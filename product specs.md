@@ -2,19 +2,29 @@
 
 - 做一个 AI 写作 Agent 桌面端应用，面向需要在本地桌面环境中进行长文写作、改写、续写和 AI 辅助创作的场景。
 - 支持打开本地的文件夹，比较类似obsidian / VScode
+- Git集成， 将部分Git 命令 集成为GUI
 
 # 技术栈
 
 - 使用 [PI Agent](https://github.com/badlogic/pi-mono) 作为 AI 处理后端
-- 使用 Base UI 作为组件基础
+- 前期使用 HeroUI 提升开发效率，后期逐步迁移为基于 Base UI 的自定义组件
 - 使用 Tailwind CSS 作为 CSS 框架
 - 使用 Tiptap 作为富文本编辑器
 - Electron
 - React
 - TypeScript
-- electron-vite
+- vite/electron-vite
+- HeroUI
+- Base UI
 - Zustand
 - chokidar
+
+## 参考项目
+
+- [scratch](https://github.com/erictli/scratch)：桌面端应用，支持打开本地文件夹，offline-first markdown editor
+- [1code](https://github.com/21st-dev/1code)：AI Agent GUI 应用参考
+- [openchamber](https://github.com/openchamber/openchamber)：AI Agent GUI 应用参考
+- [craft-agents-oss](https://github.com/lukilabs/craft-agents-oss)：AI Agent GUI 应用参考
 
 ## 架构建议
 
@@ -28,8 +38,9 @@
 ### 前端层
 
 - 使用 React + TypeScript 构建界面
-- 使用 electron-vite 作为构建工具
-- 使用 Base UI 作为组件基础
+- 使用 vite/electron-vite 作为构建工具
+- 前期使用 HeroUI 构建通用界面组件
+- 核心业务组件后期逐步迁移为基于 Base UI 的自定义组件
 - 使用 Tailwind CSS 负责样式系统
 - 使用 Tiptap 作为核心富文本编辑器
 - 使用 Zustand 管理前端状态，例如当前文档、会话状态、编辑器工具栏状态和任务执行状态
@@ -53,9 +64,8 @@
 - 支持打开和切换本地文件夹
 - 支持展示文件树
 - 支持读取、编辑和保存文件
-- 左侧会话区或文档导航区
+- 左侧文档导航区
 - 中间写作编辑区
-- 右侧 AI 辅助面板
-- 支持 AI 改写、续写、总结和润色
+- 右侧 AI 对话面板
 - 支持本地保存和恢复文档
 - 支持基础的 Agent 任务状态反馈
