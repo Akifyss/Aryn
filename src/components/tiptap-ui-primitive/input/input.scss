@@ -1,9 +1,9 @@
 :root {
-  --tiptap-input-placeholder: var(--muted);
+  --editor-input-placeholder: var(--muted);
 }
 
 .dark {
-  --tiptap-input-placeholder: var(--muted);
+  --editor-input-placeholder: var(--muted);
 }
 
 .tiptap-input {
@@ -24,7 +24,7 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 
   &::placeholder {
-    color: var(--tiptap-input-placeholder);
+    color: var(--editor-input-placeholder);
   }
 
   &:focus {

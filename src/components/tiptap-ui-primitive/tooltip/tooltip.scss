@@ -1,25 +1,25 @@
 .tiptap-tooltip {
-  --tt-tooltip-bg: var(--overlay);
-  --tt-tooltip-text: var(--overlay-foreground);
-  --tt-kbd: var(--muted);
+  --editor-tooltip-bg: var(--overlay);
+  --editor-tooltip-text: var(--overlay-foreground);
+  --editor-kbd: var(--muted);
 
   .dark & {
-    --tt-tooltip-bg: var(--overlay);
-    --tt-tooltip-text: var(--overlay-foreground);
-    --tt-kbd: var(--muted);
+    --editor-tooltip-bg: var(--overlay);
+    --editor-tooltip-text: var(--overlay-foreground);
+    --editor-kbd: var(--muted);
   }
 }
 
 .tiptap-tooltip {
   z-index: 200;
   overflow: hidden;
-  border-radius: var(--tt-radius-md, 0.375rem);
+  border-radius: var(--editor-radius-md, 0.375rem);
   border: 1px solid var(--border);
-  background-color: var(--tt-tooltip-bg);
+  background-color: var(--editor-tooltip-bg);
   padding: 0.375rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 500;
-  color: var(--tt-tooltip-text);
+  color: var(--editor-tooltip-text);
   box-shadow: var(--overlay-shadow);
   text-align: center;
 
@@ -39,6 +39,6 @@
       "Noto Sans",
       sans-serif;
     text-transform: capitalize;
-    color: var(--tt-kbd);
+    color: var(--editor-kbd);
   }
 }

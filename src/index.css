@@ -1,56 +1,121 @@
-@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Montserrat:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 @import "@heroui/styles";
 
 :root {
-  --font-sans: 'Montserrat', system-ui, -apple-system, sans-serif;
-  --font-heading: var(--font-sans);
+  --font-sans: "Instrument Sans", "Segoe UI", sans-serif;
+  --font-heading: "Cormorant Garamond", Georgia, serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  --transparent: transparent;
+  --spacing: 0.25rem;
+  --radius: 0.6rem;
+  --field-radius: calc(var(--radius) * 1.35);
+  --border-width: 1px;
+  --field-border-width: 1px;
+  --ring-offset-width: 2px;
+
+  --white: oklch(99.4% 0.003 255);
+  --black: oklch(19% 0.02 255);
+  --snow: oklch(98.8% 0.003 255);
+  --eclipse: oklch(28.5% 0.02 257);
+
+  --background: oklch(96.8% 0.005 257);
+  --foreground: var(--eclipse);
+
+  --surface: oklch(99.1% 0.003 257);
+  --surface-foreground: var(--foreground);
+  --surface-secondary: oklch(96.1% 0.006 257);
+  --surface-secondary-foreground: var(--foreground);
+  --surface-tertiary: oklch(93.9% 0.008 257);
+  --surface-tertiary-foreground: var(--foreground);
+
+  --overlay: oklch(99.3% 0.003 257);
+  --overlay-foreground: var(--foreground);
+
+  --muted: oklch(57% 0.016 257);
+  --scrollbar: oklch(84.5% 0.01 257);
+
+  --default: oklch(94.2% 0.007 257);
+  --default-foreground: var(--foreground);
+
+  --accent: oklch(54% 0.09 234);
+  --accent-foreground: var(--snow);
+
+  --field-background: color-mix(in oklab, var(--surface) 88%, var(--background));
+  --field-foreground: var(--foreground);
+  --field-placeholder: color-mix(in oklab, var(--muted) 92%, white);
+  --field-border: color-mix(in oklab, var(--border) 88%, var(--background));
+
+  --success: oklch(68% 0.11 155);
+  --success-foreground: var(--snow);
+  --warning: oklch(78% 0.12 84);
+  --warning-foreground: var(--foreground);
+  --danger: oklch(63% 0.18 25);
+  --danger-foreground: var(--snow);
+
+  --segment: color-mix(in oklab, var(--surface) 84%, var(--background));
+  --segment-foreground: var(--foreground);
+
+  --border: oklch(88.5% 0.009 257);
+  --separator: oklch(91.8% 0.007 257);
+  --focus: color-mix(in oklab, var(--accent) 82%, white);
+  --link: var(--accent);
+
+  --surface-shadow:
+    0 10px 30px rgba(32, 42, 64, 0.05),
+    0 1px 0 rgba(255, 255, 255, 0.72) inset;
+  --overlay-shadow:
+    0 14px 40px rgba(32, 42, 64, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.75) inset;
+  --field-shadow:
+    0 1px 2px rgba(32, 42, 64, 0.03),
+    0 1px 0 rgba(255, 255, 255, 0.75) inset;
 
   font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
-  color: oklch(0.2103 0.0059 285.89);
-  background: #ffffff;
+  color: var(--foreground);
+  background: var(--background);
   color-scheme: light;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
   /* Align Tiptap primitives with HeroUI v3 semantic tokens */
-  --tt-brand-color-50: color-mix(in oklab, var(--accent) 8%, white);
-  --tt-brand-color-100: color-mix(in oklab, var(--accent) 12%, white);
-  --tt-brand-color-200: color-mix(in oklab, var(--accent) 18%, white);
-  --tt-brand-color-300: color-mix(in oklab, var(--accent) 36%, white);
-  --tt-brand-color-400: color-mix(in oklab, var(--accent) 72%, white);
-  --tt-brand-color-500: var(--accent);
-  --tt-brand-color-600: color-mix(in oklab, var(--accent) 86%, black);
-  --tt-brand-color-700: color-mix(in oklab, var(--accent) 72%, black);
-  --tt-brand-color-800: color-mix(in oklab, var(--accent) 60%, black);
-  --tt-brand-color-900: color-mix(in oklab, var(--accent) 24%, black);
+  --editor-brand-color-50: color-mix(in oklab, var(--accent) 8%, white);
+  --editor-brand-color-100: color-mix(in oklab, var(--accent) 12%, white);
+  --editor-brand-color-200: color-mix(in oklab, var(--accent) 18%, white);
+  --editor-brand-color-300: color-mix(in oklab, var(--accent) 34%, white);
+  --editor-brand-color-400: color-mix(in oklab, var(--accent) 64%, white);
+  --editor-brand-color-500: var(--accent);
+  --editor-brand-color-600: color-mix(in oklab, var(--accent) 84%, black);
+  --editor-brand-color-700: color-mix(in oklab, var(--accent) 72%, black);
+  --editor-brand-color-800: color-mix(in oklab, var(--accent) 58%, black);
+  --editor-brand-color-900: color-mix(in oklab, var(--accent) 22%, black);
 
-  --tt-gray-light-a-50: color-mix(in oklab, var(--foreground) 3%, transparent);
-  --tt-gray-light-a-100: color-mix(in oklab, var(--foreground) 5%, transparent);
-  --tt-gray-light-a-200: color-mix(in oklab, var(--foreground) 9%, transparent);
-  --tt-gray-light-a-300: color-mix(in oklab, var(--foreground) 14%, transparent);
-  --tt-gray-light-a-400: color-mix(in oklab, var(--foreground) 24%, transparent);
-  --tt-gray-light-a-500: color-mix(in oklab, var(--foreground) 40%, transparent);
-  --tt-gray-light-a-600: color-mix(in oklab, var(--foreground) 58%, transparent);
-  --tt-gray-light-a-700: color-mix(in oklab, var(--foreground) 72%, transparent);
-  --tt-gray-light-a-800: color-mix(in oklab, var(--foreground) 84%, transparent);
-  --tt-gray-light-a-900: color-mix(in oklab, var(--foreground) 96%, transparent);
+  --editor-gray-light-a-50: color-mix(in oklab, var(--foreground) 3%, transparent);
+  --editor-gray-light-a-100: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --editor-gray-light-a-200: color-mix(in oklab, var(--foreground) 9%, transparent);
+  --editor-gray-light-a-300: color-mix(in oklab, var(--foreground) 14%, transparent);
+  --editor-gray-light-a-400: color-mix(in oklab, var(--foreground) 24%, transparent);
+  --editor-gray-light-a-500: color-mix(in oklab, var(--foreground) 40%, transparent);
+  --editor-gray-light-a-600: color-mix(in oklab, var(--foreground) 56%, transparent);
+  --editor-gray-light-a-700: color-mix(in oklab, var(--foreground) 70%, transparent);
+  --editor-gray-light-a-800: color-mix(in oklab, var(--foreground) 82%, transparent);
+  --editor-gray-light-a-900: color-mix(in oklab, var(--foreground) 94%, transparent);
 
-  --tt-gray-light-50: var(--background);
-  --tt-gray-light-100: var(--surface);
-  --tt-gray-light-200: var(--surface-secondary);
-  --tt-gray-light-300: var(--surface-tertiary);
-  --tt-gray-light-400: color-mix(in oklab, var(--muted) 80%, white);
-  --tt-gray-light-500: var(--muted);
-  --tt-gray-light-600: color-mix(in oklab, var(--foreground) 72%, white);
-  --tt-gray-light-700: color-mix(in oklab, var(--foreground) 82%, white);
-  --tt-gray-light-800: color-mix(in oklab, var(--foreground) 90%, white);
-  --tt-gray-light-900: var(--foreground);
+  --editor-gray-light-50: var(--background);
+  --editor-gray-light-100: var(--surface);
+  --editor-gray-light-200: var(--surface-secondary);
+  --editor-gray-light-300: var(--surface-tertiary);
+  --editor-gray-light-400: color-mix(in oklab, var(--muted) 78%, white);
+  --editor-gray-light-500: var(--muted);
+  --editor-gray-light-600: color-mix(in oklab, var(--foreground) 72%, white);
+  --editor-gray-light-700: color-mix(in oklab, var(--foreground) 82%, white);
+  --editor-gray-light-800: color-mix(in oklab, var(--foreground) 90%, white);
+  --editor-gray-light-900: var(--foreground);
 }
 
 html,
@@ -59,32 +124,32 @@ body {
   width: 100%;
   height: 100%;
   min-height: 100vh;
-  background: #ffffff;
+  background: var(--background);
   overflow: hidden;
 }
 
 .dark {
-  --tt-gray-dark-a-50: color-mix(in oklab, white 5%, transparent);
-  --tt-gray-dark-a-100: color-mix(in oklab, white 8%, transparent);
-  --tt-gray-dark-a-200: color-mix(in oklab, white 12%, transparent);
-  --tt-gray-dark-a-300: color-mix(in oklab, white 20%, transparent);
-  --tt-gray-dark-a-400: color-mix(in oklab, white 32%, transparent);
-  --tt-gray-dark-a-500: color-mix(in oklab, white 45%, transparent);
-  --tt-gray-dark-a-600: color-mix(in oklab, white 58%, transparent);
-  --tt-gray-dark-a-700: color-mix(in oklab, white 72%, transparent);
-  --tt-gray-dark-a-800: color-mix(in oklab, white 84%, transparent);
-  --tt-gray-dark-a-900: color-mix(in oklab, white 96%, transparent);
+  --editor-gray-dark-a-50: color-mix(in oklab, white 5%, transparent);
+  --editor-gray-dark-a-100: color-mix(in oklab, white 8%, transparent);
+  --editor-gray-dark-a-200: color-mix(in oklab, white 12%, transparent);
+  --editor-gray-dark-a-300: color-mix(in oklab, white 20%, transparent);
+  --editor-gray-dark-a-400: color-mix(in oklab, white 32%, transparent);
+  --editor-gray-dark-a-500: color-mix(in oklab, white 45%, transparent);
+  --editor-gray-dark-a-600: color-mix(in oklab, white 58%, transparent);
+  --editor-gray-dark-a-700: color-mix(in oklab, white 72%, transparent);
+  --editor-gray-dark-a-800: color-mix(in oklab, white 84%, transparent);
+  --editor-gray-dark-a-900: color-mix(in oklab, white 96%, transparent);
 
-  --tt-gray-dark-50: var(--surface);
-  --tt-gray-dark-100: var(--surface-secondary);
-  --tt-gray-dark-200: var(--surface-tertiary);
-  --tt-gray-dark-300: color-mix(in oklab, var(--muted) 70%, black);
-  --tt-gray-dark-400: var(--muted);
-  --tt-gray-dark-500: color-mix(in oklab, var(--foreground) 64%, black);
-  --tt-gray-dark-600: color-mix(in oklab, var(--foreground) 76%, black);
-  --tt-gray-dark-700: color-mix(in oklab, var(--foreground) 84%, black);
-  --tt-gray-dark-800: color-mix(in oklab, var(--foreground) 92%, black);
-  --tt-gray-dark-900: var(--foreground);
+  --editor-gray-dark-50: var(--surface);
+  --editor-gray-dark-100: var(--surface-secondary);
+  --editor-gray-dark-200: var(--surface-tertiary);
+  --editor-gray-dark-300: color-mix(in oklab, var(--muted) 70%, black);
+  --editor-gray-dark-400: var(--muted);
+  --editor-gray-dark-500: color-mix(in oklab, var(--foreground) 64%, black);
+  --editor-gray-dark-600: color-mix(in oklab, var(--foreground) 76%, black);
+  --editor-gray-dark-700: color-mix(in oklab, var(--foreground) 84%, black);
+  --editor-gray-dark-800: color-mix(in oklab, var(--foreground) 92%, black);
+  --editor-gray-dark-900: var(--foreground);
 }
 
 #root {
@@ -92,8 +157,18 @@ body {
   height: 100dvh;
 }
 
-button, input, textarea {
+button,
+input,
+textarea,
+select {
   font-family: inherit;
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--font-mono);
 }
 
 a {
@@ -103,12 +178,12 @@ a {
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
+select:focus-visible,
 a:focus-visible {
-  outline: 2px solid #0d9488;
+  outline: 2px solid color-mix(in oklab, var(--focus) 85%, white);
   outline-offset: 2px;
 }
 
-/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -119,10 +194,10 @@ a:focus-visible {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
-  border-radius: 99px;
+  background: color-mix(in oklab, var(--scrollbar) 90%, var(--background));
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
+  background: color-mix(in oklab, var(--muted) 48%, white);
 }

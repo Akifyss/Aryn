@@ -4,7 +4,6 @@ import {
   FolderFill,
   FolderOpenFill,
   FileFill,
-  SaveFill,
 } from '@mingcute/react'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
@@ -282,9 +281,6 @@ function App() {
         Skip to editor
       </a>
 
-      <div className='app-orb app-orb-left' aria-hidden='true' />
-      <div className='app-orb app-orb-right' aria-hidden='true' />
-
       <AppTitlebar />
 
       <aside className='panel panel-sidebar'>
@@ -310,32 +306,6 @@ function App() {
             <FileFill className='mr-2' size={16} />
             {isCreatingFile ? 'Creating...' : 'New File'}
           </Button>
-
-          <Button
-            variant='secondary'
-            onPress={() => {
-              void handleSave()
-            }}
-            isDisabled={!currentFilePath || !isDirty || isSaving}
-            className='save-action'
-          >
-            <SaveFill className='mr-2' size={16} />
-            {isSaving ? 'Saving...' : 'Save'}
-          </Button>
-        </div>
-
-        <div className='workspace-inline-meta'>
-          <div className='workspace-inline-title'>
-            <span className='workspace-name'>{workspaceName ?? 'No workspace selected'}</span>
-            <Chip
-              className='workspace-chip'
-              color={currentPath ? 'success' : 'default'}
-              size='sm'
-              variant='soft'
-            >
-              {currentPath ? 'Connected' : 'Waiting'}
-            </Chip>
-          </div>
         </div>
 
         <Separator className='section-separator' />
@@ -366,13 +336,11 @@ function App() {
           {!currentFilePath ? (
             <div className='editor-empty-state'>
               <div className='editor-empty-content'>
-                <div className='editor-empty-icon'>
-                  <FileFill size={24} />
-                </div>
+                <p className='eyebrow'>Ready</p>
                 <div className='editor-empty-copy'>
-                  <h3>Writing starts with a file.</h3>
+                  <h3>Open a workspace, then start with a clean draft.</h3>
                   <p>
-                    Connect a workspace, then create or open a markdown file.
+                    AWA keeps the file tree, editor, and assistant in one calm desktop workspace.
                   </p>
                 </div>
                 <div className='editor-empty-actions'>

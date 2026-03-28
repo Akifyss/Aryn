@@ -106,19 +106,22 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
             autoFocus
             value={draftName}
             aria-label='Rename file'
+            className='tree-rename-input'
             onChange={(event) => {
               setDraftName(event.target.value)
               if (actionError) {
                 setActionError(null)
               }
             }}
+            variant='secondary'
           />
 
           <div className='tree-inline-actions'>
-            <Button isIconOnly size='sm' variant='ghost' type='submit' isDisabled={isSubmitting}>
+            <Button className='tree-rename-action' isIconOnly size='sm' variant='ghost' type='submit' isDisabled={isSubmitting}>
               <CheckLine size={14} />
             </Button>
             <Button
+              className='tree-rename-action'
               isIconOnly
               size='sm'
               variant='ghost'

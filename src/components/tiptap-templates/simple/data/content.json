@@ -33,7 +33,7 @@
             {
               "type": "highlight",
               "attrs": {
-                "color": "var(--tt-color-highlight-yellow)"
+                "color": "var(--editor-color-highlight-yellow)"
               }
             }
           ],
@@ -209,7 +209,7 @@
             {
               "type": "highlight",
               "attrs": {
-                "color": "var(--tt-color-highlight-blue)"
+                "color": "var(--editor-color-highlight-blue)"
               }
             }
           ],

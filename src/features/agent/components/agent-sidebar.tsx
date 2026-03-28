@@ -88,6 +88,7 @@ function AgentMessageBubble({ message }: { message: AgentSidebarMessage }) {
 }
 
 export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
+  const [composerHeight, setComposerHeight] = useState(172)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
   const [composerValue, setComposerValue] = useState('')
   const [modelInputValue, setModelInputValue] = useState('')
@@ -97,6 +98,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [isSwitchingModel, setIsSwitchingModel] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
+  const composerResizeStateRef = useRef<{ pointerId: number, startHeight: number, startY: number } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -329,6 +331,40 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     }
   }
 
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const resizeState = composerResizeStateRef.current
+
+      if (!resizeState || event.pointerId !== resizeState.pointerId) {
+        return
+      }
+
+      const nextHeight = Math.min(
+        360,
+        Math.max(132, resizeState.startHeight + (resizeState.startY - event.clientY)),
+      )
+
+      setComposerHeight(nextHeight)
+    }
+
+    function handlePointerUp(event: PointerEvent) {
+      if (composerResizeStateRef.current?.pointerId === event.pointerId) {
+        document.body.style.userSelect = ''
+        composerResizeStateRef.current = null
+      }
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
+    }
+  }, [])
+
   const activeSessionPath = agentState.activeSession?.sessionPath ?? null
   const activeSession = agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
   const canSend = Boolean(workspacePath && composerValue.trim()) && !agentState.runtime.isStreaming
@@ -418,7 +454,22 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
           void handleSubmit(event)
         }}
       >
-        <div className='agent-composer-shell'>
+        <div className='agent-composer-shell' style={{ '--agent-composer-height': `${composerHeight}px` } as React.CSSProperties}>
+          <div
+            aria-hidden='true'
+            className='agent-composer-resize-handle'
+            onPointerDown={(event) => {
+              event.preventDefault()
+              document.body.style.userSelect = 'none'
+              event.currentTarget.setPointerCapture(event.pointerId)
+              composerResizeStateRef.current = {
+                pointerId: event.pointerId,
+                startHeight: composerHeight,
+                startY: event.clientY,
+              }
+            }}
+          />
+
           <TextArea
             aria-label='Prompt Pi Agent'
             className='agent-composer-input'
@@ -427,7 +478,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
               setComposerValue(event.target.value)
             }}
             onKeyDown={handleComposerKeyDown}
-            placeholder={workspacePath ? 'Message Codex CLI — @ to include context, / for commands' : 'Open a folder first.'}
+            placeholder={workspacePath ? 'Message Codex. Use @ for context and / for commands.' : 'Open a folder first.'}
             rows={3}
             value={composerValue}
             variant='secondary'
@@ -454,6 +505,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
                   }}
                   placeholder={DEFAULT_MODEL_VALUE}
                   value={modelInputValue}
+                  variant='secondary'
                 />
               </div>
 

@@ -1,21 +1,21 @@
-.tiptap.ProseMirror {
-  --tt-collaboration-carets-label: var(--tt-gray-light-900);
-  --link-text-color: var(--tt-brand-color-500);
-  --thread-text: var(--tt-gray-light-900);
-  --placeholder-color: var(--tt-gray-light-a-400);
-  --thread-bg-color: var(--tt-color-yellow-inc-2);
+﻿.tiptap.ProseMirror {
+  --editor-collaboration-carets-label: var(--editor-gray-light-900);
+  --link-text-color: var(--editor-brand-color-500);
+  --thread-text: var(--editor-gray-light-900);
+  --placeholder-color: var(--editor-gray-light-a-400);
+  --thread-bg-color: var(--editor-color-yellow-inc-2);
 
   // ai
-  --tiptap-ai-insertion-color: var(--tt-brand-color-600);
+  --editor-ai-insertion-color: var(--editor-brand-color-600);
 
   .dark & {
-    --tt-collaboration-carets-label: var(--tt-gray-dark-100);
-    --link-text-color: var(--tt-brand-color-400);
-    --thread-text: var(--tt-gray-dark-900);
-    --placeholder-color: var(--tt-gray-dark-a-400);
-    --thread-bg-color: var(--tt-color-yellow-dec-2);
+    --editor-collaboration-carets-label: var(--editor-gray-dark-100);
+    --link-text-color: var(--editor-brand-color-400);
+    --thread-text: var(--editor-gray-dark-900);
+    --placeholder-color: var(--editor-gray-dark-a-400);
+    --thread-bg-color: var(--editor-color-yellow-dec-2);
 
-    --tiptap-ai-insertion-color: var(--tt-brand-color-400);
+    --editor-ai-insertion-color: var(--editor-brand-color-400);
   }
 }
 
@@ -31,7 +31,7 @@
 .tiptap.ProseMirror {
   white-space: pre-wrap;
   outline: none;
-  caret-color: var(--tt-cursor-color);
+  caret-color: var(--editor-cursor-color);
 
   // Paragraph spacing
   p:not(:first-child) {
@@ -44,7 +44,7 @@
   // Selection styles
   &:not(.readonly):not(.ProseMirror-hideselection) {
     ::selection {
-      background-color: var(--tt-selection-color);
+      background-color: var(--editor-selection-color);
     }
 
     .selection::selection {
@@ -54,13 +54,13 @@
 
   .selection {
     display: inline;
-    background-color: var(--tt-selection-color);
+    background-color: var(--editor-selection-color);
   }
 
   // Selected node styles
   .ProseMirror-selectednode:not(img):not(pre):not(.react-renderer) {
-    border-radius: var(--tt-radius-md);
-    background-color: var(--tt-selection-color);
+    border-radius: var(--editor-radius-md);
+    background-color: var(--editor-selection-color);
   }
 
   .ProseMirror-hideselection {
@@ -92,7 +92,7 @@
   }
 
   .tiptap-ai-insertion {
-    color: var(--tiptap-ai-insertion-color);
+    color: var(--editor-ai-insertion-color);
   }
 }
 
@@ -112,7 +112,7 @@
     }
 
     &__label {
-      color: var(--tt-collaboration-carets-label);
+      color: var(--editor-collaboration-carets-label);
       border-radius: 0.25rem;
       border-bottom-left-radius: 0;
       font-size: 0.75rem;
@@ -154,7 +154,7 @@
 .tiptap.ProseMirror {
   [data-type="mention"] {
     display: inline-block;
-    color: var(--tt-brand-color-500);
+    color: var(--editor-brand-color-500);
   }
 }
 
@@ -168,7 +168,7 @@
       color 0.2s ease-in-out,
       background-color 0.2s ease-in-out;
     color: var(--thread-text);
-    border-bottom: 2px dashed var(--tt-color-yellow-base);
+    border-bottom: 2px dashed var(--editor-color-yellow-base);
     font-weight: 600;
 
     &.tiptap-thread--selected,
@@ -181,14 +181,14 @@
   // Block thread styles with images
   .tiptap-thread.tiptap-thread--unresolved.tiptap-thread--block {
     &:has(img) {
-      outline: 0.125rem solid var(--tt-color-yellow-base);
-      border-radius: var(--tt-radius-xs, 0.25rem);
+      outline: 0.125rem solid var(--editor-color-yellow-base);
+      border-radius: var(--editor-radius-xs, 0.25rem);
       overflow: hidden;
       width: fit-content;
 
       &.tiptap-thread--selected {
         outline-width: 0.25rem;
-        outline-color: var(--tt-color-yellow-base);
+        outline-color: var(--editor-color-yellow-base);
       }
 
       &.tiptap-thread--hovered {
@@ -199,21 +199,21 @@
     // Block thread styles without images
     &:not(:has(img)) {
       border-radius: 0.25rem;
-      border-bottom: 0.125rem dashed var(--tt-color-yellow-base);
+      border-bottom: 0.125rem dashed var(--editor-color-yellow-base);
       padding-bottom: 0.5rem;
       outline: 0.25rem solid transparent;
 
       &.tiptap-thread--hovered,
       &.tiptap-thread--selected {
-        background-color: var(--tt-color-yellow-base);
-        outline-color: var(--tt-color-yellow-base);
+        background-color: var(--editor-color-yellow-base);
+        outline-color: var(--editor-color-yellow-base);
       }
     }
   }
 
   // Resolved thread styles
   .tiptap-thread.tiptap-thread--resolved.tiptap-thread--inline.tiptap-thread--selected {
-    background-color: var(--tt-color-yellow-base);
+    background-color: var(--editor-color-yellow-base);
     border-color: transparent;
     opacity: 0.5;
   }
@@ -237,7 +237,7 @@
 .is-empty.with-slash[data-placeholder]:has(
     > .ProseMirror-trailingBreak:only-child
   )::before {
-  content: "Write, type '/' for commands…";
+  content: "Write, type '/' for commands...";
   font-style: italic;
 }
 
@@ -262,7 +262,7 @@
      ===================== */
 .prosemirror-dropcursor-block,
 .prosemirror-dropcursor-inline {
-  background: var(--tt-brand-color-400) !important;
+  background: var(--editor-brand-color-400) !important;
   border-radius: 0.25rem;
   margin-left: -1px;
   margin-right: -1px;
@@ -270,3 +270,4 @@
   height: 0.188rem;
   cursor: grabbing;
 }
+

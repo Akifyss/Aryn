@@ -1,6 +1,6 @@
 :root {
-  --tt-toolbar-height: 44px;
-  --tt-theme-text: var(--tt-gray-light-900);
+  --editor-toolbar-height: 48px;
+  --editor-theme-text: var(--editor-gray-light-900);
 }
 
 ::-webkit-scrollbar {
@@ -9,11 +9,11 @@
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--tt-scrollbar-color) transparent;
+  scrollbar-color: var(--editor-scrollbar-color) transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: var(--tt-scrollbar-color);
+  background-color: var(--editor-scrollbar-color);
   border-radius: 9999px;
 }
 
@@ -33,7 +33,7 @@
   min-height: 0;
   overflow: hidden;
   background: transparent;
-  color: var(--tt-theme-text);
+  color: var(--editor-theme-text);
 }
 
 .simple-editor-wrapper[data-disabled="true"] {
@@ -46,11 +46,20 @@
   z-index: 5;
   flex: 0 0 auto;
   margin: 0;
-  padding: 0 0.5rem;
-  border-bottom: 0;
-  background: none;
+  padding: 0.65rem 1.4rem 0.6rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--separator) 92%, var(--background));
+  background: color-mix(in oklab, var(--surface) 94%, var(--background));
   box-shadow: none;
   backdrop-filter: none;
+}
+
+.awa-simple-toolbar .button,
+.awa-simple-toolbar .button:hover,
+.awa-simple-toolbar .button[data-hovered="true"],
+.awa-simple-toolbar .tiptap-button,
+.awa-simple-toolbar .tiptap-button:hover,
+.awa-simple-toolbar .tiptap-button[data-hovered="true"] {
+  border-radius: 0.8rem;
 }
 
 .awa-simple-toolbar .button:focus-visible,
@@ -78,15 +87,17 @@
 }
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor {
-  width: min(100%, 46rem);
+  width: min(100%, 50rem);
   min-height: 100%;
   margin: 0 auto;
   flex: 1;
-  padding: 1.6rem 1.9rem 18vh;
-  color: #163c38;
+  padding: 2rem 2.4rem 20vh;
+  color: color-mix(in oklab, var(--foreground) 96%, black);
   background: transparent;
   box-shadow: none;
-  caret-color: #0d9488;
+  caret-color: color-mix(in oklab, var(--accent) 82%, white);
+  font-size: 1.02rem;
+  line-height: 1.85;
 }
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor:focus {
@@ -94,17 +105,16 @@
 }
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor::selection {
-  background: rgba(20, 184, 166, 0.18);
+  background: color-mix(in oklab, var(--accent) 18%, white);
 }
 
 @media screen and (max-width: 720px) {
   .awa-simple-toolbar {
-    margin: 0;
-    padding: 0 0.25rem;
+    padding: 0.55rem 0.7rem 0.5rem;
   }
 
   .simple-editor-content .tiptap.ProseMirror.simple-editor {
     width: 100%;
-    padding: 1rem 1rem 14vh;
+    padding: 1.25rem 1.1rem 14vh;
   }
 }

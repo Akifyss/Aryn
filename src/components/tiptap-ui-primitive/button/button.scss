@@ -10,10 +10,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--tt-radius-lg, 0.75rem);
+  border-radius: var(--editor-radius-lg, 0.75rem);
   transition-property: background, color, opacity;
-  transition-duration: var(--tt-transition-duration-default);
-  transition-timing-function: var(--tt-transition-easing-default);
+  transition-duration: var(--editor-transition-duration-default);
+  transition-timing-function: var(--editor-transition-easing-default);
   box-shadow: none;
 
   // focus-visible
@@ -24,9 +24,9 @@
 
   &[data-highlighted="true"],
   &[data-focus-visible="true"] {
-    background-color: var(--tt-button-hover-bg-color);
-    color: var(--tt-button-hover-text-color);
-    // outline: 2px solid var(--tt-button-active-icon-color);
+    background-color: var(--editor-button-hover-bg-color);
+    color: var(--editor-button-hover-text-color);
+    // outline: 2px solid var(--editor-button-active-icon-color);
   }
 
   &[data-weight="small"] {
@@ -51,7 +51,7 @@
     height: 1.5rem;
     min-width: 1.5rem;
     padding: 0.3125rem;
-    border-radius: var(--tt-radius-md, 0.5rem);
+    border-radius: var(--editor-radius-md, 0.5rem);
   }
 
   /* trim / expand text of the button */
@@ -188,126 +188,126 @@
 -------------------------------------------- */
 
 .tiptap-button {
-  background-color: var(--tt-button-default-bg-color);
-  color: var(--tt-button-default-text-color);
+  background-color: var(--editor-button-default-bg-color);
+  color: var(--editor-button-default-text-color);
 
   .tiptap-button-icon {
-    color: var(--tt-button-default-icon-color);
+    color: var(--editor-button-default-icon-color);
   }
 
   .tiptap-button-icon-sub {
-    color: var(--tt-button-default-icon-sub-color);
+    color: var(--editor-button-default-icon-sub-color);
   }
 
   .tiptap-button-dropdown-arrows {
-    color: var(--tt-button-default-dropdown-arrows-color);
+    color: var(--editor-button-default-dropdown-arrows-color);
   }
 
   .tiptap-button-dropdown-small {
-    color: var(--tt-button-default-dropdown-arrows-color);
+    color: var(--editor-button-default-dropdown-arrows-color);
   }
 
   /* hover state of a button */
   &:hover:not([data-active-item="true"]):not([disabled]),
   &[data-active-item="true"]:not([disabled]),
   &[data-highlighted]:not([disabled]):not([data-highlighted="false"]) {
-    background-color: var(--tt-button-hover-bg-color);
-    color: var(--tt-button-hover-text-color);
+    background-color: var(--editor-button-hover-bg-color);
+    color: var(--editor-button-hover-text-color);
 
     .tiptap-button-icon {
-      color: var(--tt-button-hover-icon-color);
+      color: var(--editor-button-hover-icon-color);
     }
 
     .tiptap-button-icon-sub {
-      color: var(--tt-button-hover-icon-sub-color);
+      color: var(--editor-button-hover-icon-sub-color);
     }
 
     .tiptap-button-dropdown-arrows,
     .tiptap-button-dropdown-small {
-      color: var(--tt-button-hover-dropdown-arrows-color);
+      color: var(--editor-button-hover-dropdown-arrows-color);
     }
   }
 
   /* Active state of a button */
   &[data-active-state="on"]:not([disabled]),
   &[data-state="open"]:not([disabled]) {
-    background-color: var(--tt-button-active-bg-color);
-    color: var(--tt-button-active-text-color);
+    background-color: var(--editor-button-active-bg-color);
+    color: var(--editor-button-active-text-color);
 
     .tiptap-button-icon {
-      color: var(--tt-button-active-icon-color);
+      color: var(--editor-button-active-icon-color);
     }
 
     .tiptap-button-icon-sub {
-      color: var(--tt-button-active-icon-sub-color);
+      color: var(--editor-button-active-icon-sub-color);
     }
 
     .tiptap-button-dropdown-arrows,
     .tiptap-button-dropdown-small {
-      color: var(--tt-button-active-dropdown-arrows-color);
+      color: var(--editor-button-active-dropdown-arrows-color);
     }
 
     &:hover {
-      background-color: var(--tt-button-active-hover-bg-color);
+      background-color: var(--editor-button-active-hover-bg-color);
     }
 
     /* Emphasized */
     &[data-appearance="emphasized"] {
-      background-color: var(--tt-button-active-bg-color-emphasized);
-      color: var(--tt-button-active-text-color-emphasized);
+      background-color: var(--editor-button-active-bg-color-emphasized);
+      color: var(--editor-button-active-text-color-emphasized);
 
       .tiptap-button-icon {
-        color: var(--tt-button-active-icon-color-emphasized);
+        color: var(--editor-button-active-icon-color-emphasized);
       }
 
       .tiptap-button-icon-sub {
-        color: var(--tt-button-active-icon-sub-color-emphasized);
+        color: var(--editor-button-active-icon-sub-color-emphasized);
       }
 
       .tiptap-button-dropdown-arrows,
       .tiptap-button-dropdown-small {
-        color: var(--tt-button-active-dropdown-arrows-color-emphasized);
+        color: var(--editor-button-active-dropdown-arrows-color-emphasized);
       }
 
       &:hover {
-        background-color: var(--tt-button-active-hover-bg-color-emphasized);
+        background-color: var(--editor-button-active-hover-bg-color-emphasized);
       }
     }
 
     /* Subdued */
     &[data-appearance="subdued"] {
-      background-color: var(--tt-button-active-bg-color-subdued);
-      color: var(--tt-button-active-text-color-subdued);
+      background-color: var(--editor-button-active-bg-color-subdued);
+      color: var(--editor-button-active-text-color-subdued);
 
       .tiptap-button-icon {
-        color: var(--tt-button-active-icon-color-subdued);
+        color: var(--editor-button-active-icon-color-subdued);
       }
 
       .tiptap-button-icon-sub {
-        color: var(--tt-button-active-icon-sub-color-subdued);
+        color: var(--editor-button-active-icon-sub-color-subdued);
       }
 
       .tiptap-button-dropdown-arrows,
       .tiptap-button-dropdown-small {
-        color: var(--tt-button-active-dropdown-arrows-color-subdued);
+        color: var(--editor-button-active-dropdown-arrows-color-subdued);
       }
 
       &:hover {
-        background-color: var(--tt-button-active-hover-bg-color-subdued);
+        background-color: var(--editor-button-active-hover-bg-color-subdued);
 
         .tiptap-button-icon {
-          color: var(--tt-button-active-icon-color-subdued);
+          color: var(--editor-button-active-icon-color-subdued);
         }
       }
     }
   }
 
   &:disabled {
-    background-color: var(--tt-button-disabled-bg-color);
-    color: var(--tt-button-disabled-text-color);
+    background-color: var(--editor-button-disabled-bg-color);
+    color: var(--editor-button-disabled-text-color);
 
     .tiptap-button-icon {
-      color: var(--tt-button-disabled-icon-color);
+      color: var(--editor-button-disabled-icon-color);
     }
   }
 }

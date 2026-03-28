@@ -1,13 +1,13 @@
 :root {
-  --tt-toolbar-height: 2.75rem;
-  --tt-safe-area-bottom: env(safe-area-inset-bottom, 0px);
-  --tt-toolbar-bg-color: transparent;
-  --tt-toolbar-border-color: var(--border);
+  --editor-toolbar-height: 2.75rem;
+  --editor-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --editor-toolbar-bg-color: transparent;
+  --editor-toolbar-border-color: var(--border);
 }
 
 .dark {
-  --tt-toolbar-bg-color: transparent;
-  --tt-toolbar-border-color: var(--border);
+  --editor-toolbar-bg-color: transparent;
+  --editor-toolbar-border-color: var(--border);
 }
 
 .tiptap-toolbar {
@@ -35,7 +35,7 @@
     top: 0;
     z-index: 10;
     width: 100%;
-    min-height: var(--tt-toolbar-height);
+    min-height: var(--editor-toolbar-height);
     background: transparent;
     border-bottom: none;
     padding: 0 0.5rem;
@@ -52,10 +52,10 @@
     @media (max-width: 480px) {
       position: absolute;
       top: auto;
-      height: calc(var(--tt-toolbar-height) + var(--tt-safe-area-bottom));
+      height: calc(var(--editor-toolbar-height) + var(--editor-safe-area-bottom));
       border-top: none;
       border-bottom: none;
-      padding: 0 0.5rem var(--tt-safe-area-bottom);
+      padding: 0 0.5rem var(--editor-safe-area-bottom);
       flex-wrap: nowrap;
       justify-content: flex-start;
 
@@ -66,17 +66,17 @@
   }
 
   &[data-variant="floating"] {
-    --tt-toolbar-padding: 0.125rem;
-    --tt-toolbar-border-width: 1px;
+    --editor-toolbar-padding: 0.125rem;
+    --editor-toolbar-border-width: 1px;
 
     padding: 0.188rem;
     border-radius: calc(
-      var(--tt-toolbar-padding) + var(--tt-radius-lg) +
-        var(--tt-toolbar-border-width)
+      var(--editor-toolbar-padding) + var(--editor-radius-lg) +
+        var(--editor-toolbar-border-width)
     );
-    border: var(--tt-toolbar-border-width) solid var(--tt-toolbar-border-color);
+    border: var(--editor-toolbar-border-width) solid var(--editor-toolbar-border-color);
     background-color: transparent;
-    box-shadow: var(--tt-shadow-elevated-md);
+    box-shadow: var(--editor-shadow-elevated-md);
     outline: none;
     overflow: hidden;
 
