@@ -1,13 +1,13 @@
 :root {
   --tt-toolbar-height: 2.75rem;
   --tt-safe-area-bottom: env(safe-area-inset-bottom, 0px);
-  --tt-toolbar-bg-color: var(--white);
-  --tt-toolbar-border-color: var(--tt-gray-light-a-100);
+  --tt-toolbar-bg-color: transparent;
+  --tt-toolbar-border-color: var(--border);
 }
 
 .dark {
-  --tt-toolbar-bg-color: var(--black);
-  --tt-toolbar-border-color: var(--tt-gray-dark-a-50);
+  --tt-toolbar-bg-color: transparent;
+  --tt-toolbar-border-color: var(--border);
 }
 
 .tiptap-toolbar {
@@ -36,8 +36,8 @@
     z-index: 10;
     width: 100%;
     min-height: var(--tt-toolbar-height);
-    background: var(--tt-toolbar-bg-color);
-    border-bottom: 1px solid var(--tt-toolbar-border-color);
+    background: transparent;
+    border-bottom: none;
     padding: 0 0.5rem;
     overflow-x: auto;
     overscroll-behavior-x: contain;
@@ -53,7 +53,7 @@
       position: absolute;
       top: auto;
       height: calc(var(--tt-toolbar-height) + var(--tt-safe-area-bottom));
-      border-top: 1px solid var(--tt-toolbar-border-color);
+      border-top: none;
       border-bottom: none;
       padding: 0 0.5rem var(--tt-safe-area-bottom);
       flex-wrap: nowrap;
@@ -75,7 +75,7 @@
         var(--tt-toolbar-border-width)
     );
     border: var(--tt-toolbar-border-width) solid var(--tt-toolbar-border-color);
-    background-color: var(--tt-toolbar-bg-color);
+    background-color: transparent;
     box-shadow: var(--tt-shadow-elevated-md);
     outline: none;
     overflow: hidden;

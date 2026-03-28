@@ -1,18 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, ScrollShadow, Separator, Card, Chip } from '@heroui/react'
+import { Button, Chip, ScrollShadow, Separator } from '@heroui/react'
+import {
+  FolderFill,
+  FolderOpenFill,
+  FileFill,
+  SaveFill,
+} from '@mingcute/react'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
-import { 
-  FolderOpenFill, 
-  FileFill, 
-  AiLine, 
-  CheckCircleFill, 
-  InformationLine,
-  SaveFill,
-  FolderFill
-} from '@mingcute/react'
+import type { WorkspaceNode } from '@/features/workspace/types'
 import './App.css'
 
 function getBaseName(filePath: string) {
@@ -53,10 +51,33 @@ function getNextUntitledFileName(existingNames: string[]) {
   return `untitled-${index}.md`
 }
 
+function countTree(nodes: WorkspaceNode[]) {
+  let fileCount = 0
+  let directoryCount = 0
+
+  function visit(branch: WorkspaceNode[]) {
+    branch.forEach((node) => {
+      if (node.kind === 'file') {
+        fileCount += 1
+        return
+      }
+
+      directoryCount += 1
+      if (node.children?.length) {
+        visit(node.children)
+      }
+    })
+  }
+
+  visit(nodes)
+
+  return { directoryCount, fileCount }
+}
+
 function App() {
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [statusMessage, setStatusMessage] = useState('Open a folder to start.')
+  const [, setStatusMessage] = useState('Open a folder to start.')
   const [isCreatingFile, setIsCreatingFile] = useState(false)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
   const currentFileContent = useWorkspaceStore((state) => state.currentFileContent)
@@ -72,6 +93,8 @@ function App() {
     () => tree.filter((node) => node.kind === 'file').map((node) => node.name),
     [tree],
   )
+  const treeCounts = useMemo(() => countTree(tree), [tree])
+  const workspaceName = currentPath ? getBaseName(currentPath) : null
 
   async function connectWorkspace(nextPath: string) {
     await window.appApi.stopWorkspaceWatch()
@@ -102,7 +125,7 @@ function App() {
       const nextPath = await window.appApi.pickWorkspace()
       if (nextPath) {
         await connectWorkspace(nextPath)
-        setStatusMessage(`Workspace connected`)
+        setStatusMessage('Workspace connected')
       }
     } finally {
       setIsPickingWorkspace(false)
@@ -172,13 +195,18 @@ function App() {
   }
 
   async function handleSave() {
-    if (!currentFilePath) return
+    if (!currentFilePath) {
+      return
+    }
+
     setIsSaving(true)
     try {
       await window.appApi.saveWorkspaceFile(currentFilePath, currentFileContent)
       setDirty(false)
       setStatusMessage('Changes saved')
-      if (currentPath) await loadTree(currentPath)
+      if (currentPath) {
+        await loadTree(currentPath)
+      }
     } finally {
       setIsSaving(false)
     }
@@ -213,15 +241,19 @@ function App() {
 
   useEffect(() => {
     const unsubscribe = window.appApi.onWorkspaceChanged(async (event) => {
-      if (!currentPath || event.rootPath !== currentPath) return
+      if (!currentPath || event.rootPath !== currentPath) {
+        return
+      }
+
       await loadTree(currentPath)
+
       if (currentFilePath === event.path && !isDirty && event.type === 'change') {
         const updatedContent = await window.appApi.readWorkspaceFile(event.path)
         setCurrentFileContent(updatedContent)
-        setStatusMessage(`Synced with external edits`)
-        return
+        setStatusMessage('Synced with external edits')
       }
     })
+
     return unsubscribe
   }, [currentFilePath, currentPath, isDirty, setCurrentFileContent, setTree])
 
@@ -238,63 +270,83 @@ function App() {
         void handleSave()
       }
     }
+
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
   }, [currentFileContent, currentFilePath])
 
   return (
     <div className='app-shell'>
+      <a className='skip-link' href='#editor-main'>
+        Skip to editor
+      </a>
+
+      <div className='app-orb app-orb-left' aria-hidden='true' />
+      <div className='app-orb app-orb-right' aria-hidden='true' />
+
       <AppTitlebar />
 
       <aside className='panel panel-sidebar'>
-        <div className='panel-header'>
-          <p className='eyebrow'>Workspace</p>
-          <h1>Drafts</h1>
+        <div className='sidebar-actions'>
+          <Button
+            variant='primary'
+            onPress={handlePickWorkspace}
+            isDisabled={isPickingWorkspace}
+            className='workspace-primary-action'
+          >
+            <FolderOpenFill className='mr-2' size={16} />
+            {isPickingWorkspace ? 'Opening...' : 'Open Folder'}
+          </Button>
+
+          <Button
+            variant='outline'
+            onPress={() => {
+              void handleCreateFile()
+            }}
+            isDisabled={!currentPath || isCreatingFile}
+            className='workspace-secondary-action'
+          >
+            <FileFill className='mr-2' size={16} />
+            {isCreatingFile ? 'Creating...' : 'New File'}
+          </Button>
+
+          <Button
+            variant='secondary'
+            onPress={() => {
+              void handleSave()
+            }}
+            isDisabled={!currentFilePath || !isDirty || isSaving}
+            className='save-action'
+          >
+            <SaveFill className='mr-2' size={16} />
+            {isSaving ? 'Saving...' : 'Save'}
+          </Button>
         </div>
 
-        <Button
-          variant='primary'
-          onPress={handlePickWorkspace}
-          isDisabled={isPickingWorkspace}
-          className="font-medium"
-        >
-          {isPickingWorkspace ? (
-            <div className="animate-spin mr-2 h-4 w-4 border-2 border-white/20 border-t-white rounded-full" />
-          ) : (
-            <FolderOpenFill className="mr-2" size={16} />
-          )}
-          {isPickingWorkspace ? 'Opening...' : 'Open Folder'}
-        </Button>
-
-        <Button
-          variant='secondary'
-          onPress={() => {
-            void handleCreateFile()
-          }}
-          isDisabled={!currentPath || isCreatingFile}
-          className="font-medium"
-        >
-          <FileFill className="mr-2" size={16} />
-          {isCreatingFile ? 'Creating...' : 'New File'}
-        </Button>
-
-        <Card className="bg-slate-50/50 border border-slate-100 shadow-none">
-          <Card.Content className="p-3">
-            <div className='label flex items-center gap-1.5 mb-1'>
-              <FolderFill size={12} />
-              <span>Current Path</span>
-            </div>
-            <p className='meta-path'>{currentPath ?? 'Not selected'}</p>
-          </Card.Content>
-        </Card>
-
-        <Separator className="my-2" />
-
-        <div className='section-title flex items-center gap-2'>
-          <FileFill size={14} className="text-slate-400" />
-          <span>Explorer</span>
+        <div className='workspace-inline-meta'>
+          <div className='workspace-inline-title'>
+            <span className='workspace-name'>{workspaceName ?? 'No workspace selected'}</span>
+            <Chip
+              className='workspace-chip'
+              color={currentPath ? 'success' : 'default'}
+              size='sm'
+              variant='soft'
+            >
+              {currentPath ? 'Connected' : 'Waiting'}
+            </Chip>
+          </div>
         </div>
-        
+
+        <Separator className='section-separator' />
+
+        <div className='section-title'>
+          <div className='label label-with-icon'>
+            <FileFill size={14} />
+            <span>Explorer</span>
+          </div>
+          <span className='section-count'>{treeCounts.fileCount}</span>
+        </div>
+
         <ScrollShadow className='tree-scroll' hideScrollBar>
           <WorkspaceTree
             activeFilePath={currentFilePath}
@@ -308,8 +360,40 @@ function App() {
         </ScrollShadow>
       </aside>
 
-      <main className='panel panel-editor'>
+      <main className='panel panel-editor' id='editor-main'>
         <div className='editor-frame'>
+          {!currentFilePath ? (
+            <div className='editor-empty-state'>
+              <div className='editor-empty-content'>
+                <div className='editor-empty-icon'>
+                  <FileFill size={24} />
+                </div>
+                <div className='editor-empty-copy'>
+                  <h3>Writing starts with a file.</h3>
+                  <p>
+                    Connect a workspace, then create or open a markdown file.
+                  </p>
+                </div>
+                <div className='editor-empty-actions'>
+                  <Button variant='primary' onPress={handlePickWorkspace} isDisabled={isPickingWorkspace}>
+                    <FolderOpenFill className='mr-2' size={16} />
+                    Open Folder
+                  </Button>
+                  <Button
+                    variant='outline'
+                    onPress={() => {
+                      void handleCreateFile()
+                    }}
+                    isDisabled={!currentPath || isCreatingFile}
+                  >
+                    <FileFill className='mr-2' size={16} />
+                    Create Draft
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <WritingEditor
             disabled={!currentFilePath}
             onChange={(nextValue) => {
@@ -322,61 +406,7 @@ function App() {
       </main>
 
       <aside className='panel panel-agent'>
-        <div className='panel-header'>
-          <p className='eyebrow'>Assistant</p>
-          <h2>AWA Intelligence</h2>
-          <p className='agent-subtitle'>Writing support and context-aware insights.</p>
-        </div>
-
-        <Card className="border-none bg-gradient-to-br from-blue-50 to-indigo-50 shadow-sm">
-          <Card.Content className="p-4 gap-4">
-            <div className='agent-stat'>
-              <div className='label flex items-center gap-1.5'>
-                <InformationLine size={12} />
-                <span>Status</span>
-              </div>
-              <strong className="text-blue-700">{statusMessage}</strong>
-            </div>
-            
-            <div className='agent-stat'>
-              <div className='label flex items-center gap-1.5'>
-                <FileFill size={12} />
-                <span>Active Document</span>
-              </div>
-              <strong className="truncate block" title={currentFilePath ?? ''}>
-                {currentFilePath ? currentFilePath.split(/[\\/]/).pop() : 'None selected'}
-              </strong>
-            </div>
-
-            <div className='agent-stat'>
-              <div className='label flex items-center gap-1.5'>
-                <SaveFill size={12} />
-                <span>Save State</span>
-              </div>
-              {isDirty ? (
-                <Chip size="sm" variant="soft" color="warning">Unsaved Changes</Chip>
-              ) : (
-                <Chip size="sm" variant="soft" color="success">
-                  <div className="flex items-center gap-1">
-                    <CheckCircleFill size={12} />
-                    <span>Up to date</span>
-                  </div>
-                </Chip>
-              )}
-            </div>
-          </Card.Content>
-        </Card>
-
-        <div className='agent-actions flex flex-col gap-2'>
-          <Button variant='primary' className="w-full font-semibold shadow-md shadow-blue-200">
-            <AiLine className="mr-2" size={16} />
-            Ask AWA Agent
-          </Button>
-          <div className="flex gap-2">
-            <Button variant="secondary" className="flex-1 text-xs px-0" size="sm">Insight</Button>
-            <Button variant="secondary" className="flex-1 text-xs px-0" size="sm">Outline</Button>
-          </div>
-        </div>
+        <div className='agent-empty-shell' />
       </aside>
     </div>
   )

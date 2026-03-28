@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Button, Chip, Tooltip } from '@heroui/react'
-import { 
-  MinimizeLine, 
-  FullscreenLine, 
+import { Button, Tooltip } from '@heroui/react'
+import {
+  CloseLine,
   FullscreenExitLine,
-  CloseLine 
+  FullscreenLine,
+  MinimizeLine,
 } from '@mingcute/react'
 
 export function AppTitlebar() {
@@ -12,31 +12,33 @@ export function AppTitlebar() {
 
   useEffect(() => {
     let mounted = true
+
     void window.appApi.isWindowMaximized().then(({ isMaximized: nextState }) => {
-      if (mounted) setIsMaximized(nextState)
+      if (mounted) {
+        setIsMaximized(nextState)
+      }
     })
-    return () => { mounted = false }
+
+    return () => {
+      mounted = false
+    }
   }, [])
 
   return (
     <header className='titlebar'>
       <div className='titlebar-drag'>
-        <div className='titlebar-brand select-none pointer-events-none'>
-          <span className='titlebar-dot' />
-          <span className='titlebar-name'>AWA Workspace</span>
-          <Chip size='sm' variant='soft' color="default" className="h-5 text-[10px] font-bold px-1.5 uppercase">Beta</Chip>
-        </div>
+        <span className='titlebar-name select-none pointer-events-none'>AWA</span>
       </div>
 
       <div className='titlebar-actions'>
-        <div className="flex items-center">
+        <div className='titlebar-window-controls'>
           <Tooltip>
             <Tooltip.Trigger>
               <Button
                 isIconOnly
-                size="sm"
-                variant="ghost"
-                className="w-10 h-10 rounded-none hover:bg-slate-100"
+                size='sm'
+                variant='ghost'
+                className='titlebar-control'
                 onPress={() => {
                   void window.appApi.minimizeWindow()
                 }}
@@ -46,14 +48,14 @@ export function AppTitlebar() {
             </Tooltip.Trigger>
             <Tooltip.Content>Minimize</Tooltip.Content>
           </Tooltip>
-          
+
           <Tooltip>
             <Tooltip.Trigger>
               <Button
                 isIconOnly
-                size="sm"
-                variant="ghost"
-                className="w-10 h-10 rounded-none hover:bg-slate-100"
+                size='sm'
+                variant='ghost'
+                className='titlebar-control'
                 onPress={() => {
                   void window.appApi.toggleMaximizeWindow().then(({ isMaximized: nextState }) => {
                     setIsMaximized(nextState)
@@ -70,9 +72,9 @@ export function AppTitlebar() {
             <Tooltip.Trigger>
               <Button
                 isIconOnly
-                size="sm"
-                variant="ghost"
-                className="w-10 h-10 rounded-none hover:bg-red-500 hover:text-white"
+                size='sm'
+                variant='ghost'
+                className='titlebar-control titlebar-control-close'
                 onPress={() => {
                   void window.appApi.closeWindow()
                 }}

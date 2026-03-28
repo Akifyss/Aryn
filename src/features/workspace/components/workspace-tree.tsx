@@ -1,7 +1,14 @@
 import { FormEvent, useState } from 'react'
 import { Button, Input, Tooltip } from '@heroui/react'
+import {
+  CheckLine,
+  CloseLine,
+  Delete2Line,
+  Edit2Line,
+  FileFill,
+  FolderFill,
+} from '@mingcute/react'
 import type { WorkspaceNode } from '@/features/workspace/types'
-import { FileFill, FolderFill, Edit2Line, Delete2Line, CheckLine, CloseLine } from '@mingcute/react'
 
 type WorkspaceTreeProps = {
   activeFilePath: string | null
@@ -29,14 +36,15 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
   if (node.kind === 'directory') {
     return (
       <li>
-        <div 
-          className='tree-directory flex items-center gap-2 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-400 select-none' 
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        <div
+          className='tree-directory'
+          style={{ paddingLeft: `${depth * 14 + 8}px` }}
         >
           <FolderFill size={14} />
-          {node.name}
+          <span>{node.name}</span>
         </div>
-        {node.children && node.children.length > 0 && (
+
+        {node.children && node.children.length > 0 ? (
           <ul className='tree-list'>
             {node.children.map((childNode) => (
               <TreeNode
@@ -50,7 +58,7 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
               />
             ))}
           </ul>
-        )}
+        ) : null}
       </li>
     )
   }
@@ -85,11 +93,11 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
   }
 
   return (
-    <li className='tree-item'>
+    <li className={`tree-item ${isActive ? 'is-active' : ''}`}>
       {isEditing ? (
         <form
           className='tree-inline-rename'
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
+          style={{ paddingLeft: `${depth * 14 + 8}px` }}
           onSubmit={(event) => {
             void submitRename(event)
           }}
@@ -97,6 +105,7 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
           <Input
             autoFocus
             value={draftName}
+            aria-label='Rename file'
             onChange={(event) => {
               setDraftName(event.target.value)
               if (actionError) {
@@ -104,6 +113,7 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
               }
             }}
           />
+
           <div className='tree-inline-actions'>
             <Button isIconOnly size='sm' variant='ghost' type='submit' isDisabled={isSubmitting}>
               <CheckLine size={14} />
@@ -126,17 +136,17 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
       ) : (
         <div
           className={`tree-file-row ${isActive ? 'is-active' : ''}`}
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
+          style={{ paddingLeft: `${depth * 14 + 8}px` }}
         >
           <Button
-            className={`tree-file h-8 rounded-md transition-all justify-start px-2 ${isActive ? 'bg-blue-50 text-blue-600 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}
+            className='tree-file'
             size='sm'
             variant='ghost'
             onPress={() => onSelectFile(node.path)}
           >
-            <div className="flex items-center gap-2 overflow-hidden">
-              <FileFill size={14} className={isActive ? 'text-blue-500' : 'text-slate-400'} />
-              <span className="truncate">{node.name}</span>
+            <div className='tree-file-content'>
+              <FileFill size={14} className='tree-file-icon' />
+              <span className='tree-file-name'>{node.name}</span>
             </div>
           </Button>
 
@@ -189,15 +199,17 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
 export function WorkspaceTree({ activeFilePath, nodes, onSelectFile, onRenameFile, onDeleteFile }: WorkspaceTreeProps) {
   if (nodes.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center px-4">
-        <FolderFill size={32} className="text-slate-200 mb-2" />
-        <p className='text-xs text-slate-400 leading-relaxed font-medium'>Connect a workspace folder to view and edit files.</p>
+      <div className='tree-empty-state'>
+        <div className='tree-empty-icon'>
+          <FolderFill size={26} />
+        </div>
+        <p>Connect a workspace folder to browse and edit your notes.</p>
       </div>
     )
   }
 
   return (
-    <ul className='tree-list pb-8'>
+    <ul className='tree-list'>
       {nodes.map((node) => (
         <TreeNode
           key={node.path}

@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap");
-
 :root {
   --tt-toolbar-height: 44px;
   --tt-theme-text: var(--tt-gray-light-900);
@@ -24,7 +22,7 @@
 }
 
 .tiptap.ProseMirror {
-  font-family: "DM Sans", sans-serif;
+  font-family: inherit;
 }
 
 .simple-editor-wrapper {
@@ -47,9 +45,26 @@
   top: 0;
   z-index: 5;
   flex: 0 0 auto;
-  border-bottom: 1px solid color-mix(in srgb, var(--tt-border-color) 85%, transparent);
-  background: color-mix(in srgb, var(--tt-bg-color) 96%, transparent);
-  backdrop-filter: blur(10px);
+  margin: 0;
+  padding: 0 0.5rem;
+  border-bottom: 0;
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.awa-simple-toolbar .button:focus-visible,
+.awa-simple-toolbar .button[data-focus-visible="true"],
+.awa-simple-toolbar .tiptap-button:focus-visible,
+.awa-simple-toolbar .tiptap-button[data-focus-visible="true"],
+.awa-simple-toolbar [data-slot="trigger"]:focus-visible,
+.awa-simple-toolbar [data-slot="trigger"][data-focus-visible="true"],
+.awa-simple-toolbar [data-slot="base"]:focus-visible,
+.awa-simple-toolbar [data-slot="base"][data-focus-visible="true"],
+.awa-simple-toolbar [data-focus-visible="true"] {
+  outline: none !important;
+  box-shadow: none !important;
+  ring: 0 !important;
 }
 
 .simple-editor-content {
@@ -63,22 +78,33 @@
 }
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor {
-  width: min(100%, 44rem);
+  width: min(100%, 46rem);
   min-height: 100%;
   margin: 0 auto;
   flex: 1;
-  padding: 1.25rem 1.5rem 18vh;
-  color: #171a1f;
-  caret-color: #2b59ff;
+  padding: 1.6rem 1.9rem 18vh;
+  color: #163c38;
+  background: transparent;
+  box-shadow: none;
+  caret-color: #0d9488;
 }
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor:focus {
   outline: none;
 }
 
+.simple-editor-content .tiptap.ProseMirror.simple-editor::selection {
+  background: rgba(20, 184, 166, 0.18);
+}
+
 @media screen and (max-width: 720px) {
+  .awa-simple-toolbar {
+    margin: 0;
+    padding: 0 0.25rem;
+  }
+
   .simple-editor-content .tiptap.ProseMirror.simple-editor {
     width: 100%;
-    padding: 0.875rem 1rem 14vh;
+    padding: 1rem 1rem 14vh;
   }
 }

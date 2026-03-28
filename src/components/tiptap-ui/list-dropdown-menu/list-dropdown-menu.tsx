@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Button, Dropdown } from "@heroui/react"
+import { Button, Dropdown, Label } from "@heroui/react"
 import { type Editor } from "@tiptap/react"
 
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
@@ -66,20 +66,21 @@ export function ListDropdownMenu({
         </Button>
       </Dropdown.Trigger>
 
-      <Dropdown.Popover placement="bottom start">
-        <Dropdown.Menu aria-label="List styles" onAction={handleAction}>
+      <Dropdown.Popover className="awa-editor-dropdown-popover" placement="bottom start">
+        <Dropdown.Menu aria-label="List styles" className="awa-editor-dropdown-menu" onAction={handleAction}>
           {filteredLists.map((option) => {
             const OptionIcon = listIcons[option.type]
 
             return (
               <Dropdown.Item
+                className="awa-editor-dropdown-item"
                 key={option.type}
                 id={option.type}
                 textValue={listLabels[option.type]}
               >
                 <div className="awa-editor-menu-item">
                   <OptionIcon className="tiptap-button-icon" />
-                  <span>{listLabels[option.type]}</span>
+                  <Label className="awa-editor-menu-label">{listLabels[option.type]}</Label>
                 </div>
               </Dropdown.Item>
             )

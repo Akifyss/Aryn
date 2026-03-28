@@ -1,21 +1,56 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Montserrat:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 @import "@heroui/styles";
 
 :root {
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-heading: 'Outfit', sans-serif;
+  --font-sans: 'Montserrat', system-ui, -apple-system, sans-serif;
+  --font-heading: var(--font-sans);
 
   font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
-  color: #1a1c1e;
-  background: #f8fafc;
+  color: oklch(0.2103 0.0059 285.89);
+  background: #ffffff;
   color-scheme: light;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Align Tiptap primitives with HeroUI v3 semantic tokens */
+  --tt-brand-color-50: color-mix(in oklab, var(--accent) 8%, white);
+  --tt-brand-color-100: color-mix(in oklab, var(--accent) 12%, white);
+  --tt-brand-color-200: color-mix(in oklab, var(--accent) 18%, white);
+  --tt-brand-color-300: color-mix(in oklab, var(--accent) 36%, white);
+  --tt-brand-color-400: color-mix(in oklab, var(--accent) 72%, white);
+  --tt-brand-color-500: var(--accent);
+  --tt-brand-color-600: color-mix(in oklab, var(--accent) 86%, black);
+  --tt-brand-color-700: color-mix(in oklab, var(--accent) 72%, black);
+  --tt-brand-color-800: color-mix(in oklab, var(--accent) 60%, black);
+  --tt-brand-color-900: color-mix(in oklab, var(--accent) 24%, black);
+
+  --tt-gray-light-a-50: color-mix(in oklab, var(--foreground) 3%, transparent);
+  --tt-gray-light-a-100: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --tt-gray-light-a-200: color-mix(in oklab, var(--foreground) 9%, transparent);
+  --tt-gray-light-a-300: color-mix(in oklab, var(--foreground) 14%, transparent);
+  --tt-gray-light-a-400: color-mix(in oklab, var(--foreground) 24%, transparent);
+  --tt-gray-light-a-500: color-mix(in oklab, var(--foreground) 40%, transparent);
+  --tt-gray-light-a-600: color-mix(in oklab, var(--foreground) 58%, transparent);
+  --tt-gray-light-a-700: color-mix(in oklab, var(--foreground) 72%, transparent);
+  --tt-gray-light-a-800: color-mix(in oklab, var(--foreground) 84%, transparent);
+  --tt-gray-light-a-900: color-mix(in oklab, var(--foreground) 96%, transparent);
+
+  --tt-gray-light-50: var(--background);
+  --tt-gray-light-100: var(--surface);
+  --tt-gray-light-200: var(--surface-secondary);
+  --tt-gray-light-300: var(--surface-tertiary);
+  --tt-gray-light-400: color-mix(in oklab, var(--muted) 80%, white);
+  --tt-gray-light-500: var(--muted);
+  --tt-gray-light-600: color-mix(in oklab, var(--foreground) 72%, white);
+  --tt-gray-light-700: color-mix(in oklab, var(--foreground) 82%, white);
+  --tt-gray-light-800: color-mix(in oklab, var(--foreground) 90%, white);
+  --tt-gray-light-900: var(--foreground);
 }
 
 html,
@@ -24,8 +59,32 @@ body {
   width: 100%;
   height: 100%;
   min-height: 100vh;
-  background: #f8fafc;
+  background: #ffffff;
   overflow: hidden;
+}
+
+.dark {
+  --tt-gray-dark-a-50: color-mix(in oklab, white 5%, transparent);
+  --tt-gray-dark-a-100: color-mix(in oklab, white 8%, transparent);
+  --tt-gray-dark-a-200: color-mix(in oklab, white 12%, transparent);
+  --tt-gray-dark-a-300: color-mix(in oklab, white 20%, transparent);
+  --tt-gray-dark-a-400: color-mix(in oklab, white 32%, transparent);
+  --tt-gray-dark-a-500: color-mix(in oklab, white 45%, transparent);
+  --tt-gray-dark-a-600: color-mix(in oklab, white 58%, transparent);
+  --tt-gray-dark-a-700: color-mix(in oklab, white 72%, transparent);
+  --tt-gray-dark-a-800: color-mix(in oklab, white 84%, transparent);
+  --tt-gray-dark-a-900: color-mix(in oklab, white 96%, transparent);
+
+  --tt-gray-dark-50: var(--surface);
+  --tt-gray-dark-100: var(--surface-secondary);
+  --tt-gray-dark-200: var(--surface-tertiary);
+  --tt-gray-dark-300: color-mix(in oklab, var(--muted) 70%, black);
+  --tt-gray-dark-400: var(--muted);
+  --tt-gray-dark-500: color-mix(in oklab, var(--foreground) 64%, black);
+  --tt-gray-dark-600: color-mix(in oklab, var(--foreground) 76%, black);
+  --tt-gray-dark-700: color-mix(in oklab, var(--foreground) 84%, black);
+  --tt-gray-dark-800: color-mix(in oklab, var(--foreground) 92%, black);
+  --tt-gray-dark-900: var(--foreground);
 }
 
 #root {
@@ -35,6 +94,18 @@ body {
 
 button, input, textarea {
   font-family: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid #0d9488;
+  outline-offset: 2px;
 }
 
 /* Scrollbar styling */

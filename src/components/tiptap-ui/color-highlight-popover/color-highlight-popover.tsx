@@ -186,7 +186,7 @@ export function ColorHighlightPopover({
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
+      <PopoverTrigger>
         <ColorHighlightPopoverButton
           disabled={!canColorHighlight}
           data-active-state={isActive ? "on" : "off"}

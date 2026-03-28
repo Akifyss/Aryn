@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "heroui-migration": {
+      "source": "heroui-inc/heroui",
+      "sourceType": "github",
+      "computedHash": "419b6add50c2288795681599b3d1c5a14738eac1384ff13a227c8203d712b2b8"
+    },
+    "heroui-native": {
+      "source": "heroui-inc/heroui",
+      "sourceType": "github",
+      "computedHash": "cc370ef358bc81de7bfb243ad8f7fcdf38bde5b4cdcedfed06503dcfb2465108"
+    },
+    "heroui-react": {
+      "source": "heroui-inc/heroui",
+      "sourceType": "github",
+      "computedHash": "eb416399a9856a04152d36ef07396274e3bf0fff8f12f3e09bf610e5625dd58d"
+    }
+  }
+}

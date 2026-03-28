@@ -1,12 +1,12 @@
 .tiptap-dropdown-menu {
-  --tt-dropdown-menu-bg-color: var(--white);
-  --tt-dropdown-menu-border-color: var(--tt-gray-light-a-100);
-  --tt-dropdown-menu-text-color: var(--tt-gray-light-a-600);
+  --tt-dropdown-menu-bg-color: var(--overlay);
+  --tt-dropdown-menu-border-color: var(--border);
+  --tt-dropdown-menu-text-color: var(--foreground);
 
   .dark & {
-    --tt-dropdown-menu-border-color: var(--tt-gray-dark-a-50);
-    --tt-dropdown-menu-bg-color: var(--tt-gray-dark-50);
-    --tt-dropdown-menu-text-color: var(--tt-gray-dark-a-600);
+    --tt-dropdown-menu-border-color: var(--border);
+    --tt-dropdown-menu-bg-color: var(--overlay);
+    --tt-dropdown-menu-text-color: var(--foreground);
   }
 }
 

@@ -1,9 +1,6 @@
 .tiptap-button {
   font-size: 0.875rem;
   font-weight: 500;
-  font-feature-settings:
-    "salt" on,
-    "cv01" on;
   line-height: 1.15;
   height: 2rem;
   min-width: 2rem;
@@ -17,10 +14,12 @@
   transition-property: background, color, opacity;
   transition-duration: var(--tt-transition-duration-default);
   transition-timing-function: var(--tt-transition-easing-default);
+  box-shadow: none;
 
   // focus-visible
   &:focus-visible {
     outline: none;
+    box-shadow: none;
   }
 
   &[data-highlighted="true"],

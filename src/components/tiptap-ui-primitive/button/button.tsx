@@ -1,11 +1,5 @@
 import * as React from "react"
-
-// --- Tiptap UI Primitive ---
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/tiptap-ui-primitive/tooltip"
+import { Button as HeroButton, Tooltip as HeroTooltip } from "@heroui/react"
 
 // --- Lib ---
 import { cn, parseShortcutKeys } from "@/lib/tiptap-utils"
@@ -52,6 +46,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
+    const styleVariant =
+      (props as Record<string, unknown>)["data-style"] === "primary"
+        ? "primary"
+        : "ghost"
     const shortcuts = React.useMemo(
       () => parseShortcutKeys({ shortcutKeys }),
       [shortcutKeys]
@@ -59,32 +57,40 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     if (!tooltip || !showTooltip) {
       return (
-        <button
+        <HeroButton
           className={cn("tiptap-button", className)}
+          isDisabled={props.disabled}
           ref={ref}
+          size="sm"
+          variant={styleVariant}
           aria-label={ariaLabel}
-          {...props}
+          {...(props as React.ComponentProps<typeof HeroButton>)}
         >
           {children}
-        </button>
+        </HeroButton>
       )
     }
 
     return (
-      <Tooltip delay={200}>
-        <TooltipTrigger
-          className={cn("tiptap-button", className)}
-          ref={ref}
-          aria-label={ariaLabel}
-          {...props}
-        >
-          {children}
-        </TooltipTrigger>
-        <TooltipContent>
+      <HeroTooltip>
+        <HeroTooltip.Trigger>
+          <HeroButton
+            className={cn("tiptap-button", className)}
+            isDisabled={props.disabled}
+            ref={ref}
+            size="sm"
+            variant={styleVariant}
+            aria-label={ariaLabel}
+            {...(props as React.ComponentProps<typeof HeroButton>)}
+          >
+            {children}
+          </HeroButton>
+        </HeroTooltip.Trigger>
+        <HeroTooltip.Content>
           {tooltip}
           <ShortcutDisplay shortcuts={shortcuts} />
-        </TooltipContent>
-      </Tooltip>
+        </HeroTooltip.Content>
+      </HeroTooltip>
     )
   }
 )

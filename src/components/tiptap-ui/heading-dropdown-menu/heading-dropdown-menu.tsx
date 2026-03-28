@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Button, Dropdown } from "@heroui/react"
+import { Button, Dropdown, Label } from "@heroui/react"
 
 import { ChevronDownIcon } from "@/components/tiptap-icons"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
@@ -73,20 +73,21 @@ export const HeadingDropdownMenu = React.forwardRef<
           </Button>
         </Dropdown.Trigger>
 
-        <Dropdown.Popover placement="bottom start">
-          <Dropdown.Menu aria-label="Heading styles" onAction={handleAction}>
+        <Dropdown.Popover className="awa-editor-dropdown-popover" placement="bottom start">
+          <Dropdown.Menu aria-label="Heading styles" className="awa-editor-dropdown-menu" onAction={handleAction}>
             {levels.map((level) => {
               const LevelIcon = headingIcons[level]
 
               return (
                 <Dropdown.Item
+                  className="awa-editor-dropdown-item"
                   key={String(level)}
                   id={String(level)}
                   textValue={`Heading ${level}`}
                 >
                   <div className="awa-editor-menu-item">
                     <LevelIcon className="tiptap-button-icon" />
-                    <span>Heading {level}</span>
+                    <Label className="awa-editor-menu-label">Heading {level}</Label>
                   </div>
                 </Dropdown.Item>
               )
