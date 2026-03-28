@@ -1,4 +1,4 @@
-import { readFile, readdir, writeFile } from 'node:fs/promises'
+import { access, readFile, readdir, mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
 
@@ -33,6 +33,10 @@ function shouldIgnore(entryName: string) {
 
 function isOpenableFile(entryName: string) {
   return OPENABLE_EXTENSIONS.has(path.extname(entryName).toLowerCase())
+}
+
+function isInsideWorkspace(rootPath: string, targetPath: string) {
+  return targetPath === rootPath || targetPath.startsWith(rootPath + path.sep)
 }
 
 function sortNodes(left: WorkspaceNode, right: WorkspaceNode) {
@@ -90,6 +94,107 @@ export async function loadWorkspaceFile(filePath: string) {
 
 export async function saveWorkspaceFile(filePath: string, content: string) {
   await writeFile(filePath, content, 'utf8')
+}
+
+export async function workspacePathExists(workspacePath: string) {
+  try {
+    const info = await stat(workspacePath)
+    return info.isDirectory()
+  } catch {
+    return false
+  }
+}
+
+export async function createWorkspaceFile(rootPath: string, relativeFilePath: string) {
+  const normalizedRelativePath = relativeFilePath.trim().replace(/^[\\/]+/, '')
+
+  if (!normalizedRelativePath) {
+    throw new Error('File name is required.')
+  }
+
+  const resolvedRootPath = path.resolve(rootPath)
+  const resolvedFilePath = path.resolve(resolvedRootPath, normalizedRelativePath)
+
+  if (!isInsideWorkspace(resolvedRootPath, resolvedFilePath)) {
+    throw new Error('File path must stay inside the current workspace.')
+  }
+
+  if (!isOpenableFile(resolvedFilePath)) {
+    throw new Error('Only Markdown and text files can be created.')
+  }
+
+  try {
+    await access(resolvedFilePath)
+    throw new Error('That file already exists.')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error
+    }
+  }
+
+  await mkdir(path.dirname(resolvedFilePath), { recursive: true })
+  await writeFile(resolvedFilePath, '', 'utf8')
+
+  return resolvedFilePath
+}
+
+export async function renameWorkspaceFile(rootPath: string, filePath: string, nextRelativeFilePath: string) {
+  const normalizedRelativePath = nextRelativeFilePath.trim().replace(/^[\\/]+/, '')
+
+  if (!normalizedRelativePath) {
+    throw new Error('File name is required.')
+  }
+
+  const resolvedRootPath = path.resolve(rootPath)
+  const resolvedCurrentFilePath = path.resolve(filePath)
+  const resolvedNextFilePath = path.resolve(resolvedRootPath, normalizedRelativePath)
+
+  if (!isInsideWorkspace(resolvedRootPath, resolvedCurrentFilePath) || !isInsideWorkspace(resolvedRootPath, resolvedNextFilePath)) {
+    throw new Error('File path must stay inside the current workspace.')
+  }
+
+  if (!isOpenableFile(resolvedNextFilePath)) {
+    throw new Error('Only Markdown and text files are supported.')
+  }
+
+  const currentInfo = await stat(resolvedCurrentFilePath).catch(() => null)
+  if (!currentInfo?.isFile()) {
+    throw new Error('The selected file no longer exists.')
+  }
+
+  if (resolvedCurrentFilePath === resolvedNextFilePath) {
+    return resolvedCurrentFilePath
+  }
+
+  try {
+    await access(resolvedNextFilePath)
+    throw new Error('That file already exists.')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error
+    }
+  }
+
+  await mkdir(path.dirname(resolvedNextFilePath), { recursive: true })
+  await rename(resolvedCurrentFilePath, resolvedNextFilePath)
+
+  return resolvedNextFilePath
+}
+
+export async function deleteWorkspaceFile(rootPath: string, filePath: string) {
+  const resolvedRootPath = path.resolve(rootPath)
+  const resolvedFilePath = path.resolve(filePath)
+
+  if (!isInsideWorkspace(resolvedRootPath, resolvedFilePath)) {
+    throw new Error('File path must stay inside the current workspace.')
+  }
+
+  const fileInfo = await stat(resolvedFilePath).catch(() => null)
+  if (!fileInfo?.isFile()) {
+    throw new Error('The selected file no longer exists.')
+  }
+
+  await unlink(resolvedFilePath)
 }
 
 export async function watchWorkspace(

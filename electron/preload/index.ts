@@ -3,9 +3,13 @@ import type { WorkspaceChangeEvent, WorkspaceNode } from '../../src/features/wor
 
 contextBridge.exposeInMainWorld('appApi', {
   pickWorkspace: () => ipcRenderer.invoke('workspace:pick-directory') as Promise<string | null>,
+  getLastWorkspace: () => ipcRenderer.invoke('workspace:get-last-directory') as Promise<string | null>,
   loadWorkspaceTree: (rootPath: string) => ipcRenderer.invoke('workspace:load-tree', rootPath) as Promise<WorkspaceNode[]>,
   readWorkspaceFile: (filePath: string) => ipcRenderer.invoke('workspace:read-file', filePath) as Promise<string>,
   saveWorkspaceFile: (filePath: string, content: string) => ipcRenderer.invoke('workspace:save-file', filePath, content) as Promise<{ ok: boolean }>,
+  createWorkspaceFile: (rootPath: string, relativeFilePath: string) => ipcRenderer.invoke('workspace:create-file', rootPath, relativeFilePath) as Promise<{ filePath: string }>,
+  renameWorkspaceFile: (rootPath: string, filePath: string, nextRelativeFilePath: string) => ipcRenderer.invoke('workspace:rename-file', rootPath, filePath, nextRelativeFilePath) as Promise<{ filePath: string }>,
+  deleteWorkspaceFile: (rootPath: string, filePath: string) => ipcRenderer.invoke('workspace:delete-file', rootPath, filePath) as Promise<{ ok: boolean }>,
   startWorkspaceWatch: (rootPath: string) => ipcRenderer.invoke('workspace:start-watch', rootPath) as Promise<{ ok: boolean }>,
   stopWorkspaceWatch: () => ipcRenderer.invoke('workspace:stop-watch') as Promise<{ ok: boolean }>,
   minimizeWindow: () => ipcRenderer.invoke('window:minimize') as Promise<void>,

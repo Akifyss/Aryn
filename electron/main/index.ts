@@ -1,13 +1,18 @@
 import { Menu, app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
 import {
+  createWorkspaceFile,
+  deleteWorkspaceFile,
   loadWorkspaceFile,
   loadWorkspaceTree,
+  renameWorkspaceFile,
   saveWorkspaceFile,
   unwatchWorkspace,
   watchWorkspace,
+  workspacePathExists,
 } from './workspace'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -46,6 +51,29 @@ if (!app.requestSingleInstanceLock()) {
 let win: BrowserWindow | null = null
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
+const workspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
+
+type WorkspaceSettings = {
+  lastWorkspacePath: string | null
+}
+
+async function readWorkspaceSettings(): Promise<WorkspaceSettings> {
+  try {
+    const raw = await readFile(workspaceSettingsPath, 'utf8')
+    const parsed = JSON.parse(raw) as Partial<WorkspaceSettings>
+    return {
+      lastWorkspacePath: parsed.lastWorkspacePath ?? null,
+    }
+  } catch {
+    return {
+      lastWorkspacePath: null,
+    }
+  }
+}
+
+async function writeWorkspaceSettings(nextSettings: WorkspaceSettings) {
+  await writeFile(workspaceSettingsPath, JSON.stringify(nextSettings, null, 2), 'utf8')
+}
 
 async function createWindow() {
   win = new BrowserWindow({
@@ -130,11 +158,29 @@ ipcMain.handle('workspace:pick-directory', async () => {
     return null
   }
 
-  return result.filePaths[0]
+  const selectedPath = result.filePaths[0]
+  await writeWorkspaceSettings({ lastWorkspacePath: selectedPath })
+  return selectedPath
 })
 
 ipcMain.handle('workspace:load-tree', async (_, rootPath: string) => {
   return loadWorkspaceTree(rootPath)
+})
+
+ipcMain.handle('workspace:get-last-directory', async () => {
+  const settings = await readWorkspaceSettings()
+  const lastWorkspacePath = settings.lastWorkspacePath
+
+  if (!lastWorkspacePath) {
+    return null
+  }
+
+  if (!(await workspacePathExists(lastWorkspacePath))) {
+    await writeWorkspaceSettings({ lastWorkspacePath: null })
+    return null
+  }
+
+  return lastWorkspacePath
 })
 
 ipcMain.handle('workspace:read-file', async (_, filePath: string) => {
@@ -143,6 +189,21 @@ ipcMain.handle('workspace:read-file', async (_, filePath: string) => {
 
 ipcMain.handle('workspace:save-file', async (_, filePath: string, content: string) => {
   await saveWorkspaceFile(filePath, content)
+  return { ok: true }
+})
+
+ipcMain.handle('workspace:create-file', async (_, rootPath: string, relativeFilePath: string) => {
+  const filePath = await createWorkspaceFile(rootPath, relativeFilePath)
+  return { filePath }
+})
+
+ipcMain.handle('workspace:rename-file', async (_, rootPath: string, filePath: string, nextRelativeFilePath: string) => {
+  const nextFilePath = await renameWorkspaceFile(rootPath, filePath, nextRelativeFilePath)
+  return { filePath: nextFilePath }
+})
+
+ipcMain.handle('workspace:delete-file', async (_, rootPath: string, filePath: string) => {
+  await deleteWorkspaceFile(rootPath, filePath)
   return { ok: true }
 })
 
