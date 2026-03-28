@@ -57,7 +57,7 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile }: TreeNodeProps) 
 
 export function WorkspaceTree({ activeFilePath, nodes, onSelectFile }: WorkspaceTreeProps) {
   if (nodes.length === 0) {
-    return <p className='empty-copy'>Open a folder to see files.</p>
+    return <p className='empty-copy'>Open a folder to see Markdown and text files.</p>
   }
 
   return (

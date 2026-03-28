@@ -6,6 +6,7 @@ export type WorkspaceNode = {
   name: string
   path: string
   kind: 'directory' | 'file'
+  isOpenable?: boolean
   children?: WorkspaceNode[]
 }
 
@@ -16,11 +17,22 @@ export type WorkspaceChangeEvent = {
 }
 
 const IGNORED_NAMES = new Set(['.git', 'node_modules', 'dist', 'dist-electron'])
+const OPENABLE_EXTENSIONS = new Set([
+  '.md',
+  '.markdown',
+  '.mdx',
+  '.txt',
+  '.text',
+])
 
 let workspaceWatcher: FSWatcher | null = null
 
 function shouldIgnore(entryName: string) {
   return IGNORED_NAMES.has(entryName)
+}
+
+function isOpenableFile(entryName: string) {
+  return OPENABLE_EXTENSIONS.has(path.extname(entryName).toLowerCase())
 }
 
 function sortNodes(left: WorkspaceNode, right: WorkspaceNode) {
@@ -34,28 +46,39 @@ function sortNodes(left: WorkspaceNode, right: WorkspaceNode) {
 export async function loadWorkspaceTree(rootPath: string): Promise<WorkspaceNode[]> {
   async function walk(currentPath: string): Promise<WorkspaceNode[]> {
     const entries = await readdir(currentPath, { withFileTypes: true })
-    const nodes = await Promise.all(entries
+    const nodes: Array<WorkspaceNode | null> = await Promise.all(entries
       .filter((entry) => !shouldIgnore(entry.name))
       .map(async (entry) => {
         const entryPath = path.join(currentPath, entry.name)
 
         if (entry.isDirectory()) {
+          const children = await walk(entryPath)
+
+          if (children.length === 0) {
+            return null
+          }
+
           return {
             name: entry.name,
             path: entryPath,
             kind: 'directory' as const,
-            children: await walk(entryPath),
+            children,
           }
+        }
+
+        if (!isOpenableFile(entry.name)) {
+          return null
         }
 
         return {
           name: entry.name,
           path: entryPath,
           kind: 'file' as const,
+          isOpenable: true,
         }
       }))
 
-    return nodes.sort(sortNodes)
+    return nodes.filter((node): node is WorkspaceNode => node !== null).sort(sortNodes)
   }
 
   return walk(rootPath)

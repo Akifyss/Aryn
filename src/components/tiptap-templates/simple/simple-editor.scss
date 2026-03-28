@@ -1,0 +1,84 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap");
+
+:root {
+  --tt-toolbar-height: 44px;
+  --tt-theme-text: var(--tt-gray-light-900);
+}
+
+::-webkit-scrollbar {
+  width: 0.25rem;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--tt-scrollbar-color) transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--tt-scrollbar-color);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tiptap.ProseMirror {
+  font-family: "DM Sans", sans-serif;
+}
+
+.simple-editor-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--tt-theme-text);
+}
+
+.simple-editor-wrapper[data-disabled="true"] {
+  opacity: 0.72;
+}
+
+.awa-simple-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex: 0 0 auto;
+  border-bottom: 1px solid color-mix(in srgb, var(--tt-border-color) 85%, transparent);
+  background: color-mix(in srgb, var(--tt-bg-color) 96%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.simple-editor-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor {
+  width: min(100%, 44rem);
+  min-height: 100%;
+  margin: 0 auto;
+  flex: 1;
+  padding: 1.25rem 1.5rem 18vh;
+  color: #171a1f;
+  caret-color: #2b59ff;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor:focus {
+  outline: none;
+}
+
+@media screen and (max-width: 720px) {
+  .simple-editor-content .tiptap.ProseMirror.simple-editor {
+    width: 100%;
+    padding: 0.875rem 1rem 14vh;
+  }
+}

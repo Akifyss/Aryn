@@ -20,6 +20,14 @@ body {
   --text-tertiary: oklch(0.67 0.012 264);
   --accent-soft: oklch(0.95 0.02 252);
   --accent-text: oklch(0.56 0.16 255);
+  --editor-max-width: 48rem;
+  --editor-line-height: 1.7;
+  --editor-base-font-size: 1.02rem;
+  --editor-h1-size: clamp(2rem, 1.6rem + 1vw, 2.8rem);
+  --editor-h2-size: clamp(1.35rem, 1.2rem + 0.4vw, 1.7rem);
+  --editor-h3-size: 1.15rem;
+  --editor-font-family: "Aptos", "Segoe UI Variable Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --editor-bold-weight: 650;
   display: grid;
   grid-template-rows: 48px minmax(0, 1fr);
   grid-template-columns: 252px minmax(0, 1fr) 292px;
@@ -109,7 +117,7 @@ body {
 }
 
 .panel-editor {
-  padding: 18px 24px 26px;
+  padding: 0;
   background: color-mix(in oklch, white 92%, var(--app-bg));
 }
 
@@ -118,11 +126,6 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-}
-
-.panel-header-inline {
-  align-items: center;
-  margin-bottom: 16px;
 }
 
 .eyebrow {
@@ -147,10 +150,6 @@ body {
   color: var(--text-tertiary);
 }
 
-.status-pill {
-  font-size: 0.76rem;
-}
-
 .panel-divider {
   margin: 12px 0 14px;
 }
@@ -160,7 +159,7 @@ body {
   min-height: 0;
   height: 100%;
   width: 100%;
-  padding: 0;
+  padding: 0 0 24px;
   background: transparent;
   color: var(--text-primary);
   outline: none;
@@ -171,8 +170,287 @@ body {
   font-family: "Aptos", "Segoe UI Variable Text", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
-.editor-surface h2 {
+.editor-source {
+  padding-top: 10px;
+  font-family: "Consolas", "SFMono-Regular", "Courier New", monospace;
+  font-size: 0.94rem;
+  line-height: 1.7;
+  white-space: pre;
+}
+
+.ProseMirror {
+  max-width: var(--editor-max-width, 48rem) !important;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.editor-prose,
+.prose {
+  min-height: 100%;
+  color: var(--text-primary);
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-base-font-size);
+  line-height: var(--editor-line-height);
+  outline: none;
+}
+
+.editor-prose > *:first-child,
+.prose > *:first-child {
   margin-top: 0;
+}
+
+.editor-prose h1,
+.editor-prose h2,
+.editor-prose h3,
+.prose h1,
+.prose h2,
+.prose h3 {
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.editor-prose h1,
+.prose h1 {
+  margin: 0 0 0.9rem;
+  font-size: var(--editor-h1-size);
+  font-weight: var(--editor-bold-weight);
+}
+
+.editor-prose h2,
+.prose h2 {
+  margin: 1.6rem 0 0.7rem;
+  font-size: var(--editor-h2-size);
+  font-weight: var(--editor-bold-weight);
+}
+
+.editor-prose h3,
+.prose h3 {
+  margin: 1.2rem 0 0.6rem;
+  font-size: var(--editor-h3-size);
+  font-weight: var(--editor-bold-weight);
+}
+
+.editor-prose p,
+.editor-prose li,
+.editor-prose blockquote,
+.prose p,
+.prose li,
+.prose blockquote {
+  color: color-mix(in oklch, var(--text-primary) 88%, white);
+}
+
+.editor-prose p,
+.editor-prose ul,
+.editor-prose ol,
+.editor-prose blockquote,
+.editor-prose pre,
+.editor-prose hr,
+.prose p,
+.prose ul,
+.prose ol,
+.prose blockquote,
+.prose pre,
+.prose hr {
+  margin: 0 0 1rem;
+}
+
+.editor-prose ul,
+.editor-prose ol,
+.prose ul,
+.prose ol {
+  padding-left: 1.25rem;
+}
+
+.editor-prose ul[data-type='taskList'],
+.prose ul[data-type='taskList'] {
+  padding-left: 0;
+  list-style: none;
+}
+
+.editor-prose ul[data-type='taskList'] li,
+.prose ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+}
+
+.editor-prose ul[data-type='taskList'] li > label,
+.prose ul[data-type='taskList'] li > label {
+  flex-shrink: 0;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  height: 1.6em;
+}
+
+.editor-prose ul[data-type='taskList'] li input,
+.prose ul[data-type='taskList'] li input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--accent-text);
+  cursor: pointer;
+}
+
+.editor-prose ul[data-type='taskList'] li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.prose ul[data-type='taskList'] li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-prose ul[data-type='taskList'] li > div > p,
+.prose ul[data-type='taskList'] li > div > p {
+  margin: 0;
+}
+
+.editor-prose ul[data-type='taskList'] li[data-checked='true'] > div,
+.prose ul[data-type='taskList'] li[data-checked='true'] > div {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.editor-prose ul[data-type='taskList'] > li,
+.prose ul[data-type='taskList'] > li {
+  padding-top: 0.125em;
+  padding-bottom: 0.125em;
+}
+
+.editor-prose a {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.prose a {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.editor-prose strong {
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.prose strong,
+.prose b {
+  font-weight: var(--editor-bold-weight);
+  color: var(--text-primary);
+}
+
+.editor-prose em {
+  font-style: italic;
+}
+
+.prose em {
+  font-style: italic;
+}
+
+.editor-prose blockquote {
+  padding-left: 1rem;
+  border-left: 2px solid var(--panel-border-strong);
+}
+
+.prose blockquote {
+  padding-left: 1rem;
+  border-left: 2px solid var(--panel-border-strong);
+}
+
+.editor-prose hr {
+  border: 0;
+  height: 1px;
+  background: var(--panel-border);
+}
+
+.prose hr {
+  border: 0;
+  height: 1px;
+  background: var(--panel-border);
+}
+
+.editor-prose code {
+  padding: 0.16rem 0.34rem;
+  border-radius: 0.35rem;
+  background: color-mix(in oklch, var(--accent-soft) 55%, white);
+  font-size: 0.9em;
+}
+
+.prose code {
+  color: var(--text-primary);
+  padding: 0.16rem 0.34rem;
+  border-radius: 0.35rem;
+  background: color-mix(in oklch, var(--accent-soft) 55%, white);
+  font-size: 0.9em;
+  font-weight: 500;
+}
+
+.editor-prose pre {
+  overflow: auto;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  background: color-mix(in oklch, var(--app-bg) 58%, white);
+}
+
+.prose pre {
+  overflow: auto;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.75rem;
+  background: color-mix(in oklch, var(--app-bg) 58%, white);
+}
+
+.editor-prose pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.prose pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.editor-prose pre .hljs-keyword,
+.editor-prose pre .hljs-selector-tag,
+.editor-prose pre .hljs-title {
+  color: oklch(0.54 0.15 260);
+}
+
+.editor-prose pre .hljs-string,
+.editor-prose pre .hljs-attr,
+.editor-prose pre .hljs-template-tag {
+  color: oklch(0.56 0.12 160);
+}
+
+.editor-prose pre .hljs-number,
+.editor-prose pre .hljs-literal,
+.editor-prose pre .hljs-built_in {
+  color: oklch(0.6 0.14 45);
+}
+
+.editor-prose pre .hljs-comment {
+  color: var(--text-tertiary);
+}
+
+.editor-prose .tiptap.ProseMirror,
+.prose.tiptap.ProseMirror {
+  min-height: 100%;
+}
+
+.editor-prose p.is-editor-empty:first-child::before,
+.prose p.is-editor-empty:first-child::before {
+  color: var(--text-tertiary);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
 }
 
 .toolbar-row {
@@ -247,6 +525,7 @@ body {
   margin: 0;
   color: var(--text-tertiary);
   font-size: 0.84rem;
+  line-height: 1.6;
 }
 
 .agent-block {
@@ -254,13 +533,11 @@ body {
   overflow: auto;
 }
 
-.editor-heading h2,
 .agent-heading h2 {
   font-size: clamp(1.18rem, 1rem + 0.3vw, 1.42rem);
   letter-spacing: -0.025em;
 }
 
-.editor-subtitle,
 .agent-subtitle {
   margin: 6px 0 0;
   color: var(--text-secondary);
@@ -270,9 +547,73 @@ body {
 .editor-frame {
   flex: 1;
   min-height: 0;
-  width: min(100%, 880px);
-  margin: 0 auto;
-  padding: clamp(18px, 2vw, 28px) clamp(22px, 2.5vw, 38px);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.awa-editor-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.awa-link-popover {
+  display: grid;
+  gap: 12px;
+  min-width: 320px;
+}
+
+.awa-link-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.markdown-editor-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.editor-toolbar-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.toolbar-shortcut {
+  margin-left: 8px;
+  font-size: 0.73rem;
+  color: var(--text-tertiary);
+}
+
+.editor-toolbar-divider {
+  height: 1px;
+  background: var(--panel-border);
+}
+
+.editor-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.editor-scroll > div {
+  height: 100%;
 }
 
 .agent-status-grid {
@@ -315,7 +656,5 @@ body {
 
   .editor-frame {
     width: 100%;
-    padding-left: 0;
-    padding-right: 0;
   }
 }

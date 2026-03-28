@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Chip, ScrollShadow, Separator } from '@heroui/react'
+import { Button, ScrollShadow, Separator } from '@heroui/react'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
@@ -20,14 +20,6 @@ function App() {
   const setDirty = useWorkspaceStore((state) => state.setDirty)
   const setTree = useWorkspaceStore((state) => state.setTree)
   const tree = useWorkspaceStore((state) => state.tree)
-
-  const currentFileName = useMemo(() => {
-    if (!currentFilePath) {
-      return 'Draft'
-    }
-
-    return currentFilePath.split(/[\\/]/).pop() ?? currentFilePath
-  }, [currentFilePath])
 
   async function loadTree(rootPath: string) {
     const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
@@ -166,31 +158,6 @@ function App() {
       </aside>
 
       <main className='panel panel-editor'>
-        <div className='panel-header panel-header-inline'>
-          <div className='editor-heading'>
-            <p className='eyebrow'>Editor</p>
-            <h2>{currentFileName}</h2>
-            <p className='editor-subtitle'>
-              {currentPath ? 'Focused drafting environment' : 'Open a workspace to begin writing'}
-            </p>
-          </div>
-          <div className='toolbar-row'>
-            <Chip className='status-pill' color='accent' variant='soft'>
-              {isDirty ? 'Unsaved' : 'Saved'}
-            </Chip>
-            <Button
-              size='sm'
-              isDisabled={!currentFilePath || !isDirty || isSaving}
-              onPress={handleSave}
-              variant='secondary'
-            >
-              {isSaving ? 'Saving...' : 'Save'}
-            </Button>
-          </div>
-        </div>
-
-        <Separator className='panel-divider' />
-
         <div className='editor-frame'>
           <WritingEditor
             disabled={!currentFilePath}
