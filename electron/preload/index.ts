@@ -1,4 +1,5 @@
 import { ipcRenderer, contextBridge } from 'electron'
+import type { AgentClientEvent, AgentWorkspaceState } from '../../src/features/agent/types'
 import type { WorkspaceChangeEvent, WorkspaceNode } from '../../src/features/workspace/types'
 
 contextBridge.exposeInMainWorld('appApi', {
@@ -12,6 +13,13 @@ contextBridge.exposeInMainWorld('appApi', {
   deleteWorkspaceFile: (rootPath: string, filePath: string) => ipcRenderer.invoke('workspace:delete-file', rootPath, filePath) as Promise<{ ok: boolean }>,
   startWorkspaceWatch: (rootPath: string) => ipcRenderer.invoke('workspace:start-watch', rootPath) as Promise<{ ok: boolean }>,
   stopWorkspaceWatch: () => ipcRenderer.invoke('workspace:stop-watch') as Promise<{ ok: boolean }>,
+  loadAgentWorkspace: (rootPath: string) => ipcRenderer.invoke('agent:load-workspace', rootPath) as Promise<AgentWorkspaceState>,
+  createAgentSession: (rootPath: string, name?: string) => ipcRenderer.invoke('agent:create-session', rootPath, name) as Promise<AgentWorkspaceState>,
+  openAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:open-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,
+  renameAgentSession: (name: string) => ipcRenderer.invoke('agent:rename-session', name) as Promise<AgentWorkspaceState>,
+  sendAgentPrompt: (prompt: string) => ipcRenderer.invoke('agent:send-prompt', prompt) as Promise<{ ok: boolean }>,
+  selectAgentModel: (modelKey: string) => ipcRenderer.invoke('agent:select-model', modelKey) as Promise<AgentWorkspaceState>,
+  abortAgentPrompt: () => ipcRenderer.invoke('agent:abort') as Promise<AgentWorkspaceState>,
   minimizeWindow: () => ipcRenderer.invoke('window:minimize') as Promise<void>,
   toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize') as Promise<{ isMaximized: boolean }>,
   closeWindow: () => ipcRenderer.invoke('window:close') as Promise<void>,
@@ -25,6 +33,17 @@ contextBridge.exposeInMainWorld('appApi', {
 
     return () => {
       ipcRenderer.off('workspace:changed', wrappedListener)
+    }
+  },
+  onAgentEvent: (listener: (event: AgentClientEvent) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: AgentClientEvent) => {
+      listener(payload)
+    }
+
+    ipcRenderer.on('agent:event', wrappedListener)
+
+    return () => {
+      ipcRenderer.off('agent:event', wrappedListener)
     }
   },
 })

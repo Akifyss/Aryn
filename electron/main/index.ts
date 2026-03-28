@@ -14,6 +14,8 @@ import {
   watchWorkspace,
   workspacePathExists,
 } from './workspace'
+import { PiAgentManager } from './agent'
+import type { AgentClientEvent } from '../../src/features/agent/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -52,6 +54,9 @@ let win: BrowserWindow | null = null
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 const workspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
+const agentManager = new PiAgentManager((event: AgentClientEvent) => {
+  win?.webContents.send('agent:event', event)
+})
 
 type WorkspaceSettings = {
   lastWorkspacePath: string | null
@@ -123,6 +128,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   win = null
+  agentManager.dispose()
   void unwatchWorkspace()
   if (process.platform !== 'darwin') app.quit()
 })
@@ -218,6 +224,34 @@ ipcMain.handle('workspace:start-watch', async (_, rootPath: string) => {
 ipcMain.handle('workspace:stop-watch', async () => {
   await unwatchWorkspace()
   return { ok: true }
+})
+
+ipcMain.handle('agent:load-workspace', async (_event, rootPath: string) => {
+  return agentManager.loadWorkspaceState(rootPath)
+})
+
+ipcMain.handle('agent:create-session', async (_event, rootPath: string, name?: string) => {
+  return agentManager.createSession(rootPath, name)
+})
+
+ipcMain.handle('agent:open-session', async (_event, rootPath: string, sessionPath: string) => {
+  return agentManager.openSession(rootPath, sessionPath)
+})
+
+ipcMain.handle('agent:rename-session', async (_event, name: string) => {
+  return agentManager.renameActiveSession(name)
+})
+
+ipcMain.handle('agent:send-prompt', async (_event, prompt: string) => {
+  return agentManager.sendPrompt(prompt)
+})
+
+ipcMain.handle('agent:select-model', async (_event, modelKey: string) => {
+  return agentManager.selectModel(modelKey)
+})
+
+ipcMain.handle('agent:abort', async () => {
+  return agentManager.abortActivePrompt()
 })
 
 ipcMain.handle('window:minimize', () => {

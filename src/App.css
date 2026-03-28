@@ -12,7 +12,7 @@
   position: relative;
   display: grid;
   grid-template-rows: 40px minmax(0, 1fr);
-  grid-template-columns: 320px minmax(0, 1fr) 320px;
+  grid-template-columns: 300px minmax(0, 1fr) 380px;
   gap: 0;
   height: 100vh;
   padding: 0;
@@ -155,7 +155,9 @@
 }
 
 .panel-agent {
-  padding: 1rem;
+  padding: 0;
+  background: #ffffff;
+  color: var(--text-main);
 }
 
 .eyebrow {
@@ -468,9 +470,312 @@
   gap: 0.75rem;
 }
 
-.agent-empty-shell {
+.agent-shell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+}
+
+.agent-threadbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3rem;
+  padding: 0.55rem 0.9rem 0.5rem;
+  border-bottom: 1px solid #e9eded;
+}
+
+.agent-session-select {
+  min-width: 0;
+  flex: 1;
+}
+
+.agent-threadbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+
+.agent-icon-button {
+  color: #667574;
+  border-radius: 10px;
+}
+
+.agent-icon-button:hover {
+  color: #172a29;
+  background: #f4f7f8;
+}
+
+.agent-select-trigger,
+.agent-model-trigger {
+  min-height: 2rem;
+  justify-content: space-between;
+  border-radius: 8px;
+}
+
+.agent-select-popover {
+  min-width: 16rem;
+}
+
+.agent-select-current {
+  overflow: hidden;
+  color: #172a29;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-dropdown-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.agent-select-item,
+.agent-dropdown-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.agent-select-item-title,
+.agent-dropdown-title {
+  overflow: hidden;
+  color: #172a29;
+  font-size: 0.84rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-select-item-meta,
+.agent-dropdown-meta {
+  overflow: hidden;
+  color: #7a8684;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-status-inline {
+  padding: 0.45rem 0.95rem 0;
+}
+
+.agent-status-inline p {
+  margin: 0;
+  color: #7a8684;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.agent-status-inline.is-error p {
+  color: #bc4b57;
+}
+
+.agent-messages-scroll {
   flex: 1;
   min-height: 0;
+  padding: 0 0.2rem 0 0;
+}
+
+.agent-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 100%;
+  padding: 1rem 0.95rem 1.25rem;
+}
+
+.agent-empty-chat {
+  padding-top: 0.05rem;
+}
+
+.agent-empty-chat p {
+  margin: 0;
+  color: #7a8684;
+  font-size: 0.79rem;
+  line-height: 1.6;
+}
+
+.agent-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.agent-message-user {
+  gap: 0.3rem;
+  padding: 0.9rem 0.9rem;
+  border: 1px solid #d9e2e5;
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.agent-message-assistant {
+  padding: 0.1rem 0;
+}
+
+.agent-message-tool,
+.agent-message-system {
+  gap: 0.35rem;
+  padding: 0.75rem 0.8rem;
+  border: 1px solid #e2e8ec;
+  border-radius: 11px;
+  background: #f8fafb;
+}
+
+.agent-message.is-error {
+  border-color: #efc1c5;
+}
+
+.agent-message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.agent-message-role,
+.agent-message-time {
+  font-size: 0.67rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.agent-message-role {
+  color: #617472;
+}
+
+.agent-message-time {
+  color: #92a7a2;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.agent-message-body p {
+  margin: 0;
+  color: #182a29;
+  font-size: 0.82rem;
+  line-height: 1.62;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agent-composer {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border-top: 1px solid #e9eded;
+  background: #ffffff;
+}
+
+.agent-composer-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 0;
+  padding: 0.65rem 0.9rem 0.55rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.agent-composer-input.textarea {
+  width: 100%;
+  min-height: 6rem;
+  padding: 0 0 0.35rem;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: #172a29;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  resize: none;
+}
+
+.agent-composer-input.textarea::placeholder {
+  color: #7a8684;
+}
+
+.agent-composer-input.textarea:hover,
+.agent-composer-input.textarea:focus,
+.agent-composer-input.textarea:focus-visible,
+.agent-composer-input.textarea[data-focus="true"],
+.agent-composer-input.textarea[data-focus-visible="true"],
+.agent-composer-input.textarea[data-hovered="true"] {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.agent-composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  min-height: 2rem;
+}
+
+.agent-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.agent-model-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-model-input.input {
+  width: 100%;
+  min-height: 1.9rem;
+  border-radius: 8px;
+}
+
+.agent-model-input.input,
+.agent-model-input.input:hover,
+.agent-model-input.input:focus,
+.agent-model-input.input:focus-visible,
+.agent-model-input.input[data-focus="true"],
+.agent-model-input.input[data-focus-visible="true"],
+.agent-model-input.input[data-hovered="true"] {
+  box-shadow: none !important;
+}
+
+.agent-model-input.input input {
+  color: #172a29;
+  font-size: 0.78rem;
+}
+
+.agent-model-input.input input::placeholder {
+  color: #7a8684;
+}
+
+.agent-send-button {
+  color: var(--accent-color-strong);
+  border-radius: 10px;
+}
+
+.agent-send-button:hover {
+  background: color-mix(in oklab, var(--accent-color) 8%, white);
 }
 
 .awa-editor-dropdown-popover {
@@ -531,7 +836,7 @@
 
 @media (max-width: 1280px) {
   .app-shell {
-    grid-template-columns: 280px minmax(0, 1fr) 280px;
+    grid-template-columns: 280px minmax(0, 1fr) 340px;
   }
 }
 

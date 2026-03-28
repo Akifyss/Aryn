@@ -7,6 +7,7 @@ import {
   SaveFill,
 } from '@mingcute/react'
 import { AppTitlebar } from '@/components/app-titlebar'
+import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
@@ -406,7 +407,7 @@ function App() {
       </main>
 
       <aside className='panel panel-agent'>
-        <div className='agent-empty-shell' />
+        <AgentSidebar workspacePath={currentPath} />
       </aside>
     </div>
   )
