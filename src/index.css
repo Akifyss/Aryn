@@ -82,40 +82,6 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  /* Align Tiptap primitives with HeroUI v3 semantic tokens */
-  --editor-brand-color-50: color-mix(in oklab, var(--accent) 8%, white);
-  --editor-brand-color-100: color-mix(in oklab, var(--accent) 12%, white);
-  --editor-brand-color-200: color-mix(in oklab, var(--accent) 18%, white);
-  --editor-brand-color-300: color-mix(in oklab, var(--accent) 34%, white);
-  --editor-brand-color-400: color-mix(in oklab, var(--accent) 64%, white);
-  --editor-brand-color-500: var(--accent);
-  --editor-brand-color-600: color-mix(in oklab, var(--accent) 84%, black);
-  --editor-brand-color-700: color-mix(in oklab, var(--accent) 72%, black);
-  --editor-brand-color-800: color-mix(in oklab, var(--accent) 58%, black);
-  --editor-brand-color-900: color-mix(in oklab, var(--accent) 22%, black);
-
-  --editor-gray-light-a-50: color-mix(in oklab, var(--foreground) 3%, transparent);
-  --editor-gray-light-a-100: color-mix(in oklab, var(--foreground) 5%, transparent);
-  --editor-gray-light-a-200: color-mix(in oklab, var(--foreground) 9%, transparent);
-  --editor-gray-light-a-300: color-mix(in oklab, var(--foreground) 14%, transparent);
-  --editor-gray-light-a-400: color-mix(in oklab, var(--foreground) 24%, transparent);
-  --editor-gray-light-a-500: color-mix(in oklab, var(--foreground) 40%, transparent);
-  --editor-gray-light-a-600: color-mix(in oklab, var(--foreground) 56%, transparent);
-  --editor-gray-light-a-700: color-mix(in oklab, var(--foreground) 70%, transparent);
-  --editor-gray-light-a-800: color-mix(in oklab, var(--foreground) 82%, transparent);
-  --editor-gray-light-a-900: color-mix(in oklab, var(--foreground) 94%, transparent);
-
-  --editor-gray-light-50: var(--background);
-  --editor-gray-light-100: var(--surface);
-  --editor-gray-light-200: var(--surface-secondary);
-  --editor-gray-light-300: var(--surface-tertiary);
-  --editor-gray-light-400: color-mix(in oklab, var(--muted) 78%, white);
-  --editor-gray-light-500: var(--muted);
-  --editor-gray-light-600: color-mix(in oklab, var(--foreground) 72%, white);
-  --editor-gray-light-700: color-mix(in oklab, var(--foreground) 82%, white);
-  --editor-gray-light-800: color-mix(in oklab, var(--foreground) 90%, white);
-  --editor-gray-light-900: var(--foreground);
 }
 
 html,
@@ -126,30 +92,6 @@ body {
   min-height: 100vh;
   background: var(--background);
   overflow: hidden;
-}
-
-.dark {
-  --editor-gray-dark-a-50: color-mix(in oklab, white 5%, transparent);
-  --editor-gray-dark-a-100: color-mix(in oklab, white 8%, transparent);
-  --editor-gray-dark-a-200: color-mix(in oklab, white 12%, transparent);
-  --editor-gray-dark-a-300: color-mix(in oklab, white 20%, transparent);
-  --editor-gray-dark-a-400: color-mix(in oklab, white 32%, transparent);
-  --editor-gray-dark-a-500: color-mix(in oklab, white 45%, transparent);
-  --editor-gray-dark-a-600: color-mix(in oklab, white 58%, transparent);
-  --editor-gray-dark-a-700: color-mix(in oklab, white 72%, transparent);
-  --editor-gray-dark-a-800: color-mix(in oklab, white 84%, transparent);
-  --editor-gray-dark-a-900: color-mix(in oklab, white 96%, transparent);
-
-  --editor-gray-dark-50: var(--surface);
-  --editor-gray-dark-100: var(--surface-secondary);
-  --editor-gray-dark-200: var(--surface-tertiary);
-  --editor-gray-dark-300: color-mix(in oklab, var(--muted) 70%, black);
-  --editor-gray-dark-400: var(--muted);
-  --editor-gray-dark-500: color-mix(in oklab, var(--foreground) 64%, black);
-  --editor-gray-dark-600: color-mix(in oklab, var(--foreground) 76%, black);
-  --editor-gray-dark-700: color-mix(in oklab, var(--foreground) 84%, black);
-  --editor-gray-dark-800: color-mix(in oklab, var(--foreground) 92%, black);
-  --editor-gray-dark-900: var(--foreground);
 }
 
 #root {

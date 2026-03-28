@@ -1,28 +1,21 @@
-:root {
-  --editor-toolbar-height: 48px;
-  --editor-theme-text: var(--editor-gray-light-900);
-}
-
-::-webkit-scrollbar {
-  width: 0.25rem;
-}
-
-* {
+.simple-editor-wrapper,
+.simple-editor-wrapper * {
   scrollbar-width: thin;
-  scrollbar-color: var(--editor-scrollbar-color) transparent;
+  scrollbar-color: color-mix(in oklab, var(--scrollbar) 92%, transparent) transparent;
 }
 
-::-webkit-scrollbar-thumb {
-  background-color: var(--editor-scrollbar-color);
-  border-radius: 9999px;
+.simple-editor-wrapper ::-webkit-scrollbar {
+  width: 0.35rem;
+  height: 0.35rem;
 }
 
-::-webkit-scrollbar-track {
+.simple-editor-wrapper ::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--scrollbar) 92%, transparent);
+  border-radius: 999px;
+}
+
+.simple-editor-wrapper ::-webkit-scrollbar-track {
   background: transparent;
-}
-
-.tiptap.ProseMirror {
-  font-family: inherit;
 }
 
 .simple-editor-wrapper {
@@ -33,11 +26,30 @@
   min-height: 0;
   overflow: hidden;
   background: transparent;
-  color: var(--editor-theme-text);
+  color: var(--foreground);
 }
 
 .simple-editor-wrapper[data-disabled="true"] {
   opacity: 0.72;
+}
+
+.tiptap-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.tiptap-toolbar-group,
+.tiptap-button-group {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.tiptap-button-group[data-orientation="vertical"] {
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .awa-simple-toolbar {
@@ -49,31 +61,210 @@
   padding: 0.65rem 1.4rem 0.6rem;
   border-bottom: 1px solid color-mix(in oklab, var(--separator) 92%, var(--background));
   background: color-mix(in oklab, var(--surface) 94%, var(--background));
-  box-shadow: none;
-  backdrop-filter: none;
 }
 
-.awa-simple-toolbar .button,
-.awa-simple-toolbar .button:hover,
-.awa-simple-toolbar .button[data-hovered="true"],
-.awa-simple-toolbar .tiptap-button,
-.awa-simple-toolbar .tiptap-button:hover,
-.awa-simple-toolbar .tiptap-button[data-hovered="true"] {
+.tiptap-separator {
+  flex: 0 0 auto;
+  background: color-mix(in oklab, var(--separator) 90%, var(--background));
+}
+
+.tiptap-separator[data-orientation="vertical"] {
+  width: 1px;
+  height: 1.65rem;
+  margin-inline: 0.15rem;
+}
+
+.tiptap-separator[data-orientation="horizontal"] {
+  width: 100%;
+  height: 1px;
+}
+
+.tiptap-button,
+.tiptap-button.button,
+.tiptap-button:hover,
+.tiptap-button.button:hover,
+.tiptap-button[data-hovered="true"],
+.tiptap-button.button[data-hovered="true"],
+.tiptap-button[data-focus-visible="true"],
+.tiptap-button.button[data-focus-visible="true"],
+.tiptap-button[data-focus="true"],
+.tiptap-button.button[data-focus="true"] {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding-inline: 0.7rem;
   border-radius: 0.8rem;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: color-mix(in oklab, var(--foreground) 76%, white);
 }
 
-.awa-simple-toolbar .button:focus-visible,
-.awa-simple-toolbar .button[data-focus-visible="true"],
-.awa-simple-toolbar .tiptap-button:focus-visible,
-.awa-simple-toolbar .tiptap-button[data-focus-visible="true"],
-.awa-simple-toolbar [data-slot="trigger"]:focus-visible,
-.awa-simple-toolbar [data-slot="trigger"][data-focus-visible="true"],
-.awa-simple-toolbar [data-slot="base"]:focus-visible,
-.awa-simple-toolbar [data-slot="base"][data-focus-visible="true"],
-.awa-simple-toolbar [data-focus-visible="true"] {
-  outline: none !important;
-  box-shadow: none !important;
-  ring: 0 !important;
+.tiptap-button:hover,
+.tiptap-button.button:hover,
+.tiptap-button[data-hovered="true"],
+.tiptap-button.button[data-hovered="true"] {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--foreground) 4%, white) !important;
+}
+
+.tiptap-button[data-active-state="on"],
+.tiptap-button.button[data-active-state="on"] {
+  color: color-mix(in oklab, var(--accent) 82%, black);
+  background: color-mix(in oklab, var(--accent) 10%, white) !important;
+}
+
+.tiptap-button[data-active-state="on"]:hover,
+.tiptap-button[data-active-state="on"][data-hovered="true"],
+.tiptap-button.button[data-active-state="on"]:hover,
+.tiptap-button.button[data-active-state="on"][data-hovered="true"] {
+  background: color-mix(in oklab, var(--accent) 14%, white) !important;
+}
+
+.tiptap-button[disabled],
+.tiptap-button[data-disabled="true"],
+.tiptap-button.button[disabled],
+.tiptap-button.button[data-disabled="true"] {
+  color: color-mix(in oklab, var(--muted) 84%, white);
+  opacity: 0.55;
+}
+
+.tiptap-button-icon {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+}
+
+.tiptap-button-text {
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.tiptap-button-dropdown-small {
+  width: 0.85rem;
+  height: 0.85rem;
+  color: color-mix(in oklab, var(--muted) 92%, white);
+}
+
+.tiptap-button-highlight {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  background: var(--highlight-color);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+
+.tiptap-badge,
+.tiptap-tooltip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--border) 86%, white);
+  background: color-mix(in oklab, var(--surface-secondary) 92%, white);
+  color: color-mix(in oklab, var(--muted) 88%, white);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1;
+}
+
+.tiptap-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.tiptap-badge-group [data-orientation="vertical"] {
+  flex-direction: column;
+}
+
+.tiptap-popover,
+.tiptap-dropdown-menu,
+.tiptap-tooltip,
+.tiptap-card {
+  border: 1px solid color-mix(in oklab, var(--border) 88%, white);
+  border-radius: 1rem;
+  background: var(--overlay);
+  color: var(--overlay-foreground);
+  box-shadow: var(--overlay-shadow);
+}
+
+.tiptap-popover {
+  padding: 0.7rem;
+}
+
+.tiptap-dropdown-menu,
+.tiptap-card {
+  padding: 0.45rem;
+}
+
+.tiptap-card-header,
+.tiptap-card-footer {
+  padding: 0.2rem 0.25rem 0.55rem;
+}
+
+.tiptap-card-body {
+  padding: 0.25rem;
+}
+
+.tiptap-card-footer {
+  padding-top: 0.55rem;
+  border-top: 1px solid color-mix(in oklab, var(--border) 88%, white);
+}
+
+.tiptap-card-item-group {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.tiptap-card-item-group[data-orientation="vertical"] {
+  flex-direction: column;
+}
+
+.tiptap-card-group-label {
+  color: color-mix(in oklab, var(--muted) 90%, white);
+  font-size: 0.69rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tiptap-input,
+.tiptap-input-group {
+  width: 100%;
+}
+
+.tiptap-input {
+  min-height: 2.25rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--field-border);
+  border-radius: 0.8rem;
+  background: var(--field-background);
+  color: var(--field-foreground);
+  outline: none;
+}
+
+.tiptap-input::placeholder {
+  color: var(--field-placeholder);
+}
+
+.tiptap-input:focus-visible {
+  border-color: color-mix(in oklab, var(--accent) 28%, white);
+}
+
+.awa-link-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 16rem;
+}
+
+.awa-link-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.35rem;
 }
 
 .simple-editor-content {
@@ -86,15 +277,18 @@
   scrollbar-gutter: stable;
 }
 
+.tiptap.ProseMirror {
+  font-family: inherit;
+}
+
 .simple-editor-content .tiptap.ProseMirror.simple-editor {
   width: min(100%, 50rem);
   min-height: 100%;
   margin: 0 auto;
   flex: 1;
   padding: 2rem 2.4rem 20vh;
-  color: color-mix(in oklab, var(--foreground) 96%, black);
   background: transparent;
-  box-shadow: none;
+  color: color-mix(in oklab, var(--foreground) 96%, black);
   caret-color: color-mix(in oklab, var(--accent) 82%, white);
   font-size: 1.02rem;
   line-height: 1.85;
@@ -104,8 +298,154 @@
   outline: none;
 }
 
+.simple-editor-content .tiptap.ProseMirror.simple-editor ::selection,
 .simple-editor-content .tiptap.ProseMirror.simple-editor::selection {
   background: color-mix(in oklab, var(--accent) 18%, white);
+}
+
+.simple-editor-content .simple-editor > *:first-child,
+.simple-editor-content .tiptap.ProseMirror.simple-editor > *:first-child {
+  margin-top: 0;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor h1,
+.simple-editor-content .tiptap.ProseMirror.simple-editor h2,
+.simple-editor-content .tiptap.ProseMirror.simple-editor h3,
+.simple-editor-content .tiptap.ProseMirror.simple-editor h4 {
+  margin: 1.7em 0 0.5em;
+  color: var(--foreground);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor h1 {
+  font-size: clamp(2.3rem, 4vw, 3.35rem);
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor h2 {
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor h3 {
+  font-size: clamp(1.45rem, 2.4vw, 1.9rem);
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor h4 {
+  font-size: 1.18rem;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor p,
+.simple-editor-content .tiptap.ProseMirror.simple-editor ul,
+.simple-editor-content .tiptap.ProseMirror.simple-editor ol,
+.simple-editor-content .tiptap.ProseMirror.simple-editor pre,
+.simple-editor-content .tiptap.ProseMirror.simple-editor blockquote {
+  margin: 0 0 1.05rem;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor ul,
+.simple-editor-content .tiptap.ProseMirror.simple-editor ol {
+  padding-left: 1.35rem;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor li {
+  margin: 0.28rem 0;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor ul[data-type="taskList"] li > label {
+  display: inline-flex;
+  align-items: center;
+  padding-top: 0.32rem;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor ul[data-type="taskList"] input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor blockquote {
+  padding: 0.15rem 0 0.15rem 1rem;
+  border-left: 3px solid color-mix(in oklab, var(--accent) 24%, white);
+  color: color-mix(in oklab, var(--foreground) 76%, white);
+  font-style: italic;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor hr {
+  margin: 1.6rem 0;
+  border: 0;
+  border-top: 1px solid color-mix(in oklab, var(--separator) 92%, var(--background));
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor a {
+  color: color-mix(in oklab, var(--accent) 84%, black);
+  text-decoration-color: color-mix(in oklab, var(--accent) 32%, white);
+  text-underline-offset: 0.18em;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor code {
+  padding: 0.16rem 0.36rem;
+  border: 1px solid color-mix(in oklab, var(--border) 90%, white);
+  border-radius: 0.45rem;
+  background: color-mix(in oklab, var(--surface-secondary) 90%, white);
+  font-size: 0.9em;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor pre {
+  overflow: auto;
+  padding: 1rem 1.1rem;
+  border: 1px solid color-mix(in oklab, var(--border) 88%, white);
+  border-radius: 1rem;
+  background: color-mix(in oklab, var(--surface-secondary) 92%, white);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor img {
+  max-width: 100%;
+  border-radius: 1rem;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor .ProseMirror-selectednode {
+  outline: 2px solid color-mix(in oklab, var(--accent) 40%, white);
+  outline-offset: 0.15rem;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor .is-empty:not(.with-slash)[data-placeholder]:has(> .ProseMirror-trailingBreak:only-child)::before,
+.simple-editor-content .tiptap.ProseMirror.simple-editor .is-empty[data-placeholder]:not(.with-slash):first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--field-placeholder);
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor .is-empty.with-slash[data-placeholder]:has(> .ProseMirror-trailingBreak:only-child)::before,
+.simple-editor-content .tiptap.ProseMirror.simple-editor .is-empty.with-slash:first-child::before {
+  content: "Write, type '/' for commands...";
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--field-placeholder);
+  font-style: italic;
 }
 
 @media screen and (max-width: 720px) {

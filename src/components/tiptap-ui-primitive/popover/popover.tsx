@@ -1,7 +1,6 @@
 import * as React from "react"
 import { Popover as HeroPopover } from "@heroui/react"
 import { cn } from "@/lib/tiptap-utils"
-import "@/components/tiptap-ui-primitive/popover/popover.scss"
 
 interface PopoverRootProps {
   children: React.ReactNode
