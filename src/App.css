@@ -1,0 +1,161 @@
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  gap: 16px;
+  min-height: 100vh;
+  padding: 16px;
+  background:
+    radial-gradient(circle at top left, rgba(196, 231, 255, 0.9), transparent 24%),
+    radial-gradient(circle at top right, rgba(255, 226, 190, 0.85), transparent 20%),
+    linear-gradient(180deg, #f6f2e8 0%, #efe7d6 100%);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid rgba(77, 57, 33, 0.12);
+  border-radius: 24px;
+  background: rgba(255, 251, 245, 0.88);
+  box-shadow: 0 18px 40px rgba(87, 61, 23, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.panel-sidebar,
+.panel-agent {
+  padding: 18px;
+}
+
+.panel-editor {
+  padding: 18px 18px 24px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-header-inline {
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #7f684b;
+}
+
+.panel h1,
+.panel h2,
+.panel h3 {
+  margin: 0;
+  color: #2d2215;
+}
+
+.workspace-card,
+.agent-card,
+.panel-section {
+  margin-top: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(77, 57, 33, 0.08);
+}
+
+.label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  color: #8a6e4d;
+}
+
+.status-pill {
+  font-size: 0.85rem;
+}
+
+.panel-divider {
+  margin: 0 0 16px;
+}
+
+.editor-surface {
+  min-height: calc(100vh - 110px);
+  width: 100%;
+  padding: 28px 32px;
+  border-radius: 24px;
+  background: #fffdf8;
+  color: #302619;
+  box-shadow: inset 0 0 0 1px rgba(77, 57, 33, 0.08);
+  outline: none;
+  font-size: 1rem;
+  line-height: 1.7;
+  border: none;
+  resize: none;
+}
+
+.editor-surface h2 {
+  margin-top: 0;
+}
+
+.panel ul {
+  padding-left: 18px;
+  margin: 10px 0 0;
+  color: #54412b;
+}
+
+.tree-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tree-directory {
+  padding-top: 8px;
+  color: #7f684b;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.tree-file {
+  width: 100%;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  color: #4a3b29;
+}
+
+.tree-file:hover,
+.tree-file-active {
+  background: rgba(47, 111, 237, 0.1);
+  color: #214eac;
+}
+
+.empty-copy {
+  margin: 0;
+  color: #7f684b;
+}
+
+.save-button {
+  margin-top: 16px;
+}
+
+@media (max-width: 1100px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-surface {
+    min-height: 420px;
+  }
+}

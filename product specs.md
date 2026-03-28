@@ -9,7 +9,7 @@
 - 使用 [PI Agent](https://github.com/badlogic/pi-mono) 作为 AI 处理后端
 - 前期使用 HeroUI 提升开发效率，后期逐步迁移为基于 Base UI 的自定义组件
 - 使用 Tailwind CSS 作为 CSS 框架
-- 使用 Tiptap 作为富文本编辑器
+- 使用 [Tiptap](https://github.com/ueberdosis/tiptap) 作为富文本编辑器
 - Electron
 - React
 - TypeScript
@@ -21,10 +21,18 @@
 
 ## 参考项目
 
-- [scratch](https://github.com/erictli/scratch)：桌面端应用，支持打开本地文件夹，offline-first markdown editor
-- [1code](https://github.com/21st-dev/1code)：AI Agent GUI 应用参考
-- [openchamber](https://github.com/openchamber/openchamber)：AI Agent GUI 应用参考
-- [craft-agents-oss](https://github.com/lukilabs/craft-agents-oss)：AI Agent GUI 应用参考
+- [scratch](https://github.com/erictli/scratch)：极简、离线优先的桌面端 Markdown 笔记应用，可作为本地文件夹操作和基础编辑器的参考。
+- [1code](https://github.com/21st-dev/1code)：AI 编码 Agent 的可视化编排层，核心特点是支持多 Agent 并行执行和 Git 工作树隔离（Git worktree isolation）。
+- [openchamber](https://github.com/openchamber/openchamber)：OpenCode AI Agent 的桌面界面，支持对话时间线分叉（branchable timeline）和 GitHub 深度集成。
+- [craft-agents-oss](https://github.com/lukilabs/craft-agents-oss)：Craft Agents 的开源核心，采用 Agent-Native 架构，且底层同样基于 Pi SDK，对于多任务并行和流式 UI 具有高度参考价值。
+
+### 参考启示
+
+- 将 workspace 作为核心模型，而不只是文件打开能力
+- 需要支持文件树、外部文件变更检测和本地优先的数据流
+- 采用 `main / preload / renderer / shared` 的分层结构
+- 提前预留 session、task、diff 和 Git 集成能力
+- 前期用 HeroUI 提升效率，后期将核心业务组件迁移为基于 Base UI 的自定义组件
 
 ## 架构建议
 

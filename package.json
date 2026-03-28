@@ -1,0 +1,49 @@
+{
+  "name": "awa-desktop",
+  "version": "0.1.0",
+  "main": "dist-electron/main/index.js",
+  "description": "AWA desktop writing workspace.",
+  "author": "OpenAI Codex",
+  "license": "MIT",
+  "private": true,
+  "debug": {
+    "env": {
+      "VITE_DEV_SERVER_URL": "http://127.0.0.1:7777/"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc && vite build && electron-builder",
+    "preview": "vite preview",
+    "pretest": "vite build --mode=test",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@heroui/react": "^3.0.0-beta.4",
+    "@heroui/styles": "^3.0.0-beta.4",
+    "@tiptap/react": "^3.21.0",
+    "@tiptap/starter-kit": "^3.21.0",
+    "chokidar": "^5.0.0",
+    "electron-updater": "^6.3.9",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.4",
+    "@playwright/test": "^1.48.2",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^4.3.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^24.13.3",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.4.2",
+    "vite": "^5.4.11",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vitest": "^2.1.5"
+  }
+}
