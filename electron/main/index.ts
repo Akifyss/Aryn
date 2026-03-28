@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { Menu, app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -51,6 +51,12 @@ async function createWindow() {
   win = new BrowserWindow({
     title: 'AWA',
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
+    backgroundColor: '#ffffff',
+    frame: false,
+    titleBarStyle: 'hidden',
+    autoHideMenuBar: true,
+    minWidth: 1080,
+    minHeight: 720,
     webPreferences: {
       preload,
       // Warning: Enable nodeIntegration and disable contextIsolation is not secure in production
@@ -64,8 +70,7 @@ async function createWindow() {
 
   if (VITE_DEV_SERVER_URL) { // #298
     win.loadURL(VITE_DEV_SERVER_URL)
-    // Open devTool if the app is not packaged
-    win.webContents.openDevTools()
+    win.webContents.openDevTools({ mode: 'right' })
   } else {
     win.loadFile(indexHtml)
   }
@@ -75,9 +80,18 @@ async function createWindow() {
     if (url.startsWith('https:')) shell.openExternal(url)
     return { action: 'deny' }
   })
+
+  if (VITE_DEV_SERVER_URL) {
+    win.webContents.on('context-menu', (_event, params) => {
+      win?.webContents.inspectElement(params.x, params.y)
+    })
+  }
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  Menu.setApplicationMenu(null)
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   win = null
@@ -143,4 +157,30 @@ ipcMain.handle('workspace:start-watch', async (_, rootPath: string) => {
 ipcMain.handle('workspace:stop-watch', async () => {
   await unwatchWorkspace()
   return { ok: true }
+})
+
+ipcMain.handle('window:minimize', () => {
+  win?.minimize()
+})
+
+ipcMain.handle('window:toggle-maximize', () => {
+  if (!win) {
+    return { isMaximized: false }
+  }
+
+  if (win.isMaximized()) {
+    win.unmaximize()
+  } else {
+    win.maximize()
+  }
+
+  return { isMaximized: win.isMaximized() }
+})
+
+ipcMain.handle('window:close', () => {
+  win?.close()
+})
+
+ipcMain.handle('window:is-maximized', () => {
+  return { isMaximized: win?.isMaximized() ?? false }
 })

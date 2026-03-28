@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, Chip, Separator } from '@heroui/react'
+import { Button, Chip, ScrollShadow, Separator } from '@heroui/react'
+import { AppTitlebar } from '@/components/app-titlebar'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
@@ -124,13 +125,19 @@ function App() {
 
   return (
     <div className='app-shell'>
+      <AppTitlebar />
+
       <aside className='panel panel-sidebar'>
         <div className='panel-header'>
           <div>
             <p className='eyebrow'>Workspace</p>
             <h1>AWA</h1>
           </div>
+        </div>
+
+        <div className='toolbar-row'>
           <Button
+            size='sm'
             variant='primary'
             onPress={handlePickWorkspace}
             isDisabled={isPickingWorkspace}
@@ -139,77 +146,98 @@ function App() {
           </Button>
         </div>
 
-        <Card className='workspace-card'>
-          <Card.Content>
-            <span className='label'>Current folder</span>
-            <strong>{currentPath ?? 'No folder selected yet'}</strong>
-          </Card.Content>
-        </Card>
-
-        <Card className='panel-section'>
-          <Card.Content>
-            <span className='label'>Files</span>
-            <WorkspaceTree
-              activeFilePath={currentFilePath}
-              nodes={tree}
-              onSelectFile={(filePath) => {
-                void openFile(filePath)
-              }}
-            />
-          </Card.Content>
-        </Card>
-      </aside>
-
-      <main className='panel panel-editor'>
-        <div className='panel-header panel-header-inline'>
-          <div>
-            <p className='eyebrow'>Editor</p>
-            <h2>{currentFileName}</h2>
-          </div>
-          <Chip className='status-pill' color='accent' variant='soft'>
-            {isDirty ? 'Unsaved' : 'Saved'}
-          </Chip>
+        <div className='workspace-meta'>
+          <span className='label'>Current folder</span>
+          <strong className='meta-path'>{currentPath ?? 'No folder selected yet'}</strong>
         </div>
 
         <Separator className='panel-divider' />
 
-        <WritingEditor
-          disabled={!currentFilePath}
-          onChange={(nextValue) => {
-            setCurrentFileContent(nextValue)
-            setDirty(true)
-          }}
-          value={currentFileContent}
-        />
-      </main>
+        <div className='section-title'>Workspace</div>
+        <ScrollShadow className='tree-scroll' hideScrollBar>
+          <WorkspaceTree
+            activeFilePath={currentFilePath}
+            nodes={tree}
+            onSelectFile={(filePath) => {
+              void openFile(filePath)
+            }}
+          />
+        </ScrollShadow>
+      </aside>
 
-      <aside className='panel panel-agent'>
-        <div className='panel-header'>
-          <div>
-            <p className='eyebrow'>Agent</p>
-            <h2>Assistant Panel</h2>
+      <main className='panel panel-editor'>
+        <div className='panel-header panel-header-inline'>
+          <div className='editor-heading'>
+            <p className='eyebrow'>Editor</p>
+            <h2>{currentFileName}</h2>
+            <p className='editor-subtitle'>
+              {currentPath ? 'Focused drafting environment' : 'Open a workspace to begin writing'}
+            </p>
           </div>
-        </div>
-
-        <Card className='agent-card'>
-          <Card.Content>
-            <h3>Workspace status</h3>
-            <ul>
-              <li>{statusMessage}</li>
-              <li>{currentFilePath ?? 'No active file'}</li>
-              <li>{isSaving ? 'Saving file...' : 'Save ready'}</li>
-              <li>{currentPath ?? 'No workspace selected'}</li>
-            </ul>
+          <div className='toolbar-row'>
+            <Chip className='status-pill' color='accent' variant='soft'>
+              {isDirty ? 'Unsaved' : 'Saved'}
+            </Chip>
             <Button
-              className='save-button'
+              size='sm'
               isDisabled={!currentFilePath || !isDirty || isSaving}
               onPress={handleSave}
               variant='secondary'
             >
-              {isSaving ? 'Saving...' : 'Save File'}
+              {isSaving ? 'Saving...' : 'Save'}
             </Button>
-          </Card.Content>
-        </Card>
+          </div>
+        </div>
+
+        <Separator className='panel-divider' />
+
+        <div className='editor-frame'>
+          <WritingEditor
+            disabled={!currentFilePath}
+            onChange={(nextValue) => {
+              setCurrentFileContent(nextValue)
+              setDirty(true)
+            }}
+            value={currentFileContent}
+          />
+        </div>
+      </main>
+
+      <aside className='panel panel-agent'>
+        <div className='panel-header'>
+          <div className='agent-heading'>
+            <p className='eyebrow'>Agent</p>
+            <h2>Writing Assistant</h2>
+            <p className='agent-subtitle'>AI support, kept secondary to the draft.</p>
+          </div>
+        </div>
+
+        <Separator className='panel-divider' />
+
+        <div className='agent-block'>
+          <div className='agent-status-grid'>
+            <div className='agent-stat'>
+              <span className='label'>Status</span>
+              <strong>{statusMessage}</strong>
+            </div>
+            <div className='agent-stat'>
+              <span className='label'>Active file</span>
+              <strong>{currentFilePath ?? 'No file selected'}</strong>
+            </div>
+            <div className='agent-stat'>
+              <span className='label'>Save state</span>
+              <strong>{isSaving ? 'Saving now' : isDirty ? 'Pending changes' : 'Clean'}</strong>
+            </div>
+            <div className='agent-stat'>
+              <span className='label'>Workspace</span>
+              <strong>{currentPath ?? 'Not connected'}</strong>
+            </div>
+          </div>
+          <div className='toolbar-row agent-actions'>
+            <Button size='sm' variant='secondary'>Ask Agent</Button>
+            <Button size='sm' variant='ghost'>Summarize</Button>
+          </div>
+        </div>
       </aside>
     </div>
   )

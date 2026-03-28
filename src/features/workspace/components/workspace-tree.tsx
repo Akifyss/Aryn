@@ -1,3 +1,4 @@
+import { Button } from '@heroui/react'
 import type { WorkspaceNode } from '@/features/workspace/types'
 
 type WorkspaceTreeProps = {
@@ -41,14 +42,15 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile }: TreeNodeProps) 
 
   return (
     <li>
-      <button
+      <Button
         className={`tree-file${isActive ? ' tree-file-active' : ''}`}
+        size='sm'
         style={{ paddingLeft: `${depth * 14}px` }}
-        onClick={() => onSelectFile(node.path)}
-        type='button'
+        variant='ghost'
+        onPress={() => onSelectFile(node.path)}
       >
         {node.name}
-      </button>
+      </Button>
     </li>
   )
 }

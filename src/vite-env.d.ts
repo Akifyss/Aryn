@@ -11,6 +11,10 @@ declare global {
       saveWorkspaceFile: (filePath: string, content: string) => Promise<{ ok: boolean }>
       startWorkspaceWatch: (rootPath: string) => Promise<{ ok: boolean }>
       stopWorkspaceWatch: () => Promise<{ ok: boolean }>
+      minimizeWindow: () => Promise<void>
+      toggleMaximizeWindow: () => Promise<{ isMaximized: boolean }>
+      closeWindow: () => Promise<void>
+      isWindowMaximized: () => Promise<{ isMaximized: boolean }>
       onWorkspaceChanged: (listener: (event: WorkspaceChangeEvent) => void) => () => void
     }
   }

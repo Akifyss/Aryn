@@ -8,6 +8,10 @@ contextBridge.exposeInMainWorld('appApi', {
   saveWorkspaceFile: (filePath: string, content: string) => ipcRenderer.invoke('workspace:save-file', filePath, content) as Promise<{ ok: boolean }>,
   startWorkspaceWatch: (rootPath: string) => ipcRenderer.invoke('workspace:start-watch', rootPath) as Promise<{ ok: boolean }>,
   stopWorkspaceWatch: () => ipcRenderer.invoke('workspace:stop-watch') as Promise<{ ok: boolean }>,
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize') as Promise<void>,
+  toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize') as Promise<{ isMaximized: boolean }>,
+  closeWindow: () => ipcRenderer.invoke('window:close') as Promise<void>,
+  isWindowMaximized: () => ipcRenderer.invoke('window:is-maximized') as Promise<{ isMaximized: boolean }>,
   onWorkspaceChanged: (listener: (event: WorkspaceChangeEvent) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, payload: WorkspaceChangeEvent) => {
       listener(payload)
