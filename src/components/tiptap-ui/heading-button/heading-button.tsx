@@ -60,7 +60,6 @@ export const HeadingButton = React.forwardRef<
       hideWhenUnavailable = false,
       onToggled,
       showShortcut = false,
-      onPress,
       onClick,
       children,
       ...buttonProps
@@ -83,14 +82,13 @@ export const HeadingButton = React.forwardRef<
       onToggled,
     })
 
-    const handlePress = React.useCallback(
-      (event?: unknown) => {
-        onPress?.(event as never)
-        onClick?.(event as React.MouseEvent<HTMLButtonElement>)
-        if ((event as { defaultPrevented?: boolean } | undefined)?.defaultPrevented) return
+    const handleClick = React.useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event)
+        if (event.defaultPrevented) return
         handleToggle()
       },
-      [handleToggle, onClick, onPress]
+      [handleToggle, onClick]
     )
 
     if (!isVisible) {
@@ -109,7 +107,7 @@ export const HeadingButton = React.forwardRef<
         aria-label={label}
         aria-pressed={isActive}
         tooltip={label}
-        onPress={handlePress}
+        onClick={handleClick}
         {...buttonProps}
         ref={ref}
       >

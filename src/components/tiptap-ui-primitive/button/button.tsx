@@ -1,8 +1,18 @@
 import * as React from "react"
-import { Button as HeroButton, Tooltip as HeroTooltip } from "@heroui/react"
+
+// --- Tiptap UI Primitive ---
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/tiptap-ui-primitive/tooltip"
 
 // --- Lib ---
 import { cn, parseShortcutKeys } from "@/lib/tiptap-utils"
+
+import "@/components/tiptap-ui-primitive/button/button-colors.scss"
+import "@/components/tiptap-ui-primitive/button/button-group.scss"
+import "@/components/tiptap-ui-primitive/button/button.scss"
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -10,7 +20,6 @@ export interface ButtonProps
   showTooltip?: boolean
   tooltip?: React.ReactNode
   shortcutKeys?: string
-  onPress?: React.ComponentProps<typeof HeroButton>["onPress"]
 }
 
 export const ShortcutDisplay: React.FC<{ shortcuts: string[] }> = ({
@@ -38,75 +47,43 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       tooltip,
       showTooltip = true,
       shortcutKeys,
-      disabled,
-      onClick,
-      onPress,
       "aria-label": ariaLabel,
       ...props
     },
     ref
   ) => {
-    const styleVariant =
-      (props as Record<string, unknown>)["data-style"] === "primary"
-        ? "primary"
-        : "ghost"
     const shortcuts = React.useMemo(
       () => parseShortcutKeys({ shortcutKeys }),
       [shortcutKeys]
     )
-    const handlePress = React.useCallback(
-      (event: unknown) => {
-        if (typeof onPress === "function") {
-          onPress(event as never)
-          return
-        }
-
-        if (typeof onClick === "function") {
-          onClick(event as React.MouseEvent<HTMLButtonElement>)
-        }
-      },
-      [onClick, onPress]
-    )
-    const pressHandler = onPress || onClick ? handlePress : undefined
-
     if (!tooltip || !showTooltip) {
       return (
-        <HeroButton
+        <button
           className={cn("tiptap-button", className)}
-          isDisabled={disabled}
-          onPress={pressHandler}
           ref={ref}
-          size="sm"
-          variant={styleVariant}
           aria-label={ariaLabel}
-          {...(props as React.ComponentProps<typeof HeroButton>)}
+          {...props}
         >
           {children}
-        </HeroButton>
+        </button>
       )
     }
 
     return (
-      <HeroTooltip>
-        <HeroTooltip.Trigger>
-          <HeroButton
-            className={cn("tiptap-button", className)}
-            isDisabled={disabled}
-            onPress={pressHandler}
-            ref={ref}
-            size="sm"
-            variant={styleVariant}
-            aria-label={ariaLabel}
-            {...(props as React.ComponentProps<typeof HeroButton>)}
-          >
-            {children}
-          </HeroButton>
-        </HeroTooltip.Trigger>
-        <HeroTooltip.Content>
+      <Tooltip delay={200}>
+        <TooltipTrigger
+          className={cn("tiptap-button", className)}
+          ref={ref}
+          aria-label={ariaLabel}
+          {...props}
+        >
+          {children}
+        </TooltipTrigger>
+        <TooltipContent>
           {tooltip}
           <ShortcutDisplay shortcuts={shortcuts} />
-        </HeroTooltip.Content>
-      </HeroTooltip>
+        </TooltipContent>
+      </Tooltip>
     )
   }
 )

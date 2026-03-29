@@ -5,7 +5,7 @@ import type { Editor } from "@tiptap/react"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 // --- Icons ---
-import { LinkIcon } from "@/components/tiptap-icons"
+import { LinkIcon } from "@/components/tiptap-icons/link-icon"
 
 // --- Lib ---
 import { isMarkInSchema, sanitizeUrl } from "@/lib/tiptap-utils"
@@ -274,4 +274,3 @@ export function useLinkPopover(config?: UseLinkPopoverConfig) {
     ...linkHandler,
   }
 }
-

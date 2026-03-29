@@ -7,9 +7,9 @@ import type { Editor } from "@tiptap/react"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 // --- Icons ---
-import { ListIcon } from "@/components/tiptap-icons"
-import { ListOrderedIcon } from "@/components/tiptap-icons"
-import { ListTodoIcon } from "@/components/tiptap-icons"
+import { ListIcon } from "@/components/tiptap-icons/list-icon"
+import { ListOrderedIcon } from "@/components/tiptap-icons/list-ordered-icon"
+import { ListTodoIcon } from "@/components/tiptap-icons/list-todo-icon"
 
 // --- Lib ---
 import { isNodeInSchema } from "@/lib/tiptap-utils"
@@ -217,4 +217,3 @@ export function useListDropdownMenu(config?: UseListDropdownMenuConfig) {
     Icon: activeList ? listIcons[activeList.type] : ListIcon,
   }
 }
-

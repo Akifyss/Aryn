@@ -7,8 +7,8 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 // --- Icons ---
-import { BanIcon } from "@/components/tiptap-icons"
-import { HighlighterIcon } from "@/components/tiptap-icons"
+import { BanIcon } from "@/components/tiptap-icons/ban-icon"
+import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon"
 
 // --- UI Primitives ---
 import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
@@ -86,11 +86,11 @@ ColorHighlightPopoverButton.displayName = "ColorHighlightPopoverButton"
 export function ColorHighlightPopoverContent({
   editor,
   colors = pickHighlightColorsByValue([
-    "var(--editor-color-highlight-green)",
-    "var(--editor-color-highlight-blue)",
-    "var(--editor-color-highlight-red)",
-    "var(--editor-color-highlight-purple)",
-    "var(--editor-color-highlight-yellow)",
+    "var(--tt-color-highlight-green)",
+    "var(--tt-color-highlight-blue)",
+    "var(--tt-color-highlight-red)",
+    "var(--tt-color-highlight-purple)",
+    "var(--tt-color-highlight-yellow)",
   ]),
 }: ColorHighlightPopoverContentProps) {
   const { handleRemoveHighlight } = useColorHighlight({ editor })
@@ -142,7 +142,7 @@ export function ColorHighlightPopoverContent({
           <Separator />
           <ButtonGroup orientation="horizontal">
             <Button
-              onPress={handleRemoveHighlight}
+              onClick={handleRemoveHighlight}
               aria-label="Remove highlight"
               tooltip="Remove highlight"
               tabIndex={selectedIndex === colors.length ? 0 : -1}
@@ -163,11 +163,11 @@ export function ColorHighlightPopoverContent({
 export function ColorHighlightPopover({
   editor: providedEditor,
   colors = pickHighlightColorsByValue([
-    "var(--editor-color-highlight-green)",
-    "var(--editor-color-highlight-blue)",
-    "var(--editor-color-highlight-red)",
-    "var(--editor-color-highlight-purple)",
-    "var(--editor-color-highlight-yellow)",
+    "var(--tt-color-highlight-green)",
+    "var(--tt-color-highlight-blue)",
+    "var(--tt-color-highlight-red)",
+    "var(--tt-color-highlight-purple)",
+    "var(--tt-color-highlight-yellow)",
   ]),
   hideWhenUnavailable = false,
   onApplied,
@@ -186,7 +186,7 @@ export function ColorHighlightPopover({
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger>
+      <PopoverTrigger asChild>
         <ColorHighlightPopoverButton
           disabled={!canColorHighlight}
           data-active-state={isActive ? "on" : "off"}
@@ -207,4 +207,3 @@ export function ColorHighlightPopover({
 }
 
 export default ColorHighlightPopover
-

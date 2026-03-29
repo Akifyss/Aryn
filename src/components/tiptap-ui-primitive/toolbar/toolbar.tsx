@@ -1,5 +1,6 @@
 import * as React from "react"
 import { Separator } from "@/components/tiptap-ui-primitive/separator"
+import "@/components/tiptap-ui-primitive/toolbar/toolbar.scss"
 import { cn } from "@/lib/tiptap-utils"
 import { useMenuNavigation } from "@/hooks/use-menu-navigation"
 import { useComposedRef } from "@/hooks/use-composed-ref"
@@ -72,10 +73,6 @@ const useToolbarNavigation = (
   React.useEffect(() => {
     if (selectedIndex !== undefined && items[selectedIndex]) {
       items[selectedIndex].focus()
-      items[selectedIndex].scrollIntoView({
-        block: "nearest",
-        inline: "nearest",
-      })
     }
   }, [selectedIndex, items])
 }
@@ -86,6 +83,28 @@ export const Toolbar = React.forwardRef<HTMLDivElement, ToolbarProps>(
     const composedRef = useComposedRef(toolbarRef, ref)
     useToolbarNavigation(toolbarRef)
 
+    const handleMouseDownCapture = React.useCallback(
+      (event: React.MouseEvent<HTMLDivElement>) => {
+        const target = event.target as HTMLElement | null
+
+        if (!target) {
+          return
+        }
+
+        // Keep the editor selection stable when toolbar buttons are clicked.
+        // Inputs remain focusable so popover forms still work.
+        if (
+          target.closest("input, textarea, [contenteditable='true']") ||
+          !target.closest("button, [role='button']")
+        ) {
+          return
+        }
+
+        event.preventDefault()
+      },
+      []
+    )
+
     return (
       <div
         ref={composedRef}
@@ -93,6 +112,7 @@ export const Toolbar = React.forwardRef<HTMLDivElement, ToolbarProps>(
         aria-label="toolbar"
         data-variant={variant}
         className={cn("tiptap-toolbar", className)}
+        onMouseDownCapture={handleMouseDownCapture}
         {...props}
       >
         {children}

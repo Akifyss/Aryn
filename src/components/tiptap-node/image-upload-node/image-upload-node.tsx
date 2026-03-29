@@ -4,7 +4,8 @@ import * as React from "react"
 import type { NodeViewProps } from "@tiptap/react"
 import { NodeViewWrapper } from "@tiptap/react"
 import { Button } from "@/components/tiptap-ui-primitive/button"
-import { CloseIcon } from "@/components/tiptap-icons"
+import { CloseIcon } from "@/components/tiptap-icons/close-icon"
+import "@/components/tiptap-node/image-upload-node/image-upload-node.scss"
 import { focusNextNode, isValidPosition } from "@/lib/tiptap-utils"
 
 export interface FileItem {
@@ -520,7 +521,8 @@ export const ImageUploadNode: React.FC<NodeViewProps> = (props) => {
               <Button
                 type="button"
                 data-style="ghost"
-                onPress={() => {
+                onClick={(e) => {
+                  e.stopPropagation()
                   clearAllFiles()
                 }}
               >
@@ -550,4 +552,3 @@ export const ImageUploadNode: React.FC<NodeViewProps> = (props) => {
     </NodeViewWrapper>
   )
 }
-

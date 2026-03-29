@@ -1,82 +1,37 @@
-import type { SVGProps } from 'react'
-import {
-  AlignCenterLine,
-  AlignJustifyLine,
-  AlignLeftLine,
-  AlignRightLine,
-  ArrowLeftLine,
-  BackLine,
-  BlockquoteLine,
-  BoldLine,
-  BracketsLine,
-  BrushLine,
-  CheckboxLine,
-  CloseLine,
-  CodeLine,
-  CornerDownLeftLine,
-  Delete2Line,
-  DownLine,
-  ExternalLinkLine,
-  FileCodeLine,
-  ForwardLine,
-  Heading1Line,
-  Heading2Line,
-  Heading3Line,
-  ItalicLine,
-  LinkLine,
-  ListCheckLine,
-  ListOrderedLine,
-  MoonStarsLine,
-  PicLine,
-  StrikethroughLine,
-  SunLine,
-  UnderlineLine,
-} from '@mingcute/react'
-import { Icon } from '@iconify/react'
-
-type IconProps = SVGProps<SVGSVGElement>
-
-/**
- * Fallback to Iconify for icons missing in MingCute
- */
-const Iconify = ({ icon, className, ...props }: IconProps & { icon: string }) => (
-  <Icon icon={icon} className={className} {...(props as any)} />
-)
-
-export const ArrowLeftIcon = ArrowLeftLine
-export const HighlighterIcon = BrushLine
-export const LinkIcon = LinkLine
-export const MoonStarIcon = MoonStarsLine
-export const SunIcon = SunLine
-export const BlockquoteIcon = BlockquoteLine
-export const CodeBlockIcon = FileCodeLine
-export const BanIcon = CloseLine
-export const CloseIcon = CloseLine
-export const HeadingOneIcon = Heading1Line
-export const HeadingTwoIcon = Heading2Line
-export const HeadingThreeIcon = Heading3Line
-export const HeadingFourIcon = (props: IconProps) => <Iconify {...props} icon="lucide:heading-4" />
-export const HeadingFiveIcon = (props: IconProps) => <Iconify {...props} icon="lucide:heading-5" />
-export const HeadingSixIcon = (props: IconProps) => <Iconify {...props} icon="lucide:heading-6" />
-export const HeadingIcon = (props: IconProps) => <Iconify {...props} icon="lucide:heading" />
-export const ChevronDownIcon = DownLine
-export const ImagePlusIcon = PicLine
-export const CornerDownLeftIcon = CornerDownLeftLine
-export const ExternalLinkIcon = ExternalLinkLine
-export const TrashIcon = Delete2Line
-export const ListIcon = BracketsLine
-export const ListOrderedIcon = ListOrderedLine
-export const ListTodoIcon = ListCheckLine
-export const BoldIcon = BoldLine
-export const Code2Icon = CodeLine
-export const ItalicIcon = ItalicLine
-export const StrikeIcon = StrikethroughLine
-export const SubscriptIcon = (props: IconProps) => <Iconify {...props} icon="lucide:subscript" />
-export const SuperscriptIcon = (props: IconProps) => <Iconify {...props} icon="lucide:superscript" />
-export const UnderlineIcon = UnderlineLine
-export const AlignCenterIcon = AlignCenterLine
-export const AlignJustifyIcon = AlignJustifyLine
-export const AlignLeftIcon = AlignLeftLine
-export const AlignRightIcon = AlignRightLine
-export const Redo2Icon = ForwardLine
-export const Undo2Icon = BackLine
+export * from "@/components/tiptap-icons/align-center-icon"
+export * from "@/components/tiptap-icons/align-justify-icon"
+export * from "@/components/tiptap-icons/align-left-icon"
+export * from "@/components/tiptap-icons/align-right-icon"
+export * from "@/components/tiptap-icons/arrow-left-icon"
+export * from "@/components/tiptap-icons/ban-icon"
+export * from "@/components/tiptap-icons/blockquote-icon"
+export * from "@/components/tiptap-icons/bold-icon"
+export * from "@/components/tiptap-icons/chevron-down-icon"
+export * from "@/components/tiptap-icons/close-icon"
+export * from "@/components/tiptap-icons/code-block-icon"
+export * from "@/components/tiptap-icons/code2-icon"
+export * from "@/components/tiptap-icons/corner-down-left-icon"
+export * from "@/components/tiptap-icons/external-link-icon"
+export * from "@/components/tiptap-icons/heading-five-icon"
+export * from "@/components/tiptap-icons/heading-four-icon"
+export * from "@/components/tiptap-icons/heading-icon"
+export * from "@/components/tiptap-icons/heading-one-icon"
+export * from "@/components/tiptap-icons/heading-six-icon"
+export * from "@/components/tiptap-icons/heading-three-icon"
+export * from "@/components/tiptap-icons/heading-two-icon"
+export * from "@/components/tiptap-icons/highlighter-icon"
+export * from "@/components/tiptap-icons/image-plus-icon"
+export * from "@/components/tiptap-icons/italic-icon"
+export * from "@/components/tiptap-icons/link-icon"
+export * from "@/components/tiptap-icons/list-icon"
+export * from "@/components/tiptap-icons/list-ordered-icon"
+export * from "@/components/tiptap-icons/list-todo-icon"
+export * from "@/components/tiptap-icons/moon-star-icon"
+export * from "@/components/tiptap-icons/redo2-icon"
+export * from "@/components/tiptap-icons/strike-icon"
+export * from "@/components/tiptap-icons/subscript-icon"
+export * from "@/components/tiptap-icons/sun-icon"
+export * from "@/components/tiptap-icons/superscript-icon"
+export * from "@/components/tiptap-icons/trash-icon"
+export * from "@/components/tiptap-icons/underline-icon"
+export * from "@/components/tiptap-icons/undo2-icon"

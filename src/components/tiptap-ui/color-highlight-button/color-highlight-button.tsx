@@ -57,7 +57,6 @@ export const ColorHighlightButton = React.forwardRef<
       hideWhenUnavailable = false,
       onApplied,
       showShortcut = false,
-      onPress,
       onClick,
       children,
       style,
@@ -81,14 +80,13 @@ export const ColorHighlightButton = React.forwardRef<
       onApplied,
     })
 
-    const handlePress = React.useCallback(
-      (event?: unknown) => {
-        onPress?.(event as never)
-        onClick?.(event as React.MouseEvent<HTMLButtonElement>)
-        if ((event as { defaultPrevented?: boolean } | undefined)?.defaultPrevented) return
+    const handleClick = React.useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event)
+        if (event.defaultPrevented) return
         handleColorHighlight()
       },
-      [handleColorHighlight, onClick, onPress]
+      [handleColorHighlight, onClick]
     )
 
     const buttonStyle = React.useMemo(
@@ -116,7 +114,7 @@ export const ColorHighlightButton = React.forwardRef<
         aria-label={label}
         aria-pressed={isActive}
         tooltip={label}
-        onPress={handlePress}
+        onClick={handleClick}
         style={buttonStyle}
         {...buttonProps}
         ref={ref}

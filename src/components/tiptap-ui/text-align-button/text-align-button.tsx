@@ -71,7 +71,6 @@ export const TextAlignButton = React.forwardRef<
       hideWhenUnavailable = false,
       onAligned,
       showShortcut = false,
-      onPress,
       onClick,
       icon: CustomIcon,
       children,
@@ -95,14 +94,13 @@ export const TextAlignButton = React.forwardRef<
       onAligned,
     })
 
-    const handlePress = React.useCallback(
-      (event?: unknown) => {
-        onPress?.(event as never)
-        onClick?.(event as React.MouseEvent<HTMLButtonElement>)
-        if ((event as { defaultPrevented?: boolean } | undefined)?.defaultPrevented) return
+    const handleClick = React.useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event)
+        if (event.defaultPrevented) return
         handleTextAlign()
       },
-      [handleTextAlign, onClick, onPress]
+      [handleTextAlign, onClick]
     )
 
     if (!isVisible) {
@@ -123,7 +121,7 @@ export const TextAlignButton = React.forwardRef<
         aria-label={label}
         aria-pressed={isActive}
         tooltip={label}
-        onPress={handlePress}
+        onClick={handleClick}
         {...buttonProps}
         ref={ref}
       >

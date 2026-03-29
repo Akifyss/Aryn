@@ -56,7 +56,6 @@ export const ImageUploadButton = React.forwardRef<
       hideWhenUnavailable = false,
       onInserted,
       showShortcut = false,
-      onPress,
       onClick,
       children,
       ...buttonProps
@@ -78,14 +77,13 @@ export const ImageUploadButton = React.forwardRef<
       onInserted,
     })
 
-    const handlePress = React.useCallback(
-      (event?: unknown) => {
-        onPress?.(event as never)
-        onClick?.(event as React.MouseEvent<HTMLButtonElement>)
-        if ((event as { defaultPrevented?: boolean } | undefined)?.defaultPrevented) return
+    const handleClick = React.useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event)
+        if (event.defaultPrevented) return
         handleImage()
       },
-      [handleImage, onClick, onPress]
+      [handleImage, onClick]
     )
 
     if (!isVisible) {
@@ -104,7 +102,7 @@ export const ImageUploadButton = React.forwardRef<
         aria-label={label}
         aria-pressed={isActive}
         tooltip={label}
-        onPress={handlePress}
+        onClick={handleClick}
         {...buttonProps}
         ref={ref}
       >

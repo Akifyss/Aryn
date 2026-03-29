@@ -7,7 +7,7 @@ import type { Editor } from "@tiptap/react"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 // --- Icons ---
-import { HeadingIcon } from "@/components/tiptap-icons"
+import { HeadingIcon } from "@/components/tiptap-icons/heading-icon"
 
 // --- Tiptap UI ---
 import {
@@ -130,4 +130,3 @@ export function useHeadingDropdownMenu(config?: UseHeadingDropdownMenuConfig) {
     Icon: activeLevel ? headingIcons[activeLevel] : HeadingIcon,
   }
 }
-

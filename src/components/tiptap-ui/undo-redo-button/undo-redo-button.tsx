@@ -64,7 +64,6 @@ export const UndoRedoButton = React.forwardRef<
       hideWhenUnavailable = false,
       onExecuted,
       showShortcut = false,
-      onPress,
       onClick,
       children,
       ...buttonProps
@@ -80,14 +79,13 @@ export const UndoRedoButton = React.forwardRef<
         onExecuted,
       })
 
-    const handlePress = React.useCallback(
-      (event?: unknown) => {
-        onPress?.(event as never)
-        onClick?.(event as React.MouseEvent<HTMLButtonElement>)
-        if ((event as { defaultPrevented?: boolean } | undefined)?.defaultPrevented) return
+    const handleClick = React.useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event)
+        if (event.defaultPrevented) return
         handleAction()
       },
-      [handleAction, onClick, onPress]
+      [handleAction, onClick]
     )
 
     if (!isVisible) {
@@ -104,7 +102,7 @@ export const UndoRedoButton = React.forwardRef<
         tabIndex={-1}
         aria-label={label}
         tooltip={label}
-        onPress={handlePress}
+        onClick={handleClick}
         {...buttonProps}
         ref={ref}
       >
