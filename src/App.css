@@ -222,67 +222,67 @@
   text-transform: uppercase;
 }
 
-.sidebar-actions {
-  display: flex;
-  align-items: stretch;
-  flex-wrap: nowrap;
-  gap: 0.65rem;
-}
-
-.workspace-primary-action,
-.workspace-secondary-action {
-  width: 100%;
-  min-width: 0;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.workspace-primary-action {
-  flex: 1 1 0;
-  justify-content: flex-start;
-  min-height: 2.7rem;
-}
-
-.workspace-secondary-action {
-  flex: 1 1 0;
-  min-height: 2.7rem;
-}
-
-.section-separator {
-  margin: 0;
-  background: var(--panel-border);
-}
-
 .section-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  padding: 0.2rem 0;
 }
 
-.label {
+.section-title-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 0.35rem 0.1rem;
+  border: 0;
+  background: transparent;
   color: var(--panel-muted);
-  font-size: 0.68rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 160ms ease, opacity 160ms ease;
 }
 
-.label-with-icon {
+.section-title-actions {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  flex-shrink: 0;
+  gap: 0.3rem;
 }
 
-.section-count {
-  min-width: 1.9rem;
-  padding: 0.24rem 0.58rem;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--accent) 10%, white);
-  color: color-mix(in oklab, var(--accent) 82%, black);
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-align: center;
+.section-title-text:hover:not(:disabled),
+.section-title-text:focus-visible {
+  color: var(--panel-foreground);
+}
+
+.section-title-text:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 42%, white);
+  outline-offset: 4px;
+  border-radius: 0.45rem;
+}
+
+.section-title-text:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.section-create-button {
+  min-width: 2rem;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.7rem;
+  color: var(--panel-muted);
+}
+
+.section-create-button:hover:not(:disabled) {
+  color: var(--panel-foreground);
+  background: color-mix(in oklab, var(--surface) 88%, var(--accent) 12%);
 }
 
 .tree-scroll {
@@ -980,15 +980,18 @@
     top: 0;
   }
 
-  .sidebar-actions,
   .editor-empty-actions {
     display: flex;
     flex-direction: column;
     width: 100%;
   }
 
-  .workspace-secondary-action {
-    width: auto;
+  .section-title {
+    align-items: flex-start;
+  }
+
+  .section-title-text {
+    white-space: normal;
   }
 }
 

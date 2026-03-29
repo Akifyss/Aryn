@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, ScrollShadow, Separator } from '@heroui/react'
+import { Button, ScrollShadow } from '@heroui/react'
 import {
-  FolderOpenFill,
+  AddLine,
   FileFill,
+  FolderOpenFill,
 } from '@mingcute/react'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
@@ -50,29 +51,6 @@ function getNextUntitledFileName(existingNames: string[]) {
   return `untitled-${index}.md`
 }
 
-function countTree(nodes: WorkspaceNode[]) {
-  let fileCount = 0
-  let directoryCount = 0
-
-  function visit(branch: WorkspaceNode[]) {
-    branch.forEach((node) => {
-      if (node.kind === 'file') {
-        fileCount += 1
-        return
-      }
-
-      directoryCount += 1
-      if (node.children?.length) {
-        visit(node.children)
-      }
-    })
-  }
-
-  visit(nodes)
-
-  return { directoryCount, fileCount }
-}
-
 function App() {
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
   const [, setStatusMessage] = useState('Open a folder to start.')
@@ -91,7 +69,9 @@ function App() {
     () => tree.filter((node) => node.kind === 'file').map((node) => node.name),
     [tree],
   )
-  const treeCounts = useMemo(() => countTree(tree), [tree])
+  const workspaceLabel = currentPath
+    ? getBaseName(currentPath)
+    : '\u5f53\u524d\u5de5\u4f5c\u533a'
 
   async function getWorkspaceState(workspacePath: string) {
     return window.appApi.getWorkspaceState(workspacePath)
@@ -322,38 +302,33 @@ function App() {
       <AppTitlebar />
 
       <aside className='panel panel-sidebar'>
-        <div className='sidebar-actions'>
-          <Button
-            variant='primary'
-            onPress={handlePickWorkspace}
-            isDisabled={isPickingWorkspace}
-            className='workspace-primary-action'
-          >
-            <FolderOpenFill className='mr-2' size={16} />
-            {isPickingWorkspace ? 'Opening...' : 'Open Folder'}
-          </Button>
-
-          <Button
-            variant='outline'
-            onPress={() => {
-              void handleCreateFile()
-            }}
-            isDisabled={!currentPath || isCreatingFile}
-            className='workspace-secondary-action'
-          >
-            <FileFill className='mr-2' size={16} />
-            {isCreatingFile ? 'Creating...' : 'New File'}
-          </Button>
-        </div>
-
-        <Separator className='section-separator' />
-
         <div className='section-title'>
-          <div className='label label-with-icon'>
-            <FileFill size={14} />
-            <span>Explorer</span>
+          <button
+            type='button'
+            onClick={() => {
+              void handlePickWorkspace()
+            }}
+            disabled={isPickingWorkspace}
+            className='section-title-text'
+            aria-label={isPickingWorkspace ? 'Opening workspace' : 'Open workspace'}
+          >
+            {workspaceLabel}
+          </button>
+
+          <div className='section-title-actions'>
+            <Button
+              isIconOnly
+              variant='ghost'
+              onPress={() => {
+                void handleCreateFile()
+              }}
+              isDisabled={!currentPath || isCreatingFile}
+              className='section-create-button'
+              aria-label={isCreatingFile ? 'Creating file' : 'Create file'}
+            >
+              <AddLine size={18} />
+            </Button>
           </div>
-          <span className='section-count'>{treeCounts.fileCount}</span>
         </div>
 
         <ScrollShadow className='tree-scroll' hideScrollBar>
