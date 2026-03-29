@@ -3,6 +3,7 @@ import type { AgentClientEvent, AgentWorkspaceState } from '../../src/features/a
 import type { WorkspaceChangeEvent, WorkspaceNode } from '../../src/features/workspace/types'
 
 contextBridge.exposeInMainWorld('appApi', {
+  platform: process.platform,
   pickWorkspace: () => ipcRenderer.invoke('workspace:pick-directory') as Promise<string | null>,
   getWorkspaceRestoreState: () => ipcRenderer.invoke('workspace:get-restore-state') as Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>,
   getWorkspaceState: (workspacePath: string) => ipcRenderer.invoke('workspace:get-state', workspacePath) as Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>,

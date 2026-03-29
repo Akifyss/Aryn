@@ -110,7 +110,6 @@ async function createWindow() {
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
     backgroundColor: '#ffffff',
     frame: false,
-    titleBarStyle: 'hidden',
     autoHideMenuBar: true,
     width: appState.window.width,
     height: appState.window.height,

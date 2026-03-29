@@ -6,6 +6,7 @@ import type { WorkspaceChangeEvent, WorkspaceNode } from '@/features/workspace/t
 declare global {
   interface Window {
     appApi: {
+      platform: NodeJS.Platform
       pickWorkspace: () => Promise<string | null>
       getWorkspaceRestoreState: () => Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>
       getWorkspaceState: (workspacePath: string) => Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>

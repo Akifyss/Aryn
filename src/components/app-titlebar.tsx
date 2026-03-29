@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Button, Tooltip } from '@heroui/react'
 import {
   CloseLine,
   FullscreenExitLine,
@@ -8,6 +7,8 @@ import {
 } from '@mingcute/react'
 
 export function AppTitlebar() {
+  const platform = window.appApi.platform
+  const isMac = platform === 'darwin'
   const [isMaximized, setIsMaximized] = useState(false)
 
   useEffect(() => {
@@ -25,66 +26,73 @@ export function AppTitlebar() {
   }, [])
 
   return (
-    <header className='titlebar'>
-      <div className='titlebar-drag'>
-        <span className='titlebar-name select-none pointer-events-none'>AWA</span>
-      </div>
-
-      <div className='titlebar-actions'>
-        <div className='titlebar-window-controls'>
-          <Tooltip>
-            <Tooltip.Trigger>
-              <Button
-                isIconOnly
-                size='sm'
-                variant='ghost'
-                className='titlebar-control'
-                onPress={() => {
-                  void window.appApi.minimizeWindow()
-                }}
-              >
-                <MinimizeLine size={16} />
-              </Button>
-            </Tooltip.Trigger>
-            <Tooltip.Content>Minimize</Tooltip.Content>
-          </Tooltip>
-
-          <Tooltip>
-            <Tooltip.Trigger>
-              <Button
-                isIconOnly
-                size='sm'
-                variant='ghost'
-                className='titlebar-control'
-                onPress={() => {
-                  void window.appApi.toggleMaximizeWindow().then(({ isMaximized: nextState }) => {
-                    setIsMaximized(nextState)
-                  })
-                }}
-              >
-                {isMaximized ? <FullscreenExitLine size={16} /> : <FullscreenLine size={16} />}
-              </Button>
-            </Tooltip.Trigger>
-            <Tooltip.Content>{isMaximized ? 'Restore' : 'Maximize'}</Tooltip.Content>
-          </Tooltip>
-
-          <Tooltip>
-            <Tooltip.Trigger>
-              <Button
-                isIconOnly
-                size='sm'
-                variant='ghost'
-                className='titlebar-control titlebar-control-close'
-                onPress={() => {
-                  void window.appApi.closeWindow()
-                }}
-              >
-                <CloseLine size={18} />
-              </Button>
-            </Tooltip.Trigger>
-            <Tooltip.Content>Close</Tooltip.Content>
-          </Tooltip>
-        </div>
+    <header className={`titlebar ${isMac ? 'is-macos' : 'is-windows'}`}>
+      <div className={`titlebar-controls ${isMac ? 'titlebar-controls-macos' : 'titlebar-controls-windows'}`}>
+        {isMac ? (
+          <>
+            <button
+              aria-label='Close window'
+              className='traffic-button traffic-close'
+              type='button'
+              onClick={() => {
+                void window.appApi.closeWindow()
+              }}
+            />
+            <button
+              aria-label='Minimize window'
+              className='traffic-button traffic-minimize'
+              type='button'
+              onClick={() => {
+                void window.appApi.minimizeWindow()
+              }}
+            />
+            <button
+              aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
+              className='traffic-button traffic-maximize'
+              type='button'
+              onClick={() => {
+                void window.appApi.toggleMaximizeWindow().then(({ isMaximized: nextState }) => {
+                  setIsMaximized(nextState)
+                })
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <button
+              aria-label='Minimize window'
+              className='window-button'
+              type='button'
+              onClick={() => {
+                void window.appApi.minimizeWindow()
+              }}
+            >
+              <MinimizeLine size={16} />
+            </button>
+            <button
+              aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
+              className='window-button'
+              type='button'
+              onClick={() => {
+                void window.appApi.toggleMaximizeWindow().then(({ isMaximized: nextState }) => {
+                  setIsMaximized(nextState)
+                })
+              }}
+            >
+              {isMaximized ? <FullscreenExitLine size={16} /> : <FullscreenLine size={16} />}
+            </button>
+            <button
+              aria-label='Close window'
+              className='window-button window-button-close'
+              type='button'
+              onClick={() => {
+                void window.appApi.closeWindow()
+              }}
+            >
+              <CloseLine size={18} />
+            </button>
+          </>
+        )}
       </div>
     </header>
   )
