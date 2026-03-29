@@ -1007,6 +1007,10 @@
   width: 100%;
 }
 
+.agent-composer-meta {
+  position: relative;
+}
+
 .agent-model-field {
   flex: 1;
   min-width: 0;
@@ -1021,14 +1025,12 @@
   font-size: var(--agent-model-control-font-size);
 }
 
-.agent-provider-select-wrap {
+.agent-provider-trigger {
   display: inline-flex;
-  flex-shrink: 0;
-  min-width: 0;
-}
-
-.agent-provider-select {
+  align-items: center;
+  gap: 0.28rem;
   width: auto;
+  flex-shrink: 0;
   min-width: 0;
   max-width: none;
   border: 0;
@@ -1038,30 +1040,33 @@
   font-weight: 400;
   line-height: 1.2;
   padding: 0;
-  padding-right: 0.9rem;
-  field-sizing: content;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background-image:
-    linear-gradient(45deg, transparent 50%, currentColor 50%),
-    linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position:
-    calc(100% - 0.55rem) calc(50% - 0.02rem),
-    calc(100% - 0.3rem) calc(50% - 0.02rem);
-  background-size: 0.25rem 0.25rem, 0.25rem 0.25rem;
-  background-repeat: no-repeat;
+  cursor: pointer;
 }
 
-.agent-provider-select:hover,
-.agent-provider-select:focus,
-.agent-provider-select:focus-visible {
+.agent-provider-trigger:hover,
+.agent-provider-trigger:focus,
+.agent-provider-trigger:focus-visible {
   outline: none;
   box-shadow: none;
 }
 
-.agent-provider-select:disabled {
+.agent-provider-trigger:disabled {
   opacity: 0.55;
+  cursor: default;
+}
+
+.agent-provider-trigger-label {
+  display: block;
+}
+
+.agent-provider-trigger-caret {
+  display: block;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-top: 0.02rem;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
 }
 
 .agent-model-separator {
@@ -1104,6 +1109,52 @@
 
 .agent-model-input.input input::placeholder {
   color: var(--field-placeholder);
+}
+
+.agent-composer-menu {
+  position: absolute;
+  left: -1rem;
+  right: -1rem;
+  bottom: calc(100% + 0.05rem);
+  z-index: 8;
+  max-height: 14rem;
+  overflow: auto;
+  border-top: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--panel-border);
+  background: var(--panel-surface-section);
+}
+
+.agent-composer-option {
+  display: block;
+  width: 100%;
+  padding: 0.72rem 0;
+  border: 0;
+  border-top: 1px solid var(--panel-border);
+  background: transparent;
+  text-align: left;
+  transition: background-color 140ms ease;
+}
+
+.agent-composer-option:first-child {
+  border-top: 0;
+}
+
+.agent-composer-option:hover,
+.agent-composer-option:focus-visible,
+.agent-composer-option.is-active {
+  background: color-mix(in oklab, var(--foreground) 2%, white);
+  outline: none;
+}
+
+.agent-composer-option-label {
+  display: block;
+  overflow: hidden;
+  padding: 0 1rem;
+  color: var(--foreground);
+  font-size: 0.77rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sr-only {
