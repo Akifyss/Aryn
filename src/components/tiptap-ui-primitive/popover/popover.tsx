@@ -15,15 +15,14 @@ function PopoverTrigger({
   return <PopoverPrimitive.Trigger {...props} />
 }
 
-function PopoverContent({
-  className,
-  align = "center",
-  sideOffset = 4,
-  ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+const PopoverContent = React.forwardRef<
+  React.ElementRef<typeof PopoverPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
+>(({ className, align = "center", sideOffset = 4, ...props }, ref) => {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
+        ref={ref}
         align={align}
         sideOffset={sideOffset}
         className={cn("tiptap-popover", className)}
@@ -31,6 +30,8 @@ function PopoverContent({
       />
     </PopoverPrimitive.Portal>
   )
-}
+})
+
+PopoverContent.displayName = PopoverPrimitive.Content.displayName
 
 export { Popover, PopoverTrigger, PopoverContent }

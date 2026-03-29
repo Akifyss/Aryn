@@ -18,53 +18,53 @@ export const COLOR_HIGHLIGHT_SHORTCUT_KEY = "mod+shift+h"
 export const HIGHLIGHT_COLORS = [
   {
     label: "Default background",
-    value: "var(--editor-bg-color)",
-    border: "var(--editor-bg-color-contrast)",
+    value: "var(--tt-bg-color)",
+    border: "var(--tt-bg-color-contrast)",
   },
   {
     label: "Gray background",
-    value: "var(--editor-color-highlight-gray)",
-    border: "var(--editor-color-highlight-gray-contrast)",
+    value: "var(--tt-color-highlight-gray)",
+    border: "var(--tt-color-highlight-gray-contrast)",
   },
   {
     label: "Brown background",
-    value: "var(--editor-color-highlight-brown)",
-    border: "var(--editor-color-highlight-brown-contrast)",
+    value: "var(--tt-color-highlight-brown)",
+    border: "var(--tt-color-highlight-brown-contrast)",
   },
   {
     label: "Orange background",
-    value: "var(--editor-color-highlight-orange)",
-    border: "var(--editor-color-highlight-orange-contrast)",
+    value: "var(--tt-color-highlight-orange)",
+    border: "var(--tt-color-highlight-orange-contrast)",
   },
   {
     label: "Yellow background",
-    value: "var(--editor-color-highlight-yellow)",
-    border: "var(--editor-color-highlight-yellow-contrast)",
+    value: "var(--tt-color-highlight-yellow)",
+    border: "var(--tt-color-highlight-yellow-contrast)",
   },
   {
     label: "Green background",
-    value: "var(--editor-color-highlight-green)",
-    border: "var(--editor-color-highlight-green-contrast)",
+    value: "var(--tt-color-highlight-green)",
+    border: "var(--tt-color-highlight-green-contrast)",
   },
   {
     label: "Blue background",
-    value: "var(--editor-color-highlight-blue)",
-    border: "var(--editor-color-highlight-blue-contrast)",
+    value: "var(--tt-color-highlight-blue)",
+    border: "var(--tt-color-highlight-blue-contrast)",
   },
   {
     label: "Purple background",
-    value: "var(--editor-color-highlight-purple)",
-    border: "var(--editor-color-highlight-purple-contrast)",
+    value: "var(--tt-color-highlight-purple)",
+    border: "var(--tt-color-highlight-purple-contrast)",
   },
   {
     label: "Pink background",
-    value: "var(--editor-color-highlight-pink)",
-    border: "var(--editor-color-highlight-pink-contrast)",
+    value: "var(--tt-color-highlight-pink)",
+    border: "var(--tt-color-highlight-pink-contrast)",
   },
   {
     label: "Red background",
-    value: "var(--editor-color-highlight-red)",
-    border: "var(--editor-color-highlight-red-contrast)",
+    value: "var(--tt-color-highlight-red)",
+    border: "var(--tt-color-highlight-red-contrast)",
   },
 ]
 export type HighlightColor = (typeof HIGHLIGHT_COLORS)[number]

@@ -16,10 +16,11 @@ import { useListDropdownMenu } from "./use-list-dropdown-menu"
 import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
 import { Button, ButtonGroup } from "@/components/tiptap-ui-primitive/button"
 import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/tiptap-ui-primitive/popover"
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/tiptap-ui-primitive/dropdown-menu"
 import { Card, CardBody } from "@/components/tiptap-ui-primitive/card"
 
 export interface ListDropdownMenuProps extends Omit<ButtonProps, "type"> {
@@ -57,10 +58,8 @@ export function ListDropdownMenu({
 }: ListDropdownMenuProps) {
   const { editor } = useTiptapEditor(providedEditor)
   const [isOpen, setIsOpen] = React.useState(false)
-  const triggerRef = React.useRef<HTMLButtonElement | null>(null)
-  const contentRef = React.useRef<HTMLDivElement | null>(null)
 
-  const { filteredLists, isActive, isVisible, Icon } =
+  const { filteredLists, canToggle, isActive, isVisible, Icon } =
     useListDropdownMenu({
       editor,
       types,
@@ -75,76 +74,49 @@ export function ListDropdownMenu({
     [onOpenChange]
   )
 
-  React.useEffect(() => {
-    if (!isOpen) {
-      return
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null
-
-      if (
-        !target ||
-        triggerRef.current?.contains(target) ||
-        contentRef.current?.contains(target)
-      ) {
-        return
-      }
-
-      handleOnOpenChange(false)
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown, true)
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown, true)
-    }
-  }, [handleOnOpenChange, isOpen])
-
   if (!isVisible || !editor || !editor.isEditable) {
     return null
   }
 
   return (
-    <Popover open={isOpen} onOpenChange={handleOnOpenChange}>
-      <PopoverTrigger asChild>
+    <DropdownMenu open={isOpen} onOpenChange={handleOnOpenChange}>
+      <DropdownMenuTrigger asChild>
         <Button
           type="button"
           data-style="ghost"
           data-active-state={isActive ? "on" : "off"}
           role="button"
           tabIndex={-1}
-          disabled={!editor?.isEditable}
-          data-disabled={!editor?.isEditable}
+          disabled={!canToggle}
+          data-disabled={!canToggle}
           aria-label="List options"
           tooltip="List"
           {...props}
-          ref={triggerRef}
         >
           <Icon className="tiptap-button-icon" />
           <ChevronDownIcon className="tiptap-button-dropdown-small" />
         </Button>
-      </PopoverTrigger>
+      </DropdownMenuTrigger>
 
-      <PopoverContent align="start" ref={contentRef}>
+      <DropdownMenuContent align="start" portal={portal}>
         <Card>
           <CardBody>
             <ButtonGroup>
               {filteredLists.map((option) => (
-                <ListButton
-                  key={option.type}
-                  editor={editor}
-                  type={option.type}
-                  text={option.label}
-                  showTooltip={false}
-                  onToggled={() => handleOnOpenChange(false)}
-                />
+                <DropdownMenuItem key={option.type} asChild>
+                  <ListButton
+                    editor={editor}
+                    type={option.type}
+                    text={option.label}
+                    showTooltip={false}
+                  />
+                </DropdownMenuItem>
               ))}
             </ButtonGroup>
           </CardBody>
         </Card>
-      </PopoverContent>
-    </Popover>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

@@ -69,6 +69,8 @@ export interface SimpleEditorProps {
   onChange: (nextValue: string) => void
 }
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024
+
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -116,67 +118,58 @@ const MainToolbarContent = ({
     <Spacer />
 
     <ToolbarGroup>
-      <UndoRedoButton action="undo" showTooltip={false} />
-      <UndoRedoButton action="redo" showTooltip={false} />
+      <UndoRedoButton action="undo" />
+      <UndoRedoButton action="redo" />
     </ToolbarGroup>
 
     <ToolbarSeparator />
 
     <ToolbarGroup>
-      <HeadingDropdownMenu
-        levels={[1, 2, 3, 4]}
-        portal
-        showTooltip={false}
-      />
+      <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal={isMobile} />
       <ListDropdownMenu
         types={["bulletList", "orderedList", "taskList"]}
-        portal
-        showTooltip={false}
+        portal={isMobile}
       />
-      <BlockquoteButton showTooltip={false} />
-      <CodeBlockButton showTooltip={false} />
+      <BlockquoteButton />
+      <CodeBlockButton />
     </ToolbarGroup>
 
     <ToolbarSeparator />
 
     <ToolbarGroup>
-      <MarkButton type="bold" showTooltip={false} />
-      <MarkButton type="italic" showTooltip={false} />
-      <MarkButton type="strike" showTooltip={false} />
-      <MarkButton type="code" showTooltip={false} />
-      <MarkButton type="underline" showTooltip={false} />
+      <MarkButton type="bold" />
+      <MarkButton type="italic" />
+      <MarkButton type="strike" />
+      <MarkButton type="code" />
+      <MarkButton type="underline" />
       {!isMobile ? (
-        <ColorHighlightPopover showTooltip={false} />
+        <ColorHighlightPopover />
       ) : (
         <ColorHighlightPopoverButton onClick={onHighlighterClick} />
       )}
-      {!isMobile ? (
-        <LinkPopover showTooltip={false} />
-      ) : (
-        <LinkButton onClick={onLinkClick} />
-      )}
+      {!isMobile ? <LinkPopover /> : <LinkButton onClick={onLinkClick} />}
     </ToolbarGroup>
 
     <ToolbarSeparator />
 
     <ToolbarGroup>
-      <MarkButton type="superscript" showTooltip={false} />
-      <MarkButton type="subscript" showTooltip={false} />
+      <MarkButton type="superscript" />
+      <MarkButton type="subscript" />
     </ToolbarGroup>
 
     <ToolbarSeparator />
 
     <ToolbarGroup>
-      <TextAlignButton align="left" showTooltip={false} />
-      <TextAlignButton align="center" showTooltip={false} />
-      <TextAlignButton align="right" showTooltip={false} />
-      <TextAlignButton align="justify" showTooltip={false} />
+      <TextAlignButton align="left" />
+      <TextAlignButton align="center" />
+      <TextAlignButton align="right" />
+      <TextAlignButton align="justify" />
     </ToolbarGroup>
 
     <ToolbarSeparator />
 
     <ToolbarGroup>
-      <ImageUploadButton showTooltip={false} text="Add" />
+      <ImageUploadButton text="Add" />
     </ToolbarGroup>
 
     <Spacer />
@@ -269,7 +262,7 @@ export function SimpleEditor({
       }),
       ImageUploadNode.configure({
         accept: "image/*",
-        maxSize: 5 * 1024 * 1024,
+        maxSize: MAX_FILE_SIZE,
         limit: 3,
         upload: uploadImage,
       }),

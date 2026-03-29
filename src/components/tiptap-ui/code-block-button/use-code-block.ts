@@ -55,10 +55,22 @@ export function canToggle(
 
   try {
     if (!turnInto) {
-      return editor.can().chain().focus().setParagraph().run()
+      return editor.can().toggleNode("codeBlock", "paragraph")
     }
 
-    return editor.can().chain().focus().toggleCodeBlock().run()
+    const view = editor.view
+    const state = view.state
+    const selection = state.selection
+
+    if (selection.empty || selection instanceof TextSelection) {
+      const pos = findNodePosition({
+        editor,
+        node: state.selection.$anchor.node(1),
+      })?.pos
+      if (!isValidPosition(pos)) return false
+    }
+
+    return true
   } catch {
     return false
   }
@@ -72,7 +84,50 @@ export function toggleCodeBlock(editor: Editor | null): boolean {
   if (!canToggle(editor)) return false
 
   try {
-    return editor.chain().focus().toggleCodeBlock().run()
+    const view = editor.view
+    let state = view.state
+    let tr = state.tr
+
+    if (state.selection.empty || state.selection instanceof TextSelection) {
+      const pos = findNodePosition({
+        editor,
+        node: state.selection.$anchor.node(1),
+      })?.pos
+      if (!isValidPosition(pos)) return false
+
+      tr = tr.setSelection(NodeSelection.create(state.doc, pos))
+      view.dispatch(tr)
+      state = view.state
+    }
+
+    const selection = state.selection
+
+    let chain = editor.chain().focus()
+
+    if (selection instanceof NodeSelection) {
+      const firstChild = selection.node.firstChild?.firstChild
+      const lastChild = selection.node.lastChild?.lastChild
+
+      const from = firstChild
+        ? selection.from + firstChild.nodeSize
+        : selection.from + 1
+
+      const to = lastChild
+        ? selection.to - lastChild.nodeSize
+        : selection.to - 1
+
+      chain = chain.setTextSelection({ from, to }).clearNodes()
+    }
+
+    const toggle = editor.isActive("codeBlock")
+      ? chain.setNode("paragraph")
+      : chain.toggleNode("codeBlock", "paragraph")
+
+    toggle.run()
+
+    editor.chain().focus().selectTextblockEnd().run()
+
+    return true
   } catch {
     return false
   }

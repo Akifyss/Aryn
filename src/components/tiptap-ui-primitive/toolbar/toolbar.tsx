@@ -91,8 +91,6 @@ export const Toolbar = React.forwardRef<HTMLDivElement, ToolbarProps>(
           return
         }
 
-        // Keep the editor selection stable when toolbar buttons are clicked.
-        // Inputs remain focusable so popover forms still work.
         if (
           target.closest("input, textarea, [contenteditable='true']") ||
           !target.closest("button, [role='button']")

@@ -4,7 +4,6 @@ import * as React from "react"
 import { ChevronDownIcon } from "@/components/tiptap-icons/chevron-down-icon"
 
 // --- Hooks ---
-import { useComposedRef } from "@/hooks/use-composed-ref"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 
 // --- Tiptap UI ---
@@ -16,10 +15,11 @@ import { useHeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-
 import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
 import { Button, ButtonGroup } from "@/components/tiptap-ui-primitive/button"
 import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/tiptap-ui-primitive/popover"
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/tiptap-ui-primitive/dropdown-menu"
 import { Card, CardBody } from "@/components/tiptap-ui-primitive/card"
 
 export interface HeadingDropdownMenuProps
@@ -58,10 +58,7 @@ export const HeadingDropdownMenu = React.forwardRef<
   ) => {
     const { editor } = useTiptapEditor(providedEditor)
     const [isOpen, setIsOpen] = React.useState(false)
-    const triggerRef = React.useRef<HTMLButtonElement | null>(null)
-    const contentRef = React.useRef<HTMLDivElement | null>(null)
-    const composedRef = useComposedRef(triggerRef, ref)
-    const { isVisible, isActive, Icon } = useHeadingDropdownMenu({
+    const { isVisible, isActive, canToggle, Icon } = useHeadingDropdownMenu({
       editor,
       levels,
       hideWhenUnavailable,
@@ -69,83 +66,58 @@ export const HeadingDropdownMenu = React.forwardRef<
 
     const handleOpenChange = React.useCallback(
       (open: boolean) => {
+        if (!editor || !canToggle) return
         setIsOpen(open)
         onOpenChange?.(open)
       },
-      [onOpenChange]
+      [canToggle, editor, onOpenChange]
     )
-
-    React.useEffect(() => {
-      if (!isOpen) {
-        return
-      }
-
-      const handlePointerDown = (event: PointerEvent) => {
-        const target = event.target as Node | null
-
-        if (
-          !target ||
-          triggerRef.current?.contains(target) ||
-          contentRef.current?.contains(target)
-        ) {
-          return
-        }
-
-        handleOpenChange(false)
-      }
-
-      document.addEventListener("pointerdown", handlePointerDown, true)
-
-      return () => {
-        document.removeEventListener("pointerdown", handlePointerDown, true)
-      }
-    }, [handleOpenChange, isOpen])
 
     if (!isVisible) {
       return null
     }
 
     return (
-      <Popover open={isOpen} onOpenChange={handleOpenChange}>
-        <PopoverTrigger asChild>
+      <DropdownMenu modal open={isOpen} onOpenChange={handleOpenChange}>
+        <DropdownMenuTrigger asChild>
           <Button
             type="button"
             data-style="ghost"
             data-active-state={isActive ? "on" : "off"}
             role="button"
             tabIndex={-1}
-            disabled={!editor?.isEditable}
-            data-disabled={!editor?.isEditable}
+            disabled={!canToggle}
+            data-disabled={!canToggle}
             aria-label="Format text as heading"
             aria-pressed={isActive}
             tooltip="Heading"
             {...buttonProps}
-            ref={composedRef}
+            ref={ref}
           >
             <Icon className="tiptap-button-icon" />
             <ChevronDownIcon className="tiptap-button-dropdown-small" />
           </Button>
-        </PopoverTrigger>
+        </DropdownMenuTrigger>
 
-        <PopoverContent align="start" ref={contentRef}>
+        <DropdownMenuContent align="start" portal={portal}>
           <Card>
             <CardBody>
               <ButtonGroup>
                 {levels.map((level) => (
-                  <HeadingButton
-                    key={`heading-${level}`}
-                    editor={editor}
-                    level={level}
-                    text={`Heading ${level}`}
-                    showTooltip={false}
-                    onToggled={() => handleOpenChange(false)}
-                  />
+                  <DropdownMenuItem key={`heading-${level}`} asChild>
+                    <HeadingButton
+                      editor={editor}
+                      level={level}
+                      text={`Heading ${level}`}
+                      showTooltip={false}
+                    />
+                  </DropdownMenuItem>
                 ))}
               </ButtonGroup>
             </CardBody>
           </Card>
-        </PopoverContent>
-      </Popover>
+        </DropdownMenuContent>
+      </DropdownMenu>
     )
   }
 )

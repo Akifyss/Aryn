@@ -75,19 +75,33 @@ export function canToggleList(
   if (!isNodeInSchema(type, editor) || isNodeTypeSelected(editor, ["image"]))
     return false
 
-  try {
-    const chain = editor.can().chain().focus()
-
+  if (!turnInto) {
     switch (type) {
       case "bulletList":
-        return chain.toggleBulletList().run()
+        return editor.can().toggleBulletList()
       case "orderedList":
-        return chain.toggleOrderedList().run()
+        return editor.can().toggleOrderedList()
       case "taskList":
-        return chain.toggleTaskList().run()
+        return editor.can().toggleList("taskList", "taskItem")
       default:
         return false
     }
+  }
+
+  try {
+    const view = editor.view
+    const state = view.state
+    const selection = state.selection
+
+    if (selection.empty || selection instanceof TextSelection) {
+      const pos = findNodePosition({
+        editor,
+        node: state.selection.$anchor.node(1),
+      })?.pos
+      if (!isValidPosition(pos)) return false
+    }
+
+    return true
   } catch {
     return false
   }
@@ -119,18 +133,64 @@ export function toggleList(editor: Editor | null, type: ListType): boolean {
   if (!canToggleList(editor, type)) return false
 
   try {
-    const chain = editor.chain().focus()
+    const view = editor.view
+    let state = view.state
+    let tr = state.tr
 
-    switch (type) {
-      case "bulletList":
-        return chain.toggleBulletList().run()
-      case "orderedList":
-        return chain.toggleOrderedList().run()
-      case "taskList":
-        return chain.toggleTaskList().run()
-      default:
-        return false
+    if (state.selection.empty || state.selection instanceof TextSelection) {
+      const pos = findNodePosition({
+        editor,
+        node: state.selection.$anchor.node(1),
+      })?.pos
+      if (!isValidPosition(pos)) return false
+
+      tr = tr.setSelection(NodeSelection.create(state.doc, pos))
+      view.dispatch(tr)
+      state = view.state
     }
+
+    const selection = state.selection
+
+    let chain = editor.chain().focus()
+
+    if (selection instanceof NodeSelection) {
+      const firstChild = selection.node.firstChild?.firstChild
+      const lastChild = selection.node.lastChild?.lastChild
+
+      const from = firstChild
+        ? selection.from + firstChild.nodeSize
+        : selection.from + 1
+
+      const to = lastChild
+        ? selection.to - lastChild.nodeSize
+        : selection.to - 1
+
+      chain = chain.setTextSelection({ from, to }).clearNodes()
+    }
+
+    if (editor.isActive(type)) {
+      chain
+        .liftListItem("listItem")
+        .lift("bulletList")
+        .lift("orderedList")
+        .lift("taskList")
+        .run()
+    } else {
+      const toggleMap: Record<ListType, () => typeof chain> = {
+        bulletList: () => chain.toggleBulletList(),
+        orderedList: () => chain.toggleOrderedList(),
+        taskList: () => chain.toggleList("taskList", "taskItem"),
+      }
+
+      const toggle = toggleMap[type]
+      if (!toggle) return false
+
+      toggle().run()
+    }
+
+    editor.chain().focus().selectTextblockEnd().run()
+
+    return true
   } catch {
     return false
   }
