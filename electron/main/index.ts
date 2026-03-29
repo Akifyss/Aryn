@@ -1,8 +1,8 @@
 import { Menu, app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
+import throttle from 'lodash.throttle'
 import {
   createWorkspaceFile,
   deleteWorkspaceFile,
@@ -12,9 +12,16 @@ import {
   saveWorkspaceFile,
   unwatchWorkspace,
   watchWorkspace,
+  workspaceFileExists,
   workspacePathExists,
 } from './workspace'
 import { PiAgentManager } from './agent'
+import {
+  AppStateStore,
+  getWorkspaceEntry,
+  MIN_WINDOW_HEIGHT,
+  MIN_WINDOW_WIDTH,
+} from './app-state'
 import type { AgentClientEvent } from '../../src/features/agent/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -53,34 +60,51 @@ if (!app.requestSingleInstanceLock()) {
 let win: BrowserWindow | null = null
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
-const workspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
+const appStatePath = path.join(app.getPath('userData'), 'app-state.json')
+const legacyWorkspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
+const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPath)
 const agentManager = new PiAgentManager((event: AgentClientEvent) => {
   win?.webContents.send('agent:event', event)
 })
 
-type WorkspaceSettings = {
-  lastWorkspacePath: string | null
+async function persistWindowState(targetWindow: BrowserWindow) {
+  const bounds = targetWindow.isMaximized()
+    ? targetWindow.getNormalBounds()
+    : targetWindow.getBounds()
+
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    window: {
+      width: Math.max(MIN_WINDOW_WIDTH, bounds.width),
+      height: Math.max(MIN_WINDOW_HEIGHT, bounds.height),
+      isMaximized: targetWindow.isMaximized(),
+    },
+  }))
 }
 
-async function readWorkspaceSettings(): Promise<WorkspaceSettings> {
-  try {
-    const raw = await readFile(workspaceSettingsPath, 'utf8')
-    const parsed = JSON.parse(raw) as Partial<WorkspaceSettings>
-    return {
-      lastWorkspacePath: parsed.lastWorkspacePath ?? null,
-    }
-  } catch {
-    return {
-      lastWorkspacePath: null,
-    }
-  }
-}
+function bindWindowStatePersistence(targetWindow: BrowserWindow) {
+  const persistBounds = throttle(() => {
+    void persistWindowState(targetWindow)
+  }, 240)
 
-async function writeWorkspaceSettings(nextSettings: WorkspaceSettings) {
-  await writeFile(workspaceSettingsPath, JSON.stringify(nextSettings, null, 2), 'utf8')
+  targetWindow.on('resize', persistBounds)
+  targetWindow.on('maximize', () => {
+    persistBounds.cancel()
+    void persistWindowState(targetWindow)
+  })
+  targetWindow.on('unmaximize', () => {
+    persistBounds.cancel()
+    void persistWindowState(targetWindow)
+  })
+  targetWindow.on('close', () => {
+    persistBounds.cancel()
+    void persistWindowState(targetWindow)
+  })
 }
 
 async function createWindow() {
+  const appState = await appStateStore.read()
+
   win = new BrowserWindow({
     title: 'AWA',
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
@@ -88,8 +112,10 @@ async function createWindow() {
     frame: false,
     titleBarStyle: 'hidden',
     autoHideMenuBar: true,
-    minWidth: 1080,
-    minHeight: 720,
+    width: appState.window.width,
+    height: appState.window.height,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     webPreferences: {
       preload,
       // Warning: Enable nodeIntegration and disable contextIsolation is not secure in production
@@ -100,6 +126,12 @@ async function createWindow() {
       // contextIsolation: false,
     },
   })
+
+  bindWindowStatePersistence(win)
+
+  if (appState.window.isMaximized) {
+    win.maximize()
+  }
 
   if (VITE_DEV_SERVER_URL) { // #298
     win.loadURL(VITE_DEV_SERVER_URL)
@@ -123,7 +155,7 @@ async function createWindow() {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
-  createWindow()
+  void createWindow()
 })
 
 app.on('window-all-closed', () => {
@@ -146,7 +178,7 @@ app.on('activate', () => {
   if (allWindows.length) {
     allWindows[0].focus()
   } else {
-    createWindow()
+    void createWindow()
   }
 })
 
@@ -164,29 +196,121 @@ ipcMain.handle('workspace:pick-directory', async () => {
     return null
   }
 
-  const selectedPath = result.filePaths[0]
-  await writeWorkspaceSettings({ lastWorkspacePath: selectedPath })
-  return selectedPath
+  return result.filePaths[0]
 })
 
 ipcMain.handle('workspace:load-tree', async (_, rootPath: string) => {
   return loadWorkspaceTree(rootPath)
 })
 
-ipcMain.handle('workspace:get-last-directory', async () => {
-  const settings = await readWorkspaceSettings()
-  const lastWorkspacePath = settings.lastWorkspacePath
+ipcMain.handle('workspace:get-restore-state', async () => {
+  const settings = await appStateStore.read()
+  const lastWorkspacePath = settings.workspace.lastWorkspacePath
 
   if (!lastWorkspacePath) {
-    return null
+    return {
+      agentSessionPath: null,
+      filePath: null,
+      workspacePath: null,
+    }
   }
 
   if (!(await workspacePathExists(lastWorkspacePath))) {
-    await writeWorkspaceSettings({ lastWorkspacePath: null })
-    return null
+    await appStateStore.update((currentState) => ({
+      ...currentState,
+      workspace: {
+        ...currentState.workspace,
+        lastWorkspacePath: null,
+      },
+    }))
+    return {
+      agentSessionPath: null,
+      filePath: null,
+      workspacePath: null,
+    }
   }
 
-  return lastWorkspacePath
+  const workspaceEntry = getWorkspaceEntry(settings, lastWorkspacePath)
+  const lastFilePath = workspaceEntry.lastFilePath
+
+  if (!lastFilePath || !(await workspaceFileExists(lastWorkspacePath, lastFilePath))) {
+    if (lastFilePath) {
+      await appStateStore.update((currentState) => ({
+        ...currentState,
+        workspace: {
+          ...currentState.workspace,
+          entries: {
+            ...currentState.workspace.entries,
+            [lastWorkspacePath]: {
+              ...getWorkspaceEntry(currentState, lastWorkspacePath),
+              lastFilePath: null,
+            },
+          },
+        },
+      }))
+    }
+
+    return {
+      agentSessionPath: workspaceEntry.lastAgentSessionPath,
+      filePath: null,
+      workspacePath: lastWorkspacePath,
+    }
+  }
+
+  return {
+    agentSessionPath: workspaceEntry.lastAgentSessionPath,
+    filePath: lastFilePath,
+    workspacePath: lastWorkspacePath,
+  }
+})
+
+ipcMain.handle('workspace:get-state', async (_, workspacePath: string) => {
+  const state = await appStateStore.read()
+  return getWorkspaceEntry(state, workspacePath)
+})
+
+ipcMain.handle('workspace:update-state', async (
+  _,
+  workspacePath: string,
+  patch: {
+    lastAgentSessionPath?: string | null
+    lastFilePath?: string | null
+    markAsLastOpened?: boolean
+  },
+) => {
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    workspace: {
+      entries: {
+        ...currentState.workspace.entries,
+        [workspacePath]: {
+          ...getWorkspaceEntry(currentState, workspacePath),
+          ...(patch.lastAgentSessionPath !== undefined ? { lastAgentSessionPath: patch.lastAgentSessionPath } : {}),
+          ...(patch.lastFilePath !== undefined ? { lastFilePath: patch.lastFilePath } : {}),
+        },
+      },
+      lastWorkspacePath: patch.markAsLastOpened ? workspacePath : currentState.workspace.lastWorkspacePath,
+    },
+  }))
+
+  return { ok: true }
+})
+
+ipcMain.handle('ui:get-state', async () => {
+  const state = await appStateStore.read()
+  return state.ui
+})
+
+ipcMain.handle('ui:update-state', async (_, patch: { agentComposerHeight?: number }) => {
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    ui: {
+      ...currentState.ui,
+      ...(patch.agentComposerHeight !== undefined ? { agentComposerHeight: patch.agentComposerHeight } : {}),
+    },
+  }))
+
+  return { ok: true }
 })
 
 ipcMain.handle('workspace:read-file', async (_, filePath: string) => {
@@ -226,8 +350,8 @@ ipcMain.handle('workspace:stop-watch', async () => {
   return { ok: true }
 })
 
-ipcMain.handle('agent:load-workspace', async (_event, rootPath: string) => {
-  return agentManager.loadWorkspaceState(rootPath)
+ipcMain.handle('agent:load-workspace', async (_event, rootPath: string, preferredSessionPath?: string | null) => {
+  return agentManager.loadWorkspaceState(rootPath, preferredSessionPath ?? null)
 })
 
 ipcMain.handle('agent:create-session', async (_event, rootPath: string, name?: string) => {

@@ -105,6 +105,22 @@ export async function workspacePathExists(workspacePath: string) {
   }
 }
 
+export async function workspaceFileExists(rootPath: string, filePath: string) {
+  const resolvedRootPath = path.resolve(rootPath)
+  const resolvedFilePath = path.resolve(filePath)
+
+  if (!isInsideWorkspace(resolvedRootPath, resolvedFilePath) || !isOpenableFile(resolvedFilePath)) {
+    return false
+  }
+
+  try {
+    const info = await stat(resolvedFilePath)
+    return info.isFile()
+  } catch {
+    return false
+  }
+}
+
 export async function createWorkspaceFile(rootPath: string, relativeFilePath: string) {
   const normalizedRelativePath = relativeFilePath.trim().replace(/^[\\/]+/, '')
 

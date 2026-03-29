@@ -197,15 +197,19 @@ export class PiAgentManager {
 
   constructor(private readonly emitEvent: (event: AgentClientEvent) => void) {}
 
-  async loadWorkspaceState(cwd: string): Promise<AgentWorkspaceState> {
+  async loadWorkspaceState(cwd: string, preferredSessionPath: string | null = null): Promise<AgentWorkspaceState> {
     if (this.activeRuntime?.cwd !== cwd) {
       await this.releaseActiveSession()
     }
 
     const sessions = await this.listSessions(cwd)
 
-    if (!this.activeRuntime && sessions[0]) {
-      await this.openSession(cwd, sessions[0].path)
+    const preferredSession = preferredSessionPath
+      ? sessions.find((session) => session.path === preferredSessionPath)
+      : null
+
+    if (!this.activeRuntime && (preferredSession ?? sessions[0])) {
+      await this.openSession(cwd, (preferredSession ?? sessions[0]).path)
       return this.buildWorkspaceState(cwd)
     }
 

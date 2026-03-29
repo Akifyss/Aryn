@@ -89,6 +89,7 @@ function AgentMessageBubble({ message }: { message: AgentSidebarMessage }) {
 
 export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   const [composerHeight, setComposerHeight] = useState(172)
+  const [hasLoadedComposerHeight, setHasLoadedComposerHeight] = useState(false)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
   const [composerValue, setComposerValue] = useState('')
   const [modelInputValue, setModelInputValue] = useState('')
@@ -98,8 +99,46 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [isSwitchingModel, setIsSwitchingModel] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
+  const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
   const composerResizeStateRef = useRef<{ pointerId: number, startHeight: number, startY: number } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+
+    void window.appApi.getUiState()
+      .then((uiState) => {
+        if (!mounted) {
+          return
+        }
+
+        setComposerHeight(uiState.agentComposerHeight)
+        setHasLoadedComposerHeight(true)
+      })
+      .catch(() => {
+        if (mounted) {
+          setHasLoadedComposerHeight(true)
+        }
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!hasLoadedComposerHeight) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void window.appApi.updateUiState({ agentComposerHeight: composerHeight })
+    }, 120)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [composerHeight, hasLoadedComposerHeight])
 
   useEffect(() => {
     const unsubscribe = window.appApi.onAgentEvent((event: AgentClientEvent) => {
@@ -176,16 +215,20 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       setDraftAssistant('')
       setLiveTools([])
       setPanelError(null)
+      setHasLoadedWorkspaceState(false)
       return
     }
 
     setIsLoading(true)
     setPanelError(null)
+    setHasLoadedWorkspaceState(false)
 
-    void window.appApi.loadAgentWorkspace(workspacePath)
+    void window.appApi.getWorkspaceState(workspacePath)
+      .then((workspaceState) => window.appApi.loadAgentWorkspace(workspacePath, workspaceState.lastAgentSessionPath))
       .then((nextState) => {
         setAgentState(nextState)
         setModelInputValue(formatModelLabel(nextState.runtime.selectedModel))
+        setHasLoadedWorkspaceState(true)
       })
       .catch((error) => {
         setPanelError(error instanceof Error ? error.message : 'Unable to load Pi Agent sessions.')
@@ -194,6 +237,16 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
         setIsLoading(false)
       })
   }, [workspacePath])
+
+  useEffect(() => {
+    if (!workspacePath || isLoading || !hasLoadedWorkspaceState) {
+      return
+    }
+
+    void window.appApi.updateWorkspaceState(workspacePath, {
+      lastAgentSessionPath: agentState.activeSession?.sessionPath ?? null,
+    })
+  }, [agentState.activeSession?.sessionPath, hasLoadedWorkspaceState, isLoading, workspacePath])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })

@@ -7,16 +7,20 @@ declare global {
   interface Window {
     appApi: {
       pickWorkspace: () => Promise<string | null>
-      getLastWorkspace: () => Promise<string | null>
+      getWorkspaceRestoreState: () => Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>
+      getWorkspaceState: (workspacePath: string) => Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>
+      updateWorkspaceState: (workspacePath: string, patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean }) => Promise<{ ok: boolean }>
       loadWorkspaceTree: (rootPath: string) => Promise<WorkspaceNode[]>
       readWorkspaceFile: (filePath: string) => Promise<string>
       saveWorkspaceFile: (filePath: string, content: string) => Promise<{ ok: boolean }>
       createWorkspaceFile: (rootPath: string, relativeFilePath: string) => Promise<{ filePath: string }>
       renameWorkspaceFile: (rootPath: string, filePath: string, nextRelativeFilePath: string) => Promise<{ filePath: string }>
       deleteWorkspaceFile: (rootPath: string, filePath: string) => Promise<{ ok: boolean }>
+      getUiState: () => Promise<{ agentComposerHeight: number }>
+      updateUiState: (patch: { agentComposerHeight?: number }) => Promise<{ ok: boolean }>
       startWorkspaceWatch: (rootPath: string) => Promise<{ ok: boolean }>
       stopWorkspaceWatch: () => Promise<{ ok: boolean }>
-      loadAgentWorkspace: (rootPath: string) => Promise<AgentWorkspaceState>
+      loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null) => Promise<AgentWorkspaceState>
       createAgentSession: (rootPath: string, name?: string) => Promise<AgentWorkspaceState>
       openAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
       renameAgentSession: (name: string) => Promise<AgentWorkspaceState>

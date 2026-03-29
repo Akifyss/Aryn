@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Chip, ScrollShadow, Separator } from '@heroui/react'
+import { Button, ScrollShadow, Separator } from '@heroui/react'
 import {
-  FolderFill,
   FolderOpenFill,
   FileFill,
 } from '@mingcute/react'
@@ -76,7 +75,6 @@ function countTree(nodes: WorkspaceNode[]) {
 
 function App() {
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
   const [, setStatusMessage] = useState('Open a folder to start.')
   const [isCreatingFile, setIsCreatingFile] = useState(false)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
@@ -94,16 +92,27 @@ function App() {
     [tree],
   )
   const treeCounts = useMemo(() => countTree(tree), [tree])
-  const workspaceName = currentPath ? getBaseName(currentPath) : null
+
+  async function getWorkspaceState(workspacePath: string) {
+    return window.appApi.getWorkspaceState(workspacePath)
+  }
+
+  async function updateWorkspaceState(
+    workspacePath: string,
+    patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean },
+  ) {
+    await window.appApi.updateWorkspaceState(workspacePath, patch)
+  }
 
   async function connectWorkspace(nextPath: string) {
     await window.appApi.stopWorkspaceWatch()
+    await loadTree(nextPath)
     setCurrentPath(nextPath)
     setCurrentFilePath(null)
     setCurrentFileContent('')
     setDirty(false)
-    await loadTree(nextPath)
     await window.appApi.startWorkspaceWatch(nextPath)
+    await updateWorkspaceState(nextPath, { markAsLastOpened: true })
   }
 
   async function loadTree(rootPath: string) {
@@ -111,12 +120,28 @@ function App() {
     setTree(nextTree)
   }
 
-  async function openFile(filePath: string) {
+  async function openFile(filePath: string, workspacePath: string | null = currentPath) {
     const fileContent = await window.appApi.readWorkspaceFile(filePath)
     setCurrentFilePath(filePath)
     setCurrentFileContent(fileContent)
     setDirty(false)
+
+    if (workspacePath) {
+      await updateWorkspaceState(workspacePath, { lastFilePath: filePath })
+    }
+
     setStatusMessage(`${filePath.split(/[\\/]/).pop()} opened`)
+  }
+
+  async function restoreWorkspaceFile(workspacePath: string, fallbackFilePath?: string | null) {
+    const workspaceState = await getWorkspaceState(workspacePath)
+    const filePath = fallbackFilePath ?? workspaceState.lastFilePath
+
+    if (!filePath) {
+      return
+    }
+
+    await openFile(filePath, workspacePath).catch(() => undefined)
   }
 
   async function handlePickWorkspace() {
@@ -125,6 +150,7 @@ function App() {
       const nextPath = await window.appApi.pickWorkspace()
       if (nextPath) {
         await connectWorkspace(nextPath)
+        await restoreWorkspaceFile(nextPath)
         setStatusMessage('Workspace connected')
       }
     } finally {
@@ -172,6 +198,7 @@ function App() {
 
     if (currentFilePath === filePath) {
       setCurrentFilePath(nextFilePath)
+      await updateWorkspaceState(currentPath, { lastFilePath: nextFilePath })
     }
 
     setStatusMessage(`${nextBaseName} renamed`)
@@ -189,6 +216,7 @@ function App() {
       setCurrentFilePath(null)
       setCurrentFileContent('')
       setDirty(false)
+      await updateWorkspaceState(currentPath, { lastFilePath: null })
     }
 
     setStatusMessage(`${getBaseName(filePath)} deleted`)
@@ -199,16 +227,11 @@ function App() {
       return
     }
 
-    setIsSaving(true)
-    try {
-      await window.appApi.saveWorkspaceFile(currentFilePath, currentFileContent)
-      setDirty(false)
-      setStatusMessage('Changes saved')
-      if (currentPath) {
-        await loadTree(currentPath)
-      }
-    } finally {
-      setIsSaving(false)
+    await window.appApi.saveWorkspaceFile(currentFilePath, currentFileContent)
+    setDirty(false)
+    setStatusMessage('Changes saved')
+    if (currentPath) {
+      await loadTree(currentPath)
     }
   }
 
@@ -216,7 +239,8 @@ function App() {
     let cancelled = false
 
     void (async () => {
-      const lastWorkspacePath = await window.appApi.getLastWorkspace()
+      const restoreState = await window.appApi.getWorkspaceRestoreState()
+      const lastWorkspacePath = restoreState.workspacePath
 
       if (!lastWorkspacePath || cancelled) {
         return
@@ -224,6 +248,10 @@ function App() {
 
       try {
         await connectWorkspace(lastWorkspacePath)
+        if (!cancelled) {
+          await restoreWorkspaceFile(lastWorkspacePath, restoreState.filePath)
+        }
+
         if (!cancelled) {
           setStatusMessage('Last workspace restored')
         }
@@ -247,6 +275,20 @@ function App() {
 
       await loadTree(currentPath)
 
+      if (currentFilePath === event.path && event.type === 'unlink') {
+        if (isDirty) {
+          setStatusMessage('Open file was removed externally. Save now to recreate it.')
+          return
+        }
+
+        setCurrentFilePath(null)
+        setCurrentFileContent('')
+        setDirty(false)
+        await updateWorkspaceState(currentPath, { lastFilePath: null })
+        setStatusMessage('Open file was removed')
+        return
+      }
+
       if (currentFilePath === event.path && !isDirty && event.type === 'change') {
         const updatedContent = await window.appApi.readWorkspaceFile(event.path)
         setCurrentFileContent(updatedContent)
@@ -255,7 +297,7 @@ function App() {
     })
 
     return unsubscribe
-  }, [currentFilePath, currentPath, isDirty, setCurrentFileContent, setTree])
+  }, [currentFilePath, currentPath, isDirty, setCurrentFileContent])
 
   useEffect(() => {
     return () => {
