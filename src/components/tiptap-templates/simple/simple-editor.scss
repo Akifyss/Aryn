@@ -240,10 +240,6 @@
   background: color-mix(in oklab, var(--accent) 8%, white);
 }
 
-.editor-dropdown-item + .editor-dropdown-item {
-  border-top: 1px solid color-mix(in oklab, var(--border) 82%, white);
-}
-
 .editor-menu-item {
   display: flex;
   align-items: center;
