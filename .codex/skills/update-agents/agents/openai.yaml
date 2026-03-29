@@ -1,0 +1,5 @@
+﻿version: 1
+interface:
+  display_name: Update AGENTS
+  short_description: Update AGENTS.md from new or changed project guidance.
+  default_prompt: Update AGENTS.md based on the new or changed project guidance I provide.
