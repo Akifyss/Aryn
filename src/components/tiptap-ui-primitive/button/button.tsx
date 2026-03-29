@@ -10,6 +10,7 @@ export interface ButtonProps
   showTooltip?: boolean
   tooltip?: React.ReactNode
   shortcutKeys?: string
+  onPress?: React.ComponentProps<typeof HeroButton>["onPress"]
 }
 
 export const ShortcutDisplay: React.FC<{ shortcuts: string[] }> = ({
@@ -37,6 +38,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       tooltip,
       showTooltip = true,
       shortcutKeys,
+      disabled,
+      onClick,
+      onPress,
       "aria-label": ariaLabel,
       ...props
     },
@@ -50,12 +54,27 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       () => parseShortcutKeys({ shortcutKeys }),
       [shortcutKeys]
     )
+    const handlePress = React.useCallback(
+      (event: unknown) => {
+        if (typeof onPress === "function") {
+          onPress(event as never)
+          return
+        }
+
+        if (typeof onClick === "function") {
+          onClick(event as React.MouseEvent<HTMLButtonElement>)
+        }
+      },
+      [onClick, onPress]
+    )
+    const pressHandler = onPress || onClick ? handlePress : undefined
 
     if (!tooltip || !showTooltip) {
       return (
         <HeroButton
           className={cn("tiptap-button", className)}
-          isDisabled={props.disabled}
+          isDisabled={disabled}
+          onPress={pressHandler}
           ref={ref}
           size="sm"
           variant={styleVariant}
@@ -72,7 +91,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         <HeroTooltip.Trigger>
           <HeroButton
             className={cn("tiptap-button", className)}
-            isDisabled={props.disabled}
+            isDisabled={disabled}
+            onPress={pressHandler}
             ref={ref}
             size="sm"
             variant={styleVariant}

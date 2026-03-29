@@ -142,7 +142,7 @@ export function ColorHighlightPopoverContent({
           <Separator />
           <ButtonGroup orientation="horizontal">
             <Button
-              onClick={handleRemoveHighlight}
+              onPress={handleRemoveHighlight}
               aria-label="Remove highlight"
               tooltip="Remove highlight"
               tabIndex={selectedIndex === colors.length ? 0 : -1}

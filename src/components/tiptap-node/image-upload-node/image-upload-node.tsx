@@ -520,8 +520,7 @@ export const ImageUploadNode: React.FC<NodeViewProps> = (props) => {
               <Button
                 type="button"
                 data-style="ghost"
-                onClick={(e) => {
-                  e.stopPropagation()
+                onPress={() => {
                   clearAllFiles()
                 }}
               >
