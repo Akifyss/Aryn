@@ -1,11 +1,15 @@
 {
   "name": "awa-desktop",
   "version": "0.1.0",
+  "productName": "AWA",
   "main": "dist-electron/main/index.js",
   "description": "AWA desktop writing workspace.",
   "author": "OpenAI Codex",
   "license": "MIT",
   "private": true,
+  "engines": {
+    "node": "22.14.x"
+  },
   "debug": {
     "env": {
       "VITE_DEV_SERVER_URL": "http://127.0.0.1:7777/"

@@ -40,7 +40,3 @@ Thumbs.db
 
 # Local tool state
 .codex/
-
-# Local reference repos
-scratch-ref/
-tiptap-ui-ref/
