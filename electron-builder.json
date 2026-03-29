@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "com.awa.desktop",
+  "appId": "com.writingworkspace.desktop",
   "asar": true,
   "directories": {
     "output": "release/${version}"

@@ -20,7 +20,7 @@ afterEach(async () => {
 })
 
 async function createTempDir() {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'awa-app-state-'))
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'app-state-'))
   tempRoots.push(rootPath)
   return rootPath
 }

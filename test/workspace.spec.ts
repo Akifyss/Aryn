@@ -15,7 +15,7 @@ afterEach(async () => {
 })
 
 async function createTempWorkspace() {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'awa-workspace-'))
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'workspace-'))
   tempRoots.push(rootPath)
   return rootPath
 }

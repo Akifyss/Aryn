@@ -1,8 +1,8 @@
-# AWA Agent Guide
+# Project Agent Guide
 
 ## Product Summary
 
-AWA is an AI writing agent desktop application for long-form drafting, rewriting, continuation, and assisted creation in a local desktop workspace.
+This project is an AI writing agent desktop application for long-form drafting, rewriting, continuation, and assisted creation in a local desktop workspace.
 
 The product direction is:
 

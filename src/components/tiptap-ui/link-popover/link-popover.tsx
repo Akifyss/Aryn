@@ -69,7 +69,7 @@ const LinkMain: React.FC<LinkMainProps> = ({
   }
 
   return (
-    <div className="awa-link-popover">
+    <div className="link-popover">
       <Input
         autoCapitalize="off"
         autoComplete="off"
@@ -82,7 +82,7 @@ const LinkMain: React.FC<LinkMainProps> = ({
         onKeyDown={handleKeyDown}
       />
 
-      <div className="awa-link-popover-actions">
+      <div className="link-popover-actions">
         <Button
           aria-label="Apply link"
           data-style="ghost"
@@ -206,7 +206,7 @@ export const LinkPopover = React.forwardRef<HTMLButtonElement, LinkPopoverProps>
           </LinkButton>
         </PopoverTrigger>
 
-        <PopoverContent className="awa-link-popover-panel" placement="bottom start">
+        <PopoverContent className="link-popover-panel" placement="bottom start">
           <LinkMain
             url={url}
             setUrl={setUrl}

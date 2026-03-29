@@ -145,14 +145,14 @@ export function SimpleEditor({
     <div className="simple-editor-wrapper" data-disabled={disabled || undefined}>
       <EditorContext.Provider value={{ editor }}>
         <ScrollShadow
-          className="awa-simple-toolbar-scroll"
+          className="simple-toolbar-scroll"
           hideScrollBar
           offset={24}
           orientation="horizontal"
           size={48}
         >
-          <div className="awa-simple-toolbar-frame">
-            <Toolbar className="awa-simple-toolbar">
+          <div className="simple-toolbar-frame">
+            <Toolbar className="simple-toolbar">
               <ToolbarGroup>
                 <UndoRedoButton action="undo" showTooltip={false} />
                 <UndoRedoButton action="redo" showTooltip={false} />

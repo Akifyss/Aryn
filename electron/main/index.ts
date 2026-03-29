@@ -106,7 +106,7 @@ async function createWindow() {
   const appState = await appStateStore.read()
 
   win = new BrowserWindow({
-    title: 'AWA',
+    title: 'Writing Workspace',
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
     backgroundColor: '#ffffff',
     frame: false,

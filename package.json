@@ -1,9 +1,9 @@
 {
-  "name": "awa-desktop",
+  "name": "writing-workspace-desktop",
   "version": "0.1.0",
-  "productName": "AWA",
+  "productName": "Writing Workspace",
   "main": "dist-electron/main/index.js",
-  "description": "AWA desktop writing workspace.",
+  "description": "Desktop writing workspace.",
   "author": "OpenAI Codex",
   "license": "MIT",
   "private": true,

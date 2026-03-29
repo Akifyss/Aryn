@@ -64,12 +64,12 @@ export const EditorDropdown = React.forwardRef<
         </Dropdown.Trigger>
 
         <Dropdown.Popover
-          className="awa-editor-dropdown-popover"
+          className="editor-dropdown-popover"
           placement="bottom start"
         >
           <Dropdown.Menu
             aria-label={menuAriaLabel}
-            className="awa-editor-dropdown-menu"
+            className="editor-dropdown-menu"
             onAction={onAction}
           >
             {items.map((item) => {
@@ -77,14 +77,14 @@ export const EditorDropdown = React.forwardRef<
 
               return (
                 <Dropdown.Item
-                  className="awa-editor-dropdown-item"
+                  className="editor-dropdown-item"
                   id={item.id}
                   key={item.id}
                   textValue={item.label}
                 >
-                  <div className="awa-editor-menu-item">
+                  <div className="editor-menu-item">
                     <ItemIcon className="tiptap-button-icon" />
-                    <span className="awa-editor-menu-label">{item.label}</span>
+                    <span className="editor-menu-label">{item.label}</span>
                   </div>
                 </Dropdown.Item>
               )

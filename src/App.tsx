@@ -353,7 +353,7 @@ function App() {
                 <div className='editor-empty-copy'>
                   <h3>Open a workspace, then start with a clean draft.</h3>
                   <p>
-                    AWA keeps the file tree, editor, and assistant in one calm desktop workspace.
+                    The file tree, editor, and assistant stay together in one calm desktop workspace.
                   </p>
                 </div>
                 <div className='editor-empty-actions'>
