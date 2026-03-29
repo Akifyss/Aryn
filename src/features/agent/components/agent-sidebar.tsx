@@ -537,6 +537,9 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   }
 
   async function handleProviderSelectionChange(nextProvider: string) {
+    if (panelError) {
+      setPanelError(null)
+    }
     setSelectedProviderValue(nextProvider)
 
     const nextModel = modelInputValue.trim()
@@ -929,6 +932,9 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
                       void handleModelInputCommit()
                     }}
                     onChange={(event) => {
+                      if (panelError) {
+                        setPanelError(null)
+                      }
                       setModelInputValue(event.target.value)
                     }}
                     onKeyDown={(event) => {
