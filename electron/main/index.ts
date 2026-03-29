@@ -61,11 +61,15 @@ let win: BrowserWindow | null = null
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json')
+const agentDir = path.join(app.getPath('userData'), 'pi-agent')
 const legacyWorkspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
 const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPath)
-const agentManager = new PiAgentManager((event: AgentClientEvent) => {
-  win?.webContents.send('agent:event', event)
-})
+const agentManager = new PiAgentManager(
+  (event: AgentClientEvent) => {
+    win?.webContents.send('agent:event', event)
+  },
+  { agentDir },
+)
 
 async function persistWindowState(targetWindow: BrowserWindow) {
   const bounds = targetWindow.isMaximized()
@@ -361,6 +365,10 @@ ipcMain.handle('agent:open-session', async (_event, rootPath: string, sessionPat
   return agentManager.openSession(rootPath, sessionPath)
 })
 
+ipcMain.handle('agent:delete-session', async (_event, rootPath: string, sessionPath: string) => {
+  return agentManager.deleteSession(rootPath, sessionPath)
+})
+
 ipcMain.handle('agent:rename-session', async (_event, name: string) => {
   return agentManager.renameActiveSession(name)
 })
@@ -371,6 +379,10 @@ ipcMain.handle('agent:send-prompt', async (_event, prompt: string) => {
 
 ipcMain.handle('agent:select-model', async (_event, modelKey: string) => {
   return agentManager.selectModel(modelKey)
+})
+
+ipcMain.handle('agent:update-openrouter-auth', async (_event, rootPath: string, apiKey: string | null) => {
+  return agentManager.updateOpenRouterAuth(rootPath, apiKey)
 })
 
 ipcMain.handle('agent:abort', async () => {

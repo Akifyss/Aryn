@@ -24,9 +24,11 @@ declare global {
       loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null) => Promise<AgentWorkspaceState>
       createAgentSession: (rootPath: string, name?: string) => Promise<AgentWorkspaceState>
       openAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
+      deleteAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
       renameAgentSession: (name: string) => Promise<AgentWorkspaceState>
       sendAgentPrompt: (prompt: string) => Promise<{ ok: boolean }>
       selectAgentModel: (modelKey: string) => Promise<AgentWorkspaceState>
+      updateOpenRouterAuth: (rootPath: string, apiKey: string | null) => Promise<AgentWorkspaceState>
       abortAgentPrompt: () => Promise<AgentWorkspaceState>
       minimizeWindow: () => Promise<void>
       toggleMaximizeWindow: () => Promise<{ isMaximized: boolean }>

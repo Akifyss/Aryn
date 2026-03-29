@@ -1,7 +1,8 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Input, ListBox, ScrollShadow, Select, TextArea } from '@heroui/react'
+import { Button, Input, ScrollShadow, TextArea } from '@heroui/react'
 import {
   AddLine,
+  Delete2Line,
   SendPlaneLine,
   StopCircleLine,
 } from '@mingcute/react'
@@ -22,12 +23,22 @@ type LiveToolState = {
   isError?: boolean
 }
 
+type AgentOverlayPanel = 'auth' | 'sessions' | null
+
 const OPENROUTER_PREFIX = 'openrouter/'
 const DEFAULT_MODEL_VALUE = 'google/gemini-3.1-flash-lite-preview'
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
   runtime: {
+    auth: {
+      openrouter: {
+        envVarName: 'OPENROUTER_API_KEY',
+        hasStoredCredential: false,
+        source: 'none',
+        usesEnvironmentCredential: false,
+      },
+    },
     availableModels: [],
     hasConfiguredModels: false,
     isStreaming: false,
@@ -95,16 +106,21 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   const [modelInputValue, setModelInputValue] = useState('')
   const [draftAssistant, setDraftAssistant] = useState('')
   const [liveTools, setLiveTools] = useState<LiveToolState[]>([])
+  const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [activeOverlayPanel, setActiveOverlayPanel] = useState<AgentOverlayPanel>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSavingAuth, setIsSavingAuth] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
+  const [deletingSessionPath, setDeletingSessionPath] = useState<string | null>(null)
   const [isSwitchingModel, setIsSwitchingModel] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
+  const authButtonRef = useRef<HTMLButtonElement | null>(null)
   const composerResizeStateRef = useRef<{ pointerId: number, startHeight: number, startY: number } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
-  const restorableSessionPath = agentState.activeSession?.messages.length
-    ? agentState.activeSession.sessionPath
-    : null
+  const overlayPanelRef = useRef<HTMLDivElement | null>(null)
+  const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
+  const restorableSessionPath = agentState.activeSession?.sessionPath ?? null
 
   useEffect(() => {
     let mounted = true
@@ -185,6 +201,38 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       }
 
       if (
+        event.type === 'tool_execution_updated'
+        && event.sessionId === agentState.activeSession?.sessionId
+      ) {
+        setLiveTools((currentTools) => {
+          const existingTool = currentTools.find((tool) => tool.id === event.toolCallId)
+
+          if (!existingTool) {
+            return [
+              ...currentTools,
+              {
+                id: event.toolCallId,
+                name: event.toolName,
+                summary: event.summary,
+              },
+            ]
+          }
+
+          return currentTools.map((tool) => {
+            if (tool.id !== event.toolCallId) {
+              return tool
+            }
+
+            return {
+              ...tool,
+              summary: event.summary,
+            }
+          })
+        })
+        return
+      }
+
+      if (
         event.type === 'tool_execution_finished'
         && event.sessionId === agentState.activeSession?.sessionId
       ) {
@@ -252,6 +300,50 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   }, [hasLoadedWorkspaceState, isLoading, restorableSessionPath, workspacePath])
 
   useEffect(() => {
+    if (!workspacePath) {
+      setActiveOverlayPanel(null)
+      setApiKeyDraft('')
+    }
+  }, [workspacePath])
+
+  useEffect(() => {
+    if (!activeOverlayPanel) {
+      return
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target
+      if (!(target instanceof Node)) {
+        return
+      }
+
+      if (overlayPanelRef.current?.contains(target)) {
+        return
+      }
+
+      if (sessionButtonRef.current?.contains(target) || authButtonRef.current?.contains(target)) {
+        return
+      }
+
+      setActiveOverlayPanel(null)
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setActiveOverlayPanel(null)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [activeOverlayPanel])
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [agentState.activeSession?.messages.length, draftAssistant, liveTools])
 
@@ -280,6 +372,8 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     return nextMessages
   }, [agentState.activeSession?.messages, draftAssistant, liveTools])
 
+  const openRouterAuth = agentState.runtime.auth.openrouter
+
   async function handleCreateSession() {
     if (!workspacePath) {
       return
@@ -290,6 +384,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       setPanelError(null)
       const nextState = await window.appApi.createAgentSession(workspacePath)
       setAgentState(nextState)
+      setActiveOverlayPanel(null)
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to create a session.')
     } finally {
@@ -306,8 +401,26 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       setPanelError(null)
       const nextState = await window.appApi.openAgentSession(workspacePath, sessionPath)
       setAgentState(nextState)
+      setActiveOverlayPanel(null)
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to open that session.')
+    }
+  }
+
+  async function handleDeleteSession(sessionPath: string) {
+    if (!workspacePath) {
+      return
+    }
+
+    try {
+      setDeletingSessionPath(sessionPath)
+      setPanelError(null)
+      const nextState = await window.appApi.deleteAgentSession(workspacePath, sessionPath)
+      setAgentState(nextState)
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'Unable to delete that session.')
+    } finally {
+      setDeletingSessionPath(null)
     }
   }
 
@@ -342,6 +455,27 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     }
 
     await handleSelectModel(nextModel)
+  }
+
+  async function handleSaveOpenRouterAuth(apiKey: string | null) {
+    if (!workspacePath) {
+      return
+    }
+
+    try {
+      setIsSavingAuth(true)
+      setPanelError(null)
+      const nextState = await window.appApi.updateOpenRouterAuth(workspacePath, apiKey)
+      setAgentState(nextState)
+      setApiKeyDraft('')
+      if (apiKey?.trim()) {
+        setActiveOverlayPanel(null)
+      }
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'Unable to update OpenRouter authentication.')
+    } finally {
+      setIsSavingAuth(false)
+    }
   }
 
   async function handleAbort() {
@@ -435,41 +569,34 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     <div className='agent-shell'>
       <div className='agent-threadbar'>
         <div className='agent-session-select'>
-          <Select
-            id='agent-session-select'
-            isDisabled={!workspacePath || agentState.sessions.length === 0}
-            onSelectionChange={(key) => {
-              if (typeof key === 'string') {
-                void handleOpenSession(key)
-              }
+          <button
+            ref={sessionButtonRef}
+            type='button'
+            disabled={!workspacePath}
+            className={`agent-session-trigger ${activeOverlayPanel === 'sessions' ? 'is-open' : ''}`}
+            onClick={() => {
+              setActiveOverlayPanel((currentValue) => currentValue === 'sessions' ? null : 'sessions')
             }}
-            placeholder='Session'
-            selectedKey={activeSessionPath ?? undefined}
-            variant='secondary'
           >
-            <Select.Trigger className='agent-select-trigger'>
-              <Select.Value>
-                <span className='agent-select-current'>
-                  {activeSession ? formatSessionLabel(activeSession.name, activeSession.modifiedAt) : 'Session'}
-                </span>
-              </Select.Value>
-            </Select.Trigger>
-            <Select.Popover className='agent-select-popover'>
-              <ListBox aria-label='Agent sessions'>
-                {agentState.sessions.map((session) => (
-                  <ListBox.Item id={session.path} key={session.path} textValue={formatSessionLabel(session.name, session.modifiedAt)}>
-                    <div className='agent-select-item'>
-                      <span className='agent-select-item-title'>{session.name ?? 'Untitled session'}</span>
-                      <span className='agent-select-item-meta'>{formatSessionTime(session.modifiedAt)}</span>
-                    </div>
-                  </ListBox.Item>
-                ))}
-              </ListBox>
-            </Select.Popover>
-          </Select>
+            <span className='agent-select-current'>
+              {activeSession ? formatSessionLabel(activeSession.name, activeSession.modifiedAt) : 'Session'}
+            </span>
+          </button>
         </div>
 
         <div className='agent-threadbar-actions'>
+          <Button
+            ref={authButtonRef}
+            size='sm'
+            variant='ghost'
+            className='agent-setup-button'
+            onPress={() => {
+              setActiveOverlayPanel((currentValue) => currentValue === 'auth' ? null : 'auth')
+            }}
+          >
+            Auth
+          </Button>
+
           <Button
             isIconOnly
             isDisabled={!workspacePath || isCreatingSession}
@@ -484,6 +611,113 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
           </Button>
         </div>
       </div>
+
+      {activeOverlayPanel ? (
+        <div className='agent-overlay-layer'>
+          <div ref={overlayPanelRef} className='agent-floating-panel'>
+            {activeOverlayPanel === 'sessions' ? (
+              <>
+                <ScrollShadow className='agent-overlay-scroll' hideScrollBar>
+                  <div className='agent-session-list'>
+                    <div className='agent-session-option'>
+                      <button
+                        type='button'
+                        className='agent-session-select-button'
+                        disabled={!workspacePath || isCreatingSession}
+                        onClick={() => {
+                          void handleCreateSession()
+                        }}
+                      >
+                        <div className='agent-select-item'>
+                          <span className='agent-select-item-title'>New Session</span>
+                        </div>
+                      </button>
+                    </div>
+
+                    {agentState.sessions.map((session) => {
+                      const isActive = session.path === activeSessionPath
+                      const isDeleting = deletingSessionPath === session.path
+
+                      return (
+                        <div key={session.path} className={`agent-session-option ${isActive ? 'is-active' : ''}`}>
+                          <button
+                            type='button'
+                            className='agent-session-select-button'
+                            disabled={isDeleting}
+                            onClick={() => {
+                              void handleOpenSession(session.path)
+                            }}
+                          >
+                            <div className='agent-select-item'>
+                              <span className='agent-select-item-title'>{session.name ?? 'Untitled session'}</span>
+                              <span className='agent-select-item-meta'>{formatSessionTime(session.modifiedAt)}</span>
+                            </div>
+                          </button>
+
+                          <Button
+                            aria-label='Delete session'
+                            isIconOnly
+                            isDisabled={isDeleting}
+                            size='sm'
+                            variant='ghost'
+                            className='agent-session-delete-button'
+                            onPress={() => {
+                              void handleDeleteSession(session.path)
+                            }}
+                          >
+                            <Delete2Line size={14} />
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </ScrollShadow>
+              </>
+            ) : (
+              <div className='agent-auth-form'>
+                <Input
+                  aria-label='OpenRouter API key'
+                  className='agent-auth-input'
+                  disabled={!workspacePath || isSavingAuth}
+                  onChange={(event) => {
+                    setApiKeyDraft(event.target.value)
+                  }}
+                  placeholder='sk-or-v1-...'
+                  type='password'
+                  value={apiKeyDraft}
+                  variant='secondary'
+                />
+
+                <div className='agent-auth-actions'>
+                  <Button
+                    isDisabled={!workspacePath || isSavingAuth || !apiKeyDraft.trim()}
+                    size='sm'
+                    variant='ghost'
+                    className='agent-auth-save'
+                    onPress={() => {
+                      void handleSaveOpenRouterAuth(apiKeyDraft)
+                    }}
+                  >
+                    Save Key
+                  </Button>
+
+                  <Button
+                    isDisabled={!workspacePath || isSavingAuth || !openRouterAuth.hasStoredCredential}
+                    size='sm'
+                    variant='ghost'
+                    className='agent-auth-clear'
+                    onPress={() => {
+                      void handleSaveOpenRouterAuth(null)
+                    }}
+                  >
+                    Remove Saved
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {statusMessage ? (
         <div className={`agent-status-inline ${panelError ? 'is-error' : ''}`}>
@@ -534,7 +768,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
               setComposerValue(event.target.value)
             }}
             onKeyDown={handleComposerKeyDown}
-            placeholder={workspacePath ? 'Message Codex. Use @ for context and / for commands.' : 'Open a folder first.'}
+            placeholder={workspacePath ? 'Message' : 'Open a folder first.'}
             rows={3}
             value={composerValue}
             variant='secondary'

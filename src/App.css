@@ -543,6 +543,7 @@
 }
 
 .agent-shell {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -572,26 +573,42 @@
   flex-shrink: 0;
 }
 
-.agent-select-trigger {
+.agent-setup-button {
+  min-width: auto;
+  height: 2.25rem;
+  padding-inline: 0.72rem;
+  border-radius: 0.8rem;
+  color: var(--panel-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.agent-setup-button:hover {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--foreground) 4%, white);
+}
+
+.agent-session-trigger {
+  display: flex;
+  align-items: center;
+  width: 100%;
   min-height: 2.3rem;
   justify-content: space-between;
-  border-radius: 0.85rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
-.agent-select-popover {
-  min-width: 17rem;
-  border: 1px solid var(--panel-border);
-  border-radius: 1rem;
-  background: var(--overlay);
-  box-shadow: var(--overlay-shadow);
+.agent-session-trigger:hover,
+.agent-session-trigger.is-open {
+  background: transparent;
 }
 
-.agent-select-popover [data-slot="list-box"] {
-  padding: 0.4rem;
-}
-
-.agent-select-popover [data-slot="list-box-item"] {
-  border-radius: 0.8rem;
+.agent-session-trigger:disabled {
+  opacity: 0.55;
 }
 
 .agent-select-current {
@@ -643,6 +660,148 @@
 
 .agent-status-inline.is-error p {
   color: color-mix(in oklab, var(--danger) 84%, black);
+}
+
+.agent-overlay-layer {
+  position: absolute;
+  top: 4.05rem;
+  left: 0;
+  right: 0;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.agent-floating-panel {
+  pointer-events: auto;
+  width: 100%;
+  max-height: min(26rem, calc(100% - 8rem));
+  overflow: hidden;
+  border-top: 0;
+  border-bottom: 1px solid var(--panel-border);
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  background: var(--panel-surface-section);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.agent-auth-form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.agent-auth-input.input,
+.agent-auth-input.input:hover,
+.agent-auth-input.input:focus,
+.agent-auth-input.input:focus-visible,
+.agent-auth-input.input[data-focus="true"],
+.agent-auth-input.input[data-focus-visible="true"],
+.agent-auth-input.input[data-hovered="true"] {
+  width: 100%;
+}
+
+.agent-auth-form {
+  padding: 0.9rem 1rem;
+}
+
+.agent-auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.agent-auth-save,
+.agent-auth-clear {
+  min-width: auto;
+  height: 2rem;
+  padding-inline: 0.72rem;
+  border-radius: 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.agent-auth-save {
+  color: color-mix(in oklab, var(--accent) 82%, black);
+  background: color-mix(in oklab, var(--accent) 10%, white);
+  border: 1px solid color-mix(in oklab, var(--accent) 16%, var(--background));
+}
+
+.agent-auth-save:hover {
+  background: color-mix(in oklab, var(--accent) 14%, white);
+}
+
+.agent-auth-clear {
+  color: var(--panel-muted);
+}
+
+.agent-overlay-scroll {
+  max-height: min(20rem, calc(100vh - 15rem));
+}
+
+.agent-session-list {
+  display: grid;
+  gap: 0;
+  padding: 0;
+}
+
+.agent-session-option {
+  display: flex;
+  align-items: stretch;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--panel-border);
+  background: transparent;
+  transition: background-color 140ms ease;
+}
+
+.agent-session-option:hover,
+.agent-session-option:focus-within {
+  background: color-mix(in oklab, var(--foreground) 2%, white);
+}
+
+.agent-session-option.is-active {
+  background: color-mix(in oklab, var(--accent) 5%, white);
+}
+
+.agent-session-select-button {
+  flex: 1;
+  min-width: 0;
+  padding: 0.8rem 0 0.8rem 1rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.agent-session-select-button:disabled {
+  opacity: 0.55;
+}
+
+.agent-session-delete-button {
+  align-self: center;
+  flex-shrink: 0;
+  min-width: 2rem;
+  width: 2rem;
+  height: 2rem;
+  margin-right: 0.5rem;
+  border-radius: 0.7rem;
+  color: var(--panel-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, color 140ms ease, background-color 140ms ease;
+}
+
+.agent-session-option:hover .agent-session-delete-button,
+.agent-session-option:focus-within .agent-session-delete-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.agent-session-delete-button:hover {
+  color: color-mix(in oklab, var(--danger) 72%, black);
+  background: color-mix(in oklab, var(--danger) 7%, white);
 }
 
 .agent-messages-scroll {

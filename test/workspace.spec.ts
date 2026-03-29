@@ -29,6 +29,8 @@ describe('workspace helpers', () => {
     await writeFile(path.join(rootPath, 'draft.md'), '# Draft', 'utf8')
     await writeFile(path.join(docsPath, 'notes.txt'), 'notes', 'utf8')
     await writeFile(path.join(rootPath, 'image.png'), 'png', 'utf8')
+    await mkdir(path.join(rootPath, '.pi', 'sessions'), { recursive: true })
+    await writeFile(path.join(rootPath, '.pi', 'sessions', 'current.jsonl'), 'ignore me', 'utf8')
     await mkdir(path.join(rootPath, 'node_modules', 'ignored-lib'), { recursive: true })
     await writeFile(path.join(rootPath, 'node_modules', 'ignored-lib', 'readme.md'), 'ignore me', 'utf8')
 

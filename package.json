@@ -29,7 +29,7 @@
     "@heroui/react": "^3.0.0-beta.4",
     "@heroui/styles": "^3.0.0-beta.4",
     "@iconify/react": "^6.0.2",
-    "@mariozechner/pi-coding-agent": "^0.63.1",
+    "@mariozechner/pi-coding-agent": "^0.63.2",
     "@mingcute/react": "^1.4.1",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-popover": "^1.1.15",

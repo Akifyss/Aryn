@@ -20,12 +20,22 @@ export type AgentSessionListItem = {
 }
 
 export type AgentRuntimeState = {
+  auth: {
+    openrouter: AgentOpenRouterAuthState
+  }
   workspacePath: string | null
   hasConfiguredModels: boolean
   availableModels: string[]
   selectedModel: string | null
   isStreaming: boolean
   setupHint: string | null
+}
+
+export type AgentOpenRouterAuthState = {
+  envVarName: string
+  hasStoredCredential: boolean
+  source: 'env' | 'none' | 'stored'
+  usesEnvironmentCredential: boolean
 }
 
 export type AgentSessionSnapshot = {
@@ -60,6 +70,13 @@ export type AgentClientEvent =
       summary: string
     }
   | {
+      type: 'tool_execution_updated'
+      sessionId: string
+      toolCallId: string
+      toolName: string
+      summary: string
+    }
+  | {
       type: 'tool_execution_finished'
       sessionId: string
       toolCallId: string
@@ -76,4 +93,3 @@ export type AgentClientEvent =
       sessionId: string | null
       message: string
     }
-

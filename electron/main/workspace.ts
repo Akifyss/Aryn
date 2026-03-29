@@ -16,7 +16,7 @@ export type WorkspaceChangeEvent = {
   type: 'add' | 'addDir' | 'change' | 'unlink' | 'unlinkDir'
 }
 
-const IGNORED_NAMES = new Set(['.git', 'node_modules', 'dist', 'dist-electron'])
+const IGNORED_NAMES = new Set(['.git', '.pi', 'node_modules', 'dist', 'dist-electron'])
 const OPENABLE_EXTENSIONS = new Set([
   '.md',
   '.markdown',
