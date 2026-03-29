@@ -319,10 +319,6 @@ function App() {
 
   return (
     <div className='app-shell'>
-      <a className='skip-link' href='#editor-main'>
-        Skip to editor
-      </a>
-
       <AppTitlebar />
 
       <aside className='panel panel-sidebar'>

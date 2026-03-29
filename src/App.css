@@ -28,22 +28,6 @@
     inset 0 0 0 1px rgba(54, 69, 94, 0.04);
 }
 
-.skip-link {
-  position: absolute;
-  top: -3rem;
-  left: 1rem;
-  z-index: 200;
-  padding: 0.625rem 0.875rem;
-  border-radius: 999px;
-  background: var(--foreground);
-  color: var(--surface);
-  text-decoration: none;
-}
-
-.skip-link:focus-visible {
-  top: 1rem;
-}
-
 .titlebar {
   grid-column: 1 / -1;
   display: flex;
@@ -83,10 +67,21 @@
 
 .traffic-button,
 .window-button {
+  appearance: none;
   border: 0;
   background: transparent;
   padding: 0;
+  outline: none;
+  box-shadow: none;
   cursor: pointer;
+}
+
+.traffic-button:focus,
+.traffic-button:focus-visible,
+.window-button:focus,
+.window-button:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .window-button {
@@ -1004,8 +999,7 @@
   .traffic-button::before,
   .traffic-button::after,
   .window-button,
-  .tree-file,
-  .skip-link {
+  .tree-file {
     transition: none;
   }
 }
