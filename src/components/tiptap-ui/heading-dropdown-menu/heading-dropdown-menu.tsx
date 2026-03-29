@@ -1,13 +1,13 @@
 import * as React from "react"
-import { Button, Dropdown, Label } from "@heroui/react"
 
-import { ChevronDownIcon } from "@/components/tiptap-icons"
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 import type { UseHeadingDropdownMenuConfig } from "@/components/tiptap-ui/heading-dropdown-menu"
 import { headingIcons, toggleHeading } from "@/components/tiptap-ui/heading-button"
 import { useHeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu"
+import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
+import { EditorDropdown } from "@/components/tiptap-ui-primitive/editor-dropdown"
 
-type TriggerButtonProps = React.ComponentProps<typeof Button>
+type TriggerButtonProps = ButtonProps
 
 export interface HeadingDropdownMenuProps
   extends Omit<TriggerButtonProps, "type">,
@@ -54,47 +54,25 @@ export const HeadingDropdownMenu = React.forwardRef<
       return null
     }
 
+    const items = levels.map((level) => ({
+      icon: headingIcons[level],
+      id: String(level),
+      label: `Heading ${level}`,
+    }))
+
     return (
-      <Dropdown.Root onOpenChange={onOpenChange}>
-        <Dropdown.Trigger>
-          <Button
-            ref={ref}
-            aria-label="Format text as heading"
-            aria-pressed={isActive}
-            className="tiptap-button"
-            data-active-state={isActive ? "on" : "off"}
-            isDisabled={!canToggle}
-            size="sm"
-            variant="ghost"
-            {...buttonProps}
-          >
-            <Icon className="tiptap-button-icon" />
-            <ChevronDownIcon className="tiptap-button-dropdown-small" />
-          </Button>
-        </Dropdown.Trigger>
-
-        <Dropdown.Popover className="awa-editor-dropdown-popover" placement="bottom start">
-          <Dropdown.Menu aria-label="Heading styles" className="awa-editor-dropdown-menu" onAction={handleAction}>
-            {levels.map((level) => {
-              const LevelIcon = headingIcons[level]
-
-              return (
-                <Dropdown.Item
-                  className="awa-editor-dropdown-item"
-                  key={String(level)}
-                  id={String(level)}
-                  textValue={`Heading ${level}`}
-                >
-                  <div className="awa-editor-menu-item">
-                    <LevelIcon className="tiptap-button-icon" />
-                    <Label className="awa-editor-menu-label">Heading {level}</Label>
-                  </div>
-                </Dropdown.Item>
-              )
-            })}
-          </Dropdown.Menu>
-        </Dropdown.Popover>
-      </Dropdown.Root>
+      <EditorDropdown
+        ref={ref}
+        disabled={!canToggle}
+        isActive={isActive}
+        items={items}
+        menuAriaLabel="Heading styles"
+        onAction={handleAction}
+        onOpenChange={onOpenChange}
+        triggerAriaLabel="Format text as heading"
+        triggerIcon={Icon}
+        {...buttonProps}
+      />
     )
   }
 )

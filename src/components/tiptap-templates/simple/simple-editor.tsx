@@ -12,8 +12,8 @@ import { Superscript } from "@tiptap/extension-superscript"
 import { Underline } from "@tiptap/extension-underline"
 import Placeholder from "@tiptap/extension-placeholder"
 import { Markdown } from "@tiptap/markdown"
+import { ScrollShadow } from "@heroui/react"
 
-import { Spacer } from "@/components/tiptap-ui-primitive/spacer"
 import {
   Toolbar,
   ToolbarGroup,
@@ -144,54 +144,60 @@ export function SimpleEditor({
   return (
     <div className="simple-editor-wrapper" data-disabled={disabled || undefined}>
       <EditorContext.Provider value={{ editor }}>
-        <Toolbar className="awa-simple-toolbar">
-          <Spacer />
+        <ScrollShadow
+          className="awa-simple-toolbar-scroll"
+          hideScrollBar
+          offset={24}
+          orientation="horizontal"
+          size={48}
+        >
+          <div className="awa-simple-toolbar-frame">
+            <Toolbar className="awa-simple-toolbar">
+              <ToolbarGroup>
+                <UndoRedoButton action="undo" showTooltip={false} />
+                <UndoRedoButton action="redo" showTooltip={false} />
+              </ToolbarGroup>
 
-          <ToolbarGroup>
-            <UndoRedoButton action="undo" showTooltip={false} />
-            <UndoRedoButton action="redo" showTooltip={false} />
-          </ToolbarGroup>
+              <ToolbarSeparator />
 
-          <ToolbarSeparator />
+              <ToolbarGroup>
+                <HeadingDropdownMenu levels={[1, 2, 3, 4]} />
+                <ListDropdownMenu
+                  types={["bulletList", "orderedList", "taskList"]}
+                />
+                <BlockquoteButton showTooltip={false} />
+                <CodeBlockButton showTooltip={false} />
+              </ToolbarGroup>
 
-          <ToolbarGroup>
-            <HeadingDropdownMenu levels={[1, 2, 3, 4]} />
-            <ListDropdownMenu
-              types={["bulletList", "orderedList", "taskList"]}
-            />
-            <BlockquoteButton showTooltip={false} />
-            <CodeBlockButton showTooltip={false} />
-          </ToolbarGroup>
+              <ToolbarSeparator />
 
-          <ToolbarSeparator />
+              <ToolbarGroup>
+                <MarkButton type="bold" showTooltip={false} />
+                <MarkButton type="italic" showTooltip={false} />
+                <MarkButton type="strike" showTooltip={false} />
+                <MarkButton type="code" showTooltip={false} />
+                <MarkButton type="underline" showTooltip={false} />
+                <LinkPopover />
+              </ToolbarGroup>
 
-          <ToolbarGroup>
-            <MarkButton type="bold" showTooltip={false} />
-            <MarkButton type="italic" showTooltip={false} />
-            <MarkButton type="strike" showTooltip={false} />
-            <MarkButton type="code" showTooltip={false} />
-            <MarkButton type="underline" showTooltip={false} />
-            <LinkPopover />
-          </ToolbarGroup>
+              <ToolbarSeparator />
 
-          <ToolbarSeparator />
+              <ToolbarGroup>
+                <MarkButton type="superscript" showTooltip={false} />
+                <MarkButton type="subscript" showTooltip={false} />
+              </ToolbarGroup>
 
-          <ToolbarGroup>
-            <MarkButton type="superscript" showTooltip={false} />
-            <MarkButton type="subscript" showTooltip={false} />
-          </ToolbarGroup>
+              <ToolbarSeparator />
 
-          <ToolbarSeparator />
-
-          <ToolbarGroup>
-            <TextAlignButton align="left" showTooltip={false} />
-            <TextAlignButton align="center" showTooltip={false} />
-            <TextAlignButton align="right" showTooltip={false} />
-            <TextAlignButton align="justify" showTooltip={false} />
-          </ToolbarGroup>
-
-          <Spacer />
-        </Toolbar>
+              <ToolbarGroup>
+                <TextAlignButton align="left" showTooltip={false} />
+                <TextAlignButton align="center" showTooltip={false} />
+                <TextAlignButton align="right" showTooltip={false} />
+                <TextAlignButton align="justify" showTooltip={false} />
+              </ToolbarGroup>
+            </Toolbar>
+          </div>
+        </ScrollShadow>
 
         <EditorContent
           editor={editor}

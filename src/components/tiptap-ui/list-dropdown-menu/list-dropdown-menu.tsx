@@ -1,13 +1,13 @@
 import * as React from "react"
-import { Button, Dropdown, Label } from "@heroui/react"
 import { type Editor } from "@tiptap/react"
 
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
-import { ChevronDownIcon } from "@/components/tiptap-icons"
 import { listIcons, listLabels, toggleList, type ListType } from "@/components/tiptap-ui/list-button"
+import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
+import { EditorDropdown } from "@/components/tiptap-ui-primitive/editor-dropdown"
 import { useListDropdownMenu } from "./use-list-dropdown-menu"
 
-type TriggerButtonProps = React.ComponentProps<typeof Button>
+type TriggerButtonProps = ButtonProps
 
 export interface ListDropdownMenuProps extends Omit<TriggerButtonProps, "type"> {
   editor?: Editor
@@ -49,45 +49,24 @@ export function ListDropdownMenu({
     return null
   }
 
+  const items = filteredLists.map((option) => ({
+    icon: listIcons[option.type],
+    id: option.type,
+    label: listLabels[option.type],
+  }))
+
   return (
-    <Dropdown.Root onOpenChange={onOpenChange}>
-      <Dropdown.Trigger>
-        <Button
-          aria-label="List options"
-          className="tiptap-button"
-          data-active-state={isActive ? "on" : "off"}
-          isDisabled={!canToggle}
-          size="sm"
-          variant="ghost"
-          {...props}
-        >
-          <Icon className="tiptap-button-icon" />
-          <ChevronDownIcon className="tiptap-button-dropdown-small" />
-        </Button>
-      </Dropdown.Trigger>
-
-      <Dropdown.Popover className="awa-editor-dropdown-popover" placement="bottom start">
-        <Dropdown.Menu aria-label="List styles" className="awa-editor-dropdown-menu" onAction={handleAction}>
-          {filteredLists.map((option) => {
-            const OptionIcon = listIcons[option.type]
-
-            return (
-              <Dropdown.Item
-                className="awa-editor-dropdown-item"
-                key={option.type}
-                id={option.type}
-                textValue={listLabels[option.type]}
-              >
-                <div className="awa-editor-menu-item">
-                  <OptionIcon className="tiptap-button-icon" />
-                  <Label className="awa-editor-menu-label">{listLabels[option.type]}</Label>
-                </div>
-              </Dropdown.Item>
-            )
-          })}
-        </Dropdown.Menu>
-      </Dropdown.Popover>
-    </Dropdown.Root>
+    <EditorDropdown
+      disabled={!canToggle}
+      isActive={isActive}
+      items={items}
+      menuAriaLabel="List styles"
+      onAction={handleAction}
+      onOpenChange={onOpenChange}
+      triggerAriaLabel="List options"
+      triggerIcon={Icon}
+      {...props}
+    />
   )
 }
 

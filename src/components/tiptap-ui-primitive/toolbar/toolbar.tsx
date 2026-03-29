@@ -72,6 +72,10 @@ const useToolbarNavigation = (
   React.useEffect(() => {
     if (selectedIndex !== undefined && items[selectedIndex]) {
       items[selectedIndex].focus()
+      items[selectedIndex].scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      })
     }
   }, [selectedIndex, items])
 }

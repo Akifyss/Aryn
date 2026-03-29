@@ -52,15 +52,32 @@
   align-items: stretch;
 }
 
-.awa-simple-toolbar {
+.awa-simple-toolbar-scroll {
   position: sticky;
   top: 0;
   z-index: 5;
   flex: 0 0 auto;
   margin: 0;
-  padding: 0.65rem 1.4rem 0.6rem;
   border-bottom: 1px solid color-mix(in oklab, var(--separator) 92%, var(--background));
-  background: color-mix(in oklab, var(--surface) 94%, var(--background));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--surface) 97%, white),
+      color-mix(in oklab, var(--surface) 94%, var(--background))
+    );
+}
+
+.awa-simple-toolbar-frame {
+  display: flex;
+  justify-content: center;
+  min-width: 100%;
+}
+
+.awa-simple-toolbar {
+  min-width: max-content;
+  flex-wrap: nowrap;
+  padding: 0.65rem 1.4rem 0.6rem;
+  background: transparent;
 }
 
 .tiptap-separator {
@@ -195,6 +212,60 @@
   padding: 0.7rem;
 }
 
+.awa-editor-dropdown-popover {
+  min-width: 11.5rem;
+  padding: 0.28rem;
+  border: 1px solid color-mix(in oklab, var(--border) 88%, white);
+  border-radius: 0.95rem;
+  background: var(--overlay);
+  box-shadow: var(--overlay-shadow);
+}
+
+.awa-editor-dropdown-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.awa-editor-dropdown-item {
+  min-height: 2.1rem;
+  padding: 0.15rem 0.3rem;
+  border-radius: 0.7rem;
+  color: var(--foreground);
+}
+
+.awa-editor-dropdown-item[data-hovered="true"],
+.awa-editor-dropdown-item[data-focus-visible="true"],
+.awa-editor-dropdown-item[data-focus="true"] {
+  background: color-mix(in oklab, var(--accent) 8%, white);
+}
+
+.awa-editor-dropdown-item + .awa-editor-dropdown-item {
+  border-top: 1px solid color-mix(in oklab, var(--border) 82%, white);
+}
+
+.awa-editor-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  min-height: 1.8rem;
+}
+
+.awa-editor-menu-item .tiptap-button-icon {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  color: color-mix(in oklab, var(--muted) 84%, white);
+}
+
+.awa-editor-menu-label {
+  color: var(--foreground);
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
 .tiptap-dropdown-menu,
 .tiptap-card {
   padding: 0.45rem;
@@ -259,6 +330,10 @@
   flex-direction: column;
   gap: 0.6rem;
   min-width: 16rem;
+}
+
+.awa-link-popover-panel {
+  min-width: min(20rem, calc(100vw - 2rem));
 }
 
 .awa-link-popover-actions {
@@ -347,6 +422,35 @@
 .simple-editor-content .tiptap.ProseMirror.simple-editor ul,
 .simple-editor-content .tiptap.ProseMirror.simple-editor ol {
   padding-left: 1.35rem;
+  list-style-position: outside;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor ul {
+  list-style-type: disc;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor ol {
+  list-style-type: decimal;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor ul ul {
+  list-style-type: circle;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor ul ul ul {
+  list-style-type: square;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor ol ol {
+  list-style-type: lower-alpha;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor ol ol ol {
+  list-style-type: lower-roman;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor li::marker {
+  color: color-mix(in oklab, var(--foreground) 72%, white);
 }
 
 .simple-editor-content .tiptap.ProseMirror.simple-editor li {

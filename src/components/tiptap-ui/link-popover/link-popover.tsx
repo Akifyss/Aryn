@@ -2,14 +2,21 @@
 
 import * as React from "react"
 import type { Editor } from "@tiptap/react"
-import { Button, Input, Popover } from "@heroui/react"
 
 import { useTiptapEditor } from "@/hooks/use-tiptap-editor"
 import { CornerDownLeftIcon, ExternalLinkIcon, LinkIcon, TrashIcon } from "@/components/tiptap-icons"
 import type { UseLinkPopoverConfig } from "@/components/tiptap-ui/link-popover"
 import { useLinkPopover } from "@/components/tiptap-ui/link-popover"
+import type { ButtonProps } from "@/components/tiptap-ui-primitive/button"
+import { Button } from "@/components/tiptap-ui-primitive/button"
+import { Input } from "@/components/tiptap-ui-primitive/input"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/tiptap-ui-primitive/popover"
 
-type TriggerButtonProps = React.ComponentProps<typeof Button>
+type TriggerButtonProps = ButtonProps
 
 export interface LinkMainProps {
   url: string
@@ -33,9 +40,9 @@ export const LinkButton = React.forwardRef<HTMLButtonElement, TriggerButtonProps
       <Button
         ref={ref}
         aria-label="Link"
-        className={["tiptap-button", className].filter(Boolean).join(" ")}
-        size="sm"
-        variant="ghost"
+        className={className}
+        data-style="ghost"
+        showTooltip={false}
         {...props}
       >
         {children || <LinkIcon className="tiptap-button-icon" />}
@@ -71,35 +78,34 @@ const LinkMain: React.FC<LinkMainProps> = ({
         placeholder="Paste a link..."
         type="url"
         value={url}
-        variant="secondary"
         onChange={(event) => setUrl(event.target.value)}
         onKeyDown={handleKeyDown}
       />
 
       <div className="awa-link-popover-actions">
         <Button
-          isIconOnly
-          isDisabled={!url && !isActive}
-          size="sm"
-          variant="ghost"
+          aria-label="Apply link"
+          data-style="ghost"
+          disabled={!url && !isActive}
+          showTooltip={false}
           onPress={setLink}
         >
           <CornerDownLeftIcon className="tiptap-button-icon" />
         </Button>
         <Button
-          isIconOnly
-          isDisabled={!url && !isActive}
-          size="sm"
-          variant="ghost"
+          aria-label="Open link"
+          data-style="ghost"
+          disabled={!url && !isActive}
+          showTooltip={false}
           onPress={openLink}
         >
           <ExternalLinkIcon className="tiptap-button-icon" />
         </Button>
         <Button
-          isIconOnly
-          isDisabled={!url && !isActive}
-          size="sm"
-          variant="ghost"
+          aria-label="Remove link"
+          data-style="ghost"
+          disabled={!url && !isActive}
+          showTooltip={false}
           onPress={removeLink}
         >
           <TrashIcon className="tiptap-button-icon" />
@@ -165,6 +171,16 @@ export const LinkPopover = React.forwardRef<HTMLButtonElement, LinkPopoverProps>
       setIsOpen(false)
     }, [setLink])
 
+    const handleRemoveLink = React.useCallback(() => {
+      removeLink()
+      setIsOpen(false)
+    }, [removeLink])
+
+    const handleOpenLink = React.useCallback(() => {
+      openLink()
+      setIsOpen(false)
+    }, [openLink])
+
     React.useEffect(() => {
       if (autoOpenOnLinkActive && isActive) {
         setIsOpen(true)
@@ -176,33 +192,31 @@ export const LinkPopover = React.forwardRef<HTMLButtonElement, LinkPopoverProps>
     }
 
     return (
-      <Popover.Root isOpen={isOpen} onOpenChange={handleOpenChange}>
-        <Popover.Trigger>
-          <div>
-            <LinkButton
-              ref={ref}
-              aria-label={label}
-              aria-pressed={isActive}
-              data-active-state={isActive ? "on" : "off"}
-              isDisabled={!canSet}
-              {...buttonProps}
-            >
-              {children ?? <Icon className="tiptap-button-icon" />}
-            </LinkButton>
-          </div>
-        </Popover.Trigger>
+      <Popover open={isOpen} onOpenChange={handleOpenChange}>
+        <PopoverTrigger>
+          <LinkButton
+            ref={ref}
+            aria-label={label}
+            aria-pressed={isActive}
+            data-active-state={isActive ? "on" : "off"}
+            disabled={!canSet}
+            {...buttonProps}
+          >
+            {children ?? <Icon className="tiptap-button-icon" />}
+          </LinkButton>
+        </PopoverTrigger>
 
-        <Popover.Content placement="bottom">
+        <PopoverContent className="awa-link-popover-panel" placement="bottom start">
           <LinkMain
             url={url}
             setUrl={setUrl}
             setLink={handleSetLink}
-            removeLink={removeLink}
-            openLink={openLink}
+            removeLink={handleRemoveLink}
+            openLink={handleOpenLink}
             isActive={isActive}
           />
-        </Popover.Content>
-      </Popover.Root>
+        </PopoverContent>
+      </Popover>
     )
   }
 )
