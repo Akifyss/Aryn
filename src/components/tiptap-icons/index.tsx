@@ -32,55 +32,16 @@ import {
   SunLine,
   UnderlineLine,
 } from '@mingcute/react'
+import { Icon } from '@iconify/react'
 
 type IconProps = SVGProps<SVGSVGElement>
 
-function TextIcon({
-  className,
-  label,
-}: {
-  className?: string
-  label: string
-}) {
-  return (
-    <svg
-      aria-hidden='true'
-      className={className}
-      fill='none'
-      viewBox='0 0 24 24'
-      xmlns='http://www.w3.org/2000/svg'
-    >
-      <rect height='18' rx='4' stroke='currentColor' strokeWidth='1.8' width='18' x='3' y='3' />
-      <text
-        dominantBaseline='central'
-        fill='currentColor'
-        fontFamily='ui-sans-serif, sans-serif'
-        fontSize='8'
-        fontWeight='700'
-        textAnchor='middle'
-        x='12'
-        y='12.5'
-      >
-        {label}
-      </text>
-    </svg>
-  )
-}
-
-function SlashIcon({ className }: IconProps) {
-  return (
-    <svg
-      aria-hidden='true'
-      className={className}
-      fill='none'
-      viewBox='0 0 24 24'
-      xmlns='http://www.w3.org/2000/svg'
-    >
-      <path d='M8 18 16 6' stroke='currentColor' strokeLinecap='round' strokeWidth='1.8' />
-      <path d='M6 18h4M14 6h4' stroke='currentColor' strokeLinecap='round' strokeWidth='1.8' />
-    </svg>
-  )
-}
+/**
+ * Fallback to Iconify for icons missing in MingCute
+ */
+const Iconify = ({ icon, className, ...props }: IconProps & { icon: string }) => (
+  <Icon icon={icon} className={className} {...(props as any)} />
+)
 
 export const ArrowLeftIcon = ArrowLeftLine
 export const HighlighterIcon = BrushLine
@@ -94,10 +55,10 @@ export const CloseIcon = CloseLine
 export const HeadingOneIcon = Heading1Line
 export const HeadingTwoIcon = Heading2Line
 export const HeadingThreeIcon = Heading3Line
-export const HeadingFourIcon = (props: IconProps) => <TextIcon {...props} label='H4' />
-export const HeadingFiveIcon = (props: IconProps) => <TextIcon {...props} label='H5' />
-export const HeadingSixIcon = (props: IconProps) => <TextIcon {...props} label='H6' />
-export const HeadingIcon = (props: IconProps) => <TextIcon {...props} label='H' />
+export const HeadingFourIcon = (props: IconProps) => <Iconify {...props} icon="lucide:heading-4" />
+export const HeadingFiveIcon = (props: IconProps) => <Iconify {...props} icon="lucide:heading-5" />
+export const HeadingSixIcon = (props: IconProps) => <Iconify {...props} icon="lucide:heading-6" />
+export const HeadingIcon = (props: IconProps) => <Iconify {...props} icon="lucide:heading" />
 export const ChevronDownIcon = DownLine
 export const ImagePlusIcon = PicLine
 export const CornerDownLeftIcon = CornerDownLeftLine
@@ -110,8 +71,8 @@ export const BoldIcon = BoldLine
 export const Code2Icon = CodeLine
 export const ItalicIcon = ItalicLine
 export const StrikeIcon = StrikethroughLine
-export const SubscriptIcon = SlashIcon
-export const SuperscriptIcon = SlashIcon
+export const SubscriptIcon = (props: IconProps) => <Iconify {...props} icon="lucide:subscript" />
+export const SuperscriptIcon = (props: IconProps) => <Iconify {...props} icon="lucide:superscript" />
 export const UnderlineIcon = UnderlineLine
 export const AlignCenterIcon = AlignCenterLine
 export const AlignJustifyIcon = AlignJustifyLine
