@@ -4,6 +4,7 @@ import {
   AddLine,
   FileFill,
   FolderOpenFill,
+  SelectorVerticalLine,
 } from '@mingcute/react'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
@@ -312,7 +313,8 @@ function App() {
             className='section-title-text'
             aria-label={isPickingWorkspace ? 'Opening workspace' : 'Open workspace'}
           >
-            {workspaceLabel}
+            <span className='section-title-label'>{workspaceLabel}</span>
+            <SelectorVerticalLine size={24} className='section-title-icon' />
           </button>
 
           <div className='section-title-actions'>

@@ -3,6 +3,7 @@ import { Button, Input, ScrollShadow, TextArea } from '@heroui/react'
 import {
   AddLine,
   Delete2Line,
+  Key2Line,
   SendPlaneLine,
   StopCircleLine,
 } from '@mingcute/react'
@@ -733,14 +734,16 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
         <div className='agent-threadbar-actions'>
           <Button
             ref={authButtonRef}
+            isIconOnly
             size='sm'
             variant='ghost'
-            className='agent-setup-button'
+            className='agent-icon-button'
+            aria-label='Configure auth'
             onPress={() => {
               setActiveOverlayPanel((currentValue) => currentValue === 'auth' ? null : 'auth')
             }}
           >
-            Auth
+            <Key2Line size={16} />
           </Button>
 
           <Button
