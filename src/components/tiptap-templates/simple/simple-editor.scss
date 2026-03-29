@@ -124,6 +124,13 @@
   background: color-mix(in oklab, var(--foreground) 4%, white) !important;
 }
 
+.tiptap-button:focus,
+.tiptap-button:focus-visible,
+.tiptap-button.button:focus,
+.tiptap-button.button:focus-visible {
+  outline: none !important;
+}
+
 .tiptap-button[data-active-state="on"],
 .tiptap-button.button[data-active-state="on"] {
   color: color-mix(in oklab, var(--accent) 82%, black);
