@@ -202,15 +202,13 @@ export class PiAgentManager {
       await this.releaseActiveSession()
     }
 
-    const sessions = await this.listSessions(cwd)
-
-    const preferredSession = preferredSessionPath
-      ? sessions.find((session) => session.path === preferredSessionPath)
-      : null
-
-    if (!this.activeRuntime && (preferredSession ?? sessions[0])) {
-      await this.openSession(cwd, (preferredSession ?? sessions[0]).path)
-      return this.buildWorkspaceState(cwd)
+    if (!this.activeRuntime && preferredSessionPath) {
+      try {
+        await this.openSession(cwd, preferredSessionPath)
+        return this.buildWorkspaceState(cwd)
+      } catch {
+        return this.buildWorkspaceState(cwd)
+      }
     }
 
     return this.buildWorkspaceState(cwd)

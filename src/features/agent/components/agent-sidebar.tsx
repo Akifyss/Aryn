@@ -102,6 +102,9 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
   const composerResizeStateRef = useRef<{ pointerId: number, startHeight: number, startY: number } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const restorableSessionPath = agentState.activeSession?.messages.length
+    ? agentState.activeSession.sessionPath
+    : null
 
   useEffect(() => {
     let mounted = true
@@ -244,9 +247,9 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     }
 
     void window.appApi.updateWorkspaceState(workspacePath, {
-      lastAgentSessionPath: agentState.activeSession?.sessionPath ?? null,
+      lastAgentSessionPath: restorableSessionPath ?? null,
     })
-  }, [agentState.activeSession?.sessionPath, hasLoadedWorkspaceState, isLoading, workspacePath])
+  }, [hasLoadedWorkspaceState, isLoading, restorableSessionPath, workspacePath])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })

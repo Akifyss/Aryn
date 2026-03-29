@@ -2,10 +2,16 @@
   --app-background: color-mix(in oklab, var(--background) 88%, var(--default));
   --panel-border: color-mix(in oklab, var(--separator) 92%, var(--background));
   --panel-border-strong: color-mix(in oklab, var(--foreground) 12%, var(--background));
+  --panel-foreground: var(--foreground);
   --panel-muted: color-mix(in oklab, var(--foreground) 58%, var(--background));
   --panel-soft: color-mix(in oklab, var(--foreground) 72%, var(--background));
   --panel-highlight: color-mix(in oklab, var(--accent) 8%, var(--surface));
   --panel-highlight-strong: color-mix(in oklab, var(--accent) 16%, var(--surface));
+  --panel-surface-chrome: color-mix(in oklab, var(--background) 86%, var(--surface-secondary));
+  --panel-surface-base: var(--surface);
+  --panel-surface-subtle: color-mix(in oklab, var(--background) 88%, var(--surface));
+  --panel-surface-section: color-mix(in oklab, var(--background) 92%, var(--surface));
+  --panel-surface-editor: color-mix(in oklab, var(--surface) 96%, var(--background));
 
   position: relative;
   display: grid;
@@ -34,7 +40,7 @@
   align-items: center;
   min-width: 0;
   border-bottom: 1px solid var(--panel-border);
-  background: color-mix(in oklab, var(--background) 90%, var(--surface));
+  background: var(--panel-surface-chrome);
   z-index: 20;
   app-region: drag;
   -webkit-app-region: drag;
@@ -46,7 +52,6 @@
 
 .titlebar.is-windows {
   justify-content: flex-end;
-  border-bottom-color: transparent;
 }
 
 .titlebar-controls {
@@ -201,15 +206,15 @@
   gap: 1rem;
   padding: 1.2rem 1rem 1rem 1.25rem;
   border-right: 1px solid var(--panel-border);
-  background: color-mix(in oklab, var(--background) 86%, var(--surface-secondary));
+  background: var(--panel-surface-chrome);
 }
 
 .panel-editor {
-  background: var(--surface);
+  background: var(--panel-surface-base);
 }
 
 .panel-agent {
-  background: color-mix(in oklab, var(--background) 88%, var(--surface));
+  background: var(--panel-surface-subtle);
   border-left: 1px solid var(--panel-border);
 }
 
@@ -489,7 +494,7 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  background: color-mix(in oklab, var(--surface) 96%, var(--background));
+  background: var(--panel-surface-editor);
   overflow: hidden;
 }
 
@@ -500,7 +505,7 @@
   display: flex;
   justify-content: center;
   padding: clamp(2rem, 5vw, 4rem) 2rem 2rem;
-  background: color-mix(in oklab, var(--surface) 95%, var(--background));
+  background: var(--panel-surface-editor);
 }
 
 .editor-empty-content {
@@ -552,7 +557,7 @@
   gap: 0.75rem;
   padding: 0.95rem 1rem 0.85rem;
   border-bottom: 1px solid var(--panel-border);
-  background: color-mix(in oklab, var(--background) 92%, var(--surface));
+  background: var(--panel-surface-section);
 }
 
 .agent-session-select {
@@ -691,7 +696,7 @@
   padding: 0.75rem 0.8rem;
   border: 1px solid var(--panel-border);
   border-radius: 0.95rem;
-  background: color-mix(in oklab, var(--background) 76%, var(--surface));
+  background: color-mix(in oklab, var(--panel-surface-base) 76%, var(--background));
 }
 
 .agent-message.is-error {
@@ -733,7 +738,7 @@
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--panel-border);
-  background: color-mix(in oklab, var(--background) 92%, var(--surface));
+  background: var(--panel-surface-section);
 }
 
 .agent-composer-shell {
