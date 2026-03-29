@@ -25,7 +25,7 @@ contextBridge.exposeInMainWorld('appApi', {
   renameAgentSession: (name: string) => ipcRenderer.invoke('agent:rename-session', name) as Promise<AgentWorkspaceState>,
   sendAgentPrompt: (prompt: string) => ipcRenderer.invoke('agent:send-prompt', prompt) as Promise<{ ok: boolean }>,
   selectAgentModel: (modelKey: string) => ipcRenderer.invoke('agent:select-model', modelKey) as Promise<AgentWorkspaceState>,
-  updateOpenRouterAuth: (rootPath: string, apiKey: string | null) => ipcRenderer.invoke('agent:update-openrouter-auth', rootPath, apiKey) as Promise<AgentWorkspaceState>,
+  updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => ipcRenderer.invoke('agent:update-provider-auth', rootPath, provider, apiKey) as Promise<AgentWorkspaceState>,
   abortAgentPrompt: () => ipcRenderer.invoke('agent:abort') as Promise<AgentWorkspaceState>,
   minimizeWindow: () => ipcRenderer.invoke('window:minimize') as Promise<void>,
   toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize') as Promise<{ isMaximized: boolean }>,

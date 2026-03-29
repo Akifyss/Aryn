@@ -28,7 +28,7 @@ declare global {
       renameAgentSession: (name: string) => Promise<AgentWorkspaceState>
       sendAgentPrompt: (prompt: string) => Promise<{ ok: boolean }>
       selectAgentModel: (modelKey: string) => Promise<AgentWorkspaceState>
-      updateOpenRouterAuth: (rootPath: string, apiKey: string | null) => Promise<AgentWorkspaceState>
+      updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => Promise<AgentWorkspaceState>
       abortAgentPrompt: () => Promise<AgentWorkspaceState>
       minimizeWindow: () => Promise<void>
       toggleMaximizeWindow: () => Promise<{ isMaximized: boolean }>

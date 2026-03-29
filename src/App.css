@@ -688,7 +688,7 @@
 
 .agent-auth-form {
   display: grid;
-  gap: 0.55rem;
+  gap: 0;
 }
 
 .agent-auth-input.input,
@@ -702,7 +702,35 @@
 }
 
 .agent-auth-form {
+  padding: 0;
+}
+
+.agent-auth-provider {
+  display: grid;
+  gap: 0.55rem;
   padding: 0.9rem 1rem;
+  border-top: 1px solid var(--panel-border);
+}
+
+.agent-auth-provider:first-child {
+  border-top: 0;
+}
+
+.agent-auth-provider-copy {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.agent-auth-provider-label {
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.agent-auth-provider-meta {
+  color: var(--panel-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
 }
 
 .agent-auth-actions {
@@ -984,6 +1012,65 @@
   min-width: 0;
 }
 
+.agent-model-composite {
+  --agent-model-control-font-size: 0.77rem;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  font-size: var(--agent-model-control-font-size);
+}
+
+.agent-provider-select-wrap {
+  display: inline-flex;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.agent-provider-select {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.2;
+  padding: 0;
+  padding-right: 0.9rem;
+  field-sizing: content;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 0.55rem) calc(50% - 0.02rem),
+    calc(100% - 0.3rem) calc(50% - 0.02rem);
+  background-size: 0.25rem 0.25rem, 0.25rem 0.25rem;
+  background-repeat: no-repeat;
+}
+
+.agent-provider-select:hover,
+.agent-provider-select:focus,
+.agent-provider-select:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.agent-provider-select:disabled {
+  opacity: 0.55;
+}
+
+.agent-model-separator {
+  flex-shrink: 0;
+  color: var(--panel-muted);
+  font-size: inherit;
+  user-select: none;
+}
+
 .agent-model-input.input,
 .agent-model-input.input:hover,
 .agent-model-input.input:focus,
@@ -1010,12 +1097,25 @@
 
 .agent-model-input.input input {
   color: var(--foreground);
-  font-size: 0.77rem;
+  font-size: inherit;
+  line-height: 1.2;
   padding: 0 !important;
 }
 
 .agent-model-input.input input::placeholder {
   color: var(--field-placeholder);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .agent-icon-button,

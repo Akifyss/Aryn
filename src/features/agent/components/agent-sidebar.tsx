@@ -8,6 +8,7 @@ import {
 } from '@mingcute/react'
 import type {
   AgentClientEvent,
+  AgentProviderAuthState,
   AgentSidebarMessage,
   AgentWorkspaceState,
 } from '@/features/agent/types'
@@ -24,14 +25,27 @@ type LiveToolState = {
 }
 
 type AgentOverlayPanel = 'auth' | 'sessions' | null
+type AuthProviderKey = 'google' | 'openai' | 'openrouter'
 
-const OPENROUTER_PREFIX = 'openrouter/'
 const DEFAULT_MODEL_VALUE = 'google/gemini-3.1-flash-lite-preview'
+const KNOWN_AGENT_PROVIDERS: AuthProviderKey[] = ['google', 'openai', 'openrouter']
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
   runtime: {
     auth: {
+      google: {
+        envVarName: 'GEMINI_API_KEY',
+        hasStoredCredential: false,
+        source: 'none',
+        usesEnvironmentCredential: false,
+      },
+      openai: {
+        envVarName: 'OPENAI_API_KEY',
+        hasStoredCredential: false,
+        source: 'none',
+        usesEnvironmentCredential: false,
+      },
       openrouter: {
         envVarName: 'OPENROUTER_API_KEY',
         hasStoredCredential: false,
@@ -71,12 +85,30 @@ function formatSessionLabel(name: string | null, modifiedAt: string) {
 
 function formatModelLabel(modelKey: string | null) {
   if (!modelKey) {
-    return DEFAULT_MODEL_VALUE
+    return DEFAULT_MODEL_VALUE.split('/').slice(1).join('/')
   }
 
-  return modelKey.startsWith(OPENROUTER_PREFIX)
-    ? modelKey.slice(OPENROUTER_PREFIX.length)
-    : modelKey
+  const parts = modelKey.split('/')
+  return parts.length > 1 ? parts.slice(1).join('/') : modelKey
+}
+
+function parseModelSelection(modelKey: string | null): { modelId: string, provider: string } {
+  if (!modelKey) {
+    return {
+      modelId: formatModelLabel(DEFAULT_MODEL_VALUE),
+      provider: 'google',
+    }
+  }
+
+  const [providerCandidate, ...modelIdParts] = modelKey.split('/')
+  const provider = KNOWN_AGENT_PROVIDERS.includes(providerCandidate as AuthProviderKey)
+    ? providerCandidate as AuthProviderKey
+    : 'google'
+
+  return {
+    modelId: modelIdParts.length > 0 ? modelIdParts.join('/') : formatModelLabel(modelKey),
+    provider,
+  }
 }
 
 function AgentMessageBubble({ message }: { message: AgentSidebarMessage }) {
@@ -104,9 +136,14 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
   const [composerValue, setComposerValue] = useState('')
   const [modelInputValue, setModelInputValue] = useState('')
+  const [selectedProviderValue, setSelectedProviderValue] = useState('google')
   const [draftAssistant, setDraftAssistant] = useState('')
   const [liveTools, setLiveTools] = useState<LiveToolState[]>([])
-  const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [authDrafts, setAuthDrafts] = useState<Record<AuthProviderKey, string>>({
+    google: '',
+    openai: '',
+    openrouter: '',
+  })
   const [activeOverlayPanel, setActiveOverlayPanel] = useState<AgentOverlayPanel>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSavingAuth, setIsSavingAuth] = useState(false)
@@ -163,7 +200,9 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     const unsubscribe = window.appApi.onAgentEvent((event: AgentClientEvent) => {
       if (event.type === 'workspace_state') {
         setAgentState(event.state)
-        setModelInputValue(formatModelLabel(event.state.runtime.selectedModel))
+        const nextModelSelection = parseModelSelection(event.state.runtime.selectedModel)
+        setModelInputValue(nextModelSelection.modelId)
+        setSelectedProviderValue(nextModelSelection.provider)
         setDraftAssistant('')
         setLiveTools([])
         return
@@ -278,7 +317,9 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       .then((workspaceState) => window.appApi.loadAgentWorkspace(workspacePath, workspaceState.lastAgentSessionPath))
       .then((nextState) => {
         setAgentState(nextState)
-        setModelInputValue(formatModelLabel(nextState.runtime.selectedModel))
+        const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
+        setModelInputValue(nextModelSelection.modelId)
+        setSelectedProviderValue(nextModelSelection.provider)
         setHasLoadedWorkspaceState(true)
       })
       .catch((error) => {
@@ -302,7 +343,11 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   useEffect(() => {
     if (!workspacePath) {
       setActiveOverlayPanel(null)
-      setApiKeyDraft('')
+      setAuthDrafts({
+        google: '',
+        openai: '',
+        openrouter: '',
+      })
     }
   }, [workspacePath])
 
@@ -372,7 +417,31 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     return nextMessages
   }, [agentState.activeSession?.messages, draftAssistant, liveTools])
 
-  const openRouterAuth = agentState.runtime.auth.openrouter
+  const authProviders: Array<{
+    key: AuthProviderKey
+    label: string
+    placeholder: string
+    state: AgentProviderAuthState
+  }> = [
+    {
+      key: 'openrouter',
+      label: 'OpenRouter',
+      placeholder: 'sk-or-v1-...',
+      state: agentState.runtime.auth.openrouter,
+    },
+    {
+      key: 'openai',
+      label: 'OpenAI',
+      placeholder: 'sk-...',
+      state: agentState.runtime.auth.openai,
+    },
+    {
+      key: 'google',
+      label: 'Google Gemini',
+      placeholder: 'GEMINI_API_KEY / API key',
+      state: agentState.runtime.auth.google,
+    },
+  ]
 
   async function handleCreateSession() {
     if (!workspacePath) {
@@ -384,6 +453,9 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       setPanelError(null)
       const nextState = await window.appApi.createAgentSession(workspacePath)
       setAgentState(nextState)
+      const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
+      setModelInputValue(nextModelSelection.modelId)
+      setSelectedProviderValue(nextModelSelection.provider)
       setActiveOverlayPanel(null)
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to create a session.')
@@ -401,6 +473,9 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       setPanelError(null)
       const nextState = await window.appApi.openAgentSession(workspacePath, sessionPath)
       setAgentState(nextState)
+      const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
+      setModelInputValue(nextModelSelection.modelId)
+      setSelectedProviderValue(nextModelSelection.provider)
       setActiveOverlayPanel(null)
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to open that session.')
@@ -440,6 +515,9 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
 
       const nextState = await window.appApi.selectAgentModel(modelKey)
       setAgentState(nextState)
+      const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
+      setModelInputValue(nextModelSelection.modelId)
+      setSelectedProviderValue(nextModelSelection.provider)
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to switch the model.')
     } finally {
@@ -449,15 +527,32 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
 
   async function handleModelInputCommit() {
     const nextModel = modelInputValue.trim()
+    const nextModelKey = `${selectedProviderValue}/${nextModel}`
 
-    if (!nextModel || nextModel === formatModelLabel(agentState.runtime.selectedModel)) {
+    if (!nextModel || nextModelKey === agentState.runtime.selectedModel) {
       return
     }
 
-    await handleSelectModel(nextModel)
+    await handleSelectModel(nextModelKey)
   }
 
-  async function handleSaveOpenRouterAuth(apiKey: string | null) {
+  async function handleProviderSelectionChange(nextProvider: string) {
+    setSelectedProviderValue(nextProvider)
+
+    const nextModel = modelInputValue.trim()
+    if (!nextModel) {
+      return
+    }
+
+    const nextModelKey = `${nextProvider}/${nextModel}`
+    if (nextModelKey === agentState.runtime.selectedModel) {
+      return
+    }
+
+    await handleSelectModel(nextModelKey)
+  }
+
+  async function handleSaveProviderAuth(provider: AuthProviderKey, apiKey: string | null) {
     if (!workspacePath) {
       return
     }
@@ -465,14 +560,17 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     try {
       setIsSavingAuth(true)
       setPanelError(null)
-      const nextState = await window.appApi.updateOpenRouterAuth(workspacePath, apiKey)
+      const nextState = await window.appApi.updateAgentProviderAuth(workspacePath, provider, apiKey)
       setAgentState(nextState)
-      setApiKeyDraft('')
+      setAuthDrafts((currentValue) => ({
+        ...currentValue,
+        [provider]: '',
+      }))
       if (apiKey?.trim()) {
         setActiveOverlayPanel(null)
       }
     } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to update OpenRouter authentication.')
+      setPanelError(error instanceof Error ? error.message : 'Unable to update provider authentication.')
     } finally {
       setIsSavingAuth(false)
     }
@@ -557,6 +655,10 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
 
   const activeSessionPath = agentState.activeSession?.sessionPath ?? null
   const activeSession = agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
+  const availableProviders = Array.from(new Set([
+    ...KNOWN_AGENT_PROVIDERS,
+    ...agentState.runtime.availableModels.map((model) => model.split('/')[0]),
+  ]))
   const canSend = Boolean(workspacePath && composerValue.trim()) && !agentState.runtime.isStreaming
   const statusMessage = panelError
     ?? (!workspacePath
@@ -675,44 +777,66 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
               </>
             ) : (
               <div className='agent-auth-form'>
-                <Input
-                  aria-label='OpenRouter API key'
-                  className='agent-auth-input'
-                  disabled={!workspacePath || isSavingAuth}
-                  onChange={(event) => {
-                    setApiKeyDraft(event.target.value)
-                  }}
-                  placeholder='sk-or-v1-...'
-                  type='password'
-                  value={apiKeyDraft}
-                  variant='secondary'
-                />
+                {authProviders.map((provider) => {
+                  const draftValue = authDrafts[provider.key]
 
-                <div className='agent-auth-actions'>
-                  <Button
-                    isDisabled={!workspacePath || isSavingAuth || !apiKeyDraft.trim()}
-                    size='sm'
-                    variant='ghost'
-                    className='agent-auth-save'
-                    onPress={() => {
-                      void handleSaveOpenRouterAuth(apiKeyDraft)
-                    }}
-                  >
-                    Save Key
-                  </Button>
+                  return (
+                    <section key={provider.key} className='agent-auth-provider'>
+                      <div className='agent-auth-provider-copy'>
+                        <span className='agent-auth-provider-label'>{provider.label}</span>
+                        <span className='agent-auth-provider-meta'>
+                          {provider.state.source === 'stored'
+                            ? 'Using saved key'
+                            : provider.state.source === 'env'
+                              ? `Using ${provider.state.envVarName}`
+                              : `No key saved. ${provider.state.envVarName} also works.`}
+                        </span>
+                      </div>
 
-                  <Button
-                    isDisabled={!workspacePath || isSavingAuth || !openRouterAuth.hasStoredCredential}
-                    size='sm'
-                    variant='ghost'
-                    className='agent-auth-clear'
-                    onPress={() => {
-                      void handleSaveOpenRouterAuth(null)
-                    }}
-                  >
-                    Remove Saved
-                  </Button>
-                </div>
+                      <Input
+                        aria-label={`${provider.label} API key`}
+                        className='agent-auth-input'
+                        disabled={!workspacePath || isSavingAuth}
+                        onChange={(event) => {
+                          setAuthDrafts((currentValue) => ({
+                            ...currentValue,
+                            [provider.key]: event.target.value,
+                          }))
+                        }}
+                        placeholder={provider.placeholder}
+                        type='password'
+                        value={draftValue}
+                        variant='secondary'
+                      />
+
+                      <div className='agent-auth-actions'>
+                        <Button
+                          isDisabled={!workspacePath || isSavingAuth || !draftValue.trim()}
+                          size='sm'
+                          variant='ghost'
+                          className='agent-auth-save'
+                          onPress={() => {
+                            void handleSaveProviderAuth(provider.key, draftValue)
+                          }}
+                        >
+                          Save Key
+                        </Button>
+
+                        <Button
+                          isDisabled={!workspacePath || isSavingAuth || !provider.state.hasStoredCredential}
+                          size='sm'
+                          variant='ghost'
+                          className='agent-auth-clear'
+                          onPress={() => {
+                            void handleSaveProviderAuth(provider.key, null)
+                          }}
+                        >
+                          Remove Saved
+                        </Button>
+                      </div>
+                    </section>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -777,26 +901,47 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
           <div className='agent-composer-toolbar'>
             <div className='agent-composer-actions'>
               <div className='agent-model-field'>
-                <Input
-                  aria-label='Model'
-                  className='agent-model-input'
-                  disabled={!workspacePath || !agentState.runtime.hasConfiguredModels || isSwitchingModel}
-                  onBlur={() => {
-                    void handleModelInputCommit()
-                  }}
-                  onChange={(event) => {
-                    setModelInputValue(event.target.value)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
+                <div className='agent-model-composite'>
+                  <label className='agent-provider-select-wrap'>
+                    <span className='sr-only'>Provider</span>
+                    <select
+                      aria-label='Provider'
+                      className='agent-provider-select'
+                      disabled={!workspacePath || isSwitchingModel}
+                      onChange={(event) => {
+                        void handleProviderSelectionChange(event.target.value)
+                      }}
+                      value={selectedProviderValue}
+                    >
+                      {availableProviders.map((provider) => (
+                        <option key={provider} value={provider}>{provider}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <span className='agent-model-separator'>/</span>
+
+                  <Input
+                    aria-label='Model'
+                    className='agent-model-input'
+                    disabled={!workspacePath || !agentState.runtime.hasConfiguredModels || isSwitchingModel}
+                    onBlur={() => {
                       void handleModelInputCommit()
-                    }
-                  }}
-                  placeholder={DEFAULT_MODEL_VALUE}
-                  value={modelInputValue}
-                  variant='secondary'
-                />
+                    }}
+                    onChange={(event) => {
+                      setModelInputValue(event.target.value)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void handleModelInputCommit()
+                      }
+                    }}
+                    placeholder={formatModelLabel(DEFAULT_MODEL_VALUE)}
+                    value={modelInputValue}
+                    variant='secondary'
+                  />
+                </div>
               </div>
 
               <Button

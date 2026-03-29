@@ -21,7 +21,9 @@ export type AgentSessionListItem = {
 
 export type AgentRuntimeState = {
   auth: {
-    openrouter: AgentOpenRouterAuthState
+    google: AgentProviderAuthState
+    openai: AgentProviderAuthState
+    openrouter: AgentProviderAuthState
   }
   workspacePath: string | null
   hasConfiguredModels: boolean
@@ -31,7 +33,7 @@ export type AgentRuntimeState = {
   setupHint: string | null
 }
 
-export type AgentOpenRouterAuthState = {
+export type AgentProviderAuthState = {
   envVarName: string
   hasStoredCredential: boolean
   source: 'env' | 'none' | 'stored'

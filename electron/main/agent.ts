@@ -14,7 +14,7 @@ import {
 import type { AssistantMessage, TextContent, ToolResultMessage, UserMessage } from '@mariozechner/pi-ai'
 import type {
   AgentClientEvent,
-  AgentOpenRouterAuthState,
+  AgentProviderAuthState,
   AgentRuntimeState,
   AgentSessionListItem,
   AgentSessionSnapshot,
@@ -34,8 +34,12 @@ type PiAgentManagerOptions = {
 
 const OPENROUTER_ENV_KEY = 'OPENROUTER_API_KEY'
 const OPENROUTER_PROVIDER = 'openrouter'
+const OPENAI_ENV_KEY = 'OPENAI_API_KEY'
+const OPENAI_PROVIDER = 'openai'
+const GOOGLE_ENV_KEY = 'GEMINI_API_KEY'
+const GOOGLE_PROVIDER = 'google'
 const DEFAULT_MODEL_ID = 'google/gemini-3.1-flash-lite-preview'
-const AUTH_SETUP_HINT = `No authenticated models are available. Add an OpenRouter API key in Agent Auth or set ${OPENROUTER_ENV_KEY}.`
+const AUTH_SETUP_HINT = `No authenticated models are available. Add an API key in Agent Auth or set ${OPENROUTER_ENV_KEY}, ${OPENAI_ENV_KEY}, or ${GOOGLE_ENV_KEY}.`
 
 function asText(value: string | Array<TextContent | { type: 'image' }>) {
   if (typeof value === 'string') {
@@ -323,17 +327,17 @@ export class PiAgentManager {
     return this.broadcastWorkspaceState(runtime.cwd)
   }
 
-  async updateOpenRouterAuth(cwd: string, apiKey: string | null) {
+  async updateProviderAuth(cwd: string, provider: string, apiKey: string | null) {
     this.authStorage.reload()
 
     const trimmedApiKey = apiKey?.trim()
     if (trimmedApiKey) {
-      this.authStorage.set(OPENROUTER_PROVIDER, {
+      this.authStorage.set(provider, {
         type: 'api_key',
         key: trimmedApiKey,
       })
     } else {
-      this.authStorage.remove(OPENROUTER_PROVIDER)
+      this.authStorage.remove(provider)
     }
 
     this.modelRegistry.refresh()
@@ -547,6 +551,8 @@ export class PiAgentManager {
 
     return {
       auth: {
+        google: this.getProviderAuthState(GOOGLE_PROVIDER, GOOGLE_ENV_KEY),
+        openai: this.getProviderAuthState(OPENAI_PROVIDER, OPENAI_ENV_KEY),
         openrouter: this.getOpenRouterAuthState(),
       },
       availableModels: availableModels.map((model) => `${model.provider}/${model.id}`),
@@ -609,9 +615,13 @@ export class PiAgentManager {
     return resolvedSessionPath
   }
 
-  private getOpenRouterAuthState(): AgentOpenRouterAuthState {
-    const hasEnvironmentCredential = Boolean(process.env[OPENROUTER_ENV_KEY]?.trim())
-    const hasStoredCredential = this.authStorage.has(OPENROUTER_PROVIDER)
+  private getOpenRouterAuthState(): AgentProviderAuthState {
+    return this.getProviderAuthState(OPENROUTER_PROVIDER, OPENROUTER_ENV_KEY)
+  }
+
+  private getProviderAuthState(provider: string, envVarName: string): AgentProviderAuthState {
+    const hasEnvironmentCredential = Boolean(process.env[envVarName]?.trim())
+    const hasStoredCredential = this.authStorage.has(provider)
     const source = hasStoredCredential
       ? 'stored'
       : hasEnvironmentCredential
@@ -619,7 +629,7 @@ export class PiAgentManager {
         : 'none'
 
     return {
-      envVarName: OPENROUTER_ENV_KEY,
+      envVarName,
       hasStoredCredential,
       source,
       usesEnvironmentCredential: source === 'env',
