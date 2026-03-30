@@ -8,7 +8,7 @@
   "license": "MIT",
   "private": true,
   "engines": {
-    "node": "22.14.x"
+    "node": ">=22 <23"
   },
   "debug": {
     "env": {

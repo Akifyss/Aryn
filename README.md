@@ -4,7 +4,7 @@ Desktop writing workspace built with Electron, React, HeroUI, and TypeScript.
 
 ## Requirements
 
-- Node.js `22.14.0`
+- Node.js `22.x`
 - npm `10+`
 
 ## Stack
@@ -46,7 +46,7 @@ npm run dev
 Notes:
 
 - Do not copy `node_modules` from Windows to macOS. Install dependencies again on the Mac.
-- `.node-version` and `.nvmrc` are both pinned to `22.14.0`.
+- `.node-version` and `.nvmrc` both target Node `22`.
 - Electron builder is configured with the project app id `com.writingworkspace.desktop`; macOS packaging still needs Apple signing and notarization before release builds are distributed.
 
 ## Verification
