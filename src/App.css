@@ -353,12 +353,12 @@
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  border-top: 1px solid var(--panel-border);
+  border-top: 0;
   transition: background-color 140ms ease;
 }
 
-.tree-list > .tree-item:first-child > .tree-file-row {
-  border-top: 0;
+.tree-list > li + .tree-item > .tree-file-row {
+  border-top: 1px solid var(--panel-border);
 }
 
 .tree-item:hover .tree-file-row,
@@ -370,7 +370,8 @@
   background: color-mix(in oklab, var(--accent) 5%, white);
 }
 
-.tree-file {
+.tree-file,
+.tree-file.button {
   flex: 1;
   justify-content: flex-start;
   min-width: 0;
@@ -379,6 +380,12 @@
   border-radius: 0;
   color: var(--panel-soft);
   background: transparent;
+  transition: none;
+}
+
+.tree-file.button:active,
+.tree-file.button[data-pressed="true"] {
+  transform: none;
 }
 
 .tree-item:hover .tree-file,
@@ -782,9 +789,12 @@
   width: 100%;
   padding: 0;
   border: 0;
-  border-top: 1px solid var(--panel-border);
   background: transparent;
   transition: background-color 140ms ease;
+}
+
+.agent-session-option + .agent-session-option {
+  border-top: 1px solid var(--panel-border);
 }
 
 .agent-session-option:hover,
