@@ -311,7 +311,7 @@
 .tree-scroll {
   flex: 1;
   min-height: 0;
-  padding: 0.85rem 1rem 1rem 1.25rem;
+  padding: 0;
 }
 
 .tree-list {
@@ -324,34 +324,13 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  width: 100%;
   gap: 0.22rem;
-  border-radius: 0.95rem;
-  transition: background-color 160ms ease, color 160ms ease;
+  transition: color 140ms ease;
 }
 
 .tree-item::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0.4rem;
-  bottom: 0.4rem;
-  width: 2px;
-  border-radius: 999px;
-  background: transparent;
-  transition: background-color 160ms ease;
-}
-
-.tree-item:hover,
-.tree-item:focus-within {
-  background: color-mix(in oklab, var(--accent) 4%, var(--surface));
-}
-
-.tree-item.is-active {
-  background: color-mix(in oklab, var(--accent) 9%, var(--surface));
-}
-
-.tree-item.is-active::before {
-  background: color-mix(in oklab, var(--accent) 78%, white);
+  content: none;
 }
 
 .tree-directory {
@@ -369,18 +348,35 @@
 
 .tree-file-row {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  align-items: stretch;
+  gap: 0.2rem;
+  width: 100%;
   min-width: 0;
+  box-sizing: border-box;
+  border-top: 1px solid var(--panel-border);
+  transition: background-color 140ms ease;
+}
+
+.tree-list > .tree-item:first-child > .tree-file-row {
+  border-top: 0;
+}
+
+.tree-item:hover .tree-file-row,
+.tree-item:focus-within .tree-file-row {
+  background: color-mix(in oklab, var(--foreground) 2%, white);
+}
+
+.tree-item.is-active .tree-file-row {
+  background: color-mix(in oklab, var(--accent) 5%, white);
 }
 
 .tree-file {
   flex: 1;
   justify-content: flex-start;
   min-width: 0;
-  min-height: 2.45rem;
-  padding: 0 0.8rem;
-  border-radius: 0.85rem;
+  min-height: 0;
+  padding: 0.8rem 0 0.8rem 1.25rem;
+  border-radius: 0;
   color: var(--panel-soft);
   background: transparent;
 }
@@ -392,7 +388,7 @@
 }
 
 .tree-item.is-active .tree-file {
-  color: color-mix(in oklab, var(--accent) 82%, black);
+  color: var(--panel-foreground);
 }
 
 .tree-file-content {
@@ -419,13 +415,15 @@
   display: flex;
   align-items: center;
   gap: 0.1rem;
+  align-self: center;
+  flex-shrink: 0;
+  margin-right: 0.5rem;
   opacity: 0;
   pointer-events: none;
   transition: opacity 160ms ease;
 }
 
-.tree-file-row:hover .tree-item-actions,
-.tree-file-row.is-active .tree-item-actions,
+.tree-item:hover .tree-item-actions,
 .tree-item:focus-within .tree-item-actions {
   opacity: 1;
   pointer-events: auto;
@@ -492,7 +490,7 @@
   justify-content: center;
   gap: 0.75rem;
   min-height: 14rem;
-  padding: 1rem 0.35rem 1rem 0;
+  padding: 1rem 1rem 1rem 1.25rem;
   color: var(--panel-soft);
 }
 

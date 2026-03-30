@@ -5,7 +5,7 @@ import {
   CloseLine,
   Delete2Line,
   Edit2Line,
-  FileFill,
+  FileLine,
   FolderFill,
 } from '@mingcute/react'
 import type { WorkspaceNode } from '@/features/workspace/types'
@@ -148,7 +148,7 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
             onPress={() => onSelectFile(node.path)}
           >
             <div className='tree-file-content'>
-              <FileFill size={14} className='tree-file-icon' />
+              <FileLine size={14} className='tree-file-icon' />
               <span className='tree-file-name'>{node.name}</span>
             </div>
           </Button>
