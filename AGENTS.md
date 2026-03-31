@@ -70,7 +70,3 @@ The current minimum viable scope includes:
 - keep an Antigravity-compatible mirror under `.agents/skills/`
 - when a repo-local skill changes, update both trees so the Codex and Antigravity copies stay aligned
 
-## Migration Notes
-
-- `product specs.md` has been replaced by `AGENTS.md`
-- the old `update-product-specs` skill now updates `AGENTS.md`
