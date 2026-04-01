@@ -162,9 +162,25 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   const composerResizeStateRef = useRef<{ pointerId: number, startHeight: number, startY: number } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
+  const modelInputRef = useRef<HTMLInputElement | null>(null)
   const overlayPanelRef = useRef<HTMLDivElement | null>(null)
   const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
   const restorableSessionPath = agentState.activeSession?.sessionPath ?? null
+  const [isModelInputFullySelected, setIsModelInputFullySelected] = useState(false)
+
+  function syncModelInputSelectionState(input: HTMLInputElement) {
+    const hasFullSelection = input.value.length > 0
+      && input.selectionStart === 0
+      && input.selectionEnd === input.value.length
+
+    setIsModelInputFullySelected(hasFullSelection)
+  }
+
+  function syncModelInputSelectionStateNextFrame(input: HTMLInputElement) {
+    requestAnimationFrame(() => {
+      syncModelInputSelectionState(input)
+    })
+  }
 
   function syncModelSelection(selection: { modelId: string, provider: string }) {
     setSelectedProviderValue(selection.provider)
@@ -699,10 +715,12 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       .filter((model) => model.startsWith(`${selectedProviderValue}/`))
       .map((model) => model.split('/').slice(1).join('/')),
   ))
-  const modelSuggestions = providerModelIds.filter((modelId) => {
-    const query = modelInputValue.trim().toLowerCase()
-    return !query || modelId.toLowerCase().includes(query)
-  })
+  const modelSuggestions = isModelInputFullySelected
+    ? providerModelIds
+    : providerModelIds.filter((modelId) => {
+      const query = modelInputValue.trim().toLowerCase()
+      return !query || modelId.toLowerCase().includes(query)
+    })
   const modelPlaceholder = 'model'
   const canSend = Boolean(workspacePath && composerValue.trim()) && !agentState.runtime.isStreaming
   const statusMessage = panelError
@@ -971,7 +989,9 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
                     aria-label='Model'
                     className='agent-model-input'
                     disabled={!workspacePath || !agentState.runtime.hasConfiguredModels || isSwitchingModel}
+                    ref={modelInputRef}
                     onBlur={() => {
+                      setIsModelInputFullySelected(false)
                       setActiveComposerMenu((currentValue) => currentValue === 'model' ? null : currentValue)
                       void handleModelInputCommit()
                     }}
@@ -979,6 +999,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
                       if (panelError) {
                         setPanelError(null)
                       }
+                      setIsModelInputFullySelected(false)
                       setActiveComposerMenu('model')
                       setModelInputValue(event.target.value)
                       setModelDrafts((currentValue) => ({
@@ -986,8 +1007,22 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
                         [selectedProviderValue]: event.target.value,
                       }))
                     }}
-                    onFocus={() => {
+                    onFocus={(event) => {
                       setActiveComposerMenu('model')
+                      const input = event.currentTarget
+                      requestAnimationFrame(() => {
+                        input.select()
+                        syncModelInputSelectionState(input)
+                      })
+                    }}
+                    onSelect={(event) => {
+                      syncModelInputSelectionState(event.currentTarget)
+                    }}
+                    onPointerUp={(event) => {
+                      syncModelInputSelectionStateNextFrame(event.currentTarget)
+                    }}
+                    onKeyUp={(event) => {
+                      syncModelInputSelectionStateNextFrame(event.currentTarget)
                     }}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
