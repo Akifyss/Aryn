@@ -1,72 +1,71 @@
-# Project Agent Guide
+# 项目 Agent 指南
 
-## Product Summary
+## 产品概述
 
-This project is an AI writing agent desktop application for long-form drafting, rewriting, continuation, and assisted creation in a local desktop workspace.
+本项目是一个用于长篇草拟、改写、续写和辅助创作的 AI 写作 Agent 桌面应用程序，运行在本地桌面工作区。
 
-The product direction is:
+产品方向如下：
 
-- open a local folder as the active workspace, similar to Obsidian or VS Code
-- treat `workspace` as the core model instead of only a file picker
-- keep local-first file access and external file change detection as first-class capabilities
-- expose a GUI for selected Git workflows instead of requiring terminal-only usage
+- 打开本地文件夹作为活动工作区，类似于 Obsidian 或 VS Code
+- 将“工作区”作为核心模型，而不仅仅是文件选择器
+- 将本地优先的文件访问和外部文件更改检测作为一等公民能力
+- 为选定的 Git 工作流提供 GUI，而不是仅限终端使用
 
-## Current Scope
+## 当前范围
 
-The current minimum viable scope includes:
+目前的最小可行范围包括：
 
-- open and switch local workspace folders
-- render a file tree
-- open, edit, and save supported text files
-- provide a left navigation area, a central writing/editor area, and a right AI conversation panel
-- preserve and restore local workspace state
-- surface basic agent task status feedback
+- 打开和切换本地工作区文件夹
+- 渲染文件树
+- 打开、编辑和保存支持的文本文件
+- 提供左侧导航区、中央写作/编辑器区和右侧 AI 对话面板
+- 保存并恢复本地工作区状态
+- 展示基础的 Agent 任务状态反馈
 
-## Technical Direction
+## 技术路线
 
-- Electron is the desktop container
-- React + TypeScript is the renderer stack
-- `vite` / `electron-vite` is the build toolchain
-- PI Agent is the current AI backend integration path
-- Tailwind CSS powers styling
-- Tiptap is the rich text editor
-- Zustand manages renderer state
-- HeroUI is allowed for faster early-stage delivery
-- Core business UI should gradually move toward custom components built on Base UI
+- Electron 作为桌面容器
+- React + TypeScript 作为渲染层技术栈
+- `vite` / `electron-vite` 作为构建工具链
+- PI Agent 是目前的 AI 后端集成路径
+- Tailwind CSS 负责样式
+- Tiptap 是富文本编辑器
+- Zustand 管理渲染器状态
+- 允许使用 HeroUI 以实现快速的早期交付
+- 核心业务 UI 应逐步转向基于 Base UI 构建的自定义组件
 
-## Architecture Guidance
+## 架构指导
 
-### Process Boundaries
+### 进程边界
 
-- `main` owns filesystem access, window management, agent orchestration, and privileged local integrations
-- `preload` exposes only controlled APIs through `contextBridge` and IPC
-- `renderer` owns editor UX, session UI, writing workflow, and interaction design
-- keep a layered structure aligned with `main / preload / renderer / shared`
+- `main` 进程负责文件系统访问、窗口管理、Agent 编排和特权本地集成
+- `preload` 脚本仅通过 `contextBridge` 和 IPC 暴露受控 API
+- `renderer` 进程负责编辑器 UX、会话 UI、写作工作流和交互设计
+- 保持对齐 `main / preload / renderer / shared` 的分层结构
 
-### Data Strategy
+### 数据策略
 
-- phase 1 stays local-first on the filesystem
-- introduce `better-sqlite3` only when workspace metadata, session history, prompt templates, or user settings outgrow flat files
-- prefer saving structured editor content plus required export formats
+- 第一阶段保持本地文件系统优先
+- 仅在工作区元数据、会话历史、提示词模板或用户设置超出扁平文件承载能力时，才引入 `better-sqlite3`
+- 优先保存结构化的编辑器内容以及所需的导出格式
 
-### Agent Strategy
+### Agent 策略
 
-- keep PI Agent integration in the Electron main process for now
-- only split agent work into a standalone local service if complexity or isolation needs justify it later
-- route long-running and sensitive agent tasks through the main process rather than directly from the renderer
+- 目前将 PI Agent 集成保留在 Electron 主进程中
+- 仅在复杂度或隔离需求合理时，才将 Agent 工作拆分为独立的本地服务
+- 长期运行且敏感的 Agent 任务应通过主进程路由，而不是直接由渲染进程发起
 
-## Reference Products
+## 参考产品
 
-- [scratch](https://github.com/erictli/scratch): minimal, offline-first desktop Markdown notes with strong local file ergonomics
-- [1code](https://github.com/21st-dev/1code): multi-agent visual orchestration and Git worktree isolation ideas
-- [openchamber](https://github.com/openchamber/openchamber): desktop AI agent UI with branchable timelines and deep GitHub integration
-- [craft-agents-oss](https://github.com/lukilabs/craft-agents-oss): agent-native architecture built around Pi SDK patterns
+- [scratch](https://github.com/erictli/scratch): 极简、离线优先的桌面 Markdown 笔记，具有强大的本地文件人体工程学
+- [1code](https://github.com/21st-dev/1code): 多 Agent 视觉编排和 Git 工作树隔离理念
+- [openchamber](https://github.com/openchamber/openchamber): 具有分支时间线和深度 GitHub 集成的桌面 AI Agent UI
+- [craft-agents-oss](https://github.com/lukilabs/craft-agents-oss): 基于 Pi SDK 模式构建的 Agent 原生架构
 
-## Repository Conventions For Agents
+## Agent 仓库规范
 
-- keep this `AGENTS.md` file as the canonical project guidance document at the repository root
-- when project scope, architecture, workflows, or delivery priorities change, update `AGENTS.md` instead of keeping a separate product-specs file
-- keep custom Codex skills under `.codex/skills/`
-- keep an Antigravity-compatible mirror under `.agents/skills/`
-- when a repo-local skill changes, update both trees so the Codex and Antigravity copies stay aligned
-
+- 在仓库根目录保留此 `AGENTS.md` 文件，作为规范的项目指导文档
+- 当项目范围、架构、工作流或交付优先级发生变化时，更新 `AGENTS.md`，而不是保留单独的产品规格文件
+- 将自定义 Codex 技能保留在 `.codex/skills/` 下
+- 在 `.agents/skills/` 下保留 Antigravity 兼容的镜像
+- 当仓库本地技能发生变化时，同时更新两个树，以保持 Codex 和 Antigravity 副本一致

@@ -5,7 +5,6 @@ import {
   Delete2Line,
   Key2Line,
   SendPlaneLine,
-  StopCircleLine,
 } from '@mingcute/react'
 import type {
   AgentClientEvent,
@@ -29,7 +28,7 @@ type AgentOverlayPanel = 'auth' | 'sessions' | null
 type AuthProviderKey = 'google' | 'openai' | 'openrouter'
 
 const DEFAULT_MODEL_VALUE = 'google/gemini-3.1-flash-lite-preview'
-const KNOWN_AGENT_PROVIDERS: AuthProviderKey[] = ['google', 'openai', 'openrouter']
+const KNOWN_AGENT_PROVIDERS = ['google', 'openai', 'openrouter'] as const
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -627,18 +626,6 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     }
   }
 
-  async function handleAbort() {
-    try {
-      setPanelError(null)
-      const nextState = await window.appApi.abortAgentPrompt()
-      setAgentState(nextState)
-      setDraftAssistant('')
-      setLiveTools([])
-    } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to stop the current turn.')
-    }
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -750,32 +737,29 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
         </div>
 
         <div className='agent-threadbar-actions'>
-          <Button
+          <button
             ref={authButtonRef}
-            isIconOnly
-            size='sm'
-            variant='ghost'
-            className='agent-icon-button'
-            aria-label='Configure auth'
-            onPress={() => {
+            type='button'
+            className='agent-toolbar-button'
+            aria-label='Configure providers'
+            onClick={() => {
               setActiveOverlayPanel((currentValue) => currentValue === 'auth' ? null : 'auth')
             }}
           >
             <Key2Line size={16} />
-          </Button>
+          </button>
 
-          <Button
-            isIconOnly
-            isDisabled={!workspacePath || isCreatingSession}
-            size='sm'
-            variant='ghost'
-            className='agent-icon-button'
-            onPress={() => {
+          <button
+            type='button'
+            disabled={!workspacePath || isCreatingSession}
+            className='agent-toolbar-button'
+            aria-label='Create session'
+            onClick={() => {
               void handleCreateSession()
             }}
           >
             <AddLine size={16} />
-          </Button>
+          </button>
         </div>
       </div>
 
@@ -783,63 +767,61 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
         <div className='agent-overlay-layer'>
           <div ref={overlayPanelRef} className='agent-floating-panel'>
             {activeOverlayPanel === 'sessions' ? (
-              <>
-                <ScrollShadow className='agent-overlay-scroll' hideScrollBar>
-                  <div className='agent-session-list'>
-                    <div className='agent-session-option'>
-                      <button
-                        type='button'
-                        className='agent-session-select-button'
-                        disabled={!workspacePath || isCreatingSession}
-                        onClick={() => {
-                          void handleCreateSession()
-                        }}
-                      >
-                        <div className='agent-select-item'>
-                          <span className='agent-select-item-title'>New Session</span>
-                        </div>
-                      </button>
-                    </div>
-
-                    {agentState.sessions.map((session) => {
-                      const isActive = session.path === activeSessionPath
-                      const isDeleting = deletingSessionPath === session.path
-
-                      return (
-                        <div key={session.path} className={`agent-session-option ${isActive ? 'is-active' : ''}`}>
-                          <button
-                            type='button'
-                            className='agent-session-select-button'
-                            disabled={isDeleting}
-                            onClick={() => {
-                              void handleOpenSession(session.path)
-                            }}
-                          >
-                            <div className='agent-select-item'>
-                              <span className='agent-select-item-title'>{session.name ?? 'Untitled session'}</span>
-                              <span className='agent-select-item-meta'>{formatSessionTime(session.modifiedAt)}</span>
-                            </div>
-                          </button>
-
-                          <Button
-                            aria-label='Delete session'
-                            isIconOnly
-                            isDisabled={isDeleting}
-                            size='sm'
-                            variant='ghost'
-                            className='agent-session-delete-button'
-                            onPress={() => {
-                              void handleDeleteSession(session.path)
-                            }}
-                          >
-                            <Delete2Line size={14} />
-                          </Button>
-                        </div>
-                      )
-                    })}
+              <ScrollShadow className='agent-overlay-scroll' hideScrollBar>
+                <div className='agent-session-list'>
+                  <div className='agent-session-option'>
+                    <button
+                      type='button'
+                      className='agent-session-select-button'
+                      disabled={!workspacePath || isCreatingSession}
+                      onClick={() => {
+                        void handleCreateSession()
+                      }}
+                    >
+                      <div className='agent-select-item'>
+                        <span className='agent-select-item-title'>New Session</span>
+                      </div>
+                    </button>
                   </div>
-                </ScrollShadow>
-              </>
+
+                  {agentState.sessions.map((session) => {
+                    const isActive = session.path === activeSessionPath
+                    const isDeleting = deletingSessionPath === session.path
+
+                    return (
+                      <div key={session.path} className={`agent-session-option ${isActive ? 'is-active' : ''}`}>
+                        <button
+                          type='button'
+                          className='agent-session-select-button'
+                          disabled={isDeleting}
+                          onClick={() => {
+                            void handleOpenSession(session.path)
+                          }}
+                        >
+                          <div className='agent-select-item'>
+                            <span className='agent-select-item-title'>{session.name ?? 'Untitled session'}</span>
+                            <span className='agent-select-item-meta'>{formatSessionTime(session.modifiedAt)}</span>
+                          </div>
+                        </button>
+
+                        <Button
+                          aria-label='Delete session'
+                          isIconOnly
+                          isDisabled={isDeleting}
+                          size='sm'
+                          variant='ghost'
+                          className='agent-session-delete-button'
+                          onPress={() => {
+                            void handleDeleteSession(session.path)
+                          }}
+                        >
+                          <Delete2Line size={14} />
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </ScrollShadow>
             ) : (
               <div className='agent-auth-form'>
                 {authProviders.map((provider) => {
@@ -1041,19 +1023,6 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
                   />
                 </div>
                 </div>
-
-                <Button
-                  isIconOnly
-                  isDisabled={!agentState.runtime.isStreaming}
-                  size='sm'
-                  variant='ghost'
-                  className='agent-icon-button'
-                  onPress={() => {
-                    void handleAbort()
-                  }}
-                >
-                  <StopCircleLine size={16} />
-                </Button>
 
                 <Button
                   isIconOnly

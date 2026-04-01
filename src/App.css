@@ -598,6 +598,36 @@
   flex-shrink: 0;
 }
 
+.agent-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.8rem;
+  background: transparent;
+  color: var(--panel-muted);
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
+}
+
+.agent-toolbar-button:hover {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--foreground) 4%, white);
+}
+
+.agent-toolbar-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.agent-toolbar-button:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 42%, white);
+  outline-offset: 2px;
+}
+
 .agent-session-trigger {
   display: flex;
   align-items: center;
@@ -629,16 +659,14 @@
   white-space: nowrap;
 }
 
-.agent-select-item,
-.agent-dropdown-row {
+.agent-select-item {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
   min-width: 0;
 }
 
-.agent-select-item-title,
-.agent-dropdown-title {
+.agent-select-item-title {
   overflow: hidden;
   color: var(--foreground);
   font-size: 0.82rem;
@@ -647,8 +675,7 @@
   white-space: nowrap;
 }
 
-.agent-select-item-meta,
-.agent-dropdown-meta {
+.agent-select-item-meta {
   overflow: hidden;
   color: var(--panel-muted);
   font-size: 0.72rem;
@@ -698,6 +725,7 @@
 .agent-auth-form {
   display: grid;
   gap: 0;
+  padding: 0;
 }
 
 .agent-auth-input.input,
@@ -708,10 +736,6 @@
 .agent-auth-input.input[data-focus-visible="true"],
 .agent-auth-input.input[data-hovered="true"] {
   width: 100%;
-}
-
-.agent-auth-form {
-  padding: 0;
 }
 
 .agent-auth-provider {
@@ -1169,32 +1193,28 @@
   white-space: nowrap;
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.agent-icon-button,
 .agent-send-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 2.25rem;
   height: 2.25rem;
+  padding: 0;
+  border: 0;
   border-radius: 0.8rem;
+  background: transparent;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
 }
 
-.agent-icon-button {
-  color: var(--panel-muted);
+.agent-send-button:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
-.agent-icon-button:hover {
-  color: var(--foreground);
-  background: color-mix(in oklab, var(--foreground) 4%, white);
+.agent-send-button:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 42%, white);
+  outline-offset: 2px;
 }
 
 .agent-send-button {
