@@ -26,6 +26,10 @@ import type {
 type ActiveSessionRuntime = {
   cwd: string
   session: AgentSession
+  status: {
+    compactionReason: 'manual' | 'overflow' | 'threshold' | null
+    retryMaxAttempts: number | null
+  }
   unsubscribe: () => void
 }
 
@@ -361,24 +365,7 @@ function serializeSessionEntries(entries: SessionEntry[]) {
         return
       }
       case 'model_change':
-        pushSerializedMessage(messages, entryMessages, {
-          id: `${entry.type}-${entry.id}`,
-          entryId: entry.id,
-          kind: 'system',
-          text: `${entry.provider}/${entry.modelId}`,
-          timestamp,
-          title: 'Model change',
-        })
-        return
       case 'thinking_level_change':
-        pushSerializedMessage(messages, entryMessages, {
-          id: `${entry.type}-${entry.id}`,
-          entryId: entry.id,
-          kind: 'system',
-          text: entry.thinkingLevel,
-          timestamp,
-          title: 'Thinking level',
-        })
         return
       case 'compaction':
         pushSerializedMessage(messages, entryMessages, {
@@ -647,6 +634,10 @@ export class PiAgentManager {
     this.activeRuntime = {
       cwd,
       session,
+      status: {
+        compactionReason: null,
+        retryMaxAttempts: null,
+      },
       unsubscribe,
     }
 
@@ -686,6 +677,22 @@ export class PiAgentManager {
       return
     }
 
+    if (event.type === 'compaction_start') {
+      this.activeRuntime.status.compactionReason = event.reason
+    }
+
+    if (event.type === 'compaction_end') {
+      this.activeRuntime.status.compactionReason = null
+    }
+
+    if (event.type === 'auto_retry_start') {
+      this.activeRuntime.status.retryMaxAttempts = event.maxAttempts
+    }
+
+    if (event.type === 'auto_retry_end') {
+      this.activeRuntime.status.retryMaxAttempts = null
+    }
+
     if (event.type === 'message_start' && 'role' in event.message && event.message.role === 'assistant') {
       this.emitEvent({
         type: 'assistant_message_started',
@@ -698,6 +705,23 @@ export class PiAgentManager {
       this.emitEvent({
         type: 'assistant_message_delta',
         delta: event.assistantMessageEvent.delta,
+        sessionId: session.sessionId,
+      })
+      return
+    }
+
+    if (event.type === 'message_update' && event.assistantMessageEvent.type === 'thinking_delta') {
+      this.emitEvent({
+        type: 'assistant_thinking_delta',
+        delta: event.assistantMessageEvent.delta,
+        sessionId: session.sessionId,
+      })
+      return
+    }
+
+    if (event.type === 'message_update' && event.assistantMessageEvent.type === 'thinking_end') {
+      this.emitEvent({
+        type: 'assistant_thinking_finished',
         sessionId: session.sessionId,
       })
       return
@@ -788,6 +812,8 @@ export class PiAgentManager {
   private serializeRuntime(cwd: string, session: AgentSession | null): AgentRuntimeState {
     const availableModels = (session?.modelRegistry ?? this.modelRegistry).getAvailable()
     const selectedModel = session?.model ? `${session.model.provider}/${session.model.id}` : null
+    const steeringMessageCount = session?.getSteeringMessages().length ?? 0
+    const followUpMessageCount = session?.getFollowUpMessages().length ?? 0
 
     return {
       auth: {
@@ -796,14 +822,18 @@ export class PiAgentManager {
         openrouter: this.getOpenRouterAuthState(),
       },
       availableModels: availableModels.map((model) => `${model.provider}/${model.id}`),
+      compactionReason: this.activeRuntime?.cwd === cwd ? this.activeRuntime.status.compactionReason : null,
+      followUpMessageCount,
       followUpMode: session?.followUpMode ?? 'one-at-a-time',
       hasConfiguredModels: availableModels.length > 0,
       isCompacting: session?.isCompacting ?? false,
       isStreaming: session?.isStreaming ?? false,
       pendingMessageCount: session?.pendingMessageCount ?? 0,
       retryAttempt: session?.retryAttempt ?? 0,
+      retryMaxAttempts: this.activeRuntime?.cwd === cwd ? this.activeRuntime.status.retryMaxAttempts : null,
       selectedModel,
       setupHint: availableModels.length > 0 ? null : AUTH_SETUP_HINT,
+      steeringMessageCount,
       steeringMode: session?.steeringMode ?? 'one-at-a-time',
       workspacePath: cwd,
     }

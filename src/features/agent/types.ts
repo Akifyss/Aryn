@@ -4,6 +4,7 @@ export type AgentSidebarMessageStatus = 'done' | 'error' | 'running'
 export type AgentSidebarMessage = {
   id: string
   kind: AgentSidebarMessageKind
+  isThinkingStreaming?: boolean
   label?: string
   status?: AgentSidebarMessageStatus
   text: string
@@ -32,13 +33,17 @@ export type AgentRuntimeState = {
   workspacePath: string | null
   hasConfiguredModels: boolean
   availableModels: string[]
+  compactionReason: 'manual' | 'overflow' | 'threshold' | null
+  followUpMessageCount: number
   followUpMode: 'all' | 'one-at-a-time'
   isCompacting: boolean
   selectedModel: string | null
   isStreaming: boolean
   pendingMessageCount: number
   retryAttempt: number
+  retryMaxAttempts: number | null
   setupHint: string | null
+  steeringMessageCount: number
   steeringMode: 'all' | 'one-at-a-time'
 }
 
@@ -66,6 +71,15 @@ export type AgentWorkspaceState = {
 export type AgentClientEvent =
   | {
       type: 'assistant_message_started'
+      sessionId: string
+    }
+  | {
+      type: 'assistant_thinking_delta'
+      sessionId: string
+      delta: string
+    }
+  | {
+      type: 'assistant_thinking_finished'
       sessionId: string
     }
   | {

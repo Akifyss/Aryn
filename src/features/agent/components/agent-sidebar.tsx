@@ -59,14 +59,18 @@ const emptyAgentState: AgentWorkspaceState = {
       },
     },
     availableModels: [],
+    compactionReason: null,
+    followUpMessageCount: 0,
     followUpMode: 'one-at-a-time',
     hasConfiguredModels: false,
     isCompacting: false,
     isStreaming: false,
     pendingMessageCount: 0,
     retryAttempt: 0,
+    retryMaxAttempts: null,
     selectedModel: null,
     setupHint: null,
+    steeringMessageCount: 0,
     steeringMode: 'one-at-a-time',
     workspacePath: null,
   },
@@ -151,28 +155,35 @@ function AgentMarkdown({ text }: { text: string }) {
 function AgentDisclosure({
   children,
   defaultExpanded = false,
+  expanded,
   label,
 }: {
   children: ReactNode
   defaultExpanded?: boolean
+  expanded?: boolean
   label: string
 }) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const resolvedExpanded = expanded ?? isExpanded
 
   return (
     <div className='agent-disclosure'>
       <button
-        aria-expanded={isExpanded}
+        aria-expanded={resolvedExpanded}
         className='agent-disclosure-toggle'
         type='button'
         onClick={() => {
+          if (expanded !== undefined) {
+            return
+          }
+
           setIsExpanded((currentValue) => !currentValue)
         }}
       >
-        <span className={`agent-message-toggle-caret ${isExpanded ? 'is-open' : ''}`} aria-hidden='true' />
+        <span className={`agent-message-toggle-caret ${resolvedExpanded ? 'is-open' : ''}`} aria-hidden='true' />
         <span className='agent-disclosure-label'>{label}</span>
       </button>
-      {isExpanded ? (
+      {resolvedExpanded ? (
         <div className='agent-disclosure-body'>
           {children}
         </div>
@@ -257,12 +268,12 @@ function AgentMessageBubble({ message }: { message: AgentSidebarMessage }) {
       ) : null}
 
       <div className='agent-message-body'>
-        <AgentMarkdown text={message.text} />
         {message.kind === 'assistant' && message.thinkingText ? (
-          <AgentDisclosure label='Thinking'>
+          <AgentDisclosure expanded={message.isThinkingStreaming} label='Thinking'>
             <AgentMarkdown text={message.thinkingText} />
           </AgentDisclosure>
         ) : null}
+        {message.text.trim() ? <AgentMarkdown text={message.text} /> : null}
       </div>
     </article>
   )
@@ -274,6 +285,26 @@ type AgentSessionStatus = {
   detail: string
   label: string
   tone: AgentSessionStatusTone
+}
+
+function formatQueueSummary({
+  followUpMessageCount,
+  steeringMessageCount,
+}: {
+  followUpMessageCount: number
+  steeringMessageCount: number
+}) {
+  const parts: string[] = []
+
+  if (steeringMessageCount > 0) {
+    parts.push(steeringMessageCount === 1 ? '1 steering queued.' : `${steeringMessageCount} steering queued.`)
+  }
+
+  if (followUpMessageCount > 0) {
+    parts.push(followUpMessageCount === 1 ? '1 follow-up queued.' : `${followUpMessageCount} follow-up queued.`)
+  }
+
+  return parts.join(' ')
 }
 
 function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
@@ -301,6 +332,8 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   })
   const [activeComposerMenu, setActiveComposerMenu] = useState<'model' | 'provider' | null>(null)
   const [draftAssistant, setDraftAssistant] = useState('')
+  const [draftThinking, setDraftThinking] = useState('')
+  const [isThinkingStreaming, setIsThinkingStreaming] = useState(false)
   const [liveTools, setLiveTools] = useState<LiveToolState[]>([])
   const [authDrafts, setAuthDrafts] = useState<Record<AuthProviderKey, string>>({
     google: '',
@@ -392,6 +425,8 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
         const nextModelSelection = parseModelSelection(event.state.runtime.selectedModel)
         syncModelSelection(nextModelSelection)
         setDraftAssistant('')
+        setDraftThinking('')
+        setIsThinkingStreaming(false)
         setLiveTools([])
         setActiveComposerMenu(null)
         return
@@ -402,6 +437,25 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
         && event.sessionId === agentState.activeSession?.sessionId
       ) {
         setDraftAssistant('')
+        setDraftThinking('')
+        setIsThinkingStreaming(false)
+        return
+      }
+
+      if (
+        event.type === 'assistant_thinking_delta'
+        && event.sessionId === agentState.activeSession?.sessionId
+      ) {
+        setIsThinkingStreaming(true)
+        setDraftThinking((currentValue) => currentValue + event.delta)
+        return
+      }
+
+      if (
+        event.type === 'assistant_thinking_finished'
+        && event.sessionId === agentState.activeSession?.sessionId
+      ) {
+        setIsThinkingStreaming(false)
         return
       }
 
@@ -517,6 +571,8 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
         [defaultModelSelection.provider]: defaultModelSelection.modelId,
       })
       setDraftAssistant('')
+      setDraftThinking('')
+      setIsThinkingStreaming(false)
       setLiveTools([])
       setPanelError(null)
       setHasLoadedWorkspaceState(false)
@@ -628,7 +684,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [agentState.activeSession?.messages.length, draftAssistant, liveTools])
+  }, [agentState.activeSession?.messages.length, draftAssistant, draftThinking, liveTools])
 
   const renderedMessages = useMemo(() => {
     const persistedMessages = agentState.activeSession?.messages ?? []
@@ -644,17 +700,19 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
 
     const nextMessages = [...persistedMessages, ...toolMessages]
 
-    if (draftAssistant.trim()) {
+    if (draftAssistant.trim() || draftThinking.trim()) {
       nextMessages.push({
         id: 'draft-assistant',
         kind: 'assistant',
+        isThinkingStreaming,
         text: draftAssistant,
+        thinkingText: draftThinking || undefined,
         timestamp: Date.now(),
       })
     }
 
     return nextMessages
-  }, [agentState.activeSession?.messages, draftAssistant, liveTools])
+  }, [agentState.activeSession?.messages, draftAssistant, draftThinking, isThinkingStreaming, liveTools])
 
   const authProviders: Array<{
     key: AuthProviderKey
@@ -896,6 +954,10 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       ? (agentState.runtime.setupHint ?? 'Configure a model first.')
       : null
   const runningTools = liveTools.filter((tool) => tool.status === 'running')
+  const queueSummary = formatQueueSummary({
+    followUpMessageCount: agentState.runtime.followUpMessageCount,
+    steeringMessageCount: agentState.runtime.steeringMessageCount,
+  })
   const sessionStatus = useMemo<AgentSessionStatus | null>(() => {
     if (!workspacePath) {
       return null
@@ -910,49 +972,66 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     }
 
     if (runningTools.length > 0) {
-      const detail = runningTools.length === 1
+      const baseDetail = runningTools.length === 1
         ? `${runningTools[0].name} is running.`
         : `${runningTools.length} tools are running.`
 
       return {
-        detail,
+        detail: queueSummary ? `${baseDetail} ${queueSummary}` : baseDetail,
         label: 'Tool execution',
         tone: 'running',
       }
     }
 
     if (agentState.runtime.isCompacting) {
+      const baseDetail = agentState.runtime.compactionReason === 'manual'
+        ? 'Manual compaction is running.'
+        : agentState.runtime.compactionReason === 'threshold'
+          ? 'Threshold compaction is running.'
+          : agentState.runtime.compactionReason === 'overflow'
+            ? 'Overflow compaction is running.'
+            : 'Compacting session context.'
+
       return {
-        detail: 'Compacting session context.',
-        label: 'Auto-compaction',
+        detail: queueSummary ? `${baseDetail} ${queueSummary}` : baseDetail,
+        label: 'Compaction',
         tone: 'running',
       }
     }
 
     if (agentState.runtime.retryAttempt > 0) {
+      const baseDetail = agentState.runtime.retryMaxAttempts
+        ? `Attempt ${agentState.runtime.retryAttempt} of ${agentState.runtime.retryMaxAttempts} is in progress.`
+        : `Retry attempt ${agentState.runtime.retryAttempt} is in progress.`
+
       return {
-        detail: `Retry attempt ${agentState.runtime.retryAttempt} is in progress.`,
+        detail: queueSummary ? `${baseDetail} ${queueSummary}` : baseDetail,
         label: 'Auto-retry',
+        tone: 'running',
+      }
+    }
+
+    if (agentState.runtime.isStreaming) {
+      const isThinkingOnly = isThinkingStreaming && !draftAssistant.trim()
+      const baseDetail = draftAssistant.trim()
+        ? 'Receiving assistant output.'
+        : isThinkingOnly
+          ? 'Reasoning before responding.'
+          : 'Waiting for agent output.'
+
+      return {
+        detail: queueSummary ? `${baseDetail} ${queueSummary}` : baseDetail,
+        label: isThinkingOnly ? 'Thinking' : 'Streaming',
         tone: 'running',
       }
     }
 
     if (agentState.runtime.pendingMessageCount > 0) {
       return {
-        detail: agentState.runtime.pendingMessageCount === 1
+        detail: queueSummary || (agentState.runtime.pendingMessageCount === 1
           ? '1 queued message is waiting.'
-          : `${agentState.runtime.pendingMessageCount} queued messages are waiting.`,
-        label: 'Queue',
-        tone: 'running',
-      }
-    }
-
-    if (agentState.runtime.isStreaming) {
-      return {
-        detail: draftAssistant.trim()
-          ? 'Receiving assistant output.'
-          : 'Waiting for agent output.',
-        label: 'Streaming',
+          : `${agentState.runtime.pendingMessageCount} queued messages are waiting.`),
+        label: 'Message queue',
         tone: 'running',
       }
     }
@@ -970,13 +1049,20 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     }
   }, [
     agentState.activeSession,
+    agentState.runtime.compactionReason,
+    agentState.runtime.followUpMessageCount,
     agentState.runtime.isCompacting,
     agentState.runtime.hasConfiguredModels,
     agentState.runtime.isStreaming,
     agentState.runtime.pendingMessageCount,
     agentState.runtime.retryAttempt,
+    agentState.runtime.retryMaxAttempts,
+    agentState.runtime.steeringMessageCount,
     draftAssistant,
+    draftThinking,
+    isThinkingStreaming,
     panelError,
+    queueSummary,
     runningTools,
     workspacePath,
   ])
