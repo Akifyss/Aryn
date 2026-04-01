@@ -287,6 +287,50 @@ type AgentSessionStatus = {
   tone: AgentSessionStatusTone
 }
 
+type AgentSessionPhase =
+  | {
+      type: 'error'
+      message: string
+    }
+  | {
+      queueSummary: string
+      type: 'tool_execution'
+      toolCount: number
+      toolName: string | null
+    }
+  | {
+      queueSummary: string
+      reason: AgentWorkspaceState['runtime']['compactionReason']
+      type: 'compaction'
+    }
+  | {
+      attempt: number
+      maxAttempts: number | null
+      queueSummary: string
+      type: 'auto_retry'
+    }
+  | {
+      queueSummary: string
+      type: 'thinking'
+    }
+  | {
+      queueSummary: string
+      type: 'streaming'
+    }
+  | {
+      queueSummary: string
+      type: 'running'
+    }
+  | {
+      pendingMessageCount: number
+      queueSummary: string
+      type: 'message_queue'
+    }
+  | {
+      hasActiveSession: boolean
+      type: 'idle'
+    }
+
 function formatQueueSummary({
   followUpMessageCount,
   steeringMessageCount,
@@ -305,6 +349,200 @@ function formatQueueSummary({
   }
 
   return parts.join(' ')
+}
+
+function deriveAgentSessionPhase({
+  activeSession,
+  draftAssistant,
+  isStreaming,
+  isThinkingStreaming,
+  panelError,
+  pendingMessageCount,
+  queueSummary,
+  retryAttempt,
+  retryMaxAttempts,
+  runningTools,
+  runtime,
+  workspacePath,
+}: {
+  activeSession: AgentWorkspaceState['activeSession']
+  draftAssistant: string
+  isStreaming: boolean
+  isThinkingStreaming: boolean
+  panelError: string | null
+  pendingMessageCount: number
+  queueSummary: string
+  retryAttempt: number
+  retryMaxAttempts: number | null
+  runningTools: LiveToolState[]
+  runtime: AgentWorkspaceState['runtime']
+  workspacePath: string | null
+}): AgentSessionPhase | null {
+  if (!workspacePath) {
+    return null
+  }
+
+  if (panelError) {
+    return {
+      message: panelError,
+      type: 'error',
+    }
+  }
+
+  if (runningTools.length > 0) {
+    return {
+      queueSummary,
+      toolCount: runningTools.length,
+      toolName: runningTools.length === 1 ? runningTools[0].name : null,
+      type: 'tool_execution',
+    }
+  }
+
+  if (runtime.isCompacting) {
+    return {
+      queueSummary,
+      reason: runtime.compactionReason,
+      type: 'compaction',
+    }
+  }
+
+  if (retryAttempt > 0) {
+    return {
+      attempt: retryAttempt,
+      maxAttempts: retryMaxAttempts,
+      queueSummary,
+      type: 'auto_retry',
+    }
+  }
+
+  if (isStreaming) {
+    if (isThinkingStreaming && !draftAssistant.trim()) {
+      return {
+        queueSummary,
+        type: 'thinking',
+      }
+    }
+
+    if (draftAssistant.trim()) {
+      return {
+        queueSummary,
+        type: 'streaming',
+      }
+    }
+
+    return {
+      queueSummary,
+      type: 'running',
+    }
+  }
+
+  if (pendingMessageCount > 0) {
+    return {
+      pendingMessageCount,
+      queueSummary,
+      type: 'message_queue',
+    }
+  }
+
+  if (!runtime.hasConfiguredModels) {
+    return null
+  }
+
+  return {
+    hasActiveSession: Boolean(activeSession),
+    type: 'idle',
+  }
+}
+
+function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus {
+  switch (phase.type) {
+    case 'error':
+      return {
+        detail: phase.message,
+        label: 'Error',
+        tone: 'error',
+      }
+    case 'tool_execution': {
+      const baseDetail = phase.toolName
+        ? `${phase.toolName} is running.`
+        : `${phase.toolCount} tools are running.`
+
+      return {
+        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        label: 'Tool execution',
+        tone: 'running',
+      }
+    }
+    case 'compaction': {
+      const baseDetail = phase.reason === 'manual'
+        ? 'Manual compaction is running.'
+        : phase.reason === 'threshold'
+          ? 'Threshold compaction is running.'
+          : phase.reason === 'overflow'
+            ? 'Overflow compaction is running.'
+            : 'Compacting session context.'
+
+      return {
+        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        label: 'Compaction',
+        tone: 'running',
+      }
+    }
+    case 'auto_retry': {
+      const baseDetail = phase.maxAttempts
+        ? `Attempt ${phase.attempt} of ${phase.maxAttempts} is in progress.`
+        : `Retry attempt ${phase.attempt} is in progress.`
+
+      return {
+        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        label: 'Auto-retry',
+        tone: 'running',
+      }
+    }
+    case 'thinking': {
+      const baseDetail = 'Reasoning before responding.'
+
+      return {
+        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        label: 'Thinking',
+        tone: 'running',
+      }
+    }
+    case 'streaming': {
+      const baseDetail = 'Receiving assistant output.'
+
+      return {
+        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        label: 'Streaming',
+        tone: 'running',
+      }
+    }
+    case 'running': {
+      const baseDetail = 'Agent is running.'
+
+      return {
+        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        label: 'Running',
+        tone: 'running',
+      }
+    }
+    case 'message_queue':
+      return {
+        detail: phase.queueSummary || (phase.pendingMessageCount === 1
+          ? '1 queued message is waiting.'
+          : `${phase.pendingMessageCount} queued messages are waiting.`),
+        label: 'Message queue',
+        tone: 'running',
+      }
+    case 'idle':
+      return {
+        detail: phase.hasActiveSession
+          ? 'Ready for the next prompt.'
+          : 'No active session yet.',
+        label: 'Idle',
+        tone: 'idle',
+      }
+  }
 }
 
 function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
@@ -958,96 +1196,20 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     followUpMessageCount: agentState.runtime.followUpMessageCount,
     steeringMessageCount: agentState.runtime.steeringMessageCount,
   })
-  const sessionStatus = useMemo<AgentSessionStatus | null>(() => {
-    if (!workspacePath) {
-      return null
-    }
-
-    if (panelError) {
-      return {
-        detail: panelError,
-        label: 'Error',
-        tone: 'error',
-      }
-    }
-
-    if (runningTools.length > 0) {
-      const baseDetail = runningTools.length === 1
-        ? `${runningTools[0].name} is running.`
-        : `${runningTools.length} tools are running.`
-
-      return {
-        detail: queueSummary ? `${baseDetail} ${queueSummary}` : baseDetail,
-        label: 'Tool execution',
-        tone: 'running',
-      }
-    }
-
-    if (agentState.runtime.isCompacting) {
-      const baseDetail = agentState.runtime.compactionReason === 'manual'
-        ? 'Manual compaction is running.'
-        : agentState.runtime.compactionReason === 'threshold'
-          ? 'Threshold compaction is running.'
-          : agentState.runtime.compactionReason === 'overflow'
-            ? 'Overflow compaction is running.'
-            : 'Compacting session context.'
-
-      return {
-        detail: queueSummary ? `${baseDetail} ${queueSummary}` : baseDetail,
-        label: 'Compaction',
-        tone: 'running',
-      }
-    }
-
-    if (agentState.runtime.retryAttempt > 0) {
-      const baseDetail = agentState.runtime.retryMaxAttempts
-        ? `Attempt ${agentState.runtime.retryAttempt} of ${agentState.runtime.retryMaxAttempts} is in progress.`
-        : `Retry attempt ${agentState.runtime.retryAttempt} is in progress.`
-
-      return {
-        detail: queueSummary ? `${baseDetail} ${queueSummary}` : baseDetail,
-        label: 'Auto-retry',
-        tone: 'running',
-      }
-    }
-
-    if (agentState.runtime.isStreaming) {
-      const isThinkingOnly = isThinkingStreaming && !draftAssistant.trim()
-      const baseDetail = draftAssistant.trim()
-        ? 'Receiving assistant output.'
-        : isThinkingOnly
-          ? 'Reasoning before responding.'
-          : 'Waiting for agent output.'
-
-      return {
-        detail: queueSummary ? `${baseDetail} ${queueSummary}` : baseDetail,
-        label: isThinkingOnly ? 'Thinking' : 'Streaming',
-        tone: 'running',
-      }
-    }
-
-    if (agentState.runtime.pendingMessageCount > 0) {
-      return {
-        detail: queueSummary || (agentState.runtime.pendingMessageCount === 1
-          ? '1 queued message is waiting.'
-          : `${agentState.runtime.pendingMessageCount} queued messages are waiting.`),
-        label: 'Message queue',
-        tone: 'running',
-      }
-    }
-
-    if (!agentState.runtime.hasConfiguredModels) {
-      return null
-    }
-
-    return {
-      detail: agentState.activeSession
-        ? 'Ready for the next prompt.'
-        : 'No active session yet.',
-      label: 'Idle',
-      tone: 'idle',
-    }
-  }, [
+  const sessionPhase = useMemo(() => deriveAgentSessionPhase({
+    activeSession: agentState.activeSession,
+    draftAssistant,
+    isStreaming: agentState.runtime.isStreaming,
+    isThinkingStreaming,
+    panelError,
+    pendingMessageCount: agentState.runtime.pendingMessageCount,
+    queueSummary,
+    retryAttempt: agentState.runtime.retryAttempt,
+    retryMaxAttempts: agentState.runtime.retryMaxAttempts,
+    runningTools,
+    runtime: agentState.runtime,
+    workspacePath,
+  }), [
     agentState.activeSession,
     agentState.runtime.compactionReason,
     agentState.runtime.followUpMessageCount,
@@ -1066,6 +1228,10 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     runningTools,
     workspacePath,
   ])
+  const sessionStatus = useMemo(
+    () => sessionPhase ? formatAgentSessionStatus(sessionPhase) : null,
+    [sessionPhase],
+  )
 
   return (
     <div className='agent-shell'>
