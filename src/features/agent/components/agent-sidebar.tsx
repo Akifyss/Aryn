@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Input, ScrollShadow, TextArea } from '@heroui/react'
 import {
   AddLine,
@@ -6,10 +6,13 @@ import {
   Key2Line,
   SendPlaneLine,
 } from '@mingcute/react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type {
   AgentClientEvent,
   AgentProviderAuthState,
   AgentSidebarMessage,
+  AgentSidebarMessageStatus,
   AgentWorkspaceState,
 } from '@/features/agent/types'
 
@@ -20,6 +23,7 @@ type AgentSidebarProps = {
 type LiveToolState = {
   id: string
   name: string
+  status: AgentSidebarMessageStatus
   summary: string
   isError?: boolean
 }
@@ -29,6 +33,7 @@ type AuthProviderKey = 'google' | 'openai' | 'openrouter'
 
 const DEFAULT_MODEL_VALUE = 'google/gemini-3.1-flash-lite-preview'
 const KNOWN_AGENT_PROVIDERS = ['google', 'openai', 'openrouter'] as const
+const MARKDOWN_PLUGINS = [remarkGfm]
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -61,13 +66,6 @@ const emptyAgentState: AgentWorkspaceState = {
     workspacePath: null,
   },
   sessions: [],
-}
-
-function formatTimestamp(value: number) {
-  return new Intl.DateTimeFormat('en', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(value)
 }
 
 function formatSessionTime(value: string) {
@@ -111,20 +109,97 @@ function parseModelSelection(modelKey: string | null): { modelId: string, provid
   }
 }
 
+function getMessageStatus(message: AgentSidebarMessage): AgentSidebarMessageStatus {
+  return message.status ?? (message.isError ? 'error' : 'done')
+}
+
+function getToolStatusLabel(status: AgentSidebarMessageStatus) {
+  switch (status) {
+    case 'running':
+      return 'Running'
+    case 'error':
+      return 'Failed'
+    default:
+      return 'Done'
+  }
+}
+
+function AgentMarkdown({ text }: { text: string }) {
+  return (
+    <div className='agent-markdown'>
+      <ReactMarkdown
+        components={{
+          a: ({ href, children }) => (
+            <a href={href} rel='noreferrer' target='_blank'>
+              {children}
+            </a>
+          ),
+        }}
+        remarkPlugins={MARKDOWN_PLUGINS}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
 function AgentMessageBubble({ message }: { message: AgentSidebarMessage }) {
-  const showMeta = message.kind === 'tool' || message.kind === 'system'
+  const isToolMessage = message.kind === 'tool'
+  const messageStatus = getMessageStatus(message)
+  const [isExpanded, setIsExpanded] = useState(messageStatus === 'error' || messageStatus === 'running')
+
+  useEffect(() => {
+    if (!isToolMessage) {
+      return
+    }
+
+    if (messageStatus === 'running' || messageStatus === 'error') {
+      setIsExpanded(true)
+      return
+    }
+
+    setIsExpanded(false)
+  }, [isToolMessage, message.id, messageStatus])
+
+  if (isToolMessage) {
+    return (
+      <article className={`agent-message agent-message-tool ${messageStatus === 'running' ? 'is-running' : ''} ${message.isError ? 'is-error' : ''}`}>
+        <button
+          aria-expanded={isExpanded}
+          className='agent-message-toggle'
+          type='button'
+          onClick={() => {
+            setIsExpanded((currentValue) => !currentValue)
+          }}
+        >
+          <span className={`agent-message-toggle-caret ${isExpanded ? 'is-open' : ''}`} aria-hidden='true' />
+          <span className='agent-message-role'>{message.title ?? 'Tool'}</span>
+          <span className={`agent-message-status agent-message-status-${messageStatus}`}>
+            {getToolStatusLabel(messageStatus)}
+          </span>
+        </button>
+
+        {isExpanded ? (
+          <div className='agent-message-body'>
+            <AgentMarkdown text={message.text} />
+          </div>
+        ) : null}
+      </article>
+    )
+  }
+
+  const showMeta = message.kind === 'system'
 
   return (
     <article className={`agent-message agent-message-${message.kind} ${message.isError ? 'is-error' : ''}`}>
       {showMeta ? (
         <div className='agent-message-meta'>
           <span className='agent-message-role'>{message.title ?? message.kind}</span>
-          <span className='agent-message-time'>{formatTimestamp(message.timestamp)}</span>
         </div>
       ) : null}
 
       <div className='agent-message-body'>
-        <p>{message.text}</p>
+        <AgentMarkdown text={message.text} />
       </div>
     </article>
   )
@@ -264,6 +339,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
           {
             id: event.toolCallId,
             name: event.toolName,
+            status: 'running',
             summary: event.summary,
           },
         ])
@@ -283,6 +359,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
               {
                 id: event.toolCallId,
                 name: event.toolName,
+                status: 'running',
                 summary: event.summary,
               },
             ]
@@ -295,6 +372,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
 
             return {
               ...tool,
+              status: 'running',
               summary: event.summary,
             }
           })
@@ -306,17 +384,35 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
         event.type === 'tool_execution_finished'
         && event.sessionId === agentState.activeSession?.sessionId
       ) {
-        setLiveTools((currentTools) => currentTools.map((tool) => {
-          if (tool.id !== event.toolCallId) {
-            return tool
+        setLiveTools((currentTools) => {
+          const existingTool = currentTools.find((tool) => tool.id === event.toolCallId)
+
+          if (!existingTool) {
+            return [
+              ...currentTools,
+              {
+                id: event.toolCallId,
+                isError: event.isError,
+                name: event.toolName,
+                status: event.isError ? 'error' : 'done',
+                summary: event.summary,
+              },
+            ]
           }
 
-          return {
-            ...tool,
-            isError: event.isError,
-            summary: event.summary,
-          }
-        }))
+          return currentTools.map((tool) => {
+            if (tool.id !== event.toolCallId) {
+              return tool
+            }
+
+            return {
+              ...tool,
+              isError: event.isError,
+              status: event.isError ? 'error' : 'done',
+              summary: event.summary,
+            }
+          })
+        })
         return
       }
 
@@ -457,6 +553,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       id: `live-tool-${tool.id}`,
       isError: tool.isError,
       kind: 'tool',
+      status: tool.status,
       text: tool.summary,
       timestamp: Date.now(),
       title: tool.name,
@@ -915,7 +1012,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
           void handleSubmit(event)
         }}
       >
-        <div className='agent-composer-shell' style={{ '--agent-composer-height': `${composerHeight}px` } as React.CSSProperties}>
+        <div className='agent-composer-shell' style={{ '--agent-composer-height': `${composerHeight}px` } as CSSProperties}>
           <div
             aria-hidden='true'
             className='agent-composer-resize-handle'

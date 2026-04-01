@@ -87,7 +87,7 @@ function summarizeToolPayload(value: unknown, maxLength: number, fallback: strin
   return summary || fallback
 }
 
-function serializeAssistantMessage(message: AssistantMessage, index: number): AgentSidebarMessage {
+function serializeAssistantMessage(message: AssistantMessage, index: number): AgentSidebarMessage | null {
   const text = message.content
     .filter((block) => block.type === 'text')
     .map((block) => block.text)
@@ -98,9 +98,11 @@ function serializeAssistantMessage(message: AssistantMessage, index: number): Ag
     .filter((block) => block.type === 'toolCall')
     .map((block) => block.name)
 
-  const fallbackText = toolCalls.length > 0
-    ? `Running ${toolCalls.join(', ')}`
-    : message.errorMessage ?? 'Assistant response'
+  if (!text && toolCalls.length > 0 && !message.errorMessage) {
+    return null
+  }
+
+  const fallbackText = message.errorMessage ?? 'Assistant response'
 
   return {
     id: `assistant-${message.timestamp}-${index}`,
@@ -126,6 +128,7 @@ function serializeToolResult(message: ToolResultMessage, index: number): AgentSi
   return {
     id: message.toolCallId || `tool-${message.timestamp}-${index}`,
     kind: 'tool',
+    status: message.isError ? 'error' : 'done',
     title: message.toolName,
     text,
     timestamp: message.timestamp,

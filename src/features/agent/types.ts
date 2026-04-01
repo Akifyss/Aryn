@@ -1,8 +1,10 @@
 export type AgentSidebarMessageKind = 'assistant' | 'system' | 'tool' | 'user'
+export type AgentSidebarMessageStatus = 'done' | 'error' | 'running'
 
 export type AgentSidebarMessage = {
   id: string
   kind: AgentSidebarMessageKind
+  status?: AgentSidebarMessageStatus
   text: string
   timestamp: number
   title?: string

@@ -913,13 +913,24 @@
   padding: 0.1rem 0.1rem 0.1rem 0;
 }
 
-.agent-message-tool,
 .agent-message-system {
   gap: 0.35rem;
   padding: 0.75rem 0.8rem;
   border: 1px solid var(--panel-border);
   border-radius: 0.95rem;
   background: color-mix(in oklab, var(--panel-surface-base) 76%, var(--background));
+}
+
+.agent-message-tool {
+  gap: 0.45rem;
+  padding: 0.3rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.95rem;
+  background: color-mix(in oklab, var(--panel-surface-base) 72%, var(--background));
+}
+
+.agent-message-tool.is-running {
+  border-color: color-mix(in oklab, var(--accent) 20%, var(--panel-border));
 }
 
 .agent-message.is-error {
@@ -933,28 +944,179 @@
   gap: 0.75rem;
 }
 
-.agent-message-role,
-.agent-message-time {
+.agent-message-role {
   font-size: 0.67rem;
   font-weight: 600;
-}
-
-.agent-message-role {
   color: var(--panel-soft);
 }
 
-.agent-message-time {
-  color: color-mix(in oklab, var(--muted) 76%, white);
-  font-family: var(--font-mono);
+.agent-message-toggle {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.46rem 0.5rem;
+  border: 0;
+  border-radius: 0.72rem;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.agent-message-body p {
-  margin: 0;
+.agent-message-toggle:hover {
+  background: color-mix(in oklab, var(--panel-border) 22%, transparent);
+}
+
+.agent-message-toggle:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 32%, white);
+  outline-offset: 1px;
+}
+
+.agent-message-toggle-caret {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 1.5px solid var(--panel-soft);
+  border-bottom: 1.5px solid var(--panel-soft);
+  transform: rotate(-45deg) translateY(-0.05rem);
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+
+.agent-message-toggle:hover .agent-message-toggle-caret {
+  border-color: var(--foreground);
+}
+
+.agent-message-toggle-caret.is-open {
+  transform: rotate(45deg) translateY(-0.12rem);
+}
+
+.agent-message-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.35rem;
+  padding: 0.08rem 0.46rem;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.agent-message-status-running {
+  color: color-mix(in oklab, var(--accent) 60%, black);
+  background: color-mix(in oklab, var(--accent) 13%, white);
+}
+
+.agent-message-status-done {
+  color: color-mix(in oklab, var(--foreground) 72%, var(--panel-soft));
+  background: color-mix(in oklab, var(--panel-border) 38%, white);
+}
+
+.agent-message-status-error {
+  color: color-mix(in oklab, var(--danger) 72%, black);
+  background: color-mix(in oklab, var(--danger) 10%, white);
+}
+
+.agent-message-body {
+  min-width: 0;
+}
+
+.agent-message-tool .agent-message-body {
+  padding: 0 0.55rem 0.35rem 1.7rem;
+}
+
+.agent-markdown {
   color: var(--foreground);
   font-size: 0.82rem;
   line-height: 1.7;
-  white-space: pre-wrap;
   word-break: break-word;
+}
+
+.agent-markdown > :first-child {
+  margin-top: 0;
+}
+
+.agent-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.agent-markdown p,
+.agent-markdown ul,
+.agent-markdown ol,
+.agent-markdown blockquote,
+.agent-markdown pre,
+.agent-markdown table,
+.agent-markdown hr {
+  margin: 0.55rem 0;
+}
+
+.agent-markdown ul,
+.agent-markdown ol {
+  padding-left: 1.1rem;
+}
+
+.agent-markdown li + li {
+  margin-top: 0.18rem;
+}
+
+.agent-markdown a {
+  color: color-mix(in oklab, var(--accent) 78%, black);
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
+}
+
+.agent-markdown a:hover {
+  color: color-mix(in oklab, var(--accent) 66%, black);
+}
+
+.agent-markdown code {
+  padding: 0.1rem 0.28rem;
+  border-radius: 0.32rem;
+  background: color-mix(in oklab, var(--panel-border) 26%, white);
+  font-size: 0.78em;
+  font-family: var(--font-mono);
+}
+
+.agent-markdown pre {
+  overflow-x: auto;
+  padding: 0.72rem 0.8rem;
+  border: 1px solid color-mix(in oklab, var(--panel-border) 88%, transparent);
+  border-radius: 0.72rem;
+  background: color-mix(in oklab, var(--panel-surface-base) 82%, black 2%);
+}
+
+.agent-markdown pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.agent-markdown blockquote {
+  padding-left: 0.8rem;
+  border-left: 2px solid color-mix(in oklab, var(--panel-border) 92%, transparent);
+  color: color-mix(in oklab, var(--muted) 86%, var(--foreground));
+}
+
+.agent-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.agent-markdown th,
+.agent-markdown td {
+  padding: 0.4rem 0.48rem;
+  border: 1px solid color-mix(in oklab, var(--panel-border) 90%, transparent);
+  text-align: left;
+  vertical-align: top;
+}
+
+.agent-markdown th {
+  color: var(--panel-soft);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.agent-markdown input[type="checkbox"] {
+  margin-right: 0.35rem;
 }
 
 .agent-composer {
