@@ -893,6 +893,61 @@
   line-height: 1.65;
 }
 
+.agent-session-status {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.15rem;
+  padding: 0.2rem 0;
+  color: var(--panel-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.agent-session-status-dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--panel-border) 88%, white);
+}
+
+.agent-session-status-dot-idle {
+  background: color-mix(in oklab, var(--panel-soft) 44%, white);
+}
+
+.agent-session-status-dot-running {
+  background: color-mix(in oklab, var(--accent) 78%, white);
+}
+
+.agent-session-status-dot-error {
+  background: color-mix(in oklab, var(--danger) 78%, white);
+}
+
+.agent-session-status-label {
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.agent-session-status-label-idle {
+  color: var(--panel-soft);
+}
+
+.agent-session-status-label-running {
+  color: color-mix(in oklab, var(--accent) 60%, black);
+}
+
+.agent-session-status-label-error {
+  color: color-mix(in oklab, var(--danger) 72%, black);
+}
+
+.agent-session-status-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agent-message {
   display: flex;
   flex-direction: column;

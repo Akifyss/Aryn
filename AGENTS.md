@@ -33,6 +33,7 @@
 - Zustand 管理渲染器状态
 - 允许使用 HeroUI 以实现快速的早期交付
 - 核心业务 UI 应逐步转向基于 Base UI 构建的自定义组件
+- 使用 mingcute 、 iconify 来引入界面中需要的图标。
 
 ## 架构指导
 
@@ -49,12 +50,6 @@
 - 仅在工作区元数据、会话历史、提示词模板或用户设置超出扁平文件承载能力时，才引入 `better-sqlite3`
 - 优先保存结构化的编辑器内容以及所需的导出格式
 
-### Agent 策略
-
-- 目前将 PI Agent 集成保留在 Electron 主进程中
-- 仅在复杂度或隔离需求合理时，才将 Agent 工作拆分为独立的本地服务
-- 长期运行且敏感的 Agent 任务应通过主进程路由，而不是直接由渲染进程发起
-
 ## 参考产品
 
 - [scratch](https://github.com/erictli/scratch): 极简、离线优先的桌面 Markdown 笔记，具有强大的本地文件人体工程学
@@ -62,10 +57,3 @@
 - [openchamber](https://github.com/openchamber/openchamber): 具有分支时间线和深度 GitHub 集成的桌面 AI Agent UI
 - [craft-agents-oss](https://github.com/lukilabs/craft-agents-oss): 基于 Pi SDK 模式构建的 Agent 原生架构
 
-## Agent 仓库规范
-
-- 在仓库根目录保留此 `AGENTS.md` 文件，作为规范的项目指导文档
-- 当项目范围、架构、工作流或交付优先级发生变化时，更新 `AGENTS.md`，而不是保留单独的产品规格文件
-- 将自定义 Codex 技能保留在 `.codex/skills/` 下
-- 在 `.agents/skills/` 下保留 Antigravity 兼容的镜像
-- 当仓库本地技能发生变化时，同时更新两个树，以保持 Codex 和 Antigravity 副本一致

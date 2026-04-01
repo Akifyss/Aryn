@@ -205,6 +205,26 @@ function AgentMessageBubble({ message }: { message: AgentSidebarMessage }) {
   )
 }
 
+type AgentSessionStatusTone = 'error' | 'idle' | 'running'
+
+type AgentSessionStatus = {
+  detail: string
+  label: string
+  tone: AgentSessionStatusTone
+}
+
+function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
+  return (
+    <article className={`agent-session-status agent-session-status-${status.tone}`}>
+      <span className={`agent-session-status-dot agent-session-status-dot-${status.tone}`} aria-hidden='true' />
+      <span className={`agent-session-status-label agent-session-status-label-${status.tone}`}>
+        {status.label}
+      </span>
+      <span className='agent-session-status-detail'>{status.detail}</span>
+    </article>
+  )
+}
+
 export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   const defaultModelSelection = parseModelSelection(DEFAULT_MODEL_VALUE)
   const [composerHeight, setComposerHeight] = useState(172)
@@ -807,12 +827,67 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     })
   const modelPlaceholder = 'model'
   const canSend = Boolean(workspacePath && composerValue.trim()) && !agentState.runtime.isStreaming
-  const statusMessage = panelError
-    ?? (!workspacePath
-      ? 'Open a workspace to start.'
-      : !agentState.runtime.hasConfiguredModels
-        ? (agentState.runtime.setupHint ?? 'Configure a model first.')
-        : null)
+  const statusMessage = !workspacePath
+    ? 'Open a workspace to start.'
+    : !agentState.runtime.hasConfiguredModels
+      ? (agentState.runtime.setupHint ?? 'Configure a model first.')
+      : null
+  const runningTools = liveTools.filter((tool) => tool.status === 'running')
+  const sessionStatus = useMemo<AgentSessionStatus | null>(() => {
+    if (!workspacePath) {
+      return null
+    }
+
+    if (panelError) {
+      return {
+        detail: panelError,
+        label: 'Error',
+        tone: 'error',
+      }
+    }
+
+    if (runningTools.length > 0) {
+      const detail = runningTools.length === 1
+        ? `${runningTools[0].name} is running.`
+        : `${runningTools.length} tools are running.`
+
+      return {
+        detail,
+        label: 'Tool execution',
+        tone: 'running',
+      }
+    }
+
+    if (agentState.runtime.isStreaming) {
+      return {
+        detail: draftAssistant.trim()
+          ? 'Receiving assistant output.'
+          : 'Waiting for agent output.',
+        label: 'Streaming',
+        tone: 'running',
+      }
+    }
+
+    if (!agentState.runtime.hasConfiguredModels) {
+      return null
+    }
+
+    return {
+      detail: agentState.activeSession
+        ? 'Ready for the next prompt.'
+        : 'No active session yet.',
+      label: 'Idle',
+      tone: 'idle',
+    }
+  }, [
+    agentState.activeSession,
+    agentState.runtime.hasConfiguredModels,
+    agentState.runtime.isStreaming,
+    draftAssistant,
+    panelError,
+    runningTools,
+    workspacePath,
+  ])
 
   return (
     <div className='agent-shell'>
@@ -988,7 +1063,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       ) : null}
 
       {statusMessage ? (
-        <div className={`agent-status-inline ${panelError ? 'is-error' : ''}`}>
+        <div className='agent-status-inline'>
           <p>{statusMessage}</p>
         </div>
       ) : null}
@@ -1002,6 +1077,9 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
           ) : renderedMessages.map((message) => (
             <AgentMessageBubble key={message.id} message={message} />
           ))}
+          {sessionStatus ? (
+            <AgentSessionStatusBubble status={sessionStatus} />
+          ) : null}
           <div ref={messagesEndRef} />
         </div>
       </ScrollShadow>
