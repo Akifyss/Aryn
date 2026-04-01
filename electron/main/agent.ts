@@ -9,6 +9,7 @@ import {
   ModelRegistry,
   SessionManager,
   SettingsManager,
+  type SessionEntry,
   type AgentSession,
 } from '@mariozechner/pi-coding-agent'
 import type { AssistantMessage, TextContent, ToolResultMessage, UserMessage } from '@mariozechner/pi-ai'
@@ -87,10 +88,46 @@ function summarizeToolPayload(value: unknown, maxLength: number, fallback: strin
   return summary || fallback
 }
 
+type SerializedBranchMessage = AgentSidebarMessage & {
+  entryId?: string
+}
+
+function formatToolPayloadSection(label: string, value: string) {
+  const trimmedValue = value.trim()
+
+  if (!trimmedValue) {
+    return ''
+  }
+
+  return `**${label}**\n\`\`\`\n${trimmedValue}\n\`\`\``
+}
+
+function formatToolMessageText(argumentsValue: unknown, resultText?: string) {
+  const sections: string[] = []
+  const argumentText = stringifyForDisplay(argumentsValue).trim()
+  const normalizedResultText = resultText?.trim() ?? ''
+
+  if (argumentText) {
+    sections.push(formatToolPayloadSection('Arguments', argumentText))
+  }
+
+  if (normalizedResultText) {
+    sections.push(argumentText ? `**Result**\n${normalizedResultText}` : normalizedResultText)
+  }
+
+  return sections.join('\n\n').trim()
+}
+
 function serializeAssistantMessage(message: AssistantMessage, index: number): AgentSidebarMessage | null {
   const text = message.content
     .filter((block) => block.type === 'text')
     .map((block) => block.text)
+    .join('\n')
+    .trim()
+
+  const thinkingText = message.content
+    .filter((block) => block.type === 'thinking')
+    .map((block) => block.thinking)
     .join('\n')
     .trim()
 
@@ -107,6 +144,7 @@ function serializeAssistantMessage(message: AssistantMessage, index: number): Ag
   return {
     id: `assistant-${message.timestamp}-${index}`,
     kind: 'assistant',
+    thinkingText: thinkingText || undefined,
     text: text || fallbackText,
     timestamp: message.timestamp,
     isError: message.stopReason === 'error',
@@ -175,7 +213,7 @@ function serializeCustomMessage(message: Extract<AgentMessage, { role: 'bashExec
 
   return {
     id: `custom-${message.timestamp}-${index}`,
-    kind: 'system',
+    kind: 'custom',
     title: message.customType,
     text: asText(message.content) || message.customType,
     timestamp: message.timestamp,
@@ -208,6 +246,192 @@ function serializeMessage(message: AgentMessage, index: number): AgentSidebarMes
   }
 
   return null
+}
+
+function parseEntryTimestamp(value: string) {
+  const parsed = Date.parse(value)
+  return Number.isNaN(parsed) ? Date.now() : parsed
+}
+
+function pushSerializedMessage(
+  messages: SerializedBranchMessage[],
+  entryMessages: Map<string, SerializedBranchMessage>,
+  message: SerializedBranchMessage,
+) {
+  messages.push(message)
+
+  if (message.entryId) {
+    entryMessages.set(message.entryId, message)
+  }
+}
+
+function serializeSessionEntries(entries: SessionEntry[]) {
+  const messages: SerializedBranchMessage[] = []
+  const entryMessages = new Map<string, SerializedBranchMessage>()
+  const toolArguments = new Map<string, unknown>()
+  const toolMessages = new Map<string, SerializedBranchMessage>()
+
+  entries.forEach((entry, index) => {
+    const timestamp = parseEntryTimestamp(entry.timestamp)
+
+    switch (entry.type) {
+      case 'message': {
+        const message = entry.message
+
+        if ('role' in message && message.role === 'user') {
+          pushSerializedMessage(messages, entryMessages, {
+            ...serializeUserMessage(message, index),
+            entryId: entry.id,
+          })
+          return
+        }
+
+        if ('role' in message && message.role === 'assistant') {
+          const assistantMessage = serializeAssistantMessage(message, index)
+          let labelTarget: SerializedBranchMessage | null = assistantMessage
+            ? {
+                ...assistantMessage,
+                entryId: entry.id,
+              }
+            : null
+
+          if (labelTarget) {
+            pushSerializedMessage(messages, entryMessages, labelTarget)
+          }
+
+          message.content
+            .filter((block) => block.type === 'toolCall')
+            .forEach((toolCall, toolIndex) => {
+              const toolMessage: SerializedBranchMessage = {
+                id: toolCall.id || `tool-call-${entry.id}-${toolIndex}`,
+                kind: 'tool',
+                status: 'done',
+                text: formatToolMessageText(toolCall.arguments) || 'Tool was called without arguments.',
+                timestamp,
+                title: toolCall.name,
+              }
+
+              if (!labelTarget) {
+                toolMessage.entryId = entry.id
+                labelTarget = toolMessage
+              }
+
+              pushSerializedMessage(messages, entryMessages, toolMessage)
+
+              if (toolCall.id) {
+                toolArguments.set(toolCall.id, toolCall.arguments)
+                toolMessages.set(toolCall.id, toolMessage)
+              }
+            })
+
+          return
+        }
+
+        if ('role' in message && message.role === 'toolResult') {
+          const resultText = asText(message.content) || stringifyForDisplay(message.details) || 'Tool finished without output.'
+          const existingToolMessage = message.toolCallId ? toolMessages.get(message.toolCallId) : undefined
+
+          if (existingToolMessage) {
+            entryMessages.set(entry.id, existingToolMessage)
+            existingToolMessage.status = message.isError ? 'error' : 'done'
+            existingToolMessage.isError = message.isError
+            existingToolMessage.text = formatToolMessageText(
+              toolArguments.get(message.toolCallId),
+              resultText,
+            ) || resultText
+            return
+          }
+
+          pushSerializedMessage(messages, entryMessages, {
+            ...serializeToolResult(message, index),
+            entryId: entry.id,
+          })
+          return
+        }
+
+        const serializedMessage = serializeMessage(message, index)
+
+        if (serializedMessage) {
+          pushSerializedMessage(messages, entryMessages, {
+            ...serializedMessage,
+            entryId: entry.id,
+          })
+        }
+
+        return
+      }
+      case 'model_change':
+        pushSerializedMessage(messages, entryMessages, {
+          id: `${entry.type}-${entry.id}`,
+          entryId: entry.id,
+          kind: 'system',
+          text: `${entry.provider}/${entry.modelId}`,
+          timestamp,
+          title: 'Model change',
+        })
+        return
+      case 'thinking_level_change':
+        pushSerializedMessage(messages, entryMessages, {
+          id: `${entry.type}-${entry.id}`,
+          entryId: entry.id,
+          kind: 'system',
+          text: entry.thinkingLevel,
+          timestamp,
+          title: 'Thinking level',
+        })
+        return
+      case 'compaction':
+        pushSerializedMessage(messages, entryMessages, {
+          id: `${entry.type}-${entry.id}`,
+          entryId: entry.id,
+          kind: 'system',
+          text: entry.summary || 'Session context was compacted.',
+          timestamp,
+          title: 'Compaction summary',
+        })
+        return
+      case 'branch_summary':
+        pushSerializedMessage(messages, entryMessages, {
+          id: `${entry.type}-${entry.id}`,
+          entryId: entry.id,
+          kind: 'system',
+          text: entry.summary,
+          timestamp,
+          title: 'Branch summary',
+        })
+        return
+      case 'custom_message':
+        if (!entry.display) {
+          return
+        }
+
+        pushSerializedMessage(messages, entryMessages, {
+          id: `${entry.type}-${entry.id}`,
+          entryId: entry.id,
+          kind: 'custom',
+          text: asText(entry.content) || entry.customType,
+          timestamp,
+          title: entry.customType,
+        })
+        return
+      case 'label': {
+        const targetMessage = entryMessages.get(entry.targetId)
+
+        if (targetMessage) {
+          targetMessage.label = entry.label?.trim() || undefined
+        }
+
+        return
+      }
+      case 'session_info':
+      case 'custom':
+        return
+      default:
+        return
+    }
+  })
+
+  return messages.map(({ entryId: _entryId, ...message }) => message)
 }
 
 export class PiAgentManager {
@@ -521,6 +745,19 @@ export class PiAgentManager {
       return
     }
 
+    if (
+      event.type === 'compaction_start'
+      || event.type === 'compaction_end'
+      || event.type === 'auto_retry_start'
+      || event.type === 'auto_retry_end'
+      || event.type === 'agent_start'
+      || event.type === 'turn_start'
+      || event.type === 'turn_end'
+    ) {
+      await this.broadcastWorkspaceState(this.activeRuntime.cwd)
+      return
+    }
+
     if (event.type === 'message_end' || event.type === 'agent_end') {
       await this.broadcastWorkspaceState(this.activeRuntime.cwd)
     }
@@ -559,18 +796,21 @@ export class PiAgentManager {
         openrouter: this.getOpenRouterAuthState(),
       },
       availableModels: availableModels.map((model) => `${model.provider}/${model.id}`),
+      followUpMode: session?.followUpMode ?? 'one-at-a-time',
       hasConfiguredModels: availableModels.length > 0,
+      isCompacting: session?.isCompacting ?? false,
       isStreaming: session?.isStreaming ?? false,
+      pendingMessageCount: session?.pendingMessageCount ?? 0,
+      retryAttempt: session?.retryAttempt ?? 0,
       selectedModel,
       setupHint: availableModels.length > 0 ? null : AUTH_SETUP_HINT,
+      steeringMode: session?.steeringMode ?? 'one-at-a-time',
       workspacePath: cwd,
     }
   }
 
   private serializeSession(session: AgentSession): AgentSessionSnapshot {
-    const messages = session.messages
-      .map((message, index) => serializeMessage(message, index))
-      .filter((message): message is AgentSidebarMessage => message !== null)
+    const messages = serializeSessionEntries(session.sessionManager.getBranch())
 
     return {
       messages,

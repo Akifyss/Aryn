@@ -1,11 +1,13 @@
-export type AgentSidebarMessageKind = 'assistant' | 'system' | 'tool' | 'user'
+export type AgentSidebarMessageKind = 'assistant' | 'custom' | 'system' | 'tool' | 'user'
 export type AgentSidebarMessageStatus = 'done' | 'error' | 'running'
 
 export type AgentSidebarMessage = {
   id: string
   kind: AgentSidebarMessageKind
+  label?: string
   status?: AgentSidebarMessageStatus
   text: string
+  thinkingText?: string
   timestamp: number
   title?: string
   isError?: boolean
@@ -30,9 +32,14 @@ export type AgentRuntimeState = {
   workspacePath: string | null
   hasConfiguredModels: boolean
   availableModels: string[]
+  followUpMode: 'all' | 'one-at-a-time'
+  isCompacting: boolean
   selectedModel: string | null
   isStreaming: boolean
+  pendingMessageCount: number
+  retryAttempt: number
   setupHint: string | null
+  steeringMode: 'all' | 'one-at-a-time'
 }
 
 export type AgentProviderAuthState = {

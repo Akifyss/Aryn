@@ -1,4 +1,4 @@
-import { type CSSProperties, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, FormEvent, KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Input, ScrollShadow, TextArea } from '@heroui/react'
 import {
   AddLine,
@@ -59,10 +59,15 @@ const emptyAgentState: AgentWorkspaceState = {
       },
     },
     availableModels: [],
+    followUpMode: 'one-at-a-time',
     hasConfiguredModels: false,
+    isCompacting: false,
     isStreaming: false,
+    pendingMessageCount: 0,
+    retryAttempt: 0,
     selectedModel: null,
     setupHint: null,
+    steeringMode: 'one-at-a-time',
     workspacePath: null,
   },
   sessions: [],
@@ -143,8 +148,43 @@ function AgentMarkdown({ text }: { text: string }) {
   )
 }
 
+function AgentDisclosure({
+  children,
+  defaultExpanded = false,
+  label,
+}: {
+  children: ReactNode
+  defaultExpanded?: boolean
+  label: string
+}) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+
+  return (
+    <div className='agent-disclosure'>
+      <button
+        aria-expanded={isExpanded}
+        className='agent-disclosure-toggle'
+        type='button'
+        onClick={() => {
+          setIsExpanded((currentValue) => !currentValue)
+        }}
+      >
+        <span className={`agent-message-toggle-caret ${isExpanded ? 'is-open' : ''}`} aria-hidden='true' />
+        <span className='agent-disclosure-label'>{label}</span>
+      </button>
+      {isExpanded ? (
+        <div className='agent-disclosure-body'>
+          {children}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function AgentMessageBubble({ message }: { message: AgentSidebarMessage }) {
   const isToolMessage = message.kind === 'tool'
+  const isCollapsibleSystemMessage = (message.kind === 'system' || message.kind === 'custom')
+    && (message.title === 'Compaction summary' || message.title === 'Branch summary')
   const messageStatus = getMessageStatus(message)
   const [isExpanded, setIsExpanded] = useState(messageStatus === 'error' || messageStatus === 'running')
 
@@ -174,6 +214,7 @@ function AgentMessageBubble({ message }: { message: AgentSidebarMessage }) {
         >
           <span className={`agent-message-toggle-caret ${isExpanded ? 'is-open' : ''}`} aria-hidden='true' />
           <span className='agent-message-role'>{message.title ?? 'Tool'}</span>
+          {message.label ? <span className='agent-message-label'>{message.label}</span> : null}
           <span className={`agent-message-status agent-message-status-${messageStatus}`}>
             {getToolStatusLabel(messageStatus)}
           </span>
@@ -188,18 +229,40 @@ function AgentMessageBubble({ message }: { message: AgentSidebarMessage }) {
     )
   }
 
-  const showMeta = message.kind === 'system'
+  if (isCollapsibleSystemMessage) {
+    return (
+      <article className={`agent-message agent-message-system agent-message-system-collapsible ${message.isError ? 'is-error' : ''}`}>
+        <div className='agent-message-meta'>
+          <span className='agent-message-role'>{message.title ?? message.kind}</span>
+        </div>
+        <AgentDisclosure label='Details'>
+          <AgentMarkdown text={message.text} />
+        </AgentDisclosure>
+      </article>
+    )
+  }
+
+  const roleLabel = message.kind === 'system' || message.kind === 'custom'
+    ? (message.title ?? message.kind)
+    : null
+  const showMeta = Boolean(roleLabel || message.label)
 
   return (
     <article className={`agent-message agent-message-${message.kind} ${message.isError ? 'is-error' : ''}`}>
       {showMeta ? (
         <div className='agent-message-meta'>
-          <span className='agent-message-role'>{message.title ?? message.kind}</span>
+          {roleLabel ? <span className='agent-message-role'>{roleLabel}</span> : <span />}
+          {message.label ? <span className='agent-message-label'>{message.label}</span> : null}
         </div>
       ) : null}
 
       <div className='agent-message-body'>
         <AgentMarkdown text={message.text} />
+        {message.kind === 'assistant' && message.thinkingText ? (
+          <AgentDisclosure label='Thinking'>
+            <AgentMarkdown text={message.thinkingText} />
+          </AgentDisclosure>
+        ) : null}
       </div>
     </article>
   )
@@ -858,6 +921,32 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       }
     }
 
+    if (agentState.runtime.isCompacting) {
+      return {
+        detail: 'Compacting session context.',
+        label: 'Auto-compaction',
+        tone: 'running',
+      }
+    }
+
+    if (agentState.runtime.retryAttempt > 0) {
+      return {
+        detail: `Retry attempt ${agentState.runtime.retryAttempt} is in progress.`,
+        label: 'Auto-retry',
+        tone: 'running',
+      }
+    }
+
+    if (agentState.runtime.pendingMessageCount > 0) {
+      return {
+        detail: agentState.runtime.pendingMessageCount === 1
+          ? '1 queued message is waiting.'
+          : `${agentState.runtime.pendingMessageCount} queued messages are waiting.`,
+        label: 'Queue',
+        tone: 'running',
+      }
+    }
+
     if (agentState.runtime.isStreaming) {
       return {
         detail: draftAssistant.trim()
@@ -881,8 +970,11 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     }
   }, [
     agentState.activeSession,
+    agentState.runtime.isCompacting,
     agentState.runtime.hasConfiguredModels,
     agentState.runtime.isStreaming,
+    agentState.runtime.pendingMessageCount,
+    agentState.runtime.retryAttempt,
     draftAssistant,
     panelError,
     runningTools,

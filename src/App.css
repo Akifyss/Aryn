@@ -976,6 +976,14 @@
   background: color-mix(in oklab, var(--panel-surface-base) 76%, var(--background));
 }
 
+.agent-message-custom {
+  gap: 0.35rem;
+  padding: 0.75rem 0.8rem;
+  border: 1px solid color-mix(in oklab, var(--accent) 16%, var(--panel-border));
+  border-radius: 0.95rem;
+  background: color-mix(in oklab, var(--accent) 5%, var(--panel-surface-base));
+}
+
 .agent-message-tool {
   gap: 0.45rem;
   padding: 0.3rem;
@@ -1005,9 +1013,22 @@
   color: var(--panel-soft);
 }
 
+.agent-message-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.2rem;
+  padding: 0.02rem 0.42rem;
+  border-radius: 999px;
+  color: color-mix(in oklab, var(--accent) 72%, black);
+  background: color-mix(in oklab, var(--accent) 10%, white);
+  font-size: 0.63rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 .agent-message-toggle {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
   gap: 0.6rem;
   width: 100%;
@@ -1046,6 +1067,45 @@
   transform: rotate(45deg) translateY(-0.12rem);
 }
 
+.agent-disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.agent-disclosure-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--panel-soft);
+  cursor: pointer;
+}
+
+.agent-disclosure-toggle:hover {
+  color: var(--foreground);
+}
+
+.agent-disclosure-toggle:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 32%, white);
+  outline-offset: 2px;
+  border-radius: 0.35rem;
+}
+
+.agent-disclosure-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.agent-disclosure-body {
+  min-width: 0;
+  padding-left: 1.05rem;
+}
+
 .agent-message-status {
   display: inline-flex;
   align-items: center;
@@ -1078,6 +1138,14 @@
 
 .agent-message-tool .agent-message-body {
   padding: 0 0.55rem 0.35rem 1.7rem;
+}
+
+.agent-message-system-collapsible {
+  gap: 0.2rem;
+}
+
+.agent-message-system-collapsible .agent-disclosure {
+  margin-top: 0;
 }
 
 .agent-markdown {
