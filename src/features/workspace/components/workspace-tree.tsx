@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Button, Input, Tooltip } from '@heroui/react'
 import {
   CheckLine,
@@ -6,7 +6,8 @@ import {
   Delete2Line,
   Edit2Line,
   FileLine,
-  FolderFill,
+  FolderLine,
+  FolderOpenLine,
 } from '@mingcute/react'
 import type { WorkspaceNode } from '@/features/workspace/types'
 
@@ -21,37 +22,77 @@ type WorkspaceTreeProps = {
 type TreeNodeProps = {
   activeFilePath: string | null
   depth: number
+  expandedPaths: Set<string>
   node: WorkspaceNode
+  onToggleDirectory: (path: string) => void
   onSelectFile: (path: string) => void
   onRenameFile: (path: string, nextName: string) => Promise<void>
   onDeleteFile: (path: string) => Promise<void>
 }
 
-function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onDeleteFile }: TreeNodeProps) {
+function collectDirectoryPaths(nodes: WorkspaceNode[]): string[] {
+  return nodes.flatMap((node) => {
+    if (node.kind !== 'directory') {
+      return []
+    }
+
+    return [node.path, ...(node.children ? collectDirectoryPaths(node.children) : [])]
+  })
+}
+
+function TreeNode({
+  activeFilePath,
+  depth,
+  expandedPaths,
+  node,
+  onToggleDirectory,
+  onSelectFile,
+  onRenameFile,
+  onDeleteFile,
+}: TreeNodeProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [draftName, setDraftName] = useState(node.name)
   const [actionError, setActionError] = useState<string | null>(null)
+  const rowIndent = `${depth * 14 + 8}px`
+  const directoryIndent = `calc(${rowIndent} + 0.75rem)`
 
   if (node.kind === 'directory') {
-    return (
-      <li>
-        <div
-          className='tree-directory'
-          style={{ paddingLeft: `${depth * 14 + 8}px` }}
-        >
-          <FolderFill size={14} />
-          <span>{node.name}</span>
-        </div>
+    const children = node.children ?? []
+    const hasChildren = children.length > 0
+    const isExpanded = expandedPaths.has(node.path)
 
-        {node.children && node.children.length > 0 ? (
+    return (
+      <li className={`tree-item tree-directory-item ${isExpanded ? 'is-expanded' : ''}`}>
+        <button
+          type='button'
+          className='tree-row tree-directory-button'
+          style={{ paddingLeft: directoryIndent }}
+          onClick={() => {
+            if (hasChildren) {
+              onToggleDirectory(node.path)
+            }
+          }}
+          aria-expanded={hasChildren ? isExpanded : undefined}
+          aria-label={hasChildren ? `${isExpanded ? 'Collapse' : 'Expand'} ${node.name}` : node.name}
+        >
+          <span className='tree-node-icon' aria-hidden='true'>
+            {isExpanded ? <FolderOpenLine size={16} /> : <FolderLine size={16} />}
+          </span>
+
+          <span className='tree-node-name'>{node.name}</span>
+        </button>
+
+        {hasChildren && isExpanded ? (
           <ul className='tree-list'>
-            {node.children.map((childNode) => (
+            {children.map((childNode) => (
               <TreeNode
                 key={childNode.path}
                 activeFilePath={activeFilePath}
                 depth={depth + 1}
+                expandedPaths={expandedPaths}
                 node={childNode}
+                onToggleDirectory={onToggleDirectory}
                 onSelectFile={onSelectFile}
                 onRenameFile={onRenameFile}
                 onDeleteFile={onDeleteFile}
@@ -97,7 +138,7 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
       {isEditing ? (
         <form
           className='tree-inline-rename'
-          style={{ paddingLeft: `${depth * 14 + 8}px` }}
+          style={{ paddingLeft: rowIndent }}
           onSubmit={(event) => {
             void submitRename(event)
           }}
@@ -138,8 +179,8 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
         </form>
       ) : (
         <div
-          className={`tree-file-row ${isActive ? 'is-active' : ''}`}
-          style={{ paddingLeft: `${depth * 14 + 8}px` }}
+          className={`tree-row tree-file-row ${isActive ? 'is-active' : ''}`}
+          style={{ paddingLeft: rowIndent }}
         >
           <Button
             className='tree-file'
@@ -148,8 +189,10 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
             onPress={() => onSelectFile(node.path)}
           >
             <div className='tree-file-content'>
-              <FileLine size={14} className='tree-file-icon' />
-              <span className='tree-file-name'>{node.name}</span>
+              <span className='tree-node-icon' aria-hidden='true'>
+                <FileLine size={16} className='tree-file-icon' />
+              </span>
+              <span className='tree-file-name tree-node-name'>{node.name}</span>
             </div>
           </Button>
 
@@ -200,11 +243,37 @@ function TreeNode({ activeFilePath, depth, node, onSelectFile, onRenameFile, onD
 }
 
 export function WorkspaceTree({ activeFilePath, nodes, onSelectFile, onRenameFile, onDeleteFile }: WorkspaceTreeProps) {
+  const previousDirectoryPathsRef = useRef<Set<string>>(new Set())
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set(collectDirectoryPaths(nodes)))
+
+  useEffect(() => {
+    const directoryPaths = collectDirectoryPaths(nodes)
+    const previousDirectoryPaths = previousDirectoryPathsRef.current
+
+    setExpandedPaths((currentPaths) => {
+      const nextPaths = new Set<string>()
+
+      if (currentPaths.size === 0 && directoryPaths.length > 0) {
+        return new Set(directoryPaths)
+      }
+
+      for (const path of directoryPaths) {
+        if (currentPaths.has(path) || !previousDirectoryPaths.has(path)) {
+          nextPaths.add(path)
+        }
+      }
+
+      return nextPaths
+    })
+
+    previousDirectoryPathsRef.current = new Set(directoryPaths)
+  }, [nodes])
+
   if (nodes.length === 0) {
     return (
       <div className='tree-empty-state'>
         <div className='tree-empty-icon'>
-          <FolderFill size={26} />
+          <FolderLine size={26} />
         </div>
         <p>Connect a workspace folder to browse and edit your notes.</p>
       </div>
@@ -218,7 +287,21 @@ export function WorkspaceTree({ activeFilePath, nodes, onSelectFile, onRenameFil
           key={node.path}
           activeFilePath={activeFilePath}
           depth={0}
+          expandedPaths={expandedPaths}
           node={node}
+          onToggleDirectory={(path) => {
+            setExpandedPaths((currentPaths) => {
+              const nextPaths = new Set(currentPaths)
+
+              if (nextPaths.has(path)) {
+                nextPaths.delete(path)
+              } else {
+                nextPaths.add(path)
+              }
+
+              return nextPaths
+            })
+          }}
           onSelectFile={onSelectFile}
           onRenameFile={onRenameFile}
           onDeleteFile={onDeleteFile}

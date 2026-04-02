@@ -316,7 +316,7 @@
 
 .tree-list {
   margin: 0;
-  padding: 0 0 0.25rem;
+  padding: 0;
   list-style: none;
 }
 
@@ -325,7 +325,6 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  gap: 0.22rem;
   transition: color 140ms ease;
 }
 
@@ -333,31 +332,64 @@
   content: none;
 }
 
-.tree-directory {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  width: 100%;
-  margin: 0.8rem 0 0.3rem;
-  color: var(--panel-muted);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-}
-
-.tree-file-row {
+.tree-row {
   display: flex;
-  align-items: stretch;
-  gap: 0.2rem;
+  align-items: center;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+}
+
+.tree-directory-button {
+  gap: 0.625rem;
+  min-height: 33px;
+  padding-right: 0.9rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  border: 0;
+  background: transparent;
+  color: var(--panel-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.tree-directory-button:hover,
+.tree-directory-button:focus-visible {
+  background: color-mix(in oklab, var(--foreground) 2%, white);
+  color: var(--panel-foreground);
+}
+
+.tree-directory-button:focus-visible {
+  outline: none;
+}
+
+.tree-node-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  min-width: 16px;
+  color: currentColor;
+}
+
+.tree-node-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+.tree-file-row {
+  align-items: stretch;
+  gap: 0;
   border-top: 0;
   transition: background-color 140ms ease;
 }
 
-.tree-list > li + .tree-item > .tree-file-row {
+.tree-list > li + li > .tree-row {
   border-top: 1px solid var(--panel-border);
 }
 
@@ -376,7 +408,8 @@
   justify-content: flex-start;
   min-width: 0;
   min-height: 0;
-  padding: 0.8rem 0 0.8rem 1.25rem;
+  padding: 0 0 0 0.75rem;
+  height: 33px;
   border-radius: 0;
   color: var(--panel-soft);
   background: transparent;
@@ -401,7 +434,7 @@
 .tree-file-content {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.625rem;
   width: 100%;
   min-width: 0;
 }
@@ -411,11 +444,7 @@
 }
 
 .tree-file-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.84rem;
-  font-weight: 500;
+  color: inherit;
 }
 
 .tree-item-actions {
@@ -456,6 +485,10 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.5rem;
+  min-height: 33px;
+  padding-top: 0;
+  padding-right: 0.5rem;
+  padding-bottom: 0;
 }
 
 .tree-inline-actions {
