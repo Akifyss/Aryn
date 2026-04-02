@@ -76,6 +76,8 @@ function App() {
   const [isCreatingFile, setIsCreatingFile] = useState(false)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(DEFAULT_LEFT_SIDEBAR_WIDTH)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(DEFAULT_RIGHT_SIDEBAR_WIDTH)
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
+  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false)
   const [activeResizePanel, setActiveResizePanel] = useState<ResizePanel | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
@@ -97,13 +99,17 @@ function App() {
     : '\u5f53\u524d\u5de5\u4f5c\u533a'
   const isMobileStacked = typeof window !== 'undefined' && window.innerWidth <= MOBILE_STACK_BREAKPOINT
   const isAgentPanelVisible = typeof window !== 'undefined' && window.innerWidth > DESKTOP_AGENT_BREAKPOINT
+  const isLeftSidebarVisible = !isLeftSidebarCollapsed
+  const isRightSidebarVisible = isAgentPanelVisible && !isRightSidebarCollapsed
+  const effectiveLeftSidebarWidth = isLeftSidebarVisible ? leftSidebarWidth : 0
+  const effectiveRightSidebarWidth = isRightSidebarVisible ? rightSidebarWidth : 0
 
   function getShellWidth() {
     return appShellRef.current?.clientWidth ?? window.innerWidth
   }
 
   function clampLeftWidth(nextWidth: number, shellWidth: number, currentRightWidth: number) {
-    const reservedWidth = MIN_EDITOR_WIDTH + RESIZE_HANDLE_WIDTH + (isAgentPanelVisible ? currentRightWidth + RESIZE_HANDLE_WIDTH : 0)
+    const reservedWidth = MIN_EDITOR_WIDTH + RESIZE_HANDLE_WIDTH + (currentRightWidth > 0 ? currentRightWidth + RESIZE_HANDLE_WIDTH : 0)
     const maxWidth = Math.min(LEFT_SIDEBAR_MAX_WIDTH, Math.max(LEFT_SIDEBAR_MIN_WIDTH, shellWidth - reservedWidth))
 
     return clamp(nextWidth, LEFT_SIDEBAR_MIN_WIDTH, maxWidth)
@@ -132,7 +138,7 @@ function App() {
 
     if (panel === 'left') {
       const nextWidth = pointerClientX - shellRect.left
-      setLeftSidebarWidth(clampLeftWidth(nextWidth, shellWidth, rightSidebarWidth))
+      setLeftSidebarWidth(clampLeftWidth(nextWidth, shellWidth, effectiveRightSidebarWidth))
       return
     }
 
@@ -141,11 +147,15 @@ function App() {
     }
 
     const nextWidth = shellRect.right - pointerClientX
-    setRightSidebarWidth(clampRightWidth(nextWidth, shellWidth, leftSidebarWidth))
+    setRightSidebarWidth(clampRightWidth(nextWidth, shellWidth, effectiveLeftSidebarWidth))
   }
 
   function handleResizeStart(panel: ResizePanel) {
-    if (isMobileStacked || (panel === 'right' && !isAgentPanelVisible)) {
+    if (
+      isMobileStacked
+      || (panel === 'left' && !isLeftSidebarVisible)
+      || (panel === 'right' && !isRightSidebarVisible)
+    ) {
       return
     }
 
@@ -399,6 +409,8 @@ function App() {
     const storage = window.localStorage
     const savedLeftWidth = storage.getItem('writing-workspace:left-sidebar-width')
     const savedRightWidth = storage.getItem('writing-workspace:right-sidebar-width')
+    const savedLeftCollapsed = storage.getItem('writing-workspace:left-sidebar-collapsed')
+    const savedRightCollapsed = storage.getItem('writing-workspace:right-sidebar-collapsed')
 
     if (savedLeftWidth) {
       const parsedLeftWidth = Number(savedLeftWidth)
@@ -413,6 +425,14 @@ function App() {
         setRightSidebarWidth(parsedRightWidth)
       }
     }
+
+    if (savedLeftCollapsed) {
+      setIsLeftSidebarCollapsed(savedLeftCollapsed === 'true')
+    }
+
+    if (savedRightCollapsed) {
+      setIsRightSidebarCollapsed(savedRightCollapsed === 'true')
+    }
   }, [])
 
   useEffect(() => {
@@ -424,11 +444,19 @@ function App() {
   }, [rightSidebarWidth])
 
   useEffect(() => {
+    window.localStorage.setItem('writing-workspace:left-sidebar-collapsed', String(isLeftSidebarCollapsed))
+  }, [isLeftSidebarCollapsed])
+
+  useEffect(() => {
+    window.localStorage.setItem('writing-workspace:right-sidebar-collapsed', String(isRightSidebarCollapsed))
+  }, [isRightSidebarCollapsed])
+
+  useEffect(() => {
     function syncSidebarWidths() {
       const shellWidth = getShellWidth()
-      const nextLeftWidth = clampLeftWidth(leftSidebarWidth, shellWidth, rightSidebarWidth)
-      const nextRightWidth = isAgentPanelVisible
-        ? clampRightWidth(rightSidebarWidth, shellWidth, nextLeftWidth)
+      const nextLeftWidth = clampLeftWidth(leftSidebarWidth, shellWidth, effectiveRightSidebarWidth)
+      const nextRightWidth = isRightSidebarVisible
+        ? clampRightWidth(rightSidebarWidth, shellWidth, isLeftSidebarVisible ? nextLeftWidth : 0)
         : rightSidebarWidth
 
       if (nextLeftWidth !== leftSidebarWidth) {
@@ -444,7 +472,7 @@ function App() {
     window.addEventListener('resize', syncSidebarWidths)
 
     return () => window.removeEventListener('resize', syncSidebarWidths)
-  }, [isAgentPanelVisible, leftSidebarWidth, rightSidebarWidth])
+  }, [effectiveRightSidebarWidth, isLeftSidebarVisible, isRightSidebarVisible, leftSidebarWidth, rightSidebarWidth])
 
   useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
@@ -458,6 +486,16 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeydown)
   }, [currentFileContent, currentFilePath])
 
+  useEffect(() => {
+    if (!isLeftSidebarVisible && activeResizePanel === 'left') {
+      setActiveResizePanel(null)
+    }
+
+    if (!isRightSidebarVisible && activeResizePanel === 'right') {
+      setActiveResizePanel(null)
+    }
+  }, [activeResizePanel, isLeftSidebarVisible, isRightSidebarVisible])
+
   return (
     <div
       ref={appShellRef}
@@ -465,14 +503,24 @@ function App() {
       data-resizing={activeResizePanel ? 'true' : 'false'}
       style={
         {
-          '--left-sidebar-width': `${leftSidebarWidth}px`,
-          '--right-sidebar-width': `${rightSidebarWidth}px`,
+          '--left-sidebar-width': `${effectiveLeftSidebarWidth}px`,
+          '--right-sidebar-width': `${effectiveRightSidebarWidth}px`,
         } as CSSProperties
       }
     >
-      <AppTitlebar />
+      <AppTitlebar
+        isLeftSidebarVisible={isLeftSidebarVisible}
+        isRightSidebarVisible={isRightSidebarVisible}
+        showRightSidebarToggle={isAgentPanelVisible}
+        onToggleLeftSidebar={() => {
+          setIsLeftSidebarCollapsed((currentValue) => !currentValue)
+        }}
+        onToggleRightSidebar={() => {
+          setIsRightSidebarCollapsed((currentValue) => !currentValue)
+        }}
+      />
 
-      <aside className='panel panel-sidebar'>
+      <aside className={`panel panel-sidebar${isLeftSidebarVisible ? '' : ' is-collapsed'}`}>
         <div className='section-title'>
           <button
             type='button'
@@ -516,7 +564,7 @@ function App() {
         </ScrollShadow>
       </aside>
 
-      <div className='panel-resize-slot panel-resize-slot-left'>
+      <div className={`panel-resize-slot panel-resize-slot-left${isLeftSidebarVisible ? '' : ' is-hidden'}`}>
         <div
           role='separator'
           className={`panel-resize-handle${activeResizePanel === 'left' ? ' is-active' : ''}`}
@@ -576,7 +624,7 @@ function App() {
         </div>
       </main>
 
-      <div className='panel-resize-slot panel-resize-slot-right'>
+      <div className={`panel-resize-slot panel-resize-slot-right${isRightSidebarVisible ? '' : ' is-hidden'}`}>
         <div
           role='separator'
           className={`panel-resize-handle${activeResizePanel === 'right' ? ' is-active' : ''}`}
@@ -593,7 +641,7 @@ function App() {
         />
       </div>
 
-      <aside className='panel panel-agent'>
+      <aside className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}>
         <AgentSidebar workspacePath={currentPath} />
       </aside>
     </div>
