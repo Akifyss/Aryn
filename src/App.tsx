@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, ScrollShadow } from '@heroui/react'
 import {
   AddLine,
@@ -52,10 +53,31 @@ function getNextUntitledFileName(existingNames: string[]) {
   return `untitled-${index}.md`
 }
 
+const DESKTOP_AGENT_BREAKPOINT = 1160
+const MOBILE_STACK_BREAKPOINT = 860
+const RESIZE_HANDLE_WIDTH = 12
+const MIN_EDITOR_WIDTH = 480
+const LEFT_SIDEBAR_MIN_WIDTH = 240
+const LEFT_SIDEBAR_MAX_WIDTH = 520
+const RIGHT_SIDEBAR_MIN_WIDTH = 300
+const RIGHT_SIDEBAR_MAX_WIDTH = 560
+const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
+const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
+
+type ResizePanel = 'left' | 'right'
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
 function App() {
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
   const [, setStatusMessage] = useState('Open a folder to start.')
   const [isCreatingFile, setIsCreatingFile] = useState(false)
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(DEFAULT_LEFT_SIDEBAR_WIDTH)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(DEFAULT_RIGHT_SIDEBAR_WIDTH)
+  const [activeResizePanel, setActiveResizePanel] = useState<ResizePanel | null>(null)
+  const appShellRef = useRef<HTMLDivElement | null>(null)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
   const currentFileContent = useWorkspaceStore((state) => state.currentFileContent)
   const currentFilePath = useWorkspaceStore((state) => state.currentFilePath)
@@ -73,6 +95,62 @@ function App() {
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
     : '\u5f53\u524d\u5de5\u4f5c\u533a'
+  const isMobileStacked = typeof window !== 'undefined' && window.innerWidth <= MOBILE_STACK_BREAKPOINT
+  const isAgentPanelVisible = typeof window !== 'undefined' && window.innerWidth > DESKTOP_AGENT_BREAKPOINT
+
+  function getShellWidth() {
+    return appShellRef.current?.clientWidth ?? window.innerWidth
+  }
+
+  function clampLeftWidth(nextWidth: number, shellWidth: number, currentRightWidth: number) {
+    const reservedWidth = MIN_EDITOR_WIDTH + RESIZE_HANDLE_WIDTH + (isAgentPanelVisible ? currentRightWidth + RESIZE_HANDLE_WIDTH : 0)
+    const maxWidth = Math.min(LEFT_SIDEBAR_MAX_WIDTH, Math.max(LEFT_SIDEBAR_MIN_WIDTH, shellWidth - reservedWidth))
+
+    return clamp(nextWidth, LEFT_SIDEBAR_MIN_WIDTH, maxWidth)
+  }
+
+  function clampRightWidth(nextWidth: number, shellWidth: number, currentLeftWidth: number) {
+    const reservedWidth = MIN_EDITOR_WIDTH + currentLeftWidth + RESIZE_HANDLE_WIDTH * 2
+    const maxWidth = Math.min(RIGHT_SIDEBAR_MAX_WIDTH, Math.max(RIGHT_SIDEBAR_MIN_WIDTH, shellWidth - reservedWidth))
+
+    return clamp(nextWidth, RIGHT_SIDEBAR_MIN_WIDTH, maxWidth)
+  }
+
+  function resizeSidebar(panel: ResizePanel, pointerClientX: number) {
+    if (isMobileStacked) {
+      return
+    }
+
+    const shell = appShellRef.current
+
+    if (!shell) {
+      return
+    }
+
+    const shellRect = shell.getBoundingClientRect()
+    const shellWidth = shellRect.width
+
+    if (panel === 'left') {
+      const nextWidth = pointerClientX - shellRect.left
+      setLeftSidebarWidth(clampLeftWidth(nextWidth, shellWidth, rightSidebarWidth))
+      return
+    }
+
+    if (!isAgentPanelVisible) {
+      return
+    }
+
+    const nextWidth = shellRect.right - pointerClientX
+    setRightSidebarWidth(clampRightWidth(nextWidth, shellWidth, leftSidebarWidth))
+  }
+
+  function handleResizeStart(panel: ResizePanel) {
+    if (isMobileStacked || (panel === 'right' && !isAgentPanelVisible)) {
+      return
+    }
+
+    setActiveResizePanel(panel)
+  }
 
   async function getWorkspaceState(workspacePath: string) {
     return window.appApi.getWorkspaceState(workspacePath)
@@ -287,6 +365,88 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (!activeResizePanel) {
+      return
+    }
+
+    const resizePanel = activeResizePanel
+
+    function handlePointerMove(event: PointerEvent) {
+      resizeSidebar(resizePanel, event.clientX)
+    }
+
+    function stopResizing() {
+      setActiveResizePanel(null)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', stopResizing)
+    window.addEventListener('pointercancel', stopResizing)
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', stopResizing)
+      window.removeEventListener('pointercancel', stopResizing)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [activeResizePanel, isAgentPanelVisible, isMobileStacked, leftSidebarWidth, rightSidebarWidth])
+
+  useEffect(() => {
+    const storage = window.localStorage
+    const savedLeftWidth = storage.getItem('writing-workspace:left-sidebar-width')
+    const savedRightWidth = storage.getItem('writing-workspace:right-sidebar-width')
+
+    if (savedLeftWidth) {
+      const parsedLeftWidth = Number(savedLeftWidth)
+      if (Number.isFinite(parsedLeftWidth)) {
+        setLeftSidebarWidth(parsedLeftWidth)
+      }
+    }
+
+    if (savedRightWidth) {
+      const parsedRightWidth = Number(savedRightWidth)
+      if (Number.isFinite(parsedRightWidth)) {
+        setRightSidebarWidth(parsedRightWidth)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem('writing-workspace:left-sidebar-width', String(leftSidebarWidth))
+  }, [leftSidebarWidth])
+
+  useEffect(() => {
+    window.localStorage.setItem('writing-workspace:right-sidebar-width', String(rightSidebarWidth))
+  }, [rightSidebarWidth])
+
+  useEffect(() => {
+    function syncSidebarWidths() {
+      const shellWidth = getShellWidth()
+      const nextLeftWidth = clampLeftWidth(leftSidebarWidth, shellWidth, rightSidebarWidth)
+      const nextRightWidth = isAgentPanelVisible
+        ? clampRightWidth(rightSidebarWidth, shellWidth, nextLeftWidth)
+        : rightSidebarWidth
+
+      if (nextLeftWidth !== leftSidebarWidth) {
+        setLeftSidebarWidth(nextLeftWidth)
+      }
+
+      if (nextRightWidth !== rightSidebarWidth) {
+        setRightSidebarWidth(nextRightWidth)
+      }
+    }
+
+    syncSidebarWidths()
+    window.addEventListener('resize', syncSidebarWidths)
+
+    return () => window.removeEventListener('resize', syncSidebarWidths)
+  }, [isAgentPanelVisible, leftSidebarWidth, rightSidebarWidth])
+
+  useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
@@ -299,7 +459,17 @@ function App() {
   }, [currentFileContent, currentFilePath])
 
   return (
-    <div className='app-shell'>
+    <div
+      ref={appShellRef}
+      className='app-shell'
+      data-resizing={activeResizePanel ? 'true' : 'false'}
+      style={
+        {
+          '--left-sidebar-width': `${leftSidebarWidth}px`,
+          '--right-sidebar-width': `${rightSidebarWidth}px`,
+        } as CSSProperties
+      }
+    >
       <AppTitlebar />
 
       <aside className='panel panel-sidebar'>
@@ -346,6 +516,23 @@ function App() {
         </ScrollShadow>
       </aside>
 
+      <div className='panel-resize-slot panel-resize-slot-left'>
+        <div
+          role='separator'
+          className={`panel-resize-handle${activeResizePanel === 'left' ? ' is-active' : ''}`}
+          aria-label='Resize workspace sidebar'
+          aria-controls='editor-main'
+          aria-orientation='vertical'
+          onPointerDown={(event) => {
+            if (event.button !== 0) {
+              return
+            }
+
+            handleResizeStart('left')
+          }}
+        />
+      </div>
+
       <main className='panel panel-editor' id='editor-main'>
         <div className='editor-frame'>
           {!currentFilePath ? (
@@ -388,6 +575,23 @@ function App() {
           />
         </div>
       </main>
+
+      <div className='panel-resize-slot panel-resize-slot-right'>
+        <div
+          role='separator'
+          className={`panel-resize-handle${activeResizePanel === 'right' ? ' is-active' : ''}`}
+          aria-label='Resize assistant sidebar'
+          aria-controls='editor-main'
+          aria-orientation='vertical'
+          onPointerDown={(event) => {
+            if (event.button !== 0) {
+              return
+            }
+
+            handleResizeStart('right')
+          }}
+        />
+      </div>
 
       <aside className='panel panel-agent'>
         <AgentSidebar workspacePath={currentPath} />

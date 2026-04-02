@@ -12,11 +12,18 @@
   --panel-surface-subtle: color-mix(in oklab, var(--background) 88%, var(--surface));
   --panel-surface-section: color-mix(in oklab, var(--background) 92%, var(--surface));
   --panel-surface-editor: color-mix(in oklab, var(--surface) 96%, var(--background));
+  --left-sidebar-width: 320px;
+  --right-sidebar-width: 368px;
+  --resize-handle-width: 12px;
+  --resize-handle-hit-area: 100%;
+  --resize-handle-line-width: 2px;
+  --resize-handle-color: color-mix(in oklab, var(--panel-border) 92%, transparent);
+  --resize-handle-color-active: color-mix(in oklab, var(--accent) 52%, var(--panel-border));
 
   position: relative;
   display: grid;
   grid-template-rows: 44px minmax(0, 1fr);
-  grid-template-columns: 320px minmax(0, 1fr) 368px;
+  grid-template-columns: var(--left-sidebar-width) minmax(0, 1fr) var(--right-sidebar-width);
   width: 100%;
   height: 100dvh;
   background: var(--app-background);
@@ -203,19 +210,81 @@
 }
 
 .panel-sidebar {
+  grid-column: 1;
   gap: 0;
   padding: 0;
-  border-right: 1px solid var(--panel-border);
   background: var(--panel-surface-chrome);
 }
 
 .panel-editor {
+  grid-column: 2;
   background: var(--panel-surface-base);
 }
 
 .panel-agent {
+  grid-column: 3;
   background: var(--panel-surface-subtle);
-  border-left: 1px solid var(--panel-border);
+}
+
+.panel-resize-slot {
+  position: absolute;
+  top: 44px;
+  bottom: 0;
+  width: var(--resize-handle-width);
+  transform: translateX(-50%);
+  z-index: 15;
+}
+
+.panel-resize-slot-left {
+  left: var(--left-sidebar-width);
+}
+
+.panel-resize-slot-right {
+  left: calc(100% - var(--right-sidebar-width));
+}
+
+.panel-resize-handle {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  cursor: col-resize;
+}
+
+.panel-resize-handle:focus,
+.panel-resize-handle:focus-visible {
+  outline: none;
+}
+
+.panel-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: var(--resize-handle-line-width);
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--resize-handle-color);
+  opacity: 0;
+  transition:
+    opacity 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.panel-resize-handle:hover::before,
+.panel-resize-handle:focus-visible::before,
+.panel-resize-handle.is-active::before,
+.app-shell[data-resizing='true'] .panel-resize-handle::before {
+  opacity: 1;
+}
+
+.panel-resize-handle.is-active::before,
+.panel-resize-handle:focus-visible::before {
+  background: var(--resize-handle-color-active);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 14%, transparent);
 }
 
 .eyebrow {
@@ -1555,16 +1624,20 @@
 
 @media (max-width: 1360px) {
   .app-shell {
-    grid-template-columns: 300px minmax(0, 1fr) 332px;
+    grid-template-columns: var(--left-sidebar-width) minmax(0, 1fr) var(--right-sidebar-width);
   }
 }
 
 @media (max-width: 1160px) {
   .app-shell {
-    grid-template-columns: 292px minmax(0, 1fr);
+    grid-template-columns: var(--left-sidebar-width) minmax(0, 1fr);
   }
 
   .panel-agent {
+    display: none;
+  }
+
+  .panel-resize-slot-right {
     display: none;
   }
 }
@@ -1582,11 +1655,16 @@
   .panel-editor,
   .panel-agent {
     grid-row: auto;
+    grid-column: 1;
   }
 
   .panel-sidebar,
   .panel-editor {
     border-right: 0;
+  }
+
+  .panel-resize-slot {
+    display: none;
   }
 
   .panel-sidebar {
