@@ -10,9 +10,12 @@ import {
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
+import { FileTabs } from '@/features/workspace/components/file-tabs'
+import {
+  useWorkspaceStore,
+  type WorkspaceTab,
+} from '@/features/workspace/store/use-workspace-store'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
-import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
-import type { WorkspaceNode } from '@/features/workspace/types'
 import './App.css'
 
 function getBaseName(filePath: string) {
@@ -53,6 +56,11 @@ function getNextUntitledFileName(existingNames: string[]) {
   return `untitled-${index}.md`
 }
 
+type StoredTabState = {
+  activePath: string | null
+  paths: string[]
+}
+
 const DESKTOP_AGENT_BREAKPOINT = 1160
 const MOBILE_STACK_BREAKPOINT = 860
 const RESIZE_HANDLE_WIDTH = 12
@@ -63,11 +71,65 @@ const RIGHT_SIDEBAR_MIN_WIDTH = 300
 const RIGHT_SIDEBAR_MAX_WIDTH = 560
 const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
 const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
+const TAB_STORAGE_PREFIX = 'writing-workspace:file-tabs:'
+const LEGACY_TAB_STORAGE_PREFIX = 'writing-workspace:editor-tabs:'
 
 type ResizePanel = 'left' | 'right'
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
+}
+
+function getTabStorageKey(workspacePath: string) {
+  return `${TAB_STORAGE_PREFIX}${encodeURIComponent(workspacePath)}`
+}
+
+function getLegacyTabStorageKey(workspacePath: string) {
+  return `${LEGACY_TAB_STORAGE_PREFIX}${encodeURIComponent(workspacePath)}`
+}
+
+function readStoredTabState(workspacePath: string): StoredTabState {
+  try {
+    const rawValue = window.localStorage.getItem(getTabStorageKey(workspacePath))
+      ?? window.localStorage.getItem(getLegacyTabStorageKey(workspacePath))
+    if (!rawValue) {
+      return {
+        activePath: null,
+        paths: [],
+      }
+    }
+
+    const parsedValue = JSON.parse(rawValue) as Partial<StoredTabState>
+    const paths = Array.isArray(parsedValue.paths)
+      ? parsedValue.paths.filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
+      : []
+
+    return {
+      activePath: typeof parsedValue.activePath === 'string' && parsedValue.activePath.trim().length > 0
+        ? parsedValue.activePath
+        : null,
+      paths,
+    }
+  } catch {
+    return {
+      activePath: null,
+      paths: [],
+    }
+  }
+}
+
+function dedupePaths(paths: string[]) {
+  return [...new Set(paths)]
+}
+
+function toStoredWorkspaceTab(filePath: string, content: string): WorkspaceTab {
+  return {
+    content,
+    exists: true,
+    filePath,
+    isDirty: false,
+    savedContent: content,
+  }
 }
 
 function App() {
@@ -80,23 +142,40 @@ function App() {
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false)
   const [activeResizePanel, setActiveResizePanel] = useState<ResizePanel | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
+  const activeTabPath = useWorkspaceStore((state) => state.activeTabPath)
+  const activateTab = useWorkspaceStore((state) => state.activateTab)
+  const closeTab = useWorkspaceStore((state) => state.closeTab)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
-  const currentFileContent = useWorkspaceStore((state) => state.currentFileContent)
-  const currentFilePath = useWorkspaceStore((state) => state.currentFilePath)
-  const isDirty = useWorkspaceStore((state) => state.isDirty)
-  const setCurrentFileContent = useWorkspaceStore((state) => state.setCurrentFileContent)
-  const setCurrentFilePath = useWorkspaceStore((state) => state.setCurrentFilePath)
+  const markTabMissing = useWorkspaceStore((state) => state.markTabMissing)
+  const markTabSaved = useWorkspaceStore((state) => state.markTabSaved)
+  const openTab = useWorkspaceStore((state) => state.openTab)
+  const openTabs = useWorkspaceStore((state) => state.openTabs)
+  const renameTab = useWorkspaceStore((state) => state.renameTab)
+  const replaceTabs = useWorkspaceStore((state) => state.replaceTabs)
+  const resetOpenTabs = useWorkspaceStore((state) => state.resetOpenTabs)
   const setCurrentPath = useWorkspaceStore((state) => state.setCurrentPath)
-  const setDirty = useWorkspaceStore((state) => state.setDirty)
   const setTree = useWorkspaceStore((state) => state.setTree)
+  const syncTabWithDisk = useWorkspaceStore((state) => state.syncTabWithDisk)
   const tree = useWorkspaceStore((state) => state.tree)
+  const updateTabContent = useWorkspaceStore((state) => state.updateTabContent)
+  const activeTab = useMemo(
+    () => openTabs.find((tab) => tab.filePath === activeTabPath) ?? null,
+    [activeTabPath, openTabs],
+  )
+  const currentFileContent = activeTab?.content ?? ''
+  const currentFilePath = activeTab?.filePath ?? null
+  const isDirty = activeTab?.isDirty ?? false
+  const dirtyTabs = useMemo(
+    () => openTabs.filter((tab) => tab.isDirty),
+    [openTabs],
+  )
   const rootFileNames = useMemo(
     () => tree.filter((node) => node.kind === 'file').map((node) => node.name),
     [tree],
   )
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
-    : '\u5f53\u524d\u5de5\u4f5c\u533a'
+    : '当前工作区'
   const isMobileStacked = typeof window !== 'undefined' && window.innerWidth <= MOBILE_STACK_BREAKPOINT
   const isAgentPanelVisible = typeof window !== 'undefined' && window.innerWidth > DESKTOP_AGENT_BREAKPOINT
   const isLeftSidebarVisible = !isLeftSidebarCollapsed
@@ -173,13 +252,67 @@ function App() {
     await window.appApi.updateWorkspaceState(workspacePath, patch)
   }
 
+  async function syncPersistedActiveFile(workspacePath: string) {
+    await updateWorkspaceState(workspacePath, {
+      lastFilePath: useWorkspaceStore.getState().activeTabPath,
+    })
+  }
+
+  function confirmDiscardDirtyTabs(reason: 'close' | 'switch-workspace') {
+    if (dirtyTabs.length === 0) {
+      return true
+    }
+
+    const dirtyNames = dirtyTabs
+      .slice(0, 4)
+      .map((tab) => getBaseName(tab.filePath))
+      .join(', ')
+    const remainingCount = dirtyTabs.length - Math.min(dirtyTabs.length, 4)
+    const extraLabel = remainingCount > 0 ? ` and ${remainingCount} more` : ''
+    const actionLabel = reason === 'close'
+      ? 'Closing them now will discard the unsaved changes.'
+      : 'Switching workspaces now will discard the unsaved changes.'
+
+    return window.confirm(
+      `${dirtyTabs.length} tab${dirtyTabs.length > 1 ? 's have' : ' has'} unsaved changes: ${dirtyNames}${extraLabel}.\n\n${actionLabel}`,
+    )
+  }
+
+  function closeEditorTab(filePath: string, options: { force?: boolean, silent?: boolean } = {}) {
+    const targetTab = openTabs.find((tab) => tab.filePath === filePath)
+
+    if (!targetTab) {
+      return false
+    }
+
+    if (targetTab.isDirty && !options.force) {
+      const confirmed = window.confirm(
+        `"${getBaseName(filePath)}" has unsaved changes.\n\nClose this tab and discard them?`,
+      )
+
+      if (!confirmed) {
+        return false
+      }
+    }
+
+    closeTab(filePath)
+
+    if (currentPath) {
+      void syncPersistedActiveFile(currentPath)
+    }
+
+    if (!options.silent) {
+      setStatusMessage(`${getBaseName(filePath)} closed`)
+    }
+
+    return true
+  }
+
   async function connectWorkspace(nextPath: string) {
     await window.appApi.stopWorkspaceWatch()
     await loadTree(nextPath)
     setCurrentPath(nextPath)
-    setCurrentFilePath(null)
-    setCurrentFileContent('')
-    setDirty(false)
+    resetOpenTabs()
     await window.appApi.startWorkspaceWatch(nextPath)
     await updateWorkspaceState(nextPath, { markAsLastOpened: true })
   }
@@ -190,36 +323,72 @@ function App() {
   }
 
   async function openFile(filePath: string, workspacePath: string | null = currentPath) {
+    const existingTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.filePath === filePath)
+
+    if (existingTab) {
+      activateTab(filePath)
+
+      if (workspacePath) {
+        await updateWorkspaceState(workspacePath, { lastFilePath: filePath })
+      }
+
+      setStatusMessage(`${getBaseName(filePath)} focused`)
+      return
+    }
+
     const fileContent = await window.appApi.readWorkspaceFile(filePath)
-    setCurrentFilePath(filePath)
-    setCurrentFileContent(fileContent)
-    setDirty(false)
+    openTab({ filePath, content: fileContent })
 
     if (workspacePath) {
       await updateWorkspaceState(workspacePath, { lastFilePath: filePath })
     }
 
-    setStatusMessage(`${filePath.split(/[\\/]/).pop()} opened`)
+    setStatusMessage(`${getBaseName(filePath)} opened`)
   }
 
-  async function restoreWorkspaceFile(workspacePath: string, fallbackFilePath?: string | null) {
+  async function restoreWorkspaceTabs(workspacePath: string, fallbackFilePath?: string | null) {
     const workspaceState = await getWorkspaceState(workspacePath)
-    const filePath = fallbackFilePath ?? workspaceState.lastFilePath
+    const storedState = readStoredTabState(workspacePath)
+    const fallbackPath = fallbackFilePath ?? workspaceState.lastFilePath
+    const candidatePaths = dedupePaths([
+      ...storedState.paths,
+      ...(fallbackPath ? [fallbackPath] : []),
+    ])
 
-    if (!filePath) {
+    if (candidatePaths.length === 0) {
+      replaceTabs([], null)
       return
     }
 
-    await openFile(filePath, workspacePath).catch(() => undefined)
+    const settledTabs = await Promise.all(candidatePaths.map(async (filePath) => {
+      try {
+        const content = await window.appApi.readWorkspaceFile(filePath)
+        return toStoredWorkspaceTab(filePath, content)
+      } catch {
+        return null
+      }
+    }))
+    const nextTabs = settledTabs.filter((tab): tab is WorkspaceTab => tab !== null)
+    const requestedActivePath = storedState.activePath ?? fallbackPath ?? null
+    const nextActivePath = nextTabs.some((tab) => tab.filePath === requestedActivePath)
+      ? requestedActivePath
+      : nextTabs[0]?.filePath ?? null
+
+    replaceTabs(nextTabs, nextActivePath)
+    await updateWorkspaceState(workspacePath, { lastFilePath: nextActivePath })
   }
 
   async function handlePickWorkspace() {
+    if (!confirmDiscardDirtyTabs('switch-workspace')) {
+      return
+    }
+
     setIsPickingWorkspace(true)
     try {
       const nextPath = await window.appApi.pickWorkspace()
       if (nextPath) {
         await connectWorkspace(nextPath)
-        await restoreWorkspaceFile(nextPath)
+        await restoreWorkspaceTabs(nextPath)
         setStatusMessage('Workspace connected')
       }
     } finally {
@@ -264,9 +433,9 @@ function App() {
 
     const { filePath: nextFilePath } = await window.appApi.renameWorkspaceFile(currentPath, filePath, nextRelativePath)
     await loadTree(currentPath)
+    renameTab(filePath, nextFilePath)
 
-    if (currentFilePath === filePath) {
-      setCurrentFilePath(nextFilePath)
+    if (activeTabPath === filePath) {
       await updateWorkspaceState(currentPath, { lastFilePath: nextFilePath })
     }
 
@@ -278,14 +447,23 @@ function App() {
       throw new Error('Open a workspace first.')
     }
 
+    const targetTab = openTabs.find((tab) => tab.filePath === filePath)
+    if (targetTab?.isDirty) {
+      const confirmed = window.confirm(
+        `"${getBaseName(filePath)}" has unsaved changes.\n\nDelete the file and discard those changes?`,
+      )
+
+      if (!confirmed) {
+        return
+      }
+    }
+
     await window.appApi.deleteWorkspaceFile(currentPath, filePath)
     await loadTree(currentPath)
 
-    if (currentFilePath === filePath) {
-      setCurrentFilePath(null)
-      setCurrentFileContent('')
-      setDirty(false)
-      await updateWorkspaceState(currentPath, { lastFilePath: null })
+    if (targetTab) {
+      closeTab(filePath)
+      await syncPersistedActiveFile(currentPath)
     }
 
     setStatusMessage(`${getBaseName(filePath)} deleted`)
@@ -297,11 +475,36 @@ function App() {
     }
 
     await window.appApi.saveWorkspaceFile(currentFilePath, currentFileContent)
-    setDirty(false)
+    markTabSaved(currentFilePath, currentFileContent)
     setStatusMessage('Changes saved')
+
     if (currentPath) {
       await loadTree(currentPath)
     }
+  }
+
+  function activateFileTab(filePath: string) {
+    activateTab(filePath)
+
+    if (currentPath) {
+      void updateWorkspaceState(currentPath, { lastFilePath: filePath })
+    }
+  }
+
+  function cycleTabs(direction: 1 | -1) {
+    if (openTabs.length < 2 || !activeTabPath) {
+      return
+    }
+
+    const currentIndex = openTabs.findIndex((tab) => tab.filePath === activeTabPath)
+    if (currentIndex === -1) {
+      return
+    }
+
+    const nextIndex = (currentIndex + direction + openTabs.length) % openTabs.length
+    const nextTab = openTabs[nextIndex]
+
+    activateFileTab(nextTab.filePath)
   }
 
   useEffect(() => {
@@ -317,8 +520,9 @@ function App() {
 
       try {
         await connectWorkspace(lastWorkspacePath)
+
         if (!cancelled) {
-          await restoreWorkspaceFile(lastWorkspacePath, restoreState.filePath)
+          await restoreWorkspaceTabs(lastWorkspacePath, restoreState.filePath)
         }
 
         if (!cancelled) {
@@ -343,36 +547,72 @@ function App() {
       }
 
       await loadTree(currentPath)
+      const affectedTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.filePath === event.path)
 
-      if (currentFilePath === event.path && event.type === 'unlink') {
-        if (isDirty) {
-          setStatusMessage('Open file was removed externally. Save now to recreate it.')
-          return
-        }
-
-        setCurrentFilePath(null)
-        setCurrentFileContent('')
-        setDirty(false)
-        await updateWorkspaceState(currentPath, { lastFilePath: null })
-        setStatusMessage('Open file was removed')
+      if (!affectedTab) {
         return
       }
 
-      if (currentFilePath === event.path && !isDirty && event.type === 'change') {
+      if (event.type === 'unlink') {
+        if (affectedTab.isDirty) {
+          markTabMissing(event.path)
+          setStatusMessage(`${getBaseName(event.path)} was removed externally. Save to recreate it.`)
+          return
+        }
+
+        closeTab(event.path)
+        await syncPersistedActiveFile(currentPath)
+        setStatusMessage(`${getBaseName(event.path)} was removed`)
+        return
+      }
+
+      if (event.type === 'add') {
+        if (affectedTab.isDirty) {
+          setStatusMessage(`${getBaseName(event.path)} returned on disk. Kept your unsaved version.`)
+          return
+        }
+
         const updatedContent = await window.appApi.readWorkspaceFile(event.path)
-        setCurrentFileContent(updatedContent)
+        syncTabWithDisk(event.path, updatedContent)
+        setStatusMessage(`${getBaseName(event.path)} reloaded`)
+        return
+      }
+
+      if (event.type === 'change') {
+        if (affectedTab.isDirty) {
+          setStatusMessage(`${getBaseName(event.path)} changed on disk. Kept your unsaved version.`)
+          return
+        }
+
+        const updatedContent = await window.appApi.readWorkspaceFile(event.path)
+        syncTabWithDisk(event.path, updatedContent)
         setStatusMessage('Synced with external edits')
       }
     })
 
     return unsubscribe
-  }, [currentFilePath, currentPath, isDirty, setCurrentFileContent])
+  }, [closeTab, currentPath, markTabMissing, syncTabWithDisk])
 
   useEffect(() => {
     return () => {
       void window.appApi.stopWorkspaceWatch()
     }
   }, [])
+
+  useEffect(() => {
+    if (!currentPath) {
+      return
+    }
+
+    const storedPaths = openTabs
+      .filter((tab) => tab.exists)
+      .map((tab) => tab.filePath)
+
+    window.localStorage.setItem(getTabStorageKey(currentPath), JSON.stringify({
+      activePath: activeTabPath,
+      paths: storedPaths,
+    } satisfies StoredTabState))
+  }, [activeTabPath, currentPath, openTabs])
 
   useEffect(() => {
     if (!activeResizePanel) {
@@ -476,15 +716,45 @@ function App() {
 
   useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      const key = event.key.toLowerCase()
+
+      if ((event.ctrlKey || event.metaKey) && key === 's') {
         event.preventDefault()
         void handleSave()
+        return
+      }
+
+      if ((event.ctrlKey || event.metaKey) && key === 'w') {
+        if (!currentFilePath) {
+          return
+        }
+
+        event.preventDefault()
+        closeEditorTab(currentFilePath)
+        return
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Tab') {
+        event.preventDefault()
+        cycleTabs(event.shiftKey ? -1 : 1)
+        return
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === 'PageDown') {
+        event.preventDefault()
+        cycleTabs(1)
+        return
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === 'PageUp') {
+        event.preventDefault()
+        cycleTabs(-1)
       }
     }
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [currentFileContent, currentFilePath])
+  }, [currentFilePath, openTabs, activeTabPath, currentFileContent])
 
   useEffect(() => {
     if (!isLeftSidebarVisible && activeResizePanel === 'left') {
@@ -583,44 +853,59 @@ function App() {
 
       <main className='panel panel-editor' id='editor-main'>
         <div className='editor-frame'>
-          {!currentFilePath ? (
-            <div className='editor-empty-state'>
-              <div className='editor-empty-content'>
-                <p className='eyebrow'>Ready</p>
-                <div className='editor-empty-copy'>
-                  <h3>Open a workspace, then start with a clean draft.</h3>
-                  <p>
-                    The file tree, editor, and assistant stay together in one calm desktop workspace.
-                  </p>
-                </div>
-                <div className='editor-empty-actions'>
-                  <Button variant='primary' onPress={handlePickWorkspace} isDisabled={isPickingWorkspace}>
-                    <FolderOpenFill className='mr-2' size={16} />
-                    Open Folder
-                  </Button>
-                  <Button
-                    variant='outline'
-                    onPress={() => {
-                      void handleCreateFile()
-                    }}
-                    isDisabled={!currentPath || isCreatingFile}
-                  >
-                    <FileFill className='mr-2' size={16} />
-                    Create Draft
-                  </Button>
+          <FileTabs
+            activeFilePath={currentFilePath}
+            tabs={openTabs}
+            workspacePath={currentPath}
+            onActivate={activateFileTab}
+            onClose={(filePath) => {
+              closeEditorTab(filePath)
+            }}
+          />
+
+          <div className='editor-content-shell' id='writing-editor-panel'>
+            {!currentFilePath ? (
+              <div className='editor-empty-state'>
+                <div className='editor-empty-content'>
+                  <p className='eyebrow'>Ready</p>
+                  <div className='editor-empty-copy'>
+                    <h3>Open a workspace, then start with a clean draft.</h3>
+                    <p>
+                      The file tree, editor, and assistant stay together in one calm desktop workspace.
+                    </p>
+                  </div>
+                  <div className='editor-empty-actions'>
+                    <Button variant='primary' onPress={handlePickWorkspace} isDisabled={isPickingWorkspace}>
+                      <FolderOpenFill className='mr-2' size={16} />
+                      Open Folder
+                    </Button>
+                    <Button
+                      variant='outline'
+                      onPress={() => {
+                        void handleCreateFile()
+                      }}
+                      isDisabled={!currentPath || isCreatingFile}
+                    >
+                      <FileFill className='mr-2' size={16} />
+                      Create Draft
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          <WritingEditor
-            disabled={!currentFilePath}
-            onChange={(nextValue) => {
-              setCurrentFileContent(nextValue)
-              setDirty(true)
-            }}
-            value={currentFileContent}
-          />
+            <WritingEditor
+              disabled={!currentFilePath}
+              onChange={(nextValue) => {
+                if (!currentFilePath) {
+                  return
+                }
+
+                updateTabContent(currentFilePath, nextValue)
+              }}
+              value={currentFileContent}
+            />
+          </div>
         </div>
       </main>
 
