@@ -389,7 +389,15 @@
   transition: background-color 140ms ease;
 }
 
-.tree-list > li + li > .tree-row {
+.tree-list > li + li > .tree-directory-button,
+.tree-list > li + li > .tree-file-row,
+.tree-list > li + li > .tree-inline-rename {
+  border-top: 1px solid var(--panel-border);
+}
+
+.tree-directory-item > .tree-list > li > .tree-directory-button,
+.tree-directory-item > .tree-list > li > .tree-file-row,
+.tree-directory-item > .tree-list > li > .tree-inline-rename {
   border-top: 1px solid var(--panel-border);
 }
 
