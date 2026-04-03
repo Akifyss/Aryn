@@ -20,9 +20,10 @@
   --resize-handle-color: color-mix(in oklab, var(--panel-border) 92%, transparent);
   --resize-handle-color-active: color-mix(in oklab, var(--accent) 52%, var(--panel-border));
   --chrome-height: 44px;
+  --tabs-chrome-height: calc(var(--chrome-height) - 1px);
   --panel-toggle-size: 2rem;
   --panel-toggle-gap: 0.55rem;
-  --left-panel-toggle-anchor: 4.35rem;
+  --left-panel-toggle-anchor: 4.7rem;
   --right-panel-toggle-anchor: 0.75rem;
   --left-panel-content-inset: calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
   --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
@@ -39,7 +40,7 @@
 
 .app-shell[data-platform='windows'] {
   --left-panel-toggle-anchor: 0.75rem;
-  --right-panel-toggle-anchor: 9.35rem;
+  --right-panel-toggle-anchor: 9.75rem;
 }
 
 .app-shell::before {
@@ -751,7 +752,7 @@
   align-items: stretch;
   flex-shrink: 0;
   min-width: 0;
-  min-height: var(--chrome-height);
+  min-height: var(--tabs-chrome-height);
   border-bottom: 1px solid var(--panel-border);
   background:
     linear-gradient(
@@ -796,7 +797,7 @@
 .file-tabs-empty {
   display: flex;
   align-items: center;
-  min-height: var(--chrome-height);
+  min-height: var(--tabs-chrome-height);
   padding: 0 1rem;
   color: var(--panel-soft);
   font-size: 0.74rem;
@@ -833,7 +834,7 @@
   align-items: center;
   gap: 0.45rem;
   min-width: 0;
-  min-height: var(--chrome-height);
+  min-height: var(--tabs-chrome-height);
   padding: 0 0.45rem 0 0.95rem;
   border: 0;
   background: transparent;
