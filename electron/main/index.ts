@@ -67,15 +67,10 @@ const indexHtml = path.join(RENDERER_DIST, 'index.html')
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json')
 const agentDir = path.join(app.getPath('userData'), 'pi-agent')
 const workspaceIconThemeCacheDir = path.join(app.getPath('temp'), app.getName(), 'workspace-icon-themes')
-const bundledWorkspaceIconThemeDirectory = path.join(process.env.VITE_PUBLIC, 'icon-themes')
-const bundledWorkspaceIconThemeFileNames = [
+const bundledWorkspaceIconThemePath = path.join(
+  process.env.VITE_PUBLIC,
+  'icon-themes',
   'thang-nm.flow-icons-1.3.2.vsix',
-  'vscode-icons-team.vscode-icons-12.17.0.vsix',
-  'pkief.material-icon-theme-5.33.1.vsix',
-] as const
-const defaultBundledWorkspaceIconThemePath = path.join(
-  bundledWorkspaceIconThemeDirectory,
-  bundledWorkspaceIconThemeFileNames[0],
 )
 const legacyWorkspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
 const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPath)
@@ -172,9 +167,7 @@ async function createWindow() {
 }
 
 function isBundledWorkspaceIconThemePath(vsixPath: string) {
-  return bundledWorkspaceIconThemeFileNames.some((fileName) => (
-    path.resolve(vsixPath) === path.resolve(path.join(bundledWorkspaceIconThemeDirectory, fileName))
-  ))
+  return path.resolve(vsixPath) === path.resolve(bundledWorkspaceIconThemePath)
 }
 
 async function importWorkspaceIconTheme(vsixPath: string, preferredThemeId?: string | null) {
@@ -187,13 +180,7 @@ async function importWorkspaceIconTheme(vsixPath: string, preferredThemeId?: str
 }
 
 async function loadBundledWorkspaceIconTheme(preferredThemeId?: string | null) {
-  return importWorkspaceIconTheme(defaultBundledWorkspaceIconThemePath, preferredThemeId)
-}
-
-function getBundledWorkspaceIconThemePaths() {
-  return bundledWorkspaceIconThemeFileNames.map((fileName) => (
-    path.join(bundledWorkspaceIconThemeDirectory, fileName)
-  ))
+  return importWorkspaceIconTheme(bundledWorkspaceIconThemePath, preferredThemeId)
 }
 
 function toCatalogOptions(theme: Awaited<ReturnType<typeof importWorkspaceIconTheme>>): WorkspaceIconThemeCatalogOption[] {
@@ -222,18 +209,14 @@ async function getEffectiveWorkspaceIconThemeSelection(): Promise<{
 
   return {
     activeThemeId: null,
-    sourceVsixPath: defaultBundledWorkspaceIconThemePath,
+    sourceVsixPath: bundledWorkspaceIconThemePath,
   }
 }
 
 async function getWorkspaceIconThemeCatalog() {
   const selection = await getEffectiveWorkspaceIconThemeSelection()
-  const bundledThemeResults = await Promise.allSettled(
-    getBundledWorkspaceIconThemePaths().map((vsixPath) => importWorkspaceIconTheme(vsixPath)),
-  )
-  const catalogOptions = bundledThemeResults.flatMap((result) => (
-    result.status === 'fulfilled' ? toCatalogOptions(result.value) : []
-  ))
+  const bundledTheme = await loadBundledWorkspaceIconTheme()
+  const catalogOptions = [...toCatalogOptions(bundledTheme)]
 
   if (!isBundledWorkspaceIconThemePath(selection.sourceVsixPath)) {
     try {
