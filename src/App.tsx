@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, ScrollShadow } from '@heroui/react'
+import { Button, ScrollShadow, Toast, toast } from '@heroui/react'
 import {
   AddLine,
   FileFill,
@@ -12,6 +12,7 @@ import {
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
 import type { AgentWorkspaceState } from '@/features/agent/types'
+import { CodeEditor } from '@/features/editor/components/code-editor'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import {
   SettingsDialog,
@@ -22,6 +23,7 @@ import type {
   WorkspaceIconTheme,
   WorkspaceIconThemeCatalogOption,
 } from '@/features/workspace/types'
+import { getSupportedWorkspaceEditorKind } from '@/features/workspace/lib/file-types'
 import {
   useWorkspaceStore,
   type WorkspaceTab,
@@ -135,8 +137,15 @@ function dedupePaths(paths: string[]) {
 }
 
 function toStoredWorkspaceTab(filePath: string, content: string): WorkspaceTab {
+  const editorKind = getSupportedWorkspaceEditorKind(filePath)
+
+  if (!editorKind) {
+    throw new Error('Unsupported file type')
+  }
+
   return {
     content,
+    editorKind,
     exists: true,
     filePath,
     isDirty: false,
@@ -184,13 +193,27 @@ function App() {
     [activeTabPath, openTabs],
   )
   const displayTabs = useMemo(
-    () => isSettingsTabOpen
-      ? [...openTabs, { content: '', exists: true, filePath: SETTINGS_TAB_PATH, isDirty: false, savedContent: '' }]
-      : openTabs,
+    () => {
+      if (!isSettingsTabOpen) {
+        return openTabs
+      }
+
+      const settingsTab: WorkspaceTab = {
+        content: '',
+        editorKind: 'rich-text',
+        exists: true,
+        filePath: SETTINGS_TAB_PATH,
+        isDirty: false,
+        savedContent: '',
+      }
+
+      return [...openTabs, settingsTab]
+    },
     [isSettingsTabOpen, openTabs],
   )
   const displayActiveTabPath = isSettingsTabActive ? SETTINGS_TAB_PATH : activeTabPath
   const currentFileContent = isSettingsTabActive ? '' : activeTab?.content ?? ''
+  const currentEditorKind = isSettingsTabActive ? null : activeTab?.editorKind ?? null
   const currentFilePath = isSettingsTabActive ? null : activeTab?.filePath ?? null
   const isDirty = activeTab?.isDirty ?? false
   const dirtyTabs = useMemo(
@@ -378,8 +401,27 @@ function App() {
       return
     }
 
-    const fileContent = await window.appApi.readWorkspaceFile(filePath)
-    openTab({ filePath, content: fileContent })
+    const editorKind = getSupportedWorkspaceEditorKind(filePath)
+
+    if (!editorKind) {
+      toast.warning(`Cannot open ${getBaseName(filePath)} yet`, {
+        description: 'Only Markdown/text files and supported code files can open in tabs right now.',
+      })
+      setStatusMessage(`${getBaseName(filePath)} is not supported yet`)
+      return
+    }
+
+    try {
+      const fileContent = await window.appApi.readWorkspaceFile(filePath)
+      openTab({ filePath, content: fileContent, editorKind })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to open file.'
+      toast.danger(`Failed to open ${getBaseName(filePath)}`, {
+        description: message,
+      })
+      setStatusMessage(message)
+      return
+    }
 
     if (workspacePath) {
       await updateWorkspaceState(workspacePath, { lastFilePath: filePath })
@@ -404,6 +446,10 @@ function App() {
     }
 
     const settledTabs = await Promise.all(candidatePaths.map(async (filePath) => {
+      if (!getSupportedWorkspaceEditorKind(filePath)) {
+        return null
+      }
+
       try {
         const content = await window.appApi.readWorkspaceFile(filePath)
         return toStoredWorkspaceTab(filePath, content)
@@ -1065,7 +1111,7 @@ function App() {
               </div>
             ) : null}
 
-            {!isSettingsTabActive ? (
+            {!isSettingsTabActive && currentFilePath && currentEditorKind === 'rich-text' ? (
               <WritingEditor
                 disabled={!currentFilePath}
                 onChange={(nextValue) => {
@@ -1073,6 +1119,17 @@ function App() {
                     return
                   }
 
+                  updateTabContent(currentFilePath, nextValue)
+                }}
+                value={currentFileContent}
+              />
+            ) : null}
+
+            {!isSettingsTabActive && currentFilePath && currentEditorKind === 'code' ? (
+              <CodeEditor
+                disabled={!currentFilePath}
+                filePath={currentFilePath}
+                onChange={(nextValue) => {
                   updateTabContent(currentFilePath, nextValue)
                 }}
                 value={currentFileContent}
@@ -1105,6 +1162,8 @@ function App() {
           onWorkspaceStateChange={setAgentWorkspaceState}
         />
       </aside>
+
+      <Toast.Provider placement='bottom end' />
     </div>
   )
 }

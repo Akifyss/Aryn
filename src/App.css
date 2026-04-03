@@ -982,6 +982,17 @@
   background: var(--panel-surface-editor);
 }
 
+.code-editor-shell {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.code-editor-shell .monaco-editor,
+.code-editor-shell .monaco-editor .overflow-guard {
+  border-radius: 0;
+}
+
 .editor-empty-state {
   position: absolute;
   inset: 0;

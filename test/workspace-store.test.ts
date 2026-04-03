@@ -16,14 +16,17 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({
       content: 'alpha',
+      editorKind: 'rich-text',
       filePath: 'C:/workspace/a.md',
     })
     store.openTab({
       content: 'beta',
+      editorKind: 'rich-text',
       filePath: 'C:/workspace/b.md',
     })
     store.openTab({
       content: 'ignored',
+      editorKind: 'rich-text',
       filePath: 'C:/workspace/a.md',
     })
 
@@ -38,6 +41,7 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({
       content: 'draft',
+      editorKind: 'rich-text',
       filePath: 'C:/workspace/draft.md',
     })
     store.updateTabContent('C:/workspace/draft.md', 'draft updated')
@@ -53,9 +57,9 @@ describe('useWorkspaceStore', () => {
   it('closes the active tab and falls back to the nearest tab on the right first', () => {
     const store = useWorkspaceStore.getState()
 
-    store.openTab({ content: 'a', filePath: 'C:/workspace/a.md' })
-    store.openTab({ content: 'b', filePath: 'C:/workspace/b.md' })
-    store.openTab({ content: 'c', filePath: 'C:/workspace/c.md' })
+    store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
+    store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
+    store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
     store.activateTab('C:/workspace/b.md')
     store.closeTab('C:/workspace/b.md')
 
@@ -72,6 +76,7 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({
       content: 'content',
+      editorKind: 'rich-text',
       filePath: 'C:/workspace/old-name.md',
     })
     store.updateTabContent('C:/workspace/old-name.md', 'content updated')

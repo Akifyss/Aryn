@@ -26,6 +26,8 @@ lerna-debug.log*
 test-results/
 playwright-report/
 playwright/.cache/
+.tmp-icon-theme-cache/
+temp-icon-theme-cache/
 
 # Editor / OS
 .vscode/.debug.env

@@ -1,8 +1,13 @@
 import { create } from 'zustand'
 import type { WorkspaceNode } from '@/features/workspace/types'
+import {
+  getSupportedWorkspaceEditorKind,
+  type SupportedWorkspaceEditorKind,
+} from '@/features/workspace/lib/file-types'
 
 export type WorkspaceTab = {
   content: string
+  editorKind: SupportedWorkspaceEditorKind
   exists: boolean
   filePath: string
   isDirty: boolean
@@ -18,7 +23,7 @@ type WorkspaceState = {
   closeTab: (path: string) => void
   markTabMissing: (path: string) => void
   markTabSaved: (path: string, savedContent: string) => void
-  openTab: (tab: { content: string, filePath: string }) => void
+  openTab: (tab: { content: string, editorKind: SupportedWorkspaceEditorKind, filePath: string }) => void
   renameTab: (currentPath: string, nextPath: string) => void
   replaceTabs: (tabs: WorkspaceTab[], activeTabPath: string | null) => void
   resetOpenTabs: () => void
@@ -81,7 +86,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         : tab
     )),
   })),
-  openTab: ({ content, filePath }) => set((state) => {
+  openTab: ({ content, editorKind, filePath }) => set((state) => {
     const existingTab = state.openTabs.find((tab) => tab.filePath === filePath)
 
     if (existingTab) {
@@ -104,6 +109,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         ...state.openTabs,
         {
           content,
+          editorKind,
           exists: true,
           filePath,
           isDirty: false,
@@ -118,6 +124,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       tab.filePath === currentPath
         ? {
           ...tab,
+          editorKind: getSupportedWorkspaceEditorKind(nextPath) ?? tab.editorKind,
           exists: true,
           filePath: nextPath,
         }

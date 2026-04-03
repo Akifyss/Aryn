@@ -16,8 +16,16 @@ export type WorkspaceChangeEvent = {
   type: 'add' | 'addDir' | 'change' | 'unlink' | 'unlinkDir'
 }
 
-const IGNORED_NAMES = new Set(['.git', '.pi', 'node_modules', 'dist', 'dist-electron'])
-const OPENABLE_EXTENSIONS = new Set([
+const IGNORED_NAMES = new Set([
+  '.git',
+  '.pi',
+  '.tmp-icon-theme-cache',
+  'dist',
+  'dist-electron',
+  'node_modules',
+  'temp-icon-theme-cache',
+])
+const CREATABLE_EXTENSIONS = new Set([
   '.md',
   '.markdown',
   '.mdx',
@@ -31,8 +39,8 @@ function shouldIgnore(entryName: string) {
   return IGNORED_NAMES.has(entryName)
 }
 
-function isOpenableFile(entryName: string) {
-  return OPENABLE_EXTENSIONS.has(path.extname(entryName).toLowerCase())
+function isCreatableFile(entryName: string) {
+  return CREATABLE_EXTENSIONS.has(path.extname(entryName).toLowerCase())
 }
 
 function isInsideWorkspace(rootPath: string, targetPath: string) {
@@ -58,10 +66,6 @@ export async function loadWorkspaceTree(rootPath: string): Promise<WorkspaceNode
         if (entry.isDirectory()) {
           const children = await walk(entryPath)
 
-          if (children.length === 0) {
-            return null
-          }
-
           return {
             name: entry.name,
             path: entryPath,
@@ -70,15 +74,10 @@ export async function loadWorkspaceTree(rootPath: string): Promise<WorkspaceNode
           }
         }
 
-        if (!isOpenableFile(entry.name)) {
-          return null
-        }
-
         return {
           name: entry.name,
           path: entryPath,
           kind: 'file' as const,
-          isOpenable: true,
         }
       }))
 
@@ -109,7 +108,7 @@ export async function workspaceFileExists(rootPath: string, filePath: string) {
   const resolvedRootPath = path.resolve(rootPath)
   const resolvedFilePath = path.resolve(filePath)
 
-  if (!isInsideWorkspace(resolvedRootPath, resolvedFilePath) || !isOpenableFile(resolvedFilePath)) {
+  if (!isInsideWorkspace(resolvedRootPath, resolvedFilePath)) {
     return false
   }
 
@@ -135,7 +134,7 @@ export async function createWorkspaceFile(rootPath: string, relativeFilePath: st
     throw new Error('File path must stay inside the current workspace.')
   }
 
-  if (!isOpenableFile(resolvedFilePath)) {
+  if (!isCreatableFile(resolvedFilePath)) {
     throw new Error('Only Markdown and text files can be created.')
   }
 
@@ -167,10 +166,6 @@ export async function renameWorkspaceFile(rootPath: string, filePath: string, ne
 
   if (!isInsideWorkspace(resolvedRootPath, resolvedCurrentFilePath) || !isInsideWorkspace(resolvedRootPath, resolvedNextFilePath)) {
     throw new Error('File path must stay inside the current workspace.')
-  }
-
-  if (!isOpenableFile(resolvedNextFilePath)) {
-    throw new Error('Only Markdown and text files are supported.')
   }
 
   const currentInfo = await stat(resolvedCurrentFilePath).catch(() => null)

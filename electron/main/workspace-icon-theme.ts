@@ -192,7 +192,7 @@ async function readIconAsDataUrl(filePath: string) {
 }
 
 async function resolveIconDefinitionUrl(
-  themeRootPath: string,
+  themeFileDirectoryPath: string,
   iconDefinitions: Record<string, RawIconDefinition>,
   iconId?: string,
 ) {
@@ -205,7 +205,7 @@ async function resolveIconDefinitionUrl(
     return null
   }
 
-  const resolvedIconPath = path.resolve(themeRootPath, iconDefinition.iconPath)
+  const resolvedIconPath = path.resolve(themeFileDirectoryPath, iconDefinition.iconPath)
   return readIconAsDataUrl(resolvedIconPath)
 }
 
@@ -329,6 +329,7 @@ export async function importWorkspaceIconThemeFromVsix(
   }
 
   const themeFilePath = path.resolve(extensionRootPath, selectedTheme.path)
+  const themeFileDirectoryPath = path.dirname(themeFilePath)
   const rawTheme = await readFile(themeFilePath, 'utf8')
   const theme = parseJsonFile<RawWorkspaceIconTheme>(rawTheme, themeFilePath)
   const iconDefinitions = theme.iconDefinitions ?? {}
@@ -336,16 +337,16 @@ export async function importWorkspaceIconThemeFromVsix(
   return {
     activeThemeId: selectedTheme.id,
     activeThemeLabel: selectedTheme.label?.trim() || selectedTheme.id,
-    defaultFileIcon: await resolveIconDefinitionUrl(extensionRootPath, iconDefinitions, theme.file),
-    defaultFolderExpandedIcon: await resolveIconDefinitionUrl(extensionRootPath, iconDefinitions, theme.folderExpanded),
-    defaultFolderIcon: await resolveIconDefinitionUrl(extensionRootPath, iconDefinitions, theme.folder),
-    defaultRootFolderExpandedIcon: await resolveIconDefinitionUrl(extensionRootPath, iconDefinitions, theme.rootFolderExpanded),
-    defaultRootFolderIcon: await resolveIconDefinitionUrl(extensionRootPath, iconDefinitions, theme.rootFolder),
+    defaultFileIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.file),
+    defaultFolderExpandedIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.folderExpanded),
+    defaultFolderIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.folder),
+    defaultRootFolderExpandedIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.rootFolderExpanded),
+    defaultRootFolderIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.rootFolder),
     extensionLabel: manifest.displayName?.trim() || manifest.name?.trim() || 'VS Code Icon Theme',
-    fileExtensions: await normalizeIconMap(extensionRootPath, iconDefinitions, theme.fileExtensions),
-    fileNames: await normalizeIconMap(extensionRootPath, iconDefinitions, theme.fileNames),
-    folderNames: await normalizeIconMap(extensionRootPath, iconDefinitions, theme.folderNames),
-    folderNamesExpanded: await normalizeIconMap(extensionRootPath, iconDefinitions, theme.folderNamesExpanded),
+    fileExtensions: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.fileExtensions),
+    fileNames: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.fileNames),
+    folderNames: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.folderNames),
+    folderNamesExpanded: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.folderNamesExpanded),
     sourceKind,
     sourceVsixPath: resolvedVsixPath,
     themes: toThemeOptions(iconThemes),

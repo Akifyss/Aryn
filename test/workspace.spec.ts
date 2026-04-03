@@ -21,14 +21,18 @@ async function createTempWorkspace() {
 }
 
 describe('workspace helpers', () => {
-  it('shows only openable text files in the workspace tree', async () => {
+  it('shows all workspace files while still ignoring internal folders', async () => {
     const rootPath = await createTempWorkspace()
+    const assetsPath = path.join(rootPath, 'assets')
     const docsPath = path.join(rootPath, 'docs')
 
+    await mkdir(assetsPath, { recursive: true })
     await mkdir(docsPath, { recursive: true })
+    await mkdir(path.join(rootPath, '.tmp-icon-theme-cache', 'icons'), { recursive: true })
     await writeFile(path.join(rootPath, 'draft.md'), '# Draft', 'utf8')
     await writeFile(path.join(docsPath, 'notes.txt'), 'notes', 'utf8')
     await writeFile(path.join(rootPath, 'image.png'), 'png', 'utf8')
+    await writeFile(path.join(rootPath, '.tmp-icon-theme-cache', 'icons', 'ghost.svg'), 'ignore me', 'utf8')
     await mkdir(path.join(rootPath, '.pi', 'sessions'), { recursive: true })
     await writeFile(path.join(rootPath, '.pi', 'sessions', 'current.jsonl'), 'ignore me', 'utf8')
     await mkdir(path.join(rootPath, 'node_modules', 'ignored-lib'), { recursive: true })
@@ -38,9 +42,14 @@ describe('workspace helpers', () => {
 
     expect(tree).toEqual([
       {
+        children: [],
+        kind: 'directory',
+        name: 'assets',
+        path: assetsPath,
+      },
+      {
         children: [
           {
-            isOpenable: true,
             kind: 'file',
             name: 'notes.txt',
             path: path.join(docsPath, 'notes.txt'),
@@ -51,10 +60,14 @@ describe('workspace helpers', () => {
         path: docsPath,
       },
       {
-        isOpenable: true,
         kind: 'file',
         name: 'draft.md',
         path: path.join(rootPath, 'draft.md'),
+      },
+      {
+        kind: 'file',
+        name: 'image.png',
+        path: path.join(rootPath, 'image.png'),
       },
     ])
   })
