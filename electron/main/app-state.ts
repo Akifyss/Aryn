@@ -6,6 +6,11 @@ export const MIN_WINDOW_WIDTH = 1080
 export const MIN_WINDOW_HEIGHT = 720
 export const DEFAULT_AGENT_COMPOSER_HEIGHT = 172
 
+export type PersistedWorkspaceIconThemeSelection = {
+  activeThemeId: string | null
+  sourceVsixPath: string | null
+}
+
 export type PersistedWorkspaceEntry = {
   lastAgentSessionPath: string | null
   lastFilePath: string | null
@@ -24,6 +29,7 @@ export type PersistedWindowState = {
 
 export type PersistedUiState = {
   agentComposerHeight: number
+  workspaceIconTheme: PersistedWorkspaceIconThemeSelection
 }
 
 export type PersistedAppState = {
@@ -35,6 +41,10 @@ export type PersistedAppState = {
 const DEFAULT_APP_STATE: PersistedAppState = {
   ui: {
     agentComposerHeight: DEFAULT_AGENT_COMPOSER_HEIGHT,
+    workspaceIconTheme: {
+      activeThemeId: null,
+      sourceVsixPath: null,
+    },
   },
   workspace: {
     entries: {},
@@ -78,6 +88,17 @@ function readAgentComposerHeight(value: unknown) {
   return readWindowDimension(value, DEFAULT_AGENT_COMPOSER_HEIGHT, 132)
 }
 
+function readWorkspaceIconThemeSelection(value: unknown): PersistedWorkspaceIconThemeSelection {
+  const candidate = value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {}
+
+  return {
+    activeThemeId: readNullableString(candidate.activeThemeId),
+    sourceVsixPath: readNullableString(candidate.sourceVsixPath),
+  }
+}
+
 export function normalizePersistedAppState(value: unknown): PersistedAppState {
   if (!value || typeof value !== 'object') {
     return cloneState(DEFAULT_APP_STATE)
@@ -114,6 +135,7 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
   return {
     ui: {
       agentComposerHeight: readAgentComposerHeight(uiCandidate.agentComposerHeight),
+      workspaceIconTheme: readWorkspaceIconThemeSelection(uiCandidate.workspaceIconTheme),
     },
     workspace: {
       entries,

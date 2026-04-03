@@ -10,13 +10,14 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type {
   AgentClientEvent,
-  AgentProviderAuthState,
   AgentSidebarMessage,
   AgentSidebarMessageStatus,
   AgentWorkspaceState,
 } from '@/features/agent/types'
 
 type AgentSidebarProps = {
+  onOpenSettings?: () => void
+  onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
   workspacePath: string | null
 }
 
@@ -28,7 +29,6 @@ type LiveToolState = {
   isError?: boolean
 }
 
-type AgentOverlayPanel = 'auth' | 'sessions' | null
 type AuthProviderKey = 'google' | 'openai' | 'openrouter'
 
 const DEFAULT_MODEL_VALUE = 'google/gemini-3.1-flash-lite-preview'
@@ -557,7 +557,7 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
   )
 }
 
-export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
+export function AgentSidebar({ onOpenSettings, onWorkspaceStateChange, workspacePath }: AgentSidebarProps) {
   const defaultModelSelection = parseModelSelection(DEFAULT_MODEL_VALUE)
   const [composerHeight, setComposerHeight] = useState(172)
   const [hasLoadedComposerHeight, setHasLoadedComposerHeight] = useState(false)
@@ -573,20 +573,13 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   const [draftThinking, setDraftThinking] = useState('')
   const [isThinkingStreaming, setIsThinkingStreaming] = useState(false)
   const [liveTools, setLiveTools] = useState<LiveToolState[]>([])
-  const [authDrafts, setAuthDrafts] = useState<Record<AuthProviderKey, string>>({
-    google: '',
-    openai: '',
-    openrouter: '',
-  })
-  const [activeOverlayPanel, setActiveOverlayPanel] = useState<AgentOverlayPanel>(null)
+  const [activeOverlayPanel, setActiveOverlayPanel] = useState<'sessions' | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isSavingAuth, setIsSavingAuth] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [deletingSessionPath, setDeletingSessionPath] = useState<string | null>(null)
   const [isSwitchingModel, setIsSwitchingModel] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
-  const authButtonRef = useRef<HTMLButtonElement | null>(null)
   const composerResizeStateRef = useRef<{ pointerId: number, startHeight: number, startY: number } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
@@ -850,11 +843,6 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
   useEffect(() => {
     if (!workspacePath) {
       setActiveOverlayPanel(null)
-      setAuthDrafts({
-        google: '',
-        openai: '',
-        openrouter: '',
-      })
     }
   }, [workspacePath])
 
@@ -873,7 +861,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
         return
       }
 
-      if (sessionButtonRef.current?.contains(target) || authButtonRef.current?.contains(target)) {
+      if (sessionButtonRef.current?.contains(target)) {
         return
       }
 
@@ -894,6 +882,10 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [activeOverlayPanel])
+
+  useEffect(() => {
+    onWorkspaceStateChange?.(agentState)
+  }, [agentState, onWorkspaceStateChange])
 
   useEffect(() => {
     if (!activeComposerMenu) {
@@ -951,32 +943,6 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
 
     return nextMessages
   }, [agentState.activeSession?.messages, draftAssistant, draftThinking, isThinkingStreaming, liveTools])
-
-  const authProviders: Array<{
-    key: AuthProviderKey
-    label: string
-    placeholder: string
-    state: AgentProviderAuthState
-  }> = [
-    {
-      key: 'openrouter',
-      label: 'OpenRouter',
-      placeholder: 'sk-or-v1-...',
-      state: agentState.runtime.auth.openrouter,
-    },
-    {
-      key: 'openai',
-      label: 'OpenAI',
-      placeholder: 'sk-...',
-      state: agentState.runtime.auth.openai,
-    },
-    {
-      key: 'google',
-      label: 'Google Gemini',
-      placeholder: 'GEMINI_API_KEY / API key',
-      state: agentState.runtime.auth.google,
-    },
-  ]
 
   async function handleCreateSession() {
     if (!workspacePath) {
@@ -1076,30 +1042,6 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
     setSelectedProviderValue(nextProvider)
     setModelInputValue(modelDrafts[nextProvider] ?? '')
     setActiveComposerMenu(null)
-  }
-
-  async function handleSaveProviderAuth(provider: AuthProviderKey, apiKey: string | null) {
-    if (!workspacePath) {
-      return
-    }
-
-    try {
-      setIsSavingAuth(true)
-      setPanelError(null)
-      const nextState = await window.appApi.updateAgentProviderAuth(workspacePath, provider, apiKey)
-      setAgentState(nextState)
-      setAuthDrafts((currentValue) => ({
-        ...currentValue,
-        [provider]: '',
-      }))
-      if (apiKey?.trim()) {
-        setActiveOverlayPanel(null)
-      }
-    } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to update provider authentication.')
-    } finally {
-      setIsSavingAuth(false)
-    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1256,12 +1198,11 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
 
         <div className='agent-threadbar-actions'>
           <button
-            ref={authButtonRef}
             type='button'
             className='agent-toolbar-button'
             aria-label='Configure providers'
             onClick={() => {
-              setActiveOverlayPanel((currentValue) => currentValue === 'auth' ? null : 'auth')
+              onOpenSettings?.()
             }}
           >
             <Key2Line size={16} />
@@ -1340,70 +1281,7 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
                   })}
                 </div>
               </ScrollShadow>
-            ) : (
-              <div className='agent-auth-form'>
-                {authProviders.map((provider) => {
-                  const draftValue = authDrafts[provider.key]
-
-                  return (
-                    <section key={provider.key} className='agent-auth-provider'>
-                      <div className='agent-auth-provider-copy'>
-                        <span className='agent-auth-provider-label'>{provider.label}</span>
-                        <span className='agent-auth-provider-meta'>
-                          {provider.state.source === 'stored'
-                            ? 'Using saved key'
-                            : provider.state.source === 'env'
-                              ? `Using ${provider.state.envVarName}`
-                              : `No key saved. ${provider.state.envVarName} also works.`}
-                        </span>
-                      </div>
-
-                      <Input
-                        aria-label={`${provider.label} API key`}
-                        className='agent-auth-input'
-                        disabled={!workspacePath || isSavingAuth}
-                        onChange={(event) => {
-                          setAuthDrafts((currentValue) => ({
-                            ...currentValue,
-                            [provider.key]: event.target.value,
-                          }))
-                        }}
-                        placeholder={provider.placeholder}
-                        type='password'
-                        value={draftValue}
-                        variant='secondary'
-                      />
-
-                      <div className='agent-auth-actions'>
-                        <Button
-                          isDisabled={!workspacePath || isSavingAuth || !draftValue.trim()}
-                          size='sm'
-                          variant='ghost'
-                          className='agent-auth-save'
-                          onPress={() => {
-                            void handleSaveProviderAuth(provider.key, draftValue)
-                          }}
-                        >
-                          Save Key
-                        </Button>
-
-                        <Button
-                          isDisabled={!workspacePath || isSavingAuth || !provider.state.hasStoredCredential}
-                          size='sm'
-                          variant='ghost'
-                          className='agent-auth-clear'
-                          onPress={() => {
-                            void handleSaveProviderAuth(provider.key, null)
-                          }}
-                        >
-                          Remove Saved
-                        </Button>
-                      </div>
-                    </section>
-                  )
-                })}
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
       ) : null}

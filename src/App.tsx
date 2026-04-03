@@ -11,8 +11,14 @@ import {
 } from '@mingcute/react'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
+import type { AgentWorkspaceState } from '@/features/agent/types'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
+import {
+  SettingsDialog,
+  type SettingsSectionId,
+} from '@/features/settings/components/settings-dialog'
 import { FileTabs } from '@/features/workspace/components/file-tabs'
+import type { WorkspaceIconTheme } from '@/features/workspace/types'
 import {
   useWorkspaceStore,
   type WorkspaceTab,
@@ -137,6 +143,12 @@ function toStoredWorkspaceTab(filePath: string, content: string): WorkspaceTab {
 function App() {
   const platform = window.appApi.platform
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
+  const [isImportingIconTheme, setIsImportingIconTheme] = useState(false)
+  const [isApplyingIconTheme, setIsApplyingIconTheme] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('providers')
+  const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
+  const [iconTheme, setIconTheme] = useState<WorkspaceIconTheme | null>(null)
   const [, setStatusMessage] = useState('Open a folder to start.')
   const [isCreatingFile, setIsCreatingFile] = useState(false)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(DEFAULT_LEFT_SIDEBAR_WIDTH)
@@ -421,6 +433,72 @@ function App() {
     }
   }
 
+  async function handlePickWorkspaceIconTheme() {
+    try {
+      setIsImportingIconTheme(true)
+      const nextIconTheme = await window.appApi.pickWorkspaceIconTheme()
+
+      if (!nextIconTheme) {
+        return
+      }
+
+      setIconTheme(nextIconTheme)
+      setStatusMessage(`${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to import the VSIX icon theme.'
+      setStatusMessage(message)
+    } finally {
+      setIsImportingIconTheme(false)
+    }
+  }
+
+  async function handleSelectWorkspaceIconTheme(themeId: string) {
+    if (iconTheme?.activeThemeId === themeId) {
+      return
+    }
+
+    try {
+      setIsApplyingIconTheme(true)
+      const nextIconTheme = await window.appApi.setWorkspaceIconTheme(themeId)
+
+      if (!nextIconTheme) {
+        return
+      }
+
+      setIconTheme(nextIconTheme)
+      setStatusMessage(`${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to switch the icon theme.'
+      setStatusMessage(message)
+    } finally {
+      setIsApplyingIconTheme(false)
+    }
+  }
+
+  async function handleUseBundledWorkspaceIconTheme(themeId?: string | null) {
+    try {
+      setIsApplyingIconTheme(true)
+      const nextIconTheme = await window.appApi.useBundledWorkspaceIconTheme(themeId)
+
+      if (!nextIconTheme) {
+        return
+      }
+
+      setIconTheme(nextIconTheme)
+      setStatusMessage(`${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to enable the built-in icon theme.'
+      setStatusMessage(message)
+    } finally {
+      setIsApplyingIconTheme(false)
+    }
+  }
+
+  function openSettings(section: SettingsSectionId) {
+    setSettingsSection(section)
+    setIsSettingsOpen(true)
+  }
+
   async function handleRenameFile(filePath: string, nextName: string) {
     if (!currentPath) {
       throw new Error('Open a workspace first.')
@@ -515,6 +593,17 @@ function App() {
     let cancelled = false
 
     void (async () => {
+      try {
+        const persistedIconTheme = await window.appApi.getWorkspaceIconTheme()
+        if (!cancelled) {
+          setIconTheme(persistedIconTheme)
+        }
+      } catch {
+        if (!cancelled) {
+          setIconTheme(null)
+        }
+      }
+
       const restoreState = await window.appApi.getWorkspaceRestoreState()
       const lastWorkspacePath = restoreState.workspacePath
 
@@ -834,6 +923,18 @@ function App() {
 
           <div className='section-title-actions'>
             <Button
+              variant='ghost'
+              size='sm'
+              onPress={() => {
+                openSettings('file-icons')
+              }}
+              className='section-settings-button'
+              aria-label='Open settings'
+            >
+              Settings
+            </Button>
+
+            <Button
               isIconOnly
               variant='ghost'
               onPress={() => {
@@ -851,6 +952,7 @@ function App() {
         <ScrollShadow className='tree-scroll' hideScrollBar>
           <WorkspaceTree
             activeFilePath={currentFilePath}
+            iconTheme={iconTheme}
             nodes={tree}
             onSelectFile={(filePath) => {
               void openFile(filePath)
@@ -954,8 +1056,32 @@ function App() {
       </div>
 
       <aside className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}>
-        <AgentSidebar workspacePath={currentPath} />
+        <AgentSidebar
+          workspacePath={currentPath}
+          onOpenSettings={() => {
+            openSettings('providers')
+          }}
+          onWorkspaceStateChange={setAgentWorkspaceState}
+        />
       </aside>
+
+      <SettingsDialog
+        activeSection={settingsSection}
+        agentState={agentWorkspaceState}
+        iconTheme={iconTheme}
+        isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
+        isOpen={isSettingsOpen}
+        workspacePath={currentPath}
+        onAgentStateChange={setAgentWorkspaceState}
+        onClose={() => {
+          setIsSettingsOpen(false)
+        }}
+        onImportIconTheme={handlePickWorkspaceIconTheme}
+        onSectionChange={setSettingsSection}
+        onSelectIconTheme={handleSelectWorkspaceIconTheme}
+        onStatusMessage={setStatusMessage}
+        onUseBundledIconTheme={handleUseBundledWorkspaceIconTheme}
+      />
     </div>
   )
 }

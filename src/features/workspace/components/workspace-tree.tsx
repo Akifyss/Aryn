@@ -9,10 +9,12 @@ import {
   FolderLine,
   FolderOpenLine,
 } from '@mingcute/react'
-import type { WorkspaceNode } from '@/features/workspace/types'
+import { resolveWorkspaceDirectoryIconUrl, resolveWorkspaceFileIconUrl } from '@/features/workspace/lib/icon-theme'
+import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 
 type WorkspaceTreeProps = {
   activeFilePath: string | null
+  iconTheme: WorkspaceIconTheme | null
   nodes: WorkspaceNode[]
   onSelectFile: (path: string) => void
   onRenameFile: (path: string, nextName: string) => Promise<void>
@@ -23,6 +25,7 @@ type TreeNodeProps = {
   activeFilePath: string | null
   depth: number
   expandedPaths: Set<string>
+  iconTheme: WorkspaceIconTheme | null
   node: WorkspaceNode
   onToggleDirectory: (path: string) => void
   onSelectFile: (path: string) => void
@@ -44,6 +47,7 @@ function TreeNode({
   activeFilePath,
   depth,
   expandedPaths,
+  iconTheme,
   node,
   onToggleDirectory,
   onSelectFile,
@@ -61,6 +65,7 @@ function TreeNode({
     const children = node.children ?? []
     const hasChildren = children.length > 0
     const isExpanded = expandedPaths.has(node.path)
+    const themedDirectoryIconUrl = resolveWorkspaceDirectoryIconUrl(iconTheme, node.name, isExpanded)
 
     return (
       <li className={`tree-item tree-directory-item ${isExpanded ? 'is-expanded' : ''}`}>
@@ -77,7 +82,18 @@ function TreeNode({
           aria-label={hasChildren ? `${isExpanded ? 'Collapse' : 'Expand'} ${node.name}` : node.name}
         >
           <span className='tree-node-icon' aria-hidden='true'>
-            {isExpanded ? <FolderOpenLine size={16} /> : <FolderLine size={16} />}
+            {themedDirectoryIconUrl ? (
+              <img
+                alt=''
+                className='tree-theme-icon'
+                draggable='false'
+                src={themedDirectoryIconUrl}
+              />
+            ) : isExpanded ? (
+              <FolderOpenLine size={16} />
+            ) : (
+              <FolderLine size={16} />
+            )}
           </span>
 
           <span className='tree-node-name'>{node.name}</span>
@@ -91,6 +107,7 @@ function TreeNode({
                 activeFilePath={activeFilePath}
                 depth={depth + 1}
                 expandedPaths={expandedPaths}
+                iconTheme={iconTheme}
                 node={childNode}
                 onToggleDirectory={onToggleDirectory}
                 onSelectFile={onSelectFile}
@@ -105,6 +122,7 @@ function TreeNode({
   }
 
   const isActive = activeFilePath === node.path
+  const themedFileIconUrl = resolveWorkspaceFileIconUrl(iconTheme, node.name)
 
   async function submitRename(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -190,7 +208,16 @@ function TreeNode({
           >
             <div className='tree-file-content'>
               <span className='tree-node-icon' aria-hidden='true'>
-                <FileLine size={16} className='tree-file-icon' />
+                {themedFileIconUrl ? (
+                  <img
+                    alt=''
+                    className='tree-theme-icon'
+                    draggable='false'
+                    src={themedFileIconUrl}
+                  />
+                ) : (
+                  <FileLine size={16} className='tree-file-icon' />
+                )}
               </span>
               <span className='tree-file-name tree-node-name'>{node.name}</span>
             </div>
@@ -242,7 +269,14 @@ function TreeNode({
   )
 }
 
-export function WorkspaceTree({ activeFilePath, nodes, onSelectFile, onRenameFile, onDeleteFile }: WorkspaceTreeProps) {
+export function WorkspaceTree({
+  activeFilePath,
+  iconTheme,
+  nodes,
+  onSelectFile,
+  onRenameFile,
+  onDeleteFile,
+}: WorkspaceTreeProps) {
   const previousDirectoryPathsRef = useRef<Set<string>>(new Set())
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set(collectDirectoryPaths(nodes)))
 
@@ -288,6 +322,7 @@ export function WorkspaceTree({ activeFilePath, nodes, onSelectFile, onRenameFil
           activeFilePath={activeFilePath}
           depth={0}
           expandedPaths={expandedPaths}
+          iconTheme={iconTheme}
           node={node}
           onToggleDirectory={(path) => {
             setExpandedPaths((currentPaths) => {

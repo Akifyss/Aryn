@@ -34,6 +34,7 @@
 - 允许使用 HeroUI 以实现快速的早期交付
 - 核心业务 UI 应逐步转向基于 Base UI 构建的自定义组件
 - 使用 mingcute 、 iconify 来引入界面中需要的图标。
+- 使用 [pierrejs](https://pierrejs-docs.vercel.app/) 来实现 diff 渲染
 
 ## 架构指导
 
@@ -54,6 +55,6 @@
 
 - [scratch](https://github.com/erictli/scratch): 极简、离线优先的桌面 Markdown 笔记，具有强大的本地文件人体工程学
 - [1code](https://github.com/21st-dev/1code): 多 Agent 视觉编排和 Git 工作树隔离理念
-- [openchamber](https://github.com/openchamber/openchamber): 具有分支时间线和深度 GitHub 集成的桌面 AI Agent UI
+- [openchamber](https://github.com/openchamber/openchamber): 具有分支时间线和深度 Git 集成的桌面 AI Agent UI
 - [craft-agents-oss](https://github.com/lukilabs/craft-agents-oss): 基于 Pi SDK 模式构建的 Agent 原生架构
 

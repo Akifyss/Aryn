@@ -23,6 +23,9 @@ import {
   MIN_WINDOW_WIDTH,
 } from './app-state'
 import type { AgentClientEvent } from '../../src/features/agent/types'
+import {
+  importWorkspaceIconThemeFromVsix,
+} from './workspace-icon-theme'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -62,6 +65,12 @@ const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json')
 const agentDir = path.join(app.getPath('userData'), 'pi-agent')
+const workspaceIconThemeCacheDir = path.join(app.getPath('userData'), 'workspace-icon-themes')
+const bundledWorkspaceIconThemePath = path.join(
+  process.env.VITE_PUBLIC,
+  'icon-themes',
+  'thang-nm.flow-icons-1.3.2.vsix',
+)
 const legacyWorkspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
 const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPath)
 const agentManager = new PiAgentManager(
@@ -153,6 +162,43 @@ async function createWindow() {
     win.webContents.on('context-menu', (_event, params) => {
       win?.webContents.inspectElement(params.x, params.y)
     })
+  }
+}
+
+function isBundledWorkspaceIconThemePath(vsixPath: string) {
+  return path.resolve(vsixPath) === path.resolve(bundledWorkspaceIconThemePath)
+}
+
+async function importWorkspaceIconTheme(vsixPath: string, preferredThemeId?: string | null) {
+  return importWorkspaceIconThemeFromVsix(
+    vsixPath,
+    workspaceIconThemeCacheDir,
+    preferredThemeId,
+    isBundledWorkspaceIconThemePath(vsixPath) ? 'bundled' : 'external',
+  )
+}
+
+async function loadBundledWorkspaceIconTheme(preferredThemeId?: string | null) {
+  return importWorkspaceIconTheme(bundledWorkspaceIconThemePath, preferredThemeId)
+}
+
+async function getEffectiveWorkspaceIconThemeSelection(): Promise<{
+  activeThemeId: string | null
+  sourceVsixPath: string
+}> {
+  const state = await appStateStore.read()
+  const persistedVsixPath = state.ui.workspaceIconTheme.sourceVsixPath
+
+  if (persistedVsixPath) {
+    return {
+      activeThemeId: state.ui.workspaceIconTheme.activeThemeId,
+      sourceVsixPath: persistedVsixPath,
+    }
+  }
+
+  return {
+    activeThemeId: null,
+    sourceVsixPath: bundledWorkspaceIconThemePath,
   }
 }
 
@@ -351,6 +397,109 @@ ipcMain.handle('workspace:start-watch', async (_, rootPath: string) => {
 ipcMain.handle('workspace:stop-watch', async () => {
   await unwatchWorkspace()
   return { ok: true }
+})
+
+ipcMain.handle('workspace-icons:get-theme', async () => {
+  const state = await appStateStore.read()
+  const persistedSelection = await getEffectiveWorkspaceIconThemeSelection()
+  const theme = await importWorkspaceIconTheme(
+    persistedSelection.sourceVsixPath,
+    persistedSelection.activeThemeId,
+  )
+    .catch(async (error) => {
+      if (!state.ui.workspaceIconTheme.sourceVsixPath) {
+        return null
+      }
+
+      await appStateStore.update((currentState) => ({
+        ...currentState,
+        ui: {
+          ...currentState.ui,
+          workspaceIconTheme: {
+            activeThemeId: null,
+            sourceVsixPath: null,
+          },
+        },
+      }))
+
+      try {
+        return await loadBundledWorkspaceIconTheme()
+      } catch {
+        throw error
+      }
+    })
+
+  return theme
+})
+
+ipcMain.handle('workspace-icons:pick-theme', async () => {
+  if (!win) {
+    return null
+  }
+
+  const result = await dialog.showOpenDialog(win, {
+    filters: [
+      {
+        name: 'VS Code Icon Theme',
+        extensions: ['vsix'],
+      },
+    ],
+    properties: ['openFile'],
+    title: 'Import VSIX Icon Theme',
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+
+  const theme = await importWorkspaceIconTheme(result.filePaths[0])
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    ui: {
+      ...currentState.ui,
+      workspaceIconTheme: {
+        activeThemeId: theme.activeThemeId,
+        sourceVsixPath: theme.sourceVsixPath,
+      },
+    },
+  }))
+
+  return theme
+})
+
+ipcMain.handle('workspace-icons:set-active-theme', async (_, themeId: string) => {
+  const selection = await getEffectiveWorkspaceIconThemeSelection()
+  const theme = await importWorkspaceIconTheme(selection.sourceVsixPath, themeId)
+
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    ui: {
+      ...currentState.ui,
+      workspaceIconTheme: {
+        activeThemeId: theme.activeThemeId,
+        sourceVsixPath: theme.sourceVsixPath,
+      },
+    },
+  }))
+
+  return theme
+})
+
+ipcMain.handle('workspace-icons:use-bundled-theme', async (_, themeId?: string | null) => {
+  const theme = await loadBundledWorkspaceIconTheme(themeId)
+
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    ui: {
+      ...currentState.ui,
+      workspaceIconTheme: {
+        activeThemeId: theme.activeThemeId,
+        sourceVsixPath: theme.sourceVsixPath,
+      },
+    },
+  }))
+
+  return theme
 })
 
 ipcMain.handle('agent:load-workspace', async (_event, rootPath: string, preferredSessionPath?: string | null) => {

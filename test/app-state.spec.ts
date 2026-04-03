@@ -41,6 +41,10 @@ describe('app state persistence', () => {
     expect(state).toEqual({
       ui: {
         agentComposerHeight: DEFAULT_AGENT_COMPOSER_HEIGHT,
+        workspaceIconTheme: {
+          activeThemeId: null,
+          sourceVsixPath: null,
+        },
       },
       workspace: {
         entries: {
@@ -85,6 +89,10 @@ describe('app state persistence', () => {
     expect(nextState).toEqual({
       ui: {
         agentComposerHeight: 132,
+        workspaceIconTheme: {
+          activeThemeId: null,
+          sourceVsixPath: null,
+        },
       },
       workspace: {
         entries: {
