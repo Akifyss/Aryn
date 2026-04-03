@@ -19,16 +19,27 @@
   --resize-handle-line-width: 2px;
   --resize-handle-color: color-mix(in oklab, var(--panel-border) 92%, transparent);
   --resize-handle-color-active: color-mix(in oklab, var(--accent) 52%, var(--panel-border));
+  --chrome-height: 44px;
+  --panel-toggle-size: 2rem;
+  --panel-toggle-gap: 0.55rem;
+  --left-panel-toggle-anchor: 4.35rem;
+  --right-panel-toggle-anchor: 0.75rem;
+  --left-panel-content-inset: calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
+  --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
 
   position: relative;
   display: grid;
-  grid-template-rows: 44px minmax(0, 1fr);
   grid-template-columns: var(--left-sidebar-width) minmax(0, 1fr) var(--right-sidebar-width);
   width: 100%;
   height: 100dvh;
   background: var(--app-background);
   color: var(--foreground);
   overflow: hidden;
+}
+
+.app-shell[data-platform='windows'] {
+  --left-panel-toggle-anchor: 0.75rem;
+  --right-panel-toggle-anchor: 9.35rem;
 }
 
 .app-shell::before {
@@ -42,21 +53,23 @@
 }
 
 .titlebar {
-  grid-column: 1 / -1;
+  position: absolute;
+  inset: 0 0 auto 0;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   min-width: 0;
-  border-bottom: 1px solid var(--panel-border);
-  background: var(--panel-surface-chrome);
-  z-index: 20;
-  app-region: drag;
-  -webkit-app-region: drag;
+  height: var(--chrome-height);
+  background: transparent;
+  z-index: 30;
+  pointer-events: none;
 }
 
 .titlebar-side {
   display: flex;
   align-items: center;
   height: 100%;
+  pointer-events: auto;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
@@ -73,6 +86,9 @@
 .titlebar-spacer {
   flex: 1;
   min-width: 0;
+  pointer-events: auto;
+  app-region: drag;
+  -webkit-app-region: drag;
 }
 
 .titlebar-controls {
@@ -93,7 +109,7 @@
   gap: 0.35rem;
 }
 
-.titlebar-sidebar-button {
+.panel-toggle-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -109,11 +125,40 @@
   -webkit-app-region: no-drag;
 }
 
-.titlebar-sidebar-button:hover,
-.titlebar-sidebar-button:focus-visible {
+.panel-toggle-button:hover,
+.panel-toggle-button:focus-visible {
   color: var(--panel-foreground);
   background: color-mix(in oklab, var(--foreground) 6%, white);
   outline: none;
+}
+
+.panel-toggle-button-overlay {
+  position: absolute;
+  top: calc((var(--chrome-height) - var(--panel-toggle-size)) / 2);
+  z-index: 34;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.panel-toggle-button-overlay-left {
+  left: var(--left-panel-toggle-anchor);
+}
+
+.panel-toggle-button-overlay-right {
+  right: var(--right-panel-toggle-anchor);
+}
+
+.panel-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+}
+
+.panel-toggle-icon.is-collapsed {
+  transform: rotate(180deg);
+  transform-origin: center;
 }
 
 .traffic-button,
@@ -156,14 +201,6 @@
   color: white;
 }
 
-.titlebar-sidebar-button-left {
-  margin-left: 0;
-}
-
-.titlebar-sidebar-button-right {
-  margin-right: 0;
-}
-
 .traffic-button {
   position: relative;
   width: 0.8rem;
@@ -183,6 +220,8 @@
 
 .titlebar-controls-macos:hover .traffic-button::before,
 .titlebar-controls-macos:hover .traffic-button::after,
+.titlebar-macos-left:hover .traffic-button::before,
+.titlebar-macos-left:hover .traffic-button::after,
 .traffic-button:focus-visible::before,
 .traffic-button:focus-visible::after {
   opacity: 1;
@@ -253,7 +292,7 @@
 .panel-sidebar,
 .panel-editor,
 .panel-agent {
-  grid-row: 2;
+  grid-row: 1;
 }
 
 .panel-sidebar {
@@ -261,6 +300,7 @@
   gap: 0;
   padding: 0;
   background: var(--panel-surface-chrome);
+  border-right: 1px solid var(--panel-border);
 }
 
 .panel-editor {
@@ -271,6 +311,7 @@
 .panel-agent {
   grid-column: 3;
   background: var(--panel-surface-subtle);
+  border-left: 1px solid var(--panel-border);
 }
 
 .panel-sidebar.is-collapsed,
@@ -280,7 +321,7 @@
 
 .panel-resize-slot {
   position: absolute;
-  top: 44px;
+  top: 0;
   bottom: 0;
   width: var(--resize-handle-width);
   transform: translateX(-50%);
@@ -358,9 +399,13 @@
   justify-content: space-between;
   gap: 0.75rem;
   flex-shrink: 0;
-  min-height: 2.75rem;
+  min-height: var(--chrome-height);
   padding: 0 1rem 0 1.25rem;
   border-bottom: 1px solid var(--panel-border);
+}
+
+.workspace-section-title {
+  padding-left: var(--left-panel-content-inset);
 }
 
 .section-title-text {
@@ -368,7 +413,8 @@
   align-items: center;
   gap: 0px;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  max-width: 100%;
   overflow: hidden;
   align-self: stretch;
   padding: 0;
@@ -384,6 +430,15 @@
   white-space: nowrap;
   cursor: pointer;
   transition: color 160ms ease, opacity 160ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.section-title-drag-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+  app-region: drag;
+  -webkit-app-region: drag;
 }
 
 .section-title-icon {
@@ -402,6 +457,8 @@
   align-items: center;
   flex-shrink: 0;
   gap: 0.3rem;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
 .section-title-text:hover:not(:disabled),
@@ -690,8 +747,11 @@
 
 .file-tabs-shell {
   position: relative;
+  display: flex;
+  align-items: stretch;
   flex-shrink: 0;
   min-width: 0;
+  min-height: var(--chrome-height);
   border-bottom: 1px solid var(--panel-border);
   background:
     linear-gradient(
@@ -701,13 +761,32 @@
     );
 }
 
+.app-shell[data-left-collapsed='true'] .file-tabs-shell {
+  padding-left: var(--left-panel-content-inset);
+}
+
+.app-shell[data-right-collapsed='true'] .file-tabs-shell {
+  padding-right: var(--right-panel-content-inset);
+}
+
 .file-tabs-scroller {
   display: flex;
   align-items: stretch;
+  flex: 0 1 auto;
+  max-width: 100%;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.file-tabs-drag-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+  app-region: drag;
+  -webkit-app-region: drag;
 }
 
 .file-tabs-scroller::-webkit-scrollbar {
@@ -717,7 +796,7 @@
 .file-tabs-empty {
   display: flex;
   align-items: center;
-  min-height: 2.65rem;
+  min-height: var(--chrome-height);
   padding: 0 1rem;
   color: var(--panel-soft);
   font-size: 0.74rem;
@@ -734,6 +813,8 @@
   border-right: 1px solid var(--panel-border);
   background: transparent;
   transition: background-color 140ms ease, color 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
 .file-tab:hover,
@@ -752,7 +833,7 @@
   align-items: center;
   gap: 0.45rem;
   min-width: 0;
-  min-height: 2.65rem;
+  min-height: var(--chrome-height);
   padding: 0 0.45rem 0 0.95rem;
   border: 0;
   background: transparent;
@@ -762,6 +843,8 @@
   font-weight: 500;
   text-align: left;
   transition: color 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
 .file-tab.is-active .file-tab-trigger,
@@ -809,6 +892,8 @@
   color: var(--panel-soft);
   cursor: pointer;
   transition: color 140ms ease, opacity 140ms ease, background-color 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
 .file-tab-close:hover {
@@ -946,15 +1031,25 @@
   justify-content: space-between;
   gap: 0.75rem;
   flex-shrink: 0;
-  min-height: 2.75rem;
-  padding: 0 1rem;
+  min-height: var(--chrome-height);
+  padding: 0 var(--right-panel-content-inset) 0 1rem;
   border-bottom: 1px solid var(--panel-border);
   background: var(--panel-surface-section);
 }
 
 .agent-session-select {
   min-width: 0;
-  flex: 1;
+  flex: 0 1 auto;
+  max-width: 100%;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-threadbar-drag-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+  app-region: drag;
+  -webkit-app-region: drag;
 }
 
 .agent-threadbar-actions {
@@ -962,6 +1057,8 @@
   align-items: center;
   gap: 0.2rem;
   flex-shrink: 0;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
 .agent-toolbar-button {
@@ -1066,7 +1163,7 @@
 
 .agent-overlay-layer {
   position: absolute;
-  top: 2.75rem;
+  top: var(--chrome-height);
   left: 0;
   right: 0;
   z-index: 12;
@@ -1900,7 +1997,6 @@
 
 @media (max-width: 860px) {
   .app-shell {
-    grid-template-rows: 56px minmax(0, auto) minmax(0, 1fr);
     grid-template-columns: 1fr;
     height: auto;
     min-height: 100vh;
@@ -1926,11 +2022,6 @@
   .panel-sidebar {
     min-height: 24rem;
     border-bottom: 1px solid var(--panel-border);
-  }
-
-  .titlebar {
-    position: sticky;
-    top: 0;
   }
 
   .editor-empty-actions {

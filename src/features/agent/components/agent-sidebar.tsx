@@ -1252,6 +1252,8 @@ export function AgentSidebar({ workspacePath }: AgentSidebarProps) {
           </button>
         </div>
 
+        <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
+
         <div className='agent-threadbar-actions'>
           <button
             ref={authButtonRef}

@@ -3,28 +3,10 @@ import {
   CloseLine,
   FullscreenExitLine,
   FullscreenLine,
-  LayoutLeftbarCloseLine,
-  LayoutLeftbarOpenLine,
-  LayoutRightbarCloseLine,
-  LayoutRightbarOpenLine,
   MinimizeLine,
 } from '@mingcute/react'
 
-type AppTitlebarProps = {
-  isLeftSidebarVisible: boolean
-  isRightSidebarVisible: boolean
-  showRightSidebarToggle: boolean
-  onToggleLeftSidebar: () => void
-  onToggleRightSidebar: () => void
-}
-
-export function AppTitlebar({
-  isLeftSidebarVisible,
-  isRightSidebarVisible,
-  showRightSidebarToggle,
-  onToggleLeftSidebar,
-  onToggleRightSidebar,
-}: AppTitlebarProps) {
+export function AppTitlebar() {
   const platform = window.appApi.platform
   const isMac = platform === 'darwin'
   const [isMaximized, setIsMaximized] = useState(false)
@@ -74,89 +56,51 @@ export function AppTitlebar({
                 })
               }}
             />
-            <button
-              type='button'
-              className='titlebar-sidebar-button titlebar-sidebar-button-left'
-              aria-label={isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar'}
-              onClick={onToggleLeftSidebar}
-            >
-              {isLeftSidebarVisible ? <LayoutLeftbarCloseLine size={16} /> : <LayoutLeftbarOpenLine size={16} />}
-            </button>
           </div>
-        ) : (
-            <button
-              type='button'
-              className='titlebar-sidebar-button titlebar-sidebar-button-left'
-              aria-label={isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar'}
-              onClick={onToggleLeftSidebar}
-            >
-              {isLeftSidebarVisible ? <LayoutLeftbarCloseLine size={16} /> : <LayoutLeftbarOpenLine size={16} />}
-            </button>
-        )}
+        ) : null}
       </div>
 
       <div className='titlebar-spacer' />
 
       <div className='titlebar-side titlebar-side-right'>
-        {isMac ? (
-          showRightSidebarToggle ? (
-            <button
-              type='button'
-              className='titlebar-sidebar-button titlebar-sidebar-button-right'
-              aria-label={isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar'}
-              onClick={onToggleRightSidebar}
-            >
-              {isRightSidebarVisible ? <LayoutRightbarCloseLine size={16} /> : <LayoutRightbarOpenLine size={16} />}
-            </button>
-          ) : null
-        ) : (
+        {!isMac ? (
           <>
-            {showRightSidebarToggle ? (
-              <button
-                type='button'
-                className='titlebar-sidebar-button titlebar-sidebar-button-right'
-                aria-label={isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar'}
-                onClick={onToggleRightSidebar}
-              >
-                {isRightSidebarVisible ? <LayoutRightbarCloseLine size={16} /> : <LayoutRightbarOpenLine size={16} />}
-              </button>
-            ) : null}
             <div className='titlebar-controls titlebar-controls-windows'>
               <button
-              aria-label='Minimize window'
-              className='window-button'
-              type='button'
-              onClick={() => {
-                void window.appApi.minimizeWindow()
-              }}
-            >
-              <MinimizeLine size={16} />
-            </button>
-            <button
-              aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
-              className='window-button'
-              type='button'
-              onClick={() => {
-                void window.appApi.toggleMaximizeWindow().then(({ isMaximized: nextState }) => {
-                  setIsMaximized(nextState)
-                })
-              }}
-            >
-              {isMaximized ? <FullscreenExitLine size={16} /> : <FullscreenLine size={16} />}
-            </button>
-            <button
-              aria-label='Close window'
-              className='window-button window-button-close'
-              type='button'
-              onClick={() => {
-                void window.appApi.closeWindow()
-              }}
-            >
-              <CloseLine size={18} />
-            </button>
+                aria-label='Minimize window'
+                className='window-button'
+                type='button'
+                onClick={() => {
+                  void window.appApi.minimizeWindow()
+                }}
+              >
+                <MinimizeLine size={16} />
+              </button>
+              <button
+                aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
+                className='window-button'
+                type='button'
+                onClick={() => {
+                  void window.appApi.toggleMaximizeWindow().then(({ isMaximized: nextState }) => {
+                    setIsMaximized(nextState)
+                  })
+                }}
+              >
+                {isMaximized ? <FullscreenExitLine size={16} /> : <FullscreenLine size={16} />}
+              </button>
+              <button
+                aria-label='Close window'
+                className='window-button window-button-close'
+                type='button'
+                onClick={() => {
+                  void window.appApi.closeWindow()
+                }}
+              >
+                <CloseLine size={18} />
+              </button>
             </div>
           </>
-        )}
+        ) : null}
       </div>
     </header>
   )

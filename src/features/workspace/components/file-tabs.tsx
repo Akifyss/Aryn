@@ -188,6 +188,8 @@ export function FileTabs({
           )
         })}
       </div>
+
+      <div className='file-tabs-drag-spacer' aria-hidden='true' />
     </div>
   )
 }

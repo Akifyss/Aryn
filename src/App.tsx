@@ -5,6 +5,8 @@ import {
   AddLine,
   FileFill,
   FolderOpenFill,
+  LayoutLeftbarCloseLine,
+  LayoutRightbarCloseLine,
   SelectorVerticalLine,
 } from '@mingcute/react'
 import { AppTitlebar } from '@/components/app-titlebar'
@@ -133,6 +135,7 @@ function toStoredWorkspaceTab(filePath: string, content: string): WorkspaceTab {
 }
 
 function App() {
+  const platform = window.appApi.platform
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
   const [, setStatusMessage] = useState('Open a folder to start.')
   const [isCreatingFile, setIsCreatingFile] = useState(false)
@@ -176,6 +179,7 @@ function App() {
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
     : '当前工作区'
+  const shellPlatform = platform === 'darwin' ? 'macos' : 'windows'
   const isMobileStacked = typeof window !== 'undefined' && window.innerWidth <= MOBILE_STACK_BREAKPOINT
   const isAgentPanelVisible = typeof window !== 'undefined' && window.innerWidth > DESKTOP_AGENT_BREAKPOINT
   const isLeftSidebarVisible = !isLeftSidebarCollapsed
@@ -770,7 +774,10 @@ function App() {
     <div
       ref={appShellRef}
       className='app-shell'
+      data-platform={shellPlatform}
+      data-left-collapsed={isLeftSidebarVisible ? 'false' : 'true'}
       data-resizing={activeResizePanel ? 'true' : 'false'}
+      data-right-collapsed={isRightSidebarVisible ? 'false' : 'true'}
       style={
         {
           '--left-sidebar-width': `${effectiveLeftSidebarWidth}px`,
@@ -778,20 +785,38 @@ function App() {
         } as CSSProperties
       }
     >
-      <AppTitlebar
-        isLeftSidebarVisible={isLeftSidebarVisible}
-        isRightSidebarVisible={isRightSidebarVisible}
-        showRightSidebarToggle={isAgentPanelVisible}
-        onToggleLeftSidebar={() => {
+      <AppTitlebar />
+
+      <button
+        type='button'
+        className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-left'
+        aria-label={isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar'}
+        onClick={() => {
           setIsLeftSidebarCollapsed((currentValue) => !currentValue)
         }}
-        onToggleRightSidebar={() => {
-          setIsRightSidebarCollapsed((currentValue) => !currentValue)
-        }}
-      />
+      >
+        <span className={`panel-toggle-icon${isLeftSidebarVisible ? '' : ' is-collapsed'}`} aria-hidden='true'>
+          <LayoutLeftbarCloseLine size={16} />
+        </span>
+      </button>
+
+      {isAgentPanelVisible ? (
+        <button
+          type='button'
+          className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
+          aria-label={isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar'}
+          onClick={() => {
+            setIsRightSidebarCollapsed((currentValue) => !currentValue)
+          }}
+        >
+          <span className={`panel-toggle-icon${isRightSidebarVisible ? '' : ' is-collapsed'}`} aria-hidden='true'>
+            <LayoutRightbarCloseLine size={16} />
+          </span>
+        </button>
+      ) : null}
 
       <aside className={`panel panel-sidebar${isLeftSidebarVisible ? '' : ' is-collapsed'}`}>
-        <div className='section-title'>
+        <div className='section-title workspace-section-title'>
           <button
             type='button'
             onClick={() => {
@@ -804,6 +829,8 @@ function App() {
             <span className='section-title-label'>{workspaceLabel}</span>
             <SelectorVerticalLine size={24} className='section-title-icon' />
           </button>
+
+          <div className='section-title-drag-spacer' aria-hidden='true' />
 
           <div className='section-title-actions'>
             <Button
