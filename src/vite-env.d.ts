@@ -1,5 +1,10 @@
 import type { AgentClientEvent, AgentWorkspaceState } from '@/features/agent/types'
-import type { WorkspaceChangeEvent, WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
+import type {
+  WorkspaceChangeEvent,
+  WorkspaceIconTheme,
+  WorkspaceIconThemeCatalogOption,
+  WorkspaceNode,
+} from '@/features/workspace/types'
 
 /// <reference types="vite/client" />
 
@@ -18,9 +23,9 @@ declare global {
       renameWorkspaceFile: (rootPath: string, filePath: string, nextRelativeFilePath: string) => Promise<{ filePath: string }>
       deleteWorkspaceFile: (rootPath: string, filePath: string) => Promise<{ ok: boolean }>
       getWorkspaceIconTheme: () => Promise<WorkspaceIconTheme | null>
+      getWorkspaceIconThemeCatalog: () => Promise<WorkspaceIconThemeCatalogOption[]>
       pickWorkspaceIconTheme: () => Promise<WorkspaceIconTheme | null>
-      setWorkspaceIconTheme: (themeId: string) => Promise<WorkspaceIconTheme | null>
-      useBundledWorkspaceIconTheme: (themeId?: string | null) => Promise<WorkspaceIconTheme | null>
+      setWorkspaceIconTheme: (selection: { sourceVsixPath: string, themeId: string }) => Promise<WorkspaceIconTheme | null>
       getUiState: () => Promise<{ agentComposerHeight: number }>
       updateUiState: (patch: { agentComposerHeight?: number }) => Promise<{ ok: boolean }>
       startWorkspaceWatch: (rootPath: string) => Promise<{ ok: boolean }>

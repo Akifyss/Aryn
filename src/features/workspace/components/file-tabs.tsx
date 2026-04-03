@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef } from 'react'
 import { CloseLine } from '@mingcute/react'
 import type { WorkspaceTab } from '@/features/workspace/store/use-workspace-store'
 
+const SETTINGS_TAB_PATH = 'app://settings'
+
 type FileTabsProps = {
   activeFilePath: string | null
   tabs: WorkspaceTab[]
@@ -11,6 +13,10 @@ type FileTabsProps = {
 }
 
 function getBaseName(filePath: string) {
+  if (filePath === SETTINGS_TAB_PATH) {
+    return '设置'
+  }
+
   return filePath.split(/[\\/]/).pop() ?? filePath
 }
 
@@ -27,6 +33,10 @@ function getRelativePath(rootPath: string, filePath: string) {
 }
 
 function getTabMetaLabel(workspacePath: string | null, filePath: string, hasDuplicateName: boolean) {
+  if (filePath === SETTINGS_TAB_PATH) {
+    return 'Application'
+  }
+
   if (!workspacePath || !hasDuplicateName) {
     return null
   }

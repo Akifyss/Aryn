@@ -19,6 +19,14 @@ export type WorkspaceIconThemeOption = {
 
 export type WorkspaceIconThemeSourceKind = 'bundled' | 'external'
 
+export type WorkspaceIconThemeCatalogOption = {
+  key: string
+  label: string
+  sourceKind: WorkspaceIconThemeSourceKind
+  sourceVsixPath: string
+  themeId: string
+}
+
 export type WorkspaceIconTheme = {
   activeThemeId: string
   activeThemeLabel: string

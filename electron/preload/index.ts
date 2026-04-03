@@ -1,6 +1,11 @@
 import { ipcRenderer, contextBridge } from 'electron'
 import type { AgentClientEvent, AgentWorkspaceState } from '../../src/features/agent/types'
-import type { WorkspaceChangeEvent, WorkspaceIconTheme, WorkspaceNode } from '../../src/features/workspace/types'
+import type {
+  WorkspaceChangeEvent,
+  WorkspaceIconTheme,
+  WorkspaceIconThemeCatalogOption,
+  WorkspaceNode,
+} from '../../src/features/workspace/types'
 
 contextBridge.exposeInMainWorld('appApi', {
   platform: process.platform,
@@ -15,9 +20,9 @@ contextBridge.exposeInMainWorld('appApi', {
   renameWorkspaceFile: (rootPath: string, filePath: string, nextRelativeFilePath: string) => ipcRenderer.invoke('workspace:rename-file', rootPath, filePath, nextRelativeFilePath) as Promise<{ filePath: string }>,
   deleteWorkspaceFile: (rootPath: string, filePath: string) => ipcRenderer.invoke('workspace:delete-file', rootPath, filePath) as Promise<{ ok: boolean }>,
   getWorkspaceIconTheme: () => ipcRenderer.invoke('workspace-icons:get-theme') as Promise<WorkspaceIconTheme | null>,
+  getWorkspaceIconThemeCatalog: () => ipcRenderer.invoke('workspace-icons:catalog') as Promise<WorkspaceIconThemeCatalogOption[]>,
   pickWorkspaceIconTheme: () => ipcRenderer.invoke('workspace-icons:pick-theme') as Promise<WorkspaceIconTheme | null>,
-  setWorkspaceIconTheme: (themeId: string) => ipcRenderer.invoke('workspace-icons:set-active-theme', themeId) as Promise<WorkspaceIconTheme | null>,
-  useBundledWorkspaceIconTheme: (themeId?: string | null) => ipcRenderer.invoke('workspace-icons:use-bundled-theme', themeId) as Promise<WorkspaceIconTheme | null>,
+  setWorkspaceIconTheme: (selection: { sourceVsixPath: string, themeId: string }) => ipcRenderer.invoke('workspace-icons:select-theme', selection) as Promise<WorkspaceIconTheme | null>,
   getUiState: () => ipcRenderer.invoke('ui:get-state') as Promise<{ agentComposerHeight: number }>,
   updateUiState: (patch: { agentComposerHeight?: number }) => ipcRenderer.invoke('ui:update-state', patch) as Promise<{ ok: boolean }>,
   startWorkspaceWatch: (rootPath: string) => ipcRenderer.invoke('workspace:start-watch', rootPath) as Promise<{ ok: boolean }>,

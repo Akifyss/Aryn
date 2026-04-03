@@ -3,7 +3,6 @@ import { Button, Input, ScrollShadow, TextArea } from '@heroui/react'
 import {
   AddLine,
   Delete2Line,
-  Key2Line,
   SendPlaneLine,
 } from '@mingcute/react'
 import ReactMarkdown from 'react-markdown'
@@ -16,7 +15,6 @@ import type {
 } from '@/features/agent/types'
 
 type AgentSidebarProps = {
-  onOpenSettings?: () => void
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
   workspacePath: string | null
 }
@@ -557,7 +555,7 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
   )
 }
 
-export function AgentSidebar({ onOpenSettings, onWorkspaceStateChange, workspacePath }: AgentSidebarProps) {
+export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSidebarProps) {
   const defaultModelSelection = parseModelSelection(DEFAULT_MODEL_VALUE)
   const [composerHeight, setComposerHeight] = useState(172)
   const [hasLoadedComposerHeight, setHasLoadedComposerHeight] = useState(false)
@@ -1197,17 +1195,6 @@ export function AgentSidebar({ onOpenSettings, onWorkspaceStateChange, workspace
         <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
 
         <div className='agent-threadbar-actions'>
-          <button
-            type='button'
-            className='agent-toolbar-button'
-            aria-label='Configure providers'
-            onClick={() => {
-              onOpenSettings?.()
-            }}
-          >
-            <Key2Line size={16} />
-          </button>
-
           <button
             type='button'
             disabled={!workspacePath || isCreatingSession}

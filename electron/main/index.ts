@@ -23,6 +23,7 @@ import {
   MIN_WINDOW_WIDTH,
 } from './app-state'
 import type { AgentClientEvent } from '../../src/features/agent/types'
+import type { WorkspaceIconThemeCatalogOption } from '../../src/features/workspace/types'
 import {
   importWorkspaceIconThemeFromVsix,
 } from './workspace-icon-theme'
@@ -182,6 +183,16 @@ async function loadBundledWorkspaceIconTheme(preferredThemeId?: string | null) {
   return importWorkspaceIconTheme(bundledWorkspaceIconThemePath, preferredThemeId)
 }
 
+function toCatalogOptions(theme: Awaited<ReturnType<typeof importWorkspaceIconTheme>>): WorkspaceIconThemeCatalogOption[] {
+  return theme.themes.map((themeOption) => ({
+    key: `${theme.sourceVsixPath}::${themeOption.id}`,
+    label: themeOption.label,
+    sourceKind: theme.sourceKind,
+    sourceVsixPath: theme.sourceVsixPath,
+    themeId: themeOption.id,
+  }))
+}
+
 async function getEffectiveWorkspaceIconThemeSelection(): Promise<{
   activeThemeId: string | null
   sourceVsixPath: string
@@ -200,6 +211,19 @@ async function getEffectiveWorkspaceIconThemeSelection(): Promise<{
     activeThemeId: null,
     sourceVsixPath: bundledWorkspaceIconThemePath,
   }
+}
+
+async function getWorkspaceIconThemeCatalog() {
+  const selection = await getEffectiveWorkspaceIconThemeSelection()
+  const bundledTheme = await loadBundledWorkspaceIconTheme()
+  const catalogOptions = [...toCatalogOptions(bundledTheme)]
+
+  if (path.resolve(selection.sourceVsixPath) !== path.resolve(bundledWorkspaceIconThemePath)) {
+    const importedTheme = await importWorkspaceIconTheme(selection.sourceVsixPath, selection.activeThemeId)
+    catalogOptions.push(...toCatalogOptions(importedTheme))
+  }
+
+  return catalogOptions
 }
 
 app.whenReady().then(() => {
@@ -485,8 +509,12 @@ ipcMain.handle('workspace-icons:set-active-theme', async (_, themeId: string) =>
   return theme
 })
 
-ipcMain.handle('workspace-icons:use-bundled-theme', async (_, themeId?: string | null) => {
-  const theme = await loadBundledWorkspaceIconTheme(themeId)
+ipcMain.handle('workspace-icons:catalog', async () => {
+  return getWorkspaceIconThemeCatalog()
+})
+
+ipcMain.handle('workspace-icons:select-theme', async (_, selection: { sourceVsixPath: string, themeId: string }) => {
+  const theme = await importWorkspaceIconTheme(selection.sourceVsixPath, selection.themeId)
 
   await appStateStore.update((currentState) => ({
     ...currentState,

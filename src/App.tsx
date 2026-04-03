@@ -18,7 +18,10 @@ import {
   type SettingsSectionId,
 } from '@/features/settings/components/settings-dialog'
 import { FileTabs } from '@/features/workspace/components/file-tabs'
-import type { WorkspaceIconTheme } from '@/features/workspace/types'
+import type {
+  WorkspaceIconTheme,
+  WorkspaceIconThemeCatalogOption,
+} from '@/features/workspace/types'
 import {
   useWorkspaceStore,
   type WorkspaceTab,
@@ -81,6 +84,7 @@ const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
 const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
 const TAB_STORAGE_PREFIX = 'writing-workspace:file-tabs:'
 const LEGACY_TAB_STORAGE_PREFIX = 'writing-workspace:editor-tabs:'
+const SETTINGS_TAB_PATH = 'app://settings'
 
 type ResizePanel = 'left' | 'right'
 
@@ -145,10 +149,12 @@ function App() {
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
   const [isImportingIconTheme, setIsImportingIconTheme] = useState(false)
   const [isApplyingIconTheme, setIsApplyingIconTheme] = useState(false)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isSettingsTabOpen, setIsSettingsTabOpen] = useState(false)
+  const [isSettingsTabActive, setIsSettingsTabActive] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('providers')
   const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
   const [iconTheme, setIconTheme] = useState<WorkspaceIconTheme | null>(null)
+  const [iconThemeOptions, setIconThemeOptions] = useState<WorkspaceIconThemeCatalogOption[]>([])
   const [, setStatusMessage] = useState('Open a folder to start.')
   const [isCreatingFile, setIsCreatingFile] = useState(false)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(DEFAULT_LEFT_SIDEBAR_WIDTH)
@@ -177,8 +183,15 @@ function App() {
     () => openTabs.find((tab) => tab.filePath === activeTabPath) ?? null,
     [activeTabPath, openTabs],
   )
-  const currentFileContent = activeTab?.content ?? ''
-  const currentFilePath = activeTab?.filePath ?? null
+  const displayTabs = useMemo(
+    () => isSettingsTabOpen
+      ? [...openTabs, { content: '', exists: true, filePath: SETTINGS_TAB_PATH, isDirty: false, savedContent: '' }]
+      : openTabs,
+    [isSettingsTabOpen, openTabs],
+  )
+  const displayActiveTabPath = isSettingsTabActive ? SETTINGS_TAB_PATH : activeTabPath
+  const currentFileContent = isSettingsTabActive ? '' : activeTab?.content ?? ''
+  const currentFilePath = isSettingsTabActive ? null : activeTab?.filePath ?? null
   const isDirty = activeTab?.isDirty ?? false
   const dirtyTabs = useMemo(
     () => openTabs.filter((tab) => tab.isDirty),
@@ -295,6 +308,17 @@ function App() {
   }
 
   function closeEditorTab(filePath: string, options: { force?: boolean, silent?: boolean } = {}) {
+    if (filePath === SETTINGS_TAB_PATH) {
+      setIsSettingsTabOpen(false)
+      setIsSettingsTabActive(false)
+
+      if (!options.silent) {
+        setStatusMessage('设置 closed')
+      }
+
+      return true
+    }
+
     const targetTab = openTabs.find((tab) => tab.filePath === filePath)
 
     if (!targetTab) {
@@ -329,6 +353,7 @@ function App() {
     await loadTree(nextPath)
     setCurrentPath(nextPath)
     resetOpenTabs()
+    setIsSettingsTabActive(false)
     await window.appApi.startWorkspaceWatch(nextPath)
     await updateWorkspaceState(nextPath, { markAsLastOpened: true })
   }
@@ -339,6 +364,7 @@ function App() {
   }
 
   async function openFile(filePath: string, workspacePath: string | null = currentPath) {
+    setIsSettingsTabActive(false)
     const existingTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.filePath === filePath)
 
     if (existingTab) {
@@ -373,6 +399,7 @@ function App() {
 
     if (candidatePaths.length === 0) {
       replaceTabs([], null)
+      setIsSettingsTabActive(false)
       return
     }
 
@@ -391,6 +418,7 @@ function App() {
       : nextTabs[0]?.filePath ?? null
 
     replaceTabs(nextTabs, nextActivePath)
+    setIsSettingsTabActive(false)
     await updateWorkspaceState(workspacePath, { lastFilePath: nextActivePath })
   }
 
@@ -443,6 +471,7 @@ function App() {
       }
 
       setIconTheme(nextIconTheme)
+      setIconThemeOptions(await window.appApi.getWorkspaceIconThemeCatalog())
       setStatusMessage(`${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to import the VSIX icon theme.'
@@ -452,20 +481,24 @@ function App() {
     }
   }
 
-  async function handleSelectWorkspaceIconTheme(themeId: string) {
-    if (iconTheme?.activeThemeId === themeId) {
+  async function handleSelectWorkspaceIconTheme(selection: { sourceVsixPath: string, themeId: string }) {
+    if (
+      iconTheme?.activeThemeId === selection.themeId
+      && iconTheme.sourceVsixPath === selection.sourceVsixPath
+    ) {
       return
     }
 
     try {
       setIsApplyingIconTheme(true)
-      const nextIconTheme = await window.appApi.setWorkspaceIconTheme(themeId)
+      const nextIconTheme = await window.appApi.setWorkspaceIconTheme(selection)
 
       if (!nextIconTheme) {
         return
       }
 
       setIconTheme(nextIconTheme)
+      setIconThemeOptions(await window.appApi.getWorkspaceIconThemeCatalog())
       setStatusMessage(`${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to switch the icon theme.'
@@ -475,28 +508,10 @@ function App() {
     }
   }
 
-  async function handleUseBundledWorkspaceIconTheme(themeId?: string | null) {
-    try {
-      setIsApplyingIconTheme(true)
-      const nextIconTheme = await window.appApi.useBundledWorkspaceIconTheme(themeId)
-
-      if (!nextIconTheme) {
-        return
-      }
-
-      setIconTheme(nextIconTheme)
-      setStatusMessage(`${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to enable the built-in icon theme.'
-      setStatusMessage(message)
-    } finally {
-      setIsApplyingIconTheme(false)
-    }
-  }
-
   function openSettings(section: SettingsSectionId) {
     setSettingsSection(section)
-    setIsSettingsOpen(true)
+    setIsSettingsTabOpen(true)
+    setIsSettingsTabActive(true)
   }
 
   async function handleRenameFile(filePath: string, nextName: string) {
@@ -566,6 +581,13 @@ function App() {
   }
 
   function activateFileTab(filePath: string) {
+    if (filePath === SETTINGS_TAB_PATH) {
+      setIsSettingsTabOpen(true)
+      setIsSettingsTabActive(true)
+      return
+    }
+
+    setIsSettingsTabActive(false)
     activateTab(filePath)
 
     if (currentPath) {
@@ -574,17 +596,17 @@ function App() {
   }
 
   function cycleTabs(direction: 1 | -1) {
-    if (openTabs.length < 2 || !activeTabPath) {
+    if (displayTabs.length < 2 || !displayActiveTabPath) {
       return
     }
 
-    const currentIndex = openTabs.findIndex((tab) => tab.filePath === activeTabPath)
+    const currentIndex = displayTabs.findIndex((tab) => tab.filePath === displayActiveTabPath)
     if (currentIndex === -1) {
       return
     }
 
-    const nextIndex = (currentIndex + direction + openTabs.length) % openTabs.length
-    const nextTab = openTabs[nextIndex]
+    const nextIndex = (currentIndex + direction + displayTabs.length) % displayTabs.length
+    const nextTab = displayTabs[nextIndex]
 
     activateFileTab(nextTab.filePath)
   }
@@ -595,12 +617,15 @@ function App() {
     void (async () => {
       try {
         const persistedIconTheme = await window.appApi.getWorkspaceIconTheme()
+        const persistedIconThemeOptions = await window.appApi.getWorkspaceIconThemeCatalog()
         if (!cancelled) {
           setIconTheme(persistedIconTheme)
+          setIconThemeOptions(persistedIconThemeOptions)
         }
       } catch {
         if (!cancelled) {
           setIconTheme(null)
+          setIconThemeOptions([])
         }
       }
 
@@ -818,12 +843,15 @@ function App() {
       }
 
       if ((event.ctrlKey || event.metaKey) && key === 'w') {
-        if (!currentFilePath) {
+        event.preventDefault()
+        if (isSettingsTabActive) {
+          closeEditorTab(SETTINGS_TAB_PATH)
           return
         }
 
-        event.preventDefault()
-        closeEditorTab(currentFilePath)
+        if (currentFilePath) {
+          closeEditorTab(currentFilePath)
+        }
         return
       }
 
@@ -847,7 +875,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [currentFilePath, openTabs, activeTabPath, currentFileContent])
+  }, [currentFilePath, currentFileContent, displayActiveTabPath, displayTabs, isSettingsTabActive])
 
   useEffect(() => {
     if (!isLeftSidebarVisible && activeResizePanel === 'left') {
@@ -983,8 +1011,8 @@ function App() {
       <main className='panel panel-editor' id='editor-main'>
         <div className='editor-frame'>
           <FileTabs
-            activeFilePath={currentFilePath}
-            tabs={openTabs}
+            activeFilePath={displayActiveTabPath}
+            tabs={displayTabs}
             workspacePath={currentPath}
             onActivate={activateFileTab}
             onClose={(filePath) => {
@@ -993,7 +1021,21 @@ function App() {
           />
 
           <div className='editor-content-shell' id='writing-editor-panel'>
-            {!currentFilePath ? (
+            {isSettingsTabActive ? (
+              <SettingsDialog
+                activeSection={settingsSection}
+                agentState={agentWorkspaceState}
+                iconTheme={iconTheme}
+                iconThemeOptions={iconThemeOptions}
+                isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
+                workspacePath={currentPath}
+                onAgentStateChange={setAgentWorkspaceState}
+                onImportIconTheme={handlePickWorkspaceIconTheme}
+                onSectionChange={setSettingsSection}
+                onSelectIconTheme={handleSelectWorkspaceIconTheme}
+                onStatusMessage={setStatusMessage}
+              />
+            ) : !currentFilePath ? (
               <div className='editor-empty-state'>
                 <div className='editor-empty-content'>
                   <p className='eyebrow'>Ready</p>
@@ -1023,17 +1065,19 @@ function App() {
               </div>
             ) : null}
 
-            <WritingEditor
-              disabled={!currentFilePath}
-              onChange={(nextValue) => {
-                if (!currentFilePath) {
-                  return
-                }
+            {!isSettingsTabActive ? (
+              <WritingEditor
+                disabled={!currentFilePath}
+                onChange={(nextValue) => {
+                  if (!currentFilePath) {
+                    return
+                  }
 
-                updateTabContent(currentFilePath, nextValue)
-              }}
-              value={currentFileContent}
-            />
+                  updateTabContent(currentFilePath, nextValue)
+                }}
+                value={currentFileContent}
+              />
+            ) : null}
           </div>
         </div>
       </main>
@@ -1058,30 +1102,9 @@ function App() {
       <aside className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}>
         <AgentSidebar
           workspacePath={currentPath}
-          onOpenSettings={() => {
-            openSettings('providers')
-          }}
           onWorkspaceStateChange={setAgentWorkspaceState}
         />
       </aside>
-
-      <SettingsDialog
-        activeSection={settingsSection}
-        agentState={agentWorkspaceState}
-        iconTheme={iconTheme}
-        isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
-        isOpen={isSettingsOpen}
-        workspacePath={currentPath}
-        onAgentStateChange={setAgentWorkspaceState}
-        onClose={() => {
-          setIsSettingsOpen(false)
-        }}
-        onImportIconTheme={handlePickWorkspaceIconTheme}
-        onSectionChange={setSettingsSection}
-        onSelectIconTheme={handleSelectWorkspaceIconTheme}
-        onStatusMessage={setStatusMessage}
-        onUseBundledIconTheme={handleUseBundledWorkspaceIconTheme}
-      />
     </div>
   )
 }
