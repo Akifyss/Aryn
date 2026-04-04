@@ -6,6 +6,7 @@ import {
   createWorkspaceFile,
   loadWorkspaceTree,
   renameWorkspaceFile,
+  shouldIgnoreWorkspacePath,
 } from '../electron/main/workspace'
 
 const tempRoots: string[] = []
@@ -85,5 +86,12 @@ describe('workspace helpers', () => {
     await expect(renameWorkspaceFile(rootPath, renamedFilePath, '../outside.md')).rejects.toThrow(
       'File path must stay inside the current workspace.',
     )
+  })
+
+  it('ignores git internals for watcher paths across Windows and POSIX separators', () => {
+    expect(shouldIgnoreWorkspacePath('C:\\workspace\\.git\\index.lock')).toBe(true)
+    expect(shouldIgnoreWorkspacePath('/workspace/.git/index.lock')).toBe(true)
+    expect(shouldIgnoreWorkspacePath('C:\\workspace\\.git\\objects\\ab\\cd')).toBe(true)
+    expect(shouldIgnoreWorkspacePath('/workspace/docs/draft.md')).toBe(false)
   })
 })

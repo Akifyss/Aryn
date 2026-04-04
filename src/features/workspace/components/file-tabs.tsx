@@ -1,23 +1,24 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef } from 'react'
 import { CloseLine } from '@mingcute/react'
-import type { WorkspaceTab } from '@/features/workspace/store/use-workspace-store'
-
-const SETTINGS_TAB_PATH = 'app://settings'
+import type { WorkspaceDisplayTab } from '@/features/workspace/store/use-workspace-store'
 
 type FileTabsProps = {
   activeFilePath: string | null
-  tabs: WorkspaceTab[]
+  actions?: ReactNode
+  tabs: WorkspaceDisplayTab[]
   workspacePath: string | null
   onActivate: (filePath: string) => void
   onClose: (filePath: string) => void
 }
 
-function getBaseName(filePath: string) {
-  if (filePath === SETTINGS_TAB_PATH) {
-    return '设置'
+function getBaseName(tab: WorkspaceDisplayTab) {
+  if (tab.kind === 'settings') {
+    return 'Settings'
   }
 
-  return filePath.split(/[\\/]/).pop() ?? filePath
+  return tab.kind === 'diff'
+    ? tab.title
+    : tab.filePath.split(/[\\/]/).pop() ?? tab.filePath
 }
 
 function getRelativePath(rootPath: string, filePath: string) {
@@ -26,22 +27,26 @@ function getRelativePath(rootPath: string, filePath: string) {
   const normalizedRootPath = normalizedRoot.replace(/[\\/]+/g, '/')
 
   if (!normalizedFilePath.startsWith(normalizedRootPath)) {
-    return getBaseName(filePath)
+    return filePath.split(/[\\/]/).pop() ?? filePath
   }
 
   return normalizedFilePath.slice(normalizedRootPath.length).replace(/^\/+/, '')
 }
 
-function getTabMetaLabel(workspacePath: string | null, filePath: string, hasDuplicateName: boolean) {
-  if (filePath === SETTINGS_TAB_PATH) {
+function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab, hasDuplicateName: boolean) {
+  if (tab.kind === 'settings') {
     return 'Application'
+  }
+
+  if (tab.kind === 'diff') {
+    return tab.diff.change.scope === 'staged' ? 'Staged diff' : 'Open Changes'
   }
 
   if (!workspacePath || !hasDuplicateName) {
     return null
   }
 
-  const relativePath = getRelativePath(workspacePath, filePath)
+  const relativePath = getRelativePath(workspacePath, tab.filePath)
   const segments = relativePath.split('/').filter(Boolean)
   segments.pop()
   const directoryLabel = segments.join(' / ')
@@ -51,6 +56,7 @@ function getTabMetaLabel(workspacePath: string | null, filePath: string, hasDupl
 
 export function FileTabs({
   activeFilePath,
+  actions,
   tabs,
   workspacePath,
   onActivate,
@@ -62,7 +68,7 @@ export function FileTabs({
     const counts = new Map<string, number>()
 
     for (const tab of tabs) {
-      const baseName = getBaseName(tab.filePath)
+      const baseName = getBaseName(tab)
       counts.set(baseName, (counts.get(baseName) ?? 0) + 1)
     }
 
@@ -115,13 +121,13 @@ export function FileTabs({
         {tabs.length === 0 ? (
           <div className='file-tabs-empty'>No file selected</div>
         ) : tabs.map((tab, index) => {
-          const baseName = getBaseName(tab.filePath)
-          const metaLabel = getTabMetaLabel(workspacePath, tab.filePath, duplicateNameSet.has(baseName))
+          const baseName = getBaseName(tab)
+          const metaLabel = getTabMetaLabel(workspacePath, tab, duplicateNameSet.has(baseName))
           const isActive = activeFilePath === tab.filePath
           const title = [
-            tab.filePath,
+            tab.kind === 'diff' ? tab.diff.change.path : tab.filePath,
             !tab.exists ? 'Missing from workspace. Save to recreate it.' : null,
-            tab.isDirty ? 'Unsaved changes' : null,
+            tab.kind === 'file' && tab.isDirty ? 'Unsaved changes' : null,
           ]
             .filter(Boolean)
             .join('\n')
@@ -129,7 +135,7 @@ export function FileTabs({
           return (
             <div
               key={tab.filePath}
-              className={`file-tab${isActive ? ' is-active' : ''}${tab.isDirty ? ' is-dirty' : ''}${tab.exists ? '' : ' is-missing'}`}
+              className={`file-tab${isActive ? ' is-active' : ''}${tab.kind === 'file' && tab.isDirty ? ' is-dirty' : ''}${tab.exists ? '' : ' is-missing'}`}
               data-active={isActive ? 'true' : 'false'}
             >
               <button
@@ -200,6 +206,7 @@ export function FileTabs({
       </div>
 
       <div className='file-tabs-drag-spacer' aria-hidden='true' />
+      {actions ? <div className='file-tabs-actions'>{actions}</div> : null}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { ipcRenderer, contextBridge } from 'electron'
 import type { AgentClientEvent, AgentWorkspaceState } from '../../src/features/agent/types'
+import type { GitChangeItem, GitChangeScope, GitFileDiffResult, GitRepositoryState } from '../../src/features/git/types'
 import type {
   WorkspaceChangeEvent,
   WorkspaceIconTheme,
@@ -19,6 +20,13 @@ contextBridge.exposeInMainWorld('appApi', {
   createWorkspaceFile: (rootPath: string, relativeFilePath: string) => ipcRenderer.invoke('workspace:create-file', rootPath, relativeFilePath) as Promise<{ filePath: string }>,
   renameWorkspaceFile: (rootPath: string, filePath: string, nextRelativeFilePath: string) => ipcRenderer.invoke('workspace:rename-file', rootPath, filePath, nextRelativeFilePath) as Promise<{ filePath: string }>,
   deleteWorkspaceFile: (rootPath: string, filePath: string) => ipcRenderer.invoke('workspace:delete-file', rootPath, filePath) as Promise<{ ok: boolean }>,
+  getGitRepositoryState: (workspacePath: string) => ipcRenderer.invoke('git:get-state', workspacePath) as Promise<GitRepositoryState>,
+  initializeGitRepository: (workspacePath: string) => ipcRenderer.invoke('git:init', workspacePath) as Promise<GitRepositoryState>,
+  stageGitPaths: (workspacePath: string, filePaths: string[]) => ipcRenderer.invoke('git:stage-paths', workspacePath, filePaths) as Promise<GitRepositoryState>,
+  unstageGitPaths: (workspacePath: string, filePaths: string[]) => ipcRenderer.invoke('git:unstage-paths', workspacePath, filePaths) as Promise<GitRepositoryState>,
+  discardGitChange: (workspacePath: string, change: GitChangeItem) => ipcRenderer.invoke('git:discard-change', workspacePath, change) as Promise<GitRepositoryState>,
+  commitGitChanges: (workspacePath: string, message: string) => ipcRenderer.invoke('git:commit', workspacePath, message) as Promise<GitRepositoryState>,
+  getGitFileDiff: (workspacePath: string, filePath: string, scope: GitChangeScope) => ipcRenderer.invoke('git:get-file-diff', workspacePath, filePath, scope) as Promise<GitFileDiffResult>,
   getWorkspaceIconTheme: () => ipcRenderer.invoke('workspace-icons:get-theme') as Promise<WorkspaceIconTheme | null>,
   getWorkspaceIconThemeCatalog: () => ipcRenderer.invoke('workspace-icons:catalog') as Promise<WorkspaceIconThemeCatalogOption[]>,
   pickWorkspaceIconTheme: () => ipcRenderer.invoke('workspace-icons:pick-theme') as Promise<WorkspaceIconTheme | null>,

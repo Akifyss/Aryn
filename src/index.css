@@ -3,7 +3,15 @@
 @import "@heroui/styles";
 
 :root {
-  --font-sans: "Instrument Sans", "Segoe UI", sans-serif;
+  --font-sans:
+    "Instrument Sans",
+    "Segoe UI",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    "Source Han Sans SC",
+    sans-serif;
   --font-heading: "Cormorant Garamond", Georgia, serif;
   --font-mono: "IBM Plex Mono", monospace;
 

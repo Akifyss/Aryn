@@ -5,6 +5,7 @@ import {
   AddLine,
   FileFill,
   FolderOpenFill,
+  GitCompareLine,
   LayoutLeftbarCloseLine,
   LayoutRightbarCloseLine,
   SelectorVerticalLine,
@@ -12,23 +13,28 @@ import {
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
 import type { AgentWorkspaceState } from '@/features/agent/types'
+import { GitDiffEditor } from '@/features/editor/components/git-diff-editor'
 import { CodeEditor } from '@/features/editor/components/code-editor'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
+import { GitPanel } from '@/features/git/components/git-panel'
+import type { GitChangeItem, GitChangeScope, GitRepositoryState } from '@/features/git/types'
 import {
   SettingsDialog,
   type SettingsSectionId,
 } from '@/features/settings/components/settings-dialog'
 import { FileTabs } from '@/features/workspace/components/file-tabs'
+import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
+import { getSupportedWorkspaceEditorKind } from '@/features/workspace/lib/file-types'
+import {
+  useWorkspaceStore,
+  type WorkspaceDiffTab,
+  type WorkspaceDisplayTab,
+  type WorkspaceFileTab,
+} from '@/features/workspace/store/use-workspace-store'
 import type {
   WorkspaceIconTheme,
   WorkspaceIconThemeCatalogOption,
 } from '@/features/workspace/types'
-import { getSupportedWorkspaceEditorKind } from '@/features/workspace/lib/file-types'
-import {
-  useWorkspaceStore,
-  type WorkspaceTab,
-} from '@/features/workspace/store/use-workspace-store'
-import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
 import './App.css'
 
 function getBaseName(filePath: string) {
@@ -69,6 +75,22 @@ function getNextUntitledFileName(existingNames: string[]) {
   return `untitled-${index}.md`
 }
 
+function isWorkspaceFileTab(tab: WorkspaceDisplayTab | null | undefined): tab is WorkspaceFileTab {
+  return tab?.kind === 'file'
+}
+
+function isWorkspaceDiffTab(tab: WorkspaceDisplayTab | null | undefined): tab is WorkspaceDiffTab {
+  return tab?.kind === 'diff'
+}
+
+function createDiffTabId(filePath: string, scope: GitChangeScope) {
+  return `git-diff://${scope}/${encodeURIComponent(filePath)}`
+}
+
+function normalizeFilePath(filePath: string) {
+  return filePath.replace(/[\\/]+/g, '/').toLowerCase()
+}
+
 type StoredTabState = {
   activePath: string | null
   paths: string[]
@@ -84,6 +106,8 @@ const RIGHT_SIDEBAR_MIN_WIDTH = 300
 const RIGHT_SIDEBAR_MAX_WIDTH = 560
 const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
 const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
+const DEFAULT_GIT_PANEL_HEIGHT = 292
+const MIN_GIT_PANEL_HEIGHT = 200
 const TAB_STORAGE_PREFIX = 'writing-workspace:file-tabs:'
 const LEGACY_TAB_STORAGE_PREFIX = 'writing-workspace:editor-tabs:'
 const SETTINGS_TAB_PATH = 'app://settings'
@@ -136,7 +160,7 @@ function dedupePaths(paths: string[]) {
   return [...new Set(paths)]
 }
 
-function toStoredWorkspaceTab(filePath: string, content: string): WorkspaceTab {
+function toStoredWorkspaceTab(filePath: string, content: string): WorkspaceFileTab {
   const editorKind = getSupportedWorkspaceEditorKind(filePath)
 
   if (!editorKind) {
@@ -149,7 +173,19 @@ function toStoredWorkspaceTab(filePath: string, content: string): WorkspaceTab {
     exists: true,
     filePath,
     isDirty: false,
+    kind: 'file',
     savedContent: content,
+  }
+}
+
+function createDiffTab(change: GitChangeItem, scope: GitChangeScope, diff: Awaited<ReturnType<typeof window.appApi.getGitFileDiff>>): WorkspaceDiffTab {
+  return {
+    diff,
+    exists: true,
+    filePath: createDiffTabId(change.path, scope),
+    isDirty: false,
+    kind: 'diff',
+    title: getBaseName(change.path),
   }
 }
 
@@ -168,16 +204,25 @@ function App() {
   const [isCreatingFile, setIsCreatingFile] = useState(false)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(DEFAULT_LEFT_SIDEBAR_WIDTH)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(DEFAULT_RIGHT_SIDEBAR_WIDTH)
+  const [gitPanelHeight, setGitPanelHeight] = useState(DEFAULT_GIT_PANEL_HEIGHT)
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false)
   const [activeResizePanel, setActiveResizePanel] = useState<ResizePanel | null>(null)
+  const [isGitPanelResizing, setIsGitPanelResizing] = useState(false)
+  const [gitRepositoryState, setGitRepositoryState] = useState<GitRepositoryState | null>(null)
+  const [isGitLoading, setIsGitLoading] = useState(false)
+  const [gitBusyLabel, setGitBusyLabel] = useState<string | null>(null)
+  const [gitErrorMessage, setGitErrorMessage] = useState<string | null>(null)
+  const [gitCommitMessage, setGitCommitMessage] = useState('')
   const appShellRef = useRef<HTMLDivElement | null>(null)
+  const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
   const activeTabPath = useWorkspaceStore((state) => state.activeTabPath)
   const activateTab = useWorkspaceStore((state) => state.activateTab)
   const closeTab = useWorkspaceStore((state) => state.closeTab)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
   const markTabMissing = useWorkspaceStore((state) => state.markTabMissing)
   const markTabSaved = useWorkspaceStore((state) => state.markTabSaved)
+  const openDiffTab = useWorkspaceStore((state) => state.openDiffTab)
   const openTab = useWorkspaceStore((state) => state.openTab)
   const openTabs = useWorkspaceStore((state) => state.openTabs)
   const renameTab = useWorkspaceStore((state) => state.renameTab)
@@ -192,32 +237,35 @@ function App() {
     () => openTabs.find((tab) => tab.filePath === activeTabPath) ?? null,
     [activeTabPath, openTabs],
   )
-  const displayTabs = useMemo(
+  const activeFileTab = isWorkspaceFileTab(activeTab) ? activeTab : null
+  const activeDiffTab = isWorkspaceDiffTab(activeTab) ? activeTab : null
+  const displayTabs = useMemo<WorkspaceDisplayTab[]>(
     () => {
       if (!isSettingsTabOpen) {
         return openTabs
       }
 
-      const settingsTab: WorkspaceTab = {
-        content: '',
-        editorKind: 'rich-text',
-        exists: true,
-        filePath: SETTINGS_TAB_PATH,
-        isDirty: false,
-        savedContent: '',
-      }
-
-      return [...openTabs, settingsTab]
+      return [
+        ...openTabs,
+        {
+          content: '',
+          editorKind: 'rich-text',
+          exists: true,
+          filePath: SETTINGS_TAB_PATH,
+          isDirty: false,
+          kind: 'settings',
+          savedContent: '',
+        },
+      ]
     },
     [isSettingsTabOpen, openTabs],
   )
   const displayActiveTabPath = isSettingsTabActive ? SETTINGS_TAB_PATH : activeTabPath
-  const currentFileContent = isSettingsTabActive ? '' : activeTab?.content ?? ''
-  const currentEditorKind = isSettingsTabActive ? null : activeTab?.editorKind ?? null
-  const currentFilePath = isSettingsTabActive ? null : activeTab?.filePath ?? null
-  const isDirty = activeTab?.isDirty ?? false
+  const currentFileContent = activeFileTab?.content ?? ''
+  const currentEditorKind = activeFileTab?.editorKind ?? null
+  const currentFilePath = activeFileTab?.filePath ?? null
   const dirtyTabs = useMemo(
-    () => openTabs.filter((tab) => tab.isDirty),
+    () => openTabs.filter((tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.isDirty),
     [openTabs],
   )
   const rootFileNames = useMemo(
@@ -226,7 +274,7 @@ function App() {
   )
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
-    : '当前工作区'
+    : 'Current workspace'
   const shellPlatform = platform === 'darwin' ? 'macos' : 'windows'
   const isMobileStacked = typeof window !== 'undefined' && window.innerWidth <= MOBILE_STACK_BREAKPOINT
   const isAgentPanelVisible = typeof window !== 'undefined' && window.innerWidth > DESKTOP_AGENT_BREAKPOINT
@@ -234,9 +282,35 @@ function App() {
   const isRightSidebarVisible = isAgentPanelVisible && !isRightSidebarCollapsed
   const effectiveLeftSidebarWidth = isLeftSidebarVisible ? leftSidebarWidth : 0
   const effectiveRightSidebarWidth = isRightSidebarVisible ? rightSidebarWidth : 0
+  const activeTreePath = activeFileTab?.filePath ?? activeDiffTab?.diff.change.path ?? null
+  const currentGitChange = useMemo(() => {
+    if (!currentFilePath || !gitRepositoryState?.isRepository) {
+      return null
+    }
+
+    const targetPath = normalizeFilePath(currentFilePath)
+    return gitRepositoryState.unstagedChanges.find((change) => normalizeFilePath(change.path) === targetPath)
+      ?? gitRepositoryState.stagedChanges.find((change) => normalizeFilePath(change.path) === targetPath)
+      ?? null
+  }, [currentFilePath, gitRepositoryState])
+
+  function getPersistedActiveFilePath() {
+    const activeTabId = useWorkspaceStore.getState().activeTabPath
+    const tab = useWorkspaceStore.getState().openTabs.find((candidate) => candidate.filePath === activeTabId)
+    return tab?.kind === 'file' ? tab.filePath : null
+  }
 
   function getShellWidth() {
     return appShellRef.current?.clientWidth ?? window.innerWidth
+  }
+
+  function getGitPanelMaxHeight() {
+    const containerHeight = leftSidebarBodyRef.current?.clientHeight ?? 0
+    return clamp(containerHeight - 180, MIN_GIT_PANEL_HEIGHT, 520)
+  }
+
+  function clampGitHeight(nextHeight: number) {
+    return clamp(nextHeight, MIN_GIT_PANEL_HEIGHT, getGitPanelMaxHeight())
   }
 
   function clampLeftWidth(nextWidth: number, shellWidth: number, currentRightWidth: number) {
@@ -293,6 +367,18 @@ function App() {
     setActiveResizePanel(panel)
   }
 
+  function handleGitPanelResize(pointerClientY: number) {
+    const container = leftSidebarBodyRef.current
+
+    if (!container) {
+      return
+    }
+
+    const rect = container.getBoundingClientRect()
+    const nextHeight = rect.bottom - pointerClientY
+    setGitPanelHeight(clampGitHeight(nextHeight))
+  }
+
   async function getWorkspaceState(workspacePath: string) {
     return window.appApi.getWorkspaceState(workspacePath)
   }
@@ -306,8 +392,66 @@ function App() {
 
   async function syncPersistedActiveFile(workspacePath: string) {
     await updateWorkspaceState(workspacePath, {
-      lastFilePath: useWorkspaceStore.getState().activeTabPath,
+      lastFilePath: getPersistedActiveFilePath(),
     })
+  }
+
+  async function syncOpenDiffTabs(workspacePath: string) {
+    const diffTabs = useWorkspaceStore.getState().openTabs.filter((tab): tab is WorkspaceDiffTab => tab.kind === 'diff')
+
+    await Promise.all(diffTabs.map(async (tab) => {
+      try {
+        const nextDiff = await window.appApi.getGitFileDiff(workspacePath, tab.diff.change.path, tab.diff.change.scope)
+        openDiffTab(createDiffTab(nextDiff.change, nextDiff.change.scope, nextDiff), false)
+      } catch {
+        closeTab(tab.filePath)
+      }
+    }))
+  }
+
+  async function refreshGitState(workspacePath: string | null, options: { silent?: boolean } = {}) {
+    if (!workspacePath) {
+      setGitRepositoryState(null)
+      return null
+    }
+
+    if (!options.silent) {
+      setIsGitLoading(true)
+    }
+
+    try {
+      const nextState = await window.appApi.getGitRepositoryState(workspacePath)
+      setGitRepositoryState(nextState)
+      setGitErrorMessage(null)
+      await syncOpenDiffTabs(workspacePath)
+      return nextState
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load Git status.'
+      setGitErrorMessage(message)
+      return null
+    } finally {
+      if (!options.silent) {
+        setIsGitLoading(false)
+      }
+    }
+  }
+
+  async function runGitAction<T>(label: string, action: () => Promise<T>) {
+    setGitBusyLabel(label)
+    setGitErrorMessage(null)
+
+    try {
+      return await action()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Git action failed.'
+      setGitErrorMessage(message)
+      toast.danger('Git action failed', {
+        description: message,
+      })
+      throw error
+    } finally {
+      setGitBusyLabel(null)
+    }
   }
 
   function confirmDiscardDirtyTabs(reason: 'close' | 'switch-workspace') {
@@ -336,7 +480,7 @@ function App() {
       setIsSettingsTabActive(false)
 
       if (!options.silent) {
-        setStatusMessage('设置 closed')
+        setStatusMessage('Settings closed')
       }
 
       return true
@@ -348,9 +492,9 @@ function App() {
       return false
     }
 
-    if (targetTab.isDirty && !options.force) {
+    if (targetTab.kind === 'file' && targetTab.isDirty && !options.force) {
       const confirmed = window.confirm(
-        `"${getBaseName(filePath)}" has unsaved changes.\n\nClose this tab and discard them?`,
+        `"${getBaseName(targetTab.filePath)}" has unsaved changes.\n\nClose this tab and discard them?`,
       )
 
       if (!confirmed) {
@@ -365,7 +509,7 @@ function App() {
     }
 
     if (!options.silent) {
-      setStatusMessage(`${getBaseName(filePath)} closed`)
+      setStatusMessage(`${getBaseName(targetTab.kind === 'diff' ? targetTab.diff.change.path : targetTab.filePath)} closed`)
     }
 
     return true
@@ -376,7 +520,11 @@ function App() {
     await loadTree(nextPath)
     setCurrentPath(nextPath)
     resetOpenTabs()
+    setIsSettingsTabOpen(false)
     setIsSettingsTabActive(false)
+    setGitCommitMessage('')
+    setGitErrorMessage(null)
+    await refreshGitState(nextPath, { silent: true })
     await window.appApi.startWorkspaceWatch(nextPath)
     await updateWorkspaceState(nextPath, { markAsLastOpened: true })
   }
@@ -388,7 +536,7 @@ function App() {
 
   async function openFile(filePath: string, workspacePath: string | null = currentPath) {
     setIsSettingsTabActive(false)
-    const existingTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.filePath === filePath)
+    const existingTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.kind === 'file' && tab.filePath === filePath)
 
     if (existingTab) {
       activateTab(filePath)
@@ -430,6 +578,25 @@ function App() {
     setStatusMessage(`${getBaseName(filePath)} opened`)
   }
 
+  async function openGitDiff(change: GitChangeItem) {
+    if (!currentPath) {
+      return
+    }
+
+    try {
+      const diff = await window.appApi.getGitFileDiff(currentPath, change.path, change.scope)
+      openDiffTab(createDiffTab(change, change.scope, diff))
+      setIsSettingsTabActive(false)
+      setStatusMessage(`${getBaseName(change.path)} diff opened`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to open the diff view.'
+      toast.danger('Failed to open diff', {
+        description: message,
+      })
+      setStatusMessage(message)
+    }
+  }
+
   async function restoreWorkspaceTabs(workspacePath: string, fallbackFilePath?: string | null) {
     const workspaceState = await getWorkspaceState(workspacePath)
     const storedState = readStoredTabState(workspacePath)
@@ -457,7 +624,7 @@ function App() {
         return null
       }
     }))
-    const nextTabs = settledTabs.filter((tab): tab is WorkspaceTab => tab !== null)
+    const nextTabs = settledTabs.filter((tab): tab is WorkspaceFileTab => tab !== null)
     const requestedActivePath = storedState.activePath ?? fallbackPath ?? null
     const nextActivePath = nextTabs.some((tab) => tab.filePath === requestedActivePath)
       ? requestedActivePath
@@ -498,6 +665,7 @@ function App() {
       const { filePath } = await window.appApi.createWorkspaceFile(currentPath, nextRelativePath)
       await loadTree(currentPath)
       await openFile(filePath)
+      await refreshGitState(currentPath, { silent: true })
       setStatusMessage(`${nextRelativePath} created`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to create file.'
@@ -577,6 +745,7 @@ function App() {
     const { filePath: nextFilePath } = await window.appApi.renameWorkspaceFile(currentPath, filePath, nextRelativePath)
     await loadTree(currentPath)
     renameTab(filePath, nextFilePath)
+    await refreshGitState(currentPath, { silent: true })
 
     if (activeTabPath === filePath) {
       await updateWorkspaceState(currentPath, { lastFilePath: nextFilePath })
@@ -590,7 +759,7 @@ function App() {
       throw new Error('Open a workspace first.')
     }
 
-    const targetTab = openTabs.find((tab) => tab.filePath === filePath)
+    const targetTab = openTabs.find((tab) => tab.kind === 'file' && tab.filePath === filePath)
     if (targetTab?.isDirty) {
       const confirmed = window.confirm(
         `"${getBaseName(filePath)}" has unsaved changes.\n\nDelete the file and discard those changes?`,
@@ -603,6 +772,7 @@ function App() {
 
     await window.appApi.deleteWorkspaceFile(currentPath, filePath)
     await loadTree(currentPath)
+    await refreshGitState(currentPath, { silent: true })
 
     if (targetTab) {
       closeTab(filePath)
@@ -623,6 +793,17 @@ function App() {
 
     if (currentPath) {
       await loadTree(currentPath)
+      await refreshGitState(currentPath, { silent: true })
+    }
+  }
+
+  async function handleSaveDiffFile(filePath: string, content: string) {
+    await window.appApi.saveWorkspaceFile(filePath, content)
+    syncTabWithDisk(filePath, content)
+
+    if (currentPath) {
+      await loadTree(currentPath)
+      await refreshGitState(currentPath, { silent: true })
     }
   }
 
@@ -636,8 +817,10 @@ function App() {
     setIsSettingsTabActive(false)
     activateTab(filePath)
 
-    if (currentPath) {
-      void updateWorkspaceState(currentPath, { lastFilePath: filePath })
+    const targetTab = displayTabs.find((tab) => tab.filePath === filePath)
+
+    if (currentPath && targetTab?.kind === 'file') {
+      void updateWorkspaceState(currentPath, { lastFilePath: targetTab.filePath })
     }
   }
 
@@ -655,6 +838,78 @@ function App() {
     const nextTab = displayTabs[nextIndex]
 
     activateFileTab(nextTab.filePath)
+  }
+
+  async function handleInitializeGit() {
+    if (!currentPath) {
+      return
+    }
+
+    await runGitAction('Initializing repository...', async () => {
+      const nextState = await window.appApi.initializeGitRepository(currentPath)
+      setGitRepositoryState(nextState)
+      setStatusMessage('Git repository initialized')
+    })
+  }
+
+  async function handleStageGitPaths(filePaths: string[]) {
+    if (!currentPath || filePaths.length === 0) {
+      return
+    }
+
+    await runGitAction('Staging changes...', async () => {
+      const nextState = await window.appApi.stageGitPaths(currentPath, filePaths)
+      setGitRepositoryState(nextState)
+      await syncOpenDiffTabs(currentPath)
+      setStatusMessage('Git changes staged')
+    })
+  }
+
+  async function handleUnstageGitPaths(filePaths: string[]) {
+    if (!currentPath || filePaths.length === 0) {
+      return
+    }
+
+    await runGitAction('Unstaging changes...', async () => {
+      const nextState = await window.appApi.unstageGitPaths(currentPath, filePaths)
+      setGitRepositoryState(nextState)
+      await syncOpenDiffTabs(currentPath)
+      setStatusMessage('Git changes unstaged')
+    })
+  }
+
+  async function handleDiscardGitChange(change: GitChangeItem) {
+    if (!currentPath) {
+      return
+    }
+
+    const confirmed = window.confirm(`Discard the current ${change.scope} change for "${change.relativePath}"?`)
+
+    if (!confirmed) {
+      return
+    }
+
+    await runGitAction('Discarding change...', async () => {
+      const nextState = await window.appApi.discardGitChange(currentPath, change)
+      setGitRepositoryState(nextState)
+      await loadTree(currentPath)
+      await syncOpenDiffTabs(currentPath)
+      setStatusMessage(`${change.relativePath} reverted`)
+    })
+  }
+
+  async function handleCommitGitChanges() {
+    if (!currentPath) {
+      return
+    }
+
+    await runGitAction('Creating commit...', async () => {
+      const nextState = await window.appApi.commitGitChanges(currentPath, gitCommitMessage)
+      setGitRepositoryState(nextState)
+      setGitCommitMessage('')
+      await syncOpenDiffTabs(currentPath)
+      setStatusMessage('Commit created')
+    })
   }
 
   useEffect(() => {
@@ -711,7 +966,9 @@ function App() {
       }
 
       await loadTree(currentPath)
-      const affectedTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.filePath === event.path)
+      await refreshGitState(currentPath, { silent: true })
+
+      const affectedTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.kind === 'file' && tab.filePath === event.path)
 
       if (!affectedTab) {
         return
@@ -755,7 +1012,7 @@ function App() {
     })
 
     return unsubscribe
-  }, [closeTab, currentPath, markTabMissing, syncTabWithDisk])
+  }, [closeTab, currentPath, markTabMissing, openDiffTab, syncTabWithDisk])
 
   useEffect(() => {
     return () => {
@@ -769,11 +1026,11 @@ function App() {
     }
 
     const storedPaths = openTabs
-      .filter((tab) => tab.exists)
+      .filter((tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.exists)
       .map((tab) => tab.filePath)
 
     window.localStorage.setItem(getTabStorageKey(currentPath), JSON.stringify({
-      activePath: activeTabPath,
+      activePath: getPersistedActiveFilePath(),
       paths: storedPaths,
     } satisfies StoredTabState))
   }, [activeTabPath, currentPath, openTabs])
@@ -810,11 +1067,41 @@ function App() {
   }, [activeResizePanel, isAgentPanelVisible, isMobileStacked, leftSidebarWidth, rightSidebarWidth])
 
   useEffect(() => {
+    if (!isGitPanelResizing) {
+      return
+    }
+
+    function handlePointerMove(event: PointerEvent) {
+      handleGitPanelResize(event.clientY)
+    }
+
+    function stopResizing() {
+      setIsGitPanelResizing(false)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', stopResizing)
+    window.addEventListener('pointercancel', stopResizing)
+
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', stopResizing)
+      window.removeEventListener('pointercancel', stopResizing)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isGitPanelResizing])
+
+  useEffect(() => {
     const storage = window.localStorage
     const savedLeftWidth = storage.getItem('writing-workspace:left-sidebar-width')
     const savedRightWidth = storage.getItem('writing-workspace:right-sidebar-width')
     const savedLeftCollapsed = storage.getItem('writing-workspace:left-sidebar-collapsed')
     const savedRightCollapsed = storage.getItem('writing-workspace:right-sidebar-collapsed')
+    const savedGitPanelHeight = storage.getItem('writing-workspace:git-panel-height')
 
     if (savedLeftWidth) {
       const parsedLeftWidth = Number(savedLeftWidth)
@@ -827,6 +1114,13 @@ function App() {
       const parsedRightWidth = Number(savedRightWidth)
       if (Number.isFinite(parsedRightWidth)) {
         setRightSidebarWidth(parsedRightWidth)
+      }
+    }
+
+    if (savedGitPanelHeight) {
+      const parsedGitPanelHeight = Number(savedGitPanelHeight)
+      if (Number.isFinite(parsedGitPanelHeight)) {
+        setGitPanelHeight(parsedGitPanelHeight)
       }
     }
 
@@ -846,6 +1140,10 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem('writing-workspace:right-sidebar-width', String(rightSidebarWidth))
   }, [rightSidebarWidth])
+
+  useEffect(() => {
+    window.localStorage.setItem('writing-workspace:git-panel-height', String(gitPanelHeight))
+  }, [gitPanelHeight])
 
   useEffect(() => {
     window.localStorage.setItem('writing-workspace:left-sidebar-collapsed', String(isLeftSidebarCollapsed))
@@ -879,6 +1177,10 @@ function App() {
   }, [effectiveRightSidebarWidth, isLeftSidebarVisible, isRightSidebarVisible, leftSidebarWidth, rightSidebarWidth])
 
   useEffect(() => {
+    setGitPanelHeight((currentValue) => clampGitHeight(currentValue))
+  }, [leftSidebarWidth, isLeftSidebarVisible])
+
+  useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
       const key = event.key.toLowerCase()
 
@@ -895,8 +1197,8 @@ function App() {
           return
         }
 
-        if (currentFilePath) {
-          closeEditorTab(currentFilePath)
+        if (displayActiveTabPath) {
+          closeEditorTab(displayActiveTabPath)
         }
         return
       }
@@ -921,7 +1223,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [currentFilePath, currentFileContent, displayActiveTabPath, displayTabs, isSettingsTabActive])
+  }, [displayActiveTabPath, displayTabs, isSettingsTabActive])
 
   useEffect(() => {
     if (!isLeftSidebarVisible && activeResizePanel === 'left') {
@@ -939,17 +1241,17 @@ function App() {
       className='app-shell'
       data-platform={shellPlatform}
       data-left-collapsed={isLeftSidebarVisible ? 'false' : 'true'}
-      data-resizing={activeResizePanel ? 'true' : 'false'}
+      data-resizing={activeResizePanel || isGitPanelResizing ? 'true' : 'false'}
       data-right-collapsed={isRightSidebarVisible ? 'false' : 'true'}
       style={
         {
+          '--git-panel-height': `${gitPanelHeight}px`,
           '--left-sidebar-width': `${effectiveLeftSidebarWidth}px`,
           '--right-sidebar-width': `${effectiveRightSidebarWidth}px`,
         } as CSSProperties
       }
     >
       <AppTitlebar />
-
       <button
         type='button'
         className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-left'
@@ -1023,18 +1325,72 @@ function App() {
           </div>
         </div>
 
-        <ScrollShadow className='tree-scroll' hideScrollBar>
-          <WorkspaceTree
-            activeFilePath={currentFilePath}
-            iconTheme={iconTheme}
-            nodes={tree}
-            onSelectFile={(filePath) => {
-              void openFile(filePath)
-            }}
-            onRenameFile={(filePath, nextName) => handleRenameFile(filePath, nextName)}
-            onDeleteFile={(filePath) => handleDeleteFile(filePath)}
-          />
-        </ScrollShadow>
+        <div ref={leftSidebarBodyRef} className='sidebar-stack'>
+          <div className='sidebar-stack-pane sidebar-tree-pane'>
+            <ScrollShadow className='tree-scroll' hideScrollBar>
+              <WorkspaceTree
+                activeFilePath={activeTreePath}
+                iconTheme={iconTheme}
+                nodes={tree}
+                onSelectFile={(filePath) => {
+                  void openFile(filePath)
+                }}
+                onRenameFile={(filePath, nextName) => handleRenameFile(filePath, nextName)}
+                onDeleteFile={(filePath) => handleDeleteFile(filePath)}
+              />
+            </ScrollShadow>
+          </div>
+
+          <div className='sidebar-stack-resize-slot'>
+            <div
+              role='separator'
+              className={`sidebar-stack-resize-handle${isGitPanelResizing ? ' is-active' : ''}`}
+              aria-label='Resize Git panel'
+              aria-controls='git-panel'
+              aria-orientation='horizontal'
+              onPointerDown={(event) => {
+                if (event.button !== 0) {
+                  return
+                }
+
+                setIsGitPanelResizing(true)
+              }}
+            />
+          </div>
+
+          <div className='sidebar-stack-pane sidebar-git-pane' id='git-panel'>
+            <GitPanel
+              busyLabel={gitBusyLabel}
+              commitMessage={gitCommitMessage}
+              errorMessage={gitErrorMessage}
+              isLoading={isGitLoading}
+              onCommit={() => {
+                void handleCommitGitChanges()
+              }}
+              onCommitMessageChange={setGitCommitMessage}
+              onDiscard={(change) => {
+                void handleDiscardGitChange(change)
+              }}
+              onInitialize={() => {
+                void handleInitializeGit()
+              }}
+              onOpenDiff={(change) => {
+                void openGitDiff(change)
+              }}
+              onRefresh={() => {
+                void refreshGitState(currentPath, { silent: false })
+              }}
+              onStage={(filePaths) => {
+                void handleStageGitPaths(filePaths)
+              }}
+              onUnstage={(filePaths) => {
+                void handleUnstageGitPaths(filePaths)
+              }}
+              repositoryState={gitRepositoryState}
+              workspacePath={currentPath}
+            />
+          </div>
+        </div>
       </aside>
 
       <div className={`panel-resize-slot panel-resize-slot-left${isLeftSidebarVisible ? '' : ' is-hidden'}`}>
@@ -1058,6 +1414,24 @@ function App() {
         <div className='editor-frame'>
           <FileTabs
             activeFilePath={displayActiveTabPath}
+            actions={currentPath ? (
+              <button
+                type='button'
+                className='editor-toolbar-icon-button'
+                aria-label={currentGitChange ? `Open diff for ${getBaseName(currentGitChange.path)}` : 'Open diff for current file'}
+                title={currentGitChange ? 'Open diff for current file' : 'Current file has no Git changes'}
+                disabled={!currentGitChange}
+                onClick={() => {
+                  if (!currentGitChange) {
+                    return
+                  }
+
+                  void openGitDiff(currentGitChange)
+                }}
+              >
+                <GitCompareLine size={16} />
+              </button>
+            ) : null}
             tabs={displayTabs}
             workspacePath={currentPath}
             onActivate={activateFileTab}
@@ -1081,14 +1455,14 @@ function App() {
                 onSelectIconTheme={handleSelectWorkspaceIconTheme}
                 onStatusMessage={setStatusMessage}
               />
-            ) : !currentFilePath ? (
+            ) : !activeFileTab && !activeDiffTab ? (
               <div className='editor-empty-state'>
                 <div className='editor-empty-content'>
                   <p className='eyebrow'>Ready</p>
                   <div className='editor-empty-copy'>
                     <h3>Open a workspace, then start with a clean draft.</h3>
                     <p>
-                      The file tree, editor, and assistant stay together in one calm desktop workspace.
+                      The file tree, editor, Git changes, and assistant stay together in one calm desktop workspace.
                     </p>
                   </div>
                   <div className='editor-empty-actions'>
@@ -1111,7 +1485,14 @@ function App() {
               </div>
             ) : null}
 
-            {!isSettingsTabActive && currentFilePath && currentEditorKind === 'rich-text' ? (
+            {activeDiffTab ? (
+              <GitDiffEditor
+                diff={activeDiffTab.diff}
+                onSaveEditedFile={handleSaveDiffFile}
+              />
+            ) : null}
+
+            {activeFileTab && currentEditorKind === 'rich-text' ? (
               <WritingEditor
                 disabled={!currentFilePath}
                 onChange={(nextValue) => {
@@ -1125,12 +1506,12 @@ function App() {
               />
             ) : null}
 
-            {!isSettingsTabActive && currentFilePath && currentEditorKind === 'code' ? (
+            {activeFileTab && currentEditorKind === 'code' ? (
               <CodeEditor
-                disabled={!currentFilePath}
-                filePath={currentFilePath}
+                disabled={false}
+                filePath={activeFileTab.filePath}
                 onChange={(nextValue) => {
-                  updateTabContent(currentFilePath, nextValue)
+                  updateTabContent(activeFileTab.filePath, nextValue)
                 }}
                 value={currentFileContent}
               />

@@ -33,7 +33,10 @@ describe('useWorkspaceStore', () => {
     const nextState = useWorkspaceStore.getState()
     expect(nextState.openTabs).toHaveLength(2)
     expect(nextState.activeTabPath).toBe('C:/workspace/a.md')
-    expect(nextState.openTabs[0].content).toBe('alpha')
+    expect(nextState.openTabs[0]).toMatchObject({
+      content: 'alpha',
+      kind: 'file',
+    })
   })
 
   it('marks tabs dirty only when their content diverges from the saved content', () => {
@@ -45,13 +48,22 @@ describe('useWorkspaceStore', () => {
       filePath: 'C:/workspace/draft.md',
     })
     store.updateTabContent('C:/workspace/draft.md', 'draft updated')
-    expect(useWorkspaceStore.getState().openTabs[0].isDirty).toBe(true)
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      isDirty: true,
+      kind: 'file',
+    })
 
     store.markTabSaved('C:/workspace/draft.md', 'draft updated')
-    expect(useWorkspaceStore.getState().openTabs[0].isDirty).toBe(false)
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      isDirty: false,
+      kind: 'file',
+    })
 
     store.updateTabContent('C:/workspace/draft.md', 'draft updated')
-    expect(useWorkspaceStore.getState().openTabs[0].isDirty).toBe(false)
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      isDirty: false,
+      kind: 'file',
+    })
   })
 
   it('closes the active tab and falls back to the nearest tab on the right first', () => {
@@ -84,8 +96,55 @@ describe('useWorkspaceStore', () => {
 
     const nextState = useWorkspaceStore.getState()
     expect(nextState.activeTabPath).toBe('C:/workspace/new-name.md')
-    expect(nextState.openTabs[0].filePath).toBe('C:/workspace/new-name.md')
-    expect(nextState.openTabs[0].content).toBe('content updated')
-    expect(nextState.openTabs[0].isDirty).toBe(true)
+    expect(nextState.openTabs[0]).toMatchObject({
+      content: 'content updated',
+      filePath: 'C:/workspace/new-name.md',
+      isDirty: true,
+      kind: 'file',
+    })
+  })
+
+  it('upserts diff tabs without disturbing other open tabs', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({
+      content: 'content',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/file.md',
+    })
+
+    store.openDiffTab({
+      diff: {
+        change: {
+          kind: 'modified',
+          originalPath: null,
+          path: 'C:/workspace/file.md',
+          relativePath: 'file.md',
+          scope: 'unstaged',
+          statusCode: 'M',
+        },
+        editorKind: 'rich-text',
+        modifiedContent: 'new',
+        modifiedExists: true,
+        modifiedLabel: 'Working tree',
+        originalContent: 'old',
+        originalExists: true,
+        originalLabel: 'Index',
+        repositoryRootPath: 'C:/workspace',
+      },
+      exists: true,
+      filePath: 'git-diff://unstaged/C%3A%2Fworkspace%2Ffile.md',
+      isDirty: false,
+      kind: 'diff',
+      title: 'file.md',
+    })
+
+    const nextState = useWorkspaceStore.getState()
+    expect(nextState.openTabs).toHaveLength(2)
+    expect(nextState.activeTabPath).toBe('git-diff://unstaged/C%3A%2Fworkspace%2Ffile.md')
+    expect(nextState.openTabs[1]).toMatchObject({
+      kind: 'diff',
+      title: 'file.md',
+    })
   })
 })

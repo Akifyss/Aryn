@@ -10,6 +10,7 @@ describe('workspace file types', () => {
 
   it('routes code and config files to the code editor', () => {
     expect(getWorkspaceEditorKind('C:/workspace/main.ts')).toBe('code')
+    expect(getWorkspaceEditorKind('C:/workspace/index.html')).toBe('code')
     expect(getWorkspaceEditorKind('C:/workspace/.env.local')).toBe('code')
     expect(getWorkspaceEditorKind('C:/workspace/Dockerfile')).toBe('code')
   })
@@ -21,6 +22,7 @@ describe('workspace file types', () => {
 
   it('maps known code files to monaco languages', () => {
     expect(getCodeLanguage('C:/workspace/main.tsx')).toBe('typescript')
+    expect(getCodeLanguage('C:/workspace/index.html')).toBe('html')
     expect(getCodeLanguage('C:/workspace/theme.css')).toBe('css')
     expect(getCodeLanguage('C:/workspace/config.yaml')).toBe('yaml')
     expect(getCodeLanguage('C:/workspace/.env')).toBe('plaintext')

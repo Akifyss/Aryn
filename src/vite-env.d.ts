@@ -1,4 +1,5 @@
 import type { AgentClientEvent, AgentWorkspaceState } from '@/features/agent/types'
+import type { GitChangeItem, GitChangeScope, GitFileDiffResult, GitRepositoryState } from '@/features/git/types'
 import type {
   WorkspaceChangeEvent,
   WorkspaceIconTheme,
@@ -22,6 +23,13 @@ declare global {
       createWorkspaceFile: (rootPath: string, relativeFilePath: string) => Promise<{ filePath: string }>
       renameWorkspaceFile: (rootPath: string, filePath: string, nextRelativeFilePath: string) => Promise<{ filePath: string }>
       deleteWorkspaceFile: (rootPath: string, filePath: string) => Promise<{ ok: boolean }>
+      getGitRepositoryState: (workspacePath: string) => Promise<GitRepositoryState>
+      initializeGitRepository: (workspacePath: string) => Promise<GitRepositoryState>
+      stageGitPaths: (workspacePath: string, filePaths: string[]) => Promise<GitRepositoryState>
+      unstageGitPaths: (workspacePath: string, filePaths: string[]) => Promise<GitRepositoryState>
+      discardGitChange: (workspacePath: string, change: GitChangeItem) => Promise<GitRepositoryState>
+      commitGitChanges: (workspacePath: string, message: string) => Promise<GitRepositoryState>
+      getGitFileDiff: (workspacePath: string, filePath: string, scope: GitChangeScope) => Promise<GitFileDiffResult>
       getWorkspaceIconTheme: () => Promise<WorkspaceIconTheme | null>
       getWorkspaceIconThemeCatalog: () => Promise<WorkspaceIconThemeCatalogOption[]>
       pickWorkspaceIconTheme: () => Promise<WorkspaceIconTheme | null>

@@ -39,6 +39,33 @@ function shouldIgnore(entryName: string) {
   return IGNORED_NAMES.has(entryName)
 }
 
+function normalizeWorkspacePath(watchedPath: string) {
+  return watchedPath.replace(/[\\/]+/g, '/')
+}
+
+export function shouldIgnoreWorkspacePath(watchedPath: string) {
+  const normalizedPath = normalizeWorkspacePath(watchedPath)
+  const segments = normalizedPath.split('/').filter(Boolean)
+
+  if (segments.some(shouldIgnore)) {
+    return true
+  }
+
+  return normalizedPath.endsWith('/.git/index.lock')
+}
+
+function isIgnorableWorkspaceWatcherError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  if (!/EPERM/i.test(error.message)) {
+    return false
+  }
+
+  return shouldIgnoreWorkspacePath(error.message)
+}
+
 function isCreatableFile(entryName: string) {
   return CREATABLE_EXTENSIONS.has(path.extname(entryName).toLowerCase())
 }
@@ -216,7 +243,7 @@ export async function watchWorkspace(
 
   workspaceWatcher = chokidar.watch(rootPath, {
     ignoreInitial: true,
-    ignored: (watchedPath) => watchedPath.split(path.sep).some(shouldIgnore),
+    ignored: shouldIgnoreWorkspacePath,
   })
 
   const relay = (type: WorkspaceChangeEvent['type'], changedPath: string) => {
@@ -233,6 +260,13 @@ export async function watchWorkspace(
     .on('change', (changedPath) => relay('change', changedPath))
     .on('unlink', (changedPath) => relay('unlink', changedPath))
     .on('unlinkDir', (changedPath) => relay('unlinkDir', changedPath))
+    .on('error', (error) => {
+      if (isIgnorableWorkspaceWatcherError(error)) {
+        return
+      }
+
+      throw error
+    })
 }
 
 export async function unwatchWorkspace() {

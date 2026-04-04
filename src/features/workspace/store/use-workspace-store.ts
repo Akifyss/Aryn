@@ -1,18 +1,43 @@
 import { create } from 'zustand'
+import type { GitFileDiffResult } from '@/features/git/types'
 import type { WorkspaceNode } from '@/features/workspace/types'
 import {
   getSupportedWorkspaceEditorKind,
   type SupportedWorkspaceEditorKind,
 } from '@/features/workspace/lib/file-types'
 
-export type WorkspaceTab = {
+export type WorkspaceFileTab = {
   content: string
   editorKind: SupportedWorkspaceEditorKind
   exists: boolean
   filePath: string
   isDirty: boolean
+  kind: 'file'
   savedContent: string
 }
+
+export type WorkspaceDiffTab = {
+  diff: GitFileDiffResult
+  exists: true
+  filePath: string
+  isDirty: false
+  kind: 'diff'
+  title: string
+}
+
+export type WorkspaceTab = WorkspaceFileTab | WorkspaceDiffTab
+
+export type WorkspaceSettingsTab = {
+  content: ''
+  editorKind: 'rich-text'
+  exists: true
+  filePath: 'app://settings'
+  isDirty: false
+  kind: 'settings'
+  savedContent: ''
+}
+
+export type WorkspaceDisplayTab = WorkspaceTab | WorkspaceSettingsTab
 
 type WorkspaceState = {
   activeTabPath: string | null
@@ -23,6 +48,7 @@ type WorkspaceState = {
   closeTab: (path: string) => void
   markTabMissing: (path: string) => void
   markTabSaved: (path: string, savedContent: string) => void
+  openDiffTab: (tab: WorkspaceDiffTab, activate?: boolean) => void
   openTab: (tab: { content: string, editorKind: SupportedWorkspaceEditorKind, filePath: string }) => void
   renameTab: (currentPath: string, nextPath: string) => void
   replaceTabs: (tabs: WorkspaceTab[], activeTabPath: string | null) => void
@@ -65,7 +91,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   })),
   markTabMissing: (path) => set((state) => ({
     openTabs: state.openTabs.map((tab) => (
-      tab.filePath === path
+      tab.kind === 'file' && tab.filePath === path
         ? {
           ...tab,
           exists: false,
@@ -75,7 +101,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   })),
   markTabSaved: (path, savedContent) => set((state) => ({
     openTabs: state.openTabs.map((tab) => (
-      tab.filePath === path
+      tab.kind === 'file' && tab.filePath === path
         ? {
           ...tab,
           content: savedContent,
@@ -93,7 +119,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       return {
         activeTabPath: filePath,
         openTabs: state.openTabs.map((tab) => (
-          tab.filePath === filePath
+          tab.kind === 'file' && tab.filePath === filePath
             ? {
               ...tab,
               exists: true,
@@ -113,15 +139,27 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           exists: true,
           filePath,
           isDirty: false,
+          kind: 'file',
           savedContent: content,
         },
       ],
     }
   }),
+  openDiffTab: (tab, activate = true) => set((state) => {
+    const existingIndex = state.openTabs.findIndex((candidate) => candidate.filePath === tab.filePath)
+    const nextTabs = existingIndex === -1
+      ? [...state.openTabs, tab]
+      : state.openTabs.map((candidate, index) => (index === existingIndex ? tab : candidate))
+
+    return {
+      activeTabPath: activate ? tab.filePath : state.activeTabPath,
+      openTabs: nextTabs,
+    }
+  }),
   renameTab: (currentPath, nextPath) => set((state) => ({
     activeTabPath: state.activeTabPath === currentPath ? nextPath : state.activeTabPath,
     openTabs: state.openTabs.map((tab) => (
-      tab.filePath === currentPath
+      tab.kind === 'file' && tab.filePath === currentPath
         ? {
           ...tab,
           editorKind: getSupportedWorkspaceEditorKind(nextPath) ?? tab.editorKind,
@@ -143,7 +181,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   setTree: (tree) => set({ tree }),
   syncTabWithDisk: (path, nextContent) => set((state) => ({
     openTabs: state.openTabs.map((tab) => (
-      tab.filePath === path
+      tab.kind === 'file' && tab.filePath === path
         ? {
           ...tab,
           content: nextContent,
@@ -156,7 +194,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   })),
   updateTabContent: (path, content) => set((state) => ({
     openTabs: state.openTabs.map((tab) => (
-      tab.filePath === path
+      tab.kind === 'file' && tab.filePath === path
         ? {
           ...tab,
           content,

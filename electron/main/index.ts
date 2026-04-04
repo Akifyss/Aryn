@@ -4,6 +4,15 @@ import path from 'node:path'
 import os from 'node:os'
 import throttle from 'lodash.throttle'
 import {
+  commitGitChanges,
+  discardGitChange,
+  getGitFileDiff,
+  getGitRepositoryState,
+  initializeGitRepository,
+  stageGitPaths,
+  unstageGitPaths,
+} from './git'
+import {
   createWorkspaceFile,
   deleteWorkspaceFile,
   loadWorkspaceFile,
@@ -23,6 +32,7 @@ import {
   MIN_WINDOW_WIDTH,
 } from './app-state'
 import type { AgentClientEvent } from '../../src/features/agent/types'
+import type { GitChangeItem, GitChangeScope } from '../../src/features/git/types'
 import type { WorkspaceIconThemeCatalogOption } from '../../src/features/workspace/types'
 import {
   importWorkspaceIconThemeFromVsix,
@@ -412,6 +422,34 @@ ipcMain.handle('workspace:rename-file', async (_, rootPath: string, filePath: st
 ipcMain.handle('workspace:delete-file', async (_, rootPath: string, filePath: string) => {
   await deleteWorkspaceFile(rootPath, filePath)
   return { ok: true }
+})
+
+ipcMain.handle('git:get-state', async (_, workspacePath: string) => {
+  return getGitRepositoryState(workspacePath)
+})
+
+ipcMain.handle('git:init', async (_, workspacePath: string) => {
+  return initializeGitRepository(workspacePath)
+})
+
+ipcMain.handle('git:stage-paths', async (_, workspacePath: string, filePaths: string[]) => {
+  return stageGitPaths(workspacePath, filePaths)
+})
+
+ipcMain.handle('git:unstage-paths', async (_, workspacePath: string, filePaths: string[]) => {
+  return unstageGitPaths(workspacePath, filePaths)
+})
+
+ipcMain.handle('git:discard-change', async (_, workspacePath: string, change: GitChangeItem) => {
+  return discardGitChange(workspacePath, change)
+})
+
+ipcMain.handle('git:commit', async (_, workspacePath: string, message: string) => {
+  return commitGitChanges(workspacePath, message)
+})
+
+ipcMain.handle('git:get-file-diff', async (_, workspacePath: string, filePath: string, scope: GitChangeScope) => {
+  return getGitFileDiff(workspacePath, filePath, scope)
 })
 
 ipcMain.handle('workspace:start-watch', async (_, rootPath: string) => {

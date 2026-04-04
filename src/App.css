@@ -12,6 +12,7 @@
   --panel-surface-subtle: color-mix(in oklab, var(--background) 88%, var(--surface));
   --panel-surface-section: color-mix(in oklab, var(--background) 92%, var(--surface));
   --panel-surface-editor: color-mix(in oklab, var(--surface) 96%, var(--background));
+  --git-panel-height: 292px;
   --left-sidebar-width: 320px;
   --right-sidebar-width: 368px;
   --resize-handle-width: 12px;
@@ -504,9 +505,54 @@
 }
 
 .tree-scroll {
+  display: flex;
   flex: 1;
   min-height: 0;
   padding: 0;
+  overflow: hidden;
+}
+
+.sidebar-stack {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-stack-pane {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar-tree-pane {
+  display: flex;
+  flex: 1 1 auto;
+}
+
+.sidebar-git-pane {
+  display: flex;
+  flex: 0 0 var(--git-panel-height);
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 2;
+  border-top: 1px solid var(--panel-border);
+  background: color-mix(in oklab, var(--panel-surface-base) 96%, white);
+}
+
+.sidebar-stack-resize-slot {
+  position: relative;
+  flex: 0 0 0.85rem;
+}
+
+.sidebar-stack-resize-handle {
+  position: absolute;
+  inset: 0;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 2;
 }
 
 .tree-list {
@@ -809,6 +855,15 @@
   -webkit-app-region: drag;
 }
 
+.file-tabs-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.6rem 0 0;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
 .file-tabs-scroller::-webkit-scrollbar {
   display: none;
 }
@@ -972,6 +1027,31 @@
   opacity: 0;
 }
 
+.editor-toolbar-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.72rem;
+  background: transparent;
+  color: var(--panel-muted);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.editor-toolbar-icon-button:hover:not(:disabled) {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+}
+
+.editor-toolbar-icon-button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
 .editor-content-shell {
   position: relative;
   display: flex;
@@ -991,6 +1071,506 @@
 .code-editor-shell .monaco-editor,
 .code-editor-shell .monaco-editor .overflow-guard {
   border-radius: 0;
+}
+
+.git-diff-editor {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.git-diff-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem 0.9rem;
+  border-bottom: 1px solid var(--panel-border);
+  background: color-mix(in oklab, var(--panel-surface-section) 82%, white);
+}
+
+.git-diff-header-copy {
+  min-width: 0;
+}
+
+.git-diff-header-copy h3 {
+  margin: 0.12rem 0 0;
+  color: var(--foreground);
+  font-size: 0.94rem;
+  font-weight: 600;
+}
+
+.git-diff-header-copy p,
+.git-panel-empty-copy,
+.git-panel-status,
+.git-panel-error,
+.markdown-diff-empty-state p {
+  margin: 0.18rem 0 0;
+  color: var(--panel-muted);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.git-diff-view-modes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.8rem;
+  background: color-mix(in oklab, var(--panel-surface-base) 78%, white);
+}
+
+.git-diff-view-mode,
+.git-toolbar-action,
+.git-change-action,
+.git-panel-section-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--panel-muted);
+}
+
+.git-diff-view-mode,
+.git-toolbar-action,
+.git-change-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0 0.78rem;
+  border-radius: 0.72rem;
+  font-size: 0.73rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.git-toolbar-icon-button,
+.git-change-icon-button {
+  width: 2rem;
+  min-width: 2rem;
+  padding: 0;
+}
+
+.git-diff-view-mode.is-active,
+.git-diff-view-mode:hover,
+.git-toolbar-action:hover,
+.git-change-action:hover {
+  background: color-mix(in oklab, var(--accent) 9%, white);
+  color: var(--foreground);
+}
+
+.git-change-action.is-danger:hover {
+  background: color-mix(in oklab, var(--danger) 12%, white);
+  color: color-mix(in oklab, var(--danger) 72%, black);
+}
+
+.git-diff-codemirror-shell {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.75rem 0.9rem 1rem;
+  background: color-mix(in oklab, var(--panel-surface-base) 94%, white);
+}
+
+.git-diff-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  padding: 0 0.9rem 0.2rem;
+}
+
+.git-diff-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: 0.1rem 0.65rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--panel-surface-base) 98%, white);
+  color: var(--panel-soft);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.git-diff-meta-pill.is-editable {
+  border-color: color-mix(in oklab, var(--accent) 22%, var(--panel-border));
+  color: color-mix(in oklab, var(--accent) 72%, black);
+  background: color-mix(in oklab, var(--accent) 8%, white);
+}
+
+.git-diff-meta-arrow {
+  color: var(--panel-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.git-diff-codemirror-host {
+  min-height: 100%;
+  height: 100%;
+  border: 1px solid var(--panel-border);
+  border-radius: 1rem;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--panel-surface-editor) 98%, white);
+}
+
+.git-diff-codemirror-host,
+.git-diff-codemirror-host * {
+  font-family: var(--font-sans) !important;
+}
+
+.git-diff-codemirror-host .cm-mergeView,
+.git-diff-codemirror-host .cm-editor {
+  height: 100%;
+  font-family: var(--font-sans);
+}
+
+.git-diff-codemirror-host .cm-mergeView {
+  background: color-mix(in oklab, var(--panel-surface-editor) 98%, white);
+}
+
+.git-diff-codemirror-host .cm-mergeViewEditors,
+.git-diff-codemirror-host .cm-mergeViewEditor {
+  height: 100%;
+}
+
+.git-diff-codemirror-host .cm-editor.cm-focused {
+  outline: none;
+}
+
+.git-diff-codemirror-host .cm-content,
+.git-diff-codemirror-host .cm-line,
+.git-diff-codemirror-host .cm-gutter,
+.git-diff-codemirror-host .cm-gutterElement,
+.git-diff-codemirror-host .cm-tooltip {
+  font-family: var(--font-sans) !important;
+  font-style: normal;
+}
+
+.git-diff-codemirror-host .cm-merge-revert {
+  display: none;
+}
+
+.git-diff-codemirror-host .cm-changedLine,
+.git-diff-codemirror-host .cm-deletedChunk,
+.git-diff-codemirror-host .cm-insertedLine {
+  background-color: color-mix(in oklab, var(--accent) 6%, white);
+}
+
+.git-diff-codemirror-host .cm-deletedText,
+.git-diff-codemirror-host .cm-insertedText {
+  border-radius: 0.25rem;
+}
+
+.git-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.git-panel-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--panel-border);
+  background: color-mix(in oklab, var(--panel-surface-base) 98%, white);
+}
+
+.git-panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+.git-panel-commit-row {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.git-panel-commit-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.git-panel-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.45rem 0.75rem 0;
+  color: var(--panel-soft);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.git-panel-summary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.git-panel-summary-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.08rem;
+}
+
+.git-panel-summary-primary {
+  display: block;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-panel-summary-secondary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-panel-empty-state {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+.git-panel-init-state {
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.git-panel-clean-state {
+  color: var(--panel-soft);
+}
+
+.git-panel-status,
+.git-panel-error {
+  padding: 0.35rem 0.75rem 0;
+}
+
+.git-panel-error {
+  color: color-mix(in oklab, var(--danger) 74%, black);
+}
+
+.git-panel-sections {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.git-panel-section {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--panel-border);
+}
+
+.git-panel-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.git-panel-section-toggle {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.git-panel-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.git-panel-section-caret {
+  transition: transform 140ms ease;
+}
+
+.git-panel-section-caret.is-expanded {
+  transform: rotate(90deg);
+}
+
+.git-panel-section-count {
+  color: var(--panel-soft);
+  font-size: 0.72rem;
+}
+
+.git-panel-section-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding-right: 0.75rem;
+}
+
+.git-panel-section-toggle:hover {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--foreground) 2%, white);
+}
+
+.git-change-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.git-change-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  border-top: 1px solid var(--panel-border);
+}
+
+.git-change-trigger {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0.52rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+}
+
+.git-change-trigger:hover {
+  background: color-mix(in oklab, var(--foreground) 2%, white);
+}
+
+.git-change-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.git-change-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.git-change-meta {
+  color: var(--panel-muted);
+  font-size: 0.69rem;
+}
+
+.git-change-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  background: color-mix(in oklab, var(--panel-border) 44%, white);
+}
+
+.git-change-badge-added,
+.git-change-badge-untracked {
+  color: color-mix(in oklab, var(--success) 72%, black);
+  background: color-mix(in oklab, var(--success) 12%, white);
+}
+
+.git-change-badge-modified,
+.git-change-badge-renamed {
+  color: color-mix(in oklab, var(--accent) 72%, black);
+  background: color-mix(in oklab, var(--accent) 12%, white);
+}
+
+.git-change-badge-deleted,
+.git-change-badge-conflicted {
+  color: color-mix(in oklab, var(--danger) 76%, black);
+  background: color-mix(in oklab, var(--danger) 12%, white);
+}
+
+.git-change-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0 0.45rem 0 0.2rem;
+}
+
+.git-commit-textarea {
+  display: block;
+  width: 100%;
+  min-height: 2.55rem;
+  max-height: 7rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.9rem;
+  background: color-mix(in oklab, var(--panel-surface-section) 96%, white);
+  color: var(--foreground);
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.git-commit-textarea::placeholder {
+  color: var(--field-placeholder);
+}
+
+.git-commit-textarea:focus,
+.git-commit-textarea:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 28%, transparent);
+  outline-offset: 1px;
+  border-color: color-mix(in oklab, var(--accent) 24%, var(--panel-border));
+}
+
+@media (max-width: 860px) {
+  .sidebar-git-pane {
+    flex-basis: 18rem;
+  }
+
+  .git-diff-header,
+  .git-panel-header {
+    padding-inline: 1rem;
+  }
+
+  .git-panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .git-panel-summary {
+    padding-inline: 1rem;
+  }
+
+  .git-diff-pierre-shell {
+    padding-inline: 1rem;
+  }
 }
 
 .editor-empty-state {
