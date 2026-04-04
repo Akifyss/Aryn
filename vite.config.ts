@@ -1,10 +1,30 @@
 import { rmSync } from 'node:fs'
+import { builtinModules } from 'node:module'
 import path from 'node:path'
 import { defineConfig } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron/simple'
 import pkg from './package.json'
+
+const bundledElectronRuntimeExternals = new Set([
+  'electron',
+  ...builtinModules,
+  ...builtinModules.map((moduleName) => `node:${moduleName}`),
+])
+
+function isBundledElectronRuntimeExternal(id: string) {
+  if (id === 'electron') {
+    return true
+  }
+
+  if (id.startsWith('node:')) {
+    return true
+  }
+
+  // Handle subpath imports such as `fs/promises` without matching local paths like `electron/preload/index.ts`.
+  return builtinModules.some((moduleName) => id === moduleName || id.startsWith(`${moduleName}/`))
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
@@ -26,7 +46,7 @@ export default defineConfig(({ command }) => {
       electron({
         main: {
           // Shortcut of `build.lib.entry`
-          entry: 'electron/main/index.ts',
+          entry: 'electron/main/entry.ts',
           onstart(args) {
             if (process.env.VSCODE_DEBUG) {
               console.log(/* For `.vscode/.debug.script.mjs` */'[startup] Electron App')
@@ -41,7 +61,10 @@ export default defineConfig(({ command }) => {
               minify: isBuild,
               outDir: 'dist-electron/main',
               rollupOptions: {
-                external: Object.keys('dependencies' in pkg ? pkg.dependencies : {}),
+                external: isBundledElectronRuntimeExternal,
+                output: {
+                  entryFileNames: 'index.js',
+                },
               },
             },
           },
@@ -57,7 +80,7 @@ export default defineConfig(({ command }) => {
               minify: isBuild,
               outDir: 'dist-electron/preload',
               rollupOptions: {
-                external: Object.keys('dependencies' in pkg ? pkg.dependencies : {}),
+                external: isBundledElectronRuntimeExternal,
               },
             },
           },
