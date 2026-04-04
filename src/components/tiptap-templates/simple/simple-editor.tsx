@@ -227,6 +227,8 @@ export function SimpleEditor({
 
   const editor = useEditor({
     immediatelyRender: false,
+    content: value,
+    contentType: "markdown",
     shouldRerenderOnTransaction: false,
     editorProps: {
       attributes: {
@@ -268,31 +270,11 @@ export function SimpleEditor({
       }),
       Markdown,
     ],
-    content: "",
     editable: !disabled,
-    onCreate: ({ editor: currentEditor }) => {
-      const manager = currentEditor.storage.markdown?.manager
-
-      try {
-        currentEditor.commands.setContent(
-          manager ? manager.parse(value) : value,
-          {
-            emitUpdate: false,
-          }
-        )
-      } catch {
-        currentEditor.commands.setContent(value, {
-          emitUpdate: false,
-        })
-      }
-
-      lastMarkdownRef.current = value
-    },
     onUpdate: ({ editor: currentEditor }) => {
-      const manager = currentEditor.storage.markdown?.manager
-      const nextMarkdown = manager
-        ? manager.serialize(currentEditor.getJSON()).replace(/&nbsp;|&#160;/g, " ")
-        : currentEditor.getText()
+      const nextMarkdown = currentEditor
+        .getMarkdown()
+        .replace(/&nbsp;|&#160;/g, " ")
 
       if (nextMarkdown === lastMarkdownRef.current) {
         return
@@ -313,7 +295,7 @@ export function SimpleEditor({
       return
     }
 
-    editor.setEditable(!disabled)
+    editor.setEditable(!disabled, false)
   }, [disabled, editor])
 
   React.useEffect(() => {
@@ -321,10 +303,9 @@ export function SimpleEditor({
       return
     }
 
-    const manager = editor.storage.markdown?.manager
-
     try {
-      editor.commands.setContent(manager ? manager.parse(value) : value, {
+      editor.commands.setContent(value, {
+        contentType: "markdown",
         emitUpdate: false,
       })
     } catch {
