@@ -1294,19 +1294,38 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   flex: 0 0 auto;
 }
 
 .git-panel-commit-row {
-  display: grid;
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 
-.git-panel-commit-actions {
-  display: flex;
-  justify-content: flex-end;
+.git-panel-commit-field {
+  position: relative;
+  min-width: 0;
+}
+
+.git-panel-commit-clear {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  color: var(--panel-muted);
+}
+
+.git-panel-commit-clear:hover {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--foreground) 4%, white);
 }
 
 .git-panel-summary {
@@ -1386,6 +1405,11 @@
   overflow: auto;
 }
 
+.git-panel-tree-shell {
+  display: flex;
+  flex-direction: column;
+}
+
 .git-panel-section {
   display: flex;
   flex-direction: column;
@@ -1448,6 +1472,44 @@
   list-style: none;
 }
 
+.git-tree-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.git-tree-node {
+  display: flex;
+  flex-direction: column;
+}
+
+.git-tree-node-children {
+  display: flex;
+  flex-direction: column;
+}
+
+.git-tree-folder-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-top: 1px solid var(--panel-border);
+}
+
+.git-tree-folder-toggle {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0.5rem 0.75rem 0.5rem 1rem;
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.git-tree-folder-toggle:hover {
+  background: color-mix(in oklab, var(--foreground) 2%, white);
+}
+
 .git-change-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1469,6 +1531,10 @@
 
 .git-change-trigger:hover {
   background: color-mix(in oklab, var(--foreground) 2%, white);
+}
+
+.git-tree-node .git-change-trigger {
+  padding-left: 1.5rem;
 }
 
 .git-change-copy {
@@ -1533,7 +1599,7 @@
   width: 100%;
   min-height: 2.55rem;
   max-height: 7rem;
-  padding: 0.7rem 0.85rem;
+  padding: 0.7rem 2.4rem 0.7rem 0.85rem;
   border: 1px solid var(--panel-border);
   border-radius: 0.9rem;
   background: color-mix(in oklab, var(--panel-surface-section) 96%, white);
@@ -1552,6 +1618,11 @@
   outline: 2px solid color-mix(in oklab, var(--accent) 28%, transparent);
   outline-offset: 1px;
   border-color: color-mix(in oklab, var(--accent) 24%, var(--panel-border));
+}
+
+.git-toolbar-action.is-accent {
+  color: color-mix(in oklab, var(--accent) 72%, black);
+  background: color-mix(in oklab, var(--accent) 10%, white);
 }
 
 @media (max-width: 860px) {

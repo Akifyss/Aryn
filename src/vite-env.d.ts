@@ -29,7 +29,11 @@ declare global {
       stageGitPaths: (workspacePath: string, filePaths: string[]) => Promise<GitRepositoryState>
       unstageGitPaths: (workspacePath: string, filePaths: string[]) => Promise<GitRepositoryState>
       discardGitChange: (workspacePath: string, change: GitChangeItem) => Promise<GitRepositoryState>
+      discardAllGitChanges: (workspacePath: string) => Promise<GitRepositoryState>
       commitGitChanges: (workspacePath: string, message: string) => Promise<GitRepositoryState>
+      commitAndSyncGitChanges: (workspacePath: string, message: string) => Promise<GitRepositoryState>
+      pullGitChanges: (workspacePath: string) => Promise<GitRepositoryState>
+      pushGitChanges: (workspacePath: string) => Promise<GitRepositoryState>
       getGitFileDiff: (workspacePath: string, filePath: string, scope: GitChangeScope) => Promise<GitFileDiffResult>
       getWorkspaceIconTheme: () => Promise<WorkspaceIconTheme | null>
       getWorkspaceIconThemeCatalog: () => Promise<WorkspaceIconThemeCatalogOption[]>

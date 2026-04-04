@@ -28,8 +28,8 @@ import {
   indentWithTab,
 } from '@codemirror/commands'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
-import { SaveLine } from '@mingcute/react'
-import type { GitFileDiffResult } from '@/features/git/types'
+import { ArrowDownLine, ArrowUpLine, Refresh2Line, SaveLine } from '@mingcute/react'
+import type { GitChangeItem, GitFileDiffResult } from '@/features/git/types'
 import { getCodeMirrorLanguageSupport } from '@/features/editor/lib/codemirror-language'
 
 type DiffViewMode = 'split' | 'unified'
@@ -128,10 +128,16 @@ function createDiffExtensions({
 
 export function GitDiffEditor({
   diff,
+  onDiscardChange,
   onSaveEditedFile,
+  onStageChange,
+  onUnstageChange,
 }: {
   diff: GitFileDiffResult
+  onDiscardChange: (change: GitChangeItem) => void
   onSaveEditedFile: (filePath: string, content: string) => Promise<void>
+  onStageChange: (change: GitChangeItem) => void
+  onUnstageChange: (change: GitChangeItem) => void
 }) {
   const defaultMode = diff.editorKind === 'rich-text' ? 'unified' : 'split'
   const [viewMode, setViewMode] = useState<DiffViewMode>(defaultMode)
@@ -322,6 +328,41 @@ export function GitDiffEditor({
         </div>
 
         <div className='git-diff-view-modes'>
+          {diff.change.scope === 'unstaged' ? (
+            <>
+              <button
+                type='button'
+                className='git-diff-view-mode'
+                onClick={() => {
+                  onDiscardChange(diff.change)
+                }}
+              >
+                <Refresh2Line size={15} />
+                Discard
+              </button>
+              <button
+                type='button'
+                className='git-diff-view-mode'
+                onClick={() => {
+                  onStageChange(diff.change)
+                }}
+              >
+                <ArrowUpLine size={15} />
+                Stage
+              </button>
+            </>
+          ) : (
+            <button
+              type='button'
+              className='git-diff-view-mode'
+              onClick={() => {
+                onUnstageChange(diff.change)
+              }}
+            >
+              <ArrowDownLine size={15} />
+              Unstage
+            </button>
+          )}
           <button
             type='button'
             className={`git-diff-view-mode${viewMode === 'unified' ? ' is-active' : ''}`}
@@ -358,9 +399,7 @@ export function GitDiffEditor({
         <span className='git-diff-meta-pill'>{diff.originalLabel}</span>
         <span className='git-diff-meta-arrow'>to</span>
         <span className='git-diff-meta-pill'>{diff.modifiedLabel}</span>
-        <span className={`git-diff-meta-pill${isEditable ? ' is-editable' : ''}`}>
-          {isEditable ? 'Editable' : 'Read only'}
-        </span>
+        <span className={`git-diff-meta-pill${isEditable ? ' is-editable' : ''}`}>{fileDescription}</span>
       </div>
 
       <div className='git-diff-codemirror-shell'>

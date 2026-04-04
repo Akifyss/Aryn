@@ -2,7 +2,14 @@ import { execFile } from 'node:child_process'
 import { readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import type { GitChangeItem, GitChangeKind, GitChangeScope, GitFileDiffResult, GitRepositoryState } from '../../src/features/git/types'
+import type {
+  GitChangeItem,
+  GitChangeKind,
+  GitChangeScope,
+  GitFileDiffResult,
+  GitRecentPullItem,
+  GitRepositoryState,
+} from '../../src/features/git/types'
 import { getSupportedWorkspaceEditorKind } from '../../src/features/workspace/lib/file-types'
 
 const execFileAsync = promisify(execFile)
@@ -18,6 +25,12 @@ type ParsedBranchStatus = {
   behind: number
   branch: string | null
 }
+
+type EnsureUpstreamMode = 'pull' | 'push' | 'sync'
+
+type EnsureUpstreamResult = 'ready' | 'pushed'
+
+const recentPullsByRepository = new Map<string, GitRecentPullItem[]>()
 
 function toPosixPath(filePath: string) {
   return filePath.replace(/[\\/]+/g, '/')
@@ -141,6 +154,25 @@ function mapStatusCodeToKind(code: string, scope: GitChangeScope): GitChangeKind
       return 'type-changed'
     case '!':
       return scope === 'unstaged' ? 'deleted' : null
+    default:
+      return null
+  }
+}
+
+function mapNameStatusCodeToKind(code: string): GitRecentPullItem['kind'] | null {
+  switch (code[0]) {
+    case 'A':
+      return 'added'
+    case 'C':
+      return 'copied'
+    case 'D':
+      return 'deleted'
+    case 'M':
+      return 'modified'
+    case 'R':
+      return 'renamed'
+    case 'T':
+      return 'type-changed'
     default:
       return null
   }
@@ -272,6 +304,156 @@ async function readGitIndexFile(repositoryRootPath: string, relativePath: string
   return stdout
 }
 
+async function getUnpushedCommitCount(repositoryRootPath: string) {
+  const stdout = await runGit(['rev-list', '--count', '@{upstream}..HEAD'], {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  })
+
+  const parsedCount = Number(stdout?.trim() ?? '0')
+  return Number.isFinite(parsedCount) ? parsedCount : 0
+}
+
+async function getTrackingBranch(repositoryRootPath: string) {
+  const stdout = await runGit(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  })
+
+  const trackingBranch = stdout?.trim() ?? ''
+  return trackingBranch || null
+}
+
+async function getCurrentBranch(repositoryRootPath: string) {
+  const stdout = await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], {
+    cwd: repositoryRootPath,
+  })
+
+  const branchName = (stdout ?? '').trim()
+
+  if (!branchName || branchName === 'HEAD') {
+    throw new Error('Detached HEAD is not supported for Git sync actions.')
+  }
+
+  return branchName
+}
+
+async function getRemotes(repositoryRootPath: string) {
+  const stdout = await runGit(['remote'], {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  })
+
+  return (stdout ?? '')
+    .split(/\r?\n/g)
+    .map((remote) => remote.trim())
+    .filter(Boolean)
+}
+
+async function remoteHasBranch(repositoryRootPath: string, remoteName: string, branchName: string) {
+  const stdout = await runGit(['ls-remote', '--heads', remoteName, branchName], {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  })
+
+  return Boolean(stdout?.trim())
+}
+
+async function ensureUpstreamBranch(repositoryRootPath: string, mode: EnsureUpstreamMode): Promise<EnsureUpstreamResult> {
+  if (await getTrackingBranch(repositoryRootPath)) {
+    return 'ready'
+  }
+
+  const remotes = await getRemotes(repositoryRootPath)
+
+  if (remotes.length === 0) {
+    throw new Error('No remote is configured for this repository.')
+  }
+
+  if (remotes.length > 1) {
+    throw new Error('No upstream branch is set. Configure the tracking branch manually for this repository first.')
+  }
+
+  const remoteName = remotes[0]
+  const branchName = await getCurrentBranch(repositoryRootPath)
+
+  if (await remoteHasBranch(repositoryRootPath, remoteName, branchName)) {
+    await runGit(['branch', '--set-upstream-to', `${remoteName}/${branchName}`, branchName], {
+      cwd: repositoryRootPath,
+    })
+    return 'ready'
+  }
+
+  if (mode === 'pull') {
+    throw new Error(`No upstream branch is set, and ${remoteName}/${branchName} does not exist yet. Push this branch first.`)
+  }
+
+  await runGit(['push', '-u', remoteName, branchName], {
+    cwd: repositoryRootPath,
+  })
+
+  return 'pushed'
+}
+
+function parseNameStatusOutput(repositoryRootPath: string, diffOutput: string) {
+  const entries = diffOutput
+    .split('\0')
+    .map((entry) => entry.replace(/\r?\n/g, ''))
+    .filter(Boolean)
+  const changes: GitRecentPullItem[] = []
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const statusCode = entries[index]
+
+    if (!statusCode) {
+      continue
+    }
+
+    const kind = mapNameStatusCodeToKind(statusCode)
+
+    if (!kind) {
+      continue
+    }
+
+    if (statusCode.startsWith('R') || statusCode.startsWith('C')) {
+      const originalPath = entries[index + 1]
+      const currentPath = entries[index + 2]
+
+      if (!originalPath || !currentPath) {
+        continue
+      }
+
+      changes.push({
+        kind,
+        originalPath: path.resolve(repositoryRootPath, originalPath),
+        path: path.resolve(repositoryRootPath, currentPath),
+        relativePath: toWorkspaceRelativePath(repositoryRootPath, path.resolve(repositoryRootPath, currentPath)),
+        statusCode,
+      })
+      index += 2
+      continue
+    }
+
+    const currentPath = entries[index + 1]
+
+    if (!currentPath) {
+      continue
+    }
+
+    changes.push({
+      kind,
+      originalPath: null,
+      path: path.resolve(repositoryRootPath, currentPath),
+      relativePath: toWorkspaceRelativePath(repositoryRootPath, path.resolve(repositoryRootPath, currentPath)),
+      statusCode,
+    })
+    index += 1
+  }
+
+  changes.sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+  return changes
+}
+
 export async function getGitRepositoryState(workspacePath: string): Promise<GitRepositoryState> {
   const repositoryRootPath = await resolveRepositoryRoot(workspacePath)
 
@@ -283,8 +465,10 @@ export async function getGitRepositoryState(workspacePath: string): Promise<GitR
       hasCommits: false,
       hasChanges: false,
       isRepository: false,
+      recentlyPulledChanges: [],
       repositoryRootPath: null,
       stagedChanges: [],
+      unpushedCommits: 0,
       unstagedChanges: [],
       workspacePath,
     }
@@ -300,6 +484,9 @@ export async function getGitRepositoryState(workspacePath: string): Promise<GitR
 
   const parsedStatus = parseStatusLines(repositoryRootPath, statusOutput)
   const hasCommits = await repositoryHasCommits(repositoryRootPath)
+  const unpushedCommits = hasCommits
+    ? await getUnpushedCommitCount(repositoryRootPath)
+    : 0
 
   return {
     ahead: parsedStatus.ahead,
@@ -308,8 +495,10 @@ export async function getGitRepositoryState(workspacePath: string): Promise<GitR
     hasCommits,
     hasChanges: parsedStatus.stagedChanges.length > 0 || parsedStatus.unstagedChanges.length > 0,
     isRepository: true,
+    recentlyPulledChanges: recentPullsByRepository.get(repositoryRootPath) ?? [],
     repositoryRootPath,
     stagedChanges: parsedStatus.stagedChanges,
+    unpushedCommits,
     unstagedChanges: parsedStatus.unstagedChanges,
     workspacePath,
   }
@@ -320,6 +509,7 @@ export async function initializeGitRepository(workspacePath: string) {
     cwd: workspacePath,
   })
 
+  recentPullsByRepository.delete(workspacePath)
   return getGitRepositoryState(workspacePath)
 }
 
@@ -374,6 +564,33 @@ export async function discardGitChange(workspacePath: string, change: GitChangeI
   return getGitRepositoryState(workspacePath)
 }
 
+export async function discardAllGitChanges(workspacePath: string) {
+  const repositoryState = await getGitRepositoryState(workspacePath)
+
+  if (!repositoryState.isRepository || !repositoryState.repositoryRootPath) {
+    throw new Error('Initialize Git in this workspace first.')
+  }
+
+  const trackedPaths = repositoryState.unstagedChanges
+    .filter((change) => change.kind !== 'untracked')
+    .map((change) => toWorkspaceRelativePath(repositoryState.repositoryRootPath!, change.path))
+  const untrackedPaths = repositoryState.unstagedChanges
+    .filter((change) => change.kind === 'untracked')
+    .map((change) => change.path)
+
+  if (trackedPaths.length > 0) {
+    await runGit(['restore', '--worktree', '--', ...trackedPaths], {
+      cwd: repositoryState.repositoryRootPath,
+    })
+  }
+
+  await Promise.all(untrackedPaths.map(async (filePath) => {
+    await rm(filePath, { force: true, recursive: true })
+  }))
+
+  return getGitRepositoryState(workspacePath)
+}
+
 export async function commitGitChanges(workspacePath: string, message: string) {
   const repositoryRootPath = await resolveRepositoryRoot(workspacePath)
 
@@ -404,6 +621,90 @@ export async function commitGitChanges(workspacePath: string, message: string) {
   })
 
   return getGitRepositoryState(workspacePath)
+}
+
+export async function pullGitChanges(workspacePath: string) {
+  const repositoryRootPath = await resolveRepositoryRoot(workspacePath)
+
+  if (!repositoryRootPath) {
+    throw new Error('Initialize Git in this workspace first.')
+  }
+
+  await ensureUpstreamBranch(repositoryRootPath, 'pull')
+
+  const beforeHead = (await runGit(['rev-parse', 'HEAD'], {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  }))?.trim() ?? null
+
+  await runGit(['pull', '--no-rebase'], {
+    cwd: repositoryRootPath,
+  })
+
+  const afterHead = (await runGit(['rev-parse', 'HEAD'], {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  }))?.trim() ?? null
+
+  if (beforeHead && afterHead && beforeHead !== afterHead) {
+    const diffOutput = await runGit(['diff', '--name-status', '-z', `${beforeHead}..${afterHead}`], {
+      cwd: repositoryRootPath,
+    })
+    recentPullsByRepository.set(repositoryRootPath, parseNameStatusOutput(repositoryRootPath, diffOutput ?? ''))
+  } else {
+    recentPullsByRepository.set(repositoryRootPath, [])
+  }
+
+  return getGitRepositoryState(workspacePath)
+}
+
+export async function pushGitChanges(workspacePath: string) {
+  const repositoryRootPath = await resolveRepositoryRoot(workspacePath)
+
+  if (!repositoryRootPath) {
+    throw new Error('Initialize Git in this workspace first.')
+  }
+
+  const upstreamState = await ensureUpstreamBranch(repositoryRootPath, 'push')
+
+  if (upstreamState === 'pushed') {
+    return getGitRepositoryState(workspacePath)
+  }
+
+  await runGit(['push'], {
+    cwd: repositoryRootPath,
+  })
+
+  return getGitRepositoryState(workspacePath)
+}
+
+export async function commitAndSyncGitChanges(workspacePath: string, message: string) {
+  const repositoryState = await getGitRepositoryState(workspacePath)
+
+  if (!repositoryState.isRepository) {
+    throw new Error('Initialize Git in this workspace first.')
+  }
+
+  let nextState = repositoryState
+
+  if (repositoryState.hasChanges) {
+    nextState = await commitGitChanges(workspacePath, message)
+  }
+
+  if (!nextState.repositoryRootPath) {
+    throw new Error('Initialize Git in this workspace first.')
+  }
+
+  const upstreamState = await ensureUpstreamBranch(nextState.repositoryRootPath, 'sync')
+
+  if (upstreamState === 'pushed') {
+    return getGitRepositoryState(workspacePath)
+  }
+
+  nextState = await pullGitChanges(workspacePath)
+  nextState = await pushGitChanges(workspacePath)
+
+  return nextState
 }
 
 export async function getGitFileDiff(

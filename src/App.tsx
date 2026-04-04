@@ -17,14 +17,13 @@ import { GitDiffEditor } from '@/features/editor/components/git-diff-editor'
 import { CodeEditor } from '@/features/editor/components/code-editor'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import { GitPanel } from '@/features/git/components/git-panel'
-import type { GitChangeItem, GitChangeScope, GitRepositoryState } from '@/features/git/types'
+import type { GitChangeItem, GitChangeScope, GitPanelLayout, GitRepositoryState } from '@/features/git/types'
 import {
   SettingsDialog,
   type SettingsSectionId,
 } from '@/features/settings/components/settings-dialog'
 import { FileTabs } from '@/features/workspace/components/file-tabs'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
-import { getSupportedWorkspaceEditorKind } from '@/features/workspace/lib/file-types'
 import {
   useWorkspaceStore,
   type WorkspaceDiffTab,
@@ -108,6 +107,7 @@ const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
 const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
 const DEFAULT_GIT_PANEL_HEIGHT = 292
 const MIN_GIT_PANEL_HEIGHT = 200
+const DEFAULT_GIT_PANEL_LAYOUT: GitPanelLayout = 'list'
 const TAB_STORAGE_PREFIX = 'writing-workspace:file-tabs:'
 const LEGACY_TAB_STORAGE_PREFIX = 'writing-workspace:editor-tabs:'
 const SETTINGS_TAB_PATH = 'app://settings'
@@ -209,6 +209,7 @@ function App() {
   const [gitBusyLabel, setGitBusyLabel] = useState<string | null>(null)
   const [gitErrorMessage, setGitErrorMessage] = useState<string | null>(null)
   const [gitCommitMessage, setGitCommitMessage] = useState('')
+  const [gitPanelLayout, setGitPanelLayout] = useState<GitPanelLayout>(DEFAULT_GIT_PANEL_LAYOUT)
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
   const activeTabPath = useWorkspaceStore((state) => state.activeTabPath)
@@ -282,18 +283,7 @@ function App() {
     activeFileTab
     && currentPath
     && gitRepositoryState?.isRepository
-    && getSupportedWorkspaceEditorKind(activeFileTab.filePath),
   )
-  const currentGitChange = useMemo(() => {
-    if (!currentFilePath || !gitRepositoryState?.isRepository) {
-      return null
-    }
-
-    const targetPath = normalizeFilePath(currentFilePath)
-    return gitRepositoryState.unstagedChanges.find((change) => normalizeFilePath(change.path) === targetPath)
-      ?? gitRepositoryState.stagedChanges.find((change) => normalizeFilePath(change.path) === targetPath)
-      ?? null
-  }, [currentFilePath, gitRepositoryState])
 
   function findGitChangeByFilePath(repositoryState: GitRepositoryState | null, filePath: string) {
     if (!repositoryState?.isRepository) {
@@ -931,6 +921,36 @@ function App() {
     })
   }
 
+  async function handleDiscardGitChanges(changes: GitChangeItem[]) {
+    if (!currentPath || changes.length === 0) {
+      return
+    }
+
+    if (changes.length === 1) {
+      await handleDiscardGitChange(changes[0])
+      return
+    }
+
+    const confirmed = window.confirm(`Discard ${changes.length} working tree changes?`)
+
+    if (!confirmed) {
+      return
+    }
+
+    await runGitAction('Discarding changes...', async () => {
+      await Promise.all(changes.map(async (change) => {
+        await window.appApi.discardGitChange(currentPath, change)
+      }))
+      const nextState = await refreshGitState(currentPath, { silent: true })
+      if (nextState) {
+        setGitRepositoryState(nextState)
+      }
+      await loadTree(currentPath)
+      await syncOpenDiffTabs(currentPath)
+      setStatusMessage(`${changes.length} changes discarded`)
+    })
+  }
+
   async function handleCommitGitChanges() {
     if (!currentPath) {
       return
@@ -942,6 +962,66 @@ function App() {
       setGitCommitMessage('')
       await syncOpenDiffTabs(currentPath)
       setStatusMessage('Commit created')
+    })
+  }
+
+  async function handleCommitAndSyncGitChanges() {
+    if (!currentPath) {
+      return
+    }
+
+    await runGitAction('Committing and syncing...', async () => {
+      const nextState = await window.appApi.commitAndSyncGitChanges(currentPath, gitCommitMessage)
+      setGitRepositoryState(nextState)
+      setGitCommitMessage('')
+      await syncOpenDiffTabs(currentPath)
+      setStatusMessage('Commit and sync completed')
+    })
+  }
+
+  async function handlePushGitChanges() {
+    if (!currentPath) {
+      return
+    }
+
+    await runGitAction('Pushing changes...', async () => {
+      const nextState = await window.appApi.pushGitChanges(currentPath)
+      setGitRepositoryState(nextState)
+      setStatusMessage('Git changes pushed')
+    })
+  }
+
+  async function handlePullGitChanges() {
+    if (!currentPath) {
+      return
+    }
+
+    await runGitAction('Pulling changes...', async () => {
+      const nextState = await window.appApi.pullGitChanges(currentPath)
+      setGitRepositoryState(nextState)
+      await loadTree(currentPath)
+      await syncOpenDiffTabs(currentPath)
+      setStatusMessage('Git changes pulled')
+    })
+  }
+
+  async function handleDiscardAllGitChanges() {
+    if (!currentPath || !gitRepositoryState?.unstagedChanges.length) {
+      return
+    }
+
+    const confirmed = window.confirm('Discard all working tree changes? This will revert tracked files and delete untracked files.')
+
+    if (!confirmed) {
+      return
+    }
+
+    await runGitAction('Discarding all working tree changes...', async () => {
+      const nextState = await window.appApi.discardAllGitChanges(currentPath)
+      setGitRepositoryState(nextState)
+      await loadTree(currentPath)
+      await syncOpenDiffTabs(currentPath)
+      setStatusMessage('Working tree changes discarded')
     })
   }
 
@@ -1135,6 +1215,7 @@ function App() {
     const savedLeftCollapsed = storage.getItem('writing-workspace:left-sidebar-collapsed')
     const savedRightCollapsed = storage.getItem('writing-workspace:right-sidebar-collapsed')
     const savedGitPanelHeight = storage.getItem('writing-workspace:git-panel-height')
+    const savedGitPanelLayout = storage.getItem('writing-workspace:git-panel-layout')
 
     if (savedLeftWidth) {
       const parsedLeftWidth = Number(savedLeftWidth)
@@ -1157,6 +1238,10 @@ function App() {
       }
     }
 
+    if (savedGitPanelLayout === 'list' || savedGitPanelLayout === 'tree') {
+      setGitPanelLayout(savedGitPanelLayout)
+    }
+
     if (savedLeftCollapsed) {
       setIsLeftSidebarCollapsed(savedLeftCollapsed === 'true')
     }
@@ -1177,6 +1262,10 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem('writing-workspace:git-panel-height', String(gitPanelHeight))
   }, [gitPanelHeight])
+
+  useEffect(() => {
+    window.localStorage.setItem('writing-workspace:git-panel-layout', gitPanelLayout)
+  }, [gitPanelLayout])
 
   useEffect(() => {
     window.localStorage.setItem('writing-workspace:left-sidebar-collapsed', String(isLeftSidebarCollapsed))
@@ -1395,20 +1484,36 @@ function App() {
             <GitPanel
               busyLabel={gitBusyLabel}
               commitMessage={gitCommitMessage}
-              errorMessage={gitErrorMessage}
               isLoading={isGitLoading}
+              layout={gitPanelLayout}
               onCommit={() => {
                 void handleCommitGitChanges()
               }}
+              onCommitAndSync={() => {
+                void handleCommitAndSyncGitChanges()
+              }}
               onCommitMessageChange={setGitCommitMessage}
-              onDiscard={(change) => {
-                void handleDiscardGitChange(change)
+              onDiscardAll={() => {
+                void handleDiscardAllGitChanges()
+              }}
+              onDiscardMany={(changes) => {
+                void handleDiscardGitChanges(changes)
               }}
               onInitialize={() => {
                 void handleInitializeGit()
               }}
+              onLayoutChange={setGitPanelLayout}
+              onOpenFile={(filePath) => {
+                void openFile(filePath)
+              }}
               onOpenDiff={(change) => {
                 void openGitDiff(change)
+              }}
+              onPull={() => {
+                void handlePullGitChanges()
+              }}
+              onPush={() => {
+                void handlePushGitChanges()
               }}
               onRefresh={() => {
                 void refreshGitState(currentPath, { silent: false })
@@ -1521,7 +1626,16 @@ function App() {
             {activeDiffTab ? (
               <GitDiffEditor
                 diff={activeDiffTab.diff}
+                onDiscardChange={(change) => {
+                  void handleDiscardGitChange(change)
+                }}
                 onSaveEditedFile={handleSaveDiffFile}
+                onStageChange={(change) => {
+                  void handleStageGitPaths([change.path])
+                }}
+                onUnstageChange={(change) => {
+                  void handleUnstageGitPaths([change.path])
+                }}
               />
             ) : null}
 

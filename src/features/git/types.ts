@@ -2,6 +2,8 @@ import type { SupportedWorkspaceEditorKind } from '@/features/workspace/lib/file
 
 export type GitChangeScope = 'staged' | 'unstaged'
 
+export type GitPanelLayout = 'list' | 'tree'
+
 export type GitChangeKind =
   | 'added'
   | 'copied'
@@ -21,6 +23,14 @@ export type GitChangeItem = {
   statusCode: string
 }
 
+export type GitRecentPullItem = {
+  kind: Exclude<GitChangeKind, 'conflicted' | 'untracked'>
+  originalPath: string | null
+  path: string
+  relativePath: string
+  statusCode: string
+}
+
 export type GitRepositoryState = {
   ahead: number
   behind: number
@@ -28,8 +38,10 @@ export type GitRepositoryState = {
   hasCommits: boolean
   hasChanges: boolean
   isRepository: boolean
+  recentlyPulledChanges: GitRecentPullItem[]
   repositoryRootPath: string | null
   stagedChanges: GitChangeItem[]
+  unpushedCommits: number
   unstagedChanges: GitChangeItem[]
   workspacePath: string
 }

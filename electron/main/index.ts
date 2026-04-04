@@ -4,11 +4,15 @@ import path from 'node:path'
 import os from 'node:os'
 import throttle from 'lodash.throttle'
 import {
+  commitAndSyncGitChanges,
   commitGitChanges,
+  discardAllGitChanges,
   discardGitChange,
   getGitFileDiff,
   getGitRepositoryState,
   initializeGitRepository,
+  pullGitChanges,
+  pushGitChanges,
   stageGitPaths,
   unstageGitPaths,
 } from './git'
@@ -449,8 +453,24 @@ ipcMain.handle('git:discard-change', async (_, workspacePath: string, change: Gi
   return discardGitChange(workspacePath, change)
 })
 
+ipcMain.handle('git:discard-all', async (_, workspacePath: string) => {
+  return discardAllGitChanges(workspacePath)
+})
+
 ipcMain.handle('git:commit', async (_, workspacePath: string, message: string) => {
   return commitGitChanges(workspacePath, message)
+})
+
+ipcMain.handle('git:commit-and-sync', async (_, workspacePath: string, message: string) => {
+  return commitAndSyncGitChanges(workspacePath, message)
+})
+
+ipcMain.handle('git:pull', async (_, workspacePath: string) => {
+  return pullGitChanges(workspacePath)
+})
+
+ipcMain.handle('git:push', async (_, workspacePath: string) => {
+  return pushGitChanges(workspacePath)
 })
 
 ipcMain.handle('git:get-file-diff', async (_, workspacePath: string, filePath: string, scope: GitChangeScope) => {
