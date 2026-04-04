@@ -60,6 +60,7 @@ import { useWindowSize } from "@/hooks/use-window-size"
 import { useCursorVisibility } from "@/hooks/use-cursor-visibility"
 
 import { ThemeToggle } from "@/components/tiptap-templates/simple/theme-toggle"
+import { normalizeMarkdownForComparison } from "@/features/editor/lib/markdown"
 
 import "@/components/tiptap-templates/simple/simple-editor.scss"
 
@@ -222,7 +223,7 @@ export function SimpleEditor({
     "main" | "highlighter" | "link"
   >("main")
   const [theme, setTheme] = React.useState<"light" | "dark">("light")
-  const lastMarkdownRef = React.useRef(value)
+  const lastMarkdownRef = React.useRef(normalizeMarkdownForComparison(value))
   const toolbarRef = React.useRef<HTMLDivElement>(null)
 
   const editor = useEditor({
@@ -272,15 +273,14 @@ export function SimpleEditor({
     ],
     editable: !disabled,
     onUpdate: ({ editor: currentEditor }) => {
-      const nextMarkdown = currentEditor
-        .getMarkdown()
-        .replace(/&nbsp;|&#160;/g, " ")
+      const nextMarkdown = currentEditor.getMarkdown()
+      const comparableMarkdown = normalizeMarkdownForComparison(nextMarkdown)
 
-      if (nextMarkdown === lastMarkdownRef.current) {
+      if (comparableMarkdown === lastMarkdownRef.current) {
         return
       }
 
-      lastMarkdownRef.current = nextMarkdown
+      lastMarkdownRef.current = comparableMarkdown
       onChange(nextMarkdown)
     },
   })
@@ -299,7 +299,9 @@ export function SimpleEditor({
   }, [disabled, editor])
 
   React.useEffect(() => {
-    if (!editor || value === lastMarkdownRef.current) {
+    const comparableValue = normalizeMarkdownForComparison(value)
+
+    if (!editor || comparableValue === lastMarkdownRef.current) {
       return
     }
 
@@ -314,7 +316,7 @@ export function SimpleEditor({
       })
     }
 
-    lastMarkdownRef.current = value
+    lastMarkdownRef.current = comparableValue
   }, [editor, value])
 
   React.useEffect(() => {
