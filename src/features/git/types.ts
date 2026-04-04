@@ -37,8 +37,10 @@ export type GitRepositoryState = {
   branch: string | null
   hasCommits: boolean
   hasChanges: boolean
+  hasRemote: boolean
   isRepository: boolean
   recentlyPulledChanges: GitRecentPullItem[]
+  remoteCount: number
   repositoryRootPath: string | null
   stagedChanges: GitChangeItem[]
   unpushedCommits: number

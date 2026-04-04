@@ -613,6 +613,12 @@ export function GitPanel({
     )
   }
 
+  const syncDisabledReason = !repositoryState.hasRemote
+    ? 'Configure a remote repository to sync'
+    : Boolean(busyLabel)
+      ? busyLabel
+      : null
+
   return (
     <div className='git-panel'>
       <header className='git-panel-header'>
@@ -621,8 +627,8 @@ export function GitPanel({
             type='button'
             className='git-toolbar-action git-toolbar-icon-button'
             aria-label='Commit and sync'
-            title='Commit and sync'
-            disabled={!canSubmitCommit || Boolean(busyLabel)}
+            title={syncDisabledReason ?? 'Commit and sync'}
+            disabled={!canSubmitCommit || Boolean(syncDisabledReason)}
             onClick={onCommitAndSync}
           >
             <ArrowUpCircleLine size={17} />
@@ -665,8 +671,8 @@ export function GitPanel({
             type='button'
             className={`git-toolbar-action git-toolbar-icon-button${repositoryState.unpushedCommits > 0 ? ' is-accent' : ''}`}
             aria-label='Push'
-            title='Push'
-            disabled={Boolean(busyLabel)}
+            title={syncDisabledReason ?? 'Push'}
+            disabled={Boolean(syncDisabledReason)}
             onClick={onPush}
           >
             <UploadLine size={17} />
@@ -675,8 +681,8 @@ export function GitPanel({
             type='button'
             className='git-toolbar-action git-toolbar-icon-button'
             aria-label='Pull'
-            title='Pull'
-            disabled={Boolean(busyLabel)}
+            title={syncDisabledReason ?? 'Pull'}
+            disabled={Boolean(syncDisabledReason)}
             onClick={onPull}
           >
             <DownloadLine size={17} />

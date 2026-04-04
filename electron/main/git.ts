@@ -464,8 +464,10 @@ export async function getGitRepositoryState(workspacePath: string): Promise<GitR
       branch: null,
       hasCommits: false,
       hasChanges: false,
+      hasRemote: false,
       isRepository: false,
       recentlyPulledChanges: [],
+      remoteCount: 0,
       repositoryRootPath: null,
       stagedChanges: [],
       unpushedCommits: 0,
@@ -484,6 +486,7 @@ export async function getGitRepositoryState(workspacePath: string): Promise<GitR
 
   const parsedStatus = parseStatusLines(repositoryRootPath, statusOutput)
   const hasCommits = await repositoryHasCommits(repositoryRootPath)
+  const remotes = await getRemotes(repositoryRootPath)
   const unpushedCommits = hasCommits
     ? await getUnpushedCommitCount(repositoryRootPath)
     : 0
@@ -494,8 +497,10 @@ export async function getGitRepositoryState(workspacePath: string): Promise<GitR
     branch: parsedStatus.branch,
     hasCommits,
     hasChanges: parsedStatus.stagedChanges.length > 0 || parsedStatus.unstagedChanges.length > 0,
+    hasRemote: remotes.length > 0,
     isRepository: true,
     recentlyPulledChanges: recentPullsByRepository.get(repositoryRootPath) ?? [],
+    remoteCount: remotes.length,
     repositoryRootPath,
     stagedChanges: parsedStatus.stagedChanges,
     unpushedCommits,
