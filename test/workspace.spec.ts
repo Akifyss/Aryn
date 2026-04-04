@@ -6,6 +6,7 @@ import {
   createWorkspaceFile,
   loadWorkspaceTree,
   renameWorkspaceFile,
+  resolveWorkspaceEditorKind,
   shouldIgnoreWorkspacePath,
 } from '../electron/main/workspace'
 
@@ -93,5 +94,17 @@ describe('workspace helpers', () => {
     expect(shouldIgnoreWorkspacePath('/workspace/.git/index.lock')).toBe(true)
     expect(shouldIgnoreWorkspacePath('C:\\workspace\\.git\\objects\\ab\\cd')).toBe(true)
     expect(shouldIgnoreWorkspacePath('/workspace/docs/draft.md')).toBe(false)
+  })
+
+  it('falls back unknown text extensions to code and keeps binary files closed', async () => {
+    const rootPath = await createTempWorkspace()
+    const textFilePath = path.join(rootPath, 'notes.custom')
+    const binaryFilePath = path.join(rootPath, 'image.custombin')
+
+    await writeFile(textFilePath, 'plain text body\n', 'utf8')
+    await writeFile(binaryFilePath, Buffer.from([0, 159, 146, 150, 0, 1, 2, 3]))
+
+    await expect(resolveWorkspaceEditorKind(textFilePath)).resolves.toBe('code')
+    await expect(resolveWorkspaceEditorKind(binaryFilePath)).resolves.toBeNull()
   })
 })

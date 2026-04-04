@@ -146,30 +146,14 @@ function mapStatusCodeToKind(code: string, scope: GitChangeScope): GitChangeKind
   }
 }
 
-function parseRenamePath(rawPath: string) {
-  const arrowIndex = rawPath.indexOf(' -> ')
-
-  if (arrowIndex === -1) {
-    return {
-      currentPath: rawPath,
-      originalPath: null,
-    }
-  }
-
-  return {
-    currentPath: rawPath.slice(arrowIndex + 4),
-    originalPath: rawPath.slice(0, arrowIndex),
-  }
-}
-
 function parseStatusLines(repositoryRootPath: string, statusOutput: string) {
-  const lines = statusOutput
-    .split(/\r?\n/g)
-    .map((line) => line.trimEnd())
+  const entries = statusOutput
+    .split('\0')
+    .map((entry) => entry.replace(/\r?\n/g, ''))
     .filter(Boolean)
 
-  const branchStatus = lines[0]?.startsWith('## ')
-    ? parseBranchStatus(lines[0])
+  const branchStatus = entries[0]?.startsWith('## ')
+    ? parseBranchStatus(entries[0])
     : {
       ahead: 0,
       behind: 0,
@@ -178,18 +162,26 @@ function parseStatusLines(repositoryRootPath: string, statusOutput: string) {
   const stagedChanges: GitChangeItem[] = []
   const unstagedChanges: GitChangeItem[] = []
 
-  for (const line of lines) {
-    if (line.startsWith('## ')) {
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]
+
+    if (entry.startsWith('## ')) {
       continue
     }
 
-    if (line.length < 4) {
+    if (entry.length < 4) {
       continue
     }
 
-    const status = line.slice(0, 2)
-    const rawPath = line.slice(3)
-    const { currentPath, originalPath } = parseRenamePath(rawPath)
+    const status = entry.slice(0, 2)
+    const currentPath = entry.slice(3)
+    const hasOriginalPath = status.includes('R') || status.includes('C')
+    const originalPath = hasOriginalPath ? entries[index + 1] ?? null : null
+
+    if (hasOriginalPath) {
+      index += 1
+    }
+
     const absolutePath = path.resolve(repositoryRootPath, currentPath)
     const absoluteOriginalPath = originalPath
       ? path.resolve(repositoryRootPath, originalPath)
@@ -298,7 +290,7 @@ export async function getGitRepositoryState(workspacePath: string): Promise<GitR
     }
   }
 
-  const statusOutput = await runGit(['status', '--porcelain=v1', '--branch', '--untracked-files=all'], {
+  const statusOutput = await runGit(['status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'], {
     cwd: repositoryRootPath,
   })
 

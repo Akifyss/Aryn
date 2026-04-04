@@ -112,6 +112,33 @@ describe('git helpers', () => {
     })
   })
 
+  it('parses modified paths with spaces and non-ascii characters without git quotes', async () => {
+    const rootPath = await createTempWorkspace()
+    const fileName = '新建 文本文档.html'
+    const filePath = path.join(rootPath, fileName)
+
+    await initializeGitRepository(rootPath)
+    await writeFile(filePath, '<div>one</div>\n', 'utf8')
+    await stageGitPaths(rootPath, [filePath])
+    await commitGitChanges(rootPath, 'initial html')
+    await writeFile(filePath, '<div>two</div>\n', 'utf8')
+
+    const repositoryState = await getGitRepositoryState(rootPath)
+    expect(repositoryState.unstagedChanges[0]).toMatchObject({
+      kind: 'modified',
+      path: filePath,
+      relativePath: fileName,
+      scope: 'unstaged',
+    })
+
+    await expect(getGitFileDiff(rootPath, filePath, 'unstaged')).resolves.toMatchObject({
+      modifiedContent: '<div>two</div>\n',
+      modifiedExists: true,
+      originalContent: '<div>one</div>\n',
+      originalExists: true,
+    })
+  })
+
   it('commits all working tree changes when nothing is staged', async () => {
     const rootPath = await createTempWorkspace()
     const filePath = path.join(rootPath, 'draft.md')

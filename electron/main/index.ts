@@ -18,6 +18,7 @@ import {
   loadWorkspaceFile,
   loadWorkspaceTree,
   renameWorkspaceFile,
+  resolveWorkspaceEditorKind,
   saveWorkspaceFile,
   unwatchWorkspace,
   watchWorkspace,
@@ -402,6 +403,10 @@ ipcMain.handle('ui:update-state', async (_, patch: { agentComposerHeight?: numbe
 
 ipcMain.handle('workspace:read-file', async (_, filePath: string) => {
   return loadWorkspaceFile(filePath)
+})
+
+ipcMain.handle('workspace:resolve-editor-kind', async (_, filePath: string) => {
+  return resolveWorkspaceEditorKind(filePath)
 })
 
 ipcMain.handle('workspace:save-file', async (_, filePath: string, content: string) => {

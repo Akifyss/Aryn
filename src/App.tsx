@@ -160,12 +160,7 @@ function dedupePaths(paths: string[]) {
   return [...new Set(paths)]
 }
 
-function toStoredWorkspaceTab(filePath: string, content: string): WorkspaceFileTab {
-  const editorKind = getSupportedWorkspaceEditorKind(filePath)
-
-  if (!editorKind) {
-    throw new Error('Unsupported file type')
-  }
+function toStoredWorkspaceTab(filePath: string, content: string, editorKind: WorkspaceFileTab['editorKind']): WorkspaceFileTab {
 
   return {
     content,
@@ -283,6 +278,12 @@ function App() {
   const effectiveLeftSidebarWidth = isLeftSidebarVisible ? leftSidebarWidth : 0
   const effectiveRightSidebarWidth = isRightSidebarVisible ? rightSidebarWidth : 0
   const activeTreePath = activeFileTab?.filePath ?? activeDiffTab?.diff.change.path ?? null
+  const canAttemptOpenCurrentDiff = Boolean(
+    activeFileTab
+    && currentPath
+    && gitRepositoryState?.isRepository
+    && getSupportedWorkspaceEditorKind(activeFileTab.filePath),
+  )
   const currentGitChange = useMemo(() => {
     if (!currentFilePath || !gitRepositoryState?.isRepository) {
       return null
@@ -293,6 +294,17 @@ function App() {
       ?? gitRepositoryState.stagedChanges.find((change) => normalizeFilePath(change.path) === targetPath)
       ?? null
   }, [currentFilePath, gitRepositoryState])
+
+  function findGitChangeByFilePath(repositoryState: GitRepositoryState | null, filePath: string) {
+    if (!repositoryState?.isRepository) {
+      return null
+    }
+
+    const targetPath = normalizeFilePath(filePath)
+    return repositoryState.unstagedChanges.find((change) => normalizeFilePath(change.path) === targetPath)
+      ?? repositoryState.stagedChanges.find((change) => normalizeFilePath(change.path) === targetPath)
+      ?? null
+  }
 
   function getPersistedActiveFilePath() {
     const activeTabId = useWorkspaceStore.getState().activeTabPath
@@ -549,11 +561,11 @@ function App() {
       return
     }
 
-    const editorKind = getSupportedWorkspaceEditorKind(filePath)
+    const editorKind = await window.appApi.resolveWorkspaceEditorKind(filePath)
 
     if (!editorKind) {
       toast.warning(`Cannot open ${getBaseName(filePath)} yet`, {
-        description: 'Only Markdown/text files and supported code files can open in tabs right now.',
+        description: 'Only text files can open in tabs right now. This file looks binary or unsupported.',
       })
       setStatusMessage(`${getBaseName(filePath)} is not supported yet`)
       return
@@ -597,6 +609,25 @@ function App() {
     }
   }
 
+  async function openCurrentFileDiff() {
+    if (!currentPath || !activeFileTab) {
+      return
+    }
+
+    const latestGitState = await refreshGitState(currentPath, { silent: true })
+    const nextChange = findGitChangeByFilePath(latestGitState, activeFileTab.filePath)
+
+    if (!nextChange) {
+      toast.warning('No Git diff for current file', {
+        description: 'Save the file first, then make sure it is tracked or changed in this repository.',
+      })
+      setStatusMessage('Current file has no Git diff yet')
+      return
+    }
+
+    await openGitDiff(nextChange)
+  }
+
   async function restoreWorkspaceTabs(workspacePath: string, fallbackFilePath?: string | null) {
     const workspaceState = await getWorkspaceState(workspacePath)
     const storedState = readStoredTabState(workspacePath)
@@ -613,13 +644,15 @@ function App() {
     }
 
     const settledTabs = await Promise.all(candidatePaths.map(async (filePath) => {
-      if (!getSupportedWorkspaceEditorKind(filePath)) {
+      const editorKind = await window.appApi.resolveWorkspaceEditorKind(filePath)
+
+      if (!editorKind) {
         return null
       }
 
       try {
         const content = await window.appApi.readWorkspaceFile(filePath)
-        return toStoredWorkspaceTab(filePath, content)
+        return toStoredWorkspaceTab(filePath, content, editorKind)
       } catch {
         return null
       }
@@ -1418,15 +1451,15 @@ function App() {
               <button
                 type='button'
                 className='editor-toolbar-icon-button'
-                aria-label={currentGitChange ? `Open diff for ${getBaseName(currentGitChange.path)}` : 'Open diff for current file'}
-                title={currentGitChange ? 'Open diff for current file' : 'Current file has no Git changes'}
-                disabled={!currentGitChange}
+                aria-label={activeFileTab ? `Open diff for ${getBaseName(activeFileTab.filePath)}` : 'Open diff for current file'}
+                title={canAttemptOpenCurrentDiff ? 'Open diff for current file' : 'Open a supported file in a Git repository first'}
+                disabled={!canAttemptOpenCurrentDiff}
                 onClick={() => {
-                  if (!currentGitChange) {
+                  if (!canAttemptOpenCurrentDiff) {
                     return
                   }
 
-                  void openGitDiff(currentGitChange)
+                  void openCurrentFileDiff()
                 }}
               >
                 <GitCompareLine size={16} />

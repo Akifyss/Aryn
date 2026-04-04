@@ -1,6 +1,7 @@
 import { access, readFile, readdir, mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
+import { getSupportedWorkspaceEditorKind, type SupportedWorkspaceEditorKind } from '../../src/features/workspace/lib/file-types'
 
 export type WorkspaceNode = {
   name: string
@@ -120,6 +121,48 @@ export async function loadWorkspaceFile(filePath: string) {
 
 export async function saveWorkspaceFile(filePath: string, content: string) {
   await writeFile(filePath, content, 'utf8')
+}
+
+function isProbablyUtf8Text(buffer: Buffer) {
+  if (buffer.length === 0) {
+    return true
+  }
+
+  if (buffer.includes(0)) {
+    return false
+  }
+
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(buffer)
+  } catch {
+    return false
+  }
+
+  let suspiciousControlCount = 0
+
+  for (const byte of buffer) {
+    const isAllowedControl = byte === 9 || byte === 10 || byte === 13
+    if (!isAllowedControl && byte < 32) {
+      suspiciousControlCount += 1
+    }
+  }
+
+  return suspiciousControlCount / buffer.length < 0.02
+}
+
+export async function resolveWorkspaceEditorKind(filePath: string): Promise<SupportedWorkspaceEditorKind | null> {
+  const knownKind = getSupportedWorkspaceEditorKind(filePath)
+
+  if (knownKind) {
+    return knownKind
+  }
+
+  try {
+    const sample = await readFile(filePath)
+    return isProbablyUtf8Text(sample.subarray(0, 8192)) ? 'code' : null
+  } catch {
+    return null
+  }
 }
 
 export async function workspacePathExists(workspacePath: string) {
