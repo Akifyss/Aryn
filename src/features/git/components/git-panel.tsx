@@ -871,7 +871,7 @@ export function GitPanel({
                       onStage(unstagedPaths)
                     }}
                   >
-                    <ArrowUpLine size={14} />
+                    <AddLine size={14} />
                   </button>
                 </>
               ) : null}

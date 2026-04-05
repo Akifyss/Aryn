@@ -1597,6 +1597,10 @@
   list-style: none;
 }
 
+.git-panel-tree-shell {
+  padding: 0.4rem 0;
+}
+
 .git-tree-node {
   display: flex;
   flex-direction: column;
@@ -1613,6 +1617,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  margin: 0 0.4rem;
+  border-radius: 0.5rem;
   transition: background-color 120ms ease;
 }
 
