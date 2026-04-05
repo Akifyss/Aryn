@@ -1525,7 +1525,6 @@
   margin: 0;
   min-height: 2.15rem;
   transition: background-color 120ms ease, color 120ms ease;
-  cursor: pointer;
 }
 
 .git-panel-section-header:hover {
@@ -1552,12 +1551,13 @@
 .git-panel-section-title {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.55rem;
   min-width: 0;
 }
 
 .git-panel-section-caret {
-  display: none;
+  color: var(--panel-muted);
+  flex-shrink: 0;
 }
 
 .git-panel-section-count {
@@ -1625,10 +1625,15 @@
   font-size: 0.78rem;
   font-weight: 600;
   text-align: left;
+  gap: 0.55rem;
 }
 
-.git-tree-folder-row:hover {
-  background: color-mix(in oklab, var(--foreground) 3%, transparent);
+.git-panel-section-header,
+.git-tree-folder-row,
+.git-tree-folder-toggle,
+.git-change-item,
+.git-change-trigger {
+  cursor: pointer;
 }
 
 .git-change-item {
@@ -1640,6 +1645,10 @@
   transition: background-color 120ms ease;
 }
 
+.git-tree-folder-row:hover {
+  background: color-mix(in oklab, var(--foreground) 3%, transparent);
+}
+
 .git-change-item:hover {
   background: color-mix(in oklab, var(--foreground) 3%, transparent);
 }
@@ -1648,12 +1657,11 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  padding: 0.42rem 0.55rem;
+  padding: 0.42rem 0.75rem;
   border: 0;
   background: transparent;
   color: var(--foreground);
   text-align: left;
-  cursor: pointer;
 }
 
 .git-tree-node .git-change-trigger {
@@ -1661,7 +1669,8 @@
 }
 
 .git-change-copy {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   gap: 0.15rem;
 }
@@ -1677,10 +1686,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  margin-right: 0.15rem;
   color: var(--panel-muted);
 }
 

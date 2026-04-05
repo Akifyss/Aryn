@@ -16,6 +16,7 @@ import {
   Refresh3Line,
   Back2Line,
   ListCheckLine,
+  DownLine,
   RightLine,
   UploadLine,
 } from '@mingcute/react'
@@ -248,7 +249,7 @@ function GitFolderTree({
                 }}
               >
                 <span className='git-panel-section-title'>
-                  <span className='git-tree-node-icon' aria-hidden='true'>
+                  <span className='git-row-icon' aria-hidden='true'>
                     {themedDirectoryIconUrl ? (
                       <img
                         alt=''
@@ -557,6 +558,11 @@ function GitSection({
         }}
       >
         <div className='git-panel-section-title-area'>
+          {isExpanded ? (
+            <DownLine className='git-panel-section-caret' size={14} />
+          ) : (
+            <RightLine className='git-panel-section-caret' size={14} />
+          )}
           <span className='git-panel-section-title'>{title}</span>
         </div>
         <div className='git-panel-section-tools' onClick={(e) => e.stopPropagation()}>
