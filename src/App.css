@@ -754,7 +754,7 @@
   min-width: 0;
   min-height: 0;
   padding: 0 0 0 12px;
-  height: 33px;
+  height: 32px;
   border-radius: 0;
   color: var(--panel-soft);
   background: transparent;
@@ -830,7 +830,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  min-height: 33px;
+  min-height: 32px;
   padding-top: 0;
   padding-right: 8px;
   padding-bottom: 0;
@@ -849,7 +849,7 @@
 .tree-rename-input.input[data-focus="true"],
 .tree-rename-input.input[data-focus-visible="true"] {
   min-height: 38px;
-  border-radius: 13px;
+  border-radius: 12px;
   border: 1px solid var(--field-border) !important;
   background: var(--field-background) !important;
   box-shadow: none !important;
@@ -996,7 +996,7 @@
   gap: 8px;
   min-width: 0;
   min-height: var(--tabs-chrome-height);
-  padding: 0 7px 0 15px;
+  padding: 0 8px 0 16px;
   border: 0;
   background: transparent;
   color: var(--panel-muted);
