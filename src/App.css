@@ -42,7 +42,7 @@
 .app-shell[data-platform='windows'] {
   --left-panel-toggle-anchor: 0.75rem;
   --right-panel-toggle-anchor: 9.75rem;
-  --sidebar-icon-x: calc(var(--left-panel-toggle-anchor) + (var(--panel-toggle-size) - 18px) / 2);
+  --sidebar-icon-x: calc(var(--left-panel-toggle-anchor) + (var(--panel-toggle-size) - 16px) / 2);
 }
 
 .app-shell::before {
@@ -418,6 +418,11 @@
   flex-shrink: 0;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+.workspace-section-toggle .panel-toggle-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .section-title-text {

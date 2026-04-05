@@ -1449,7 +1449,7 @@ function App() {
           }}
         >
           <span className='panel-toggle-icon' aria-hidden='true'>
-            <LayoutLeftLine size={18} />
+            <LayoutLeftLine size={16} />
           </span>
         </button>
       ) : null}
@@ -1464,7 +1464,7 @@ function App() {
           }}
         >
           <span className='panel-toggle-icon' aria-hidden='true'>
-            <LayoutRightLine size={18} />
+            <LayoutRightLine size={16} />
           </span>
         </button>
       ) : null}
@@ -1480,7 +1480,7 @@ function App() {
             }}
           >
             <span className='panel-toggle-icon' aria-hidden='true'>
-              <LayoutLeftLine size={18} />
+              <LayoutLeftLine size={16} />
             </span>
           </button>
           <button
@@ -1508,7 +1508,7 @@ function App() {
                 setActiveLeftSidebarTab('file')
               }}
             >
-              <FileLine size={18} className='sidebar-vertical-tab-icon' />
+              <FileLine size={16} className='sidebar-vertical-tab-icon' />
               <span className='sidebar-vertical-tab-label'>文件</span>
             </button>
             <button
@@ -1518,7 +1518,7 @@ function App() {
                 setActiveLeftSidebarTab('git')
               }}
             >
-              <GitCompareLine size={18} className='sidebar-vertical-tab-icon' />
+              <GitCompareLine size={16} className='sidebar-vertical-tab-icon' />
               <span className='sidebar-vertical-tab-label'>Git</span>
             </button>
           </div>
