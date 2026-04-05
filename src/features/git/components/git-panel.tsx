@@ -248,10 +248,6 @@ function GitFolderTree({
                 }}
               >
                 <span className='git-panel-section-title'>
-                  <RightLine
-                    className={`git-panel-section-caret${isClosed ? '' : ' is-expanded'}`}
-                    size={14}
-                  />
                   <span className='git-tree-node-icon' aria-hidden='true'>
                     {themedDirectoryIconUrl ? (
                       <img
@@ -561,10 +557,6 @@ function GitSection({
         }}
       >
         <div className='git-panel-section-title-area'>
-          <RightLine
-            className={`git-panel-section-caret${isExpanded ? ' is-expanded' : ''}`}
-            size={14}
-          />
           <span className='git-panel-section-title'>{title}</span>
         </div>
         <div className='git-panel-section-tools' onClick={(e) => e.stopPropagation()}>

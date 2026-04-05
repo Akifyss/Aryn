@@ -1557,13 +1557,7 @@
 }
 
 .git-panel-section-caret {
-  color: var(--panel-muted);
-  transition: transform 140ms ease;
-  flex-shrink: 0;
-}
-
-.git-panel-section-caret.is-expanded {
-  transform: rotate(90deg);
+  display: none;
 }
 
 .git-panel-section-count {
@@ -1609,7 +1603,7 @@
 .git-tree-node-children {
   display: flex;
   flex-direction: column;
-  margin-left: 0.85rem;
+  margin-left: 1.65rem;
   border-left: 1px solid var(--panel-border);
 }
 
