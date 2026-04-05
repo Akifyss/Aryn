@@ -1680,9 +1680,10 @@
   align-items: center;
   gap: 0.55rem;
   min-width: 0;
+  height: 1.25rem;
 }
 
-.git-tree-node-icon {
+.git-row-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1692,9 +1693,9 @@
   color: var(--panel-muted);
 }
 
-.git-tree-node-icon img {
-  width: 16px;
-  height: 16px;
+.git-row-icon img {
+  width: 18px;
+  height: 18px;
   object-fit: contain;
 }
 

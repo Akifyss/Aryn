@@ -180,7 +180,7 @@ function buildGitTree(changes: GitDisplayChange[]) {
     }
   }
 
-  function materialize(nodes: Iterable<GitTreeNodeDraft>): GitTreeNode[] {
+function materialize(nodes: Iterable<GitTreeNodeDraft>): GitTreeNode[] {
     return [...nodes]
       .map((node) => {
         return {
@@ -197,308 +197,276 @@ function buildGitTree(changes: GitDisplayChange[]) {
   return materialize(root.values())
 }
 
-function GitFolderTree({
+function GitRowIcon({
+  nodeLabel,
+  fileName,
+  isFolder,
+  isClosed,
+  iconTheme,
+}: {
+  nodeLabel?: string
+  fileName?: string
+  isFolder?: boolean
+  isClosed?: boolean
+  iconTheme: WorkspaceIconTheme | null
+}) {
+  const iconUrl = isFolder
+    ? resolveWorkspaceDirectoryIconUrl(iconTheme, nodeLabel ?? '', !isClosed)
+    : resolveWorkspaceFileIconUrl(iconTheme, fileName ?? '')
+
+  return (
+    <span className='git-row-icon' aria-hidden='true'>
+      {iconUrl ? (
+        <img alt='' className='tree-theme-icon' draggable='false' src={iconUrl} />
+      ) : isFolder ? (
+        <FolderLine size={16} />
+      ) : (
+        <FileLine size={16} className='tree-file-icon' />
+      )}
+    </span>
+  )
+}
+
+function GitRowActions({
   kind,
-  nodes,
+  onUnstage,
+  onStage,
+  onDiscard,
+  onOpenDiff,
+  isFolder,
+  change,
+  changesCount,
+}: {
+  kind: GitPanelSectionKind
+  onUnstage?: () => void
+  onStage?: () => void
+  onDiscard?: () => void
+  onOpenDiff?: () => void
+  isFolder?: boolean
+  change?: GitDisplayChange
+  changesCount?: number
+}) {
+  const isChange = change && isScopedGitChange(change)
+
+  return (
+    <div className='git-change-tools'>
+      <div className='git-change-actions'>
+        {/* Open Actions */}
+        {!isFolder && isChange && (
+          <button
+            type='button'
+            className='git-change-action git-change-icon-button'
+            aria-label='Open diff'
+            title={isChange ? 'Open diff' : 'Open file'}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenDiff?.()
+            }}
+          >
+            <ExternalLinkLine size={16} />
+          </button>
+        )}
+
+        {/* Git State Actions */}
+        {kind === 'staged' && (
+          <button
+            type='button'
+            className='git-change-action git-change-icon-button'
+            aria-label='Unstage'
+            title='Unstage'
+            onClick={(e) => {
+              e.stopPropagation()
+              onUnstage?.()
+            }}
+          >
+            <Icon icon='mdi:minus' width={16} height={16} />
+          </button>
+        )}
+
+        {kind === 'unstaged' && (
+          <>
+            <button
+              type='button'
+              className='git-change-action git-change-icon-button'
+              aria-label='Discard'
+              title='Discard'
+              onClick={(e) => {
+                e.stopPropagation()
+                onDiscard?.()
+              }}
+            >
+              <Back2Line size={16} />
+            </button>
+            <button
+              type='button'
+              className='git-change-action git-change-icon-button'
+              aria-label='Stage'
+              title='Stage'
+              onClick={(e) => {
+                e.stopPropagation()
+                onStage?.()
+              }}
+            >
+              <AddLine size={16} />
+            </button>
+          </>
+        )}
+      </div>
+
+      {isChange && (
+        <span className={`git-change-badge git-change-badge-${change.kind}`}>
+          {getChangeKindLabel(change.kind)}
+        </span>
+      )}
+      {isFolder && <span className='git-panel-section-count'>{changesCount ?? 0}</span>}
+    </div>
+  )
+}
+
+function GitTreeFolder({
+  kind,
+  node,
   onDiscardMany,
   onOpenDiff,
   onOpenFile,
   onStage,
   onUnstage,
   iconTheme,
+  closedMap,
+  toggleNode,
 }: {
   kind: GitPanelSectionKind
-  nodes: GitTreeNode[]
+  node: GitTreeNode
   onDiscardMany: (changes: GitChangeItem[]) => void
   onOpenDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   onStage: (filePaths: string[]) => void
   onUnstage: (filePaths: string[]) => void
   iconTheme: WorkspaceIconTheme | null
+  closedMap: Record<string, boolean>
+  toggleNode: (id: string) => void
 }) {
-  const [closedMap, setClosedMap] = useState<Record<string, boolean>>({})
+  const isClosed = closedMap[node.id] ?? false
+  const activeItems = node.items.filter(isScopedGitChange)
+  const paths = activeItems.map((i) => i.path)
 
-  function toggleNode(nodeId: string) {
-    setClosedMap((currentValue) => ({
-      ...currentValue,
-      [nodeId]: !currentValue[nodeId],
-    }))
-  }
+  // Only show files directly under this node
+  const localItems = node.items.filter((item) => {
+    const parentPath = item.relativePath.substring(0, item.relativePath.lastIndexOf('/'))
+    return parentPath === node.path
+  })
 
   return (
-    <ul className='git-tree-list'>
-      {nodes.map((node) => {
-        const isClosed = closedMap[node.id] ?? false
-        const scopedItems = node.items.filter(isScopedGitChange)
-        const stageablePaths = scopedItems
-          .filter((change) => change.scope === 'unstaged')
-          .map((change) => change.path)
-        const unstageablePaths = scopedItems
-          .filter((change) => change.scope === 'staged')
-          .map((change) => change.path)
-        const themedDirectoryIconUrl = resolveWorkspaceDirectoryIconUrl(iconTheme, node.label, !isClosed)
+    <li className='git-tree-node'>
+      <div className='git-tree-folder-row' onClick={() => toggleNode(node.id)}>
+        <button type='button' className='git-tree-folder-toggle'>
+          <span className='git-panel-section-title'>
+            <GitRowIcon isFolder nodeLabel={node.label} isClosed={isClosed} iconTheme={iconTheme} />
+            <span>{node.label}</span>
+          </span>
+        </button>
 
-        return (
-          <li key={node.id} className='git-tree-node'>
-            <div className='git-tree-folder-row'>
-              <button
-                type='button'
-                className='git-tree-folder-toggle'
-                onClick={() => {
-                  toggleNode(node.id)
-                }}
-              >
-                <span className='git-panel-section-title'>
-                  <span className='git-row-icon' aria-hidden='true'>
-                    {themedDirectoryIconUrl ? (
-                      <img
-                        alt=''
-                        className='tree-theme-icon'
-                        draggable='false'
-                        src={themedDirectoryIconUrl}
-                      />
-                    ) : (
-                      <FolderLine size={16} />
-                    )}
-                  </span>
-                  <span>{node.label}</span>
-                </span>
-              </button>
+        <GitRowActions
+          kind={kind}
+          isFolder
+          changesCount={node.items.length}
+          onStage={() => onStage(paths)}
+          onUnstage={() => onUnstage(paths)}
+          onDiscard={() => onDiscardMany(activeItems)}
+        />
+      </div>
 
-              <div className='git-change-tools'>
-                <div className='git-change-actions'>
-                  {kind === 'staged' ? (
-                    <button
-                      type='button'
-                      className='git-change-action git-change-icon-button'
-                      aria-label={`Unstage ${node.path}`}
-                      title='Unstage'
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onUnstage(unstageablePaths)
-                      }}
-                    >
-                      <Icon icon='mdi:minus' width={16} height={16} />
-                    </button>
-                  ) : null}
-
-                  {kind === 'unstaged' ? (
-                    <>
-                      <button
-                        type='button'
-                        className='git-change-action git-change-icon-button'
-                        aria-label={`Discard ${node.path}`}
-                        title='Discard'
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onDiscardMany(scopedItems.filter((change) => change.scope === 'unstaged'))
-                        }}
-                      >
-                        <Back2Line size={16} />
-                      </button>
-                      <button
-                        type='button'
-                        className='git-change-action git-change-icon-button'
-                        aria-label={`Stage ${node.path}`}
-                        title='Stage'
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onStage(stageablePaths)
-                        }}
-                      >
-                        <AddLine size={16} />
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-
-                <div className='git-change-status'>
-                  <span className='git-panel-section-count'>{node.items.length}</span>
-                </div>
-              </div>
-            </div>
-
-            {!isClosed ? (
-              <div className='git-tree-node-children'>
-                {node.children.length > 0 ? (
-                  <GitFolderTree
-                    kind={kind}
-                    nodes={node.children}
-                    onDiscardMany={onDiscardMany}
-                    onOpenDiff={onOpenDiff}
-                    onOpenFile={onOpenFile}
-                    onStage={onStage}
-                    onUnstage={onUnstage}
-                    iconTheme={iconTheme}
-                  />
-                ) : null}
-                <GitChangeList
-                  changes={node.items.filter((change) => !change.relativePath.slice(node.path.length + 1).includes('/'))}
+      {!isClosed && (
+        <div className='git-tree-node-children'>
+          {node.children.length > 0 && (
+            <ul className='git-tree-list'>
+              {node.children.map((child) => (
+                <GitTreeFolder
+                  key={child.id}
                   kind={kind}
+                  node={child}
                   onDiscardMany={onDiscardMany}
                   onOpenDiff={onOpenDiff}
                   onOpenFile={onOpenFile}
                   onStage={onStage}
                   onUnstage={onUnstage}
                   iconTheme={iconTheme}
+                  closedMap={closedMap}
+                  toggleNode={toggleNode}
                 />
-              </div>
-            ) : null}
-          </li>
-        )
-      })}
-    </ul>
+              ))}
+            </ul>
+          )}
+          <GitChangeList
+            changes={localItems}
+            kind={kind}
+            onDiscardMany={onDiscardMany}
+            onOpenDiff={onOpenDiff}
+            onOpenFile={onOpenFile}
+            onStage={onStage}
+            onUnstage={onUnstage}
+            iconTheme={iconTheme}
+          />
+        </div>
+      )}
+    </li>
   )
 }
 
 function GitChangeList({
   changes,
-  kind,
   onDiscardMany,
   onOpenDiff,
   onOpenFile,
   onStage,
   onUnstage,
   iconTheme,
+  kind,
 }: {
   changes: GitDisplayChange[]
-  kind: GitPanelSectionKind
   onDiscardMany: (changes: GitChangeItem[]) => void
   onOpenDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   onStage: (filePaths: string[]) => void
   onUnstage: (filePaths: string[]) => void
   iconTheme: WorkspaceIconTheme | null
+  kind: GitPanelSectionKind
 }) {
-  if (changes.length === 0) {
-    return null
-  }
-
   return (
     <ul className='git-change-list'>
       {changes.map((change) => {
         const fileName = getBaseName(change.relativePath)
-        const directoryLabel = getDirectoryLabel(change.relativePath)
-        const metaLabel = change.originalPath
-          ? `from ${getBaseName(change.originalPath)}`
-          : directoryLabel
+        const dirLabel = getDirectoryLabel(change.relativePath)
+        const isChange = isScopedGitChange(change)
 
         return (
-          <li className='git-change-item' key={`${kind}:${change.relativePath}`}>
+          <li key={change.path} className='git-change-item'>
             <button
               type='button'
               className='git-change-trigger'
               title={change.relativePath}
               onClick={() => {
-                if (isScopedGitChange(change)) {
-                  onOpenDiff(change)
-                  return
-                }
-
-                onOpenFile(change.path)
+                if (isChange) onOpenDiff(change)
+                else onOpenFile(change.path)
               }}
             >
               <span className='git-change-copy'>
                 <span className='git-change-header'>
-                  <span className='git-tree-node-icon' aria-hidden='true'>
-                    {resolveWorkspaceFileIconUrl(iconTheme, fileName) ? (
-                      <img
-                        alt=''
-                        className='tree-theme-icon'
-                        draggable='false'
-                        src={resolveWorkspaceFileIconUrl(iconTheme, fileName)!}
-                      />
-                    ) : (
-                      <FileLine size={16} className='tree-file-icon' />
-                    )}
-                  </span>
+                  <GitRowIcon fileName={fileName} iconTheme={iconTheme} />
                   <span className='git-change-path'>{fileName}</span>
                 </span>
-                {metaLabel ? <span className='git-change-meta'>{metaLabel}</span> : null}
+                {dirLabel && <span className='git-change-meta'>{dirLabel}</span>}
               </span>
             </button>
 
-            <div className='git-change-tools'>
-              <div className='git-change-actions'>
-                {isScopedGitChange(change) ? (
-                  <button
-                    type='button'
-                    className='git-change-action git-change-icon-button'
-                    aria-label={`Open diff for ${change.relativePath}`}
-                    title='Open diff'
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onOpenDiff(change)
-                    }}
-                  >
-                    <ExternalLinkLine size={16} />
-                  </button>
-                ) : (
-                  <button
-                    type='button'
-                    className='git-change-action git-change-icon-button'
-                    aria-label={`Open ${change.relativePath}`}
-                    title='Open file'
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onOpenFile(change.path)
-                    }}
-                  >
-                    <ExternalLinkLine size={16} />
-                  </button>
-                )}
-
-                {isScopedGitChange(change) && change.scope === 'unstaged' ? (
-                  <>
-                    <button
-                      type='button'
-                      className='git-change-action git-change-icon-button'
-                      aria-label={`Discard ${change.relativePath}`}
-                      title='Discard'
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDiscardMany([change])
-                      }}
-                    >
-                      <Back2Line size={16} />
-                    </button>
-                    <button
-                      type='button'
-                      className='git-change-action git-change-icon-button'
-                      aria-label={`Stage ${change.relativePath}`}
-                      title='Stage'
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onStage([change.path])
-                      }}
-                    >
-                      <AddLine size={16} />
-                    </button>
-                  </>
-                ) : null}
-
-                {isScopedGitChange(change) && change.scope === 'staged' ? (
-                  <button
-                    type='button'
-                    className='git-change-action git-change-icon-button'
-                    aria-label={`Unstage ${change.relativePath}`}
-                    title='Unstage'
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onUnstage([change.path])
-                    }}
-                  >
-                    <Icon icon='mdi:minus' width={16} height={16} />
-                  </button>
-                ) : null}
-              </div>
-
-              <div className='git-change-status'>
-                <span className={`git-change-badge git-change-badge-${change.kind}`}>
-                  {getChangeKindLabel(change.kind)}
-                </span>
-              </div>
-            </div>
+            <GitRowActions
+              kind={kind}
+              change={change}
+              onStage={() => onStage([change.path])}
+              onUnstage={() => onUnstage([change.path])}
+              onDiscard={() => onDiscardMany([change as GitChangeItem])}
+              onOpenDiff={() => isChange && onOpenDiff(change)}
+            />
           </li>
         )
       })}
@@ -507,55 +475,50 @@ function GitChangeList({
 }
 
 function GitSection({
-  action,
+  title,
   changes,
-  emptyLabel,
   kind,
   layout,
+  action,
+  onStage,
+  onUnstage,
   onDiscardMany,
   onOpenDiff,
   onOpenFile,
-  onStage,
-  onUnstage,
-  title,
   iconTheme,
 }: {
-  action?: ReactNode
+  title: string
   changes: GitDisplayChange[]
-  emptyLabel: string
   kind: GitPanelSectionKind
   layout: GitPanelLayout
+  action?: ReactNode
+  onStage: (filePaths: string[]) => void
+  onUnstage: (filePaths: string[]) => void
   onDiscardMany: (changes: GitChangeItem[]) => void
   onOpenDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
-  onStage: (filePaths: string[]) => void
-  onUnstage: (filePaths: string[]) => void
-  title: string
   iconTheme: WorkspaceIconTheme | null
 }) {
   const [isExpanded, setIsExpanded] = useState(true)
+  const [closedMap, setClosedMap] = useState<Record<string, boolean>>({})
+  
   const treeNodes = useMemo(() => buildGitTree(changes), [changes])
-  const flatChanges = useMemo(
-    () => changes.filter((change) => !change.relativePath.includes('/')),
-    [changes],
+  const rootFiles = useMemo(() => 
+    changes.filter(c => !c.relativePath.includes('/')),
+    [changes]
   )
 
+  const toggleNode = (id: string) => {
+    setClosedMap((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
   return (
-    <section className='git-panel-section'>
+    <div className='git-panel-section'>
       <div
         className='git-panel-section-header'
         role='button'
         tabIndex={0}
-        aria-expanded={isExpanded}
-        onClick={() => {
-          setIsExpanded((currentValue) => !currentValue)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setIsExpanded((currentValue) => !currentValue)
-          }
-        }}
+        onClick={() => setIsExpanded((v) => !v)}
       >
         <div className='git-panel-section-title-area'>
           {isExpanded ? (
@@ -571,31 +534,38 @@ function GitSection({
         </div>
       </div>
 
-      {isExpanded ? (
-        changes.length > 0 ? (
-          layout === 'tree' && treeNodes.length > 0 ? (
-            <div className='git-panel-tree-shell'>
-              <GitFolderTree
-                kind={kind}
-                nodes={treeNodes}
-                onDiscardMany={onDiscardMany}
-                onOpenDiff={onOpenDiff}
-                onOpenFile={onOpenFile}
-                onStage={onStage}
-                onUnstage={onUnstage}
-                iconTheme={iconTheme}
-              />
-              <GitChangeList
-                changes={flatChanges}
-                kind={kind}
-                onDiscardMany={onDiscardMany}
-                onOpenDiff={onOpenDiff}
-                onOpenFile={onOpenFile}
-                onStage={onStage}
-                onUnstage={onUnstage}
-                iconTheme={iconTheme}
-              />
-            </div>
+      {isExpanded && changes.length > 0 && (
+        <div className={layout === 'tree' ? 'git-panel-tree-shell' : ''}>
+          {layout === 'tree' && treeNodes.length > 0 ? (
+            <ul className='git-tree-list'>
+              {treeNodes.map((node) => (
+                <GitTreeFolder
+                  key={node.id}
+                  kind={kind}
+                  node={node}
+                  closedMap={closedMap}
+                  toggleNode={toggleNode}
+                  onDiscardMany={onDiscardMany}
+                  onOpenDiff={onOpenDiff}
+                  onOpenFile={onOpenFile}
+                  onStage={onStage}
+                  onUnstage={onUnstage}
+                  iconTheme={iconTheme}
+                />
+              ))}
+              {rootFiles.length > 0 && (
+                <GitChangeList
+                  changes={rootFiles}
+                  kind={kind}
+                  onDiscardMany={onDiscardMany}
+                  onOpenDiff={onOpenDiff}
+                  onOpenFile={onOpenFile}
+                  onStage={onStage}
+                  onUnstage={onUnstage}
+                  iconTheme={iconTheme}
+                />
+              )}
+            </ul>
           ) : (
             <GitChangeList
               changes={changes}
@@ -607,12 +577,10 @@ function GitSection({
               onUnstage={onUnstage}
               iconTheme={iconTheme}
             />
-          )
-        ) : (
-          <p className='git-panel-empty-copy'>{emptyLabel}</p>
-        )
-      ) : null}
-    </section>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -822,39 +790,44 @@ export function GitPanel({
         ) : (
           <>
             <GitSection
-              action={repositoryState.stagedChanges.length > 0 ? (
-                <button
-                  type='button'
-                  className='git-change-action git-change-icon-button'
-                  aria-label='Unstage all staged changes'
-                  title='Unstage all'
-                  onClick={() => {
-                    onUnstage(stagedPaths)
-                  }}
-                >
-                  <Icon icon='mdi:minus' width={14} height={14} />
-                </button>
-              ) : null}
+              title='Staged Changes'
               changes={repositoryState.stagedChanges}
-              emptyLabel='No staged changes.'
               kind='staged'
               layout={layout}
+              iconTheme={iconTheme}
               onDiscardMany={onDiscardMany}
               onOpenDiff={onOpenDiff}
               onOpenFile={onOpenFile}
               onStage={onStage}
               onUnstage={onUnstage}
-              title='Staged Changes'
-              iconTheme={iconTheme}
+              action={
+                <button
+                  type='button'
+                  className='git-change-action git-change-icon-button'
+                  aria-label='Unstage all'
+                  onClick={() => onUnstage(stagedPaths)}
+                >
+                  <Icon icon='mdi:minus' width={14} height={14} />
+                </button>
+              }
             />
 
             <GitSection
-              action={repositoryState.unstagedChanges.length > 0 ? (
+              title='Changes'
+              changes={repositoryState.unstagedChanges}
+              kind='unstaged'
+              layout={layout}
+              iconTheme={iconTheme}
+              onDiscardMany={onDiscardMany}
+              onOpenDiff={onOpenDiff}
+              onOpenFile={onOpenFile}
+              onStage={onStage}
+              onUnstage={onUnstage}
+              action={
                 <>
                   <button
                     type='button'
                     className='git-change-action git-change-icon-button'
-                    aria-label='Discard all working tree changes'
                     title='Discard all'
                     onClick={onDiscardAll}
                   >
@@ -863,44 +836,29 @@ export function GitPanel({
                   <button
                     type='button'
                     className='git-change-action git-change-icon-button'
-                    aria-label='Stage all working tree changes'
                     title='Stage all'
-                    onClick={() => {
-                      onStage(unstagedPaths)
-                    }}
+                    onClick={() => onStage(unstagedPaths)}
                   >
                     <AddLine size={14} />
                   </button>
                 </>
-              ) : null}
-              changes={repositoryState.unstagedChanges}
-              emptyLabel='No working tree changes.'
-              kind='unstaged'
-              layout={layout}
-              onDiscardMany={onDiscardMany}
-              onOpenDiff={onOpenDiff}
-              onOpenFile={onOpenFile}
-              onStage={onStage}
-              onUnstage={onUnstage}
-              title='Changes'
-              iconTheme={iconTheme}
+              }
             />
 
-            {repositoryState.recentlyPulledChanges.length > 0 ? (
+            {repositoryState.recentlyPulledChanges.length > 0 && (
               <GitSection
+                title='Recently Pulled'
                 changes={repositoryState.recentlyPulledChanges}
-                emptyLabel='No recently pulled files.'
                 kind='pulled'
                 layout={layout}
+                iconTheme={iconTheme}
                 onDiscardMany={onDiscardMany}
                 onOpenDiff={onOpenDiff}
                 onOpenFile={onOpenFile}
                 onStage={onStage}
                 onUnstage={onUnstage}
-                title='Recently Pulled Files'
-                iconTheme={iconTheme}
               />
-            ) : null}
+            )}
           </>
         )}
       </div>
