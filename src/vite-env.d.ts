@@ -22,6 +22,7 @@ declare global {
       readWorkspaceFile: (filePath: string) => Promise<string>
       saveWorkspaceFile: (filePath: string, content: string) => Promise<{ ok: boolean }>
       createWorkspaceFile: (rootPath: string, relativeFilePath: string) => Promise<{ filePath: string }>
+      createWorkspaceDirectory: (rootPath: string, relativeDirPath: string) => Promise<{ dirPath: string }>
       renameWorkspaceFile: (rootPath: string, filePath: string, nextRelativeFilePath: string) => Promise<{ filePath: string }>
       deleteWorkspaceFile: (rootPath: string, filePath: string) => Promise<{ ok: boolean }>
       getGitRepositoryState: (workspacePath: string) => Promise<GitRepositoryState>

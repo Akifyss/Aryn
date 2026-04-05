@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Input, Tooltip } from '@heroui/react'
 import {
   CheckLine,
@@ -16,6 +16,8 @@ type WorkspaceTreeProps = {
   activeFilePath: string | null
   iconTheme: WorkspaceIconTheme | null
   nodes: WorkspaceNode[]
+  expandedPaths: Set<string>
+  setExpandedPaths: (paths: Set<string>) => void
   onSelectFile: (path: string) => void
   onRenameFile: (path: string, nextName: string) => Promise<void>
   onDeleteFile: (path: string) => Promise<void>
@@ -243,19 +245,17 @@ export function WorkspaceTree({
   activeFilePath,
   iconTheme,
   nodes,
+  expandedPaths,
+  setExpandedPaths,
   onSelectFile,
   onRenameFile,
   onDeleteFile,
 }: WorkspaceTreeProps) {
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
-
   const handleToggle = (path: string) => {
-    setExpandedPaths(prev => {
-      const next = new Set(prev)
-      if (next.has(path)) next.delete(path)
-      else next.add(path)
-      return next
-    })
+    const next = new Set(expandedPaths)
+    if (next.has(path)) next.delete(path)
+    else next.add(path)
+    setExpandedPaths(next)
   }
 
   if (nodes.length === 0) {

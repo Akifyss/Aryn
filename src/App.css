@@ -1685,8 +1685,67 @@
   min-width: 0;
 }
 
-.workspace-tree-row .git-change-actions {
-  align-self: center;
+.sidebar-tree-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.file-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 2.25rem;
+  padding: 0 0.5rem 0 0.75rem;
+  border-bottom: 1px solid var(--panel-border);
+  flex-shrink: 0;
+}
+
+.file-panel-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--panel-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+  user-select: none;
+}
+
+.file-panel-actions {
+  display: flex;
+  gap: 0.125rem;
+}
+
+.file-panel-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.4rem;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--panel-muted);
+  transition: all 140ms ease;
+  padding: 0;
+}
+
+.file-panel-action:hover:not(:disabled) {
+  background: var(--panel-border);
+  color: var(--foreground);
+}
+
+.file-panel-action:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tree-scroll {
+  flex: 1;
+  min-height: 0;
 }
 
 .git-change-item {

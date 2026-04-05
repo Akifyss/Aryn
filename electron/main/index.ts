@@ -17,6 +17,7 @@ import {
   unstageGitPaths,
 } from './git'
 import {
+  createWorkspaceDirectory,
   createWorkspaceFile,
   deleteWorkspaceFile,
   loadWorkspaceFile,
@@ -421,6 +422,11 @@ ipcMain.handle('workspace:save-file', async (_, filePath: string, content: strin
 ipcMain.handle('workspace:create-file', async (_, rootPath: string, relativeFilePath: string) => {
   const filePath = await createWorkspaceFile(rootPath, relativeFilePath)
   return { filePath }
+})
+
+ipcMain.handle('workspace:create-directory', async (_, rootPath: string, relativeDirPath: string) => {
+  const dirPath = await createWorkspaceDirectory(rootPath, relativeDirPath)
+  return { dirPath }
 })
 
 ipcMain.handle('workspace:rename-file', async (_, rootPath: string, filePath: string, nextRelativeFilePath: string) => {

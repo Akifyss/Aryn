@@ -271,11 +271,50 @@ export async function deleteWorkspaceFile(rootPath: string, filePath: string) {
   }
 
   const fileInfo = await stat(resolvedFilePath).catch(() => null)
-  if (!fileInfo?.isFile()) {
-    throw new Error('The selected file no longer exists.')
+  if (!fileInfo) {
+    throw new Error('The selected item no longer exists.')
   }
 
-  await unlink(resolvedFilePath)
+  if (fileInfo.isDirectory()) {
+    // For now we only support deleting empty directories or use rm -rf logic
+    // To be safe, let's keep it simple for files first or implement recursive delete
+    await unlink(resolvedFilePath).catch(async () => {
+      // If it's a directory, unlink might fail, try rm
+      const { rm } = await import('node:fs/promises')
+      await rm(resolvedFilePath, { recursive: true, force: true })
+    })
+  } else {
+    await unlink(resolvedFilePath)
+  }
+}
+
+export async function createWorkspaceDirectory(rootPath: string, relativeDirPath: string) {
+  const normalizedRelativePath = relativeDirPath.trim().replace(/^[\\/]+/, '')
+
+  if (!normalizedRelativePath) {
+    throw new Error('Directory name is required.')
+  }
+
+  const resolvedRootPath = path.resolve(rootPath)
+  const resolvedDirPath = path.resolve(resolvedRootPath, normalizedRelativePath)
+
+  if (!isInsideWorkspace(resolvedRootPath, resolvedDirPath)) {
+    throw new Error('Directory path must stay inside the current workspace.')
+  }
+
+  try {
+    const info = await stat(resolvedDirPath)
+    if (info.isDirectory()) {
+      throw new Error('That directory already exists.')
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error
+    }
+  }
+
+  await mkdir(resolvedDirPath, { recursive: true })
+  return resolvedDirPath
 }
 
 export async function watchWorkspace(

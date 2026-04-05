@@ -1,15 +1,16 @@
 import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, ScrollShadow, Toast, toast } from '@heroui/react'
+import { Button, ScrollShadow, Tooltip, Toast, toast } from '@heroui/react'
 import {
-  AddLine,
   FileFill,
   FolderOpenFill,
   GitCompareLine,
-  LayoutLeftbarCloseLine,
-  LayoutRightbarCloseLine,
+  LayoutLeftLine,
+  LayoutRightLine,
   SelectorVerticalLine,
 } from '@mingcute/react'
+import { Icon } from '@iconify/react'
+import type { WorkspaceNode } from '@/features/workspace/types'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
 import type { AgentWorkspaceState } from '@/features/agent/types'
@@ -72,6 +73,21 @@ function getNextUntitledFileName(existingNames: string[]) {
   }
 
   return `untitled-${index}.md`
+}
+
+function getNextUntitledDirectoryName(existingNames: string[]) {
+  const occupiedNames = new Set(existingNames.map((name) => name.toLowerCase()))
+
+  if (!occupiedNames.has('new-folder')) {
+    return 'new-folder'
+  }
+
+  let index = 1
+  while (occupiedNames.has(`new-folder-${index}`)) {
+    index += 1
+  }
+
+  return `new-folder-${index}`
 }
 
 function isWorkspaceFileTab(tab: WorkspaceDisplayTab | null | undefined): tab is WorkspaceFileTab {
@@ -197,6 +213,8 @@ function App() {
   const [iconThemeOptions, setIconThemeOptions] = useState<WorkspaceIconThemeCatalogOption[]>([])
   const [, setStatusMessage] = useState('Open a folder to start.')
   const [isCreatingFile, setIsCreatingFile] = useState(false)
+  const [isCreatingDirectory, setIsCreatingDirectory] = useState(false)
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(DEFAULT_LEFT_SIDEBAR_WIDTH)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(DEFAULT_RIGHT_SIDEBAR_WIDTH)
   const [gitPanelHeight, setGitPanelHeight] = useState(DEFAULT_GIT_PANEL_HEIGHT)
@@ -267,6 +285,10 @@ function App() {
   )
   const rootFileNames = useMemo(
     () => tree.filter((node) => node.kind === 'file').map((node) => node.name),
+    [tree],
+  )
+  const rootDirNames = useMemo(
+    () => tree.filter((node) => node.kind === 'directory').map((node) => node.name),
     [tree],
   )
   const workspaceLabel = currentPath
@@ -696,6 +718,46 @@ function App() {
       setStatusMessage(message)
     } finally {
       setIsCreatingFile(false)
+    }
+  }
+
+  async function handleCreateDirectory() {
+    if (!currentPath) {
+      return
+    }
+
+    const nextRelativePath = getNextUntitledDirectoryName(rootDirNames)
+
+    try {
+      setIsCreatingDirectory(true)
+      await window.appApi.createWorkspaceDirectory(currentPath, nextRelativePath)
+      await loadTree(currentPath)
+      setStatusMessage(`${nextRelativePath} created`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to create directory.'
+      setStatusMessage(message)
+    } finally {
+      setIsCreatingDirectory(false)
+    }
+  }
+
+  function handleToggleFileTreeExpansion() {
+    if (expandedPaths.size > 0) {
+      setExpandedPaths(new Set())
+      setStatusMessage('All folders collapsed')
+    } else {
+      const allDirs = new Set<string>()
+      const collect = (items: WorkspaceNode[]) => {
+        for (const node of items) {
+          if (node.kind === 'directory') {
+            allDirs.add(node.path)
+            if (node.children) collect(node.children)
+          }
+        }
+      }
+      collect(tree)
+      setExpandedPaths(allDirs)
+      setStatusMessage('All folders expanded')
     }
   }
 
@@ -1383,8 +1445,8 @@ function App() {
           setIsLeftSidebarCollapsed((currentValue) => !currentValue)
         }}
       >
-        <span className={`panel-toggle-icon${isLeftSidebarVisible ? '' : ' is-collapsed'}`} aria-hidden='true'>
-          <LayoutLeftbarCloseLine size={16} />
+        <span className='panel-toggle-icon' aria-hidden='true'>
+          <LayoutLeftLine size={18} />
         </span>
       </button>
 
@@ -1397,8 +1459,8 @@ function App() {
             setIsRightSidebarCollapsed((currentValue) => !currentValue)
           }}
         >
-          <span className={`panel-toggle-icon${isRightSidebarVisible ? '' : ' is-collapsed'}`} aria-hidden='true'>
-            <LayoutRightbarCloseLine size={16} />
+          <span className='panel-toggle-icon' aria-hidden='true'>
+            <LayoutRightLine size={18} />
           </span>
         </button>
       ) : null}
@@ -1432,19 +1494,6 @@ function App() {
             >
               Settings
             </Button>
-
-            <Button
-              isIconOnly
-              variant='ghost'
-              onPress={() => {
-                void handleCreateFile()
-              }}
-              isDisabled={!currentPath || isCreatingFile}
-              className='section-create-button'
-              aria-label={isCreatingFile ? 'Creating file' : 'Create file'}
-            >
-              <AddLine size={18} />
-            </Button>
           </div>
         </div>
 
@@ -1474,11 +1523,64 @@ function App() {
 
           {activeLeftSidebarTab === 'file' ? (
             <div className='sidebar-stack-pane sidebar-tree-pane'>
+              <div className='file-panel-header'>
+                <span className='file-panel-title'>文件树</span>
+                <div className='file-panel-actions'>
+                  <Tooltip closeDelay={0}>
+                    <Tooltip.Trigger>
+                      <button
+                        type='button'
+                        className='file-panel-action'
+                        onClick={() => void handleCreateFile()}
+                        disabled={!currentPath || isCreatingFile}
+                        aria-label='Create File'
+                      >
+                        <Icon icon='lucide:file-plus' width={17} height={17} />
+                      </button>
+                    </Tooltip.Trigger>
+                    <Tooltip.Content>Create File</Tooltip.Content>
+                  </Tooltip>
+                  <Tooltip closeDelay={0}>
+                    <Tooltip.Trigger>
+                      <button
+                        type='button'
+                        className='file-panel-action'
+                        onClick={() => void handleCreateDirectory()}
+                        disabled={!currentPath || isCreatingDirectory}
+                        aria-label='Create Folder'
+                      >
+                        <Icon icon='lucide:folder-plus' width={17} height={17} />
+                      </button>
+                    </Tooltip.Trigger>
+                    <Tooltip.Content>Create Folder</Tooltip.Content>
+                  </Tooltip>
+                  <Tooltip closeDelay={0}>
+                    <Tooltip.Trigger>
+                      <button
+                        type='button'
+                        className='file-panel-action'
+                        onClick={handleToggleFileTreeExpansion}
+                        disabled={!currentPath || tree.length === 0}
+                        aria-label='Toggle Expansion'
+                      >
+                        <Icon 
+                          icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'} 
+                          width={17} height={17} 
+                        />
+                      </button>
+                    </Tooltip.Trigger>
+                    <Tooltip.Content>{expandedPaths.size > 0 ? 'Collapse All' : 'Expand All'}</Tooltip.Content>
+                  </Tooltip>
+                </div>
+              </div>
+
               <ScrollShadow className='tree-scroll' hideScrollBar>
                 <WorkspaceTree
                   activeFilePath={activeTreePath}
                   iconTheme={iconTheme}
                   nodes={tree}
+                  expandedPaths={expandedPaths}
+                  setExpandedPaths={setExpandedPaths}
                   onSelectFile={(filePath) => {
                     void openFile(filePath)
                   }}
