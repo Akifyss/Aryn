@@ -4,6 +4,7 @@ import {
   AddLine,
   ArrowDownLine,
   ArrowUpLine,
+  ArrowUpCircleLine,
   CheckLine,
   CloseCircleLine,
   DownloadLine,
@@ -699,7 +700,7 @@ export function GitPanel({
               disabled={!canSubmitCommit || Boolean(syncDisabledReason)}
               onClick={onCommitAndSync}
             >
-              <Refresh3Line size={17} />
+              <ArrowUpCircleLine size={17} />
             </button>
             <button
               type='button'
@@ -833,7 +834,7 @@ export function GitPanel({
                     onUnstage(stagedPaths)
                   }}
                 >
-                  <ArrowDownLine size={14} />
+                  <Icon icon='mdi:minus' width={14} height={14} />
                 </button>
               ) : null}
               changes={repositoryState.stagedChanges}
@@ -859,7 +860,7 @@ export function GitPanel({
                     title='Discard all'
                     onClick={onDiscardAll}
                   >
-                    <Refresh2Line size={14} />
+                    <Back2Line size={14} />
                   </button>
                   <button
                     type='button'
