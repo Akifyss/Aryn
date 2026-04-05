@@ -204,6 +204,7 @@ function App() {
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false)
   const [activeResizePanel, setActiveResizePanel] = useState<ResizePanel | null>(null)
   const [isGitPanelResizing, setIsGitPanelResizing] = useState(false)
+  const [activeLeftSidebarTab, setActiveLeftSidebarTab] = useState<'file' | 'git'>('file')
   const [gitRepositoryState, setGitRepositoryState] = useState<GitRepositoryState | null>(null)
   const [isGitLoading, setIsGitLoading] = useState(false)
   const [gitBusyLabel, setGitBusyLabel] = useState<string | null>(null)
@@ -1448,86 +1449,94 @@ function App() {
         </div>
 
         <div ref={leftSidebarBodyRef} className='sidebar-stack'>
-          <div className='sidebar-stack-pane sidebar-tree-pane'>
-            <ScrollShadow className='tree-scroll' hideScrollBar>
-              <WorkspaceTree
-                activeFilePath={activeTreePath}
-                iconTheme={iconTheme}
-                nodes={tree}
-                onSelectFile={(filePath) => {
+          <div className='sidebar-vertical-tabs'>
+            <button
+              type='button'
+              className={`sidebar-vertical-tab${activeLeftSidebarTab === 'file' ? ' is-active' : ''}`}
+              onClick={() => {
+                setActiveLeftSidebarTab('file')
+              }}
+            >
+              <FileFill size={18} className='sidebar-vertical-tab-icon' />
+              <span className='sidebar-vertical-tab-label'>文件</span>
+            </button>
+            <button
+              type='button'
+              className={`sidebar-vertical-tab${activeLeftSidebarTab === 'git' ? ' is-active' : ''}`}
+              onClick={() => {
+                setActiveLeftSidebarTab('git')
+              }}
+            >
+              <GitCompareLine size={18} className='sidebar-vertical-tab-icon' />
+              <span className='sidebar-vertical-tab-label'>Git</span>
+            </button>
+          </div>
+
+          {activeLeftSidebarTab === 'file' ? (
+            <div className='sidebar-stack-pane sidebar-tree-pane'>
+              <ScrollShadow className='tree-scroll' hideScrollBar>
+                <WorkspaceTree
+                  activeFilePath={activeTreePath}
+                  iconTheme={iconTheme}
+                  nodes={tree}
+                  onSelectFile={(filePath) => {
+                    void openFile(filePath)
+                  }}
+                  onRenameFile={(filePath, nextName) => handleRenameFile(filePath, nextName)}
+                  onDeleteFile={(filePath) => handleDeleteFile(filePath)}
+                />
+              </ScrollShadow>
+            </div>
+          ) : (
+            <div className='sidebar-stack-pane sidebar-git-pane' id='git-panel'>
+              <GitPanel
+                busyLabel={gitBusyLabel}
+                commitMessage={gitCommitMessage}
+                isLoading={isGitLoading}
+                layout={gitPanelLayout}
+                onCommit={() => {
+                  void handleCommitGitChanges()
+                }}
+                onCommitAndSync={() => {
+                  void handleCommitAndSyncGitChanges()
+                }}
+                onCommitMessageChange={setGitCommitMessage}
+                onDiscardAll={() => {
+                  void handleDiscardAllGitChanges()
+                }}
+                onDiscardMany={(changes) => {
+                  void handleDiscardGitChanges(changes)
+                }}
+                onInitialize={() => {
+                  void handleInitializeGit()
+                }}
+                onLayoutChange={setGitPanelLayout}
+                onOpenFile={(filePath) => {
                   void openFile(filePath)
                 }}
-                onRenameFile={(filePath, nextName) => handleRenameFile(filePath, nextName)}
-                onDeleteFile={(filePath) => handleDeleteFile(filePath)}
+                onOpenDiff={(change) => {
+                  void openGitDiff(change)
+                }}
+                onPull={() => {
+                  void handlePullGitChanges()
+                }}
+                onPush={() => {
+                  void handlePushGitChanges()
+                }}
+                onRefresh={() => {
+                  void refreshGitState(currentPath, { silent: false })
+                }}
+                onStage={(filePaths) => {
+                  void handleStageGitPaths(filePaths)
+                }}
+                onUnstage={(filePaths) => {
+                  void handleUnstageGitPaths(filePaths)
+                }}
+                repositoryState={gitRepositoryState}
+                workspacePath={currentPath}
               />
-            </ScrollShadow>
-          </div>
-
-          <div className='sidebar-stack-resize-slot'>
-            <div
-              role='separator'
-              className={`sidebar-stack-resize-handle${isGitPanelResizing ? ' is-active' : ''}`}
-              aria-label='Resize Git panel'
-              aria-controls='git-panel'
-              aria-orientation='horizontal'
-              onPointerDown={(event) => {
-                if (event.button !== 0) {
-                  return
-                }
-
-                setIsGitPanelResizing(true)
-              }}
-            />
-          </div>
-
-          <div className='sidebar-stack-pane sidebar-git-pane' id='git-panel'>
-            <GitPanel
-              busyLabel={gitBusyLabel}
-              commitMessage={gitCommitMessage}
-              isLoading={isGitLoading}
-              layout={gitPanelLayout}
-              onCommit={() => {
-                void handleCommitGitChanges()
-              }}
-              onCommitAndSync={() => {
-                void handleCommitAndSyncGitChanges()
-              }}
-              onCommitMessageChange={setGitCommitMessage}
-              onDiscardAll={() => {
-                void handleDiscardAllGitChanges()
-              }}
-              onDiscardMany={(changes) => {
-                void handleDiscardGitChanges(changes)
-              }}
-              onInitialize={() => {
-                void handleInitializeGit()
-              }}
-              onLayoutChange={setGitPanelLayout}
-              onOpenFile={(filePath) => {
-                void openFile(filePath)
-              }}
-              onOpenDiff={(change) => {
-                void openGitDiff(change)
-              }}
-              onPull={() => {
-                void handlePullGitChanges()
-              }}
-              onPush={() => {
-                void handlePushGitChanges()
-              }}
-              onRefresh={() => {
-                void refreshGitState(currentPath, { silent: false })
-              }}
-              onStage={(filePaths) => {
-                void handleStageGitPaths(filePaths)
-              }}
-              onUnstage={(filePaths) => {
-                void handleUnstageGitPaths(filePaths)
-              }}
-              repositoryState={gitRepositoryState}
-              workspacePath={currentPath}
-            />
-          </div>
+            </div>
+          )}
         </div>
       </aside>
 
