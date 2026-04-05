@@ -1534,6 +1534,7 @@ function App() {
                 }}
                 repositoryState={gitRepositoryState}
                 workspacePath={currentPath}
+                iconTheme={iconTheme}
               />
             </div>
           )}

@@ -10,6 +10,7 @@ import {
   CloseCircleLine,
   DownloadLine,
   ExternalLinkLine,
+  FileLine,
   FolderLine,
   GitBranchLine,
   ListCheckLine,
@@ -23,6 +24,11 @@ import type {
   GitRecentPullItem,
   GitRepositoryState,
 } from '@/features/git/types'
+import {
+  resolveWorkspaceDirectoryIconUrl,
+  resolveWorkspaceFileIconUrl,
+} from '@/features/workspace/lib/icon-theme'
+import type { WorkspaceIconTheme } from '@/features/workspace/types'
 
 type GitPanelProps = {
   busyLabel: string | null
@@ -45,6 +51,7 @@ type GitPanelProps = {
   onUnstage: (filePaths: string[]) => void
   repositoryState: GitRepositoryState | null
   workspacePath: string | null
+  iconTheme: WorkspaceIconTheme | null
 }
 
 type GitPanelSectionKind = 'staged' | 'unstaged' | 'pulled'
@@ -195,6 +202,7 @@ function GitFolderTree({
   onOpenFile,
   onStage,
   onUnstage,
+  iconTheme,
 }: {
   kind: GitPanelSectionKind
   nodes: GitTreeNode[]
@@ -203,6 +211,7 @@ function GitFolderTree({
   onOpenFile: (filePath: string) => void
   onStage: (filePaths: string[]) => void
   onUnstage: (filePaths: string[]) => void
+  iconTheme: WorkspaceIconTheme | null
 }) {
   const [closedMap, setClosedMap] = useState<Record<string, boolean>>({})
 
@@ -224,6 +233,7 @@ function GitFolderTree({
         const unstageablePaths = scopedItems
           .filter((change) => change.scope === 'staged')
           .map((change) => change.path)
+        const themedDirectoryIconUrl = resolveWorkspaceDirectoryIconUrl(iconTheme, node.label, !isClosed)
 
         return (
           <li key={node.id} className='git-tree-node'>
@@ -240,6 +250,18 @@ function GitFolderTree({
                     className={`git-panel-section-caret${isClosed ? '' : ' is-expanded'}`}
                     size={14}
                   />
+                  <span className='git-tree-node-icon' aria-hidden='true'>
+                    {themedDirectoryIconUrl ? (
+                      <img
+                        alt=''
+                        className='tree-theme-icon'
+                        draggable='false'
+                        src={themedDirectoryIconUrl}
+                      />
+                    ) : (
+                      <FolderLine size={16} />
+                    )}
+                  </span>
                   <span>{node.label}</span>
                 </span>
               </button>
@@ -301,6 +323,7 @@ function GitFolderTree({
                     onOpenFile={onOpenFile}
                     onStage={onStage}
                     onUnstage={onUnstage}
+                    iconTheme={iconTheme}
                   />
                 ) : null}
                 <GitChangeList
@@ -311,6 +334,7 @@ function GitFolderTree({
                   onOpenFile={onOpenFile}
                   onStage={onStage}
                   onUnstage={onUnstage}
+                  iconTheme={iconTheme}
                 />
               </div>
             ) : null}
@@ -329,6 +353,7 @@ function GitChangeList({
   onOpenFile,
   onStage,
   onUnstage,
+  iconTheme,
 }: {
   changes: GitDisplayChange[]
   kind: GitPanelSectionKind
@@ -337,6 +362,7 @@ function GitChangeList({
   onOpenFile: (filePath: string) => void
   onStage: (filePaths: string[]) => void
   onUnstage: (filePaths: string[]) => void
+  iconTheme: WorkspaceIconTheme | null
 }) {
   if (changes.length === 0) {
     return null
@@ -367,7 +393,21 @@ function GitChangeList({
               }}
             >
               <span className='git-change-copy'>
-                <span className='git-change-path'>{fileName}</span>
+                <span className='git-change-header'>
+                  <span className='git-tree-node-icon' aria-hidden='true'>
+                    {resolveWorkspaceFileIconUrl(iconTheme, fileName) ? (
+                      <img
+                        alt=''
+                        className='tree-theme-icon'
+                        draggable='false'
+                        src={resolveWorkspaceFileIconUrl(iconTheme, fileName)!}
+                      />
+                    ) : (
+                      <FileLine size={16} className='tree-file-icon' />
+                    )}
+                  </span>
+                  <span className='git-change-path'>{fileName}</span>
+                </span>
                 {metaLabel ? <span className='git-change-meta'>{metaLabel}</span> : null}
               </span>
             </button>
@@ -463,6 +503,7 @@ function GitSection({
   onStage,
   onUnstage,
   title,
+  iconTheme,
 }: {
   action?: ReactNode
   changes: GitDisplayChange[]
@@ -475,6 +516,7 @@ function GitSection({
   onStage: (filePaths: string[]) => void
   onUnstage: (filePaths: string[]) => void
   title: string
+  iconTheme: WorkspaceIconTheme | null
 }) {
   const [isExpanded, setIsExpanded] = useState(true)
   const treeNodes = useMemo(() => buildGitTree(changes), [changes])
@@ -520,6 +562,7 @@ function GitSection({
                 onOpenFile={onOpenFile}
                 onStage={onStage}
                 onUnstage={onUnstage}
+                iconTheme={iconTheme}
               />
               <GitChangeList
                 changes={flatChanges}
@@ -529,6 +572,7 @@ function GitSection({
                 onOpenFile={onOpenFile}
                 onStage={onStage}
                 onUnstage={onUnstage}
+                iconTheme={iconTheme}
               />
             </div>
           ) : (
@@ -540,6 +584,7 @@ function GitSection({
               onOpenFile={onOpenFile}
               onStage={onStage}
               onUnstage={onUnstage}
+              iconTheme={iconTheme}
             />
           )
         ) : (
@@ -571,6 +616,7 @@ export function GitPanel({
   onUnstage,
   repositoryState,
   workspacePath,
+  iconTheme,
 }: GitPanelProps) {
   const stagedPaths = useMemo(
     () => repositoryState?.stagedChanges.map((change) => change.path) ?? [],
@@ -757,8 +803,11 @@ export function GitPanel({
       <div className='git-panel-sections'>
         {!repositoryState.hasChanges && repositoryState.recentlyPulledChanges.length === 0 ? (
           <div className='git-panel-empty-state git-panel-clean-state'>
-            <GitBranchLine size={18} />
-            <p>Working tree clean.</p>
+            <div className='git-empty-illustration'>
+              <CheckLine size={28} />
+            </div>
+            <p>Working tree clean</p>
+            <span className='git-empty-subtext'>All changes are committed</span>
           </div>
         ) : (
           <>
@@ -786,6 +835,7 @@ export function GitPanel({
               onStage={onStage}
               onUnstage={onUnstage}
               title='Staged Changes'
+              iconTheme={iconTheme}
             />
 
             <GitSection
@@ -823,6 +873,7 @@ export function GitPanel({
               onStage={onStage}
               onUnstage={onUnstage}
               title='Changes'
+              iconTheme={iconTheme}
             />
 
             {repositoryState.recentlyPulledChanges.length > 0 ? (
@@ -837,6 +888,7 @@ export function GitPanel({
                 onStage={onStage}
                 onUnstage={onUnstage}
                 title='Recently Pulled Files'
+                iconTheme={iconTheme}
               />
             ) : null}
           </>
