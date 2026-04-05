@@ -22,10 +22,10 @@
   --resize-handle-color-active: color-mix(in oklab, var(--accent) 52%, var(--panel-border));
   --chrome-height: 44px;
   --tabs-chrome-height: calc(var(--chrome-height) - 1px);
-  --panel-toggle-size: 2rem;
-  --panel-toggle-gap: 0.55rem;
-  --left-panel-toggle-anchor: 4.7rem;
-  --right-panel-toggle-anchor: 0.75rem;
+  --panel-toggle-size: 32px;
+  --panel-toggle-gap: 9px;
+  --left-panel-toggle-anchor: 75px;
+  --right-panel-toggle-anchor: 12px;
   --left-panel-content-inset: calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
   --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
 
@@ -40,8 +40,8 @@
 }
 
 .app-shell[data-platform='windows'] {
-  --left-panel-toggle-anchor: 0.75rem;
-  --right-panel-toggle-anchor: 9.75rem;
+  --left-panel-toggle-anchor: 12px;
+  --right-panel-toggle-anchor: 156px;
   --sidebar-icon-x: calc(var(--left-panel-toggle-anchor) + (var(--panel-toggle-size) - 16px) / 2);
 }
 
@@ -83,7 +83,7 @@
 
 .titlebar-side-right {
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .titlebar-spacer {
@@ -101,25 +101,25 @@
 }
 
 .titlebar-controls-macos {
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .titlebar-macos-left {
   display: flex;
   align-items: center;
   height: 100%;
-  margin-left: 1rem;
-  gap: 0.35rem;
+  margin-left: 16px;
+  gap: 6px;
 }
 
 .panel-toggle-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: 32px;
+  height: 32px;
   border: 0;
-  border-radius: 0.6rem;
+  border-radius: 10px;
   background: transparent;
   color: var(--panel-muted);
   cursor: pointer;
@@ -155,8 +155,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1rem;
-  height: 1rem;
+  width: 16px;
+  height: 16px;
 }
 
 .panel-toggle-icon.is-collapsed {
@@ -187,8 +187,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 3rem;
-  min-width: 3rem;
+  width: 48px;
+  min-width: 48px;
   height: 100%;
   color: var(--panel-muted);
   transition: background-color 140ms ease, color 140ms ease;
@@ -206,8 +206,8 @@
 
 .traffic-button {
   position: relative;
-  width: 0.8rem;
-  height: 0.8rem;
+  width: 12.8px;
+  height: 12.8px;
   border-radius: 999px;
   margin-top: 1px;
 }
@@ -237,7 +237,7 @@
 .traffic-close::before,
 .traffic-close::after {
   inset: 50% auto auto 50%;
-  width: 0.45rem;
+  width: 7px;
   height: 1px;
   background: rgba(70, 27, 27, 0.82);
   transform-origin: center;
@@ -257,7 +257,7 @@
 
 .traffic-minimize::before {
   inset: 50% auto auto 50%;
-  width: 0.42rem;
+  width: 6.7px;
   height: 1px;
   background: rgba(92, 64, 5, 0.9);
   transform: translate(-50%, -50%);
@@ -275,13 +275,13 @@
 }
 
 .traffic-maximize::before {
-  width: 0.42rem;
+  width: 6.7px;
   height: 1px;
 }
 
 .traffic-maximize::after {
   width: 1px;
-  height: 0.42rem;
+  height: 6.7px;
 }
 
 .panel {
@@ -390,7 +390,7 @@
 .eyebrow {
   margin: 0;
   color: var(--panel-muted);
-  font-size: 0.68rem;
+  font-size: 10.9px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -400,16 +400,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 12px;
   flex-shrink: 0;
   min-height: var(--chrome-height);
-  padding: 0 1rem 0 1.25rem;
+  padding: 0 16px 0 20px;
   border-bottom: 0;
 }
 
 .workspace-section-title {
   padding-left: var(--left-panel-toggle-anchor);
-  gap: 0.25rem;
+  gap: 4px;
   app-region: drag;
   -webkit-app-region: drag;
 }
@@ -434,13 +434,13 @@
   max-width: 100%;
   overflow: hidden;
   align-self: center;
-  margin-left: -0.5rem;
-  padding: 0.25rem 0.6rem;
+  margin-left: -8px;
+  padding: 4px 10px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: #111827;
-  font-size: 0.85rem;
+  font-size: 13.6px;
   font-weight: 500;
   letter-spacing: -0.01em;
   text-align: left;
@@ -477,7 +477,7 @@
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 0.3rem;
+  gap: 4.8px;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
@@ -490,7 +490,7 @@
 .section-title-text:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--accent) 42%, white);
   outline-offset: 4px;
-  border-radius: 0.45rem;
+  border-radius: 7px;
 }
 
 .section-title-text:disabled {
@@ -499,20 +499,20 @@
 }
 
 .section-create-button {
-  min-width: 2rem;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.7rem;
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: 11.2px;
   color: var(--panel-muted);
 }
 
 .section-settings-button {
   min-width: auto;
-  height: 2rem;
-  padding-inline: 0.72rem;
-  border-radius: 0.7rem;
+  height: 32px;
+  padding-inline: 11.5px;
+  border-radius: 11.2px;
   color: var(--panel-muted);
-  font-size: 0.68rem;
+  font-size: 10.9px;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -547,22 +547,22 @@
 .sidebar-vertical-tabs {
   display: flex;
   flex-direction: column;
-  padding: 0.5rem 0.6rem;
-  padding-left: calc(var(--sidebar-icon-x, 1.35rem) - 0.75rem);
-  gap: 0.25rem;
+  padding: 8px 10px;
+  padding-left: calc(var(--sidebar-icon-x, 22px) - 12px);
+  gap: 4px;
 }
 
 .sidebar-vertical-tab {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.45rem 0.75rem;
-  border-radius: 0.5rem;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--panel-muted);
-  font-size: 0.82rem;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 140ms ease;
@@ -585,8 +585,8 @@
   content: "";
   position: absolute;
   left: 0;
-  top: 0.6rem;
-  bottom: 0.6rem;
+  top: 10px;
+  bottom: 10px;
   width: 3px;
   background: var(--accent);
   border-radius: 999px;
@@ -632,7 +632,7 @@
 
 .sidebar-stack-resize-slot {
   position: relative;
-  flex: 0 0 0.85rem;
+  flex: 0 0 13.6px;
 }
 
 .sidebar-stack-resize-handle {
@@ -671,9 +671,9 @@
 }
 
 .tree-directory-button {
-  gap: 0.625rem;
+  gap: 10px;
   min-height: 33px;
-  padding-right: 0.9rem;
+  padding-right: 14.4px;
   padding-top: 0;
   padding-bottom: 0;
   border: 0;
@@ -715,7 +715,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.84rem;
+  font-size: 13.4px;
   font-weight: 500;
 }
 
@@ -753,7 +753,7 @@
   justify-content: flex-start;
   min-width: 0;
   min-height: 0;
-  padding: 0 0 0 0.75rem;
+  padding: 0 0 0 12px;
   height: 33px;
   border-radius: 0;
   color: var(--panel-soft);
@@ -779,7 +779,7 @@
 .tree-file-content {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  gap: 10px;
   width: 100%;
   min-width: 0;
 }
@@ -795,10 +795,10 @@
 .tree-item-actions {
   display: flex;
   align-items: center;
-  gap: 0.1rem;
+  gap: 1.6px;
   align-self: center;
   flex-shrink: 0;
-  margin-right: 0.5rem;
+  margin-right: 8px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 160ms ease;
@@ -812,11 +812,11 @@
 
 .tree-action-button,
 .tree-rename-action {
-  width: 2rem;
-  min-width: 2rem;
-  height: 2rem;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
   color: var(--panel-muted);
-  border-radius: 0.75rem;
+  border-radius: 12px;
 }
 
 .tree-action-button:hover,
@@ -829,17 +829,17 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
   min-height: 33px;
   padding-top: 0;
-  padding-right: 0.5rem;
+  padding-right: 8px;
   padding-bottom: 0;
 }
 
 .tree-inline-actions {
   display: flex;
   align-items: center;
-  gap: 0.12rem;
+  gap: 1.9px;
 }
 
 .tree-rename-input.input,
@@ -848,8 +848,8 @@
 .tree-rename-input.input:focus-visible,
 .tree-rename-input.input[data-focus="true"],
 .tree-rename-input.input[data-focus-visible="true"] {
-  min-height: 2.35rem;
-  border-radius: 0.8rem;
+  min-height: 37.6px;
+  border-radius: 12.8px;
   border: 1px solid var(--field-border) !important;
   background: var(--field-background) !important;
   box-shadow: none !important;
@@ -857,14 +857,14 @@
 
 .tree-rename-input.input input {
   color: var(--foreground);
-  font-size: 0.8rem;
+  font-size: 12.8px;
 }
 
 .tree-item-error {
-  margin: 0 0 0.15rem;
-  padding-left: 1rem;
+  margin: 0 0 2.4px;
+  padding-left: 16px;
   color: color-mix(in oklab, var(--danger) 85%, black);
-  font-size: 0.74rem;
+  font-size: 11.8px;
   line-height: 1.45;
 }
 
@@ -873,17 +873,17 @@
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  gap: 0.75rem;
-  min-height: 14rem;
-  padding: 1rem 1rem 1rem 1.25rem;
+  gap: 12px;
+  min-height: 224px;
+  padding: 16px 16px 16px 20px;
   color: var(--panel-soft);
 }
 
 .tree-empty-icon {
   display: grid;
   place-items: center;
-  width: 2.9rem;
-  height: 2.9rem;
+  width: 46.4px;
+  height: 46.4px;
   border-radius: 999px;
   background: color-mix(in oklab, var(--accent) 8%, white);
   color: color-mix(in oklab, var(--accent) 82%, black);
@@ -945,8 +945,8 @@
 .file-tabs-actions {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0 0.6rem 0 0;
+  gap: 7px;
+  padding: 0 10px 0 0;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
@@ -959,9 +959,9 @@
   display: flex;
   align-items: center;
   min-height: var(--tabs-chrome-height);
-  padding: 0 1rem;
+  padding: 0 16px;
   color: var(--panel-soft);
-  font-size: 0.74rem;
+  font-size: 11.8px;
   letter-spacing: 0.01em;
 }
 
@@ -971,7 +971,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   flex: 0 0 auto;
   min-width: 0;
-  max-width: min(18rem, 42vw);
+  max-width: min(288px, 42vw);
   border-right: 1px solid var(--panel-border);
   background: transparent;
   transition: background-color 140ms ease, color 140ms ease;
@@ -993,15 +993,15 @@
 .file-tab-trigger {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 7px;
   min-width: 0;
   min-height: var(--tabs-chrome-height);
-  padding: 0 0.45rem 0 0.95rem;
+  padding: 0 7px 0 15.2px;
   border: 0;
   background: transparent;
   color: var(--panel-muted);
   cursor: pointer;
-  font-size: 0.79rem;
+  font-size: 12.6px;
   font-weight: 500;
   text-align: left;
   transition: color 140ms ease;
@@ -1033,7 +1033,7 @@
 .file-tab-meta {
   flex-shrink: 1;
   color: var(--panel-soft);
-  font-size: 0.69rem;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -1046,8 +1046,8 @@
   position: relative;
   display: grid;
   place-items: center;
-  width: 2rem;
-  min-width: 2rem;
+  width: 32px;
+  min-width: 32px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1082,8 +1082,8 @@
 
 .file-tab-dirty-indicator {
   position: absolute;
-  width: 0.45rem;
-  height: 0.45rem;
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
   background: color-mix(in oklab, var(--accent) 62%, var(--foreground));
   opacity: 0;
@@ -1118,11 +1118,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 0;
-  border-radius: 0.72rem;
+  border-radius: 11.5px;
   background: transparent;
   color: var(--panel-muted);
   cursor: pointer;
@@ -1172,8 +1172,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.25rem 0.9rem;
+  gap: 16px;
+  padding: 16px 20px 14.4px;
   border-bottom: 1px solid var(--panel-border);
   background: color-mix(in oklab, var(--panel-surface-section) 82%, white);
 }
@@ -1183,9 +1183,9 @@
 }
 
 .git-diff-header-copy h3 {
-  margin: 0.12rem 0 0;
+  margin: 1.9px 0 0;
   color: var(--foreground);
-  font-size: 0.94rem;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -1194,19 +1194,19 @@
 .git-panel-status,
 .git-panel-error,
 .markdown-diff-empty-state p {
-  margin: 0.18rem 0 0;
+  margin: 2.9px 0 0;
   color: var(--panel-muted);
-  font-size: 0.75rem;
+  font-size: 12px;
   line-height: 1.55;
 }
 
 .git-diff-view-modes {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.2rem;
+  gap: 4px;
+  padding: 3px;
   border: 1px solid var(--panel-border);
-  border-radius: 0.8rem;
+  border-radius: 12.8px;
   background: color-mix(in oklab, var(--panel-surface-base) 78%, white);
 }
 
@@ -1225,10 +1225,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2rem;
-  padding: 0 0.78rem;
-  border-radius: 0.72rem;
-  font-size: 0.73rem;
+  min-height: 32px;
+  padding: 0 12.5px;
+  border-radius: 11.5px;
+  font-size: 11.7px;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
@@ -1236,8 +1236,8 @@
 
 .git-toolbar-icon-button,
 .git-change-icon-button {
-  width: 2rem;
-  min-width: 2rem;
+  width: 32px;
+  min-width: 32px;
   padding: 0;
 }
 
@@ -1268,28 +1268,28 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 0.75rem 0.9rem 1rem;
+  padding: 12px 14.4px 16px;
   background: color-mix(in oklab, var(--panel-surface-base) 94%, white);
 }
 
 .git-diff-meta-row {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 7px;
   flex-wrap: wrap;
-  padding: 0 0.9rem 0.2rem;
+  padding: 0 14.4px 3px;
 }
 
 .git-diff-meta-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 1.75rem;
-  padding: 0.1rem 0.65rem;
+  min-height: 28px;
+  padding: 0.16px 10px;
   border: 1px solid var(--panel-border);
   border-radius: 999px;
   background: color-mix(in oklab, var(--panel-surface-base) 98%, white);
   color: var(--panel-soft);
-  font-size: 0.72rem;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -1301,7 +1301,7 @@
 
 .git-diff-meta-arrow {
   color: var(--panel-muted);
-  font-size: 0.74rem;
+  font-size: 11.8px;
   font-weight: 600;
 }
 
@@ -1312,7 +1312,7 @@
   min-height: 100%;
   min-height: 0;
   border: 1px solid var(--panel-border);
-  border-radius: 1rem;
+  border-radius: 16px;
   overflow: hidden;
   background: color-mix(in oklab, var(--panel-surface-editor) 98%, white);
 }
@@ -1363,7 +1363,7 @@
 
 .git-diff-codemirror-host .cm-deletedText,
 .git-diff-codemirror-host .cm-insertedText {
-  border-radius: 0.25rem;
+  border-radius: 4px;
 }
 
 .git-panel {
@@ -1379,8 +1379,8 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.55rem;
-  padding: 0.65rem 0.75rem;
+  gap: 9px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--panel-border);
   background: transparent;
 }
@@ -1388,7 +1388,7 @@
 .git-panel-toolbar {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 6px;
   flex-wrap: nowrap;
   overflow-x: auto;
   flex: 0 0 auto;
@@ -1407,13 +1407,13 @@
 
 .git-panel-commit-clear {
   position: absolute;
-  top: 0.7rem;
-  right: 0.75rem;
+  top: 11.2px;
+  right: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
   color: var(--panel-muted);
 }
@@ -1426,17 +1426,17 @@
 .git-panel-summary {
   display: flex;
   align-items: flex-start;
-  gap: 0.65rem;
-  padding: 0.75rem 1rem 0.25rem;
+  gap: 10px;
+  padding: 12px 16px 4px;
   color: var(--panel-soft);
-  font-size: 0.72rem;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .git-panel-summary-label {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 4px;
   flex: 0 0 auto;
   font-weight: 600;
 }
@@ -1444,14 +1444,14 @@
 .git-panel-summary-copy {
   display: grid;
   min-width: 0;
-  gap: 0.08rem;
+  gap: 1.3px;
 }
 
 .git-panel-summary-primary {
   display: block;
   overflow: hidden;
   color: var(--foreground);
-  font-size: 0.78rem;
+  font-size: 13px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1469,44 +1469,44 @@
   flex: 1;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
-  padding: 1rem;
+  gap: 9px;
+  padding: 16px;
   text-align: center;
 }
 
 .git-panel-init-state {
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 12.8px;
 }
 
 .git-panel-clean-state {
   flex-direction: column;
-  padding: 2.5rem 1.5rem;
+  padding: 40px 24px;
 }
 
 .git-empty-illustration {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 3.8rem;
-  height: 3.8rem;
-  margin-bottom: 1.15rem;
-  border-radius: 1.35rem;
+  width: 60.8px;
+  height: 60.8px;
+  margin-bottom: 18.5px;
+  border-radius: 22px;
   background: color-mix(in oklab, var(--success) 8%, transparent);
   color: var(--success);
 }
 
 .git-empty-subtext {
   display: block;
-  margin-top: 0.35rem;
+  margin-top: 5.6px;
   color: var(--panel-soft);
-  font-size: 0.72rem;
+  font-size: 12px;
   font-weight: 500;
 }
 
 .git-panel-status,
 .git-panel-error {
-  padding: 0.35rem 0.75rem 0;
+  padding: 5.6px 12px 0;
 }
 
 .git-panel-error {
@@ -1539,11 +1539,11 @@
 .git-panel-section-header {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 7px;
   background: var(--panel-surface-section);
   border-bottom: 1px solid var(--panel-border);
   margin: 0;
-  min-height: 2.15rem;
+  min-height: 34.4px;
   transition: background-color 120ms ease, color 120ms ease;
 }
 
@@ -1556,8 +1556,8 @@
   align-items: center;
   flex: 1;
   min-width: 0;
-  padding: 0.42rem 0.75rem;
-  font-size: 0.78rem;
+  padding: 6.7px 12px;
+  font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1571,7 +1571,7 @@
 .git-panel-section-title {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 9px;
   min-width: 0;
 }
 
@@ -1582,7 +1582,7 @@
 
 .git-panel-section-count {
   color: var(--panel-soft);
-  font-size: 0.72rem;
+  font-size: 12px;
   font-weight: 600;
   margin-left: auto;
 }
@@ -1590,8 +1590,8 @@
 .git-panel-section-tools {
   display: inline-flex;
   align-items: center;
-  gap: 0.28rem;
-  padding-right: 0.75rem;
+  gap: 4.5px;
+  padding-right: 12px;
 }
 
 .git-panel-section-toggle:hover {
@@ -1601,7 +1601,7 @@
 
 .git-change-list {
   margin: 0;
-  padding: 0.4rem 0;
+  padding: 6.5px 0;
   list-style: none;
 }
 
@@ -1612,7 +1612,7 @@
 }
 
 .git-panel-tree-shell {
-  padding: 0.4rem 0;
+  padding: 6.5px 0;
 }
 
 .git-tree-node {
@@ -1624,7 +1624,7 @@
 .workspace-tree-children {
   display: flex;
   flex-direction: column;
-  margin-left: 1.65rem;
+  margin-left: 26.4px;
   border-left: 1px solid var(--panel-border);
 }
 
@@ -1633,9 +1633,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  margin: 0 0.4rem;
-  min-height: 2rem;
-  border-radius: 0.5rem;
+  margin: 0 6.5px;
+  min-height: 32px;
+  border-radius: 8px;
   transition: background-color 120ms ease;
   cursor: pointer;
 }
@@ -1658,20 +1658,20 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  padding: 0.48rem 0.75rem;
-  padding-left: calc(var(--sidebar-icon-x, 1.15rem) - 0.4rem);
+  padding: 8px 12px;
+  padding-left: calc(var(--sidebar-icon-x, 18.5px) - 6.5px);
   color: var(--foreground);
-  font-size: 0.78rem;
+  font-size: 13px;
   font-weight: 500;
   text-align: left;
-  gap: 0.55rem;
+  gap: 9px;
   background: transparent;
   border: 0;
   width: 100%;
 }
 
 .git-change-path {
-  font-size: 0.78rem;
+  font-size: 13px;
   font-weight: 500;
   color: var(--foreground);
   overflow: hidden;
@@ -1698,8 +1698,8 @@
   box-shadow: none;
   padding: 0;
   margin: 0;
-  height: 1.4rem;
-  font-size: 0.78rem;
+  height: 22.4px;
+  font-size: 13px;
   font-family: inherit;
   font-weight: 500;
   color: var(--accent);
@@ -1718,14 +1718,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 2.25rem;
-  padding: 0 0.5rem 0 var(--sidebar-icon-x, 0.75rem);
+  height: 36px;
+  padding: 0 8px 0 var(--sidebar-icon-x, 12px);
   border-bottom: 1px solid var(--panel-border);
   flex-shrink: 0;
 }
 
 .file-panel-title {
-  font-size: 0.72rem;
+  font-size: 12px;
   font-weight: 600;
   color: var(--panel-muted);
   text-transform: uppercase;
@@ -1736,16 +1736,16 @@
 
 .file-panel-actions {
   display: flex;
-  gap: 0.125rem;
+  gap: 2px;
 }
 
 .file-panel-action {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.85rem;
-  height: 1.85rem;
-  border-radius: 0.4rem;
+  width: 29.6px;
+  height: 29.6px;
+  border-radius: 6.5px;
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -1772,22 +1772,22 @@
 .sidebar-footer {
   display: flex;
   flex-direction: column;
-  padding: 0.5rem;
+  padding: 8px;
   border-top: 1px solid var(--panel-border);
-  gap: 0.125rem;
+  gap: 2px;
   background: transparent;
 }
 
 .sidebar-footer-item {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.5rem;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--panel-muted);
-  font-size: 0.82rem;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 140ms ease;
@@ -1952,9 +1952,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  margin: 0 0.4rem;
-  min-height: 2rem;
-  border-radius: 0.5rem;
+  margin: 0 6.5px;
+  min-height: 32px;
+  border-radius: 8px;
   transition: background-color 120ms ease;
   cursor: pointer;
 }
@@ -1966,7 +1966,7 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  padding: 0.42rem 0.75rem;
+  padding: 6.7px 12px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -1977,15 +1977,15 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 0.15rem;
+  gap: 2.4px;
 }
 
 .git-change-header {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 9px;
   min-width: 0;
-  height: 1.25rem;
+  height: 20px;
 }
 
 .git-row-icon {
@@ -2008,25 +2008,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.78rem;
+  font-size: 13px;
   font-weight: 500;
   color: var(--foreground);
 }
 
 .git-change-meta {
   color: var(--panel-soft);
-  font-size: 0.68rem;
+  font-size: 10.9px;
 }
 
 .git-change-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.15rem;
-  height: 1.15rem;
-  padding: 0 0.3rem;
-  border-radius: 0.35rem;
-  font-size: 0.63rem;
+  min-width: 18.5px;
+  height: 18.5px;
+  padding: 0 4.8px;
+  border-radius: 5.6px;
+  font-size: 10.1px;
   font-weight: 800;
   background: var(--panel-border);
   color: var(--panel-muted);
@@ -2056,14 +2056,14 @@
 .git-change-tools {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
-  padding-right: 0.75rem;
+  gap: 9px;
+  padding-right: 12px;
 }
 
 .git-change-actions {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 6px;
   opacity: 0;
   max-width: 0; /* No space when hidden */
   overflow: hidden;
@@ -2079,7 +2079,7 @@
 .git-tree-folder-row:hover .git-change-actions,
 .workspace-tree-row:hover .git-change-actions {
   opacity: 1;
-  max-width: 8rem; /* Expand to show icons */
+  max-width: 128px; /* Expand to show icons */
   transform: translateX(0);
 }
 
@@ -2087,22 +2087,22 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.15rem;
+  min-width: 18.5px;
   flex-shrink: 0;
 }
 
 .git-commit-textarea {
   display: block;
   width: 100%;
-  min-height: 4rem;
-  max-height: 10rem;
-  padding: 0.75rem 2.45rem 0.75rem 0.95rem;
+  min-height: 64px;
+  max-height: 160px;
+  padding: 12px 39.2px 12px 15.2px;
   border: 1px solid var(--panel-border);
-  border-radius: 0.95rem;
+  border-radius: 15.2px;
   background: color-mix(in oklab, var(--panel-surface-base) 94%, white);
   color: var(--foreground);
   font: inherit;
-  font-size: 0.74rem;
+  font-size: 11.8px;
   line-height: 1.5;
   resize: vertical;
 }
@@ -2125,12 +2125,12 @@
 
 @media (max-width: 860px) {
   .sidebar-git-pane {
-    flex-basis: 18rem;
+    flex-basis: 288px;
   }
 
   .git-diff-header,
   .git-panel-header {
-    padding-inline: 1rem;
+    padding-inline: 16px;
   }
 
   .git-panel-header {
@@ -2139,11 +2139,11 @@
   }
 
   .git-panel-summary {
-    padding-inline: 1rem;
+    padding-inline: 16px;
   }
 
   .git-diff-pierre-shell {
-    padding-inline: 1rem;
+    padding-inline: 16px;
   }
 }
 
@@ -2153,7 +2153,7 @@
   z-index: 2;
   display: flex;
   justify-content: center;
-  padding: clamp(2rem, 5vw, 4rem) 2rem 2rem;
+  padding: clamp(32px, 5vw, 64px) 32px 32px;
   background: var(--panel-surface-editor);
 }
 
@@ -2161,39 +2161,39 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1.2rem;
-  width: min(30rem, 100%);
-  padding-top: clamp(2rem, 8vh, 5rem);
+  gap: 19.2px;
+  width: min(480px, 100%);
+  padding-top: clamp(32px, 8vh, 80px);
   text-align: left;
 }
 
 .editor-empty-copy h3 {
-  margin: 0 0 0.65rem;
+  margin: 0 0 10px;
   color: var(--foreground);
   font-family: var(--font-heading);
-  font-size: clamp(2rem, 3vw, 2.85rem);
+  font-size: clamp(32px, 3vw, 45.6px);
   font-weight: 600;
   line-height: 0.98;
   letter-spacing: -0.04em;
 }
 
 .editor-empty-copy p {
-  max-width: 24rem;
+  max-width: 384px;
   margin: 0;
   color: var(--panel-muted);
-  font-size: 0.95rem;
+  font-size: 15.2px;
   line-height: 1.7;
 }
 
 .editor-empty-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .settings-page {
   display: grid;
-  grid-template-columns: minmax(14rem, 17rem) minmax(0, 1fr);
+  grid-template-columns: minmax(224px, 272px) minmax(0, 1fr);
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -2214,19 +2214,19 @@
 .settings-sidebar-header,
 .settings-panel-header,
 .settings-panel-content {
-  padding-inline: 1.5rem;
+  padding-inline: 24px;
 }
 
 .settings-sidebar-header {
-  padding-top: 1.5rem;
-  padding-bottom: 1rem;
+  padding-top: 24px;
+  padding-bottom: 16px;
 }
 
 .settings-sidebar-eyebrow,
 .settings-panel-eyebrow {
-  margin: 0 0 0.35rem;
+  margin: 0 0 5.6px;
   color: var(--panel-muted);
-  font-size: 0.72rem;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -2237,7 +2237,7 @@
   margin: 0;
   color: var(--foreground);
   font-family: var(--font-heading);
-  font-size: 1.55rem;
+  font-size: 24.8px;
   font-weight: 600;
   letter-spacing: -0.04em;
 }
@@ -2245,19 +2245,19 @@
 .settings-nav {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  padding: 0 0.75rem 1rem;
+  gap: 6px;
+  padding: 0 12px 16px;
 }
 
 .settings-nav-item {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.2rem;
+  gap: 3px;
   width: 100%;
-  padding: 0.95rem 0.95rem 0.9rem;
+  padding: 15.2px 15.2px 14.4px;
   border: 0;
-  border-radius: 1rem;
+  border-radius: 16px;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -2278,13 +2278,13 @@
 
 .settings-nav-label {
   color: var(--foreground);
-  font-size: 0.97rem;
+  font-size: 15.5px;
   font-weight: 600;
 }
 
 .settings-nav-description {
   color: var(--panel-muted);
-  font-size: 0.78rem;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -2298,36 +2298,36 @@
 .settings-panel-header {
   display: flex;
   align-items: flex-start;
-  padding-top: 1.5rem;
-  padding-bottom: 1.1rem;
+  padding-top: 24px;
+  padding-bottom: 17.6px;
   border-bottom: 1px solid color-mix(in oklab, var(--panel-border) 92%, white);
 }
 
 .settings-panel-content {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 16px;
   flex: 1;
   min-height: 0;
-  padding-top: 1.35rem;
-  padding-bottom: 1.5rem;
+  padding-top: 22px;
+  padding-bottom: 24px;
   overflow: auto;
 }
 
 .settings-section-stack {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 16px;
 }
 
 .settings-panel-header {
-  padding: 1.5rem 2rem 1.25rem;
+  padding: 24px 32px 20px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.03);
   background: var(--panel-surface-base);
 }
 
 .settings-panel-eyebrow {
-  font-size: 0.72rem;
+  font-size: 12px;
   color: var(--panel-muted);
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -2335,23 +2335,23 @@
 }
 
 .settings-panel-title {
-  font-size: 1.35rem;
+  font-size: 22px;
   font-weight: 700;
   color: var(--panel-foreground);
-  margin-top: 0.25rem;
+  margin-top: 4px;
 }
 
 .settings-panel-content {
   flex: 1;
-  padding: 2.5rem 2rem;
+  padding: 40px 32px;
   overflow-y: auto;
 }
 
 .settings-card {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-  margin-bottom: 3rem;
+  gap: 32px;
+  margin-bottom: 48px;
 }
 
 .settings-panel-content {
@@ -2425,35 +2425,35 @@
 
 .settings-field {
   display: grid;
-  gap: 0.55rem;
+  gap: 9px;
 }
 
 .settings-field-grow {
   flex: 1;
-  min-width: min(26rem, 100%);
+  min-width: min(416px, 100%);
 }
 
 .settings-field-label {
   color: var(--foreground);
-  font-size: 0.86rem;
+  font-size: 13.8px;
   font-weight: 600;
 }
 
 .settings-select {
-  min-height: 2.75rem;
-  border-radius: 0.95rem;
+  min-height: 44px;
+  border-radius: 15.2px;
   background: color-mix(in oklab, var(--background) 95%, white);
 }
 
 .settings-card-compact {
-  gap: 0.85rem;
+  gap: 13.6px;
 }
 
 .settings-inline-form {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .settings-inline-actions {
@@ -2464,15 +2464,15 @@
 .settings-inline-hint {
   margin: 0;
   color: var(--panel-muted);
-  font-size: 0.82rem;
+  font-size: 13px;
   line-height: 1.5;
 }
 
 .settings-empty-state,
 .settings-alert {
-  padding: 1rem 1.05rem;
-  border-radius: 0.95rem;
-  font-size: 0.9rem;
+  padding: 16px 16.8px;
+  border-radius: 15.2px;
+  font-size: 14.4px;
   line-height: 1.6;
 }
 
@@ -2489,7 +2489,7 @@
 
 @media (max-width: 1120px) {
   .file-tab {
-    max-width: min(14rem, 52vw);
+    max-width: min(224px, 52vw);
   }
 
   .file-tab-meta {
@@ -2510,10 +2510,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 12px;
   flex-shrink: 0;
   min-height: var(--chrome-height);
-  padding: 0 var(--right-panel-content-inset) 0 1rem;
+  padding: 0 var(--right-panel-content-inset) 0 16px;
   border-bottom: 1px solid var(--panel-border);
   background: var(--panel-surface-section);
 }
@@ -2536,7 +2536,7 @@
 .agent-threadbar-actions {
   display: flex;
   align-items: center;
-  gap: 0.2rem;
+  gap: 3px;
   flex-shrink: 0;
   app-region: no-drag;
   -webkit-app-region: no-drag;
@@ -2546,11 +2546,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.25rem;
-  height: 2.25rem;
+  min-width: 36px;
+  height: 36px;
   padding: 0;
   border: 0;
-  border-radius: 0.8rem;
+  border-radius: 12.8px;
   background: transparent;
   color: var(--panel-muted);
   cursor: pointer;
@@ -2576,7 +2576,7 @@
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 2.3rem;
+  min-height: 36.8px;
   justify-content: space-between;
   padding: 0;
   border: 0;
@@ -2598,7 +2598,7 @@
   display: block;
   overflow: hidden;
   color: var(--foreground);
-  font-size: 0.78rem;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2606,14 +2606,14 @@
 .agent-select-item {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 2.4px;
   min-width: 0;
 }
 
 .agent-select-item-title {
   overflow: hidden;
   color: var(--foreground);
-  font-size: 0.82rem;
+  font-size: 13px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2622,19 +2622,19 @@
 .agent-select-item-meta {
   overflow: hidden;
   color: var(--panel-muted);
-  font-size: 0.72rem;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .agent-status-inline {
-  padding: 0.6rem 1rem 0;
+  padding: 10px 16px 0;
 }
 
 .agent-status-inline p {
   margin: 0;
   color: var(--panel-muted);
-  font-size: 0.73rem;
+  font-size: 11.7px;
   line-height: 1.5;
 }
 
@@ -2654,7 +2654,7 @@
 .agent-floating-panel {
   pointer-events: auto;
   width: 100%;
-  max-height: min(26rem, calc(100% - 8rem));
+  max-height: min(416px, calc(100% - 128px));
   overflow: hidden;
   border-top: 0;
   border-bottom: 1px solid var(--panel-border);
@@ -2684,8 +2684,8 @@
 
 .agent-auth-provider {
   display: grid;
-  gap: 0.55rem;
-  padding: 0.9rem 1rem;
+  gap: 9px;
+  padding: 14.4px 16px;
   border-top: 1px solid var(--panel-border);
 }
 
@@ -2695,34 +2695,34 @@
 
 .agent-auth-provider-copy {
   display: grid;
-  gap: 0.14rem;
+  gap: 2.2px;
 }
 
 .agent-auth-provider-label {
   color: var(--foreground);
-  font-size: 0.78rem;
+  font-size: 13px;
   font-weight: 500;
 }
 
 .agent-auth-provider-meta {
   color: var(--panel-muted);
-  font-size: 0.72rem;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .agent-auth-actions {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 7px;
 }
 
 .agent-auth-save,
 .agent-auth-clear {
   min-width: auto;
-  height: 2rem;
-  padding-inline: 0.72rem;
-  border-radius: 0.75rem;
-  font-size: 0.72rem;
+  height: 32px;
+  padding-inline: 11.5px;
+  border-radius: 12px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -2741,7 +2741,7 @@
 }
 
 .agent-overlay-scroll {
-  max-height: min(20rem, calc(100vh - 15rem));
+  max-height: min(320px, calc(100vh - 240px));
 }
 
 .agent-session-list {
@@ -2753,7 +2753,7 @@
 .agent-session-option {
   display: flex;
   align-items: stretch;
-  gap: 0.2rem;
+  gap: 3px;
   width: 100%;
   padding: 0;
   border: 0;
@@ -2777,7 +2777,7 @@
 .agent-session-select-button {
   flex: 1;
   min-width: 0;
-  padding: 0.8rem 0 0.8rem 1rem;
+  padding: 12.8px 0 12.8px 16px;
   border: 0;
   background: transparent;
   text-align: left;
@@ -2790,11 +2790,11 @@
 .agent-session-delete-button {
   align-self: center;
   flex-shrink: 0;
-  min-width: 2rem;
-  width: 2rem;
-  height: 2rem;
-  margin-right: 0.5rem;
-  border-radius: 0.7rem;
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  margin-right: 8px;
+  border-radius: 11.2px;
   color: var(--panel-muted);
   opacity: 0;
   pointer-events: none;
@@ -2815,42 +2815,42 @@
 .agent-messages-scroll {
   flex: 1;
   min-height: 0;
-  padding-right: 0.1rem;
+  padding-right: 1.6px;
 }
 
 .agent-messages {
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 12.8px;
   min-height: 100%;
-  padding: 1rem 1rem 1.4rem;
+  padding: 16px 16px 22.4px;
 }
 
 .agent-empty-chat {
-  padding-top: 0.1rem;
+  padding-top: 1.6px;
 }
 
 .agent-empty-chat p {
   margin: 0;
   color: var(--panel-muted);
-  font-size: 0.79rem;
+  font-size: 12.6px;
   line-height: 1.65;
 }
 
 .agent-session-status {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  margin-top: 0.15rem;
-  padding: 0.2rem 0;
+  gap: 7px;
+  margin-top: 2.4px;
+  padding: 3px 0;
   color: var(--panel-muted);
-  font-size: 0.72rem;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .agent-session-status-dot {
-  width: 0.42rem;
-  height: 0.42rem;
+  width: 6.7px;
+  height: 6.7px;
   flex: 0 0 auto;
   border-radius: 999px;
   background: color-mix(in oklab, var(--panel-border) 88%, white);
@@ -2895,44 +2895,44 @@
 .agent-message {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 6px;
   max-width: 100%;
 }
 
 .agent-message-user {
   align-self: flex-end;
   max-width: 88%;
-  padding: 0.82rem 0.95rem;
+  padding: 13.1px 15.2px;
   border: 1px solid color-mix(in oklab, var(--accent) 14%, var(--background));
-  border-radius: 0.95rem;
+  border-radius: 15.2px;
   background: color-mix(in oklab, var(--accent) 7%, var(--surface));
 }
 
 .agent-message-assistant {
-  padding: 0.1rem 0.1rem 0.1rem 0;
+  padding: 0.16px 0.16px 0.16px 0;
 }
 
 .agent-message-system {
-  gap: 0.35rem;
-  padding: 0.75rem 0.8rem;
+  gap: 6px;
+  padding: 12px 12.8px;
   border: 1px solid var(--panel-border);
-  border-radius: 0.95rem;
+  border-radius: 15.2px;
   background: color-mix(in oklab, var(--panel-surface-base) 76%, var(--background));
 }
 
 .agent-message-custom {
-  gap: 0.35rem;
-  padding: 0.75rem 0.8rem;
+  gap: 6px;
+  padding: 12px 12.8px;
   border: 1px solid color-mix(in oklab, var(--accent) 16%, var(--panel-border));
-  border-radius: 0.95rem;
+  border-radius: 15.2px;
   background: color-mix(in oklab, var(--accent) 5%, var(--panel-surface-base));
 }
 
 .agent-message-tool {
-  gap: 0.45rem;
-  padding: 0.3rem;
+  gap: 7px;
+  padding: 4.8px;
   border: 1px solid var(--panel-border);
-  border-radius: 0.95rem;
+  border-radius: 15.2px;
   background: color-mix(in oklab, var(--panel-surface-base) 72%, var(--background));
 }
 
@@ -2948,11 +2948,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .agent-message-role {
-  font-size: 0.67rem;
+  font-size: 10.7px;
   font-weight: 600;
   color: var(--panel-soft);
 }
@@ -2960,12 +2960,12 @@
 .agent-message-label {
   display: inline-flex;
   align-items: center;
-  min-height: 1.2rem;
-  padding: 0.02rem 0.42rem;
+  min-height: 19.2px;
+  padding: 0.3px 6.7px;
   border-radius: 999px;
   color: color-mix(in oklab, var(--accent) 72%, black);
   background: color-mix(in oklab, var(--accent) 10%, white);
-  font-size: 0.63rem;
+  font-size: 10.1px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -2974,11 +2974,11 @@
   display: grid;
   grid-template-columns: auto 1fr auto auto;
   align-items: center;
-  gap: 0.6rem;
+  gap: 10px;
   width: 100%;
-  padding: 0.46rem 0.5rem;
+  padding: 7.4px 8px;
   border: 0;
-  border-radius: 0.72rem;
+  border-radius: 11.5px;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -2995,11 +2995,11 @@
 }
 
 .agent-message-toggle-caret {
-  width: 0.55rem;
-  height: 0.55rem;
+  width: 9px;
+  height: 9px;
   border-right: 1.5px solid var(--panel-soft);
   border-bottom: 1.5px solid var(--panel-soft);
-  transform: rotate(-45deg) translateY(-0.05rem);
+  transform: rotate(-45deg) translateY(-0.8px);
   transition: transform 160ms ease, border-color 160ms ease;
 }
 
@@ -3008,20 +3008,20 @@
 }
 
 .agent-message-toggle-caret.is-open {
-  transform: rotate(45deg) translateY(-0.12rem);
+  transform: rotate(45deg) translateY(-1.9px);
 }
 
 .agent-disclosure {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  margin-top: 0.45rem;
+  gap: 6px;
+  margin-top: 7px;
 }
 
 .agent-disclosure-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
   width: fit-content;
   padding: 0;
   border: 0;
@@ -3037,26 +3037,26 @@
 .agent-disclosure-toggle:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--accent) 32%, white);
   outline-offset: 2px;
-  border-radius: 0.35rem;
+  border-radius: 5.6px;
 }
 
 .agent-disclosure-label {
-  font-size: 0.68rem;
+  font-size: 10.9px;
   font-weight: 600;
 }
 
 .agent-disclosure-body {
   min-width: 0;
-  padding-left: 1.05rem;
+  padding-left: 16.8px;
 }
 
 .agent-message-status {
   display: inline-flex;
   align-items: center;
-  min-height: 1.35rem;
-  padding: 0.08rem 0.46rem;
+  min-height: 22px;
+  padding: 1.3px 7.4px;
   border-radius: 999px;
-  font-size: 0.64rem;
+  font-size: 10.2px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -3081,11 +3081,11 @@
 }
 
 .agent-message-tool .agent-message-body {
-  padding: 0 0.55rem 0.35rem 1.7rem;
+  padding: 0 9px 5.6px 27.2px;
 }
 
 .agent-message-system-collapsible {
-  gap: 0.2rem;
+  gap: 3px;
 }
 
 .agent-message-system-collapsible .agent-disclosure {
@@ -3094,7 +3094,7 @@
 
 .agent-markdown {
   color: var(--foreground);
-  font-size: 0.82rem;
+  font-size: 13px;
   line-height: 1.7;
   word-break: break-word;
 }
@@ -3114,16 +3114,16 @@
 .agent-markdown pre,
 .agent-markdown table,
 .agent-markdown hr {
-  margin: 0.55rem 0;
+  margin: 9px 0;
 }
 
 .agent-markdown ul,
 .agent-markdown ol {
-  padding-left: 1.1rem;
+  padding-left: 17.6px;
 }
 
 .agent-markdown li+li {
-  margin-top: 0.18rem;
+  margin-top: 2.9px;
 }
 
 .agent-markdown a {
@@ -3137,8 +3137,8 @@
 }
 
 .agent-markdown code {
-  padding: 0.1rem 0.28rem;
-  border-radius: 0.32rem;
+  padding: 0.16px 4.5px;
+  border-radius: 5.1px;
   background: color-mix(in oklab, var(--panel-border) 26%, white);
   font-size: 0.78em;
   font-family: var(--font-mono);
@@ -3146,9 +3146,9 @@
 
 .agent-markdown pre {
   overflow-x: auto;
-  padding: 0.72rem 0.8rem;
+  padding: 11.5px 12.8px;
   border: 1px solid color-mix(in oklab, var(--panel-border) 88%, transparent);
-  border-radius: 0.72rem;
+  border-radius: 11.5px;
   background: color-mix(in oklab, var(--panel-surface-base) 82%, black 2%);
 }
 
@@ -3158,7 +3158,7 @@
 }
 
 .agent-markdown blockquote {
-  padding-left: 0.8rem;
+  padding-left: 12.8px;
   border-left: 2px solid color-mix(in oklab, var(--panel-border) 92%, transparent);
   color: color-mix(in oklab, var(--muted) 86%, var(--foreground));
 }
@@ -3170,7 +3170,7 @@
 
 .agent-markdown th,
 .agent-markdown td {
-  padding: 0.4rem 0.48rem;
+  padding: 6.5px 8px;
   border: 1px solid color-mix(in oklab, var(--panel-border) 90%, transparent);
   text-align: left;
   vertical-align: top;
@@ -3178,12 +3178,12 @@
 
 .agent-markdown th {
   color: var(--panel-soft);
-  font-size: 0.76rem;
+  font-size: 12.2px;
   font-weight: 600;
 }
 
 .agent-markdown input[type="checkbox"] {
-  margin-right: 0.35rem;
+  margin-right: 5.6px;
 }
 
 .agent-composer {
@@ -3198,8 +3198,8 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
-  padding: 0.9rem 1rem 1rem;
+  gap: 11.2px;
+  padding: 14.4px 16px 16px;
 }
 
 .agent-composer-resize-handle {
@@ -3207,7 +3207,7 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 0.85rem;
+  height: 13.6px;
   cursor: ns-resize;
   touch-action: none;
   user-select: none;
@@ -3249,7 +3249,7 @@
   overflow: auto !important;
   padding: 0 !important;
   color: var(--foreground);
-  font-size: 0.83rem;
+  font-size: 13.3px;
   line-height: 1.65;
 }
 
@@ -3262,13 +3262,13 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  min-height: 2.2rem;
+  min-height: 35.2px;
 }
 
 .agent-composer-actions {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 6.5px;
   width: 100%;
 }
 
@@ -3282,10 +3282,10 @@
 }
 
 .agent-model-composite {
-  --agent-model-control-font-size: 0.77rem;
+  --agent-model-control-font-size: 12.3px;
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 4.8px;
   min-width: 0;
   font-size: var(--agent-model-control-font-size);
 }
@@ -3293,7 +3293,7 @@
 .agent-provider-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 0.28rem;
+  gap: 4.5px;
   width: auto;
   flex-shrink: 0;
   min-width: 0;
@@ -3326,9 +3326,9 @@
 
 .agent-provider-trigger-caret {
   display: block;
-  width: 0.42rem;
-  height: 0.42rem;
-  margin-top: 0.02rem;
+  width: 6.7px;
+  height: 6.7px;
+  margin-top: 0.3px;
   border-right: 1px solid currentColor;
   border-bottom: 1px solid currentColor;
   transform: rotate(45deg);
@@ -3349,7 +3349,7 @@
 .agent-model-input.input[data-focus-visible="true"],
 .agent-model-input.input[data-hovered="true"] {
   width: 100%;
-  min-height: 2.25rem;
+  min-height: 36px;
   border-radius: 0 !important;
   border: 0 !important;
   background: transparent !important;
@@ -3378,11 +3378,11 @@
 
 .agent-composer-menu {
   position: absolute;
-  left: -1rem;
-  right: -1rem;
-  bottom: calc(100% + 0.05rem);
+  left: -16px;
+  right: -16px;
+  bottom: calc(100% + 0.8px);
   z-index: 8;
-  max-height: 14rem;
+  max-height: 224px;
   overflow: auto;
   border-top: 1px solid var(--panel-border);
   border-bottom: 1px solid var(--panel-border);
@@ -3392,7 +3392,7 @@
 .agent-composer-option {
   display: block;
   width: 100%;
-  padding: 0.72rem 0;
+  padding: 11.5px 0;
   border: 0;
   border-top: 1px solid var(--panel-border);
   background: transparent;
@@ -3414,9 +3414,9 @@
 .agent-composer-option-label {
   display: block;
   overflow: hidden;
-  padding: 0 1rem;
+  padding: 0 16px;
   color: var(--foreground);
-  font-size: 0.77rem;
+  font-size: 12.3px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3426,11 +3426,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.25rem;
-  height: 2.25rem;
+  min-width: 36px;
+  height: 36px;
   padding: 0;
   border: 0;
-  border-radius: 0.8rem;
+  border-radius: 12.8px;
   background: transparent;
   cursor: pointer;
   transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
@@ -3468,7 +3468,7 @@
   }
 
   .settings-page {
-    grid-template-columns: 13.5rem minmax(0, 1fr);
+    grid-template-columns: 216px minmax(0, 1fr);
   }
 
   .panel-agent {
@@ -3505,7 +3505,7 @@
   }
 
   .panel-sidebar {
-    min-height: 24rem;
+    min-height: 384px;
     border-bottom: 1px solid var(--panel-border);
   }
 
@@ -3527,22 +3527,22 @@
   .settings-sidebar-header,
   .settings-panel-header,
   .settings-panel-content {
-    padding-inline: 1rem;
+    padding-inline: 16px;
   }
 
   .settings-sidebar-header {
-    padding-top: 1rem;
-    padding-bottom: 0.8rem;
+    padding-top: 16px;
+    padding-bottom: 12.8px;
   }
 
   .settings-nav {
     flex-direction: row;
     overflow-x: auto;
-    padding: 0 1rem 1rem;
+    padding: 0 16px 16px;
   }
 
   .settings-nav-item {
-    min-width: 12rem;
+    min-width: 192px;
   }
 
   .settings-inline-form {

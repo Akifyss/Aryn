@@ -677,7 +677,7 @@ export function GitPanel({
               disabled={!canSubmitCommit || Boolean(syncDisabledReason)}
               onClick={onCommitAndSync}
             >
-              <ArrowUpCircleLine size={17} />
+              <ArrowUpCircleLine size={16} />
             </button>
             <button
               type='button'
@@ -687,7 +687,7 @@ export function GitPanel({
               disabled={!repositoryState.hasChanges || commitMessage.trim().length === 0 || Boolean(busyLabel)}
               onClick={onCommit}
             >
-              <CheckLine size={17} />
+              <CheckLine size={16} />
             </button>
             <button
               type='button'
@@ -699,7 +699,7 @@ export function GitPanel({
                 onStage(unstagedPaths)
               }}
             >
-              <AddLine size={17} />
+              <AddLine size={16} />
             </button>
             <button
               type='button'
@@ -711,7 +711,7 @@ export function GitPanel({
                 onUnstage(stagedPaths)
               }}
             >
-              <Icon icon='mdi:minus' width={17} height={17} />
+              <Icon icon='mdi:minus' width={16} height={16} />
             </button>
           <button
             type='button'
@@ -721,7 +721,7 @@ export function GitPanel({
             disabled={Boolean(syncDisabledReason)}
             onClick={onPush}
           >
-            <UploadLine size={17} />
+            <UploadLine size={16} />
           </button>
           <button
             type='button'
@@ -731,7 +731,7 @@ export function GitPanel({
             disabled={Boolean(syncDisabledReason)}
             onClick={onPull}
           >
-            <DownloadLine size={17} />
+            <DownloadLine size={16} />
           </button>
           <button
             type='button'
@@ -743,7 +743,7 @@ export function GitPanel({
               onLayoutChange(layout === 'tree' ? 'list' : 'tree')
             }}
           >
-            {layout === 'tree' ? <ListCheckLine size={17} /> : <FolderLine size={17} />}
+            {layout === 'tree' ? <ListCheckLine size={16} /> : <FolderLine size={16} />}
           </button>
           <button
             type='button'
@@ -753,7 +753,7 @@ export function GitPanel({
             disabled={Boolean(busyLabel)}
             onClick={onRefresh}
           >
-            <Refresh2Line size={17} />
+            <Refresh2Line size={16} />
           </button>
         </div>
 
