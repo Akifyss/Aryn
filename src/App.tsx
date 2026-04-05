@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, ScrollShadow, Tooltip, Toast, toast, Modal } from '@heroui/react'
 import {
-  FileFill,
+  FileLine,
   FolderOpenFill,
   GitCompareLine,
   LayoutLeftLine,
@@ -1439,18 +1439,20 @@ function App() {
       }
     >
       <AppTitlebar />
-      <button
-        type='button'
-        className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-left'
-        aria-label={isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar'}
-        onClick={() => {
-          setIsLeftSidebarCollapsed((currentValue) => !currentValue)
-        }}
-      >
-        <span className='panel-toggle-icon' aria-hidden='true'>
-          <LayoutLeftLine size={18} />
-        </span>
-      </button>
+      {!isLeftSidebarVisible ? (
+        <button
+          type='button'
+          className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-left'
+          aria-label='Expand workspace sidebar'
+          onClick={() => {
+            setIsLeftSidebarCollapsed(false)
+          }}
+        >
+          <span className='panel-toggle-icon' aria-hidden='true'>
+            <LayoutLeftLine size={18} />
+          </span>
+        </button>
+      ) : null}
 
       {isAgentPanelVisible ? (
         <button
@@ -1469,6 +1471,18 @@ function App() {
 
       <aside className={`panel panel-sidebar${isLeftSidebarVisible ? '' : ' is-collapsed'}`}>
         <div className='section-title workspace-section-title'>
+          <button
+            type='button'
+            className='panel-toggle-button workspace-section-toggle'
+            aria-label='Collapse workspace sidebar'
+            onClick={() => {
+              setIsLeftSidebarCollapsed(true)
+            }}
+          >
+            <span className='panel-toggle-icon' aria-hidden='true'>
+              <LayoutLeftLine size={18} />
+            </span>
+          </button>
           <button
             type='button'
             onClick={() => {
@@ -1494,7 +1508,7 @@ function App() {
                 setActiveLeftSidebarTab('file')
               }}
             >
-              <FileFill size={18} className='sidebar-vertical-tab-icon' />
+              <FileLine size={18} className='sidebar-vertical-tab-icon' />
               <span className='sidebar-vertical-tab-label'>文件</span>
             </button>
             <button
@@ -1726,7 +1740,7 @@ function App() {
                       }}
                       isDisabled={!currentPath || isCreatingFile}
                     >
-                      <FileFill className='mr-2' size={16} />
+                      <FileLine className='mr-2' size={16} />
                       Create Draft
                     </Button>
                   </div>

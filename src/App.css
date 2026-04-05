@@ -42,6 +42,7 @@
 .app-shell[data-platform='windows'] {
   --left-panel-toggle-anchor: 0.75rem;
   --right-panel-toggle-anchor: 9.75rem;
+  --sidebar-icon-x: calc(var(--left-panel-toggle-anchor) + (var(--panel-toggle-size) - 18px) / 2);
 }
 
 .app-shell::before {
@@ -407,7 +408,16 @@
 }
 
 .workspace-section-title {
-  padding-left: var(--left-panel-content-inset);
+  padding-left: var(--left-panel-toggle-anchor);
+  gap: 0.25rem;
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.workspace-section-toggle {
+  flex-shrink: 0;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
 .section-title-text {
@@ -533,6 +543,7 @@
   display: flex;
   flex-direction: column;
   padding: 0.5rem 0.6rem;
+  padding-left: calc(var(--sidebar-icon-x, 1.35rem) - 0.75rem);
   gap: 0.25rem;
 }
 
@@ -1643,6 +1654,7 @@
   align-items: center;
   min-width: 0;
   padding: 0.48rem 0.75rem;
+  padding-left: calc(var(--sidebar-icon-x, 1.15rem) - 0.4rem);
   color: var(--foreground);
   font-size: 0.78rem;
   font-weight: 500;
@@ -1702,7 +1714,7 @@
   align-items: center;
   justify-content: space-between;
   height: 2.25rem;
-  padding: 0 0.5rem 0 0.75rem;
+  padding: 0 0.5rem 0 var(--sidebar-icon-x, 0.75rem);
   border-bottom: 1px solid var(--panel-border);
   flex-shrink: 0;
 }
