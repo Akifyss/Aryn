@@ -1537,7 +1537,7 @@ function App() {
                         disabled={!currentPath || isCreatingFile}
                         aria-label='Create File'
                       >
-                        <Icon icon='lucide:file-plus' width={17} height={17} />
+                        <Icon icon='lucide:file-plus' width={16} height={16} />
                       </button>
                     </Tooltip.Trigger>
                     <Tooltip.Content>Create File</Tooltip.Content>
@@ -1551,7 +1551,7 @@ function App() {
                         disabled={!currentPath || isCreatingDirectory}
                         aria-label='Create Folder'
                       >
-                        <Icon icon='lucide:folder-plus' width={17} height={17} />
+                        <Icon icon='lucide:folder-plus' width={16} height={16} />
                       </button>
                     </Tooltip.Trigger>
                     <Tooltip.Content>Create Folder</Tooltip.Content>
@@ -1567,7 +1567,7 @@ function App() {
                       >
                         <Icon 
                           icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'} 
-                          width={17} height={17} 
+                          width={16} height={16} 
                         />
                       </button>
                     </Tooltip.Trigger>
@@ -1650,7 +1650,7 @@ function App() {
             className='sidebar-footer-item'
             onClick={() => setIsSettingsOpen(true)}
           >
-            <Icon icon='lucide:settings' width={18} height={18} />
+            <Icon icon='lucide:settings' width={16} height={16} />
             <span>Settings</span>
           </button>
         </div>
