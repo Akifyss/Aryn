@@ -1760,13 +1760,20 @@
   align-items: center;
   gap: 0.35rem;
   opacity: 0;
+  max-width: 0; /* No space when hidden */
+  overflow: hidden;
+  white-space: nowrap;
   transform: translateX(4px);
-  transition: opacity 140ms ease, transform 140ms ease;
+  transition: 
+    opacity 160ms ease, 
+    transform 160ms ease,
+    max-width 160ms ease;
 }
 
 .git-change-item:hover .git-change-actions,
 .git-tree-folder-row:hover .git-change-actions {
   opacity: 1;
+  max-width: 8rem; /* Expand to show icons */
   transform: translateX(0);
 }
 

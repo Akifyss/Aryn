@@ -334,6 +334,7 @@ function GitTreeFolder({
   iconTheme,
   closedMap,
   toggleNode,
+  layout,
 }: {
   kind: GitPanelSectionKind
   node: GitTreeNode
@@ -345,6 +346,7 @@ function GitTreeFolder({
   iconTheme: WorkspaceIconTheme | null
   closedMap: Record<string, boolean>
   toggleNode: (id: string) => void
+  layout: GitPanelLayout
 }) {
   const isClosed = closedMap[node.id] ?? false
   const activeItems = node.items.filter(isScopedGitChange)
@@ -393,6 +395,7 @@ function GitTreeFolder({
                   iconTheme={iconTheme}
                   closedMap={closedMap}
                   toggleNode={toggleNode}
+                  layout={layout}
                 />
               ))}
             </ul>
@@ -406,6 +409,7 @@ function GitTreeFolder({
             onStage={onStage}
             onUnstage={onUnstage}
             iconTheme={iconTheme}
+            layout={layout}
           />
         </div>
       )}
@@ -422,6 +426,7 @@ function GitChangeList({
   onUnstage,
   iconTheme,
   kind,
+  layout,
 }: {
   changes: GitDisplayChange[]
   onDiscardMany: (changes: GitChangeItem[]) => void
@@ -431,6 +436,7 @@ function GitChangeList({
   onUnstage: (filePaths: string[]) => void
   iconTheme: WorkspaceIconTheme | null
   kind: GitPanelSectionKind
+  layout: GitPanelLayout
 }) {
   return (
     <ul className='git-change-list'>
@@ -455,7 +461,9 @@ function GitChangeList({
                   <GitRowIcon fileName={fileName} iconTheme={iconTheme} />
                   <span className='git-change-path'>{fileName}</span>
                 </span>
-                {dirLabel && <span className='git-change-meta'>{dirLabel}</span>}
+                {layout === 'list' && dirLabel && (
+                  <span className='git-change-meta'>{dirLabel}</span>
+                )}
               </span>
             </button>
 
@@ -551,6 +559,7 @@ function GitSection({
                   onStage={onStage}
                   onUnstage={onUnstage}
                   iconTheme={iconTheme}
+                  layout={layout}
                 />
               ))}
               {rootFiles.length > 0 && (
@@ -563,6 +572,7 @@ function GitSection({
                   onStage={onStage}
                   onUnstage={onUnstage}
                   iconTheme={iconTheme}
+                  layout={layout}
                 />
               )}
             </ul>
@@ -576,6 +586,7 @@ function GitSection({
               onStage={onStage}
               onUnstage={onUnstage}
               iconTheme={iconTheme}
+              layout={layout}
             />
           )}
         </div>
