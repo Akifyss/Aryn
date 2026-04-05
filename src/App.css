@@ -1600,32 +1600,62 @@
   flex-direction: column;
 }
 
-.git-tree-node-children {
+.git-tree-node-children,
+.workspace-tree-children {
   display: flex;
   flex-direction: column;
   margin-left: 1.65rem;
   border-left: 1px solid var(--panel-border);
 }
 
-.git-tree-folder-row {
+.git-tree-folder-row,
+.workspace-tree-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   margin: 0 0.4rem;
+  min-height: 2rem;
   border-radius: 0.5rem;
   transition: background-color 120ms ease;
+  cursor: pointer;
 }
 
-.git-tree-folder-toggle {
+.git-tree-folder-row:hover,
+.workspace-tree-row:hover,
+.git-change-item:hover {
+  background: color-mix(in oklab, var(--foreground) 3.5%, transparent);
+}
+
+.git-tree-folder-row.is-active,
+.workspace-tree-row.is-active,
+.git-change-item.is-active {
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  color: var(--accent);
+}
+
+.git-tree-folder-toggle,
+.workspace-tree-trigger {
   display: flex;
   align-items: center;
   min-width: 0;
   padding: 0.48rem 0.75rem;
   color: var(--foreground);
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 500;
   text-align: left;
   gap: 0.55rem;
+  background: transparent;
+  border: 0;
+  width: 100%;
+}
+
+.git-change-path {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .git-panel-section-header,
@@ -1639,33 +1669,26 @@
 .git-change-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: stretch;
+  align-items: center;
   margin: 0 0.4rem;
+  min-height: 2rem;
   border-radius: 0.5rem;
   transition: background-color 120ms ease;
+  cursor: pointer;
 }
 
-.git-tree-folder-row:hover {
-  background: color-mix(in oklab, var(--foreground) 3%, transparent);
-}
 
-.git-change-item:hover {
-  background: color-mix(in oklab, var(--foreground) 3%, transparent);
-}
 
-.git-change-trigger {
+.git-change-trigger,
+.workspace-tree-trigger {
   display: flex;
   align-items: center;
   min-width: 0;
   padding: 0.42rem 0.75rem;
   border: 0;
   background: transparent;
-  color: var(--foreground);
+  color: inherit;
   text-align: left;
-}
-
-.git-tree-node .git-change-trigger {
-  padding-left: 1rem;
 }
 
 .git-change-copy {
