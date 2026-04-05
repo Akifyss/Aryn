@@ -1,10 +1,8 @@
 import { type ReactNode, useMemo, useState } from 'react'
 import { Button } from '@heroui/react'
 import {
-  AddCircleLine,
+  AddLine,
   ArrowDownLine,
-  ArrowRightLine,
-  ArrowUpCircleLine,
   ArrowUpLine,
   CheckLine,
   CloseCircleLine,
@@ -13,9 +11,12 @@ import {
   FileLine,
   FolderLine,
   GitBranchLine,
+  HistoryLine,
   ListCheckLine,
-  MinusCircleLine,
   Refresh2Line,
+  Refresh3Line,
+  RightLine,
+  SubtractLine,
   UploadLine,
 } from '@mingcute/react'
 import type {
@@ -246,7 +247,7 @@ function GitFolderTree({
                 }}
               >
                 <span className='git-panel-section-title'>
-                  <ArrowRightLine
+                  <RightLine
                     className={`git-panel-section-caret${isClosed ? '' : ' is-expanded'}`}
                     size={14}
                   />
@@ -266,49 +267,56 @@ function GitFolderTree({
                 </span>
               </button>
 
-              <div className='git-change-actions'>
-                {kind === 'staged' ? (
-                  <button
-                    type='button'
-                    className='git-change-action git-change-icon-button'
-                    aria-label={`Unstage ${node.path}`}
-                    title='Unstage'
-                    onClick={() => {
-                      onUnstage(unstageablePaths)
-                    }}
-                  >
-                    <ArrowDownLine size={16} />
-                  </button>
-                ) : null}
-
-                {kind === 'unstaged' ? (
-                  <>
+              <div className='git-change-tools'>
+                <div className='git-change-actions'>
+                  {kind === 'staged' ? (
                     <button
                       type='button'
                       className='git-change-action git-change-icon-button'
-                      aria-label={`Discard ${node.path}`}
-                      title='Discard'
-                      onClick={() => {
-                        onDiscardMany(scopedItems.filter((change) => change.scope === 'unstaged'))
+                      aria-label={`Unstage ${node.path}`}
+                      title='Unstage'
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onUnstage(unstageablePaths)
                       }}
                     >
-                      <Refresh2Line size={16} />
+                      <SubtractLine size={16} />
                     </button>
-                    <button
-                      type='button'
-                      className='git-change-action git-change-icon-button'
-                      aria-label={`Stage ${node.path}`}
-                      title='Stage'
-                      onClick={() => {
-                        onStage(stageablePaths)
-                      }}
-                    >
-                      <ArrowUpLine size={16} />
-                    </button>
-                  </>
-                ) : null}
+                  ) : null}
 
-                <span className='git-panel-section-count'>{node.items.length}</span>
+                  {kind === 'unstaged' ? (
+                    <>
+                      <button
+                        type='button'
+                        className='git-change-action git-change-icon-button'
+                        aria-label={`Discard ${node.path}`}
+                        title='Discard'
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onDiscardMany(scopedItems.filter((change) => change.scope === 'unstaged'))
+                        }}
+                      >
+                        <Refresh2Line size={16} />
+                      </button>
+                      <button
+                        type='button'
+                        className='git-change-action git-change-icon-button'
+                        aria-label={`Stage ${node.path}`}
+                        title='Stage'
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onStage(stageablePaths)
+                        }}
+                      >
+                        <AddLine size={16} />
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+
+                <div className='git-change-status'>
+                  <span className='git-panel-section-count'>{node.items.length}</span>
+                </div>
               </div>
             </div>
 
@@ -412,77 +420,86 @@ function GitChangeList({
               </span>
             </button>
 
-            <div className='git-change-actions'>
-              {isScopedGitChange(change) ? (
-                <button
-                  type='button'
-                  className='git-change-action git-change-icon-button'
-                  aria-label={`Open diff for ${change.relativePath}`}
-                  title='Open diff'
-                  onClick={() => {
-                    onOpenDiff(change)
-                  }}
-                >
-                  <ExternalLinkLine size={16} />
-                </button>
-              ) : (
-                <button
-                  type='button'
-                  className='git-change-action git-change-icon-button'
-                  aria-label={`Open ${change.relativePath}`}
-                  title='Open file'
-                  onClick={() => {
-                    onOpenFile(change.path)
-                  }}
-                >
-                  <ExternalLinkLine size={16} />
-                </button>
-              )}
-
-              {isScopedGitChange(change) && change.scope === 'unstaged' ? (
-                <>
+            <div className='git-change-tools'>
+              <div className='git-change-actions'>
+                {isScopedGitChange(change) ? (
                   <button
                     type='button'
                     className='git-change-action git-change-icon-button'
-                    aria-label={`Stage ${change.relativePath}`}
-                    title='Stage'
-                    onClick={() => {
-                      onStage([change.path])
+                    aria-label={`Open diff for ${change.relativePath}`}
+                    title='Open diff'
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenDiff(change)
                     }}
                   >
-                    <ArrowUpLine size={16} />
+                    <ExternalLinkLine size={16} />
                   </button>
+                ) : (
                   <button
                     type='button'
-                    className='git-change-action git-change-icon-button is-danger'
-                    aria-label={`Discard ${change.relativePath}`}
-                    title='Discard'
-                    onClick={() => {
-                      onDiscardMany([change])
+                    className='git-change-action git-change-icon-button'
+                    aria-label={`Open ${change.relativePath}`}
+                    title='Open file'
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenFile(change.path)
                     }}
                   >
-                    <MinusCircleLine size={16} />
+                    <ExternalLinkLine size={16} />
                   </button>
-                </>
-              ) : null}
+                )}
 
-              {isScopedGitChange(change) && change.scope === 'staged' ? (
-                <button
-                  type='button'
-                  className='git-change-action git-change-icon-button'
-                  aria-label={`Unstage ${change.relativePath}`}
-                  title='Unstage'
-                  onClick={() => {
-                    onUnstage([change.path])
-                  }}
-                >
-                  <ArrowDownLine size={16} />
-                </button>
-              ) : null}
+                {isScopedGitChange(change) && change.scope === 'unstaged' ? (
+                  <>
+                    <button
+                      type='button'
+                      className='git-change-action git-change-icon-button'
+                      aria-label={`Discard ${change.relativePath}`}
+                      title='Discard'
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDiscardMany([change])
+                      }}
+                    >
+                      <Refresh2Line size={16} />
+                    </button>
+                    <button
+                      type='button'
+                      className='git-change-action git-change-icon-button'
+                      aria-label={`Stage ${change.relativePath}`}
+                      title='Stage'
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onStage([change.path])
+                      }}
+                    >
+                      <AddLine size={16} />
+                    </button>
+                  </>
+                ) : null}
 
-              <span className={`git-change-badge git-change-badge-${change.kind}`}>
-                {getChangeKindLabel(change.kind)}
-              </span>
+                {isScopedGitChange(change) && change.scope === 'staged' ? (
+                  <button
+                    type='button'
+                    className='git-change-action git-change-icon-button'
+                    aria-label={`Unstage ${change.relativePath}`}
+                    title='Unstage'
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onUnstage([change.path])
+                    }}
+                  >
+                    <SubtractLine size={16} />
+                  </button>
+                ) : null}
+              </div>
+
+              <div className='git-change-status'>
+                <span className={`git-change-badge git-change-badge-${change.kind}`}>
+                  {getChangeKindLabel(change.kind)}
+                </span>
+              </div>
             </div>
           </li>
         )
@@ -527,23 +544,29 @@ function GitSection({
 
   return (
     <section className='git-panel-section'>
-      <div className='git-panel-section-header'>
-        <button
-          type='button'
-          className='git-panel-section-toggle'
-          aria-expanded={isExpanded}
-          onClick={() => {
+      <div
+        className='git-panel-section-header'
+        role='button'
+        tabIndex={0}
+        onClick={() => {
+          setIsExpanded((currentValue) => !currentValue)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
             setIsExpanded((currentValue) => !currentValue)
-          }}
-        >
+          }
+        }}
+      >
+        <div className='git-panel-section-toggle' aria-expanded={isExpanded}>
           <span className='git-panel-section-title'>
-            <ArrowRightLine
+            <RightLine
               className={`git-panel-section-caret${isExpanded ? ' is-expanded' : ''}`}
               size={14}
             />
             <span>{title}</span>
           </span>
-        </button>
+        </div>
         <div className='git-panel-section-tools'>
           {action}
           <span className='git-panel-section-count'>{changes.length}</span>
@@ -669,50 +692,50 @@ export function GitPanel({
     <div className='git-panel'>
       <header className='git-panel-header'>
         <div className='git-panel-toolbar'>
-          <button
-            type='button'
-            className='git-toolbar-action git-toolbar-icon-button'
-            aria-label='Commit and sync'
-            title={syncDisabledReason ?? 'Commit and sync'}
-            disabled={!canSubmitCommit || Boolean(syncDisabledReason)}
-            onClick={onCommitAndSync}
-          >
-            <ArrowUpCircleLine size={17} />
-          </button>
-          <button
-            type='button'
-            className='git-toolbar-action git-toolbar-icon-button'
-            aria-label='Commit'
-            title='Commit'
-            disabled={!repositoryState.hasChanges || commitMessage.trim().length === 0 || Boolean(busyLabel)}
-            onClick={onCommit}
-          >
-            <CheckLine size={17} />
-          </button>
-          <button
-            type='button'
-            className='git-toolbar-action git-toolbar-icon-button'
-            aria-label='Stage all'
-            title='Stage all'
-            disabled={unstagedPaths.length === 0 || Boolean(busyLabel)}
-            onClick={() => {
-              onStage(unstagedPaths)
-            }}
-          >
-            <AddCircleLine size={17} />
-          </button>
-          <button
-            type='button'
-            className='git-toolbar-action git-toolbar-icon-button'
-            aria-label='Unstage all'
-            title='Unstage all'
-            disabled={stagedPaths.length === 0 || Boolean(busyLabel)}
-            onClick={() => {
-              onUnstage(stagedPaths)
-            }}
-          >
-            <MinusCircleLine size={17} />
-          </button>
+            <button
+              type='button'
+              className='git-toolbar-action git-toolbar-icon-button'
+              aria-label='Commit and sync'
+              title={syncDisabledReason ?? 'Commit and sync'}
+              disabled={!canSubmitCommit || Boolean(syncDisabledReason)}
+              onClick={onCommitAndSync}
+            >
+              <Refresh3Line size={17} />
+            </button>
+            <button
+              type='button'
+              className='git-toolbar-action git-toolbar-icon-button'
+              aria-label='Commit'
+              title='Commit'
+              disabled={!repositoryState.hasChanges || commitMessage.trim().length === 0 || Boolean(busyLabel)}
+              onClick={onCommit}
+            >
+              <CheckLine size={17} />
+            </button>
+            <button
+              type='button'
+              className='git-toolbar-action git-toolbar-icon-button'
+              aria-label='Stage all'
+              title='Stage all'
+              disabled={unstagedPaths.length === 0 || Boolean(busyLabel)}
+              onClick={() => {
+                onStage(unstagedPaths)
+              }}
+            >
+              <AddLine size={17} />
+            </button>
+            <button
+              type='button'
+              className='git-toolbar-action git-toolbar-icon-button'
+              aria-label='Unstage all'
+              title='Unstage all'
+              disabled={stagedPaths.length === 0 || Boolean(busyLabel)}
+              onClick={() => {
+                onUnstage(stagedPaths)
+              }}
+            >
+              <SubtractLine size={17} />
+            </button>
           <button
             type='button'
             className={`git-toolbar-action git-toolbar-icon-button${repositoryState.unpushedCommits > 0 ? ' is-accent' : ''}`}
@@ -786,17 +809,6 @@ export function GitPanel({
           </div>
         </div>
       </header>
-
-      <div className='git-panel-summary'>
-        <span className='git-panel-summary-label'>
-          <GitBranchLine size={14} />
-          Git
-        </span>
-        <div className='git-panel-summary-copy'>
-          <strong className='git-panel-summary-primary'>{getRepositoryHeading(repositoryState)}</strong>
-          <span className='git-panel-summary-secondary'>{getRepositoryMeta(repositoryState, workspacePath)}</span>
-        </div>
-      </div>
 
       {busyLabel ? <p className='git-panel-status'>{busyLabel}</p> : null}
 
