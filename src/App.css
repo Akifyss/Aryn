@@ -1527,9 +1527,15 @@
   border-bottom: 1px solid var(--panel-border);
   margin-bottom: 0.4rem;
   min-height: 2.15rem;
+  transition: background-color 120ms ease, color 120ms ease;
+  cursor: pointer;
 }
 
-.git-panel-section-toggle {
+.git-panel-section-header:hover {
+  background: color-mix(in oklab, var(--foreground) 3%, var(--panel-surface-section));
+}
+
+.git-panel-section-title-area {
   display: flex;
   align-items: center;
   flex: 1;
@@ -1540,12 +1546,10 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--panel-soft);
-  cursor: pointer;
 }
 
-.git-panel-section-toggle:hover {
+.git-panel-section-header:hover .git-panel-section-title-area {
   color: var(--foreground);
-  background: color-mix(in oklab, var(--foreground) 3%, transparent);
 }
 
 .git-panel-section-title {
@@ -1771,15 +1775,16 @@
 .git-commit-textarea {
   display: block;
   width: 100%;
-  min-height: 2.85rem;
-  max-height: 8rem;
+  min-height: 4rem;
+  max-height: 10rem;
   padding: 0.75rem 2.45rem 0.75rem 0.95rem;
   border: 1px solid var(--panel-border);
   border-radius: 0.95rem;
   background: color-mix(in oklab, var(--panel-surface-base) 94%, white);
   color: var(--foreground);
   font: inherit;
-  line-height: 1.45;
+  font-size: 0.74rem;
+  line-height: 1.5;
   resize: vertical;
 }
 

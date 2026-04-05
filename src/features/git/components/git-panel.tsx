@@ -11,14 +11,14 @@ import {
   FileLine,
   FolderLine,
   GitBranchLine,
-  HistoryLine,
-  ListCheckLine,
   Refresh2Line,
   Refresh3Line,
+  Back2Line,
+  ListCheckLine,
   RightLine,
-  SubtractLine,
   UploadLine,
 } from '@mingcute/react'
+import { Icon } from '@iconify/react'
 import type {
   GitChangeItem,
   GitPanelLayout,
@@ -280,7 +280,7 @@ function GitFolderTree({
                         onUnstage(unstageablePaths)
                       }}
                     >
-                      <SubtractLine size={16} />
+                      <Icon icon='mdi:minus' width={16} height={16} />
                     </button>
                   ) : null}
 
@@ -296,7 +296,7 @@ function GitFolderTree({
                           onDiscardMany(scopedItems.filter((change) => change.scope === 'unstaged'))
                         }}
                       >
-                        <Refresh2Line size={16} />
+                        <Back2Line size={16} />
                       </button>
                       <button
                         type='button'
@@ -462,7 +462,7 @@ function GitChangeList({
                         onDiscardMany([change])
                       }}
                     >
-                      <Refresh2Line size={16} />
+                      <Back2Line size={16} />
                     </button>
                     <button
                       type='button'
@@ -490,7 +490,7 @@ function GitChangeList({
                       onUnstage([change.path])
                     }}
                   >
-                    <SubtractLine size={16} />
+                    <Icon icon='mdi:minus' width={16} height={16} />
                   </button>
                 ) : null}
               </div>
@@ -548,6 +548,7 @@ function GitSection({
         className='git-panel-section-header'
         role='button'
         tabIndex={0}
+        aria-expanded={isExpanded}
         onClick={() => {
           setIsExpanded((currentValue) => !currentValue)
         }}
@@ -558,16 +559,14 @@ function GitSection({
           }
         }}
       >
-        <div className='git-panel-section-toggle' aria-expanded={isExpanded}>
-          <span className='git-panel-section-title'>
-            <RightLine
-              className={`git-panel-section-caret${isExpanded ? ' is-expanded' : ''}`}
-              size={14}
-            />
-            <span>{title}</span>
-          </span>
+        <div className='git-panel-section-title-area'>
+          <RightLine
+            className={`git-panel-section-caret${isExpanded ? ' is-expanded' : ''}`}
+            size={14}
+          />
+          <span className='git-panel-section-title'>{title}</span>
         </div>
-        <div className='git-panel-section-tools'>
+        <div className='git-panel-section-tools' onClick={(e) => e.stopPropagation()}>
           {action}
           <span className='git-panel-section-count'>{changes.length}</span>
         </div>
@@ -734,7 +733,7 @@ export function GitPanel({
                 onUnstage(stagedPaths)
               }}
             >
-              <SubtractLine size={17} />
+              <Icon icon='mdi:minus' width={17} height={17} />
             </button>
           <button
             type='button'
