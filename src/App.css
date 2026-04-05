@@ -1748,6 +1748,185 @@
   min-height: 0;
 }
 
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem;
+  border-top: 1px solid var(--panel-border);
+  gap: 0.125rem;
+  background: transparent;
+}
+
+.sidebar-footer-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--panel-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 140ms ease;
+  width: 100%;
+  text-align: left;
+}
+
+.sidebar-footer-item:hover {
+  background: var(--panel-surface-section);
+  color: var(--panel-foreground);
+}
+
+.settings-modal {
+  max-width: 820px !important;
+  height: 560px !important;
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.4) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  display: flex !important;
+  flex-direction: column;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.settings-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #9ca3af;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  z-index: 100;
+  transition: all 150ms;
+}
+
+.settings-modal-close:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.settings-modal > *, 
+.settings-modal .modal__body {
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex: 1;
+}
+
+.settings-page {
+  display: flex !important;
+  width: 100% !important;
+  height: 100% !important;
+  font-family: var(--font-sans, Inter, -apple-system, system-ui, sans-serif) !important;
+  background: #ffffff !important;
+}
+
+.settings-page * {
+  font-family: inherit !important;
+}
+
+.settings-sidebar {
+  width: 180px;
+  background: #f3f4f6;
+  border-right: 1px solid #e5e7eb;
+  padding: 24px 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-sidebar-header {
+  padding: 0 12px;
+  margin-bottom: 24px;
+}
+
+.settings-sidebar-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #6b7280;
+  letter-spacing: 0.8px;
+}
+
+.settings-sidebar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin-top: 4px;
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-nav-item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #4b5563;
+  transition: all 120ms;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-nav-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #111827;
+}
+
+.settings-nav-item.is-active {
+  background: rgba(0, 0, 0, 0.08);
+  color: #111827;
+  font-weight: 500;
+}
+
+.settings-nav-label {
+  font-size: 13px;
+}
+
+.settings-panel {
+  flex: 1;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.settings-panel-header {
+  padding: 24px 32px 16px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.settings-panel-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.settings-panel-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin-top: 2px;
+}
+
 .git-change-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2120,67 +2299,107 @@
   gap: 1rem;
 }
 
+.settings-panel-header {
+  padding: 1.5rem 2rem 1.25rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+  background: var(--panel-surface-base);
+}
+
+.settings-panel-eyebrow {
+  font-size: 0.72rem;
+  color: var(--panel-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 700;
+}
+
+.settings-panel-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--panel-foreground);
+  margin-top: 0.25rem;
+}
+
+.settings-panel-content {
+  flex: 1;
+  padding: 2.5rem 2rem;
+  overflow-y: auto;
+}
+
 .settings-card {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 1.15rem;
-  border: 1px solid color-mix(in oklab, var(--panel-border) 92%, white);
-  border-radius: 1.15rem;
-  background: color-mix(in oklab, var(--surface) 96%, white);
+  gap: 2rem;
+  margin-bottom: 3rem;
+}
+
+.settings-panel-content {
+  flex: 1;
+  padding: 32px;
+  overflow-y: auto;
+}
+
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
 }
 
 .settings-copy-block h4 {
-  margin: 0 0 0.35rem;
-  color: var(--foreground);
-  font-size: 1rem;
+  margin: 0 0 6px;
+  color: #111827;
+  font-size: 14px;
   font-weight: 600;
 }
 
 .settings-copy-block p {
   margin: 0;
-  color: var(--panel-muted);
-  font-size: 0.9rem;
-  line-height: 1.6;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .settings-provider-list {
-  display: grid;
-  gap: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
 }
 
 .settings-provider-card {
-  display: grid;
-  gap: 0.8rem;
-  padding: 1rem;
-  border: 1px solid color-mix(in oklab, var(--panel-border) 92%, white);
-  border-radius: 1rem;
-  background: color-mix(in oklab, var(--background) 95%, white);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .settings-provider-label {
-  display: block;
-  margin-bottom: 0.22rem;
-  color: var(--foreground);
-  font-size: 0.96rem;
+  font-size: 13px;
   font-weight: 600;
+  color: #111827;
 }
 
 .settings-provider-meta {
-  color: var(--panel-muted);
-  font-size: 0.8rem;
-}
-
-.settings-provider-actions,
-.settings-theme-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 2px;
+  display: block;
 }
 
 .settings-action-button {
-  min-height: 2.25rem;
-  border-radius: 0.85rem;
+  height: 32px !important;
+  padding: 0 12px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  border-radius: 6px !important;
+}
+
+.settings-empty-state {
+  padding: 48px 32px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px dashed #e5e7eb;
 }
 
 .settings-field {

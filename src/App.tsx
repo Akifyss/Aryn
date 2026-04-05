@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, ScrollShadow, Tooltip, Toast, toast } from '@heroui/react'
+import { Button, ScrollShadow, Tooltip, Toast, toast, Modal } from '@heroui/react'
 import {
   FileFill,
   FolderOpenFill,
@@ -215,6 +215,8 @@ function App() {
   const [isCreatingFile, setIsCreatingFile] = useState(false)
   const [isCreatingDirectory, setIsCreatingDirectory] = useState(false)
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'file-icons' | 'agent'>('file-icons')
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(DEFAULT_LEFT_SIDEBAR_WIDTH)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(DEFAULT_RIGHT_SIDEBAR_WIDTH)
   const [gitPanelHeight, setGitPanelHeight] = useState(DEFAULT_GIT_PANEL_HEIGHT)
@@ -1482,19 +1484,6 @@ function App() {
 
           <div className='section-title-drag-spacer' aria-hidden='true' />
 
-          <div className='section-title-actions'>
-            <Button
-              variant='ghost'
-              size='sm'
-              onPress={() => {
-                openSettings('file-icons')
-              }}
-              className='section-settings-button'
-              aria-label='Open settings'
-            >
-              Settings
-            </Button>
-          </div>
         </div>
 
         <div ref={leftSidebarBodyRef} className='sidebar-stack'>
@@ -1640,6 +1629,17 @@ function App() {
               />
             </div>
           )}
+        </div>
+
+        <div className='sidebar-footer'>
+          <button 
+            type='button' 
+            className='sidebar-footer-item'
+            onClick={() => setIsSettingsOpen(true)}
+          >
+            <Icon icon='lucide:settings' width={18} height={18} />
+            <span>Settings</span>
+          </button>
         </div>
       </aside>
 
@@ -1804,6 +1804,39 @@ function App() {
       </aside>
 
       <Toast.Provider placement='bottom end' />
+
+      <Modal>
+        <Modal.Backdrop 
+          isOpen={isSettingsOpen} 
+          onOpenChange={setIsSettingsOpen}
+        >
+          <Modal.Container scroll='inside' className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'>
+            <Modal.Dialog className='settings-modal p-0 m-0 relative'>
+              <Modal.CloseTrigger 
+                className='settings-modal-close'
+                aria-label='Close settings'
+              >
+                <Icon icon='lucide:x' width={16} height={16} />
+              </Modal.CloseTrigger>
+              <Modal.Body className='p-0 m-0'>
+                <SettingsDialog
+                  activeSection={settingsSection}
+                  agentState={agentWorkspaceState}
+                  iconTheme={iconTheme}
+                  iconThemeOptions={iconThemeOptions}
+                  isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
+                  workspacePath={currentPath}
+                  onAgentStateChange={setAgentWorkspaceState}
+                  onImportIconTheme={handlePickWorkspaceIconTheme}
+                  onSectionChange={setSettingsSection}
+                  onSelectIconTheme={handleSelectWorkspaceIconTheme}
+                  onStatusMessage={setStatusMessage}
+                />
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
     </div>
   )
 }

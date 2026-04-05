@@ -150,8 +150,7 @@ export function SettingsDialog({
     <div className='settings-page'>
       <aside className='settings-sidebar'>
         <div className='settings-sidebar-header'>
-          <p className='settings-sidebar-eyebrow'>Workspace</p>
-          <h2 className='settings-sidebar-title'>设置</h2>
+          <h2 className='settings-sidebar-title'>Settings</h2>
         </div>
 
         <nav className='settings-nav' aria-label='Settings sections'>
@@ -159,13 +158,12 @@ export function SettingsDialog({
             <button
               key={section.id}
               type='button'
-              className={`settings-nav-item${section.id === activeSection ? ' is-active' : ''}`}
+              className={`settings-nav-item ${section.id === activeSection ? 'is-active' : ''}`}
               onClick={() => {
                 onSectionChange(section.id)
               }}
             >
               <span className='settings-nav-label'>{section.label}</span>
-              <span className='settings-nav-description'>{section.description}</span>
             </button>
           ))}
         </nav>
@@ -174,9 +172,6 @@ export function SettingsDialog({
       <section className='settings-panel'>
         <div className='settings-panel-header'>
           <div>
-            <p className='settings-panel-eyebrow'>
-              {activeSection === 'providers' ? 'Configure providers' : 'Workspace file icons'}
-            </p>
             <h3 className='settings-panel-title'>
               {activeSection === 'providers' ? 'Providers' : 'File Icons'}
             </h3>
