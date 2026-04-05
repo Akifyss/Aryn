@@ -1662,8 +1662,31 @@
 .git-tree-folder-row,
 .git-tree-folder-toggle,
 .git-change-item,
-.git-change-trigger {
+.git-change-trigger,
+.workspace-tree-row {
   cursor: pointer;
+}
+
+.workspace-tree-row .raw-rename-input,
+.workspace-tree-row .raw-rename-input:focus,
+.workspace-tree-row .raw-rename-input:focus-visible {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  height: 1.4rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+  font-weight: 500;
+  color: var(--accent);
+  min-width: 0;
+}
+
+.workspace-tree-row .git-change-actions {
+  align-self: center;
 }
 
 .git-change-item {
@@ -1794,7 +1817,8 @@
 }
 
 .git-change-item:hover .git-change-actions,
-.git-tree-folder-row:hover .git-change-actions {
+.git-tree-folder-row:hover .git-change-actions,
+.workspace-tree-row:hover .git-change-actions {
   opacity: 1;
   max-width: 8rem; /* Expand to show icons */
   transform: translateX(0);

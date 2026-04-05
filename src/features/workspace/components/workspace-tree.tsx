@@ -169,12 +169,12 @@ function FileTreeItem({
       >
         {isEditing ? (
           <form className='workspace-tree-trigger' onSubmit={handleSubmitRename} onClick={e => e.stopPropagation()}>
-            <Input
+            <FileRowIcon node={node} isExpanded={isExpanded} iconTheme={iconTheme} />
+            <input
               autoFocus
-              size='sm'
-              variant='flat'
+              className='raw-rename-input'
               value={draftName}
-              className='tree-rename-input'
+              onFocus={e => e.target.select()}
               onChange={e => setDraftName(e.target.value)}
               onKeyDown={e => {
                 if (e.key === 'Escape') {
