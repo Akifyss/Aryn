@@ -24,7 +24,7 @@
   --tabs-chrome-height: calc(var(--chrome-height) - 1px);
   --panel-toggle-size: 32px;
   --panel-toggle-gap: 8px;
-  --left-panel-toggle-anchor: 75px;
+  --left-panel-toggle-anchor: 76px;
   --right-panel-toggle-anchor: 12px;
   --left-panel-content-inset: calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
   --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
@@ -206,8 +206,8 @@
 
 .traffic-button {
   position: relative;
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   border-radius: 999px;
   margin-top: 1px;
 }
@@ -237,7 +237,7 @@
 .traffic-close::before,
 .traffic-close::after {
   inset: 50% auto auto 50%;
-  width: 7px;
+  width: 6px;
   height: 1px;
   background: rgba(70, 27, 27, 0.82);
   transform-origin: center;
@@ -257,7 +257,7 @@
 
 .traffic-minimize::before {
   inset: 50% auto auto 50%;
-  width: 7px;
+  width: 6px;
   height: 1px;
   background: rgba(92, 64, 5, 0.9);
   transform: translate(-50%, -50%);
@@ -275,13 +275,13 @@
 }
 
 .traffic-maximize::before {
-  width: 7px;
+  width: 6px;
   height: 1px;
 }
 
 .traffic-maximize::after {
   width: 1px;
-  height: 7px;
+  height: 6px;
 }
 
 .panel {
@@ -490,7 +490,7 @@
 .section-title-text:focus-visible {
   outline: 2px solid color-mix(in oklab, var(--accent) 42%, white);
   outline-offset: 4px;
-  border-radius: 7px;
+  border-radius: 8px;
 }
 
 .section-title-text:disabled {
@@ -502,7 +502,7 @@
   min-width: 32px;
   width: 32px;
   height: 32px;
-  border-radius: 11px;
+  border-radius: 12px;
   color: var(--panel-muted);
 }
 
@@ -510,7 +510,7 @@
   min-width: auto;
   height: 32px;
   padding-inline: 12px;
-  border-radius: 11px;
+  border-radius: 12px;
   color: var(--panel-muted);
   font-size: 11px;
   font-weight: 700;
@@ -587,7 +587,7 @@
   left: 0;
   top: 10px;
   bottom: 10px;
-  width: 3px;
+  width: 4px;
   background: var(--accent);
   border-radius: 999px;
   box-shadow: 0 0 8px var(--accent);
@@ -672,7 +672,7 @@
 
 .tree-directory-button {
   gap: 10px;
-  min-height: 33px;
+  min-height: 32px;
   padding-right: 14px;
   padding-top: 0;
   padding-bottom: 0;
@@ -1698,7 +1698,7 @@
   box-shadow: none;
   padding: 0;
   margin: 0;
-  height: 22px;
+  height: 20px;
   font-size: 13px;
   font-family: inherit;
   font-weight: 500;
@@ -3114,7 +3114,7 @@
 .agent-markdown pre,
 .agent-markdown table,
 .agent-markdown hr {
-  margin: 9px 0;
+  margin: 8px 0;
 }
 
 .agent-markdown ul,
