@@ -706,15 +706,15 @@
   transition: background-color 140ms ease;
 }
 
-.tree-list > li + li > .tree-directory-button,
-.tree-list > li + li > .tree-file-row,
-.tree-list > li + li > .tree-inline-rename {
+.tree-list>li+li>.tree-directory-button,
+.tree-list>li+li>.tree-file-row,
+.tree-list>li+li>.tree-inline-rename {
   border-top: 1px solid var(--panel-border);
 }
 
-.tree-directory-item > .tree-list > li > .tree-directory-button,
-.tree-directory-item > .tree-list > li > .tree-file-row,
-.tree-directory-item > .tree-list > li > .tree-inline-rename {
+.tree-directory-item>.tree-list>li>.tree-directory-button,
+.tree-directory-item>.tree-list>li>.tree-file-row,
+.tree-directory-item>.tree-list>li>.tree-inline-rename {
   border-top: 1px solid var(--panel-border);
 }
 
@@ -889,11 +889,9 @@
   min-height: var(--tabs-chrome-height);
   border-bottom: 1px solid var(--panel-border);
   background:
-    linear-gradient(
-      180deg,
+    linear-gradient(180deg,
       color-mix(in oklab, var(--panel-surface-chrome) 86%, white) 0%,
-      color-mix(in oklab, var(--panel-surface-section) 88%, var(--panel-surface-editor)) 100%
-    );
+      color-mix(in oklab, var(--panel-surface-section) 88%, var(--panel-surface-editor)) 100%);
 }
 
 .app-shell[data-left-collapsed='true'] .file-tabs-shell {
@@ -1512,7 +1510,6 @@
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--panel-border);
-  padding-bottom: 0.4rem;
 }
 
 .git-panel-section:first-child {
@@ -2402,7 +2399,7 @@
   transition: background-color 140ms ease;
 }
 
-.agent-session-option + .agent-session-option {
+.agent-session-option+.agent-session-option {
   border-top: 1px solid var(--panel-border);
 }
 
@@ -2740,11 +2737,11 @@
   word-break: break-word;
 }
 
-.agent-markdown > :first-child {
+.agent-markdown> :first-child {
   margin-top: 0;
 }
 
-.agent-markdown > :last-child {
+.agent-markdown> :last-child {
   margin-bottom: 0;
 }
 
@@ -2763,7 +2760,7 @@
   padding-left: 1.1rem;
 }
 
-.agent-markdown li + li {
+.agent-markdown li+li {
   margin-top: 0.18rem;
 }
 
@@ -3195,7 +3192,7 @@
     width: 100%;
   }
 
-  .settings-inline-actions > * {
+  .settings-inline-actions>* {
     width: 100%;
   }
 }
