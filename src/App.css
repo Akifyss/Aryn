@@ -403,7 +403,7 @@
   flex-shrink: 0;
   min-height: var(--chrome-height);
   padding: 0 1rem 0 1.25rem;
-  border-bottom: 1px solid var(--panel-border);
+  border-bottom: 0;
 }
 
 .workspace-section-title {
@@ -413,27 +413,34 @@
 .section-title-text {
   display: flex;
   align-items: center;
-  gap: 0px;
+  gap: 6px;
   min-width: 0;
   flex: 0 1 auto;
   max-width: 100%;
   overflow: hidden;
-  align-self: stretch;
-  padding: 0;
+  align-self: center;
+  margin-left: -0.5rem;
+  padding: 0.25rem 0.6rem;
   border: 0;
+  border-radius: 6px;
   background: transparent;
-  color: var(--panel-muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  color: #111827;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   text-align: left;
   text-overflow: ellipsis;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
   cursor: pointer;
-  transition: color 160ms ease, opacity 160ms ease;
+  transition: all 120ms ease;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+.section-title-text:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #000000;
 }
 
 .section-title-drag-spacer {
@@ -443,9 +450,6 @@
   -webkit-app-region: drag;
 }
 
-.section-title-icon {
-  flex-shrink: 0;
-}
 
 .section-title-label {
   min-width: 0;

@@ -1479,7 +1479,6 @@ function App() {
             aria-label={isPickingWorkspace ? 'Opening workspace' : 'Open workspace'}
           >
             <span className='section-title-label'>{workspaceLabel}</span>
-            <SelectorVerticalLine size={24} className='section-title-icon' />
           </button>
 
           <div className='section-title-drag-spacer' aria-hidden='true' />
