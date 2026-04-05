@@ -1719,14 +1719,13 @@
   align-items: center;
   justify-content: space-between;
   height: 36px;
-  padding: 0 8px 0 12px;
-  border-bottom: 1px solid var(--panel-border);
+  padding: 0 8px 0 20px;
+  border-bottom: 0;
   flex-shrink: 0;
 }
 
 .file-panel-title {
   font-size: 12px;
-  font-weight: 600;
   color: var(--panel-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1837,7 +1836,7 @@
   color: #111827;
 }
 
-.settings-modal > *, 
+.settings-modal>*,
 .settings-modal .modal__body {
   padding: 0 !important;
   margin: 0 !important;
@@ -2065,12 +2064,13 @@
   align-items: center;
   gap: 6px;
   opacity: 0;
-  max-width: 0; /* No space when hidden */
+  max-width: 0;
+  /* No space when hidden */
   overflow: hidden;
   white-space: nowrap;
   transform: translateX(4px);
-  transition: 
-    opacity 160ms ease, 
+  transition:
+    opacity 160ms ease,
     transform 160ms ease,
     max-width 160ms ease;
 }
@@ -2079,7 +2079,8 @@
 .git-tree-folder-row:hover .git-change-actions,
 .workspace-tree-row:hover .git-change-actions {
   opacity: 1;
-  max-width: 128px; /* Expand to show icons */
+  max-width: 128px;
+  /* Expand to show icons */
   transform: translateX(0);
 }
 
