@@ -1227,34 +1227,28 @@
 
 .git-diff-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px 20px 14px;
+  padding: 0 20px;
+  height: 48px;
   border-bottom: 1px solid var(--separator);
-  background: var(--surface-secondary);
+  background: var(--surface);
 }
 
-.git-diff-header-copy {
+.git-diff-header-title-area {
+  flex: 1;
   min-width: 0;
 }
 
-.git-diff-header-copy h3 {
-  margin: 2px 0 0;
+.git-diff-header-title {
+  margin: 0;
   color: var(--foreground);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
-}
-
-.git-diff-header-copy p,
-.git-panel-empty-copy,
-.git-panel-status,
-.git-panel-error,
-.markdown-diff-empty-state p {
-  margin: 3px 0 0;
-  color: var(--default-500);
-  font-size: 12px;
-  line-height: 1.55;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .git-diff-view-modes {
@@ -1325,41 +1319,18 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 12px 14px 16px;
-  background: var(--background);
+  padding: 0;
+  background: var(--surface);
 }
 
-.git-diff-meta-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 0 14px 3px;
-}
-
-.git-diff-meta-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0px 10px;
-  border: 1px solid var(--separator);
-  border-radius: 999px;
-  background: var(--surface-secondary);
-  color: var(--default-400);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.git-diff-meta-pill.is-editable {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--default);
-}
-
-.git-diff-meta-arrow {
+.git-panel-empty-copy,
+.git-panel-status,
+.git-panel-error,
+.markdown-diff-empty-state p {
+  margin: 3px 0 0;
   color: var(--default-500);
   font-size: 12px;
-  font-weight: 600;
+  line-height: 1.55;
 }
 
 .git-diff-codemirror-host {
@@ -1368,10 +1339,8 @@
   min-width: 0;
   min-height: 100%;
   min-height: 0;
-  border: 1px solid var(--separator);
-  border-radius: 16px;
   overflow: hidden;
-  background: var(--background);
+  background: var(--surface);
 }
 
 .git-diff-codemirror-host,
@@ -1387,7 +1356,7 @@
 }
 
 .git-diff-codemirror-host .cm-mergeView {
-  background: var(--background);
+  background: var(--surface);
 }
 
 .git-diff-codemirror-host .cm-mergeViewEditors,

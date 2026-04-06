@@ -315,16 +315,8 @@ export function GitDiffEditor({
   return (
     <div className='git-diff-editor'>
       <header className='git-diff-header'>
-        <div className='git-diff-header-copy'>
-          <p className='eyebrow'>Git Diff</p>
-          <h3>{diff.change.relativePath}</h3>
-          <p>
-            {diff.originalLabel}
-            {' -> '}
-            {diff.modifiedLabel}
-            {' / '}
-            {fileDescription}
-          </p>
+        <div className='git-diff-header-title-area'>
+          <h3 className='git-diff-header-title'>{diff.change.relativePath}</h3>
         </div>
 
         <div className='git-diff-view-modes'>
@@ -394,13 +386,6 @@ export function GitDiffEditor({
           </Button>
         </div>
       </header>
-
-      <div className='git-diff-meta-row'>
-        <span className='git-diff-meta-pill'>{diff.originalLabel}</span>
-        <span className='git-diff-meta-arrow'>to</span>
-        <span className='git-diff-meta-pill'>{diff.modifiedLabel}</span>
-        <span className={`git-diff-meta-pill${isEditable ? ' is-editable' : ''}`}>{fileDescription}</span>
-      </div>
 
       <div className='git-diff-codemirror-shell'>
         <div
