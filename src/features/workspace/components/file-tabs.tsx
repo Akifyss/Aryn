@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useRef } from 'react'
-import { CloseLine } from '@mingcute/react'
+import { CloseLine, GitCompareLine } from '@mingcute/react'
 import type { WorkspaceDisplayTab } from '@/features/workspace/store/use-workspace-store'
 
 type FileTabsProps = {
@@ -9,6 +9,8 @@ type FileTabsProps = {
   workspacePath: string | null
   onActivate: (filePath: string) => void
   onClose: (filePath: string) => void
+  onOpenDiff?: (filePath: string) => void
+  getHasDiff?: (filePath: string) => boolean
 }
 
 function getBaseName(tab: WorkspaceDisplayTab) {
@@ -61,6 +63,8 @@ export function FileTabs({
   workspacePath,
   onActivate,
   onClose,
+  onOpenDiff,
+  getHasDiff,
 }: FileTabsProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
@@ -187,6 +191,21 @@ export function FileTabs({
                 <span className='file-tab-label'>{baseName}</span>
                 {metaLabel ? <span className='file-tab-meta'>{metaLabel}</span> : null}
               </button>
+
+              {tab.kind === 'file' && getHasDiff?.(tab.filePath) && onOpenDiff && (
+                <button
+                  type='button'
+                  className='file-tab-diff'
+                  aria-label={`Open diff for ${baseName}`}
+                  title='Open Git diff'
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onOpenDiff(tab.filePath)
+                  }}
+                >
+                  <GitCompareLine size={14} />
+                </button>
+              )}
 
               <button
                 type='button'

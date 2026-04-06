@@ -892,7 +892,7 @@
   flex-shrink: 0;
   min-width: 0;
   min-height: var(--tabs-chrome-height);
-  background-color: var(--background);
+  background-color: var(--surface);
 }
 
 /* When collapsed, fill the left padding area with a segment of the bottom line */
@@ -981,7 +981,7 @@
 .file-tab {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   flex: 0 0 auto;
   min-width: 0;
   max-width: min(288px, 42vw);
@@ -1098,6 +1098,39 @@
 .file-tab-close:hover svg,
 .file-tab-close:focus-visible svg {
   opacity: 1;
+}
+
+.file-tab-diff {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--default-400);
+  cursor: pointer;
+  transition: color 140ms ease, opacity 140ms ease, background-color 140ms ease;
+  opacity: 0;
+  pointer-events: none;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.file-tab:hover .file-tab-diff,
+.file-tab-diff:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.file-tab-diff:hover {
+  color: var(--foreground);
+  background: var(--surface-tertiary);
+}
+
+.file-tab-diff svg {
+  transform: scale(0.9);
 }
 
 .file-tab-dirty-indicator {

@@ -1779,30 +1779,20 @@ function App() {
         <div className='editor-frame'>
           <FileTabs
             activeFilePath={displayActiveTabPath}
-            actions={currentPath ? (
-              <button
-                type='button'
-                className='editor-toolbar-icon-button'
-                aria-label={activeFileTab ? `Open diff for ${getBaseName(activeFileTab.filePath)}` : 'Open diff for current file'}
-                title={canAttemptOpenCurrentDiff ? 'Open diff for current file' : 'Open a supported file in a Git repository first'}
-                disabled={!canAttemptOpenCurrentDiff}
-                onClick={() => {
-                  if (!canAttemptOpenCurrentDiff) {
-                    return
-                  }
-
-                  void openCurrentFileDiff()
-                }}
-              >
-                <GitCompareLine size={16} />
-              </button>
-            ) : null}
             tabs={displayTabs}
             workspacePath={currentPath}
             onActivate={activateFileTab}
             onClose={(filePath) => {
               closeEditorTab(filePath)
             }}
+            onOpenDiff={async (filePath) => {
+              const latestGitState = await refreshGitState(currentPath, { silent: true })
+              const nextChange = findGitChangeByFilePath(latestGitState, filePath)
+              if (nextChange) {
+                void openGitDiff(nextChange)
+              }
+            }}
+            getHasDiff={(filePath) => Boolean(findGitChangeByFilePath(gitRepositoryState, filePath))}
           />
 
           <div className='editor-content-shell' id='writing-editor-panel'>
