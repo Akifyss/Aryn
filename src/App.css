@@ -892,8 +892,18 @@
   flex-shrink: 0;
   min-width: 0;
   min-height: var(--tabs-chrome-height);
-  border-bottom: 1px solid var(--separator);
-  background: var(--surface);
+  background: var(--background);
+}
+
+.file-tabs-shell::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--separator);
+  z-index: 1;
 }
 
 .app-shell[data-left-collapsed='true'] .file-tabs-shell {
@@ -905,6 +915,8 @@
 }
 
 .file-tabs-scroller {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: stretch;
   flex: 0 1 auto;
@@ -955,6 +967,9 @@
   min-width: 0;
   max-width: min(288px, 42vw);
   border-right: 1px solid var(--separator);
+  border-left: 1px solid transparent;
+  border-top: 1px solid transparent;
+  border-radius: 6px 6px 0 0;
   background: transparent;
   transition: background-color 140ms ease, color 140ms ease;
   app-region: no-drag;
@@ -962,7 +977,21 @@
 }
 
 .file-tab.is-active {
-  box-shadow: none;
+  background: var(--surface);
+  border-top-color: var(--separator);
+  border-left-color: var(--separator);
+  z-index: 5;
+}
+
+.file-tab.is-active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--surface);
+  z-index: 10;
 }
 
 .file-tab-trigger {
