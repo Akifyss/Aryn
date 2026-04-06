@@ -53,18 +53,18 @@ const DIFF_EDITOR_THEME = EditorView.theme({
     paddingBottom: '2rem',
   },
   '.cm-gutters': {
-    borderRight: '1px solid var(--panel-border)',
-    backgroundColor: 'color-mix(in oklab, var(--panel-surface-base) 98%, white)',
-    color: 'var(--panel-muted)',
+    borderRight: '1px solid var(--separator)',
+    backgroundColor: 'var(--surface-secondary)',
+    color: 'var(--muted)',
   },
   '.cm-activeLine': {
-    backgroundColor: 'color-mix(in oklab, var(--accent) 4%, white)',
+    backgroundColor: 'var(--default)',
   },
   '.cm-activeLineGutter': {
-    backgroundColor: 'color-mix(in oklab, var(--accent) 7%, white)',
+    backgroundColor: 'var(--default)',
   },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-content ::selection': {
-    backgroundColor: 'color-mix(in oklab, var(--accent) 18%, white)',
+    backgroundColor: 'var(--default)',
   },
   '.cm-cursor, .cm-dropCursor': {
     borderLeftColor: 'var(--foreground)',

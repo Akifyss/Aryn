@@ -47,6 +47,7 @@
     "@floating-ui/react": "^0.27.19",
     "@heroui/react": "^3.0.2",
     "@heroui/styles": "^3.0.2",
+    "@heroui/system": "^2.4.28",
     "@iconify/react": "^6.0.2",
     "@mariozechner/pi-coding-agent": "^0.63.2",
     "@mingcute/react": "^1.4.1",

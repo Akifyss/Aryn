@@ -214,14 +214,19 @@ function App() {
       const body = window.document.body
       const root = window.document.documentElement
       
-      // Obsidian-style pattern: apply to body
-      body.classList.remove('theme-light', 'theme-dark')
-      body.classList.add(`theme-${t}`)
-      
-      // Keep data-theme on root for HeroUI/Tailwind compatibility
-      root.setAttribute('data-theme', t)
+      // HeroUI/Tailwind official pattern: apply to html and body
       root.classList.remove('light', 'dark')
       root.classList.add(t)
+      root.setAttribute('data-theme', t)
+      
+      body.classList.remove('light', 'dark')
+      body.classList.add(t)
+      
+      // Also set the theme-color meta tag for better UI integration
+      const meta = window.document.querySelector('meta[name="theme-color"]')
+      if (meta) {
+        meta.setAttribute('content', t === 'dark' ? '#09090b' : '#ffffff')
+      }
     }
 
     if (theme === 'auto') {
@@ -1511,7 +1516,7 @@ function App() {
   return (
     <div
       ref={appShellRef}
-      className='app-shell'
+      className="app-shell text-foreground bg-background"
       data-platform={shellPlatform}
       data-left-collapsed={isLeftSidebarVisible ? 'false' : 'true'}
       data-resizing={activeResizePanel || isGitPanelResizing ? 'true' : 'false'}

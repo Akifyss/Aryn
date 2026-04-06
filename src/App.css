@@ -1,25 +1,10 @@
 .app-shell {
-  --app-background: color-mix(in oklab, var(--background) 88%, var(--default));
-  --panel-border: color-mix(in oklab, var(--separator) 92%, var(--background));
-  --panel-border-strong: color-mix(in oklab, var(--foreground) 12%, var(--background));
-  --panel-foreground: var(--foreground);
-  --panel-muted: color-mix(in oklab, var(--foreground) 58%, var(--background));
-  --panel-soft: color-mix(in oklab, var(--foreground) 72%, var(--background));
-  --panel-highlight: color-mix(in oklab, var(--accent) 8%, var(--surface));
-  --panel-highlight-strong: color-mix(in oklab, var(--accent) 16%, var(--surface));
-  --panel-surface-chrome: color-mix(in oklab, var(--background) 86%, var(--surface-secondary));
-  --panel-surface-base: var(--surface);
-  --panel-surface-subtle: color-mix(in oklab, var(--background) 88%, var(--surface));
-  --panel-surface-section: color-mix(in oklab, var(--background) 92%, var(--surface));
-  --panel-surface-editor: color-mix(in oklab, var(--surface) 96%, var(--background));
   --git-panel-height: 292px;
   --left-sidebar-width: 320px;
   --right-sidebar-width: 368px;
   --resize-handle-width: 12px;
   --resize-handle-hit-area: 100%;
   --resize-handle-line-width: 2px;
-  --resize-handle-color: color-mix(in oklab, var(--panel-border) 92%, transparent);
-  --resize-handle-color-active: color-mix(in oklab, var(--accent) 52%, var(--panel-border));
   --chrome-height: 44px;
   --tabs-chrome-height: calc(var(--chrome-height) - 1px);
   --panel-toggle-size: 32px;
@@ -34,7 +19,7 @@
   grid-template-columns: var(--left-sidebar-width) minmax(0, 1fr) var(--right-sidebar-width);
   width: 100%;
   height: 100dvh;
-  background: var(--app-background);
+  background: var(--background);
   color: var(--foreground);
   overflow: hidden;
 }
@@ -51,8 +36,8 @@
   inset: 0;
   pointer-events: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    inset 0 0 0 1px rgba(54, 69, 94, 0.04);
+    inset 0 1px 0 var(--separator),
+    inset 0 0 0 1px var(--border);
 }
 
 .titlebar {
@@ -121,7 +106,7 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--panel-muted);
+  color: var(--default-500);
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
   app-region: no-drag;
@@ -130,8 +115,8 @@
 
 .panel-toggle-button:hover,
 .panel-toggle-button:focus-visible {
-  color: var(--panel-foreground);
-  background: color-mix(in oklab, var(--foreground) 6%, var(--bg-mix));
+  color: var(--foreground);
+  background: var(--surface-tertiary);
   outline: none;
 }
 
@@ -190,18 +175,18 @@
   width: 48px;
   min-width: 48px;
   height: 100%;
-  color: var(--panel-muted);
+  color: var(--default-500);
   transition: background-color 140ms ease, color 140ms ease;
 }
 
 .window-button:hover {
-  background: color-mix(in oklab, var(--foreground) 7%, var(--bg-mix));
+  background: var(--surface-tertiary);
   color: var(--foreground);
 }
 
 .window-button-close:hover {
-  background: #e81123;
-  color: white;
+  background: var(--danger);
+  color: var(--danger-foreground);
 }
 
 .traffic-button {
@@ -231,7 +216,7 @@
 }
 
 .traffic-close {
-  background: #ff5f57;
+  background: var(--danger);
 }
 
 .traffic-close::before,
@@ -239,7 +224,7 @@
   inset: 50% auto auto 50%;
   width: 6px;
   height: 1px;
-  background: rgba(70, 27, 27, 0.82);
+  background: var(--danger-foreground);
   transform-origin: center;
 }
 
@@ -252,25 +237,25 @@
 }
 
 .traffic-minimize {
-  background: #ffbd2e;
+  background: var(--warning);
 }
 
 .traffic-minimize::before {
   inset: 50% auto auto 50%;
   width: 6px;
   height: 1px;
-  background: rgba(92, 64, 5, 0.9);
+  background: var(--warning-foreground);
   transform: translate(-50%, -50%);
 }
 
 .traffic-maximize {
-  background: #28c840;
+  background: var(--success);
 }
 
 .traffic-maximize::before,
 .traffic-maximize::after {
   inset: 50% auto auto 50%;
-  background: rgba(15, 73, 24, 0.9);
+  background: var(--success-foreground);
   transform: translate(-50%, -50%);
 }
 
@@ -302,19 +287,19 @@
   grid-column: 1;
   gap: 0;
   padding: 0;
-  background: var(--panel-surface-chrome);
-  border-right: 1px solid var(--panel-border);
+  background: var(--surface-secondary);
+  border-right: 1px solid var(--separator);
 }
 
 .panel-editor {
   grid-column: 2;
-  background: var(--panel-surface-base);
+  background: var(--background);
 }
 
 .panel-agent {
   grid-column: 3;
-  background: var(--panel-surface-subtle);
-  border-left: 1px solid var(--panel-border);
+  background: var(--surface-secondary);
+  border-left: 1px solid var(--separator);
 }
 
 .panel-sidebar.is-collapsed,
@@ -384,12 +369,12 @@
 .panel-resize-handle.is-active::before,
 .panel-resize-handle:focus-visible::before {
   background: var(--resize-handle-color-active);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 14%, transparent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .eyebrow {
   margin: 0;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -454,8 +439,8 @@
 }
 
 .section-title-text:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: #000000;
+  background: var(--surface-tertiary);
+  color: var(--foreground);
 }
 
 .section-title-drag-spacer {
@@ -484,11 +469,11 @@
 
 .section-title-text:hover:not(:disabled),
 .section-title-text:focus-visible {
-  color: var(--panel-foreground);
+  color: var(--foreground);
 }
 
 .section-title-text:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 42%, var(--bg-mix));
+  outline: 2px solid var(--focus);
   outline-offset: 4px;
   border-radius: 8px;
 }
@@ -503,7 +488,7 @@
   width: 32px;
   height: 32px;
   border-radius: 12px;
-  color: var(--panel-muted);
+  color: var(--default-500);
 }
 
 .section-settings-button {
@@ -511,7 +496,7 @@
   height: 32px;
   padding-inline: 12px;
   border-radius: 12px;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -519,8 +504,8 @@
 
 .section-settings-button:hover:not(:disabled),
 .section-create-button:hover:not(:disabled) {
-  color: var(--panel-foreground);
-  background: color-mix(in oklab, var(--surface) 88%, var(--accent) 12%);
+  color: var(--foreground);
+  background: var(--surface-tertiary);
 }
 
 .tree-scroll {
@@ -561,7 +546,7 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -571,13 +556,13 @@
 }
 
 .sidebar-vertical-tab:hover {
-  background: color-mix(in oklab, var(--foreground) 4%, var(--bg-mix));
-  color: var(--panel-foreground);
+  background: var(--surface-tertiary);
+  color: var(--foreground);
 }
 
 .sidebar-vertical-tab.is-active {
-  background: color-mix(in oklab, var(--foreground) 7%, var(--bg-mix));
-  color: var(--panel-foreground);
+  background: var(--default);
+  color: var(--foreground);
   font-weight: 600;
 }
 
@@ -590,7 +575,7 @@
   width: 4px;
   background: var(--accent);
   border-radius: 999px;
-  box-shadow: 0 0 8px var(--accent);
+  box-shadow: none;
 }
 
 .sidebar-vertical-tab-icon {
@@ -678,7 +663,7 @@
   padding-bottom: 0;
   border: 0;
   background: transparent;
-  color: var(--panel-soft);
+  color: var(--default-400);
   text-align: left;
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
@@ -686,8 +671,8 @@
 
 .tree-directory-button:hover,
 .tree-directory-button:focus-visible {
-  background: color-mix(in oklab, var(--foreground) 2%, var(--bg-mix));
-  color: var(--panel-foreground);
+  background: var(--surface-tertiary);
+  color: var(--foreground);
 }
 
 .tree-directory-button:focus-visible {
@@ -729,22 +714,22 @@
 .tree-list>li+li>.tree-directory-button,
 .tree-list>li+li>.tree-file-row,
 .tree-list>li+li>.tree-inline-rename {
-  border-top: 1px solid var(--panel-border);
+  border-top: 1px solid var(--separator);
 }
 
 .tree-directory-item>.tree-list>li>.tree-directory-button,
 .tree-directory-item>.tree-list>li>.tree-file-row,
 .tree-directory-item>.tree-list>li>.tree-inline-rename {
-  border-top: 1px solid var(--panel-border);
+  border-top: 1px solid var(--separator);
 }
 
 .tree-item:hover .tree-file-row,
 .tree-item:focus-within .tree-file-row {
-  background: color-mix(in oklab, var(--foreground) 2%, var(--bg-mix));
+  background: var(--surface-tertiary);
 }
 
 .tree-item.is-active .tree-file-row {
-  background: color-mix(in oklab, var(--accent) 5%, var(--bg-mix));
+  background: var(--default);
 }
 
 .tree-file,
@@ -756,7 +741,7 @@
   padding: 0 0 0 12px;
   height: 32px;
   border-radius: 0;
-  color: var(--panel-soft);
+  color: var(--default-400);
   background: transparent;
   transition: none;
 }
@@ -773,7 +758,7 @@
 }
 
 .tree-item.is-active .tree-file {
-  color: var(--panel-foreground);
+  color: var(--foreground);
 }
 
 .tree-file-content {
@@ -815,14 +800,14 @@
   width: 32px;
   min-width: 32px;
   height: 32px;
-  color: var(--panel-muted);
+  color: var(--default-500);
   border-radius: 12px;
 }
 
 .tree-action-button:hover,
 .tree-rename-action:hover {
   color: var(--foreground);
-  background: color-mix(in oklab, var(--foreground) 4%, var(--bg-mix));
+  background: var(--surface-tertiary);
 }
 
 .tree-inline-rename {
@@ -863,7 +848,7 @@
 .tree-item-error {
   margin: 0 0 2px;
   padding-left: 16px;
-  color: color-mix(in oklab, var(--danger) 85%, black);
+  color: var(--danger);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -876,7 +861,7 @@
   gap: 12px;
   min-height: 224px;
   padding: 16px 16px 16px 20px;
-  color: var(--panel-soft);
+  color: var(--default-400);
 }
 
 .tree-empty-icon {
@@ -885,8 +870,8 @@
   width: 46px;
   height: 46px;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--accent) 8%, var(--bg-mix));
-  color: color-mix(in oklab, var(--accent) 82%, black);
+  background: var(--surface-secondary);
+  color: var(--accent);
 }
 
 .editor-frame {
@@ -896,7 +881,7 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  background: var(--panel-surface-editor);
+  background: var(--background);
   overflow: hidden;
 }
 
@@ -907,11 +892,8 @@
   flex-shrink: 0;
   min-width: 0;
   min-height: var(--tabs-chrome-height);
-  border-bottom: 1px solid var(--panel-border);
-  background:
-    linear-gradient(180deg,
-      color-mix(in oklab, var(--panel-surface-chrome) 86%, var(--bg-mix)) 0%,
-      color-mix(in oklab, var(--panel-surface-section) 88%, var(--panel-surface-editor)) 100%);
+  border-bottom: 1px solid var(--separator);
+  background: var(--surface-secondary);
 }
 
 .app-shell[data-left-collapsed='true'] .file-tabs-shell {
@@ -960,7 +942,7 @@
   align-items: center;
   min-height: var(--tabs-chrome-height);
   padding: 0 16px;
-  color: var(--panel-soft);
+  color: var(--default-400);
   font-size: 12px;
   letter-spacing: 0.01em;
 }
@@ -972,7 +954,7 @@
   flex: 0 0 auto;
   min-width: 0;
   max-width: min(288px, 42vw);
-  border-right: 1px solid var(--panel-border);
+  border-right: 1px solid var(--separator);
   background: transparent;
   transition: background-color 140ms ease, color 140ms ease;
   app-region: no-drag;
@@ -981,13 +963,11 @@
 
 .file-tab:hover,
 .file-tab.is-active {
-  background: color-mix(in oklab, var(--panel-surface-editor) 92%, var(--bg-mix));
+  background: var(--surface-tertiary);
 }
 
 .file-tab.is-active {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.65),
-    inset 0 -1px 0 var(--panel-surface-editor);
+  box-shadow: none;
 }
 
 .file-tab-trigger {
@@ -999,7 +979,7 @@
   padding: 0 8px 0 16px;
   border: 0;
   background: transparent;
-  color: var(--panel-muted);
+  color: var(--default-500);
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
@@ -1015,7 +995,7 @@
 }
 
 .file-tab-trigger:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 38%, var(--bg-mix));
+  outline: 2px solid var(--focus);
   outline-offset: -2px;
 }
 
@@ -1032,14 +1012,14 @@
 
 .file-tab-meta {
   flex-shrink: 1;
-  color: var(--panel-soft);
+  color: var(--default-400);
   font-size: 11px;
   font-weight: 500;
 }
 
 .file-tab.is-missing .file-tab-label,
 .file-tab.is-missing .file-tab-meta {
-  color: color-mix(in oklab, var(--danger) 52%, var(--panel-muted));
+  color: var(--danger);
 }
 
 .file-tab-close {
@@ -1051,7 +1031,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--panel-soft);
+  color: var(--default-400);
   cursor: pointer;
   transition: color 140ms ease, opacity 140ms ease, background-color 140ms ease;
   app-region: no-drag;
@@ -1060,11 +1040,11 @@
 
 .file-tab-close:hover {
   color: var(--foreground);
-  background: color-mix(in oklab, var(--foreground) 5%, transparent);
+  background: var(--surface-tertiary);
 }
 
 .file-tab-close:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 38%, var(--bg-mix));
+  outline: 2px solid var(--focus);
   outline-offset: -2px;
 }
 
@@ -1085,7 +1065,7 @@
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--accent) 62%, var(--foreground));
+  background: var(--accent);
   opacity: 0;
   transform: scale(0.9);
   transition: opacity 140ms ease, transform 140ms ease;
@@ -1124,14 +1104,14 @@
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: var(--panel-muted);
+  color: var(--default-500);
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
 }
 
 .editor-toolbar-icon-button:hover:not(:disabled) {
   color: var(--foreground);
-  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+  background: var(--surface-tertiary);
 }
 
 .editor-toolbar-icon-button:disabled {
@@ -1146,7 +1126,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--panel-surface-editor);
+  background: var(--background);
 }
 
 .code-editor-shell {
@@ -1174,8 +1154,8 @@
   justify-content: space-between;
   gap: 16px;
   padding: 16px 20px 14px;
-  border-bottom: 1px solid var(--panel-border);
-  background: color-mix(in oklab, var(--panel-surface-section) 82%, var(--bg-mix));
+  border-bottom: 1px solid var(--separator);
+  background: var(--surface-secondary);
 }
 
 .git-diff-header-copy {
@@ -1195,7 +1175,7 @@
 .git-panel-error,
 .markdown-diff-empty-state p {
   margin: 3px 0 0;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -1205,9 +1185,9 @@
   align-items: center;
   gap: 4px;
   padding: 3px;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--separator);
   border-radius: 13px;
-  background: color-mix(in oklab, var(--panel-surface-base) 78%, var(--bg-mix));
+  background: var(--surface-secondary);
 }
 
 .git-diff-view-mode,
@@ -1216,7 +1196,7 @@
 .git-panel-section-toggle {
   border: 0;
   background: transparent;
-  color: var(--panel-muted);
+  color: var(--default-500);
 }
 
 .git-diff-view-mode,
@@ -1245,7 +1225,7 @@
 .git-diff-view-mode:hover:not(:disabled),
 .git-toolbar-action:hover:not(:disabled),
 .git-change-action:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  background: var(--surface-tertiary);
   color: var(--foreground);
 }
 
@@ -1253,13 +1233,13 @@
 .git-toolbar-action:disabled,
 .git-change-action:disabled {
   cursor: not-allowed;
-  opacity: 0.38;
-  color: color-mix(in oklab, var(--panel-muted) 82%, var(--bg-mix));
+  color: var(--muted);
+  opacity: 0.5;
 }
 
 .git-change-action.is-danger:hover {
-  background: color-mix(in oklab, var(--danger) 12%, var(--bg-mix));
-  color: color-mix(in oklab, var(--danger) 72%, black);
+  background: var(--danger);
+  color: var(--danger-foreground);
 }
 
 .git-diff-codemirror-shell {
@@ -1269,7 +1249,7 @@
   min-height: 0;
   overflow: hidden;
   padding: 12px 14px 16px;
-  background: color-mix(in oklab, var(--panel-surface-base) 94%, var(--bg-mix));
+  background: var(--background);
 }
 
 .git-diff-meta-row {
@@ -1285,22 +1265,22 @@
   align-items: center;
   min-height: 28px;
   padding: 0px 10px;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--separator);
   border-radius: 999px;
-  background: color-mix(in oklab, var(--panel-surface-base) 98%, var(--bg-mix));
-  color: var(--panel-soft);
+  background: var(--surface-secondary);
+  color: var(--default-400);
   font-size: 12px;
   font-weight: 600;
 }
 
 .git-diff-meta-pill.is-editable {
-  border-color: color-mix(in oklab, var(--accent) 22%, var(--panel-border));
-  color: color-mix(in oklab, var(--accent) 72%, black);
-  background: color-mix(in oklab, var(--accent) 8%, var(--bg-mix));
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--default);
 }
 
 .git-diff-meta-arrow {
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1311,10 +1291,10 @@
   min-width: 0;
   min-height: 100%;
   min-height: 0;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--separator);
   border-radius: 16px;
   overflow: hidden;
-  background: color-mix(in oklab, var(--panel-surface-editor) 98%, var(--bg-mix));
+  background: var(--background);
 }
 
 .git-diff-codemirror-host,
@@ -1330,7 +1310,7 @@
 }
 
 .git-diff-codemirror-host .cm-mergeView {
-  background: color-mix(in oklab, var(--panel-surface-editor) 98%, var(--bg-mix));
+  background: var(--background);
 }
 
 .git-diff-codemirror-host .cm-mergeViewEditors,
@@ -1358,7 +1338,7 @@
 .git-diff-codemirror-host .cm-changedLine,
 .git-diff-codemirror-host .cm-deletedChunk,
 .git-diff-codemirror-host .cm-insertedLine {
-  background-color: color-mix(in oklab, var(--accent) 6%, var(--bg-mix));
+  background-color: var(--default);
 }
 
 .git-diff-codemirror-host .cm-deletedText,
@@ -1381,7 +1361,7 @@
   align-items: stretch;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--separator);
   background: transparent;
 }
 
@@ -1421,12 +1401,12 @@
   width: 24px;
   height: 24px;
   border-radius: 999px;
-  color: var(--panel-muted);
+  color: var(--default-500);
 }
 
 .git-panel-commit-clear:hover {
   color: var(--foreground);
-  background: color-mix(in oklab, var(--foreground) 4%, var(--bg-mix));
+  background: var(--surface-tertiary);
 }
 
 .git-panel-summary {
@@ -1434,7 +1414,7 @@
   align-items: flex-start;
   gap: 10px;
   padding: 12px 16px 4px;
-  color: var(--panel-soft);
+  color: var(--default-400);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -1498,14 +1478,14 @@
   height: 61px;
   margin-bottom: 18px;
   border-radius: 22px;
-  background: color-mix(in oklab, var(--success) 8%, transparent);
-  color: var(--success);
+  background: var(--success);
+  color: var(--success-foreground);
 }
 
 .git-empty-subtext {
   display: block;
   margin-top: 6px;
-  color: var(--panel-soft);
+  color: var(--default-400);
   font-size: 12px;
   font-weight: 500;
 }
@@ -1516,7 +1496,7 @@
 }
 
 .git-panel-error {
-  color: color-mix(in oklab, var(--danger) 74%, black);
+  color: var(--danger);
 }
 
 .git-panel-sections {
@@ -1535,7 +1515,7 @@
 .git-panel-section {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--panel-border);
+  border-top: 1px solid var(--separator);
 }
 
 .git-panel-section:first-child {
@@ -1546,15 +1526,15 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--panel-surface-section);
-  border-bottom: 1px solid var(--panel-border);
+  background: var(--surface-tertiary);
+  border-bottom: 1px solid var(--separator);
   margin: 0;
   min-height: 34px;
   transition: background-color 120ms ease, color 120ms ease;
 }
 
 .git-panel-section-header:hover {
-  background: color-mix(in oklab, var(--foreground) 3%, var(--panel-surface-section));
+  background: var(--default);
 }
 
 .git-panel-section-title-area {
@@ -1567,7 +1547,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--panel-soft);
+  color: var(--default-400);
 }
 
 .git-panel-section-header:hover .git-panel-section-title-area {
@@ -1582,12 +1562,12 @@
 }
 
 .git-panel-section-caret {
-  color: var(--panel-muted);
+  color: var(--default-500);
   flex-shrink: 0;
 }
 
 .git-panel-section-count {
-  color: var(--panel-soft);
+  color: var(--default-400);
   font-size: 12px;
   font-weight: 600;
   margin-left: auto;
@@ -1602,7 +1582,7 @@
 
 .git-panel-section-toggle:hover {
   color: var(--foreground);
-  background: color-mix(in oklab, var(--foreground) 2%, var(--bg-mix));
+  background: var(--surface-tertiary);
 }
 
 .git-change-list {
@@ -1631,7 +1611,7 @@
   display: flex;
   flex-direction: column;
   margin-left: 26px;
-  border-left: 1px solid var(--panel-border);
+  border-left: 1px solid var(--separator);
 }
 
 .git-tree-folder-row,
@@ -1649,13 +1629,13 @@
 .git-tree-folder-row:hover,
 .workspace-tree-row:hover,
 .git-change-item:hover {
-  background: color-mix(in oklab, var(--foreground) 3.5%, transparent);
+  background: var(--surface-tertiary);
 }
 
 .git-tree-folder-row.is-active,
 .workspace-tree-row.is-active,
 .git-change-item.is-active {
-  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  background: var(--default);
   color: var(--accent);
 }
 
@@ -1732,7 +1712,7 @@
 
 .file-panel-title {
   font-size: 12px;
-  color: var(--panel-muted);
+  color: var(--default-500);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   opacity: 0.8;
@@ -1754,13 +1734,13 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  color: var(--panel-muted);
+  color: var(--default-500);
   transition: all 140ms ease;
   padding: 0;
 }
 
 .file-panel-action:hover:not(:disabled) {
-  background: var(--panel-border);
+  background: var(--separator);
   color: var(--foreground);
 }
 
@@ -1778,7 +1758,6 @@
   display: flex;
   flex-direction: column;
   padding: 8px;
-  border-top: 1px solid var(--panel-border);
   gap: 2px;
   background: transparent;
 }
@@ -1791,7 +1770,7 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1801,16 +1780,16 @@
 }
 
 .sidebar-footer-item:hover {
-  background: var(--panel-surface-section);
-  color: var(--panel-foreground);
+  background: var(--surface-tertiary);
+  color: var(--foreground);
 }
 
 .settings-modal {
   max-width: 820px !important;
   height: 560px !important;
-  background: #ffffff !important;
+  background: var(--surface) !important;
   border: 1px solid var(--border) !important;
-  box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.2) !important;
   border-radius: 12px !important;
   overflow: hidden;
   display: flex !important;
@@ -1838,7 +1817,7 @@
 }
 
 .settings-modal-close:hover {
-  background: #f3f4f6;
+  background: var(--surface-tertiary);
   color: var(--foreground);
 }
 
@@ -1855,7 +1834,7 @@
   width: 100% !important;
   height: 100% !important;
   font-family: var(--font-sans, Inter, -apple-system, system-ui, sans-serif) !important;
-  background: #ffffff !important;
+  background: var(--surface) !important;
 }
 
 .settings-page * {
@@ -2000,7 +1979,7 @@
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  color: var(--panel-muted);
+  color: var(--default-500);
 }
 
 .git-row-icon img {
@@ -2019,7 +1998,7 @@
 }
 
 .git-change-meta {
-  color: var(--panel-soft);
+  color: var(--default-400);
   font-size: 11px;
 }
 
@@ -2033,29 +2012,26 @@
   border-radius: 6px;
   font-size: 10px;
   font-weight: 800;
-  background: var(--panel-border);
-  color: var(--panel-muted);
+  background: var(--separator);
+  color: var(--default-500);
 }
 
 .git-change-badge-added,
 .git-change-badge-untracked {
-  color: var(--success);
-  background: color-mix(in oklab, var(--success) 12%, transparent);
-  border: 1px solid color-mix(in oklab, var(--success) 20%, transparent);
+  color: var(--success-foreground);
+  background: var(--success);
 }
 
 .git-change-badge-modified,
 .git-change-badge-renamed {
-  color: var(--accent);
-  background: color-mix(in oklab, var(--accent) 12%, transparent);
-  border: 1px solid color-mix(in oklab, var(--accent) 20%, transparent);
+  color: var(--accent-foreground);
+  background: var(--accent);
 }
 
 .git-change-badge-deleted,
 .git-change-badge-conflicted {
-  color: var(--danger);
-  background: color-mix(in oklab, var(--danger) 12%, transparent);
-  border: 1px solid color-mix(in oklab, var(--danger) 20%, transparent);
+  color: var(--danger-foreground);
+  background: var(--danger);
 }
 
 .git-change-tools {
@@ -2104,9 +2080,9 @@
   min-height: 64px;
   max-height: 160px;
   padding: 12px 40px 12px 16px;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--separator);
   border-radius: 15px;
-  background: color-mix(in oklab, var(--panel-surface-base) 94%, var(--bg-mix));
+  background: var(--field-background);
   color: var(--foreground);
   font: inherit;
   font-size: 12px;
@@ -2120,14 +2096,14 @@
 
 .git-commit-textarea:focus,
 .git-commit-textarea:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 28%, transparent);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
-  border-color: color-mix(in oklab, var(--accent) 24%, var(--panel-border));
+  border-color: var(--accent);
 }
 
 .git-toolbar-action.is-accent {
-  color: color-mix(in oklab, var(--accent) 72%, black);
-  background: color-mix(in oklab, var(--accent) 10%, var(--bg-mix));
+  color: var(--accent-foreground);
+  background: var(--accent);
 }
 
 @media (max-width: 860px) {
@@ -2161,7 +2137,7 @@
   display: flex;
   justify-content: center;
   padding: clamp(32px, 5vw, 64px) 32px 32px;
-  background: var(--panel-surface-editor);
+  background: var(--background);
 }
 
 .editor-empty-content {
@@ -2187,7 +2163,7 @@
 .editor-empty-copy p {
   max-width: 384px;
   margin: 0;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 15px;
   line-height: 1.7;
 }
@@ -2204,8 +2180,7 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  background:
-    linear-gradient(180deg, color-mix(in oklab, var(--surface) 96%, var(--bg-mix)) 0%, color-mix(in oklab, var(--surface) 90%, var(--background)) 100%);
+  background: var(--background);
   overflow: hidden;
 }
 
@@ -2213,9 +2188,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border-right: 1px solid color-mix(in oklab, var(--panel-border) 92%, var(--bg-mix));
-  background:
-    linear-gradient(180deg, color-mix(in oklab, var(--surface-secondary) 90%, var(--bg-mix)), color-mix(in oklab, var(--background) 92%, var(--surface)));
+  border-right: 1px solid var(--separator);
+  background: var(--surface-secondary);
 }
 
 .settings-sidebar-header,
@@ -2232,7 +2206,7 @@
 .settings-sidebar-eyebrow,
 .settings-panel-eyebrow {
   margin: 0 0 6px;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -2274,13 +2248,12 @@
 
 .settings-nav-item:hover,
 .settings-nav-item:focus-visible {
-  background: color-mix(in oklab, var(--accent) 8%, var(--bg-mix));
+  background: var(--surface-tertiary);
   outline: none;
 }
 
 .settings-nav-item.is-active {
-  background: color-mix(in oklab, var(--accent) 14%, var(--bg-mix));
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 16%, var(--panel-border));
+  background: var(--default);
 }
 
 .settings-nav-label {
@@ -2290,7 +2263,7 @@
 }
 
 .settings-nav-description {
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -2307,7 +2280,7 @@
   align-items: flex-start;
   padding-top: 24px;
   padding-bottom: 18px;
-  border-bottom: 1px solid color-mix(in oklab, var(--panel-border) 92%, var(--bg-mix));
+  border-bottom: 1px solid var(--separator);
 }
 
 .settings-panel-content {
@@ -2329,13 +2302,13 @@
 
 .settings-panel-header {
   padding: 24px 32px 20px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.03);
-  background: var(--panel-surface-base);
+  border-bottom: 1px solid var(--separator);
+  background: var(--surface);
 }
 
 .settings-panel-eyebrow {
   font-size: 12px;
-  color: var(--panel-muted);
+  color: var(--default-500);
   text-transform: uppercase;
   letter-spacing: 0.07em;
   font-weight: 700;
@@ -2344,7 +2317,7 @@
 .settings-panel-title {
   font-size: 22px;
   font-weight: 700;
-  color: var(--panel-foreground);
+  color: var(--foreground);
   margin-top: 4px;
 }
 
@@ -2449,7 +2422,7 @@
 .settings-select {
   min-height: 44px;
   border-radius: 15px;
-  background: color-mix(in oklab, var(--background) 95%, var(--bg-mix));
+  background: var(--field-background);
 }
 
 .settings-card-compact {
@@ -2470,7 +2443,7 @@
 
 .settings-inline-hint {
   margin: 0;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -2484,14 +2457,14 @@
 }
 
 .settings-empty-state {
-  background: color-mix(in oklab, var(--background) 94%, var(--bg-mix));
-  color: var(--panel-muted);
+  background: var(--surface-secondary);
+  color: var(--default-500);
 }
 
 .settings-alert-error {
-  border: 1px solid color-mix(in oklab, #d97b64 26%, var(--bg-mix));
-  background: color-mix(in oklab, #f2b4a4 18%, var(--bg-mix));
-  color: color-mix(in oklab, #7a2c1b 82%, var(--foreground));
+  border: 1px solid var(--danger);
+  background: var(--danger);
+  color: var(--danger-foreground);
 }
 
 @media (max-width: 1120px) {
@@ -2521,8 +2494,8 @@
   flex-shrink: 0;
   min-height: var(--chrome-height);
   padding: 0 var(--right-panel-content-inset) 0 16px;
-  border-bottom: 1px solid var(--panel-border);
-  background: var(--panel-surface-section);
+  border-bottom: 1px solid var(--separator);
+  background: var(--surface-secondary);
 }
 
 .agent-session-select {
@@ -2559,14 +2532,14 @@
   border: 0;
   border-radius: 13px;
   background: transparent;
-  color: var(--panel-muted);
+  color: var(--default-500);
   cursor: pointer;
   transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
 }
 
 .agent-toolbar-button:hover {
   color: var(--foreground);
-  background: color-mix(in oklab, var(--foreground) 4%, var(--bg-mix));
+  background: var(--surface-tertiary);
 }
 
 .agent-toolbar-button:disabled {
@@ -2575,7 +2548,7 @@
 }
 
 .agent-toolbar-button:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 42%, var(--bg-mix));
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -2628,7 +2601,7 @@
 
 .agent-select-item-meta {
   overflow: hidden;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2640,13 +2613,13 @@
 
 .agent-status-inline p {
   margin: 0;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 12px;
   line-height: 1.5;
 }
 
 .agent-status-inline.is-error p {
-  color: color-mix(in oklab, var(--danger) 84%, black);
+  color: var(--danger);
 }
 
 .agent-overlay-layer {
@@ -2664,11 +2637,11 @@
   max-height: min(416px, calc(100% - 128px));
   overflow: hidden;
   border-top: 0;
-  border-bottom: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--separator);
   border-left: 0;
   border-right: 0;
   border-radius: 0;
-  background: var(--panel-surface-section);
+  background: var(--surface-tertiary);
   box-shadow: none;
   backdrop-filter: none;
 }
@@ -2693,7 +2666,7 @@
   display: grid;
   gap: 8px;
   padding: 14px 16px;
-  border-top: 1px solid var(--panel-border);
+  border-top: 1px solid var(--separator);
 }
 
 .agent-auth-provider:first-child {
@@ -2712,7 +2685,7 @@
 }
 
 .agent-auth-provider-meta {
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -2734,17 +2707,18 @@
 }
 
 .agent-auth-save {
-  color: color-mix(in oklab, var(--accent) 82%, black);
-  background: color-mix(in oklab, var(--accent) 10%, var(--bg-mix));
-  border: 1px solid color-mix(in oklab, var(--accent) 16%, var(--background));
+  color: var(--accent-foreground);
+  background: var(--accent);
+  border: 1px solid var(--border);
 }
 
 .agent-auth-save:hover {
-  background: color-mix(in oklab, var(--accent) 14%, var(--bg-mix));
+  background: var(--accent);
+  opacity: 0.9;
 }
 
 .agent-auth-clear {
-  color: var(--panel-muted);
+  color: var(--default-500);
 }
 
 .agent-overlay-scroll {
@@ -2764,21 +2738,21 @@
   width: 100%;
   padding: 0;
   border: 0;
-  background: transparent;
+  background: var(--surface);
   transition: background-color 140ms ease;
 }
 
 .agent-session-option+.agent-session-option {
-  border-top: 1px solid var(--panel-border);
+  border-top: 1px solid var(--separator);
 }
 
 .agent-session-option:hover,
 .agent-session-option:focus-within {
-  background: color-mix(in oklab, var(--foreground) 2%, var(--bg-mix));
+  background: var(--surface-tertiary);
 }
 
 .agent-session-option.is-active {
-  background: color-mix(in oklab, var(--accent) 5%, var(--bg-mix));
+  background: var(--default);
 }
 
 .agent-session-select-button {
@@ -2802,7 +2776,7 @@
   height: 32px;
   margin-right: 8px;
   border-radius: 11px;
-  color: var(--panel-muted);
+  color: var(--default-500);
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms ease, color 140ms ease, background-color 140ms ease;
@@ -2815,8 +2789,8 @@
 }
 
 .agent-session-delete-button:hover {
-  color: color-mix(in oklab, var(--danger) 72%, black);
-  background: color-mix(in oklab, var(--danger) 7%, var(--bg-mix));
+  color: var(--danger-foreground);
+  background: var(--danger);
 }
 
 .agent-messages-scroll {
@@ -2839,7 +2813,7 @@
 
 .agent-empty-chat p {
   margin: 0;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -2850,7 +2824,7 @@
   gap: 8px;
   margin-top: 2px;
   padding: 3px 0;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -2860,19 +2834,19 @@
   height: 7px;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--panel-border) 88%, var(--bg-mix));
+  background: var(--separator);
 }
 
 .agent-session-status-dot-idle {
-  background: color-mix(in oklab, var(--panel-soft) 44%, var(--bg-mix));
+  background: var(--default);
 }
 
 .agent-session-status-dot-running {
-  background: color-mix(in oklab, var(--accent) 78%, var(--bg-mix));
+  background: var(--accent);
 }
 
 .agent-session-status-dot-error {
-  background: color-mix(in oklab, var(--danger) 78%, var(--bg-mix));
+  background: var(--danger);
 }
 
 .agent-session-status-label {
@@ -2881,15 +2855,15 @@
 }
 
 .agent-session-status-label-idle {
-  color: var(--panel-soft);
+  color: var(--default-400);
 }
 
 .agent-session-status-label-running {
-  color: color-mix(in oklab, var(--accent) 60%, black);
+  color: var(--accent);
 }
 
 .agent-session-status-label-error {
-  color: color-mix(in oklab, var(--danger) 72%, black);
+  color: var(--danger);
 }
 
 .agent-session-status-detail {
@@ -2910,9 +2884,9 @@
   align-self: flex-end;
   max-width: 88%;
   padding: 13px 15px;
-  border: 1px solid color-mix(in oklab, var(--accent) 14%, var(--background));
+  border: 1px solid var(--separator);
   border-radius: 15px;
-  background: color-mix(in oklab, var(--accent) 7%, var(--surface));
+  background: var(--default);
 }
 
 .agent-message-assistant {
@@ -2922,33 +2896,33 @@
 .agent-message-system {
   gap: 6px;
   padding: 12px 13px;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--separator);
   border-radius: 15px;
-  background: color-mix(in oklab, var(--panel-surface-base) 76%, var(--background));
+  background: var(--surface-secondary);
 }
 
 .agent-message-custom {
   gap: 6px;
   padding: 12px 13px;
-  border: 1px solid color-mix(in oklab, var(--accent) 16%, var(--panel-border));
+  border: 1px solid var(--separator);
   border-radius: 15px;
-  background: color-mix(in oklab, var(--accent) 5%, var(--panel-surface-base));
+  background: var(--surface-secondary);
 }
 
 .agent-message-tool {
   gap: 8px;
   padding: 5px;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--separator);
   border-radius: 15px;
-  background: color-mix(in oklab, var(--panel-surface-base) 72%, var(--background));
+  background: var(--surface-secondary);
 }
 
 .agent-message-tool.is-running {
-  border-color: color-mix(in oklab, var(--accent) 20%, var(--panel-border));
+  border-color: var(--accent);
 }
 
 .agent-message.is-error {
-  border-color: color-mix(in oklab, var(--danger) 22%, var(--background));
+  border-color: var(--danger);
 }
 
 .agent-message-meta {
@@ -2961,7 +2935,7 @@
 .agent-message-role {
   font-size: 11px;
   font-weight: 600;
-  color: var(--panel-soft);
+  color: var(--default-400);
 }
 
 .agent-message-label {
@@ -2970,8 +2944,8 @@
   min-height: 19px;
   padding: 0px 7px;
   border-radius: 999px;
-  color: color-mix(in oklab, var(--accent) 72%, black);
-  background: color-mix(in oklab, var(--accent) 10%, var(--bg-mix));
+  color: var(--accent-foreground);
+  background: var(--accent);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -2993,19 +2967,19 @@
 }
 
 .agent-message-toggle:hover {
-  background: color-mix(in oklab, var(--panel-border) 22%, transparent);
+  background: var(--surface-tertiary);
 }
 
 .agent-message-toggle:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 32%, var(--bg-mix));
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 
 .agent-message-toggle-caret {
   width: 9px;
   height: 9px;
-  border-right: 2px solid var(--panel-soft);
-  border-bottom: 2px solid var(--panel-soft);
+  border-right: 2px solid var(--default-400);
+  border-bottom: 2px solid var(--default-400);
   transform: rotate(-45deg) translateY(-1px);
   transition: transform 160ms ease, border-color 160ms ease;
 }
@@ -3033,7 +3007,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--panel-soft);
+  color: var(--default-400);
   cursor: pointer;
 }
 
@@ -3042,7 +3016,7 @@
 }
 
 .agent-disclosure-toggle:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 32%, var(--bg-mix));
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -3069,18 +3043,18 @@
 }
 
 .agent-message-status-running {
-  color: color-mix(in oklab, var(--accent) 60%, black);
-  background: color-mix(in oklab, var(--accent) 13%, var(--bg-mix));
+  color: var(--accent);
+  background: var(--default);
 }
 
 .agent-message-status-done {
-  color: color-mix(in oklab, var(--foreground) 72%, var(--panel-soft));
-  background: color-mix(in oklab, var(--panel-border) 38%, var(--bg-mix));
+  color: var(--foreground);
+  background: var(--surface-secondary);
 }
 
 .agent-message-status-error {
-  color: color-mix(in oklab, var(--danger) 72%, black);
-  background: color-mix(in oklab, var(--danger) 10%, var(--bg-mix));
+  color: var(--danger);
+  background: var(--default);
 }
 
 .agent-message-body {
@@ -3134,19 +3108,20 @@
 }
 
 .agent-markdown a {
-  color: color-mix(in oklab, var(--accent) 78%, black);
+  color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 0.14em;
 }
 
 .agent-markdown a:hover {
-  color: color-mix(in oklab, var(--accent) 66%, black);
+  text-decoration: none;
+  opacity: 0.8;
 }
 
 .agent-markdown code {
-  padding: 0px 4px;
+  padding: 2px 4px;
   border-radius: 4px;
-  background: color-mix(in oklab, var(--panel-border) 26%, var(--bg-mix));
+  background: var(--surface-secondary);
   font-size: 0.78em;
   font-family: var(--font-mono);
 }
@@ -3154,9 +3129,9 @@
 .agent-markdown pre {
   overflow-x: auto;
   padding: 12px 13px;
-  border: 1px solid color-mix(in oklab, var(--panel-border) 88%, transparent);
+  border: 1px solid var(--separator);
   border-radius: 12px;
-  background: color-mix(in oklab, var(--panel-surface-base) 82%, black 2%);
+  background: var(--surface-secondary);
 }
 
 .agent-markdown pre code {
@@ -3166,8 +3141,8 @@
 
 .agent-markdown blockquote {
   padding-left: 13px;
-  border-left: 2px solid color-mix(in oklab, var(--panel-border) 92%, transparent);
-  color: color-mix(in oklab, var(--muted) 86%, var(--foreground));
+  border-left: 2px solid var(--separator);
+  color: var(--muted);
 }
 
 .agent-markdown table {
@@ -3178,13 +3153,13 @@
 .agent-markdown th,
 .agent-markdown td {
   padding: 6px 8px;
-  border: 1px solid color-mix(in oklab, var(--panel-border) 90%, transparent);
+  border: 1px solid var(--separator);
   text-align: left;
   vertical-align: top;
 }
 
 .agent-markdown th {
-  color: var(--panel-soft);
+  color: var(--default-400);
   font-size: 12px;
   font-weight: 600;
 }
@@ -3196,8 +3171,8 @@
 .agent-composer {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--panel-border);
-  background: var(--panel-surface-section);
+  border-top: 1px solid var(--separator);
+  background: var(--surface-secondary);
 }
 
 .agent-composer-shell {
@@ -3343,7 +3318,7 @@
 
 .agent-model-separator {
   flex-shrink: 0;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: inherit;
   user-select: none;
 }
@@ -3391,9 +3366,9 @@
   z-index: 8;
   max-height: 224px;
   overflow: auto;
-  border-top: 1px solid var(--panel-border);
-  border-bottom: 1px solid var(--panel-border);
-  background: var(--panel-surface-section);
+  border-top: 1px solid var(--separator);
+  border-bottom: 1px solid var(--separator);
+  background: var(--surface-secondary);
 }
 
 .agent-composer-option {
@@ -3401,7 +3376,7 @@
   width: 100%;
   padding: 12px 0;
   border: 0;
-  border-top: 1px solid var(--panel-border);
+  border-top: 1px solid var(--separator);
   background: transparent;
   text-align: left;
   transition: background-color 140ms ease;
@@ -3414,7 +3389,7 @@
 .agent-composer-option:hover,
 .agent-composer-option:focus-visible,
 .agent-composer-option.is-active {
-  background: color-mix(in oklab, var(--foreground) 2%, var(--bg-mix));
+  background: var(--surface-tertiary);
   outline: none;
 }
 
@@ -3449,18 +3424,19 @@
 }
 
 .agent-send-button:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--accent) 42%, var(--bg-mix));
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
 .agent-send-button {
-  color: color-mix(in oklab, var(--accent) 82%, black);
-  background: color-mix(in oklab, var(--accent) 10%, var(--bg-mix));
-  border: 1px solid color-mix(in oklab, var(--accent) 16%, var(--background));
+  color: var(--accent-foreground);
+  background: var(--accent);
+  border: 1px solid var(--border);
 }
 
 .agent-send-button:hover {
-  background: color-mix(in oklab, var(--accent) 14%, var(--bg-mix));
+  background: var(--accent);
+  opacity: 0.9;
 }
 
 @media (max-width: 1360px) {
@@ -3513,7 +3489,7 @@
 
   .panel-sidebar {
     min-height: 384px;
-    border-bottom: 1px solid var(--panel-border);
+    border-bottom: 1px solid var(--separator);
   }
 
   .editor-empty-actions {
@@ -3528,7 +3504,7 @@
 
   .settings-sidebar {
     border-right: 0;
-    border-bottom: 1px solid color-mix(in oklab, var(--panel-border) 92%, var(--bg-mix));
+    border-bottom: 1px solid var(--separator);
   }
 
   .settings-sidebar-header,
@@ -3578,6 +3554,7 @@
     transition: none;
   }
 }
+
 [data-command-active='true'] {
   scroll-margin: 80px 0;
 }
@@ -3605,7 +3582,7 @@
   border-radius: 8px;
   border: 0;
   background: transparent;
-  color: var(--panel-muted);
+  color: var(--default-500);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -3613,24 +3590,21 @@
 }
 
 .settings-radio-item:hover {
-  color: var(--panel-foreground);
-  background: color-mix(in oklab, var(--foreground) 4%, var(--bg-mix));
+  color: var(--foreground);
+  background: var(--surface-tertiary);
 }
 
 .settings-radio-item.is-active {
-  background: var(--surface);
+  background: var(--default);
   color: var(--accent);
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.05),
-    0 0 0 1px var(--border);
+  box-shadow: 0 0 0 1px var(--border);
   font-weight: 600;
 }
 
 .dark .settings-radio-item.is-active {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border);
+  box-shadow: 0 0 0 1px var(--border);
 }
 
 .dark [data-slot="backdrop"] {
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: var(--overlay);
 }
-
