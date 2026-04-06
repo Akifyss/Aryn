@@ -35,7 +35,7 @@ type CommandPaletteProps = {
 }
 
 const CustomKbd = ({ children, className = '' }: { children: React.ReactNode, className?: string }) => (
-  <span className={`px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-[10px] font-bold text-slate-400 shadow-sm leading-none flex items-center justify-center min-w-[20px] ${className}`}>
+  <span className={`px-1.5 py-0.5 rounded border border-(--border) bg-(--surface-secondary) text-[10px] font-bold text-(--muted) shadow-sm leading-none flex items-center justify-center min-w-[20px] ${className}`}>
     {children}
   </span>
 )
@@ -224,14 +224,14 @@ export function CommandPalette({
             <Modal.Body className='p-0 m-0'>
               {/* Header */}
               <div className='flex items-center px-6 py-5 gap-3.5 bg-[var(--surface)]'>
-                <Icon icon='lucide:search' className='text-slate-400' width={22} />
+                <Icon icon='lucide:search' className='text-(--muted)' width={22} />
                 <input
                   ref={inputRef}
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder='Search...'
                   style={{ outline: 'none', boxShadow: 'none' }}
-                  className='flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[16px] text-[var(--foreground)] placeholder:text-[var(--muted)] opacity-80 font-normal'
+                  className='flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[16px] text-(--foreground) placeholder:text-(--muted) opacity-80 font-normal'
                 />
                 <div className='flex items-center gap-1.5 opacity-30 select-none'>
                    <Kbd className='bg-transparent border-none shadow-none text-xs text-[var(--muted)] font-bold'>⌘</Kbd>
@@ -289,13 +289,13 @@ export function CommandPalette({
                                   style={{ outline: 'none' }}
                                 >
                                   <div className='flex items-center gap-4 w-full pointer-events-none'>
-                                    <div className={`transition-colors flex-shrink-0 ${isSelected ? 'text-slate-900 border-slate-300' : 'text-slate-400'}`}>
+                                    <div className={`transition-colors flex-shrink-0 ${isSelected ? 'text-(--foreground)' : 'text-(--muted)'}`}>
                                       <Icon icon={item.icon} width={18} />
                                     </div>
                                     <div className='flex flex-1 min-w-0 flex-col gap-0'>
-                                      <span className={`text-[14px] font-semibold truncate ${isSelected ? 'text-[var(--foreground)]' : 'text-[var(--foreground)] opacity-80'}`}>{item.label}</span>
+                                      <span className={`text-[14px] font-semibold truncate ${isSelected ? 'text-(--foreground)' : 'text-(--foreground) opacity-80'}`}>{item.label}</span>
                                       {item.description && (
-                                        <span className={`text-[10px] truncate opacity-40 font-normal ${isSelected ? 'text-slate-500' : 'text-slate-400'}`}>
+                                        <span className={`text-[10px] truncate opacity-40 font-normal ${isSelected ? 'text-(--foreground)' : 'text-(--muted)'}`}>
                                           {item.description}
                                         </span>
                                       )}
@@ -316,7 +316,7 @@ export function CommandPalette({
                     })})()}
                   </div>
                 ) : (
-                  <div className='py-24 flex flex-col items-center justify-center text-slate-300 gap-4 opacity-40'>
+                  <div className='py-24 flex flex-col items-center justify-center text-(--muted) gap-4 opacity-40'>
                     <Icon icon='lucide:search' width={32} className='opacity-10' />
                     <p className='text-sm italic'>No results found</p>
                   </div>

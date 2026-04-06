@@ -1789,7 +1789,7 @@
   height: 560px !important;
   background: var(--surface) !important;
   border: 1px solid var(--border) !important;
-  box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 0 0 1px var(--border) !important;
   border-radius: 12px !important;
   overflow: hidden;
   display: flex !important;
@@ -3582,7 +3582,7 @@
   border-radius: 8px;
   border: 0;
   background: transparent;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;

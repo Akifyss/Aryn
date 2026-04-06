@@ -96,7 +96,7 @@ function FileRowActions({
             >
               <Dropdown.Item id='rename' textValue='Rename'>
                 <div className='flex items-center gap-2'>
-                  <Edit2Line size={16} className='text-muted-foreground' />
+                  <Edit2Line size={16} className='text-(--muted)' />
                   <Label>Rename</Label>
                 </div>
               </Dropdown.Item>

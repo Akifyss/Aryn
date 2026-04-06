@@ -225,7 +225,8 @@ function App() {
       // Also set the theme-color meta tag for better UI integration
       const meta = window.document.querySelector('meta[name="theme-color"]')
       if (meta) {
-        meta.setAttribute('content', t === 'dark' ? '#09090b' : '#ffffff')
+        // Match official OKLCH background tokens
+        meta.setAttribute('content', t === 'dark' ? '#242526' : '#f5f6f8')
       }
     }
 
