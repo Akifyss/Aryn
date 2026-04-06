@@ -1888,7 +1888,7 @@
 
 .settings-sidebar {
   width: 180px;
-  background: var(--surface-secondary);
+  background: var(--background);
   border-right: 1px solid var(--border);
   padding: 24px 8px;
   display: flex;
@@ -1935,12 +1935,12 @@
 }
 
 .settings-nav-item:hover {
-  background: var(--surface-secondary);
+  background: var(--default);
   color: var(--foreground);
 }
 
 .settings-nav-item.is-active {
-  background: var(--surface-tertiary);
+  background: var(--default);
   color: var(--foreground);
   font-weight: 600;
 }
