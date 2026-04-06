@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Button, Input } from '@heroui/react'
+import { useSettingsStore, type AppTheme } from '@/hooks/use-settings-store'
 import type { AgentProviderAuthState, AgentWorkspaceState } from '@/features/agent/types'
 import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '@/features/workspace/types'
 
-export type SettingsSectionId = 'file-icons' | 'providers'
+export type SettingsSectionId = 'general' | 'file-icons' | 'providers'
 
 type SettingsViewProps = {
   activeSection: SettingsSectionId
@@ -22,6 +23,11 @@ type SettingsViewProps = {
 type AuthProviderKey = 'google' | 'openai' | 'openrouter'
 
 const SETTINGS_SECTIONS: Array<{ description: string, id: SettingsSectionId, label: string }> = [
+  {
+    description: 'Application appearance and behavior.',
+    id: 'general',
+    label: 'Appearance',
+  },
   {
     description: 'Manage API keys for Pi Agent providers.',
     id: 'providers',
@@ -69,9 +75,18 @@ export function SettingsDialog({
   onStatusMessage,
   workspacePath,
 }: SettingsViewProps) {
+  const { theme, setTheme } = useSettingsStore()
   const [authDrafts, setAuthDrafts] = useState<Record<AuthProviderKey, string>>(EMPTY_AUTH_DRAFTS)
   const [isSavingAuth, setIsSavingAuth] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
+
+  // Resolve theme for portal context
+  const resolvedTheme = useMemo(() => {
+    if (theme === 'auto') {
+      return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    }
+    return theme
+  }, [theme])
 
   const authProviders: Array<{
     key: AuthProviderKey
@@ -147,7 +162,7 @@ export function SettingsDialog({
   }
 
   return (
-    <div className='settings-page'>
+    <div className={`settings-page ${resolvedTheme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}>
       <aside className='settings-sidebar'>
         <div className='settings-sidebar-header'>
           <h2 className='settings-sidebar-title'>Settings</h2>
@@ -173,7 +188,7 @@ export function SettingsDialog({
         <div className='settings-panel-header'>
           <div>
             <h3 className='settings-panel-title'>
-              {activeSection === 'providers' ? 'Providers' : 'File Icons'}
+              {activeSection === 'general' ? 'Appearance' : activeSection === 'providers' ? 'Providers' : 'File Icons'}
             </h3>
           </div>
         </div>
@@ -183,7 +198,34 @@ export function SettingsDialog({
             <div className='settings-alert settings-alert-error'>{panelError}</div>
           ) : null}
 
-          {activeSection === 'providers' ? (
+          {activeSection === 'general' ? (
+            <section className='settings-card'>
+              <div className='settings-copy-block'>
+                <h4>Theme</h4>
+                <p>Choose your preferred application theme. 'Sync with system' will follow your computer's light/dark mode settings.</p>
+              </div>
+
+              <div className='settings-theme-switcher'>
+                <div className='settings-field'>
+                  <span className='settings-field-label'>Mode</span>
+                  <div className='settings-radio-group'>
+                    {(['light', 'dark', 'auto'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type='button'
+                        className={`settings-radio-item ${theme === mode ? 'is-active' : ''}`}
+                        onClick={() => setTheme(mode)}
+                      >
+                        <span className='settings-radio-label'>
+                          {mode === 'light' ? 'Light' : mode === 'dark' ? 'Dark' : 'Sync with system'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+          ) : activeSection === 'providers' ? (
             <section className='settings-card'>
               <div className='settings-copy-block'>
                 <h4>Provider Keys</h4>

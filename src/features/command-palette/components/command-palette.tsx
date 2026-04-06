@@ -31,6 +31,7 @@ type CommandPaletteProps = {
   }[]
   onOpenFile: (path: string) => void
   onOpenSession: (id: string) => void
+  theme: 'light' | 'dark' | 'auto'
 }
 
 const CustomKbd = ({ children, className = '' }: { children: React.ReactNode, className?: string }) => (
@@ -46,7 +47,8 @@ export function CommandPalette({
   sessions,
   actions,
   onOpenFile,
-  onOpenSession
+  onOpenSession,
+  theme
 }: CommandPaletteProps) {
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -218,10 +220,10 @@ export function CommandPalette({
           scroll='inside' 
           className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'
         >
-          <Modal.Dialog className='p-0 m-0 relative w-full max-w-xl bg-white shadow-2xl rounded-2xl border border-slate-200 overflow-hidden outline-none'>
+          <Modal.Dialog className={`p-0 m-0 relative w-full max-w-xl bg-[var(--surface)] shadow-2xl rounded-2xl border border-[var(--border)] overflow-hidden outline-none ${theme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}>
             <Modal.Body className='p-0 m-0'>
               {/* Header */}
-              <div className='flex items-center px-6 py-5 gap-3.5 bg-white'>
+              <div className='flex items-center px-6 py-5 gap-3.5 bg-[var(--surface)]'>
                 <Icon icon='lucide:search' className='text-slate-400' width={22} />
                 <input
                   ref={inputRef}
@@ -229,15 +231,15 @@ export function CommandPalette({
                   onChange={e => setQuery(e.target.value)}
                   placeholder='Search...'
                   style={{ outline: 'none', boxShadow: 'none' }}
-                  className='flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[16px] text-slate-800 placeholder:text-slate-300 font-normal'
+                  className='flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[16px] text-[var(--foreground)] placeholder:text-[var(--muted)] opacity-80 font-normal'
                 />
                 <div className='flex items-center gap-1.5 opacity-30 select-none'>
-                   <Kbd className='bg-transparent border-none shadow-none text-xs text-slate-400 font-bold'>⌘</Kbd>
-                   <Kbd className='bg-transparent border-none shadow-none text-xs text-slate-400 font-bold'>K</Kbd>
+                   <Kbd className='bg-transparent border-none shadow-none text-xs text-[var(--muted)] font-bold'>⌘</Kbd>
+                   <Kbd className='bg-transparent border-none shadow-none text-xs text-[var(--muted)] font-bold'>K</Kbd>
                 </div>
               </div>
 
-              <div className='h-px bg-slate-100 mx-6' />
+              <div className='h-px bg-[var(--border)] mx-6' />
 
               {/* Viewport with explicit scrolling container */}
               <ScrollShadow 
@@ -262,7 +264,7 @@ export function CommandPalette({
                         
                         return (
                           <div key={cat} className='flex flex-col gap-1 px-2'>
-                            <header className='px-4 py-1 text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] opacity-80 select-none'>
+                            <header className='px-4 py-1 text-[10px] font-black text-[var(--muted)] uppercase tracking-[0.25em] opacity-80 select-none'>
                               {label}
                             </header>
                             <ListBox 
@@ -282,7 +284,7 @@ export function CommandPalette({
                                   key={item.id}
                                   data-command-active={isSelected ? 'true' : 'false'}
                                   textValue={item.label}
-                                  className={`rounded-xl px-4 py-2.5 transition-all outline-none focus:outline-none !outline-none focus:ring-0 ring-0 hover:!bg-slate-50 ${isSelected ? 'bg-slate-100' : 'bg-transparent'}`}
+                                  className={`rounded-xl px-4 py-2.5 transition-all outline-none focus:outline-none !outline-none focus:ring-0 ring-0 hover:!bg-[var(--surface-secondary)] ${isSelected ? 'bg-[var(--surface-tertiary)]' : 'bg-transparent'}`}
                                   onPress={() => item.onSelect()}
                                   style={{ outline: 'none' }}
                                 >
@@ -291,7 +293,7 @@ export function CommandPalette({
                                       <Icon icon={item.icon} width={18} />
                                     </div>
                                     <div className='flex flex-1 min-w-0 flex-col gap-0'>
-                                      <span className={`text-[14px] font-semibold truncate ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>{item.label}</span>
+                                      <span className={`text-[14px] font-semibold truncate ${isSelected ? 'text-[var(--foreground)]' : 'text-[var(--foreground)] opacity-80'}`}>{item.label}</span>
                                       {item.description && (
                                         <span className={`text-[10px] truncate opacity-40 font-normal ${isSelected ? 'text-slate-500' : 'text-slate-400'}`}>
                                           {item.description}
@@ -299,7 +301,7 @@ export function CommandPalette({
                                       )}
                                     </div>
                                     {isSelected && (
-                                      <div className='flex items-center gap-1.5 px-2 py-0.5 rounded border border-slate-200 bg-white text-[9px] font-bold text-slate-400 shadow-xs uppercase tracking-tighter'>
+                                      <div className='flex items-center gap-1.5 px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--surface)] text-[9px] font-bold text-[var(--muted)] shadow-xs uppercase tracking-tighter'>
                                         <span>ENTER</span>
                                         <Icon icon='lucide:corner-down-left' width={10} />
                                       </div>
@@ -322,7 +324,7 @@ export function CommandPalette({
               </ScrollShadow>
 
               {/* Footer */}
-              <div className='px-8 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[10px] text-slate-400 font-bold tracking-tight select-none'>
+              <div className='px-8 py-4 border-t border-[var(--border)] bg-[var(--surface)] flex items-center justify-between text-[10px] text-[var(--muted)] font-bold tracking-tight select-none'>
                 <div className='flex items-center gap-8'>
                   <div className='flex items-center gap-2.5'>
                     <div className='flex gap-1'>

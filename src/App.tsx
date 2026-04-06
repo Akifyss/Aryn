@@ -36,6 +36,7 @@ import type {
   WorkspaceIconThemeCatalogOption,
 } from '@/features/workspace/types'
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
+import { useSettingsStore } from '@/hooks/use-settings-store'
 import './App.css'
 
 function getBaseName(filePath: string) {
@@ -201,14 +202,50 @@ function createDiffTab(change: GitChangeItem, scope: GitChangeScope, diff: Await
   }
 }
 
+
 function App() {
   const platform = window.appApi.platform
+  const { theme, setTheme } = useSettingsStore()
+
+  // Apply theme to document root
+  useEffect(() => {
+    const root = window.document.documentElement
+    const applyTheme = (t: 'light' | 'dark') => {
+      const body = window.document.body
+      const root = window.document.documentElement
+      
+      // Obsidian-style pattern: apply to body
+      body.classList.remove('theme-light', 'theme-dark')
+      body.classList.add(`theme-${t}`)
+      
+      // Keep data-theme on root for HeroUI/Tailwind compatibility
+      root.setAttribute('data-theme', t)
+      root.classList.remove('light', 'dark')
+      root.classList.add(t)
+    }
+
+    if (theme === 'auto') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+      applyTheme(systemTheme)
+
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+      const handleChange = (e: MediaQueryListEvent) => {
+        applyTheme(e.matches ? 'dark' : 'light')
+      }
+      mediaQuery.addEventListener('change', handleChange)
+      return () => mediaQuery.removeEventListener('change', handleChange)
+    }
+
+    applyTheme(theme)
+  }, [theme])
+
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
+
   const [isImportingIconTheme, setIsImportingIconTheme] = useState(false)
   const [isApplyingIconTheme, setIsApplyingIconTheme] = useState(false)
   const [isSettingsTabOpen, setIsSettingsTabOpen] = useState(false)
   const [isSettingsTabActive, setIsSettingsTabActive] = useState(false)
-  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('providers')
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('general')
   const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
   const [iconTheme, setIconTheme] = useState<WorkspaceIconTheme | null>(null)
   const [iconThemeOptions, setIconThemeOptions] = useState<WorkspaceIconThemeCatalogOption[]>([])
@@ -218,7 +255,8 @@ function App() {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'file-icons' | 'agent'>('file-icons')
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'file-icons' | 'agent'>('general')
+
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(DEFAULT_LEFT_SIDEBAR_WIDTH)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(DEFAULT_RIGHT_SIDEBAR_WIDTH)
   const [gitPanelHeight, setGitPanelHeight] = useState(DEFAULT_GIT_PANEL_HEIGHT)
@@ -1833,6 +1871,7 @@ function App() {
                   updateTabContent(currentFilePath, nextValue)
                 }}
                 value={currentFileContent}
+                theme={theme}
               />
             ) : null}
 
@@ -1844,6 +1883,7 @@ function App() {
                   updateTabContent(activeFileTab.filePath, nextValue)
                 }}
                 value={currentFileContent}
+                theme={theme}
               />
             ) : null}
           </div>
@@ -1883,7 +1923,7 @@ function App() {
           variant='opaque'
         >
           <Modal.Container scroll='inside' className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'>
-            <Modal.Dialog className='settings-modal p-0 m-0 relative'>
+            <Modal.Dialog className={`settings-modal p-0 m-0 relative ${theme === 'dark' ? 'dark' : ''}`}>
               <Modal.CloseTrigger 
                 className='settings-modal-close'
                 aria-label='Close settings'
@@ -1918,6 +1958,7 @@ function App() {
         onOpenFile={openFile}
         onOpenSession={handleOpenSession}
         actions={commandPaletteActions}
+        theme={theme}
       />
     </div>
   )

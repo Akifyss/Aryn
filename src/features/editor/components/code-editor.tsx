@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { getCodeLanguage } from '@/features/workspace/lib/file-types'
 import { Editor, configureMonaco, type MonacoEditorOptions } from '@/features/editor/lib/monaco'
 
@@ -6,6 +7,7 @@ type CodeEditorProps = {
   filePath: string
   value: string
   onChange: (nextValue: string) => void
+  theme?: "light" | "dark" | "auto"
 }
 
 configureMonaco()
@@ -36,7 +38,15 @@ export function CodeEditor({
   filePath,
   onChange,
   value,
+  theme = "auto",
 }: CodeEditorProps) {
+  const monacoTheme = React.useMemo(() => {
+    if (theme === "auto") {
+      return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "vs-dark" : "vs"
+    }
+    return theme === "dark" ? "vs-dark" : "vs"
+  }, [theme])
+
   return (
     <div className='code-editor-shell'>
       <Editor
@@ -47,7 +57,7 @@ export function CodeEditor({
           readOnly: disabled,
         }}
         path={filePath}
-        theme='vs'
+        theme={monacoTheme}
         value={value}
         onChange={(nextValue) => {
           onChange(nextValue ?? '')

@@ -68,6 +68,7 @@ export interface SimpleEditorProps {
   disabled?: boolean
   value: string
   onChange: (nextValue: string) => void
+  theme?: "light" | "dark" | "auto"
 }
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -177,7 +178,7 @@ const MainToolbarContent = ({
 
     {isMobile && <ToolbarSeparator />}
 
-    <ToolbarGroup>
+    <ToolbarGroup className="tiptap-theme-toggle-group">
       <ThemeToggle theme={theme} onToggle={onThemeToggle} />
     </ToolbarGroup>
   </>
@@ -216,13 +217,22 @@ export function SimpleEditor({
   disabled = false,
   onChange,
   value,
+  theme = "auto",
 }: SimpleEditorProps) {
   const isMobile = useIsMobile()
   const { height } = useWindowSize()
   const [mobileView, setMobileView] = React.useState<
     "main" | "highlighter" | "link"
   >("main")
-  const [theme, setTheme] = React.useState<"light" | "dark">("light")
+  
+  // Resolve theme from prop or system preference
+  const resolvedTheme = React.useMemo(() => {
+    if (theme === "auto") {
+      return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+    }
+    return theme
+  }, [theme])
+
   const lastMarkdownRef = React.useRef(normalizeMarkdownForComparison(value))
   const toolbarRef = React.useRef<HTMLDivElement>(null)
 
@@ -327,18 +337,18 @@ export function SimpleEditor({
 
   React.useEffect(() => {
     const root = document.documentElement
-    root.dataset.tiptapTheme = theme
+    root.dataset.tiptapTheme = resolvedTheme
 
     return () => {
       delete root.dataset.tiptapTheme
     }
-  }, [theme])
+  }, [resolvedTheme])
 
   return (
     <div
-      className={`simple-editor-wrapper${theme === "dark" ? " dark" : ""}`}
+      className={`simple-editor-wrapper${resolvedTheme === "dark" ? " dark" : ""}`}
       data-disabled={disabled || undefined}
-      data-theme={theme}
+      data-theme={resolvedTheme}
     >
       <EditorContext.Provider value={{ editor }}>
         <Toolbar
@@ -356,12 +366,8 @@ export function SimpleEditor({
               isMobile={isMobile}
               onHighlighterClick={() => setMobileView("highlighter")}
               onLinkClick={() => setMobileView("link")}
-              onThemeToggle={() =>
-                setTheme((currentTheme) =>
-                  currentTheme === "dark" ? "light" : "dark"
-                )
-              }
-              theme={theme}
+              onThemeToggle={() => {}} // Controlled globally
+              theme={resolvedTheme}
             />
           ) : (
             <MobileToolbarContent
