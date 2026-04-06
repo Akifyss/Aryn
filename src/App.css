@@ -940,6 +940,11 @@
   -webkit-app-region: no-drag;
 }
 
+/* Offset the 1px negative margin ONLY when the first tab is allowed to overlap (collapsed state) */
+.app-shell[data-left-collapsed='true'] .file-tabs-scroller {
+  padding-left: 1px;
+}
+
 .file-tabs-drag-spacer {
   flex: 1 1 auto;
   min-width: 0;
@@ -984,10 +989,17 @@
   border-left: 1px solid transparent;
   border-top: 1px solid transparent;
   border-bottom: 1px solid var(--separator);
+  margin-left: -1px;
   background: transparent;
   transition: background-color 140ms ease, color 140ms ease;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+/* When sidebar is visible, the very first tab shouldn't have a left border or negative margin (to avoid redundant line with sidebar) */
+.app-shell[data-left-collapsed='false'] .file-tab:first-child {
+  border-left-width: 0;
+  margin-left: 0;
 }
 
 .file-tab.is-active {
@@ -995,7 +1007,6 @@
   border-top-color: var(--separator);
   border-left-color: var(--separator);
   border-bottom: 1px solid transparent;
-  margin-left: -1px;
   z-index: 5;
 }
 
