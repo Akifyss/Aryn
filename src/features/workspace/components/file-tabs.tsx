@@ -15,7 +15,7 @@ type FileTabsProps = {
 
 function getBaseName(tab: WorkspaceDisplayTab) {
   if (tab.kind === 'settings') {
-    return 'Settings'
+    return '设置'
   }
 
   return tab.kind === 'diff'

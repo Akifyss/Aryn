@@ -1753,7 +1753,7 @@ function App() {
             onClick={() => setIsSettingsOpen(true)}
           >
             <Icon icon='lucide:settings' width={16} height={16} />
-            <span>Settings</span>
+            <span>设置</span>
           </button>
         </div>
       </aside>

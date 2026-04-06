@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
-import { Button, Input } from '@heroui/react'
+import { Button, Input, Tabs, Select, ListBox } from '@heroui/react'
 import { useSettingsStore } from '@/hooks/use-settings-store'
 import type { AgentProviderAuthState, AgentWorkspaceState } from '@/features/agent/types'
 import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '@/features/workspace/types'
@@ -24,14 +24,14 @@ type AuthProviderKey = 'google' | 'openai' | 'openrouter'
 
 const SETTINGS_SECTIONS: Array<{ description: string, id: SettingsSectionId, label: string }> = [
   {
-    description: 'Application appearance and behavior.',
+    description: '应用的界面外观和行为。',
     id: 'general',
-    label: 'Appearance',
+    label: '外观',
   },
   {
-    description: 'Manage API keys for Pi Agent providers.',
+    description: '管理 Pi Agent 提供商的 API 密钥。',
     id: 'providers',
-    label: 'Providers',
+    label: '服务提供商',
   },
 ]
 
@@ -47,14 +47,14 @@ function getBaseName(filePath: string) {
 
 function getProviderMeta(state: AgentProviderAuthState) {
   if (state.source === 'stored') {
-    return 'Using saved key'
+    return '正在使用已保存的密钥'
   }
 
   if (state.source === 'env') {
-    return `Using ${state.envVarName}`
+    return `正在使用环境变量 ${state.envVarName}`
   }
 
-  return `No key saved. ${state.envVarName} also works.`
+  return `未保存密钥。环境变量 ${state.envVarName} 也可生效。`
 }
 
 export function SettingsDialog({
@@ -174,10 +174,10 @@ export function SettingsDialog({
         [provider]: '',
       }))
       onStatusMessage(apiKey?.trim()
-        ? `${provider} key updated`
-        : `${provider} key removed`)
+        ? `${provider} 密钥已更新`
+        : `${provider} 密钥已移除`)
     } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to update provider authentication.')
+      setPanelError(error instanceof Error ? error.message : '无法更新提供商身份验证。')
     } finally {
       setIsSavingAuth(false)
     }
@@ -187,7 +187,7 @@ export function SettingsDialog({
     <div className={`settings-page ${resolvedTheme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}>
       <aside className='settings-sidebar'>
         <div className='settings-sidebar-header'>
-          <h2 className='settings-sidebar-title'>Settings</h2>
+          <h2 className='settings-sidebar-title'>设置</h2>
         </div>
 
         <nav className='settings-nav' aria-label='Settings sections'>
@@ -207,7 +207,7 @@ export function SettingsDialog({
       <section className='settings-panel'>
         <div className='settings-panel-header'>
           <h3 className='settings-panel-title'>
-            {activeSection === 'general' ? 'Appearance' : 'Providers'}
+            {activeSection === 'general' ? '外观' : '服务提供商'}
           </h3>
         </div>
 
@@ -218,33 +218,43 @@ export function SettingsDialog({
             <div className='settings-card'>
               <div className='settings-theme-switcher'>
                 <div className='settings-field'>
-                  <span className='settings-field-label'>Mode</span>
-                  <div className='settings-radio-group'>
-                    {(['light', 'dark', 'auto'] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type='button'
-                        className={`settings-radio-item ${theme === mode ? 'is-active' : ''}`}
-                        onClick={() => setTheme(mode)}
-                      >
-                        <span className='settings-radio-label'>
-                          {mode === 'light' ? 'Light' : mode === 'dark' ? 'Dark' : 'Sync with system'}
-                        </span>
-                      </button>
-                    ))}
+                  <span className='settings-field-label'>模式</span>
+                  <div className='settings-tabs-wrapper heroui-tabs-fix'>
+                    <Tabs 
+                      selectedKey={theme} 
+                      onSelectionChange={(key) => setTheme(key as 'light' | 'dark' | 'auto')}
+                      variant="primary"
+                      className="w-full"
+                    >
+                      <Tabs.ListContainer className="w-full">
+                        <Tabs.List aria-label="主题配色" className="w-full">
+                          <Tabs.Tab id="light" className="flex-1">
+                            浅色
+                            <Tabs.Indicator />
+                          </Tabs.Tab>
+                          <Tabs.Tab id="dark" className="flex-1">
+                            深色
+                            <Tabs.Indicator />
+                          </Tabs.Tab>
+                          <Tabs.Tab id="auto" className="flex-1">
+                            跟随系统
+                            <Tabs.Indicator />
+                          </Tabs.Tab>
+                        </Tabs.List>
+                      </Tabs.ListContainer>
+                    </Tabs>
                   </div>
                 </div>
 
                 <div className='settings-field' style={{ marginTop: '24px' }}>
-                  <span className='settings-field-label'>Icon theme</span>
-                  <div className='settings-inline-form'>
-                    <select
-                      className='settings-select'
-                      style={{ flex: 1 }}
-                      disabled={isIconThemeBusy || iconThemeOptions.length === 0}
-                      value={activeIconThemeKey}
-                      onChange={(event) => {
-                        const selectedOption = iconThemeOptions.find((o) => o.key === event.target.value)
+                  <span className='settings-field-label'>图标主题</span>
+                  <div className='settings-inline-form' style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <Select
+                      className='flex-1 heroui-select-fix'
+                      selectedKey={activeIconThemeKey}
+                      onSelectionChange={(val) => {
+                        const valStr = String(val)
+                        const selectedOption = iconThemeOptions.find((o) => o.key === valStr)
                         if (selectedOption) {
                           void onSelectIconTheme({
                             sourceVsixPath: selectedOption.sourceVsixPath,
@@ -252,23 +262,35 @@ export function SettingsDialog({
                           })
                         }
                       }}
+                      placeholder="选择图标主题"
+                      isDisabled={isIconThemeBusy || iconThemeOptions.length === 0}
                     >
-                      {iconThemeOptions.map((option) => (
-                        <option key={option.key} value={option.key}>{option.label}</option>
-                      ))}
-                    </select>
+                      <Select.Trigger className='settings-select-trigger'>
+                        <Select.Value />
+                        <Select.Indicator />
+                      </Select.Trigger>
+                      <Select.Popover>
+                        <ListBox>
+                          {iconThemeOptions.map((option) => (
+                            <ListBox.Item key={option.key} id={option.key} textValue={option.label}>
+                              {option.label}
+                            </ListBox.Item>
+                          ))}
+                        </ListBox>
+                      </Select.Popover>
+                    </Select>
                     <Button
                       isDisabled={isIconThemeBusy}
                       variant='primary'
-                      className='settings-action-button'
+                      className='settings-action-button h-10'
                       onPress={() => void onImportIconTheme()}
                     >
-                      Import VSIX
+                      导入 VSIX
                     </Button>
                   </div>
                   {iconTheme && (
                     <p className='settings-inline-hint' style={{ marginTop: '8px' }}>
-                      Current: {iconTheme.activeThemeLabel} / {getBaseName(iconTheme.sourceVsixPath)}
+                      当前: {iconTheme.activeThemeLabel} / {getBaseName(iconTheme.sourceVsixPath)}
                     </p>
                   )}
                 </div>
@@ -304,7 +326,7 @@ export function SettingsDialog({
                             className='settings-action-button'
                             onPress={() => void handleSaveProviderAuth(provider.key, draftValue)}
                           >
-                            Save Key
+                            保存密钥
                           </Button>
                           <Button
                             isDisabled={isSavingAuth || !provider.state.hasStoredCredential}
@@ -313,7 +335,7 @@ export function SettingsDialog({
                             className='settings-action-button'
                             onPress={() => void handleSaveProviderAuth(provider.key, null)}
                           >
-                            Remove Saved
+                            移除已保存
                           </Button>
                         </div>
                       </section>
@@ -322,7 +344,7 @@ export function SettingsDialog({
                 </div>
               ) : (
                 <div className='settings-empty-state'>
-                  Open a workspace first. Provider configuration follows the active workspace context.
+                  请先打开一个工作区。服务提供商配置将遵循当前活动的工作区上下文。
                 </div>
               )}
             </div>
