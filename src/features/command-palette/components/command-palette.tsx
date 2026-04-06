@@ -15,7 +15,7 @@ export type CommandItem = {
   label: string
   description?: string
   icon: string
-  category: 'file' | 'session' | 'action'
+  category: 'action' | 'file' | 'session'
   onSelect: () => void
 }
 
@@ -34,7 +34,7 @@ type CommandPaletteProps = {
 }
 
 const CustomKbd = ({ children, className = '' }: { children: React.ReactNode, className?: string }) => (
-  <span className={`px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-[10px] font-bold text-slate-400 shadow-sm leading-none flex items-center justify-center min-w-[20px] ${className}`}>
+  <span className={`px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-[9px] font-bold text-slate-400 shadow-sm leading-none flex items-center justify-center min-w-[18px] ${className}`}>
     {children}
   </span>
 )
@@ -74,7 +74,10 @@ export function CommandPalette({
           label: action.label,
           icon: action.icon,
           category: 'action',
-          onSelect: action.onSelect
+          onSelect: () => {
+            action.onSelect()
+            onClose()
+          }
         })
       }
     })
@@ -87,7 +90,10 @@ export function CommandPalette({
           description: file.path,
           icon: 'lucide:file-text',
           category: 'file',
-          onSelect: () => onOpenFile(file.path)
+          onSelect: () => {
+            onOpenFile(file.path)
+            onClose()
+          }
         })
       }
     })
@@ -101,13 +107,16 @@ export function CommandPalette({
           description: session.preview || 'AI chat session',
           icon: 'lucide:message-square',
           category: 'session',
-          onSelect: () => onOpenSession(session.path)
+          onSelect: () => {
+            onOpenSession(session.path) // Path for sessions
+            onClose()
+          }
         })
       }
     })
 
     return all.slice(0, 50)
-  }, [query, flattenedFiles, sessions, actions, onOpenFile, onOpenSession])
+  }, [query, flattenedFiles, sessions, actions, onOpenFile, onOpenSession, onClose])
 
   useEffect(() => {
     setSelectedIndex(0)
@@ -119,25 +128,32 @@ export function CommandPalette({
     }
   }, [isOpen])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setSelectedIndex(prev => (prev + 1) % Math.max(results.length, 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setSelectedIndex(prev => (prev - 1 + results.length) % Math.max(results.length, 1))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      const selected = results[selectedIndex]
-      if (selected) {
-        selected.onSelect()
+  // Global keyboard handling for absolute reliability
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedIndex(prev => (prev + 1) % Math.max(results.length, 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedIndex(prev => (prev - 1 + results.length) % Math.max(results.length, 1))
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        const selected = results[selectedIndex]
+        if (selected) {
+          selected.onSelect()
+        }
+      } else if (e.key === 'Escape') {
         onClose()
       }
     }
-  }
 
-  // EXACT REPLICATION OF SETTINGS MODAL STRUCTURE (COMPOSITE API)
-  // This structure is proven to work in the current app's shell.
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [isOpen, results, selectedIndex, onClose])
+
   return (
     <Modal>
       <Modal.Backdrop 
@@ -149,21 +165,20 @@ export function CommandPalette({
           scroll='inside' 
           className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'
         >
-          <Modal.Dialog className='command-palette-dialog p-0 m-0 relative w-full max-w-2xl bg-white shadow-2xl rounded-2xl border border-slate-100 flex flex-col overflow-hidden outline-none'>
+          <Modal.Dialog className='command-palette-dialog p-0 m-0 relative w-full max-w-xl bg-white shadow-2xl rounded-2xl border border-slate-100 flex flex-col overflow-hidden outline-none'>
             <Modal.Body className='p-0 m-0'>
-              {/* Premium Light Search Bar */}
-              <div className='flex items-center px-8 py-6 gap-4 bg-slate-50/30'>
-                <Icon icon='lucide:search' className='text-slate-400' width={24} />
+              {/* Refined Search Bar */}
+              <div className='flex items-center px-6 py-4 gap-3 bg-white'>
+                <Icon icon='lucide:search' className='text-slate-400' width={20} />
                 <input
                   autoFocus
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder='Search apps, files, sessions...'
+                  placeholder='Search...'
                   style={{ outline: 'none', boxShadow: 'none' }}
-                  className='flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-xl text-slate-900 placeholder:text-slate-300 font-light'
+                  className='flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-lg text-slate-800 placeholder:text-slate-300 font-normal'
                 />
-                <div className='flex items-center gap-1.5 opacity-30 select-none'>
+                <div className='flex items-center gap-1 opacity-30 select-none'>
                    <Kbd className='bg-transparent border-none shadow-none text-xs text-slate-400 font-bold'>⌘</Kbd>
                    <Kbd className='bg-transparent border-none shadow-none text-xs text-slate-400 font-bold'>K</Kbd>
                 </div>
@@ -171,21 +186,21 @@ export function CommandPalette({
 
               <div className='h-px bg-slate-100' />
 
-              {/* Results List Area */}
-              <ScrollShadow hideScrollBar className='max-h-[min(65vh,520px)] overflow-y-auto px-4 py-5'>
+              {/* Compact Results List */}
+              <ScrollShadow hideScrollBar className='max-h-[380px] overflow-y-auto px-1.5 py-4'>
                 {results.length > 0 ? (
-                  <div className='flex flex-col gap-7'>
+                  <div className='flex flex-col gap-5'>
                     {['action', 'file', 'session'].map(cat => {
                       const items = results.filter(i => i.category === cat)
                       if (items.length === 0) return null
-                      const label = cat === 'action' ? 'Actions' : cat === 'file' ? 'Recent Files' : 'Active Sessions'
+                      const label = cat === 'action' ? 'Navigation' : cat === 'file' ? 'Files' : 'Sessions'
                       
                       return (
-                        <div key={cat} className='flex flex-col gap-2'>
-                          <header className='px-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] opacity-80'>
+                        <div key={cat} className='flex flex-col gap-1 px-1'>
+                          <header className='px-4 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-[0.25em] opacity-80'>
                             {label}
                           </header>
-                          <ListBox aria-label={label} variant='flat' className='p-0 gap-0.5'>
+                          <ListBox aria-label={label} variant='flat' className='p-0 gap-0'>
                             {items.map((item) => {
                               const globalIndex = results.findIndex(i => i.id === item.id)
                               const isSelected = globalIndex === selectedIndex
@@ -194,29 +209,23 @@ export function CommandPalette({
                                 <ListBoxItem
                                   key={item.id}
                                   textValue={item.label}
-                                  onPress={() => {
-                                    item.onSelect()
-                                    onClose()
-                                  }}
-                                  className={`rounded-xl px-4 py-4 transition-all duration-150 ${isSelected ? 'bg-slate-100 shadow-sm' : 'hover:bg-slate-50'}`}
+                                  onPress={() => item.onSelect()}
+                                  className={`rounded-lg px-4 py-2 transition-all ${isSelected ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
                                 >
-                                  <div className='flex items-center gap-4 w-full'>
-                                    <div className={`p-1.5 transition-colors ${isSelected ? 'text-slate-900 scale-105' : 'text-slate-400'}`}>
-                                      <Icon icon={item.icon} width={22} />
+                                  <div className='flex items-center gap-3 w-full'>
+                                    <div className={`p-1 transition-colors ${isSelected ? 'text-slate-900' : 'text-slate-400'}`}>
+                                      <Icon icon={item.icon} width={18} />
                                     </div>
-                                    <div className='flex flex-1 min-w-0 flex-col gap-0.5'>
-                                      <span className={`text-[15px] font-semibold truncate ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>{item.label}</span>
+                                    <div className='flex flex-1 min-w-0 flex-col'>
+                                      <span className={`text-[13px] font-medium truncate ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>{item.label}</span>
                                       {item.description && (
-                                        <span className={`text-[11px] truncate opacity-40 font-normal ${isSelected ? 'text-slate-500' : 'text-slate-400'}`}>
+                                        <span className={`text-[10px] truncate opacity-40 font-normal ${isSelected ? 'text-slate-500' : 'text-slate-400'}`}>
                                           {item.description}
                                         </span>
                                       )}
                                     </div>
                                     {isSelected && (
-                                      <div className='flex items-center gap-2 px-3 py-1 rounded bg-white border border-slate-200 text-[10px] font-bold text-slate-400 shadow-sm animate-in fade-in zoom-in-95'>
-                                        <span>ENTER</span>
-                                        <Icon icon='lucide:corner-down-left' width={12} />
-                                      </div>
+                                      <CustomKbd className="opacity-60">Enter</CustomKbd>
                                     )}
                                   </div>
                                 </ListBoxItem>
@@ -228,33 +237,31 @@ export function CommandPalette({
                     })}
                   </div>
                 ) : (
-                  <div className='py-28 flex flex-col items-center justify-center text-slate-300 gap-4 opacity-40'>
-                    <Icon icon='lucide:search' width={48} className='opacity-10' />
-                    <p className='text-base font-medium tracking-wide'>No results found</p>
+                  <div className='py-20 flex flex-col items-center justify-center text-slate-300 gap-3 opacity-40'>
+                    <Icon icon='lucide:search' width={32} className='opacity-10' />
+                    <p className='text-xs font-medium'>Nothing for "{query}"</p>
                   </div>
                 )}
               </ScrollShadow>
 
-              {/* Modern Minimal Footer */}
-              <div className='px-8 py-5 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[11px] text-slate-400 font-bold tracking-tight'>
-                <div className='flex items-center gap-10'>
-                  <div className='flex items-center gap-3'>
+              {/* Tighter Footer Toolbar */}
+              <div className='px-6 py-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[10px] text-slate-400 font-medium select-none'>
+                <div className='flex items-center gap-6'>
+                  <div className='flex items-center gap-2'>
                     <div className='flex gap-1'>
-                      <CustomKbd><Icon icon='lucide:arrow-up' width={10} /></CustomKbd>
-                      <CustomKbd><Icon icon='lucide:arrow-down' width={10} /></CustomKbd>
+                      <CustomKbd><Icon icon='lucide:arrow-up' width={8} /></CustomKbd>
+                      <CustomKbd><Icon icon='lucide:arrow-down' width={8} /></CustomKbd>
                     </div>
-                    <span className='opacity-60'>NAVIGATE</span>
+                    <span>NAVIGATE</span>
                   </div>
-                  <div className='flex items-center gap-3'>
-                    <CustomKbd className='min-w-[48px]'>ENTER</CustomKbd>
-                    <span className='opacity-60'>SELECT</span>
+                  <div className='flex items-center gap-2'>
+                    <CustomKbd>ENTER</CustomKbd>
+                    <span>SELECT</span>
                   </div>
                 </div>
-                <div className='flex items-center gap-4'>
-                  <div className='flex items-center gap-3'>
-                    <CustomKbd className='min-w-[36px]'>ESC</CustomKbd>
-                    <span className='opacity-60'>CLOSE</span>
-                  </div>
+                <div className='flex items-center gap-2'>
+                  <CustomKbd>ESC</CustomKbd>
+                  <span>CLOSE</span>
                 </div>
               </div>
             </Modal.Body>
