@@ -180,8 +180,8 @@ export function CommandPalette({
 
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         const now = Date.now()
-        // Throttle to roughly 50fps to avoid layout thrashing during hardware keyboard repeat
-        if (now - lastNavigateTime.current < 20) {
+        // Slow down navigation speed (throttle to ~16fps / 60ms) to ensure absolute stability
+        if (now - lastNavigateTime.current < 60) {
           e.preventDefault()
           return
         }

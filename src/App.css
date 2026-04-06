@@ -1392,6 +1392,12 @@
   flex-wrap: nowrap;
   overflow-x: auto;
   flex: 0 0 auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.git-panel-toolbar::-webkit-scrollbar {
+  display: none;
 }
 
 .git-panel-commit-row {

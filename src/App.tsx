@@ -1457,7 +1457,7 @@ function App() {
     },
     {
       label: 'Switch Workspace',
-      icon: 'lucide:unfold-vertical',
+      icon: 'mingcute:transfer-4-line',
       onSelect: () => handlePickWorkspace()
     }
   ], [handleCreateFile, handleCreateDirectory, handlePickWorkspace])
