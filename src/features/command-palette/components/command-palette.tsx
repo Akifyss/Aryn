@@ -51,8 +51,8 @@ export function CommandPalette({
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   
-  // Refs to ensure keyboard listeners are working with current state
   const resultsRef = useRef<CommandItem[]>([])
   const selectedIndexRef = useRef(0)
 
@@ -131,7 +131,6 @@ export function CommandPalette({
     selectedIndexRef.current = selectedIndex
   }, [selectedIndex])
 
-  // Initialize and Reset behavior
   useEffect(() => {
     if (isOpen) {
       setSelectedIndex(0)
@@ -144,21 +143,36 @@ export function CommandPalette({
     setSelectedIndex(0)
   }, [query])
 
-  // Scrolling follow selection
-  useEffect(() => {
-    const activeItem = document.querySelector(`[data-command-active="true"]`)
-    if (activeItem) {
-      activeItem.scrollIntoView({
-        block: 'nearest',
-        behavior: 'instant'
-      })
-    }
-  }, [selectedIndex, results])
-
-  // Global events to handle selection and enter
+  // EXTREME FIX: Deep Bound Auto-scroll with High Visibility Padding
   useEffect(() => {
     if (!isOpen) return
+    
+    const activeElement = document.querySelector(`[data-command-active="true"]`) as HTMLElement
+    const viewport = scrollRef.current
 
+    if (activeElement && viewport) {
+      const activeRect = activeElement.getBoundingClientRect()
+      const viewportRect = viewport.getBoundingClientRect()
+
+      // Large padding (80px) to ensure items are pushed WELL into the visible area
+      // this prevents overlapping by the footer etc.
+      const padding = 80 
+
+      const isSubmerged = activeRect.bottom > viewportRect.bottom - padding
+      const isElevated = activeRect.top < viewportRect.top + padding
+
+      if (isSubmerged) {
+        // Move DOWN (scroll list up) - calculating the delta needed to center roughly or clear the padding
+        viewport.scrollTop += (activeRect.bottom - viewportRect.bottom + padding)
+      } else if (isElevated) {
+        // Move UP (scroll list down) 
+        viewport.scrollTop -= (viewportRect.top - activeRect.top + padding)
+      }
+    }
+  }, [selectedIndex, results, isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const currentResults = resultsRef.current
       const currentIndex = selectedIndexRef.current
@@ -179,7 +193,6 @@ export function CommandPalette({
         onClose()
       }
     }
-
     window.addEventListener('keydown', handleGlobalKeyDown, true)
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, true)
   }, [isOpen, onClose])
@@ -195,18 +208,18 @@ export function CommandPalette({
           scroll='inside' 
           className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'
         >
-          <Modal.Dialog className='p-0 m-0 relative w-full max-w-lg bg-white shadow-2xl rounded-2xl border border-slate-200 overflow-hidden outline-none'>
+          <Modal.Dialog className='p-0 m-0 relative w-full max-w-xl bg-white shadow-2xl rounded-2xl border border-slate-200 overflow-hidden outline-none'>
             <Modal.Body className='p-0 m-0'>
               {/* Header */}
-              <div className='flex items-center px-6 py-4.5 gap-3 bg-white'>
-                <Icon icon='lucide:search' className='text-slate-400' width={20} />
+              <div className='flex items-center px-6 py-5 gap-3.5 bg-white'>
+                <Icon icon='lucide:search' className='text-slate-400' width={22} />
                 <input
                   ref={inputRef}
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder='Search apps, files, sessions...'
+                  placeholder='Search...'
                   style={{ outline: 'none', boxShadow: 'none' }}
-                  className='flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[16px] text-slate-800 placeholder:text-slate-300 font-normal ring-0'
+                  className='flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[16px] text-slate-800 placeholder:text-slate-300 font-normal'
                 />
                 <div className='flex items-center gap-1.5 opacity-30 select-none'>
                    <Kbd className='bg-transparent border-none shadow-none text-xs text-slate-400 font-bold'>⌘</Kbd>
@@ -216,17 +229,21 @@ export function CommandPalette({
 
               <div className='h-px bg-slate-100 mx-6' />
 
-              {/* Pro-Compact list layout */}
-              <ScrollShadow hideScrollBar className='max-h-[380px] overflow-y-auto px-2 py-4'>
+              {/* Viewport with explicit scrolling container */}
+              <ScrollShadow 
+                hideScrollBar 
+                className='max-h-[420px] overflow-y-auto px-2 py-4 relative'
+                ref={scrollRef}
+              >
                 {results.length > 0 ? (
-                  <div className='flex flex-col gap-5'>
-                    {['action', 'file', 'session'].map(cat => {
+                  <div className='flex flex-col gap-6'>
+                    {['action', 'file', 'session'].map((cat) => {
                       const items = results.filter(i => i.category === cat)
                       if (items.length === 0) return null
                       const label = cat === 'action' ? 'Navigation' : cat === 'file' ? 'Recent Files' : 'Sessions'
                       
                       return (
-                        <div key={cat} className='flex flex-col gap-0.5 px-2'>
+                        <div key={cat} className='flex flex-col gap-1 px-2'>
                           <header className='px-4 py-1 text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] opacity-80 select-none'>
                             {label}
                           </header>
@@ -236,11 +253,8 @@ export function CommandPalette({
                             className='p-0 gap-0 outline-none'
                             selectionMode='single'
                             onAction={(key) => {
-                               // Force matching key logic
                                const item = resultsRef.current.find(i => i.id === key)
-                               if (item) {
-                                  item.onSelect()
-                               }
+                               if (item) item.onSelect()
                             }}
                           >
                             {items.map((item) => {
@@ -252,17 +266,16 @@ export function CommandPalette({
                                   key={item.id}
                                   data-command-active={isSelected ? 'true' : 'false'}
                                   textValue={item.label}
-                                  // Explicit onClick to guarantee action even if onAction is intercepted
+                                  className={`rounded-xl px-4 py-2.5 transition-all outline-none focus:outline-none !outline-none focus:ring-0 ring-0 hover:!bg-slate-50 ${isSelected ? 'bg-slate-100' : 'bg-transparent'}`}
                                   onPress={() => item.onSelect()}
-                                  className={`rounded-lg px-4 py-2.5 transition-all outline-none focus:outline-none !outline-none focus:ring-0 ring-0 hover:!bg-slate-50 ${isSelected ? 'bg-slate-100 shadow-sm' : 'bg-transparent'}`}
-                                  style={{ outline: 'none', boxShadow: isSelected ? '0 0 0 0 transparent' : 'none' }}
+                                  style={{ outline: 'none' }}
                                 >
-                                  <div className='flex items-center gap-3.5 w-full pointer-events-none'>
+                                  <div className='flex items-center gap-4 w-full pointer-events-none'>
                                     <div className={`transition-colors flex-shrink-0 ${isSelected ? 'text-slate-900 border-slate-300' : 'text-slate-400'}`}>
                                       <Icon icon={item.icon} width={18} />
                                     </div>
                                     <div className='flex flex-1 min-w-0 flex-col gap-0'>
-                                      <span className={`text-[14px] font-medium truncate ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>{item.label}</span>
+                                      <span className={`text-[14px] font-semibold truncate ${isSelected ? 'text-slate-900' : 'text-slate-700'}`}>{item.label}</span>
                                       {item.description && (
                                         <span className={`text-[10px] truncate opacity-40 font-normal ${isSelected ? 'text-slate-500' : 'text-slate-400'}`}>
                                           {item.description}
@@ -292,8 +305,8 @@ export function CommandPalette({
                 )}
               </ScrollShadow>
 
-              {/* Toolbar Footer */}
-              <div className='px-7 py-3.5 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[10px] text-slate-400 font-bold tracking-tight select-none'>
+              {/* Footer */}
+              <div className='px-8 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between text-[10px] text-slate-400 font-bold tracking-tight select-none'>
                 <div className='flex items-center gap-8'>
                   <div className='flex items-center gap-2.5'>
                     <div className='flex gap-1'>
@@ -307,11 +320,9 @@ export function CommandPalette({
                     <span>SELECT</span>
                   </div>
                 </div>
-                <div className='flex items-center gap-4 text-xs font-bold'>
-                    <div className='flex items-center gap-2.5'>
-                    <CustomKbd className='min-w-[32px] font-bold'>ESC</CustomKbd>
-                    <span>CLOSE</span>
-                  </div>
+                <div className='flex items-center gap-2'>
+                  <CustomKbd className='min-w-[32px]'>ESC</CustomKbd>
+                  <span>CLOSE</span>
                 </div>
               </div>
             </Modal.Body>
