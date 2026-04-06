@@ -287,7 +287,7 @@
   grid-column: 1;
   gap: 0;
   padding: 0;
-  background: var(--surface-secondary);
+  background: var(--background);
   border-right: 1px solid var(--separator);
 }
 
@@ -298,7 +298,7 @@
 
 .panel-agent {
   grid-column: 3;
-  background: var(--surface-secondary);
+  background: var(--background);
   border-left: 1px solid var(--separator);
 }
 
@@ -893,7 +893,7 @@
   min-width: 0;
   min-height: var(--tabs-chrome-height);
   border-bottom: 1px solid var(--separator);
-  background: var(--surface-secondary);
+  background: var(--surface);
 }
 
 .app-shell[data-left-collapsed='true'] .file-tabs-shell {
@@ -1126,7 +1126,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--background);
+  background: var(--surface);
 }
 
 .code-editor-shell {
@@ -2495,7 +2495,6 @@
   min-height: var(--chrome-height);
   padding: 0 var(--right-panel-content-inset) 0 16px;
   border-bottom: 1px solid var(--separator);
-  background: var(--surface-secondary);
 }
 
 .agent-session-select {
@@ -2641,7 +2640,7 @@
   border-left: 0;
   border-right: 0;
   border-radius: 0;
-  background: var(--surface-tertiary);
+  background: var(--background);
   box-shadow: none;
   backdrop-filter: none;
 }
@@ -2725,6 +2724,10 @@
   max-height: min(320px, calc(100vh - 240px));
 }
 
+.agent-overlay-scroll [data-slot="shadow"] {
+  display: none !important;
+}
+
 .agent-session-list {
   display: grid;
   gap: 0;
@@ -2738,7 +2741,7 @@
   width: 100%;
   padding: 0;
   border: 0;
-  background: var(--surface);
+  background: var(--background);
   transition: background-color 140ms ease;
 }
 
@@ -3172,7 +3175,6 @@
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--separator);
-  background: var(--surface-secondary);
 }
 
 .agent-composer-shell {
