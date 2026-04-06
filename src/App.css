@@ -1779,7 +1779,7 @@
   background: transparent;
   border: 0;
   cursor: pointer;
-  color: var(--default-500);
+  color: var(--muted);
   transition: all 140ms ease;
   padding: 0;
 }
