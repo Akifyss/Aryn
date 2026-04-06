@@ -3572,3 +3572,6 @@
     transition: none;
   }
 }
+[data-command-active='true'] {
+  scroll-margin: 80px 0;
+}

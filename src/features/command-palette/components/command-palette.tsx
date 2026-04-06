@@ -143,33 +143,34 @@ export function CommandPalette({
     setSelectedIndex(0)
   }, [query])
 
+  // EXTREME FIX: Clamp selectedIndex when results change to avoid out-of-bounds access
+  useEffect(() => {
+    if (results.length > 0 && selectedIndex >= results.length) {
+      setSelectedIndex(results.length - 1)
+    }
+  }, [results.length, selectedIndex])
+
   // EXTREME FIX: Deep Bound Auto-scroll with High Visibility Padding
+  // Use scrollIntoView + scroll-margin (defined in CSS) for native-first performance
+  // and wrap in requestAnimationFrame to prevent layout thrashing on rapid keydown.
   useEffect(() => {
     if (!isOpen) return
     
-    const activeElement = document.querySelector(`[data-command-active="true"]`) as HTMLElement
-    const viewport = scrollRef.current
-
-    if (activeElement && viewport) {
-      const activeRect = activeElement.getBoundingClientRect()
-      const viewportRect = viewport.getBoundingClientRect()
-
-      // Large padding (80px) to ensure items are pushed WELL into the visible area
-      // this prevents overlapping by the footer etc.
-      const padding = 80 
-
-      const isSubmerged = activeRect.bottom > viewportRect.bottom - padding
-      const isElevated = activeRect.top < viewportRect.top + padding
-
-      if (isSubmerged) {
-        // Move DOWN (scroll list up) - calculating the delta needed to center roughly or clear the padding
-        viewport.scrollTop += (activeRect.bottom - viewportRect.bottom + padding)
-      } else if (isElevated) {
-        // Move UP (scroll list down) 
-        viewport.scrollTop -= (viewportRect.top - activeRect.top + padding)
+    const frameId = requestAnimationFrame(() => {
+      const activeElement = document.querySelector(`[data-command-active="true"]`)
+      if (activeElement) {
+        activeElement.scrollIntoView({
+          behavior: 'auto', // 'auto' is usually instant, avoids overhead of smooth scroll
+          block: 'nearest',
+          inline: 'nearest'
+        })
       }
-    }
+    })
+
+    return () => cancelAnimationFrame(frameId)
   }, [selectedIndex, results, isOpen])
+
+  const lastNavigateTime = useRef(0)
 
   useEffect(() => {
     if (!isOpen) return
@@ -177,12 +178,21 @@ export function CommandPalette({
       const currentResults = resultsRef.current
       const currentIndex = selectedIndexRef.current
 
-      if (e.key === 'ArrowDown') {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const now = Date.now()
+        // Throttle to roughly 50fps to avoid layout thrashing during hardware keyboard repeat
+        if (now - lastNavigateTime.current < 20) {
+          e.preventDefault()
+          return
+        }
+        lastNavigateTime.current = now
+
         e.preventDefault()
-        setSelectedIndex(prev => (prev + 1) % Math.max(currentResults.length, 1))
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setSelectedIndex(prev => (prev - 1 + currentResults.length) % Math.max(currentResults.length, 1))
+        if (e.key === 'ArrowDown') {
+          setSelectedIndex(prev => (prev + 1) % Math.max(currentResults.length, 1))
+        } else {
+          setSelectedIndex(prev => (prev - 1 + currentResults.length) % Math.max(currentResults.length, 1))
+        }
       } else if (e.key === 'Enter') {
         e.preventDefault()
         const selected = currentResults[currentIndex]
@@ -237,29 +247,35 @@ export function CommandPalette({
               >
                 {results.length > 0 ? (
                   <div className='flex flex-col gap-6'>
-                    {['action', 'file', 'session'].map((cat) => {
-                      const items = results.filter(i => i.category === cat)
-                      if (items.length === 0) return null
-                      const label = cat === 'action' ? 'Navigation' : cat === 'file' ? 'Recent Files' : 'Sessions'
-                      
-                      return (
-                        <div key={cat} className='flex flex-col gap-1 px-2'>
-                          <header className='px-4 py-1 text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] opacity-80 select-none'>
-                            {label}
-                          </header>
-                          <ListBox 
-                            aria-label={label} 
-                            variant='flat' 
-                            className='p-0 gap-0 outline-none'
-                            selectionMode='single'
-                            onAction={(key) => {
-                               const item = resultsRef.current.find(i => i.id === key)
-                               if (item) item.onSelect()
-                            }}
-                          >
-                            {items.map((item) => {
-                              const globalIndex = results.findIndex(i => i.id === item.id)
-                              const isSelected = globalIndex === selectedIndex
+                    {(() => {
+                      const activeId = results[selectedIndex]?.id;
+                      // Optimization: Group by category once per render to avoid O(N^2) total work
+                      const categorized: Record<string, CommandItem[]> = { action: [], file: [], session: [] }
+                      results.forEach(item => {
+                        if (categorized[item.category]) categorized[item.category].push(item)
+                      })
+
+                      return ['action', 'file', 'session'].map((cat) => {
+                        const items = categorized[cat]
+                        if (items.length === 0) return null
+                        const label = cat === 'action' ? 'Navigation' : cat === 'file' ? 'Recent Files' : 'Sessions'
+                        
+                        return (
+                          <div key={cat} className='flex flex-col gap-1 px-2'>
+                            <header className='px-4 py-1 text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] opacity-80 select-none'>
+                              {label}
+                            </header>
+                            <ListBox 
+                              aria-label={label} 
+                              className='p-0 gap-0 outline-none'
+                              selectionMode='single'
+                              onAction={(key) => {
+                                 const item = resultsRef.current.find(i => i.id === key)
+                                 if (item) item.onSelect()
+                              }}
+                            >
+                              {items.map((item) => {
+                                const isSelected = item.id === activeId
 
                               return (
                                 <ListBoxItem
@@ -295,7 +311,7 @@ export function CommandPalette({
                           </ListBox>
                         </div>
                       )
-                    })}
+                    })})()}
                   </div>
                 ) : (
                   <div className='py-24 flex flex-col items-center justify-center text-slate-300 gap-4 opacity-40'>

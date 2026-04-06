@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, ScrollShadow, Tooltip, Toast, toast, Modal } from '@heroui/react'
 import {
   FileLine,
@@ -558,12 +558,12 @@ function App() {
     await updateWorkspaceState(nextPath, { markAsLastOpened: true })
   }
 
-  async function loadTree(rootPath: string) {
+  const loadTree = useCallback(async (rootPath: string) => {
     const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
     setTree(nextTree)
-  }
+  }, [setTree])
 
-  async function openFile(filePath: string, workspacePath: string | null = currentPath) {
+  const openFile = useCallback(async (filePath: string, workspacePath: string | null = currentPath) => {
     setIsSettingsTabActive(false)
     const existingTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.kind === 'file' && tab.filePath === filePath)
 
@@ -605,7 +605,7 @@ function App() {
     }
 
     setStatusMessage(`${getBaseName(filePath)} opened`)
-  }
+  }, [currentPath, activateTab, openTab])
 
   async function openGitDiff(change: GitChangeItem) {
     if (!currentPath) {
@@ -1439,6 +1439,37 @@ function App() {
     }
   }, [activeResizePanel, isLeftSidebarVisible, isRightSidebarVisible])
 
+  const commandPaletteActions = useMemo(() => [
+    {
+      label: 'Open Settings',
+      icon: 'lucide:settings',
+      onSelect: () => setIsSettingsOpen(true)
+    },
+    {
+      label: 'Create New File',
+      icon: 'lucide:file-plus',
+      onSelect: () => handleCreateFile()
+    },
+    {
+      label: 'Create New Folder',
+      icon: 'lucide:folder-plus',
+      onSelect: () => handleCreateDirectory()
+    },
+    {
+      label: 'Switch Workspace',
+      icon: 'lucide:unfold-vertical',
+      onSelect: () => handlePickWorkspace()
+    }
+  ], [handleCreateFile, handleCreateDirectory, handlePickWorkspace])
+
+  const handleOpenSession = useCallback((sessionPath: string) => {
+    if (currentPath) {
+      void window.appApi.openAgentSession(currentPath, sessionPath)
+    }
+  }, [currentPath])
+
+  const handleCloseCommandPalette = useCallback(() => setIsCommandPaletteOpen(false), [])
+
   return (
     <div
       ref={appShellRef}
@@ -1881,39 +1912,12 @@ function App() {
 
       <CommandPalette 
         isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
+        onClose={handleCloseCommandPalette}
         files={tree}
         sessions={agentWorkspaceState?.sessions ?? []}
-        onOpenFile={(path) => {
-          void openFile(path)
-        }}
-        onOpenSession={(sessionPath) => {
-          if (currentPath) {
-            void window.appApi.openAgentSession(currentPath, sessionPath)
-          }
-        }}
-        actions={[
-          {
-            label: 'Open Settings',
-            icon: 'lucide:settings',
-            onSelect: () => setIsSettingsOpen(true)
-          },
-          {
-            label: 'Create New File',
-            icon: 'lucide:file-plus',
-            onSelect: () => handleCreateFile()
-          },
-          {
-            label: 'Create New Folder',
-            icon: 'lucide:folder-plus',
-            onSelect: () => handleCreateDirectory()
-          },
-          {
-            label: 'Switch Workspace',
-            icon: 'lucide:unfold-vertical',
-            onSelect: () => handlePickWorkspace()
-          }
-        ]}
+        onOpenFile={openFile}
+        onOpenSession={handleOpenSession}
+        actions={commandPaletteActions}
       />
     </div>
   )
