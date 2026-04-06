@@ -980,9 +980,9 @@
 
 .file-tab {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  display: flex;
   flex: 0 0 auto;
+  align-items: stretch;
   min-width: 0;
   max-width: min(288px, 42vw);
   border-right: 1px solid var(--separator);
@@ -1016,7 +1016,7 @@
   gap: 8px;
   min-width: 0;
   min-height: var(--tabs-chrome-height);
-  padding: 0 8px 0 16px;
+  padding: 0 16px 0 16px;
   border: 0;
   background: transparent;
   color: var(--default-500);
@@ -1034,9 +1034,65 @@
   color: var(--foreground);
 }
 
+.file-tab-actions {
+  position: absolute;
+  right: 4px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  opacity: 0;
+  pointer-events: none;
+  background: var(--surface);
+  transition: opacity 140ms ease;
+  z-index: 10;
+}
+
+/* Background gradient to fade out text behind actions */
+.file-tab-actions::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  background: linear-gradient(to right, transparent, var(--surface));
+  pointer-events: none;
+}
+
+.file-tab.is-active .file-tab-actions {
+  /* Match active background color */
+  background: var(--surface);
+}
+
+.file-tab.is-active .file-tab-actions::before {
+  background: linear-gradient(to right, transparent, var(--surface));
+}
+
+.file-tab:hover .file-tab-actions,
+.file-tab.is-dirty .file-tab-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* When dirty but NOT hovered, hide the functional icons to show the dot */
+.file-tab.is-dirty:not(:hover) .file-tab-diff,
+.file-tab.is-dirty:not(:hover) .file-tab-close svg {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .file-tab-trigger:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
+}
+
+.file-tab-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding-right: 4px;
 }
 
 .file-tab-label,
@@ -1062,75 +1118,34 @@
   color: var(--danger);
 }
 
-.file-tab-close {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  min-width: 32px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--default-400);
-  cursor: pointer;
-  transition: color 140ms ease, opacity 140ms ease, background-color 140ms ease;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.file-tab-close:hover {
-  color: var(--foreground);
-  background: var(--surface-tertiary);
-}
-
-.file-tab-close:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-
-.file-tab-close svg {
-  opacity: 0;
-  transition: opacity 140ms ease;
-}
-
-.file-tab:hover .file-tab-close svg,
-.file-tab.is-active .file-tab-close svg,
-.file-tab-close:hover svg,
-.file-tab-close:focus-visible svg {
-  opacity: 1;
-}
-
+.file-tab-close,
 .file-tab-diff {
   position: relative;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 28px;
-  min-width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
+  border-radius: 6px;
   background: transparent;
   color: var(--default-400);
   cursor: pointer;
-  transition: color 140ms ease, opacity 140ms ease, background-color 140ms ease;
-  opacity: 0;
-  pointer-events: none;
+  transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
-.file-tab:hover .file-tab-diff,
-.file-tab-diff:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
+.file-tab-close:hover,
 .file-tab-diff:hover {
   color: var(--foreground);
   background: var(--surface-tertiary);
 }
 
+.file-tab-close svg,
 .file-tab-diff svg {
-  transform: scale(0.9);
+  flex-shrink: 0;
 }
 
 .file-tab-dirty-indicator {
@@ -1153,17 +1168,6 @@
 .file-tab.is-dirty.is-active:hover .file-tab-dirty-indicator,
 .file-tab.is-dirty .file-tab-close:hover .file-tab-dirty-indicator,
 .file-tab.is-dirty .file-tab-close:focus-visible .file-tab-dirty-indicator {
-  opacity: 0;
-}
-
-.file-tab.is-dirty:hover .file-tab-close svg,
-.file-tab.is-dirty.is-active:hover .file-tab-close svg,
-.file-tab.is-dirty .file-tab-close:hover svg,
-.file-tab.is-dirty .file-tab-close:focus-visible svg {
-  opacity: 1;
-}
-
-.file-tab.is-dirty .file-tab-close svg {
   opacity: 0;
 }
 

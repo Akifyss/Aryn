@@ -192,33 +192,35 @@ export function FileTabs({
                 {metaLabel ? <span className='file-tab-meta'>{metaLabel}</span> : null}
               </button>
 
-              {tab.kind === 'file' && getHasDiff?.(tab.filePath) && onOpenDiff && (
+              <div className='file-tab-actions'>
+                {tab.kind === 'file' && getHasDiff?.(tab.filePath) && onOpenDiff && (
+                  <button
+                    type='button'
+                    className='file-tab-diff'
+                    aria-label={`Open diff for ${baseName}`}
+                    title='Open Git diff'
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onOpenDiff(tab.filePath)
+                    }}
+                  >
+                    <GitCompareLine size={16} />
+                  </button>
+                )}
+
                 <button
                   type='button'
-                  className='file-tab-diff'
-                  aria-label={`Open diff for ${baseName}`}
-                  title='Open Git diff'
+                  className='file-tab-close'
+                  aria-label={`Close ${baseName}`}
                   onClick={(event) => {
                     event.stopPropagation()
-                    onOpenDiff(tab.filePath)
+                    onClose(tab.filePath)
                   }}
                 >
-                  <GitCompareLine size={14} />
+                  <span className='file-tab-dirty-indicator' aria-hidden='true' />
+                  <CloseLine size={16} />
                 </button>
-              )}
-
-              <button
-                type='button'
-                className='file-tab-close'
-                aria-label={`Close ${baseName}`}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onClose(tab.filePath)
-                }}
-              >
-                <span className='file-tab-dirty-indicator' aria-hidden='true' />
-                <CloseLine size={14} />
-              </button>
+              </div>
             </div>
           )
         })}
