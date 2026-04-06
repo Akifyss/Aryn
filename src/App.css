@@ -2234,7 +2234,7 @@
   flex-direction: column;
   min-width: 0;
   border-right: 1px solid var(--separator);
-  background: var(--surface-secondary);
+  background: var(--background);
 }
 
 .settings-sidebar-header,
@@ -2539,7 +2539,6 @@
   flex-shrink: 0;
   min-height: var(--chrome-height);
   padding: 0 var(--right-panel-content-inset) 0 16px;
-  border-bottom: 1px solid var(--separator);
 }
 
 .agent-session-select {
