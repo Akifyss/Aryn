@@ -1822,6 +1822,7 @@ function App() {
         <Modal.Backdrop 
           isOpen={isSettingsOpen} 
           onOpenChange={setIsSettingsOpen}
+          variant='opaque'
         >
           <Modal.Container scroll='inside' className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'>
             <Modal.Dialog className='settings-modal p-0 m-0 relative'>

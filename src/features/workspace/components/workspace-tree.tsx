@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { Input, Tooltip } from '@heroui/react'
+import { Button, Dropdown, Input, Label, Modal, Tooltip, useOverlayState } from '@heroui/react'
 import {
   CheckLine,
   CloseLine,
@@ -8,6 +8,7 @@ import {
   FileLine,
   FolderLine,
   FolderOpenLine,
+  More1Line,
 } from '@mingcute/react'
 import { resolveWorkspaceDirectoryIconUrl, resolveWorkspaceFileIconUrl } from '@/features/workspace/lib/icon-theme'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
@@ -65,40 +66,53 @@ function FileRowActions({
   onDelete: () => void
   isSubmitting: boolean
 }) {
+  const [isOpen, setIsOpen] = useState(false)
+
   return (
     <div className='git-change-tools'>
-      <div className='git-change-actions'>
-        <Tooltip>
-          <Tooltip.Trigger>
+      <div 
+        className='git-change-actions'
+        style={isOpen ? { opacity: 1, maxWidth: '2rem', transform: 'translateX(0)' } : undefined}
+      >
+        <Dropdown onOpenChange={setIsOpen}>
+          <Dropdown.Trigger>
             <button
               type='button'
               className='git-change-action git-change-icon-button'
               onClick={(e) => {
                 e.stopPropagation()
-                onRename()
               }}
             >
-              <Edit2Line size={15} />
+              <More1Line size={16} />
             </button>
-          </Tooltip.Trigger>
-          <Tooltip.Content>Rename</Tooltip.Content>
-        </Tooltip>
-        <Tooltip>
-          <Tooltip.Trigger>
-            <button
-              type='button'
-              className='git-change-action git-change-icon-button'
-              disabled={isSubmitting}
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete()
+          </Dropdown.Trigger>
+          <Dropdown.Popover placement='bottom end'>
+            <Dropdown.Menu 
+              aria-label='File actions'
+              onAction={(key) => {
+                if (key === 'rename') onRename()
+                if (key === 'delete') onDelete()
               }}
             >
-              <Delete2Line size={15} />
-            </button>
-          </Tooltip.Trigger>
-          <Tooltip.Content>Delete</Tooltip.Content>
-        </Tooltip>
+              <Dropdown.Item id='rename' textValue='Rename'>
+                <div className='flex items-center gap-2'>
+                  <Edit2Line size={16} className='text-muted-foreground' />
+                  <Label>Rename</Label>
+                </div>
+              </Dropdown.Item>
+              <Dropdown.Item 
+                id='delete' 
+                textValue='Delete' 
+                variant='danger'
+              >
+                <div className='flex items-center gap-2'>
+                  <Delete2Line size={16} style={{ color: 'var(--danger)' }} />
+                  <Label>Delete</Label>
+                </div>
+              </Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
       </div>
     </div>
   )
@@ -152,10 +166,13 @@ function FileTreeItem({
     }
   }
 
-  const handleDelete = async () => {
+  const deleteModal = useOverlayState()
+
+  const handleDelete = async (onClose: () => void) => {
     try {
       setIsSubmitting(true)
       await onDeleteFile(node.path)
+      onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed')
     } finally {
@@ -211,10 +228,47 @@ function FileTreeItem({
               setDraftName(node.name)
               setIsEditing(true)
             }}
-            onDelete={handleDelete}
+            onDelete={deleteModal.open}
           />
         )}
       </div>
+
+      <Modal>
+        <Modal.Backdrop 
+          isOpen={deleteModal.isOpen} 
+          onOpenChange={(open) => open ? deleteModal.open() : deleteModal.close()}
+          variant='opaque'
+        >
+          <Modal.Container size='sm'>
+            <Modal.Dialog>
+              {({ close }) => (
+                <>
+                  <Modal.Header>
+                    <Modal.Heading>Confirm Deletion</Modal.Heading>
+                  </Modal.Header>
+                  <Modal.Body>
+                    <p>
+                      Are you sure you want to delete <span style={{ fontWeight: 600 }}>{node.name}</span>? 
+                      This action cannot be undone.
+                    </p>
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button variant='ghost' onPress={close} isDisabled={isSubmitting}>
+                      Cancel
+                    </Button>
+                    <Button 
+                      variant='danger' 
+                      onPress={() => handleDelete(close)}
+                    >
+                      Delete
+                    </Button>
+                  </Modal.Footer>
+                </>
+              )}
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
 
       {error && <p className='tree-item-error'>{error}</p>}
 
