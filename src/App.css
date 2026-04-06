@@ -106,7 +106,7 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--default-500);
+  color: var(--muted);
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
   app-region: no-drag;
@@ -175,7 +175,7 @@
   width: 48px;
   min-width: 48px;
   height: 100%;
-  color: var(--default-500);
+  color: var(--muted);
   transition: background-color 140ms ease, color 140ms ease;
 }
 
@@ -351,7 +351,7 @@
   width: var(--resize-handle-line-width);
   transform: translateX(-50%);
   border-radius: 999px;
-  background: var(--resize-handle-color);
+  background: var(--separator);
   opacity: 0;
   transition:
     opacity 140ms ease,
@@ -368,13 +368,13 @@
 
 .panel-resize-handle.is-active::before,
 .panel-resize-handle:focus-visible::before {
-  background: var(--resize-handle-color-active);
+  background: var(--separator);
   box-shadow: 0 0 0 1px var(--accent);
 }
 
 .eyebrow {
   margin: 0;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -488,7 +488,7 @@
   width: 32px;
   height: 32px;
   border-radius: 12px;
-  color: var(--default-500);
+  color: var(--muted);
 }
 
 .section-settings-button {
@@ -496,7 +496,7 @@
   height: 32px;
   padding-inline: 12px;
   border-radius: 12px;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -546,7 +546,7 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -561,7 +561,7 @@
 }
 
 .sidebar-vertical-tab.is-active {
-  background: var(--default);
+  background: var(--surface-tertiary);
   color: var(--foreground);
   font-weight: 600;
 }
@@ -663,7 +663,7 @@
   padding-bottom: 0;
   border: 0;
   background: transparent;
-  color: var(--default-400);
+  color: var(--muted);
   text-align: left;
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
@@ -729,7 +729,7 @@
 }
 
 .tree-item.is-active .tree-file-row {
-  background: var(--default);
+  background: var(--surface-tertiary);
 }
 
 .tree-file,
@@ -741,7 +741,7 @@
   padding: 0 0 0 12px;
   height: 32px;
   border-radius: 0;
-  color: var(--default-400);
+  color: var(--muted);
   background: transparent;
   transition: none;
 }
@@ -800,7 +800,7 @@
   width: 32px;
   min-width: 32px;
   height: 32px;
-  color: var(--default-500);
+  color: var(--muted);
   border-radius: 12px;
 }
 
@@ -861,7 +861,7 @@
   gap: 12px;
   min-height: 224px;
   padding: 16px 16px 16px 20px;
-  color: var(--default-400);
+  color: var(--muted);
 }
 
 .tree-empty-icon {
@@ -972,7 +972,7 @@
   align-items: center;
   min-height: var(--tabs-chrome-height);
   padding: 0 16px;
-  color: var(--default-400);
+  color: var(--muted);
   font-size: 12px;
   letter-spacing: 0.01em;
   border-bottom: 1px solid var(--separator);
@@ -1019,7 +1019,7 @@
   padding: 0 16px 0 16px;
   border: 0;
   background: transparent;
-  color: var(--default-500);
+  color: var(--muted);
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
@@ -1108,7 +1108,7 @@
 
 .file-tab-meta {
   flex-shrink: 1;
-  color: var(--default-400);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 500;
 }
@@ -1130,7 +1130,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--default-400);
+  color: var(--muted);
   cursor: pointer;
   transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
   app-region: no-drag;
@@ -1181,7 +1181,7 @@
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: var(--default-500);
+  color: var(--muted);
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
 }
@@ -1267,7 +1267,7 @@
 .git-panel-section-toggle {
   border: 0;
   background: transparent;
-  color: var(--default-500);
+  color: var(--muted);
 }
 
 .git-diff-view-mode,
@@ -1328,7 +1328,7 @@
 .git-panel-error,
 .markdown-diff-empty-state p {
   margin: 3px 0 0;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -1384,7 +1384,7 @@
 .git-diff-codemirror-host .cm-changedLine,
 .git-diff-codemirror-host .cm-deletedChunk,
 .git-diff-codemirror-host .cm-insertedLine {
-  background-color: var(--default);
+  background-color: var(--surface-tertiary);
 }
 
 .git-diff-codemirror-host .cm-deletedText,
@@ -1447,7 +1447,7 @@
   width: 24px;
   height: 24px;
   border-radius: 999px;
-  color: var(--default-500);
+  color: var(--muted);
 }
 
 .git-panel-commit-clear:hover {
@@ -1460,7 +1460,7 @@
   align-items: flex-start;
   gap: 10px;
   padding: 12px 16px 4px;
-  color: var(--default-400);
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -1531,7 +1531,7 @@
 .git-empty-subtext {
   display: block;
   margin-top: 6px;
-  color: var(--default-400);
+  color: var(--muted);
   font-size: 12px;
   font-weight: 500;
 }
@@ -1579,7 +1579,7 @@
 }
 
 .git-panel-section-header:hover {
-  background: var(--default);
+  background: var(--surface-tertiary);
 }
 
 .git-panel-section-title-area {
@@ -1592,7 +1592,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--default-400);
+  color: var(--muted);
 }
 
 .git-panel-section-header:hover .git-panel-section-title-area {
@@ -1607,12 +1607,12 @@
 }
 
 .git-panel-section-caret {
-  color: var(--default-500);
+  color: var(--muted);
   flex-shrink: 0;
 }
 
 .git-panel-section-count {
-  color: var(--default-400);
+  color: var(--muted);
   font-size: 12px;
   font-weight: 600;
   margin-left: auto;
@@ -1680,7 +1680,7 @@
 .git-tree-folder-row.is-active,
 .workspace-tree-row.is-active,
 .git-change-item.is-active {
-  background: var(--default);
+  background: var(--surface-tertiary);
   color: var(--accent);
 }
 
@@ -1757,7 +1757,7 @@
 
 .file-panel-title {
   font-size: 12px;
-  color: var(--default-500);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   opacity: 0.8;
@@ -1815,7 +1815,7 @@
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1935,12 +1935,12 @@
 }
 
 .settings-nav-item:hover {
-  background: var(--default);
+  background: var(--surface-tertiary);
   color: var(--foreground);
 }
 
 .settings-nav-item.is-active {
-  background: var(--default);
+  background: var(--surface-tertiary);
   color: var(--foreground);
   font-weight: 600;
 }
@@ -2024,7 +2024,7 @@
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  color: var(--default-500);
+  color: var(--muted);
 }
 
 .git-row-icon img {
@@ -2043,7 +2043,7 @@
 }
 
 .git-change-meta {
-  color: var(--default-400);
+  color: var(--muted);
   font-size: 11px;
 }
 
@@ -2058,7 +2058,7 @@
   font-size: 10px;
   font-weight: 800;
   background: var(--separator);
-  color: var(--default-500);
+  color: var(--muted);
 }
 
 .git-change-badge-added,
@@ -2208,7 +2208,7 @@
 .editor-empty-copy p {
   max-width: 384px;
   margin: 0;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 15px;
   line-height: 1.7;
 }
@@ -2251,7 +2251,7 @@
 .settings-sidebar-eyebrow,
 .settings-panel-eyebrow {
   margin: 0 0 6px;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -2298,7 +2298,7 @@
 }
 
 .settings-nav-item.is-active {
-  background: var(--default);
+  background: var(--surface-tertiary);
 }
 
 .settings-nav-label {
@@ -2308,7 +2308,7 @@
 }
 
 .settings-nav-description {
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -2353,7 +2353,7 @@
 
 .settings-panel-eyebrow {
   font-size: 12px;
-  color: var(--default-500);
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.07em;
   font-weight: 700;
@@ -2488,7 +2488,7 @@
 
 .settings-inline-hint {
   margin: 0;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -2503,7 +2503,7 @@
 
 .settings-empty-state {
   background: var(--surface-secondary);
-  color: var(--default-500);
+  color: var(--muted);
 }
 
 .settings-alert-error {
@@ -2575,7 +2575,7 @@
   border: 0;
   border-radius: 13px;
   background: transparent;
-  color: var(--default-500);
+  color: var(--muted);
   cursor: pointer;
   transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
 }
@@ -2644,7 +2644,7 @@
 
 .agent-select-item-meta {
   overflow: hidden;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2656,7 +2656,7 @@
 
 .agent-status-inline p {
   margin: 0;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -2728,7 +2728,7 @@
 }
 
 .agent-auth-provider-meta {
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -2761,7 +2761,7 @@
 }
 
 .agent-auth-clear {
-  color: var(--default-500);
+  color: var(--muted);
 }
 
 .agent-overlay-scroll {
@@ -2799,7 +2799,7 @@
 }
 
 .agent-session-option.is-active {
-  background: var(--default);
+  background: var(--surface-tertiary);
 }
 
 .agent-session-select-button {
@@ -2823,7 +2823,7 @@
   height: 32px;
   margin-right: 8px;
   border-radius: 11px;
-  color: var(--default-500);
+  color: var(--muted);
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms ease, color 140ms ease, background-color 140ms ease;
@@ -2860,7 +2860,7 @@
 
 .agent-empty-chat p {
   margin: 0;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -2871,7 +2871,7 @@
   gap: 8px;
   margin-top: 2px;
   padding: 3px 0;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -2885,7 +2885,7 @@
 }
 
 .agent-session-status-dot-idle {
-  background: var(--default);
+  background: var(--surface-tertiary);
 }
 
 .agent-session-status-dot-running {
@@ -2902,7 +2902,7 @@
 }
 
 .agent-session-status-label-idle {
-  color: var(--default-400);
+  color: var(--muted);
 }
 
 .agent-session-status-label-running {
@@ -2933,7 +2933,7 @@
   padding: 13px 15px;
   border: 1px solid var(--separator);
   border-radius: 15px;
-  background: var(--default);
+  background: var(--surface-tertiary);
 }
 
 .agent-message-assistant {
@@ -2982,7 +2982,7 @@
 .agent-message-role {
   font-size: 11px;
   font-weight: 600;
-  color: var(--default-400);
+  color: var(--muted);
 }
 
 .agent-message-label {
@@ -3025,8 +3025,8 @@
 .agent-message-toggle-caret {
   width: 9px;
   height: 9px;
-  border-right: 2px solid var(--default-400);
-  border-bottom: 2px solid var(--default-400);
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
   transform: rotate(-45deg) translateY(-1px);
   transition: transform 160ms ease, border-color 160ms ease;
 }
@@ -3054,7 +3054,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--default-400);
+  color: var(--muted);
   cursor: pointer;
 }
 
@@ -3091,7 +3091,7 @@
 
 .agent-message-status-running {
   color: var(--accent);
-  background: var(--default);
+  background: var(--surface-tertiary);
 }
 
 .agent-message-status-done {
@@ -3101,7 +3101,7 @@
 
 .agent-message-status-error {
   color: var(--danger);
-  background: var(--default);
+  background: var(--surface-tertiary);
 }
 
 .agent-message-body {
@@ -3206,7 +3206,7 @@
 }
 
 .agent-markdown th {
-  color: var(--default-400);
+  color: var(--muted);
   font-size: 12px;
   font-weight: 600;
 }
@@ -3364,7 +3364,7 @@
 
 .agent-model-separator {
   flex-shrink: 0;
-  color: var(--default-500);
+  color: var(--muted);
   font-size: inherit;
   user-select: none;
 }
@@ -3641,7 +3641,7 @@
 }
 
 .settings-radio-item.is-active {
-  background: var(--default);
+  background: var(--surface-tertiary);
   color: var(--accent);
   box-shadow: 0 0 0 1px var(--border);
   font-weight: 600;
