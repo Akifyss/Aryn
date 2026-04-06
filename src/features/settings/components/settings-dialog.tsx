@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { Button, Input } from '@heroui/react'
-import { useSettingsStore, type AppTheme } from '@/hooks/use-settings-store'
+import { useSettingsStore } from '@/hooks/use-settings-store'
 import type { AgentProviderAuthState, AgentWorkspaceState } from '@/features/agent/types'
 import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '@/features/workspace/types'
 
-export type SettingsSectionId = 'general' | 'file-icons' | 'providers'
+export type SettingsSectionId = 'general' | 'providers'
 
 type SettingsViewProps = {
   activeSection: SettingsSectionId
@@ -32,11 +32,6 @@ const SETTINGS_SECTIONS: Array<{ description: string, id: SettingsSectionId, lab
     description: 'Manage API keys for Pi Agent providers.',
     id: 'providers',
     label: 'Providers',
-  },
-  {
-    description: 'Switch workspace file icon themes.',
-    id: 'file-icons',
-    label: 'File Icons',
   },
 ]
 
@@ -88,17 +83,46 @@ export function SettingsDialog({
     return theme
   }, [theme])
 
-  const authProviders: Array<{
-    key: AuthProviderKey
-    label: string
-    placeholder: string
-    state: AgentProviderAuthState
-  }> = useMemo(() => {
+  // Track previous theme to prevent overriding manual selection
+  const prevThemeRef = useRef(resolvedTheme);
+
+  // Automatically switch icon theme ONLY when theme itself changes
+  useEffect(() => {
+    if (!workspacePath || isIconThemeBusy || iconThemeOptions.length === 0) return;
+
+    // Only trigger if theme changed laterally
+    if (prevThemeRef.current !== resolvedTheme) {
+      const targetLabel = resolvedTheme === 'dark' ? 'flow dawn' : 'flow deep';
+      const targetOption = iconThemeOptions.find(opt => 
+        opt.label.toLowerCase().includes(targetLabel)
+      );
+
+      // DELAY THE HEAVY ICON WORK to let the main theme transition finish first
+      const timer = setTimeout(() => {
+        if (targetOption && (
+          !iconTheme || 
+          iconTheme.activeThemeId !== targetOption.themeId || 
+          iconTheme.sourceVsixPath !== targetOption.sourceVsixPath
+        )) {
+          void onSelectIconTheme({
+            sourceVsixPath: targetOption.sourceVsixPath,
+            themeId: targetOption.themeId,
+          });
+        }
+      }, 300);
+      
+      // Update ref immediately to prevent multiple triggers
+      prevThemeRef.current = resolvedTheme;
+      return () => clearTimeout(timer);
+    }
+  }, [resolvedTheme, iconThemeOptions, workspacePath, iconTheme, isIconThemeBusy, onSelectIconTheme]);
+
+  const authProviders = useMemo(() => {
     const runtimeAuth = agentState?.runtime.auth
 
     return [
       {
-        key: 'openrouter',
+        key: 'openrouter' as const,
         label: 'OpenRouter',
         placeholder: 'sk-or-v1-...',
         state: runtimeAuth?.openrouter ?? {
@@ -109,7 +133,7 @@ export function SettingsDialog({
         },
       },
       {
-        key: 'openai',
+        key: 'openai' as const,
         label: 'OpenAI',
         placeholder: 'sk-...',
         state: runtimeAuth?.openai ?? {
@@ -120,9 +144,9 @@ export function SettingsDialog({
         },
       },
       {
-        key: 'google',
+        key: 'google' as const,
         label: 'Google Gemini',
-        placeholder: 'GEMINI_API_KEY / API key',
+        placeholder: 'API key',
         state: runtimeAuth?.google ?? {
           envVarName: 'GEMINI_API_KEY',
           hasStoredCredential: false,
@@ -138,9 +162,7 @@ export function SettingsDialog({
     : ''
 
   async function handleSaveProviderAuth(provider: AuthProviderKey, apiKey: string | null) {
-    if (!workspacePath) {
-      return
-    }
+    if (!workspacePath) return
 
     try {
       setIsSavingAuth(true)
@@ -174,9 +196,7 @@ export function SettingsDialog({
               key={section.id}
               type='button'
               className={`settings-nav-item ${section.id === activeSection ? 'is-active' : ''}`}
-              onClick={() => {
-                onSectionChange(section.id)
-              }}
+              onClick={() => onSectionChange(section.id as SettingsSectionId)}
             >
               <span className='settings-nav-label'>{section.label}</span>
             </button>
@@ -186,25 +206,16 @@ export function SettingsDialog({
 
       <section className='settings-panel'>
         <div className='settings-panel-header'>
-          <div>
-            <h3 className='settings-panel-title'>
-              {activeSection === 'general' ? 'Appearance' : activeSection === 'providers' ? 'Providers' : 'File Icons'}
-            </h3>
-          </div>
+          <h3 className='settings-panel-title'>
+            {activeSection === 'general' ? 'Appearance' : 'Providers'}
+          </h3>
         </div>
 
         <div className='settings-panel-content'>
-          {panelError ? (
-            <div className='settings-alert settings-alert-error'>{panelError}</div>
-          ) : null}
+          {panelError && <div className='settings-alert settings-alert-error'>{panelError}</div>}
 
           {activeSection === 'general' ? (
-            <section className='settings-card'>
-              <div className='settings-copy-block'>
-                <h4>Theme</h4>
-                <p>Choose your preferred application theme. 'Sync with system' will follow your computer's light/dark mode settings.</p>
-              </div>
-
+            <div className='settings-card'>
               <div className='settings-theme-switcher'>
                 <div className='settings-field'>
                   <span className='settings-field-label'>Mode</span>
@@ -223,64 +234,84 @@ export function SettingsDialog({
                     ))}
                   </div>
                 </div>
-              </div>
-            </section>
-          ) : activeSection === 'providers' ? (
-            <section className='settings-card'>
-              <div className='settings-copy-block'>
-                <h4>Provider Keys</h4>
-                <p>Saved keys are stored locally and reused by the Agent panel.</p>
-              </div>
 
+                <div className='settings-field' style={{ marginTop: '24px' }}>
+                  <span className='settings-field-label'>Icon theme</span>
+                  <div className='settings-inline-form'>
+                    <select
+                      className='settings-select'
+                      style={{ flex: 1 }}
+                      disabled={isIconThemeBusy || iconThemeOptions.length === 0}
+                      value={activeIconThemeKey}
+                      onChange={(event) => {
+                        const selectedOption = iconThemeOptions.find((o) => o.key === event.target.value)
+                        if (selectedOption) {
+                          void onSelectIconTheme({
+                            sourceVsixPath: selectedOption.sourceVsixPath,
+                            themeId: selectedOption.themeId,
+                          })
+                        }
+                      }}
+                    >
+                      {iconThemeOptions.map((option) => (
+                        <option key={option.key} value={option.key}>{option.label}</option>
+                      ))}
+                    </select>
+                    <Button
+                      isDisabled={isIconThemeBusy}
+                      variant='primary'
+                      className='settings-action-button'
+                      onPress={() => void onImportIconTheme()}
+                    >
+                      Import VSIX
+                    </Button>
+                  </div>
+                  {iconTheme && (
+                    <p className='settings-inline-hint' style={{ marginTop: '8px' }}>
+                      Current: {iconTheme.activeThemeLabel} / {getBaseName(iconTheme.sourceVsixPath)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className='settings-card'>
               {workspacePath ? (
                 <div className='settings-provider-list'>
                   {authProviders.map((provider) => {
                     const draftValue = authDrafts[provider.key]
-
                     return (
                       <section key={provider.key} className='settings-provider-card'>
                         <div>
                           <span className='settings-provider-label'>{provider.label}</span>
                           <span className='settings-provider-meta'>{getProviderMeta(provider.state)}</span>
                         </div>
-
                         <Input
                           aria-label={`${provider.label} API key`}
                           className='settings-provider-input'
                           disabled={isSavingAuth}
-                          onChange={(event) => {
-                            setAuthDrafts((currentValue) => ({
-                              ...currentValue,
-                              [provider.key]: event.target.value,
-                            }))
-                          }}
+                          onChange={(e) => setAuthDrafts(prev => ({ ...prev, [provider.key]: e.target.value }))}
                           placeholder={provider.placeholder}
                           type='password'
                           value={draftValue}
                           variant='secondary'
                         />
-
                         <div className='settings-provider-actions'>
                           <Button
                             isDisabled={isSavingAuth || !draftValue.trim()}
                             size='sm'
                             variant='ghost'
                             className='settings-action-button'
-                            onPress={() => {
-                              void handleSaveProviderAuth(provider.key, draftValue)
-                            }}
+                            onPress={() => void handleSaveProviderAuth(provider.key, draftValue)}
                           >
                             Save Key
                           </Button>
-
                           <Button
                             isDisabled={isSavingAuth || !provider.state.hasStoredCredential}
                             size='sm'
                             variant='ghost'
                             className='settings-action-button'
-                            onPress={() => {
-                              void handleSaveProviderAuth(provider.key, null)
-                            }}
+                            onPress={() => void handleSaveProviderAuth(provider.key, null)}
                           >
                             Remove Saved
                           </Button>
@@ -294,63 +325,7 @@ export function SettingsDialog({
                   Open a workspace first. Provider configuration follows the active workspace context.
                 </div>
               )}
-            </section>
-          ) : (
-            <section className='settings-card settings-card-compact'>
-              <div className='settings-copy-block'>
-                <h4>Theme</h4>
-                <p>Choose a file icon theme variant, or import another VSIX package.</p>
-              </div>
-
-              <div className='settings-inline-form'>
-                <label className='settings-field settings-field-grow'>
-                  <span className='settings-field-label'>Icon theme</span>
-                  <select
-                    className='settings-select'
-                    disabled={isIconThemeBusy || iconThemeOptions.length === 0}
-                    value={activeIconThemeKey}
-                    onChange={(event) => {
-                      const selectedOption = iconThemeOptions.find((option) => option.key === event.target.value)
-                      if (!selectedOption) {
-                        return
-                      }
-
-                      void onSelectIconTheme({
-                        sourceVsixPath: selectedOption.sourceVsixPath,
-                        themeId: selectedOption.themeId,
-                      })
-                    }}
-                  >
-                    {iconThemeOptions.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className='settings-inline-actions'>
-                  <Button
-                    isDisabled={isIconThemeBusy}
-                    variant='primary'
-                    className='settings-action-button'
-                    onPress={() => {
-                      void onImportIconTheme()
-                    }}
-                  >
-                    Import VSIX
-                  </Button>
-                </div>
-              </div>
-
-              {iconTheme ? (
-                <p className='settings-inline-hint'>
-                  Current: {iconTheme.activeThemeLabel} / {getBaseName(iconTheme.sourceVsixPath)}
-                </p>
-              ) : (
-                <p className='settings-inline-hint'>No icon theme is active.</p>
-              )}
-            </section>
+            </div>
           )}
         </div>
       </section>
