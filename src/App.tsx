@@ -35,6 +35,7 @@ import type {
   WorkspaceIconTheme,
   WorkspaceIconThemeCatalogOption,
 } from '@/features/workspace/types'
+import { CommandPalette } from '@/features/command-palette/components/command-palette'
 import './App.css'
 
 function getBaseName(filePath: string) {
@@ -216,6 +217,7 @@ function App() {
   const [isCreatingDirectory, setIsCreatingDirectory] = useState(false)
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'file-icons' | 'agent'>('file-icons')
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(DEFAULT_LEFT_SIDEBAR_WIDTH)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(DEFAULT_RIGHT_SIDEBAR_WIDTH)
@@ -1199,6 +1201,21 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      const isMac = platform === 'darwin'
+      const modifier = isMac ? event.metaKey : event.ctrlKey
+
+      if (modifier && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setIsCommandPaletteOpen((prev) => !prev)
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [platform])
+
+  useEffect(() => {
     if (!currentPath) {
       return
     }
@@ -1520,6 +1537,16 @@ function App() {
             >
               <GitCompareLine size={16} className='sidebar-vertical-tab-icon' />
               <span className='sidebar-vertical-tab-label'>Git</span>
+            </button>
+            <button
+              type='button'
+              className='sidebar-vertical-tab'
+              onClick={() => {
+                setIsCommandPaletteOpen(true)
+              }}
+            >
+              <Icon icon='lucide:search' width={16} height={16} className='sidebar-vertical-tab-icon' />
+              <span className='sidebar-vertical-tab-label'>搜索</span>
             </button>
           </div>
 
@@ -1851,6 +1878,43 @@ function App() {
           </Modal.Container>
         </Modal.Backdrop>
       </Modal>
+
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        files={tree}
+        sessions={agentWorkspaceState?.sessions ?? []}
+        onOpenFile={(path) => {
+          void openFile(path)
+        }}
+        onOpenSession={(sessionPath) => {
+          if (currentPath) {
+            void window.appApi.openAgentSession(currentPath, sessionPath)
+          }
+        }}
+        actions={[
+          {
+            label: 'Open Settings',
+            icon: 'lucide:settings',
+            onSelect: () => setIsSettingsOpen(true)
+          },
+          {
+            label: 'Create New File',
+            icon: 'lucide:file-plus',
+            onSelect: () => handleCreateFile()
+          },
+          {
+            label: 'Create New Folder',
+            icon: 'lucide:folder-plus',
+            onSelect: () => handleCreateDirectory()
+          },
+          {
+            label: 'Switch Workspace',
+            icon: 'lucide:unfold-vertical',
+            onSelect: () => handlePickWorkspace()
+          }
+        ]}
+      />
     </div>
   )
 }
