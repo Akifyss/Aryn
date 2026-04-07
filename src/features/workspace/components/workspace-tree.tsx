@@ -12,6 +12,7 @@ import {
 } from '@mingcute/react'
 import { resolveWorkspaceDirectoryIconUrl, resolveWorkspaceFileIconUrl } from '@/features/workspace/lib/icon-theme'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
+import type { GitRepositoryState, GitDisplayChange } from '@/features/git/types'
 
 type WorkspaceTreeProps = {
   activeFilePath: string | null
@@ -22,6 +23,34 @@ type WorkspaceTreeProps = {
   onSelectFile: (path: string) => void
   onRenameFile: (path: string, nextName: string) => Promise<void>
   onDeleteFile: (path: string) => Promise<void>
+  gitRepositoryState?: GitRepositoryState | null
+}
+
+function normalizePath(filePath: string) {
+  return filePath.replace(/[\\/]+/g, '/').toLowerCase();
+}
+
+function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | undefined, node: WorkspaceNode): GitDisplayChange | null {
+  if (!repositoryState?.isRepository) return null
+  
+  const targetPath = normalizePath(node.path)
+  
+  if (node.kind === 'file') {
+    return repositoryState.unstagedChanges.find(c => normalizePath(c.path) === targetPath)
+      ?? repositoryState.stagedChanges.find(c => normalizePath(c.path) === targetPath)
+      ?? null
+  } else {
+    // Folder status: check if any child (at any depth) has changes
+    const prefix = targetPath.endsWith('/') ? targetPath : targetPath + '/'
+    const hasUnstaged = repositoryState.unstagedChanges.some(c => normalizePath(c.path).startsWith(prefix))
+    const hasStaged = repositoryState.stagedChanges.some(c => normalizePath(c.path).startsWith(prefix))
+    
+    if (hasUnstaged || hasStaged) {
+      // Use a consistent 'modified' look for folders containing changes
+      return { kind: 'modified', path: node.path } as any
+    }
+  }
+  return null
 }
 
 /**
@@ -61,15 +90,24 @@ function FileRowActions({
   onRename,
   onDelete,
   isSubmitting,
+  gitChange,
 }: {
   onRename: () => void
   onDelete: () => void
   isSubmitting: boolean
+  gitChange: GitDisplayChange | null
 }) {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
     <div className='git-change-tools'>
+      {gitChange && (
+        <span 
+          className={`git-status-dot git-status-dot-${gitChange.kind}`} 
+          aria-hidden='true'
+          title={gitChange.kind.charAt(0).toUpperCase() + gitChange.kind.slice(1)}
+        />
+      )}
       <div 
         className='git-change-actions'
         style={isOpen ? { opacity: 1, maxWidth: '2rem', transform: 'translateX(0)' } : undefined}
@@ -130,6 +168,7 @@ function FileTreeItem({
   onSelectFile,
   onRenameFile,
   onDeleteFile,
+  gitRepositoryState,
 }: {
   activeFilePath: string | null
   expandedPaths: Set<string>
@@ -139,6 +178,7 @@ function FileTreeItem({
   onSelectFile: (path: string) => void
   onRenameFile: (path: string, nextName: string) => Promise<void>
   onDeleteFile: (path: string) => Promise<void>
+  gitRepositoryState?: GitRepositoryState | null
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -148,6 +188,7 @@ function FileTreeItem({
   const isFolder = node.kind === 'directory'
   const isExpanded = expandedPaths.has(node.path)
   const isActive = activeFilePath === node.path
+  const gitChange = findGitChangeByFilePath(gitRepositoryState, node)
 
   const handleSubmitRename = async (e?: FormEvent) => {
     e?.preventDefault()
@@ -215,7 +256,9 @@ function FileTreeItem({
         ) : (
           <div className='workspace-tree-trigger' title={node.path}>
             <FileRowIcon node={node} isExpanded={isExpanded} iconTheme={iconTheme} />
-            <span className='git-change-path' style={{ fontWeight: isFolder ? 600 : 500 }}>
+            <span className='git-change-path' style={{ 
+              fontWeight: isFolder ? 600 : 500
+            }}>
               {node.name}
             </span>
           </div>
@@ -224,6 +267,7 @@ function FileTreeItem({
         {!isEditing && (
           <FileRowActions 
             isSubmitting={isSubmitting}
+            gitChange={gitChange}
             onRename={() => {
               setDraftName(node.name)
               setIsEditing(true)
@@ -286,6 +330,7 @@ function FileTreeItem({
                 onSelectFile={onSelectFile}
                 onRenameFile={onRenameFile}
                 onDeleteFile={onDeleteFile}
+                gitRepositoryState={gitRepositoryState}
               />
             ))}
           </ul>
@@ -304,6 +349,7 @@ export function WorkspaceTree({
   onSelectFile,
   onRenameFile,
   onDeleteFile,
+  gitRepositoryState,
 }: WorkspaceTreeProps) {
   const handleToggle = (path: string) => {
     const next = new Set(expandedPaths)
@@ -336,6 +382,7 @@ export function WorkspaceTree({
           onSelectFile={onSelectFile}
           onRenameFile={onRenameFile}
           onDeleteFile={onDeleteFile}
+          gitRepositoryState={gitRepositoryState}
         />
       ))}
     </ul>

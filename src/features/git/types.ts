@@ -31,6 +31,8 @@ export type GitRecentPullItem = {
   statusCode: string
 }
 
+export type GitDisplayChange = GitChangeItem | GitRecentPullItem
+
 export type GitRepositoryState = {
   ahead: number
   behind: number
