@@ -97,7 +97,7 @@ function getChangeKindIcon(kind: GitDisplayChange['kind']) {
     case 'renamed':
       return <Icon icon='radix-icons:dot-filled' width={iconSize} height={iconSize} />
     case 'deleted':
-      return <Icon icon='mingcute:minus-line' width={iconSize} height={iconSize} />
+      return <Icon icon='ic:round-minus' width={iconSize} height={iconSize} />
     case 'modified':
     case 'type-changed':
       return <Icon icon='radix-icons:dot-filled' width={iconSize} height={iconSize} />
