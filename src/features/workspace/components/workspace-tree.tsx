@@ -40,15 +40,25 @@ function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | un
       ?? repositoryState.stagedChanges.find(c => normalizePath(c.path) === targetPath)
       ?? null
   } else {
-    // Folder status: check if any child (at any depth) has changes
+    // Folder status logic: propagate deep child changes up
     const prefix = targetPath.endsWith('/') ? targetPath : targetPath + '/'
-    const hasUnstaged = repositoryState.unstagedChanges.some(c => normalizePath(c.path).startsWith(prefix))
-    const hasStaged = repositoryState.stagedChanges.some(c => normalizePath(c.path).startsWith(prefix))
+    const unstaged = repositoryState.unstagedChanges.filter(c => normalizePath(c.path).startsWith(prefix))
+    const staged = repositoryState.stagedChanges.filter(c => normalizePath(c.path).startsWith(prefix))
+    const allChanges = [...unstaged, ...staged]
     
-    if (hasUnstaged || hasStaged) {
-      // Use a consistent 'modified' look for folders containing changes
+    if (allChanges.length === 0) return null
+    
+    // Priority: If any child is modified, directory is modified (Amber)
+    const isModified = allChanges.some(c => 
+      c.kind === 'modified' || c.kind === 'renamed' || c.kind === 'copied' || c.kind === 'type-changed'
+    )
+    
+    if (isModified) {
       return { kind: 'modified', path: node.path } as any
     }
+    
+    // Else if any child is added, directory is added (Emerald)
+    return { kind: 'added', path: node.path } as any
   }
   return null
 }
