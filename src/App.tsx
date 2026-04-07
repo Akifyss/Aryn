@@ -1813,17 +1813,10 @@ function App() {
             ) : !activeFileTab && !activeDiffTab ? (
               <div className='editor-empty-state'>
                 <div className='editor-empty-content'>
-                  <p className='eyebrow'>Ready</p>
-                  <div className='editor-empty-copy'>
-                    <h3>Open a workspace, then start with a clean draft.</h3>
-                    <p>
-                      The file tree, editor, Git changes, and assistant stay together in one calm desktop workspace.
-                    </p>
-                  </div>
                   <div className='editor-empty-actions'>
-                    <Button variant='primary' onPress={handlePickWorkspace} isDisabled={isPickingWorkspace}>
-                      <FolderOpenFill className='mr-2' size={16} />
-                      Open Folder
+                    <Button variant='outline' onPress={() => setIsCommandPaletteOpen(true)}>
+                      <Icon icon='lucide:search' width={16} height={16} className='mr-2' />
+                      搜索
                     </Button>
                     <Button
                       variant='outline'
@@ -1833,7 +1826,7 @@ function App() {
                       isDisabled={!currentPath || isCreatingFile}
                     >
                       <FileLine className='mr-2' size={16} />
-                      Create Draft
+                      新建文件
                     </Button>
                   </div>
                 </div>
