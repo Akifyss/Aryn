@@ -368,8 +368,8 @@
 
 .panel-resize-handle.is-active::before,
 .panel-resize-handle:focus-visible::before {
-  background: var(--separator);
-  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--color-accent-soft);
 }
 
 .eyebrow {
@@ -2533,7 +2533,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px;
   flex-shrink: 0;
   min-height: var(--chrome-height);
   padding: 0 var(--right-panel-content-inset) 0 16px;
