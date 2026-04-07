@@ -1530,7 +1530,7 @@ function App() {
         } as CSSProperties
       }
     >
-      <AppTitlebar />
+
       {!isLeftSidebarVisible ? (
         <button
           type='button'
@@ -1956,6 +1956,7 @@ function App() {
         actions={commandPaletteActions}
         theme={theme}
       />
+      <AppTitlebar />
     </div>
   )
 }

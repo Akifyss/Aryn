@@ -385,16 +385,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px;
   flex-shrink: 0;
   min-height: 44px;
-  padding: 0 16px 0 12px;
+  padding: 0 0 0 var(--left-panel-toggle-anchor, 12px);
   border-bottom: 0;
-}
-
-.workspace-section-title {
-  padding-left: var(--left-panel-toggle-anchor, 12px);
-  gap: 4px;
   app-region: drag;
   -webkit-app-region: drag;
 }
@@ -446,6 +441,7 @@
 .section-title-drag-spacer {
   flex: 1 1 auto;
   min-width: 0;
+  align-self: stretch;
   app-region: drag;
   -webkit-app-region: drag;
 }
@@ -948,6 +944,7 @@
 .file-tabs-drag-spacer {
   flex: 1 1 auto;
   min-width: 0;
+  align-self: stretch;
   border-bottom: 1px solid var(--separator);
   app-region: drag;
   -webkit-app-region: drag;
@@ -2553,6 +2550,7 @@
 .agent-threadbar-drag-spacer {
   flex: 1 1 auto;
   min-width: 0;
+  align-self: stretch;
   app-region: drag;
   -webkit-app-region: drag;
 }
