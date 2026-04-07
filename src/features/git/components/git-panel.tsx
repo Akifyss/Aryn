@@ -87,26 +87,23 @@ function getDirectoryLabel(relativePath: string) {
   return segments.join(' / ')
 }
 
-function getChangeKindLabel(kind: GitDisplayChange['kind']) {
+function getChangeKindIcon(kind: GitDisplayChange['kind']) {
   switch (kind) {
     case 'added':
-      return 'A'
-    case 'copied':
-      return 'C'
-    case 'deleted':
-      return 'D'
-    case 'modified':
-      return 'M'
-    case 'renamed':
-      return 'R'
-    case 'type-changed':
-      return 'T'
     case 'untracked':
-      return 'U'
+      return <Icon icon='mingcute:add-line' width={16} height={16} />
+    case 'copied':
+    case 'renamed':
+      return <Icon icon='mingcute:repeat-line' width={16} height={16} />
+    case 'deleted':
+      return <Icon icon='mingcute:minus-line' width={16} height={16} />
+    case 'modified':
+    case 'type-changed':
+      return <Icon icon='mingcute:record-fill' width={16} height={16} />
     case 'conflicted':
-      return '!'
+      return <Icon icon='mingcute:alert-line' width={16} height={16} />
     default:
-      return '?'
+      return <Icon icon='mingcute:question-line' width={16} height={16} />
   }
 }
 
@@ -314,8 +311,11 @@ function GitRowActions({
       </div>
 
       {isChange && (
-        <span className={`git-change-badge git-change-badge-${change.kind}`}>
-          {getChangeKindLabel(change.kind)}
+        <span 
+          className={`git-change-badge git-change-badge-${change.kind}`}
+          title={change.kind.charAt(0).toUpperCase() + change.kind.slice(1)}
+        >
+          {getChangeKindIcon(change.kind)}
         </span>
       )}
       {isFolder && <span className='git-panel-section-count'>{changesCount ?? 0}</span>}

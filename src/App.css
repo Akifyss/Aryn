@@ -894,8 +894,10 @@
 .file-tabs-shell[data-empty='true'] .file-tabs-drag-spacer,
 .file-tabs-shell[data-empty='true'] .file-tabs-actions,
 .file-tabs-shell[data-empty='true']::before,
-.file-tabs-shell[data-empty='true']::after {
-  border-bottom-color: transparent;
+.file-tabs-shell[data-empty='true']::after,
+.app-shell[data-left-collapsed='true'] .file-tabs-shell[data-empty='true']::before,
+.app-shell[data-right-collapsed='true'] .file-tabs-shell[data-empty='true']::after {
+  border-bottom-color: transparent !important;
 }
 
 /* When collapsed, fill the left padding area with a segment of the bottom line */
@@ -2045,32 +2047,35 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 18px;
+  width: 18px;
   height: 18px;
-  padding: 0 4px;
-  border-radius: 6px;
-  font-size: 10px;
-  font-weight: 800;
-  background: var(--separator);
-  color: var(--muted);
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: all 140ms ease;
+  line-height: normal;
 }
 
 .git-change-badge-added,
 .git-change-badge-untracked {
-  color: var(--success-foreground);
-  background: var(--success);
+  color: var(--color-emerald-500);
+  background: color-mix(in srgb, var(--color-emerald-500), transparent 90%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-emerald-500), transparent 40%);
 }
 
 .git-change-badge-modified,
-.git-change-badge-renamed {
-  color: var(--accent-foreground);
-  background: var(--accent);
+.git-change-badge-renamed,
+.git-change-badge-copied,
+.git-change-badge-type-changed {
+  color: var(--color-amber-500);
+  background: color-mix(in srgb, var(--color-amber-500), transparent 90%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-amber-500), transparent 40%);
 }
 
 .git-change-badge-deleted,
 .git-change-badge-conflicted {
-  color: var(--danger-foreground);
-  background: var(--danger);
+  color: var(--color-rose-500);
+  background: color-mix(in srgb, var(--color-rose-500), transparent 90%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-rose-500), transparent 40%);
 }
 
 .git-change-tools {
