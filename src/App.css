@@ -528,7 +528,7 @@
 .sidebar-vertical-tabs {
   display: flex;
   flex-direction: column;
-  padding: 8px 10px;
+  padding: 8px;
   padding-left: calc(var(--sidebar-icon-x, 20px) - 12px);
   gap: 2px;
 }
@@ -2041,6 +2041,10 @@
 .git-change-meta {
   color: var(--muted);
   font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
 }
 
 .git-change-badge {
