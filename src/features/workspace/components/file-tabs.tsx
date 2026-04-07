@@ -107,7 +107,7 @@ export function FileTabs({
   }
 
   return (
-    <div className='file-tabs-shell'>
+    <div className='file-tabs-shell' data-empty={tabs.length === 0}>
       <div
         ref={scrollerRef}
         className='file-tabs-scroller'
@@ -122,9 +122,7 @@ export function FileTabs({
           event.preventDefault()
         }}
       >
-        {tabs.length === 0 ? (
-          <div className='file-tabs-empty'>No file selected</div>
-        ) : tabs.map((tab, index) => {
+        {tabs.length > 0 && tabs.map((tab, index) => {
           const baseName = getBaseName(tab)
           const metaLabel = getTabMetaLabel(workspacePath, tab, duplicateNameSet.has(baseName))
           const isActive = activeFilePath === tab.filePath

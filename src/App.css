@@ -891,6 +891,13 @@
   background-color: var(--surface);
 }
 
+.file-tabs-shell[data-empty='true'] .file-tabs-drag-spacer,
+.file-tabs-shell[data-empty='true'] .file-tabs-actions,
+.file-tabs-shell[data-empty='true']::before,
+.file-tabs-shell[data-empty='true']::after {
+  border-bottom-color: transparent;
+}
+
 /* When collapsed, fill the left padding area with a segment of the bottom line */
 .app-shell[data-left-collapsed='true'] .file-tabs-shell::before {
   content: "";
@@ -962,17 +969,6 @@
 
 .file-tabs-scroller::-webkit-scrollbar {
   display: none;
-}
-
-.file-tabs-empty {
-  display: flex;
-  align-items: center;
-  min-height: var(--tabs-chrome-height);
-  padding: 0 16px;
-  color: var(--muted);
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  border-bottom: 1px solid var(--separator);
 }
 
 .file-tab {
