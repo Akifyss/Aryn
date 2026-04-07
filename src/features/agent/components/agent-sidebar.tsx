@@ -578,6 +578,7 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
   const [isSwitchingModel, setIsSwitchingModel] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
+  const [isResizingComposer, setIsResizingComposer] = useState(false)
   const composerResizeStateRef = useRef<{ pointerId: number, startHeight: number, startY: number } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
@@ -1074,6 +1075,10 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
   }
 
   useEffect(() => {
+    if (!isResizingComposer) {
+      return
+    }
+
     function handlePointerMove(event: PointerEvent) {
       const resizeState = composerResizeStateRef.current
 
@@ -1091,8 +1096,9 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
 
     function handlePointerUp(event: PointerEvent) {
       if (composerResizeStateRef.current?.pointerId === event.pointerId) {
-        document.body.style.userSelect = ''
+        setIsResizingComposer(false)
         composerResizeStateRef.current = null
+        document.body.style.userSelect = ''
       }
     }
 
@@ -1100,12 +1106,15 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
     window.addEventListener('pointerup', handlePointerUp)
     window.addEventListener('pointercancel', handlePointerUp)
 
+    document.body.style.userSelect = 'none'
+
     return () => {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
       window.removeEventListener('pointercancel', handlePointerUp)
+      document.body.style.userSelect = ''
     }
-  }, [])
+  }, [isResizingComposer])
 
   const activeSessionPath = agentState.activeSession?.sessionPath ?? null
   const activeSession = agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
@@ -1304,16 +1313,19 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
         <div className='agent-composer-shell' style={{ '--agent-composer-height': `${composerHeight}px` } as CSSProperties}>
           <div
             aria-hidden='true'
-            className='agent-composer-resize-handle'
+            className={`agent-composer-resize-handle${isResizingComposer ? ' is-active' : ''}`}
             onPointerDown={(event) => {
+              if (event.button !== 0) {
+                return
+              }
+
               event.preventDefault()
-              document.body.style.userSelect = 'none'
-              event.currentTarget.setPointerCapture(event.pointerId)
               composerResizeStateRef.current = {
                 pointerId: event.pointerId,
                 startHeight: composerHeight,
                 startY: event.clientY,
               }
+              setIsResizingComposer(true)
             }}
           />
 

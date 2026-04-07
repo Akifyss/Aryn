@@ -3293,7 +3293,34 @@
   cursor: ns-resize;
   touch-action: none;
   user-select: none;
-  z-index: 2;
+  z-index: 40;
+}
+
+.agent-composer-resize-handle::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: var(--resize-handle-line-width);
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: var(--separator);
+  opacity: 0;
+  transition:
+    opacity 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.agent-composer-resize-handle:hover::before,
+.agent-composer-resize-handle.is-active::before {
+  opacity: 1;
+}
+
+.agent-composer-resize-handle.is-active::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--color-accent-soft);
 }
 
 .agent-composer-input.textarea,
