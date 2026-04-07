@@ -2139,10 +2139,6 @@
   background-color: var(--surface-tertiary);
 }
 
-.workspace-tree-row.is-active {
-  background-color: var(--surface-secondary);
-}
-
 .git-status-dot {
   width: 6px;
   height: 6px;
