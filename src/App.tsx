@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, ScrollShadow, Tooltip, Toast, toast, Modal } from '@heroui/react'
+import { Button, ScrollShadow, Tooltip, Toast, toast, Modal, AlertDialog } from '@heroui/react'
 import {
   FileLine,
   FolderOpenFill,
@@ -246,6 +246,40 @@ function App() {
   }, [theme])
 
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
+
+  const [confirmDialogOptions, setConfirmDialogOptions] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    confirmLabel?: string
+    cancelLabel?: string
+    isDanger?: boolean
+    onConfirm: () => void
+    onCancel: () => void
+  } | null>(null)
+
+  function requestConfirm(options: {
+    title: string
+    message: string
+    confirmLabel?: string
+    cancelLabel?: string
+    isDanger?: boolean
+  }): Promise<boolean> {
+    return new Promise((resolve) => {
+      setConfirmDialogOptions({
+        ...options,
+        isOpen: true,
+        onConfirm: () => {
+          setConfirmDialogOptions((prev) => prev ? { ...prev, isOpen: false } : null)
+          resolve(true)
+        },
+        onCancel: () => {
+          setConfirmDialogOptions((prev) => prev ? { ...prev, isOpen: false } : null)
+          resolve(false)
+        }
+      })
+    })
+  }
 
   const [isImportingIconTheme, setIsImportingIconTheme] = useState(false)
   const [isApplyingIconTheme, setIsApplyingIconTheme] = useState(false)
@@ -527,7 +561,7 @@ function App() {
     }
   }
 
-  function confirmDiscardDirtyTabs(reason: 'close' | 'switch-workspace') {
+  async function confirmDiscardDirtyTabs(reason: 'close' | 'switch-workspace') {
     if (dirtyTabs.length === 0) {
       return true
     }
@@ -542,12 +576,15 @@ function App() {
       ? 'Closing them now will discard the unsaved changes.'
       : 'Switching workspaces now will discard the unsaved changes.'
 
-    return window.confirm(
-      `${dirtyTabs.length} tab${dirtyTabs.length > 1 ? 's have' : ' has'} unsaved changes: ${dirtyNames}${extraLabel}.\n\n${actionLabel}`,
-    )
+    return await requestConfirm({
+      title: 'Unsaved Changes',
+      message: `${dirtyTabs.length} tab${dirtyTabs.length > 1 ? 's have' : ' has'} unsaved changes: ${dirtyNames}${extraLabel}.\n\n${actionLabel}`,
+      confirmLabel: 'Discard Changes',
+      isDanger: true,
+    })
   }
 
-  function closeEditorTab(filePath: string, options: { force?: boolean, silent?: boolean } = {}) {
+  async function closeEditorTab(filePath: string, options: { force?: boolean, silent?: boolean } = {}) {
     if (filePath === SETTINGS_TAB_PATH) {
       setIsSettingsTabOpen(false)
       setIsSettingsTabActive(false)
@@ -566,9 +603,12 @@ function App() {
     }
 
     if (targetTab.kind === 'file' && targetTab.isDirty && !options.force) {
-      const confirmed = window.confirm(
-        `"${getBaseName(targetTab.filePath)}" has unsaved changes.\n\nClose this tab and discard them?`,
-      )
+      const confirmed = await requestConfirm({
+        title: 'Unsaved Changes',
+        message: `"${getBaseName(targetTab.filePath)}" has unsaved changes.\n\nClose this tab and discard them?`,
+        confirmLabel: 'Discard & Close',
+        isDanger: true,
+      })
 
       if (!confirmed) {
         return false
@@ -730,7 +770,7 @@ function App() {
   }
 
   async function handlePickWorkspace() {
-    if (!confirmDiscardDirtyTabs('switch-workspace')) {
+    if (!(await confirmDiscardDirtyTabs('switch-workspace'))) {
       return
     }
 
@@ -895,9 +935,12 @@ function App() {
 
     const targetTab = openTabs.find((tab) => tab.kind === 'file' && tab.filePath === filePath)
     if (targetTab?.isDirty) {
-      const confirmed = window.confirm(
-        `"${getBaseName(filePath)}" has unsaved changes.\n\nDelete the file and discard those changes?`,
-      )
+      const confirmed = await requestConfirm({
+        title: 'Delete File',
+        message: `"${getBaseName(filePath)}" has unsaved changes.\n\nDelete the file and discard those changes?`,
+        confirmLabel: 'Delete',
+        isDanger: true,
+      })
 
       if (!confirmed) {
         return
@@ -1017,7 +1060,12 @@ function App() {
       return
     }
 
-    const confirmed = window.confirm(`Discard the current ${change.scope} change for "${change.relativePath}"?`)
+    const confirmed = await requestConfirm({
+      title: 'Discard Change',
+      message: `Discard the current ${change.scope} change for "${change.relativePath}"?`,
+      confirmLabel: 'Discard',
+      isDanger: true,
+    })
 
     if (!confirmed) {
       return
@@ -1042,7 +1090,12 @@ function App() {
       return
     }
 
-    const confirmed = window.confirm(`Discard ${changes.length} working tree changes?`)
+    const confirmed = await requestConfirm({
+      title: 'Discard Changes',
+      message: `Discard ${changes.length} working tree changes?`,
+      confirmLabel: 'Discard All',
+      isDanger: true,
+    })
 
     if (!confirmed) {
       return
@@ -1121,7 +1174,12 @@ function App() {
       return
     }
 
-    const confirmed = window.confirm('Discard all working tree changes? This will revert tracked files and delete untracked files.')
+    const confirmed = await requestConfirm({
+      title: 'Discard All Changes',
+      message: 'Discard all working tree changes?\n\nThis will revert tracked files and delete untracked files.',
+      confirmLabel: 'Discard All',
+      isDanger: true,
+    })
 
     if (!confirmed) {
       return
@@ -1939,6 +1997,38 @@ function App() {
           </Modal.Container>
         </Modal.Backdrop>
       </Modal>
+
+      <AlertDialog>
+        <AlertDialog.Backdrop 
+          isOpen={confirmDialogOptions?.isOpen ?? false} 
+          onOpenChange={(isOpen) => {
+            if (!isOpen && confirmDialogOptions) {
+               confirmDialogOptions.onCancel()
+            }
+          }}
+        >
+          <AlertDialog.Container>
+             <AlertDialog.Dialog>
+               <AlertDialog.CloseTrigger />
+               <AlertDialog.Header>
+                 <AlertDialog.Icon status={confirmDialogOptions?.isDanger ? "danger" : "warning"} />
+                 <AlertDialog.Heading>{confirmDialogOptions?.title}</AlertDialog.Heading>
+               </AlertDialog.Header>
+               <AlertDialog.Body>
+                 <p className="text-[var(--foreground)] whitespace-pre-wrap">{confirmDialogOptions?.message}</p>
+               </AlertDialog.Body>
+               <AlertDialog.Footer>
+                 <Button variant="tertiary" onPress={() => confirmDialogOptions?.onCancel()}>
+                   {confirmDialogOptions?.cancelLabel ?? '取消'}
+                 </Button>
+                 <Button variant={confirmDialogOptions?.isDanger ? "danger" : "primary"} onPress={() => confirmDialogOptions?.onConfirm()}>
+                   {confirmDialogOptions?.confirmLabel ?? '确认'}
+                 </Button>
+               </AlertDialog.Footer>
+             </AlertDialog.Dialog>
+          </AlertDialog.Container>
+        </AlertDialog.Backdrop>
+      </AlertDialog>
 
       <CommandPalette 
         isOpen={isCommandPaletteOpen}
