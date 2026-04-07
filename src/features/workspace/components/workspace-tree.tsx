@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { Button, Dropdown, Input, Label, Modal, Tooltip, useOverlayState } from '@heroui/react'
+import { Button, Dropdown, Input, Label, AlertDialog, Tooltip, useOverlayState } from '@heroui/react'
 import {
   CheckLine,
   CloseLine,
@@ -287,42 +287,45 @@ function FileTreeItem({
         )}
       </div>
 
-      <Modal>
-        <Modal.Backdrop 
+      <AlertDialog>
+        <AlertDialog.Backdrop 
           isOpen={deleteModal.isOpen} 
           onOpenChange={(open) => open ? deleteModal.open() : deleteModal.close()}
           variant='opaque'
         >
-          <Modal.Container size='sm'>
-            <Modal.Dialog>
+          <AlertDialog.Container size='sm'>
+            <AlertDialog.Dialog>
               {({ close }) => (
                 <>
-                  <Modal.Header>
-                    <Modal.Heading>Confirm Deletion</Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <p>
+                  <AlertDialog.CloseTrigger />
+                  <AlertDialog.Header>
+                    <AlertDialog.Icon status='danger' />
+                    <AlertDialog.Heading>Confirm Deletion</AlertDialog.Heading>
+                  </AlertDialog.Header>
+                  <AlertDialog.Body>
+                    <p className='text-[var(--foreground)]'>
                       Are you sure you want to delete <span style={{ fontWeight: 600 }}>{node.name}</span>? 
                       This action cannot be undone.
                     </p>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button variant='ghost' onPress={close} isDisabled={isSubmitting}>
+                  </AlertDialog.Body>
+                  <AlertDialog.Footer>
+                    <Button variant='tertiary' onPress={close} isDisabled={isSubmitting}>
                       Cancel
                     </Button>
                     <Button 
                       variant='danger' 
                       onPress={() => handleDelete(close)}
+                      isDisabled={isSubmitting}
                     >
                       Delete
                     </Button>
-                  </Modal.Footer>
+                  </AlertDialog.Footer>
                 </>
               )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+            </AlertDialog.Dialog>
+          </AlertDialog.Container>
+        </AlertDialog.Backdrop>
+      </AlertDialog>
 
       {error && <p className='tree-item-error'>{error}</p>}
 
