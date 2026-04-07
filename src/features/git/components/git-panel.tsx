@@ -88,22 +88,23 @@ function getDirectoryLabel(relativePath: string) {
 }
 
 function getChangeKindIcon(kind: GitDisplayChange['kind']) {
+  const iconSize = 12
   switch (kind) {
     case 'added':
     case 'untracked':
-      return <Icon icon='mingcute:add-line' width={16} height={16} />
+      return <Icon icon='mingcute:add-line' width={iconSize} height={iconSize} />
     case 'copied':
     case 'renamed':
-      return <Icon icon='mingcute:repeat-line' width={16} height={16} />
+      return <Icon icon='radix-icons:dot-filled' width={iconSize} height={iconSize} />
     case 'deleted':
-      return <Icon icon='mingcute:minus-line' width={16} height={16} />
+      return <Icon icon='mingcute:minus-line' width={iconSize} height={iconSize} />
     case 'modified':
     case 'type-changed':
-      return <Icon icon='mingcute:record-fill' width={16} height={16} />
+      return <Icon icon='radix-icons:dot-filled' width={iconSize} height={iconSize} />
     case 'conflicted':
-      return <Icon icon='mingcute:alert-line' width={16} height={16} />
+      return <Icon icon='mingcute:alert-line' width={iconSize} height={iconSize} />
     default:
-      return <Icon icon='mingcute:question-line' width={16} height={16} />
+      return <Icon icon='mingcute:question-line' width={iconSize} height={iconSize} />
   }
 }
 
