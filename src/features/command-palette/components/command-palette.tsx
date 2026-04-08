@@ -34,11 +34,7 @@ type CommandPaletteProps = {
   theme: 'light' | 'dark' | 'auto'
 }
 
-const CustomKbd = ({ children, className = '' }: { children: React.ReactNode, className?: string }) => (
-  <span className={`px-1.5 py-0.5 rounded border border-(--border) bg-(--surface-secondary) text-[10px] font-bold text-(--muted) shadow-sm leading-none flex items-center justify-center min-w-[20px] ${className}`}>
-    {children}
-  </span>
-)
+
 
 export function CommandPalette({
   isOpen,
@@ -220,31 +216,31 @@ export function CommandPalette({
           scroll='inside' 
           className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'
         >
-          <Modal.Dialog className={`p-0 m-0 relative w-full max-w-xl bg-[var(--surface)] shadow-2xl rounded-2xl border border-[var(--border)] overflow-hidden outline-none ${theme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}>
+          <Modal.Dialog className={`command-palette-dialog ${theme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}>
             <Modal.Body className='p-0 m-0'>
               {/* Header */}
-              <div className='flex items-center px-6 py-5 gap-3.5 bg-[var(--surface)]'>
-                <Icon icon='lucide:search' className='text-(--muted)' width={22} />
+              <div className='command-palette-header'>
+                <Icon icon='lucide:search' className='command-palette-icon' width={22} />
                 <input
                   ref={inputRef}
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder='Search...'
                   style={{ outline: 'none', boxShadow: 'none' }}
-                  className='flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[16px] text-(--foreground) placeholder:text-(--muted) opacity-80 font-normal'
+                  className='command-palette-input'
                 />
-                <div className='flex items-center gap-1.5 opacity-30 select-none'>
-                   <Kbd className='bg-transparent border-none shadow-none text-xs text-[var(--muted)] font-bold'>⌘</Kbd>
-                   <Kbd className='bg-transparent border-none shadow-none text-xs text-[var(--muted)] font-bold'>K</Kbd>
+                <div className='command-palette-kbd-group'>
+                   <Kbd className="text-[10px] px-1.5 py-0.5 min-w-[20px] shadow-none">⌘</Kbd>
+                   <Kbd className="text-[10px] px-1.5 py-0.5 min-w-[20px] shadow-none">K</Kbd>
                 </div>
               </div>
 
-              <div className='h-px bg-[var(--border)] mx-6' />
+              <div className='command-palette-divider' />
 
               {/* Viewport with explicit scrolling container */}
               <ScrollShadow 
                 hideScrollBar 
-                className='max-h-[420px] overflow-y-auto px-2 py-4 relative'
+                className='command-palette-viewport'
                 ref={scrollRef}
               >
                 {results.length > 0 ? (
@@ -263,8 +259,8 @@ export function CommandPalette({
                         const label = cat === 'action' ? 'Navigation' : cat === 'file' ? 'Recent Files' : 'Sessions'
                         
                         return (
-                          <div key={cat} className='flex flex-col gap-1 px-2'>
-                            <header className='px-4 py-1 text-[10px] font-black text-[var(--muted)] uppercase tracking-[0.25em] opacity-80 select-none'>
+                          <div key={cat} className='command-palette-section'>
+                            <header className='command-palette-section-header'>
                               {label}
                             </header>
                             <ListBox 
@@ -284,28 +280,25 @@ export function CommandPalette({
                                   key={item.id}
                                   data-command-active={isSelected ? 'true' : 'false'}
                                   textValue={item.label}
-                                  className={`rounded-xl px-4 py-2.5 transition-all outline-none focus:outline-none !outline-none focus:ring-0 ring-0 hover:!bg-[var(--surface-secondary)] ${isSelected ? 'bg-[var(--surface-tertiary)]' : 'bg-transparent'}`}
+                                  className='command-palette-item'
                                   onPress={() => item.onSelect()}
                                   style={{ outline: 'none' }}
                                 >
-                                  <div className='flex items-center gap-4 w-full pointer-events-none'>
-                                    <div className={`transition-colors flex-shrink-0 ${isSelected ? 'text-(--foreground)' : 'text-(--muted)'}`}>
+                                  <div className='command-palette-item-content'>
+                                    <div className='command-palette-item-icon'>
                                       <Icon icon={item.icon} width={18} />
                                     </div>
-                                    <div className='flex flex-1 min-w-0 flex-col gap-0'>
-                                      <span className={`text-[14px] font-semibold truncate ${isSelected ? 'text-(--foreground)' : 'text-(--foreground) opacity-80'}`}>{item.label}</span>
+                                    <div className='command-palette-item-text'>
+                                      <span className='command-palette-item-title'>{item.label}</span>
                                       {item.description && (
-                                        <span className={`text-[10px] truncate opacity-40 font-normal ${isSelected ? 'text-(--foreground)' : 'text-(--muted)'}`}>
+                                        <span className='command-palette-item-desc'>
                                           {item.description}
                                         </span>
                                       )}
                                     </div>
-                                    {isSelected && (
-                                      <div className='flex items-center gap-1.5 px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--surface)] text-[9px] font-bold text-[var(--muted)] shadow-xs uppercase tracking-tighter'>
-                                        <span>ENTER</span>
-                                        <Icon icon='lucide:corner-down-left' width={10} />
-                                      </div>
-                                    )}
+                                    <div className={`command-palette-item-action ${isSelected ? 'is-active' : ''}`}>
+                                      <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">↵ ENTER</Kbd>
+                                    </div>
                                   </div>
                                 </ListBoxItem>
                               )
@@ -316,30 +309,30 @@ export function CommandPalette({
                     })})()}
                   </div>
                 ) : (
-                  <div className='py-24 flex flex-col items-center justify-center text-(--muted) gap-4 opacity-40'>
-                    <Icon icon='lucide:search' width={32} className='opacity-10' />
-                    <p className='text-sm italic'>No results found</p>
+                  <div className='command-palette-empty'>
+                    <Icon icon='lucide:search' width={32} className='command-palette-empty-icon' />
+                    <p className='command-palette-empty-text'>No results found</p>
                   </div>
                 )}
               </ScrollShadow>
 
               {/* Footer */}
-              <div className='px-8 py-4 border-t border-[var(--border)] bg-[var(--surface)] flex items-center justify-between text-[10px] text-[var(--muted)] font-bold tracking-tight select-none'>
-                <div className='flex items-center gap-8'>
-                  <div className='flex items-center gap-2.5'>
-                    <div className='flex gap-1'>
-                      <CustomKbd><Icon icon='lucide:arrow-up' width={8} /></CustomKbd>
-                      <CustomKbd><Icon icon='lucide:arrow-down' width={8} /></CustomKbd>
+              <div className='command-palette-footer'>
+                <div className='command-palette-footer-group'>
+                  <div className='command-palette-footer-item'>
+                    <div className='command-palette-footer-kbd-row'>
+                      <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none min-w-[20px]">↑</Kbd>
+                      <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none min-w-[20px]">↓</Kbd>
                     </div>
                     <span>NAVIGATE</span>
                   </div>
-                  <div className='flex items-center gap-2.5'>
-                    <CustomKbd className='min-w-[44px]'>ENTER</CustomKbd>
+                  <div className='command-palette-footer-item'>
+                    <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">↵ ENTER</Kbd>
                     <span>SELECT</span>
                   </div>
                 </div>
-                <div className='flex items-center gap-2'>
-                  <CustomKbd className='min-w-[32px]'>ESC</CustomKbd>
+                <div className='command-palette-footer-item'>
+                  <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">ESC</Kbd>
                   <span>CLOSE</span>
                 </div>
               </div>
