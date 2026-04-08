@@ -291,7 +291,7 @@ function serializeAssistantMessage(message: AssistantMessage, index: number): Ag
     return null
   }
 
-  const fallbackText = message.errorMessage ?? 'Assistant response'
+  const fallbackText = message.errorMessage ?? (thinkingText ? '' : 'Assistant response')
 
   return {
     id: `assistant-${message.timestamp}-${index}`,
@@ -417,7 +417,7 @@ function pushSerializedMessage(
   }
 }
 
-function serializeSessionEntries(entries: SessionEntry[]) {
+export function serializeSessionEntries(entries: SessionEntry[]) {
   const messages: SerializedBranchMessage[] = []
   const entryMessages = new Map<string, SerializedBranchMessage>()
   const toolArguments = new Map<string, unknown>()
