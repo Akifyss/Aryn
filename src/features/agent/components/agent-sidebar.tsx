@@ -1085,10 +1085,10 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
     setActiveComposerMenu(null)
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function submitComposerPrompt(streamingBehavior?: 'steer' | 'followUp') {
+    const trimmedPrompt = composerValue.trim()
 
-    if (!workspacePath || !composerValue.trim()) {
+    if (!workspacePath || !trimmedPrompt) {
       return
     }
 
@@ -1100,7 +1100,7 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
         setAgentState(nextState)
       }
 
-      await window.appApi.sendAgentPrompt(composerValue)
+      await window.appApi.sendAgentPrompt(trimmedPrompt, streamingBehavior)
       setComposerValue('')
       setDraftAssistant('')
       setLiveTools([])
@@ -1109,10 +1109,15 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await submitComposerPrompt(agentState.runtime.isStreaming ? 'steer' : undefined)
+  }
+
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
-      event.currentTarget.form?.requestSubmit()
+      void submitComposerPrompt(event.altKey ? 'followUp' : agentState.runtime.isStreaming ? 'steer' : undefined)
     }
   }
 
@@ -1176,7 +1181,7 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
       return !query || modelId.toLowerCase().includes(query)
     })
   const modelPlaceholder = 'model'
-  const canSend = Boolean(workspacePath && composerValue.trim()) && !agentState.runtime.isStreaming
+  const canSend = Boolean(workspacePath && composerValue.trim())
   const statusMessage = !workspacePath
     ? 'Open a workspace to start.'
     : !agentState.runtime.hasConfiguredModels

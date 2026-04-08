@@ -92,7 +92,11 @@ const legacyWorkspaceSettingsPath = path.join(app.getPath('userData'), 'workspac
 const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPath)
 const agentManager = new PiAgentManager(
   (event: AgentClientEvent) => {
-    win?.webContents.send('agent:event', event)
+    if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
+      return
+    }
+
+    win.webContents.send('agent:event', event)
   },
   { agentDir },
 )
@@ -485,7 +489,11 @@ ipcMain.handle('git:get-file-diff', async (_, workspacePath: string, filePath: s
 
 ipcMain.handle('workspace:start-watch', async (_, rootPath: string) => {
   await watchWorkspace(rootPath, (event) => {
-    win?.webContents.send('workspace:changed', event)
+    if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
+      return
+    }
+
+    win.webContents.send('workspace:changed', event)
   })
 
   return { ok: true }
@@ -623,8 +631,8 @@ ipcMain.handle('agent:rename-session', async (_event, name: string) => {
   return agentManager.renameActiveSession(name)
 })
 
-ipcMain.handle('agent:send-prompt', async (_event, prompt: string) => {
-  return agentManager.sendPrompt(prompt)
+ipcMain.handle('agent:send-prompt', async (_event, prompt: string, streamingBehavior?: 'steer' | 'followUp') => {
+  return agentManager.sendPrompt(prompt, streamingBehavior)
 })
 
 ipcMain.handle('agent:select-model', async (_event, modelKey: string) => {

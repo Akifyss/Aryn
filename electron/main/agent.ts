@@ -37,6 +37,8 @@ type PiAgentManagerOptions = {
   agentDir: string
 }
 
+type StreamingBehavior = 'steer' | 'followUp'
+
 const OPENROUTER_ENV_KEY = 'OPENROUTER_API_KEY'
 const OPENROUTER_PROVIDER = 'openrouter'
 const OPENAI_ENV_KEY = 'OPENAI_API_KEY'
@@ -717,7 +719,7 @@ export class PiAgentManager {
     return this.buildWorkspaceState(cwd)
   }
 
-  async sendPrompt(prompt: string) {
+  async sendPrompt(prompt: string, streamingBehavior?: StreamingBehavior) {
     const runtime = this.requireActiveSession()
     const message = prompt.trim()
 
@@ -729,7 +731,11 @@ export class PiAgentManager {
       throw new Error(AUTH_SETUP_HINT)
     }
 
-    const pendingPrompt = runtime.session.prompt(message)
+    const pendingPrompt = streamingBehavior === 'steer'
+      ? runtime.session.steer(message)
+      : streamingBehavior === 'followUp'
+        ? runtime.session.followUp(message)
+        : runtime.session.prompt(message)
     this.emitEvent({
       type: 'workspace_state',
       state: this.serializeWorkspaceState(

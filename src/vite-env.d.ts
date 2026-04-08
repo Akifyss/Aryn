@@ -49,7 +49,7 @@ declare global {
       openAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
       deleteAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
       renameAgentSession: (name: string) => Promise<AgentWorkspaceState>
-      sendAgentPrompt: (prompt: string) => Promise<{ ok: boolean }>
+      sendAgentPrompt: (prompt: string, streamingBehavior?: 'steer' | 'followUp') => Promise<{ ok: boolean }>
       selectAgentModel: (modelKey: string) => Promise<AgentWorkspaceState>
       updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => Promise<AgentWorkspaceState>
       abortAgentPrompt: () => Promise<AgentWorkspaceState>

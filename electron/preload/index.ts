@@ -46,7 +46,7 @@ contextBridge.exposeInMainWorld('appApi', {
   openAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:open-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,
   deleteAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:delete-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,
   renameAgentSession: (name: string) => ipcRenderer.invoke('agent:rename-session', name) as Promise<AgentWorkspaceState>,
-  sendAgentPrompt: (prompt: string) => ipcRenderer.invoke('agent:send-prompt', prompt) as Promise<{ ok: boolean }>,
+  sendAgentPrompt: (prompt: string, streamingBehavior?: 'steer' | 'followUp') => ipcRenderer.invoke('agent:send-prompt', prompt, streamingBehavior) as Promise<{ ok: boolean }>,
   selectAgentModel: (modelKey: string) => ipcRenderer.invoke('agent:select-model', modelKey) as Promise<AgentWorkspaceState>,
   updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => ipcRenderer.invoke('agent:update-provider-auth', rootPath, provider, apiKey) as Promise<AgentWorkspaceState>,
   abortAgentPrompt: () => ipcRenderer.invoke('agent:abort') as Promise<AgentWorkspaceState>,
