@@ -3788,7 +3788,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  opacity: 0.5;
   user-select: none;
 }
 

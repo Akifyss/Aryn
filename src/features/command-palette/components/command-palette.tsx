@@ -48,6 +48,10 @@ export function CommandPalette({
 }: CommandPaletteProps) {
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
+
+  const isMac = typeof window !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  const cmdKey = isMac ? '⌘' : 'Ctrl'
+
   const inputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -55,6 +59,7 @@ export function CommandPalette({
   const selectedIndexRef = useRef(0)
 
   const flattenedFiles = useMemo(() => {
+    const isMac = typeof window !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
     const list: WorkspaceNode[] = []
     const flatten = (nodes: WorkspaceNode[]) => {
       nodes.forEach(node => {
@@ -230,8 +235,7 @@ export function CommandPalette({
                   className='command-palette-input'
                 />
                 <div className='command-palette-kbd-group'>
-                  <Kbd className="text-[10px] px-1.5 py-0.5 min-w-[20px] shadow-none">⌘</Kbd>
-                  <Kbd className="text-[10px] px-1.5 py-0.5 min-w-[20px] shadow-none">K</Kbd>
+                  <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">{cmdKey}  K</Kbd>
                 </div>
               </div>
 
