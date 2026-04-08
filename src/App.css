@@ -3004,24 +3004,16 @@ body.workspace-tree-dragging .workspace-tree-row {
   line-height: 1.5;
 }
 
-.agent-session-status-dot {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: var(--separator);
-}
-
-.agent-session-status-dot-idle {
-  background: var(--surface-tertiary);
-}
-
-.agent-session-status-dot-running {
-  background: var(--accent);
-}
-
-.agent-session-status-dot-error {
-  background: var(--danger);
+.agent-session-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4ch;
+  flex: 0 0 4ch;
+  font-family: 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1;
+  white-space: pre;
 }
 
 .agent-session-status-label {
@@ -3029,15 +3021,19 @@ body.workspace-tree-dragging .workspace-tree-row {
   flex: 0 0 auto;
 }
 
-.agent-session-status-label-idle {
-  color: var(--muted);
-}
-
 .agent-session-status-label-running {
   color: var(--accent);
 }
 
 .agent-session-status-label-error {
+  color: var(--danger);
+}
+
+.agent-session-status-indicator-running {
+  color: var(--accent);
+}
+
+.agent-session-status-indicator-error {
   color: var(--danger);
 }
 

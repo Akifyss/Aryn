@@ -7,6 +7,7 @@ import {
 } from '@mingcute/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import spinners, { type BrailleSpinnerName } from 'unicode-animations'
 import type {
   AgentClientEvent,
   AgentSidebarMessage,
@@ -277,10 +278,21 @@ function AgentMessageBubble({ message }: { message: AgentSidebarMessage }) {
   )
 }
 
-type AgentSessionStatusTone = 'error' | 'idle' | 'running'
+type AgentSessionStatusTone = 'error' | 'running'
+
+type AgentSessionStatusIndicator =
+  | {
+      kind: 'spinner'
+      name: BrailleSpinnerName
+    }
+  | {
+      kind: 'symbol'
+      value: string
+    }
 
 type AgentSessionStatus = {
   detail: string
+  indicator: AgentSessionStatusIndicator
   label: string
   tone: AgentSessionStatusTone
 }
@@ -328,6 +340,18 @@ type AgentSessionPhase =
       hasActiveSession: boolean
       type: 'idle'
     }
+
+type LoadingAgentSessionPhaseType = Exclude<AgentSessionPhase['type'], 'error' | 'idle'>
+
+const AGENT_SESSION_STATUS_ANIMATIONS: Record<LoadingAgentSessionPhaseType, BrailleSpinnerName> = {
+  auto_retry: 'orbit',
+  compaction: 'cascade',
+  message_queue: 'columns',
+  running: 'braille',
+  streaming: 'braillewave',
+  thinking: 'dna',
+  tool_execution: 'scan',
+}
 
 function formatQueueSummary({
   followUpMessageCount,
@@ -452,11 +476,15 @@ function deriveAgentSessionPhase({
   }
 }
 
-function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus {
+function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus | null {
   switch (phase.type) {
     case 'error':
       return {
         detail: phase.message,
+        indicator: {
+          kind: 'symbol',
+          value: '•',
+        },
         label: 'Error',
         tone: 'error',
       }
@@ -467,6 +495,10 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
 
       return {
         detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        indicator: {
+          kind: 'spinner',
+          name: AGENT_SESSION_STATUS_ANIMATIONS.tool_execution,
+        },
         label: 'Tool execution',
         tone: 'running',
       }
@@ -482,6 +514,10 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
 
       return {
         detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        indicator: {
+          kind: 'spinner',
+          name: AGENT_SESSION_STATUS_ANIMATIONS.compaction,
+        },
         label: 'Compaction',
         tone: 'running',
       }
@@ -493,6 +529,10 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
 
       return {
         detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        indicator: {
+          kind: 'spinner',
+          name: AGENT_SESSION_STATUS_ANIMATIONS.auto_retry,
+        },
         label: 'Auto-retry',
         tone: 'running',
       }
@@ -502,6 +542,10 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
 
       return {
         detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        indicator: {
+          kind: 'spinner',
+          name: AGENT_SESSION_STATUS_ANIMATIONS.thinking,
+        },
         label: 'Thinking',
         tone: 'running',
       }
@@ -511,6 +555,10 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
 
       return {
         detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        indicator: {
+          kind: 'spinner',
+          name: AGENT_SESSION_STATUS_ANIMATIONS.streaming,
+        },
         label: 'Streaming',
         tone: 'running',
       }
@@ -520,6 +568,10 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
 
       return {
         detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
+        indicator: {
+          kind: 'spinner',
+          name: AGENT_SESSION_STATUS_ANIMATIONS.running,
+        },
         label: 'Running',
         tone: 'running',
       }
@@ -529,24 +581,71 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
         detail: phase.queueSummary || (phase.pendingMessageCount === 1
           ? '1 queued message is waiting.'
           : `${phase.pendingMessageCount} queued messages are waiting.`),
+        indicator: {
+          kind: 'spinner',
+          name: AGENT_SESSION_STATUS_ANIMATIONS.message_queue,
+        },
         label: 'Message queue',
         tone: 'running',
       }
     case 'idle':
-      return {
-        detail: phase.hasActiveSession
-          ? 'Ready for the next prompt.'
-          : 'No active session yet.',
-        label: 'Idle',
-        tone: 'idle',
-      }
+      return null
   }
+}
+
+function UnicodeSpinner({
+  className,
+  name,
+}: {
+  className: string
+  name: BrailleSpinnerName
+}) {
+  const spinner = spinners[name]
+  const [frameIndex, setFrameIndex] = useState(0)
+
+  useEffect(() => {
+    setFrameIndex(0)
+
+    const timer = window.setInterval(() => {
+      setFrameIndex((currentValue) => (currentValue + 1) % spinner.frames.length)
+    }, spinner.interval)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [name, spinner.frames.length, spinner.interval])
+
+  return (
+    <span aria-hidden='true' className={className}>
+      {spinner.frames[frameIndex] ?? spinner.frames[0]}
+    </span>
+  )
+}
+
+function AgentSessionStatusIndicator({ status }: { status: AgentSessionStatus }) {
+  if (status.indicator.kind === 'spinner') {
+    return (
+      <UnicodeSpinner
+        className={`agent-session-status-indicator agent-session-status-indicator-${status.tone}`}
+        name={status.indicator.name}
+      />
+    )
+  }
+
+  return (
+    <span
+      aria-hidden='true'
+      className={`agent-session-status-indicator agent-session-status-indicator-${status.tone}`}
+    >
+      {status.indicator.value}
+    </span>
+  )
 }
 
 function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
   return (
     <article className={`agent-session-status agent-session-status-${status.tone}`}>
-      <span className={`agent-session-status-dot agent-session-status-dot-${status.tone}`} aria-hidden='true' />
+      <AgentSessionStatusIndicator status={status} />
       <span className={`agent-session-status-label agent-session-status-label-${status.tone}`}>
         {status.label}
       </span>
