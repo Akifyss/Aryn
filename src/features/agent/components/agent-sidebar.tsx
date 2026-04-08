@@ -84,8 +84,8 @@ function formatSessionTime(value: string) {
   }).format(new Date(value))
 }
 
-function formatSessionLabel(name: string | null, modifiedAt: string) {
-  return `${name ?? 'Untitled session'} / ${formatSessionTime(modifiedAt)}`
+function formatSessionLabel(name: string | null) {
+  return name ?? 'Untitled session'
 }
 
 function formatModelLabel(modelKey: string | null) {
@@ -1196,7 +1196,7 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
             }}
           >
             <span className='agent-select-current'>
-              {activeSession ? formatSessionLabel(activeSession.name, activeSession.modifiedAt) : 'Session'}
+              {activeSession ? formatSessionLabel(activeSession.name) : 'Session'}
             </span>
           </button>
         </div>
