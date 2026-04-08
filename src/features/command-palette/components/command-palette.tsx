@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
-import { 
-  Modal, 
+import {
+  Modal,
   Kbd,
   ListBox,
   ListBoxItem,
@@ -50,7 +50,7 @@ export function CommandPalette({
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
-  
+
   const resultsRef = useRef<CommandItem[]>([])
   const selectedIndexRef = useRef(0)
 
@@ -153,7 +153,7 @@ export function CommandPalette({
   // and wrap in requestAnimationFrame to prevent layout thrashing on rapid keydown.
   useEffect(() => {
     if (!isOpen) return
-    
+
     const frameId = requestAnimationFrame(() => {
       const activeElement = document.querySelector(`[data-command-active="true"]`)
       if (activeElement) {
@@ -207,13 +207,13 @@ export function CommandPalette({
 
   return (
     <Modal>
-      <Modal.Backdrop 
-        isOpen={isOpen} 
+      <Modal.Backdrop
+        isOpen={isOpen}
         onOpenChange={onClose}
         variant='opaque'
       >
-        <Modal.Container 
-          scroll='inside' 
+        <Modal.Container
+          scroll='inside'
           className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'
         >
           <Modal.Dialog className={`command-palette-dialog ${theme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}>
@@ -230,16 +230,16 @@ export function CommandPalette({
                   className='command-palette-input'
                 />
                 <div className='command-palette-kbd-group'>
-                   <Kbd className="text-[10px] px-1.5 py-0.5 min-w-[20px] shadow-none">⌘</Kbd>
-                   <Kbd className="text-[10px] px-1.5 py-0.5 min-w-[20px] shadow-none">K</Kbd>
+                  <Kbd className="text-[10px] px-1.5 py-0.5 min-w-[20px] shadow-none">⌘</Kbd>
+                  <Kbd className="text-[10px] px-1.5 py-0.5 min-w-[20px] shadow-none">K</Kbd>
                 </div>
               </div>
 
               <div className='command-palette-divider' />
 
               {/* Viewport with explicit scrolling container */}
-              <ScrollShadow 
-                hideScrollBar 
+              <ScrollShadow
+                hideScrollBar
                 className='command-palette-viewport'
                 ref={scrollRef}
               >
@@ -257,56 +257,57 @@ export function CommandPalette({
                         const items = categorized[cat]
                         if (items.length === 0) return null
                         const label = cat === 'action' ? 'Navigation' : cat === 'file' ? 'Recent Files' : 'Sessions'
-                        
+
                         return (
                           <div key={cat} className='command-palette-section'>
                             <header className='command-palette-section-header'>
                               {label}
                             </header>
-                            <ListBox 
-                              aria-label={label} 
+                            <ListBox
+                              aria-label={label}
                               className='p-0 gap-0 outline-none'
                               selectionMode='single'
                               onAction={(key) => {
-                                 const item = resultsRef.current.find(i => i.id === key)
-                                 if (item) item.onSelect()
+                                const item = resultsRef.current.find(i => i.id === key)
+                                if (item) item.onSelect()
                               }}
                             >
                               {items.map((item) => {
                                 const isSelected = item.id === activeId
 
-                              return (
-                                <ListBoxItem
-                                  key={item.id}
-                                  data-command-active={isSelected ? 'true' : 'false'}
-                                  textValue={item.label}
-                                  className='command-palette-item'
-                                  onPress={() => item.onSelect()}
-                                  style={{ outline: 'none' }}
-                                >
-                                  <div className='command-palette-item-content'>
-                                    <div className='command-palette-item-icon'>
-                                      <Icon icon={item.icon} width={18} />
+                                return (
+                                  <ListBoxItem
+                                    key={item.id}
+                                    data-command-active={isSelected ? 'true' : 'false'}
+                                    textValue={item.label}
+                                    className='command-palette-item'
+                                    onPress={() => item.onSelect()}
+                                    style={{ outline: 'none' }}
+                                  >
+                                    <div className='command-palette-item-content'>
+                                      <div className='command-palette-item-icon'>
+                                        <Icon icon={item.icon} width={18} />
+                                      </div>
+                                      <div className='command-palette-item-text'>
+                                        <span className='command-palette-item-title'>{item.label}</span>
+                                        {item.description && (
+                                          <span className='command-palette-item-desc'>
+                                            {item.description}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className={`command-palette-item-action ${isSelected ? 'is-active' : ''}`}>
+                                        <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">ENTER</Kbd>
+                                      </div>
                                     </div>
-                                    <div className='command-palette-item-text'>
-                                      <span className='command-palette-item-title'>{item.label}</span>
-                                      {item.description && (
-                                        <span className='command-palette-item-desc'>
-                                          {item.description}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className={`command-palette-item-action ${isSelected ? 'is-active' : ''}`}>
-                                      <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">↵ ENTER</Kbd>
-                                    </div>
-                                  </div>
-                                </ListBoxItem>
-                              )
-                            })}
-                          </ListBox>
-                        </div>
-                      )
-                    })})()}
+                                  </ListBoxItem>
+                                )
+                              })}
+                            </ListBox>
+                          </div>
+                        )
+                      })
+                    })()}
                   </div>
                 ) : (
                   <div className='command-palette-empty'>
@@ -327,7 +328,7 @@ export function CommandPalette({
                     <span>NAVIGATE</span>
                   </div>
                   <div className='command-palette-footer-item'>
-                    <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">↵ ENTER</Kbd>
+                    <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">ENTER</Kbd>
                     <span>SELECT</span>
                   </div>
                 </div>
