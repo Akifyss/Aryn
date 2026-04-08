@@ -1,21 +1,42 @@
-import type { GitChangeKind, GitDisplayChange } from '@/features/git/types'
+import type { GitChangeKind, GitChangeScope } from '@/features/git/types'
 
-const GIT_CHANGE_PRIORITY: Record<GitChangeKind, number> = {
-  conflicted: 0,
-  deleted: 1,
-  modified: 2,
-  renamed: 2,
-  copied: 2,
-  'type-changed': 2,
-  added: 3,
-  untracked: 3,
+type GitDisplayChangeSummary = {
+  kind: GitChangeKind
+  scope?: GitChangeScope
 }
 
-export function pickDominantGitDisplayChange<T extends Pick<GitDisplayChange, 'kind'>>(changes: T[]): T | null {
+function getGitChangePriority(change: GitDisplayChangeSummary) {
+  if (change.kind === 'conflicted') {
+    return 0
+  }
+
+  if (change.kind === 'untracked') {
+    return 1
+  }
+
+  if (change.kind === 'deleted') {
+    return change.scope === 'unstaged' ? 2 : 4
+  }
+
+  if (
+    change.kind === 'modified'
+    || change.kind === 'renamed'
+    || change.kind === 'copied'
+    || change.kind === 'type-changed'
+  ) {
+    return change.scope === 'unstaged' ? 3 : 5
+  }
+
+  return 6
+}
+
+export function pickDominantGitDisplayChange<
+  T extends GitDisplayChangeSummary
+>(changes: T[]): T | null {
   let dominantChange: T | null = null
 
   for (const change of changes) {
-    if (!dominantChange || GIT_CHANGE_PRIORITY[change.kind] < GIT_CHANGE_PRIORITY[dominantChange.kind]) {
+    if (!dominantChange || getGitChangePriority(change) < getGitChangePriority(dominantChange)) {
       dominantChange = change
     }
   }

@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { pickDominantGitDisplayChange } from '@/features/git/lib/display-change'
 import type { GitDisplayChange } from '@/features/git/types'
 
-function createChange(kind: GitDisplayChange['kind']): Pick<GitDisplayChange, 'kind'> {
-  return { kind }
+function createChange(
+  kind: GitDisplayChange['kind'],
+  scope?: Extract<GitDisplayChange, { kind: GitDisplayChange['kind'] }> extends infer T
+    ? T extends { scope: infer S } ? S : never
+    : never,
+): Pick<GitDisplayChange, 'kind'> & Partial<Pick<GitDisplayChange, 'scope'>> {
+  return scope ? { kind, scope } : { kind }
 }
 
 describe('pickDominantGitDisplayChange', () => {
@@ -16,6 +21,16 @@ describe('pickDominantGitDisplayChange', () => {
     ).toEqual(createChange('deleted'))
   })
 
+  it('prefers untracked over deleted and added, matching IDE-style folder summaries', () => {
+    expect(
+      pickDominantGitDisplayChange([
+        createChange('deleted', 'staged'),
+        createChange('untracked', 'unstaged'),
+        createChange('added', 'staged'),
+      ]),
+    ).toEqual(createChange('untracked', 'unstaged'))
+  })
+
   it('prefers conflicted over every other change kind', () => {
     expect(
       pickDominantGitDisplayChange([
@@ -26,14 +41,23 @@ describe('pickDominantGitDisplayChange', () => {
     ).toEqual(createChange('conflicted'))
   })
 
-  it('treats modified-like statuses as stronger than added and untracked', () => {
+  it('prefers untracked over modified-like and added statuses', () => {
     expect(
       pickDominantGitDisplayChange([
         createChange('untracked'),
         createChange('renamed'),
         createChange('added'),
       ]),
-    ).toEqual(createChange('renamed'))
+    ).toEqual(createChange('untracked'))
+  })
+
+  it('prefers unstaged modifications over staged deletions', () => {
+    expect(
+      pickDominantGitDisplayChange([
+        createChange('deleted', 'staged'),
+        createChange('modified', 'unstaged'),
+      ]),
+    ).toEqual(createChange('modified', 'unstaged'))
   })
 
   it('returns null when there are no changes', () => {
