@@ -38,6 +38,7 @@ export type WorkspaceSettingsTab = {
 }
 
 export type WorkspaceDisplayTab = WorkspaceTab | WorkspaceSettingsTab
+export type TabDropPosition = 'before' | 'after'
 
 type WorkspaceState = {
   activeTabPath: string | null
@@ -48,6 +49,7 @@ type WorkspaceState = {
   closeTab: (path: string) => void
   markTabMissing: (path: string) => void
   markTabSaved: (path: string, savedContent: string) => void
+  moveTab: (movingPath: string, targetPath: string, position: TabDropPosition) => void
   openDiffTab: (tab: WorkspaceDiffTab, activate?: boolean) => void
   openTab: (tab: { content: string, editorKind: SupportedWorkspaceEditorKind, filePath: string }) => void
   renameTab: (currentPath: string, nextPath: string) => void
@@ -73,6 +75,36 @@ function getNextActiveTabPath(openTabs: WorkspaceTab[], activeTabPath: string | 
   const nextActiveTab = nextTabs[closingIndex] ?? nextTabs[closingIndex - 1] ?? null
 
   return nextActiveTab?.filePath ?? null
+}
+
+export function reorderWorkspaceTabs(
+  openTabs: WorkspaceTab[],
+  movingPath: string,
+  targetPath: string,
+  position: TabDropPosition,
+) {
+  if (movingPath === targetPath) {
+    return openTabs
+  }
+
+  const movingTab = openTabs.find((tab) => tab.filePath === movingPath)
+  if (!movingTab || !openTabs.some((tab) => tab.filePath === targetPath)) {
+    return openTabs
+  }
+
+  const remainingTabs = openTabs.filter((tab) => tab.filePath !== movingPath)
+  const targetIndex = remainingTabs.findIndex((tab) => tab.filePath === targetPath)
+  if (targetIndex === -1) {
+    return openTabs
+  }
+
+  const insertionIndex = position === 'before' ? targetIndex : targetIndex + 1
+  const nextTabs = [...remainingTabs]
+  nextTabs.splice(insertionIndex, 0, movingTab)
+
+  return nextTabs.every((tab, index) => tab === openTabs[index])
+    ? openTabs
+    : nextTabs
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -112,6 +144,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         : tab
     )),
   })),
+  moveTab: (movingPath, targetPath, position) => set((state) => {
+    const nextTabs = reorderWorkspaceTabs(state.openTabs, movingPath, targetPath, position)
+
+    return nextTabs === state.openTabs
+      ? state
+      : { openTabs: nextTabs }
+  }),
   openTab: ({ content, editorKind, filePath }) => set((state) => {
     const existingTab = state.openTabs.find((tab) => tab.filePath === filePath)
 

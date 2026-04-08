@@ -348,6 +348,7 @@ function App() {
   const currentPath = useWorkspaceStore((state) => state.currentPath)
   const markTabMissing = useWorkspaceStore((state) => state.markTabMissing)
   const markTabSaved = useWorkspaceStore((state) => state.markTabSaved)
+  const moveTab = useWorkspaceStore((state) => state.moveTab)
   const openDiffTab = useWorkspaceStore((state) => state.openDiffTab)
   const openTab = useWorkspaceStore((state) => state.openTab)
   const openTabs = useWorkspaceStore((state) => state.openTabs)
@@ -1940,6 +1941,9 @@ function App() {
             onActivate={activateFileTab}
             onClose={(filePath) => {
               closeEditorTab(filePath)
+            }}
+            onMoveTab={(movingPath, targetPath, position) => {
+              moveTab(movingPath, targetPath, position)
             }}
             onOpenDiff={async (filePath) => {
               const latestGitState = await refreshGitState(currentPath, { silent: true })

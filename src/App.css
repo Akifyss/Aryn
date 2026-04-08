@@ -945,6 +945,10 @@
   -webkit-app-region: no-drag;
 }
 
+.file-tabs-scroller[data-dragging='true'] {
+  cursor: grabbing;
+}
+
 /* Offset the 1px negative margin ONLY when the first tab is allowed to overlap (collapsed state) */
 .app-shell[data-left-collapsed='true'] .file-tabs-scroller {
   padding-left: 1px;
@@ -989,6 +993,43 @@
   transition: background-color 140ms ease, color 140ms ease;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+.file-tab.is-drag-source {
+  opacity: 0.56;
+}
+
+.file-tabs-scroller[data-dragging='true'] .file-tab:hover .file-tab-trigger {
+  color: var(--muted);
+}
+
+.file-tabs-scroller[data-dragging='true'] .file-tab.is-active .file-tab-trigger,
+.file-tabs-scroller[data-dragging='true'] .file-tab.is-active:hover .file-tab-trigger {
+  color: var(--foreground);
+}
+
+.file-tabs-scroller[data-dragging='true'] .file-tab-actions,
+.file-tabs-scroller[data-dragging='true'] .file-tab:hover .file-tab-actions,
+.file-tabs-scroller[data-dragging='true'] .file-tab.is-dirty .file-tab-actions {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.file-tabs-scroller[data-dragging='true'] .file-tab-actions::before {
+  display: none;
+}
+
+.file-tabs-drop-indicator {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  pointer-events: none;
+  transform: translateX(-50%);
+  z-index: 7;
 }
 
 /* When sidebar is visible, the very first tab shouldn't have a left border or negative margin (to avoid redundant line with sidebar) */

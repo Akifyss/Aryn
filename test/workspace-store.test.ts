@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { useWorkspaceStore } from '../src/features/workspace/store/use-workspace-store'
+import {
+  reorderWorkspaceTabs,
+  useWorkspaceStore,
+} from '../src/features/workspace/store/use-workspace-store'
 
 describe('useWorkspaceStore', () => {
   beforeEach(() => {
@@ -145,6 +148,107 @@ describe('useWorkspaceStore', () => {
     expect(nextState.openTabs[1]).toMatchObject({
       kind: 'diff',
       title: 'file.md',
+    })
+  })
+
+  it('reorders tabs before and after the hovered target without disturbing the active tab', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
+    store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
+    store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
+    store.activateTab('C:/workspace/b.md')
+
+    store.moveTab('C:/workspace/c.md', 'C:/workspace/a.md', 'before')
+    expect(useWorkspaceStore.getState().openTabs.map((tab) => tab.filePath)).toEqual([
+      'C:/workspace/c.md',
+      'C:/workspace/a.md',
+      'C:/workspace/b.md',
+    ])
+    expect(useWorkspaceStore.getState().activeTabPath).toBe('C:/workspace/b.md')
+
+    store.moveTab('C:/workspace/c.md', 'C:/workspace/b.md', 'after')
+    expect(useWorkspaceStore.getState().openTabs.map((tab) => tab.filePath)).toEqual([
+      'C:/workspace/a.md',
+      'C:/workspace/b.md',
+      'C:/workspace/c.md',
+    ])
+    expect(useWorkspaceStore.getState().activeTabPath).toBe('C:/workspace/b.md')
+  })
+
+  it('treats self-drops and adjacent no-op drops as stable reorder operations', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
+    store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
+    store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
+
+    const currentTabs = useWorkspaceStore.getState().openTabs
+
+    expect(reorderWorkspaceTabs(currentTabs, 'C:/workspace/b.md', 'C:/workspace/b.md', 'before')).toBe(currentTabs)
+    expect(reorderWorkspaceTabs(currentTabs, 'C:/workspace/b.md', 'C:/workspace/c.md', 'before')).toBe(currentTabs)
+    expect(reorderWorkspaceTabs(currentTabs, 'C:/workspace/b.md', 'C:/workspace/a.md', 'after')).toBe(currentTabs)
+    expect(reorderWorkspaceTabs(currentTabs, 'C:/workspace/missing.md', 'C:/workspace/a.md', 'before')).toBe(currentTabs)
+  })
+
+  it('moves a leading tab to the very end when dropped after the last tab', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
+    store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
+    store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
+
+    store.moveTab('C:/workspace/a.md', 'C:/workspace/c.md', 'after')
+
+    expect(useWorkspaceStore.getState().openTabs.map((tab) => tab.filePath)).toEqual([
+      'C:/workspace/b.md',
+      'C:/workspace/c.md',
+      'C:/workspace/a.md',
+    ])
+  })
+
+  it('reorders diff tabs alongside file tabs without changing their payloads', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({ content: 'draft', editorKind: 'rich-text', filePath: 'C:/workspace/draft.md' })
+    store.openDiffTab({
+      diff: {
+        change: {
+          kind: 'modified',
+          originalPath: null,
+          path: 'C:/workspace/draft.md',
+          relativePath: 'draft.md',
+          scope: 'unstaged',
+          statusCode: 'M',
+        },
+        editorKind: 'rich-text',
+        modifiedContent: 'new',
+        modifiedExists: true,
+        modifiedLabel: 'Working tree',
+        originalContent: 'old',
+        originalExists: true,
+        originalLabel: 'Index',
+        repositoryRootPath: 'C:/workspace',
+      },
+      exists: true,
+      filePath: 'git-diff://unstaged/C%3A%2Fworkspace%2Fdraft.md',
+      isDirty: false,
+      kind: 'diff',
+      title: 'draft.md',
+    })
+    store.openTab({ content: 'notes', editorKind: 'rich-text', filePath: 'C:/workspace/notes.md' })
+
+    store.moveTab('git-diff://unstaged/C%3A%2Fworkspace%2Fdraft.md', 'C:/workspace/notes.md', 'after')
+
+    const nextTabs = useWorkspaceStore.getState().openTabs
+    expect(nextTabs.map((tab) => tab.filePath)).toEqual([
+      'C:/workspace/draft.md',
+      'C:/workspace/notes.md',
+      'git-diff://unstaged/C%3A%2Fworkspace%2Fdraft.md',
+    ])
+    expect(nextTabs[2]).toMatchObject({
+      kind: 'diff',
+      title: 'draft.md',
     })
   })
 })
