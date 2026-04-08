@@ -823,16 +823,19 @@ export class PiAgentManager {
     const models: Model<Api>[] = []
     const preferredNamingModel = session.modelRegistry.find(OPENROUTER_PROVIDER, AUTO_SESSION_NAME_MODEL_ID) ?? AUTO_SESSION_NAME_MODEL
 
-    if (session.modelRegistry.hasConfiguredAuth(preferredNamingModel)) {
-      models.push(preferredNamingModel)
-    }
-
     if (
       session.model
       && session.modelRegistry.hasConfiguredAuth(session.model)
       && !models.some((model) => model.provider === session.model?.provider && model.id === session.model?.id)
     ) {
       models.push(session.model)
+    }
+
+    if (
+      session.modelRegistry.hasConfiguredAuth(preferredNamingModel)
+      && !models.some((model) => model.provider === preferredNamingModel.provider && model.id === preferredNamingModel.id)
+    ) {
+      models.push(preferredNamingModel)
     }
 
     return models
