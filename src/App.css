@@ -3391,7 +3391,7 @@
 }
 
 .agent-model-composite {
-  --agent-model-control-font-size: 12px;
+  --agent-model-control-font-size: 13px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -3433,15 +3433,6 @@
   display: block;
 }
 
-.agent-provider-trigger-caret {
-  display: block;
-  width: 7px;
-  height: 7px;
-  margin-top: 0px;
-  border-right: 1px solid currentColor;
-  border-bottom: 1px solid currentColor;
-  transform: rotate(45deg);
-}
 
 .agent-model-separator {
   flex-shrink: 0;
@@ -3525,7 +3516,7 @@
   overflow: hidden;
   padding: 0 16px;
   color: var(--foreground);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;

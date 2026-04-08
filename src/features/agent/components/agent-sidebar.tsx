@@ -1360,7 +1360,6 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
                     }}
                   >
                     <span className='agent-provider-trigger-label'>{selectedProviderValue}</span>
-                    <span aria-hidden='true' className='agent-provider-trigger-caret' />
                   </button>
 
                   <span className='agent-model-separator'>/</span>
