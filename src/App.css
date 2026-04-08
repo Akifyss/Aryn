@@ -3031,6 +3031,37 @@ body.workspace-tree-dragging .workspace-tree-row {
   flex: 0 0 auto;
 }
 
+.agent-session-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--separator);
+  border-radius: 999px;
+  background: var(--surface-secondary);
+  color: var(--muted);
+}
+
+.agent-session-status-badge-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-family: 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: pre;
+}
+
+.agent-session-status-badge-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .agent-session-status-label-running {
   color: var(--foreground);
 }

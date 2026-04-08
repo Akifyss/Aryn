@@ -290,7 +290,13 @@ type AgentSessionStatusIndicator =
       value: string
     }
 
+type AgentSessionStatusBadge = {
+  indicator: Extract<AgentSessionStatusIndicator, { kind: 'spinner' }>
+  label: string
+}
+
 type AgentSessionStatus = {
+  badge?: AgentSessionStatusBadge
   indicator: AgentSessionStatusIndicator
   label: string
   tone: AgentSessionStatusTone
@@ -302,99 +308,59 @@ type AgentSessionPhase =
       message: string
     }
   | {
-      queueSummary: string
       type: 'tool_execution'
-      toolCount: number
-      toolName: string | null
     }
   | {
-      queueSummary: string
-      reason: AgentWorkspaceState['runtime']['compactionReason']
       type: 'compaction'
     }
   | {
-      attempt: number
-      maxAttempts: number | null
-      queueSummary: string
       type: 'auto_retry'
     }
   | {
-      queueSummary: string
       type: 'thinking'
     }
   | {
-      queueSummary: string
       type: 'streaming'
     }
   | {
-      queueSummary: string
-      type: 'running'
+      type: 'working'
     }
   | {
-      pendingMessageCount: number
-      queueSummary: string
-      type: 'message_queue'
+      type: 'queued'
     }
   | {
-      hasActiveSession: boolean
       type: 'idle'
     }
 
-type LoadingAgentSessionPhaseType = Exclude<AgentSessionPhase['type'], 'error' | 'idle'>
+type AnimatedAgentSessionStatusType = Exclude<AgentSessionPhase['type'], 'error' | 'idle'>
 
-const AGENT_SESSION_STATUS_ANIMATIONS: Record<LoadingAgentSessionPhaseType, BrailleSpinnerName> = {
+const AGENT_SESSION_STATUS_ANIMATIONS: Record<AnimatedAgentSessionStatusType, BrailleSpinnerName> = {
   auto_retry: 'orbit',
   compaction: 'cascade',
-  message_queue: 'columns',
-  running: 'braille',
+  queued: 'columns',
   streaming: 'braillewave',
   thinking: 'dna',
   tool_execution: 'scan',
-}
-
-function formatQueueSummary({
-  followUpMessageCount,
-  steeringMessageCount,
-}: {
-  followUpMessageCount: number
-  steeringMessageCount: number
-}) {
-  const parts: string[] = []
-
-  if (steeringMessageCount > 0) {
-    parts.push(steeringMessageCount === 1 ? '1 steering queued.' : `${steeringMessageCount} steering queued.`)
-  }
-
-  if (followUpMessageCount > 0) {
-    parts.push(followUpMessageCount === 1 ? '1 follow-up queued.' : `${followUpMessageCount} follow-up queued.`)
-  }
-
-  return parts.join(' ')
+  working: 'braille',
 }
 
 function deriveAgentSessionPhase({
-  activeSession,
   draftAssistant,
   isStreaming,
   isThinkingStreaming,
   panelError,
   pendingMessageCount,
-  queueSummary,
   retryAttempt,
-  retryMaxAttempts,
   runningTools,
   runtime,
   workspacePath,
 }: {
-  activeSession: AgentWorkspaceState['activeSession']
   draftAssistant: string
   isStreaming: boolean
   isThinkingStreaming: boolean
   panelError: string | null
   pendingMessageCount: number
-  queueSummary: string
   retryAttempt: number
-  retryMaxAttempts: number | null
   runningTools: LiveToolState[]
   runtime: AgentWorkspaceState['runtime']
   workspacePath: string | null
@@ -412,26 +378,18 @@ function deriveAgentSessionPhase({
 
   if (runningTools.length > 0) {
     return {
-      queueSummary,
-      toolCount: runningTools.length,
-      toolName: runningTools.length === 1 ? runningTools[0].name : null,
       type: 'tool_execution',
     }
   }
 
   if (runtime.isCompacting) {
     return {
-      queueSummary,
-      reason: runtime.compactionReason,
       type: 'compaction',
     }
   }
 
   if (retryAttempt > 0) {
     return {
-      attempt: retryAttempt,
-      maxAttempts: retryMaxAttempts,
-      queueSummary,
       type: 'auto_retry',
     }
   }
@@ -439,29 +397,24 @@ function deriveAgentSessionPhase({
   if (isStreaming) {
     if (isThinkingStreaming && !draftAssistant.trim()) {
       return {
-        queueSummary,
         type: 'thinking',
       }
     }
 
     if (draftAssistant.trim()) {
       return {
-        queueSummary,
         type: 'streaming',
       }
     }
 
     return {
-      queueSummary,
-      type: 'running',
+      type: 'working',
     }
   }
 
   if (pendingMessageCount > 0) {
     return {
-      pendingMessageCount,
-      queueSummary,
-      type: 'message_queue',
+      type: 'queued',
     }
   }
 
@@ -470,12 +423,24 @@ function deriveAgentSessionPhase({
   }
 
   return {
-    hasActiveSession: Boolean(activeSession),
     type: 'idle',
   }
 }
 
-function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus | null {
+function formatAgentSessionStatus(
+  phase: AgentSessionPhase,
+  pendingMessageCount: number,
+): AgentSessionStatus | null {
+  const queuedBadge = pendingMessageCount > 0 && phase.type !== 'error' && phase.type !== 'queued'
+    ? {
+        indicator: {
+          kind: 'spinner' as const,
+          name: AGENT_SESSION_STATUS_ANIMATIONS.queued,
+        },
+        label: pendingMessageCount === 1 ? 'Queued 1' : `Queued ${pendingMessageCount}`,
+      }
+    : undefined
+
   switch (phase.type) {
     case 'error':
       return {
@@ -488,6 +453,7 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
       }
     case 'tool_execution': {
       return {
+        badge: queuedBadge,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.tool_execution,
@@ -498,6 +464,7 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
     }
     case 'compaction': {
       return {
+        badge: queuedBadge,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.compaction,
@@ -508,6 +475,7 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
     }
     case 'auto_retry': {
       return {
+        badge: queuedBadge,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.auto_retry,
@@ -518,6 +486,7 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
     }
     case 'thinking': {
       return {
+        badge: queuedBadge,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.thinking,
@@ -528,6 +497,7 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
     }
     case 'streaming': {
       return {
+        badge: queuedBadge,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.streaming,
@@ -536,23 +506,24 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
         tone: 'running',
       }
     }
-    case 'running': {
+    case 'working': {
       return {
+        badge: queuedBadge,
         indicator: {
           kind: 'spinner',
-          name: AGENT_SESSION_STATUS_ANIMATIONS.running,
+          name: AGENT_SESSION_STATUS_ANIMATIONS.working,
         },
-        label: 'Running',
+        label: 'Working',
         tone: 'running',
       }
     }
-    case 'message_queue':
+    case 'queued':
       return {
         indicator: {
           kind: 'spinner',
-          name: AGENT_SESSION_STATUS_ANIMATIONS.message_queue,
+          name: AGENT_SESSION_STATUS_ANIMATIONS.queued,
         },
-        label: 'Message queue',
+        label: pendingMessageCount === 1 ? 'Queued 1' : `Queued ${pendingMessageCount}`,
         tone: 'running',
       }
     case 'idle':
@@ -616,6 +587,15 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
       <span className={`agent-session-status-label agent-session-status-label-${status.tone}`}>
         {status.label}
       </span>
+      {status.badge ? (
+        <span className='agent-session-status-badge'>
+          <UnicodeSpinner
+            className='agent-session-status-badge-indicator'
+            name={status.badge.indicator.name}
+          />
+          <span className='agent-session-status-badge-label'>{status.badge.label}</span>
+        </span>
+      ) : null}
     </article>
   )
 }
@@ -1203,47 +1183,37 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
       ? (agentState.runtime.setupHint ?? 'Configure a model first.')
       : null
   const runningTools = liveTools.filter((tool) => tool.status === 'running')
-  const queueSummary = formatQueueSummary({
-    followUpMessageCount: agentState.runtime.followUpMessageCount,
-    steeringMessageCount: agentState.runtime.steeringMessageCount,
-  })
   const sessionPhase = useMemo(() => deriveAgentSessionPhase({
-    activeSession: agentState.activeSession,
     draftAssistant,
     isStreaming: agentState.runtime.isStreaming,
     isThinkingStreaming,
     panelError,
     pendingMessageCount: agentState.runtime.pendingMessageCount,
-    queueSummary,
     retryAttempt: agentState.runtime.retryAttempt,
-    retryMaxAttempts: agentState.runtime.retryMaxAttempts,
     runningTools,
     runtime: agentState.runtime,
     workspacePath,
   }), [
-    agentState.activeSession,
     agentState.runtime.compactionReason,
-    agentState.runtime.followUpMessageCount,
     agentState.runtime.isCompacting,
     agentState.runtime.hasConfiguredModels,
     agentState.runtime.isStreaming,
     agentState.runtime.pendingMessageCount,
     agentState.runtime.retryAttempt,
-    agentState.runtime.retryMaxAttempts,
-    agentState.runtime.steeringMessageCount,
     draftAssistant,
     draftThinking,
     isThinkingStreaming,
     panelError,
-    queueSummary,
     runningTools,
     workspacePath,
   ])
   const sessionStatus = useMemo(
-    () => sessionPhase ? formatAgentSessionStatus(sessionPhase) : null,
-    [sessionPhase],
+    () => sessionPhase ? formatAgentSessionStatus(sessionPhase, agentState.runtime.pendingMessageCount) : null,
+    [agentState.runtime.pendingMessageCount, sessionPhase],
   )
-  const sessionStatusKey = sessionStatus ? sessionStatus.label : 'none'
+  const sessionStatusKey = sessionStatus
+    ? `${sessionStatus.label}:${sessionStatus.badge?.label ?? ''}`
+    : 'none'
   const renderedMessageCount = renderedMessages.length
 
   useLayoutEffect(() => {
