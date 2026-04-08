@@ -2979,7 +2979,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   flex-direction: column;
   gap: 13px;
   min-height: 100%;
-  padding: 16px 16px 22px;
+  padding: 16px 16px 32px;
 }
 
 .agent-empty-chat {
@@ -3008,10 +3008,11 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 4ch;
-  flex: 0 0 4ch;
+  width: 4.5ch;
+  flex: 0 0 4.5ch;
   font-family: 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace;
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1;
   white-space: pre;
 }

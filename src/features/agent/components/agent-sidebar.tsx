@@ -1,4 +1,4 @@
-import { type CSSProperties, FormEvent, KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, FormEvent, KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Button, Input, ScrollShadow, TextArea } from '@heroui/react'
 import {
   AddLine,
@@ -679,11 +679,12 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
   const [isResizingComposer, setIsResizingComposer] = useState(false)
   const composerResizeStateRef = useRef<{ pointerId: number, startHeight: number, startY: number } | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
   const modelInputRef = useRef<HTMLInputElement | null>(null)
   const overlayPanelRef = useRef<HTMLDivElement | null>(null)
   const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
+  const previousSessionPathRef = useRef<string | null>(null)
   const restorableSessionPath = agentState.activeSession?.sessionPath ?? null
   const [isModelInputFullySelected, setIsModelInputFullySelected] = useState(false)
 
@@ -1010,10 +1011,6 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
     }
   }, [activeComposerMenu])
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [agentState.activeSession?.messages.length, draftAssistant, draftThinking, liveTools])
-
   const renderedMessages = useMemo(() => {
     const persistedMessages = agentState.activeSession?.messages ?? []
     const toolMessages: AgentSidebarMessage[] = liveTools.map((tool) => ({
@@ -1280,6 +1277,36 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
     () => sessionPhase ? formatAgentSessionStatus(sessionPhase) : null,
     [sessionPhase],
   )
+  const sessionStatusKey = sessionStatus ? `${sessionStatus.label}:${sessionStatus.detail}` : 'none'
+  const renderedMessageCount = renderedMessages.length
+
+  useLayoutEffect(() => {
+    const scrollElement = messagesScrollRef.current
+    if (!scrollElement) {
+      return
+    }
+
+    const isSessionChanged = previousSessionPathRef.current !== activeSessionPath
+    previousSessionPathRef.current = activeSessionPath
+
+    const scrollToBottom = () => {
+      scrollElement.scrollTop = scrollElement.scrollHeight
+    }
+
+    scrollToBottom()
+
+    if (isSessionChanged) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      scrollToBottom()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [activeSessionPath, draftAssistant, draftThinking, liveTools, renderedMessageCount, sessionStatusKey])
 
   return (
     <div className='agent-shell'>
@@ -1387,7 +1414,7 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
         </div>
       ) : null}
 
-      <ScrollShadow className='agent-messages-scroll' hideScrollBar>
+      <ScrollShadow ref={messagesScrollRef} className='agent-messages-scroll' hideScrollBar>
         <div className='agent-messages'>
           {workspacePath && renderedMessages.length === 0 ? (
             <div className='agent-empty-chat'>
@@ -1399,7 +1426,6 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
           {sessionStatus ? (
             <AgentSessionStatusBubble status={sessionStatus} />
           ) : null}
-          <div ref={messagesEndRef} />
         </div>
       </ScrollShadow>
 
