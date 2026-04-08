@@ -3541,14 +3541,38 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: block;
 }
 
-.agent-provider-setup-button {
-  padding-inline: 0 !important;
-  color: var(--muted-foreground) !important;
+.agent-composer-actions .agent-provider-setup-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  min-width: fit-content;
+  max-width: 100%;
+  flex: 0 0 auto;
+  overflow: hidden;
+  align-self: center;
+  margin-left: -4px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: normal;
+  text-align: left;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 120ms ease;
 }
 
-.agent-provider-setup-button:hover,
-.agent-provider-setup-button:focus-visible {
-  color: var(--foreground) !important;
+.agent-composer-actions .agent-provider-setup-button:hover,
+.agent-composer-actions .agent-provider-setup-button:focus-visible {
+  color: var(--foreground);
+  background: var(--surface-tertiary);
 }
 
 
