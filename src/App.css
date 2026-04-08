@@ -3018,8 +3018,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 4.5ch;
-  flex: 0 0 4.5ch;
+  flex: 0 0 auto;
   font-family: 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace;
   font-size: 14px;
   font-weight: 600;
@@ -3033,7 +3032,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-session-status-label-running {
-  color: var(--accent);
+  color: var(--foreground);
 }
 
 .agent-session-status-label-error {
@@ -3041,18 +3040,11 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-session-status-indicator-running {
-  color: var(--accent);
+  color: var(--foreground);
 }
 
 .agent-session-status-indicator-error {
   color: var(--danger);
-}
-
-.agent-session-status-detail {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .agent-message {

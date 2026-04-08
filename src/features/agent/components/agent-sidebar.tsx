@@ -291,7 +291,6 @@ type AgentSessionStatusIndicator =
     }
 
 type AgentSessionStatus = {
-  detail: string
   indicator: AgentSessionStatusIndicator
   label: string
   tone: AgentSessionStatusTone
@@ -480,7 +479,6 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
   switch (phase.type) {
     case 'error':
       return {
-        detail: phase.message,
         indicator: {
           kind: 'symbol',
           value: '•',
@@ -489,12 +487,7 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
         tone: 'error',
       }
     case 'tool_execution': {
-      const baseDetail = phase.toolName
-        ? `${phase.toolName} is running.`
-        : `${phase.toolCount} tools are running.`
-
       return {
-        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.tool_execution,
@@ -504,16 +497,7 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
       }
     }
     case 'compaction': {
-      const baseDetail = phase.reason === 'manual'
-        ? 'Manual compaction is running.'
-        : phase.reason === 'threshold'
-          ? 'Threshold compaction is running.'
-          : phase.reason === 'overflow'
-            ? 'Overflow compaction is running.'
-            : 'Compacting session context.'
-
       return {
-        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.compaction,
@@ -523,12 +507,7 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
       }
     }
     case 'auto_retry': {
-      const baseDetail = phase.maxAttempts
-        ? `Attempt ${phase.attempt} of ${phase.maxAttempts} is in progress.`
-        : `Retry attempt ${phase.attempt} is in progress.`
-
       return {
-        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.auto_retry,
@@ -538,10 +517,7 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
       }
     }
     case 'thinking': {
-      const baseDetail = 'Reasoning before responding.'
-
       return {
-        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.thinking,
@@ -551,10 +527,7 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
       }
     }
     case 'streaming': {
-      const baseDetail = 'Receiving assistant output.'
-
       return {
-        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.streaming,
@@ -564,10 +537,7 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
       }
     }
     case 'running': {
-      const baseDetail = 'Agent is running.'
-
       return {
-        detail: phase.queueSummary ? `${baseDetail} ${phase.queueSummary}` : baseDetail,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.running,
@@ -578,9 +548,6 @@ function formatAgentSessionStatus(phase: AgentSessionPhase): AgentSessionStatus 
     }
     case 'message_queue':
       return {
-        detail: phase.queueSummary || (phase.pendingMessageCount === 1
-          ? '1 queued message is waiting.'
-          : `${phase.pendingMessageCount} queued messages are waiting.`),
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.message_queue,
@@ -649,7 +616,6 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
       <span className={`agent-session-status-label agent-session-status-label-${status.tone}`}>
         {status.label}
       </span>
-      <span className='agent-session-status-detail'>{status.detail}</span>
     </article>
   )
 }
@@ -1277,7 +1243,7 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
     () => sessionPhase ? formatAgentSessionStatus(sessionPhase) : null,
     [sessionPhase],
   )
-  const sessionStatusKey = sessionStatus ? `${sessionStatus.label}:${sessionStatus.detail}` : 'none'
+  const sessionStatusKey = sessionStatus ? sessionStatus.label : 'none'
   const renderedMessageCount = renderedMessages.length
 
   useLayoutEffect(() => {
