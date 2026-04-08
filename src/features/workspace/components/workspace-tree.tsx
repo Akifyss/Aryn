@@ -506,12 +506,14 @@ export function WorkspaceTree({
 
     const targetDirectoryPath = resolveDropTargetDirectoryPath(node, workspacePath)
     if (!targetDirectoryPath || isMovingNode) {
+      setDropTargetDirectoryPath(null)
       event.dataTransfer.dropEffect = 'none'
       return
     }
 
     const canMoveToTargetDirectory = canMoveNodeToDirectory(draggedNode, targetDirectoryPath)
     if (!canMoveToTargetDirectory) {
+      setDropTargetDirectoryPath(null)
       event.dataTransfer.dropEffect = 'none'
       return
     }
