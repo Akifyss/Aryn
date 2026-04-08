@@ -22,7 +22,7 @@ import {
   deleteWorkspaceFile,
   loadWorkspaceFile,
   loadWorkspaceTree,
-  renameWorkspaceFile,
+  moveWorkspaceEntry,
   resolveWorkspaceEditorKind,
   saveWorkspaceFile,
   unwatchWorkspace,
@@ -429,8 +429,8 @@ ipcMain.handle('workspace:create-directory', async (_, rootPath: string, relativ
   return { dirPath }
 })
 
-ipcMain.handle('workspace:rename-file', async (_, rootPath: string, filePath: string, nextRelativeFilePath: string) => {
-  const nextFilePath = await renameWorkspaceFile(rootPath, filePath, nextRelativeFilePath)
+ipcMain.handle('workspace:move-entry', async (_, rootPath: string, entryPath: string, nextRelativePath: string) => {
+  const nextFilePath = await moveWorkspaceEntry(rootPath, entryPath, nextRelativePath)
   return { filePath: nextFilePath }
 })
 

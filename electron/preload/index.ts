@@ -20,7 +20,7 @@ contextBridge.exposeInMainWorld('appApi', {
   saveWorkspaceFile: (filePath: string, content: string) => ipcRenderer.invoke('workspace:save-file', filePath, content) as Promise<{ ok: boolean }>,
   createWorkspaceFile: (rootPath: string, relativeFilePath: string) => ipcRenderer.invoke('workspace:create-file', rootPath, relativeFilePath) as Promise<{ filePath: string }>,
   createWorkspaceDirectory: (rootPath: string, relativeDirPath: string) => ipcRenderer.invoke('workspace:create-directory', rootPath, relativeDirPath) as Promise<{ dirPath: string }>,
-  renameWorkspaceFile: (rootPath: string, filePath: string, nextRelativeFilePath: string) => ipcRenderer.invoke('workspace:rename-file', rootPath, filePath, nextRelativeFilePath) as Promise<{ filePath: string }>,
+  moveWorkspaceEntry: (rootPath: string, entryPath: string, nextRelativePath: string) => ipcRenderer.invoke('workspace:move-entry', rootPath, entryPath, nextRelativePath) as Promise<{ filePath: string }>,
   deleteWorkspaceFile: (rootPath: string, filePath: string) => ipcRenderer.invoke('workspace:delete-file', rootPath, filePath) as Promise<{ ok: boolean }>,
   getGitRepositoryState: (workspacePath: string) => ipcRenderer.invoke('git:get-state', workspacePath) as Promise<GitRepositoryState>,
   initializeGitRepository: (workspacePath: string) => ipcRenderer.invoke('git:init', workspacePath) as Promise<GitRepositoryState>,

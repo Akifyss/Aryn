@@ -108,6 +108,35 @@ function normalizeFilePath(filePath: string) {
   return filePath.replace(/[\\/]+/g, '/').toLowerCase()
 }
 
+function hasPathPrefix(filePath: string, prefixPath: string) {
+  const normalizedFilePath = normalizeFilePath(filePath).replace(/\/+$/, '')
+  const normalizedPrefixPath = normalizeFilePath(prefixPath).replace(/\/+$/, '')
+
+  return normalizedFilePath === normalizedPrefixPath || normalizedFilePath.startsWith(`${normalizedPrefixPath}/`)
+}
+
+function getPathSeparator(filePath: string) {
+  return filePath.includes('\\') ? '\\' : '/'
+}
+
+function joinPath(basePath: string, relativeSuffix: string) {
+  const separator = getPathSeparator(basePath)
+  const normalizedBasePath = basePath.replace(/[\\/]+$/, '')
+  const normalizedSuffix = relativeSuffix.replace(/[\\/]+/g, separator).replace(/^[\\/]+/, '')
+
+  return normalizedSuffix ? `${normalizedBasePath}${separator}${normalizedSuffix}` : normalizedBasePath
+}
+
+function rebasePathPrefix(filePath: string, currentPrefix: string, nextPrefix: string) {
+  const normalizedFilePath = filePath.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
+  const normalizedCurrentPrefix = currentPrefix.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
+  const suffix = normalizedFilePath === normalizedCurrentPrefix
+    ? ''
+    : normalizedFilePath.slice(normalizedCurrentPrefix.length).replace(/^\/+/, '')
+
+  return joinPath(nextPrefix, suffix)
+}
+
 type StoredTabState = {
   activePath: string | null
   paths: string[]
@@ -500,6 +529,49 @@ function App() {
   async function syncPersistedActiveFile(workspacePath: string) {
     await updateWorkspaceState(workspacePath, {
       lastFilePath: getPersistedActiveFilePath(),
+    })
+  }
+
+  function rebaseExpandedTreePaths(currentNodePath: string, nextNodePath: string) {
+    setExpandedPaths((currentExpandedPaths) => {
+      const nextExpandedPaths = new Set<string>()
+
+      currentExpandedPaths.forEach((expandedPath) => {
+        if (hasPathPrefix(expandedPath, currentNodePath)) {
+          nextExpandedPaths.add(rebasePathPrefix(expandedPath, currentNodePath, nextNodePath))
+          return
+        }
+
+        nextExpandedPaths.add(expandedPath)
+      })
+
+      return nextExpandedPaths
+    })
+  }
+
+  function updateOpenTabsForMovedNode(currentNodePath: string, nextNodePath: string) {
+    const currentTabs = [...useWorkspaceStore.getState().openTabs]
+
+    currentTabs.forEach((tab) => {
+      if (tab.kind === 'file' && hasPathPrefix(tab.filePath, currentNodePath)) {
+        renameTab(tab.filePath, rebasePathPrefix(tab.filePath, currentNodePath, nextNodePath))
+        return
+      }
+
+      if (tab.kind === 'diff' && hasPathPrefix(tab.diff.change.path, currentNodePath)) {
+        closeTab(tab.filePath)
+      }
+    })
+  }
+
+  function closeTabsForNode(nodePath: string) {
+    const currentTabs = [...useWorkspaceStore.getState().openTabs]
+
+    currentTabs.forEach((tab) => {
+      const targetPath = tab.kind === 'diff' ? tab.diff.change.path : tab.filePath
+      if (hasPathPrefix(targetPath, nodePath)) {
+        closeTab(tab.filePath)
+      }
     })
   }
 
@@ -902,42 +974,69 @@ function App() {
     setIsSettingsTabActive(true)
   }
 
-  async function handleRenameFile(filePath: string, nextName: string) {
+  async function handleMoveWorkspaceNode(node: WorkspaceNode, nextRelativePath: string, successMessage: string) {
+    if (!currentPath) {
+      throw new Error('Open a workspace first.')
+    }
+
+    const { filePath: nextFilePath } = await window.appApi.moveWorkspaceEntry(currentPath, node.path, nextRelativePath)
+    await loadTree(currentPath)
+    updateOpenTabsForMovedNode(node.path, nextFilePath)
+    rebaseExpandedTreePaths(node.path, nextFilePath)
+    await refreshGitState(currentPath, { silent: true })
+    await syncPersistedActiveFile(currentPath)
+    setStatusMessage(successMessage)
+  }
+
+  async function handleRenameNode(node: WorkspaceNode, nextName: string) {
     if (!currentPath) {
       throw new Error('Open a workspace first.')
     }
 
     const trimmedName = nextName.trim()
     if (!trimmedName) {
-      throw new Error('File name is required.')
+      throw new Error(`${node.kind === 'directory' ? 'Folder' : 'File'} name is required.`)
     }
 
-    const nextBaseName = /\.[a-z0-9]+$/i.test(trimmedName) ? trimmedName : `${trimmedName}.md`
-    const parentDirectory = getDirectoryRelativePath(currentPath, filePath)
+    const currentBaseName = getBaseName(node.path)
+    const currentExtensionMatch = currentBaseName.match(/(\.[^./\\]+)$/)
+    const nextBaseName = node.kind === 'file' && currentExtensionMatch && !/\.[^./\\]+$/.test(trimmedName)
+      ? `${trimmedName}${currentExtensionMatch[1]}`
+      : trimmedName
+    const parentDirectory = getDirectoryRelativePath(currentPath, node.path)
     const nextRelativePath = parentDirectory ? `${parentDirectory}/${nextBaseName}` : nextBaseName
 
-    const { filePath: nextFilePath } = await window.appApi.renameWorkspaceFile(currentPath, filePath, nextRelativePath)
-    await loadTree(currentPath)
-    renameTab(filePath, nextFilePath)
-    await refreshGitState(currentPath, { silent: true })
-
-    if (activeTabPath === filePath) {
-      await updateWorkspaceState(currentPath, { lastFilePath: nextFilePath })
-    }
-
-    setStatusMessage(`${nextBaseName} renamed`)
+    await handleMoveWorkspaceNode(node, nextRelativePath, `${nextBaseName} renamed`)
   }
 
-  async function handleDeleteFile(filePath: string) {
+  async function handleMoveNode(node: WorkspaceNode, targetDirectoryPath: string) {
     if (!currentPath) {
       throw new Error('Open a workspace first.')
     }
 
-    const targetTab = openTabs.find((tab) => tab.kind === 'file' && tab.filePath === filePath)
-    if (targetTab?.isDirty) {
+    const targetRelativePath = getRelativePath(currentPath, targetDirectoryPath)
+    const nextRelativePath = targetRelativePath ? `${targetRelativePath}/${node.name}` : node.name
+
+    await handleMoveWorkspaceNode(node, nextRelativePath, `${node.name} moved`)
+  }
+
+  async function handleDeleteNode(node: WorkspaceNode) {
+    if (!currentPath) {
+      throw new Error('Open a workspace first.')
+    }
+
+    const affectedFileTabs = openTabs.filter((tab): tab is WorkspaceFileTab => (
+      tab.kind === 'file' && hasPathPrefix(tab.filePath, node.path)
+    ))
+    const hasDirtyTabs = affectedFileTabs.some((tab) => tab.isDirty)
+
+    if (hasDirtyTabs) {
+      const targetLabel = node.kind === 'directory'
+        ? `"${node.name}" contains unsaved files.\n\nDelete the folder and discard those changes?`
+        : `"${node.name}" has unsaved changes.\n\nDelete the file and discard those changes?`
       const confirmed = await requestConfirm({
-        title: 'Delete File',
-        message: `"${getBaseName(filePath)}" has unsaved changes.\n\nDelete the file and discard those changes?`,
+        title: node.kind === 'directory' ? 'Delete Folder' : 'Delete File',
+        message: targetLabel,
         confirmLabel: 'Delete',
         isDanger: true,
       })
@@ -947,16 +1046,12 @@ function App() {
       }
     }
 
-    await window.appApi.deleteWorkspaceFile(currentPath, filePath)
+    await window.appApi.deleteWorkspaceFile(currentPath, node.path)
     await loadTree(currentPath)
+    closeTabsForNode(node.path)
     await refreshGitState(currentPath, { silent: true })
-
-    if (targetTab) {
-      closeTab(filePath)
-      await syncPersistedActiveFile(currentPath)
-    }
-
-    setStatusMessage(`${getBaseName(filePath)} deleted`)
+    await syncPersistedActiveFile(currentPath)
+    setStatusMessage(`${node.name} deleted`)
   }
 
   async function handleSave() {
@@ -1747,8 +1842,9 @@ function App() {
                   onSelectFile={(filePath) => {
                     void openFile(filePath)
                   }}
-                  onRenameFile={(filePath, nextName) => handleRenameFile(filePath, nextName)}
-                  onDeleteFile={(filePath) => handleDeleteFile(filePath)}
+                  onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
+                  onDeleteNode={(node) => handleDeleteNode(node)}
+                  onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
                 />
               </ScrollShadow>
             </div>

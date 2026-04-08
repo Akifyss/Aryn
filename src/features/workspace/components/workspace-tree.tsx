@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useState } from 'react'
-import { Button, Dropdown, Input, Label, AlertDialog, Tooltip, useOverlayState } from '@heroui/react'
+import { type Dispatch, type DragEvent, type FormEvent, type SetStateAction, useEffect, useRef, useState } from 'react'
+import { AlertDialog, Button, Dropdown, Label, useOverlayState } from '@heroui/react'
 import {
   CheckLine,
   CloseLine,
@@ -12,60 +12,86 @@ import {
 } from '@mingcute/react'
 import { resolveWorkspaceDirectoryIconUrl, resolveWorkspaceFileIconUrl } from '@/features/workspace/lib/icon-theme'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
-import type { GitRepositoryState, GitDisplayChange } from '@/features/git/types'
+import type { GitDisplayChange, GitRepositoryState } from '@/features/git/types'
 
 type WorkspaceTreeProps = {
   activeFilePath: string | null
   iconTheme: WorkspaceIconTheme | null
   nodes: WorkspaceNode[]
   expandedPaths: Set<string>
-  setExpandedPaths: (paths: Set<string>) => void
+  setExpandedPaths: Dispatch<SetStateAction<Set<string>>>
   onSelectFile: (path: string) => void
-  onRenameFile: (path: string, nextName: string) => Promise<void>
-  onDeleteFile: (path: string) => Promise<void>
+  onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
+  onDeleteNode: (node: WorkspaceNode) => Promise<void>
+  onMoveNode: (node: WorkspaceNode, targetDirectoryPath: string) => Promise<void>
   gitRepositoryState?: GitRepositoryState | null
 }
 
 function normalizePath(filePath: string) {
-  return filePath.replace(/[\\/]+/g, '/').toLowerCase();
+  return filePath.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
+function getParentDirectoryPath(filePath: string) {
+  const normalizedPath = filePath.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
+  const lastSeparatorIndex = normalizedPath.lastIndexOf('/')
+
+  if (lastSeparatorIndex <= 0) {
+    return null
+  }
+
+  return normalizedPath.slice(0, lastSeparatorIndex)
+}
+
+function isSamePathOrDescendant(targetPath: string, parentPath: string) {
+  const normalizedTargetPath = normalizePath(targetPath)
+  const normalizedParentPath = normalizePath(parentPath)
+
+  return normalizedTargetPath === normalizedParentPath || normalizedTargetPath.startsWith(`${normalizedParentPath}/`)
+}
+
+function canMoveNodeToDirectory(node: WorkspaceNode | null, targetDirectoryPath: string) {
+  if (!node) {
+    return false
+  }
+
+  if (node.kind === 'directory' && isSamePathOrDescendant(targetDirectoryPath, node.path)) {
+    return false
+  }
+
+  return normalizePath(getParentDirectoryPath(node.path) ?? '') !== normalizePath(targetDirectoryPath)
 }
 
 function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | undefined, node: WorkspaceNode): GitDisplayChange | null {
   if (!repositoryState?.isRepository) return null
-  
+
   const targetPath = normalizePath(node.path)
-  
+
   if (node.kind === 'file') {
     return repositoryState.unstagedChanges.find(c => normalizePath(c.path) === targetPath)
       ?? repositoryState.stagedChanges.find(c => normalizePath(c.path) === targetPath)
       ?? null
-  } else {
-    // Folder status logic: propagate deep child changes up
-    const prefix = targetPath.endsWith('/') ? targetPath : targetPath + '/'
-    const unstaged = repositoryState.unstagedChanges.filter(c => normalizePath(c.path).startsWith(prefix))
-    const staged = repositoryState.stagedChanges.filter(c => normalizePath(c.path).startsWith(prefix))
-    const allChanges = [...unstaged, ...staged]
-    
-    if (allChanges.length === 0) return null
-    
-    // Priority: If any child is modified, directory is modified (Amber)
-    const isModified = allChanges.some(c => 
-      c.kind === 'modified' || c.kind === 'renamed' || c.kind === 'copied' || c.kind === 'type-changed'
-    )
-    
-    if (isModified) {
-      return { kind: 'modified', path: node.path } as any
-    }
-    
-    // Else if any child is added, directory is added (Emerald)
-    return { kind: 'added', path: node.path } as any
   }
-  return null
+
+  const prefix = targetPath.endsWith('/') ? targetPath : `${targetPath}/`
+  const unstaged = repositoryState.unstagedChanges.filter(c => normalizePath(c.path).startsWith(prefix))
+  const staged = repositoryState.stagedChanges.filter(c => normalizePath(c.path).startsWith(prefix))
+  const allChanges = [...unstaged, ...staged]
+
+  if (allChanges.length === 0) {
+    return null
+  }
+
+  const isModified = allChanges.some(c =>
+    c.kind === 'modified' || c.kind === 'renamed' || c.kind === 'copied' || c.kind === 'type-changed',
+  )
+
+  if (isModified) {
+    return { kind: 'modified', path: node.path } as GitDisplayChange
+  }
+
+  return { kind: 'added', path: node.path } as GitDisplayChange
 }
 
-/**
- * Shared Icon Component for unified sizing and theme resolution
- */
 function FileRowIcon({
   node,
   isExpanded,
@@ -93,9 +119,6 @@ function FileRowIcon({
   )
 }
 
-/**
- * Shared Actions Component for Rename/Delete
- */
 function FileRowActions({
   onRename,
   onDelete,
@@ -112,13 +135,13 @@ function FileRowActions({
   return (
     <div className='git-change-tools'>
       {gitChange && (
-        <span 
-          className={`git-status-dot git-status-dot-${gitChange.kind}`} 
+        <span
+          className={`git-status-dot git-status-dot-${gitChange.kind}`}
           aria-hidden='true'
           title={gitChange.kind.charAt(0).toUpperCase() + gitChange.kind.slice(1)}
         />
       )}
-      <div 
+      <div
         className='git-change-actions'
         style={isOpen ? { opacity: 1, maxWidth: '2rem', transform: 'translateX(0)' } : undefined}
       >
@@ -127,15 +150,16 @@ function FileRowActions({
             <button
               type='button'
               className='git-change-action git-change-icon-button'
-              onClick={(e) => {
-                e.stopPropagation()
+              disabled={isSubmitting}
+              onClick={(event) => {
+                event.stopPropagation()
               }}
             >
               <More1Line size={16} />
             </button>
           </Dropdown.Trigger>
           <Dropdown.Popover placement='bottom end'>
-            <Dropdown.Menu 
+            <Dropdown.Menu
               aria-label='File actions'
               onAction={(key) => {
                 if (key === 'rename') onRename()
@@ -148,9 +172,9 @@ function FileRowActions({
                   <Label>Rename</Label>
                 </div>
               </Dropdown.Item>
-              <Dropdown.Item 
-                id='delete' 
-                textValue='Delete' 
+              <Dropdown.Item
+                id='delete'
+                textValue='Delete'
                 variant='danger'
               >
                 <div className='flex items-center gap-2'>
@@ -166,28 +190,39 @@ function FileRowActions({
   )
 }
 
-/**
- * Recursive Tree Node Component
- */
 function FileTreeItem({
   activeFilePath,
+  draggedNode,
+  dropTargetDirectoryPath,
   expandedPaths,
   iconTheme,
   node,
-  onToggleDirectory,
+  onDeleteNode,
+  onDragEndNode,
+  onDragLeaveDirectory,
+  onDragOverDirectory,
+  onDragStartNode,
+  onDropOnDirectory,
+  onRenameNode,
   onSelectFile,
-  onRenameFile,
-  onDeleteFile,
+  onToggleDirectory,
   gitRepositoryState,
 }: {
   activeFilePath: string | null
+  draggedNode: WorkspaceNode | null
+  dropTargetDirectoryPath: string | null
   expandedPaths: Set<string>
   iconTheme: WorkspaceIconTheme | null
   node: WorkspaceNode
-  onToggleDirectory: (path: string) => void
+  onDeleteNode: (node: WorkspaceNode) => Promise<void>
+  onDragEndNode: () => void
+  onDragLeaveDirectory: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
+  onDragOverDirectory: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
+  onDragStartNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
+  onDropOnDirectory: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => Promise<void>
+  onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onSelectFile: (path: string) => void
-  onRenameFile: (path: string, nextName: string) => Promise<void>
-  onDeleteFile: (path: string) => Promise<void>
+  onToggleDirectory: (path: string) => void
   gitRepositoryState?: GitRepositoryState | null
 }) {
   const [isEditing, setIsEditing] = useState(false)
@@ -199,16 +234,24 @@ function FileTreeItem({
   const isExpanded = expandedPaths.has(node.path)
   const isActive = activeFilePath === node.path
   const gitChange = findGitChangeByFilePath(gitRepositoryState, node)
+  const isDragSource = draggedNode?.path === node.path
+  const isDropTarget = isFolder && dropTargetDirectoryPath === node.path
 
-  const handleSubmitRename = async (e?: FormEvent) => {
-    e?.preventDefault()
+  useEffect(() => {
+    setDraftName(node.name)
+  }, [node.name])
+
+  const handleSubmitRename = async (event?: FormEvent) => {
+    event?.preventDefault()
     if (!draftName.trim() || draftName === node.name) {
       setIsEditing(false)
       return
     }
+
     try {
       setIsSubmitting(true)
-      await onRenameFile(node.path, draftName)
+      setError(null)
+      await onRenameNode(node, draftName)
       setIsEditing(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Rename failed')
@@ -222,7 +265,8 @@ function FileTreeItem({
   const handleDelete = async (onClose: () => void) => {
     try {
       setIsSubmitting(true)
-      await onDeleteFile(node.path)
+      setError(null)
+      await onDeleteNode(node)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed')
@@ -233,21 +277,24 @@ function FileTreeItem({
 
   return (
     <li className='git-tree-node'>
-      <div 
-        className={`workspace-tree-row ${isActive ? 'is-active' : ''}`}
-        onClick={() => isFolder ? onToggleDirectory(node.path) : onSelectFile(node.path)}
+      <div
+        className={`workspace-tree-row${isActive ? ' is-active' : ''}${isDragSource ? ' is-drag-source' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
+        onClick={() => (isFolder ? onToggleDirectory(node.path) : onSelectFile(node.path))}
+        onDragLeave={isFolder ? (event) => onDragLeaveDirectory(node, event) : undefined}
+        onDragOver={isFolder ? (event) => onDragOverDirectory(node, event) : undefined}
+        onDrop={isFolder ? (event) => void onDropOnDirectory(node, event) : undefined}
       >
         {isEditing ? (
-          <form className='workspace-tree-trigger' onSubmit={handleSubmitRename} onClick={e => e.stopPropagation()}>
+          <form className='workspace-tree-trigger' onSubmit={handleSubmitRename} onClick={event => event.stopPropagation()}>
             <FileRowIcon node={node} isExpanded={isExpanded} iconTheme={iconTheme} />
             <input
               autoFocus
               className='raw-rename-input'
               value={draftName}
-              onFocus={e => e.target.select()}
-              onChange={e => setDraftName(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Escape') {
+              onFocus={event => event.target.select()}
+              onChange={event => setDraftName(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Escape') {
                   setDraftName(node.name)
                   setIsEditing(false)
                 }
@@ -264,18 +311,22 @@ function FileTreeItem({
             </div>
           </form>
         ) : (
-          <div className='workspace-tree-trigger' title={node.path}>
+          <div
+            className='workspace-tree-trigger'
+            draggable={!isSubmitting}
+            title={node.path}
+            onDragEnd={onDragEndNode}
+            onDragStart={(event) => onDragStartNode(node, event)}
+          >
             <FileRowIcon node={node} isExpanded={isExpanded} iconTheme={iconTheme} />
-            <span className='git-change-path' style={{ 
-              fontWeight: isFolder ? 600 : 500
-            }}>
+            <span className='git-change-path' style={{ fontWeight: isFolder ? 600 : 500 }}>
               {node.name}
             </span>
           </div>
         )}
 
         {!isEditing && (
-          <FileRowActions 
+          <FileRowActions
             isSubmitting={isSubmitting}
             gitChange={gitChange}
             onRename={() => {
@@ -288,9 +339,9 @@ function FileTreeItem({
       </div>
 
       <AlertDialog>
-        <AlertDialog.Backdrop 
-          isOpen={deleteModal.isOpen} 
-          onOpenChange={(open) => open ? deleteModal.open() : deleteModal.close()}
+        <AlertDialog.Backdrop
+          isOpen={deleteModal.isOpen}
+          onOpenChange={(open) => (open ? deleteModal.open() : deleteModal.close())}
           variant='opaque'
         >
           <AlertDialog.Container size='sm'>
@@ -304,7 +355,7 @@ function FileTreeItem({
                   </AlertDialog.Header>
                   <AlertDialog.Body>
                     <p className='text-[var(--foreground)]'>
-                      Are you sure you want to delete <span style={{ fontWeight: 600 }}>{node.name}</span>? 
+                      Are you sure you want to delete <span style={{ fontWeight: 600 }}>{node.name}</span>?
                       This action cannot be undone.
                     </p>
                   </AlertDialog.Body>
@@ -312,8 +363,8 @@ function FileTreeItem({
                     <Button variant='tertiary' onPress={close} isDisabled={isSubmitting}>
                       Cancel
                     </Button>
-                    <Button 
-                      variant='danger' 
+                    <Button
+                      variant='danger'
                       onPress={() => handleDelete(close)}
                       isDisabled={isSubmitting}
                     >
@@ -335,14 +386,21 @@ function FileTreeItem({
             {node.children.map(child => (
               <FileTreeItem
                 key={child.path}
-                node={child}
                 activeFilePath={activeFilePath}
+                draggedNode={draggedNode}
+                dropTargetDirectoryPath={dropTargetDirectoryPath}
                 expandedPaths={expandedPaths}
                 iconTheme={iconTheme}
-                onToggleDirectory={onToggleDirectory}
+                node={child}
+                onDeleteNode={onDeleteNode}
+                onDragEndNode={onDragEndNode}
+                onDragLeaveDirectory={onDragLeaveDirectory}
+                onDragOverDirectory={onDragOverDirectory}
+                onDragStartNode={onDragStartNode}
+                onDropOnDirectory={onDropOnDirectory}
+                onRenameNode={onRenameNode}
                 onSelectFile={onSelectFile}
-                onRenameFile={onRenameFile}
-                onDeleteFile={onDeleteFile}
+                onToggleDirectory={onToggleDirectory}
                 gitRepositoryState={gitRepositoryState}
               />
             ))}
@@ -360,15 +418,135 @@ export function WorkspaceTree({
   expandedPaths,
   setExpandedPaths,
   onSelectFile,
-  onRenameFile,
-  onDeleteFile,
+  onRenameNode,
+  onDeleteNode,
+  onMoveNode,
   gitRepositoryState,
 }: WorkspaceTreeProps) {
+  const [draggedNode, setDraggedNode] = useState<WorkspaceNode | null>(null)
+  const [dropTargetDirectoryPath, setDropTargetDirectoryPath] = useState<string | null>(null)
+  const [isMovingNode, setIsMovingNode] = useState(false)
+  const expandTimerRef = useRef<number | null>(null)
+  const expandTimerPathRef = useRef<string | null>(null)
+
+  const clearExpandTimer = () => {
+    if (expandTimerRef.current !== null) {
+      window.clearTimeout(expandTimerRef.current)
+      expandTimerRef.current = null
+    }
+
+    expandTimerPathRef.current = null
+  }
+
+  useEffect(() => clearExpandTimer, [])
+
+  useEffect(() => {
+    const className = 'workspace-tree-dragging'
+    document.body.classList.toggle(className, draggedNode !== null)
+
+    return () => {
+      document.body.classList.remove(className)
+    }
+  }, [draggedNode])
+
   const handleToggle = (path: string) => {
-    const next = new Set(expandedPaths)
-    if (next.has(path)) next.delete(path)
-    else next.add(path)
-    setExpandedPaths(next)
+    setExpandedPaths((currentExpandedPaths) => {
+      const nextExpandedPaths = new Set(currentExpandedPaths)
+      if (nextExpandedPaths.has(path)) nextExpandedPaths.delete(path)
+      else nextExpandedPaths.add(path)
+      return nextExpandedPaths
+    })
+  }
+
+  const handleDragStartNode = (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
+    if (isMovingNode) {
+      event.preventDefault()
+      return
+    }
+
+    event.stopPropagation()
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', node.path)
+    setDraggedNode(node)
+    setDropTargetDirectoryPath(null)
+  }
+
+  const handleDragEndNode = () => {
+    setDraggedNode(null)
+    setDropTargetDirectoryPath(null)
+    clearExpandTimer()
+  }
+
+  const handleDragOverDirectory = (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
+    if (isMovingNode || !canMoveNodeToDirectory(draggedNode, node.path)) {
+      if (draggedNode) {
+        event.dataTransfer.dropEffect = 'none'
+      }
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'move'
+
+    if (dropTargetDirectoryPath !== node.path) {
+      setDropTargetDirectoryPath(node.path)
+    }
+
+    if (expandedPaths.has(node.path) || expandTimerPathRef.current === node.path) {
+      return
+    }
+
+    clearExpandTimer()
+    expandTimerPathRef.current = node.path
+    expandTimerRef.current = window.setTimeout(() => {
+      setExpandedPaths((currentExpandedPaths) => {
+        const nextExpandedPaths = new Set(currentExpandedPaths)
+        nextExpandedPaths.add(node.path)
+        return nextExpandedPaths
+      })
+      clearExpandTimer()
+    }, 550)
+  }
+
+  const handleDragLeaveDirectory = (_node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
+    if (!draggedNode) {
+      return
+    }
+
+    const relatedTarget = event.relatedTarget
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+      return
+    }
+
+    setDropTargetDirectoryPath((currentValue) => (
+      currentValue === _node.path ? null : currentValue
+    ))
+
+    if (expandTimerPathRef.current === _node.path) {
+      clearExpandTimer()
+    }
+  }
+
+  const handleDropOnDirectory = async (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
+    if (isMovingNode || !draggedNode || !canMoveNodeToDirectory(draggedNode, node.path)) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const sourceNode = draggedNode
+    setIsMovingNode(true)
+    setDraggedNode(null)
+    setDropTargetDirectoryPath(null)
+    clearExpandTimer()
+
+    try {
+      await onMoveNode(sourceNode, node.path)
+    } finally {
+      setIsMovingNode(false)
+    }
   }
 
   if (nodes.length === 0) {
@@ -383,18 +561,25 @@ export function WorkspaceTree({
   }
 
   return (
-    <ul className='git-tree-list' style={{ paddingTop: 6, paddingBottom: 6 }}>
+    <ul className={`git-tree-list workspace-tree-root${draggedNode ? ' is-dragging' : ''}`} style={{ paddingTop: 6, paddingBottom: 6 }}>
       {nodes.map((node) => (
         <FileTreeItem
           key={node.path}
-          node={node}
           activeFilePath={activeFilePath}
+          draggedNode={draggedNode}
+          dropTargetDirectoryPath={dropTargetDirectoryPath}
           expandedPaths={expandedPaths}
           iconTheme={iconTheme}
-          onToggleDirectory={handleToggle}
+          node={node}
+          onDeleteNode={onDeleteNode}
+          onDragEndNode={handleDragEndNode}
+          onDragLeaveDirectory={handleDragLeaveDirectory}
+          onDragOverDirectory={handleDragOverDirectory}
+          onDragStartNode={handleDragStartNode}
+          onDropOnDirectory={handleDropOnDirectory}
+          onRenameNode={onRenameNode}
           onSelectFile={onSelectFile}
-          onRenameFile={onRenameFile}
-          onDeleteFile={onDeleteFile}
+          onToggleDirectory={handleToggle}
           gitRepositoryState={gitRepositoryState}
         />
       ))}

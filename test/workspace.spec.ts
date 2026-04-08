@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   createWorkspaceFile,
   loadWorkspaceTree,
-  renameWorkspaceFile,
+  moveWorkspaceEntry,
   resolveWorkspaceEditorKind,
   shouldIgnoreWorkspacePath,
 } from '../electron/main/workspace'
@@ -80,12 +80,36 @@ describe('workspace helpers', () => {
     const createdFilePath = await createWorkspaceFile(rootPath, 'entries/today.md')
     await writeFile(createdFilePath, 'hello', 'utf8')
 
-    const renamedFilePath = await renameWorkspaceFile(rootPath, createdFilePath, 'archive/today.txt')
+    const renamedFilePath = await moveWorkspaceEntry(rootPath, createdFilePath, 'archive/today.txt')
 
     expect(renamedFilePath).toBe(path.join(rootPath, 'archive', 'today.txt'))
     await expect(readFile(renamedFilePath, 'utf8')).resolves.toBe('hello')
-    await expect(renameWorkspaceFile(rootPath, renamedFilePath, '../outside.md')).rejects.toThrow(
-      'File path must stay inside the current workspace.',
+    await expect(moveWorkspaceEntry(rootPath, renamedFilePath, '../outside.md')).rejects.toThrow(
+      'Path must stay inside the current workspace.',
+    )
+  })
+
+  it('moves directories and preserves their descendants', async () => {
+    const rootPath = await createTempWorkspace()
+    const sourceDirectoryPath = path.join(rootPath, 'drafts')
+
+    await mkdir(path.join(sourceDirectoryPath, 'nested'), { recursive: true })
+    await writeFile(path.join(sourceDirectoryPath, 'nested', 'chapter.md'), 'chapter', 'utf8')
+
+    const movedDirectoryPath = await moveWorkspaceEntry(rootPath, sourceDirectoryPath, 'archive/drafts')
+
+    expect(movedDirectoryPath).toBe(path.join(rootPath, 'archive', 'drafts'))
+    await expect(readFile(path.join(movedDirectoryPath, 'nested', 'chapter.md'), 'utf8')).resolves.toBe('chapter')
+  })
+
+  it('prevents moving a directory into itself or its descendants', async () => {
+    const rootPath = await createTempWorkspace()
+    const sourceDirectoryPath = path.join(rootPath, 'drafts')
+
+    await mkdir(path.join(sourceDirectoryPath, 'nested'), { recursive: true })
+
+    await expect(moveWorkspaceEntry(rootPath, sourceDirectoryPath, 'drafts/nested/drafts')).rejects.toThrow(
+      'A folder cannot be moved into itself or one of its descendants.',
     )
   })
 

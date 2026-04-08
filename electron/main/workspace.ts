@@ -75,6 +75,10 @@ function isInsideWorkspace(rootPath: string, targetPath: string) {
   return targetPath === rootPath || targetPath.startsWith(rootPath + path.sep)
 }
 
+function isSamePathOrDescendant(targetPath: string, parentPath: string) {
+  return targetPath === parentPath || targetPath.startsWith(parentPath + path.sep)
+}
+
 function sortNodes(left: WorkspaceNode, right: WorkspaceNode) {
   if (left.kind !== right.kind) {
     return left.kind === 'directory' ? -1 : 1
@@ -223,43 +227,50 @@ export async function createWorkspaceFile(rootPath: string, relativeFilePath: st
   return resolvedFilePath
 }
 
-export async function renameWorkspaceFile(rootPath: string, filePath: string, nextRelativeFilePath: string) {
-  const normalizedRelativePath = nextRelativeFilePath.trim().replace(/^[\\/]+/, '')
+export async function moveWorkspaceEntry(rootPath: string, entryPath: string, nextRelativePath: string) {
+  const normalizedRelativePath = nextRelativePath.trim().replace(/^[\\/]+/, '')
 
   if (!normalizedRelativePath) {
-    throw new Error('File name is required.')
+    throw new Error('Destination path is required.')
   }
 
   const resolvedRootPath = path.resolve(rootPath)
-  const resolvedCurrentFilePath = path.resolve(filePath)
-  const resolvedNextFilePath = path.resolve(resolvedRootPath, normalizedRelativePath)
+  const resolvedCurrentEntryPath = path.resolve(entryPath)
+  const resolvedNextEntryPath = path.resolve(resolvedRootPath, normalizedRelativePath)
 
-  if (!isInsideWorkspace(resolvedRootPath, resolvedCurrentFilePath) || !isInsideWorkspace(resolvedRootPath, resolvedNextFilePath)) {
-    throw new Error('File path must stay inside the current workspace.')
+  if (!isInsideWorkspace(resolvedRootPath, resolvedCurrentEntryPath) || !isInsideWorkspace(resolvedRootPath, resolvedNextEntryPath)) {
+    throw new Error('Path must stay inside the current workspace.')
   }
 
-  const currentInfo = await stat(resolvedCurrentFilePath).catch(() => null)
-  if (!currentInfo?.isFile()) {
-    throw new Error('The selected file no longer exists.')
+  const currentInfo = await stat(resolvedCurrentEntryPath).catch(() => null)
+  if (!currentInfo) {
+    throw new Error('The selected item no longer exists.')
   }
 
-  if (resolvedCurrentFilePath === resolvedNextFilePath) {
-    return resolvedCurrentFilePath
+  if (resolvedCurrentEntryPath === resolvedNextEntryPath) {
+    return resolvedCurrentEntryPath
+  }
+
+  if (
+    currentInfo.isDirectory()
+    && isSamePathOrDescendant(resolvedNextEntryPath, resolvedCurrentEntryPath)
+  ) {
+    throw new Error('A folder cannot be moved into itself or one of its descendants.')
   }
 
   try {
-    await access(resolvedNextFilePath)
-    throw new Error('That file already exists.')
+    await access(resolvedNextEntryPath)
+    throw new Error('That destination already exists.')
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
       throw error
     }
   }
 
-  await mkdir(path.dirname(resolvedNextFilePath), { recursive: true })
-  await rename(resolvedCurrentFilePath, resolvedNextFilePath)
+  await mkdir(path.dirname(resolvedNextEntryPath), { recursive: true })
+  await rename(resolvedCurrentEntryPath, resolvedNextEntryPath)
 
-  return resolvedNextFilePath
+  return resolvedNextEntryPath
 }
 
 export async function deleteWorkspaceFile(rootPath: string, filePath: string) {

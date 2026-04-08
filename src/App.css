@@ -2139,6 +2139,34 @@
   background-color: var(--surface-tertiary);
 }
 
+.workspace-tree-row.is-drag-source {
+  opacity: 0.46;
+  background: color-mix(in srgb, var(--surface-tertiary) 84%, transparent);
+}
+
+.workspace-tree-row.is-drop-target {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 11%, transparent), transparent 70%),
+    var(--surface-tertiary);
+  outline: 1px solid color-mix(in srgb, var(--accent) 46%, transparent);
+  outline-offset: -1px;
+}
+
+.workspace-tree-row.is-drop-target .git-change-path {
+  color: color-mix(in srgb, var(--accent) 82%, var(--foreground));
+}
+
+.workspace-tree-root.is-dragging .workspace-tree-row.is-drag-source .workspace-tree-trigger,
+body.workspace-tree-dragging .workspace-tree-row.is-drag-source .workspace-tree-trigger {
+  cursor: grabbing;
+}
+
+body.workspace-tree-dragging,
+body.workspace-tree-dragging .workspace-tree-trigger,
+body.workspace-tree-dragging .workspace-tree-row {
+  cursor: grabbing;
+}
+
 .git-status-dot {
   width: 6px;
   height: 6px;
