@@ -9,16 +9,31 @@ import pkg from './package.json'
 
 const bundledElectronRuntimeExternals = new Set([
   'electron',
+  'bufferutil',
   ...builtinModules,
   ...builtinModules.map((moduleName) => `node:${moduleName}`),
+  'utf-8-validate',
+  'ws',
 ])
 
 function isBundledElectronRuntimeExternal(id: string) {
-  if (id === 'electron') {
+  if (bundledElectronRuntimeExternals.has(id)) {
     return true
   }
 
   if (id.startsWith('node:')) {
+    return true
+  }
+
+  if (id === 'ws' || id.startsWith('ws/')) {
+    return true
+  }
+
+  if (id === 'bufferutil' || id.startsWith('bufferutil/')) {
+    return true
+  }
+
+  if (id === 'utf-8-validate' || id.startsWith('utf-8-validate/')) {
     return true
   }
 
