@@ -3533,8 +3533,22 @@ body.workspace-tree-dragging .workspace-tree-row {
   cursor: default;
 }
 
+.agent-provider-trigger.is-static {
+  cursor: default;
+}
+
 .agent-provider-trigger-label {
   display: block;
+}
+
+.agent-provider-setup-button {
+  padding-inline: 0 !important;
+  color: var(--muted-foreground) !important;
+}
+
+.agent-provider-setup-button:hover,
+.agent-provider-setup-button:focus-visible {
+  color: var(--foreground) !important;
 }
 
 

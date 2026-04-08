@@ -2058,6 +2058,10 @@ function App() {
 
       <aside className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}>
         <AgentSidebar
+          onOpenProviderSettings={() => {
+            setSettingsSection('providers')
+            setIsSettingsOpen(true)
+          }}
           workspacePath={currentPath}
           onWorkspaceStateChange={setAgentWorkspaceState}
         />

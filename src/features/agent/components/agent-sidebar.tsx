@@ -16,6 +16,7 @@ import type {
 } from '@/features/agent/types'
 
 type AgentSidebarProps = {
+  onOpenProviderSettings?: () => void
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
   workspacePath: string | null
 }
@@ -30,7 +31,6 @@ type LiveToolState = {
 
 type AuthProviderKey = 'google' | 'openai' | 'openrouter'
 
-const DEFAULT_MODEL_VALUE = 'google/gemini-3.1-flash-lite-preview'
 const KNOWN_AGENT_PROVIDERS = ['google', 'openai', 'openrouter'] as const
 const MARKDOWN_PLUGINS = [remarkGfm]
 
@@ -91,7 +91,7 @@ function formatSessionLabel(name: string | null) {
 
 function formatModelLabel(modelKey: string | null) {
   if (!modelKey) {
-    return DEFAULT_MODEL_VALUE.split('/').slice(1).join('/')
+    return ''
   }
 
   const parts = modelKey.split('/')
@@ -101,20 +101,24 @@ function formatModelLabel(modelKey: string | null) {
 function parseModelSelection(modelKey: string | null): { modelId: string, provider: string } {
   if (!modelKey) {
     return {
-      modelId: formatModelLabel(DEFAULT_MODEL_VALUE),
-      provider: 'google',
+      modelId: '',
+      provider: '',
     }
   }
 
   const [providerCandidate, ...modelIdParts] = modelKey.split('/')
   const provider = KNOWN_AGENT_PROVIDERS.includes(providerCandidate as AuthProviderKey)
     ? providerCandidate as AuthProviderKey
-    : 'google'
+    : ''
 
   return {
     modelId: modelIdParts.length > 0 ? modelIdParts.join('/') : formatModelLabel(modelKey),
     provider,
   }
+}
+
+function isProviderConfigured(state: AgentWorkspaceState['runtime']['auth'][AuthProviderKey]) {
+  return state.source !== 'none'
 }
 
 function getMessageStatus(message: AgentSidebarMessage): AgentSidebarMessageStatus {
@@ -600,8 +604,8 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
   )
 }
 
-export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSidebarProps) {
-  const defaultModelSelection = parseModelSelection(DEFAULT_MODEL_VALUE)
+export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, workspacePath }: AgentSidebarProps) {
+  const defaultModelSelection = parseModelSelection(null)
   const [composerHeight, setComposerHeight] = useState(172)
   const [hasLoadedComposerHeight, setHasLoadedComposerHeight] = useState(false)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
@@ -1067,7 +1071,7 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
 
   async function handleModelInputCommit() {
     const nextModel = modelInputValue.trim()
-    const nextModelKey = `${selectedProviderValue}/${nextModel}`
+    const nextModelKey = `${resolvedSelectedProviderValue}/${nextModel}`
 
     if (!nextModel || nextModelKey === agentState.runtime.selectedModel) {
       return
@@ -1081,7 +1085,12 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
       setPanelError(null)
     }
     setSelectedProviderValue(nextProvider)
-    setModelInputValue(modelDrafts[nextProvider] ?? '')
+    const nextProviderModels = Array.from(new Set(
+      agentState.runtime.availableModels
+        .filter((model) => model.startsWith(`${nextProvider}/`))
+        .map((model) => model.split('/').slice(1).join('/')),
+    ))
+    setModelInputValue(modelDrafts[nextProvider] ?? nextProviderModels[0] ?? '')
     setActiveComposerMenu(null)
   }
 
@@ -1163,15 +1172,17 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
     }
   }, [isResizingComposer])
 
+  const configuredProviders = KNOWN_AGENT_PROVIDERS.filter((provider) => isProviderConfigured(agentState.runtime.auth[provider]))
+  const hasConfiguredProviders = configuredProviders.length > 0
+  const canChooseProvider = configuredProviders.length > 1
+  const resolvedSelectedProviderValue = configuredProviders.includes(selectedProviderValue as AuthProviderKey)
+    ? selectedProviderValue
+    : configuredProviders[0] ?? selectedProviderValue
   const activeSessionPath = agentState.activeSession?.sessionPath ?? null
   const activeSession = agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
-  const availableProviders = Array.from(new Set([
-    ...KNOWN_AGENT_PROVIDERS,
-    ...agentState.runtime.availableModels.map((model) => model.split('/')[0]),
-  ]))
   const providerModelIds = Array.from(new Set(
     agentState.runtime.availableModels
-      .filter((model) => model.startsWith(`${selectedProviderValue}/`))
+      .filter((model) => model.startsWith(`${resolvedSelectedProviderValue}/`))
       .map((model) => model.split('/').slice(1).join('/')),
   ))
   const modelSuggestions = isModelInputFullySelected
@@ -1181,7 +1192,7 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
       return !query || modelId.toLowerCase().includes(query)
     })
   const modelPlaceholder = 'model'
-  const canSend = Boolean(workspacePath && composerValue.trim())
+  const canSend = Boolean(workspacePath && composerValue.trim() && agentState.runtime.hasConfiguredModels)
   const statusMessage = !workspacePath
     ? 'Open a workspace to start.'
     : !agentState.runtime.hasConfiguredModels
@@ -1220,6 +1231,31 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
     ? `${sessionStatus.label}:${sessionStatus.badge?.label ?? ''}`
     : 'none'
   const renderedMessageCount = renderedMessages.length
+
+  useEffect(() => {
+    if (!canChooseProvider && activeComposerMenu === 'provider') {
+      setActiveComposerMenu(null)
+    }
+
+    if (!hasConfiguredProviders) {
+      return
+    }
+
+    if (resolvedSelectedProviderValue === selectedProviderValue) {
+      return
+    }
+
+    setSelectedProviderValue(resolvedSelectedProviderValue)
+    setModelInputValue(modelDrafts[resolvedSelectedProviderValue] ?? providerModelIds[0] ?? '')
+  }, [
+    activeComposerMenu,
+    canChooseProvider,
+    hasConfiguredProviders,
+    modelDrafts,
+    providerModelIds,
+    resolvedSelectedProviderValue,
+    selectedProviderValue,
+  ])
 
   useLayoutEffect(() => {
     const scrollElement = messagesScrollRef.current
@@ -1413,78 +1449,96 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
             <div className='agent-composer-toolbar'>
               <div className='agent-composer-actions'>
                 <div className='agent-model-field'>
-                <div className='agent-model-composite'>
-                  <button
-                    type='button'
-                    aria-haspopup='listbox'
-                    aria-expanded={activeComposerMenu === 'provider'}
-                    aria-label='Provider'
-                    className='agent-provider-trigger'
-                    disabled={!workspacePath || isSwitchingModel}
-                    onClick={() => {
-                      setActiveComposerMenu((currentValue) => currentValue === 'provider' ? null : 'provider')
-                    }}
-                  >
-                    <span className='agent-provider-trigger-label'>{selectedProviderValue}</span>
-                  </button>
+                  {hasConfiguredProviders ? (
+                    <div className='agent-model-composite'>
+                      <button
+                        type='button'
+                        aria-expanded={canChooseProvider ? activeComposerMenu === 'provider' : undefined}
+                        aria-haspopup={canChooseProvider ? 'listbox' : undefined}
+                        aria-label='Provider'
+                        className={`agent-provider-trigger${canChooseProvider ? '' : ' is-static'}`}
+                        disabled={!workspacePath || isSwitchingModel}
+                        onClick={() => {
+                          if (!canChooseProvider) {
+                            return
+                          }
+                          setActiveComposerMenu((currentValue) => currentValue === 'provider' ? null : 'provider')
+                        }}
+                      >
+                        <span className='agent-provider-trigger-label'>{resolvedSelectedProviderValue}</span>
+                      </button>
 
-                  <span className='agent-model-separator'>/</span>
+                      <span className='agent-model-separator'>/</span>
 
-                  <Input
-                    aria-label='Model'
-                    className='agent-model-input'
-                    disabled={!workspacePath || !agentState.runtime.hasConfiguredModels || isSwitchingModel}
-                    ref={modelInputRef}
-                    onBlur={() => {
-                      setIsModelInputFullySelected(false)
-                      setActiveComposerMenu((currentValue) => currentValue === 'model' ? null : currentValue)
-                      void handleModelInputCommit()
-                    }}
-                    onChange={(event) => {
-                      if (panelError) {
-                        setPanelError(null)
-                      }
-                      setIsModelInputFullySelected(false)
-                      setActiveComposerMenu('model')
-                      setModelInputValue(event.target.value)
-                      setModelDrafts((currentValue) => ({
-                        ...currentValue,
-                        [selectedProviderValue]: event.target.value,
-                      }))
-                    }}
-                    onFocus={(event) => {
-                      setActiveComposerMenu('model')
-                      const input = event.currentTarget
-                      requestAnimationFrame(() => {
-                        input.select()
-                        syncModelInputSelectionState(input)
-                      })
-                    }}
-                    onSelect={(event) => {
-                      syncModelInputSelectionState(event.currentTarget)
-                    }}
-                    onPointerUp={(event) => {
-                      syncModelInputSelectionStateNextFrame(event.currentTarget)
-                    }}
-                    onKeyUp={(event) => {
-                      syncModelInputSelectionStateNextFrame(event.currentTarget)
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
+                      <Input
+                        aria-label='Model'
+                        className='agent-model-input'
+                        disabled={!workspacePath || !agentState.runtime.hasConfiguredModels || isSwitchingModel}
+                        ref={modelInputRef}
+                        onBlur={() => {
+                          setIsModelInputFullySelected(false)
+                          setActiveComposerMenu((currentValue) => currentValue === 'model' ? null : currentValue)
+                          void handleModelInputCommit()
+                        }}
+                        onChange={(event) => {
+                          if (panelError) {
+                            setPanelError(null)
+                          }
+                          setIsModelInputFullySelected(false)
+                          setActiveComposerMenu('model')
+                          setModelInputValue(event.target.value)
+                          setModelDrafts((currentValue) => ({
+                            ...currentValue,
+                            [resolvedSelectedProviderValue]: event.target.value,
+                          }))
+                        }}
+                        onFocus={(event) => {
+                          setActiveComposerMenu('model')
+                          const input = event.currentTarget
+                          requestAnimationFrame(() => {
+                            input.select()
+                            syncModelInputSelectionState(input)
+                          })
+                        }}
+                        onSelect={(event) => {
+                          syncModelInputSelectionState(event.currentTarget)
+                        }}
+                        onPointerUp={(event) => {
+                          syncModelInputSelectionStateNextFrame(event.currentTarget)
+                        }}
+                        onKeyUp={(event) => {
+                          syncModelInputSelectionStateNextFrame(event.currentTarget)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            setActiveComposerMenu(null)
+                            void handleModelInputCommit()
+                          }
+
+                          if (event.key === 'Escape') {
+                            setActiveComposerMenu(null)
+                          }
+                        }}
+                        placeholder={modelPlaceholder}
+                        value={modelInputValue}
+                        variant='secondary'
+                      />
+                    </div>
+                  ) : (
+                    <Button
+                      className='agent-provider-setup-button'
+                      isDisabled={!workspacePath}
+                      size='sm'
+                      variant='ghost'
+                      onPress={() => {
                         setActiveComposerMenu(null)
-                        void handleModelInputCommit()
-                      }
-
-                      if (event.key === 'Escape') {
-                        setActiveComposerMenu(null)
-                      }
-                    }}
-                    placeholder={modelPlaceholder}
-                    value={modelInputValue}
-                    variant='secondary'
-                  />
-                </div>
+                        onOpenProviderSettings?.()
+                      }}
+                    >
+                      配置提供商
+                    </Button>
+                  )}
                 </div>
 
                 <Button
@@ -1500,13 +1554,13 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
               </div>
             </div>
 
-            {activeComposerMenu === 'provider' ? (
+            {activeComposerMenu === 'provider' && canChooseProvider ? (
               <div className='agent-composer-menu' role='listbox' aria-label='Available providers'>
-                {availableProviders.map((provider) => (
+                {configuredProviders.map((provider) => (
                   <button
                     key={provider}
                     type='button'
-                    className={`agent-composer-option ${provider === selectedProviderValue ? 'is-active' : ''}`}
+                    className={`agent-composer-option ${provider === resolvedSelectedProviderValue ? 'is-active' : ''}`}
                     onPointerDown={(event) => {
                       event.preventDefault()
                     }}
@@ -1524,7 +1578,7 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
               <div className='agent-composer-menu' role='listbox' aria-label='Available models'>
                 {modelSuggestions.map((modelId) => (
                   <button
-                    key={`${selectedProviderValue}/${modelId}`}
+                    key={`${resolvedSelectedProviderValue}/${modelId}`}
                     type='button'
                     className='agent-composer-option'
                     onPointerDown={(event) => {
@@ -1537,10 +1591,10 @@ export function AgentSidebar({ onWorkspaceStateChange, workspacePath }: AgentSid
                       setModelInputValue(modelId)
                       setModelDrafts((currentValue) => ({
                         ...currentValue,
-                        [selectedProviderValue]: modelId,
+                        [resolvedSelectedProviderValue]: modelId,
                       }))
                       setActiveComposerMenu(null)
-                      void handleSelectModel(`${selectedProviderValue}/${modelId}`)
+                      void handleSelectModel(`${resolvedSelectedProviderValue}/${modelId}`)
                     }}
                   >
                     <span className='agent-composer-option-label'>{modelId}</span>

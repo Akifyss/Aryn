@@ -45,7 +45,6 @@ const OPENAI_ENV_KEY = 'OPENAI_API_KEY'
 const OPENAI_PROVIDER = 'openai'
 const GOOGLE_ENV_KEY = 'GEMINI_API_KEY'
 const GOOGLE_PROVIDER = 'google'
-const DEFAULT_MODEL_ID = 'google/gemini-3.1-flash-lite-preview'
 const AUTO_SESSION_NAME_MODEL_ID = 'openrouter/free'
 const AUTO_SESSION_NAME_MAX_TOKENS = 48
 const AUTH_SETUP_HINT = `No authenticated models are available. Add an API key in Agent Auth or set ${OPENROUTER_ENV_KEY}, ${OPENAI_ENV_KEY}, or ${GOOGLE_ENV_KEY}.`
@@ -816,8 +815,8 @@ export class PiAgentManager {
       return
     }
 
-    const preferredProvider = session.settingsManager.getDefaultProvider() ?? OPENROUTER_PROVIDER
-    const preferredModel = session.settingsManager.getDefaultModel() ?? DEFAULT_MODEL_ID
+    const preferredProvider = session.settingsManager.getDefaultProvider()
+    const preferredModel = session.settingsManager.getDefaultModel()
     const preferredSelection = preferredProvider && preferredModel
       ? availableModels.find((model) => model.provider === preferredProvider && model.id === preferredModel)
       : null
