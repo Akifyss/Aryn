@@ -235,7 +235,10 @@ export function CommandPalette({
                   className='command-palette-input'
                 />
                 <div className='command-palette-kbd-group'>
-                  <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">{cmdKey}  K</Kbd>
+                  <Kbd className="text-[10px] px-2 py-0.5 shadow-none">
+                    {cmdKey}
+                    <span className="ml-1">K</span>
+                  </Kbd>
                 </div>
               </div>
 
