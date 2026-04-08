@@ -1838,6 +1838,7 @@ function App() {
                   nodes={tree}
                   expandedPaths={expandedPaths}
                   setExpandedPaths={setExpandedPaths}
+                  workspacePath={currentPath}
                   gitRepositoryState={gitRepositoryState}
                   onSelectFile={(filePath) => {
                     void openFile(filePath)

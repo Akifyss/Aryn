@@ -20,6 +20,7 @@ type WorkspaceTreeProps = {
   nodes: WorkspaceNode[]
   expandedPaths: Set<string>
   setExpandedPaths: Dispatch<SetStateAction<Set<string>>>
+  workspacePath: string | null
   onSelectFile: (path: string) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onDeleteNode: (node: WorkspaceNode) => Promise<void>
@@ -417,6 +418,7 @@ export function WorkspaceTree({
   nodes,
   expandedPaths,
   setExpandedPaths,
+  workspacePath,
   onSelectFile,
   onRenameNode,
   onDeleteNode,
@@ -428,6 +430,7 @@ export function WorkspaceTree({
   const [isMovingNode, setIsMovingNode] = useState(false)
   const expandTimerRef = useRef<number | null>(null)
   const expandTimerPathRef = useRef<string | null>(null)
+  const isRootDropTarget = Boolean(workspacePath && dropTargetDirectoryPath === workspacePath)
 
   const clearExpandTimer = () => {
     if (expandTimerRef.current !== null) {
@@ -549,6 +552,58 @@ export function WorkspaceTree({
     }
   }
 
+  const handleRootDragOver = (event: DragEvent<HTMLUListElement>) => {
+    if (!workspacePath || isMovingNode || !canMoveNodeToDirectory(draggedNode, workspacePath)) {
+      if (draggedNode) {
+        event.dataTransfer.dropEffect = 'none'
+      }
+      return
+    }
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+
+    if (dropTargetDirectoryPath !== workspacePath) {
+      clearExpandTimer()
+      setDropTargetDirectoryPath(workspacePath)
+    }
+  }
+
+  const handleRootDragLeave = (event: DragEvent<HTMLUListElement>) => {
+    if (!workspacePath || !draggedNode) {
+      return
+    }
+
+    const relatedTarget = event.relatedTarget
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+      return
+    }
+
+    setDropTargetDirectoryPath((currentValue) => (
+      currentValue === workspacePath ? null : currentValue
+    ))
+  }
+
+  const handleRootDrop = async (event: DragEvent<HTMLUListElement>) => {
+    if (!workspacePath || isMovingNode || !draggedNode || !canMoveNodeToDirectory(draggedNode, workspacePath)) {
+      return
+    }
+
+    event.preventDefault()
+
+    const sourceNode = draggedNode
+    setIsMovingNode(true)
+    setDraggedNode(null)
+    setDropTargetDirectoryPath(null)
+    clearExpandTimer()
+
+    try {
+      await onMoveNode(sourceNode, workspacePath)
+    } finally {
+      setIsMovingNode(false)
+    }
+  }
+
   if (nodes.length === 0) {
     return (
       <div className='tree-empty-state'>
@@ -561,7 +616,13 @@ export function WorkspaceTree({
   }
 
   return (
-    <ul className={`git-tree-list workspace-tree-root${draggedNode ? ' is-dragging' : ''}`} style={{ paddingTop: 6, paddingBottom: 6 }}>
+    <ul
+      className={`git-tree-list workspace-tree-root${draggedNode ? ' is-dragging' : ''}${isRootDropTarget ? ' is-root-drop-target' : ''}`}
+      style={{ paddingTop: 6, paddingBottom: 6 }}
+      onDragLeave={handleRootDragLeave}
+      onDragOver={handleRootDragOver}
+      onDrop={(event) => void handleRootDrop(event)}
+    >
       {nodes.map((node) => (
         <FileTreeItem
           key={node.path}
