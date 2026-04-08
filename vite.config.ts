@@ -64,6 +64,7 @@ export default defineConfig(({ command }) => {
                 external: isBundledElectronRuntimeExternal,
                 output: {
                   entryFileNames: 'index.js',
+                  chunkFileNames: 'chunks/[name].js',
                 },
               },
             },
@@ -81,6 +82,9 @@ export default defineConfig(({ command }) => {
               outDir: 'dist-electron/preload',
               rollupOptions: {
                 external: isBundledElectronRuntimeExternal,
+                output: {
+                  chunkFileNames: 'chunks/[name].js',
+                },
               },
             },
           },
