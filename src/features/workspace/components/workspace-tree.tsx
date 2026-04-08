@@ -62,6 +62,14 @@ function canMoveNodeToDirectory(node: WorkspaceNode | null, targetDirectoryPath:
   return normalizePath(getParentDirectoryPath(node.path) ?? '') !== normalizePath(targetDirectoryPath)
 }
 
+function resolveDropTargetDirectoryPath(node: WorkspaceNode, workspacePath: string | null) {
+  if (node.kind === 'directory') {
+    return node.path
+  }
+
+  return getParentDirectoryPath(node.path) ?? workspacePath
+}
+
 function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | undefined, node: WorkspaceNode): GitDisplayChange | null {
   if (!repositoryState?.isRepository) return null
 
@@ -198,12 +206,13 @@ function FileTreeItem({
   expandedPaths,
   iconTheme,
   node,
+  workspacePath,
   onDeleteNode,
   onDragEndNode,
-  onDragLeaveDirectory,
-  onDragOverDirectory,
+  onDragLeaveNode,
+  onDragOverNode,
   onDragStartNode,
-  onDropOnDirectory,
+  onDropOnNode,
   onRenameNode,
   onSelectFile,
   onToggleDirectory,
@@ -215,12 +224,13 @@ function FileTreeItem({
   expandedPaths: Set<string>
   iconTheme: WorkspaceIconTheme | null
   node: WorkspaceNode
+  workspacePath: string | null
   onDeleteNode: (node: WorkspaceNode) => Promise<void>
   onDragEndNode: () => void
-  onDragLeaveDirectory: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
-  onDragOverDirectory: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
+  onDragLeaveNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
+  onDragOverNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
   onDragStartNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
-  onDropOnDirectory: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => Promise<void>
+  onDropOnNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => Promise<void>
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onSelectFile: (path: string) => void
   onToggleDirectory: (path: string) => void
@@ -235,8 +245,13 @@ function FileTreeItem({
   const isExpanded = expandedPaths.has(node.path)
   const isActive = activeFilePath === node.path
   const gitChange = findGitChangeByFilePath(gitRepositoryState, node)
+  const resolvedDropTargetDirectoryPath = resolveDropTargetDirectoryPath(node, workspacePath)
   const isDragSource = draggedNode?.path === node.path
-  const isDropTarget = isFolder && dropTargetDirectoryPath === node.path
+  const isDropTarget = Boolean(
+    isFolder
+    && resolvedDropTargetDirectoryPath
+    && dropTargetDirectoryPath === resolvedDropTargetDirectoryPath,
+  )
 
   useEffect(() => {
     setDraftName(node.name)
@@ -281,9 +296,9 @@ function FileTreeItem({
       <div
         className={`workspace-tree-row${isActive ? ' is-active' : ''}${isDragSource ? ' is-drag-source' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
         onClick={() => (isFolder ? onToggleDirectory(node.path) : onSelectFile(node.path))}
-        onDragLeave={isFolder ? (event) => onDragLeaveDirectory(node, event) : undefined}
-        onDragOver={isFolder ? (event) => onDragOverDirectory(node, event) : undefined}
-        onDrop={isFolder ? (event) => void onDropOnDirectory(node, event) : undefined}
+        onDragLeave={(event) => onDragLeaveNode(node, event)}
+        onDragOver={(event) => onDragOverNode(node, event)}
+        onDrop={(event) => void onDropOnNode(node, event)}
       >
         {isEditing ? (
           <form className='workspace-tree-trigger' onSubmit={handleSubmitRename} onClick={event => event.stopPropagation()}>
@@ -393,12 +408,13 @@ function FileTreeItem({
                 expandedPaths={expandedPaths}
                 iconTheme={iconTheme}
                 node={child}
+                workspacePath={workspacePath}
                 onDeleteNode={onDeleteNode}
                 onDragEndNode={onDragEndNode}
-                onDragLeaveDirectory={onDragLeaveDirectory}
-                onDragOverDirectory={onDragOverDirectory}
+                onDragLeaveNode={onDragLeaveNode}
+                onDragOverNode={onDragOverNode}
                 onDragStartNode={onDragStartNode}
-                onDropOnDirectory={onDropOnDirectory}
+                onDropOnNode={onDropOnNode}
                 onRenameNode={onRenameNode}
                 onSelectFile={onSelectFile}
                 onToggleDirectory={onToggleDirectory}
@@ -480,27 +496,37 @@ export function WorkspaceTree({
     clearExpandTimer()
   }
 
-  const handleDragOverDirectory = (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
-    if (isMovingNode || !canMoveNodeToDirectory(draggedNode, node.path)) {
-      if (draggedNode) {
-        event.dataTransfer.dropEffect = 'none'
-      }
+  const handleDragOverNode = (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
+    if (!draggedNode) {
+      return
+    }
+
+    event.stopPropagation()
+    clearExpandTimer()
+
+    const targetDirectoryPath = resolveDropTargetDirectoryPath(node, workspacePath)
+    if (!targetDirectoryPath || isMovingNode) {
+      event.dataTransfer.dropEffect = 'none'
+      return
+    }
+
+    const canMoveToTargetDirectory = canMoveNodeToDirectory(draggedNode, targetDirectoryPath)
+    if (!canMoveToTargetDirectory) {
+      event.dataTransfer.dropEffect = 'none'
       return
     }
 
     event.preventDefault()
-    event.stopPropagation()
     event.dataTransfer.dropEffect = 'move'
 
-    if (dropTargetDirectoryPath !== node.path) {
-      setDropTargetDirectoryPath(node.path)
+    if (dropTargetDirectoryPath !== targetDirectoryPath) {
+      setDropTargetDirectoryPath(targetDirectoryPath)
     }
 
-    if (expandedPaths.has(node.path) || expandTimerPathRef.current === node.path) {
+    if (node.kind !== 'directory' || expandedPaths.has(node.path) || expandTimerPathRef.current === node.path) {
       return
     }
 
-    clearExpandTimer()
     expandTimerPathRef.current = node.path
     expandTimerRef.current = window.setTimeout(() => {
       setExpandedPaths((currentExpandedPaths) => {
@@ -512,32 +538,43 @@ export function WorkspaceTree({
     }, 550)
   }
 
-  const handleDragLeaveDirectory = (_node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
+  const handleDragLeaveNode = (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
     if (!draggedNode) {
       return
     }
+
+    event.stopPropagation()
 
     const relatedTarget = event.relatedTarget
     if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
       return
     }
 
-    setDropTargetDirectoryPath((currentValue) => (
-      currentValue === _node.path ? null : currentValue
-    ))
+    const targetDirectoryPath = resolveDropTargetDirectoryPath(node, workspacePath)
+    if (!targetDirectoryPath) {
+      return
+    }
 
-    if (expandTimerPathRef.current === _node.path) {
+    setDropTargetDirectoryPath((currentValue) => (currentValue === targetDirectoryPath ? null : currentValue))
+
+    if (expandTimerPathRef.current === node.path) {
       clearExpandTimer()
     }
   }
 
-  const handleDropOnDirectory = async (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
-    if (isMovingNode || !draggedNode || !canMoveNodeToDirectory(draggedNode, node.path)) {
+  const handleDropOnNode = async (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
+    if (!draggedNode) {
+      return
+    }
+
+    event.stopPropagation()
+
+    const targetDirectoryPath = resolveDropTargetDirectoryPath(node, workspacePath)
+    if (!targetDirectoryPath || isMovingNode || !canMoveNodeToDirectory(draggedNode, targetDirectoryPath)) {
       return
     }
 
     event.preventDefault()
-    event.stopPropagation()
 
     const sourceNode = draggedNode
     setIsMovingNode(true)
@@ -546,7 +583,7 @@ export function WorkspaceTree({
     clearExpandTimer()
 
     try {
-      await onMoveNode(sourceNode, node.path)
+      await onMoveNode(sourceNode, targetDirectoryPath)
     } finally {
       setIsMovingNode(false)
     }
@@ -632,12 +669,13 @@ export function WorkspaceTree({
           expandedPaths={expandedPaths}
           iconTheme={iconTheme}
           node={node}
+          workspacePath={workspacePath}
           onDeleteNode={onDeleteNode}
           onDragEndNode={handleDragEndNode}
-          onDragLeaveDirectory={handleDragLeaveDirectory}
-          onDragOverDirectory={handleDragOverDirectory}
+          onDragLeaveNode={handleDragLeaveNode}
+          onDragOverNode={handleDragOverNode}
           onDragStartNode={handleDragStartNode}
-          onDropOnDirectory={handleDropOnDirectory}
+          onDropOnNode={handleDropOnNode}
           onRenameNode={onRenameNode}
           onSelectFile={onSelectFile}
           onToggleDirectory={handleToggle}
