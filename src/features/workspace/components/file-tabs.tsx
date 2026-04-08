@@ -281,7 +281,12 @@ export function FileTabs({
   const dropIndicatorOffset = getDropIndicatorOffset(dragTarget)
 
   return (
-    <div ref={shellRef} className='file-tabs-shell' data-empty={tabs.length === 0}>
+    <div
+      ref={shellRef}
+      className='file-tabs-shell'
+      data-empty={tabs.length === 0}
+      data-dragging={draggingTabPath ? 'true' : 'false'}
+    >
       <div
         ref={scrollerRef}
         className='file-tabs-scroller'

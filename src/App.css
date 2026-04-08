@@ -963,6 +963,16 @@
   -webkit-app-region: drag;
 }
 
+/*
+  Windows caption drag regions swallow HTML drag/drop events. Keep the spacer as
+  a window drag handle by default, but temporarily hand it back to the DOM while
+  a tab reorder is in progress so dropping after the last tab still works.
+*/
+.file-tabs-shell[data-dragging='true'] .file-tabs-drag-spacer {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
 .file-tabs-actions {
   display: flex;
   align-items: center;
