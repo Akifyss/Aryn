@@ -10,6 +10,7 @@ import {
   FolderOpenLine,
   More1Line,
 } from '@mingcute/react'
+import { pickDominantGitDisplayChange } from '@/features/git/lib/display-change'
 import { resolveWorkspaceDirectoryIconUrl, resolveWorkspaceFileIconUrl } from '@/features/workspace/lib/icon-theme'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 import type { GitDisplayChange, GitRepositoryState } from '@/features/git/types'
@@ -90,15 +91,13 @@ function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | un
     return null
   }
 
-  const isModified = allChanges.some(c =>
-    c.kind === 'modified' || c.kind === 'renamed' || c.kind === 'copied' || c.kind === 'type-changed',
-  )
+  const dominantChange = pickDominantGitDisplayChange(allChanges)
 
-  if (isModified) {
-    return { kind: 'modified', path: node.path } as GitDisplayChange
+  if (!dominantChange) {
+    return null
   }
 
-  return { kind: 'added', path: node.path } as GitDisplayChange
+  return { ...dominantChange, path: node.path } as GitDisplayChange
 }
 
 function FileRowIcon({
