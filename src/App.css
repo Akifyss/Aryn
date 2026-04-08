@@ -2156,6 +2156,11 @@
   color: color-mix(in srgb, var(--accent) 82%, var(--foreground));
 }
 
+.workspace-tree-root.is-root-drop-target {
+  outline: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  outline-offset: -1px;
+}
+
 .workspace-tree-root.is-dragging .workspace-tree-row.is-drag-source .workspace-tree-trigger,
 body.workspace-tree-dragging .workspace-tree-row.is-drag-source .workspace-tree-trigger {
   cursor: grabbing;
