@@ -2003,6 +2003,7 @@ function App() {
                 onStageChange={(change) => {
                   void handleStageGitPaths([change.path])
                 }}
+                theme={theme}
                 onUnstageChange={(change) => {
                   void handleUnstageGitPaths([change.path])
                 }}

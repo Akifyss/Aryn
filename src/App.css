@@ -1377,6 +1377,29 @@
   background: var(--surface);
 }
 
+.git-diff-monaco-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.git-diff-monaco-editor,
+.git-diff-monaco-editor > div {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.git-diff-monaco-shell .monaco-editor,
+.git-diff-monaco-shell .monaco-editor .overflow-guard,
+.git-diff-monaco-shell .monaco-diff-editor,
+.git-diff-monaco-shell .monaco-diff-editor .overflow-guard {
+  border-radius: 0;
+}
+
 .git-panel-empty-copy,
 .git-panel-status,
 .git-panel-error,
@@ -1402,7 +1425,6 @@
   font-family: var(--font-sans) !important;
 }
 
-.git-diff-codemirror-host .cm-mergeView,
 .git-diff-codemirror-host .cm-editor {
   width: 100%;
   height: 100%;
@@ -1410,12 +1432,22 @@
 }
 
 .git-diff-codemirror-host .cm-mergeView {
+  width: 100%;
   background: var(--surface);
 }
 
-.git-diff-codemirror-host .cm-mergeViewEditors,
-.git-diff-codemirror-host .cm-mergeViewEditor {
+.git-diff-codemirror-host-unified .cm-mergeViewEditors,
+.git-diff-codemirror-host-unified .cm-mergeViewEditor {
   height: 100%;
+}
+
+.git-diff-codemirror-host-split .cm-mergeView {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.git-diff-codemirror-host-split .cm-mergeViewEditors {
+  min-height: 100%;
 }
 
 .git-diff-codemirror-host .cm-editor.cm-focused {

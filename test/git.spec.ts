@@ -96,6 +96,7 @@ describe('git helpers', () => {
     })
 
     await expect(getGitFileDiff(rootPath, filePath, 'staged')).resolves.toMatchObject({
+      editorKind: 'rich-text',
       modifiedContent: '# Draft\n',
       modifiedExists: true,
       originalContent: '',
@@ -103,6 +104,7 @@ describe('git helpers', () => {
     })
 
     await expect(getGitFileDiff(rootPath, filePath, 'unstaged')).resolves.toMatchObject({
+      editorKind: 'rich-text',
       modifiedContent: '# Draft\n\nSecond line\n',
       modifiedExists: true,
       originalContent: '# Draft\n',
@@ -154,6 +156,7 @@ describe('git helpers', () => {
     })
 
     await expect(getGitFileDiff(rootPath, filePath, 'unstaged')).resolves.toMatchObject({
+      editorKind: 'code',
       modifiedContent: '<div>two</div>\n',
       modifiedExists: true,
       originalContent: '<div>one</div>\n',

@@ -1,10 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { Button } from '@heroui/react'
 import { EditorState } from '@codemirror/state'
-import {
-  MergeView,
-  unifiedMergeView,
-} from '@codemirror/merge'
+import { MergeView, unifiedMergeView } from '@codemirror/merge'
 import {
   drawSelection,
   EditorView,
@@ -21,18 +18,24 @@ import {
   indentOnInput,
   syntaxHighlighting,
 } from '@codemirror/language'
-import {
-  defaultKeymap,
-  history,
-  historyKeymap,
-  indentWithTab,
-} from '@codemirror/commands'
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
 import { ArrowDownLine, ArrowUpLine, Refresh2Line, SaveLine } from '@mingcute/react'
+import * as monaco from 'monaco-editor'
 import type { GitChangeItem, GitFileDiffResult } from '@/features/git/types'
 import { getCodeMirrorLanguageSupport } from '@/features/editor/lib/codemirror-language'
+import {
+  DiffEditor,
+  configureMonaco,
+  resolveMonacoTheme,
+  type MonacoDiffEditorOptions,
+  type MonacoThemePreference,
+} from '@/features/editor/lib/monaco'
+import { getCodeLanguage } from '@/features/workspace/lib/file-types'
 
 type DiffViewMode = 'split' | 'unified'
+
+configureMonaco()
 
 const DIFF_EDITOR_THEME = EditorView.theme({
   '&': {
@@ -70,6 +73,40 @@ const DIFF_EDITOR_THEME = EditorView.theme({
     borderLeftColor: 'var(--foreground)',
   },
 })
+
+const DEFAULT_MONACO_DIFF_OPTIONS: MonacoDiffEditorOptions = {
+  automaticLayout: true,
+  diffAlgorithm: 'advanced',
+  diffWordWrap: 'inherit',
+  enableSplitViewResizing: true,
+  fontFamily: '"SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace',
+  fontLigatures: true,
+  fontSize: 13.5,
+  hideUnchangedRegions: {
+    enabled: true,
+    contextLineCount: 3,
+    minimumLineCount: 4,
+    revealLineCount: 3,
+  },
+  ignoreTrimWhitespace: false,
+  lineNumbersMinChars: 3,
+  minimap: { enabled: false },
+  originalEditable: false,
+  overviewRulerBorder: false,
+  padding: {
+    top: 18,
+    bottom: 18,
+  },
+  readOnly: false,
+  renderGutterMenu: false,
+  renderIndicators: true,
+  renderMarginRevertIcon: false,
+  renderOverviewRuler: false,
+  roundedSelection: false,
+  scrollBeyondLastLine: false,
+  smoothScrolling: true,
+  useInlineViewWhenSpaceIsLimited: false,
+}
 
 function createDiffExtensions({
   editable,
@@ -126,56 +163,22 @@ function createDiffExtensions({
   ]
 }
 
-export function GitDiffEditor({
+function RichTextDiffRenderer({
   diff,
-  onDiscardChange,
-  onSaveEditedFile,
-  onStageChange,
-  onUnstageChange,
+  isEditable,
+  onDraftChange,
+  onSave,
+  viewMode,
 }: {
   diff: GitFileDiffResult
-  onDiscardChange: (change: GitChangeItem) => void
-  onSaveEditedFile: (filePath: string, content: string) => Promise<void>
-  onStageChange: (change: GitChangeItem) => void
-  onUnstageChange: (change: GitChangeItem) => void
+  isEditable: boolean
+  onDraftChange: (content: string) => void
+  onSave: () => void
+  viewMode: DiffViewMode
 }) {
-  const defaultMode = diff.editorKind === 'rich-text' ? 'unified' : 'split'
-  const [viewMode, setViewMode] = useState<DiffViewMode>(defaultMode)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const splitViewRef = useRef<MergeView | null>(null)
   const unifiedViewRef = useRef<EditorView | null>(null)
-  const [draftContent, setDraftContent] = useState(diff.modifiedContent)
-  const draftContentRef = useRef(diff.modifiedContent)
-  const [isSaving, setIsSaving] = useState(false)
-  const isEditable = diff.change.scope === 'unstaged' && diff.modifiedExists
-  const isDirty = draftContent !== diff.modifiedContent
-  const fileDescription = useMemo(
-    () => {
-      if (!diff.originalExists && diff.modifiedExists) {
-        return 'new file'
-      }
-
-      if (diff.originalExists && !diff.modifiedExists) {
-        return 'deleted file'
-      }
-
-      return diff.change.kind
-    },
-    [diff.change.kind, diff.modifiedExists, diff.originalExists],
-  )
-
-  useEffect(() => {
-    setViewMode(defaultMode)
-  }, [defaultMode, diff.change.path, diff.change.scope])
-
-  useEffect(() => {
-    setDraftContent(diff.modifiedContent)
-    draftContentRef.current = diff.modifiedContent
-  }, [diff.change.path, diff.change.scope, diff.modifiedContent])
-
-  useEffect(() => {
-    draftContentRef.current = draftContent
-  }, [draftContent])
 
   useEffect(() => {
     const container = containerRef.current
@@ -190,28 +193,7 @@ export function GitDiffEditor({
     unifiedViewRef.current?.destroy()
     unifiedViewRef.current = null
 
-    const handleDraftChange = (content: string) => {
-      draftContentRef.current = content
-      setDraftContent(content)
-    }
-
-    const handleSave = () => {
-      if (!isEditable || isSaving) {
-        return
-      }
-
-      void (async () => {
-        setIsSaving(true)
-
-        try {
-          await onSaveEditedFile(diff.change.path, draftContentRef.current)
-        } finally {
-          setIsSaving(false)
-        }
-      })()
-    }
-
-    const rightDoc = diff.modifiedExists ? draftContentRef.current : ''
+    const rightDoc = diff.modifiedExists ? diff.modifiedContent : ''
     const leftDoc = diff.originalExists ? diff.originalContent : ''
 
     if (viewMode === 'split') {
@@ -230,8 +212,8 @@ export function GitDiffEditor({
           extensions: createDiffExtensions({
             editable: isEditable,
             filePath: diff.change.path,
-            onChange: handleDraftChange,
-            onSave: handleSave,
+            onChange: onDraftChange,
+            onSave,
           }),
         },
         gutter: true,
@@ -259,8 +241,8 @@ export function GitDiffEditor({
         ...createDiffExtensions({
           editable: isEditable,
           filePath: diff.change.path,
-          onChange: handleDraftChange,
-          onSave: handleSave,
+          onChange: onDraftChange,
+          onSave,
         }),
         unifiedMergeView({
           allowInlineDiffs: true,
@@ -293,13 +275,149 @@ export function GitDiffEditor({
     diff.originalContent,
     diff.originalExists,
     isEditable,
-    isSaving,
-    onSaveEditedFile,
+    onDraftChange,
+    onSave,
     viewMode,
   ])
 
-  async function handleSave() {
-    if (!isEditable || isSaving || !isDirty) {
+  return (
+    <div className='git-diff-codemirror-shell'>
+      <div
+        ref={containerRef}
+        className={`git-diff-codemirror-host git-diff-codemirror-host-${viewMode}`}
+      />
+    </div>
+  )
+}
+
+function CodeDiffRenderer({
+  diff,
+  draftContent,
+  isEditable,
+  onDraftChange,
+  onSave,
+  theme,
+  viewMode,
+}: {
+  diff: GitFileDiffResult
+  draftContent: string
+  isEditable: boolean
+  onDraftChange: (content: string) => void
+  onSave: () => void
+  theme: MonacoThemePreference
+  viewMode: DiffViewMode
+}) {
+  const diffEditorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null)
+  const latestDraftRef = useRef(draftContent)
+  const onSaveRef = useRef(onSave)
+  const language = useMemo(() => getCodeLanguage(diff.change.path), [diff.change.path])
+  const monacoTheme = useMemo(() => resolveMonacoTheme(theme), [theme])
+  const editorOptions = useMemo<MonacoDiffEditorOptions>(() => ({
+    ...DEFAULT_MONACO_DIFF_OPTIONS,
+    experimental: {
+      useTrueInlineView: viewMode === 'unified',
+    },
+    readOnly: !isEditable,
+    renderSideBySide: viewMode === 'split',
+  }), [isEditable, viewMode])
+
+  useEffect(() => {
+    latestDraftRef.current = draftContent
+  }, [draftContent])
+
+  useEffect(() => {
+    onSaveRef.current = onSave
+  }, [onSave])
+
+  const handleMount = useCallback<NonNullable<ComponentProps<typeof DiffEditor>['onMount']>>((editor, monacoInstance) => {
+    diffEditorRef.current = editor
+
+    const originalEditor = editor.getOriginalEditor()
+    const modifiedEditor = editor.getModifiedEditor()
+    originalEditor.updateOptions({ tabSize: 2 })
+    modifiedEditor.updateOptions({ tabSize: 2 })
+    modifiedEditor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
+      void onSaveRef.current()
+    })
+
+    modifiedEditor.onDidChangeModelContent(() => {
+      const nextValue = modifiedEditor.getValue()
+
+      if (nextValue === latestDraftRef.current) {
+        return
+      }
+
+      latestDraftRef.current = nextValue
+      onDraftChange(nextValue)
+    })
+  }, [onDraftChange])
+
+  useEffect(() => () => {
+    diffEditorRef.current = null
+  }, [])
+
+  const encodedPath = encodeURIComponent(diff.change.path)
+
+  return (
+    <div className='git-diff-monaco-shell'>
+      <DiffEditor
+        className='git-diff-monaco-editor'
+        height='100%'
+        language={language}
+        modified={diff.modifiedExists ? draftContent : ''}
+        modifiedModelPath={`git-diff://modified/${encodedPath}?scope=${diff.change.scope}`}
+        options={editorOptions}
+        original={diff.originalExists ? diff.originalContent : ''}
+        originalModelPath={`git-diff://original/${encodedPath}?scope=${diff.change.scope}`}
+        theme={monacoTheme}
+        onMount={handleMount}
+      />
+    </div>
+  )
+}
+
+export function GitDiffEditor({
+  diff,
+  onDiscardChange,
+  onSaveEditedFile,
+  onStageChange,
+  onUnstageChange,
+  theme = 'auto',
+}: {
+  diff: GitFileDiffResult
+  onDiscardChange: (change: GitChangeItem) => void
+  onSaveEditedFile: (filePath: string, content: string) => Promise<void>
+  onStageChange: (change: GitChangeItem) => void
+  onUnstageChange: (change: GitChangeItem) => void
+  theme?: MonacoThemePreference
+}) {
+  const defaultMode = diff.editorKind === 'rich-text' ? 'unified' : 'split'
+  const [viewMode, setViewMode] = useState<DiffViewMode>(defaultMode)
+  const [draftContent, setDraftContent] = useState(diff.modifiedContent)
+  const draftContentRef = useRef(diff.modifiedContent)
+  const [isSaving, setIsSaving] = useState(false)
+  const isEditable = diff.change.scope === 'unstaged' && diff.modifiedExists
+  const isDirty = draftContent !== diff.modifiedContent
+
+  useEffect(() => {
+    setViewMode(defaultMode)
+  }, [defaultMode, diff.change.path, diff.change.scope])
+
+  useEffect(() => {
+    setDraftContent(diff.modifiedContent)
+    draftContentRef.current = diff.modifiedContent
+  }, [diff.change.path, diff.change.scope, diff.modifiedContent])
+
+  useEffect(() => {
+    draftContentRef.current = draftContent
+  }, [draftContent])
+
+  const handleDraftChange = useCallback((content: string) => {
+    setDraftContent((current) => current === content ? current : content)
+  }, [])
+
+  const handleSave = useCallback(async () => {
+    if (!isEditable || isSaving || draftContentRef.current === diff.modifiedContent) {
       return
     }
 
@@ -310,7 +428,7 @@ export function GitDiffEditor({
     } finally {
       setIsSaving(false)
     }
-  }
+  }, [diff.change.path, diff.modifiedContent, isEditable, isSaving, onSaveEditedFile])
 
   return (
     <div className='git-diff-editor'>
@@ -387,12 +505,32 @@ export function GitDiffEditor({
         </div>
       </header>
 
-      <div className='git-diff-codemirror-shell'>
-        <div
-          ref={containerRef}
-          className={`git-diff-codemirror-host git-diff-codemirror-host-${viewMode}`}
+      {diff.editorKind === 'rich-text' ? (
+        <RichTextDiffRenderer
+          diff={{
+            ...diff,
+            modifiedContent: draftContent,
+          }}
+          isEditable={isEditable}
+          onDraftChange={handleDraftChange}
+          onSave={() => {
+            void handleSave()
+          }}
+          viewMode={viewMode}
         />
-      </div>
+      ) : (
+        <CodeDiffRenderer
+          diff={diff}
+          draftContent={draftContent}
+          isEditable={isEditable}
+          onDraftChange={handleDraftChange}
+          onSave={() => {
+            void handleSave()
+          }}
+          theme={theme}
+          viewMode={viewMode}
+        />
+      )}
     </div>
   )
 }
