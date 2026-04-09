@@ -1082,6 +1082,11 @@ export function GitDiffEditor({
     isSaving,
   })
   const areBlockActionsEnabled = blockActionsDisabledReason === null
+  const saveDisabledReason = hasDirtyRelatedFileTab
+    ? 'Save or close the other dirty editor tab for this file first.'
+    : isComposing
+      ? 'Finish the current IME composition first.'
+      : null
   const areFileGitActionsEnabled = !(isSaving || isApplyingBlockAction || isComposing || (
     diff.change.scope === 'unstaged' && (isDirty || hasDirtyRelatedFileTab)
   ))
@@ -1138,6 +1143,7 @@ export function GitDiffEditor({
 
     if (
       !isEditable
+      || hasDirtyRelatedFileTab
       || isComposingRef.current
       || isSavingRef.current
       || draftContentRef.current === latestModifiedContentRef.current
@@ -1155,7 +1161,7 @@ export function GitDiffEditor({
       isSavingRef.current = false
       setIsSaving(false)
     }
-  }, [clearAutoSaveTimer, diff.change.path, isEditable, onSaveEditedFile])
+  }, [clearAutoSaveTimer, diff.change.path, hasDirtyRelatedFileTab, isEditable, onSaveEditedFile])
 
   const handleSaveRequest = useCallback(async (content?: string) => {
     if (typeof content === 'string') {
@@ -1167,7 +1173,7 @@ export function GitDiffEditor({
   }, [handleSave])
 
   useEffect(() => {
-    if (!isEditable || isComposing || isSaving || !isDirty) {
+    if (!isEditable || hasDirtyRelatedFileTab || isComposing || isSaving || !isDirty) {
       clearAutoSaveTimer()
       return
     }
@@ -1177,7 +1183,7 @@ export function GitDiffEditor({
     }, DIFF_AUTO_SAVE_DELAY_MS)
 
     return clearAutoSaveTimer
-  }, [clearAutoSaveTimer, handleSave, isComposing, isDirty, isEditable, isSaving])
+  }, [clearAutoSaveTimer, handleSave, hasDirtyRelatedFileTab, isComposing, isDirty, isEditable, isSaving])
 
   useEffect(() => () => {
     clearAutoSaveTimer()
@@ -1269,9 +1275,9 @@ export function GitDiffEditor({
           <button
             type='button'
             className='git-diff-view-mode git-diff-view-mode-icon-only'
-            aria-label={isSaving ? 'Saving file' : 'Save file'}
-            title={isSaving ? 'Saving file' : 'Save file'}
-            disabled={!isEditable || !isDirty || isSaving}
+            aria-label={isSaving ? 'Saving file' : saveDisabledReason ?? 'Save file'}
+            title={isSaving ? 'Saving file' : saveDisabledReason ?? 'Save file'}
+            disabled={!isEditable || !isDirty || isSaving || saveDisabledReason !== null}
             onClick={() => {
               void handleSave()
             }}

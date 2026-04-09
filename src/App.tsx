@@ -133,6 +133,10 @@ function hasPathPrefix(filePath: string, prefixPath: string) {
   return normalizedFilePath === normalizedPrefixPath || normalizedFilePath.startsWith(`${normalizedPrefixPath}/`)
 }
 
+function getWorkspaceTabSourcePath(tab: WorkspaceDisplayTab | WorkspaceDiffTab | WorkspaceFileTab) {
+  return tab.kind === 'diff' ? tab.diff.change.path : tab.filePath
+}
+
 function getPathSeparator(filePath: string) {
   return filePath.includes('\\') ? '\\' : '/'
 }
@@ -483,6 +487,7 @@ function App() {
   const previousWorkspaceAutosavePathRef = useRef<string | null>(null)
   const internalWorkspaceSavePathsRef = useRef(new Set<string>())
   const internalWorkspaceSaveTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const windowCloseRequestInFlightRef = useRef(false)
   const rootFileNames = useMemo(
     () => tree.filter((node) => node.kind === 'file').map((node) => node.name),
     [tree],
@@ -529,6 +534,32 @@ function App() {
     return useWorkspaceStore.getState().openTabs.filter(
       (tab) => tab.isDirty,
     )
+  }
+
+  function getDirtyWorkspaceTabsForPaths(filePaths?: string[]) {
+    const normalizedTargets = filePaths?.map((filePath) => normalizeFilePath(filePath))
+
+    return getDirtyWorkspaceTabsSnapshot().filter((tab) => {
+      if (!normalizedTargets?.length) {
+        return true
+      }
+
+      return normalizedTargets.includes(normalizeFilePath(getWorkspaceTabSourcePath(tab)))
+    })
+  }
+
+  function getDirtyWorkspaceTabsForNodePath(nodePath: string) {
+    return getDirtyWorkspaceTabsSnapshot().filter((tab) => hasPathPrefix(getWorkspaceTabSourcePath(tab), nodePath))
+  }
+
+  function hasDirtyFileTabsForPath(filePath: string) {
+    const normalizedPath = normalizeFilePath(filePath)
+
+    return useWorkspaceStore.getState().openTabs.some((tab) => (
+      tab.kind === 'file'
+      && tab.isDirty
+      && normalizeFilePath(tab.filePath) === normalizedPath
+    ))
   }
 
   function getShellWidth() {
@@ -688,7 +719,9 @@ function App() {
         const nextDiff = await window.appApi.getGitFileDiff(workspacePath, tab.diff.change.path, tab.diff.change.scope)
         openDiffTab(createDiffTab(nextDiff.change, nextDiff.change.scope, nextDiff), false)
       } catch {
-        closeTab(tab.id)
+        if (!tab.isDirty) {
+          closeTab(tab.id)
+        }
       }
     }))
   }
@@ -727,6 +760,10 @@ function App() {
       return false
     }
 
+    if (hasDirtyFileTabsForPath(tab.diff.change.path)) {
+      return false
+    }
+
     const draftContent = tab.draftContent ?? tab.diff.modifiedContent
 
     if (draftContent === tab.diff.modifiedContent) {
@@ -738,9 +775,18 @@ function App() {
     return true
   }
 
-  async function flushDirtyDiffTabs() {
+  async function flushDirtyDiffTabs(filePaths?: string[]) {
+    if (Array.isArray(filePaths) && filePaths.length === 0) {
+      return false
+    }
+
+    const normalizedTargets = filePaths?.map((filePath) => normalizeFilePath(filePath))
     const dirtyDiffTabs = useWorkspaceStore.getState().openTabs.filter(
-      (tab): tab is WorkspaceDiffTab => tab.kind === 'diff' && tab.isDirty,
+      (tab): tab is WorkspaceDiffTab => (
+        tab.kind === 'diff'
+        && tab.isDirty
+        && (!normalizedTargets?.length || normalizedTargets.includes(normalizeFilePath(tab.diff.change.path)))
+      ),
     )
 
     let didSave = false
@@ -751,6 +797,96 @@ function App() {
     }
 
     return didSave
+  }
+
+  async function ensureWorkspaceTabsSavedBeforeNodeMutation(options: {
+    actionLabel: string
+    nodePath: string
+  }) {
+    if (isActiveEditorComposing) {
+      const message = `Finish the current IME composition before ${options.actionLabel.toLowerCase()}.`
+      toast.warning('Finish editing first', {
+        description: message,
+      })
+      setStatusMessage(message)
+      return false
+    }
+
+    await flushWorkspaceAutosave()
+
+    const dirtyDiffPaths = Array.from(new Set(
+      getDirtyWorkspaceTabsForNodePath(options.nodePath)
+        .filter((tab): tab is WorkspaceDiffTab => tab.kind === 'diff')
+        .map((tab) => tab.diff.change.path),
+    ))
+
+    try {
+      await flushDirtyDiffTabs(dirtyDiffPaths)
+    } catch {
+      // Keep unsaved tabs visible and block the tree mutation below.
+    }
+
+    const remainingDirtyTabs = getDirtyWorkspaceTabsForNodePath(options.nodePath)
+
+    if (remainingDirtyTabs.length === 0) {
+      return true
+    }
+
+    const dirtyNames = remainingDirtyTabs
+      .slice(0, 4)
+      .map((tab) => getBaseName(getWorkspaceTabSourcePath(tab)))
+      .join(', ')
+    const remainingCount = remainingDirtyTabs.length - Math.min(remainingDirtyTabs.length, 4)
+    const extraLabel = remainingCount > 0 ? ` and ${remainingCount} more` : ''
+    const message = `Save or close the unsaved tab${remainingDirtyTabs.length > 1 ? 's' : ''} (${dirtyNames}${extraLabel}) before ${options.actionLabel.toLowerCase()}.`
+
+    toast.warning('Unsaved changes need attention', {
+      description: message,
+    })
+    setStatusMessage(message)
+    return false
+  }
+
+  async function ensureWorkspaceTabsSavedBeforeGitAction(options: {
+    actionLabel: string
+    filePaths?: string[]
+  }) {
+    if (isActiveEditorComposing) {
+      const message = 'Finish the current IME composition before running this Git action.'
+      toast.warning('Finish editing first', {
+        description: message,
+      })
+      setStatusMessage(message)
+      return false
+    }
+
+    await flushWorkspaceAutosave()
+
+    try {
+      await flushDirtyDiffTabs(options.filePaths)
+    } catch {
+      // Keep unsaved tabs visible and block the Git action below.
+    }
+
+    const remainingDirtyTabs = getDirtyWorkspaceTabsForPaths(options.filePaths)
+
+    if (remainingDirtyTabs.length === 0) {
+      return true
+    }
+
+    const dirtyNames = remainingDirtyTabs
+      .slice(0, 4)
+      .map((tab) => getBaseName(getWorkspaceTabSourcePath(tab)))
+      .join(', ')
+    const remainingCount = remainingDirtyTabs.length - Math.min(remainingDirtyTabs.length, 4)
+    const extraLabel = remainingCount > 0 ? ` and ${remainingCount} more` : ''
+    const message = `Save the unsaved tab${remainingDirtyTabs.length > 1 ? 's' : ''} (${dirtyNames}${extraLabel}) before ${options.actionLabel.toLowerCase()}.`
+
+    toast.warning('Unsaved changes need attention', {
+      description: message,
+    })
+    setStatusMessage(message)
+    return false
   }
 
   async function refreshGitState(workspacePath: string | null, options: { silent?: boolean } = {}) {
@@ -1027,6 +1163,24 @@ function App() {
     await refreshGitState(nextPath, { silent: true })
     await window.appApi.startWorkspaceWatch(nextPath)
     await updateWorkspaceState(nextPath, { markAsLastOpened: true })
+  }
+
+  async function handleRequestWindowClose() {
+    if (windowCloseRequestInFlightRef.current) {
+      return
+    }
+
+    windowCloseRequestInFlightRef.current = true
+
+    try {
+      if (!(await confirmDiscardDirtyTabs('close'))) {
+        return
+      }
+
+      await window.appApi.closeWindow()
+    } finally {
+      windowCloseRequestInFlightRef.current = false
+    }
   }
 
   const openFile = useCallback(async (
@@ -1318,6 +1472,13 @@ function App() {
       throw new Error('Open a workspace first.')
     }
 
+    if (!(await ensureWorkspaceTabsSavedBeforeNodeMutation({
+      actionLabel: `moving ${node.kind === 'directory' ? 'this folder' : 'this file'}`,
+      nodePath: node.path,
+    }))) {
+      return
+    }
+
     const { filePath: nextFilePath } = await window.appApi.moveWorkspaceEntry(currentPath, node.path, nextRelativePath)
     await loadTree(currentPath)
     updateOpenTabsForMovedNode(node.path, nextFilePath)
@@ -1364,15 +1525,26 @@ function App() {
       throw new Error('Open a workspace first.')
     }
 
-    const affectedFileTabs = openTabs.filter((tab): tab is WorkspaceFileTab => (
-      tab.kind === 'file' && hasPathPrefix(tab.filePath, node.path)
+    await flushWorkspaceAutosave()
+
+    const dirtyDiffPaths = Array.from(new Set(
+      getDirtyWorkspaceTabsForNodePath(node.path)
+        .filter((tab): tab is WorkspaceDiffTab => tab.kind === 'diff')
+        .map((tab) => tab.diff.change.path),
     ))
-    const hasDirtyTabs = affectedFileTabs.some((tab) => tab.isDirty)
+
+    try {
+      await flushDirtyDiffTabs(dirtyDiffPaths)
+    } catch {
+      // Fall back to explicit discard confirmation below.
+    }
+
+    const hasDirtyTabs = getDirtyWorkspaceTabsForNodePath(node.path).length > 0
 
     if (hasDirtyTabs) {
       const targetLabel = node.kind === 'directory'
-        ? `"${node.name}" contains unsaved files.\n\nDelete the folder and discard those changes?`
-        : `"${node.name}" has unsaved changes.\n\nDelete the file and discard those changes?`
+        ? `"${node.name}" contains unsaved editor tabs.\n\nDelete the folder and discard those changes?`
+        : `"${node.name}" has unsaved changes in an editor tab.\n\nDelete the file and discard those changes?`
       const confirmed = await requestConfirm({
         title: node.kind === 'directory' ? 'Delete Folder' : 'Delete File',
         message: targetLabel,
@@ -1419,7 +1591,7 @@ function App() {
     })
   }
 
-  async function handleSaveDiffFile(filePath: string, content: string) {
+  async function handleSaveDiffFile(filePath: string, content: string, options: { announce?: boolean } = {}) {
     const targetDiffTab = useWorkspaceStore.getState().openTabs.find(
       (tab): tab is WorkspaceDiffTab => (
         tab.kind === 'diff'
@@ -1430,13 +1602,28 @@ function App() {
 
     if (!targetDiffTab) {
       await persistWorkspaceFileContent(filePath, content, {
-        announce: false,
+        announce: options.announce ?? false,
         syncMode: 'sync',
       })
       return
     }
 
-    await persistDiffTabContent(targetDiffTab.id, filePath, content, { announce: false })
+    await persistDiffTabContent(targetDiffTab.id, filePath, content, {
+      announce: options.announce ?? false,
+    })
+  }
+
+  async function handleSaveActiveTab() {
+    if (activeDiffTab) {
+      if (!activeDiffTab.isDirty || isActiveEditorComposing) {
+        return
+      }
+
+      await handleSaveDiffFile(activeDiffTab.diff.change.path, activeDiffDraftContent, { announce: true })
+      return
+    }
+
+    await handleSave()
   }
 
   async function handleApplyGitDiffSelection(
@@ -1529,6 +1716,13 @@ function App() {
       return
     }
 
+    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
+      actionLabel: 'staging changes',
+      filePaths,
+    }))) {
+      return
+    }
+
     await runGitAction('Staging changes...', async () => {
       const nextState = await window.appApi.stageGitPaths(currentPath, filePaths)
       setGitRepositoryState(nextState)
@@ -1552,6 +1746,13 @@ function App() {
 
   async function handleDiscardGitChange(change: GitChangeItem) {
     if (!currentPath) {
+      return
+    }
+
+    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
+      actionLabel: 'discarding Git changes',
+      filePaths: [change.path],
+    }))) {
       return
     }
 
@@ -1585,6 +1786,13 @@ function App() {
       return
     }
 
+    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
+      actionLabel: 'discarding Git changes',
+      filePaths: changes.map((change) => change.path),
+    }))) {
+      return
+    }
+
     const confirmed = await requestConfirm({
       title: 'Discard Changes',
       message: `Discard ${changes.length} working tree changes?`,
@@ -1615,6 +1823,12 @@ function App() {
       return
     }
 
+    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
+      actionLabel: 'creating a commit',
+    }))) {
+      return
+    }
+
     await runGitAction('Creating commit...', async () => {
       const nextState = await window.appApi.commitGitChanges(currentPath, gitCommitMessage)
       setGitRepositoryState(nextState)
@@ -1626,6 +1840,12 @@ function App() {
 
   async function handleCommitAndSyncGitChanges() {
     if (!currentPath) {
+      return
+    }
+
+    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
+      actionLabel: 'committing and syncing',
+    }))) {
       return
     }
 
@@ -1655,6 +1875,12 @@ function App() {
       return
     }
 
+    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
+      actionLabel: 'pulling Git changes',
+    }))) {
+      return
+    }
+
     await runGitAction('Pulling changes...', async () => {
       const nextState = await window.appApi.pullGitChanges(currentPath)
       setGitRepositoryState(nextState)
@@ -1666,6 +1892,13 @@ function App() {
 
   async function handleDiscardAllGitChanges() {
     if (!currentPath || !gitRepositoryState?.unstagedChanges.length) {
+      return
+    }
+
+    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
+      actionLabel: 'discarding all Git changes',
+      filePaths: gitRepositoryState.unstagedChanges.map((change) => change.path),
+    }))) {
       return
     }
 
@@ -1853,6 +2086,14 @@ function App() {
 
     return unsubscribe
   }, [closeTab, consumeInternalWorkspaceSave, currentPath, loadTree, markTabMissing, openDiffTab, refreshGitState, syncTabWithDisk])
+
+  useEffect(() => {
+    const unsubscribe = window.appApi.onWindowCloseRequested(() => {
+      void handleRequestWindowClose()
+    })
+
+    return unsubscribe
+  }, [handleRequestWindowClose])
 
   useEffect(() => {
     return () => {
@@ -2054,7 +2295,7 @@ function App() {
 
       if ((event.ctrlKey || event.metaKey) && key === 's') {
         event.preventDefault()
-        void handleSave()
+        void handleSaveActiveTab()
         return
       }
 
@@ -2091,7 +2332,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [displayActiveTabId, displayTabs, isSettingsTabActive])
+  }, [closeEditorTab, cycleTabs, displayActiveTabId, handleSaveActiveTab, isSettingsTabActive])
 
   useEffect(() => {
     if (!isLeftSidebarVisible && activeResizePanel === 'left') {
@@ -2646,7 +2887,10 @@ function App() {
         actions={commandPaletteActions}
         theme={theme}
       />
-      <AppTitlebar />
+      <AppTitlebar onRequestClose={() => {
+        void handleRequestWindowClose()
+      }}
+      />
     </div>
   )
 }

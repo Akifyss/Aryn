@@ -71,6 +71,7 @@ declare global {
       toggleMaximizeWindow: () => Promise<{ isMaximized: boolean }>
       closeWindow: () => Promise<void>
       isWindowMaximized: () => Promise<{ isMaximized: boolean }>
+      onWindowCloseRequested: (listener: () => void) => () => void
       onWorkspaceChanged: (listener: (event: WorkspaceChangeEvent) => void) => () => void
       onAgentEvent: (listener: (event: AgentClientEvent) => void) => () => void
     }

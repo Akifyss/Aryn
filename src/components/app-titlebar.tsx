@@ -6,7 +6,11 @@ import {
   MinimizeLine,
 } from '@mingcute/react'
 
-export function AppTitlebar() {
+export function AppTitlebar({
+  onRequestClose,
+}: {
+  onRequestClose?: () => void
+}) {
   const platform = window.appApi.platform
   const isMac = platform === 'darwin'
   const [isMaximized, setIsMaximized] = useState(false)
@@ -35,6 +39,11 @@ export function AppTitlebar() {
               className='traffic-button traffic-close'
               type='button'
               onClick={() => {
+                if (onRequestClose) {
+                  onRequestClose()
+                  return
+                }
+
                 void window.appApi.closeWindow()
               }}
             />
@@ -93,6 +102,11 @@ export function AppTitlebar() {
                 className='window-button window-button-close'
                 type='button'
                 onClick={() => {
+                  if (onRequestClose) {
+                    onRequestClose()
+                    return
+                  }
+
                   void window.appApi.closeWindow()
                 }}
               >

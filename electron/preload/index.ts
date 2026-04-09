@@ -68,6 +68,17 @@ contextBridge.exposeInMainWorld('appApi', {
   toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize') as Promise<{ isMaximized: boolean }>,
   closeWindow: () => ipcRenderer.invoke('window:close') as Promise<void>,
   isWindowMaximized: () => ipcRenderer.invoke('window:is-maximized') as Promise<{ isMaximized: boolean }>,
+  onWindowCloseRequested: (listener: () => void) => {
+    const wrappedListener = () => {
+      listener()
+    }
+
+    ipcRenderer.on('window:close-requested', wrappedListener)
+
+    return () => {
+      ipcRenderer.off('window:close-requested', wrappedListener)
+    }
+  },
   onWorkspaceChanged: (listener: (event: WorkspaceChangeEvent) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, payload: WorkspaceChangeEvent) => {
       listener(payload)

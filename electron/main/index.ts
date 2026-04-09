@@ -79,6 +79,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 let win: BrowserWindow | null = null
+let allowWindowClose = false
 const preload = path.join(MAIN_DIST, 'preload', 'index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json')
@@ -162,6 +163,21 @@ async function createWindow() {
   })
 
   bindWindowStatePersistence(win)
+
+  win.on('close', (event) => {
+    if (allowWindowClose) {
+      allowWindowClose = false
+      return
+    }
+
+    if (win?.webContents.isDestroyed()) {
+      allowWindowClose = true
+      return
+    }
+
+    event.preventDefault()
+    win?.webContents.send('window:close-requested')
+  })
 
   if (appState.window.isMaximized) {
     win.maximize()
@@ -681,7 +697,12 @@ ipcMain.handle('window:toggle-maximize', () => {
 })
 
 ipcMain.handle('window:close', () => {
-  win?.close()
+  if (!win) {
+    return
+  }
+
+  allowWindowClose = true
+  win.close()
 })
 
 ipcMain.handle('window:is-maximized', () => {
