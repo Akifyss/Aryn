@@ -182,6 +182,7 @@ function getBlockActionsDisabledReason(
   diff: GitFileDiffResult,
   options: {
     hasDirtyFileTab: boolean
+    isDirty: boolean
     isComposing: boolean
     isApplyingAction: boolean
     isSaving: boolean
@@ -195,7 +196,7 @@ function getBlockActionsDisabledReason(
     return 'Finish the current IME composition first.'
   }
 
-  if (options.hasDirtyFileTab) {
+  if (options.hasDirtyFileTab && options.isDirty) {
     return 'Save other open editor tabs for this file before applying Git block actions.'
   }
 
@@ -1077,6 +1078,7 @@ export function GitDiffEditor({
   const isDirty = draftContent !== diff.modifiedContent
   const blockActionsDisabledReason = getBlockActionsDisabledReason(diff, {
     hasDirtyFileTab: hasDirtyRelatedFileTab,
+    isDirty,
     isComposing,
     isApplyingAction: isApplyingBlockAction,
     isSaving,
@@ -1088,7 +1090,7 @@ export function GitDiffEditor({
       ? 'Finish the current IME composition first.'
       : null
   const areFileGitActionsEnabled = !(isSaving || isApplyingBlockAction || isComposing || (
-    diff.change.scope === 'unstaged' && (isDirty || hasDirtyRelatedFileTab)
+    diff.change.scope === 'unstaged' && isDirty
   ))
 
   useEffect(() => {

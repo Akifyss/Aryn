@@ -862,6 +862,27 @@ function App() {
 
     await flushWorkspaceAutosave()
 
+    if (options.filePaths?.length) {
+      const uniqueFilePaths = Array.from(new Set(options.filePaths.map((filePath) => normalizeFilePath(filePath))))
+      const workspaceTabs = useWorkspaceStore.getState().openTabs
+
+      for (const normalizedPath of uniqueFilePaths) {
+        const matchingFileTab = workspaceTabs.find(
+          (tab): tab is WorkspaceFileTab => (
+            isWorkspaceAutosaveTab(tab)
+            && tab.isDirty
+            && normalizeFilePath(tab.filePath) === normalizedPath
+          ),
+        )
+
+        if (!matchingFileTab) {
+          continue
+        }
+
+        await flushWorkspaceAutosave(matchingFileTab.filePath)
+      }
+    }
+
     try {
       await flushDirtyDiffTabs(options.filePaths)
     } catch {
@@ -1632,6 +1653,17 @@ function App() {
     action: GitDiffBlockAction,
   ) {
     if (!currentPath) {
+      return
+    }
+
+    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
+      actionLabel: action === 'stage'
+        ? 'staging this diff block'
+        : action === 'unstage'
+          ? 'unstaging this diff block'
+          : 'discarding this diff block',
+      filePaths: [change.path],
+    }))) {
       return
     }
 
