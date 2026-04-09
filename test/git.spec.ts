@@ -248,6 +248,28 @@ describe('git helpers', () => {
     })
   })
 
+  it('discards an untracked block by removing the new file', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'draft.md')
+    const modifiedContent = 'alpha\nbeta\n'
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(filePath, modifiedContent, 'utf8')
+
+    await applyGitDiffSelection(rootPath, filePath, 'unstaged', {
+      originalLineCount: 0,
+      originalStartLine: 0,
+      modifiedLineCount: 2,
+      modifiedStartLine: 1,
+    }, 'discard')
+
+    await expect(readFile(filePath, 'utf8')).rejects.toThrow()
+    await expect(getGitRepositoryState(rootPath)).resolves.toMatchObject({
+      unstagedChanges: [],
+    })
+  })
+
   it('discards only the selected unstaged diff block', async () => {
     const rootPath = await createTempWorkspace()
     const filePath = path.join(rootPath, 'draft.md')

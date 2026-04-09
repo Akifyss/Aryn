@@ -51,6 +51,8 @@ type MonacoBlockOverlayItem = {
 
 configureMonaco()
 
+const DIFF_AUTO_SAVE_DELAY_MS = 1000
+
 const DIFF_EDITOR_THEME = EditorView.theme({
   '&': {
     height: '100%',
@@ -278,6 +280,108 @@ function RichTextDiffRenderer({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const splitViewRef = useRef<MergeView | null>(null)
   const unifiedViewRef = useRef<EditorView | null>(null)
+  const onBlockActionRef = useRef(onBlockAction)
+  const onDraftChangeRef = useRef(onDraftChange)
+  const onSaveRef = useRef(onSave)
+  const areBlockActionsEnabledRef = useRef(areBlockActionsEnabled)
+  const blockActionsDisabledReasonRef = useRef(blockActionsDisabledReason)
+
+  useEffect(() => {
+    onBlockActionRef.current = onBlockAction
+  }, [onBlockAction])
+
+  useEffect(() => {
+    onDraftChangeRef.current = onDraftChange
+  }, [onDraftChange])
+
+  useEffect(() => {
+    onSaveRef.current = onSave
+  }, [onSave])
+
+  useEffect(() => {
+    areBlockActionsEnabledRef.current = areBlockActionsEnabled
+    blockActionsDisabledReasonRef.current = blockActionsDisabledReason
+  }, [areBlockActionsEnabled, blockActionsDisabledReason])
+
+  useEffect(() => {
+    const host = containerRef.current
+
+    if (!host) {
+      return
+    }
+
+    const controls = host.querySelectorAll<HTMLElement>('.git-diff-native-control')
+    controls.forEach((control) => {
+      const action = control.dataset.action as GitDiffBlockAction | undefined
+
+      if (!action) {
+        return
+      }
+
+      const title = areBlockActionsEnabled
+        ? action === 'stage'
+          ? 'Stage block'
+          : action === 'unstage'
+            ? 'Unstage block'
+            : 'Discard block'
+        : blockActionsDisabledReason ?? (
+            action === 'stage'
+              ? 'Stage block'
+              : action === 'unstage'
+                ? 'Unstage block'
+                : 'Discard block'
+          )
+
+      control.title = title
+      control.setAttribute('aria-label', title)
+      control.setAttribute('aria-disabled', areBlockActionsEnabled ? 'false' : 'true')
+      control.setAttribute('tabindex', areBlockActionsEnabled ? '0' : '-1')
+    })
+  }, [areBlockActionsEnabled, blockActionsDisabledReason])
+
+  useEffect(() => {
+    const splitView = splitViewRef.current
+
+    if (!splitView) {
+      return
+    }
+
+    const currentDoc = splitView.b.state.doc.toString()
+
+    if (currentDoc === diff.modifiedContent) {
+      return
+    }
+
+    splitView.b.dispatch({
+      changes: {
+        from: 0,
+        to: splitView.b.state.doc.length,
+        insert: diff.modifiedContent,
+      },
+    })
+  }, [diff.modifiedContent])
+
+  useEffect(() => {
+    const unifiedView = unifiedViewRef.current
+
+    if (!unifiedView) {
+      return
+    }
+
+    const currentDoc = unifiedView.state.doc.toString()
+
+    if (currentDoc === diff.modifiedContent) {
+      return
+    }
+
+    unifiedView.dispatch({
+      changes: {
+        from: 0,
+        to: unifiedView.state.doc.length,
+        insert: diff.modifiedContent,
+      },
+    })
+  }, [diff.modifiedContent])
 
   useEffect(() => {
     const container = containerRef.current
@@ -304,19 +408,21 @@ function RichTextDiffRenderer({
       title: string
     }) => {
       const control = document.createElement('div')
-      control.className = 'git-diff-native-control'
-      control.title = areBlockActionsEnabled ? title : blockActionsDisabledReason ?? title
+      control.className = 'git-diff-native-control clickable-icon'
+      const resolvedTitle = areBlockActionsEnabledRef.current ? title : blockActionsDisabledReasonRef.current ?? title
+      control.title = resolvedTitle
+      control.dataset.action = action
       control.setAttribute('role', 'button')
-      control.setAttribute('tabindex', areBlockActionsEnabled ? '0' : '-1')
-      control.setAttribute('aria-label', control.title)
-      control.setAttribute('aria-disabled', areBlockActionsEnabled ? 'false' : 'true')
+      control.setAttribute('tabindex', areBlockActionsEnabledRef.current ? '0' : '-1')
+      control.setAttribute('aria-label', resolvedTitle)
+      control.setAttribute('aria-disabled', areBlockActionsEnabledRef.current ? 'false' : 'true')
       control.innerHTML = getCodeMirrorControlSvg(action)
 
       const handleActivate = (event: MouseEvent | KeyboardEvent) => {
         event.preventDefault()
         event.stopPropagation()
 
-        if (!areBlockActionsEnabled) {
+        if (!areBlockActionsEnabledRef.current) {
           return
         }
 
@@ -336,7 +442,7 @@ function RichTextDiffRenderer({
       event: MouseEvent | KeyboardEvent,
       action: GitDiffBlockAction,
     ) => {
-      if (!areBlockActionsEnabled || !splitViewRef.current) {
+      if (!areBlockActionsEnabledRef.current || !splitViewRef.current) {
         return
       }
 
@@ -354,7 +460,7 @@ function RichTextDiffRenderer({
         return
       }
 
-      onBlockAction(
+      onBlockActionRef.current(
         createSelectionFromCodeMirrorChunk(splitViewRef.current.a.state.doc, splitViewRef.current.b.state.doc, chunk),
         action,
       )
@@ -390,7 +496,7 @@ function RichTextDiffRenderer({
     }
     const createUnifiedBlockControl = (action: GitDiffBlockAction, title: string) => {
       const handleUnifiedBlockAction = (event: MouseEvent | KeyboardEvent, requestedAction: GitDiffBlockAction) => {
-        if (!areBlockActionsEnabled || !unifiedViewRef.current) {
+        if (!areBlockActionsEnabledRef.current || !unifiedViewRef.current) {
           return
         }
 
@@ -410,7 +516,7 @@ function RichTextDiffRenderer({
           return
         }
 
-        onBlockAction(
+        onBlockActionRef.current(
           createSelectionFromCodeMirrorChunk(getOriginalDoc(unifiedViewRef.current.state), unifiedViewRef.current.state.doc, chunk),
           requestedAction,
         )
@@ -440,8 +546,12 @@ function RichTextDiffRenderer({
           extensions: createDiffExtensions({
             editable: isEditable,
             filePath: diff.change.path,
-            onChange: onDraftChange,
-            onSave,
+            onChange: (content) => {
+              onDraftChangeRef.current(content)
+            },
+            onSave: () => {
+              onSaveRef.current()
+            },
             wrapLines: diff.editorKind === 'rich-text',
           }),
         },
@@ -472,8 +582,12 @@ function RichTextDiffRenderer({
         ...createDiffExtensions({
           editable: isEditable,
           filePath: diff.change.path,
-          onChange: onDraftChange,
-          onSave,
+          onChange: (content) => {
+            onDraftChangeRef.current(content)
+          },
+          onSave: () => {
+            onSaveRef.current()
+          },
           wrapLines: diff.editorKind === 'rich-text',
         }),
         unifiedMergeView({
@@ -511,18 +625,12 @@ function RichTextDiffRenderer({
       unifiedViewRef.current = null
     }
   }, [
-    blockActionsDisabledReason,
     diff.change.path,
     diff.change.scope,
-    diff.modifiedContent,
     diff.modifiedExists,
     diff.originalContent,
     diff.originalExists,
-    areBlockActionsEnabled,
     isEditable,
-    onBlockAction,
-    onDraftChange,
-    onSave,
     viewMode,
   ])
 
@@ -787,8 +895,11 @@ export function GitDiffEditor({
   const [viewMode, setViewMode] = useState<DiffViewMode>(defaultMode)
   const [draftContent, setDraftContent] = useState(diff.modifiedContent)
   const draftContentRef = useRef(diff.modifiedContent)
+  const latestModifiedContentRef = useRef(diff.modifiedContent)
   const [isApplyingBlockAction, setIsApplyingBlockAction] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const isSavingRef = useRef(false)
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isEditable = diff.change.scope === 'unstaged' && diff.modifiedExists
   const isDirty = draftContent !== diff.modifiedContent
   const blockActionsDisabledReason = getBlockActionsDisabledReason(diff, {
@@ -809,29 +920,68 @@ export function GitDiffEditor({
   useEffect(() => {
     setDraftContent(diff.modifiedContent)
     draftContentRef.current = diff.modifiedContent
+    latestModifiedContentRef.current = diff.modifiedContent
   }, [diff.change.path, diff.change.scope, diff.modifiedContent])
 
   useEffect(() => {
     draftContentRef.current = draftContent
   }, [draftContent])
 
+  useEffect(() => {
+    isSavingRef.current = isSaving
+  }, [isSaving])
+
   const handleDraftChange = useCallback((content: string) => {
     setDraftContent((current) => current === content ? current : content)
   }, [])
 
+  const clearAutoSaveTimer = useCallback(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = null
+    }
+  }, [])
+
   const handleSave = useCallback(async () => {
-    if (!isEditable || isSaving || draftContentRef.current === diff.modifiedContent) {
+    clearAutoSaveTimer()
+
+    if (!isEditable || isSavingRef.current || draftContentRef.current === latestModifiedContentRef.current) {
       return
     }
 
     setIsSaving(true)
+    isSavingRef.current = true
 
     try {
       await onSaveEditedFile(diff.change.path, draftContentRef.current)
+      latestModifiedContentRef.current = draftContentRef.current
     } finally {
+      isSavingRef.current = false
       setIsSaving(false)
     }
-  }, [diff.change.path, diff.modifiedContent, isEditable, isSaving, onSaveEditedFile])
+  }, [clearAutoSaveTimer, diff.change.path, isEditable, onSaveEditedFile])
+
+  useEffect(() => {
+    if (!isEditable || isSaving || !isDirty) {
+      clearAutoSaveTimer()
+      return
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      void handleSave()
+    }, DIFF_AUTO_SAVE_DELAY_MS)
+
+    return clearAutoSaveTimer
+  }, [clearAutoSaveTimer, handleSave, isDirty, isEditable, isSaving])
+
+  useEffect(() => () => {
+    if (autoSaveTimerRef.current && isEditable && draftContentRef.current !== latestModifiedContentRef.current) {
+      void handleSave()
+      return
+    }
+
+    clearAutoSaveTimer()
+  }, [clearAutoSaveTimer, handleSave, isEditable])
 
   const handleBlockAction = useCallback(async (selection: GitDiffSelection, action: GitDiffBlockAction) => {
     if (!areBlockActionsEnabled) {

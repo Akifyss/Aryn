@@ -114,6 +114,10 @@ function isWorkspaceDiffTab(tab: WorkspaceDisplayTab | null | undefined): tab is
   return tab?.kind === 'diff'
 }
 
+function isTiptapAutosaveTab(tab: WorkspaceDisplayTab | WorkspaceFileTab | null | undefined): tab is WorkspaceFileTab {
+  return tab?.kind === 'file' && tab.editorKind === 'rich-text' && tab.viewMode === 'default'
+}
+
 function createDiffTabId(filePath: string, scope: GitChangeScope) {
   return `git-diff://${scope}/${encodeURIComponent(filePath)}`
 }
@@ -177,6 +181,8 @@ const TAB_STORAGE_PREFIX = 'writing-workspace:file-tabs:'
 const LEGACY_TAB_STORAGE_PREFIX = 'writing-workspace:editor-tabs:'
 const SETTINGS_TAB_ID = 'app://settings'
 const SETTINGS_TAB_PATH = 'app://settings'
+const TIPTAP_AUTO_SAVE_DELAY_MS = 1000
+const INTERNAL_SAVE_EVENT_TTL_MS = 2500
 
 type ResizePanel = 'left' | 'right'
 
@@ -428,6 +434,10 @@ function App() {
   const syncTabWithDisk = useWorkspaceStore((state) => state.syncTabWithDisk)
   const tree = useWorkspaceStore((state) => state.tree)
   const updateTabContent = useWorkspaceStore((state) => state.updateTabContent)
+  const loadTree = useCallback(async (rootPath: string) => {
+    const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
+    setTree(nextTree)
+  }, [setTree])
   const activeTab = useMemo(
     () => openTabs.find((tab) => tab.id === activeTabId) ?? null,
     [activeTabId, openTabs],
@@ -461,6 +471,13 @@ function App() {
   const currentEditorKind = activeFileTab?.editorKind ?? null
   const currentFileViewMode = activeFileTab?.viewMode ?? null
   const currentFilePath = activeFileTab?.filePath ?? null
+  const activeTiptapAutosaveTab = isTiptapAutosaveTab(activeFileTab) ? activeFileTab : null
+  const tiptapAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const tiptapAutosaveTargetRef = useRef<{ content: string, filePath: string } | null>(null)
+  const tiptapAutosavePromiseRef = useRef<Promise<void> | null>(null)
+  const previousTiptapAutosavePathRef = useRef<string | null>(null)
+  const internalWorkspaceSavePathsRef = useRef(new Set<string>())
+  const internalWorkspaceSaveTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const dirtyTabs = useMemo(
     () => openTabs.filter((tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.isDirty),
     [openTabs],
@@ -505,6 +522,12 @@ function App() {
     const activeTabId = useWorkspaceStore.getState().activeTabId
     const tab = useWorkspaceStore.getState().openTabs.find((candidate) => candidate.id === activeTabId)
     return tab?.kind === 'file' ? tab.filePath : null
+  }
+
+  function getDirtyWorkspaceFileTabsSnapshot() {
+    return useWorkspaceStore.getState().openTabs.filter(
+      (tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.isDirty,
+    )
   }
 
   function getShellWidth() {
@@ -714,16 +737,144 @@ function App() {
     }
   }
 
+  const clearInternalWorkspaceSaveMarker = useCallback((filePath: string) => {
+    internalWorkspaceSavePathsRef.current.delete(filePath)
+    const timer = internalWorkspaceSaveTimersRef.current.get(filePath)
+
+    if (timer) {
+      clearTimeout(timer)
+      internalWorkspaceSaveTimersRef.current.delete(filePath)
+    }
+  }, [])
+
+  const markInternalWorkspaceSave = useCallback((filePath: string) => {
+    clearInternalWorkspaceSaveMarker(filePath)
+    internalWorkspaceSavePathsRef.current.add(filePath)
+    internalWorkspaceSaveTimersRef.current.set(filePath, setTimeout(() => {
+      clearInternalWorkspaceSaveMarker(filePath)
+    }, INTERNAL_SAVE_EVENT_TTL_MS))
+  }, [clearInternalWorkspaceSaveMarker])
+
+  const consumeInternalWorkspaceSave = useCallback((filePath: string) => {
+    if (!internalWorkspaceSavePathsRef.current.has(filePath)) {
+      return false
+    }
+
+    clearInternalWorkspaceSaveMarker(filePath)
+    return true
+  }, [clearInternalWorkspaceSaveMarker])
+
+  const clearTiptapAutosaveTimer = useCallback(() => {
+    if (!tiptapAutosaveTimerRef.current) {
+      return
+    }
+
+    clearTimeout(tiptapAutosaveTimerRef.current)
+    tiptapAutosaveTimerRef.current = null
+  }, [])
+
+  const persistWorkspaceFileContent = useCallback(async (
+    filePath: string,
+    content: string,
+    options: { announce?: boolean, syncMode?: 'mark' | 'sync' } = {},
+  ) => {
+    const { announce = false, syncMode = 'mark' } = options
+    markInternalWorkspaceSave(filePath)
+
+    try {
+      await window.appApi.saveWorkspaceFile(filePath, content)
+    } catch (error) {
+      clearInternalWorkspaceSaveMarker(filePath)
+      throw error
+    }
+
+    if (syncMode === 'sync') {
+      syncTabWithDisk(filePath, content)
+    } else {
+      markTabSaved(filePath, content)
+    }
+
+    if (announce) {
+      setStatusMessage('Changes saved')
+    }
+
+    if (currentPath) {
+      await loadTree(currentPath)
+      await refreshGitState(currentPath, { silent: true })
+    }
+  }, [
+    clearInternalWorkspaceSaveMarker,
+    currentPath,
+    loadTree,
+    markInternalWorkspaceSave,
+    markTabSaved,
+    refreshGitState,
+    syncTabWithDisk,
+  ])
+
+  const flushTiptapAutosave = useCallback(async (filePath?: string) => {
+    clearTiptapAutosaveTimer()
+
+    if (tiptapAutosavePromiseRef.current) {
+      await tiptapAutosavePromiseRef.current
+    }
+
+    const targetFilePath = filePath ?? tiptapAutosaveTargetRef.current?.filePath
+
+    if (!targetFilePath) {
+      return false
+    }
+
+    const targetTab = useWorkspaceStore.getState().openTabs.find(
+      (tab): tab is WorkspaceFileTab => (
+        isTiptapAutosaveTab(tab)
+        && tab.filePath === targetFilePath
+        && tab.isDirty
+      ),
+    )
+
+    if (!targetTab) {
+      if (tiptapAutosaveTargetRef.current?.filePath === targetFilePath) {
+        tiptapAutosaveTargetRef.current = null
+      }
+
+      return false
+    }
+
+    const savePromise = persistWorkspaceFileContent(targetTab.filePath, targetTab.content, {
+      announce: false,
+      syncMode: 'mark',
+    })
+    tiptapAutosavePromiseRef.current = savePromise
+
+    try {
+      await savePromise
+      return true
+    } finally {
+      if (tiptapAutosavePromiseRef.current === savePromise) {
+        tiptapAutosavePromiseRef.current = null
+      }
+
+      if (tiptapAutosaveTargetRef.current?.filePath === targetTab.filePath) {
+        tiptapAutosaveTargetRef.current = null
+      }
+    }
+  }, [clearTiptapAutosaveTimer, persistWorkspaceFileContent])
+
   async function confirmDiscardDirtyTabs(reason: 'close' | 'switch-workspace') {
-    if (dirtyTabs.length === 0) {
+    await flushTiptapAutosave()
+
+    const pendingDirtyTabs = getDirtyWorkspaceFileTabsSnapshot()
+
+    if (pendingDirtyTabs.length === 0) {
       return true
     }
 
-    const dirtyNames = dirtyTabs
+    const dirtyNames = pendingDirtyTabs
       .slice(0, 4)
       .map((tab) => getBaseName(tab.filePath))
       .join(', ')
-    const remainingCount = dirtyTabs.length - Math.min(dirtyTabs.length, 4)
+    const remainingCount = pendingDirtyTabs.length - Math.min(pendingDirtyTabs.length, 4)
     const extraLabel = remainingCount > 0 ? ` and ${remainingCount} more` : ''
     const actionLabel = reason === 'close'
       ? 'Closing them now will discard the unsaved changes.'
@@ -731,7 +882,7 @@ function App() {
 
     return await requestConfirm({
       title: 'Unsaved Changes',
-      message: `${dirtyTabs.length} tab${dirtyTabs.length > 1 ? 's have' : ' has'} unsaved changes: ${dirtyNames}${extraLabel}.\n\n${actionLabel}`,
+      message: `${pendingDirtyTabs.length} tab${pendingDirtyTabs.length > 1 ? 's have' : ' has'} unsaved changes: ${dirtyNames}${extraLabel}.\n\n${actionLabel}`,
       confirmLabel: 'Discard Changes',
       isDanger: true,
     })
@@ -755,10 +906,16 @@ function App() {
       return false
     }
 
-    if (targetTab.kind === 'file' && targetTab.isDirty && !options.force) {
+    if (isTiptapAutosaveTab(targetTab) && targetTab.isDirty) {
+      await flushTiptapAutosave(targetTab.filePath)
+    }
+
+    const latestTargetTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.id === tabId) ?? targetTab
+
+    if (latestTargetTab.kind === 'file' && latestTargetTab.isDirty && !options.force) {
       const confirmed = await requestConfirm({
         title: 'Unsaved Changes',
-        message: `"${getBaseName(targetTab.filePath)}" has unsaved changes.\n\nClose this tab and discard them?`,
+        message: `"${getBaseName(latestTargetTab.filePath)}" has unsaved changes.\n\nClose this tab and discard them?`,
         confirmLabel: 'Discard & Close',
         isDanger: true,
       })
@@ -775,13 +932,14 @@ function App() {
     }
 
     if (!options.silent) {
-      setStatusMessage(`${getBaseName(targetTab.kind === 'diff' ? targetTab.diff.change.path : targetTab.filePath)} closed`)
+      setStatusMessage(`${getBaseName(latestTargetTab.kind === 'diff' ? latestTargetTab.diff.change.path : latestTargetTab.filePath)} closed`)
     }
 
     return true
   }
 
   async function connectWorkspace(nextPath: string) {
+    await flushTiptapAutosave()
     await window.appApi.stopWorkspaceWatch()
     await loadTree(nextPath)
     setCurrentPath(nextPath)
@@ -794,11 +952,6 @@ function App() {
     await window.appApi.startWorkspaceWatch(nextPath)
     await updateWorkspaceState(nextPath, { markAsLastOpened: true })
   }
-
-  const loadTree = useCallback(async (rootPath: string) => {
-    const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
-    setTree(nextTree)
-  }, [setTree])
 
   const openFile = useCallback(async (
     filePath: string,
@@ -1169,24 +1322,17 @@ function App() {
       return
     }
 
-    await window.appApi.saveWorkspaceFile(currentFilePath, currentFileContent)
-    markTabSaved(currentFilePath, currentFileContent)
-    setStatusMessage('Changes saved')
-
-    if (currentPath) {
-      await loadTree(currentPath)
-      await refreshGitState(currentPath, { silent: true })
-    }
+    await persistWorkspaceFileContent(currentFilePath, currentFileContent, {
+      announce: true,
+      syncMode: 'mark',
+    })
   }
 
   async function handleSaveDiffFile(filePath: string, content: string) {
-    await window.appApi.saveWorkspaceFile(filePath, content)
-    syncTabWithDisk(filePath, content)
-
-    if (currentPath) {
-      await loadTree(currentPath)
-      await refreshGitState(currentPath, { silent: true })
-    }
+    await persistWorkspaceFileContent(filePath, content, {
+      announce: false,
+      syncMode: 'sync',
+    })
   }
 
   async function handleApplyGitDiffSelection(
@@ -1487,6 +1633,60 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const previousPath = previousTiptapAutosavePathRef.current
+    const nextPath = activeTiptapAutosaveTab?.filePath ?? null
+
+    if (previousPath && previousPath !== nextPath) {
+      const previousTab = useWorkspaceStore.getState().openTabs.find(
+        (tab): tab is WorkspaceFileTab => isTiptapAutosaveTab(tab) && tab.filePath === previousPath,
+      )
+
+      if (previousTab?.isDirty) {
+        void flushTiptapAutosave(previousPath)
+      }
+    }
+
+    previousTiptapAutosavePathRef.current = nextPath
+  }, [activeTiptapAutosaveTab?.filePath, flushTiptapAutosave])
+
+  useEffect(() => {
+    clearTiptapAutosaveTimer()
+
+    if (!activeTiptapAutosaveTab?.isDirty) {
+      if (!activeTiptapAutosaveTab) {
+        tiptapAutosaveTargetRef.current = null
+      }
+      return
+    }
+
+    tiptapAutosaveTargetRef.current = {
+      content: activeTiptapAutosaveTab.content,
+      filePath: activeTiptapAutosaveTab.filePath,
+    }
+    tiptapAutosaveTimerRef.current = setTimeout(() => {
+      void flushTiptapAutosave(activeTiptapAutosaveTab.filePath)
+    }, TIPTAP_AUTO_SAVE_DELAY_MS)
+
+    return clearTiptapAutosaveTimer
+  }, [
+    activeTiptapAutosaveTab?.content,
+    activeTiptapAutosaveTab?.filePath,
+    activeTiptapAutosaveTab?.isDirty,
+    clearTiptapAutosaveTimer,
+    flushTiptapAutosave,
+  ])
+
+  useEffect(() => () => {
+    clearTiptapAutosaveTimer()
+    void flushTiptapAutosave()
+    internalWorkspaceSaveTimersRef.current.forEach((timer) => {
+      clearTimeout(timer)
+    })
+    internalWorkspaceSaveTimersRef.current.clear()
+    internalWorkspaceSavePathsRef.current.clear()
+  }, [clearTiptapAutosaveTimer, flushTiptapAutosave])
+
+  useEffect(() => {
     const unsubscribe = window.appApi.onWorkspaceChanged(async (event) => {
       if (!currentPath || event.rootPath !== currentPath) {
         return
@@ -1498,6 +1698,10 @@ function App() {
       const affectedTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.kind === 'file' && tab.filePath === event.path)
 
       if (!affectedTab) {
+        return
+      }
+
+      if ((event.type === 'add' || event.type === 'change') && consumeInternalWorkspaceSave(event.path)) {
         return
       }
 
@@ -1539,7 +1743,7 @@ function App() {
     })
 
     return unsubscribe
-  }, [closeTab, currentPath, markTabMissing, openDiffTab, syncTabWithDisk])
+  }, [closeTab, consumeInternalWorkspaceSave, currentPath, loadTree, markTabMissing, openDiffTab, refreshGitState, syncTabWithDisk])
 
   useEffect(() => {
     return () => {
