@@ -196,6 +196,58 @@ describe('git helpers', () => {
     })
   })
 
+  it('stages a top-of-file insertion block with git-style zero line starts', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'draft.md')
+    const originalContent = 'beta\ngamma\n'
+    const modifiedContent = 'alpha\nbeta\ngamma\n'
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(filePath, originalContent, 'utf8')
+    await stageGitPaths(rootPath, [filePath])
+    await commitGitChanges(rootPath, 'initial commit')
+    await writeFile(filePath, modifiedContent, 'utf8')
+
+    await applyGitDiffSelection(rootPath, filePath, 'unstaged', {
+      originalLineCount: 0,
+      originalStartLine: 0,
+      modifiedLineCount: 1,
+      modifiedStartLine: 1,
+    }, 'stage')
+
+    await expect(getGitFileDiff(rootPath, filePath, 'staged')).resolves.toMatchObject({
+      modifiedContent,
+      originalContent,
+    })
+    await expect(getGitRepositoryState(rootPath)).resolves.toMatchObject({
+      unstagedChanges: [],
+    })
+  })
+
+  it('stages an untracked block from an empty original document', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'draft.md')
+    const modifiedContent = 'alpha\nbeta\n'
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(filePath, modifiedContent, 'utf8')
+
+    await applyGitDiffSelection(rootPath, filePath, 'unstaged', {
+      originalLineCount: 0,
+      originalStartLine: 0,
+      modifiedLineCount: 2,
+      modifiedStartLine: 1,
+    }, 'stage')
+
+    await expect(getGitFileDiff(rootPath, filePath, 'staged')).resolves.toMatchObject({
+      modifiedContent,
+      originalContent: '',
+      originalExists: false,
+    })
+  })
+
   it('discards only the selected unstaged diff block', async () => {
     const rootPath = await createTempWorkspace()
     const filePath = path.join(rootPath, 'draft.md')

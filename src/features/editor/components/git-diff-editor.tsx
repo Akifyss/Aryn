@@ -39,6 +39,8 @@ type CodeMirrorChunk = {
   toA: number
   fromB: number
   toB: number
+  endA: number
+  endB: number
 }
 type MonacoLineChange = monaco.editor.ILineChange
 type MonacoBlockOverlayItem = {
@@ -147,25 +149,30 @@ function getTextLineCount(doc: Text, from: number, to: number) {
   return Math.max(0, endLine - startLine + 1)
 }
 
-function getTextAnchorLine(doc: Text, from: number, to: number) {
-  if (doc.lines === 0) {
-    return 1
+function createSelectionFromCodeMirrorChunk(originalDoc: Text, modifiedDoc: Text, chunk: CodeMirrorChunk): GitDiffSelection {
+  const originalStartLine = originalDoc.lineAt(Math.min(chunk.fromA, originalDoc.length)).number
+  const modifiedStartLine = modifiedDoc.lineAt(Math.min(chunk.fromB, modifiedDoc.length)).number
+  const originalLineCount = chunk.fromA === chunk.toA ? 0 : getTextLineCount(originalDoc, chunk.fromA, chunk.endA)
+  const modifiedLineCount = chunk.fromB === chunk.toB ? 0 : getTextLineCount(modifiedDoc, chunk.fromB, chunk.endB)
+
+  return {
+    modifiedLineCount,
+    modifiedStartLine: modifiedLineCount === 0 ? Math.max(0, modifiedStartLine - 1) : modifiedStartLine,
+    originalLineCount,
+    originalStartLine: originalLineCount === 0 ? Math.max(0, originalStartLine - 1) : originalStartLine,
   }
-
-  const anchorPos = from === to
-    ? Math.min(from, doc.length)
-    : Math.min(from, Math.max(0, to - 1))
-
-  return doc.lineAt(anchorPos).number
 }
 
-function createSelectionFromCodeMirrorChunk(originalDoc: Text, modifiedDoc: Text, chunk: CodeMirrorChunk): GitDiffSelection {
-  return {
-    modifiedLineCount: getTextLineCount(modifiedDoc, chunk.fromB, chunk.toB),
-    modifiedStartLine: getTextAnchorLine(modifiedDoc, chunk.fromB, chunk.toB),
-    originalLineCount: getTextLineCount(originalDoc, chunk.fromA, chunk.toA),
-    originalStartLine: getTextAnchorLine(originalDoc, chunk.fromA, chunk.toA),
+function getCodeMirrorControlSvg(action: GitDiffBlockAction) {
+  if (action === 'stage') {
+    return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3.25v9.5"/><path d="M3.25 8h9.5"/></svg>'
   }
+
+  if (action === 'unstage') {
+    return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.25 8h9.5"/></svg>'
+  }
+
+  return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5.25 4.75H2.75V2.25"/><path d="M2.75 4.75A5.25 5.25 0 1 1 5 12.85"/></svg>'
 }
 
 function getBlockActionsDisabledReason(
@@ -189,10 +196,6 @@ function getBlockActionsDisabledReason(
     return 'Save other open editor tabs for this file before applying Git block actions.'
   }
 
-  if (diff.change.scope === 'unstaged' && diff.change.kind === 'untracked') {
-    return 'Block actions are not available for untracked files yet.'
-  }
-
   return null
 }
 
@@ -201,11 +204,13 @@ function createDiffExtensions({
   filePath,
   onChange,
   onSave,
+  wrapLines,
 }: {
   editable: boolean
   filePath: string
   onChange: (content: string) => void
   onSave: () => void
+  wrapLines: boolean
 }) {
   return [
     lineNumbers(),
@@ -219,7 +224,7 @@ function createDiffExtensions({
     highlightSelectionMatches(),
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
     EditorState.tabSize.of(2),
-    EditorView.lineWrapping,
+    ...(wrapLines ? [EditorView.lineWrapping] : []),
     EditorView.editable.of(editable),
     EditorState.readOnly.of(!editable),
     DIFF_EDITOR_THEME,
@@ -289,21 +294,60 @@ function RichTextDiffRenderer({
 
     const rightDoc = diff.modifiedExists ? diff.modifiedContent : ''
     const leftDoc = diff.originalExists ? diff.originalContent : ''
+    const createCodeMirrorIconControl = ({
+      action,
+      onActivate,
+      title,
+    }: {
+      action: GitDiffBlockAction
+      onActivate: (event: MouseEvent | KeyboardEvent, action: GitDiffBlockAction) => void
+      title: string
+    }) => {
+      const control = document.createElement('div')
+      control.className = 'git-diff-native-control'
+      control.title = areBlockActionsEnabled ? title : blockActionsDisabledReason ?? title
+      control.setAttribute('role', 'button')
+      control.setAttribute('tabindex', areBlockActionsEnabled ? '0' : '-1')
+      control.setAttribute('aria-label', control.title)
+      control.setAttribute('aria-disabled', areBlockActionsEnabled ? 'false' : 'true')
+      control.innerHTML = getCodeMirrorControlSvg(action)
+
+      const handleActivate = (event: MouseEvent | KeyboardEvent) => {
+        event.preventDefault()
+        event.stopPropagation()
+
+        if (!areBlockActionsEnabled) {
+          return
+        }
+
+        onActivate(event, action)
+      }
+
+      control.onmousedown = handleActivate
+      control.onkeydown = (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          handleActivate(event)
+        }
+      }
+
+      return control
+    }
     const handleSplitBlockAction = (
-      event: MouseEvent,
+      event: MouseEvent | KeyboardEvent,
       action: GitDiffBlockAction,
     ) => {
-      event.preventDefault()
-      event.stopPropagation()
-
       if (!areBlockActionsEnabled || !splitViewRef.current) {
         return
       }
 
-      const chunkRoot = (event.currentTarget as HTMLElement).closest<HTMLElement>('[data-chunk]')
-      const chunkIndex = chunkRoot?.dataset.chunk ? Number(chunkRoot.dataset.chunk) : Number.NaN
-      const chunk = Number.isInteger(chunkIndex)
-        ? (splitViewRef.current as MergeView & { chunks?: CodeMirrorChunk[] }).chunks?.[chunkIndex]
+      const controlsRoot = (event.currentTarget as HTMLElement).closest<HTMLElement>('.git-diff-native-controls')
+      const controlsParent = controlsRoot?.parentElement
+      const chunkIndex = controlsRoot && controlsParent
+        ? Array.from(controlsParent.children).indexOf(controlsRoot)
+        : -1
+      const chunkState = getChunks(splitViewRef.current.b.state)
+      const chunk = chunkIndex > -1
+        ? chunkState?.chunks[chunkIndex] as CodeMirrorChunk | undefined
         : undefined
 
       if (!chunk) {
@@ -317,64 +361,35 @@ function RichTextDiffRenderer({
     }
     const createSplitBlockControls = () => {
       const container = document.createElement('div')
-      container.className = 'git-diff-block-controls'
+      container.className = 'git-diff-native-controls'
       container.onmousedown = (event) => {
         event.preventDefault()
         event.stopPropagation()
       }
 
       if (diff.change.scope === 'unstaged') {
-        const discardButton = document.createElement('button')
-        discardButton.type = 'button'
-        discardButton.className = 'git-diff-block-control'
-        discardButton.textContent = '↶'
-        discardButton.title = areBlockActionsEnabled ? 'Discard block' : blockActionsDisabledReason ?? 'Discard block'
-        discardButton.setAttribute('aria-label', discardButton.title)
-        discardButton.disabled = !areBlockActionsEnabled
-        discardButton.onmousedown = (event) => {
-          handleSplitBlockAction(event, 'discard')
-        }
-        container.append(discardButton)
-
-        const stageButton = document.createElement('button')
-        stageButton.type = 'button'
-        stageButton.className = 'git-diff-block-control'
-        stageButton.textContent = '+'
-        stageButton.title = areBlockActionsEnabled ? 'Stage block' : blockActionsDisabledReason ?? 'Stage block'
-        stageButton.setAttribute('aria-label', stageButton.title)
-        stageButton.disabled = !areBlockActionsEnabled
-        stageButton.onmousedown = (event) => {
-          handleSplitBlockAction(event, 'stage')
-        }
-        container.append(stageButton)
+        container.append(createCodeMirrorIconControl({
+          action: 'stage',
+          onActivate: handleSplitBlockAction,
+          title: 'Stage block',
+        }))
+        container.append(createCodeMirrorIconControl({
+          action: 'discard',
+          onActivate: handleSplitBlockAction,
+          title: 'Discard block',
+        }))
       } else {
-        const unstageButton = document.createElement('button')
-        unstageButton.type = 'button'
-        unstageButton.className = 'git-diff-block-control'
-        unstageButton.textContent = '−'
-        unstageButton.title = areBlockActionsEnabled ? 'Unstage block' : blockActionsDisabledReason ?? 'Unstage block'
-        unstageButton.setAttribute('aria-label', unstageButton.title)
-        unstageButton.disabled = !areBlockActionsEnabled
-        unstageButton.onmousedown = (event) => {
-          handleSplitBlockAction(event, 'unstage')
-        }
-        container.append(unstageButton)
+        container.append(createCodeMirrorIconControl({
+          action: 'unstage',
+          onActivate: handleSplitBlockAction,
+          title: 'Unstage block',
+        }))
       }
 
       return container
     }
-    const createUnifiedBlockControl = (action: GitDiffBlockAction, title: string, label: string) => {
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.className = 'git-diff-block-control'
-      button.textContent = label
-      button.title = areBlockActionsEnabled ? title : blockActionsDisabledReason ?? title
-      button.setAttribute('aria-label', button.title)
-      button.disabled = !areBlockActionsEnabled
-      button.onmousedown = (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-
+    const createUnifiedBlockControl = (action: GitDiffBlockAction, title: string) => {
+      const handleUnifiedBlockAction = (event: MouseEvent | KeyboardEvent, requestedAction: GitDiffBlockAction) => {
         if (!areBlockActionsEnabled || !unifiedViewRef.current) {
           return
         }
@@ -397,11 +412,15 @@ function RichTextDiffRenderer({
 
         onBlockAction(
           createSelectionFromCodeMirrorChunk(getOriginalDoc(unifiedViewRef.current.state), unifiedViewRef.current.state.doc, chunk),
-          action,
+          requestedAction,
         )
       }
 
-      return button
+      return createCodeMirrorIconControl({
+        action,
+        onActivate: handleUnifiedBlockAction,
+        title,
+      })
     }
 
     if (viewMode === 'split') {
@@ -413,6 +432,7 @@ function RichTextDiffRenderer({
             filePath: diff.change.path,
             onChange: () => {},
             onSave: () => {},
+            wrapLines: diff.editorKind === 'rich-text',
           }),
         },
         b: {
@@ -422,17 +442,18 @@ function RichTextDiffRenderer({
             filePath: diff.change.path,
             onChange: onDraftChange,
             onSave,
+            wrapLines: diff.editorKind === 'rich-text',
           }),
         },
         gutter: true,
         highlightChanges: true,
         collapseUnchanged: {
-          margin: 3,
-          minSize: 4,
+          margin: 4,
+          minSize: 6,
         },
         diffConfig: {
-          scanLimit: 500,
-          timeout: 1000,
+          scanLimit: isEditable ? 1000 : 10000,
+          timeout: 200,
         },
         renderRevertControl: createSplitBlockControls,
         revertControls: 'a-to-b',
@@ -453,28 +474,29 @@ function RichTextDiffRenderer({
           filePath: diff.change.path,
           onChange: onDraftChange,
           onSave,
+          wrapLines: diff.editorKind === 'rich-text',
         }),
         unifiedMergeView({
           allowInlineDiffs: true,
           collapseUnchanged: {
-            margin: 3,
-            minSize: 4,
+            margin: 4,
+            minSize: 6,
           },
           diffConfig: {
-            scanLimit: 500,
-            timeout: 1000,
+            scanLimit: isEditable ? 1000 : 10000,
+            timeout: 200,
           },
           gutter: true,
           highlightChanges: true,
           mergeControls: (kind) => {
             if (diff.change.scope === 'unstaged') {
               return kind === 'accept'
-                ? createUnifiedBlockControl('stage', 'Stage block', '+')
-                : createUnifiedBlockControl('discard', 'Discard block', '↶')
+                ? createUnifiedBlockControl('stage', 'Stage block')
+                : createUnifiedBlockControl('discard', 'Discard block')
             }
 
             return kind === 'accept'
-              ? createUnifiedBlockControl('unstage', 'Unstage block', '−')
+              ? createUnifiedBlockControl('unstage', 'Unstage block')
               : document.createElement('span')
           },
           original: leftDoc,

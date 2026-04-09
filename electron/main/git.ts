@@ -108,6 +108,46 @@ async function runGit(
   }
 }
 
+async function runGitAllowOutputOnFailure(
+  args: string[],
+  options: GitCommandOptions,
+) {
+  const encoding = options.encoding ?? 'utf8'
+  const commandArgs = ['-c', 'core.quotepath=false', ...args]
+
+  try {
+    const result = await execFileAsync('git', commandArgs, {
+      cwd: options.cwd,
+      encoding,
+      windowsHide: true,
+    })
+
+    return result.stdout
+  } catch (error) {
+    if (isGitMissingError(error)) {
+      throw new Error('Git is not available on this machine.')
+    }
+
+    const stdout = typeof (error as { stdout?: unknown }).stdout === 'string'
+      ? (error as { stdout: string }).stdout
+      : ''
+
+    if (stdout.length > 0) {
+      return stdout
+    }
+
+    if (options.allowFailure) {
+      return null
+    }
+
+    const stderr = typeof (error as { stderr?: unknown }).stderr === 'string'
+      ? (error as { stderr: string }).stderr.trim()
+      : ''
+    const message = stderr || (error instanceof Error ? error.message : 'Git command failed.')
+    throw new Error(message)
+  }
+}
+
 async function runGitWithInput(
   args: string[],
   input: string,
@@ -253,8 +293,8 @@ function isSameComparablePath(leftPath: string, rightPath: string) {
 }
 
 function lineRangeOverlaps(startA: number, countA: number, startB: number, countB: number) {
-  const normalizedStartA = Math.max(1, startA)
-  const normalizedStartB = Math.max(1, startB)
+  const normalizedStartA = Math.max(0, startA)
+  const normalizedStartB = Math.max(0, startB)
   const endA = normalizedStartA + Math.max(countA, 1)
   const endB = normalizedStartB + Math.max(countB, 1)
 
@@ -283,11 +323,26 @@ function buildPatchFromHunks(parsedPatch: ParsedGitPatch, hunks: ParsedGitPatchH
 }
 
 async function getPatchForGitChange(repositoryRootPath: string, change: GitChangeItem) {
+  const relativePath = toWorkspaceRelativePath(repositoryRootPath, change.path)
+
   if (change.scope === 'unstaged' && change.kind === 'untracked') {
-    return null
+    const patch = await runGitAllowOutputOnFailure([
+      'diff',
+      '--no-index',
+      '--no-ext-diff',
+      '--no-color',
+      '--unified=0',
+      '--',
+      '/dev/null',
+      relativePath,
+    ], {
+      allowFailure: true,
+      cwd: repositoryRootPath,
+    })
+
+    return patch?.length ? patch : null
   }
 
-  const relativePath = toWorkspaceRelativePath(repositoryRootPath, change.path)
   const args = change.scope === 'staged'
     ? ['diff', '--cached', '--no-ext-diff', '--no-color', '--unified=0', '--', relativePath]
     : ['diff', '--no-ext-diff', '--no-color', '--unified=0', '--', relativePath]
@@ -1006,10 +1061,6 @@ export async function applyGitDiffSelection(
 
   if (action === 'unstage' && scope !== 'staged') {
     throw new Error('Only staged changes can be unstaged by block.')
-  }
-
-  if (change.kind === 'untracked') {
-    throw new Error('Block actions are not available for untracked files yet.')
   }
 
   const patch = await getPatchForGitChange(repositoryRootPath, change)

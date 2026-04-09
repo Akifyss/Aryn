@@ -1486,8 +1486,8 @@
 
 .git-diff-codemirror-host .cm-merge-revert {
   position: relative;
-  width: 40px;
-  min-width: 40px;
+  width: 4em;
+  min-width: 4em;
 }
 
 .git-diff-block-overlay {
@@ -1509,11 +1509,58 @@
   position: absolute;
 }
 
+.git-diff-codemirror-host .cm-merge-revert>* {
+  position: absolute;
+  display: flex;
+  background: var(--surface-secondary);
+}
+
 .git-diff-block-controls {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   pointer-events: auto;
+}
+
+.git-diff-native-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  pointer-events: auto;
+  padding: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-secondary) 94%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.git-diff-native-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 999px;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.git-diff-native-control svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.git-diff-native-control:hover,
+.git-diff-native-control:focus-visible {
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+  outline: none;
+}
+
+.git-diff-native-control[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .git-diff-block-control {
@@ -1545,6 +1592,12 @@
 .git-diff-codemirror-host .git-diff-block-control {
   font-size: 13px;
   font-weight: 700;
+}
+
+.git-diff-codemirror-host .cm-deletedChunk .cm-chunkButtons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .git-diff-codemirror-host .cm-changedLine,
