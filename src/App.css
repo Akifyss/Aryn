@@ -1322,11 +1322,11 @@
 .git-diff-view-modes {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--separator);
-  border-radius: 13px;
-  background: var(--surface-secondary);
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .git-diff-view-mode,
@@ -1351,6 +1351,12 @@
   font-weight: 600;
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.git-diff-view-mode-icon-only {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
 }
 
 .git-toolbar-icon-button,

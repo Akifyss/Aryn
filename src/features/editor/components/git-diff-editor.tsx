@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
-import { Button } from '@heroui/react'
 import { EditorState } from '@codemirror/state'
 import { MergeView, unifiedMergeView } from '@codemirror/merge'
 import {
@@ -20,7 +19,8 @@ import {
 } from '@codemirror/language'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
-import { ArrowDownLine, ArrowUpLine, Refresh2Line, SaveLine } from '@mingcute/react'
+import { AddLine, Back2Line } from '@mingcute/react'
+import { Icon } from '@iconify/react'
 import * as monaco from 'monaco-editor'
 import type { GitChangeItem, GitFileDiffResult } from '@/features/git/types'
 import { getCodeMirrorLanguageSupport } from '@/features/editor/lib/codemirror-language'
@@ -442,66 +442,64 @@ export function GitDiffEditor({
             <>
               <button
                 type='button'
-                className='git-diff-view-mode'
+                className='git-diff-view-mode git-diff-view-mode-icon-only'
+                aria-label='Discard'
+                title='Discard'
                 onClick={() => {
                   onDiscardChange(diff.change)
                 }}
               >
-                <Refresh2Line size={15} />
-                Discard
+                <Back2Line size={16} />
               </button>
               <button
                 type='button'
-                className='git-diff-view-mode'
+                className='git-diff-view-mode git-diff-view-mode-icon-only'
+                aria-label='Stage'
+                title='Stage'
                 onClick={() => {
                   onStageChange(diff.change)
                 }}
               >
-                <ArrowUpLine size={15} />
-                Stage
+                <AddLine size={16} />
               </button>
             </>
           ) : (
             <button
               type='button'
-              className='git-diff-view-mode'
+              className='git-diff-view-mode git-diff-view-mode-icon-only'
+              aria-label='Unstage'
+              title='Unstage'
               onClick={() => {
                 onUnstageChange(diff.change)
               }}
             >
-              <ArrowDownLine size={15} />
-              Unstage
+              <Icon icon='mdi:minus' width={16} height={16} />
             </button>
           )}
           <button
             type='button'
-            className={`git-diff-view-mode${viewMode === 'unified' ? ' is-active' : ''}`}
+            className='git-diff-view-mode git-diff-view-mode-icon-only'
+            aria-label={viewMode === 'split' ? 'Current diff view: split. Click to switch to inline.' : 'Current diff view: inline. Click to switch to split.'}
+            aria-pressed={viewMode === 'split'}
+            title={viewMode === 'split' ? 'Current diff view: split. Click to switch to inline.' : 'Current diff view: inline. Click to switch to split.'}
             onClick={() => {
-              setViewMode('unified')
+              setViewMode((currentMode) => (currentMode === 'split' ? 'unified' : 'split'))
             }}
           >
-            Inline
+            <Icon icon={viewMode === 'split' ? 'lucide:columns-2' : 'lucide:between-horizontal-start'} width={16} height={16} />
           </button>
           <button
             type='button'
-            className={`git-diff-view-mode${viewMode === 'split' ? ' is-active' : ''}`}
+            className='git-diff-view-mode git-diff-view-mode-icon-only'
+            aria-label={isSaving ? 'Saving file' : 'Save file'}
+            title={isSaving ? 'Saving file' : 'Save file'}
+            disabled={!isEditable || !isDirty || isSaving}
             onClick={() => {
-              setViewMode('split')
-            }}
-          >
-            Split
-          </button>
-          <Button
-            variant='primary'
-            size='sm'
-            isDisabled={!isEditable || !isDirty || isSaving}
-            onPress={() => {
               void handleSave()
             }}
           >
-            <SaveLine size={16} />
-            {isSaving ? 'Saving' : 'Save'}
-          </Button>
+            <Icon icon='lucide:save' width={16} height={16} />
+          </button>
         </div>
       </header>
 
