@@ -3019,9 +3019,9 @@ body.workspace-tree-dragging .workspace-tree-row {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  font-family: 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace;
+  font-family: 'SF Mono', 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'Fira Code', 'Menlo', ui-monospace, monospace;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1;
   white-space: pre;
 }
@@ -3048,9 +3048,9 @@ body.workspace-tree-dragging .workspace-tree-row {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  font-family: 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Mono', ui-monospace, monospace;
+  font-family: 'SF Mono', 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'Fira Code', 'Menlo', ui-monospace, monospace;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1;
   white-space: pre;
 }
