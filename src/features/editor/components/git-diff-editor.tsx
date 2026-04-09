@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { EditorState, type Text } from '@codemirror/state'
 import { getChunks, getOriginalDoc, MergeView, unifiedMergeView } from '@codemirror/merge'
 import {
@@ -19,7 +20,7 @@ import {
 } from '@codemirror/language'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
-import { AddLine, Back2Line } from '@mingcute/react'
+import { AddLine, ArrowRightLine, Back2Line } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import * as monaco from 'monaco-editor'
 import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
@@ -167,14 +168,14 @@ function createSelectionFromCodeMirrorChunk(originalDoc: Text, modifiedDoc: Text
 
 function getCodeMirrorControlSvg(action: GitDiffBlockAction) {
   if (action === 'stage') {
-    return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3.25v9.5"/><path d="M3.25 8h9.5"/></svg>'
+    return renderToStaticMarkup(<AddLine aria-hidden='true' size={14} />)
   }
 
   if (action === 'unstage') {
     return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.25 8h9.5"/></svg>'
   }
 
-  return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5.25 4.75H2.75V2.25"/><path d="M2.75 4.75A5.25 5.25 0 1 1 5 12.85"/></svg>'
+  return renderToStaticMarkup(<ArrowRightLine aria-hidden='true' size={14} />)
 }
 
 function getBlockActionsDisabledReason(
@@ -475,14 +476,14 @@ function RichTextDiffRenderer({
 
       if (diff.change.scope === 'unstaged') {
         container.append(createCodeMirrorIconControl({
-          action: 'stage',
-          onActivate: handleSplitBlockAction,
-          title: 'Stage block',
-        }))
-        container.append(createCodeMirrorIconControl({
           action: 'discard',
           onActivate: handleSplitBlockAction,
           title: 'Discard block',
+        }))
+        container.append(createCodeMirrorIconControl({
+          action: 'stage',
+          onActivate: handleSplitBlockAction,
+          title: 'Stage block',
         }))
       } else {
         container.append(createCodeMirrorIconControl({

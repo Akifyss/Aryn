@@ -1486,8 +1486,8 @@
 
 .git-diff-codemirror-host .cm-merge-revert {
   position: relative;
-  width: 4em;
-  min-width: 4em;
+  width: 20px;
+  min-width: 20px;
 }
 
 .git-diff-block-overlay {
@@ -1512,7 +1512,6 @@
 .git-diff-codemirror-host .cm-merge-revert>* {
   position: absolute;
   display: flex;
-  background: var(--surface-secondary);
 }
 
 .git-diff-block-controls {
@@ -1524,22 +1523,30 @@
 
 .git-diff-native-controls {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   pointer-events: auto;
+  padding: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface-secondary) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--separator) 70%, transparent);
+  box-shadow:
+    0 6px 16px color-mix(in srgb, var(--background) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 
 .git-diff-native-control {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   color: var(--muted);
   cursor: pointer;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-secondary) 96%, transparent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
   transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
 }
 
