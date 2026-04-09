@@ -183,16 +183,11 @@ function getBlockActionsDisabledReason(
   options: {
     hasDirtyFileTab: boolean
     isApplyingAction: boolean
-    isDirty: boolean
     isSaving: boolean
   },
 ) {
   if (options.isSaving || options.isApplyingAction) {
     return 'Wait for the current file action to finish first.'
-  }
-
-  if (options.isDirty) {
-    return 'Save changes before applying Git block actions.'
   }
 
   if (options.hasDirtyFileTab) {
@@ -476,14 +471,14 @@ function RichTextDiffRenderer({
 
       if (diff.change.scope === 'unstaged') {
         container.append(createCodeMirrorIconControl({
-          action: 'discard',
-          onActivate: handleSplitBlockAction,
-          title: 'Discard block',
-        }))
-        container.append(createCodeMirrorIconControl({
           action: 'stage',
           onActivate: handleSplitBlockAction,
           title: 'Stage block',
+        }))
+        container.append(createCodeMirrorIconControl({
+          action: 'discard',
+          onActivate: handleSplitBlockAction,
+          title: 'Discard block',
         }))
       } else {
         container.append(createCodeMirrorIconControl({
@@ -906,7 +901,6 @@ export function GitDiffEditor({
   const blockActionsDisabledReason = getBlockActionsDisabledReason(diff, {
     hasDirtyFileTab: hasDirtyRelatedFileTab,
     isApplyingAction: isApplyingBlockAction,
-    isDirty,
     isSaving,
   })
   const areBlockActionsEnabled = blockActionsDisabledReason === null
@@ -989,6 +983,10 @@ export function GitDiffEditor({
       return
     }
 
+    if (isEditable && isDirty) {
+      await handleSave()
+    }
+
     setIsApplyingBlockAction(true)
 
     try {
@@ -996,7 +994,7 @@ export function GitDiffEditor({
     } finally {
       setIsApplyingBlockAction(false)
     }
-  }, [areBlockActionsEnabled, diff.change, onApplyBlockAction])
+  }, [areBlockActionsEnabled, diff.change, handleSave, isDirty, isEditable, onApplyBlockAction])
 
   return (
     <div className='git-diff-editor'>

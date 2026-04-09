@@ -301,6 +301,13 @@ function lineRangeOverlaps(startA: number, countA: number, startB: number, count
   return normalizedStartA < endB && normalizedStartB < endA
 }
 
+function hunkExactlyMatchesSelection(hunk: ParsedGitPatchHunk, selection: GitDiffSelection) {
+  return hunk.modifiedStartLine === selection.modifiedStartLine
+    && hunk.modifiedLineCount === selection.modifiedLineCount
+    && hunk.originalStartLine === selection.originalStartLine
+    && hunk.originalLineCount === selection.originalLineCount
+}
+
 function hunkMatchesSelection(hunk: ParsedGitPatchHunk, selection: GitDiffSelection) {
   return lineRangeOverlaps(
     hunk.modifiedStartLine,
@@ -1075,7 +1082,10 @@ export async function applyGitDiffSelection(
     throw new Error('Unable to parse the Git diff for that file.')
   }
 
-  const matchingHunks = parsedPatch.hunks.filter((hunk) => hunkMatchesSelection(hunk, selection))
+  const exactMatchingHunks = parsedPatch.hunks.filter((hunk) => hunkExactlyMatchesSelection(hunk, selection))
+  const matchingHunks = exactMatchingHunks.length > 0
+    ? exactMatchingHunks
+    : parsedPatch.hunks.filter((hunk) => hunkMatchesSelection(hunk, selection))
 
   if (matchingHunks.length === 0) {
     throw new Error('That diff block is no longer available.')
