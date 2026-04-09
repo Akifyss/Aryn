@@ -39,6 +39,46 @@ describe('useWorkspaceStore', () => {
     expect(nextState.openTabs[0]).toMatchObject({
       content: 'alpha',
       kind: 'file',
+      viewMode: 'editor',
+    })
+  })
+
+  it('defaults html code tabs to preview and allows switching them to the code editor', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({
+      content: '<h1>Hello</h1>',
+      editorKind: 'code',
+      filePath: 'C:/workspace/index.html',
+    })
+
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      filePath: 'C:/workspace/index.html',
+      viewMode: 'preview',
+    })
+
+    store.setTabViewMode('C:/workspace/index.html', 'editor')
+
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      filePath: 'C:/workspace/index.html',
+      viewMode: 'editor',
+    })
+  })
+
+  it('falls back to editor mode when a preview tab is renamed to a non-html file', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({
+      content: '<h1>Hello</h1>',
+      editorKind: 'code',
+      filePath: 'C:/workspace/index.html',
+    })
+    store.renameTab('C:/workspace/index.html', 'C:/workspace/index.ts')
+
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      editorKind: 'code',
+      filePath: 'C:/workspace/index.ts',
+      viewMode: 'editor',
     })
   })
 

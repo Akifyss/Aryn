@@ -2,8 +2,11 @@ import { create } from 'zustand'
 import type { GitFileDiffResult } from '@/features/git/types'
 import type { WorkspaceNode } from '@/features/workspace/types'
 import {
+  getDefaultWorkspaceFileViewMode,
   getSupportedWorkspaceEditorKind,
+  supportsHtmlPreview,
   type SupportedWorkspaceEditorKind,
+  type WorkspaceFileViewMode,
 } from '@/features/workspace/lib/file-types'
 
 export type WorkspaceFileTab = {
@@ -14,6 +17,7 @@ export type WorkspaceFileTab = {
   isDirty: boolean
   kind: 'file'
   savedContent: string
+  viewMode: WorkspaceFileViewMode
 }
 
 export type WorkspaceDiffTab = {
@@ -51,11 +55,12 @@ type WorkspaceState = {
   markTabSaved: (path: string, savedContent: string) => void
   moveTab: (movingPath: string, targetPath: string, position: TabDropPosition) => void
   openDiffTab: (tab: WorkspaceDiffTab, activate?: boolean) => void
-  openTab: (tab: { content: string, editorKind: SupportedWorkspaceEditorKind, filePath: string }) => void
+  openTab: (tab: { content: string, editorKind: SupportedWorkspaceEditorKind, filePath: string, viewMode?: WorkspaceFileViewMode }) => void
   renameTab: (currentPath: string, nextPath: string) => void
   replaceTabs: (tabs: WorkspaceTab[], activeTabPath: string | null) => void
   resetOpenTabs: () => void
   setCurrentPath: (path: string | null) => void
+  setTabViewMode: (path: string, viewMode: WorkspaceFileViewMode) => void
   setTree: (tree: WorkspaceNode[]) => void
   syncTabWithDisk: (path: string, nextContent: string) => void
   updateTabContent: (path: string, content: string) => void
@@ -107,6 +112,10 @@ export function reorderWorkspaceTabs(
     : nextTabs
 }
 
+function supportsPreviewMode(filePath: string, editorKind: SupportedWorkspaceEditorKind) {
+  return editorKind === 'code' && supportsHtmlPreview(filePath)
+}
+
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activeTabPath: null,
   currentPath: null,
@@ -151,7 +160,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       ? state
       : { openTabs: nextTabs }
   }),
-  openTab: ({ content, editorKind, filePath }) => set((state) => {
+  openTab: ({ content, editorKind, filePath, viewMode }) => set((state) => {
+    const nextViewMode = viewMode ?? getDefaultWorkspaceFileViewMode(filePath, editorKind)
     const existingTab = state.openTabs.find((tab) => tab.filePath === filePath)
 
     if (existingTab) {
@@ -161,7 +171,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           tab.kind === 'file' && tab.filePath === filePath
             ? {
               ...tab,
+              editorKind,
               exists: true,
+              viewMode: nextViewMode,
             }
             : tab
         )),
@@ -180,6 +192,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           isDirty: false,
           kind: 'file',
           savedContent: content,
+          viewMode: nextViewMode,
         },
       ],
     }
@@ -199,12 +212,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     activeTabPath: state.activeTabPath === currentPath ? nextPath : state.activeTabPath,
     openTabs: state.openTabs.map((tab) => (
       tab.kind === 'file' && tab.filePath === currentPath
-        ? {
-          ...tab,
-          editorKind: getSupportedWorkspaceEditorKind(nextPath) ?? tab.editorKind,
-          exists: true,
-          filePath: nextPath,
-        }
+        ? (() => {
+          const nextEditorKind = getSupportedWorkspaceEditorKind(nextPath) ?? tab.editorKind
+
+          return {
+            ...tab,
+            editorKind: nextEditorKind,
+            exists: true,
+            filePath: nextPath,
+            viewMode: tab.viewMode === 'preview' && !supportsPreviewMode(nextPath, nextEditorKind)
+              ? getDefaultWorkspaceFileViewMode(nextPath, nextEditorKind)
+              : tab.viewMode,
+          }
+        })()
         : tab
     )),
   })),
@@ -217,6 +237,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     openTabs: [],
   }),
   setCurrentPath: (currentPath) => set({ currentPath }),
+  setTabViewMode: (path, viewMode) => set((state) => ({
+    openTabs: state.openTabs.map((tab) => (
+      tab.kind === 'file' && tab.filePath === path
+        ? {
+          ...tab,
+          viewMode,
+        }
+        : tab
+    )),
+  })),
   setTree: (tree) => set({ tree }),
   syncTabWithDisk: (path, nextContent) => set((state) => ({
     openTabs: state.openTabs.map((tab) => (

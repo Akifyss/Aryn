@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { getCodeLanguage, getWorkspaceEditorKind } from '../src/features/workspace/lib/file-types'
+import {
+  getCodeLanguage,
+  getDefaultWorkspaceFileViewMode,
+  getWorkspaceEditorKind,
+  supportsHtmlPreview,
+} from '../src/features/workspace/lib/file-types'
 
 describe('workspace file types', () => {
   it('routes markdown and plain text files to the rich text editor', () => {
@@ -26,5 +31,15 @@ describe('workspace file types', () => {
     expect(getCodeLanguage('C:/workspace/theme.css')).toBe('css')
     expect(getCodeLanguage('C:/workspace/config.yaml')).toBe('yaml')
     expect(getCodeLanguage('C:/workspace/.env')).toBe('plaintext')
+  })
+
+  it('defaults html files to preview while leaving other editor types in editor mode', () => {
+    expect(supportsHtmlPreview('C:/workspace/index.html')).toBe(true)
+    expect(supportsHtmlPreview('C:/workspace/partial.htm')).toBe(true)
+    expect(supportsHtmlPreview('C:/workspace/main.ts')).toBe(false)
+
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/index.html', 'code')).toBe('preview')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/main.ts', 'code')).toBe('editor')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.md', 'rich-text')).toBe('editor')
   })
 })

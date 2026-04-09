@@ -31,12 +31,18 @@ import {
   type WorkspaceDisplayTab,
   type WorkspaceFileTab,
 } from '@/features/workspace/store/use-workspace-store'
+import {
+  getDefaultWorkspaceFileViewMode,
+  supportsHtmlPreview,
+  type WorkspaceFileViewMode,
+} from '@/features/workspace/lib/file-types'
 import type {
   WorkspaceIconTheme,
   WorkspaceIconThemeCatalogOption,
 } from '@/features/workspace/types'
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
 import { useSettingsStore } from '@/hooks/use-settings-store'
+import { HtmlPreview } from '@/features/editor/components/html-preview'
 import './App.css'
 
 function getBaseName(filePath: string) {
@@ -139,6 +145,10 @@ function rebasePathPrefix(filePath: string, currentPrefix: string, nextPrefix: s
 
 type StoredTabState = {
   activePath: string | null
+  entries?: Array<{
+    path: string
+    viewMode?: WorkspaceFileViewMode
+  }>
   paths: string[]
 }
 
@@ -185,6 +195,17 @@ function readStoredTabState(workspacePath: string): StoredTabState {
     }
 
     const parsedValue = JSON.parse(rawValue) as Partial<StoredTabState>
+    const entries = Array.isArray(parsedValue.entries)
+      ? parsedValue.entries.filter(
+        (entry): entry is { path: string, viewMode?: WorkspaceFileViewMode } => (
+          typeof entry === 'object'
+          && entry !== null
+          && typeof entry.path === 'string'
+          && entry.path.trim().length > 0
+          && (entry.viewMode === undefined || entry.viewMode === 'editor' || entry.viewMode === 'preview')
+        ),
+      )
+      : []
     const paths = Array.isArray(parsedValue.paths)
       ? parsedValue.paths.filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
       : []
@@ -193,11 +214,13 @@ function readStoredTabState(workspacePath: string): StoredTabState {
       activePath: typeof parsedValue.activePath === 'string' && parsedValue.activePath.trim().length > 0
         ? parsedValue.activePath
         : null,
-      paths,
+      entries,
+      paths: entries.length > 0 ? entries.map((entry) => entry.path) : paths,
     }
   } catch {
     return {
       activePath: null,
+      entries: [],
       paths: [],
     }
   }
@@ -207,7 +230,24 @@ function dedupePaths(paths: string[]) {
   return [...new Set(paths)]
 }
 
-function toStoredWorkspaceTab(filePath: string, content: string, editorKind: WorkspaceFileTab['editorKind']): WorkspaceFileTab {
+function resolveWorkspaceFileViewMode(
+  filePath: string,
+  editorKind: WorkspaceFileTab['editorKind'],
+  preferredViewMode?: WorkspaceFileViewMode,
+) {
+  if (preferredViewMode === 'preview' && editorKind === 'code' && supportsHtmlPreview(filePath)) {
+    return preferredViewMode
+  }
+
+  return getDefaultWorkspaceFileViewMode(filePath, editorKind)
+}
+
+function toStoredWorkspaceTab(
+  filePath: string,
+  content: string,
+  editorKind: WorkspaceFileTab['editorKind'],
+  viewMode: WorkspaceFileViewMode,
+): WorkspaceFileTab {
 
   return {
     content,
@@ -217,6 +257,7 @@ function toStoredWorkspaceTab(filePath: string, content: string, editorKind: Wor
     isDirty: false,
     kind: 'file',
     savedContent: content,
+    viewMode,
   }
 }
 
@@ -356,6 +397,7 @@ function App() {
   const replaceTabs = useWorkspaceStore((state) => state.replaceTabs)
   const resetOpenTabs = useWorkspaceStore((state) => state.resetOpenTabs)
   const setCurrentPath = useWorkspaceStore((state) => state.setCurrentPath)
+  const setTabViewMode = useWorkspaceStore((state) => state.setTabViewMode)
   const setTree = useWorkspaceStore((state) => state.setTree)
   const syncTabWithDisk = useWorkspaceStore((state) => state.syncTabWithDisk)
   const tree = useWorkspaceStore((state) => state.tree)
@@ -390,6 +432,7 @@ function App() {
   const displayActiveTabPath = isSettingsTabActive ? SETTINGS_TAB_PATH : activeTabPath
   const currentFileContent = activeFileTab?.content ?? ''
   const currentEditorKind = activeFileTab?.editorKind ?? null
+  const currentFileViewMode = activeFileTab?.viewMode ?? null
   const currentFilePath = activeFileTab?.filePath ?? null
   const dirtyTabs = useMemo(
     () => openTabs.filter((tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.isDirty),
@@ -720,11 +763,21 @@ function App() {
     setTree(nextTree)
   }, [setTree])
 
-  const openFile = useCallback(async (filePath: string, workspacePath: string | null = currentPath) => {
+  const openFile = useCallback(async (
+    filePath: string,
+    workspacePath: string | null = currentPath,
+    preferredViewMode?: WorkspaceFileViewMode,
+  ) => {
     setIsSettingsTabActive(false)
-    const existingTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.kind === 'file' && tab.filePath === filePath)
+    const existingTab = useWorkspaceStore.getState().openTabs.find(
+      (tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.filePath === filePath,
+    )
 
     if (existingTab) {
+      if (preferredViewMode && existingTab.viewMode !== preferredViewMode) {
+        setTabViewMode(filePath, preferredViewMode)
+      }
+
       activateTab(filePath)
 
       if (workspacePath) {
@@ -747,7 +800,12 @@ function App() {
 
     try {
       const fileContent = await window.appApi.readWorkspaceFile(filePath)
-      openTab({ filePath, content: fileContent, editorKind })
+      openTab({
+        filePath,
+        content: fileContent,
+        editorKind,
+        viewMode: resolveWorkspaceFileViewMode(filePath, editorKind, preferredViewMode),
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to open file.'
       toast.danger(`Failed to open ${getBaseName(filePath)}`, {
@@ -762,7 +820,7 @@ function App() {
     }
 
     setStatusMessage(`${getBaseName(filePath)} opened`)
-  }, [currentPath, activateTab, openTab])
+  }, [currentPath, activateTab, openTab, setTabViewMode])
 
   async function openGitDiff(change: GitChangeItem) {
     if (!currentPath) {
@@ -817,6 +875,9 @@ function App() {
       return
     }
 
+    const storedViewModes = new Map(
+      (storedState.entries ?? []).map((entry) => [entry.path, entry.viewMode]),
+    )
     const settledTabs = await Promise.all(candidatePaths.map(async (filePath) => {
       const editorKind = await window.appApi.resolveWorkspaceEditorKind(filePath)
 
@@ -826,7 +887,12 @@ function App() {
 
       try {
         const content = await window.appApi.readWorkspaceFile(filePath)
-        return toStoredWorkspaceTab(filePath, content, editorKind)
+        return toStoredWorkspaceTab(
+          filePath,
+          content,
+          editorKind,
+          resolveWorkspaceFileViewMode(filePath, editorKind, storedViewModes.get(filePath)),
+        )
       } catch {
         return null
       }
@@ -1418,13 +1484,17 @@ function App() {
       return
     }
 
-    const storedPaths = openTabs
+    const storedEntries = openTabs
       .filter((tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.exists)
-      .map((tab) => tab.filePath)
+      .map((tab) => ({
+        path: tab.filePath,
+        viewMode: tab.viewMode,
+      }))
 
     window.localStorage.setItem(getTabStorageKey(currentPath), JSON.stringify({
       activePath: getPersistedActiveFilePath(),
-      paths: storedPaths,
+      entries: storedEntries,
+      paths: storedEntries.map((entry) => entry.path),
     } satisfies StoredTabState))
   }, [activeTabPath, currentPath, openTabs])
 
@@ -1841,12 +1911,15 @@ function App() {
                   setExpandedPaths={setExpandedPaths}
                   workspacePath={currentPath}
                   gitRepositoryState={gitRepositoryState}
-                  onSelectFile={(filePath) => {
-                    void openFile(filePath)
-                  }}
-                  onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
-                  onDeleteNode={(node) => handleDeleteNode(node)}
-                  onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
+                onSelectFile={(filePath) => {
+                  void openFile(filePath)
+                }}
+                onOpenInCodeEditor={(filePath) => {
+                  void openFile(filePath, currentPath, 'editor')
+                }}
+                onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
+                onDeleteNode={(node) => handleDeleteNode(node)}
+                onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
                 />
               </ScrollShadow>
             </div>
@@ -2025,16 +2098,25 @@ function App() {
               />
             ) : null}
 
-            {activeFileTab && currentEditorKind === 'code' ? (
-              <CodeEditor
-                disabled={false}
+            {activeFileTab && currentEditorKind === 'code' && currentFileViewMode === 'preview' ? (
+              <HtmlPreview
+                content={currentFileContent}
                 filePath={activeFileTab.filePath}
-                onChange={(nextValue) => {
-                  updateTabContent(activeFileTab.filePath, nextValue)
-                }}
-                value={currentFileContent}
-                theme={theme}
               />
+            ) : null}
+
+            {activeFileTab && currentEditorKind === 'code' ? (
+              currentFileViewMode === 'editor' ? (
+                <CodeEditor
+                  disabled={false}
+                  filePath={activeFileTab.filePath}
+                  onChange={(nextValue) => {
+                    updateTabContent(activeFileTab.filePath, nextValue)
+                  }}
+                  value={currentFileContent}
+                  theme={theme}
+                />
+              ) : null
             ) : null}
           </div>
         </div>
