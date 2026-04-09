@@ -68,6 +68,7 @@ export interface SimpleEditorProps {
   disabled?: boolean
   value: string
   onChange: (nextValue: string) => void
+  onCompositionChange?: (isComposing: boolean) => void
   theme?: "light" | "dark" | "auto"
 }
 
@@ -216,6 +217,7 @@ const MobileToolbarContent = ({
 export function SimpleEditor({
   disabled = false,
   onChange,
+  onCompositionChange,
   value,
   theme = "auto",
 }: SimpleEditorProps) {
@@ -234,7 +236,33 @@ export function SimpleEditor({
   }, [theme])
 
   const lastMarkdownRef = React.useRef(normalizeMarkdownForComparison(value))
+  const onChangeRef = React.useRef(onChange)
+  const onCompositionChangeRef = React.useRef(onCompositionChange)
+  const isComposingRef = React.useRef(false)
+  const isFocusedRef = React.useRef(false)
+  const pendingMarkdownRef = React.useRef<string | null>(null)
+  const compositionFlushTimerRef = React.useRef<number | null>(null)
   const toolbarRef = React.useRef<HTMLDivElement>(null)
+  const [isFocused, setIsFocused] = React.useState(false)
+
+  const emitMarkdownChange = React.useCallback((nextMarkdown: string) => {
+    const comparableMarkdown = normalizeMarkdownForComparison(nextMarkdown)
+
+    if (comparableMarkdown === lastMarkdownRef.current) {
+      return
+    }
+
+    lastMarkdownRef.current = comparableMarkdown
+    onChangeRef.current(nextMarkdown)
+  }, [])
+
+  React.useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
+
+  React.useEffect(() => {
+    onCompositionChangeRef.current = onCompositionChange
+  }, [onCompositionChange])
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -248,6 +276,37 @@ export function SimpleEditor({
         autocapitalize: "off",
         "aria-label": "Main content area, start typing to enter text.",
         class: "simple-editor",
+      },
+      handleDOMEvents: {
+        compositionstart: () => {
+          if (compositionFlushTimerRef.current !== null) {
+            window.clearTimeout(compositionFlushTimerRef.current)
+            compositionFlushTimerRef.current = null
+          }
+
+          isComposingRef.current = true
+          onCompositionChangeRef.current?.(true)
+          return false
+        },
+        compositionend: () => {
+          isComposingRef.current = false
+          onCompositionChangeRef.current?.(false)
+          compositionFlushTimerRef.current = window.setTimeout(() => {
+            compositionFlushTimerRef.current = null
+            flushPendingComposition()
+          }, 0)
+          return false
+        },
+        focus: () => {
+          isFocusedRef.current = true
+          setIsFocused(true)
+          return false
+        },
+        blur: () => {
+          isFocusedRef.current = false
+          setIsFocused(false)
+          return false
+        },
       },
     },
     extensions: [
@@ -284,16 +343,25 @@ export function SimpleEditor({
     editable: !disabled,
     onUpdate: ({ editor: currentEditor }) => {
       const nextMarkdown = currentEditor.getMarkdown()
-      const comparableMarkdown = normalizeMarkdownForComparison(nextMarkdown)
 
-      if (comparableMarkdown === lastMarkdownRef.current) {
+      if (isComposingRef.current) {
+        pendingMarkdownRef.current = nextMarkdown
         return
       }
 
-      lastMarkdownRef.current = comparableMarkdown
-      onChange(nextMarkdown)
+      emitMarkdownChange(nextMarkdown)
     },
   })
+
+  const flushPendingComposition = React.useCallback(() => {
+    if (!editor) {
+      return
+    }
+
+    const nextMarkdown = pendingMarkdownRef.current ?? editor.getMarkdown()
+    pendingMarkdownRef.current = null
+    emitMarkdownChange(nextMarkdown)
+  }, [editor, emitMarkdownChange])
 
   const rect = useCursorVisibility({
     editor,
@@ -311,7 +379,18 @@ export function SimpleEditor({
   React.useEffect(() => {
     const comparableValue = normalizeMarkdownForComparison(value)
 
-    if (!editor || comparableValue === lastMarkdownRef.current) {
+    if (!editor) {
+      return
+    }
+
+    const currentEditorValue = normalizeMarkdownForComparison(editor.getMarkdown())
+
+    if (comparableValue === currentEditorValue) {
+      lastMarkdownRef.current = comparableValue
+      return
+    }
+
+    if (isComposingRef.current || isFocusedRef.current || comparableValue === lastMarkdownRef.current) {
       return
     }
 
@@ -327,7 +406,18 @@ export function SimpleEditor({
     }
 
     lastMarkdownRef.current = comparableValue
-  }, [editor, value])
+  }, [editor, isFocused, value])
+
+  React.useEffect(() => () => {
+    if (compositionFlushTimerRef.current !== null) {
+      window.clearTimeout(compositionFlushTimerRef.current)
+    }
+
+    pendingMarkdownRef.current = null
+    isFocusedRef.current = false
+    isComposingRef.current = false
+    onCompositionChangeRef.current?.(false)
+  }, [])
 
   React.useEffect(() => {
     if (!isMobile && mobileView !== "main") {

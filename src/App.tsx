@@ -114,8 +114,8 @@ function isWorkspaceDiffTab(tab: WorkspaceDisplayTab | null | undefined): tab is
   return tab?.kind === 'diff'
 }
 
-function isTiptapAutosaveTab(tab: WorkspaceDisplayTab | WorkspaceFileTab | null | undefined): tab is WorkspaceFileTab {
-  return tab?.kind === 'file' && tab.editorKind === 'rich-text' && tab.viewMode === 'default'
+function isWorkspaceAutosaveTab(tab: WorkspaceDisplayTab | WorkspaceFileTab | null | undefined): tab is WorkspaceFileTab {
+  return tab?.kind === 'file' && tab.viewMode !== 'preview'
 }
 
 function createDiffTabId(filePath: string, scope: GitChangeScope) {
@@ -181,7 +181,7 @@ const TAB_STORAGE_PREFIX = 'writing-workspace:file-tabs:'
 const LEGACY_TAB_STORAGE_PREFIX = 'writing-workspace:editor-tabs:'
 const SETTINGS_TAB_ID = 'app://settings'
 const SETTINGS_TAB_PATH = 'app://settings'
-const TIPTAP_AUTO_SAVE_DELAY_MS = 1000
+const WORKSPACE_AUTO_SAVE_DELAY_MS = 1000
 const INTERNAL_SAVE_EVENT_TTL_MS = 2500
 
 type ResizePanel = 'left' | 'right'
@@ -471,11 +471,12 @@ function App() {
   const currentEditorKind = activeFileTab?.editorKind ?? null
   const currentFileViewMode = activeFileTab?.viewMode ?? null
   const currentFilePath = activeFileTab?.filePath ?? null
-  const activeTiptapAutosaveTab = isTiptapAutosaveTab(activeFileTab) ? activeFileTab : null
-  const tiptapAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const tiptapAutosaveTargetRef = useRef<{ content: string, filePath: string } | null>(null)
-  const tiptapAutosavePromiseRef = useRef<Promise<void> | null>(null)
-  const previousTiptapAutosavePathRef = useRef<string | null>(null)
+  const activeWorkspaceAutosaveTab = isWorkspaceAutosaveTab(activeFileTab) ? activeFileTab : null
+  const [isActiveEditorComposing, setIsActiveEditorComposing] = useState(false)
+  const workspaceAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const workspaceAutosaveTargetRef = useRef<{ content: string, filePath: string } | null>(null)
+  const workspaceAutosavePromiseRef = useRef<Promise<void> | null>(null)
+  const previousWorkspaceAutosavePathRef = useRef<string | null>(null)
   const internalWorkspaceSavePathsRef = useRef(new Set<string>())
   const internalWorkspaceSaveTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const dirtyTabs = useMemo(
@@ -764,13 +765,13 @@ function App() {
     return true
   }, [clearInternalWorkspaceSaveMarker])
 
-  const clearTiptapAutosaveTimer = useCallback(() => {
-    if (!tiptapAutosaveTimerRef.current) {
+  const clearWorkspaceAutosaveTimer = useCallback(() => {
+    if (!workspaceAutosaveTimerRef.current) {
       return
     }
 
-    clearTimeout(tiptapAutosaveTimerRef.current)
-    tiptapAutosaveTimerRef.current = null
+    clearTimeout(workspaceAutosaveTimerRef.current)
+    workspaceAutosaveTimerRef.current = null
   }, [])
 
   const persistWorkspaceFileContent = useCallback(async (
@@ -812,14 +813,14 @@ function App() {
     syncTabWithDisk,
   ])
 
-  const flushTiptapAutosave = useCallback(async (filePath?: string) => {
-    clearTiptapAutosaveTimer()
+  const flushWorkspaceAutosave = useCallback(async (filePath?: string) => {
+    clearWorkspaceAutosaveTimer()
 
-    if (tiptapAutosavePromiseRef.current) {
-      await tiptapAutosavePromiseRef.current
+    if (workspaceAutosavePromiseRef.current) {
+      await workspaceAutosavePromiseRef.current
     }
 
-    const targetFilePath = filePath ?? tiptapAutosaveTargetRef.current?.filePath
+    const targetFilePath = filePath ?? workspaceAutosaveTargetRef.current?.filePath
 
     if (!targetFilePath) {
       return false
@@ -827,15 +828,15 @@ function App() {
 
     const targetTab = useWorkspaceStore.getState().openTabs.find(
       (tab): tab is WorkspaceFileTab => (
-        isTiptapAutosaveTab(tab)
+        isWorkspaceAutosaveTab(tab)
         && tab.filePath === targetFilePath
         && tab.isDirty
       ),
     )
 
     if (!targetTab) {
-      if (tiptapAutosaveTargetRef.current?.filePath === targetFilePath) {
-        tiptapAutosaveTargetRef.current = null
+      if (workspaceAutosaveTargetRef.current?.filePath === targetFilePath) {
+        workspaceAutosaveTargetRef.current = null
       }
 
       return false
@@ -845,24 +846,24 @@ function App() {
       announce: false,
       syncMode: 'mark',
     })
-    tiptapAutosavePromiseRef.current = savePromise
+    workspaceAutosavePromiseRef.current = savePromise
 
     try {
       await savePromise
       return true
     } finally {
-      if (tiptapAutosavePromiseRef.current === savePromise) {
-        tiptapAutosavePromiseRef.current = null
+      if (workspaceAutosavePromiseRef.current === savePromise) {
+        workspaceAutosavePromiseRef.current = null
       }
 
-      if (tiptapAutosaveTargetRef.current?.filePath === targetTab.filePath) {
-        tiptapAutosaveTargetRef.current = null
+      if (workspaceAutosaveTargetRef.current?.filePath === targetTab.filePath) {
+        workspaceAutosaveTargetRef.current = null
       }
     }
-  }, [clearTiptapAutosaveTimer, persistWorkspaceFileContent])
+  }, [clearWorkspaceAutosaveTimer, persistWorkspaceFileContent])
 
   async function confirmDiscardDirtyTabs(reason: 'close' | 'switch-workspace') {
-    await flushTiptapAutosave()
+    await flushWorkspaceAutosave()
 
     const pendingDirtyTabs = getDirtyWorkspaceFileTabsSnapshot()
 
@@ -906,8 +907,8 @@ function App() {
       return false
     }
 
-    if (isTiptapAutosaveTab(targetTab) && targetTab.isDirty) {
-      await flushTiptapAutosave(targetTab.filePath)
+    if (isWorkspaceAutosaveTab(targetTab) && targetTab.isDirty) {
+      await flushWorkspaceAutosave(targetTab.filePath)
     }
 
     const latestTargetTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.id === tabId) ?? targetTab
@@ -939,7 +940,7 @@ function App() {
   }
 
   async function connectWorkspace(nextPath: string) {
-    await flushTiptapAutosave()
+    await flushWorkspaceAutosave()
     await window.appApi.stopWorkspaceWatch()
     await loadTree(nextPath)
     setCurrentPath(nextPath)
@@ -1317,13 +1318,28 @@ function App() {
     setStatusMessage(`${node.name} deleted`)
   }
 
-  async function handleSave() {
-    if (!currentFilePath) {
+  async function handleSave(options: { content?: string, filePath?: string, announce?: boolean } = {}) {
+    const targetFilePath = options.filePath ?? currentFilePath
+
+    if (!targetFilePath || isActiveEditorComposing) {
       return
     }
 
-    await persistWorkspaceFileContent(currentFilePath, currentFileContent, {
-      announce: true,
+    const targetContent = options.content
+      ?? (
+        targetFilePath === currentFilePath
+          ? currentFileContent
+          : useWorkspaceStore.getState().openTabs.find(
+            (tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.filePath === targetFilePath,
+          )?.content
+      )
+
+    if (typeof targetContent !== 'string') {
+      return
+    }
+
+    await persistWorkspaceFileContent(targetFilePath, targetContent, {
+      announce: options.announce ?? true,
       syncMode: 'mark',
     })
   }
@@ -1633,58 +1649,63 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const previousPath = previousTiptapAutosavePathRef.current
-    const nextPath = activeTiptapAutosaveTab?.filePath ?? null
+    setIsActiveEditorComposing(false)
+  }, [currentEditorKind, currentFilePath, currentFileViewMode])
+
+  useEffect(() => {
+    const previousPath = previousWorkspaceAutosavePathRef.current
+    const nextPath = activeWorkspaceAutosaveTab?.filePath ?? null
 
     if (previousPath && previousPath !== nextPath) {
       const previousTab = useWorkspaceStore.getState().openTabs.find(
-        (tab): tab is WorkspaceFileTab => isTiptapAutosaveTab(tab) && tab.filePath === previousPath,
+        (tab): tab is WorkspaceFileTab => isWorkspaceAutosaveTab(tab) && tab.filePath === previousPath,
       )
 
       if (previousTab?.isDirty) {
-        void flushTiptapAutosave(previousPath)
+        void flushWorkspaceAutosave(previousPath)
       }
     }
 
-    previousTiptapAutosavePathRef.current = nextPath
-  }, [activeTiptapAutosaveTab?.filePath, flushTiptapAutosave])
+    previousWorkspaceAutosavePathRef.current = nextPath
+  }, [activeWorkspaceAutosaveTab?.filePath, flushWorkspaceAutosave])
 
   useEffect(() => {
-    clearTiptapAutosaveTimer()
+    clearWorkspaceAutosaveTimer()
 
-    if (!activeTiptapAutosaveTab?.isDirty) {
-      if (!activeTiptapAutosaveTab) {
-        tiptapAutosaveTargetRef.current = null
+    if (!activeWorkspaceAutosaveTab?.isDirty || isActiveEditorComposing) {
+      if (!activeWorkspaceAutosaveTab) {
+        workspaceAutosaveTargetRef.current = null
       }
       return
     }
 
-    tiptapAutosaveTargetRef.current = {
-      content: activeTiptapAutosaveTab.content,
-      filePath: activeTiptapAutosaveTab.filePath,
+    workspaceAutosaveTargetRef.current = {
+      content: activeWorkspaceAutosaveTab.content,
+      filePath: activeWorkspaceAutosaveTab.filePath,
     }
-    tiptapAutosaveTimerRef.current = setTimeout(() => {
-      void flushTiptapAutosave(activeTiptapAutosaveTab.filePath)
-    }, TIPTAP_AUTO_SAVE_DELAY_MS)
+    workspaceAutosaveTimerRef.current = setTimeout(() => {
+      void flushWorkspaceAutosave(activeWorkspaceAutosaveTab.filePath)
+    }, WORKSPACE_AUTO_SAVE_DELAY_MS)
 
-    return clearTiptapAutosaveTimer
+    return clearWorkspaceAutosaveTimer
   }, [
-    activeTiptapAutosaveTab?.content,
-    activeTiptapAutosaveTab?.filePath,
-    activeTiptapAutosaveTab?.isDirty,
-    clearTiptapAutosaveTimer,
-    flushTiptapAutosave,
+    activeWorkspaceAutosaveTab?.content,
+    activeWorkspaceAutosaveTab?.filePath,
+    activeWorkspaceAutosaveTab?.isDirty,
+    clearWorkspaceAutosaveTimer,
+    flushWorkspaceAutosave,
+    isActiveEditorComposing,
   ])
 
   useEffect(() => () => {
-    clearTiptapAutosaveTimer()
-    void flushTiptapAutosave()
+    clearWorkspaceAutosaveTimer()
+    void flushWorkspaceAutosave()
     internalWorkspaceSaveTimersRef.current.forEach((timer) => {
       clearTimeout(timer)
     })
     internalWorkspaceSaveTimersRef.current.clear()
     internalWorkspaceSavePathsRef.current.clear()
-  }, [clearTiptapAutosaveTimer, flushTiptapAutosave])
+  }, [clearWorkspaceAutosaveTimer, flushWorkspaceAutosave])
 
   useEffect(() => {
     const unsubscribe = window.appApi.onWorkspaceChanged(async (event) => {
@@ -2355,6 +2376,7 @@ function App() {
 
             {activeDiffTab ? (
               <GitDiffEditor
+                key={activeDiffTab.id}
                 diff={activeDiffTab.diff}
                 hasDirtyRelatedFileTab={openTabs.some((tab) => (
                   tab.kind === 'file'
@@ -2378,6 +2400,7 @@ function App() {
 
             {activeFileTab && currentEditorKind === 'rich-text' && currentFileViewMode === 'default' ? (
               <WritingEditor
+                key={activeFileTab.id}
                 disabled={!currentFilePath}
                 onChange={(nextValue) => {
                   if (!currentFilePath) {
@@ -2386,6 +2409,7 @@ function App() {
 
                   updateTabContent(currentFilePath, nextValue)
                 }}
+                onCompositionChange={setIsActiveEditorComposing}
                 value={currentFileContent}
                 theme={theme}
               />
@@ -2403,10 +2427,18 @@ function App() {
               || (currentEditorKind === 'rich-text' && currentFileViewMode === 'code')
             ) ? (
               <CodeEditor
+                key={activeFileTab.id}
                 disabled={false}
                 filePath={activeFileTab.filePath}
                 onChange={(nextValue) => {
                   updateTabContent(activeFileTab.filePath, nextValue)
+                }}
+                onCompositionChange={setIsActiveEditorComposing}
+                onSave={(content) => {
+                  void handleSave({
+                    content,
+                    filePath: activeFileTab.filePath,
+                  })
                 }}
                 value={currentFileContent}
                 theme={theme}

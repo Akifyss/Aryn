@@ -182,12 +182,17 @@ function getBlockActionsDisabledReason(
   diff: GitFileDiffResult,
   options: {
     hasDirtyFileTab: boolean
+    isComposing: boolean
     isApplyingAction: boolean
     isSaving: boolean
   },
 ) {
   if (options.isSaving || options.isApplyingAction) {
     return 'Wait for the current file action to finish first.'
+  }
+
+  if (options.isComposing) {
+    return 'Finish the current IME composition first.'
   }
 
   if (options.hasDirtyFileTab) {
@@ -201,12 +206,16 @@ function createDiffExtensions({
   editable,
   filePath,
   onChange,
+  onCompositionChange,
+  onFocusChange,
   onSave,
   wrapLines,
 }: {
   editable: boolean
   filePath: string
   onChange: (content: string) => void
+  onCompositionChange: (isComposing: boolean) => void
+  onFocusChange: (isFocused: boolean) => void
   onSave: () => void
   wrapLines: boolean
 }) {
@@ -251,6 +260,26 @@ function createDiffExtensions({
         onChange(update.state.doc.toString())
       }
     }),
+    EditorView.domEventHandlers({
+      compositionstart: () => {
+        onCompositionChange(true)
+        return false
+      },
+      compositionend: () => {
+        window.setTimeout(() => {
+          onCompositionChange(false)
+        }, 0)
+        return false
+      },
+      focus: () => {
+        onFocusChange(true)
+        return false
+      },
+      blur: () => {
+        onFocusChange(false)
+        return false
+      },
+    }),
   ]
 }
 
@@ -261,6 +290,8 @@ function RichTextDiffRenderer({
   isEditable,
   onBlockAction,
   onDraftChange,
+  onCompositionChange,
+  isComposing,
   onSave,
   viewMode,
 }: {
@@ -270,6 +301,8 @@ function RichTextDiffRenderer({
   isEditable: boolean
   onBlockAction: (selection: GitDiffSelection, action: GitDiffBlockAction) => void
   onDraftChange: (content: string) => void
+  onCompositionChange: (isComposing: boolean) => void
+  isComposing: boolean
   onSave: () => void
   viewMode: DiffViewMode
 }) {
@@ -278,7 +311,9 @@ function RichTextDiffRenderer({
   const unifiedViewRef = useRef<EditorView | null>(null)
   const onBlockActionRef = useRef(onBlockAction)
   const onDraftChangeRef = useRef(onDraftChange)
+  const onCompositionChangeRef = useRef(onCompositionChange)
   const onSaveRef = useRef(onSave)
+  const [isModifiedFocused, setIsModifiedFocused] = useState(false)
   const areBlockActionsEnabledRef = useRef(areBlockActionsEnabled)
   const blockActionsDisabledReasonRef = useRef(blockActionsDisabledReason)
 
@@ -289,6 +324,10 @@ function RichTextDiffRenderer({
   useEffect(() => {
     onDraftChangeRef.current = onDraftChange
   }, [onDraftChange])
+
+  useEffect(() => {
+    onCompositionChangeRef.current = onCompositionChange
+  }, [onCompositionChange])
 
   useEffect(() => {
     onSaveRef.current = onSave
@@ -348,6 +387,10 @@ function RichTextDiffRenderer({
       return
     }
 
+    if (isModifiedFocused || isComposing) {
+      return
+    }
+
     splitView.b.dispatch({
       changes: {
         from: 0,
@@ -355,7 +398,7 @@ function RichTextDiffRenderer({
         insert: diff.modifiedContent,
       },
     })
-  }, [diff.modifiedContent])
+  }, [diff.modifiedContent, isComposing, isModifiedFocused])
 
   useEffect(() => {
     const unifiedView = unifiedViewRef.current
@@ -370,6 +413,10 @@ function RichTextDiffRenderer({
       return
     }
 
+    if (isModifiedFocused || isComposing) {
+      return
+    }
+
     unifiedView.dispatch({
       changes: {
         from: 0,
@@ -377,7 +424,7 @@ function RichTextDiffRenderer({
         insert: diff.modifiedContent,
       },
     })
-  }, [diff.modifiedContent])
+  }, [diff.modifiedContent, isComposing, isModifiedFocused])
 
   useEffect(() => {
     const container = containerRef.current
@@ -533,6 +580,8 @@ function RichTextDiffRenderer({
             editable: false,
             filePath: diff.change.path,
             onChange: () => {},
+            onCompositionChange: () => {},
+            onFocusChange: () => {},
             onSave: () => {},
             wrapLines: diff.editorKind === 'rich-text',
           }),
@@ -545,6 +594,10 @@ function RichTextDiffRenderer({
             onChange: (content) => {
               onDraftChangeRef.current(content)
             },
+            onCompositionChange: (nextValue) => {
+              onCompositionChangeRef.current(nextValue)
+            },
+            onFocusChange: setIsModifiedFocused,
             onSave: () => {
               onSaveRef.current()
             },
@@ -581,6 +634,10 @@ function RichTextDiffRenderer({
           onChange: (content) => {
             onDraftChangeRef.current(content)
           },
+          onCompositionChange: (nextValue) => {
+            onCompositionChangeRef.current(nextValue)
+          },
+          onFocusChange: setIsModifiedFocused,
           onSave: () => {
             onSaveRef.current()
           },
@@ -648,6 +705,7 @@ function CodeDiffRenderer({
   isEditable,
   onBlockAction,
   onDraftChange,
+  onCompositionChange,
   onSave,
   theme,
   viewMode,
@@ -659,16 +717,26 @@ function CodeDiffRenderer({
   isEditable: boolean
   onBlockAction: (selection: GitDiffSelection, action: GitDiffBlockAction) => void
   onDraftChange: (content: string) => void
-  onSave: () => void
+  onCompositionChange: (isComposing: boolean) => void
+  onSave: (content?: string) => void
   theme: MonacoThemePreference
   viewMode: DiffViewMode
 }) {
   const diffEditorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null)
   const diffEditorDisposablesRef = useRef<monaco.IDisposable[]>([])
+  const initialOriginalContentRef = useRef(diff.originalExists ? diff.originalContent : '')
+  const initialModifiedContentRef = useRef(diff.modifiedExists ? diff.modifiedContent : '')
   const latestDraftRef = useRef(draftContent)
+  const onDraftChangeRef = useRef(onDraftChange)
+  const onCompositionChangeRef = useRef(onCompositionChange)
+  const pendingDraftRef = useRef<string | null>(null)
+  const isComposingRef = useRef(false)
+  const isModifiedFocusedRef = useRef(false)
+  const isApplyingExternalDraftRef = useRef(false)
   const onSaveRef = useRef(onSave)
   const [overlayVersion, setOverlayVersion] = useState(0)
   const [lineChanges, setLineChanges] = useState<readonly MonacoLineChange[]>([])
+  const [isModifiedFocused, setIsModifiedFocused] = useState(false)
   const language = useMemo(() => getCodeLanguage(diff.change.path), [diff.change.path])
   const monacoTheme = useMemo(() => resolveMonacoTheme(theme), [theme])
   const editorOptions = useMemo<MonacoDiffEditorOptions>(() => ({
@@ -681,12 +749,25 @@ function CodeDiffRenderer({
   }), [isEditable, viewMode])
 
   useEffect(() => {
-    latestDraftRef.current = draftContent
-  }, [draftContent])
+    onDraftChangeRef.current = onDraftChange
+  }, [onDraftChange])
+
+  useEffect(() => {
+    onCompositionChangeRef.current = onCompositionChange
+  }, [onCompositionChange])
 
   useEffect(() => {
     onSaveRef.current = onSave
   }, [onSave])
+
+  const emitDraftChange = useCallback((nextValue: string) => {
+    if (nextValue === latestDraftRef.current) {
+      return
+    }
+
+    latestDraftRef.current = nextValue
+    onDraftChangeRef.current(nextValue)
+  }, [])
 
   const syncLineChanges = useCallback(() => {
     const editor = diffEditorRef.current
@@ -712,7 +793,7 @@ function CodeDiffRenderer({
     originalEditor.updateOptions({ tabSize: 2 })
     modifiedEditor.updateOptions({ tabSize: 2 })
     modifiedEditor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
-      void onSaveRef.current()
+      void onSaveRef.current(modifiedEditor.getValue())
     })
 
     diffEditorDisposablesRef.current = [
@@ -731,21 +812,49 @@ function CodeDiffRenderer({
       modifiedEditor.onDidLayoutChange(() => {
         setOverlayVersion((current) => current + 1)
       }),
+      modifiedEditor.onDidFocusEditorText(() => {
+        isModifiedFocusedRef.current = true
+        setIsModifiedFocused(true)
+      }),
+      modifiedEditor.onDidBlurEditorText(() => {
+        isModifiedFocusedRef.current = false
+        setIsModifiedFocused(false)
+      }),
+      modifiedEditor.onDidCompositionStart(() => {
+        isComposingRef.current = true
+        onCompositionChangeRef.current(true)
+      }),
+      modifiedEditor.onDidCompositionEnd(() => {
+        isComposingRef.current = false
+        onCompositionChangeRef.current(false)
+
+        const pendingDraft = pendingDraftRef.current
+        pendingDraftRef.current = null
+
+        if (pendingDraft !== null) {
+          emitDraftChange(pendingDraft)
+        }
+      }),
     ]
 
     diffEditorDisposablesRef.current.push(modifiedEditor.onDidChangeModelContent(() => {
-      const nextValue = modifiedEditor.getValue()
-
-      if (nextValue === latestDraftRef.current) {
+      if (isApplyingExternalDraftRef.current) {
         return
       }
 
-      latestDraftRef.current = nextValue
-      onDraftChange(nextValue)
+      const nextValue = modifiedEditor.getValue()
+
+      if (isComposingRef.current) {
+        pendingDraftRef.current = nextValue
+        return
+      }
+
+      pendingDraftRef.current = null
+      emitDraftChange(nextValue)
     }))
 
     syncLineChanges()
-  }, [onDraftChange, syncLineChanges])
+  }, [emitDraftChange, syncLineChanges])
 
   useEffect(() => () => {
     diffEditorDisposablesRef.current.forEach((disposable) => {
@@ -753,7 +862,68 @@ function CodeDiffRenderer({
     })
     diffEditorDisposablesRef.current = []
     diffEditorRef.current = null
+    pendingDraftRef.current = null
+    isComposingRef.current = false
+    isModifiedFocusedRef.current = false
+    isApplyingExternalDraftRef.current = false
+    onCompositionChangeRef.current(false)
   }, [])
+
+  useEffect(() => {
+    const editor = diffEditorRef.current
+    const originalEditor = editor?.getOriginalEditor()
+    const model = originalEditor?.getModel()
+    const nextOriginalContent = diff.originalExists ? diff.originalContent : ''
+
+    if (!originalEditor || !model || model.getValue() === nextOriginalContent) {
+      return
+    }
+
+    originalEditor.executeEdits('external-sync', [{
+      forceMoveMarkers: true,
+      range: model.getFullModelRange(),
+      text: nextOriginalContent,
+    }])
+    originalEditor.pushUndoStop()
+    syncLineChanges()
+  }, [diff.originalContent, diff.originalExists, syncLineChanges])
+
+  useEffect(() => {
+    const editor = diffEditorRef.current
+    const modifiedEditor = editor?.getModifiedEditor()
+    const model = modifiedEditor?.getModel()
+    const nextDraftContent = diff.modifiedExists ? draftContent : ''
+
+    if (!modifiedEditor || !model) {
+      return
+    }
+
+    const currentModelValue = model.getValue()
+
+    if (currentModelValue === nextDraftContent) {
+      latestDraftRef.current = nextDraftContent
+      return
+    }
+
+    if (isModifiedFocusedRef.current || isComposingRef.current) {
+      return
+    }
+
+    isApplyingExternalDraftRef.current = true
+
+    try {
+      modifiedEditor.executeEdits('external-sync', [{
+        forceMoveMarkers: true,
+        range: model.getFullModelRange(),
+        text: nextDraftContent,
+      }])
+      modifiedEditor.pushUndoStop()
+      latestDraftRef.current = nextDraftContent
+      syncLineChanges()
+    } finally {
+      isApplyingExternalDraftRef.current = false
+    }
+  }, [diff.modifiedExists, draftContent, isModifiedFocused, syncLineChanges])
 
   useEffect(() => {
     syncLineChanges()
@@ -843,10 +1013,10 @@ function CodeDiffRenderer({
         className='git-diff-monaco-editor'
         height='100%'
         language={language}
-        modified={diff.modifiedExists ? draftContent : ''}
+        modified={initialModifiedContentRef.current}
         modifiedModelPath={`git-diff://modified/${encodedPath}?scope=${diff.change.scope}`}
         options={editorOptions}
-        original={diff.originalExists ? diff.originalContent : ''}
+        original={initialOriginalContentRef.current}
         originalModelPath={`git-diff://original/${encodedPath}?scope=${diff.change.scope}`}
         theme={monacoTheme}
         onMount={handleMount}
@@ -893,18 +1063,21 @@ export function GitDiffEditor({
   const draftContentRef = useRef(diff.modifiedContent)
   const latestModifiedContentRef = useRef(diff.modifiedContent)
   const [isApplyingBlockAction, setIsApplyingBlockAction] = useState(false)
+  const [isComposing, setIsComposing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const isSavingRef = useRef(false)
+  const isComposingRef = useRef(false)
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isEditable = diff.change.scope === 'unstaged' && diff.modifiedExists
   const isDirty = draftContent !== diff.modifiedContent
   const blockActionsDisabledReason = getBlockActionsDisabledReason(diff, {
     hasDirtyFileTab: hasDirtyRelatedFileTab,
+    isComposing,
     isApplyingAction: isApplyingBlockAction,
     isSaving,
   })
   const areBlockActionsEnabled = blockActionsDisabledReason === null
-  const areFileGitActionsEnabled = !(isSaving || isApplyingBlockAction || (
+  const areFileGitActionsEnabled = !(isSaving || isApplyingBlockAction || isComposing || (
     diff.change.scope === 'unstaged' && (isDirty || hasDirtyRelatedFileTab)
   ))
 
@@ -926,6 +1099,16 @@ export function GitDiffEditor({
     isSavingRef.current = isSaving
   }, [isSaving])
 
+  useEffect(() => {
+    setIsComposing(false)
+    isComposingRef.current = false
+  }, [diff.change.path, diff.change.scope])
+
+  const handleCompositionChange = useCallback((nextValue: boolean) => {
+    isComposingRef.current = nextValue
+    setIsComposing((current) => current === nextValue ? current : nextValue)
+  }, [])
+
   const handleDraftChange = useCallback((content: string) => {
     setDraftContent((current) => current === content ? current : content)
   }, [])
@@ -940,7 +1123,12 @@ export function GitDiffEditor({
   const handleSave = useCallback(async () => {
     clearAutoSaveTimer()
 
-    if (!isEditable || isSavingRef.current || draftContentRef.current === latestModifiedContentRef.current) {
+    if (
+      !isEditable
+      || isComposingRef.current
+      || isSavingRef.current
+      || draftContentRef.current === latestModifiedContentRef.current
+    ) {
       return
     }
 
@@ -956,8 +1144,17 @@ export function GitDiffEditor({
     }
   }, [clearAutoSaveTimer, diff.change.path, isEditable, onSaveEditedFile])
 
+  const handleSaveRequest = useCallback(async (content?: string) => {
+    if (typeof content === 'string') {
+      setDraftContent((current) => current === content ? current : content)
+      draftContentRef.current = content
+    }
+
+    await handleSave()
+  }, [handleSave])
+
   useEffect(() => {
-    if (!isEditable || isSaving || !isDirty) {
+    if (!isEditable || isComposing || isSaving || !isDirty) {
       clearAutoSaveTimer()
       return
     }
@@ -967,15 +1164,14 @@ export function GitDiffEditor({
     }, DIFF_AUTO_SAVE_DELAY_MS)
 
     return clearAutoSaveTimer
-  }, [clearAutoSaveTimer, handleSave, isDirty, isEditable, isSaving])
+  }, [clearAutoSaveTimer, handleSave, isComposing, isDirty, isEditable, isSaving])
 
   useEffect(() => () => {
-    if (autoSaveTimerRef.current && isEditable && draftContentRef.current !== latestModifiedContentRef.current) {
-      void handleSave()
-      return
-    }
-
     clearAutoSaveTimer()
+
+    if (isEditable && draftContentRef.current !== latestModifiedContentRef.current) {
+      void handleSave()
+    }
   }, [clearAutoSaveTimer, handleSave, isEditable])
 
   const handleBlockAction = useCallback(async (selection: GitDiffSelection, action: GitDiffBlockAction) => {
@@ -1080,13 +1276,15 @@ export function GitDiffEditor({
             ...diff,
             modifiedContent: draftContent,
           }}
+          isComposing={isComposing}
           isEditable={isEditable}
           onBlockAction={(selection, action) => {
             void handleBlockAction(selection, action)
           }}
+          onCompositionChange={handleCompositionChange}
           onDraftChange={handleDraftChange}
           onSave={() => {
-            void handleSave()
+            void handleSaveRequest()
           }}
           viewMode={viewMode}
         />
@@ -1100,9 +1298,10 @@ export function GitDiffEditor({
           onBlockAction={(selection, action) => {
             void handleBlockAction(selection, action)
           }}
+          onCompositionChange={handleCompositionChange}
           onDraftChange={handleDraftChange}
-          onSave={() => {
-            void handleSave()
+          onSave={(content) => {
+            void handleSaveRequest(content)
           }}
           theme={theme}
           viewMode={viewMode}

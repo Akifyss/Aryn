@@ -196,19 +196,37 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         : tab
     )),
   })),
-  markTabSaved: (path, savedContent) => set((state) => ({
-    openTabs: state.openTabs.map((tab) => (
-      tab.kind === 'file' && tab.filePath === path
-        ? {
-          ...tab,
-          content: savedContent,
-          exists: true,
-          isDirty: false,
-          savedContent,
-        }
-        : tab
-    )),
-  })),
+  markTabSaved: (path, savedContent) => set((state) => {
+    let didChange = false
+
+    const openTabs = state.openTabs.map((tab) => {
+      if (tab.kind !== 'file' || tab.filePath !== path) {
+        return tab
+      }
+
+      const nextTab = {
+        ...tab,
+        content: savedContent,
+        exists: true,
+        isDirty: false,
+        savedContent,
+      }
+
+      if (
+        tab.content === nextTab.content
+        && tab.exists === nextTab.exists
+        && tab.isDirty === nextTab.isDirty
+        && tab.savedContent === nextTab.savedContent
+      ) {
+        return tab
+      }
+
+      didChange = true
+      return nextTab
+    })
+
+    return didChange ? { openTabs } : state
+  }),
   moveTab: (movingId, targetId, position) => set((state) => {
     const nextTabs = reorderWorkspaceTabs(state.openTabs, movingId, targetId, position)
 
@@ -301,28 +319,59 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   resetOpenTabs: () => set({ activeTabId: null, openTabs: [] }),
   setCurrentPath: (currentPath) => set({ currentPath }),
   setTree: (tree) => set({ tree }),
-  syncTabWithDisk: (path, nextContent) => set((state) => ({
-    openTabs: state.openTabs.map((tab) => (
-      tab.kind === 'file' && tab.filePath === path
-        ? {
-          ...tab,
-          content: nextContent,
-          exists: true,
-          isDirty: false,
-          savedContent: nextContent,
-        }
-        : tab
-    )),
-  })),
-  updateTabContent: (path, content) => set((state) => ({
-    openTabs: state.openTabs.map((tab) => (
-      tab.kind === 'file' && tab.filePath === path
-        ? {
-          ...tab,
-          content,
-          isDirty: content !== tab.savedContent,
-        }
-        : tab
-    )),
-  })),
+  syncTabWithDisk: (path, nextContent) => set((state) => {
+    let didChange = false
+
+    const openTabs = state.openTabs.map((tab) => {
+      if (tab.kind !== 'file' || tab.filePath !== path) {
+        return tab
+      }
+
+      const nextTab = {
+        ...tab,
+        content: nextContent,
+        exists: true,
+        isDirty: false,
+        savedContent: nextContent,
+      }
+
+      if (
+        tab.content === nextTab.content
+        && tab.exists === nextTab.exists
+        && tab.isDirty === nextTab.isDirty
+        && tab.savedContent === nextTab.savedContent
+      ) {
+        return tab
+      }
+
+      didChange = true
+      return nextTab
+    })
+
+    return didChange ? { openTabs } : state
+  }),
+  updateTabContent: (path, content) => set((state) => {
+    let didChange = false
+
+    const openTabs = state.openTabs.map((tab) => {
+      if (tab.kind !== 'file' || tab.filePath !== path) {
+        return tab
+      }
+
+      const nextIsDirty = content !== tab.savedContent
+
+      if (tab.content === content && tab.isDirty === nextIsDirty) {
+        return tab
+      }
+
+      didChange = true
+      return {
+        ...tab,
+        content,
+        isDirty: nextIsDirty,
+      }
+    })
+
+    return didChange ? { openTabs } : state
+  }),
 }))
