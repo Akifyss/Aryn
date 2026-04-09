@@ -391,7 +391,7 @@ export function GitDiffEditor({
   onUnstageChange: (change: GitChangeItem) => void
   theme?: MonacoThemePreference
 }) {
-  const defaultMode = diff.editorKind === 'rich-text' ? 'unified' : 'split'
+  const defaultMode: DiffViewMode = 'split'
   const [viewMode, setViewMode] = useState<DiffViewMode>(defaultMode)
   const [draftContent, setDraftContent] = useState(diff.modifiedContent)
   const draftContentRef = useRef(diff.modifiedContent)
