@@ -237,6 +237,7 @@ describe('useWorkspaceStore', () => {
     })
 
     store.openDiffTab({
+      draftContent: null,
       diff: {
         change: {
           kind: 'modified',
@@ -375,6 +376,7 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({ content: 'draft', editorKind: 'rich-text', filePath: 'C:/workspace/draft.md' })
     store.openDiffTab({
+      draftContent: null,
       diff: {
         change: {
           kind: 'modified',
@@ -415,9 +417,130 @@ describe('useWorkspaceStore', () => {
       diffTabId,
     ])
     expect(nextTabs[2]).toMatchObject({
+      draftContent: null,
       id: diffTabId,
       kind: 'diff',
       title: 'draft.md',
     })
+  })
+
+  it('tracks diff tab draft content as a dirty state', () => {
+    const store = useWorkspaceStore.getState()
+    const diffTabId = createDiffTabId('C:/workspace/file.md', 'unstaged')
+
+    store.openDiffTab({
+      draftContent: null,
+      diff: {
+        change: {
+          kind: 'modified',
+          originalPath: null,
+          path: 'C:/workspace/file.md',
+          relativePath: 'file.md',
+          scope: 'unstaged',
+          statusCode: 'M',
+        },
+        editorKind: 'rich-text',
+        modifiedContent: 'saved',
+        modifiedExists: true,
+        modifiedLabel: 'Working tree',
+        originalContent: 'base',
+        originalExists: true,
+        originalLabel: 'Index',
+        repositoryRootPath: 'C:/workspace',
+      },
+      exists: true,
+      filePath: diffTabId,
+      id: diffTabId,
+      isDirty: false,
+      kind: 'diff',
+      title: 'file.md',
+    })
+
+    store.updateDiffTabDraft(diffTabId, 'saved + local')
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      draftContent: 'saved + local',
+      isDirty: true,
+      kind: 'diff',
+    })
+
+    store.markDiffTabSaved(diffTabId, 'saved + local')
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      draftContent: null,
+      isDirty: false,
+      kind: 'diff',
+    })
+  })
+
+  it('preserves a dirty diff draft when refreshed from Git state', () => {
+    const store = useWorkspaceStore.getState()
+    const diffTabId = createDiffTabId('C:/workspace/file.md', 'unstaged')
+
+    store.openDiffTab({
+      draftContent: null,
+      diff: {
+        change: {
+          kind: 'modified',
+          originalPath: null,
+          path: 'C:/workspace/file.md',
+          relativePath: 'file.md',
+          scope: 'unstaged',
+          statusCode: 'M',
+        },
+        editorKind: 'rich-text',
+        modifiedContent: 'saved',
+        modifiedExists: true,
+        modifiedLabel: 'Working tree',
+        originalContent: 'base',
+        originalExists: true,
+        originalLabel: 'Index',
+        repositoryRootPath: 'C:/workspace',
+      },
+      exists: true,
+      filePath: diffTabId,
+      id: diffTabId,
+      isDirty: false,
+      kind: 'diff',
+      title: 'file.md',
+    })
+
+    store.updateDiffTabDraft(diffTabId, 'saved + local')
+    store.openDiffTab({
+      draftContent: null,
+      diff: {
+        change: {
+          kind: 'modified',
+          originalPath: null,
+          path: 'C:/workspace/file.md',
+          relativePath: 'file.md',
+          scope: 'unstaged',
+          statusCode: 'M',
+        },
+        editorKind: 'rich-text',
+        modifiedContent: 'saved from disk',
+        modifiedExists: true,
+        modifiedLabel: 'Working tree',
+        originalContent: 'base',
+        originalExists: true,
+        originalLabel: 'Index',
+        repositoryRootPath: 'C:/workspace',
+      },
+      exists: true,
+      filePath: diffTabId,
+      id: diffTabId,
+      isDirty: false,
+      kind: 'diff',
+      title: 'file.md',
+    }, false)
+
+    const nextTab = useWorkspaceStore.getState().openTabs[0]
+    expect(nextTab).toMatchObject({
+      draftContent: 'saved + local',
+      isDirty: true,
+      kind: 'diff',
+    })
+    if (nextTab.kind !== 'diff') {
+      throw new Error('Expected a diff tab')
+    }
+    expect(nextTab.diff.modifiedContent).toBe('saved from disk')
   })
 })

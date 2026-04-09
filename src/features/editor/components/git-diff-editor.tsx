@@ -1040,18 +1040,22 @@ function CodeDiffRenderer({
 
 export function GitDiffEditor({
   diff,
+  draftContent: initialDraftContent,
   hasDirtyRelatedFileTab = false,
   onApplyBlockAction,
   onDiscardChange,
+  onDraftChange: onDraftContentChange,
   onSaveEditedFile,
   onStageChange,
   onUnstageChange,
   theme = 'auto',
 }: {
   diff: GitFileDiffResult
+  draftContent: string
   hasDirtyRelatedFileTab?: boolean
   onApplyBlockAction: (change: GitChangeItem, selection: GitDiffSelection, action: GitDiffBlockAction) => Promise<void>
   onDiscardChange: (change: GitChangeItem) => void
+  onDraftChange: (content: string) => void
   onSaveEditedFile: (filePath: string, content: string) => Promise<void>
   onStageChange: (change: GitChangeItem) => void
   onUnstageChange: (change: GitChangeItem) => void
@@ -1059,9 +1063,10 @@ export function GitDiffEditor({
 }) {
   const defaultMode: DiffViewMode = 'split'
   const [viewMode, setViewMode] = useState<DiffViewMode>(defaultMode)
-  const [draftContent, setDraftContent] = useState(diff.modifiedContent)
-  const draftContentRef = useRef(diff.modifiedContent)
+  const [draftContent, setDraftContent] = useState(initialDraftContent)
+  const draftContentRef = useRef(initialDraftContent)
   const latestModifiedContentRef = useRef(diff.modifiedContent)
+  const onDraftContentChangeRef = useRef(onDraftContentChange)
   const [isApplyingBlockAction, setIsApplyingBlockAction] = useState(false)
   const [isComposing, setIsComposing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -1086,13 +1091,21 @@ export function GitDiffEditor({
   }, [defaultMode, diff.change.path, diff.change.scope])
 
   useEffect(() => {
-    setDraftContent(diff.modifiedContent)
-    draftContentRef.current = diff.modifiedContent
+    setDraftContent((current) => current === initialDraftContent ? current : initialDraftContent)
+    draftContentRef.current = initialDraftContent
     latestModifiedContentRef.current = diff.modifiedContent
-  }, [diff.change.path, diff.change.scope, diff.modifiedContent])
+  }, [diff.change.path, diff.change.scope, diff.modifiedContent, initialDraftContent])
 
   useEffect(() => {
     draftContentRef.current = draftContent
+  }, [draftContent])
+
+  useEffect(() => {
+    onDraftContentChangeRef.current = onDraftContentChange
+  }, [onDraftContentChange])
+
+  useEffect(() => {
+    onDraftContentChangeRef.current(draftContent)
   }, [draftContent])
 
   useEffect(() => {

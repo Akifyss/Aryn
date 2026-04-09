@@ -377,7 +377,7 @@ export function FileTabs({
           const title = [
             tab.kind === 'diff' ? tab.diff.change.path : tab.filePath,
             !tab.exists ? 'Missing from workspace. Save to recreate it.' : null,
-            tab.kind === 'file' && tab.isDirty ? 'Unsaved changes' : null,
+            tab.isDirty ? 'Unsaved changes' : null,
           ]
             .filter(Boolean)
             .join('\n')
@@ -388,7 +388,7 @@ export function FileTabs({
               ref={(element) => {
                 tabContainerRefs.current[tab.id] = element
               }}
-              className={`file-tab${isActive ? ' is-active' : ''}${tab.kind === 'file' && tab.isDirty ? ' is-dirty' : ''}${tab.exists ? '' : ' is-missing'}${draggingTabId === tab.id ? ' is-drag-source' : ''}`}
+              className={`file-tab${isActive ? ' is-active' : ''}${tab.isDirty ? ' is-dirty' : ''}${tab.exists ? '' : ' is-missing'}${draggingTabId === tab.id ? ' is-drag-source' : ''}`}
               data-active={isActive ? 'true' : 'false'}
               data-reorderable={tab.kind === 'settings' ? 'false' : 'true'}
               data-tab-id={tab.id}

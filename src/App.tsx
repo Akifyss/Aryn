@@ -295,6 +295,7 @@ function toStoredWorkspaceTab(
 function createDiffTab(change: GitChangeItem, scope: GitChangeScope, diff: Awaited<ReturnType<typeof window.appApi.getGitFileDiff>>): WorkspaceDiffTab {
   const id = createDiffTabId(change.path, scope)
   return {
+    draftContent: null,
     diff,
     exists: true,
     filePath: id,
@@ -420,6 +421,7 @@ function App() {
   const activateTab = useWorkspaceStore((state) => state.activateTab)
   const closeTab = useWorkspaceStore((state) => state.closeTab)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
+  const markDiffTabSaved = useWorkspaceStore((state) => state.markDiffTabSaved)
   const markTabMissing = useWorkspaceStore((state) => state.markTabMissing)
   const markTabSaved = useWorkspaceStore((state) => state.markTabSaved)
   const moveTab = useWorkspaceStore((state) => state.moveTab)
@@ -433,6 +435,7 @@ function App() {
   const setTree = useWorkspaceStore((state) => state.setTree)
   const syncTabWithDisk = useWorkspaceStore((state) => state.syncTabWithDisk)
   const tree = useWorkspaceStore((state) => state.tree)
+  const updateDiffTabDraft = useWorkspaceStore((state) => state.updateDiffTabDraft)
   const updateTabContent = useWorkspaceStore((state) => state.updateTabContent)
   const loadTree = useCallback(async (rootPath: string) => {
     const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
@@ -444,6 +447,7 @@ function App() {
   )
   const activeFileTab = isWorkspaceFileTab(activeTab) ? activeTab : null
   const activeDiffTab = isWorkspaceDiffTab(activeTab) ? activeTab : null
+  const activeDiffDraftContent = activeDiffTab?.draftContent ?? activeDiffTab?.diff.modifiedContent ?? ''
   const displayTabs = useMemo<WorkspaceDisplayTab[]>(
     () => {
       if (!isSettingsTabOpen) {
@@ -479,10 +483,6 @@ function App() {
   const previousWorkspaceAutosavePathRef = useRef<string | null>(null)
   const internalWorkspaceSavePathsRef = useRef(new Set<string>())
   const internalWorkspaceSaveTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  const dirtyTabs = useMemo(
-    () => openTabs.filter((tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.isDirty),
-    [openTabs],
-  )
   const rootFileNames = useMemo(
     () => tree.filter((node) => node.kind === 'file').map((node) => node.name),
     [tree],
@@ -525,9 +525,9 @@ function App() {
     return tab?.kind === 'file' ? tab.filePath : null
   }
 
-  function getDirtyWorkspaceFileTabsSnapshot() {
+  function getDirtyWorkspaceTabsSnapshot() {
     return useWorkspaceStore.getState().openTabs.filter(
-      (tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.isDirty,
+      (tab) => tab.isDirty,
     )
   }
 
@@ -691,6 +691,66 @@ function App() {
         closeTab(tab.id)
       }
     }))
+  }
+
+  async function persistDiffTabContent(
+    tabId: string,
+    filePath: string,
+    content: string,
+    options: { announce?: boolean } = {},
+  ) {
+    const { announce = false } = options
+    markInternalWorkspaceSave(filePath)
+
+    try {
+      await window.appApi.saveWorkspaceFile(filePath, content)
+    } catch (error) {
+      clearInternalWorkspaceSaveMarker(filePath)
+      throw error
+    }
+
+    syncTabWithDisk(filePath, content)
+    markDiffTabSaved(tabId, content)
+
+    if (announce) {
+      setStatusMessage('Changes saved')
+    }
+
+    if (currentPath) {
+      await loadTree(currentPath)
+      await refreshGitState(currentPath, { silent: true })
+    }
+  }
+
+  async function flushDiffTab(tab: WorkspaceDiffTab, options: { announce?: boolean } = {}) {
+    if (!tab.isDirty || tab.diff.change.scope !== 'unstaged' || !tab.diff.modifiedExists) {
+      return false
+    }
+
+    const draftContent = tab.draftContent ?? tab.diff.modifiedContent
+
+    if (draftContent === tab.diff.modifiedContent) {
+      updateDiffTabDraft(tab.id, null)
+      return false
+    }
+
+    await persistDiffTabContent(tab.id, tab.diff.change.path, draftContent, options)
+    return true
+  }
+
+  async function flushDirtyDiffTabs() {
+    const dirtyDiffTabs = useWorkspaceStore.getState().openTabs.filter(
+      (tab): tab is WorkspaceDiffTab => tab.kind === 'diff' && tab.isDirty,
+    )
+
+    let didSave = false
+
+    for (const tab of dirtyDiffTabs) {
+      const saved = await flushDiffTab(tab)
+      didSave = didSave || saved
+    }
+
+    return didSave
   }
 
   async function refreshGitState(workspacePath: string | null, options: { silent?: boolean } = {}) {
@@ -864,8 +924,13 @@ function App() {
 
   async function confirmDiscardDirtyTabs(reason: 'close' | 'switch-workspace') {
     await flushWorkspaceAutosave()
+    try {
+      await flushDirtyDiffTabs()
+    } catch {
+      // Keep dirty tabs visible and fall back to explicit discard confirmation.
+    }
 
-    const pendingDirtyTabs = getDirtyWorkspaceFileTabsSnapshot()
+    const pendingDirtyTabs = getDirtyWorkspaceTabsSnapshot()
 
     if (pendingDirtyTabs.length === 0) {
       return true
@@ -873,7 +938,7 @@ function App() {
 
     const dirtyNames = pendingDirtyTabs
       .slice(0, 4)
-      .map((tab) => getBaseName(tab.filePath))
+      .map((tab) => getBaseName(tab.kind === 'diff' ? tab.diff.change.path : tab.filePath))
       .join(', ')
     const remainingCount = pendingDirtyTabs.length - Math.min(pendingDirtyTabs.length, 4)
     const extraLabel = remainingCount > 0 ? ` and ${remainingCount} more` : ''
@@ -913,10 +978,20 @@ function App() {
 
     const latestTargetTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.id === tabId) ?? targetTab
 
-    if (latestTargetTab.kind === 'file' && latestTargetTab.isDirty && !options.force) {
+    if (latestTargetTab.kind === 'diff' && latestTargetTab.isDirty) {
+      try {
+        await flushDiffTab(latestTargetTab)
+      } catch {
+        // Leave the tab dirty so close confirmation can still protect the draft.
+      }
+    }
+
+    const settledTargetTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.id === tabId) ?? latestTargetTab
+
+    if (settledTargetTab.isDirty && !options.force) {
       const confirmed = await requestConfirm({
         title: 'Unsaved Changes',
-        message: `"${getBaseName(latestTargetTab.filePath)}" has unsaved changes.\n\nClose this tab and discard them?`,
+        message: `"${getBaseName(settledTargetTab.kind === 'diff' ? settledTargetTab.diff.change.path : settledTargetTab.filePath)}" has unsaved changes.\n\nClose this tab and discard them?`,
         confirmLabel: 'Discard & Close',
         isDanger: true,
       })
@@ -933,7 +1008,7 @@ function App() {
     }
 
     if (!options.silent) {
-      setStatusMessage(`${getBaseName(latestTargetTab.kind === 'diff' ? latestTargetTab.diff.change.path : latestTargetTab.filePath)} closed`)
+      setStatusMessage(`${getBaseName(settledTargetTab.kind === 'diff' ? settledTargetTab.diff.change.path : settledTargetTab.filePath)} closed`)
     }
 
     return true
@@ -1345,10 +1420,23 @@ function App() {
   }
 
   async function handleSaveDiffFile(filePath: string, content: string) {
-    await persistWorkspaceFileContent(filePath, content, {
-      announce: false,
-      syncMode: 'sync',
-    })
+    const targetDiffTab = useWorkspaceStore.getState().openTabs.find(
+      (tab): tab is WorkspaceDiffTab => (
+        tab.kind === 'diff'
+        && tab.diff.change.path === filePath
+        && tab.isDirty
+      ),
+    ) ?? activeDiffTab
+
+    if (!targetDiffTab) {
+      await persistWorkspaceFileContent(filePath, content, {
+        announce: false,
+        syncMode: 'sync',
+      })
+      return
+    }
+
+    await persistDiffTabContent(targetDiffTab.id, filePath, content, { announce: false })
   }
 
   async function handleApplyGitDiffSelection(
@@ -2378,6 +2466,7 @@ function App() {
               <GitDiffEditor
                 key={activeDiffTab.id}
                 diff={activeDiffTab.diff}
+                draftContent={activeDiffDraftContent}
                 hasDirtyRelatedFileTab={openTabs.some((tab) => (
                   tab.kind === 'file'
                   && tab.filePath === activeDiffTab.diff.change.path
@@ -2386,6 +2475,9 @@ function App() {
                 onApplyBlockAction={handleApplyGitDiffSelection}
                 onDiscardChange={(change) => {
                   void handleDiscardGitChange(change)
+                }}
+                onDraftChange={(nextValue) => {
+                  updateDiffTabDraft(activeDiffTab.id, nextValue)
                 }}
                 onSaveEditedFile={handleSaveDiffFile}
                 onStageChange={(change) => {

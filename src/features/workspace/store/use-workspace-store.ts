@@ -22,11 +22,12 @@ export type WorkspaceFileTab = {
 }
 
 export type WorkspaceDiffTab = {
+  draftContent: string | null
   diff: GitFileDiffResult
   exists: true
   filePath: string
   id: string
-  isDirty: false
+  isDirty: boolean
   kind: 'diff'
   title: string
 }
@@ -55,6 +56,7 @@ type WorkspaceState = {
   activateTab: (tabId: string) => void
   closeTab: (tabId: string) => void
   markTabMissing: (path: string) => void
+  markDiffTabSaved: (tabId: string, savedContent: string) => void
   markTabSaved: (path: string, savedContent: string) => void
   moveTab: (movingId: string, targetId: string, position: TabDropPosition) => void
   openDiffTab: (tab: WorkspaceDiffTab, activate?: boolean) => void
@@ -70,6 +72,7 @@ type WorkspaceState = {
   setCurrentPath: (path: string | null) => void
   setTree: (tree: WorkspaceNode[]) => void
   syncTabWithDisk: (path: string, nextContent: string) => void
+  updateDiffTabDraft: (tabId: string, draftContent: string | null) => void
   updateTabContent: (path: string, content: string) => void
 }
 
@@ -145,6 +148,17 @@ function dedupeWorkspaceTabs(tabs: WorkspaceTab[]) {
   return dedupedTabs
 }
 
+function mergeWorkspaceDiffTab(existingTab: WorkspaceDiffTab, nextTab: WorkspaceDiffTab): WorkspaceDiffTab {
+  const preservedDraftContent = existingTab.isDirty ? existingTab.draftContent : null
+  const nextIsDirty = preservedDraftContent !== null && preservedDraftContent !== nextTab.diff.modifiedContent
+
+  return {
+    ...nextTab,
+    draftContent: nextIsDirty ? preservedDraftContent : null,
+    isDirty: nextIsDirty,
+  }
+}
+
 export function reorderWorkspaceTabs(
   openTabs: WorkspaceTab[],
   movingId: string,
@@ -196,6 +210,38 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         : tab
     )),
   })),
+  markDiffTabSaved: (tabId, savedContent) => set((state) => {
+    let didChange = false
+
+    const openTabs = state.openTabs.map((tab) => {
+      if (tab.kind !== 'diff' || tab.id !== tabId) {
+        return tab
+      }
+
+      const nextTab = {
+        ...tab,
+        diff: {
+          ...tab.diff,
+          modifiedContent: savedContent,
+        },
+        draftContent: null,
+        isDirty: false,
+      }
+
+      if (
+        tab.diff.modifiedContent === nextTab.diff.modifiedContent
+        && tab.draftContent === nextTab.draftContent
+        && tab.isDirty === nextTab.isDirty
+      ) {
+        return tab
+      }
+
+      didChange = true
+      return nextTab
+    })
+
+    return didChange ? { openTabs } : state
+  }),
   markTabSaved: (path, savedContent) => set((state) => {
     let didChange = false
 
@@ -270,7 +316,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     const existingIndex = state.openTabs.findIndex((candidate) => candidate.id === tab.id)
     const nextTabs = existingIndex === -1
       ? [...state.openTabs, tab]
-      : state.openTabs.map((candidate, index) => (index === existingIndex ? tab : candidate))
+      : state.openTabs.map((candidate, index) => {
+        if (index !== existingIndex) {
+          return candidate
+        }
+
+        return candidate.kind === 'diff'
+          ? mergeWorkspaceDiffTab(candidate, tab)
+          : tab
+      })
 
     return {
       activeTabId: activate ? tab.id : state.activeTabId,
@@ -346,6 +400,33 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
       didChange = true
       return nextTab
+    })
+
+    return didChange ? { openTabs } : state
+  }),
+  updateDiffTabDraft: (tabId, draftContent) => set((state) => {
+    let didChange = false
+
+    const openTabs = state.openTabs.map((tab) => {
+      if (tab.kind !== 'diff' || tab.id !== tabId) {
+        return tab
+      }
+
+      const normalizedDraftContent = draftContent === null || draftContent === tab.diff.modifiedContent
+        ? null
+        : draftContent
+      const nextIsDirty = normalizedDraftContent !== null
+
+      if (tab.draftContent === normalizedDraftContent && tab.isDirty === nextIsDirty) {
+        return tab
+      }
+
+      didChange = true
+      return {
+        ...tab,
+        draftContent: normalizedDraftContent,
+        isDirty: nextIsDirty,
+      }
     })
 
     return didChange ? { openTabs } : state
