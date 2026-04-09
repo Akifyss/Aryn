@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  applyGitDiffSelection,
   commitAndSyncGitChanges,
   discardAllGitChanges,
   commitGitChanges,
@@ -161,6 +162,97 @@ describe('git helpers', () => {
       modifiedExists: true,
       originalContent: '<div>one</div>\n',
       originalExists: true,
+    })
+  })
+
+  it('stages only the selected unstaged diff block', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'draft.md')
+    const originalContent = 'alpha\nbeta\ngamma\ndelta\n'
+    const modifiedContent = 'alpha updated\nbeta\ngamma updated\ndelta\n'
+    const partiallyStagedContent = 'alpha updated\nbeta\ngamma\ndelta\n'
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(filePath, originalContent, 'utf8')
+    await stageGitPaths(rootPath, [filePath])
+    await commitGitChanges(rootPath, 'initial commit')
+    await writeFile(filePath, modifiedContent, 'utf8')
+
+    await applyGitDiffSelection(rootPath, filePath, 'unstaged', {
+      originalLineCount: 1,
+      originalStartLine: 1,
+      modifiedLineCount: 1,
+      modifiedStartLine: 1,
+    }, 'stage')
+
+    await expect(getGitFileDiff(rootPath, filePath, 'staged')).resolves.toMatchObject({
+      modifiedContent: partiallyStagedContent,
+      originalContent,
+    })
+    await expect(getGitFileDiff(rootPath, filePath, 'unstaged')).resolves.toMatchObject({
+      modifiedContent,
+      originalContent: partiallyStagedContent,
+    })
+  })
+
+  it('discards only the selected unstaged diff block', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'draft.md')
+    const originalContent = 'alpha\nbeta\ngamma\ndelta\n'
+    const modifiedContent = 'alpha updated\nbeta\ngamma updated\ndelta\n'
+    const partiallyDiscardedContent = 'alpha\nbeta\ngamma updated\ndelta\n'
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(filePath, originalContent, 'utf8')
+    await stageGitPaths(rootPath, [filePath])
+    await commitGitChanges(rootPath, 'initial commit')
+    await writeFile(filePath, modifiedContent, 'utf8')
+
+    await applyGitDiffSelection(rootPath, filePath, 'unstaged', {
+      originalLineCount: 1,
+      originalStartLine: 1,
+      modifiedLineCount: 1,
+      modifiedStartLine: 1,
+    }, 'discard')
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe(partiallyDiscardedContent)
+    await expect(getGitFileDiff(rootPath, filePath, 'unstaged')).resolves.toMatchObject({
+      modifiedContent: partiallyDiscardedContent,
+      originalContent,
+    })
+  })
+
+  it('unstages only the selected staged diff block', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'draft.md')
+    const originalContent = 'alpha\nbeta\ngamma\ndelta\n'
+    const modifiedContent = 'alpha updated\nbeta\ngamma updated\ndelta\n'
+    const partiallyStagedContent = 'alpha\nbeta\ngamma updated\ndelta\n'
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(filePath, originalContent, 'utf8')
+    await stageGitPaths(rootPath, [filePath])
+    await commitGitChanges(rootPath, 'initial commit')
+    await writeFile(filePath, modifiedContent, 'utf8')
+    await stageGitPaths(rootPath, [filePath])
+
+    await applyGitDiffSelection(rootPath, filePath, 'staged', {
+      originalLineCount: 1,
+      originalStartLine: 1,
+      modifiedLineCount: 1,
+      modifiedStartLine: 1,
+    }, 'unstage')
+
+    await expect(getGitFileDiff(rootPath, filePath, 'staged')).resolves.toMatchObject({
+      modifiedContent: partiallyStagedContent,
+      originalContent,
+    })
+    await expect(getGitFileDiff(rootPath, filePath, 'unstaged')).resolves.toMatchObject({
+      modifiedContent,
+      originalContent: partiallyStagedContent,
     })
   })
 

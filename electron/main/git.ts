@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -6,6 +6,8 @@ import type {
   GitChangeItem,
   GitChangeKind,
   GitChangeScope,
+  GitDiffBlockAction,
+  GitDiffSelection,
   GitFileDiffResult,
   GitRecentPullItem,
   GitRepositoryState,
@@ -32,12 +34,35 @@ type EnsureUpstreamResult = 'ready' | 'pushed'
 
 const recentPullsByRepository = new Map<string, GitRecentPullItem[]>()
 
+type ParsedGitPatchHunk = GitDiffSelection & {
+  bodyLines: string[]
+  headerLine: string
+}
+
+type ParsedGitPatch = {
+  headerLines: string[]
+  hunks: ParsedGitPatchHunk[]
+}
+
 function toPosixPath(filePath: string) {
   return filePath.replace(/[\\/]+/g, '/')
 }
 
+function normalizeComparablePath(filePath: string) {
+  const resolvedPath = path.resolve(filePath)
+
+  if (process.platform === 'darwin' && resolvedPath.startsWith('/private/var/')) {
+    return resolvedPath.slice('/private'.length)
+  }
+
+  return resolvedPath
+}
+
 function toWorkspaceRelativePath(repositoryRootPath: string, filePath: string) {
-  return toPosixPath(path.relative(repositoryRootPath, filePath))
+  return toPosixPath(path.relative(
+    normalizeComparablePath(repositoryRootPath),
+    normalizeComparablePath(filePath),
+  ))
 }
 
 function isGitMissingError(error: unknown) {
@@ -83,6 +108,63 @@ async function runGit(
   }
 }
 
+async function runGitWithInput(
+  args: string[],
+  input: string,
+  options: GitCommandOptions,
+) {
+  const commandArgs = ['-c', 'core.quotepath=false', ...args]
+
+  return await new Promise<string | null>((resolve, reject) => {
+    const child = spawn('git', commandArgs, {
+      cwd: options.cwd,
+      stdio: 'pipe',
+      windowsHide: true,
+    })
+    const stdoutChunks: Buffer[] = []
+    const stderrChunks: Buffer[] = []
+
+    child.stdout.on('data', (chunk: Buffer | string) => {
+      stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    })
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderrChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    })
+    child.on('error', (error) => {
+      if (options.allowFailure) {
+        resolve(null)
+        return
+      }
+
+      if (isGitMissingError(error)) {
+        reject(new Error('Git is not available on this machine.'))
+        return
+      }
+
+      reject(error)
+    })
+    child.on('close', (exitCode) => {
+      const stdout = Buffer.concat(stdoutChunks).toString(options.encoding ?? 'utf8')
+      const stderr = Buffer.concat(stderrChunks).toString(options.encoding ?? 'utf8')
+
+      if (exitCode === 0) {
+        resolve(stdout)
+        return
+      }
+
+      if (options.allowFailure) {
+        resolve(null)
+        return
+      }
+
+      const message = stderr.trim() || stdout.trim() || 'Git command failed.'
+      reject(new Error(message))
+    })
+
+    child.stdin.end(input)
+  })
+}
+
 async function resolveRepositoryRoot(workspacePath: string) {
   const stdout = await runGit(['rev-parse', '--show-toplevel'], {
     allowFailure: true,
@@ -93,7 +175,154 @@ async function resolveRepositoryRoot(workspacePath: string) {
     return null
   }
 
-  return stdout.trim() || null
+  const repositoryRootPath = stdout.trim()
+  return repositoryRootPath ? normalizeComparablePath(repositoryRootPath) : null
+}
+
+function splitPatchLines(patch: string) {
+  return patch.match(/[^\n]*\n|[^\n]+/g) ?? []
+}
+
+function parsePatchHunkHeader(line: string) {
+  const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line)
+
+  if (!match) {
+    return null
+  }
+
+  return {
+    modifiedLineCount: match[4] === undefined ? 1 : Number(match[4]),
+    modifiedStartLine: Number(match[3]),
+    originalLineCount: match[2] === undefined ? 1 : Number(match[2]),
+    originalStartLine: Number(match[1]),
+  } satisfies GitDiffSelection
+}
+
+function parseGitPatch(patch: string): ParsedGitPatch | null {
+  const lines = splitPatchLines(patch)
+
+  if (lines.length === 0) {
+    return null
+  }
+
+  const headerLines: string[] = []
+  const hunks: ParsedGitPatchHunk[] = []
+  let currentHunk: ParsedGitPatchHunk | null = null
+
+  for (const line of lines) {
+    if (line.startsWith('@@ ')) {
+      const parsedHeader = parsePatchHunkHeader(line)
+
+      if (!parsedHeader) {
+        continue
+      }
+
+      currentHunk = {
+        ...parsedHeader,
+        bodyLines: [],
+        headerLine: line,
+      }
+      hunks.push(currentHunk)
+      continue
+    }
+
+    if (currentHunk) {
+      currentHunk.bodyLines.push(line)
+      continue
+    }
+
+    headerLines.push(line)
+  }
+
+  if (hunks.length === 0) {
+    return null
+  }
+
+  return {
+    headerLines,
+    hunks,
+  }
+}
+
+function toComparablePath(filePath: string) {
+  return normalizeComparablePath(filePath).replace(/[\\/]+/g, '/')
+}
+
+function isSameComparablePath(leftPath: string, rightPath: string) {
+  return toComparablePath(leftPath) === toComparablePath(rightPath)
+}
+
+function lineRangeOverlaps(startA: number, countA: number, startB: number, countB: number) {
+  const normalizedStartA = Math.max(1, startA)
+  const normalizedStartB = Math.max(1, startB)
+  const endA = normalizedStartA + Math.max(countA, 1)
+  const endB = normalizedStartB + Math.max(countB, 1)
+
+  return normalizedStartA < endB && normalizedStartB < endA
+}
+
+function hunkMatchesSelection(hunk: ParsedGitPatchHunk, selection: GitDiffSelection) {
+  return lineRangeOverlaps(
+    hunk.modifiedStartLine,
+    hunk.modifiedLineCount,
+    selection.modifiedStartLine,
+    selection.modifiedLineCount,
+  ) || lineRangeOverlaps(
+    hunk.originalStartLine,
+    hunk.originalLineCount,
+    selection.originalStartLine,
+    selection.originalLineCount,
+  )
+}
+
+function buildPatchFromHunks(parsedPatch: ParsedGitPatch, hunks: ParsedGitPatchHunk[]) {
+  return [
+    ...parsedPatch.headerLines,
+    ...hunks.flatMap((hunk) => [hunk.headerLine, ...hunk.bodyLines]),
+  ].join('')
+}
+
+async function getPatchForGitChange(repositoryRootPath: string, change: GitChangeItem) {
+  if (change.scope === 'unstaged' && change.kind === 'untracked') {
+    return null
+  }
+
+  const relativePath = toWorkspaceRelativePath(repositoryRootPath, change.path)
+  const args = change.scope === 'staged'
+    ? ['diff', '--cached', '--no-ext-diff', '--no-color', '--unified=0', '--', relativePath]
+    : ['diff', '--no-ext-diff', '--no-color', '--unified=0', '--', relativePath]
+
+  const patch = await runGit(args, {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  })
+
+  return patch?.length ? patch : null
+}
+
+async function resolveChangeForPath(
+  workspacePath: string,
+  filePath: string,
+  scope: GitChangeScope,
+) {
+  const repositoryState = await getGitRepositoryState(workspacePath)
+
+  if (!repositoryState.isRepository || !repositoryState.repositoryRootPath) {
+    throw new Error('Initialize Git in this workspace first.')
+  }
+
+  const changes = scope === 'staged' ? repositoryState.stagedChanges : repositoryState.unstagedChanges
+  const change = changes.find((item) => isSameComparablePath(item.path, filePath))
+
+  if (!change) {
+    throw new Error('That Git change is no longer available.')
+  }
+
+  return {
+    change,
+    repositoryRootPath: repositoryState.repositoryRootPath,
+    repositoryState,
+  }
 }
 
 async function repositoryHasCommits(repositoryRootPath: string) {
@@ -717,29 +946,17 @@ export async function getGitFileDiff(
   targetPath: string,
   scope: GitChangeScope,
 ): Promise<GitFileDiffResult> {
-  const repositoryState = await getGitRepositoryState(workspacePath)
-
-  if (!repositoryState.isRepository || !repositoryState.repositoryRootPath) {
-    throw new Error('Initialize Git in this workspace first.')
-  }
-
-  const changes = scope === 'staged' ? repositoryState.stagedChanges : repositoryState.unstagedChanges
-  const change = changes.find((item) => path.resolve(item.path) === path.resolve(targetPath))
-
-  if (!change) {
-    throw new Error('That Git change is no longer available.')
-  }
-
-  const relativePath = toWorkspaceRelativePath(repositoryState.repositoryRootPath, change.path)
+  const { change, repositoryRootPath } = await resolveChangeForPath(workspacePath, targetPath, scope)
+  const relativePath = toWorkspaceRelativePath(repositoryRootPath, change.path)
   const editorKind = getSupportedWorkspaceEditorKind(change.path) ?? 'code'
 
   if (scope === 'staged') {
     const originalContent = change.kind === 'added'
       ? null
-      : await readGitRevisionFile(repositoryState.repositoryRootPath, 'HEAD', relativePath)
+      : await readGitRevisionFile(repositoryRootPath, 'HEAD', relativePath)
     const modifiedContent = change.kind === 'deleted'
       ? null
-      : await readGitIndexFile(repositoryState.repositoryRootPath, relativePath)
+      : await readGitIndexFile(repositoryRootPath, relativePath)
 
     return {
       change,
@@ -750,13 +967,13 @@ export async function getGitFileDiff(
       originalContent: originalContent ?? '',
       originalExists: originalContent !== null,
       originalLabel: 'HEAD',
-      repositoryRootPath: repositoryState.repositoryRootPath,
+      repositoryRootPath,
     }
   }
 
   const originalContent = change.kind === 'untracked'
     ? null
-    : await readGitIndexFile(repositoryState.repositoryRootPath, relativePath)
+    : await readGitIndexFile(repositoryRootPath, relativePath)
   const modifiedContent = change.kind === 'deleted'
     ? null
     : await readFileIfPresent(change.path)
@@ -770,6 +987,70 @@ export async function getGitFileDiff(
     originalContent: originalContent ?? '',
     originalExists: originalContent !== null,
     originalLabel: 'Index',
-    repositoryRootPath: repositoryState.repositoryRootPath,
+    repositoryRootPath,
   }
+}
+
+export async function applyGitDiffSelection(
+  workspacePath: string,
+  filePath: string,
+  scope: GitChangeScope,
+  selection: GitDiffSelection,
+  action: GitDiffBlockAction,
+) {
+  const { change, repositoryRootPath } = await resolveChangeForPath(workspacePath, filePath, scope)
+
+  if (action === 'stage' && scope !== 'unstaged') {
+    throw new Error('Only unstaged changes can be staged by block.')
+  }
+
+  if (action === 'unstage' && scope !== 'staged') {
+    throw new Error('Only staged changes can be unstaged by block.')
+  }
+
+  if (change.kind === 'untracked') {
+    throw new Error('Block actions are not available for untracked files yet.')
+  }
+
+  const patch = await getPatchForGitChange(repositoryRootPath, change)
+
+  if (!patch) {
+    throw new Error('No Git patch is available for that block action.')
+  }
+
+  const parsedPatch = parseGitPatch(patch)
+
+  if (!parsedPatch) {
+    throw new Error('Unable to parse the Git diff for that file.')
+  }
+
+  const matchingHunks = parsedPatch.hunks.filter((hunk) => hunkMatchesSelection(hunk, selection))
+
+  if (matchingHunks.length === 0) {
+    throw new Error('That diff block is no longer available.')
+  }
+
+  const selectedPatch = buildPatchFromHunks(parsedPatch, matchingHunks)
+  const applyArgs = (() => {
+    switch (action) {
+      case 'stage':
+        return ['apply', '--cached', '--recount', '--unidiff-zero', '--whitespace=nowarn', '-']
+      case 'unstage':
+        return ['apply', '-R', '--cached', '--recount', '--unidiff-zero', '--whitespace=nowarn', '-']
+      case 'discard':
+        return ['apply', '-R', '--recount', '--unidiff-zero', '--whitespace=nowarn', '-']
+      default:
+        return null
+    }
+  })()
+
+  if (!applyArgs) {
+    throw new Error('Unsupported Git diff action.')
+  }
+
+  await runGitWithInput(applyArgs, selectedPatch, {
+    cwd: repositoryRootPath,
+  })
+
+  return getGitRepositoryState(workspacePath)
 }

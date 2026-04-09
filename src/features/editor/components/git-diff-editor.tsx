@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
-import { EditorState } from '@codemirror/state'
-import { MergeView, unifiedMergeView } from '@codemirror/merge'
+import { EditorState, type Text } from '@codemirror/state'
+import { getChunks, getOriginalDoc, MergeView, unifiedMergeView } from '@codemirror/merge'
 import {
   drawSelection,
   EditorView,
@@ -22,7 +22,7 @@ import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
 import { AddLine, Back2Line } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import * as monaco from 'monaco-editor'
-import type { GitChangeItem, GitFileDiffResult } from '@/features/git/types'
+import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
 import { getCodeMirrorLanguageSupport } from '@/features/editor/lib/codemirror-language'
 import {
   DiffEditor,
@@ -34,6 +34,18 @@ import {
 import { getCodeLanguage } from '@/features/workspace/lib/file-types'
 
 type DiffViewMode = 'split' | 'unified'
+type CodeMirrorChunk = {
+  fromA: number
+  toA: number
+  fromB: number
+  toB: number
+}
+type MonacoLineChange = monaco.editor.ILineChange
+type MonacoBlockOverlayItem = {
+  key: string
+  selection: GitDiffSelection
+  top: number
+}
 
 configureMonaco()
 
@@ -108,6 +120,82 @@ const DEFAULT_MONACO_DIFF_OPTIONS: MonacoDiffEditorOptions = {
   useInlineViewWhenSpaceIsLimited: false,
 }
 
+function getLineCountFromMonacoRange(startLine: number, endLine: number) {
+  if (startLine === 0 && endLine === 0) {
+    return 0
+  }
+
+  return Math.max(0, endLine - startLine + 1)
+}
+
+function createSelectionFromMonacoLineChange(change: MonacoLineChange): GitDiffSelection {
+  return {
+    modifiedLineCount: getLineCountFromMonacoRange(change.modifiedStartLineNumber, change.modifiedEndLineNumber),
+    modifiedStartLine: Math.max(1, change.modifiedStartLineNumber || change.modifiedEndLineNumber || 1),
+    originalLineCount: getLineCountFromMonacoRange(change.originalStartLineNumber, change.originalEndLineNumber),
+    originalStartLine: Math.max(1, change.originalStartLineNumber || change.originalEndLineNumber || 1),
+  }
+}
+
+function getTextLineCount(doc: Text, from: number, to: number) {
+  if (from === to) {
+    return 0
+  }
+
+  const startLine = doc.lineAt(Math.min(from, doc.length)).number
+  const endLine = doc.lineAt(Math.max(0, Math.min(doc.length, to) - 1)).number
+  return Math.max(0, endLine - startLine + 1)
+}
+
+function getTextAnchorLine(doc: Text, from: number, to: number) {
+  if (doc.lines === 0) {
+    return 1
+  }
+
+  const anchorPos = from === to
+    ? Math.min(from, doc.length)
+    : Math.min(from, Math.max(0, to - 1))
+
+  return doc.lineAt(anchorPos).number
+}
+
+function createSelectionFromCodeMirrorChunk(originalDoc: Text, modifiedDoc: Text, chunk: CodeMirrorChunk): GitDiffSelection {
+  return {
+    modifiedLineCount: getTextLineCount(modifiedDoc, chunk.fromB, chunk.toB),
+    modifiedStartLine: getTextAnchorLine(modifiedDoc, chunk.fromB, chunk.toB),
+    originalLineCount: getTextLineCount(originalDoc, chunk.fromA, chunk.toA),
+    originalStartLine: getTextAnchorLine(originalDoc, chunk.fromA, chunk.toA),
+  }
+}
+
+function getBlockActionsDisabledReason(
+  diff: GitFileDiffResult,
+  options: {
+    hasDirtyFileTab: boolean
+    isApplyingAction: boolean
+    isDirty: boolean
+    isSaving: boolean
+  },
+) {
+  if (options.isSaving || options.isApplyingAction) {
+    return 'Wait for the current file action to finish first.'
+  }
+
+  if (options.isDirty) {
+    return 'Save changes before applying Git block actions.'
+  }
+
+  if (options.hasDirtyFileTab) {
+    return 'Save other open editor tabs for this file before applying Git block actions.'
+  }
+
+  if (diff.change.scope === 'unstaged' && diff.change.kind === 'untracked') {
+    return 'Block actions are not available for untracked files yet.'
+  }
+
+  return null
+}
+
 function createDiffExtensions({
   editable,
   filePath,
@@ -164,14 +252,20 @@ function createDiffExtensions({
 }
 
 function RichTextDiffRenderer({
+  blockActionsDisabledReason,
+  areBlockActionsEnabled,
   diff,
   isEditable,
+  onBlockAction,
   onDraftChange,
   onSave,
   viewMode,
 }: {
+  blockActionsDisabledReason: string | null
+  areBlockActionsEnabled: boolean
   diff: GitFileDiffResult
   isEditable: boolean
+  onBlockAction: (selection: GitDiffSelection, action: GitDiffBlockAction) => void
   onDraftChange: (content: string) => void
   onSave: () => void
   viewMode: DiffViewMode
@@ -195,6 +289,120 @@ function RichTextDiffRenderer({
 
     const rightDoc = diff.modifiedExists ? diff.modifiedContent : ''
     const leftDoc = diff.originalExists ? diff.originalContent : ''
+    const handleSplitBlockAction = (
+      event: MouseEvent,
+      action: GitDiffBlockAction,
+    ) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (!areBlockActionsEnabled || !splitViewRef.current) {
+        return
+      }
+
+      const chunkRoot = (event.currentTarget as HTMLElement).closest<HTMLElement>('[data-chunk]')
+      const chunkIndex = chunkRoot?.dataset.chunk ? Number(chunkRoot.dataset.chunk) : Number.NaN
+      const chunk = Number.isInteger(chunkIndex)
+        ? (splitViewRef.current as MergeView & { chunks?: CodeMirrorChunk[] }).chunks?.[chunkIndex]
+        : undefined
+
+      if (!chunk) {
+        return
+      }
+
+      onBlockAction(
+        createSelectionFromCodeMirrorChunk(splitViewRef.current.a.state.doc, splitViewRef.current.b.state.doc, chunk),
+        action,
+      )
+    }
+    const createSplitBlockControls = () => {
+      const container = document.createElement('div')
+      container.className = 'git-diff-block-controls'
+      container.onmousedown = (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+
+      if (diff.change.scope === 'unstaged') {
+        const discardButton = document.createElement('button')
+        discardButton.type = 'button'
+        discardButton.className = 'git-diff-block-control'
+        discardButton.textContent = '↶'
+        discardButton.title = areBlockActionsEnabled ? 'Discard block' : blockActionsDisabledReason ?? 'Discard block'
+        discardButton.setAttribute('aria-label', discardButton.title)
+        discardButton.disabled = !areBlockActionsEnabled
+        discardButton.onmousedown = (event) => {
+          handleSplitBlockAction(event, 'discard')
+        }
+        container.append(discardButton)
+
+        const stageButton = document.createElement('button')
+        stageButton.type = 'button'
+        stageButton.className = 'git-diff-block-control'
+        stageButton.textContent = '+'
+        stageButton.title = areBlockActionsEnabled ? 'Stage block' : blockActionsDisabledReason ?? 'Stage block'
+        stageButton.setAttribute('aria-label', stageButton.title)
+        stageButton.disabled = !areBlockActionsEnabled
+        stageButton.onmousedown = (event) => {
+          handleSplitBlockAction(event, 'stage')
+        }
+        container.append(stageButton)
+      } else {
+        const unstageButton = document.createElement('button')
+        unstageButton.type = 'button'
+        unstageButton.className = 'git-diff-block-control'
+        unstageButton.textContent = '−'
+        unstageButton.title = areBlockActionsEnabled ? 'Unstage block' : blockActionsDisabledReason ?? 'Unstage block'
+        unstageButton.setAttribute('aria-label', unstageButton.title)
+        unstageButton.disabled = !areBlockActionsEnabled
+        unstageButton.onmousedown = (event) => {
+          handleSplitBlockAction(event, 'unstage')
+        }
+        container.append(unstageButton)
+      }
+
+      return container
+    }
+    const createUnifiedBlockControl = (action: GitDiffBlockAction, title: string, label: string) => {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'git-diff-block-control'
+      button.textContent = label
+      button.title = areBlockActionsEnabled ? title : blockActionsDisabledReason ?? title
+      button.setAttribute('aria-label', button.title)
+      button.disabled = !areBlockActionsEnabled
+      button.onmousedown = (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+
+        if (!areBlockActionsEnabled || !unifiedViewRef.current) {
+          return
+        }
+
+        const chunkHost = (event.currentTarget as HTMLElement).closest<HTMLElement>('.cm-deletedChunk')
+
+        if (!chunkHost) {
+          return
+        }
+
+        const position = unifiedViewRef.current.posAtDOM(chunkHost)
+        const chunkState = getChunks(unifiedViewRef.current.state)
+        const chunk = chunkState?.chunks.find((candidate) => (
+          candidate.fromB <= position && candidate.endB >= position
+        )) as CodeMirrorChunk | undefined
+
+        if (!chunk) {
+          return
+        }
+
+        onBlockAction(
+          createSelectionFromCodeMirrorChunk(getOriginalDoc(unifiedViewRef.current.state), unifiedViewRef.current.state.doc, chunk),
+          action,
+        )
+      }
+
+      return button
+    }
 
     if (viewMode === 'split') {
       splitViewRef.current = new MergeView({
@@ -226,6 +434,8 @@ function RichTextDiffRenderer({
           scanLimit: 500,
           timeout: 1000,
         },
+        renderRevertControl: createSplitBlockControls,
+        revertControls: 'a-to-b',
         parent: container,
       })
 
@@ -256,7 +466,17 @@ function RichTextDiffRenderer({
           },
           gutter: true,
           highlightChanges: true,
-          mergeControls: false,
+          mergeControls: (kind) => {
+            if (diff.change.scope === 'unstaged') {
+              return kind === 'accept'
+                ? createUnifiedBlockControl('stage', 'Stage block', '+')
+                : createUnifiedBlockControl('discard', 'Discard block', '↶')
+            }
+
+            return kind === 'accept'
+              ? createUnifiedBlockControl('unstage', 'Unstage block', '−')
+              : document.createElement('span')
+          },
           original: leftDoc,
           syntaxHighlightDeletions: true,
         }),
@@ -269,12 +489,16 @@ function RichTextDiffRenderer({
       unifiedViewRef.current = null
     }
   }, [
+    blockActionsDisabledReason,
     diff.change.path,
+    diff.change.scope,
     diff.modifiedContent,
     diff.modifiedExists,
     diff.originalContent,
     diff.originalExists,
+    areBlockActionsEnabled,
     isEditable,
+    onBlockAction,
     onDraftChange,
     onSave,
     viewMode,
@@ -291,25 +515,34 @@ function RichTextDiffRenderer({
 }
 
 function CodeDiffRenderer({
+  blockActionsDisabledReason,
+  areBlockActionsEnabled,
   diff,
   draftContent,
   isEditable,
+  onBlockAction,
   onDraftChange,
   onSave,
   theme,
   viewMode,
 }: {
+  blockActionsDisabledReason: string | null
+  areBlockActionsEnabled: boolean
   diff: GitFileDiffResult
   draftContent: string
   isEditable: boolean
+  onBlockAction: (selection: GitDiffSelection, action: GitDiffBlockAction) => void
   onDraftChange: (content: string) => void
   onSave: () => void
   theme: MonacoThemePreference
   viewMode: DiffViewMode
 }) {
   const diffEditorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null)
+  const diffEditorDisposablesRef = useRef<monaco.IDisposable[]>([])
   const latestDraftRef = useRef(draftContent)
   const onSaveRef = useRef(onSave)
+  const [overlayVersion, setOverlayVersion] = useState(0)
+  const [lineChanges, setLineChanges] = useState<readonly MonacoLineChange[]>([])
   const language = useMemo(() => getCodeLanguage(diff.change.path), [diff.change.path])
   const monacoTheme = useMemo(() => resolveMonacoTheme(theme), [theme])
   const editorOptions = useMemo<MonacoDiffEditorOptions>(() => ({
@@ -329,7 +562,23 @@ function CodeDiffRenderer({
     onSaveRef.current = onSave
   }, [onSave])
 
+  const syncLineChanges = useCallback(() => {
+    const editor = diffEditorRef.current
+
+    if (!editor) {
+      setLineChanges([])
+      return
+    }
+
+    setLineChanges(editor.getLineChanges() ?? [])
+    setOverlayVersion((current) => current + 1)
+  }, [])
+
   const handleMount = useCallback<NonNullable<ComponentProps<typeof DiffEditor>['onMount']>>((editor, monacoInstance) => {
+    diffEditorDisposablesRef.current.forEach((disposable) => {
+      disposable.dispose()
+    })
+    diffEditorDisposablesRef.current = []
     diffEditorRef.current = editor
 
     const originalEditor = editor.getOriginalEditor()
@@ -340,7 +589,25 @@ function CodeDiffRenderer({
       void onSaveRef.current()
     })
 
-    modifiedEditor.onDidChangeModelContent(() => {
+    diffEditorDisposablesRef.current = [
+      editor.onDidUpdateDiff(() => {
+        syncLineChanges()
+      }),
+      originalEditor.onDidScrollChange(() => {
+        setOverlayVersion((current) => current + 1)
+      }),
+      modifiedEditor.onDidScrollChange(() => {
+        setOverlayVersion((current) => current + 1)
+      }),
+      originalEditor.onDidLayoutChange(() => {
+        setOverlayVersion((current) => current + 1)
+      }),
+      modifiedEditor.onDidLayoutChange(() => {
+        setOverlayVersion((current) => current + 1)
+      }),
+    ]
+
+    diffEditorDisposablesRef.current.push(modifiedEditor.onDidChangeModelContent(() => {
       const nextValue = modifiedEditor.getValue()
 
       if (nextValue === latestDraftRef.current) {
@@ -349,12 +616,98 @@ function CodeDiffRenderer({
 
       latestDraftRef.current = nextValue
       onDraftChange(nextValue)
-    })
-  }, [onDraftChange])
+    }))
+
+    syncLineChanges()
+  }, [onDraftChange, syncLineChanges])
 
   useEffect(() => () => {
+    diffEditorDisposablesRef.current.forEach((disposable) => {
+      disposable.dispose()
+    })
+    diffEditorDisposablesRef.current = []
     diffEditorRef.current = null
   }, [])
+
+  useEffect(() => {
+    syncLineChanges()
+  }, [diff.change.path, diff.change.scope, draftContent, diff.originalContent, syncLineChanges])
+
+  const overlayItems = useMemo<MonacoBlockOverlayItem[]>(() => {
+    const editor = diffEditorRef.current
+
+    if (!editor || lineChanges.length === 0) {
+      return []
+    }
+
+    const originalEditor = editor.getOriginalEditor()
+    const modifiedEditor = editor.getModifiedEditor()
+
+    return lineChanges.map((change, index) => {
+      const modifiedLine = Math.max(1, change.modifiedStartLineNumber || change.modifiedEndLineNumber || 1)
+      const originalLine = Math.max(1, change.originalStartLineNumber || change.originalEndLineNumber || 1)
+      const top = viewMode === 'split'
+        ? Math.min(
+          modifiedEditor.getTopForLineNumber(modifiedLine),
+          originalEditor.getTopForLineNumber(originalLine),
+        )
+        : modifiedEditor.getTopForLineNumber(modifiedLine)
+
+      return {
+        key: `${change.originalStartLineNumber}:${change.originalEndLineNumber}:${change.modifiedStartLineNumber}:${change.modifiedEndLineNumber}:${index}`,
+        selection: createSelectionFromMonacoLineChange(change),
+        top,
+      }
+    })
+  }, [lineChanges, overlayVersion, viewMode])
+
+  const renderBlockButtons = useCallback((selection: GitDiffSelection) => {
+    if (diff.change.scope === 'staged') {
+      return (
+        <button
+          type='button'
+          className='git-diff-block-control'
+          aria-label={areBlockActionsEnabled ? 'Unstage block' : blockActionsDisabledReason ?? 'Unstage block'}
+          title={areBlockActionsEnabled ? 'Unstage block' : blockActionsDisabledReason ?? 'Unstage block'}
+          disabled={!areBlockActionsEnabled}
+          onClick={() => {
+            onBlockAction(selection, 'unstage')
+          }}
+        >
+          <Icon icon='mdi:minus' width={14} height={14} />
+        </button>
+      )
+    }
+
+    return (
+      <>
+        <button
+          type='button'
+          className='git-diff-block-control'
+          aria-label={areBlockActionsEnabled ? 'Discard block' : blockActionsDisabledReason ?? 'Discard block'}
+          title={areBlockActionsEnabled ? 'Discard block' : blockActionsDisabledReason ?? 'Discard block'}
+          disabled={!areBlockActionsEnabled}
+          onClick={() => {
+            onBlockAction(selection, 'discard')
+          }}
+        >
+          <Back2Line size={14} />
+        </button>
+        <button
+          type='button'
+          className='git-diff-block-control'
+          aria-label={areBlockActionsEnabled ? 'Stage block' : blockActionsDisabledReason ?? 'Stage block'}
+          title={areBlockActionsEnabled ? 'Stage block' : blockActionsDisabledReason ?? 'Stage block'}
+          disabled={!areBlockActionsEnabled}
+          onClick={() => {
+            onBlockAction(selection, 'stage')
+          }}
+        >
+          <AddLine size={14} />
+        </button>
+      </>
+    )
+  }, [areBlockActionsEnabled, blockActionsDisabledReason, diff.change.scope, onBlockAction])
 
   const encodedPath = encodeURIComponent(diff.change.path)
 
@@ -372,12 +725,27 @@ function CodeDiffRenderer({
         theme={monacoTheme}
         onMount={handleMount}
       />
+      {overlayItems.length > 0 ? (
+        <div className={`git-diff-block-overlay git-diff-block-overlay-${viewMode}`}>
+          {overlayItems.map((item) => (
+            <div
+              key={item.key}
+              className='git-diff-block-controls git-diff-block-overlay-item'
+              style={{ top: `${item.top + 8}px` }}
+            >
+              {renderBlockButtons(item.selection)}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
 
 export function GitDiffEditor({
   diff,
+  hasDirtyRelatedFileTab = false,
+  onApplyBlockAction,
   onDiscardChange,
   onSaveEditedFile,
   onStageChange,
@@ -385,6 +753,8 @@ export function GitDiffEditor({
   theme = 'auto',
 }: {
   diff: GitFileDiffResult
+  hasDirtyRelatedFileTab?: boolean
+  onApplyBlockAction: (change: GitChangeItem, selection: GitDiffSelection, action: GitDiffBlockAction) => Promise<void>
   onDiscardChange: (change: GitChangeItem) => void
   onSaveEditedFile: (filePath: string, content: string) => Promise<void>
   onStageChange: (change: GitChangeItem) => void
@@ -395,9 +765,20 @@ export function GitDiffEditor({
   const [viewMode, setViewMode] = useState<DiffViewMode>(defaultMode)
   const [draftContent, setDraftContent] = useState(diff.modifiedContent)
   const draftContentRef = useRef(diff.modifiedContent)
+  const [isApplyingBlockAction, setIsApplyingBlockAction] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const isEditable = diff.change.scope === 'unstaged' && diff.modifiedExists
   const isDirty = draftContent !== diff.modifiedContent
+  const blockActionsDisabledReason = getBlockActionsDisabledReason(diff, {
+    hasDirtyFileTab: hasDirtyRelatedFileTab,
+    isApplyingAction: isApplyingBlockAction,
+    isDirty,
+    isSaving,
+  })
+  const areBlockActionsEnabled = blockActionsDisabledReason === null
+  const areFileGitActionsEnabled = !(isSaving || isApplyingBlockAction || (
+    diff.change.scope === 'unstaged' && (isDirty || hasDirtyRelatedFileTab)
+  ))
 
   useEffect(() => {
     setViewMode(defaultMode)
@@ -430,6 +811,20 @@ export function GitDiffEditor({
     }
   }, [diff.change.path, diff.modifiedContent, isEditable, isSaving, onSaveEditedFile])
 
+  const handleBlockAction = useCallback(async (selection: GitDiffSelection, action: GitDiffBlockAction) => {
+    if (!areBlockActionsEnabled) {
+      return
+    }
+
+    setIsApplyingBlockAction(true)
+
+    try {
+      await onApplyBlockAction(diff.change, selection, action)
+    } finally {
+      setIsApplyingBlockAction(false)
+    }
+  }, [areBlockActionsEnabled, diff.change, onApplyBlockAction])
+
   return (
     <div className='git-diff-editor'>
       <header className='git-diff-header'>
@@ -445,6 +840,7 @@ export function GitDiffEditor({
                 className='git-diff-view-mode git-diff-view-mode-icon-only'
                 aria-label='Discard'
                 title='Discard'
+                disabled={!areFileGitActionsEnabled}
                 onClick={() => {
                   onDiscardChange(diff.change)
                 }}
@@ -456,6 +852,7 @@ export function GitDiffEditor({
                 className='git-diff-view-mode git-diff-view-mode-icon-only'
                 aria-label='Stage'
                 title='Stage'
+                disabled={!areFileGitActionsEnabled}
                 onClick={() => {
                   onStageChange(diff.change)
                 }}
@@ -469,6 +866,7 @@ export function GitDiffEditor({
               className='git-diff-view-mode git-diff-view-mode-icon-only'
               aria-label='Unstage'
               title='Unstage'
+              disabled={!areFileGitActionsEnabled}
               onClick={() => {
                 onUnstageChange(diff.change)
               }}
@@ -505,11 +903,16 @@ export function GitDiffEditor({
 
       {diff.editorKind === 'rich-text' ? (
         <RichTextDiffRenderer
+          blockActionsDisabledReason={blockActionsDisabledReason}
+          areBlockActionsEnabled={areBlockActionsEnabled}
           diff={{
             ...diff,
             modifiedContent: draftContent,
           }}
           isEditable={isEditable}
+          onBlockAction={(selection, action) => {
+            void handleBlockAction(selection, action)
+          }}
           onDraftChange={handleDraftChange}
           onSave={() => {
             void handleSave()
@@ -518,9 +921,14 @@ export function GitDiffEditor({
         />
       ) : (
         <CodeDiffRenderer
+          blockActionsDisabledReason={blockActionsDisabledReason}
+          areBlockActionsEnabled={areBlockActionsEnabled}
           diff={diff}
           draftContent={draftContent}
           isEditable={isEditable}
+          onBlockAction={(selection, action) => {
+            void handleBlockAction(selection, action)
+          }}
           onDraftChange={handleDraftChange}
           onSave={() => {
             void handleSave()

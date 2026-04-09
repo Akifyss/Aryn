@@ -18,7 +18,14 @@ import { GitDiffEditor } from '@/features/editor/components/git-diff-editor'
 import { CodeEditor } from '@/features/editor/components/code-editor'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import { GitPanel } from '@/features/git/components/git-panel'
-import type { GitChangeItem, GitChangeScope, GitPanelLayout, GitRepositoryState } from '@/features/git/types'
+import type {
+  GitChangeItem,
+  GitChangeScope,
+  GitDiffBlockAction,
+  GitDiffSelection,
+  GitPanelLayout,
+  GitRepositoryState,
+} from '@/features/git/types'
 import {
   SettingsDialog,
   type SettingsSectionId,
@@ -1182,6 +1189,46 @@ function App() {
     }
   }
 
+  async function handleApplyGitDiffSelection(
+    change: GitChangeItem,
+    selection: GitDiffSelection,
+    action: GitDiffBlockAction,
+  ) {
+    if (!currentPath) {
+      return
+    }
+
+    const statusMessage = action === 'stage'
+      ? 'Git block staged'
+      : action === 'unstage'
+        ? 'Git block unstaged'
+        : 'Git block reverted'
+    const busyLabel = action === 'stage'
+      ? 'Staging diff block...'
+      : action === 'unstage'
+        ? 'Unstaging diff block...'
+        : 'Reverting diff block...'
+
+    await runGitAction(busyLabel, async () => {
+      const nextState = await window.appApi.applyGitDiffSelection(currentPath, change.path, change.scope, selection, action)
+      setGitRepositoryState(nextState)
+
+      if (action === 'discard') {
+        await loadTree(currentPath)
+
+        try {
+          const nextContent = await window.appApi.readWorkspaceFile(change.path)
+          syncTabWithDisk(change.path, nextContent)
+        } catch {
+          closeFileTabsForPath(change.path)
+        }
+      }
+
+      await syncOpenDiffTabs(currentPath)
+      setStatusMessage(statusMessage)
+    })
+  }
+
   function activateFileTab(tabId: string) {
     if (tabId === SETTINGS_TAB_ID) {
       setIsSettingsTabOpen(true)
@@ -2105,6 +2152,12 @@ function App() {
             {activeDiffTab ? (
               <GitDiffEditor
                 diff={activeDiffTab.diff}
+                hasDirtyRelatedFileTab={openTabs.some((tab) => (
+                  tab.kind === 'file'
+                  && tab.filePath === activeDiffTab.diff.change.path
+                  && tab.isDirty
+                ))}
+                onApplyBlockAction={handleApplyGitDiffSelection}
                 onDiscardChange={(change) => {
                   void handleDiscardGitChange(change)
                 }}

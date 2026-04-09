@@ -4,6 +4,7 @@ import path from 'node:path'
 import os from 'node:os'
 import throttle from 'lodash.throttle'
 import {
+  applyGitDiffSelection,
   commitAndSyncGitChanges,
   commitGitChanges,
   discardAllGitChanges,
@@ -38,7 +39,7 @@ import {
   MIN_WINDOW_WIDTH,
 } from './app-state'
 import type { AgentClientEvent } from '../../src/features/agent/types'
-import type { GitChangeItem, GitChangeScope } from '../../src/features/git/types'
+import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
 import type { WorkspaceIconThemeCatalogOption } from '../../src/features/workspace/types'
 import {
   importWorkspaceIconThemeFromVsix,
@@ -462,6 +463,20 @@ ipcMain.handle('git:unstage-paths', async (_, workspacePath: string, filePaths: 
 ipcMain.handle('git:discard-change', async (_, workspacePath: string, change: GitChangeItem) => {
   return discardGitChange(workspacePath, change)
 })
+
+ipcMain.handle(
+  'git:apply-selection',
+  async (
+    _,
+    workspacePath: string,
+    filePath: string,
+    scope: GitChangeScope,
+    selection: GitDiffSelection,
+    action: GitDiffBlockAction,
+  ) => {
+    return applyGitDiffSelection(workspacePath, filePath, scope, selection, action)
+  },
+)
 
 ipcMain.handle('git:discard-all', async (_, workspacePath: string) => {
   return discardAllGitChanges(workspacePath)

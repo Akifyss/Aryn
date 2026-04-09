@@ -1,6 +1,13 @@
 import { ipcRenderer, contextBridge } from 'electron'
 import type { AgentClientEvent, AgentWorkspaceState } from '../../src/features/agent/types'
-import type { GitChangeItem, GitChangeScope, GitFileDiffResult, GitRepositoryState } from '../../src/features/git/types'
+import type {
+  GitChangeItem,
+  GitChangeScope,
+  GitDiffBlockAction,
+  GitDiffSelection,
+  GitFileDiffResult,
+  GitRepositoryState,
+} from '../../src/features/git/types'
 import type {
   WorkspaceChangeEvent,
   WorkspaceIconTheme,
@@ -27,6 +34,13 @@ contextBridge.exposeInMainWorld('appApi', {
   stageGitPaths: (workspacePath: string, filePaths: string[]) => ipcRenderer.invoke('git:stage-paths', workspacePath, filePaths) as Promise<GitRepositoryState>,
   unstageGitPaths: (workspacePath: string, filePaths: string[]) => ipcRenderer.invoke('git:unstage-paths', workspacePath, filePaths) as Promise<GitRepositoryState>,
   discardGitChange: (workspacePath: string, change: GitChangeItem) => ipcRenderer.invoke('git:discard-change', workspacePath, change) as Promise<GitRepositoryState>,
+  applyGitDiffSelection: (
+    workspacePath: string,
+    filePath: string,
+    scope: GitChangeScope,
+    selection: GitDiffSelection,
+    action: GitDiffBlockAction,
+  ) => ipcRenderer.invoke('git:apply-selection', workspacePath, filePath, scope, selection, action) as Promise<GitRepositoryState>,
   discardAllGitChanges: (workspacePath: string) => ipcRenderer.invoke('git:discard-all', workspacePath) as Promise<GitRepositoryState>,
   commitGitChanges: (workspacePath: string, message: string) => ipcRenderer.invoke('git:commit', workspacePath, message) as Promise<GitRepositoryState>,
   commitAndSyncGitChanges: (workspacePath: string, message: string) => ipcRenderer.invoke('git:commit-and-sync', workspacePath, message) as Promise<GitRepositoryState>,

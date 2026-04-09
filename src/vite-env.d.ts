@@ -1,5 +1,12 @@
 import type { AgentClientEvent, AgentWorkspaceState } from '@/features/agent/types'
-import type { GitChangeItem, GitChangeScope, GitFileDiffResult, GitRepositoryState } from '@/features/git/types'
+import type {
+  GitChangeItem,
+  GitChangeScope,
+  GitDiffBlockAction,
+  GitDiffSelection,
+  GitFileDiffResult,
+  GitRepositoryState,
+} from '@/features/git/types'
 import type {
   WorkspaceChangeEvent,
   WorkspaceIconTheme,
@@ -30,6 +37,13 @@ declare global {
       stageGitPaths: (workspacePath: string, filePaths: string[]) => Promise<GitRepositoryState>
       unstageGitPaths: (workspacePath: string, filePaths: string[]) => Promise<GitRepositoryState>
       discardGitChange: (workspacePath: string, change: GitChangeItem) => Promise<GitRepositoryState>
+      applyGitDiffSelection: (
+        workspacePath: string,
+        filePath: string,
+        scope: GitChangeScope,
+        selection: GitDiffSelection,
+        action: GitDiffBlockAction,
+      ) => Promise<GitRepositoryState>
       discardAllGitChanges: (workspacePath: string) => Promise<GitRepositoryState>
       commitGitChanges: (workspacePath: string, message: string) => Promise<GitRepositoryState>
       commitAndSyncGitChanges: (workspacePath: string, message: string) => Promise<GitRepositoryState>

@@ -1,6 +1,7 @@
 import type { SupportedWorkspaceEditorKind } from '@/features/workspace/lib/file-types'
 
 export type GitChangeScope = 'staged' | 'unstaged'
+export type GitDiffBlockAction = 'discard' | 'stage' | 'unstage'
 
 export type GitPanelLayout = 'list' | 'tree'
 
@@ -60,4 +61,11 @@ export type GitFileDiffResult = {
   originalExists: boolean
   originalLabel: string
   repositoryRootPath: string
+}
+
+export type GitDiffSelection = {
+  originalLineCount: number
+  originalStartLine: number
+  modifiedLineCount: number
+  modifiedStartLine: number
 }
