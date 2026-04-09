@@ -1,20 +1,25 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  createWorkspaceFileTabId,
   reorderWorkspaceTabs,
   useWorkspaceStore,
 } from '../src/features/workspace/store/use-workspace-store'
 
+function createDiffTabId(filePath: string, scope: 'staged' | 'unstaged') {
+  return `git-diff://${scope}/${encodeURIComponent(filePath)}`
+}
+
 describe('useWorkspaceStore', () => {
   beforeEach(() => {
     useWorkspaceStore.setState({
-      activeTabPath: null,
+      activeTabId: null,
       currentPath: null,
       openTabs: [],
       tree: [],
     })
   })
 
-  it('opens tabs without duplicating them and activates the requested file', () => {
+  it('opens default rich-text tabs without duplicating them and activates the requested file', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({
@@ -35,15 +40,15 @@ describe('useWorkspaceStore', () => {
 
     const nextState = useWorkspaceStore.getState()
     expect(nextState.openTabs).toHaveLength(2)
-    expect(nextState.activeTabPath).toBe('C:/workspace/a.md')
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/a.md', 'default'))
     expect(nextState.openTabs[0]).toMatchObject({
       content: 'alpha',
       kind: 'file',
-      viewMode: 'editor',
+      viewMode: 'default',
     })
   })
 
-  it('defaults html code tabs to preview and allows switching them to the code editor', () => {
+  it('keeps html preview and code tabs as separate tabs', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({
@@ -51,21 +56,47 @@ describe('useWorkspaceStore', () => {
       editorKind: 'code',
       filePath: 'C:/workspace/index.html',
     })
-
-    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+    store.openTab({
+      content: '<h1>Hello</h1>',
+      editorKind: 'code',
       filePath: 'C:/workspace/index.html',
-      viewMode: 'preview',
+      viewMode: 'code',
     })
 
-    store.setTabViewMode('C:/workspace/index.html', 'editor')
-
-    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
-      filePath: 'C:/workspace/index.html',
-      viewMode: 'editor',
-    })
+    const nextState = useWorkspaceStore.getState()
+    expect(nextState.openTabs).toHaveLength(2)
+    expect(nextState.openTabs.map((tab) => tab.id)).toEqual([
+      createWorkspaceFileTabId('C:/workspace/index.html', 'preview'),
+      createWorkspaceFileTabId('C:/workspace/index.html', 'code'),
+    ])
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/index.html', 'code'))
   })
 
-  it('falls back to editor mode when a preview tab is renamed to a non-html file', () => {
+  it('allows markdown tabs to open in both default and code views', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({
+      content: '# Draft',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/draft.md',
+    })
+    store.openTab({
+      content: '# Draft',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/draft.md',
+      viewMode: 'code',
+    })
+
+    const nextState = useWorkspaceStore.getState()
+    expect(nextState.openTabs).toHaveLength(2)
+    expect(nextState.openTabs.map((tab) => tab.id)).toEqual([
+      createWorkspaceFileTabId('C:/workspace/draft.md', 'default'),
+      createWorkspaceFileTabId('C:/workspace/draft.md', 'code'),
+    ])
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/draft.md', 'code'))
+  })
+
+  it('falls back to default mode when a preview tab is renamed to a non-html file', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({
@@ -78,8 +109,34 @@ describe('useWorkspaceStore', () => {
     expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
       editorKind: 'code',
       filePath: 'C:/workspace/index.ts',
-      viewMode: 'editor',
+      viewMode: 'default',
     })
+  })
+
+  it('collapses unsupported alternate views when renaming to a single-view file type', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({
+      content: '# Draft',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/draft.md',
+    })
+    store.openTab({
+      content: '# Draft',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/draft.md',
+      viewMode: 'code',
+    })
+    store.renameTab('C:/workspace/draft.md', 'C:/workspace/draft.ts')
+
+    const nextState = useWorkspaceStore.getState()
+    expect(nextState.openTabs).toHaveLength(1)
+    expect(nextState.openTabs[0]).toMatchObject({
+      editorKind: 'code',
+      filePath: 'C:/workspace/draft.ts',
+      viewMode: 'default',
+    })
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/draft.ts', 'default'))
   })
 
   it('marks tabs dirty only when their content diverges from the saved content', () => {
@@ -109,21 +166,43 @@ describe('useWorkspaceStore', () => {
     })
   })
 
+  it('propagates content changes across multiple tabs for the same file', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({
+      content: '# Draft',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/draft.md',
+    })
+    store.openTab({
+      content: '# Draft',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/draft.md',
+      viewMode: 'code',
+    })
+    store.updateTabContent('C:/workspace/draft.md', '# Draft updated')
+
+    expect(useWorkspaceStore.getState().openTabs).toMatchObject([
+      { content: '# Draft updated', isDirty: true, viewMode: 'default' },
+      { content: '# Draft updated', isDirty: true, viewMode: 'code' },
+    ])
+  })
+
   it('closes the active tab and falls back to the nearest tab on the right first', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
     store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
     store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
-    store.activateTab('C:/workspace/b.md')
-    store.closeTab('C:/workspace/b.md')
+    store.activateTab(createWorkspaceFileTabId('C:/workspace/b.md', 'default'))
+    store.closeTab(createWorkspaceFileTabId('C:/workspace/b.md', 'default'))
 
     const nextState = useWorkspaceStore.getState()
     expect(nextState.openTabs.map((tab) => tab.filePath)).toEqual([
       'C:/workspace/a.md',
       'C:/workspace/c.md',
     ])
-    expect(nextState.activeTabPath).toBe('C:/workspace/c.md')
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/c.md', 'default'))
   })
 
   it('renames an open active tab without losing its content or selection', () => {
@@ -138,7 +217,7 @@ describe('useWorkspaceStore', () => {
     store.renameTab('C:/workspace/old-name.md', 'C:/workspace/new-name.md')
 
     const nextState = useWorkspaceStore.getState()
-    expect(nextState.activeTabPath).toBe('C:/workspace/new-name.md')
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/new-name.md', 'default'))
     expect(nextState.openTabs[0]).toMatchObject({
       content: 'content updated',
       filePath: 'C:/workspace/new-name.md',
@@ -149,6 +228,7 @@ describe('useWorkspaceStore', () => {
 
   it('upserts diff tabs without disturbing other open tabs', () => {
     const store = useWorkspaceStore.getState()
+    const diffTabId = createDiffTabId('C:/workspace/file.md', 'unstaged')
 
     store.openTab({
       content: 'content',
@@ -176,7 +256,8 @@ describe('useWorkspaceStore', () => {
         repositoryRootPath: 'C:/workspace',
       },
       exists: true,
-      filePath: 'git-diff://unstaged/C%3A%2Fworkspace%2Ffile.md',
+      filePath: diffTabId,
+      id: diffTabId,
       isDirty: false,
       kind: 'diff',
       title: 'file.md',
@@ -184,8 +265,9 @@ describe('useWorkspaceStore', () => {
 
     const nextState = useWorkspaceStore.getState()
     expect(nextState.openTabs).toHaveLength(2)
-    expect(nextState.activeTabPath).toBe('git-diff://unstaged/C%3A%2Fworkspace%2Ffile.md')
+    expect(nextState.activeTabId).toBe(diffTabId)
     expect(nextState.openTabs[1]).toMatchObject({
+      id: diffTabId,
       kind: 'diff',
       title: 'file.md',
     })
@@ -197,23 +279,31 @@ describe('useWorkspaceStore', () => {
     store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
     store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
     store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
-    store.activateTab('C:/workspace/b.md')
+    store.activateTab(createWorkspaceFileTabId('C:/workspace/b.md', 'default'))
 
-    store.moveTab('C:/workspace/c.md', 'C:/workspace/a.md', 'before')
+    store.moveTab(
+      createWorkspaceFileTabId('C:/workspace/c.md', 'default'),
+      createWorkspaceFileTabId('C:/workspace/a.md', 'default'),
+      'before',
+    )
     expect(useWorkspaceStore.getState().openTabs.map((tab) => tab.filePath)).toEqual([
       'C:/workspace/c.md',
       'C:/workspace/a.md',
       'C:/workspace/b.md',
     ])
-    expect(useWorkspaceStore.getState().activeTabPath).toBe('C:/workspace/b.md')
+    expect(useWorkspaceStore.getState().activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/b.md', 'default'))
 
-    store.moveTab('C:/workspace/c.md', 'C:/workspace/b.md', 'after')
+    store.moveTab(
+      createWorkspaceFileTabId('C:/workspace/c.md', 'default'),
+      createWorkspaceFileTabId('C:/workspace/b.md', 'default'),
+      'after',
+    )
     expect(useWorkspaceStore.getState().openTabs.map((tab) => tab.filePath)).toEqual([
       'C:/workspace/a.md',
       'C:/workspace/b.md',
       'C:/workspace/c.md',
     ])
-    expect(useWorkspaceStore.getState().activeTabPath).toBe('C:/workspace/b.md')
+    expect(useWorkspaceStore.getState().activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/b.md', 'default'))
   })
 
   it('treats self-drops and adjacent no-op drops as stable reorder operations', () => {
@@ -225,10 +315,38 @@ describe('useWorkspaceStore', () => {
 
     const currentTabs = useWorkspaceStore.getState().openTabs
 
-    expect(reorderWorkspaceTabs(currentTabs, 'C:/workspace/b.md', 'C:/workspace/b.md', 'before')).toBe(currentTabs)
-    expect(reorderWorkspaceTabs(currentTabs, 'C:/workspace/b.md', 'C:/workspace/c.md', 'before')).toBe(currentTabs)
-    expect(reorderWorkspaceTabs(currentTabs, 'C:/workspace/b.md', 'C:/workspace/a.md', 'after')).toBe(currentTabs)
-    expect(reorderWorkspaceTabs(currentTabs, 'C:/workspace/missing.md', 'C:/workspace/a.md', 'before')).toBe(currentTabs)
+    expect(
+      reorderWorkspaceTabs(
+        currentTabs,
+        createWorkspaceFileTabId('C:/workspace/b.md', 'default'),
+        createWorkspaceFileTabId('C:/workspace/b.md', 'default'),
+        'before',
+      ),
+    ).toBe(currentTabs)
+    expect(
+      reorderWorkspaceTabs(
+        currentTabs,
+        createWorkspaceFileTabId('C:/workspace/b.md', 'default'),
+        createWorkspaceFileTabId('C:/workspace/c.md', 'default'),
+        'before',
+      ),
+    ).toBe(currentTabs)
+    expect(
+      reorderWorkspaceTabs(
+        currentTabs,
+        createWorkspaceFileTabId('C:/workspace/b.md', 'default'),
+        createWorkspaceFileTabId('C:/workspace/a.md', 'default'),
+        'after',
+      ),
+    ).toBe(currentTabs)
+    expect(
+      reorderWorkspaceTabs(
+        currentTabs,
+        createWorkspaceFileTabId('C:/workspace/missing.md', 'default'),
+        createWorkspaceFileTabId('C:/workspace/a.md', 'default'),
+        'before',
+      ),
+    ).toBe(currentTabs)
   })
 
   it('moves a leading tab to the very end when dropped after the last tab', () => {
@@ -238,7 +356,11 @@ describe('useWorkspaceStore', () => {
     store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
     store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
 
-    store.moveTab('C:/workspace/a.md', 'C:/workspace/c.md', 'after')
+    store.moveTab(
+      createWorkspaceFileTabId('C:/workspace/a.md', 'default'),
+      createWorkspaceFileTabId('C:/workspace/c.md', 'default'),
+      'after',
+    )
 
     expect(useWorkspaceStore.getState().openTabs.map((tab) => tab.filePath)).toEqual([
       'C:/workspace/b.md',
@@ -249,6 +371,7 @@ describe('useWorkspaceStore', () => {
 
   it('reorders diff tabs alongside file tabs without changing their payloads', () => {
     const store = useWorkspaceStore.getState()
+    const diffTabId = createDiffTabId('C:/workspace/draft.md', 'unstaged')
 
     store.openTab({ content: 'draft', editorKind: 'rich-text', filePath: 'C:/workspace/draft.md' })
     store.openDiffTab({
@@ -271,22 +394,28 @@ describe('useWorkspaceStore', () => {
         repositoryRootPath: 'C:/workspace',
       },
       exists: true,
-      filePath: 'git-diff://unstaged/C%3A%2Fworkspace%2Fdraft.md',
+      filePath: diffTabId,
+      id: diffTabId,
       isDirty: false,
       kind: 'diff',
       title: 'draft.md',
     })
     store.openTab({ content: 'notes', editorKind: 'rich-text', filePath: 'C:/workspace/notes.md' })
 
-    store.moveTab('git-diff://unstaged/C%3A%2Fworkspace%2Fdraft.md', 'C:/workspace/notes.md', 'after')
+    store.moveTab(
+      diffTabId,
+      createWorkspaceFileTabId('C:/workspace/notes.md', 'default'),
+      'after',
+    )
 
     const nextTabs = useWorkspaceStore.getState().openTabs
     expect(nextTabs.map((tab) => tab.filePath)).toEqual([
       'C:/workspace/draft.md',
       'C:/workspace/notes.md',
-      'git-diff://unstaged/C%3A%2Fworkspace%2Fdraft.md',
+      diffTabId,
     ])
     expect(nextTabs[2]).toMatchObject({
+      id: diffTabId,
       kind: 'diff',
       title: 'draft.md',
     })

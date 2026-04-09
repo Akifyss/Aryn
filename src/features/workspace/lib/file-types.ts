@@ -1,6 +1,6 @@
 export type WorkspaceEditorKind = 'rich-text' | 'code' | 'unsupported'
 export type SupportedWorkspaceEditorKind = Exclude<WorkspaceEditorKind, 'unsupported'>
-export type WorkspaceFileViewMode = 'editor' | 'preview'
+export type WorkspaceFileViewMode = 'default' | 'code' | 'preview'
 
 const RICH_TEXT_EXTENSIONS = new Set([
   '.md',
@@ -137,6 +137,13 @@ export function supportsHtmlPreview(filePath: string) {
   return extension === '.html' || extension === '.htm'
 }
 
+export function supportsCodeEditorToggle(
+  filePath: string,
+  editorKind: SupportedWorkspaceEditorKind,
+) {
+  return editorKind === 'rich-text' || supportsHtmlPreview(filePath)
+}
+
 export function getDefaultWorkspaceFileViewMode(
   filePath: string,
   editorKind: SupportedWorkspaceEditorKind,
@@ -145,7 +152,7 @@ export function getDefaultWorkspaceFileViewMode(
     return 'preview'
   }
 
-  return 'editor'
+  return 'default'
 }
 
 export function getCodeLanguage(filePath: string) {

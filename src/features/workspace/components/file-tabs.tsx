@@ -8,20 +8,20 @@ import {
 } from '@/features/workspace/store/use-workspace-store'
 
 type FileTabsProps = {
-  activeFilePath: string | null
+  activeTabId: string | null
   actions?: ReactNode
   tabs: WorkspaceDisplayTab[]
   workspacePath: string | null
-  onActivate: (filePath: string) => void
-  onClose: (filePath: string) => void
-  onMoveTab: (movingPath: string, targetPath: string, position: TabDropPosition) => void
+  onActivate: (tabId: string) => void
+  onClose: (tabId: string) => void
+  onMoveTab: (movingId: string, targetId: string, position: TabDropPosition) => void
   onOpenDiff?: (filePath: string) => void
   getHasDiff?: (filePath: string) => boolean
 }
 
 type DragTarget = {
   position: TabDropPosition
-  targetPath: string
+  targetId: string
 }
 
 function getBaseName(tab: WorkspaceDisplayTab) {
@@ -77,7 +77,7 @@ function resolveDropPosition(event: ReactDragEvent<HTMLElement>, element: HTMLEl
 }
 
 export function FileTabs({
-  activeFilePath,
+  activeTabId,
   actions,
   tabs,
   workspacePath,
@@ -92,7 +92,7 @@ export function FileTabs({
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const tabContainerRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
-  const [draggingTabPath, setDraggingTabPath] = useState<string | null>(null)
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null)
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null)
   const reorderableTabs = useMemo(
     () => tabs.filter(isReorderableTab),
@@ -114,29 +114,29 @@ export function FileTabs({
   }, [tabs])
 
   useEffect(() => {
-    if (!activeFilePath) {
+    if (!activeTabId) {
       return
     }
 
-    tabRefs.current[activeFilePath]?.scrollIntoView({
+    tabRefs.current[activeTabId]?.scrollIntoView({
       behavior: 'smooth',
       block: 'nearest',
       inline: 'nearest',
     })
-  }, [activeFilePath])
+  }, [activeTabId])
 
   useEffect(() => {
-    if (draggingTabPath && !reorderableTabs.some((tab) => tab.filePath === draggingTabPath)) {
-      setDraggingTabPath(null)
+    if (draggingTabId && !reorderableTabs.some((tab) => tab.id === draggingTabId)) {
+      setDraggingTabId(null)
       setDragTarget(null)
       cleanupDragPreview()
       return
     }
 
-    if (dragTarget && !reorderableTabs.some((tab) => tab.filePath === dragTarget.targetPath)) {
+    if (dragTarget && !reorderableTabs.some((tab) => tab.id === dragTarget.targetId)) {
       setDragTarget(null)
     }
-  }, [dragTarget, draggingTabPath, reorderableTabs])
+  }, [dragTarget, draggingTabId, reorderableTabs])
 
   useEffect(() => () => {
     cleanupDragPreview()
@@ -149,28 +149,28 @@ export function FileTabs({
       return
     }
 
-    onActivate(nextTab.filePath)
-    tabRefs.current[nextTab.filePath]?.focus()
+    onActivate(nextTab.id)
+    tabRefs.current[nextTab.id]?.focus()
   }
 
-  function wouldMoveChangeOrder(targetPath: string, position: TabDropPosition) {
-    if (!draggingTabPath) {
+  function wouldMoveChangeOrder(targetId: string, position: TabDropPosition) {
+    if (!draggingTabId) {
       return false
     }
 
-    return reorderWorkspaceTabs(reorderableTabs, draggingTabPath, targetPath, position) !== reorderableTabs
+    return reorderWorkspaceTabs(reorderableTabs, draggingTabId, targetId, position) !== reorderableTabs
   }
 
-  function setNextDragTarget(targetPath: string, position: TabDropPosition) {
-    if (!wouldMoveChangeOrder(targetPath, position)) {
+  function setNextDragTarget(targetId: string, position: TabDropPosition) {
+    if (!wouldMoveChangeOrder(targetId, position)) {
       setDragTarget(null)
       return
     }
 
     setDragTarget((currentTarget) => (
-      currentTarget?.targetPath === targetPath && currentTarget.position === position
+      currentTarget?.targetId === targetId && currentTarget.position === position
         ? currentTarget
-        : { targetPath, position }
+        : { targetId, position }
     ))
   }
 
@@ -182,20 +182,20 @@ export function FileTabs({
       return null
     }
 
-    const firstTabElement = tabContainerRefs.current[firstTab.filePath]
-    const lastTabElement = tabContainerRefs.current[lastTab.filePath]
+    const firstTabElement = tabContainerRefs.current[firstTab.id]
+    const lastTabElement = tabContainerRefs.current[lastTab.id]
 
     if (firstTabElement && clientX <= firstTabElement.getBoundingClientRect().left) {
       return {
         position: 'before' as const,
-        targetPath: firstTab.filePath,
+        targetId: firstTab.id,
       }
     }
 
     if (lastTabElement && clientX >= lastTabElement.getBoundingClientRect().right) {
       return {
         position: 'after' as const,
-        targetPath: lastTab.filePath,
+        targetId: lastTab.id,
       }
     }
 
@@ -227,10 +227,10 @@ export function FileTabs({
     dragPreviewRef.current = null
   }
 
-  function createDragPreview(tabPath: string) {
+  function createDragPreview(tabId: string) {
     cleanupDragPreview()
 
-    const sourceElement = tabContainerRefs.current[tabPath]
+    const sourceElement = tabContainerRefs.current[tabId]
     if (!sourceElement) {
       return null
     }
@@ -265,7 +265,7 @@ export function FileTabs({
     }
 
     const shellElement = shellRef.current
-    const targetElement = tabContainerRefs.current[target.targetPath]
+    const targetElement = tabContainerRefs.current[target.targetId]
     if (!shellElement || !targetElement) {
       return null
     }
@@ -285,16 +285,16 @@ export function FileTabs({
       ref={shellRef}
       className='file-tabs-shell'
       data-empty={tabs.length === 0}
-      data-dragging={draggingTabPath ? 'true' : 'false'}
+      data-dragging={draggingTabId ? 'true' : 'false'}
     >
       <div
         ref={scrollerRef}
         className='file-tabs-scroller'
-        data-dragging={draggingTabPath ? 'true' : 'false'}
+        data-dragging={draggingTabId ? 'true' : 'false'}
         role='tablist'
         aria-label='Open files'
         onDragOver={(event) => {
-          if (!draggingTabPath) {
+          if (!draggingTabId) {
             return
           }
 
@@ -303,17 +303,17 @@ export function FileTabs({
           autoScrollDuringDrag(event.clientX)
 
           const dragOverElement = event.target instanceof HTMLElement
-            ? event.target.closest<HTMLElement>('[data-tab-path][data-reorderable="true"]')
+            ? event.target.closest<HTMLElement>('[data-tab-id][data-reorderable="true"]')
             : null
 
           if (dragOverElement) {
-            const targetPath = dragOverElement.dataset.tabPath
-            if (!targetPath) {
+            const targetId = dragOverElement.dataset.tabId
+            if (!targetId) {
               setDragTarget(null)
               return
             }
 
-            setNextDragTarget(targetPath, resolveDropPosition(event, dragOverElement))
+            setNextDragTarget(targetId, resolveDropPosition(event, dragOverElement))
             return
           }
 
@@ -323,21 +323,21 @@ export function FileTabs({
             return
           }
 
-          setNextDragTarget(boundaryTarget.targetPath, boundaryTarget.position)
+          setNextDragTarget(boundaryTarget.targetId, boundaryTarget.position)
         }}
         onDrop={(event) => {
-          if (!draggingTabPath) {
+          if (!draggingTabId) {
             return
           }
 
           event.preventDefault()
 
           const target = dragTarget ?? getBoundaryDragTarget(event.clientX)
-          if (target && wouldMoveChangeOrder(target.targetPath, target.position)) {
-            onMoveTab(draggingTabPath, target.targetPath, target.position)
+          if (target && wouldMoveChangeOrder(target.targetId, target.position)) {
+            onMoveTab(draggingTabId, target.targetId, target.position)
             requestAnimationFrame(() => {
-              tabRefs.current[draggingTabPath]?.focus()
-              tabRefs.current[draggingTabPath]?.scrollIntoView({
+              tabRefs.current[draggingTabId]?.focus()
+              tabRefs.current[draggingTabId]?.scrollIntoView({
                 behavior: 'smooth',
                 block: 'nearest',
                 inline: 'nearest',
@@ -345,12 +345,12 @@ export function FileTabs({
             })
           }
 
-          setDraggingTabPath(null)
+          setDraggingTabId(null)
           setDragTarget(null)
           cleanupDragPreview()
         }}
         onDragLeave={(event) => {
-          if (!draggingTabPath || !scrollerRef.current) {
+          if (!draggingTabId || !scrollerRef.current) {
             return
           }
 
@@ -373,7 +373,7 @@ export function FileTabs({
         {tabs.length > 0 && tabs.map((tab, index) => {
           const baseName = getBaseName(tab)
           const metaLabel = getTabMetaLabel(workspacePath, tab, duplicateNameSet.has(baseName))
-          const isActive = activeFilePath === tab.filePath
+          const isActive = activeTabId === tab.id
           const title = [
             tab.kind === 'diff' ? tab.diff.change.path : tab.filePath,
             !tab.exists ? 'Missing from workspace. Save to recreate it.' : null,
@@ -384,29 +384,29 @@ export function FileTabs({
 
           return (
             <div
-              key={tab.filePath}
+              key={tab.id}
               ref={(element) => {
-                tabContainerRefs.current[tab.filePath] = element
+                tabContainerRefs.current[tab.id] = element
               }}
-              className={`file-tab${isActive ? ' is-active' : ''}${tab.kind === 'file' && tab.isDirty ? ' is-dirty' : ''}${tab.exists ? '' : ' is-missing'}${draggingTabPath === tab.filePath ? ' is-drag-source' : ''}`}
+              className={`file-tab${isActive ? ' is-active' : ''}${tab.kind === 'file' && tab.isDirty ? ' is-dirty' : ''}${tab.exists ? '' : ' is-missing'}${draggingTabId === tab.id ? ' is-drag-source' : ''}`}
               data-active={isActive ? 'true' : 'false'}
               data-reorderable={tab.kind === 'settings' ? 'false' : 'true'}
-              data-tab-path={tab.filePath}
+              data-tab-id={tab.id}
             >
               <button
                 ref={(element) => {
-                  tabRefs.current[tab.filePath] = element
+                  tabRefs.current[tab.id] = element
                 }}
                 type='button'
                 draggable={tab.kind !== 'settings'}
                 role='tab'
                 aria-selected={isActive}
                 aria-controls='writing-editor-panel'
-                aria-grabbed={draggingTabPath === tab.filePath}
+                aria-grabbed={draggingTabId === tab.id}
                 className='file-tab-trigger'
                 title={title}
                 onClick={() => {
-                  onActivate(tab.filePath)
+                  onActivate(tab.id)
                 }}
                 onDragStart={(event) => {
                   if (tab.kind === 'settings') {
@@ -414,17 +414,17 @@ export function FileTabs({
                     return
                   }
 
-                  setDraggingTabPath(tab.filePath)
+                  setDraggingTabId(tab.id)
                   setDragTarget(null)
                   event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData('text/plain', tab.filePath)
-                  const preview = createDragPreview(tab.filePath)
+                  event.dataTransfer.setData('text/plain', tab.id)
+                  const preview = createDragPreview(tab.id)
                   if (preview) {
                     event.dataTransfer.setDragImage(preview, 24, Math.max(12, preview.clientHeight / 2))
                   }
                 }}
                 onDragEnd={() => {
-                  setDraggingTabPath(null)
+                  setDraggingTabId(null)
                   setDragTarget(null)
                   cleanupDragPreview()
                 }}
@@ -434,7 +434,7 @@ export function FileTabs({
                   }
 
                   event.preventDefault()
-                  onClose(tab.filePath)
+                  onClose(tab.id)
                 }}
                 onKeyDown={(event) => {
                   if (event.key === 'ArrowRight') {
@@ -487,7 +487,7 @@ export function FileTabs({
                   aria-label={`Close ${baseName}`}
                   onClick={(event) => {
                     event.stopPropagation()
-                    onClose(tab.filePath)
+                    onClose(tab.id)
                   }}
                 >
                   <span className='file-tab-dirty-indicator' aria-hidden='true' />
@@ -504,7 +504,7 @@ export function FileTabs({
         className='file-tabs-drag-spacer'
         aria-hidden='true'
         onDragOver={(event) => {
-          if (!draggingTabPath) {
+          if (!draggingTabId) {
             return
           }
 
@@ -515,10 +515,10 @@ export function FileTabs({
 
           event.preventDefault()
           event.dataTransfer.dropEffect = 'move'
-          setNextDragTarget(lastTab.filePath, 'after')
+          setNextDragTarget(lastTab.id, 'after')
         }}
         onDrop={(event) => {
-          if (!draggingTabPath) {
+          if (!draggingTabId) {
             return
           }
 
@@ -529,11 +529,11 @@ export function FileTabs({
 
           event.preventDefault()
 
-          if (wouldMoveChangeOrder(lastTab.filePath, 'after')) {
-            onMoveTab(draggingTabPath, lastTab.filePath, 'after')
+          if (wouldMoveChangeOrder(lastTab.id, 'after')) {
+            onMoveTab(draggingTabId, lastTab.id, 'after')
             requestAnimationFrame(() => {
-              tabRefs.current[draggingTabPath]?.focus()
-              tabRefs.current[draggingTabPath]?.scrollIntoView({
+              tabRefs.current[draggingTabId]?.focus()
+              tabRefs.current[draggingTabId]?.scrollIntoView({
                 behavior: 'smooth',
                 block: 'nearest',
                 inline: 'nearest',
@@ -541,7 +541,7 @@ export function FileTabs({
             })
           }
 
-          setDraggingTabPath(null)
+          setDraggingTabId(null)
           setDragTarget(null)
           cleanupDragPreview()
         }}

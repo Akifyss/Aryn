@@ -26,6 +26,7 @@ import {
 import { FileTabs } from '@/features/workspace/components/file-tabs'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
 import {
+  createWorkspaceFileTabId,
   useWorkspaceStore,
   type WorkspaceDiffTab,
   type WorkspaceDisplayTab,
@@ -167,6 +168,7 @@ const MIN_GIT_PANEL_HEIGHT = 200
 const DEFAULT_GIT_PANEL_LAYOUT: GitPanelLayout = 'list'
 const TAB_STORAGE_PREFIX = 'writing-workspace:file-tabs:'
 const LEGACY_TAB_STORAGE_PREFIX = 'writing-workspace:editor-tabs:'
+const SETTINGS_TAB_ID = 'app://settings'
 const SETTINGS_TAB_PATH = 'app://settings'
 
 type ResizePanel = 'left' | 'right'
@@ -202,7 +204,7 @@ function readStoredTabState(workspacePath: string): StoredTabState {
           && entry !== null
           && typeof entry.path === 'string'
           && entry.path.trim().length > 0
-          && (entry.viewMode === undefined || entry.viewMode === 'editor' || entry.viewMode === 'preview')
+          && (entry.viewMode === undefined || entry.viewMode === 'default' || entry.viewMode === 'code' || entry.viewMode === 'preview')
         ),
       )
       : []
@@ -226,8 +228,19 @@ function readStoredTabState(workspacePath: string): StoredTabState {
   }
 }
 
-function dedupePaths(paths: string[]) {
-  return [...new Set(paths)]
+function dedupeStoredEntries(entries: Array<{ path: string, viewMode?: WorkspaceFileViewMode }>) {
+  const seen = new Set<string>()
+
+  return entries.filter((entry) => {
+    const key = `${entry.path}::${entry.viewMode ?? 'default'}`
+
+    if (seen.has(key)) {
+      return false
+    }
+
+    seen.add(key)
+    return true
+  })
 }
 
 function resolveWorkspaceFileViewMode(
@@ -236,6 +249,10 @@ function resolveWorkspaceFileViewMode(
   preferredViewMode?: WorkspaceFileViewMode,
 ) {
   if (preferredViewMode === 'preview' && editorKind === 'code' && supportsHtmlPreview(filePath)) {
+    return preferredViewMode
+  }
+
+  if (preferredViewMode === 'code' && (editorKind === 'rich-text' || supportsHtmlPreview(filePath))) {
     return preferredViewMode
   }
 
@@ -254,6 +271,7 @@ function toStoredWorkspaceTab(
     editorKind,
     exists: true,
     filePath,
+    id: createWorkspaceFileTabId(filePath, viewMode),
     isDirty: false,
     kind: 'file',
     savedContent: content,
@@ -262,10 +280,12 @@ function toStoredWorkspaceTab(
 }
 
 function createDiffTab(change: GitChangeItem, scope: GitChangeScope, diff: Awaited<ReturnType<typeof window.appApi.getGitFileDiff>>): WorkspaceDiffTab {
+  const id = createDiffTabId(change.path, scope)
   return {
     diff,
     exists: true,
-    filePath: createDiffTabId(change.path, scope),
+    filePath: id,
+    id,
     isDirty: false,
     kind: 'diff',
     title: getBaseName(change.path),
@@ -383,7 +403,7 @@ function App() {
   const [gitPanelLayout, setGitPanelLayout] = useState<GitPanelLayout>(DEFAULT_GIT_PANEL_LAYOUT)
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
-  const activeTabPath = useWorkspaceStore((state) => state.activeTabPath)
+  const activeTabId = useWorkspaceStore((state) => state.activeTabId)
   const activateTab = useWorkspaceStore((state) => state.activateTab)
   const closeTab = useWorkspaceStore((state) => state.closeTab)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
@@ -397,14 +417,13 @@ function App() {
   const replaceTabs = useWorkspaceStore((state) => state.replaceTabs)
   const resetOpenTabs = useWorkspaceStore((state) => state.resetOpenTabs)
   const setCurrentPath = useWorkspaceStore((state) => state.setCurrentPath)
-  const setTabViewMode = useWorkspaceStore((state) => state.setTabViewMode)
   const setTree = useWorkspaceStore((state) => state.setTree)
   const syncTabWithDisk = useWorkspaceStore((state) => state.syncTabWithDisk)
   const tree = useWorkspaceStore((state) => state.tree)
   const updateTabContent = useWorkspaceStore((state) => state.updateTabContent)
   const activeTab = useMemo(
-    () => openTabs.find((tab) => tab.filePath === activeTabPath) ?? null,
-    [activeTabPath, openTabs],
+    () => openTabs.find((tab) => tab.id === activeTabId) ?? null,
+    [activeTabId, openTabs],
   )
   const activeFileTab = isWorkspaceFileTab(activeTab) ? activeTab : null
   const activeDiffTab = isWorkspaceDiffTab(activeTab) ? activeTab : null
@@ -421,6 +440,7 @@ function App() {
           editorKind: 'rich-text',
           exists: true,
           filePath: SETTINGS_TAB_PATH,
+          id: SETTINGS_TAB_ID,
           isDirty: false,
           kind: 'settings',
           savedContent: '',
@@ -429,7 +449,7 @@ function App() {
     },
     [isSettingsTabOpen, openTabs],
   )
-  const displayActiveTabPath = isSettingsTabActive ? SETTINGS_TAB_PATH : activeTabPath
+  const displayActiveTabId = isSettingsTabActive ? SETTINGS_TAB_ID : activeTabId
   const currentFileContent = activeFileTab?.content ?? ''
   const currentEditorKind = activeFileTab?.editorKind ?? null
   const currentFileViewMode = activeFileTab?.viewMode ?? null
@@ -475,8 +495,8 @@ function App() {
   }
 
   function getPersistedActiveFilePath() {
-    const activeTabId = useWorkspaceStore.getState().activeTabPath
-    const tab = useWorkspaceStore.getState().openTabs.find((candidate) => candidate.filePath === activeTabId)
+    const activeTabId = useWorkspaceStore.getState().activeTabId
+    const tab = useWorkspaceStore.getState().openTabs.find((candidate) => candidate.id === activeTabId)
     return tab?.kind === 'file' ? tab.filePath : null
   }
 
@@ -603,7 +623,7 @@ function App() {
       }
 
       if (tab.kind === 'diff' && hasPathPrefix(tab.diff.change.path, currentNodePath)) {
-        closeTab(tab.filePath)
+        closeTab(tab.id)
       }
     })
   }
@@ -614,7 +634,17 @@ function App() {
     currentTabs.forEach((tab) => {
       const targetPath = tab.kind === 'diff' ? tab.diff.change.path : tab.filePath
       if (hasPathPrefix(targetPath, nodePath)) {
-        closeTab(tab.filePath)
+        closeTab(tab.id)
+      }
+    })
+  }
+
+  function closeFileTabsForPath(filePath: string) {
+    const currentTabs = useWorkspaceStore.getState().openTabs
+
+    currentTabs.forEach((tab) => {
+      if (tab.kind === 'file' && tab.filePath === filePath) {
+        closeTab(tab.id)
       }
     })
   }
@@ -627,7 +657,7 @@ function App() {
         const nextDiff = await window.appApi.getGitFileDiff(workspacePath, tab.diff.change.path, tab.diff.change.scope)
         openDiffTab(createDiffTab(nextDiff.change, nextDiff.change.scope, nextDiff), false)
       } catch {
-        closeTab(tab.filePath)
+        closeTab(tab.id)
       }
     }))
   }
@@ -700,8 +730,8 @@ function App() {
     })
   }
 
-  async function closeEditorTab(filePath: string, options: { force?: boolean, silent?: boolean } = {}) {
-    if (filePath === SETTINGS_TAB_PATH) {
+  async function closeEditorTab(tabId: string, options: { force?: boolean, silent?: boolean } = {}) {
+    if (tabId === SETTINGS_TAB_ID) {
       setIsSettingsTabOpen(false)
       setIsSettingsTabActive(false)
 
@@ -712,7 +742,7 @@ function App() {
       return true
     }
 
-    const targetTab = openTabs.find((tab) => tab.filePath === filePath)
+    const targetTab = openTabs.find((tab) => tab.id === tabId)
 
     if (!targetTab) {
       return false
@@ -731,7 +761,7 @@ function App() {
       }
     }
 
-    closeTab(filePath)
+    closeTab(tabId)
 
     if (currentPath) {
       void syncPersistedActiveFile(currentPath)
@@ -769,24 +799,6 @@ function App() {
     preferredViewMode?: WorkspaceFileViewMode,
   ) => {
     setIsSettingsTabActive(false)
-    const existingTab = useWorkspaceStore.getState().openTabs.find(
-      (tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.filePath === filePath,
-    )
-
-    if (existingTab) {
-      if (preferredViewMode && existingTab.viewMode !== preferredViewMode) {
-        setTabViewMode(filePath, preferredViewMode)
-      }
-
-      activateTab(filePath)
-
-      if (workspacePath) {
-        await updateWorkspaceState(workspacePath, { lastFilePath: filePath })
-      }
-
-      setStatusMessage(`${getBaseName(filePath)} focused`)
-      return
-    }
 
     const editorKind = await window.appApi.resolveWorkspaceEditorKind(filePath)
 
@@ -799,12 +811,32 @@ function App() {
     }
 
     try {
+      const targetViewMode = resolveWorkspaceFileViewMode(filePath, editorKind, preferredViewMode)
+      const existingTab = useWorkspaceStore.getState().openTabs.find(
+        (tab): tab is WorkspaceFileTab => (
+          tab.kind === 'file'
+          && tab.filePath === filePath
+          && tab.viewMode === targetViewMode
+        ),
+      )
+
+      if (existingTab) {
+        activateTab(existingTab.id)
+
+        if (workspacePath) {
+          await updateWorkspaceState(workspacePath, { lastFilePath: filePath })
+        }
+
+        setStatusMessage(`${getBaseName(filePath)} focused`)
+        return
+      }
+
       const fileContent = await window.appApi.readWorkspaceFile(filePath)
       openTab({
         filePath,
         content: fileContent,
         editorKind,
-        viewMode: resolveWorkspaceFileViewMode(filePath, editorKind, preferredViewMode),
+        viewMode: targetViewMode,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to open file.'
@@ -820,7 +852,7 @@ function App() {
     }
 
     setStatusMessage(`${getBaseName(filePath)} opened`)
-  }, [currentPath, activateTab, openTab, setTabViewMode])
+  }, [currentPath, activateTab, openTab])
 
   async function openGitDiff(change: GitChangeItem) {
     if (!currentPath) {
@@ -864,21 +896,24 @@ function App() {
     const workspaceState = await getWorkspaceState(workspacePath)
     const storedState = readStoredTabState(workspacePath)
     const fallbackPath = fallbackFilePath ?? workspaceState.lastFilePath
-    const candidatePaths = dedupePaths([
-      ...storedState.paths,
-      ...(fallbackPath ? [fallbackPath] : []),
+    const candidateEntries = dedupeStoredEntries([
+      ...(storedState.entries ?? []).map((entry) => ({
+        path: entry.path,
+        viewMode: entry.viewMode,
+      })),
+      ...(storedState.entries?.length
+        ? []
+        : storedState.paths.map((path) => ({ path }))),
+      ...(fallbackPath ? [{ path: fallbackPath }] : []),
     ])
 
-    if (candidatePaths.length === 0) {
+    if (candidateEntries.length === 0) {
       replaceTabs([], null)
       setIsSettingsTabActive(false)
       return
     }
 
-    const storedViewModes = new Map(
-      (storedState.entries ?? []).map((entry) => [entry.path, entry.viewMode]),
-    )
-    const settledTabs = await Promise.all(candidatePaths.map(async (filePath) => {
+    const settledTabs = await Promise.all(candidateEntries.map(async ({ path: filePath, viewMode }) => {
       const editorKind = await window.appApi.resolveWorkspaceEditorKind(filePath)
 
       if (!editorKind) {
@@ -891,21 +926,22 @@ function App() {
           filePath,
           content,
           editorKind,
-          resolveWorkspaceFileViewMode(filePath, editorKind, storedViewModes.get(filePath)),
+          resolveWorkspaceFileViewMode(filePath, editorKind, viewMode),
         )
       } catch {
         return null
       }
     }))
     const nextTabs = settledTabs.filter((tab): tab is WorkspaceFileTab => tab !== null)
-    const requestedActivePath = storedState.activePath ?? fallbackPath ?? null
-    const nextActivePath = nextTabs.some((tab) => tab.filePath === requestedActivePath)
-      ? requestedActivePath
-      : nextTabs[0]?.filePath ?? null
+    const requestedActiveId = storedState.activePath ?? fallbackPath ?? null
+    const nextActiveId = nextTabs.some((tab) => tab.id === requestedActiveId || tab.filePath === requestedActiveId)
+      ? nextTabs.find((tab) => tab.id === requestedActiveId || tab.filePath === requestedActiveId)?.id ?? null
+      : nextTabs[0]?.id ?? null
 
-    replaceTabs(nextTabs, nextActivePath)
+    replaceTabs(nextTabs, nextActiveId)
     setIsSettingsTabActive(false)
-    await updateWorkspaceState(workspacePath, { lastFilePath: nextActivePath })
+    const nextActiveFileTab = nextTabs.find((tab) => tab.id === nextActiveId && tab.kind === 'file')
+    await updateWorkspaceState(workspacePath, { lastFilePath: nextActiveFileTab?.filePath ?? null })
   }
 
   async function handlePickWorkspace() {
@@ -1146,17 +1182,17 @@ function App() {
     }
   }
 
-  function activateFileTab(filePath: string) {
-    if (filePath === SETTINGS_TAB_PATH) {
+  function activateFileTab(tabId: string) {
+    if (tabId === SETTINGS_TAB_ID) {
       setIsSettingsTabOpen(true)
       setIsSettingsTabActive(true)
       return
     }
 
     setIsSettingsTabActive(false)
-    activateTab(filePath)
+    activateTab(tabId)
 
-    const targetTab = displayTabs.find((tab) => tab.filePath === filePath)
+    const targetTab = displayTabs.find((tab) => tab.id === tabId)
 
     if (currentPath && targetTab?.kind === 'file') {
       void updateWorkspaceState(currentPath, { lastFilePath: targetTab.filePath })
@@ -1164,11 +1200,11 @@ function App() {
   }
 
   function cycleTabs(direction: 1 | -1) {
-    if (displayTabs.length < 2 || !displayActiveTabPath) {
+    if (displayTabs.length < 2 || !displayActiveTabId) {
       return
     }
 
-    const currentIndex = displayTabs.findIndex((tab) => tab.filePath === displayActiveTabPath)
+    const currentIndex = displayTabs.findIndex((tab) => tab.id === displayActiveTabId)
     if (currentIndex === -1) {
       return
     }
@@ -1176,7 +1212,7 @@ function App() {
     const nextIndex = (currentIndex + direction + displayTabs.length) % displayTabs.length
     const nextTab = displayTabs[nextIndex]
 
-    activateFileTab(nextTab.filePath)
+    activateFileTab(nextTab.id)
   }
 
   async function handleInitializeGit() {
@@ -1425,7 +1461,7 @@ function App() {
           return
         }
 
-        closeTab(event.path)
+        closeFileTabsForPath(event.path)
         await syncPersistedActiveFile(currentPath)
         setStatusMessage(`${getBaseName(event.path)} was removed`)
         return
@@ -1492,11 +1528,11 @@ function App() {
       }))
 
     window.localStorage.setItem(getTabStorageKey(currentPath), JSON.stringify({
-      activePath: getPersistedActiveFilePath(),
+      activePath: useWorkspaceStore.getState().activeTabId,
       entries: storedEntries,
       paths: storedEntries.map((entry) => entry.path),
     } satisfies StoredTabState))
-  }, [activeTabPath, currentPath, openTabs])
+  }, [activeTabId, currentPath, openTabs])
 
   useEffect(() => {
     if (!activeResizePanel) {
@@ -1665,12 +1701,12 @@ function App() {
       if ((event.ctrlKey || event.metaKey) && key === 'w') {
         event.preventDefault()
         if (isSettingsTabActive) {
-          closeEditorTab(SETTINGS_TAB_PATH)
+          closeEditorTab(SETTINGS_TAB_ID)
           return
         }
 
-        if (displayActiveTabPath) {
-          closeEditorTab(displayActiveTabPath)
+        if (displayActiveTabId) {
+          closeEditorTab(displayActiveTabId)
         }
         return
       }
@@ -1695,7 +1731,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [displayActiveTabPath, displayTabs, isSettingsTabActive])
+  }, [displayActiveTabId, displayTabs, isSettingsTabActive])
 
   useEffect(() => {
     if (!isLeftSidebarVisible && activeResizePanel === 'left') {
@@ -1911,15 +1947,15 @@ function App() {
                   setExpandedPaths={setExpandedPaths}
                   workspacePath={currentPath}
                   gitRepositoryState={gitRepositoryState}
-                onSelectFile={(filePath) => {
-                  void openFile(filePath)
-                }}
-                onOpenInCodeEditor={(filePath) => {
-                  void openFile(filePath, currentPath, 'editor')
-                }}
-                onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
-                onDeleteNode={(node) => handleDeleteNode(node)}
-                onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
+                  onSelectFile={(filePath) => {
+                    void openFile(filePath)
+                  }}
+                  onOpenInCodeEditor={(filePath) => {
+                    void openFile(filePath, currentPath, 'code')
+                  }}
+                  onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
+                  onDeleteNode={(node) => handleDeleteNode(node)}
+                  onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
                 />
               </ScrollShadow>
             </div>
@@ -2008,15 +2044,15 @@ function App() {
       <main className='panel panel-editor' id='editor-main'>
         <div className='editor-frame'>
           <FileTabs
-            activeFilePath={displayActiveTabPath}
+            activeTabId={displayActiveTabId}
             tabs={displayTabs}
             workspacePath={currentPath}
             onActivate={activateFileTab}
-            onClose={(filePath) => {
-              closeEditorTab(filePath)
+            onClose={(tabId) => {
+              closeEditorTab(tabId)
             }}
-            onMoveTab={(movingPath, targetPath, position) => {
-              moveTab(movingPath, targetPath, position)
+            onMoveTab={(movingId, targetId, position) => {
+              moveTab(movingId, targetId, position)
             }}
             onOpenDiff={async (filePath) => {
               const latestGitState = await refreshGitState(currentPath, { silent: true })
@@ -2083,7 +2119,7 @@ function App() {
               />
             ) : null}
 
-            {activeFileTab && currentEditorKind === 'rich-text' ? (
+            {activeFileTab && currentEditorKind === 'rich-text' && currentFileViewMode === 'default' ? (
               <WritingEditor
                 disabled={!currentFilePath}
                 onChange={(nextValue) => {
@@ -2105,18 +2141,19 @@ function App() {
               />
             ) : null}
 
-            {activeFileTab && currentEditorKind === 'code' ? (
-              currentFileViewMode === 'editor' ? (
-                <CodeEditor
-                  disabled={false}
-                  filePath={activeFileTab.filePath}
-                  onChange={(nextValue) => {
-                    updateTabContent(activeFileTab.filePath, nextValue)
-                  }}
-                  value={currentFileContent}
-                  theme={theme}
-                />
-              ) : null
+            {activeFileTab && (
+              (currentEditorKind === 'code' && currentFileViewMode !== 'preview')
+              || (currentEditorKind === 'rich-text' && currentFileViewMode === 'code')
+            ) ? (
+              <CodeEditor
+                disabled={false}
+                filePath={activeFileTab.filePath}
+                onChange={(nextValue) => {
+                  updateTabContent(activeFileTab.filePath, nextValue)
+                }}
+                value={currentFileContent}
+                theme={theme}
+              />
             ) : null}
           </div>
         </div>

@@ -14,6 +14,7 @@ export type WorkspaceFileTab = {
   editorKind: SupportedWorkspaceEditorKind
   exists: boolean
   filePath: string
+  id: string
   isDirty: boolean
   kind: 'file'
   savedContent: string
@@ -24,6 +25,7 @@ export type WorkspaceDiffTab = {
   diff: GitFileDiffResult
   exists: true
   filePath: string
+  id: string
   isDirty: false
   kind: 'diff'
   title: string
@@ -36,6 +38,7 @@ export type WorkspaceSettingsTab = {
   editorKind: 'rich-text'
   exists: true
   filePath: 'app://settings'
+  id: 'app://settings'
   isDirty: false
   kind: 'settings'
   savedContent: ''
@@ -45,60 +48,120 @@ export type WorkspaceDisplayTab = WorkspaceTab | WorkspaceSettingsTab
 export type TabDropPosition = 'before' | 'after'
 
 type WorkspaceState = {
-  activeTabPath: string | null
+  activeTabId: string | null
   currentPath: string | null
   openTabs: WorkspaceTab[]
   tree: WorkspaceNode[]
-  activateTab: (path: string) => void
-  closeTab: (path: string) => void
+  activateTab: (tabId: string) => void
+  closeTab: (tabId: string) => void
   markTabMissing: (path: string) => void
   markTabSaved: (path: string, savedContent: string) => void
-  moveTab: (movingPath: string, targetPath: string, position: TabDropPosition) => void
+  moveTab: (movingId: string, targetId: string, position: TabDropPosition) => void
   openDiffTab: (tab: WorkspaceDiffTab, activate?: boolean) => void
-  openTab: (tab: { content: string, editorKind: SupportedWorkspaceEditorKind, filePath: string, viewMode?: WorkspaceFileViewMode }) => void
+  openTab: (tab: {
+    content: string
+    editorKind: SupportedWorkspaceEditorKind
+    filePath: string
+    viewMode?: WorkspaceFileViewMode
+  }) => void
   renameTab: (currentPath: string, nextPath: string) => void
-  replaceTabs: (tabs: WorkspaceTab[], activeTabPath: string | null) => void
+  replaceTabs: (tabs: WorkspaceTab[], activeTabId: string | null) => void
   resetOpenTabs: () => void
   setCurrentPath: (path: string | null) => void
-  setTabViewMode: (path: string, viewMode: WorkspaceFileViewMode) => void
   setTree: (tree: WorkspaceNode[]) => void
   syncTabWithDisk: (path: string, nextContent: string) => void
   updateTabContent: (path: string, content: string) => void
 }
 
-function getNextActiveTabPath(openTabs: WorkspaceTab[], activeTabPath: string | null, closingPath: string) {
-  if (activeTabPath !== closingPath) {
-    return activeTabPath
+export function createWorkspaceFileTabId(filePath: string, viewMode: WorkspaceFileViewMode) {
+  return `file://${viewMode}/${encodeURIComponent(filePath)}`
+}
+
+function isPreviewModeSupported(filePath: string, editorKind: SupportedWorkspaceEditorKind) {
+  return editorKind === 'code' && supportsHtmlPreview(filePath)
+}
+
+function normalizeViewMode(
+  filePath: string,
+  editorKind: SupportedWorkspaceEditorKind,
+  viewMode?: WorkspaceFileViewMode,
+) {
+  if (viewMode === 'preview' && isPreviewModeSupported(filePath, editorKind)) {
+    return viewMode
   }
 
-  const closingIndex = openTabs.findIndex((tab) => tab.filePath === closingPath)
+  if (viewMode === 'code' && (editorKind === 'rich-text' || isPreviewModeSupported(filePath, editorKind))) {
+    return viewMode
+  }
+
+  return getDefaultWorkspaceFileViewMode(filePath, editorKind)
+}
+
+function getNextActiveTabId(openTabs: WorkspaceTab[], activeTabId: string | null, closingId: string) {
+  if (activeTabId !== closingId) {
+    return activeTabId
+  }
+
+  const closingIndex = openTabs.findIndex((tab) => tab.id === closingId)
   if (closingIndex === -1) {
-    return activeTabPath
+    return activeTabId
   }
 
-  const nextTabs = openTabs.filter((tab) => tab.filePath !== closingPath)
+  const nextTabs = openTabs.filter((tab) => tab.id !== closingId)
   const nextActiveTab = nextTabs[closingIndex] ?? nextTabs[closingIndex - 1] ?? null
 
-  return nextActiveTab?.filePath ?? null
+  return nextActiveTab?.id ?? null
+}
+
+function mergeDuplicateWorkspaceFileTabs(existingTab: WorkspaceFileTab, nextTab: WorkspaceFileTab): WorkspaceFileTab {
+  return {
+    ...existingTab,
+    ...nextTab,
+    exists: existingTab.exists || nextTab.exists,
+    isDirty: existingTab.isDirty || nextTab.isDirty,
+  }
+}
+
+function dedupeWorkspaceTabs(tabs: WorkspaceTab[]) {
+  const dedupedTabs: WorkspaceTab[] = []
+
+  for (const tab of tabs) {
+    const existingIndex = dedupedTabs.findIndex((candidate) => candidate.id === tab.id)
+
+    if (existingIndex === -1) {
+      dedupedTabs.push(tab)
+      continue
+    }
+
+    const existingTab = dedupedTabs[existingIndex]
+
+    if (existingTab.kind === 'file' && tab.kind === 'file') {
+      dedupedTabs[existingIndex] = mergeDuplicateWorkspaceFileTabs(existingTab, tab)
+    } else {
+      dedupedTabs[existingIndex] = tab
+    }
+  }
+
+  return dedupedTabs
 }
 
 export function reorderWorkspaceTabs(
   openTabs: WorkspaceTab[],
-  movingPath: string,
-  targetPath: string,
+  movingId: string,
+  targetId: string,
   position: TabDropPosition,
 ) {
-  if (movingPath === targetPath) {
+  if (movingId === targetId) {
     return openTabs
   }
 
-  const movingTab = openTabs.find((tab) => tab.filePath === movingPath)
-  if (!movingTab || !openTabs.some((tab) => tab.filePath === targetPath)) {
+  const movingTab = openTabs.find((tab) => tab.id === movingId)
+  if (!movingTab || !openTabs.some((tab) => tab.id === targetId)) {
     return openTabs
   }
 
-  const remainingTabs = openTabs.filter((tab) => tab.filePath !== movingPath)
-  const targetIndex = remainingTabs.findIndex((tab) => tab.filePath === targetPath)
+  const remainingTabs = openTabs.filter((tab) => tab.id !== movingId)
+  const targetIndex = remainingTabs.findIndex((tab) => tab.id === targetId)
   if (targetIndex === -1) {
     return openTabs
   }
@@ -112,31 +175,24 @@ export function reorderWorkspaceTabs(
     : nextTabs
 }
 
-function supportsPreviewMode(filePath: string, editorKind: SupportedWorkspaceEditorKind) {
-  return editorKind === 'code' && supportsHtmlPreview(filePath)
-}
-
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
-  activeTabPath: null,
+  activeTabId: null,
   currentPath: null,
   openTabs: [],
   tree: [],
-  activateTab: (activeTabPath) => set((state) => (
-    state.openTabs.some((tab) => tab.filePath === activeTabPath)
-      ? { activeTabPath }
+  activateTab: (activeTabId) => set((state) => (
+    state.openTabs.some((tab) => tab.id === activeTabId)
+      ? { activeTabId }
       : state
   )),
-  closeTab: (path) => set((state) => ({
-    activeTabPath: getNextActiveTabPath(state.openTabs, state.activeTabPath, path),
-    openTabs: state.openTabs.filter((tab) => tab.filePath !== path),
+  closeTab: (id) => set((state) => ({
+    activeTabId: getNextActiveTabId(state.openTabs, state.activeTabId, id),
+    openTabs: state.openTabs.filter((tab) => tab.id !== id),
   })),
   markTabMissing: (path) => set((state) => ({
     openTabs: state.openTabs.map((tab) => (
       tab.kind === 'file' && tab.filePath === path
-        ? {
-          ...tab,
-          exists: false,
-        }
+        ? { ...tab, exists: false }
         : tab
     )),
   })),
@@ -153,35 +209,29 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         : tab
     )),
   })),
-  moveTab: (movingPath, targetPath, position) => set((state) => {
-    const nextTabs = reorderWorkspaceTabs(state.openTabs, movingPath, targetPath, position)
+  moveTab: (movingId, targetId, position) => set((state) => {
+    const nextTabs = reorderWorkspaceTabs(state.openTabs, movingId, targetId, position)
 
-    return nextTabs === state.openTabs
-      ? state
-      : { openTabs: nextTabs }
+    return nextTabs === state.openTabs ? state : { openTabs: nextTabs }
   }),
   openTab: ({ content, editorKind, filePath, viewMode }) => set((state) => {
-    const nextViewMode = viewMode ?? getDefaultWorkspaceFileViewMode(filePath, editorKind)
-    const existingTab = state.openTabs.find((tab) => tab.filePath === filePath)
+    const nextViewMode = normalizeViewMode(filePath, editorKind, viewMode)
+    const tabId = createWorkspaceFileTabId(filePath, nextViewMode)
+    const existingTab = state.openTabs.find((tab) => tab.id === tabId)
 
     if (existingTab) {
       return {
-        activeTabPath: filePath,
+        activeTabId: tabId,
         openTabs: state.openTabs.map((tab) => (
-          tab.kind === 'file' && tab.filePath === filePath
-            ? {
-              ...tab,
-              editorKind,
-              exists: true,
-              viewMode: nextViewMode,
-            }
+          tab.kind === 'file' && tab.id === tabId
+            ? { ...tab, editorKind, exists: true }
             : tab
         )),
       }
     }
 
     return {
-      activeTabPath: filePath,
+      activeTabId: tabId,
       openTabs: [
         ...state.openTabs,
         {
@@ -189,6 +239,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           editorKind,
           exists: true,
           filePath,
+          id: tabId,
           isDirty: false,
           kind: 'file',
           savedContent: content,
@@ -198,55 +249,57 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     }
   }),
   openDiffTab: (tab, activate = true) => set((state) => {
-    const existingIndex = state.openTabs.findIndex((candidate) => candidate.filePath === tab.filePath)
+    const existingIndex = state.openTabs.findIndex((candidate) => candidate.id === tab.id)
     const nextTabs = existingIndex === -1
       ? [...state.openTabs, tab]
       : state.openTabs.map((candidate, index) => (index === existingIndex ? tab : candidate))
 
     return {
-      activeTabPath: activate ? tab.filePath : state.activeTabPath,
+      activeTabId: activate ? tab.id : state.activeTabId,
       openTabs: nextTabs,
     }
   }),
-  renameTab: (currentPath, nextPath) => set((state) => ({
-    activeTabPath: state.activeTabPath === currentPath ? nextPath : state.activeTabPath,
-    openTabs: state.openTabs.map((tab) => (
-      tab.kind === 'file' && tab.filePath === currentPath
-        ? (() => {
-          const nextEditorKind = getSupportedWorkspaceEditorKind(nextPath) ?? tab.editorKind
+  renameTab: (currentPath, nextPath) => set((state) => {
+    const renamedTabs = state.openTabs.map((tab) => {
+      if (tab.kind !== 'file' || tab.filePath !== currentPath) {
+        return tab
+      }
 
-          return {
-            ...tab,
-            editorKind: nextEditorKind,
-            exists: true,
-            filePath: nextPath,
-            viewMode: tab.viewMode === 'preview' && !supportsPreviewMode(nextPath, nextEditorKind)
-              ? getDefaultWorkspaceFileViewMode(nextPath, nextEditorKind)
-              : tab.viewMode,
-          }
-        })()
-        : tab
-    )),
-  })),
-  replaceTabs: (openTabs, activeTabPath) => set({
-    activeTabPath,
-    openTabs,
+      const nextEditorKind = getSupportedWorkspaceEditorKind(nextPath) ?? tab.editorKind
+      const nextViewMode = normalizeViewMode(nextPath, nextEditorKind, tab.viewMode)
+
+      return {
+        ...tab,
+        editorKind: nextEditorKind,
+        exists: true,
+        filePath: nextPath,
+        id: createWorkspaceFileTabId(nextPath, nextViewMode),
+        viewMode: nextViewMode,
+      }
+    })
+
+    const nextTabs = dedupeWorkspaceTabs(renamedTabs)
+    const nextActiveTabId = (() => {
+      const activeTab = state.openTabs.find((tab) => tab.id === state.activeTabId)
+      if (activeTab?.kind !== 'file' || activeTab.filePath !== currentPath) {
+        return nextTabs.some((tab) => tab.id === state.activeTabId) ? state.activeTabId : nextTabs[0]?.id ?? null
+      }
+
+      const nextEditorKind = getSupportedWorkspaceEditorKind(nextPath) ?? activeTab.editorKind
+      const nextViewMode = normalizeViewMode(nextPath, nextEditorKind, activeTab.viewMode)
+      const requestedId = createWorkspaceFileTabId(nextPath, nextViewMode)
+
+      return nextTabs.some((tab) => tab.id === requestedId) ? requestedId : nextTabs[0]?.id ?? null
+    })()
+
+    return {
+      activeTabId: nextActiveTabId,
+      openTabs: nextTabs,
+    }
   }),
-  resetOpenTabs: () => set({
-    activeTabPath: null,
-    openTabs: [],
-  }),
+  replaceTabs: (openTabs, activeTabId) => set({ activeTabId, openTabs }),
+  resetOpenTabs: () => set({ activeTabId: null, openTabs: [] }),
   setCurrentPath: (currentPath) => set({ currentPath }),
-  setTabViewMode: (path, viewMode) => set((state) => ({
-    openTabs: state.openTabs.map((tab) => (
-      tab.kind === 'file' && tab.filePath === path
-        ? {
-          ...tab,
-          viewMode,
-        }
-        : tab
-    )),
-  })),
   setTree: (tree) => set({ tree }),
   syncTabWithDisk: (path, nextContent) => set((state) => ({
     openTabs: state.openTabs.map((tab) => (

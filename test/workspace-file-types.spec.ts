@@ -3,6 +3,7 @@ import {
   getCodeLanguage,
   getDefaultWorkspaceFileViewMode,
   getWorkspaceEditorKind,
+  supportsCodeEditorToggle,
   supportsHtmlPreview,
 } from '../src/features/workspace/lib/file-types'
 
@@ -33,13 +34,21 @@ describe('workspace file types', () => {
     expect(getCodeLanguage('C:/workspace/.env')).toBe('plaintext')
   })
 
-  it('defaults html files to preview while leaving other editor types in editor mode', () => {
+  it('defaults html files to preview while leaving other editor types in their default view', () => {
     expect(supportsHtmlPreview('C:/workspace/index.html')).toBe(true)
     expect(supportsHtmlPreview('C:/workspace/partial.htm')).toBe(true)
     expect(supportsHtmlPreview('C:/workspace/main.ts')).toBe(false)
 
     expect(getDefaultWorkspaceFileViewMode('C:/workspace/index.html', 'code')).toBe('preview')
-    expect(getDefaultWorkspaceFileViewMode('C:/workspace/main.ts', 'code')).toBe('editor')
-    expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.md', 'rich-text')).toBe('editor')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/main.ts', 'code')).toBe('default')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.md', 'rich-text')).toBe('default')
+  })
+
+  it('only exposes alternate code-view entry points for html and rich-text files', () => {
+    expect(supportsCodeEditorToggle('C:/workspace/index.html', 'code')).toBe(true)
+    expect(supportsCodeEditorToggle('C:/workspace/notes.md', 'rich-text')).toBe(true)
+    expect(supportsCodeEditorToggle('C:/workspace/notes.txt', 'rich-text')).toBe(true)
+    expect(supportsCodeEditorToggle('C:/workspace/main.ts', 'code')).toBe(false)
+    expect(supportsCodeEditorToggle('C:/workspace/config.json', 'code')).toBe(false)
   })
 })

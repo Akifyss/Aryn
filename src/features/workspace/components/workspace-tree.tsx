@@ -13,7 +13,7 @@ import {
 } from '@mingcute/react'
 import { pickDominantGitDisplayChange } from '@/features/git/lib/display-change'
 import { resolveWorkspaceDirectoryIconUrl, resolveWorkspaceFileIconUrl } from '@/features/workspace/lib/icon-theme'
-import { getSupportedWorkspaceEditorKind } from '@/features/workspace/lib/file-types'
+import { getSupportedWorkspaceEditorKind, supportsCodeEditorToggle } from '@/features/workspace/lib/file-types'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 import type { GitDisplayChange, GitRepositoryState } from '@/features/git/types'
 
@@ -259,7 +259,8 @@ function FileTreeItem({
   const [error, setError] = useState<string | null>(null)
 
   const isFolder = node.kind === 'directory'
-  const canOpenInCodeEditor = node.kind === 'file' && getSupportedWorkspaceEditorKind(node.path) === 'code'
+  const editorKind = node.kind === 'file' ? getSupportedWorkspaceEditorKind(node.path) : null
+  const canOpenInCodeEditor = node.kind === 'file' && editorKind !== null && supportsCodeEditorToggle(node.path, editorKind)
   const isExpanded = expandedPaths.has(node.path)
   const isActive = activeFilePath === node.path
   const gitChange = findGitChangeByFilePath(gitRepositoryState, node)
