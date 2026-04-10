@@ -2733,6 +2733,9 @@ function App() {
             ) : !activeFileTab && !activeDiffTab ? (
               <div className='editor-empty-state'>
                 <div className='editor-empty-content'>
+                  <div className='editor-empty-logo-shell' aria-hidden='true'>
+                    <img className='editor-empty-logo' src='/branding/logo.svg' alt='' />
+                  </div>
                   <div className='editor-empty-actions'>
                     <Button variant='outline' onPress={() => setIsCommandPaletteOpen(true)}>
                       <Icon icon='lucide:search' width={16} height={16} className='mr-2' />
