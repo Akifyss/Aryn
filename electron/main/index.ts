@@ -1,4 +1,4 @@
-import { Menu, app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { Menu, app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -82,6 +82,10 @@ let win: BrowserWindow | null = null
 let allowWindowClose = false
 const preload = path.join(MAIN_DIST, 'preload', 'index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
+const appPngIconPath = path.join(process.env.VITE_PUBLIC, 'app-icon.png')
+const appWindowIconPath = process.platform === 'win32'
+  ? path.join(process.env.VITE_PUBLIC, 'favicon.ico')
+  : appPngIconPath
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json')
 const agentDir = path.join(app.getPath('userData'), 'pi-agent')
 const workspaceIconThemeCacheDir = path.join(app.getPath('temp'), app.getName(), 'workspace-icon-themes')
@@ -143,7 +147,7 @@ async function createWindow() {
 
   win = new BrowserWindow({
     title: 'Writing Workspace',
-    icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
+    icon: appWindowIconPath,
     backgroundColor: '#ffffff',
     frame: false,
     autoHideMenuBar: true,
@@ -269,6 +273,11 @@ async function getWorkspaceIconThemeCatalog() {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
+
+  if (process.platform === 'darwin') {
+    app.dock.setIcon(nativeImage.createFromPath(appPngIconPath))
+  }
+
   void createWindow()
 })
 
