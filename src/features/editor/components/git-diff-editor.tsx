@@ -20,7 +20,7 @@ import {
 } from '@codemirror/language'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
-import { AddLine, ArrowRightLine, Back2Line } from '@mingcute/react'
+import { AddLine, Back2Line } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
 import { getCodeMirrorLanguageSupport } from '@/features/editor/lib/codemirror-language'
@@ -107,29 +107,20 @@ function getCodeMirrorControlSvg(action: GitDiffBlockAction) {
     return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.25 8h9.5"/></svg>'
   }
 
-  return renderToStaticMarkup(<ArrowRightLine aria-hidden='true' size={14} />)
+  return renderToStaticMarkup(<Back2Line aria-hidden='true' size={14} />)
 }
 
-function getBlockActionsDisabledReason(
-  diff: GitFileDiffResult,
-  options: {
-    hasDirtyFileTab: boolean
-    isDirty: boolean
-    isComposing: boolean
-    isApplyingAction: boolean
-    isSaving: boolean
-  },
-) {
+function getBlockActionsDisabledReason(options: {
+  isComposing: boolean
+  isApplyingAction: boolean
+  isSaving: boolean
+}) {
   if (options.isSaving || options.isApplyingAction) {
     return 'Wait for the current file action to finish first.'
   }
 
   if (options.isComposing) {
     return 'Finish the current IME composition first.'
-  }
-
-  if (options.hasDirtyFileTab && options.isDirty) {
-    return 'Save other open editor tabs for this file before applying Git block actions.'
   }
 
   return null
@@ -665,22 +656,13 @@ export function GitDiffEditor({
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isEditable = diff.change.scope === 'unstaged' && diff.modifiedExists
   const isDirty = draftContent !== diff.modifiedContent
-  const blockActionsDisabledReason = getBlockActionsDisabledReason(diff, {
-    hasDirtyFileTab: hasDirtyRelatedFileTab,
-    isDirty,
+  const blockActionsDisabledReason = getBlockActionsDisabledReason({
     isComposing,
     isApplyingAction: isApplyingBlockAction,
     isSaving,
   })
   const areBlockActionsEnabled = blockActionsDisabledReason === null
-  const saveDisabledReason = hasDirtyRelatedFileTab
-    ? 'Save or close the other dirty editor tab for this file first.'
-    : isComposing
-      ? 'Finish the current IME composition first.'
-      : null
-  const areFileGitActionsEnabled = !(isSaving || isApplyingBlockAction || isComposing || (
-    diff.change.scope === 'unstaged' && isDirty
-  ))
+  const areFileGitActionsEnabled = !(isSaving || isApplyingBlockAction || isComposing)
 
   useEffect(() => {
     setViewMode(defaultMode)
@@ -754,15 +736,6 @@ export function GitDiffEditor({
     }
   }, [clearAutoSaveTimer, diff.change.path, hasDirtyRelatedFileTab, isEditable, onSaveEditedFile])
 
-  const handleSaveRequest = useCallback(async (content?: string) => {
-    if (typeof content === 'string') {
-      setDraftContent((current) => current === content ? current : content)
-      draftContentRef.current = content
-    }
-
-    await handleSave()
-  }, [handleSave])
-
   useEffect(() => {
     if (!isEditable || hasDirtyRelatedFileTab || isComposing || isSaving || !isDirty) {
       clearAutoSaveTimer()
@@ -789,10 +762,6 @@ export function GitDiffEditor({
       return
     }
 
-    if (isEditable && isDirty) {
-      await handleSave()
-    }
-
     setIsApplyingBlockAction(true)
 
     try {
@@ -800,7 +769,7 @@ export function GitDiffEditor({
     } finally {
       setIsApplyingBlockAction(false)
     }
-  }, [areBlockActionsEnabled, diff.change, handleSave, isDirty, isEditable, onApplyBlockAction])
+  }, [areBlockActionsEnabled, diff.change, onApplyBlockAction])
 
   return (
     <div className='git-diff-editor'>
@@ -863,18 +832,6 @@ export function GitDiffEditor({
           >
             <Icon icon={viewMode === 'split' ? 'lucide:columns-2' : 'lucide:between-horizontal-start'} width={16} height={16} />
           </button>
-          <button
-            type='button'
-            className='git-diff-view-mode git-diff-view-mode-icon-only'
-            aria-label={isSaving ? 'Saving file' : saveDisabledReason ?? 'Save file'}
-            title={isSaving ? 'Saving file' : saveDisabledReason ?? 'Save file'}
-            disabled={!isEditable || !isDirty || isSaving || saveDisabledReason !== null}
-            onClick={() => {
-              void handleSave()
-            }}
-          >
-            <Icon icon='lucide:save' width={16} height={16} />
-          </button>
         </div>
       </header>
 
@@ -893,7 +850,7 @@ export function GitDiffEditor({
         onCompositionChange={handleCompositionChange}
         onDraftChange={handleDraftChange}
         onSave={() => {
-          void handleSaveRequest()
+          void handleSave()
         }}
         viewMode={viewMode}
       />
