@@ -1524,12 +1524,6 @@
   gap: 2px;
 }
 
-.git-diff-codemirror-host .cm-changedLine,
-.git-diff-codemirror-host .cm-deletedChunk,
-.git-diff-codemirror-host .cm-insertedLine {
-  background-color: var(--surface-tertiary);
-}
-
 .git-diff-codemirror-host .cm-deletedText,
 .git-diff-codemirror-host .cm-insertedText {
   border-radius: 4px;
