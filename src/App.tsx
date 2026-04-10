@@ -485,6 +485,7 @@ function App() {
   const workspaceAutosaveTargetRef = useRef<{ content: string, filePath: string } | null>(null)
   const workspaceAutosavePromiseRef = useRef<Promise<void> | null>(null)
   const previousWorkspaceAutosavePathRef = useRef<string | null>(null)
+  const previousActiveDiffTabIdRef = useRef<string | null>(null)
   const internalWorkspaceSavePathsRef = useRef(new Set<string>())
   const internalWorkspaceSaveTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const windowCloseRequestInFlightRef = useRef(false)
@@ -2021,6 +2022,23 @@ function App() {
 
     previousWorkspaceAutosavePathRef.current = nextPath
   }, [activeWorkspaceAutosaveTab?.filePath, flushWorkspaceAutosave])
+
+  useEffect(() => {
+    const previousTabId = previousActiveDiffTabIdRef.current
+    const nextTabId = activeDiffTab?.id ?? null
+
+    if (previousTabId && previousTabId !== nextTabId) {
+      const previousDiffTab = useWorkspaceStore.getState().openTabs.find(
+        (tab): tab is WorkspaceDiffTab => tab.kind === 'diff' && tab.id === previousTabId,
+      )
+
+      if (previousDiffTab?.isDirty) {
+        void flushDiffTab(previousDiffTab)
+      }
+    }
+
+    previousActiveDiffTabIdRef.current = nextTabId
+  }, [activeDiffTab?.id, flushDiffTab])
 
   useEffect(() => {
     clearWorkspaceAutosaveTimer()

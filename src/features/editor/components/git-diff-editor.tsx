@@ -749,14 +749,6 @@ export function GitDiffEditor({
     return clearAutoSaveTimer
   }, [clearAutoSaveTimer, handleSave, hasDirtyRelatedFileTab, isComposing, isDirty, isEditable, isSaving])
 
-  useEffect(() => () => {
-    clearAutoSaveTimer()
-
-    if (isEditable && draftContentRef.current !== latestModifiedContentRef.current) {
-      void handleSave()
-    }
-  }, [clearAutoSaveTimer, handleSave, isEditable])
-
   const handleBlockAction = useCallback(async (selection: GitDiffSelection, action: GitDiffBlockAction) => {
     if (!areBlockActionsEnabled) {
       return
