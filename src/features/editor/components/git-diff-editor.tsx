@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { EditorState, type Text } from '@codemirror/state'
 import { getChunks, getOriginalDoc, MergeView, unifiedMergeView } from '@codemirror/merge'
@@ -22,17 +22,8 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
 import { AddLine, ArrowRightLine, Back2Line } from '@mingcute/react'
 import { Icon } from '@iconify/react'
-import * as monaco from 'monaco-editor'
 import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
 import { getCodeMirrorLanguageSupport } from '@/features/editor/lib/codemirror-language'
-import {
-  DiffEditor,
-  configureMonaco,
-  resolveMonacoTheme,
-  type MonacoDiffEditorOptions,
-  type MonacoThemePreference,
-} from '@/features/editor/lib/monaco'
-import { getCodeLanguage } from '@/features/workspace/lib/file-types'
 
 type DiffViewMode = 'split' | 'unified'
 type CodeMirrorChunk = {
@@ -43,14 +34,6 @@ type CodeMirrorChunk = {
   endA: number
   endB: number
 }
-type MonacoLineChange = monaco.editor.ILineChange
-type MonacoBlockOverlayItem = {
-  key: string
-  selection: GitDiffSelection
-  top: number
-}
-
-configureMonaco()
 
 const DIFF_AUTO_SAVE_DELAY_MS = 1000
 
@@ -90,57 +73,6 @@ const DIFF_EDITOR_THEME = EditorView.theme({
     borderLeftColor: 'var(--foreground)',
   },
 })
-
-const DEFAULT_MONACO_DIFF_OPTIONS: MonacoDiffEditorOptions = {
-  automaticLayout: true,
-  diffAlgorithm: 'advanced',
-  diffWordWrap: 'inherit',
-  enableSplitViewResizing: true,
-  fontFamily: '"SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace',
-  fontLigatures: true,
-  fontSize: 13.5,
-  hideUnchangedRegions: {
-    enabled: true,
-    contextLineCount: 3,
-    minimumLineCount: 4,
-    revealLineCount: 3,
-  },
-  ignoreTrimWhitespace: false,
-  lineNumbersMinChars: 3,
-  minimap: { enabled: false },
-  originalEditable: false,
-  overviewRulerBorder: false,
-  padding: {
-    top: 18,
-    bottom: 18,
-  },
-  readOnly: false,
-  renderGutterMenu: false,
-  renderIndicators: true,
-  renderMarginRevertIcon: false,
-  renderOverviewRuler: false,
-  roundedSelection: false,
-  scrollBeyondLastLine: false,
-  smoothScrolling: true,
-  useInlineViewWhenSpaceIsLimited: false,
-}
-
-function getLineCountFromMonacoRange(startLine: number, endLine: number) {
-  if (startLine === 0 && endLine === 0) {
-    return 0
-  }
-
-  return Math.max(0, endLine - startLine + 1)
-}
-
-function createSelectionFromMonacoLineChange(change: MonacoLineChange): GitDiffSelection {
-  return {
-    modifiedLineCount: getLineCountFromMonacoRange(change.modifiedStartLineNumber, change.modifiedEndLineNumber),
-    modifiedStartLine: Math.max(1, change.modifiedStartLineNumber || change.modifiedEndLineNumber || 1),
-    originalLineCount: getLineCountFromMonacoRange(change.originalStartLineNumber, change.originalEndLineNumber),
-    originalStartLine: Math.max(1, change.originalStartLineNumber || change.originalEndLineNumber || 1),
-  }
-}
 
 function getTextLineCount(doc: Text, from: number, to: number) {
   if (from === to) {
@@ -284,7 +216,7 @@ function createDiffExtensions({
   ]
 }
 
-function RichTextDiffRenderer({
+function CodeMirrorDiffRenderer({
   blockActionsDisabledReason,
   areBlockActionsEnabled,
   diff,
@@ -698,347 +630,6 @@ function RichTextDiffRenderer({
   )
 }
 
-function CodeDiffRenderer({
-  blockActionsDisabledReason,
-  areBlockActionsEnabled,
-  diff,
-  draftContent,
-  isEditable,
-  onBlockAction,
-  onDraftChange,
-  onCompositionChange,
-  onSave,
-  theme,
-  viewMode,
-}: {
-  blockActionsDisabledReason: string | null
-  areBlockActionsEnabled: boolean
-  diff: GitFileDiffResult
-  draftContent: string
-  isEditable: boolean
-  onBlockAction: (selection: GitDiffSelection, action: GitDiffBlockAction) => void
-  onDraftChange: (content: string) => void
-  onCompositionChange: (isComposing: boolean) => void
-  onSave: (content?: string) => void
-  theme: MonacoThemePreference
-  viewMode: DiffViewMode
-}) {
-  const diffEditorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null)
-  const diffEditorDisposablesRef = useRef<monaco.IDisposable[]>([])
-  const initialOriginalContentRef = useRef(diff.originalExists ? diff.originalContent : '')
-  const initialModifiedContentRef = useRef(diff.modifiedExists ? diff.modifiedContent : '')
-  const latestDraftRef = useRef(draftContent)
-  const onDraftChangeRef = useRef(onDraftChange)
-  const onCompositionChangeRef = useRef(onCompositionChange)
-  const pendingDraftRef = useRef<string | null>(null)
-  const isComposingRef = useRef(false)
-  const isModifiedFocusedRef = useRef(false)
-  const isApplyingExternalDraftRef = useRef(false)
-  const onSaveRef = useRef(onSave)
-  const [overlayVersion, setOverlayVersion] = useState(0)
-  const [lineChanges, setLineChanges] = useState<readonly MonacoLineChange[]>([])
-  const [isModifiedFocused, setIsModifiedFocused] = useState(false)
-  const language = useMemo(() => getCodeLanguage(diff.change.path), [diff.change.path])
-  const monacoTheme = useMemo(() => resolveMonacoTheme(theme), [theme])
-  const editorOptions = useMemo<MonacoDiffEditorOptions>(() => ({
-    ...DEFAULT_MONACO_DIFF_OPTIONS,
-    experimental: {
-      useTrueInlineView: viewMode === 'unified',
-    },
-    readOnly: !isEditable,
-    renderSideBySide: viewMode === 'split',
-  }), [isEditable, viewMode])
-
-  useEffect(() => {
-    onDraftChangeRef.current = onDraftChange
-  }, [onDraftChange])
-
-  useEffect(() => {
-    onCompositionChangeRef.current = onCompositionChange
-  }, [onCompositionChange])
-
-  useEffect(() => {
-    onSaveRef.current = onSave
-  }, [onSave])
-
-  const emitDraftChange = useCallback((nextValue: string) => {
-    if (nextValue === latestDraftRef.current) {
-      return
-    }
-
-    latestDraftRef.current = nextValue
-    onDraftChangeRef.current(nextValue)
-  }, [])
-
-  const syncLineChanges = useCallback(() => {
-    const editor = diffEditorRef.current
-
-    if (!editor) {
-      setLineChanges([])
-      return
-    }
-
-    setLineChanges(editor.getLineChanges() ?? [])
-    setOverlayVersion((current) => current + 1)
-  }, [])
-
-  const handleMount = useCallback<NonNullable<ComponentProps<typeof DiffEditor>['onMount']>>((editor, monacoInstance) => {
-    diffEditorDisposablesRef.current.forEach((disposable) => {
-      disposable.dispose()
-    })
-    diffEditorDisposablesRef.current = []
-    diffEditorRef.current = editor
-
-    const originalEditor = editor.getOriginalEditor()
-    const modifiedEditor = editor.getModifiedEditor()
-    originalEditor.updateOptions({ tabSize: 2 })
-    modifiedEditor.updateOptions({ tabSize: 2 })
-    modifiedEditor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
-      void onSaveRef.current(modifiedEditor.getValue())
-    })
-
-    diffEditorDisposablesRef.current = [
-      editor.onDidUpdateDiff(() => {
-        syncLineChanges()
-      }),
-      originalEditor.onDidScrollChange(() => {
-        setOverlayVersion((current) => current + 1)
-      }),
-      modifiedEditor.onDidScrollChange(() => {
-        setOverlayVersion((current) => current + 1)
-      }),
-      originalEditor.onDidLayoutChange(() => {
-        setOverlayVersion((current) => current + 1)
-      }),
-      modifiedEditor.onDidLayoutChange(() => {
-        setOverlayVersion((current) => current + 1)
-      }),
-      modifiedEditor.onDidFocusEditorText(() => {
-        isModifiedFocusedRef.current = true
-        setIsModifiedFocused(true)
-      }),
-      modifiedEditor.onDidBlurEditorText(() => {
-        isModifiedFocusedRef.current = false
-        setIsModifiedFocused(false)
-      }),
-      modifiedEditor.onDidCompositionStart(() => {
-        isComposingRef.current = true
-        onCompositionChangeRef.current(true)
-      }),
-      modifiedEditor.onDidCompositionEnd(() => {
-        isComposingRef.current = false
-        onCompositionChangeRef.current(false)
-
-        const pendingDraft = pendingDraftRef.current
-        pendingDraftRef.current = null
-
-        if (pendingDraft !== null) {
-          emitDraftChange(pendingDraft)
-        }
-      }),
-    ]
-
-    diffEditorDisposablesRef.current.push(modifiedEditor.onDidChangeModelContent(() => {
-      if (isApplyingExternalDraftRef.current) {
-        return
-      }
-
-      const nextValue = modifiedEditor.getValue()
-
-      if (isComposingRef.current) {
-        pendingDraftRef.current = nextValue
-        return
-      }
-
-      pendingDraftRef.current = null
-      emitDraftChange(nextValue)
-    }))
-
-    syncLineChanges()
-  }, [emitDraftChange, syncLineChanges])
-
-  useEffect(() => () => {
-    diffEditorDisposablesRef.current.forEach((disposable) => {
-      disposable.dispose()
-    })
-    diffEditorDisposablesRef.current = []
-    diffEditorRef.current = null
-    pendingDraftRef.current = null
-    isComposingRef.current = false
-    isModifiedFocusedRef.current = false
-    isApplyingExternalDraftRef.current = false
-    onCompositionChangeRef.current(false)
-  }, [])
-
-  useEffect(() => {
-    const editor = diffEditorRef.current
-    const originalEditor = editor?.getOriginalEditor()
-    const model = originalEditor?.getModel()
-    const nextOriginalContent = diff.originalExists ? diff.originalContent : ''
-
-    if (!originalEditor || !model || model.getValue() === nextOriginalContent) {
-      return
-    }
-
-    originalEditor.executeEdits('external-sync', [{
-      forceMoveMarkers: true,
-      range: model.getFullModelRange(),
-      text: nextOriginalContent,
-    }])
-    originalEditor.pushUndoStop()
-    syncLineChanges()
-  }, [diff.originalContent, diff.originalExists, syncLineChanges])
-
-  useEffect(() => {
-    const editor = diffEditorRef.current
-    const modifiedEditor = editor?.getModifiedEditor()
-    const model = modifiedEditor?.getModel()
-    const nextDraftContent = diff.modifiedExists ? draftContent : ''
-
-    if (!modifiedEditor || !model) {
-      return
-    }
-
-    const currentModelValue = model.getValue()
-
-    if (currentModelValue === nextDraftContent) {
-      latestDraftRef.current = nextDraftContent
-      return
-    }
-
-    if (isModifiedFocusedRef.current || isComposingRef.current) {
-      return
-    }
-
-    isApplyingExternalDraftRef.current = true
-
-    try {
-      modifiedEditor.executeEdits('external-sync', [{
-        forceMoveMarkers: true,
-        range: model.getFullModelRange(),
-        text: nextDraftContent,
-      }])
-      modifiedEditor.pushUndoStop()
-      latestDraftRef.current = nextDraftContent
-      syncLineChanges()
-    } finally {
-      isApplyingExternalDraftRef.current = false
-    }
-  }, [diff.modifiedExists, draftContent, isModifiedFocused, syncLineChanges])
-
-  useEffect(() => {
-    syncLineChanges()
-  }, [diff.change.path, diff.change.scope, draftContent, diff.originalContent, syncLineChanges])
-
-  const overlayItems = useMemo<MonacoBlockOverlayItem[]>(() => {
-    const editor = diffEditorRef.current
-
-    if (!editor || lineChanges.length === 0) {
-      return []
-    }
-
-    const originalEditor = editor.getOriginalEditor()
-    const modifiedEditor = editor.getModifiedEditor()
-
-    return lineChanges.map((change, index) => {
-      const modifiedLine = Math.max(1, change.modifiedStartLineNumber || change.modifiedEndLineNumber || 1)
-      const originalLine = Math.max(1, change.originalStartLineNumber || change.originalEndLineNumber || 1)
-      const top = viewMode === 'split'
-        ? Math.min(
-          modifiedEditor.getTopForLineNumber(modifiedLine),
-          originalEditor.getTopForLineNumber(originalLine),
-        )
-        : modifiedEditor.getTopForLineNumber(modifiedLine)
-
-      return {
-        key: `${change.originalStartLineNumber}:${change.originalEndLineNumber}:${change.modifiedStartLineNumber}:${change.modifiedEndLineNumber}:${index}`,
-        selection: createSelectionFromMonacoLineChange(change),
-        top,
-      }
-    })
-  }, [lineChanges, overlayVersion, viewMode])
-
-  const renderBlockButtons = useCallback((selection: GitDiffSelection) => {
-    if (diff.change.scope === 'staged') {
-      return (
-        <button
-          type='button'
-          className='git-diff-block-control'
-          aria-label={areBlockActionsEnabled ? 'Unstage block' : blockActionsDisabledReason ?? 'Unstage block'}
-          title={areBlockActionsEnabled ? 'Unstage block' : blockActionsDisabledReason ?? 'Unstage block'}
-          disabled={!areBlockActionsEnabled}
-          onClick={() => {
-            onBlockAction(selection, 'unstage')
-          }}
-        >
-          <Icon icon='mdi:minus' width={14} height={14} />
-        </button>
-      )
-    }
-
-    return (
-      <>
-        <button
-          type='button'
-          className='git-diff-block-control'
-          aria-label={areBlockActionsEnabled ? 'Discard block' : blockActionsDisabledReason ?? 'Discard block'}
-          title={areBlockActionsEnabled ? 'Discard block' : blockActionsDisabledReason ?? 'Discard block'}
-          disabled={!areBlockActionsEnabled}
-          onClick={() => {
-            onBlockAction(selection, 'discard')
-          }}
-        >
-          <Back2Line size={14} />
-        </button>
-        <button
-          type='button'
-          className='git-diff-block-control'
-          aria-label={areBlockActionsEnabled ? 'Stage block' : blockActionsDisabledReason ?? 'Stage block'}
-          title={areBlockActionsEnabled ? 'Stage block' : blockActionsDisabledReason ?? 'Stage block'}
-          disabled={!areBlockActionsEnabled}
-          onClick={() => {
-            onBlockAction(selection, 'stage')
-          }}
-        >
-          <AddLine size={14} />
-        </button>
-      </>
-    )
-  }, [areBlockActionsEnabled, blockActionsDisabledReason, diff.change.scope, onBlockAction])
-
-  const encodedPath = encodeURIComponent(diff.change.path)
-
-  return (
-    <div className='git-diff-monaco-shell'>
-      <DiffEditor
-        className='git-diff-monaco-editor'
-        height='100%'
-        language={language}
-        modified={initialModifiedContentRef.current}
-        modifiedModelPath={`git-diff://modified/${encodedPath}?scope=${diff.change.scope}`}
-        options={editorOptions}
-        original={initialOriginalContentRef.current}
-        originalModelPath={`git-diff://original/${encodedPath}?scope=${diff.change.scope}`}
-        theme={monacoTheme}
-        onMount={handleMount}
-      />
-      {overlayItems.length > 0 ? (
-        <div className={`git-diff-block-overlay git-diff-block-overlay-${viewMode}`}>
-          {overlayItems.map((item) => (
-            <div
-              key={item.key}
-              className='git-diff-block-controls git-diff-block-overlay-item'
-              style={{ top: `${item.top + 8}px` }}
-            >
-              {renderBlockButtons(item.selection)}
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 export function GitDiffEditor({
   diff,
   draftContent: initialDraftContent,
@@ -1049,7 +640,6 @@ export function GitDiffEditor({
   onSaveEditedFile,
   onStageChange,
   onUnstageChange,
-  theme = 'auto',
 }: {
   diff: GitFileDiffResult
   draftContent: string
@@ -1060,7 +650,6 @@ export function GitDiffEditor({
   onSaveEditedFile: (filePath: string, content: string) => Promise<void>
   onStageChange: (change: GitChangeItem) => void
   onUnstageChange: (change: GitChangeItem) => void
-  theme?: MonacoThemePreference
 }) {
   const defaultMode: DiffViewMode = 'split'
   const [viewMode, setViewMode] = useState<DiffViewMode>(defaultMode)
@@ -1289,45 +878,25 @@ export function GitDiffEditor({
         </div>
       </header>
 
-      {diff.editorKind === 'rich-text' ? (
-        <RichTextDiffRenderer
-          blockActionsDisabledReason={blockActionsDisabledReason}
-          areBlockActionsEnabled={areBlockActionsEnabled}
-          diff={{
-            ...diff,
-            modifiedContent: draftContent,
-          }}
-          isComposing={isComposing}
-          isEditable={isEditable}
-          onBlockAction={(selection, action) => {
-            void handleBlockAction(selection, action)
-          }}
-          onCompositionChange={handleCompositionChange}
-          onDraftChange={handleDraftChange}
-          onSave={() => {
-            void handleSaveRequest()
-          }}
-          viewMode={viewMode}
-        />
-      ) : (
-        <CodeDiffRenderer
-          blockActionsDisabledReason={blockActionsDisabledReason}
-          areBlockActionsEnabled={areBlockActionsEnabled}
-          diff={diff}
-          draftContent={draftContent}
-          isEditable={isEditable}
-          onBlockAction={(selection, action) => {
-            void handleBlockAction(selection, action)
-          }}
-          onCompositionChange={handleCompositionChange}
-          onDraftChange={handleDraftChange}
-          onSave={(content) => {
-            void handleSaveRequest(content)
-          }}
-          theme={theme}
-          viewMode={viewMode}
-        />
-      )}
+      <CodeMirrorDiffRenderer
+        blockActionsDisabledReason={blockActionsDisabledReason}
+        areBlockActionsEnabled={areBlockActionsEnabled}
+        diff={{
+          ...diff,
+          modifiedContent: draftContent,
+        }}
+        isComposing={isComposing}
+        isEditable={isEditable}
+        onBlockAction={(selection, action) => {
+          void handleBlockAction(selection, action)
+        }}
+        onCompositionChange={handleCompositionChange}
+        onDraftChange={handleDraftChange}
+        onSave={() => {
+          void handleSaveRequest()
+        }}
+        viewMode={viewMode}
+      />
     </div>
   )
 }
