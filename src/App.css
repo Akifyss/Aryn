@@ -405,6 +405,41 @@
   height: 16px;
 }
 
+.workspace-toggle-brand-icon {
+  position: relative;
+}
+
+.workspace-toggle-brand-logo,
+.workspace-toggle-brand-glyph {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  transition: opacity 140ms ease;
+}
+
+.workspace-toggle-brand-logo {
+  width: 18px;
+  height: 18px;
+  opacity: 1;
+}
+
+.workspace-toggle-brand-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+
+.workspace-toggle-brand-button:hover .workspace-toggle-brand-logo,
+.workspace-toggle-brand-button:focus-visible .workspace-toggle-brand-logo {
+  opacity: 0;
+}
+
+.workspace-toggle-brand-button:hover .workspace-toggle-brand-glyph,
+.workspace-toggle-brand-button:focus-visible .workspace-toggle-brand-glyph {
+  opacity: 1;
+}
+
 .section-title-text {
   display: flex;
   align-items: center;

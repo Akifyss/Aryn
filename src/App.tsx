@@ -2445,14 +2445,17 @@ function App() {
       {!isLeftSidebarVisible ? (
         <button
           type='button'
-          className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-left'
+          className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-left workspace-toggle-brand-button'
           aria-label='Expand workspace sidebar'
           onClick={() => {
             setIsLeftSidebarCollapsed(false)
           }}
         >
-          <span className='panel-toggle-icon' aria-hidden='true'>
-            <LayoutLeftLine size={16} />
+          <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
+            <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
+            <span className='workspace-toggle-brand-glyph'>
+              <LayoutLeftLine size={16} />
+            </span>
           </span>
         </button>
       ) : null}
@@ -2476,14 +2479,17 @@ function App() {
         <div className='section-title workspace-section-title'>
           <button
             type='button'
-            className='panel-toggle-button workspace-section-toggle'
+            className='panel-toggle-button workspace-section-toggle workspace-toggle-brand-button'
             aria-label='Collapse workspace sidebar'
             onClick={() => {
               setIsLeftSidebarCollapsed(true)
             }}
           >
-            <span className='panel-toggle-icon' aria-hidden='true'>
-              <LayoutLeftLine size={16} />
+            <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
+              <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
+              <span className='workspace-toggle-brand-glyph'>
+                <LayoutLeftLine size={16} />
+              </span>
             </span>
           </button>
           <button
