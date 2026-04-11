@@ -1967,8 +1967,9 @@
   min-width: 0;
   font: inherit;
   line-height: inherit;
-  color: var(--accent);
+  color: var(--foreground);
   caret-color: currentColor;
+  cursor: text;
 }
 
 .sidebar-tree-pane {
@@ -2356,6 +2357,11 @@
 
 .workspace-tree-row:hover {
   background-color: var(--surface-tertiary);
+}
+
+.workspace-tree-row.is-editing,
+.workspace-tree-row.is-editing .workspace-tree-trigger {
+  cursor: default;
 }
 
 .workspace-tree-row.is-active {

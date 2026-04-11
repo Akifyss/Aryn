@@ -295,7 +295,7 @@ function FileTreeItem({
     <li className='panel-tree-node'>
       <div
         ref={rowRef}
-        className={`workspace-tree-row${isActive ? ' is-active' : ''}${isDragSource ? ' is-drag-source' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
+        className={`workspace-tree-row${isEditing ? ' is-editing' : ''}${isActive ? ' is-active' : ''}${isDragSource ? ' is-drag-source' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
         onClick={() => (isFolder ? onToggleDirectory(node.path) : onSelectFile(node.path))}
         onDragLeave={(event) => onDragLeaveNode(node, event)}
         onDragOver={(event) => onDragOverNode(node, event)}
