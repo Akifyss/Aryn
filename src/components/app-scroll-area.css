@@ -3,7 +3,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  --app-scroll-area-scrollbar-thickness: 4px;
+  --app-scroll-area-scrollbar-thickness: 6px;
   --app-scroll-area-scrollbar-gap: 1px;
   --app-scroll-area-thumb-color: color-mix(in srgb, var(--muted) 16%, transparent);
   --app-scroll-area-thumb-hover-color: color-mix(in srgb, var(--foreground) 20%, transparent);
