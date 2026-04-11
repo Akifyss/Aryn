@@ -1,0 +1,94 @@
+.app-scroll-area {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  --app-scroll-area-scrollbar-thickness: 4px;
+  --app-scroll-area-scrollbar-gap: 1px;
+  --app-scroll-area-thumb-color: color-mix(in srgb, var(--muted) 16%, transparent);
+  --app-scroll-area-thumb-hover-color: color-mix(in srgb, var(--foreground) 20%, transparent);
+  --app-scroll-area-thumb-active-color: color-mix(in srgb, var(--foreground) 28%, transparent);
+}
+
+.app-scroll-area-viewport {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-scroll-area-content {
+  box-sizing: border-box;
+}
+
+.app-scroll-area-scrollbar {
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+  padding: 0;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  z-index: 2;
+  border-radius: 999px;
+}
+
+.app-scroll-area:hover .app-scroll-area-scrollbar,
+.app-scroll-area:focus-within .app-scroll-area-scrollbar,
+.app-scroll-area[data-scrolling] .app-scroll-area-scrollbar,
+.app-scroll-area-scrollbar[data-hovering],
+.app-scroll-area-scrollbar[data-scrolling] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-scroll-area-scrollbar[data-orientation='vertical'] {
+  top: var(--app-scroll-area-scrollbar-gap);
+  right: var(--app-scroll-area-scrollbar-gap);
+  bottom: var(--app-scroll-area-scrollbar-gap);
+  width: var(--app-scroll-area-scrollbar-thickness);
+}
+
+.app-scroll-area-scrollbar[data-orientation='horizontal'] {
+  left: var(--app-scroll-area-scrollbar-gap);
+  right: var(--app-scroll-area-scrollbar-gap);
+  bottom: var(--app-scroll-area-scrollbar-gap);
+  height: var(--app-scroll-area-scrollbar-thickness);
+}
+
+.app-scroll-area-thumb {
+  display: block;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: var(--app-scroll-area-thumb-color);
+  transition: background-color 140ms ease;
+}
+
+.app-scroll-area-scrollbar[data-orientation='vertical'] .app-scroll-area-thumb {
+  width: 100%;
+  min-height: 18px;
+}
+
+.app-scroll-area-scrollbar[data-orientation='horizontal'] .app-scroll-area-thumb {
+  height: 100%;
+  min-width: 18px;
+}
+
+.app-scroll-area:hover .app-scroll-area-thumb,
+.app-scroll-area:focus-within .app-scroll-area-thumb,
+.app-scroll-area-scrollbar[data-hovering] .app-scroll-area-thumb {
+  background: var(--app-scroll-area-thumb-hover-color);
+}
+
+.app-scroll-area-scrollbar[data-scrolling] .app-scroll-area-thumb,
+.app-scroll-area-thumb:active {
+  background: var(--app-scroll-area-thumb-active-color);
+}
+
+.app-scroll-area-corner {
+  background: transparent;
+}

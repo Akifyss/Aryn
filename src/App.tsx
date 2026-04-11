@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, ScrollShadow, Tooltip, Toast, toast, Modal, AlertDialog } from '@heroui/react'
+import { Button, Tooltip, Toast, toast, Modal, AlertDialog } from '@heroui/react'
 import {
   FileLine,
   FolderOpenFill,
@@ -11,6 +11,7 @@ import {
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import type { WorkspaceNode } from '@/features/workspace/types'
+import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
 import type { AgentWorkspaceState } from '@/features/agent/types'
@@ -2595,7 +2596,7 @@ function App() {
                 </div>
               </div>
 
-              <ScrollShadow className='tree-scroll' hideScrollBar>
+              <AppScrollArea className='tree-scroll'>
                 <WorkspaceTree
                   activeFilePath={activeTreePath}
                   iconTheme={iconTheme}
@@ -2614,7 +2615,7 @@ function App() {
                   onDeleteNode={(node) => handleDeleteNode(node)}
                   onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
                 />
-              </ScrollShadow>
+              </AppScrollArea>
             </div>
           ) : (
             <div className='sidebar-stack-pane sidebar-git-pane' id='git-panel'>

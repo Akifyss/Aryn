@@ -21,6 +21,7 @@ import {
   UploadLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
+import { AppScrollArea } from '@/components/app-scroll-area'
 import type {
   GitChangeItem,
   GitPanelLayout,
@@ -790,7 +791,10 @@ export function GitPanel({
 
       {busyLabel ? <p className='git-panel-status'>{busyLabel}</p> : null}
 
-      <div className='git-panel-sections'>
+      <AppScrollArea
+        className='git-panel-sections'
+        contentClassName='git-panel-sections-content'
+      >
         {!repositoryState.hasChanges && repositoryState.recentlyPulledChanges.length === 0 ? (
           <div className='git-panel-empty-state git-panel-clean-state'>
             <div className='git-empty-illustration'>
@@ -873,7 +877,7 @@ export function GitPanel({
             )}
           </>
         )}
-      </div>
+      </AppScrollArea>
     </div>
   )
 }

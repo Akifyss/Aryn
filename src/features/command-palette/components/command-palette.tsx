@@ -3,10 +3,10 @@ import {
   Modal,
   Kbd,
   ListBox,
-  ListBoxItem,
-  ScrollShadow
+  ListBoxItem
 } from '@heroui/react'
 import { Icon } from '@iconify/react'
+import { AppScrollArea } from '@/components/app-scroll-area'
 import type { WorkspaceNode } from '@/features/workspace/types'
 import type { AgentSessionListItem } from '@/features/agent/types'
 
@@ -53,8 +53,6 @@ export function CommandPalette({
   const cmdKey = isMac ? '⌘' : 'Ctrl'
 
   const inputRef = useRef<HTMLInputElement>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
-
   const resultsRef = useRef<CommandItem[]>([])
   const selectedIndexRef = useRef(0)
 
@@ -245,10 +243,9 @@ export function CommandPalette({
               <div className='command-palette-divider' />
 
               {/* Viewport with explicit scrolling container */}
-              <ScrollShadow
-                hideScrollBar
+              <AppScrollArea
                 className='command-palette-viewport'
-                ref={scrollRef}
+                contentClassName='command-palette-viewport-content'
               >
                 {results.length > 0 ? (
                   <div className='flex flex-col gap-6'>
@@ -322,7 +319,7 @@ export function CommandPalette({
                     <p className='command-palette-empty-text'>No results found</p>
                   </div>
                 )}
-              </ScrollShadow>
+              </AppScrollArea>
 
               {/* Footer */}
               <div className='command-palette-footer'>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { Button, Input, Tabs, Select, ListBox } from '@heroui/react'
+import { AppScrollArea } from '@/components/app-scroll-area'
 import { useSettingsStore } from '@/hooks/use-settings-store'
 import type { AgentProviderAuthState, AgentWorkspaceState } from '@/features/agent/types'
 import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '@/features/workspace/types'
@@ -211,7 +212,10 @@ export function SettingsDialog({
           </h3>
         </div>
 
-        <div className='settings-panel-content'>
+        <AppScrollArea
+          className='settings-panel-content'
+          contentClassName='settings-panel-content-inner'
+        >
           {panelError && <div className='settings-alert settings-alert-error'>{panelError}</div>}
 
           {activeSection === 'general' ? (
@@ -349,7 +353,7 @@ export function SettingsDialog({
               )}
             </div>
           )}
-        </div>
+        </AppScrollArea>
       </section>
     </div>
   )

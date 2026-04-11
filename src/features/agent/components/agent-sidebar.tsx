@@ -1,5 +1,5 @@
 import { type CSSProperties, FormEvent, KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Button, Input, ScrollShadow, TextArea } from '@heroui/react'
+import { Button, Input, TextArea } from '@heroui/react'
 import {
   AddLine,
   Delete2Line,
@@ -8,6 +8,7 @@ import {
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import spinners, { type BrailleSpinnerName } from 'unicode-animations'
+import { AppScrollArea } from '@/components/app-scroll-area'
 import type {
   AgentClientEvent,
   AgentSidebarMessage,
@@ -1325,7 +1326,7 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
         <div className='agent-overlay-layer'>
           <div ref={overlayPanelRef} className='agent-floating-panel'>
             {activeOverlayPanel === 'sessions' ? (
-              <ScrollShadow className='agent-overlay-scroll' hideScrollBar>
+              <AppScrollArea className='agent-overlay-scroll'>
                 <div className='agent-session-list'>
                   <div className='agent-session-option'>
                     <button
@@ -1379,7 +1380,7 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
                     )
                   })}
                 </div>
-              </ScrollShadow>
+              </AppScrollArea>
             ) : null}
           </div>
         </div>
@@ -1391,7 +1392,10 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
         </div>
       ) : null}
 
-      <ScrollShadow ref={messagesScrollRef} className='agent-messages-scroll' hideScrollBar>
+      <AppScrollArea
+        className='agent-messages-scroll'
+        viewportRef={messagesScrollRef}
+      >
         <div className='agent-messages'>
           {workspacePath && renderedMessages.length === 0 ? (
             <div className='agent-empty-chat'>
@@ -1404,7 +1408,7 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
             <AgentSessionStatusBubble status={sessionStatus} />
           ) : null}
         </div>
-      </ScrollShadow>
+      </AppScrollArea>
 
       <form
         className='agent-composer'
@@ -1555,52 +1559,62 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
             </div>
 
             {activeComposerMenu === 'provider' && canChooseProvider ? (
-              <div className='agent-composer-menu' role='listbox' aria-label='Available providers'>
-                {configuredProviders.map((provider) => (
-                  <button
-                    key={provider}
-                    type='button'
-                    className={`agent-composer-option ${provider === resolvedSelectedProviderValue ? 'is-active' : ''}`}
-                    onPointerDown={(event) => {
-                      event.preventDefault()
-                    }}
-                    onClick={() => {
-                      void handleProviderSelectionChange(provider)
-                    }}
-                  >
-                    <span className='agent-composer-option-label'>{provider}</span>
-                  </button>
-                ))}
-              </div>
+              <AppScrollArea
+                className='agent-composer-menu'
+                contentClassName='agent-composer-menu-content'
+              >
+                <div role='listbox' aria-label='Available providers'>
+                  {configuredProviders.map((provider) => (
+                    <button
+                      key={provider}
+                      type='button'
+                      className={`agent-composer-option ${provider === resolvedSelectedProviderValue ? 'is-active' : ''}`}
+                      onPointerDown={(event) => {
+                        event.preventDefault()
+                      }}
+                      onClick={() => {
+                        void handleProviderSelectionChange(provider)
+                      }}
+                    >
+                      <span className='agent-composer-option-label'>{provider}</span>
+                    </button>
+                  ))}
+                </div>
+              </AppScrollArea>
             ) : null}
 
             {activeComposerMenu === 'model' && modelSuggestions.length > 0 ? (
-              <div className='agent-composer-menu' role='listbox' aria-label='Available models'>
-                {modelSuggestions.map((modelId) => (
-                  <button
-                    key={`${resolvedSelectedProviderValue}/${modelId}`}
-                    type='button'
-                    className='agent-composer-option'
-                    onPointerDown={(event) => {
-                      event.preventDefault()
-                    }}
-                    onClick={() => {
-                      if (panelError) {
-                        setPanelError(null)
-                      }
-                      setModelInputValue(modelId)
-                      setModelDrafts((currentValue) => ({
-                        ...currentValue,
-                        [resolvedSelectedProviderValue]: modelId,
-                      }))
-                      setActiveComposerMenu(null)
-                      void handleSelectModel(`${resolvedSelectedProviderValue}/${modelId}`)
-                    }}
-                  >
-                    <span className='agent-composer-option-label'>{modelId}</span>
-                  </button>
-                ))}
-              </div>
+              <AppScrollArea
+                className='agent-composer-menu'
+                contentClassName='agent-composer-menu-content'
+              >
+                <div role='listbox' aria-label='Available models'>
+                  {modelSuggestions.map((modelId) => (
+                    <button
+                      key={`${resolvedSelectedProviderValue}/${modelId}`}
+                      type='button'
+                      className='agent-composer-option'
+                      onPointerDown={(event) => {
+                        event.preventDefault()
+                      }}
+                      onClick={() => {
+                        if (panelError) {
+                          setPanelError(null)
+                        }
+                        setModelInputValue(modelId)
+                        setModelDrafts((currentValue) => ({
+                          ...currentValue,
+                          [resolvedSelectedProviderValue]: modelId,
+                        }))
+                        setActiveComposerMenu(null)
+                        void handleSelectModel(`${resolvedSelectedProviderValue}/${modelId}`)
+                      }}
+                    >
+                      <span className='agent-composer-option-label'>{modelId}</span>
+                    </button>
+                  ))}
+                </div>
+              </AppScrollArea>
             ) : null}
           </div>
         </div>
