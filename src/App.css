@@ -571,7 +571,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 8px 12px;
   border-radius: 8px;
   border: none;
@@ -1921,7 +1921,7 @@
   color: var(--foreground);
 }
 
-.workspace-tree-row > .workspace-tree-trigger {
+.workspace-tree-row>.workspace-tree-trigger {
   flex: 1;
   width: auto;
 }

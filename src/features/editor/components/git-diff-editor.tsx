@@ -51,6 +51,9 @@ const DIFF_EDITOR_THEME = EditorView.theme({
     fontFamily: 'var(--font-sans)',
     fontSize: '14px',
   },
+  '.cm-gutters, .cm-gutter, .cm-gutterElement': {
+    backgroundColor: 'var(--surface)',
+  },
   '.cm-content': {
     caretColor: 'var(--foreground)',
     paddingBottom: '2rem',
@@ -59,7 +62,7 @@ const DIFF_EDITOR_THEME = EditorView.theme({
     backgroundColor: 'var(--default)',
   },
   '.cm-activeLineGutter': {
-    backgroundColor: 'var(--default)',
+    backgroundColor: 'var(--surface)',
   },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-content ::selection': {
     backgroundColor: 'var(--default)',
