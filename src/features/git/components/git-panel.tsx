@@ -360,12 +360,12 @@ function GitTreeFolder({
   })
 
   return (
-    <li className='git-tree-node'>
+    <li className='panel-tree-node'>
       <div className='git-tree-folder-row' onClick={() => toggleNode(node.id)}>
         <button type='button' className='git-tree-folder-toggle'>
           <span className='git-panel-section-title'>
             <GitRowIcon isFolder nodeLabel={node.label} isClosed={isClosed} iconTheme={iconTheme} />
-            <span>{node.label}</span>
+            <span className='panel-tree-label'>{node.label}</span>
           </span>
         </button>
 
@@ -380,9 +380,9 @@ function GitTreeFolder({
       </div>
 
       {!isClosed && (
-        <div className='git-tree-node-children'>
+        <div className='panel-tree-children'>
           {node.children.length > 0 && (
-            <ul className='git-tree-list'>
+            <ul className='panel-tree-list'>
               {node.children.map((child) => (
                 <GitTreeFolder
                   key={child.id}
@@ -460,7 +460,7 @@ function GitChangeList({
               <span className='git-change-copy'>
                 <span className='git-change-header'>
                   <GitRowIcon fileName={fileName} iconTheme={iconTheme} />
-                  <span className='git-change-path'>{fileName}</span>
+                  <span className='panel-tree-label'>{fileName}</span>
                 </span>
                 {layout === 'list' && dirLabel && (
                   <span className='git-change-meta'>{dirLabel}</span>
@@ -546,7 +546,7 @@ function GitSection({
       {isExpanded && changes.length > 0 && (
         <div className={layout === 'tree' ? 'git-panel-tree-shell' : ''}>
           {layout === 'tree' && treeNodes.length > 0 ? (
-            <ul className='git-tree-list'>
+            <ul className='panel-tree-list'>
               {treeNodes.map((node) => (
                 <GitTreeFolder
                   key={node.id}

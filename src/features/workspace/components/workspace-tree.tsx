@@ -221,6 +221,8 @@ function FileTreeItem({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [draftName, setDraftName] = useState(node.name)
   const [error, setError] = useState<string | null>(null)
+  const rowRef = useRef<HTMLDivElement | null>(null)
+  const renameInputRef = useRef<HTMLInputElement | null>(null)
 
   const isFolder = node.kind === 'directory'
   const editorKind = node.kind === 'file' ? getSupportedWorkspaceEditorKind(node.path) : null
@@ -240,6 +242,20 @@ function FileTreeItem({
   useEffect(() => {
     setDraftName(node.name)
   }, [node.name])
+
+  useEffect(() => {
+    if (!isEditing) return
+
+    const frameId = window.requestAnimationFrame(() => {
+      const input = renameInputRef.current
+      if (!input) return
+
+      input.focus()
+      input.setSelectionRange(0, input.value.length)
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [isEditing])
 
   const handleSubmitRename = async (event?: FormEvent) => {
     event?.preventDefault()
@@ -276,8 +292,9 @@ function FileTreeItem({
   }
 
   return (
-    <li className='git-tree-node'>
+    <li className='panel-tree-node'>
       <div
+        ref={rowRef}
         className={`workspace-tree-row${isActive ? ' is-active' : ''}${isDragSource ? ' is-drag-source' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
         onClick={() => (isFolder ? onToggleDirectory(node.path) : onSelectFile(node.path))}
         onDragLeave={(event) => onDragLeaveNode(node, event)}
@@ -285,31 +302,60 @@ function FileTreeItem({
         onDrop={(event) => void onDropOnNode(node, event)}
       >
         {isEditing ? (
-          <form className='workspace-tree-trigger' onSubmit={handleSubmitRename} onClick={event => event.stopPropagation()}>
-            <FileRowIcon node={node} isExpanded={isExpanded} iconTheme={iconTheme} />
-            <input
-              autoFocus
-              className='raw-rename-input'
-              value={draftName}
-              onFocus={event => event.target.select()}
-              onChange={event => setDraftName(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Escape') {
-                  setDraftName(node.name)
+          <>
+            <div className='workspace-tree-trigger' onClick={event => event.stopPropagation()}>
+              <FileRowIcon node={node} isExpanded={isExpanded} iconTheme={iconTheme} />
+              <input
+                ref={renameInputRef}
+                className='raw-rename-input'
+                value={draftName}
+                onFocus={event => event.target.select()}
+                onChange={event => setDraftName(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void handleSubmitRename()
+                  }
+                  if (event.key === 'Escape') {
+                    setDraftName(node.name)
+                    setIsEditing(false)
+                  }
+                }}
+                onBlur={(event) => {
+                  if (isSubmitting) return
+
+                  const nextFocusedElement = event.relatedTarget
+                  if (nextFocusedElement instanceof Node && rowRef.current?.contains(nextFocusedElement)) {
+                    return
+                  }
+
                   setIsEditing(false)
-                }
-              }}
-              onBlur={() => !isSubmitting && setIsEditing(false)}
-            />
-            <div className='git-change-actions' style={{ opacity: 1, maxWidth: '4rem' }}>
-              <button type='submit' className='git-change-action git-change-icon-button' disabled={isSubmitting}>
-                <CheckLine size={14} />
-              </button>
-              <button type='button' className='git-change-action git-change-icon-button' onClick={() => setIsEditing(false)}>
-                <CloseLine size={14} />
-              </button>
+                }}
+              />
             </div>
-          </form>
+            <div className='git-change-tools' onClick={event => event.stopPropagation()}>
+              <div className='git-change-actions' style={{ opacity: 1, maxWidth: '4rem', transform: 'translateX(0)' }}>
+                <button
+                  type='button'
+                  className='git-change-action git-change-icon-button'
+                  disabled={isSubmitting}
+                  onClick={() => void handleSubmitRename()}
+                >
+                  <CheckLine size={14} />
+                </button>
+                <button
+                  type='button'
+                  className='git-change-action git-change-icon-button'
+                  onClick={() => {
+                    setDraftName(node.name)
+                    setIsEditing(false)
+                  }}
+                >
+                  <CloseLine size={14} />
+                </button>
+              </div>
+            </div>
+          </>
         ) : (
           <div
             className='workspace-tree-trigger'
@@ -319,7 +365,7 @@ function FileTreeItem({
             onDragStart={(event) => onDragStartNode(node, event)}
           >
             <FileRowIcon node={node} isExpanded={isExpanded} iconTheme={iconTheme} />
-            <span className='git-change-path' style={{ fontWeight: isFolder ? 600 : 500 }}>
+            <span className='panel-tree-label' style={{ fontWeight: isFolder ? 600 : 500 }}>
               {node.name}
             </span>
           </div>
@@ -383,8 +429,8 @@ function FileTreeItem({
       {error && <p className='tree-item-error'>{error}</p>}
 
       {isFolder && isExpanded && node.children && (
-        <div className='workspace-tree-children'>
-          <ul className='git-tree-list'>
+        <div className='panel-tree-children'>
+          <ul className='panel-tree-list'>
             {node.children.map(child => (
               <FileTreeItem
                 key={child.path}
@@ -650,7 +696,7 @@ export function WorkspaceTree({
 
   return (
     <ul
-      className={`git-tree-list workspace-tree-root${draggedNode ? ' is-dragging' : ''}${isRootDropTarget ? ' is-root-drop-target' : ''}`}
+      className={`panel-tree-list workspace-tree-root${draggedNode ? ' is-dragging' : ''}${isRootDropTarget ? ' is-root-drop-target' : ''}`}
       style={{ paddingTop: 6, paddingBottom: 6 }}
       onDragLeave={handleRootDragLeave}
       onDragOver={handleRootDragOver}

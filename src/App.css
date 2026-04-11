@@ -1810,7 +1810,7 @@
   list-style: none;
 }
 
-.git-tree-list {
+.panel-tree-list {
   margin: 0;
   padding: 0;
   width: 100%;
@@ -1821,21 +1821,19 @@
   padding: 6px 0;
 }
 
-.git-tree-node {
+.panel-tree-node {
   display: flex;
   flex-direction: column;
 }
 
-.git-tree-node-children,
-.workspace-tree-children {
+.panel-tree-children {
   display: flex;
   flex-direction: column;
   margin-left: 26px;
   border-left: 1px solid var(--separator);
 }
 
-.git-tree-folder-row,
-.workspace-tree-row {
+.git-tree-folder-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -1847,13 +1845,11 @@
 }
 
 .git-tree-folder-row:hover,
-.workspace-tree-row:hover,
 .git-change-item:hover {
   background: var(--surface-tertiary);
 }
 
 .git-tree-folder-row.is-active,
-.workspace-tree-row.is-active,
 .git-change-item.is-active {
   background: var(--surface-tertiary);
   color: var(--accent);
@@ -1864,52 +1860,73 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  padding: 8px 12px;
-  padding-left: 14px;
-  color: var(--foreground);
+  padding: 8px 12px 8px 14px;
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.5;
   text-align: left;
   gap: 8px;
   background: transparent;
   border: 0;
+}
+
+.git-tree-folder-toggle {
+  color: var(--foreground);
   width: 100%;
 }
 
-.git-change-path {
-  font-size: 13px;
-  font-weight: 500;
+.workspace-tree-trigger {
   color: var(--foreground);
+}
+
+.workspace-tree-row > .workspace-tree-trigger {
+  flex: 1;
+  width: auto;
+}
+
+.panel-tree-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.git-change-header .panel-tree-label,
+.git-tree-folder-toggle .panel-tree-label,
+.workspace-tree-row .panel-tree-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: inherit;
+}
+
+.git-change-header .panel-tree-label,
+.git-tree-folder-toggle .panel-tree-label {
+  color: var(--foreground);
+}
+
+.workspace-tree-row .panel-tree-label {
+  color: var(--foreground);
 }
 
 .git-panel-section-header,
 .git-tree-folder-row,
 .git-tree-folder-toggle,
 .git-change-item,
-.git-change-trigger,
-.workspace-tree-row {
+.git-change-trigger {
   cursor: pointer;
 }
 
 .workspace-tree-row .raw-rename-input,
 .workspace-tree-row .raw-rename-input:focus,
 .workspace-tree-row .raw-rename-input:focus-visible {
+  all: unset;
   flex: 1;
-  background: transparent;
-  border: 0;
-  outline: 0;
-  box-shadow: none;
-  padding: 0;
-  margin: 0;
-  height: 20px;
-  font-size: 13px;
-  font-family: inherit;
-  font-weight: 500;
-  color: var(--accent);
+  display: block;
+  width: 100%;
   min-width: 0;
+  font: inherit;
+  line-height: inherit;
+  color: var(--accent);
+  caret-color: currentColor;
 }
 
 .sidebar-tree-pane {
@@ -2165,8 +2182,7 @@
 
 
 
-.git-change-trigger,
-.workspace-tree-trigger {
+.git-change-trigger {
   display: flex;
   align-items: center;
   min-width: 0;
@@ -2206,15 +2222,6 @@
   width: 16px;
   height: 16px;
   object-fit: contain;
-}
-
-.git-change-path {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--foreground);
 }
 
 .git-change-meta {
@@ -2271,6 +2278,7 @@
 .git-change-actions {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 6px;
   opacity: 0;
   max-width: 0;
@@ -2294,7 +2302,7 @@
 }
 
 .workspace-tree-row {
-  display: flex !important;
+  display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 28px;
@@ -2306,6 +2314,10 @@
 
 .workspace-tree-row:hover {
   background-color: var(--surface-tertiary);
+}
+
+.workspace-tree-row.is-active {
+  background: var(--surface-tertiary);
 }
 
 .workspace-tree-row.is-drag-source {
@@ -2321,7 +2333,7 @@
   outline-offset: -1px;
 }
 
-.workspace-tree-row.is-drop-target .git-change-path {
+.workspace-tree-row.is-drop-target .panel-tree-label {
   color: color-mix(in srgb, var(--accent) 82%, var(--foreground));
 }
 
