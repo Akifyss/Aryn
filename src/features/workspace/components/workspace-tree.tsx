@@ -14,6 +14,12 @@ import {
 import { pickDominantGitDisplayChange } from '@/features/git/lib/display-change'
 import { resolveWorkspaceDirectoryIconUrl, resolveWorkspaceFileIconUrl } from '@/features/workspace/lib/icon-theme'
 import { getSupportedWorkspaceEditorKind, supportsCodeEditorToggle } from '@/features/workspace/lib/file-types'
+import {
+  areSameWorkspacePaths,
+  canMoveNodeToDirectory,
+  normalizeWorkspacePath,
+  resolveDropTargetDirectoryPath,
+} from '@/features/workspace/lib/workspace-tree-dnd'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 import type { GitDisplayChange, GitRepositoryState } from '@/features/git/types'
 
@@ -32,62 +38,20 @@ type WorkspaceTreeProps = {
   gitRepositoryState?: GitRepositoryState | null
 }
 
-function normalizePath(filePath: string) {
-  return filePath.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
-}
-
-function getParentDirectoryPath(filePath: string) {
-  const normalizedPath = filePath.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
-  const lastSeparatorIndex = normalizedPath.lastIndexOf('/')
-
-  if (lastSeparatorIndex <= 0) {
-    return null
-  }
-
-  return normalizedPath.slice(0, lastSeparatorIndex)
-}
-
-function isSamePathOrDescendant(targetPath: string, parentPath: string) {
-  const normalizedTargetPath = normalizePath(targetPath)
-  const normalizedParentPath = normalizePath(parentPath)
-
-  return normalizedTargetPath === normalizedParentPath || normalizedTargetPath.startsWith(`${normalizedParentPath}/`)
-}
-
-function canMoveNodeToDirectory(node: WorkspaceNode | null, targetDirectoryPath: string) {
-  if (!node) {
-    return false
-  }
-
-  if (node.kind === 'directory' && isSamePathOrDescendant(targetDirectoryPath, node.path)) {
-    return false
-  }
-
-  return normalizePath(getParentDirectoryPath(node.path) ?? '') !== normalizePath(targetDirectoryPath)
-}
-
-function resolveDropTargetDirectoryPath(node: WorkspaceNode, workspacePath: string | null) {
-  if (node.kind === 'directory') {
-    return node.path
-  }
-
-  return getParentDirectoryPath(node.path) ?? workspacePath
-}
-
 function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | undefined, node: WorkspaceNode): GitDisplayChange | null {
   if (!repositoryState?.isRepository) return null
 
-  const targetPath = normalizePath(node.path)
+  const targetPath = normalizeWorkspacePath(node.path)
 
   if (node.kind === 'file') {
-    return repositoryState.unstagedChanges.find(c => normalizePath(c.path) === targetPath)
-      ?? repositoryState.stagedChanges.find(c => normalizePath(c.path) === targetPath)
+    return repositoryState.unstagedChanges.find(c => normalizeWorkspacePath(c.path) === targetPath)
+      ?? repositoryState.stagedChanges.find(c => normalizeWorkspacePath(c.path) === targetPath)
       ?? null
   }
 
   const prefix = targetPath.endsWith('/') ? targetPath : `${targetPath}/`
-  const unstaged = repositoryState.unstagedChanges.filter(c => normalizePath(c.path).startsWith(prefix))
-  const staged = repositoryState.stagedChanges.filter(c => normalizePath(c.path).startsWith(prefix))
+  const unstaged = repositoryState.unstagedChanges.filter(c => normalizeWorkspacePath(c.path).startsWith(prefix))
+  const staged = repositoryState.stagedChanges.filter(c => normalizeWorkspacePath(c.path).startsWith(prefix))
   const allChanges = [...unstaged, ...staged]
 
   if (allChanges.length === 0) {
@@ -269,7 +233,8 @@ function FileTreeItem({
   const isDropTarget = Boolean(
     isFolder
     && resolvedDropTargetDirectoryPath
-    && dropTargetDirectoryPath === resolvedDropTargetDirectoryPath,
+    && dropTargetDirectoryPath
+    && areSameWorkspacePaths(dropTargetDirectoryPath, resolvedDropTargetDirectoryPath),
   )
 
   useEffect(() => {
@@ -469,7 +434,11 @@ export function WorkspaceTree({
   const [isMovingNode, setIsMovingNode] = useState(false)
   const expandTimerRef = useRef<number | null>(null)
   const expandTimerPathRef = useRef<string | null>(null)
-  const isRootDropTarget = Boolean(workspacePath && dropTargetDirectoryPath === workspacePath)
+  const isRootDropTarget = Boolean(
+    workspacePath
+    && dropTargetDirectoryPath
+    && areSameWorkspacePaths(dropTargetDirectoryPath, workspacePath),
+  )
 
   const clearExpandTimer = () => {
     if (expandTimerRef.current !== null) {
@@ -544,7 +513,7 @@ export function WorkspaceTree({
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
 
-    if (dropTargetDirectoryPath !== targetDirectoryPath) {
+    if (!areSameWorkspacePaths(dropTargetDirectoryPath, targetDirectoryPath)) {
       setDropTargetDirectoryPath(targetDirectoryPath)
     }
 
@@ -580,7 +549,9 @@ export function WorkspaceTree({
       return
     }
 
-    setDropTargetDirectoryPath((currentValue) => (currentValue === targetDirectoryPath ? null : currentValue))
+    setDropTargetDirectoryPath((currentValue) => (
+      areSameWorkspacePaths(currentValue, targetDirectoryPath) ? null : currentValue
+    ))
 
     if (expandTimerPathRef.current === node.path) {
       clearExpandTimer()
@@ -625,7 +596,7 @@ export function WorkspaceTree({
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
 
-    if (dropTargetDirectoryPath !== workspacePath) {
+    if (!areSameWorkspacePaths(dropTargetDirectoryPath, workspacePath)) {
       clearExpandTimer()
       setDropTargetDirectoryPath(workspacePath)
     }
@@ -642,7 +613,7 @@ export function WorkspaceTree({
     }
 
     setDropTargetDirectoryPath((currentValue) => (
-      currentValue === workspacePath ? null : currentValue
+      areSameWorkspacePaths(currentValue, workspacePath) ? null : currentValue
     ))
   }
 
