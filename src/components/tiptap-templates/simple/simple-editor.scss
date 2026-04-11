@@ -283,26 +283,6 @@
   opacity: 0.72;
 }
 
-.simple-editor-wrapper,
-.simple-editor-wrapper * {
-  scrollbar-width: thin;
-  scrollbar-color: var(--tt-scrollbar-color) transparent;
-}
-
-.simple-editor-wrapper ::-webkit-scrollbar {
-  width: 0.25rem;
-  height: 0.25rem;
-}
-
-.simple-editor-wrapper ::-webkit-scrollbar-thumb {
-  background-color: var(--tt-scrollbar-color);
-  border-radius: 9999px;
-}
-
-.simple-editor-wrapper ::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 .simple-editor-wrapper .tiptap.ProseMirror {
   font-family: var(--font-sans);
   font-synthesis: style;
@@ -319,12 +299,32 @@
   flex-direction: column;
   width: 100%;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  background-color: var(--tt-bg-color);
+  --app-scroll-area-scrollbar-thickness: 4px;
+  --app-scroll-area-scrollbar-gap: 1px;
+  --app-scroll-area-thumb-color: color-mix(in srgb, var(--tt-scrollbar-color) 88%, transparent);
+  --app-scroll-area-thumb-hover-color: color-mix(in srgb, var(--tt-theme-text) 24%, transparent);
+  --app-scroll-area-thumb-active-color: color-mix(in srgb, var(--tt-theme-text) 32%, transparent);
+}
+
+.simple-editor-viewport {
   background-color: var(--tt-bg-color);
 }
 
-.simple-editor-content .tiptap.ProseMirror.simple-editor {
+.simple-editor-content-inner {
+  display: flex;
+  min-height: 100%;
+  width: 100%;
+}
+
+.simple-editor-editor {
+  display: flex;
+  flex: 1;
+  min-height: 100%;
+  width: 100%;
+}
+
+.simple-editor-editor .tiptap.ProseMirror.simple-editor {
   flex: 1;
   width: 100%;
   max-width: 648px;
@@ -336,13 +336,13 @@
   outline: none;
 }
 
-.simple-editor-content .tiptap.ProseMirror.simple-editor::selection,
-.simple-editor-content .tiptap.ProseMirror.simple-editor ::selection {
+.simple-editor-editor .tiptap.ProseMirror.simple-editor::selection,
+.simple-editor-editor .tiptap.ProseMirror.simple-editor ::selection {
   background-color: var(--tt-selection-color);
 }
 
 @media screen and (max-width: 480px) {
-  .simple-editor-content .tiptap.ProseMirror.simple-editor {
+  .simple-editor-editor .tiptap.ProseMirror.simple-editor {
     padding: 1rem 1.5rem 30vh;
   }
 }

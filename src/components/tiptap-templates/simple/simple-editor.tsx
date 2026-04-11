@@ -14,6 +14,7 @@ import Placeholder from "@tiptap/extension-placeholder"
 import { Selection } from "@tiptap/extensions"
 import { Markdown } from "@tiptap/markdown"
 
+import { AppScrollArea } from "@/components/app-scroll-area"
 import { Button } from "@/components/tiptap-ui-primitive/button"
 import { Spacer } from "@/components/tiptap-ui-primitive/spacer"
 import {
@@ -467,11 +468,17 @@ export function SimpleEditor({
           )}
         </Toolbar>
 
-        <EditorContent
+        <AppScrollArea
           className="simple-editor-content"
-          editor={editor}
-          role="presentation"
-        />
+          contentClassName="simple-editor-content-inner"
+          viewportClassName="simple-editor-viewport"
+        >
+          <EditorContent
+            className="simple-editor-editor"
+            editor={editor}
+            role="presentation"
+          />
+        </AppScrollArea>
       </EditorContext.Provider>
     </div>
   )
