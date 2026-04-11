@@ -1483,20 +1483,20 @@
 
 .git-diff-codemirror-host:hover .cm-scroller,
 .git-diff-codemirror-host:focus-within .cm-scroller {
-  scrollbar-color: color-mix(in srgb, var(--muted) 16%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--muted) 9%, transparent) transparent;
 }
 
 .git-diff-codemirror-host:hover .cm-scroller::-webkit-scrollbar-thumb,
 .git-diff-codemirror-host:focus-within .cm-scroller::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  background: color-mix(in srgb, var(--muted) 9%, transparent);
 }
 
 .git-diff-codemirror-host .cm-scroller::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--foreground) 20%, transparent);
+  background: color-mix(in srgb, var(--foreground) 13%, transparent);
 }
 
 .git-diff-codemirror-host .cm-scroller::-webkit-scrollbar-thumb:active {
-  background: color-mix(in srgb, var(--foreground) 28%, transparent);
+  background: color-mix(in srgb, var(--foreground) 18%, transparent);
 }
 
 .git-diff-codemirror-host .cm-mergeView {
@@ -3551,19 +3551,19 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-markdown pre:hover {
-  scrollbar-color: color-mix(in srgb, var(--muted) 16%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--muted) 9%, transparent) transparent;
 }
 
 .agent-markdown pre:hover::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  background: color-mix(in srgb, var(--muted) 9%, transparent);
 }
 
 .agent-markdown pre::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--foreground) 20%, transparent);
+  background: color-mix(in srgb, var(--foreground) 13%, transparent);
 }
 
 .agent-markdown pre::-webkit-scrollbar-thumb:active {
-  background: color-mix(in srgb, var(--foreground) 28%, transparent);
+  background: color-mix(in srgb, var(--foreground) 18%, transparent);
 }
 
 .agent-markdown pre code {
