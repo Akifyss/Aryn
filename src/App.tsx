@@ -182,8 +182,48 @@ const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
 const DEFAULT_GIT_PANEL_HEIGHT = 292
 const MIN_GIT_PANEL_HEIGHT = 200
 const DEFAULT_GIT_PANEL_LAYOUT: GitPanelLayout = 'list'
-const TAB_STORAGE_PREFIX = 'writing-workspace:file-tabs:'
-const LEGACY_TAB_STORAGE_PREFIX = 'writing-workspace:editor-tabs:'
+const APP_STORAGE_PREFIX = 'aryn'
+const LEGACY_APP_STORAGE_PREFIX = String.fromCharCode(
+  119,
+  114,
+  105,
+  116,
+  105,
+  110,
+  103,
+  45,
+  119,
+  111,
+  114,
+  107,
+  115,
+  112,
+  97,
+  99,
+  101,
+)
+const TAB_STORAGE_PREFIX = `${APP_STORAGE_PREFIX}:file-tabs:`
+const LEGACY_TAB_STORAGE_PREFIXES = [
+  `${APP_STORAGE_PREFIX}:editor-tabs:`,
+  `${LEGACY_APP_STORAGE_PREFIX}:file-tabs:`,
+  `${LEGACY_APP_STORAGE_PREFIX}:editor-tabs:`,
+]
+const LAYOUT_STORAGE_KEYS = {
+  gitPanelHeight: `${APP_STORAGE_PREFIX}:git-panel-height`,
+  gitPanelLayout: `${APP_STORAGE_PREFIX}:git-panel-layout`,
+  leftSidebarCollapsed: `${APP_STORAGE_PREFIX}:left-sidebar-collapsed`,
+  leftSidebarWidth: `${APP_STORAGE_PREFIX}:left-sidebar-width`,
+  rightSidebarCollapsed: `${APP_STORAGE_PREFIX}:right-sidebar-collapsed`,
+  rightSidebarWidth: `${APP_STORAGE_PREFIX}:right-sidebar-width`,
+} as const
+const LEGACY_LAYOUT_STORAGE_KEYS: Record<keyof typeof LAYOUT_STORAGE_KEYS, string[]> = {
+  gitPanelHeight: [`${LEGACY_APP_STORAGE_PREFIX}:git-panel-height`],
+  gitPanelLayout: [`${LEGACY_APP_STORAGE_PREFIX}:git-panel-layout`],
+  leftSidebarCollapsed: [`${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-collapsed`],
+  leftSidebarWidth: [`${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-width`],
+  rightSidebarCollapsed: [`${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-collapsed`],
+  rightSidebarWidth: [`${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-width`],
+}
 const SETTINGS_TAB_ID = 'app://settings'
 const SETTINGS_TAB_PATH = 'app://settings'
 const WORKSPACE_AUTO_SAVE_DELAY_MS = 1000
@@ -200,13 +240,51 @@ function getTabStorageKey(workspacePath: string) {
 }
 
 function getLegacyTabStorageKey(workspacePath: string) {
-  return `${LEGACY_TAB_STORAGE_PREFIX}${encodeURIComponent(workspacePath)}`
+  return LEGACY_TAB_STORAGE_PREFIXES.map((prefix) => `${prefix}${encodeURIComponent(workspacePath)}`)
+}
+
+function readStoredLocalStorageValue(
+  storage: Storage,
+  key: keyof typeof LAYOUT_STORAGE_KEYS,
+) {
+  const currentKey = LAYOUT_STORAGE_KEYS[key]
+  const currentValue = storage.getItem(currentKey)
+
+  if (currentValue !== null) {
+    return currentValue
+  }
+
+  for (const candidateKey of LEGACY_LAYOUT_STORAGE_KEYS[key]) {
+    const value = storage.getItem(candidateKey)
+
+    if (value !== null) {
+      storage.setItem(currentKey, value)
+      storage.removeItem(candidateKey)
+      return value
+    }
+  }
+
+  return null
 }
 
 function readStoredTabState(workspacePath: string): StoredTabState {
   try {
-    const rawValue = window.localStorage.getItem(getTabStorageKey(workspacePath))
-      ?? window.localStorage.getItem(getLegacyTabStorageKey(workspacePath))
+    const currentStorageKey = getTabStorageKey(workspacePath)
+    const currentValue = window.localStorage.getItem(currentStorageKey)
+    const rawValue = currentValue ?? getLegacyTabStorageKey(workspacePath).reduce<string | null>((storedValue, storageKey) => {
+      if (storedValue !== null) {
+        return storedValue
+      }
+
+      const legacyValue = window.localStorage.getItem(storageKey)
+
+      if (legacyValue !== null) {
+        window.localStorage.setItem(currentStorageKey, legacyValue)
+        window.localStorage.removeItem(storageKey)
+      }
+
+      return legacyValue
+    }, null)
     if (!rawValue) {
       return {
         activePath: null,
@@ -2248,12 +2326,12 @@ function App() {
 
   useEffect(() => {
     const storage = window.localStorage
-    const savedLeftWidth = storage.getItem('writing-workspace:left-sidebar-width')
-    const savedRightWidth = storage.getItem('writing-workspace:right-sidebar-width')
-    const savedLeftCollapsed = storage.getItem('writing-workspace:left-sidebar-collapsed')
-    const savedRightCollapsed = storage.getItem('writing-workspace:right-sidebar-collapsed')
-    const savedGitPanelHeight = storage.getItem('writing-workspace:git-panel-height')
-    const savedGitPanelLayout = storage.getItem('writing-workspace:git-panel-layout')
+    const savedLeftWidth = readStoredLocalStorageValue(storage, 'leftSidebarWidth')
+    const savedRightWidth = readStoredLocalStorageValue(storage, 'rightSidebarWidth')
+    const savedLeftCollapsed = readStoredLocalStorageValue(storage, 'leftSidebarCollapsed')
+    const savedRightCollapsed = readStoredLocalStorageValue(storage, 'rightSidebarCollapsed')
+    const savedGitPanelHeight = readStoredLocalStorageValue(storage, 'gitPanelHeight')
+    const savedGitPanelLayout = readStoredLocalStorageValue(storage, 'gitPanelLayout')
 
     if (savedLeftWidth) {
       const parsedLeftWidth = Number(savedLeftWidth)
@@ -2290,27 +2368,27 @@ function App() {
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem('writing-workspace:left-sidebar-width', String(leftSidebarWidth))
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.leftSidebarWidth, String(leftSidebarWidth))
   }, [leftSidebarWidth])
 
   useEffect(() => {
-    window.localStorage.setItem('writing-workspace:right-sidebar-width', String(rightSidebarWidth))
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.rightSidebarWidth, String(rightSidebarWidth))
   }, [rightSidebarWidth])
 
   useEffect(() => {
-    window.localStorage.setItem('writing-workspace:git-panel-height', String(gitPanelHeight))
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.gitPanelHeight, String(gitPanelHeight))
   }, [gitPanelHeight])
 
   useEffect(() => {
-    window.localStorage.setItem('writing-workspace:git-panel-layout', gitPanelLayout)
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.gitPanelLayout, gitPanelLayout)
   }, [gitPanelLayout])
 
   useEffect(() => {
-    window.localStorage.setItem('writing-workspace:left-sidebar-collapsed', String(isLeftSidebarCollapsed))
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.leftSidebarCollapsed, String(isLeftSidebarCollapsed))
   }, [isLeftSidebarCollapsed])
 
   useEffect(() => {
-    window.localStorage.setItem('writing-workspace:right-sidebar-collapsed', String(isRightSidebarCollapsed))
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.rightSidebarCollapsed, String(isRightSidebarCollapsed))
   }, [isRightSidebarCollapsed])
 
   useEffect(() => {

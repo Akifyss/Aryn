@@ -1,9 +1,9 @@
 {
-  "name": "writing-workspace-desktop",
+  "name": "aryn-desktop",
   "version": "0.1.0",
-  "productName": "Writing Workspace",
+  "productName": "Aryn",
   "main": "dist-electron/main/index.js",
-  "description": "Desktop writing workspace.",
+  "description": "Desktop AI writing app.",
   "author": "OpenAI Codex",
   "license": "MIT",
   "private": true,

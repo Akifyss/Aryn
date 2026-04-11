@@ -13,7 +13,7 @@ function toErrorText(error: unknown) {
 
 function writeStartupErrorLog(error: unknown) {
   try {
-    const logDirectoryPath = path.join(os.tmpdir(), 'writing-workspace')
+    const logDirectoryPath = path.join(os.tmpdir(), 'aryn')
     const logFilePath = path.join(logDirectoryPath, 'startup-error.log')
     mkdirSync(logDirectoryPath, { recursive: true })
     appendFileSync(
@@ -28,7 +28,7 @@ function writeStartupErrorLog(error: unknown) {
 
 function writeStartupMarker(message: string) {
   try {
-    const logDirectoryPath = path.join(os.tmpdir(), 'writing-workspace')
+    const logDirectoryPath = path.join(os.tmpdir(), 'aryn')
     const logFilePath = path.join(logDirectoryPath, 'startup-marker.log')
     mkdirSync(logDirectoryPath, { recursive: true })
     appendFileSync(logFilePath, `[${new Date().toISOString()}] ${message}\n`, 'utf8')
@@ -40,7 +40,7 @@ function writeStartupMarker(message: string) {
 function reportStartupError(error: unknown) {
   const errorText = toErrorText(error)
   writeStartupErrorLog(error)
-  dialog.showErrorBox('Writing Workspace Startup Error', errorText)
+  dialog.showErrorBox('Aryn Startup Error', errorText)
 }
 
 writeStartupMarker('bootstrap-loaded')

@@ -146,7 +146,7 @@ async function createWindow() {
   const appState = await appStateStore.read()
 
   win = new BrowserWindow({
-    title: 'Writing Workspace',
+    title: 'Aryn',
     icon: appWindowIconPath,
     backgroundColor: '#ffffff',
     frame: false,

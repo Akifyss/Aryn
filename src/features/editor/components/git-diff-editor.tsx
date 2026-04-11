@@ -55,11 +55,6 @@ const DIFF_EDITOR_THEME = EditorView.theme({
     caretColor: 'var(--foreground)',
     paddingBottom: '2rem',
   },
-  '.cm-gutters': {
-    borderRight: '1px solid var(--separator)',
-    backgroundColor: 'var(--surface-secondary)',
-    color: 'var(--muted)',
-  },
   '.cm-activeLine': {
     backgroundColor: 'var(--default)',
   },
@@ -284,12 +279,12 @@ function CodeMirrorDiffRenderer({
             ? 'Unstage block'
             : 'Discard block'
         : blockActionsDisabledReason ?? (
-            action === 'stage'
-              ? 'Stage block'
-              : action === 'unstage'
-                ? 'Unstage block'
-                : 'Discard block'
-          )
+          action === 'stage'
+            ? 'Stage block'
+            : action === 'unstage'
+              ? 'Unstage block'
+              : 'Discard block'
+        )
 
       control.title = title
       control.setAttribute('aria-label', title)
@@ -503,10 +498,10 @@ function CodeMirrorDiffRenderer({
           extensions: createDiffExtensions({
             editable: false,
             filePath: diff.change.path,
-            onChange: () => {},
-            onCompositionChange: () => {},
-            onFocusChange: () => {},
-            onSave: () => {},
+            onChange: () => { },
+            onCompositionChange: () => { },
+            onFocusChange: () => { },
+            onSave: () => { },
             wrapLines: diff.editorKind === 'rich-text',
           }),
         },

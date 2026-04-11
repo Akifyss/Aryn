@@ -1,6 +1,6 @@
-# Writing Workspace
+# Aryn
 
-Desktop writing workspace built with Electron, React, HeroUI, and TypeScript.
+Aryn is a desktop AI writing app built with Electron, React, HeroUI, and TypeScript.
 
 ## Requirements
 
@@ -47,7 +47,7 @@ Notes:
 
 - Do not copy `node_modules` from Windows to macOS. Install dependencies again on the Mac.
 - `.node-version` and `.nvmrc` both target Node `22`.
-- Electron builder is configured with the project app id `com.writingworkspace.desktop`; macOS packaging still needs Apple signing and notarization before release builds are distributed.
+- Electron builder is configured with the project app id `com.aryn.desktop`; macOS packaging still needs Apple signing and notarization before release builds are distributed.
 
 ## Verification
 
