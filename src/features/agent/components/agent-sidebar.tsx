@@ -9,6 +9,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import spinners, { type BrailleSpinnerName } from 'unicode-animations'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-changes'
 import type {
   AgentClientEvent,
   AgentMessageFileChange,
@@ -174,43 +175,6 @@ function getMessageFileSectionTitle(fileChanges: AgentMessageFileChange[]) {
 
   return 'Files Changed'
 }
-
-function mergeTurnFileChanges(fileChanges: AgentMessageFileChange[]) {
-  const mergedChanges = new Map<string, AgentMessageFileChange>()
-
-  for (const change of fileChanges) {
-    const previousChange = mergedChanges.get(change.filePath)
-
-    if (!previousChange) {
-      mergedChanges.set(change.filePath, change)
-      continue
-    }
-
-    if (previousChange.kind === 'created') {
-      mergedChanges.set(change.filePath, {
-        filePath: change.filePath,
-        kind: change.kind === 'deleted' ? 'deleted' : 'created',
-      })
-      continue
-    }
-
-    if (previousChange.kind === 'deleted') {
-      mergedChanges.set(change.filePath, {
-        filePath: change.filePath,
-        kind: change.kind === 'created' || change.kind === 'updated' ? 'updated' : 'deleted',
-      })
-      continue
-    }
-
-    mergedChanges.set(change.filePath, {
-      filePath: change.filePath,
-      kind: change.kind === 'deleted' ? 'deleted' : 'updated',
-    })
-  }
-
-  return [...mergedChanges.values()]
-}
-
 function mergeSessionAnnotationsState(
   state: AgentWorkspaceState,
   sessionId: string,
@@ -1416,50 +1380,19 @@ export function AgentSidebar({
     () => sessionPhase ? formatAgentSessionStatus(sessionPhase, agentState.runtime.pendingMessageCount) : null,
     [agentState.runtime.pendingMessageCount, sessionPhase],
   )
-  const activeSessionFileChanges = agentState.activeSession?.annotations.fileChangesByEntryId ?? {}
   const persistedMessages = agentState.activeSession?.messages ?? []
   const roundFileChangesByMessageId = useMemo(() => {
-    const nextMap = new Map<string, AgentMessageFileChange[]>()
     const hasInFlightRound = liveTools.length > 0
       || Boolean(draftAssistant.trim() || draftThinking.trim())
       || agentState.runtime.isStreaming
       || agentState.runtime.pendingMessageCount > 0
-    let currentRoundMessageIds: string[] = []
-    let currentRoundFileChanges: AgentMessageFileChange[] = []
-
-    const flushRound = (shouldRender: boolean) => {
-      if (!shouldRender || currentRoundMessageIds.length === 0 || currentRoundFileChanges.length === 0) {
-        currentRoundMessageIds = []
-        currentRoundFileChanges = []
-        return
-      }
-
-      const targetMessageId = currentRoundMessageIds[currentRoundMessageIds.length - 1]
-      if (targetMessageId) {
-        nextMap.set(targetMessageId, mergeTurnFileChanges(currentRoundFileChanges))
-      }
-
-      currentRoundMessageIds = []
-      currentRoundFileChanges = []
-    }
-
-    for (const message of persistedMessages) {
-      if (message.kind === 'user') {
-        flushRound(true)
-        continue
-      }
-
-      currentRoundMessageIds.push(message.id)
-
-      if (message.sessionEntryId) {
-        currentRoundFileChanges.push(...(activeSessionFileChanges[message.sessionEntryId] ?? []))
-      }
-    }
-
-    flushRound(!hasInFlightRound)
-    return nextMap
+    return buildRoundFileChangesByMessageId({
+      annotations: agentState.activeSession?.annotations ?? { fileChangesByEntryId: {} },
+      hasInFlightRound,
+      messages: persistedMessages,
+    })
   }, [
-    activeSessionFileChanges,
+    agentState.activeSession?.annotations,
     agentState.runtime.isStreaming,
     agentState.runtime.pendingMessageCount,
     draftAssistant,

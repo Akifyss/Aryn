@@ -529,8 +529,6 @@ ipcMain.handle('git:get-file-diff', async (_, workspacePath: string, filePath: s
 
 ipcMain.handle('workspace:start-watch', async (_, rootPath: string) => {
   await watchWorkspace(rootPath, (event) => {
-    void agentManager.handleWorkspaceChange(event)
-
     if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
       return
     }

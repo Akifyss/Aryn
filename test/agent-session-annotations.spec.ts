@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  mergeAgentMessageFileChangeKind,
-  upsertAgentSessionFileChange,
-} from '../electron/main/agent-session-annotations'
+import { upsertAgentSessionFileChange } from '../electron/main/agent-session-annotations'
+import { mergeAgentMessageFileChangeKind } from '../src/features/agent/file-change-utils'
 
 describe('agent session annotations', () => {
   it('keeps a created file as created through later updates', () => {

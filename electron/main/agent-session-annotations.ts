@@ -2,9 +2,9 @@ import { readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type {
   AgentMessageFileChange,
-  AgentMessageFileChangeKind,
   AgentSessionAnnotations,
 } from '../../src/features/agent/types'
+import { mergeAgentMessageFileChangeKind } from '../../src/features/agent/file-change-utils'
 
 const EMPTY_ANNOTATIONS: AgentSessionAnnotations = {
   fileChangesByEntryId: {},
@@ -15,7 +15,7 @@ type StoredAgentSessionAnnotations = {
   version?: number
 }
 
-function isAgentMessageFileChangeKind(value: unknown): value is AgentMessageFileChangeKind {
+function isAgentMessageFileChangeKind(value: unknown): value is AgentMessageFileChange['kind'] {
   return value === 'created' || value === 'deleted' || value === 'updated'
 }
 
@@ -72,25 +72,6 @@ function normalizeAnnotations(value: unknown): AgentSessionAnnotations {
 
 function getStoredAnnotationsPath(sessionPath: string) {
   return `${sessionPath}.annotations.json`
-}
-
-export function mergeAgentMessageFileChangeKind(
-  previousKind: AgentMessageFileChangeKind | undefined,
-  nextKind: AgentMessageFileChangeKind,
-): AgentMessageFileChangeKind | null {
-  if (!previousKind) {
-    return nextKind
-  }
-
-  if (previousKind === 'created') {
-    return nextKind === 'deleted' ? null : 'created'
-  }
-
-  if (previousKind === 'deleted') {
-    return nextKind === 'created' || nextKind === 'updated' ? 'updated' : 'deleted'
-  }
-
-  return nextKind === 'deleted' ? 'deleted' : 'updated'
 }
 
 export function upsertAgentSessionFileChange(
