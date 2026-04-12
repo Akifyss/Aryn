@@ -36,6 +36,7 @@ const KNOWN_AGENT_PROVIDERS = ['google', 'openai', 'openrouter'] as const
 const MARKDOWN_PLUGINS = [remarkGfm]
 const AGENT_COMPOSER_MENU_MAX_HEIGHT = 224
 const AGENT_COMPOSER_MENU_ROW_HEIGHT = 43
+const AGENT_COMPOSER_MENU_HEIGHT_BUFFER = 2
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -1194,8 +1195,14 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
       const query = modelInputValue.trim().toLowerCase()
       return !query || modelId.toLowerCase().includes(query)
     })
-  const providerMenuHeight = Math.min(AGENT_COMPOSER_MENU_MAX_HEIGHT, configuredProviders.length * AGENT_COMPOSER_MENU_ROW_HEIGHT)
-  const modelMenuHeight = Math.min(AGENT_COMPOSER_MENU_MAX_HEIGHT, modelSuggestions.length * AGENT_COMPOSER_MENU_ROW_HEIGHT)
+  const providerMenuHeight = Math.min(
+    AGENT_COMPOSER_MENU_MAX_HEIGHT,
+    configuredProviders.length * AGENT_COMPOSER_MENU_ROW_HEIGHT + AGENT_COMPOSER_MENU_HEIGHT_BUFFER,
+  )
+  const modelMenuHeight = Math.min(
+    AGENT_COMPOSER_MENU_MAX_HEIGHT,
+    modelSuggestions.length * AGENT_COMPOSER_MENU_ROW_HEIGHT + AGENT_COMPOSER_MENU_HEIGHT_BUFFER,
+  )
   const modelPlaceholder = 'model'
   const canSend = Boolean(workspacePath && composerValue.trim() && agentState.runtime.hasConfiguredModels)
   const statusMessage = !workspacePath
@@ -1426,8 +1433,12 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
         <div className='agent-composer-shell' style={{ '--agent-composer-height': `${composerHeight}px` } as CSSProperties}>
           <div
             aria-hidden='true'
-            className={`agent-composer-resize-handle${isResizingComposer ? ' is-active' : ''}`}
+            className={`agent-composer-resize-handle${isResizingComposer ? ' is-active' : ''}${activeComposerMenu ? ' is-blocked' : ''}`}
             onPointerDown={(event) => {
+              if (activeComposerMenu) {
+                return
+              }
+
               if (event.button !== 0) {
                 return
               }

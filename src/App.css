@@ -3639,6 +3639,11 @@ body.workspace-tree-dragging .workspace-tree-row {
   z-index: 40;
 }
 
+.agent-composer-resize-handle.is-blocked {
+  pointer-events: none;
+  cursor: default;
+}
+
 .agent-composer-resize-handle::before {
   content: "";
   position: absolute;

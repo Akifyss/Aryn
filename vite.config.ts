@@ -16,8 +16,20 @@ const bundledElectronRuntimeExternals = new Set([
   'ws',
 ])
 
+const bundledElectronPackageExternals = [
+  '@mariozechner/pi-agent-core',
+  '@mariozechner/pi-ai',
+  '@mariozechner/pi-coding-agent',
+  '@mariozechner/pi-tui',
+  '@silvia-odwyer/photon-node',
+]
+
 function isBundledElectronRuntimeExternal(id: string) {
   if (bundledElectronRuntimeExternals.has(id)) {
+    return true
+  }
+
+  if (bundledElectronPackageExternals.some((packageName) => id === packageName || id.startsWith(`${packageName}/`))) {
     return true
   }
 
