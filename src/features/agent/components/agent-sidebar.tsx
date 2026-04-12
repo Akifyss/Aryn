@@ -803,6 +803,8 @@ export function AgentSidebar({
   const overlayPanelRef = useRef<HTMLDivElement | null>(null)
   const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
   const previousSessionPathRef = useRef<string | null>(null)
+  const hasInitializedAutoOpenRef = useRef(false)
+  const lastAutoOpenedFileChangeKeyRef = useRef('')
   const restorableSessionPath = agentState.activeSession?.sessionPath ?? null
   const [isModelInputFullySelected, setIsModelInputFullySelected] = useState(false)
 
@@ -1435,6 +1437,26 @@ export function AgentSidebar({
     .flatMap(([messageId, changes]) => changes.map((change) => `${messageId}:${change.kind}:${change.filePath}`))
     .join('|')
   const renderedMessageCount = renderedMessages.length
+  const latestAutoOpenFileChange = useMemo(() => {
+    for (let index = persistedMessages.length - 1; index >= 0; index -= 1) {
+      const message = persistedMessages[index]
+      const fileChanges = roundFileChangesByMessageId.get(message.id)
+
+      if (!fileChanges || fileChanges.length === 0) {
+        continue
+      }
+
+      const nextChange = fileChanges.find((change) => change.kind !== 'deleted')
+      if (nextChange) {
+        return {
+          change: nextChange,
+          key: `${message.id}:${nextChange.kind}:${nextChange.filePath}`,
+        }
+      }
+    }
+
+    return null
+  }, [persistedMessages, roundFileChangesByMessageId])
 
   useEffect(() => {
     if (!canChooseProvider && activeComposerMenu === 'provider') {
@@ -1488,6 +1510,27 @@ export function AgentSidebar({
       window.cancelAnimationFrame(frameId)
     }
   }, [activeSessionPath, draftAssistant, draftThinking, fileChangesKey, liveTools, renderedMessageCount, sessionStatusKey])
+
+  useEffect(() => {
+    if (!activeSessionPath) {
+      hasInitializedAutoOpenRef.current = false
+      lastAutoOpenedFileChangeKeyRef.current = ''
+      return
+    }
+
+    if (!hasInitializedAutoOpenRef.current) {
+      hasInitializedAutoOpenRef.current = true
+      lastAutoOpenedFileChangeKeyRef.current = latestAutoOpenFileChange?.key ?? ''
+      return
+    }
+
+    if (!latestAutoOpenFileChange || latestAutoOpenFileChange.key === lastAutoOpenedFileChangeKeyRef.current) {
+      return
+    }
+
+    lastAutoOpenedFileChangeKeyRef.current = latestAutoOpenFileChange.key
+    void onOpenMessageFile?.(latestAutoOpenFileChange.change.filePath, latestAutoOpenFileChange.change.kind)
+  }, [activeSessionPath, latestAutoOpenFileChange, onOpenMessageFile])
 
   return (
     <div className='agent-shell'>
