@@ -34,6 +34,8 @@ type AuthProviderKey = 'google' | 'openai' | 'openrouter'
 
 const KNOWN_AGENT_PROVIDERS = ['google', 'openai', 'openrouter'] as const
 const MARKDOWN_PLUGINS = [remarkGfm]
+const AGENT_COMPOSER_MENU_MAX_HEIGHT = 224
+const AGENT_COMPOSER_MENU_ROW_HEIGHT = 43
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -1192,6 +1194,8 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
       const query = modelInputValue.trim().toLowerCase()
       return !query || modelId.toLowerCase().includes(query)
     })
+  const providerMenuHeight = Math.min(AGENT_COMPOSER_MENU_MAX_HEIGHT, configuredProviders.length * AGENT_COMPOSER_MENU_ROW_HEIGHT)
+  const modelMenuHeight = Math.min(AGENT_COMPOSER_MENU_MAX_HEIGHT, modelSuggestions.length * AGENT_COMPOSER_MENU_ROW_HEIGHT)
   const modelPlaceholder = 'model'
   const canSend = Boolean(workspacePath && composerValue.trim() && agentState.runtime.hasConfiguredModels)
   const statusMessage = !workspacePath
@@ -1565,7 +1569,7 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
               <AppScrollArea
                 className='agent-composer-menu'
                 contentClassName='agent-composer-menu-content'
-                viewportClassName='agent-composer-menu-viewport'
+                rootStyle={{ height: `${providerMenuHeight}px` }}
               >
                 <div role='listbox' aria-label='Available providers'>
                   {configuredProviders.map((provider) => (
@@ -1591,7 +1595,7 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
               <AppScrollArea
                 className='agent-composer-menu'
                 contentClassName='agent-composer-menu-content'
-                viewportClassName='agent-composer-menu-viewport'
+                rootStyle={{ height: `${modelMenuHeight}px` }}
               >
                 <div role='listbox' aria-label='Available models'>
                   {modelSuggestions.map((modelId) => (

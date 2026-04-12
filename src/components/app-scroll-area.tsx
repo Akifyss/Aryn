@@ -1,4 +1,4 @@
-import { forwardRef, type ReactNode, type Ref } from 'react'
+import { forwardRef, type CSSProperties, type ReactNode, type Ref } from 'react'
 import { ScrollArea } from '@base-ui/react/scroll-area'
 import './app-scroll-area.css'
 
@@ -7,6 +7,7 @@ type AppScrollAreaProps = {
   className?: string
   contentClassName?: string
   overflowEdgeThreshold?: number
+  rootStyle?: CSSProperties
   viewportClassName?: string
   viewportRef?: Ref<HTMLDivElement>
   withHorizontalScrollbar?: boolean
@@ -22,6 +23,7 @@ export const AppScrollArea = forwardRef<HTMLDivElement, AppScrollAreaProps>(func
     className,
     contentClassName,
     overflowEdgeThreshold,
+    rootStyle,
     viewportClassName,
     viewportRef,
     withHorizontalScrollbar = false,
@@ -33,6 +35,7 @@ export const AppScrollArea = forwardRef<HTMLDivElement, AppScrollAreaProps>(func
       ref={forwardedRef}
       className={joinClasses('app-scroll-area', className)}
       overflowEdgeThreshold={overflowEdgeThreshold}
+      style={rootStyle}
     >
       <ScrollArea.Viewport
         ref={viewportRef}
