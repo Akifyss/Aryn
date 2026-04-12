@@ -498,6 +498,9 @@ function App() {
   const [gitErrorMessage, setGitErrorMessage] = useState<string | null>(null)
   const [gitCommitMessage, setGitCommitMessage] = useState('')
   const [gitPanelLayout, setGitPanelLayout] = useState<GitPanelLayout>(DEFAULT_GIT_PANEL_LAYOUT)
+  const [viewportWidth, setViewportWidth] = useState(() => (
+    typeof window !== 'undefined' ? window.innerWidth : DESKTOP_AGENT_BREAKPOINT + 1
+  ))
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
   const activeTabId = useWorkspaceStore((state) => state.activeTabId)
@@ -580,8 +583,8 @@ function App() {
     ? getBaseName(currentPath)
     : 'Current workspace'
   const shellPlatform = platform === 'darwin' ? 'macos' : 'windows'
-  const isMobileStacked = typeof window !== 'undefined' && window.innerWidth <= MOBILE_STACK_BREAKPOINT
-  const isAgentPanelVisible = typeof window !== 'undefined' && window.innerWidth > DESKTOP_AGENT_BREAKPOINT
+  const isMobileStacked = viewportWidth <= MOBILE_STACK_BREAKPOINT
+  const isAgentPanelVisible = viewportWidth > DESKTOP_AGENT_BREAKPOINT
   const isLeftSidebarVisible = !isLeftSidebarCollapsed
   const isRightSidebarVisible = isAgentPanelVisible && !isRightSidebarCollapsed
   const effectiveLeftSidebarWidth = isLeftSidebarVisible ? leftSidebarWidth : 0
@@ -2323,6 +2326,20 @@ function App() {
       document.body.style.userSelect = ''
     }
   }, [isGitPanelResizing])
+
+  useEffect(() => {
+    function syncViewportWidth() {
+      const nextViewportWidth = window.innerWidth
+      setViewportWidth((currentWidth) => (
+        currentWidth === nextViewportWidth ? currentWidth : nextViewportWidth
+      ))
+    }
+
+    syncViewportWidth()
+    window.addEventListener('resize', syncViewportWidth)
+
+    return () => window.removeEventListener('resize', syncViewportWidth)
+  }, [])
 
   useEffect(() => {
     const storage = window.localStorage
