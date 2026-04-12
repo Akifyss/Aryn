@@ -44,6 +44,11 @@ import type { WorkspaceIconThemeCatalogOption } from '../../src/features/workspa
 import {
   importWorkspaceIconThemeFromVsix,
 } from './workspace-icon-theme'
+import {
+  getAppIconAssetPath,
+  getAppIconCatalog,
+  resolveAppIconId,
+} from './app-icons'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -82,10 +87,6 @@ let win: BrowserWindow | null = null
 let allowWindowClose = false
 const preload = path.join(MAIN_DIST, 'preload', 'index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
-const appPngIconPath = path.join(process.env.VITE_PUBLIC, 'app-icon.png')
-const appWindowIconPath = process.platform === 'win32'
-  ? path.join(process.env.VITE_PUBLIC, 'favicon.ico')
-  : appPngIconPath
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json')
 const agentDir = path.join(app.getPath('userData'), 'pi-agent')
 const workspaceIconThemeCacheDir = path.join(app.getPath('temp'), app.getName(), 'workspace-icon-themes')
@@ -144,10 +145,11 @@ function bindWindowStatePersistence(targetWindow: BrowserWindow) {
 
 async function createWindow() {
   const appState = await appStateStore.read()
+  const appIconPath = getAppIconAssetPath(process.env.VITE_PUBLIC, appState.ui.appIconId)
 
   win = new BrowserWindow({
     title: 'Aryn',
-    icon: appWindowIconPath,
+    icon: appIconPath,
     backgroundColor: '#ffffff',
     frame: false,
     autoHideMenuBar: true,
@@ -205,6 +207,26 @@ async function createWindow() {
       win?.webContents.inspectElement(params.x, params.y)
     })
   }
+
+  applyAppIconSelection(appState.ui.appIconId)
+}
+
+function applyAppIconSelection(appIconId?: string | null) {
+  const resolvedAppIconId = resolveAppIconId(appIconId)
+  const iconPath = getAppIconAssetPath(process.env.VITE_PUBLIC, resolvedAppIconId)
+  const icon = nativeImage.createFromPath(iconPath)
+
+  if (!icon.isEmpty()) {
+    if (process.platform === 'darwin') {
+      app.dock.setIcon(icon)
+    }
+
+    if (win && !win.isDestroyed()) {
+      win.setIcon(icon)
+    }
+  }
+
+  return resolvedAppIconId
 }
 
 function isBundledWorkspaceIconThemePath(vsixPath: string) {
@@ -271,12 +293,9 @@ async function getWorkspaceIconThemeCatalog() {
   return catalogOptions
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
-
-  if (process.platform === 'darwin') {
-    app.dock.setIcon(nativeImage.createFromPath(appPngIconPath))
-  }
+  applyAppIconSelection((await appStateStore.read()).ui.appIconId)
 
   void createWindow()
 })
@@ -434,6 +453,30 @@ ipcMain.handle('ui:update-state', async (_, patch: { agentComposerHeight?: numbe
   }))
 
   return { ok: true }
+})
+
+ipcMain.handle('app-icons:catalog', async () => {
+  return getAppIconCatalog(process.env.VITE_PUBLIC)
+})
+
+ipcMain.handle('app-icons:get-selection', async () => {
+  const state = await appStateStore.read()
+  return resolveAppIconId(state.ui.appIconId)
+})
+
+ipcMain.handle('app-icons:select', async (_, appIconId: string) => {
+  const nextAppIconId = resolveAppIconId(appIconId)
+
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    ui: {
+      ...currentState.ui,
+      appIconId: nextAppIconId,
+    },
+  }))
+
+  applyAppIconSelection(nextAppIconId)
+  return nextAppIconId
 })
 
 ipcMain.handle('workspace:read-file', async (_, filePath: string) => {

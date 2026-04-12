@@ -13,6 +13,7 @@ import type {
   WorkspaceIconThemeCatalogOption,
   WorkspaceNode,
 } from '@/features/workspace/types'
+import type { AppIconCatalogOption } from '@/features/settings/types'
 
 /// <reference types="vite/client" />
 
@@ -54,6 +55,9 @@ declare global {
       getWorkspaceIconThemeCatalog: () => Promise<WorkspaceIconThemeCatalogOption[]>
       pickWorkspaceIconTheme: () => Promise<WorkspaceIconTheme | null>
       setWorkspaceIconTheme: (selection: { sourceVsixPath: string, themeId: string }) => Promise<WorkspaceIconTheme | null>
+      getAppIconCatalog: () => Promise<AppIconCatalogOption[]>
+      getAppIconSelection: () => Promise<string>
+      setAppIconSelection: (appIconId: string) => Promise<string>
       getUiState: () => Promise<{ agentComposerHeight: number }>
       updateUiState: (patch: { agentComposerHeight?: number }) => Promise<{ ok: boolean }>
       startWorkspaceWatch: (rootPath: string) => Promise<{ ok: boolean }>

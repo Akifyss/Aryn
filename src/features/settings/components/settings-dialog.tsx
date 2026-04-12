@@ -1,21 +1,26 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
-import { Button, Input, Tabs, Select, ListBox } from '@heroui/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button, Input, ListBox, Select, Tabs } from '@heroui/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
-import { useSettingsStore } from '@/hooks/use-settings-store'
 import type { AgentProviderAuthState, AgentWorkspaceState } from '@/features/agent/types'
+import type { AppIconCatalogOption } from '@/features/settings/types'
 import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '@/features/workspace/types'
+import { useSettingsStore } from '@/hooks/use-settings-store'
 
 export type SettingsSectionId = 'general' | 'providers'
 
 type SettingsViewProps = {
   activeSection: SettingsSectionId
+  appIconId: string | null
+  appIconOptions: AppIconCatalogOption[]
   agentState: AgentWorkspaceState | null
   iconTheme: WorkspaceIconTheme | null
   iconThemeOptions: WorkspaceIconThemeCatalogOption[]
+  isAppIconBusy: boolean
   isIconThemeBusy: boolean
   onAgentStateChange: (state: AgentWorkspaceState) => void
   onImportIconTheme: () => Promise<void>
   onSectionChange: (section: SettingsSectionId) => void
+  onSelectAppIcon: (appIconId: string) => Promise<void>
   onSelectIconTheme: (selection: { sourceVsixPath: string, themeId: string }) => Promise<void>
   onStatusMessage: (message: string) => void
   workspacePath: string | null
@@ -60,13 +65,17 @@ function getProviderMeta(state: AgentProviderAuthState) {
 
 export function SettingsDialog({
   activeSection,
+  appIconId,
+  appIconOptions,
   agentState,
   iconTheme,
   iconThemeOptions,
+  isAppIconBusy,
   isIconThemeBusy,
   onAgentStateChange,
   onImportIconTheme,
   onSectionChange,
+  onSelectAppIcon,
   onSelectIconTheme,
   onStatusMessage,
   workspacePath,
@@ -76,47 +85,46 @@ export function SettingsDialog({
   const [isSavingAuth, setIsSavingAuth] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
 
-  // Resolve theme for portal context
   const resolvedTheme = useMemo(() => {
     if (theme === 'auto') {
-      return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+      return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light'
     }
+
     return theme
   }, [theme])
 
-  // Track previous theme to prevent overriding manual selection
-  const prevThemeRef = useRef(resolvedTheme);
+  const prevThemeRef = useRef(resolvedTheme)
 
-  // Automatically switch icon theme ONLY when theme itself changes
   useEffect(() => {
-    if (!workspacePath || isIconThemeBusy || iconThemeOptions.length === 0) return;
-
-    // Only trigger if theme changed laterally
-    if (prevThemeRef.current !== resolvedTheme) {
-      const targetLabel = resolvedTheme === 'dark' ? 'flow dawn' : 'flow deep';
-      const targetOption = iconThemeOptions.find(opt => 
-        opt.label.toLowerCase().includes(targetLabel)
-      );
-
-      // DELAY THE HEAVY ICON WORK to let the main theme transition finish first
-      const timer = setTimeout(() => {
-        if (targetOption && (
-          !iconTheme || 
-          iconTheme.activeThemeId !== targetOption.themeId || 
-          iconTheme.sourceVsixPath !== targetOption.sourceVsixPath
-        )) {
-          void onSelectIconTheme({
-            sourceVsixPath: targetOption.sourceVsixPath,
-            themeId: targetOption.themeId,
-          });
-        }
-      }, 300);
-      
-      // Update ref immediately to prevent multiple triggers
-      prevThemeRef.current = resolvedTheme;
-      return () => clearTimeout(timer);
+    if (!workspacePath || isIconThemeBusy || iconThemeOptions.length === 0) {
+      return
     }
-  }, [resolvedTheme, iconThemeOptions, workspacePath, iconTheme, isIconThemeBusy, onSelectIconTheme]);
+
+    if (prevThemeRef.current === resolvedTheme) {
+      return
+    }
+
+    const targetLabel = resolvedTheme === 'dark' ? 'flow dawn' : 'flow deep'
+    const targetOption = iconThemeOptions.find((option) => option.label.toLowerCase().includes(targetLabel))
+    const timer = setTimeout(() => {
+      if (targetOption && (
+        !iconTheme
+        || iconTheme.activeThemeId !== targetOption.themeId
+        || iconTheme.sourceVsixPath !== targetOption.sourceVsixPath
+      )) {
+        void onSelectIconTheme({
+          sourceVsixPath: targetOption.sourceVsixPath,
+          themeId: targetOption.themeId,
+        })
+      }
+    }, 300)
+
+    prevThemeRef.current = resolvedTheme
+
+    return () => clearTimeout(timer)
+  }, [resolvedTheme, iconTheme, iconThemeOptions, isIconThemeBusy, onSelectIconTheme, workspacePath])
 
   const authProviders = useMemo(() => {
     const runtimeAuth = agentState?.runtime.auth
@@ -161,9 +169,12 @@ export function SettingsDialog({
   const activeIconThemeKey = iconTheme
     ? `${iconTheme.sourceVsixPath}::${iconTheme.activeThemeId}`
     : ''
+  const selectedAppIcon = appIconOptions.find((option) => option.id === appIconId) ?? appIconOptions[0] ?? null
 
   async function handleSaveProviderAuth(provider: AuthProviderKey, apiKey: string | null) {
-    if (!workspacePath) return
+    if (!workspacePath) {
+      return
+    }
 
     try {
       setIsSavingAuth(true)
@@ -197,7 +208,7 @@ export function SettingsDialog({
               key={section.id}
               type='button'
               className={`settings-nav-item ${section.id === activeSection ? 'is-active' : ''}`}
-              onClick={() => onSectionChange(section.id as SettingsSectionId)}
+              onClick={() => onSectionChange(section.id)}
             >
               <span className='settings-nav-label'>{section.label}</span>
             </button>
@@ -224,23 +235,23 @@ export function SettingsDialog({
                 <div className='settings-field'>
                   <span className='settings-field-label'>模式</span>
                   <div className='settings-tabs-wrapper heroui-tabs-fix'>
-                    <Tabs 
-                      selectedKey={theme} 
+                    <Tabs
+                      selectedKey={theme}
                       onSelectionChange={(key) => setTheme(key as 'light' | 'dark' | 'auto')}
-                      variant="primary"
-                      className="w-full"
+                      variant='primary'
+                      className='w-full'
                     >
-                      <Tabs.ListContainer className="w-full">
-                        <Tabs.List aria-label="主题配色" className="w-full">
-                          <Tabs.Tab id="light" className="flex-1">
+                      <Tabs.ListContainer className='w-full'>
+                        <Tabs.List aria-label='主题配色' className='w-full'>
+                          <Tabs.Tab id='light' className='flex-1'>
                             浅色
                             <Tabs.Indicator />
                           </Tabs.Tab>
-                          <Tabs.Tab id="dark" className="flex-1">
+                          <Tabs.Tab id='dark' className='flex-1'>
                             深色
                             <Tabs.Indicator />
                           </Tabs.Tab>
-                          <Tabs.Tab id="auto" className="flex-1">
+                          <Tabs.Tab id='auto' className='flex-1'>
                             跟随系统
                             <Tabs.Indicator />
                           </Tabs.Tab>
@@ -256,9 +267,9 @@ export function SettingsDialog({
                     <Select
                       className='flex-1 heroui-select-fix'
                       selectedKey={activeIconThemeKey}
-                      onSelectionChange={(val) => {
-                        const valStr = String(val)
-                        const selectedOption = iconThemeOptions.find((o) => o.key === valStr)
+                      onSelectionChange={(value) => {
+                        const selectedOption = iconThemeOptions.find((option) => option.key === String(value))
+
                         if (selectedOption) {
                           void onSelectIconTheme({
                             sourceVsixPath: selectedOption.sourceVsixPath,
@@ -266,7 +277,7 @@ export function SettingsDialog({
                           })
                         }
                       }}
-                      placeholder="选择图标主题"
+                      placeholder='选择图标主题'
                       isDisabled={isIconThemeBusy || iconThemeOptions.length === 0}
                     >
                       <Select.Trigger className='settings-select-trigger'>
@@ -298,6 +309,59 @@ export function SettingsDialog({
                     </p>
                   )}
                 </div>
+
+                <div className='settings-field' style={{ marginTop: '24px' }}>
+                  <div className='settings-copy-block'>
+                    <h4>应用图标</h4>
+                  </div>
+                  <Select
+                    className='settings-field-grow heroui-select-fix'
+                    selectedKey={selectedAppIcon?.id ?? ''}
+                    onSelectionChange={(value) => {
+                      if (value == null) {
+                        return
+                      }
+
+                      const nextAppIconId = String(value)
+                      if (nextAppIconId) {
+                        void onSelectAppIcon(nextAppIconId)
+                      }
+                    }}
+                    placeholder='选择应用图标'
+                    isDisabled={isAppIconBusy || appIconOptions.length === 0}
+                  >
+                    <Select.Trigger className='settings-select-trigger settings-app-icon-select-trigger'>
+                      {selectedAppIcon ? (
+                        <>
+                          <span className='settings-app-icon-preview is-compact'>
+                            <img src={selectedAppIcon.previewSrc} alt={`${selectedAppIcon.label} app icon`} />
+                          </span>
+                          <span className='settings-app-icon-name'>{selectedAppIcon.label}</span>
+                          <Select.Indicator />
+                        </>
+                      ) : (
+                        <>
+                          <span className='settings-app-icon-placeholder'>选择应用图标</span>
+                          <Select.Indicator />
+                        </>
+                      )}
+                    </Select.Trigger>
+                    <Select.Popover>
+                      <ListBox>
+                        {appIconOptions.map((option) => (
+                          <ListBox.Item key={option.id} id={option.id} textValue={option.label}>
+                            <span className='settings-app-icon-item'>
+                              <span className='settings-app-icon-preview is-compact'>
+                                <img src={option.previewSrc} alt={`${option.label} app icon`} />
+                              </span>
+                              <span className='settings-app-icon-name'>{option.label}</span>
+                            </span>
+                          </ListBox.Item>
+                        ))}
+                      </ListBox>
+                    </Select.Popover>
+                  </Select>
+                </div>
               </div>
             </div>
           ) : (
@@ -306,6 +370,7 @@ export function SettingsDialog({
                 <div className='settings-provider-list'>
                   {authProviders.map((provider) => {
                     const draftValue = authDrafts[provider.key]
+
                     return (
                       <section key={provider.key} className='settings-provider-card'>
                         <div>
@@ -316,7 +381,7 @@ export function SettingsDialog({
                           aria-label={`${provider.label} API key`}
                           className='settings-provider-input'
                           disabled={isSavingAuth}
-                          onChange={(e) => setAuthDrafts(prev => ({ ...prev, [provider.key]: e.target.value }))}
+                          onChange={(event) => setAuthDrafts((prev) => ({ ...prev, [provider.key]: event.target.value }))}
                           placeholder={provider.placeholder}
                           type='password'
                           value={draftValue}
@@ -348,7 +413,7 @@ export function SettingsDialog({
                 </div>
               ) : (
                 <div className='settings-empty-state'>
-                  请先打开一个工作区。服务提供商配置将遵循当前活动的工作区上下文。
+                  请先打开一个工作区。服务提供商配置将遵循当前活动工作区上下文。
                 </div>
               )}
             </div>
