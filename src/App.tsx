@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Tooltip, Toast, toast, Modal, AlertDialog } from '@heroui/react'
+import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
 import {
   FileLine,
   FolderOpenFill,
@@ -170,8 +170,8 @@ type StoredTabState = {
   paths: string[]
 }
 
-const DESKTOP_AGENT_BREAKPOINT = 1160
-const MOBILE_STACK_BREAKPOINT = 860
+const FULL_LAYOUT_BREAKPOINT = 1360
+const COMPACT_LAYOUT_BREAKPOINT = 1160
 const RESIZE_HANDLE_WIDTH = 12
 const MIN_EDITOR_WIDTH = 480
 const LEFT_SIDEBAR_MIN_WIDTH = 240
@@ -231,6 +231,8 @@ const WORKSPACE_AUTO_SAVE_DELAY_MS = 1000
 const INTERNAL_SAVE_EVENT_TTL_MS = 2500
 
 type ResizePanel = 'left' | 'right'
+type LayoutMode = 'full' | 'compact' | 'focus'
+type PanelSurfaceMode = 'docked' | 'drawer'
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
@@ -502,9 +504,11 @@ function App() {
   const [gitErrorMessage, setGitErrorMessage] = useState<string | null>(null)
   const [gitCommitMessage, setGitCommitMessage] = useState('')
   const [gitPanelLayout, setGitPanelLayout] = useState<GitPanelLayout>(DEFAULT_GIT_PANEL_LAYOUT)
-  const [viewportWidth, setViewportWidth] = useState(() => (
-    typeof window !== 'undefined' ? window.innerWidth : DESKTOP_AGENT_BREAKPOINT + 1
+  const [shellWidth, setShellWidth] = useState(() => (
+    typeof window !== 'undefined' ? window.innerWidth : FULL_LAYOUT_BREAKPOINT + 1
   ))
+  const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false)
+  const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false)
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
   const activeTabId = useWorkspaceStore((state) => state.activeTabId)
@@ -587,10 +591,28 @@ function App() {
     ? getBaseName(currentPath)
     : 'Current workspace'
   const shellPlatform = platform === 'darwin' ? 'macos' : 'windows'
-  const isMobileStacked = viewportWidth <= MOBILE_STACK_BREAKPOINT
-  const isAgentPanelVisible = viewportWidth > DESKTOP_AGENT_BREAKPOINT
-  const isLeftSidebarVisible = !isLeftSidebarCollapsed
-  const isRightSidebarVisible = isAgentPanelVisible && !isRightSidebarCollapsed
+  const drawerPortalContainer = appShellRef.current ?? undefined
+  const drawerPortalProps = drawerPortalContainer
+    ? { UNSTABLE_portalContainer: drawerPortalContainer as HTMLElement }
+    : {}
+  const drawerChromeVars = {
+    '--chrome-height': '44px',
+    '--panel-toggle-size': '32px',
+    '--panel-toggle-gap': '8px',
+    '--left-panel-toggle-anchor': shellPlatform === 'windows' ? '12px' : '76px',
+    '--right-panel-toggle-anchor': shellPlatform === 'windows' ? '156px' : '12px',
+    '--left-panel-content-inset': shellPlatform === 'windows' ? '52px' : '116px',
+    '--right-panel-content-inset': shellPlatform === 'windows' ? '196px' : '52px',
+  } as CSSProperties
+  const layoutMode: LayoutMode = shellWidth > FULL_LAYOUT_BREAKPOINT
+    ? 'full'
+    : shellWidth > COMPACT_LAYOUT_BREAKPOINT
+      ? 'compact'
+      : 'focus'
+  const isLeftSidebarDrawer = layoutMode !== 'full'
+  const isRightSidebarDrawer = layoutMode === 'focus'
+  const isLeftSidebarVisible = !isLeftSidebarDrawer && !isLeftSidebarCollapsed
+  const isRightSidebarVisible = !isRightSidebarDrawer && !isRightSidebarCollapsed
   const effectiveLeftSidebarWidth = isLeftSidebarVisible ? leftSidebarWidth : 0
   const effectiveRightSidebarWidth = isRightSidebarVisible ? rightSidebarWidth : 0
   const activeTreePath = activeFileTab?.filePath ?? activeDiffTab?.diff.change.path ?? null
@@ -677,7 +699,10 @@ function App() {
   }
 
   function resizeSidebar(panel: ResizePanel, pointerClientX: number) {
-    if (isMobileStacked) {
+    if (
+      (panel === 'left' && !isLeftSidebarVisible)
+      || (panel === 'right' && !isRightSidebarVisible)
+    ) {
       return
     }
 
@@ -696,18 +721,13 @@ function App() {
       return
     }
 
-    if (!isAgentPanelVisible) {
-      return
-    }
-
     const nextWidth = shellRect.right - pointerClientX
     setRightSidebarWidth(clampRightWidth(nextWidth, shellWidth, effectiveLeftSidebarWidth))
   }
 
   function handleResizeStart(panel: ResizePanel) {
     if (
-      isMobileStacked
-      || (panel === 'left' && !isLeftSidebarVisible)
+      (panel === 'left' && !isLeftSidebarVisible)
       || (panel === 'right' && !isRightSidebarVisible)
     ) {
       return
@@ -1321,6 +1341,10 @@ function App() {
       if (existingTab) {
         activateTab(existingTab.id)
 
+        if (isLeftSidebarDrawer) {
+          setIsLeftDrawerOpen(false)
+        }
+
         if (workspacePath) {
           await updateWorkspaceState(workspacePath, { lastFilePath: filePath })
         }
@@ -1349,8 +1373,12 @@ function App() {
       await updateWorkspaceState(workspacePath, { lastFilePath: filePath })
     }
 
+    if (isLeftSidebarDrawer) {
+      setIsLeftDrawerOpen(false)
+    }
+
     setStatusMessage(`${getBaseName(filePath)} opened`)
-  }, [currentPath, activateTab, openTab])
+  }, [currentPath, activateTab, isLeftSidebarDrawer, openTab])
 
   const openAgentMessageFile = useCallback(async (
     filePath: string,
@@ -1363,6 +1391,10 @@ function App() {
     if (existingFileTab) {
       setIsSettingsTabActive(false)
       activateTab(existingFileTab.id)
+
+      if (isRightSidebarDrawer) {
+        setIsRightDrawerOpen(false)
+      }
 
       if (currentPath) {
         void window.appApi.updateWorkspaceState(currentPath, { lastFilePath: filePath })
@@ -1381,7 +1413,11 @@ function App() {
     }
 
     await openFile(filePath)
-  }, [activateTab, currentPath, openFile])
+
+    if (isRightSidebarDrawer) {
+      setIsRightDrawerOpen(false)
+    }
+  }, [activateTab, currentPath, isRightSidebarDrawer, openFile])
 
   async function openGitDiff(change: GitChangeItem) {
     if (!currentPath) {
@@ -1392,6 +1428,11 @@ function App() {
       const diff = await window.appApi.getGitFileDiff(currentPath, change.path, change.scope)
       openDiffTab(createDiffTab(change, change.scope, diff))
       setIsSettingsTabActive(false)
+
+      if (isLeftSidebarDrawer) {
+        setIsLeftDrawerOpen(false)
+      }
+
       setStatusMessage(`${getBaseName(change.path)} diff opened`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to open the diff view.'
@@ -2383,7 +2424,7 @@ function App() {
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [activeResizePanel, isAgentPanelVisible, isMobileStacked, leftSidebarWidth, rightSidebarWidth])
+  }, [activeResizePanel, isLeftSidebarVisible, isRightSidebarVisible, leftSidebarWidth, rightSidebarWidth])
 
   useEffect(() => {
     if (!isGitPanelResizing) {
@@ -2415,17 +2456,32 @@ function App() {
   }, [isGitPanelResizing])
 
   useEffect(() => {
-    function syncViewportWidth() {
-      const nextViewportWidth = window.innerWidth
-      setViewportWidth((currentWidth) => (
-        currentWidth === nextViewportWidth ? currentWidth : nextViewportWidth
+    function syncShellWidth() {
+      const nextShellWidth = getShellWidth()
+      setShellWidth((currentWidth) => (
+        currentWidth === nextShellWidth ? currentWidth : nextShellWidth
       ))
     }
 
-    syncViewportWidth()
-    window.addEventListener('resize', syncViewportWidth)
+    syncShellWidth()
 
-    return () => window.removeEventListener('resize', syncViewportWidth)
+    const shell = appShellRef.current
+    const resizeObserver = typeof ResizeObserver !== 'undefined' && shell
+      ? new ResizeObserver(() => {
+        syncShellWidth()
+      })
+      : null
+
+    if (shell && resizeObserver) {
+      resizeObserver.observe(shell)
+    }
+
+    window.addEventListener('resize', syncShellWidth)
+
+    return () => {
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', syncShellWidth)
+    }
   }, [])
 
   useEffect(() => {
@@ -2496,31 +2552,33 @@ function App() {
   }, [isRightSidebarCollapsed])
 
   useEffect(() => {
-    function syncSidebarWidths() {
-      const shellWidth = getShellWidth()
-      const nextLeftWidth = clampLeftWidth(leftSidebarWidth, shellWidth, effectiveRightSidebarWidth)
-      const nextRightWidth = isRightSidebarVisible
-        ? clampRightWidth(rightSidebarWidth, shellWidth, isLeftSidebarVisible ? nextLeftWidth : 0)
-        : rightSidebarWidth
+    const nextLeftWidth = clampLeftWidth(leftSidebarWidth, shellWidth, effectiveRightSidebarWidth)
+    const nextRightWidth = isRightSidebarVisible
+      ? clampRightWidth(rightSidebarWidth, shellWidth, isLeftSidebarVisible ? nextLeftWidth : 0)
+      : rightSidebarWidth
 
-      if (nextLeftWidth !== leftSidebarWidth) {
-        setLeftSidebarWidth(nextLeftWidth)
-      }
-
-      if (nextRightWidth !== rightSidebarWidth) {
-        setRightSidebarWidth(nextRightWidth)
-      }
+    if (nextLeftWidth !== leftSidebarWidth) {
+      setLeftSidebarWidth(nextLeftWidth)
     }
 
-    syncSidebarWidths()
-    window.addEventListener('resize', syncSidebarWidths)
-
-    return () => window.removeEventListener('resize', syncSidebarWidths)
-  }, [effectiveRightSidebarWidth, isLeftSidebarVisible, isRightSidebarVisible, leftSidebarWidth, rightSidebarWidth])
+    if (nextRightWidth !== rightSidebarWidth) {
+      setRightSidebarWidth(nextRightWidth)
+    }
+  }, [effectiveRightSidebarWidth, isLeftSidebarVisible, isRightSidebarVisible, leftSidebarWidth, rightSidebarWidth, shellWidth])
 
   useEffect(() => {
     setGitPanelHeight((currentValue) => clampGitHeight(currentValue))
   }, [leftSidebarWidth, isLeftSidebarVisible])
+
+  useEffect(() => {
+    if (!isLeftSidebarDrawer && isLeftDrawerOpen) {
+      setIsLeftDrawerOpen(false)
+    }
+
+    if (!isRightSidebarDrawer && isRightDrawerOpen) {
+      setIsRightDrawerOpen(false)
+    }
+  }, [isLeftDrawerOpen, isLeftSidebarDrawer, isRightDrawerOpen, isRightSidebarDrawer])
 
   useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
@@ -2607,15 +2665,300 @@ function App() {
   }, [currentPath])
 
   const handleCloseCommandPalette = useCallback(() => setIsCommandPaletteOpen(false), [])
+  const handleLeftDrawerOpenChange = useCallback((isOpen: boolean) => {
+    if (isOpen) {
+      setIsRightDrawerOpen(false)
+    }
+
+    setIsLeftDrawerOpen(isOpen)
+  }, [])
+  const handleRightDrawerOpenChange = useCallback((isOpen: boolean) => {
+    if (isOpen) {
+      setIsLeftDrawerOpen(false)
+    }
+
+    setIsRightDrawerOpen(isOpen)
+  }, [])
+  const openWorkspaceSurface = useCallback(() => {
+    if (isLeftSidebarDrawer) {
+      handleLeftDrawerOpenChange(true)
+      return
+    }
+
+    setIsLeftSidebarCollapsed(false)
+  }, [handleLeftDrawerOpenChange, isLeftSidebarDrawer])
+  const toggleAssistantSurface = useCallback(() => {
+    if (isRightSidebarDrawer) {
+      handleRightDrawerOpenChange(!isRightDrawerOpen)
+      return
+    }
+
+    setIsRightSidebarCollapsed((currentValue) => !currentValue)
+  }, [handleRightDrawerOpenChange, isRightDrawerOpen, isRightSidebarDrawer])
+
+  function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
+    const isDrawerSurface = surfaceMode === 'drawer'
+    const closeWorkspaceSurface = () => {
+      if (isDrawerSurface) {
+        setIsLeftDrawerOpen(false)
+        return
+      }
+
+      setIsLeftSidebarCollapsed(true)
+    }
+
+    return (
+      <div
+        className={`workspace-sidebar-surface${isDrawerSurface ? ' is-drawer' : ''}`}
+        data-platform={shellPlatform}
+        style={isDrawerSurface ? drawerChromeVars : undefined}
+      >
+        <div className={`section-title workspace-section-title${isDrawerSurface ? ' is-drawer-surface' : ''}`}>
+          <button
+            type='button'
+            className='panel-toggle-button workspace-section-toggle workspace-toggle-brand-button'
+            aria-label={isDrawerSurface ? 'Close workspace panel' : 'Collapse workspace sidebar'}
+            onClick={closeWorkspaceSurface}
+          >
+            <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
+              <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
+              <span className='workspace-toggle-brand-glyph'>
+                <LayoutLeftLine size={16} />
+              </span>
+            </span>
+          </button>
+          <button
+            type='button'
+            onClick={() => {
+              void handlePickWorkspace()
+            }}
+            disabled={isPickingWorkspace}
+            className='section-title-text'
+            aria-label={isPickingWorkspace ? 'Opening workspace' : 'Open workspace'}
+          >
+            <span className='section-title-label'>{workspaceLabel}</span>
+          </button>
+
+          <div className='section-title-drag-spacer' aria-hidden='true' />
+        </div>
+
+        <div ref={isDrawerSurface ? undefined : leftSidebarBodyRef} className='sidebar-stack'>
+          <div className='sidebar-vertical-tabs'>
+            <button
+              type='button'
+              className={`sidebar-vertical-tab${activeLeftSidebarTab === 'file' ? ' is-active' : ''}`}
+              onClick={() => {
+                setActiveLeftSidebarTab('file')
+              }}
+            >
+              <FileLine size={16} className='sidebar-vertical-tab-icon' />
+              <span className='sidebar-vertical-tab-label'>文件</span>
+            </button>
+            <button
+              type='button'
+              className={`sidebar-vertical-tab${activeLeftSidebarTab === 'git' ? ' is-active' : ''}`}
+              onClick={() => {
+                setActiveLeftSidebarTab('git')
+              }}
+            >
+              <GitCompareLine size={16} className='sidebar-vertical-tab-icon' />
+              <span className='sidebar-vertical-tab-label'>Git</span>
+            </button>
+            <button
+              type='button'
+              className='sidebar-vertical-tab'
+              onClick={() => {
+                setIsCommandPaletteOpen(true)
+
+                if (isDrawerSurface) {
+                  setIsLeftDrawerOpen(false)
+                }
+              }}
+            >
+              <Icon icon='lucide:search' width={16} height={16} className='sidebar-vertical-tab-icon' />
+              <span className='sidebar-vertical-tab-label'>搜索</span>
+            </button>
+          </div>
+
+          {activeLeftSidebarTab === 'file' ? (
+            <div className='sidebar-stack-pane sidebar-tree-pane'>
+              <div className='file-panel-header'>
+                <span className='file-panel-title'>文件树</span>
+                <div className='file-panel-actions'>
+                  <Tooltip closeDelay={0}>
+                    <Tooltip.Trigger>
+                      <button
+                        type='button'
+                        className='file-panel-action'
+                        onClick={() => void handleCreateFile()}
+                        disabled={!currentPath || isCreatingFile}
+                        aria-label='Create File'
+                      >
+                        <Icon icon='lucide:file-plus' width={16} height={16} />
+                      </button>
+                    </Tooltip.Trigger>
+                    <Tooltip.Content>Create File</Tooltip.Content>
+                  </Tooltip>
+                  <Tooltip closeDelay={0}>
+                    <Tooltip.Trigger>
+                      <button
+                        type='button'
+                        className='file-panel-action'
+                        onClick={() => void handleCreateDirectory()}
+                        disabled={!currentPath || isCreatingDirectory}
+                        aria-label='Create Folder'
+                      >
+                        <Icon icon='lucide:folder-plus' width={16} height={16} />
+                      </button>
+                    </Tooltip.Trigger>
+                    <Tooltip.Content>Create Folder</Tooltip.Content>
+                  </Tooltip>
+                  <Tooltip closeDelay={0}>
+                    <Tooltip.Trigger>
+                      <button
+                        type='button'
+                        className='file-panel-action'
+                        onClick={handleToggleFileTreeExpansion}
+                        disabled={!currentPath || tree.length === 0}
+                        aria-label='Toggle Expansion'
+                      >
+                        <Icon
+                          icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'}
+                          width={16}
+                          height={16}
+                        />
+                      </button>
+                    </Tooltip.Trigger>
+                    <Tooltip.Content>{expandedPaths.size > 0 ? 'Collapse All' : 'Expand All'}</Tooltip.Content>
+                  </Tooltip>
+                </div>
+              </div>
+
+              <AppScrollArea
+                className='tree-scroll'
+                contentClassName='tree-scroll-content'
+              >
+                <WorkspaceTree
+                  activeFilePath={activeTreePath}
+                  iconTheme={iconTheme}
+                  nodes={tree}
+                  expandedPaths={expandedPaths}
+                  setExpandedPaths={setExpandedPaths}
+                  workspacePath={currentPath}
+                  gitRepositoryState={gitRepositoryState}
+                  onSelectFile={(filePath) => {
+                    void openFile(filePath)
+                  }}
+                  onOpenInCodeEditor={(filePath) => {
+                    void openFile(filePath, currentPath, 'code')
+                  }}
+                  onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
+                  onDeleteNode={(node) => handleDeleteNode(node)}
+                  onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
+                />
+              </AppScrollArea>
+            </div>
+          ) : (
+            <div className='sidebar-stack-pane sidebar-git-pane' id='git-panel'>
+              <GitPanel
+                busyLabel={gitBusyLabel}
+                commitMessage={gitCommitMessage}
+                isLoading={isGitLoading}
+                layout={gitPanelLayout}
+                onCommit={() => {
+                  void handleCommitGitChanges()
+                }}
+                onCommitAndSync={() => {
+                  void handleCommitAndSyncGitChanges()
+                }}
+                onCommitMessageChange={setGitCommitMessage}
+                onDiscardAll={() => {
+                  void handleDiscardAllGitChanges()
+                }}
+                onDiscardMany={(changes) => {
+                  void handleDiscardGitChanges(changes)
+                }}
+                onInitialize={() => {
+                  void handleInitializeGit()
+                }}
+                onLayoutChange={setGitPanelLayout}
+                onOpenFile={(filePath) => {
+                  void openFile(filePath)
+                }}
+                onOpenDiff={(change) => {
+                  void openGitDiff(change)
+                }}
+                onPull={() => {
+                  void handlePullGitChanges()
+                }}
+                onPush={() => {
+                  void handlePushGitChanges()
+                }}
+                onRefresh={() => {
+                  void refreshGitState(currentPath, { silent: false })
+                }}
+                onStage={(filePaths) => {
+                  void handleStageGitPaths(filePaths)
+                }}
+                onUnstage={(filePaths) => {
+                  void handleUnstageGitPaths(filePaths)
+                }}
+                repositoryState={gitRepositoryState}
+                workspacePath={currentPath}
+                iconTheme={iconTheme}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className='sidebar-footer'>
+          <button
+            type='button'
+            className='sidebar-footer-item'
+            onClick={() => {
+              setIsSettingsOpen(true)
+
+              if (isDrawerSurface) {
+                setIsLeftDrawerOpen(false)
+              }
+            }}
+          >
+            <Icon icon='lucide:settings' width={16} height={16} />
+            <span>设置</span>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  function renderAgentPanel() {
+    return (
+      <AgentSidebar
+        iconTheme={iconTheme}
+        onOpenMessageFile={openAgentMessageFile}
+        onOpenProviderSettings={() => {
+          if (isRightSidebarDrawer) {
+            setIsRightDrawerOpen(false)
+          }
+
+          setSettingsSection('providers')
+          setIsSettingsOpen(true)
+        }}
+        workspacePath={currentPath}
+        onWorkspaceStateChange={setAgentWorkspaceState}
+      />
+    )
+  }
 
   return (
     <div
       ref={appShellRef}
       className="app-shell text-foreground bg-background"
+      data-layout={layoutMode}
       data-platform={shellPlatform}
-      data-left-collapsed={isLeftSidebarVisible ? 'false' : 'true'}
+      data-left-collapsed={isLeftSidebarDrawer || !isLeftSidebarVisible ? 'true' : 'false'}
       data-resizing={activeResizePanel || isGitPanelResizing ? 'true' : 'false'}
-      data-right-collapsed={isRightSidebarVisible ? 'false' : 'true'}
+      data-right-collapsed={isRightSidebarDrawer || !isRightSidebarVisible ? 'true' : 'false'}
       style={
         {
           '--git-panel-height': `${gitPanelHeight}px`,
@@ -2625,14 +2968,12 @@ function App() {
       }
     >
 
-      {!isLeftSidebarVisible ? (
+      {(isLeftSidebarDrawer || !isLeftSidebarVisible) && !isLeftDrawerOpen ? (
         <button
           type='button'
           className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-left workspace-toggle-brand-button'
-          aria-label='Expand workspace sidebar'
-          onClick={() => {
-            setIsLeftSidebarCollapsed(false)
-          }}
+          aria-label={isLeftSidebarDrawer ? 'Open workspace panel' : 'Expand workspace sidebar'}
+          onClick={openWorkspaceSurface}
         >
           <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
             <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
@@ -2643,14 +2984,14 @@ function App() {
         </button>
       ) : null}
 
-      {isAgentPanelVisible ? (
+      {!isRightSidebarDrawer || !isRightDrawerOpen ? (
         <button
           type='button'
           className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
-          aria-label={isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar'}
-          onClick={() => {
-            setIsRightSidebarCollapsed((currentValue) => !currentValue)
-          }}
+          aria-label={isRightSidebarDrawer
+            ? (isRightDrawerOpen ? 'Close assistant panel' : 'Open assistant panel')
+            : (isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar')}
+          onClick={toggleAssistantSurface}
         >
           <span className='panel-toggle-icon' aria-hidden='true'>
             <LayoutRightLine size={16} />
@@ -2658,6 +2999,13 @@ function App() {
         </button>
       ) : null}
 
+      {isLeftSidebarVisible ? (
+        <aside className='panel panel-sidebar'>
+          {renderWorkspaceSidebar('docked')}
+        </aside>
+      ) : null}
+
+      {false && (
       <aside className={`panel panel-sidebar${isLeftSidebarVisible ? '' : ' is-collapsed'}`}>
         <div className='section-title workspace-section-title'>
           <button
@@ -2866,6 +3214,7 @@ function App() {
           </button>
         </div>
       </aside>
+      )}
 
       <div className={`panel-resize-slot panel-resize-slot-left${isLeftSidebarVisible ? '' : ' is-hidden'}`}>
         <div
@@ -3046,6 +3395,13 @@ function App() {
         />
       </div>
 
+      {isRightSidebarVisible ? (
+        <aside className='panel panel-agent'>
+          {renderAgentPanel()}
+        </aside>
+      ) : null}
+
+      {false && (
       <aside className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}>
         <AgentSidebar
           iconTheme={iconTheme}
@@ -3058,6 +3414,74 @@ function App() {
           onWorkspaceStateChange={setAgentWorkspaceState}
         />
       </aside>
+      )}
+
+      {isLeftSidebarDrawer ? (
+        <Drawer
+          {...drawerPortalProps}
+          isOpen={isLeftDrawerOpen}
+          onOpenChange={handleLeftDrawerOpenChange}
+        >
+          <Drawer.Backdrop
+            className='panel-drawer-backdrop'
+            variant='opaque'
+          >
+            <Drawer.Content placement='left' className='panel-drawer panel-drawer-left' data-platform={shellPlatform}>
+              <Drawer.Dialog
+                aria-label='Workspace'
+                className={`panel-drawer-dialog ${theme === 'dark' ? 'dark' : ''}`}
+              >
+                <Drawer.Body className='panel-drawer-body'>
+                  {renderWorkspaceSidebar('drawer')}
+                </Drawer.Body>
+              </Drawer.Dialog>
+            </Drawer.Content>
+          </Drawer.Backdrop>
+        </Drawer>
+      ) : null}
+
+      {isRightSidebarDrawer ? (
+        <Drawer
+          {...drawerPortalProps}
+          isOpen={isRightDrawerOpen}
+          onOpenChange={handleRightDrawerOpenChange}
+        >
+          <Drawer.Backdrop
+            className='panel-drawer-backdrop'
+            variant='opaque'
+          >
+            <Drawer.Content placement='right' className='panel-drawer panel-drawer-right' data-platform={shellPlatform}>
+              <button
+                type='button'
+                className='panel-toggle-button panel-toggle-button-drawer panel-toggle-button-drawer-right'
+                aria-label='Close assistant panel'
+                style={drawerChromeVars}
+                onClick={() => {
+                  handleRightDrawerOpenChange(false)
+                }}
+              >
+                <span className='panel-toggle-icon' aria-hidden='true'>
+                  <LayoutRightLine size={16} />
+                </span>
+              </button>
+              <Drawer.Dialog
+                aria-label='Assistant'
+                className={`panel-drawer-dialog ${theme === 'dark' ? 'dark' : ''}`}
+              >
+                <Drawer.Body className='panel-drawer-body panel-drawer-body-agent'>
+                  <div
+                    className='panel panel-agent panel-agent-drawer'
+                    data-platform={shellPlatform}
+                    style={drawerChromeVars}
+                  >
+                    {renderAgentPanel()}
+                  </div>
+                </Drawer.Body>
+              </Drawer.Dialog>
+            </Drawer.Content>
+          </Drawer.Backdrop>
+        </Drawer>
+      ) : null}
 
       <Toast.Provider placement='bottom end' />
 
