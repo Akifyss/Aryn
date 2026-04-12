@@ -3533,12 +3533,13 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-message-file-chip {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
   max-width: 100%;
-  padding: 5px 10px;
-  border: 1px solid color-mix(in oklab, var(--outline) 72%, transparent);
-  border-radius: 999px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
   background: var(--surface-secondary);
   color: var(--foreground);
   font-size: 11px;
@@ -3547,13 +3548,16 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 button.agent-message-file-chip {
   cursor: pointer;
-  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  transition: background-color 120ms ease;
+}
+
+.agent-message-file-chip.is-static {
+  cursor: default;
+  background: var(--surface-secondary);
 }
 
 button.agent-message-file-chip:hover {
-  background: var(--surface-tertiary);
-  border-color: color-mix(in oklab, var(--accent) 40%, var(--outline));
-  transform: translateY(-1px);
+  background: var(--surface-secondary);
 }
 
 button.agent-message-file-chip:focus-visible {
@@ -3561,34 +3565,25 @@ button.agent-message-file-chip:focus-visible {
   outline-offset: 2px;
 }
 
-.agent-message-file-chip-prefix {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  background: var(--surface);
-  font-size: 10px;
-  font-weight: 700;
+.agent-message-file-chip .git-row-icon {
+  color: var(--muted);
 }
 
 .agent-message-file-chip-label {
+  font-size: 11px;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--foreground);
 }
 
-.agent-message-file-chip-created {
-  color: color-mix(in oklab, var(--success) 86%, var(--foreground));
-}
-
-.agent-message-file-chip-updated {
-  color: color-mix(in oklab, var(--accent) 74%, var(--foreground));
-}
-
-.agent-message-file-chip-deleted {
-  color: color-mix(in oklab, var(--danger) 82%, var(--foreground));
+.agent-message-file-chip-status {
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+  border-radius: 4px;
+  flex: 0 0 auto;
 }
 
 .agent-message-file-chip-overflow {

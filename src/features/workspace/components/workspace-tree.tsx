@@ -6,13 +6,11 @@ import {
   CodeLine,
   Delete2Line,
   Edit2Line,
-  FileLine,
   FolderLine,
-  FolderOpenLine,
   More1Line,
 } from '@mingcute/react'
+import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import { pickDominantGitDisplayChange } from '@/features/git/lib/display-change'
-import { resolveWorkspaceDirectoryIconUrl, resolveWorkspaceFileIconUrl } from '@/features/workspace/lib/icon-theme'
 import { getSupportedWorkspaceEditorKind, supportsCodeEditorToggle } from '@/features/workspace/lib/file-types'
 import {
   areSameWorkspacePaths,
@@ -65,33 +63,6 @@ function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | un
   }
 
   return { ...dominantChange, path: node.path } as GitDisplayChange
-}
-
-function FileRowIcon({
-  node,
-  isExpanded,
-  iconTheme,
-}: {
-  node: WorkspaceNode
-  isExpanded?: boolean
-  iconTheme: WorkspaceIconTheme | null
-}) {
-  const isFolder = node.kind === 'directory'
-  const iconUrl = isFolder
-    ? resolveWorkspaceDirectoryIconUrl(iconTheme, node.name, isExpanded ?? false)
-    : resolveWorkspaceFileIconUrl(iconTheme, node.name)
-
-  return (
-    <span className='git-row-icon' aria-hidden='true'>
-      {iconUrl ? (
-        <img alt='' className='tree-theme-icon' draggable='false' src={iconUrl} />
-      ) : isFolder ? (
-        isExpanded ? <FolderOpenLine size={16} /> : <FolderLine size={16} />
-      ) : (
-        <FileLine size={16} className='tree-file-icon' />
-      )}
-    </span>
-  )
 }
 
 function FileRowActions({
@@ -304,7 +275,13 @@ function FileTreeItem({
         {isEditing ? (
           <>
             <div className='workspace-tree-trigger' onClick={event => event.stopPropagation()}>
-              <FileRowIcon node={node} isExpanded={isExpanded} iconTheme={iconTheme} />
+              <WorkspaceFileIcon
+                fileName={node.kind === 'file' ? node.name : undefined}
+                iconTheme={iconTheme}
+                isClosed={node.kind === 'directory' ? !isExpanded : undefined}
+                isFolder={node.kind === 'directory'}
+                nodeLabel={node.kind === 'directory' ? node.name : undefined}
+              />
               <input
                 ref={renameInputRef}
                 className='raw-rename-input'
@@ -364,7 +341,13 @@ function FileTreeItem({
             onDragEnd={onDragEndNode}
             onDragStart={(event) => onDragStartNode(node, event)}
           >
-            <FileRowIcon node={node} isExpanded={isExpanded} iconTheme={iconTheme} />
+            <WorkspaceFileIcon
+              fileName={node.kind === 'file' ? node.name : undefined}
+              iconTheme={iconTheme}
+              isClosed={node.kind === 'directory' ? !isExpanded : undefined}
+              isFolder={node.kind === 'directory'}
+              nodeLabel={node.kind === 'directory' ? node.name : undefined}
+            />
             <span className='panel-tree-label' style={{ fontWeight: isFolder ? 600 : 500 }}>
               {node.name}
             </span>

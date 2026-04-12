@@ -2988,6 +2988,7 @@ function App() {
 
       <aside className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}>
         <AgentSidebar
+          iconTheme={iconTheme}
           onOpenMessageFile={openAgentMessageFile}
           onOpenProviderSettings={() => {
             setSettingsSection('providers')

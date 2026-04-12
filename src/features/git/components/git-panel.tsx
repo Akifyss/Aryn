@@ -9,7 +9,6 @@ import {
   CloseCircleLine,
   DownloadLine,
   ExternalLinkLine,
-  FileLine,
   FolderLine,
   GitBranchLine,
   Refresh2Line,
@@ -22,16 +21,16 @@ import {
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import {
+  FileChangeStatusBadge,
+  WorkspaceFileIcon,
+} from '@/components/file-change-visuals'
 import type {
   GitChangeItem,
   GitPanelLayout,
   GitRecentPullItem,
   GitRepositoryState,
 } from '@/features/git/types'
-import {
-  resolveWorkspaceDirectoryIconUrl,
-  resolveWorkspaceFileIconUrl,
-} from '@/features/workspace/lib/icon-theme'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
 
 type GitPanelProps = {
@@ -86,27 +85,6 @@ function getDirectoryLabel(relativePath: string) {
   const segments = relativePath.split('/').filter(Boolean)
   segments.pop()
   return segments.join(' / ')
-}
-
-function getChangeKindIcon(kind: GitDisplayChange['kind']) {
-  const iconSize = 12
-  switch (kind) {
-    case 'added':
-    case 'untracked':
-      return <Icon icon='mingcute:add-line' width={iconSize} height={iconSize} />
-    case 'copied':
-    case 'renamed':
-      return <Icon icon='radix-icons:dot-filled' width={iconSize} height={iconSize} />
-    case 'deleted':
-      return <Icon icon='ic:round-minus' width={iconSize} height={iconSize} />
-    case 'modified':
-    case 'type-changed':
-      return <Icon icon='radix-icons:dot-filled' width={iconSize} height={iconSize} />
-    case 'conflicted':
-      return <Icon icon='mingcute:alert-line' width={iconSize} height={iconSize} />
-    default:
-      return <Icon icon='mingcute:question-line' width={iconSize} height={iconSize} />
-  }
 }
 
 function getRepositoryHeading(repositoryState: GitRepositoryState) {
@@ -196,36 +174,6 @@ function materialize(nodes: Iterable<GitTreeNodeDraft>): GitTreeNode[] {
   return materialize(root.values())
 }
 
-function GitRowIcon({
-  nodeLabel,
-  fileName,
-  isFolder,
-  isClosed,
-  iconTheme,
-}: {
-  nodeLabel?: string
-  fileName?: string
-  isFolder?: boolean
-  isClosed?: boolean
-  iconTheme: WorkspaceIconTheme | null
-}) {
-  const iconUrl = isFolder
-    ? resolveWorkspaceDirectoryIconUrl(iconTheme, nodeLabel ?? '', !isClosed)
-    : resolveWorkspaceFileIconUrl(iconTheme, fileName ?? '')
-
-  return (
-    <span className='git-row-icon' aria-hidden='true'>
-      {iconUrl ? (
-        <img alt='' className='tree-theme-icon' draggable='false' src={iconUrl} />
-      ) : isFolder ? (
-        <FolderLine size={16} />
-      ) : (
-        <FileLine size={16} className='tree-file-icon' />
-      )}
-    </span>
-  )
-}
-
 function GitRowActions({
   kind,
   onUnstage,
@@ -313,12 +261,10 @@ function GitRowActions({
       </div>
 
       {isChange && (
-        <span 
-          className={`git-change-badge git-change-badge-${change.kind}`}
+        <FileChangeStatusBadge
+          kind={change.kind}
           title={change.kind.charAt(0).toUpperCase() + change.kind.slice(1)}
-        >
-          {getChangeKindIcon(change.kind)}
-        </span>
+        />
       )}
       {isFolder && <span className='git-panel-section-count'>{changesCount ?? 0}</span>}
     </div>
@@ -365,7 +311,7 @@ function GitTreeFolder({
       <div className='git-tree-folder-row' onClick={() => toggleNode(node.id)}>
         <button type='button' className='git-tree-folder-toggle'>
           <span className='git-panel-section-title'>
-            <GitRowIcon isFolder nodeLabel={node.label} isClosed={isClosed} iconTheme={iconTheme} />
+            <WorkspaceFileIcon isFolder nodeLabel={node.label} isClosed={isClosed} iconTheme={iconTheme} />
             <span className='panel-tree-label'>{node.label}</span>
           </span>
         </button>
@@ -460,7 +406,7 @@ function GitChangeList({
             >
               <span className='git-change-copy'>
                 <span className='git-change-header'>
-                  <GitRowIcon fileName={fileName} iconTheme={iconTheme} />
+                  <WorkspaceFileIcon fileName={fileName} iconTheme={iconTheme} />
                   <span className='panel-tree-label'>{fileName}</span>
                 </span>
                 {layout === 'list' && dirLabel && (

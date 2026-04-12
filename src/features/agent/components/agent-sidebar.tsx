@@ -9,6 +9,11 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import spinners, { type BrailleSpinnerName } from 'unicode-animations'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import {
+  FileChangeStatusBadge,
+  WorkspaceFileIcon,
+} from '@/components/file-change-visuals'
+import type { WorkspaceIconTheme } from '@/features/workspace/types'
 import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-changes'
 import type {
   AgentClientEvent,
@@ -20,6 +25,7 @@ import type {
 } from '@/features/agent/types'
 
 type AgentSidebarProps = {
+  iconTheme?: WorkspaceIconTheme | null
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenProviderSettings?: () => void
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
@@ -141,15 +147,16 @@ function getAgentRelativePath(rootPath: string | null, filePath: string) {
   return normalizedFilePath.slice(normalizedRoot.length).replace(/^\/+/, '') || (filePath.split(/[\\/]/).pop() ?? filePath)
 }
 
-function getMessageFileChangePrefix(kind: AgentMessageFileChange['kind']) {
-  switch (kind) {
-    case 'created':
-      return '+'
-    case 'deleted':
-      return '-'
-    default:
-      return '~'
+function getAgentFileChangeVisualKind(kind: AgentMessageFileChange['kind']) {
+  if (kind === 'created') {
+    return 'added'
   }
+
+  if (kind === 'deleted') {
+    return 'deleted'
+  }
+
+  return 'modified'
 }
 
 function getMessageFileSectionTitle(fileChanges: AgentMessageFileChange[]) {
@@ -273,10 +280,12 @@ function AgentDisclosure({
 
 function AgentMessageFileChips({
   fileChanges,
+  iconTheme,
   onOpenFile,
   workspacePath,
 }: {
   fileChanges: AgentMessageFileChange[]
+  iconTheme?: WorkspaceIconTheme | null
   onOpenFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   workspacePath: string | null
 }) {
@@ -298,21 +307,39 @@ function AgentMessageFileChips({
         {visibleChanges.map((change) => {
           const relativePath = getAgentRelativePath(workspacePath, change.filePath)
           const label = relativePath.split('/').pop() ?? relativePath
+          const isInteractive = change.kind !== 'deleted'
+
+          const chipContent = (
+            <>
+              <WorkspaceFileIcon fileName={label} iconTheme={iconTheme ?? null} />
+              <span className='agent-message-file-chip-label'>{label}</span>
+              <FileChangeStatusBadge className='agent-message-file-chip-status' kind={getAgentFileChangeVisualKind(change.kind)} />
+            </>
+          )
+
+          if (!isInteractive) {
+            return (
+              <span
+                key={`${change.filePath}:${change.kind}`}
+                className='agent-message-file-chip is-static'
+                title={`${relativePath} (deleted)`}
+              >
+                {chipContent}
+              </span>
+            )
+          }
 
           return (
             <button
               key={`${change.filePath}:${change.kind}`}
               type='button'
-              className={`agent-message-file-chip agent-message-file-chip-${change.kind}`}
+              className='agent-message-file-chip'
               title={relativePath}
               onClick={() => {
                 onOpenFile?.(change.filePath, change.kind)
               }}
             >
-              <span className='agent-message-file-chip-prefix' aria-hidden='true'>
-                {getMessageFileChangePrefix(change.kind)}
-              </span>
-              <span className='agent-message-file-chip-label'>{label}</span>
+              {chipContent}
             </button>
           )
         })}
@@ -740,6 +767,7 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
 }
 
 export function AgentSidebar({
+  iconTheme,
   onOpenMessageFile,
   onOpenProviderSettings,
   onWorkspaceStateChange,
@@ -1588,6 +1616,7 @@ export function AgentSidebar({
                 {fileChanges.length > 0 ? (
                   <AgentMessageFileChips
                     fileChanges={fileChanges}
+                    iconTheme={iconTheme}
                     onOpenFile={onOpenMessageFile}
                     workspacePath={workspacePath}
                   />
