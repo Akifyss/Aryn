@@ -2034,6 +2034,12 @@
   min-height: 0;
 }
 
+.tree-scroll-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
 .sidebar-footer {
   display: flex;
   flex-direction: column;
@@ -2388,6 +2394,15 @@
 .workspace-tree-root.is-root-drop-target {
   outline: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   outline-offset: -1px;
+}
+
+.workspace-tree-root {
+  display: flex;
+  flex: 1 0 auto;
+  min-height: 100%;
+  box-sizing: border-box;
+  flex-direction: column;
+  padding: 6px 0;
 }
 
 .workspace-tree-root.is-dragging .workspace-tree-row.is-drag-source .workspace-tree-trigger,

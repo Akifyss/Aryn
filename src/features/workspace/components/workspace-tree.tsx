@@ -697,7 +697,6 @@ export function WorkspaceTree({
   return (
     <ul
       className={`panel-tree-list workspace-tree-root${draggedNode ? ' is-dragging' : ''}${isRootDropTarget ? ' is-root-drop-target' : ''}`}
-      style={{ paddingTop: 6, paddingBottom: 6 }}
       onDragLeave={handleRootDragLeave}
       onDragOver={handleRootDragOver}
       onDrop={(event) => void handleRootDrop(event)}

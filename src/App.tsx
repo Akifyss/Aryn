@@ -2691,7 +2691,10 @@ function App() {
                 </div>
               </div>
 
-              <AppScrollArea className='tree-scroll'>
+              <AppScrollArea
+                className='tree-scroll'
+                contentClassName='tree-scroll-content'
+              >
                 <WorkspaceTree
                   activeFilePath={activeTreePath}
                   iconTheme={iconTheme}
