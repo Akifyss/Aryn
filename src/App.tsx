@@ -53,6 +53,15 @@ import type {
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
 import { useSettingsStore } from '@/hooks/use-settings-store'
 import { HtmlPreview } from '@/features/editor/components/html-preview'
+import {
+  COMPACT_LAYOUT_BREAKPOINT,
+  deriveLayoutMode,
+  deriveShellPlatform,
+  FULL_LAYOUT_BREAKPOINT,
+  getShellChromeVars,
+  type LayoutMode,
+  type ShellPlatform,
+} from '@/features/layout/shell-layout'
 import './App.css'
 
 function getBaseName(filePath: string) {
@@ -170,8 +179,6 @@ type StoredTabState = {
   paths: string[]
 }
 
-const FULL_LAYOUT_BREAKPOINT = 1360
-const COMPACT_LAYOUT_BREAKPOINT = 1160
 const RESIZE_HANDLE_WIDTH = 12
 const MIN_EDITOR_WIDTH = 480
 const LEFT_SIDEBAR_MIN_WIDTH = 240
@@ -231,7 +238,6 @@ const WORKSPACE_AUTO_SAVE_DELAY_MS = 1000
 const INTERNAL_SAVE_EVENT_TTL_MS = 2500
 
 type ResizePanel = 'left' | 'right'
-type LayoutMode = 'full' | 'compact' | 'focus'
 type PanelSurfaceMode = 'docked' | 'drawer'
 
 function clamp(value: number, min: number, max: number) {
@@ -590,25 +596,13 @@ function App() {
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
     : 'Current workspace'
-  const shellPlatform = platform === 'darwin' ? 'macos' : 'windows'
+  const shellPlatform: ShellPlatform = deriveShellPlatform(platform)
   const drawerPortalContainer = appShellRef.current ?? undefined
   const drawerPortalProps = drawerPortalContainer
     ? { UNSTABLE_portalContainer: drawerPortalContainer as HTMLElement }
     : {}
-  const drawerChromeVars = {
-    '--chrome-height': '44px',
-    '--panel-toggle-size': '32px',
-    '--panel-toggle-gap': '8px',
-    '--left-panel-toggle-anchor': shellPlatform === 'windows' ? '12px' : '76px',
-    '--right-panel-toggle-anchor': shellPlatform === 'windows' ? '156px' : '12px',
-    '--left-panel-content-inset': shellPlatform === 'windows' ? '52px' : '116px',
-    '--right-panel-content-inset': shellPlatform === 'windows' ? '196px' : '52px',
-  } as CSSProperties
-  const layoutMode: LayoutMode = shellWidth > FULL_LAYOUT_BREAKPOINT
-    ? 'full'
-    : shellWidth > COMPACT_LAYOUT_BREAKPOINT
-      ? 'compact'
-      : 'focus'
+  const shellChromeVars = getShellChromeVars(shellPlatform) as CSSProperties
+  const layoutMode: LayoutMode = deriveLayoutMode(shellWidth)
   const isLeftSidebarDrawer = layoutMode !== 'full'
   const isRightSidebarDrawer = layoutMode === 'focus'
   const isLeftSidebarVisible = !isLeftSidebarDrawer && !isLeftSidebarCollapsed
@@ -2711,7 +2705,7 @@ function App() {
       <div
         className={`workspace-sidebar-surface${isDrawerSurface ? ' is-drawer' : ''}`}
         data-platform={shellPlatform}
-        style={isDrawerSurface ? drawerChromeVars : undefined}
+        style={isDrawerSurface ? shellChromeVars : undefined}
       >
         <div className={`section-title workspace-section-title${isDrawerSurface ? ' is-drawer-surface' : ''}`}>
           <button
@@ -2931,7 +2925,7 @@ function App() {
     )
   }
 
-  function renderAgentPanel() {
+  function renderAgentPanel(surfaceMode: PanelSurfaceMode = 'docked') {
     return (
       <AgentSidebar
         iconTheme={iconTheme}
@@ -2964,6 +2958,7 @@ function App() {
           '--git-panel-height': `${gitPanelHeight}px`,
           '--left-sidebar-width': `${effectiveLeftSidebarWidth}px`,
           '--right-sidebar-width': `${effectiveRightSidebarWidth}px`,
+          ...shellChromeVars,
         } as CSSProperties
       }
     >
@@ -3397,7 +3392,7 @@ function App() {
 
       {isRightSidebarVisible ? (
         <aside className='panel panel-agent'>
-          {renderAgentPanel()}
+          {renderAgentPanel('docked')}
         </aside>
       ) : null}
 
@@ -3455,7 +3450,7 @@ function App() {
                 type='button'
                 className='panel-toggle-button panel-toggle-button-drawer panel-toggle-button-drawer-right'
                 aria-label='Close assistant panel'
-                style={drawerChromeVars}
+                style={shellChromeVars}
                 onClick={() => {
                   handleRightDrawerOpenChange(false)
                 }}
@@ -3472,9 +3467,9 @@ function App() {
                   <div
                     className='panel panel-agent panel-agent-drawer'
                     data-platform={shellPlatform}
-                    style={drawerChromeVars}
+                    style={shellChromeVars}
                   >
-                    {renderAgentPanel()}
+                    {renderAgentPanel('drawer')}
                   </div>
                 </Drawer.Body>
               </Drawer.Dialog>

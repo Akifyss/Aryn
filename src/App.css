@@ -11,8 +11,9 @@
   --panel-toggle-gap: 8px;
   --left-panel-toggle-anchor: 76px;
   --right-panel-toggle-anchor: 12px;
-  --left-panel-content-inset: calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
-  --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
+  --left-panel-content-inset: 116px;
+  --right-panel-content-inset: 52px;
+  --sidebar-icon-x: 20px;
 
   position: relative;
   display: grid;
@@ -39,12 +40,6 @@
 
 .app-shell[data-layout='compact'] .panel-agent {
   grid-column: 2;
-}
-
-.app-shell[data-platform='windows'] {
-  --left-panel-toggle-anchor: 12px;
-  --right-panel-toggle-anchor: 156px;
-  --sidebar-icon-x: calc(var(--left-panel-toggle-anchor) + (var(--panel-toggle-size) - 16px) / 2);
 }
 
 .app-shell::before {
@@ -358,6 +353,18 @@
   z-index: 28;
 }
 
+/* Restore HeroUI drawer motion. The editor theme stylesheet applies
+   `transition: none` under `:root[data-tiptap-theme] *`, which also reaches
+   the drawer portal subtree and suppresses the built-in enter/exit motion. */
+.panel-drawer-backdrop.drawer__backdrop {
+  transition: opacity 250ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+}
+
+.panel-drawer-backdrop.drawer__backdrop[data-exiting='true'] {
+  transition-duration: 200ms !important;
+  transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1) !important;
+}
+
 .panel-drawer {
   display: flex;
   width: 100%;
@@ -377,6 +384,7 @@
 }
 
 .panel-drawer-dialog {
+  position: relative;
   display: flex;
   height: 100%;
   flex-direction: column;
@@ -387,6 +395,16 @@
   color: var(--foreground);
   box-shadow: none;
   overflow: hidden;
+}
+
+.panel-drawer .drawer__dialog.panel-drawer-dialog {
+  will-change: translate;
+  transition: translate var(--drawer-enter-duration) var(--drawer-enter-ease) !important;
+}
+
+[data-exiting='true'] .panel-drawer .drawer__dialog.panel-drawer-dialog {
+  transition-duration: var(--drawer-exit-duration) !important;
+  transition-timing-function: var(--drawer-exit-ease) !important;
 }
 
 .panel-drawer-left .panel-drawer-dialog {
@@ -416,11 +434,20 @@
   min-width: 0;
 }
 
+@media (prefers-reduced-motion: reduce) {
+
+  .panel-drawer-backdrop.drawer__backdrop,
+  .panel-drawer .drawer__dialog.panel-drawer-dialog {
+    transition: none !important;
+  }
+}
+
 .panel-agent-drawer .agent-threadbar {
   padding-right: var(--right-panel-content-inset);
 }
 
 .panel-agent-drawer {
+  position: relative;
   padding-top: 0;
   box-sizing: border-box;
 }
