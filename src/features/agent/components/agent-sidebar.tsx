@@ -1326,7 +1326,10 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
         <div className='agent-overlay-layer'>
           <div ref={overlayPanelRef} className='agent-floating-panel'>
             {activeOverlayPanel === 'sessions' ? (
-              <AppScrollArea className='agent-overlay-scroll'>
+              <AppScrollArea
+                className='agent-overlay-scroll'
+                viewportClassName='agent-overlay-scroll-viewport'
+              >
                 <div className='agent-session-list'>
                   <div className='agent-session-option'>
                     <button
@@ -1562,6 +1565,7 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
               <AppScrollArea
                 className='agent-composer-menu'
                 contentClassName='agent-composer-menu-content'
+                viewportClassName='agent-composer-menu-viewport'
               >
                 <div role='listbox' aria-label='Available providers'>
                   {configuredProviders.map((provider) => (
@@ -1587,6 +1591,7 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
               <AppScrollArea
                 className='agent-composer-menu'
                 contentClassName='agent-composer-menu-content'
+                viewportClassName='agent-composer-menu-viewport'
               >
                 <div role='listbox' aria-label='Available models'>
                   {modelSuggestions.map((modelId) => (
