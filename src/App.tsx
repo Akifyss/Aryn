@@ -2926,12 +2926,14 @@ function App() {
   }
 
   function renderAgentPanel(surfaceMode: PanelSurfaceMode = 'docked') {
+    const isDrawerSurface = surfaceMode === 'drawer'
+
     return (
       <AgentSidebar
         iconTheme={iconTheme}
         onOpenMessageFile={openAgentMessageFile}
         onOpenProviderSettings={() => {
-          if (isRightSidebarDrawer) {
+          if (isDrawerSurface) {
             setIsRightDrawerOpen(false)
           }
 
