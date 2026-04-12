@@ -175,6 +175,42 @@ function getMessageFileSectionTitle(fileChanges: AgentMessageFileChange[]) {
   return 'Files Changed'
 }
 
+function mergeTurnFileChanges(fileChanges: AgentMessageFileChange[]) {
+  const mergedChanges = new Map<string, AgentMessageFileChange>()
+
+  for (const change of fileChanges) {
+    const previousChange = mergedChanges.get(change.filePath)
+
+    if (!previousChange) {
+      mergedChanges.set(change.filePath, change)
+      continue
+    }
+
+    if (previousChange.kind === 'created') {
+      mergedChanges.set(change.filePath, {
+        filePath: change.filePath,
+        kind: change.kind === 'deleted' ? 'deleted' : 'created',
+      })
+      continue
+    }
+
+    if (previousChange.kind === 'deleted') {
+      mergedChanges.set(change.filePath, {
+        filePath: change.filePath,
+        kind: change.kind === 'created' || change.kind === 'updated' ? 'updated' : 'deleted',
+      })
+      continue
+    }
+
+    mergedChanges.set(change.filePath, {
+      filePath: change.filePath,
+      kind: change.kind === 'deleted' ? 'deleted' : 'updated',
+    })
+  }
+
+  return [...mergedChanges.values()]
+}
+
 function mergeSessionAnnotationsState(
   state: AgentWorkspaceState,
   sessionId: string,
@@ -1381,22 +1417,61 @@ export function AgentSidebar({
     [agentState.runtime.pendingMessageCount, sessionPhase],
   )
   const activeSessionFileChanges = agentState.activeSession?.annotations.fileChangesByEntryId ?? {}
-  const trailingFileChanges = useMemo(() => {
-    const lastMessageWithFiles = [...renderedMessages].reverse().find((message) => (
-      Boolean(message.sessionEntryId) && (activeSessionFileChanges[message.sessionEntryId ?? '']?.length ?? 0) > 0
-    ))
+  const persistedMessages = agentState.activeSession?.messages ?? []
+  const roundFileChangesByMessageId = useMemo(() => {
+    const nextMap = new Map<string, AgentMessageFileChange[]>()
+    const hasInFlightRound = liveTools.length > 0
+      || Boolean(draftAssistant.trim() || draftThinking.trim())
+      || agentState.runtime.isStreaming
+      || agentState.runtime.pendingMessageCount > 0
+    let currentRoundMessageIds: string[] = []
+    let currentRoundFileChanges: AgentMessageFileChange[] = []
 
-    if (!lastMessageWithFiles?.sessionEntryId) {
-      return []
+    const flushRound = (shouldRender: boolean) => {
+      if (!shouldRender || currentRoundMessageIds.length === 0 || currentRoundFileChanges.length === 0) {
+        currentRoundMessageIds = []
+        currentRoundFileChanges = []
+        return
+      }
+
+      const targetMessageId = currentRoundMessageIds[currentRoundMessageIds.length - 1]
+      if (targetMessageId) {
+        nextMap.set(targetMessageId, mergeTurnFileChanges(currentRoundFileChanges))
+      }
+
+      currentRoundMessageIds = []
+      currentRoundFileChanges = []
     }
 
-    return activeSessionFileChanges[lastMessageWithFiles.sessionEntryId] ?? []
-  }, [activeSessionFileChanges, renderedMessages])
+    for (const message of persistedMessages) {
+      if (message.kind === 'user') {
+        flushRound(true)
+        continue
+      }
+
+      currentRoundMessageIds.push(message.id)
+
+      if (message.sessionEntryId) {
+        currentRoundFileChanges.push(...(activeSessionFileChanges[message.sessionEntryId] ?? []))
+      }
+    }
+
+    flushRound(!hasInFlightRound)
+    return nextMap
+  }, [
+    activeSessionFileChanges,
+    agentState.runtime.isStreaming,
+    agentState.runtime.pendingMessageCount,
+    draftAssistant,
+    draftThinking,
+    liveTools.length,
+    persistedMessages,
+  ])
   const sessionStatusKey = sessionStatus
     ? `${sessionStatus.label}:${sessionStatus.badge?.label ?? ''}`
     : 'none'
-  const trailingFileChangesKey = trailingFileChanges
-    .map((change) => `${change.kind}:${change.filePath}`)
+  const fileChangesKey = [...roundFileChangesByMessageId.entries()]
+    .flatMap(([messageId, changes]) => changes.map((change) => `${messageId}:${change.kind}:${change.filePath}`))
     .join('|')
   const renderedMessageCount = renderedMessages.length
 
@@ -1451,7 +1526,7 @@ export function AgentSidebar({
     return () => {
       window.cancelAnimationFrame(frameId)
     }
-  }, [activeSessionPath, draftAssistant, draftThinking, liveTools, renderedMessageCount, sessionStatusKey, trailingFileChangesKey])
+  }, [activeSessionPath, draftAssistant, draftThinking, fileChangesKey, liveTools, renderedMessageCount, sessionStatusKey])
 
   return (
     <div className='agent-shell'>
@@ -1571,22 +1646,26 @@ export function AgentSidebar({
             <div className='agent-empty-chat'>
               <p>Start a session to inspect, edit, or create files in this workspace.</p>
             </div>
-          ) : renderedMessages.map((message) => (
-            <AgentMessageBubble key={message.id} message={message} />
-          ))}
+          ) : renderedMessages.map((message) => {
+            const fileChanges = roundFileChangesByMessageId.get(message.id) ?? []
+
+            return (
+              <div key={message.id} className='agent-message-stack'>
+                <AgentMessageBubble message={message} />
+                {fileChanges.length > 0 ? (
+                  <AgentMessageFileChips
+                    fileChanges={fileChanges}
+                    onOpenFile={onOpenMessageFile}
+                    workspacePath={workspacePath}
+                  />
+                ) : null}
+              </div>
+            )
+          })}
           {sessionStatus ? (
             <AgentSessionStatusBubble status={sessionStatus} />
           ) : null}
         </div>
-        {trailingFileChanges.length > 0 ? (
-          <div className='agent-messages-trailing-files'>
-            <AgentMessageFileChips
-              fileChanges={trailingFileChanges}
-              onOpenFile={onOpenMessageFile}
-              workspacePath={workspacePath}
-            />
-          </div>
-        ) : null}
       </AppScrollArea>
 
       <form
