@@ -1,5 +1,5 @@
 import { type CSSProperties, FormEvent, KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Button, Input, TextArea } from '@heroui/react'
+import { Button, Chip, Input, TextArea } from '@heroui/react'
 import {
   AddLine,
   Delete2Line,
@@ -308,45 +308,55 @@ function AgentMessageFileChips({
           const relativePath = getAgentRelativePath(workspacePath, change.filePath)
           const label = relativePath.split('/').pop() ?? relativePath
           const isInteractive = change.kind !== 'deleted'
-
           const chipContent = (
-            <>
+            <Chip
+              className={`agent-message-file-chip ${isInteractive ? 'is-interactive' : 'is-static'}`}
+              color='default'
+              size='sm'
+              title={isInteractive ? relativePath : `${relativePath} (deleted)`}
+              variant='soft'
+            >
               <WorkspaceFileIcon fileName={label} iconTheme={iconTheme ?? null} />
-              <span className='agent-message-file-chip-label'>{label}</span>
+              <Chip.Label className='agent-message-file-chip-label'>{label}</Chip.Label>
               <FileChangeStatusBadge className='agent-message-file-chip-status' kind={getAgentFileChangeVisualKind(change.kind)} />
-            </>
+            </Chip>
           )
 
           if (!isInteractive) {
             return (
-              <span
-                key={`${change.filePath}:${change.kind}`}
-                className='agent-message-file-chip is-static'
-                title={`${relativePath} (deleted)`}
-              >
+              <div key={`${change.filePath}:${change.kind}`} className='agent-message-file-chip-wrapper'>
                 {chipContent}
-              </span>
+              </div>
             )
           }
 
           return (
-            <button
+            <div
               key={`${change.filePath}:${change.kind}`}
-              type='button'
-              className='agent-message-file-chip'
-              title={relativePath}
+              aria-label={`Open ${relativePath}`}
+              className='agent-message-file-chip-wrapper'
+              role='button'
+              tabIndex={0}
               onClick={() => {
+                onOpenFile?.(change.filePath, change.kind)
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') {
+                  return
+                }
+
+                event.preventDefault()
                 onOpenFile?.(change.filePath, change.kind)
               }}
             >
               {chipContent}
-            </button>
+            </div>
           )
         })}
         {hiddenCount > 0 ? (
-          <span className='agent-message-file-chip agent-message-file-chip-overflow'>
-            +{hiddenCount}
-          </span>
+          <Chip className='agent-message-file-chip agent-message-file-chip-overflow' color='default' size='sm' variant='soft'>
+            <Chip.Label className='agent-message-file-chip-label'>+{hiddenCount}</Chip.Label>
+          </Chip>
         ) : null}
       </div>
     </div>

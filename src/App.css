@@ -3585,6 +3585,11 @@ body.workspace-tree-dragging .workspace-tree-row {
   gap: 8px;
 }
 
+.agent-message-file-chip-wrapper {
+  display: inline-flex;
+  max-width: 100%;
+}
+
 .agent-message-file-chip {
   display: inline-flex;
   align-items: center;
@@ -3593,31 +3598,28 @@ body.workspace-tree-dragging .workspace-tree-row {
   max-width: 100%;
   min-height: 28px;
   padding: 4px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--surface-secondary);
   color: var(--foreground);
   font-size: 11px;
   line-height: 1;
 }
 
-button.agent-message-file-chip {
+.agent-message-file-chip.is-interactive {
   cursor: pointer;
   transition: background-color 120ms ease;
 }
 
 .agent-message-file-chip.is-static {
   cursor: default;
+}
+
+.agent-message-file-chip.is-interactive:hover {
   background: var(--surface-secondary);
 }
 
-button.agent-message-file-chip:hover {
-  background: var(--surface-secondary);
-}
-
-button.agent-message-file-chip:focus-visible {
+.agent-message-file-chip-wrapper[role='button']:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+  border-radius: 8px;
 }
 
 .agent-message-file-chip .git-row-icon {
