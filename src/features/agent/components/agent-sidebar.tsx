@@ -11,12 +11,15 @@ import spinners, { type BrailleSpinnerName } from 'unicode-animations'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import type {
   AgentClientEvent,
+  AgentMessageFileChange,
+  AgentSessionAnnotations,
   AgentSidebarMessage,
   AgentSidebarMessageStatus,
   AgentWorkspaceState,
 } from '@/features/agent/types'
 
 type AgentSidebarProps = {
+  onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenProviderSettings?: () => void
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
   workspacePath: string | null
@@ -37,6 +40,7 @@ const MARKDOWN_PLUGINS = [remarkGfm]
 const AGENT_COMPOSER_MENU_MAX_HEIGHT = 224
 const AGENT_COMPOSER_MENU_ROW_HEIGHT = 43
 const AGENT_COMPOSER_MENU_HEIGHT_BUFFER = 2
+const MAX_VISIBLE_MESSAGE_FILE_CHIPS = 6
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -121,6 +125,74 @@ function parseModelSelection(modelKey: string | null): { modelId: string, provid
   }
 }
 
+function getAgentRelativePath(rootPath: string | null, filePath: string) {
+  if (!rootPath) {
+    return filePath.split(/[\\/]/).pop() ?? filePath
+  }
+
+  const normalizedRoot = rootPath.replace(/[\\/]+$/, '').replace(/[\\/]+/g, '/')
+  const normalizedFilePath = filePath.replace(/[\\/]+/g, '/')
+
+  if (!normalizedFilePath.startsWith(normalizedRoot)) {
+    return filePath.split(/[\\/]/).pop() ?? filePath
+  }
+
+  return normalizedFilePath.slice(normalizedRoot.length).replace(/^\/+/, '') || (filePath.split(/[\\/]/).pop() ?? filePath)
+}
+
+function getMessageFileChangePrefix(kind: AgentMessageFileChange['kind']) {
+  switch (kind) {
+    case 'created':
+      return '+'
+    case 'deleted':
+      return '-'
+    default:
+      return '~'
+  }
+}
+
+function getMessageFileSectionTitle(fileChanges: AgentMessageFileChange[]) {
+  if (fileChanges.length === 0) {
+    return ''
+  }
+
+  const uniqueKinds = new Set(fileChanges.map((change) => change.kind))
+
+  if (uniqueKinds.size === 1) {
+    const [kind] = [...uniqueKinds]
+
+    if (kind === 'created') {
+      return 'Files Created'
+    }
+
+    if (kind === 'deleted') {
+      return 'Files Deleted'
+    }
+
+    return 'Files Modified'
+  }
+
+  return 'Files Changed'
+}
+
+function mergeSessionAnnotationsState(
+  state: AgentWorkspaceState,
+  sessionId: string,
+  annotations: AgentSessionAnnotations,
+) {
+  if (!state.activeSession || state.activeSession.sessionId !== sessionId) {
+    return state
+  }
+
+  return {
+    ...state,
+    activeSession: {
+      ...state.activeSession,
+      annotations,
+    },
+  }
+}
+
 function isProviderConfigured(state: AgentWorkspaceState['runtime']['auth'][AuthProviderKey]) {
   return state.source !== 'none'
 }
@@ -199,7 +271,66 @@ function AgentDisclosure({
   )
 }
 
-function AgentMessageBubble({ message }: { message: AgentSidebarMessage }) {
+function AgentMessageFileChips({
+  fileChanges,
+  onOpenFile,
+  workspacePath,
+}: {
+  fileChanges: AgentMessageFileChange[]
+  onOpenFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
+  workspacePath: string | null
+}) {
+  if (fileChanges.length === 0) {
+    return null
+  }
+
+  const visibleChanges = fileChanges.slice(0, MAX_VISIBLE_MESSAGE_FILE_CHIPS)
+  const hiddenCount = fileChanges.length - visibleChanges.length
+  const title = getMessageFileSectionTitle(fileChanges)
+
+  return (
+    <div className='agent-message-footer'>
+      <div className='agent-message-files-heading'>
+        <span className='agent-message-files-title'>{title}</span>
+        <span className='agent-message-files-count'>{fileChanges.length}</span>
+      </div>
+      <div className='agent-message-files'>
+        {visibleChanges.map((change) => {
+          const relativePath = getAgentRelativePath(workspacePath, change.filePath)
+          const label = relativePath.split('/').pop() ?? relativePath
+
+          return (
+            <button
+              key={`${change.filePath}:${change.kind}`}
+              type='button'
+              className={`agent-message-file-chip agent-message-file-chip-${change.kind}`}
+              title={relativePath}
+              onClick={() => {
+                onOpenFile?.(change.filePath, change.kind)
+              }}
+            >
+              <span className='agent-message-file-chip-prefix' aria-hidden='true'>
+                {getMessageFileChangePrefix(change.kind)}
+              </span>
+              <span className='agent-message-file-chip-label'>{label}</span>
+            </button>
+          )
+        })}
+        {hiddenCount > 0 ? (
+          <span className='agent-message-file-chip agent-message-file-chip-overflow'>
+            +{hiddenCount}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function AgentMessageBubble({
+  message,
+}: {
+  message: AgentSidebarMessage
+}) {
   const isToolMessage = message.kind === 'tool'
   const isCollapsibleSystemMessage = (message.kind === 'system' || message.kind === 'custom')
     && (message.title === 'Compaction summary' || message.title === 'Branch summary')
@@ -608,7 +739,12 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
   )
 }
 
-export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, workspacePath }: AgentSidebarProps) {
+export function AgentSidebar({
+  onOpenMessageFile,
+  onOpenProviderSettings,
+  onWorkspaceStateChange,
+  workspacePath,
+}: AgentSidebarProps) {
   const defaultModelSelection = parseModelSelection(null)
   const [composerHeight, setComposerHeight] = useState(172)
   const [hasLoadedComposerHeight, setHasLoadedComposerHeight] = useState(false)
@@ -713,6 +849,11 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
         setIsThinkingStreaming(false)
         setLiveTools([])
         setActiveComposerMenu(null)
+        return
+      }
+
+      if (event.type === 'session_annotations_updated') {
+        setAgentState((currentState) => mergeSessionAnnotationsState(currentState, event.sessionId, event.annotations))
         return
       }
 
@@ -1239,9 +1380,24 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
     () => sessionPhase ? formatAgentSessionStatus(sessionPhase, agentState.runtime.pendingMessageCount) : null,
     [agentState.runtime.pendingMessageCount, sessionPhase],
   )
+  const activeSessionFileChanges = agentState.activeSession?.annotations.fileChangesByEntryId ?? {}
+  const trailingFileChanges = useMemo(() => {
+    const lastMessageWithFiles = [...renderedMessages].reverse().find((message) => (
+      Boolean(message.sessionEntryId) && (activeSessionFileChanges[message.sessionEntryId ?? '']?.length ?? 0) > 0
+    ))
+
+    if (!lastMessageWithFiles?.sessionEntryId) {
+      return []
+    }
+
+    return activeSessionFileChanges[lastMessageWithFiles.sessionEntryId] ?? []
+  }, [activeSessionFileChanges, renderedMessages])
   const sessionStatusKey = sessionStatus
     ? `${sessionStatus.label}:${sessionStatus.badge?.label ?? ''}`
     : 'none'
+  const trailingFileChangesKey = trailingFileChanges
+    .map((change) => `${change.kind}:${change.filePath}`)
+    .join('|')
   const renderedMessageCount = renderedMessages.length
 
   useEffect(() => {
@@ -1295,7 +1451,7 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
     return () => {
       window.cancelAnimationFrame(frameId)
     }
-  }, [activeSessionPath, draftAssistant, draftThinking, liveTools, renderedMessageCount, sessionStatusKey])
+  }, [activeSessionPath, draftAssistant, draftThinking, liveTools, renderedMessageCount, sessionStatusKey, trailingFileChangesKey])
 
   return (
     <div className='agent-shell'>
@@ -1422,6 +1578,15 @@ export function AgentSidebar({ onOpenProviderSettings, onWorkspaceStateChange, w
             <AgentSessionStatusBubble status={sessionStatus} />
           ) : null}
         </div>
+        {trailingFileChanges.length > 0 ? (
+          <div className='agent-messages-trailing-files'>
+            <AgentMessageFileChips
+              fileChanges={trailingFileChanges}
+              onOpenFile={onOpenMessageFile}
+              workspacePath={workspacePath}
+            />
+          </div>
+        ) : null}
       </AppScrollArea>
 
       <form

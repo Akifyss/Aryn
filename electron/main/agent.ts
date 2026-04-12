@@ -1,4 +1,4 @@
-import { lstat, rm } from 'node:fs/promises'
+import { lstat, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentMessage } from '@mariozechner/pi-agent-core'
 import type { AgentSessionEvent } from '@mariozechner/pi-coding-agent'
@@ -22,8 +22,21 @@ import type {
   AgentSidebarMessage,
   AgentWorkspaceState,
 } from '../../src/features/agent/types'
+import type { WorkspaceChangeEvent } from '../../src/features/workspace/types'
+import { AgentSessionAnnotationStore } from './agent-session-annotations'
 
 type ActiveSessionRuntime = {
+  activity: {
+    activeToolOwnerEntryId: string | null
+    lastToolExecutionAt: number | null
+    pendingAssistantEntryId: string | null
+    runningToolCalls: Map<string, {
+      existedBeforeWrite: boolean | null
+      filePath: string | null
+      ownerEntryId: string | null
+      toolName: string
+    }>
+  }
   cwd: string
   session: AgentSession
   status: {
@@ -55,6 +68,7 @@ const AUTO_SESSION_NAME_SYSTEM_PROMPT = [
   'Do not use quotes, markdown, labels, prefixes, numbering, or ending punctuation.',
   'Keep it compact and specific.',
 ].join(' ')
+const AGENT_FILE_ACTIVITY_SETTLE_MS = 1500
 const AUTO_SESSION_NAME_MODEL: Model<Api> = {
   api: 'openai-completions',
   baseUrl: 'https://openrouter.ai/api/v1',
@@ -300,6 +314,47 @@ function serializeAssistantMessage(message: AssistantMessage, index: number): Ag
     timestamp: message.timestamp,
     isError: message.stopReason === 'error',
   }
+}
+
+async function pathExists(targetPath: string) {
+  try {
+    await stat(targetPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function extractWritableToolFilePath(cwd: string, toolName: string, args: unknown) {
+  if (!args || typeof args !== 'object') {
+    return null
+  }
+
+  if (toolName !== 'write' && toolName !== 'edit') {
+    return null
+  }
+
+  const candidate = (args as { path?: unknown }).path
+  if (typeof candidate !== 'string' || !candidate.trim()) {
+    return null
+  }
+
+  return path.resolve(cwd, candidate)
+}
+
+function resolveDirectToolFileChangeKind(
+  toolName: string,
+  existedBeforeWrite: boolean | null,
+): 'created' | 'updated' | null {
+  if (toolName === 'edit') {
+    return 'updated'
+  }
+
+  if (toolName === 'write') {
+    return existedBeforeWrite === false ? 'created' : 'updated'
+  }
+
+  return null
 }
 
 function serializeUserMessage(message: UserMessage, index: number): AgentSidebarMessage {
@@ -565,12 +620,16 @@ export function serializeSessionEntries(entries: SessionEntry[]) {
     }
   })
 
-  return messages.map(({ entryId: _entryId, ...message }) => message)
+  return messages.map(({ entryId, ...message }) => ({
+    ...message,
+    ...(entryId ? { sessionEntryId: entryId } : {}),
+  }))
 }
 
 export class PiAgentManager {
   private activeRuntime: ActiveSessionRuntime | null = null
   private readonly autoNamingSessions = new Set<string>()
+  private readonly annotationStore = new AgentSessionAnnotationStore()
   private readonly authStorage: AuthStorage
   private readonly modelRegistry: ModelRegistry
 
@@ -637,6 +696,8 @@ export class PiAgentManager {
         throw error
       }
     }
+
+    await this.annotationStore.delete(resolvedSessionPath)
 
     if (isDeletingActiveSession) {
       const remainingSessions = await this.listSessions(cwd)
@@ -737,7 +798,7 @@ export class PiAgentManager {
         : runtime.session.prompt(message)
     this.emitEvent({
       type: 'workspace_state',
-      state: this.serializeWorkspaceState(
+      state: await this.serializeWorkspaceState(
         runtime.cwd,
         await this.listSessions(runtime.cwd),
         runtime.session,
@@ -754,6 +815,47 @@ export class PiAgentManager {
 
   dispose() {
     void this.releaseActiveSession()
+  }
+
+  async handleWorkspaceChange(event: WorkspaceChangeEvent) {
+    const runtime = this.activeRuntime
+
+    if (
+      !runtime
+      || runtime.cwd !== event.rootPath
+      || !runtime.session.sessionFile
+      || !runtime.activity.activeToolOwnerEntryId
+      || (event.type !== 'add' && event.type !== 'change' && event.type !== 'unlink')
+    ) {
+      return
+    }
+
+    const now = Date.now()
+    const isWithinToolWindow = runtime.activity.runningToolCalls.size > 0
+      || (
+        runtime.activity.lastToolExecutionAt !== null
+        && now - runtime.activity.lastToolExecutionAt <= AGENT_FILE_ACTIVITY_SETTLE_MS
+      )
+
+    if (!isWithinToolWindow) {
+      runtime.activity.activeToolOwnerEntryId = null
+      return
+    }
+
+    const annotations = await this.annotationStore.recordFileChange(
+      runtime.session.sessionFile,
+      runtime.activity.activeToolOwnerEntryId,
+      {
+        filePath: event.path,
+        kind: event.type === 'add' ? 'created' : event.type === 'unlink' ? 'deleted' : 'updated',
+      },
+    )
+
+    this.emitEvent({
+      type: 'session_annotations_updated',
+      sessionId: runtime.session.sessionId,
+      annotations,
+    })
   }
 
   private async activateSession(cwd: string, sessionManager: SessionManager) {
@@ -784,6 +886,12 @@ export class PiAgentManager {
     })
 
     this.activeRuntime = {
+      activity: {
+        activeToolOwnerEntryId: null,
+        lastToolExecutionAt: null,
+        pendingAssistantEntryId: null,
+        runningToolCalls: new Map(),
+      },
       cwd,
       session,
       status: {
@@ -942,23 +1050,26 @@ export class PiAgentManager {
       return
     }
 
+    const runtime = this.activeRuntime
+
     if (event.type === 'compaction_start') {
-      this.activeRuntime.status.compactionReason = event.reason
+      runtime.status.compactionReason = event.reason
     }
 
     if (event.type === 'compaction_end') {
-      this.activeRuntime.status.compactionReason = null
+      runtime.status.compactionReason = null
     }
 
     if (event.type === 'auto_retry_start') {
-      this.activeRuntime.status.retryMaxAttempts = event.maxAttempts
+      runtime.status.retryMaxAttempts = event.maxAttempts
     }
 
     if (event.type === 'auto_retry_end') {
-      this.activeRuntime.status.retryMaxAttempts = null
+      runtime.status.retryMaxAttempts = null
     }
 
     if (event.type === 'message_start' && 'role' in event.message && event.message.role === 'assistant') {
+      runtime.activity.pendingAssistantEntryId = null
       this.emitEvent({
         type: 'assistant_message_started',
         sessionId: session.sessionId,
@@ -993,6 +1104,22 @@ export class PiAgentManager {
     }
 
     if (event.type === 'tool_execution_start') {
+      if (runtime.activity.runningToolCalls.size === 0) {
+        runtime.activity.activeToolOwnerEntryId = this.findLatestAssistantEntryId(session) ?? runtime.activity.pendingAssistantEntryId
+      }
+
+      const directFilePath = extractWritableToolFilePath(runtime.cwd, event.toolName, event.args)
+      const existedBeforeWrite = event.toolName === 'write' && directFilePath
+        ? await pathExists(directFilePath)
+        : null
+
+      runtime.activity.runningToolCalls.set(event.toolCallId, {
+        existedBeforeWrite,
+        filePath: directFilePath,
+        ownerEntryId: runtime.activity.activeToolOwnerEntryId,
+        toolName: event.toolName,
+      })
+      runtime.activity.lastToolExecutionAt = Date.now()
       this.emitEvent({
         type: 'tool_execution_started',
         sessionId: session.sessionId,
@@ -1019,6 +1146,40 @@ export class PiAgentManager {
     }
 
     if (event.type === 'tool_execution_end') {
+      const finishedTool = runtime.activity.runningToolCalls.get(event.toolCallId) ?? null
+      runtime.activity.runningToolCalls.delete(event.toolCallId)
+      runtime.activity.lastToolExecutionAt = Date.now()
+
+      if (
+        finishedTool
+        && !event.isError
+        && runtime.session.sessionFile
+        && finishedTool.ownerEntryId
+        && finishedTool.filePath
+      ) {
+        const directChangeKind = resolveDirectToolFileChangeKind(
+          finishedTool.toolName,
+          finishedTool.existedBeforeWrite,
+        )
+
+        if (directChangeKind) {
+          const annotations = await this.annotationStore.recordFileChange(
+            runtime.session.sessionFile,
+            finishedTool.ownerEntryId,
+            {
+              filePath: finishedTool.filePath,
+              kind: directChangeKind,
+            },
+          )
+
+          this.emitEvent({
+            type: 'session_annotations_updated',
+            sessionId: runtime.session.sessionId,
+            annotations,
+          })
+        }
+      }
+
       this.emitEvent({
         type: 'tool_execution_finished',
         sessionId: session.sessionId,
@@ -1034,6 +1195,10 @@ export class PiAgentManager {
       return
     }
 
+    if (event.type === 'message_end' && 'role' in event.message && event.message.role === 'assistant') {
+      runtime.activity.pendingAssistantEntryId = this.findEntryIdForMessage(session, event.message)
+    }
+
     if (
       event.type === 'compaction_start'
       || event.type === 'compaction_end'
@@ -1043,7 +1208,7 @@ export class PiAgentManager {
       || event.type === 'turn_start'
       || event.type === 'turn_end'
     ) {
-      await this.broadcastWorkspaceState(this.activeRuntime.cwd)
+      await this.broadcastWorkspaceState(runtime.cwd)
 
       if (event.type === 'turn_end') {
         void this.maybeAutoNameSession(session)
@@ -1053,7 +1218,7 @@ export class PiAgentManager {
     }
 
     if (event.type === 'message_end' || event.type === 'agent_end') {
-      await this.broadcastWorkspaceState(this.activeRuntime.cwd)
+      await this.broadcastWorkspaceState(runtime.cwd)
     }
   }
 
@@ -1071,9 +1236,13 @@ export class PiAgentManager {
     return this.serializeWorkspaceState(cwd, sessions, this.activeRuntime?.cwd === cwd ? this.activeRuntime.session : null)
   }
 
-  private serializeWorkspaceState(cwd: string, sessions: AgentSessionListItem[], session: AgentSession | null): AgentWorkspaceState {
+  private async serializeWorkspaceState(
+    cwd: string,
+    sessions: AgentSessionListItem[],
+    session: AgentSession | null,
+  ): Promise<AgentWorkspaceState> {
     return {
-      activeSession: session ? this.serializeSession(session) : null,
+      activeSession: session ? await this.serializeSession(session) : null,
       runtime: this.serializeRuntime(cwd, session),
       sessions,
     }
@@ -1109,10 +1278,14 @@ export class PiAgentManager {
     }
   }
 
-  private serializeSession(session: AgentSession): AgentSessionSnapshot {
+  private async serializeSession(session: AgentSession): Promise<AgentSessionSnapshot> {
     const messages = serializeSessionEntries(session.sessionManager.getBranch())
+    const annotations = session.sessionFile
+      ? await this.annotationStore.read(session.sessionFile)
+      : { fileChangesByEntryId: {} }
 
     return {
+      annotations,
       messages,
       name: session.sessionName ?? null,
       sessionId: session.sessionId,
@@ -1156,6 +1329,42 @@ export class PiAgentManager {
     }
 
     return resolvedSessionPath
+  }
+
+  private findEntryIdForMessage(session: AgentSession, message: AgentMessage) {
+    if (!('role' in message) || typeof message.timestamp !== 'number') {
+      return null
+    }
+
+    const branchEntries = session.sessionManager.getBranch()
+
+    for (let index = branchEntries.length - 1; index >= 0; index -= 1) {
+      const entry = branchEntries[index]
+
+      if (entry.type !== 'message' || !('role' in entry.message)) {
+        continue
+      }
+
+      if (entry.message.role === message.role && entry.message.timestamp === message.timestamp) {
+        return entry.id
+      }
+    }
+
+    return null
+  }
+
+  private findLatestAssistantEntryId(session: AgentSession) {
+    const branchEntries = session.sessionManager.getBranch()
+
+    for (let index = branchEntries.length - 1; index >= 0; index -= 1) {
+      const entry = branchEntries[index]
+
+      if (entry.type === 'message' && 'role' in entry.message && entry.message.role === 'assistant') {
+        return entry.id
+      }
+    }
+
+    return null
   }
 
   private getOpenRouterAuthState(): AgentProviderAuthState {

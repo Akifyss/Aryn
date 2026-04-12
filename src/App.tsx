@@ -14,7 +14,7 @@ import type { WorkspaceNode } from '@/features/workspace/types'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
-import type { AgentWorkspaceState } from '@/features/agent/types'
+import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
 import { GitDiffEditor } from '@/features/editor/components/git-diff-editor'
 import { CodeEditor } from '@/features/editor/components/code-editor'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
@@ -1347,6 +1347,37 @@ function App() {
 
     setStatusMessage(`${getBaseName(filePath)} opened`)
   }, [currentPath, activateTab, openTab])
+
+  const openAgentMessageFile = useCallback(async (
+    filePath: string,
+    changeKind: AgentMessageFileChangeKind,
+  ) => {
+    const existingFileTab = useWorkspaceStore.getState().openTabs.find(
+      (tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.filePath === filePath,
+    )
+
+    if (existingFileTab) {
+      setIsSettingsTabActive(false)
+      activateTab(existingFileTab.id)
+
+      if (currentPath) {
+        void window.appApi.updateWorkspaceState(currentPath, { lastFilePath: filePath })
+      }
+
+      setStatusMessage(`${getBaseName(filePath)} focused`)
+      return
+    }
+
+    if (changeKind === 'deleted') {
+      toast.warning(`Cannot reopen ${getBaseName(filePath)}`, {
+        description: 'This file was deleted by the agent. Open tabs for it can still be focused if they already exist.',
+      })
+      setStatusMessage(`${getBaseName(filePath)} was deleted`)
+      return
+    }
+
+    await openFile(filePath)
+  }, [activateTab, currentPath, openFile])
 
   async function openGitDiff(change: GitChangeItem) {
     if (!currentPath) {
@@ -2957,6 +2988,7 @@ function App() {
 
       <aside className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}>
         <AgentSidebar
+          onOpenMessageFile={openAgentMessageFile}
           onOpenProviderSettings={() => {
             setSettingsSection('providers')
             setIsSettingsOpen(true)

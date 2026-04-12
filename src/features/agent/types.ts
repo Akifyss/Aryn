@@ -1,11 +1,23 @@
 export type AgentSidebarMessageKind = 'assistant' | 'custom' | 'system' | 'tool' | 'user'
 export type AgentSidebarMessageStatus = 'done' | 'error' | 'running'
 
+export type AgentMessageFileChangeKind = 'created' | 'deleted' | 'updated'
+
+export type AgentMessageFileChange = {
+  filePath: string
+  kind: AgentMessageFileChangeKind
+}
+
+export type AgentSessionAnnotations = {
+  fileChangesByEntryId: Record<string, AgentMessageFileChange[]>
+}
+
 export type AgentSidebarMessage = {
   id: string
   kind: AgentSidebarMessageKind
   isThinkingStreaming?: boolean
   label?: string
+  sessionEntryId?: string
   status?: AgentSidebarMessageStatus
   text: string
   thinkingText?: string
@@ -55,6 +67,7 @@ export type AgentProviderAuthState = {
 }
 
 export type AgentSessionSnapshot = {
+  annotations: AgentSessionAnnotations
   sessionId: string
   sessionPath: string | null
   name: string | null
@@ -108,6 +121,11 @@ export type AgentClientEvent =
       toolName: string
       summary: string
       isError: boolean
+    }
+  | {
+      type: 'session_annotations_updated'
+      sessionId: string
+      annotations: AgentSessionAnnotations
     }
   | {
       type: 'workspace_state'

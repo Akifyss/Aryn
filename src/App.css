@@ -3211,7 +3211,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   flex-direction: column;
   gap: 13px;
   min-height: 100%;
-  padding: 16px 16px 32px;
+  padding: 16px 16px 0;
 }
 
 .agent-empty-chat {
@@ -3490,6 +3490,107 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-message-tool .agent-message-body {
   padding: 0 9px 6px 27px;
+}
+
+.agent-message-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in oklab, var(--outline) 50%, transparent);
+}
+
+.agent-message-files-heading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.agent-message-files-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.agent-message-files-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.agent-message-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-messages-trailing-files {
+  padding: 0 16px 32px;
+}
+
+.agent-message-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 1px solid color-mix(in oklab, var(--outline) 72%, transparent);
+  border-radius: 999px;
+  background: var(--surface-secondary);
+  color: var(--foreground);
+  font-size: 11px;
+  line-height: 1;
+}
+
+button.agent-message-file-chip {
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+button.agent-message-file-chip:hover {
+  background: var(--surface-tertiary);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--outline));
+  transform: translateY(-1px);
+}
+
+button.agent-message-file-chip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.agent-message-file-chip-prefix {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.agent-message-file-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-message-file-chip-created {
+  color: color-mix(in oklab, var(--success) 86%, var(--foreground));
+}
+
+.agent-message-file-chip-updated {
+  color: color-mix(in oklab, var(--accent) 74%, var(--foreground));
+}
+
+.agent-message-file-chip-deleted {
+  color: color-mix(in oklab, var(--danger) 82%, var(--foreground));
+}
+
+.agent-message-file-chip-overflow {
+  color: var(--muted);
 }
 
 .agent-message-system-collapsible {
@@ -3881,7 +3982,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   color: var(--field-placeholder);
 }
 
-.agent-composer-meta > .agent-composer-menu {
+.agent-composer-meta>.agent-composer-menu {
   position: absolute !important;
   left: -16px;
   right: -16px;
