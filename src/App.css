@@ -91,6 +91,12 @@
   -webkit-app-region: drag;
 }
 
+.titlebar.is-macos.is-controls-only {
+  inset: 0 auto auto 0;
+  width: max-content;
+  justify-content: flex-start;
+}
+
 .titlebar-controls {
   display: flex;
   align-items: center;
@@ -145,19 +151,6 @@
 }
 
 .panel-toggle-button-overlay-right {
-  right: var(--right-panel-toggle-anchor);
-}
-
-.panel-toggle-button-drawer {
-  position: absolute;
-  top: calc((var(--chrome-height) - var(--panel-toggle-size)) / 2);
-  z-index: 2;
-  pointer-events: auto;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.panel-toggle-button-drawer-right {
   right: var(--right-panel-toggle-anchor);
 }
 
@@ -412,19 +405,48 @@
   min-width: 0;
 }
 
+.panel-drawer-dialog,
+.panel-drawer-dialog *,
+.panel-drawer-body,
+.panel-drawer-body *,
+.workspace-sidebar-surface.is-drawer,
+.workspace-sidebar-surface.is-drawer *,
+.panel-agent-drawer,
+.panel-agent-drawer * {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.workspace-sidebar-surface.is-drawer .section-title-drag-spacer,
+.panel-agent-drawer .agent-threadbar-drag-spacer {
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
 .panel-agent-drawer .agent-threadbar {
   padding-right: var(--right-panel-content-inset);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .panel-agent-drawer {
   position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   padding-top: 0;
   box-sizing: border-box;
 }
 
+.panel-agent-drawer .agent-shell {
+  width: 100%;
+}
+
 /* When the right drawer expands to the full viewport width on narrow shells,
    the threadbar still needs to clear the macOS traffic lights on the left. */
-.panel-agent-drawer[data-platform='macos'] .agent-threadbar {
+.panel-agent-drawer[data-platform='macos'][data-full-width='true'] .agent-threadbar {
   padding-left: var(--left-panel-content-inset);
 }
 
@@ -515,18 +537,17 @@
   -webkit-app-region: drag;
 }
 
-.section-title.is-drawer-surface,
-.section-title.is-drawer-surface .section-title-drag-spacer {
+.section-title.is-drawer-surface {
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
 .section-title.is-drawer-surface {
-  padding-left: var(--left-panel-toggle-anchor, 12px);
+  padding-left: var(--left-panel-content-inset, 52px);
 }
 
 .workspace-sidebar-surface.is-drawer[data-platform='macos'] .section-title {
-  padding-left: var(--left-panel-content-inset);
+  padding-left: var(--left-panel-content-inset, 52px);
 }
 
 .section-title.is-drawer-surface .section-title-text {
@@ -3082,6 +3103,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-threadbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;

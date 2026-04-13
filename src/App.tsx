@@ -59,6 +59,7 @@ import {
   deriveShellPlatform,
   FULL_LAYOUT_BREAKPOINT,
   getShellChromeVars,
+  RIGHT_DRAWER_MAX_WIDTH,
   type LayoutMode,
   type ShellPlatform,
 } from '@/features/layout/shell-layout'
@@ -190,6 +191,8 @@ const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
 const DEFAULT_GIT_PANEL_HEIGHT = 292
 const MIN_GIT_PANEL_HEIGHT = 200
 const DEFAULT_GIT_PANEL_LAYOUT: GitPanelLayout = 'list'
+const DRAWER_INTERACTION_REFRESH_STABLE_FRAMES = 2
+const DRAWER_INTERACTION_REFRESH_MAX_FRAMES = 36
 const APP_STORAGE_PREFIX = 'aryn'
 const LEGACY_APP_STORAGE_PREFIX = String.fromCharCode(
   119,
@@ -517,6 +520,8 @@ function App() {
   const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false)
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
+  const leftDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
+  const rightDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
   const activeTabId = useWorkspaceStore((state) => state.activeTabId)
   const activateTab = useWorkspaceStore((state) => state.activateTab)
   const closeTab = useWorkspaceStore((state) => state.closeTab)
@@ -597,14 +602,11 @@ function App() {
     ? getBaseName(currentPath)
     : 'Current workspace'
   const shellPlatform: ShellPlatform = deriveShellPlatform(platform)
-  const drawerPortalContainer = appShellRef.current ?? undefined
-  const drawerPortalProps = drawerPortalContainer
-    ? { UNSTABLE_portalContainer: drawerPortalContainer as HTMLElement }
-    : {}
   const shellChromeVars = getShellChromeVars(shellPlatform) as CSSProperties
   const layoutMode: LayoutMode = deriveLayoutMode(shellWidth)
   const isLeftSidebarDrawer = layoutMode !== 'full'
   const isRightSidebarDrawer = layoutMode === 'focus'
+  const isRightDrawerFullWidth = shellWidth <= RIGHT_DRAWER_MAX_WIDTH
   const isLeftSidebarVisible = !isLeftSidebarDrawer && !isLeftSidebarCollapsed
   const isRightSidebarVisible = !isRightSidebarDrawer && !isRightSidebarCollapsed
   const effectiveLeftSidebarWidth = isLeftSidebarVisible ? leftSidebarWidth : 0
@@ -2673,14 +2675,103 @@ function App() {
 
     setIsRightDrawerOpen(isOpen)
   }, [])
-  const openWorkspaceSurface = useCallback(() => {
-    if (isLeftSidebarDrawer) {
-      handleLeftDrawerOpenChange(true)
+  useEffect(() => {
+    const openDrawerSide = isLeftDrawerOpen ? 'left' : isRightDrawerOpen ? 'right' : null
+
+    if (!openDrawerSide) {
       return
     }
 
-    setIsLeftSidebarCollapsed(false)
-  }, [handleLeftDrawerOpenChange, isLeftSidebarDrawer])
+    let cancelled = false
+    let rafId = 0
+    let frameCount = 0
+    let stableFrameCount = 0
+    let previousRectSignature = ''
+
+    // Fixed chrome elements sit outside the drawer tree, so we invalidate once
+    // immediately when the drawer mounts. That keeps the top controls clickable
+    // while the slide animation is still in flight.
+    void window.appApi.refreshWindowInteractionRegions('soft').catch(() => {})
+
+    const getDrawerSurface = () => (
+      openDrawerSide === 'left'
+        ? leftDrawerSurfaceRef.current
+        : rightDrawerSurfaceRef.current
+    )
+
+    const tick = () => {
+      if (cancelled) {
+        return
+      }
+
+      frameCount += 1
+
+      const drawerSurface = getDrawerSurface()
+      if (!drawerSurface) {
+        if (frameCount < DRAWER_INTERACTION_REFRESH_MAX_FRAMES) {
+          rafId = window.requestAnimationFrame(tick)
+        }
+        return
+      }
+
+      const rect = drawerSurface.getBoundingClientRect()
+      const rectSignature = [
+        Math.round(rect.x * 10) / 10,
+        Math.round(rect.y * 10) / 10,
+        Math.round(rect.width * 10) / 10,
+        Math.round(rect.height * 10) / 10,
+      ].join(':')
+
+      stableFrameCount = rectSignature === previousRectSignature ? stableFrameCount + 1 : 0
+      previousRectSignature = rectSignature
+
+      if (
+        stableFrameCount >= DRAWER_INTERACTION_REFRESH_STABLE_FRAMES
+        || frameCount >= DRAWER_INTERACTION_REFRESH_MAX_FRAMES
+      ) {
+        // Electron frameless hit-testing can lag behind drawer transforms until the
+        // animated bounds settle. Refreshing once here preserves clickability without
+        // nudging the window during the active slide animation.
+        void window.appApi.refreshWindowInteractionRegions('hard').catch(() => {})
+        return
+      }
+
+      rafId = window.requestAnimationFrame(tick)
+    }
+
+    rafId = window.requestAnimationFrame(tick)
+
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [isLeftDrawerOpen, isRightDrawerOpen])
+  useEffect(() => {
+    if (!isLeftDrawerOpen && !isRightDrawerOpen) {
+      return
+    }
+
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== 'Escape') {
+        return
+      }
+
+      if (isRightDrawerOpen) {
+        handleRightDrawerOpenChange(false)
+        return
+      }
+
+      if (isLeftDrawerOpen) {
+        handleLeftDrawerOpenChange(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleWindowKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleWindowKeyDown)
+    }
+  }, [handleLeftDrawerOpenChange, handleRightDrawerOpenChange, isLeftDrawerOpen, isRightDrawerOpen])
   const toggleAssistantSurface = useCallback(() => {
     if (isRightSidebarDrawer) {
       handleRightDrawerOpenChange(!isRightDrawerOpen)
@@ -2703,24 +2794,27 @@ function App() {
 
     return (
       <div
+        ref={isDrawerSurface ? leftDrawerSurfaceRef : undefined}
         className={`workspace-sidebar-surface${isDrawerSurface ? ' is-drawer' : ''}`}
         data-platform={shellPlatform}
         style={isDrawerSurface ? shellChromeVars : undefined}
       >
         <div className={`section-title workspace-section-title${isDrawerSurface ? ' is-drawer-surface' : ''}`}>
-          <button
-            type='button'
-            className='panel-toggle-button workspace-section-toggle workspace-toggle-brand-button'
-            aria-label={isDrawerSurface ? 'Close workspace panel' : 'Collapse workspace sidebar'}
-            onClick={closeWorkspaceSurface}
-          >
-            <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
-              <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
-              <span className='workspace-toggle-brand-glyph'>
-                <LayoutLeftLine size={16} />
+          {!isDrawerSurface ? (
+            <button
+              type='button'
+              className='panel-toggle-button workspace-section-toggle workspace-toggle-brand-button'
+              aria-label='Collapse workspace sidebar'
+              onClick={closeWorkspaceSurface}
+            >
+              <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
+                <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
+                <span className='workspace-toggle-brand-glyph'>
+                  <LayoutLeftLine size={16} />
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
+          ) : null}
           <button
             type='button'
             onClick={() => {
@@ -2964,13 +3058,22 @@ function App() {
         } as CSSProperties
       }
     >
-
-      {(isLeftSidebarDrawer || !isLeftSidebarVisible) && !isLeftDrawerOpen ? (
+      {isLeftSidebarDrawer || !isLeftSidebarVisible ? (
         <button
           type='button'
           className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-left workspace-toggle-brand-button'
-          aria-label={isLeftSidebarDrawer ? 'Open workspace panel' : 'Expand workspace sidebar'}
-          onClick={openWorkspaceSurface}
+          data-react-aria-top-layer='true'
+          aria-label={isLeftSidebarDrawer
+            ? (isLeftDrawerOpen ? 'Close workspace panel' : 'Open workspace panel')
+            : (isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar')}
+          onClick={() => {
+            if (isLeftSidebarDrawer) {
+              handleLeftDrawerOpenChange(!isLeftDrawerOpen)
+              return
+            }
+
+            setIsLeftSidebarCollapsed((currentValue) => !currentValue)
+          }}
         >
           <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
             <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
@@ -2981,20 +3084,19 @@ function App() {
         </button>
       ) : null}
 
-      {!isRightSidebarDrawer || !isRightDrawerOpen ? (
-        <button
-          type='button'
-          className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
-          aria-label={isRightSidebarDrawer
-            ? (isRightDrawerOpen ? 'Close assistant panel' : 'Open assistant panel')
-            : (isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar')}
-          onClick={toggleAssistantSurface}
-        >
-          <span className='panel-toggle-icon' aria-hidden='true'>
-            <LayoutRightLine size={16} />
-          </span>
-        </button>
-      ) : null}
+      <button
+        type='button'
+        className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
+        data-react-aria-top-layer='true'
+        aria-label={isRightSidebarDrawer
+          ? (isRightDrawerOpen ? 'Close assistant panel' : 'Open assistant panel')
+          : (isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar')}
+        onClick={toggleAssistantSurface}
+      >
+        <span className='panel-toggle-icon' aria-hidden='true'>
+          <LayoutRightLine size={16} />
+        </span>
+      </button>
 
       {isLeftSidebarVisible ? (
         <aside className='panel panel-sidebar'>
@@ -3415,7 +3517,6 @@ function App() {
 
       {isLeftSidebarDrawer ? (
         <Drawer
-          {...drawerPortalProps}
           isOpen={isLeftDrawerOpen}
           onOpenChange={handleLeftDrawerOpenChange}
         >
@@ -3439,7 +3540,6 @@ function App() {
 
       {isRightSidebarDrawer ? (
         <Drawer
-          {...drawerPortalProps}
           isOpen={isRightDrawerOpen}
           onOpenChange={handleRightDrawerOpenChange}
         >
@@ -3448,26 +3548,15 @@ function App() {
             variant='opaque'
           >
             <Drawer.Content placement='right' className='panel-drawer panel-drawer-right' data-platform={shellPlatform}>
-              <button
-                type='button'
-                className='panel-toggle-button panel-toggle-button-drawer panel-toggle-button-drawer-right'
-                aria-label='Close assistant panel'
-                style={shellChromeVars}
-                onClick={() => {
-                  handleRightDrawerOpenChange(false)
-                }}
-              >
-                <span className='panel-toggle-icon' aria-hidden='true'>
-                  <LayoutRightLine size={16} />
-                </span>
-              </button>
               <Drawer.Dialog
                 aria-label='Assistant'
                 className={`panel-drawer-dialog ${theme === 'dark' ? 'dark' : ''}`}
               >
                 <Drawer.Body className='panel-drawer-body panel-drawer-body-agent'>
                   <div
+                    ref={rightDrawerSurfaceRef}
                     className='panel panel-agent panel-agent-drawer'
+                    data-full-width={isRightDrawerFullWidth ? 'true' : 'false'}
                     data-platform={shellPlatform}
                     style={shellChromeVars}
                   >
@@ -3565,6 +3654,8 @@ function App() {
       <AppTitlebar onRequestClose={() => {
         void handleRequestWindowClose()
       }}
+        drawerSide={isLeftDrawerOpen ? 'left' : isRightDrawerOpen ? 'right' : null}
+        isDrawerOpen={isLeftDrawerOpen || isRightDrawerOpen}
       />
     </div>
   )

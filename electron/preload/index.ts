@@ -72,6 +72,7 @@ contextBridge.exposeInMainWorld('appApi', {
   toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize') as Promise<{ isMaximized: boolean }>,
   closeWindow: () => ipcRenderer.invoke('window:close') as Promise<void>,
   isWindowMaximized: () => ipcRenderer.invoke('window:is-maximized') as Promise<{ isMaximized: boolean }>,
+  refreshWindowInteractionRegions: (mode?: 'soft' | 'hard') => ipcRenderer.invoke('window:refresh-interaction-regions', mode) as Promise<{ ok: boolean }>,
   onWindowCloseRequested: (listener: () => void) => {
     const wrappedListener = () => {
       listener()

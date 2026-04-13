@@ -1,5 +1,6 @@
 export const FULL_LAYOUT_BREAKPOINT = 1360
 export const COMPACT_LAYOUT_BREAKPOINT = 1160
+export const RIGHT_DRAWER_MAX_WIDTH = 420
 
 export type LayoutMode = 'full' | 'compact' | 'focus'
 export type ShellPlatform = 'macos' | 'windows'

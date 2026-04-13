@@ -760,3 +760,37 @@ ipcMain.handle('window:close', () => {
 ipcMain.handle('window:is-maximized', () => {
   return { isMaximized: win?.isMaximized() ?? false }
 })
+
+ipcMain.handle('window:refresh-interaction-regions', async (_event, mode: 'soft' | 'hard' = 'hard') => {
+  if (!win || win.isDestroyed()) {
+    return { ok: false }
+  }
+
+  if (mode === 'soft') {
+    win.webContents.invalidate()
+    return { ok: true }
+  }
+
+  // Frameless windows on macOS can keep stale draggable hit regions until the
+  // next actual resize. A one-pixel width nudge-and-restore is enough to force
+  // Chromium to rebuild the hit-test map, and is lighter than repeatedly
+  // invalidating the whole window while the drawer is animating.
+  if (!win.isMaximized() && !win.isFullScreen()) {
+    const bounds = win.getBounds()
+    const nudgedBounds = {
+      ...bounds,
+      width: bounds.width + 1,
+    }
+
+    win.setBounds(nudgedBounds, false)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    if (!win.isDestroyed()) {
+      win.setBounds(bounds, false)
+    }
+  } else {
+    win.webContents.invalidate()
+  }
+
+  return { ok: true }
+})
