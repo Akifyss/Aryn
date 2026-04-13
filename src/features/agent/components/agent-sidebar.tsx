@@ -1,9 +1,19 @@
 import { type CSSProperties, FormEvent, KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Button, Chip, Input, TextArea } from '@heroui/react'
+import { Button, Chip, Disclosure, Input, TextArea } from '@heroui/react'
+import { Icon } from '@iconify/react'
 import {
+  AiLine,
   AddLine,
+  BrainLine,
+  CodeLine,
   Delete2Line,
+  DownLine,
+  FileSearchLine,
+  Pen2Line,
+  SearchLine,
   SendPlaneLine,
+  TerminalLine,
+  ToolLine,
 } from '@mingcute/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -238,43 +248,124 @@ function AgentMarkdown({ text }: { text: string }) {
   )
 }
 
-function AgentDisclosure({
+function formatDisclosureTitle(title: string) {
+  return title.includes('_') || title.includes('-')
+    ? title.replace(/[_-]+/g, ' ')
+    : title
+}
+
+function getMessageDisclosureIcon(kind: 'details' | 'thinking' | 'tool', title: string) {
+  const normalizedTitle = title.trim().toLowerCase()
+  const iconClassName = 'agent-message-toggle-icon'
+
+  if (kind === 'thinking') {
+    return <BrainLine aria-hidden='true' className={iconClassName} />
+  }
+
+  if (kind === 'details') {
+    return <AiLine aria-hidden='true' className={iconClassName} />
+  }
+
+  if (/write|edit|append|replace|rewrite|update|create|save|draft/.test(normalizedTitle)) {
+    return <Pen2Line aria-hidden='true' className={iconClassName} />
+  }
+
+  if (/delete|remove/.test(normalizedTitle)) {
+    return <Delete2Line aria-hidden='true' className={iconClassName} />
+  }
+
+  if (/bash|shell|terminal|command|powershell/.test(normalizedTitle)) {
+    return <TerminalLine aria-hidden='true' className={iconClassName} />
+  }
+
+  if (/search|find|grep|query|match/.test(normalizedTitle)) {
+    return <SearchLine aria-hidden='true' className={iconClassName} />
+  }
+
+  if (/read|open|view|inspect/.test(normalizedTitle)) {
+    return <FileSearchLine aria-hidden='true' className={iconClassName} />
+  }
+
+  if (/patch|code|diff/.test(normalizedTitle)) {
+    return <CodeLine aria-hidden='true' className={iconClassName} />
+  }
+
+  return <ToolLine aria-hidden='true' className={iconClassName} />
+}
+
+function getMessageStatusIcon(status: AgentSidebarMessageStatus) {
+  switch (status) {
+    case 'running':
+      return <Icon aria-hidden='true' className='agent-message-status-icon is-running' icon='svg-spinners:bars-rotate-fade' />
+    case 'error':
+      return <Icon aria-hidden='true' className='agent-message-status-icon is-error' icon='ci:error-outline' />
+    default:
+      return <Icon aria-hidden='true' className='agent-message-status-icon is-done' icon='lets-icons:done-ring-round' />
+  }
+}
+
+function AgentMessageDisclosure({
   children,
-  defaultExpanded = false,
+  className,
   expanded,
+  kind,
   label,
+  onExpandedChange,
+  status,
+  title,
 }: {
   children: ReactNode
-  defaultExpanded?: boolean
-  expanded?: boolean
-  label: string
+  className?: string
+  expanded: boolean
+  kind: 'details' | 'thinking' | 'tool'
+  label?: string
+  onExpandedChange: (nextExpanded: boolean) => void
+  status?: AgentSidebarMessageStatus
+  title: string
 }) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
-  const resolvedExpanded = expanded ?? isExpanded
+  const displayTitle = formatDisclosureTitle(title)
 
   return (
-    <div className='agent-disclosure'>
-      <button
-        aria-expanded={resolvedExpanded}
-        className='agent-disclosure-toggle'
-        type='button'
-        onClick={() => {
-          if (expanded !== undefined) {
-            return
-          }
+    <Disclosure
+      className={`agent-message agent-message-disclosure-card ${className ?? ''}`.trim()}
+      isExpanded={expanded}
+      onExpandedChange={onExpandedChange}
+    >
+      {({ isExpanded: disclosureExpanded }) => (
+        <>
+          <div className='agent-message-disclosure-header'>
+            <Disclosure.Heading className='agent-disclosure-heading'>
+              <Disclosure.Trigger className='agent-message-toggle'>
+                {getMessageDisclosureIcon(kind, title)}
+                <span className='agent-message-toggle-title'>{displayTitle}</span>
+                <span className='agent-message-toggle-trailing' title={status ? getToolStatusLabel(status) : undefined}>
+                  {status ? (
+                    <span className='agent-message-toggle-status-slot'>
+                      {getMessageStatusIcon(status)}
+                    </span>
+                  ) : null}
+                  <DownLine
+                    aria-hidden='true'
+                    className={`agent-message-toggle-arrow ${disclosureExpanded ? 'is-open' : ''} ${status ? 'has-status' : ''}`}
+                  />
+                </span>
+              </Disclosure.Trigger>
+            </Disclosure.Heading>
+            {label ? (
+              <div className='agent-message-disclosure-meta'>
+                {label ? <span className='agent-message-label'>{label}</span> : null}
+              </div>
+            ) : null}
+          </div>
 
-          setIsExpanded((currentValue) => !currentValue)
-        }}
-      >
-        <span className={`agent-message-toggle-caret ${resolvedExpanded ? 'is-open' : ''}`} aria-hidden='true' />
-        <span className='agent-disclosure-label'>{label}</span>
-      </button>
-      {resolvedExpanded ? (
-        <div className='agent-disclosure-body'>
-          {children}
-        </div>
-      ) : null}
-    </div>
+          <Disclosure.Content>
+            <Disclosure.Body className={`agent-message-disclosure-body agent-message-disclosure-body-${kind}`}>
+              {children}
+            </Disclosure.Body>
+          </Disclosure.Content>
+        </>
+      )}
+    </Disclosure>
   )
 }
 
@@ -369,10 +460,13 @@ function AgentMessageBubble({
   message: AgentSidebarMessage
 }) {
   const isToolMessage = message.kind === 'tool'
+  const hasThinking = message.kind === 'assistant' && Boolean(message.thinkingText)
   const isCollapsibleSystemMessage = (message.kind === 'system' || message.kind === 'custom')
     && (message.title === 'Compaction summary' || message.title === 'Branch summary')
   const messageStatus = getMessageStatus(message)
-  const [isExpanded, setIsExpanded] = useState(messageStatus === 'error' || messageStatus === 'running')
+  const [isToolExpanded, setIsToolExpanded] = useState(messageStatus === 'error' || messageStatus === 'running')
+  const [isThinkingExpanded, setIsThinkingExpanded] = useState(Boolean(message.isThinkingStreaming))
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(Boolean(message.isError))
 
   useEffect(() => {
     if (!isToolMessage) {
@@ -380,51 +474,61 @@ function AgentMessageBubble({
     }
 
     if (messageStatus === 'running' || messageStatus === 'error') {
-      setIsExpanded(true)
+      setIsToolExpanded(true)
       return
     }
 
-    setIsExpanded(false)
+    setIsToolExpanded(false)
   }, [isToolMessage, message.id, messageStatus])
+
+  useEffect(() => {
+    if (!hasThinking) {
+      return
+    }
+
+    if (message.isThinkingStreaming) {
+      setIsThinkingExpanded(true)
+      return
+    }
+
+    setIsThinkingExpanded(false)
+  }, [hasThinking, message.id, message.isThinkingStreaming])
+
+  useEffect(() => {
+    if (!isCollapsibleSystemMessage) {
+      return
+    }
+
+    setIsDetailsExpanded(Boolean(message.isError))
+  }, [isCollapsibleSystemMessage, message.id, message.isError])
 
   if (isToolMessage) {
     return (
-      <article className={`agent-message agent-message-tool ${messageStatus === 'running' ? 'is-running' : ''} ${message.isError ? 'is-error' : ''}`}>
-        <button
-          aria-expanded={isExpanded}
-          className='agent-message-toggle'
-          type='button'
-          onClick={() => {
-            setIsExpanded((currentValue) => !currentValue)
-          }}
-        >
-          <span className={`agent-message-toggle-caret ${isExpanded ? 'is-open' : ''}`} aria-hidden='true' />
-          <span className='agent-message-role'>{message.title ?? 'Tool'}</span>
-          {message.label ? <span className='agent-message-label'>{message.label}</span> : null}
-          <span className={`agent-message-status agent-message-status-${messageStatus}`}>
-            {getToolStatusLabel(messageStatus)}
-          </span>
-        </button>
-
-        {isExpanded ? (
-          <div className='agent-message-body'>
-            <AgentMarkdown text={message.text} />
-          </div>
-        ) : null}
-      </article>
+      <AgentMessageDisclosure
+        className={`agent-message-tool ${messageStatus === 'running' ? 'is-running' : ''} ${message.isError ? 'is-error' : ''}`}
+        expanded={isToolExpanded}
+        kind='tool'
+        label={message.label}
+        onExpandedChange={setIsToolExpanded}
+        status={messageStatus}
+        title={message.title ?? 'Tool'}
+      >
+        <AgentMarkdown text={message.text} />
+      </AgentMessageDisclosure>
     )
   }
 
   if (isCollapsibleSystemMessage) {
     return (
-      <article className={`agent-message agent-message-system agent-message-system-collapsible ${message.isError ? 'is-error' : ''}`}>
-        <div className='agent-message-meta'>
-          <span className='agent-message-role'>{message.title ?? message.kind}</span>
-        </div>
-        <AgentDisclosure label='Details'>
-          <AgentMarkdown text={message.text} />
-        </AgentDisclosure>
-      </article>
+      <AgentMessageDisclosure
+        className={`agent-message-details ${message.isError ? 'is-error' : ''}`}
+        expanded={isDetailsExpanded}
+        kind='details'
+        onExpandedChange={setIsDetailsExpanded}
+        title={message.title ?? message.kind}
+      >
+        <AgentMarkdown text={message.text} />
+      </AgentMessageDisclosure>
     )
   }
 
@@ -444,9 +548,15 @@ function AgentMessageBubble({
 
       <div className='agent-message-body'>
         {message.kind === 'assistant' && message.thinkingText ? (
-          <AgentDisclosure expanded={message.isThinkingStreaming} label='Thinking'>
+          <AgentMessageDisclosure
+            className='agent-message-thinking'
+            expanded={isThinkingExpanded}
+            kind='thinking'
+            onExpandedChange={setIsThinkingExpanded}
+            title='Thinking'
+          >
             <AgentMarkdown text={message.thinkingText} />
-          </AgentDisclosure>
+          </AgentMessageDisclosure>
         ) : null}
         {message.text.trim() ? <AgentMarkdown text={message.text} /> : null}
       </div>
