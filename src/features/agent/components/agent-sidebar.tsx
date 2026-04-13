@@ -7,9 +7,10 @@ import {
   BrainLine,
   CodeLine,
   Delete2Line,
-  DownLine,
+  EyeglassLine,
   FileSearchLine,
-  Pen2Line,
+  Pencil2Line,
+  RightLine,
   SearchLine,
   SendPlaneLine,
   TerminalLine,
@@ -267,7 +268,7 @@ function getMessageDisclosureIcon(kind: 'details' | 'thinking' | 'tool', title: 
   }
 
   if (/write|edit|append|replace|rewrite|update|create|save|draft/.test(normalizedTitle)) {
-    return <Pen2Line aria-hidden='true' className={iconClassName} />
+    return <Pencil2Line aria-hidden='true' className={iconClassName} />
   }
 
   if (/delete|remove/.test(normalizedTitle)) {
@@ -283,7 +284,7 @@ function getMessageDisclosureIcon(kind: 'details' | 'thinking' | 'tool', title: 
   }
 
   if (/read|open|view|inspect/.test(normalizedTitle)) {
-    return <FileSearchLine aria-hidden='true' className={iconClassName} />
+    return <EyeglassLine aria-hidden='true' className={iconClassName} />
   }
 
   if (/patch|code|diff/.test(normalizedTitle)) {
@@ -345,7 +346,7 @@ function AgentMessageDisclosure({
                       {statusIcon}
                     </span>
                   ) : null}
-                  <DownLine
+                  <RightLine
                     aria-hidden='true'
                     className={`agent-message-toggle-arrow ${disclosureExpanded ? 'is-open' : ''} ${statusIcon ? 'has-status' : ''}`}
                   />

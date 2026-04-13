@@ -3570,7 +3570,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-message-disclosure-card {
   --agent-pill-height: 28px;
   --agent-pill-x: 8px;
-  --agent-pill-gap: 8px;
+  --agent-pill-gap: 6px;
   --agent-pill-font-size: 11px;
   --agent-pill-icon-size: 16px;
 }
@@ -3699,15 +3699,21 @@ body.workspace-tree-dragging .workspace-tree-row {
   width: var(--agent-pill-icon-size);
   height: var(--agent-pill-icon-size);
   color: var(--muted);
+  opacity: 0;
   transition: transform 160ms ease, opacity 160ms ease;
 }
 
 .agent-message-toggle-arrow.is-open {
-  transform: rotate(180deg);
+  transform: rotate(90deg);
+  opacity: 1;
 }
 
 .agent-message-toggle-arrow.has-status {
   opacity: 0;
+}
+
+.agent-message-toggle-arrow.is-open.has-status {
+  opacity: 1;
 }
 
 .agent-message-tool.is-error .agent-message-toggle,
@@ -3718,6 +3724,11 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-message-toggle:hover .agent-message-toggle-arrow.has-status,
 .agent-message-toggle:focus-visible .agent-message-toggle-arrow.has-status {
+  opacity: 1;
+}
+
+.agent-message-toggle:hover .agent-message-toggle-arrow:not(.has-status),
+.agent-message-toggle:focus-visible .agent-message-toggle-arrow:not(.has-status) {
   opacity: 1;
 }
 
@@ -3762,8 +3773,9 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-message-disclosure-body-thinking {
-  margin-left: 8px;
-  padding: 1px 0 3px 10px;
+  margin-left: 0;
+  padding: 0;
+  border-left: 0;
 }
 
 .agent-message-disclosure-body-tool {
