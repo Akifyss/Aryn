@@ -3425,7 +3425,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-messages {
   display: flex;
   flex-direction: column;
-  gap: 13px;
+  gap: 8px;
   min-height: 100%;
   padding: 16px 16px 32px;
 }
@@ -3560,7 +3560,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-message-tool,
 .agent-message-disclosure-card {
-  gap: 10px;
+  gap: 0px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -3614,15 +3614,15 @@ body.workspace-tree-dragging .workspace-tree-row {
   padding: 0 var(--agent-pill-x);
   border: 0;
   border-radius: 999px;
-  background: color-mix(in oklab, var(--surface-secondary) 96%, white);
-  color: var(--foreground);
+  background: transparent;
+  color: var(--muted);
   text-align: left;
   cursor: pointer;
   transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
 .agent-message-toggle:hover {
-  background: color-mix(in oklab, var(--surface-secondary) 88%, white);
+  background: var(--surface-tertiary);
 }
 
 .agent-message-toggle:focus-visible {
@@ -3657,7 +3657,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   min-height: 18px;
   padding: 0 7px;
   color: var(--muted);
-  background: color-mix(in oklab, var(--surface-secondary) 96%, white);
+  background: var(--surface-secondary);
   font-size: 10px;
 }
 
@@ -3713,7 +3713,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-message-tool.is-error .agent-message-toggle,
 .agent-message-details.is-error .agent-message-toggle {
   color: var(--danger);
-  background: color-mix(in oklab, var(--danger) 8%, white);
+  background: var(--surface-secondary);
 }
 
 .agent-message-toggle:hover .agent-message-toggle-arrow.has-status,
@@ -3761,13 +3761,19 @@ body.workspace-tree-dragging .workspace-tree-row {
   border-left: 1px solid color-mix(in oklab, var(--outline) 55%, transparent);
 }
 
+.agent-message-disclosure-body-thinking {
+  margin-left: 8px;
+  padding: 1px 0 3px 10px;
+}
+
 .agent-message-disclosure-body-tool {
   margin-left: 0;
   padding: 10px 12px;
   border-left: 0;
   border: 1px solid color-mix(in oklab, var(--outline) 50%, transparent);
   border-radius: 14px;
-  background: color-mix(in oklab, var(--surface-secondary) 96%, white);
+  background: var(--surface);
+  color: var(--muted);
 }
 
 .agent-message-thinking {

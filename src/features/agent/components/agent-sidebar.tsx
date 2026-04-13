@@ -300,7 +300,7 @@ function getMessageStatusIcon(status: AgentSidebarMessageStatus) {
     case 'error':
       return <Icon aria-hidden='true' className='agent-message-status-icon is-error' icon='ci:error-outline' />
     default:
-      return <Icon aria-hidden='true' className='agent-message-status-icon is-done' icon='lets-icons:done-ring-round' />
+      return null
   }
 }
 
@@ -324,6 +324,7 @@ function AgentMessageDisclosure({
   title: string
 }) {
   const displayTitle = formatDisclosureTitle(title)
+  const statusIcon = status ? getMessageStatusIcon(status) : null
 
   return (
     <Disclosure
@@ -339,14 +340,14 @@ function AgentMessageDisclosure({
                 {getMessageDisclosureIcon(kind, title)}
                 <span className='agent-message-toggle-title'>{displayTitle}</span>
                 <span className='agent-message-toggle-trailing' title={status ? getToolStatusLabel(status) : undefined}>
-                  {status ? (
+                  {statusIcon ? (
                     <span className='agent-message-toggle-status-slot'>
-                      {getMessageStatusIcon(status)}
+                      {statusIcon}
                     </span>
                   ) : null}
                   <DownLine
                     aria-hidden='true'
-                    className={`agent-message-toggle-arrow ${disclosureExpanded ? 'is-open' : ''} ${status ? 'has-status' : ''}`}
+                    className={`agent-message-toggle-arrow ${disclosureExpanded ? 'is-open' : ''} ${statusIcon ? 'has-status' : ''}`}
                   />
                 </span>
               </Disclosure.Trigger>
