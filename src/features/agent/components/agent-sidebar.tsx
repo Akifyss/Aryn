@@ -813,6 +813,7 @@ export function AgentSidebar({
   const overlayPanelRef = useRef<HTMLDivElement | null>(null)
   const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
   const previousSessionPathRef = useRef<string | null>(null)
+  const previousAutoOpenSessionPathRef = useRef<string | null>(null)
   const hasInitializedAutoOpenRef = useRef(false)
   const lastAutoOpenedFileChangeKeyRef = useRef('')
   const restorableSessionPath = agentState.activeSession?.sessionPath ?? null
@@ -1523,8 +1524,18 @@ export function AgentSidebar({
 
   useEffect(() => {
     if (!activeSessionPath) {
+      previousAutoOpenSessionPathRef.current = null
       hasInitializedAutoOpenRef.current = false
       lastAutoOpenedFileChangeKeyRef.current = ''
+      return
+    }
+
+    const isSessionChanged = previousAutoOpenSessionPathRef.current !== activeSessionPath
+    previousAutoOpenSessionPathRef.current = activeSessionPath
+
+    if (isSessionChanged) {
+      hasInitializedAutoOpenRef.current = true
+      lastAutoOpenedFileChangeKeyRef.current = latestAutoOpenFileChange?.key ?? ''
       return
     }
 
