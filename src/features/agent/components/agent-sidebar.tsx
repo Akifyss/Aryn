@@ -1,4 +1,4 @@
-import { type CSSProperties, FormEvent, KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, FormEvent, KeyboardEvent, type ReactNode, type Ref, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Button, Chip, Disclosure, Input } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import {
@@ -68,9 +68,10 @@ const MARKDOWN_PLUGINS = [remarkGfm]
 const AGENT_COMPOSER_MENU_MAX_HEIGHT = 224
 const AGENT_COMPOSER_MENU_ROW_HEIGHT = 43
 const AGENT_COMPOSER_MENU_HEIGHT_BUFFER = 2
-const AGENT_THINKING_AUTO_EXPAND_DELAY_MS = 600
-const AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS = 180
-const AGENT_THINKING_MIN_EXPANDED_MS = 420
+const AGENT_THINKING_AUTO_EXPAND_DELAY_MS = 520
+const AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS = 140
+const AGENT_THINKING_MIN_EXPANDED_MS = 360
+const AGENT_THINKING_SCROLL_STICKY_THRESHOLD_PX = 24
 const MAX_VISIBLE_MESSAGE_FILE_CHIPS = 6
 
 const emptyAgentState: AgentWorkspaceState = {
@@ -248,95 +249,130 @@ function getToolStatusLabel(status: AgentSidebarMessageStatus) {
   }
 }
 
-function useDebouncedAutoExpandedState({
+function useAutoDisclosureState({
   collapseDelayMs = 0,
   expandDelayMs = 0,
   initialExpanded,
   minExpandedMs = 0,
-  nextExpanded,
+  nextAutoExpanded,
   stateKey,
 }: {
   collapseDelayMs?: number
   expandDelayMs?: number
   initialExpanded: boolean
   minExpandedMs?: number
-  nextExpanded: boolean
+  nextAutoExpanded: boolean
   stateKey: string
 }) {
   const [isExpanded, setIsExpanded] = useState(initialExpanded)
   const expandedRef = useRef(initialExpanded)
-  const lastExpandedAtRef = useRef<number | null>(initialExpanded ? Date.now() : null)
-  const previousExpandedRef = useRef(initialExpanded)
+  const autoExpandedRef = useRef(false)
+  const lastAutoExpandedAtRef = useRef<number | null>(null)
   const timerRef = useRef<number | null>(null)
+  const userInteractedRef = useRef(false)
+
+  function clearScheduledTransition() {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+  }
+
+  function setExpandedState(nextExpanded: boolean) {
+    expandedRef.current = nextExpanded
+    setIsExpanded(nextExpanded)
+  }
 
   useEffect(() => {
     expandedRef.current = isExpanded
   }, [isExpanded])
 
   useEffect(() => {
-    if (previousExpandedRef.current === isExpanded) {
-      return
-    }
-
-    previousExpandedRef.current = isExpanded
-    lastExpandedAtRef.current = isExpanded ? Date.now() : null
-  }, [isExpanded])
-
-  useEffect(() => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-
-    expandedRef.current = initialExpanded
-    previousExpandedRef.current = initialExpanded
-    lastExpandedAtRef.current = initialExpanded ? Date.now() : null
-    setIsExpanded(initialExpanded)
+    clearScheduledTransition()
+    userInteractedRef.current = false
+    autoExpandedRef.current = false
+    lastAutoExpandedAtRef.current = null
+    setExpandedState(initialExpanded)
   }, [initialExpanded, stateKey])
 
   useEffect(() => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
+    clearScheduledTransition()
 
-    if (expandedRef.current === nextExpanded) {
+    if (userInteractedRef.current) {
       return
     }
 
-    const delayMs = nextExpanded ? expandDelayMs : collapseDelayMs
-    const minVisibleRemainingMs = !nextExpanded && expandedRef.current && lastExpandedAtRef.current !== null
-      ? Math.max(0, minExpandedMs - (Date.now() - lastExpandedAtRef.current))
+    if (nextAutoExpanded) {
+      if (expandedRef.current) {
+        return
+      }
+
+      if (expandDelayMs <= 0) {
+        autoExpandedRef.current = true
+        lastAutoExpandedAtRef.current = Date.now()
+        setExpandedState(true)
+        return
+      }
+
+      timerRef.current = window.setTimeout(() => {
+        if (userInteractedRef.current) {
+          timerRef.current = null
+          return
+        }
+
+        autoExpandedRef.current = true
+        lastAutoExpandedAtRef.current = Date.now()
+        setExpandedState(true)
+        timerRef.current = null
+      }, expandDelayMs)
+
+      return clearScheduledTransition
+    }
+
+    if (!expandedRef.current || !autoExpandedRef.current) {
+      return
+    }
+
+    const minVisibleRemainingMs = lastAutoExpandedAtRef.current !== null
+      ? Math.max(0, minExpandedMs - (Date.now() - lastAutoExpandedAtRef.current))
       : 0
-    const effectiveDelayMs = Math.max(delayMs, minVisibleRemainingMs)
+    const effectiveDelayMs = Math.max(collapseDelayMs, minVisibleRemainingMs)
 
     if (effectiveDelayMs <= 0) {
-      expandedRef.current = nextExpanded
-      setIsExpanded(nextExpanded)
+      autoExpandedRef.current = false
+      lastAutoExpandedAtRef.current = null
+      setExpandedState(false)
       return
     }
 
     timerRef.current = window.setTimeout(() => {
-      expandedRef.current = nextExpanded
-      setIsExpanded(nextExpanded)
+      if (userInteractedRef.current) {
+        timerRef.current = null
+        return
+      }
+
+      autoExpandedRef.current = false
+      lastAutoExpandedAtRef.current = null
+      setExpandedState(false)
       timerRef.current = null
     }, effectiveDelayMs)
 
-    return () => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current)
-        timerRef.current = null
-      }
-    }
-  }, [collapseDelayMs, expandDelayMs, minExpandedMs, nextExpanded, stateKey])
+    return clearScheduledTransition
+  }, [collapseDelayMs, expandDelayMs, minExpandedMs, nextAutoExpanded, stateKey])
 
   useEffect(() => () => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current)
-    }
+    clearScheduledTransition()
   }, [])
 
-  return [isExpanded, setIsExpanded] as const
+  function handleExpandedChange(nextExpanded: boolean) {
+    clearScheduledTransition()
+    userInteractedRef.current = true
+    autoExpandedRef.current = false
+    lastAutoExpandedAtRef.current = null
+    setExpandedState(nextExpanded)
+  }
+
+  return [isExpanded, handleExpandedChange] as const
 }
 
 function AgentMarkdown({
@@ -447,6 +483,7 @@ function AgentMessageDisclosure({
   kind,
   label,
   onExpandedChange,
+  scrollViewportRef,
   status,
   title,
 }: {
@@ -456,6 +493,7 @@ function AgentMessageDisclosure({
   kind: 'details' | 'thinking' | 'tool'
   label?: string
   onExpandedChange: (nextExpanded: boolean) => void
+  scrollViewportRef?: Ref<HTMLDivElement>
   status?: AgentSidebarMessageStatus
   title: string
 }) {
@@ -503,6 +541,7 @@ function AgentMessageDisclosure({
                   className={`agent-message-disclosure-scroll agent-message-disclosure-scroll-${kind}`}
                   contentClassName={`agent-message-disclosure-scroll-content agent-message-disclosure-scroll-content-${kind}`}
                   viewportClassName={`agent-message-disclosure-scroll-viewport agent-message-disclosure-scroll-viewport-${kind}`}
+                  viewportRef={scrollViewportRef}
                 >
                   {children}
                 </AppScrollArea>
@@ -615,13 +654,15 @@ function AgentMessageBubble({
     && (message.title === 'Compaction summary' || message.title === 'Branch summary')
   const messageStatus = getMessageStatus(message)
   const shouldAutoExpandThinking = hasThinking && Boolean(message.isThinkingStreaming)
+  const thinkingViewportRef = useRef<HTMLDivElement | null>(null)
+  const shouldStickThinkingToBottomRef = useRef(true)
   const [isToolExpanded, setIsToolExpanded] = useState(false)
-  const [isThinkingExpanded, setIsThinkingExpanded] = useDebouncedAutoExpandedState({
+  const [isThinkingExpanded, setIsThinkingExpanded] = useAutoDisclosureState({
     collapseDelayMs: AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS,
     expandDelayMs: AGENT_THINKING_AUTO_EXPAND_DELAY_MS,
     initialExpanded: false,
     minExpandedMs: AGENT_THINKING_MIN_EXPANDED_MS,
-    nextExpanded: shouldAutoExpandThinking,
+    nextAutoExpanded: shouldAutoExpandThinking,
     stateKey: message.id,
   })
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(Boolean(message.isError))
@@ -633,6 +674,48 @@ function AgentMessageBubble({
 
     setIsDetailsExpanded(Boolean(message.isError))
   }, [isCollapsibleSystemMessage, message.id, message.isError])
+
+  useEffect(() => {
+    shouldStickThinkingToBottomRef.current = true
+  }, [message.id])
+
+  useEffect(() => {
+    const currentViewport = thinkingViewportRef.current
+    if (!currentViewport || !isThinkingExpanded) {
+      return
+    }
+
+    function updateStickiness(viewport: HTMLDivElement) {
+      const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+      shouldStickThinkingToBottomRef.current = distanceFromBottom <= AGENT_THINKING_SCROLL_STICKY_THRESHOLD_PX
+    }
+
+    updateStickiness(currentViewport)
+    const handleScroll = (event: Event) => {
+      if (event.currentTarget instanceof HTMLDivElement) {
+        updateStickiness(event.currentTarget)
+      }
+    }
+
+    currentViewport.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => {
+      currentViewport.removeEventListener('scroll', handleScroll)
+    }
+  }, [isThinkingExpanded, message.id])
+
+  useLayoutEffect(() => {
+    if (!message.isThinkingStreaming || !isThinkingExpanded || !shouldStickThinkingToBottomRef.current) {
+      return
+    }
+
+    const viewport = thinkingViewportRef.current
+    if (!viewport) {
+      return
+    }
+
+    viewport.scrollTop = viewport.scrollHeight
+  }, [isThinkingExpanded, message.isThinkingStreaming, message.thinkingText])
 
   if (isToolMessage) {
     return (
@@ -685,6 +768,7 @@ function AgentMessageBubble({
             expanded={isThinkingExpanded}
             kind='thinking'
             onExpandedChange={setIsThinkingExpanded}
+            scrollViewportRef={thinkingViewportRef}
             title='Thinking'
           >
             <AgentMarkdown onOpenWorkspaceFile={onOpenWorkspaceFile} text={message.thinkingText} workspacePath={workspacePath} />
