@@ -68,6 +68,9 @@ const MARKDOWN_PLUGINS = [remarkGfm]
 const AGENT_COMPOSER_MENU_MAX_HEIGHT = 224
 const AGENT_COMPOSER_MENU_ROW_HEIGHT = 43
 const AGENT_COMPOSER_MENU_HEIGHT_BUFFER = 2
+const AGENT_THINKING_AUTO_EXPAND_DELAY_MS = 600
+const AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS = 180
+const AGENT_THINKING_MIN_EXPANDED_MS = 420
 const MAX_VISIBLE_MESSAGE_FILE_CHIPS = 6
 
 const emptyAgentState: AgentWorkspaceState = {
@@ -245,6 +248,97 @@ function getToolStatusLabel(status: AgentSidebarMessageStatus) {
   }
 }
 
+function useDebouncedAutoExpandedState({
+  collapseDelayMs = 0,
+  expandDelayMs = 0,
+  initialExpanded,
+  minExpandedMs = 0,
+  nextExpanded,
+  stateKey,
+}: {
+  collapseDelayMs?: number
+  expandDelayMs?: number
+  initialExpanded: boolean
+  minExpandedMs?: number
+  nextExpanded: boolean
+  stateKey: string
+}) {
+  const [isExpanded, setIsExpanded] = useState(initialExpanded)
+  const expandedRef = useRef(initialExpanded)
+  const lastExpandedAtRef = useRef<number | null>(initialExpanded ? Date.now() : null)
+  const previousExpandedRef = useRef(initialExpanded)
+  const timerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    expandedRef.current = isExpanded
+  }, [isExpanded])
+
+  useEffect(() => {
+    if (previousExpandedRef.current === isExpanded) {
+      return
+    }
+
+    previousExpandedRef.current = isExpanded
+    lastExpandedAtRef.current = isExpanded ? Date.now() : null
+  }, [isExpanded])
+
+  useEffect(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+
+    expandedRef.current = initialExpanded
+    previousExpandedRef.current = initialExpanded
+    lastExpandedAtRef.current = initialExpanded ? Date.now() : null
+    setIsExpanded(initialExpanded)
+  }, [initialExpanded, stateKey])
+
+  useEffect(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+
+    if (expandedRef.current === nextExpanded) {
+      return
+    }
+
+    const delayMs = nextExpanded ? expandDelayMs : collapseDelayMs
+    const minVisibleRemainingMs = !nextExpanded && expandedRef.current && lastExpandedAtRef.current !== null
+      ? Math.max(0, minExpandedMs - (Date.now() - lastExpandedAtRef.current))
+      : 0
+    const effectiveDelayMs = Math.max(delayMs, minVisibleRemainingMs)
+
+    if (effectiveDelayMs <= 0) {
+      expandedRef.current = nextExpanded
+      setIsExpanded(nextExpanded)
+      return
+    }
+
+    timerRef.current = window.setTimeout(() => {
+      expandedRef.current = nextExpanded
+      setIsExpanded(nextExpanded)
+      timerRef.current = null
+    }, effectiveDelayMs)
+
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [collapseDelayMs, expandDelayMs, minExpandedMs, nextExpanded, stateKey])
+
+  useEffect(() => () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+    }
+  }, [])
+
+  return [isExpanded, setIsExpanded] as const
+}
+
 function AgentMarkdown({
   onOpenWorkspaceFile,
   text,
@@ -367,6 +461,7 @@ function AgentMessageDisclosure({
 }) {
   const displayTitle = formatDisclosureTitle(title)
   const statusIcon = status ? getMessageStatusIcon(status) : null
+  const shouldUseScrollArea = kind === 'thinking' || kind === 'tool'
 
   return (
     <Disclosure
@@ -403,7 +498,15 @@ function AgentMessageDisclosure({
 
           <Disclosure.Content>
             <Disclosure.Body className={`agent-message-disclosure-body agent-message-disclosure-body-${kind}`}>
-              {children}
+              {shouldUseScrollArea ? (
+                <AppScrollArea
+                  className={`agent-message-disclosure-scroll agent-message-disclosure-scroll-${kind}`}
+                  contentClassName={`agent-message-disclosure-scroll-content agent-message-disclosure-scroll-content-${kind}`}
+                  viewportClassName={`agent-message-disclosure-scroll-viewport agent-message-disclosure-scroll-viewport-${kind}`}
+                >
+                  {children}
+                </AppScrollArea>
+              ) : children}
             </Disclosure.Body>
           </Disclosure.Content>
         </>
@@ -511,35 +614,17 @@ function AgentMessageBubble({
   const isCollapsibleSystemMessage = (message.kind === 'system' || message.kind === 'custom')
     && (message.title === 'Compaction summary' || message.title === 'Branch summary')
   const messageStatus = getMessageStatus(message)
-  const [isToolExpanded, setIsToolExpanded] = useState(messageStatus === 'error' || messageStatus === 'running')
-  const [isThinkingExpanded, setIsThinkingExpanded] = useState(Boolean(message.isThinkingStreaming))
+  const shouldAutoExpandThinking = hasThinking && Boolean(message.isThinkingStreaming)
+  const [isToolExpanded, setIsToolExpanded] = useState(false)
+  const [isThinkingExpanded, setIsThinkingExpanded] = useDebouncedAutoExpandedState({
+    collapseDelayMs: AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS,
+    expandDelayMs: AGENT_THINKING_AUTO_EXPAND_DELAY_MS,
+    initialExpanded: false,
+    minExpandedMs: AGENT_THINKING_MIN_EXPANDED_MS,
+    nextExpanded: shouldAutoExpandThinking,
+    stateKey: message.id,
+  })
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(Boolean(message.isError))
-
-  useEffect(() => {
-    if (!isToolMessage) {
-      return
-    }
-
-    if (messageStatus === 'running' || messageStatus === 'error') {
-      setIsToolExpanded(true)
-      return
-    }
-
-    setIsToolExpanded(false)
-  }, [isToolMessage, message.id, messageStatus])
-
-  useEffect(() => {
-    if (!hasThinking) {
-      return
-    }
-
-    if (message.isThinkingStreaming) {
-      setIsThinkingExpanded(true)
-      return
-    }
-
-    setIsThinkingExpanded(false)
-  }, [hasThinking, message.id, message.isThinkingStreaming])
 
   useEffect(() => {
     if (!isCollapsibleSystemMessage) {
@@ -1048,7 +1133,15 @@ export function AgentSidebar({
         setDraftAssistant('')
         setDraftThinking('')
         setIsThinkingStreaming(false)
-        setLiveTools([])
+        setLiveTools((currentTools) => {
+          const persistedToolIds = new Set(
+            (event.state.activeSession?.messages ?? [])
+              .filter((message) => message.kind === 'tool')
+              .map((message) => message.id),
+          )
+
+          return currentTools.filter((tool) => tool.status === 'running' || !persistedToolIds.has(tool.id))
+        })
         setActiveComposerMenu(null)
         return
       }
@@ -1309,17 +1402,39 @@ export function AgentSidebar({
 
   const renderedMessages = useMemo(() => {
     const persistedMessages = agentState.activeSession?.messages ?? []
-    const toolMessages: AgentSidebarMessage[] = liveTools.map((tool) => ({
-      id: `live-tool-${tool.id}`,
-      isError: tool.isError,
-      kind: 'tool',
-      status: tool.status,
-      text: tool.summary,
-      timestamp: Date.now(),
-      title: tool.name,
-    }))
+    const nextMessages = [...persistedMessages]
+    const toolMessageIndices = new Map<string, number>()
 
-    const nextMessages = [...persistedMessages, ...toolMessages]
+    nextMessages.forEach((message, index) => {
+      if (message.kind === 'tool') {
+        toolMessageIndices.set(message.id, index)
+      }
+    })
+
+    liveTools.forEach((tool) => {
+      const liveToolMessage: AgentSidebarMessage = {
+        id: tool.id,
+        isError: tool.isError,
+        kind: 'tool',
+        status: tool.status,
+        text: tool.summary,
+        timestamp: Date.now(),
+        title: tool.name,
+      }
+      const existingIndex = toolMessageIndices.get(tool.id)
+
+      if (existingIndex === undefined) {
+        toolMessageIndices.set(tool.id, nextMessages.length)
+        nextMessages.push(liveToolMessage)
+        return
+      }
+
+      nextMessages[existingIndex] = {
+        ...nextMessages[existingIndex],
+        ...liveToolMessage,
+        sessionEntryId: nextMessages[existingIndex].sessionEntryId,
+      }
+    })
 
     if (draftAssistant.trim() || draftThinking.trim()) {
       nextMessages.push({

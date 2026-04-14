@@ -104,6 +104,7 @@ describe('agent session serialization', () => {
         id: 'tool-call-1',
         kind: 'tool',
         sessionEntryId: 'assistant-2',
+        status: 'running',
         title: 'write',
       }),
     ])

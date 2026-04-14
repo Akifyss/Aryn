@@ -484,7 +484,7 @@ export function serializeSessionEntries(entries: SessionEntry[]) {
               const toolMessage: SerializedBranchMessage = {
                 id: toolCall.id || `tool-call-${entry.id}-${toolIndex}`,
                 kind: 'tool',
-                status: 'done',
+                status: 'running',
                 text: formatToolMessageText(toolCall.arguments) || 'Tool was called without arguments.',
                 timestamp,
                 title: toolCall.name,

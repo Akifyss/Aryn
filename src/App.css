@@ -3573,6 +3573,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   --agent-pill-gap: 6px;
   --agent-pill-font-size: 11px;
   --agent-pill-icon-size: 16px;
+  --agent-disclosure-content-max-height: min(360px, 40vh);
 }
 
 .agent-message.is-error {
@@ -3767,6 +3768,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-message-disclosure-body {
   min-width: 0;
+  min-height: 0;
   margin-left: 17px;
   padding: 2px 0 4px 18px;
   border-left: 1px solid color-mix(in oklab, var(--outline) 55%, transparent);
@@ -3780,12 +3782,37 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-message-disclosure-body-tool {
   margin-left: 0;
-  padding: 10px 12px;
+  padding: 0;
   border-left: 0;
   border: 1px solid color-mix(in oklab, var(--outline) 50%, transparent);
   border-radius: 14px;
   background: var(--surface);
   color: var(--muted);
+  overflow: hidden;
+}
+
+.agent-message-disclosure-scroll {
+  min-width: 0;
+  min-height: 0;
+}
+
+.agent-message-disclosure-scroll-viewport {
+  height: auto;
+  max-height: var(--agent-disclosure-content-max-height);
+  overscroll-behavior: contain;
+}
+
+.agent-message-disclosure-scroll-tool {
+  --app-scroll-area-scrollbar-gap: 0px;
+}
+
+.agent-message-disclosure-scroll-content {
+  min-width: 0;
+  padding-right: 8px;
+}
+
+.agent-message-disclosure-scroll-content-tool {
+  padding: 10px 12px 10px 12px;
 }
 
 .agent-message-thinking {
