@@ -26,6 +26,7 @@ import {
 } from '@/components/file-change-visuals'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
 import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
+import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
 import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
 import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-changes'
@@ -244,16 +245,42 @@ function getToolStatusLabel(status: AgentSidebarMessageStatus) {
   }
 }
 
-function AgentMarkdown({ text }: { text: string }) {
+function AgentMarkdown({
+  onOpenWorkspaceFile,
+  text,
+  workspacePath,
+}: {
+  onOpenWorkspaceFile?: (filePath: string) => void
+  text: string
+  workspacePath: string | null
+}) {
   return (
     <div className='agent-markdown'>
       <ReactMarkdown
         components={{
-          a: ({ href, children }) => (
-            <a href={href} rel='noreferrer' target='_blank'>
-              {children}
-            </a>
-          ),
+          a: ({ href, children }) => {
+            const workspaceFilePath = resolveWorkspaceMessageLink(workspacePath, href)
+
+            if (workspaceFilePath && onOpenWorkspaceFile) {
+              return (
+                <a
+                  href={href}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    onOpenWorkspaceFile(workspaceFilePath)
+                  }}
+                >
+                  {children}
+                </a>
+              )
+            }
+
+            return (
+              <a href={href} rel='noreferrer' target='_blank'>
+                {children}
+              </a>
+            )
+          },
         }}
         remarkPlugins={MARKDOWN_PLUGINS}
       >
@@ -472,8 +499,12 @@ function AgentMessageFileChips({
 
 function AgentMessageBubble({
   message,
+  onOpenWorkspaceFile,
+  workspacePath,
 }: {
   message: AgentSidebarMessage
+  onOpenWorkspaceFile?: (filePath: string) => void
+  workspacePath: string | null
 }) {
   const isToolMessage = message.kind === 'tool'
   const hasThinking = message.kind === 'assistant' && Boolean(message.thinkingText)
@@ -529,7 +560,7 @@ function AgentMessageBubble({
         status={messageStatus}
         title={message.title ?? 'Tool'}
       >
-        <AgentMarkdown text={message.text} />
+        <AgentMarkdown onOpenWorkspaceFile={onOpenWorkspaceFile} text={message.text} workspacePath={workspacePath} />
       </AgentMessageDisclosure>
     )
   }
@@ -543,7 +574,7 @@ function AgentMessageBubble({
         onExpandedChange={setIsDetailsExpanded}
         title={message.title ?? message.kind}
       >
-        <AgentMarkdown text={message.text} />
+        <AgentMarkdown onOpenWorkspaceFile={onOpenWorkspaceFile} text={message.text} workspacePath={workspacePath} />
       </AgentMessageDisclosure>
     )
   }
@@ -571,10 +602,12 @@ function AgentMessageBubble({
             onExpandedChange={setIsThinkingExpanded}
             title='Thinking'
           >
-            <AgentMarkdown text={message.thinkingText} />
+            <AgentMarkdown onOpenWorkspaceFile={onOpenWorkspaceFile} text={message.thinkingText} workspacePath={workspacePath} />
           </AgentMessageDisclosure>
         ) : null}
-        {message.text.trim() ? <AgentMarkdown text={message.text} /> : null}
+        {message.text.trim() ? (
+          <AgentMarkdown onOpenWorkspaceFile={onOpenWorkspaceFile} text={message.text} workspacePath={workspacePath} />
+        ) : null}
       </div>
     </article>
   )
@@ -1808,7 +1841,13 @@ export function AgentSidebar({
 
             return (
               <div key={message.id} className='agent-message-stack'>
-                <AgentMessageBubble message={message} />
+                <AgentMessageBubble
+                  message={message}
+                  onOpenWorkspaceFile={(filePath) => {
+                    void onOpenMessageFile?.(filePath, 'updated')
+                  }}
+                  workspacePath={workspacePath}
+                />
                 {fileChanges.length > 0 ? (
                   <AgentMessageFileChips
                     fileChanges={fileChanges}

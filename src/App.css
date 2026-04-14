@@ -3922,12 +3922,12 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-markdown a {
   color: var(--accent);
-  text-decoration: underline;
+  text-decoration: none;
   text-underline-offset: 0.14em;
 }
 
 .agent-markdown a:hover {
-  text-decoration: none;
+  text-decoration: underline;
   opacity: 0.8;
 }
 

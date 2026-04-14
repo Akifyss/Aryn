@@ -62,8 +62,8 @@ type EditorLeaf =
     }
 
 const MENTION_MENU_MAX_HEIGHT = 264
-const MENTION_MENU_ROW_HEIGHT = 38
-const MENTION_MENU_PADDING = 12
+const MENTION_MENU_ROW_HEIGHT = 30
+const MENTION_MENU_PADDING = 10
 const MENTION_MENU_EMPTY_HEIGHT = 42
 
 function buildActiveMentionKey(activeMention: ActiveComposerMentionQuery | null) {
