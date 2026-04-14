@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { AppScrollArea } from '@/components/app-scroll-area'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import type {
   ActiveComposerMentionQuery,
@@ -59,6 +60,11 @@ type EditorLeaf =
       length: number
       type: 'mention'
     }
+
+const MENTION_MENU_MAX_HEIGHT = 280
+const MENTION_MENU_ROW_HEIGHT = 48
+const MENTION_MENU_PADDING = 12
+const MENTION_MENU_EMPTY_HEIGHT = 48
 
 function buildActiveMentionKey(activeMention: ActiveComposerMentionQuery | null) {
   if (!activeMention) {
@@ -326,6 +332,10 @@ function modelsEqual(left: ComposerModel, right: ComposerModel) {
   })
 }
 
+function editorContentMatchesModel(editor: HTMLElement, value: string, mentions: ComposerMentionToken[]) {
+  return modelsEqual(parseEditorContent(editor), { mentions, value })
+}
+
 export function AgentComposerMentionInput({
   disabled = false,
   iconTheme,
@@ -371,6 +381,12 @@ export function AgentComposerMentionInput({
     && activeMentionKey !== dismissedMentionKey,
   )
   const shouldShowPlaceholder = !value && !isComposing
+  const mentionMenuHeight = useMemo(
+    () => mentionResults.length > 0
+      ? Math.min((mentionResults.length * MENTION_MENU_ROW_HEIGHT) + MENTION_MENU_PADDING, MENTION_MENU_MAX_HEIGHT)
+      : MENTION_MENU_EMPTY_HEIGHT,
+    [mentionResults.length],
+  )
 
   useLayoutEffect(() => {
     const editor = editorRef.current
@@ -379,17 +395,21 @@ export function AgentComposerMentionInput({
       return
     }
 
-    renderEditorContent(editor, value, normalizedMentions)
-
-    if (pendingSelectionRef.current) {
-      const nextSelection = pendingSelectionRef.current
-      pendingSelectionRef.current = null
-      if (document.activeElement !== editor) {
-        editor.focus()
-      }
-      restoreSelection(editor, nextSelection)
-      setSelection(nextSelection)
+    if (!editorContentMatchesModel(editor, value, normalizedMentions)) {
+      renderEditorContent(editor, value, normalizedMentions)
     }
+
+    if (!pendingSelectionRef.current) {
+      return
+    }
+
+    const nextSelection = pendingSelectionRef.current
+    pendingSelectionRef.current = null
+    if (document.activeElement !== editor) {
+      editor.focus()
+    }
+    restoreSelection(editor, nextSelection)
+    setSelection(nextSelection)
   }, [isComposing, normalizedMentions, value])
 
   useEffect(() => {
@@ -456,10 +476,10 @@ export function AgentComposerMentionInput({
 
   function emitModel(nextModel: ComposerModel, nextSelection?: ComposerSelectionRange) {
     setDismissedMentionKey(null)
-    onChange(nextModel)
     if (nextSelection) {
       queueSelection(nextSelection)
     }
+    onChange(nextModel)
   }
 
   function syncSelectionFromEditor() {
@@ -618,50 +638,57 @@ export function AgentComposerMentionInput({
   return (
     <div className='agent-composer-input-shell'>
       {shouldShowMentionMenu ? (
-        <div ref={menuRef} className='agent-composer-mention-menu'>
-          <div className='agent-composer-mention-menu-list' role='listbox' aria-label='Project files'>
-            {mentionResults.length > 0 ? mentionResults.map((item, index) => {
-              const isActive = index === selectedIndex
+        <div className='agent-composer-mention-menu'>
+          <AppScrollArea
+            ref={menuRef}
+            className='agent-composer-mention-menu-scroll'
+            contentClassName='agent-composer-mention-menu-scroll-content'
+            rootStyle={{ height: `${mentionMenuHeight}px` }}
+          >
+            <div className='agent-composer-mention-menu-list' role='listbox' aria-label='Project files'>
+              {mentionResults.length > 0 ? mentionResults.map((item, index) => {
+                const isActive = index === selectedIndex
 
-              return (
-                <button
-                  key={item.id}
-                  type='button'
-                  role='option'
-                  aria-selected={isActive}
-                  data-active={isActive ? 'true' : 'false'}
-                  className={`agent-composer-mention-option${isActive ? ' is-active' : ''}`}
-                  title={item.relativePath}
-                  onMouseDown={(mouseEvent) => {
-                    mouseEvent.preventDefault()
-                    applyMentionSelection(index)
-                  }}
-                  onMouseEnter={() => {
-                    setSelectedIndex(index)
-                  }}
-                >
-                  <span className='git-row-icon'>
-                    <WorkspaceFileIcon
-                      fileName={item.name}
-                      iconTheme={iconTheme ?? null}
-                      isClosed={item.kind === 'directory'}
-                      isFolder={item.kind === 'directory'}
-                      nodeLabel={item.name}
-                    />
-                  </span>
+                return (
+                  <button
+                    key={item.id}
+                    type='button'
+                    role='option'
+                    aria-selected={isActive}
+                    data-active={isActive ? 'true' : 'false'}
+                    className={`agent-composer-mention-option${isActive ? ' is-active' : ''}`}
+                    title={item.relativePath}
+                    onMouseDown={(mouseEvent) => {
+                      mouseEvent.preventDefault()
+                      applyMentionSelection(index)
+                    }}
+                    onMouseEnter={() => {
+                      setSelectedIndex(index)
+                    }}
+                  >
+                    <span className='git-row-icon'>
+                      <WorkspaceFileIcon
+                        fileName={item.name}
+                        iconTheme={iconTheme ?? null}
+                        isClosed={item.kind === 'directory'}
+                        isFolder={item.kind === 'directory'}
+                        nodeLabel={item.name}
+                      />
+                    </span>
 
-                  <span className='agent-composer-mention-option-inline'>
-                    <span className='panel-tree-label'>{item.displayName}</span>
-                    {item.displayPath ? (
-                      <span className='git-change-meta'>{item.displayPath}</span>
-                    ) : null}
-                  </span>
-                </button>
-              )
-            }) : (
-              <div className='agent-composer-mention-empty'>No matching files or folders</div>
-            )}
-          </div>
+                    <span className='agent-composer-mention-option-inline'>
+                      <span className='panel-tree-label'>{item.displayName}</span>
+                      {item.displayPath ? (
+                        <span className='git-change-meta'>{item.displayPath}</span>
+                      ) : null}
+                    </span>
+                  </button>
+                )
+              }) : (
+                <div className='agent-composer-mention-empty'>No matching files or folders</div>
+              )}
+            </div>
+          </AppScrollArea>
         </div>
       ) : null}
 

@@ -4198,11 +4198,19 @@ body.workspace-tree-dragging .workspace-tree-row {
   backdrop-filter: blur(22px);
 }
 
+.agent-composer-mention-menu-scroll {
+  width: 100%;
+  --app-scroll-area-scrollbar-gap: 4px;
+  --app-scroll-area-scrollbar-thickness: 8px;
+}
+
+.agent-composer-mention-menu-scroll-content {
+  min-width: 100%;
+}
+
 .agent-composer-mention-menu-list {
   display: flex;
   flex-direction: column;
-  max-height: 280px;
-  overflow: auto;
   padding: 6px;
 }
 
