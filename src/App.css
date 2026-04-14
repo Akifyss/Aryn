@@ -4211,20 +4211,22 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-composer-mention-menu-list {
   display: flex;
   flex-direction: column;
-  padding: 6px;
+  padding: 5px;
 }
 
 .agent-composer-mention-option {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  min-height: 34px;
-  padding: 7px 10px;
+  min-height: 30px;
+  padding: 5px 9px;
   border: 0;
   border-radius: 9px;
   background: transparent;
   color: inherit;
+  font-size: 13px;
+  line-height: 1.35;
   text-align: left;
   transition: background-color 120ms ease;
 }
@@ -4246,12 +4248,15 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-composer-mention-option-inline {
   display: inline-flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   flex: 1;
 }
 
 .agent-composer-mention-option-inline .panel-tree-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4259,6 +4264,8 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-composer-mention-option-inline .git-change-meta {
+  font-size: 11px;
+  line-height: 1.35;
   width: auto;
   min-width: 0;
   overflow: hidden;
@@ -4267,7 +4274,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-composer-mention-empty {
-  padding: 12px 10px;
+  padding: 10px 9px;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;

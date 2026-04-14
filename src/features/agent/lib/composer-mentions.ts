@@ -144,7 +144,8 @@ function getMentionItemScore(item: ComposerMentionItem, query: string) {
   const normalizedDisplayName = normalizeSearchValue(item.displayName)
   const queryTerms = normalizedQuery.split(/[/\s]+/).filter(Boolean)
 
-  let score = item.kind === 'directory' ? 8 : 0
+  let score = 0
+  let didMatch = false
 
   if (
     normalizedName === normalizedQuery
@@ -152,23 +153,29 @@ function getMentionItemScore(item: ComposerMentionItem, query: string) {
     || normalizedRelativePath === normalizedQuery
   ) {
     score += 1_000
+    didMatch = true
   }
 
   if (normalizedName.startsWith(normalizedQuery) || normalizedDisplayName.startsWith(normalizedQuery)) {
     score += 600
+    didMatch = true
   } else if (normalizedName.includes(normalizedQuery) || normalizedDisplayName.includes(normalizedQuery)) {
     score += 420
+    didMatch = true
   }
 
   if (normalizedRelativePath.startsWith(normalizedQuery)) {
     score += 480
+    didMatch = true
   } else if (normalizedRelativePath.includes(normalizedQuery)) {
     score += 320
+    didMatch = true
   }
 
   const matchingSegmentIndex = item.searchSegments.findIndex((segment) => segment.startsWith(normalizedQuery))
   if (matchingSegmentIndex >= 0) {
     score += 360 - Math.min(matchingSegmentIndex, 24)
+    didMatch = true
   }
 
   if (
@@ -176,6 +183,11 @@ function getMentionItemScore(item: ComposerMentionItem, query: string) {
     && queryTerms.every((term) => term.length > 0 && item.searchValue.includes(term))
   ) {
     score += 240
+    didMatch = true
+  }
+
+  if (didMatch && item.kind === 'directory') {
+    score += 8
   }
 
   return score

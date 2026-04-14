@@ -49,6 +49,43 @@ const tree: WorkspaceNode[] = [
   },
 ]
 
+const searchTree: WorkspaceNode[] = [
+  {
+    children: [
+      {
+        kind: 'file',
+        name: 'worldview_cn.txt',
+        path: '/workspace/project/docs/worldview_cn.txt',
+      },
+      {
+        kind: 'file',
+        name: 'worldview_en.txt',
+        path: '/workspace/project/docs/worldview_en.txt',
+      },
+    ],
+    kind: 'directory',
+    name: 'docs',
+    path: '/workspace/project/docs',
+  },
+  {
+    kind: 'file',
+    name: 'workspace.json',
+    path: '/workspace/project/.obsidian/workspace.json',
+  },
+  {
+    children: [
+      {
+        kind: 'directory',
+        name: 'plugins',
+        path: '/workspace/project/.obsidian/plugins',
+      },
+    ],
+    kind: 'directory',
+    name: '.obsidian',
+    path: '/workspace/project/.obsidian',
+  },
+]
+
 describe('composer mentions', () => {
   it('converts absolute workspace paths to relative paths', () => {
     expect(toWorkspaceRelativePath(workspacePath, '/workspace/project/src/App.tsx')).toBe('src/App.tsx')
@@ -79,6 +116,37 @@ describe('composer mentions', () => {
     expect(results.slice(0, 2).map((item) => item.relativePath)).toEqual([
       'src/App.tsx',
       'src/components/app-titlebar.tsx',
+    ])
+  })
+
+  it('excludes unrelated directories from non-empty mention searches', () => {
+    const items = flattenWorkspaceNodesForMentions(searchTree, workspacePath)
+    const results = searchComposerMentionItems(items, 'wor')
+
+    expect(results.map((item) => item.relativePath)).toEqual([
+      'docs/worldview_cn.txt',
+      'docs/worldview_en.txt',
+      '.obsidian/workspace.json',
+    ])
+  })
+
+  it('keeps matching directories slightly ahead of files when scores tie', () => {
+    const items = flattenWorkspaceNodesForMentions([
+      {
+        kind: 'directory',
+        name: 'world',
+        path: '/workspace/project/world',
+      },
+      {
+        kind: 'file',
+        name: 'world.md',
+        path: '/workspace/project/world.md',
+      },
+    ], workspacePath)
+
+    expect(searchComposerMentionItems(items, 'world').map((item) => item.relativePath)).toEqual([
+      'world',
+      'world.md',
     ])
   })
 
