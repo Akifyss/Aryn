@@ -4170,9 +4170,12 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-composer-mention-token {
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
+  box-sizing: border-box;
   padding: 0 4px;
+  line-height: calc(1.65em - 2px);
+  vertical-align: baseline;
+  white-space: nowrap;
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface-secondary) 88%, var(--accent) 12%);
   border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);

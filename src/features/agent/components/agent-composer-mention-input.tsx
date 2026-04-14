@@ -370,6 +370,7 @@ export function AgentComposerMentionInput({
     && activeMention
     && activeMentionKey !== dismissedMentionKey,
   )
+  const shouldShowPlaceholder = !value && !isComposing
 
   useLayoutEffect(() => {
     const editor = editorRef.current
@@ -664,7 +665,7 @@ export function AgentComposerMentionInput({
         </div>
       ) : null}
 
-      {!value ? (
+      {shouldShowPlaceholder ? (
         <div className='agent-composer-placeholder' aria-hidden='true'>
           {placeholder}
         </div>
