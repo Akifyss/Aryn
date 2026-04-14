@@ -1,5 +1,5 @@
 import { type CSSProperties, FormEvent, KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Button, Chip, Disclosure, Input, TextArea } from '@heroui/react'
+import { Button, Chip, Disclosure, Input } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import {
   AiLine,
@@ -24,6 +24,9 @@ import {
   FileChangeStatusBadge,
   WorkspaceFileIcon,
 } from '@/components/file-change-visuals'
+import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
+import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
+import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
 import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-changes'
 import type {
@@ -34,6 +37,7 @@ import type {
   AgentSidebarMessageStatus,
   AgentWorkspaceState,
 } from '@/features/agent/types'
+import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
 
 type AgentSidebarProps = {
   iconTheme?: WorkspaceIconTheme | null
@@ -49,6 +53,11 @@ type LiveToolState = {
   status: AgentSidebarMessageStatus
   summary: string
   isError?: boolean
+}
+
+type ComposerState = {
+  mentions: ComposerMentionToken[]
+  value: string
 }
 
 type AuthProviderKey = 'google' | 'openai' | 'openrouter'
@@ -100,6 +109,11 @@ const emptyAgentState: AgentWorkspaceState = {
     workspacePath: null,
   },
   sessions: [],
+}
+
+const emptyComposerState: ComposerState = {
+  mentions: [],
+  value: '',
 }
 
 function formatSessionTime(value: string) {
@@ -895,11 +909,12 @@ export function AgentSidebar({
   onWorkspaceStateChange,
   workspacePath,
 }: AgentSidebarProps) {
+  const workspaceTree = useWorkspaceStore((state) => state.tree)
   const defaultModelSelection = parseModelSelection(null)
   const [composerHeight, setComposerHeight] = useState(172)
   const [hasLoadedComposerHeight, setHasLoadedComposerHeight] = useState(false)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
-  const [composerValue, setComposerValue] = useState('')
+  const [composerState, setComposerState] = useState<ComposerState>(emptyComposerState)
   const [modelInputValue, setModelInputValue] = useState(defaultModelSelection.modelId)
   const [selectedProviderValue, setSelectedProviderValue] = useState(defaultModelSelection.provider)
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({
@@ -1142,7 +1157,7 @@ export function AgentSidebar({
   useEffect(() => {
     if (!workspacePath) {
       setAgentState(emptyAgentState)
-      setComposerValue('')
+      setComposerState(emptyComposerState)
       setSelectedProviderValue(defaultModelSelection.provider)
       setModelInputValue(defaultModelSelection.modelId)
       setModelDrafts({
@@ -1393,7 +1408,8 @@ export function AgentSidebar({
   }
 
   async function submitComposerPrompt(streamingBehavior?: 'steer' | 'followUp') {
-    const trimmedPrompt = composerValue.trim()
+    const serializedPrompt = serializeComposerText(composerState.value, composerState.mentions)
+    const trimmedPrompt = serializedPrompt.trim()
 
     if (!workspacePath || !trimmedPrompt) {
       return
@@ -1408,7 +1424,7 @@ export function AgentSidebar({
       }
 
       await window.appApi.sendAgentPrompt(trimmedPrompt, streamingBehavior)
-      setComposerValue('')
+      setComposerState(emptyComposerState)
       setDraftAssistant('')
       setLiveTools([])
     } catch (error) {
@@ -1421,7 +1437,7 @@ export function AgentSidebar({
     await submitComposerPrompt(agentState.runtime.isStreaming ? 'steer' : undefined)
   }
 
-  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       void submitComposerPrompt(event.altKey ? 'followUp' : agentState.runtime.isStreaming ? 'steer' : undefined)
@@ -1498,7 +1514,11 @@ export function AgentSidebar({
     modelSuggestions.length * AGENT_COMPOSER_MENU_ROW_HEIGHT + AGENT_COMPOSER_MENU_HEIGHT_BUFFER,
   )
   const modelPlaceholder = 'model'
-  const canSend = Boolean(workspacePath && composerValue.trim() && agentState.runtime.hasConfiguredModels)
+  const canSend = Boolean(
+    workspacePath
+    && serializeComposerText(composerState.value, composerState.mentions).trim()
+    && agentState.runtime.hasConfiguredModels,
+  )
   const statusMessage = !workspacePath
     ? 'Open a workspace to start.'
     : !agentState.runtime.hasConfiguredModels
@@ -1835,18 +1855,17 @@ export function AgentSidebar({
             }}
           />
 
-          <TextArea
+          <AgentComposerMentionInput
             aria-label='Prompt Pi Agent'
-            className='agent-composer-input'
             disabled={!workspacePath || isLoading}
-            onChange={(event) => {
-              setComposerValue(event.target.value)
-            }}
-            onKeyDown={handleComposerKeyDown}
+            iconTheme={iconTheme}
+            mentions={composerState.mentions}
+            onChange={setComposerState}
+            onSubmitShortcut={handleComposerKeyDown}
             placeholder={workspacePath ? 'Message' : 'Open a folder first.'}
-            rows={3}
-            value={composerValue}
-            variant='secondary'
+            value={composerState.value}
+            workspaceNodes={workspaceTree}
+            workspacePath={workspacePath}
           />
 
           <div ref={modelFieldRef} className='agent-composer-meta'>

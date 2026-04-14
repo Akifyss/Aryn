@@ -4116,6 +4116,152 @@ body.workspace-tree-dragging .workspace-tree-row {
   color: var(--field-placeholder);
 }
 
+.agent-composer-input-shell {
+  position: relative;
+  min-height: var(--agent-composer-height);
+  height: var(--agent-composer-height);
+}
+
+.agent-composer-editor {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: var(--agent-composer-height);
+  height: var(--agent-composer-height);
+  padding: 0;
+  margin: 0;
+  overflow: auto;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.65;
+  letter-spacing: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  tab-size: 2;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  caret-color: var(--foreground);
+}
+
+.agent-composer-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  color: var(--field-placeholder);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.agent-composer-editor[contenteditable='false'] {
+  cursor: default;
+}
+
+.agent-composer-editor::selection {
+  background: var(--color-accent-soft);
+}
+
+.agent-composer-editor::-moz-selection {
+  background: var(--color-accent-soft);
+}
+
+.agent-composer-mention-token {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-secondary) 88%, var(--accent) 12%);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--foreground);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.agent-composer-mention-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 48;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--background) 94%, var(--surface-secondary));
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(22px);
+}
+
+.agent-composer-mention-menu-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow: auto;
+  padding: 6px;
+}
+
+.agent-composer-mention-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+
+.agent-composer-mention-option:hover,
+.agent-composer-mention-option:focus-visible,
+.agent-composer-mention-option.is-active {
+  outline: none;
+  background: color-mix(in srgb, var(--surface-tertiary) 86%, var(--accent) 14%);
+}
+
+.agent-composer-mention-option-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+}
+
+.agent-composer-mention-option-inline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.agent-composer-mention-option-inline .panel-tree-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-composer-mention-option-inline .git-change-meta {
+  width: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-composer-mention-empty {
+  padding: 12px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .agent-composer-toolbar {
   display: flex;
   align-items: center;
