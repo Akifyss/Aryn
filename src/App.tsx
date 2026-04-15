@@ -46,6 +46,11 @@ import {
   supportsHtmlPreview,
   type WorkspaceFileViewMode,
 } from '@/features/workspace/lib/file-types'
+import {
+  createWorkspaceRefreshCoordinator,
+  type WorkspaceRefreshRequest,
+  type WorkspaceRefreshScheduleMode,
+} from '@/features/workspace/lib/workspace-refresh-coordinator'
 import type {
   WorkspaceIconTheme,
   WorkspaceIconThemeCatalogOption,
@@ -239,6 +244,7 @@ const SETTINGS_TAB_ID = 'app://settings'
 const SETTINGS_TAB_PATH = 'app://settings'
 const WORKSPACE_AUTO_SAVE_DELAY_MS = 1000
 const INTERNAL_SAVE_EVENT_TTL_MS = 2500
+const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
 
 type ResizePanel = 'left' | 'right'
 type PanelSurfaceMode = 'docked' | 'drawer'
@@ -590,6 +596,21 @@ function App() {
   const internalWorkspaceSavePathsRef = useRef(new Set<string>())
   const internalWorkspaceSaveTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const windowCloseRequestInFlightRef = useRef(false)
+  const currentPathRef = useRef<string | null>(currentPath)
+  const gitRepositoryStateRef = useRef<GitRepositoryState | null>(gitRepositoryState)
+  const latestGitRefreshRequestIdRef = useRef(0)
+  const latestVisibleGitRefreshRequestIdRef = useRef<number | null>(null)
+  const performWorkspaceRefreshRef = useRef<(request: Required<WorkspaceRefreshRequest>) => Promise<void>>(async () => {})
+  const workspaceRefreshCoordinatorRef = useRef<ReturnType<typeof createWorkspaceRefreshCoordinator> | null>(null)
+  currentPathRef.current = currentPath
+  gitRepositoryStateRef.current = gitRepositoryState
+
+  if (!workspaceRefreshCoordinatorRef.current) {
+    workspaceRefreshCoordinatorRef.current = createWorkspaceRefreshCoordinator({
+      debounceMs: WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS,
+      onFlush: (request) => performWorkspaceRefreshRef.current(request),
+    })
+  }
   const rootFileNames = useMemo(
     () => tree.filter((node) => node.kind === 'file').map((node) => node.name),
     [tree],
@@ -814,7 +835,7 @@ function App() {
     })
   }
 
-  async function syncOpenDiffTabs(workspacePath: string) {
+  const syncOpenDiffTabs = useCallback(async (workspacePath: string) => {
     const diffTabs = useWorkspaceStore.getState().openTabs.filter((tab): tab is WorkspaceDiffTab => tab.kind === 'diff')
 
     await Promise.all(diffTabs.map(async (tab) => {
@@ -827,7 +848,7 @@ function App() {
         }
       }
     }))
-  }
+  }, [closeTab, openDiffTab])
 
   async function persistDiffTabContent(
     tabId: string,
@@ -853,8 +874,10 @@ function App() {
     }
 
     if (currentPath) {
-      await loadTree(currentPath)
-      await refreshGitState(currentPath, { silent: true })
+      await performWorkspaceRefresh(currentPath, {
+        refreshGit: true,
+        refreshTree: true,
+      })
     }
   }
 
@@ -1013,32 +1036,78 @@ function App() {
     return false
   }
 
-  async function refreshGitState(workspacePath: string | null, options: { silent?: boolean } = {}) {
+  const refreshGitState = useCallback(async (workspacePath: string | null, options: { silent?: boolean } = {}) => {
     if (!workspacePath) {
+      latestGitRefreshRequestIdRef.current += 1
       setGitRepositoryState(null)
       return null
     }
 
+    const requestId = latestGitRefreshRequestIdRef.current + 1
+    latestGitRefreshRequestIdRef.current = requestId
+
     if (!options.silent) {
+      latestVisibleGitRefreshRequestIdRef.current = requestId
       setIsGitLoading(true)
     }
 
     try {
       const nextState = await window.appApi.getGitRepositoryState(workspacePath)
-      setGitRepositoryState(nextState)
-      setGitErrorMessage(null)
-      await syncOpenDiffTabs(workspacePath)
+
+      // Multiple refreshes can overlap during saves and external FS events.
+      // Only the latest completed request is allowed to update UI state.
+      if (latestGitRefreshRequestIdRef.current === requestId) {
+        setGitRepositoryState(nextState)
+        setGitErrorMessage(null)
+        await syncOpenDiffTabs(workspacePath)
+      }
+
       return nextState
     } catch (error) {
+      if (latestGitRefreshRequestIdRef.current !== requestId) {
+        return gitRepositoryStateRef.current
+      }
+
       const message = error instanceof Error ? error.message : 'Unable to load Git status.'
       setGitErrorMessage(message)
       return null
     } finally {
-      if (!options.silent) {
+      if (!options.silent && latestVisibleGitRefreshRequestIdRef.current === requestId) {
         setIsGitLoading(false)
+        latestVisibleGitRefreshRequestIdRef.current = null
       }
     }
+  }, [syncOpenDiffTabs])
+
+  const performWorkspaceRefresh = useCallback(async (
+    rootPath: string,
+    options: Omit<WorkspaceRefreshRequest, 'rootPath'> = {},
+  ) => {
+    const activeWorkspacePath = currentPathRef.current
+
+    if (!activeWorkspacePath || activeWorkspacePath !== rootPath) {
+      return
+    }
+
+    if (options.refreshTree) {
+      await loadTree(rootPath)
+    }
+
+    if (options.refreshGit) {
+      await refreshGitState(rootPath, { silent: options.gitSilent ?? true })
+    }
+  }, [loadTree, refreshGitState])
+
+  performWorkspaceRefreshRef.current = async (request) => {
+    await performWorkspaceRefresh(request.rootPath, request)
   }
+
+  const requestWorkspaceRefresh = useCallback((
+    request: WorkspaceRefreshRequest,
+    mode: WorkspaceRefreshScheduleMode = 'immediate',
+  ) => {
+    return workspaceRefreshCoordinatorRef.current?.request(request, mode) ?? Promise.resolve()
+  }, [])
 
   async function runGitAction<T>(label: string, action: () => Promise<T>) {
     setGitBusyLabel(label)
@@ -1120,16 +1189,17 @@ function App() {
     }
 
     if (currentPath) {
-      await loadTree(currentPath)
-      await refreshGitState(currentPath, { silent: true })
+      await performWorkspaceRefresh(currentPath, {
+        refreshGit: true,
+        refreshTree: true,
+      })
     }
   }, [
     clearInternalWorkspaceSaveMarker,
     currentPath,
-    loadTree,
     markInternalWorkspaceSave,
     markTabSaved,
-    refreshGitState,
+    performWorkspaceRefresh,
     syncTabWithDisk,
   ])
 
@@ -1538,9 +1608,11 @@ function App() {
     try {
       setIsCreatingFile(true)
       const { filePath } = await window.appApi.createWorkspaceFile(currentPath, nextRelativePath)
-      await loadTree(currentPath)
+      await performWorkspaceRefresh(currentPath, {
+        refreshGit: true,
+        refreshTree: true,
+      })
       await openFile(filePath)
-      await refreshGitState(currentPath, { silent: true })
       setStatusMessage(`${nextRelativePath} created`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to create file.'
@@ -1560,7 +1632,9 @@ function App() {
     try {
       setIsCreatingDirectory(true)
       await window.appApi.createWorkspaceDirectory(currentPath, nextRelativePath)
-      await loadTree(currentPath)
+      await performWorkspaceRefresh(currentPath, {
+        refreshTree: true,
+      })
       setStatusMessage(`${nextRelativePath} created`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to create directory.'
@@ -1677,10 +1751,12 @@ function App() {
     }
 
     const { filePath: nextFilePath } = await window.appApi.moveWorkspaceEntry(currentPath, node.path, nextRelativePath)
-    await loadTree(currentPath)
+    await performWorkspaceRefresh(currentPath, {
+      refreshGit: true,
+      refreshTree: true,
+    })
     updateOpenTabsForMovedNode(node.path, nextFilePath)
     rebaseExpandedTreePaths(node.path, nextFilePath)
-    await refreshGitState(currentPath, { silent: true })
     await syncPersistedActiveFile(currentPath)
     setStatusMessage(successMessage)
   }
@@ -1755,9 +1831,11 @@ function App() {
     }
 
     await window.appApi.deleteWorkspaceFile(currentPath, node.path)
-    await loadTree(currentPath)
+    await performWorkspaceRefresh(currentPath, {
+      refreshGit: true,
+      refreshTree: true,
+    })
     closeTabsForNode(node.path)
-    await refreshGitState(currentPath, { silent: true })
     await syncPersistedActiveFile(currentPath)
     setStatusMessage(`${node.name} deleted`)
   }
@@ -2016,12 +2094,10 @@ function App() {
       await Promise.all(changes.map(async (change) => {
         await window.appApi.discardGitChange(currentPath, change)
       }))
-      const nextState = await refreshGitState(currentPath, { silent: true })
-      if (nextState) {
-        setGitRepositoryState(nextState)
-      }
-      await loadTree(currentPath)
-      await syncOpenDiffTabs(currentPath)
+      await performWorkspaceRefresh(currentPath, {
+        refreshGit: true,
+        refreshTree: true,
+      })
       setStatusMessage(`${changes.length} changes discarded`)
     })
   }
@@ -2191,6 +2267,12 @@ function App() {
   }, [])
 
   useEffect(() => {
+    return () => {
+      workspaceRefreshCoordinatorRef.current?.dispose()
+    }
+  }, [])
+
+  useEffect(() => {
     setIsActiveEditorComposing(false)
   }, [currentEditorKind, currentFilePath, currentFileViewMode])
 
@@ -2290,16 +2372,21 @@ function App() {
         return
       }
 
-      await loadTree(currentPath)
-      await refreshGitState(currentPath, { silent: true })
+      if ((event.type === 'add' || event.type === 'change') && consumeInternalWorkspaceSave(event.path)) {
+        return
+      }
+
+      void requestWorkspaceRefresh({
+        refreshGit: true,
+        refreshTree: true,
+        rootPath: currentPath,
+      }, 'debounced').catch(() => {
+        // The workspace may have changed before the debounced refresh executes.
+      })
 
       const affectedTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.kind === 'file' && tab.filePath === event.path)
 
       if (!affectedTab) {
-        return
-      }
-
-      if ((event.type === 'add' || event.type === 'change') && consumeInternalWorkspaceSave(event.path)) {
         return
       }
 
@@ -2341,7 +2428,7 @@ function App() {
     })
 
     return unsubscribe
-  }, [closeTab, consumeInternalWorkspaceSave, currentPath, loadTree, markTabMissing, openDiffTab, refreshGitState, syncTabWithDisk])
+  }, [consumeInternalWorkspaceSave, currentPath, markTabMissing, requestWorkspaceRefresh, syncTabWithDisk])
 
   useEffect(() => {
     const unsubscribe = window.appApi.onWindowCloseRequested(() => {
@@ -2983,7 +3070,14 @@ function App() {
                   void handlePushGitChanges()
                 }}
                 onRefresh={() => {
-                  void refreshGitState(currentPath, { silent: false })
+                  if (!currentPath) {
+                    return
+                  }
+
+                  void performWorkspaceRefresh(currentPath, {
+                    gitSilent: false,
+                    refreshGit: true,
+                  })
                 }}
                 onStage={(filePaths) => {
                   void handleStageGitPaths(filePaths)
@@ -3286,7 +3380,14 @@ function App() {
                   void handlePushGitChanges()
                 }}
                 onRefresh={() => {
-                  void refreshGitState(currentPath, { silent: false })
+                  if (!currentPath) {
+                    return
+                  }
+
+                  void performWorkspaceRefresh(currentPath, {
+                    gitSilent: false,
+                    refreshGit: true,
+                  })
                 }}
                 onStage={(filePaths) => {
                   void handleStageGitPaths(filePaths)

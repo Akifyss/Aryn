@@ -12,7 +12,6 @@ import {
   Pencil2Line,
   RightLine,
   SearchLine,
-  SendPlaneLine,
   TerminalLine,
   ToolLine,
 } from '@mingcute/react'
@@ -2210,7 +2209,7 @@ export function AgentSidebar({
                   variant='ghost'
                   className='agent-send-button'
                 >
-                  <SendPlaneLine size={16} />
+                  <Icon icon='ic:round-arrow-upward' width={16} height={16} />
                 </Button>
               </div>
             </div>
