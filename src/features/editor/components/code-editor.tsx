@@ -9,7 +9,7 @@ import {
   type MonacoThemePreference,
 } from '@/features/editor/lib/monaco'
 
-type CodeEditorProps = {
+export type CodeEditorProps = {
   disabled?: boolean
   filePath: string
   onCompositionChange?: (isComposing: boolean) => void

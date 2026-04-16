@@ -15,8 +15,8 @@ import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
 import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
-import { GitDiffEditor } from '@/features/editor/components/git-diff-editor'
-import { CodeEditor } from '@/features/editor/components/code-editor'
+import { GitDiffEditorHost } from '@/features/editor/components/git-diff-editor-host'
+import { CodeEditorHost } from '@/features/editor/components/code-editor-host'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import { GitPanel } from '@/features/git/components/git-panel'
 import type {
@@ -3502,7 +3502,7 @@ function App() {
             ) : null}
 
             {activeDiffTab ? (
-              <GitDiffEditor
+              <GitDiffEditorHost
                 key={activeDiffTab.id}
                 diff={activeDiffTab.diff}
                 draftContent={activeDiffDraftContent}
@@ -3556,7 +3556,7 @@ function App() {
               (currentEditorKind === 'code' && currentFileViewMode !== 'preview')
               || (currentEditorKind === 'rich-text' && currentFileViewMode === 'code')
             ) ? (
-              <CodeEditor
+              <CodeEditorHost
                 key={activeFileTab.id}
                 disabled={false}
                 filePath={activeFileTab.filePath}

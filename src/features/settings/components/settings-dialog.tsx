@@ -2,11 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Input, ListBox, Select, Tabs } from '@heroui/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import type { AgentProviderAuthState, AgentWorkspaceState } from '@/features/agent/types'
+import {
+  DIFF_ENGINE_OPTIONS,
+  EDITOR_RUNTIME_OPTIONS,
+  resolveDiffEngineChoice,
+  resolveEditorRuntimeChoice,
+} from '@/features/editor/lib/editor-platform'
 import type { AppIconCatalogOption } from '@/features/settings/types'
 import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '@/features/workspace/types'
 import { useSettingsStore } from '@/hooks/use-settings-store'
 
-export type SettingsSectionId = 'general' | 'providers'
+export type SettingsSectionId = 'general' | 'editor' | 'providers'
 
 type SettingsViewProps = {
   activeSection: SettingsSectionId
@@ -35,11 +41,28 @@ const SETTINGS_SECTIONS: Array<{ description: string, id: SettingsSectionId, lab
     label: '外观',
   },
   {
+    description: '代码编辑运行时与 diff 引擎的路线图和稳定选项。',
+    id: 'editor',
+    label: '编辑器',
+  },
+  {
     description: '管理 Pi Agent 提供商的 API 密钥。',
     id: 'providers',
     label: '服务提供商',
   },
 ]
+
+const SETTINGS_SECTION_TITLES: Record<SettingsSectionId, string> = {
+  editor: '编辑器',
+  general: '外观',
+  providers: '服务提供商',
+}
+
+const OPTION_STABILITY_LABELS = {
+  experimental: '实验中',
+  planned: '规划中',
+  stable: '稳定',
+} as const
 
 const EMPTY_AUTH_DRAFTS: Record<AuthProviderKey, string> = {
   google: '',
@@ -80,10 +103,26 @@ export function SettingsDialog({
   onStatusMessage,
   workspacePath,
 }: SettingsViewProps) {
-  const { theme, setTheme } = useSettingsStore()
+  const {
+    diffEngine,
+    editorRuntime,
+    setDiffEngine,
+    setEditorRuntime,
+    theme,
+    setTheme,
+  } = useSettingsStore()
   const [authDrafts, setAuthDrafts] = useState<Record<AuthProviderKey, string>>(EMPTY_AUTH_DRAFTS)
   const [isSavingAuth, setIsSavingAuth] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
+
+  const resolvedEditorRuntime = useMemo(
+    () => resolveEditorRuntimeChoice(editorRuntime),
+    [editorRuntime],
+  )
+  const resolvedDiffEngine = useMemo(
+    () => resolveDiffEngineChoice(diffEngine),
+    [diffEngine],
+  )
 
   const resolvedTheme = useMemo(() => {
     if (theme === 'auto') {
@@ -219,7 +258,7 @@ export function SettingsDialog({
       <section className='settings-panel'>
         <div className='settings-panel-header'>
           <h3 className='settings-panel-title'>
-            {activeSection === 'general' ? '外观' : '服务提供商'}
+            {SETTINGS_SECTION_TITLES[activeSection]}
           </h3>
         </div>
 
@@ -364,6 +403,126 @@ export function SettingsDialog({
                 </div>
               </div>
             </div>
+          ) : activeSection === 'editor' ? (
+            <>
+              {(resolvedEditorRuntime.fallbackReason || resolvedDiffEngine.fallbackReason) ? (
+                <div className='settings-alert settings-alert-warning'>
+                  {resolvedEditorRuntime.fallbackReason ?? resolvedDiffEngine.fallbackReason}
+                </div>
+              ) : null}
+
+              <div className='settings-card'>
+                <div className='settings-copy-block'>
+                  <h4>代码编辑运行时</h4>
+                  <p>
+                    先把运行时入口稳定地收束成一层抽象，再在隔离边界里逐步接 VS Code 兼容能力。
+                  </p>
+                </div>
+
+                <div className='settings-option-list'>
+                  {EDITOR_RUNTIME_OPTIONS.map((option) => {
+                    const isActive = resolvedEditorRuntime.resolvedId === option.id
+                    const isRequested = editorRuntime === option.id
+
+                    return (
+                      <section
+                        key={option.id}
+                        className={`settings-option-card${isActive ? ' is-active' : ''}`}
+                      >
+                        <div className='settings-option-header'>
+                          <div className='settings-copy-block'>
+                            <h4>{option.label}</h4>
+                            <p>{option.description}</p>
+                          </div>
+                          <span className={`settings-option-badge is-${option.stability}`}>
+                            {isActive ? '当前使用' : OPTION_STABILITY_LABELS[option.stability]}
+                          </span>
+                        </div>
+                        <p className='settings-inline-hint'>{option.detail}</p>
+                        <div className='settings-option-capability-list'>
+                          {option.capabilities.map((capability) => (
+                            <span key={capability} className='settings-option-capability'>
+                              {capability}
+                            </span>
+                          ))}
+                        </div>
+                        <div className='settings-inline-actions'>
+                          <Button
+                            variant={isActive ? 'primary' : 'outline'}
+                            isDisabled={isActive || !option.isSelectable}
+                            className='settings-action-button'
+                            onPress={() => setEditorRuntime(option.id)}
+                          >
+                            {isActive ? '当前使用中' : option.isSelectable ? '切换到此方案' : '尚未开放'}
+                          </Button>
+                        </div>
+                        {!option.isSelectable && isRequested ? (
+                          <p className='settings-inline-hint'>
+                            已保存的选择不会直接启用未开放方案，宿主层会继续回退到稳定运行时。
+                          </p>
+                        ) : null}
+                      </section>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className='settings-card'>
+                <div className='settings-copy-block'>
+                  <h4>Git Diff 引擎</h4>
+                  <p>
+                    现阶段优先保住块级操作和编辑体验，再逐步评估更强的 diff / merge 能力是否值得替换当前实现。
+                  </p>
+                </div>
+
+                <div className='settings-option-list'>
+                  {DIFF_ENGINE_OPTIONS.map((option) => {
+                    const isActive = resolvedDiffEngine.resolvedId === option.id
+                    const isRequested = diffEngine === option.id
+
+                    return (
+                      <section
+                        key={option.id}
+                        className={`settings-option-card${isActive ? ' is-active' : ''}`}
+                      >
+                        <div className='settings-option-header'>
+                          <div className='settings-copy-block'>
+                            <h4>{option.label}</h4>
+                            <p>{option.description}</p>
+                          </div>
+                          <span className={`settings-option-badge is-${option.stability}`}>
+                            {isActive ? '当前使用' : OPTION_STABILITY_LABELS[option.stability]}
+                          </span>
+                        </div>
+                        <p className='settings-inline-hint'>{option.detail}</p>
+                        <div className='settings-option-capability-list'>
+                          {option.capabilities.map((capability) => (
+                            <span key={capability} className='settings-option-capability'>
+                              {capability}
+                            </span>
+                          ))}
+                        </div>
+                        <div className='settings-inline-actions'>
+                          <Button
+                            variant={isActive ? 'primary' : 'outline'}
+                            isDisabled={isActive || !option.isSelectable}
+                            className='settings-action-button'
+                            onPress={() => setDiffEngine(option.id)}
+                          >
+                            {isActive ? '当前使用中' : option.isSelectable ? '切换到此方案' : '尚未开放'}
+                          </Button>
+                        </div>
+                        {!option.isSelectable && isRequested ? (
+                          <p className='settings-inline-hint'>
+                            已保存的选择不会直接启用未开放方案，宿主层会继续回退到稳定 diff 引擎。
+                          </p>
+                        ) : null}
+                      </section>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
           ) : (
             <div className='settings-card'>
               {workspacePath ? (
