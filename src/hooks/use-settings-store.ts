@@ -1,21 +1,9 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
-import {
-  isDiffEngineId,
-  isEditorRuntimeId,
-  resolveDiffEngineChoice,
-  resolveEditorRuntimeChoice,
-  type DiffEngineId,
-  type EditorRuntimeId,
-} from '@/features/editor/lib/editor-platform'
 
 export type AppTheme = 'light' | 'dark' | 'auto'
 
 interface SettingsState {
-  diffEngine: DiffEngineId
-  editorRuntime: EditorRuntimeId
-  setDiffEngine: (diffEngine: DiffEngineId) => void
-  setEditorRuntime: (editorRuntime: EditorRuntimeId) => void
   theme: AppTheme
   setTheme: (theme: AppTheme) => void
 }
@@ -79,47 +67,13 @@ const settingsStorage: StateStorage = {
   },
 }
 
-function isAppTheme(value: unknown): value is AppTheme {
-  return value === 'light' || value === 'dark' || value === 'auto'
-}
-
-type PersistedSettingsState = Partial<{
-  diffEngine: DiffEngineId
-  editorRuntime: EditorRuntimeId
-  theme: AppTheme
-}>
-
-function sanitizePersistedSettings(state: PersistedSettingsState | undefined) {
-  return {
-    diffEngine: resolveDiffEngineChoice(isDiffEngineId(state?.diffEngine) ? state.diffEngine : undefined).resolvedId,
-    editorRuntime: resolveEditorRuntimeChoice(isEditorRuntimeId(state?.editorRuntime) ? state.editorRuntime : undefined).resolvedId,
-    theme: isAppTheme(state?.theme) ? state.theme : 'auto',
-  }
-}
-
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      diffEngine: 'codemirror-merge',
-      editorRuntime: 'monaco-standalone',
-      setDiffEngine: (diffEngine) => set({
-        diffEngine: resolveDiffEngineChoice(diffEngine).resolvedId,
-      }),
-      setEditorRuntime: (editorRuntime) => set({
-        editorRuntime: resolveEditorRuntimeChoice(editorRuntime).resolvedId,
-      }),
       theme: 'auto',
       setTheme: (theme) => set({ theme }),
     }),
     {
-      merge: (persistedState, currentState) => {
-        const sanitizedState = sanitizePersistedSettings(persistedState as PersistedSettingsState | undefined)
-
-        return {
-          ...currentState,
-          ...sanitizedState,
-        }
-      },
       name: SETTINGS_STORAGE_KEY,
       storage: createJSONStorage(() => settingsStorage),
     },

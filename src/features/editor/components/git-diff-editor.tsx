@@ -619,18 +619,6 @@ function CodeMirrorDiffRenderer({
   )
 }
 
-export type GitDiffEditorProps = {
-  diff: GitFileDiffResult
-  draftContent: string
-  hasDirtyRelatedFileTab?: boolean
-  onApplyBlockAction: (change: GitChangeItem, selection: GitDiffSelection, action: GitDiffBlockAction) => Promise<void>
-  onDiscardChange: (change: GitChangeItem) => void
-  onDraftChange: (content: string) => void
-  onSaveEditedFile: (filePath: string, content: string) => Promise<void>
-  onStageChange: (change: GitChangeItem) => void
-  onUnstageChange: (change: GitChangeItem) => void
-}
-
 export function GitDiffEditor({
   diff,
   draftContent: initialDraftContent,
@@ -641,7 +629,17 @@ export function GitDiffEditor({
   onSaveEditedFile,
   onStageChange,
   onUnstageChange,
-}: GitDiffEditorProps) {
+}: {
+  diff: GitFileDiffResult
+  draftContent: string
+  hasDirtyRelatedFileTab?: boolean
+  onApplyBlockAction: (change: GitChangeItem, selection: GitDiffSelection, action: GitDiffBlockAction) => Promise<void>
+  onDiscardChange: (change: GitChangeItem) => void
+  onDraftChange: (content: string) => void
+  onSaveEditedFile: (filePath: string, content: string) => Promise<void>
+  onStageChange: (change: GitChangeItem) => void
+  onUnstageChange: (change: GitChangeItem) => void
+}) {
   const defaultMode: DiffViewMode = 'split'
   const [viewMode, setViewMode] = useState<DiffViewMode>(defaultMode)
   const [draftContent, setDraftContent] = useState(initialDraftContent)
