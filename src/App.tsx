@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
 import {
   FileLine,
@@ -16,6 +16,7 @@ import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
 import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
 import { GitDiffEditor } from '@/features/editor/components/git-diff-editor'
+import { CodeEditor } from '@/features/editor/components/code-editor'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import { GitPanel } from '@/features/git/components/git-panel'
 import type {
@@ -72,14 +73,6 @@ import './App.css'
 function getBaseName(filePath: string) {
   return filePath.split(/[\\/]/).pop() ?? filePath
 }
-
-const CodeEditor = lazy(async () => {
-  const module = await import('@/features/editor/components/code-editor')
-
-  return {
-    default: module.CodeEditor,
-  }
-})
 
 function getRelativePath(rootPath: string, filePath: string) {
   const normalizedRoot = rootPath.replace(/[\\/]+$/, '')
@@ -534,7 +527,6 @@ function App() {
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
   const leftDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
-  const previousMonacoWorkspacePathRef = useRef<string | null>(null)
   const rightDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
   const activeTabId = useWorkspaceStore((state) => state.activeTabId)
   const activateTab = useWorkspaceStore((state) => state.activateTab)
@@ -556,23 +548,6 @@ function App() {
   const tree = useWorkspaceStore((state) => state.tree)
   const updateDiffTabDraft = useWorkspaceStore((state) => state.updateDiffTabDraft)
   const updateTabContent = useWorkspaceStore((state) => state.updateTabContent)
-
-  useEffect(() => {
-    if (previousMonacoWorkspacePathRef.current === currentPath) {
-      return
-    }
-
-    if (previousMonacoWorkspacePathRef.current === null && currentPath !== null) {
-      previousMonacoWorkspacePathRef.current = currentPath
-      return
-    }
-
-    void import('@/features/editor/lib/monaco').then(({ resetMonacoFileModels }) => {
-      resetMonacoFileModels()
-    })
-    previousMonacoWorkspacePathRef.current = currentPath
-  }, [currentPath])
-
   const loadTree = useCallback(async (rootPath: string) => {
     const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
     setTree(nextTree)
@@ -3581,25 +3556,23 @@ function App() {
               (currentEditorKind === 'code' && currentFileViewMode !== 'preview')
               || (currentEditorKind === 'rich-text' && currentFileViewMode === 'code')
             ) ? (
-              <Suspense fallback={<div className='code-editor-shell' />}>
-                <CodeEditor
-                  key={activeFileTab.id}
-                  disabled={false}
-                  filePath={activeFileTab.filePath}
-                  onChange={(nextValue) => {
-                    updateTabContent(activeFileTab.filePath, nextValue)
-                  }}
-                  onCompositionChange={setIsActiveEditorComposing}
-                  onSave={(content) => {
-                    void handleSave({
-                      content,
-                      filePath: activeFileTab.filePath,
-                    })
-                  }}
-                  value={currentFileContent}
-                  theme={theme}
-                />
-              </Suspense>
+              <CodeEditor
+                key={activeFileTab.id}
+                disabled={false}
+                filePath={activeFileTab.filePath}
+                onChange={(nextValue) => {
+                  updateTabContent(activeFileTab.filePath, nextValue)
+                }}
+                onCompositionChange={setIsActiveEditorComposing}
+                onSave={(content) => {
+                  void handleSave({
+                    content,
+                    filePath: activeFileTab.filePath,
+                  })
+                }}
+                value={currentFileContent}
+                theme={theme}
+              />
             ) : null}
           </div>
         </div>

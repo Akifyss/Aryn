@@ -64,15 +64,7 @@ export default defineConfig(({ command }) => {
   return {
     resolve: {
       alias: {
-        '@': path.join(__dirname, 'src'),
-        '@codingame/monaco-vscode-api/vscode': path.join(
-          __dirname,
-          'node_modules',
-          '@codingame',
-          'monaco-vscode-api',
-          'vscode',
-          'src',
-        ),
+        '@': path.join(__dirname, 'src')
       },
     },
     plugins: [
@@ -138,28 +130,6 @@ export default defineConfig(({ command }) => {
       }
     })(),
     clearScreen: false,
-    optimizeDeps: {
-      // Monaco VS Code default extensions register theme/language assets via
-      // `new URL('./resources/...', import.meta.url)`. When Vite prebundles
-      // them into `.vite/deps` during dev, those resource URLs point at the
-      // optimized cache instead of the package resource directories and the
-      // editor boots into a blank state. Keep these packages unoptimized so
-      // their runtime asset URLs remain valid in dev and Electron.
-      exclude: [
-        '@codingame/monaco-editor-wrapper',
-        '@codingame/monaco-vscode-api',
-        '@codingame/monaco-vscode-css-language-features-default-extension',
-        '@codingame/monaco-vscode-html-language-features-default-extension',
-        '@codingame/monaco-vscode-json-language-features-default-extension',
-        '@codingame/monaco-vscode-theme-defaults-default-extension',
-        '@codingame/monaco-vscode-typescript-language-features-default-extension',
-        'monaco-editor',
-        'vscode',
-      ],
-    },
-    worker: {
-      format: 'es',
-    },
     build: {
       cssMinify: false,
     },

@@ -1,15 +1,13 @@
 import * as React from 'react'
+import * as monaco from 'monaco-editor'
 import { getCodeLanguage } from '@/features/workspace/lib/file-types'
 import {
-  acquireMonacoFileModel,
-  createMonacoEditor,
-  monaco,
+  Editor,
+  configureMonaco,
   resolveMonacoTheme,
   type MonacoEditorOptions,
   type MonacoThemePreference,
 } from '@/features/editor/lib/monaco'
-
-type MonacoFileModelLease = Awaited<ReturnType<typeof acquireMonacoFileModel>>
 
 type CodeEditorProps = {
   disabled?: boolean
@@ -20,6 +18,8 @@ type CodeEditorProps = {
   onChange: (nextValue: string) => void
   theme?: MonacoThemePreference
 }
+
+configureMonaco()
 
 const DEFAULT_EDITOR_OPTIONS: MonacoEditorOptions = {
   automaticLayout: true,
@@ -49,12 +49,10 @@ export function CodeEditor({
   onSave,
   onChange,
   value,
-  theme = 'auto',
+  theme = "auto",
 }: CodeEditorProps) {
-  const containerRef = React.useRef<HTMLDivElement | null>(null)
   const monacoTheme = React.useMemo(() => resolveMonacoTheme(theme), [theme])
   const editorRef = React.useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
-  const modelLeaseRef = React.useRef<MonacoFileModelLease | null>(null)
   const disposablesRef = React.useRef<monaco.IDisposable[]>([])
   const isComposingRef = React.useRef(false)
   const isFocusedRef = React.useRef(false)
@@ -75,17 +73,6 @@ export function CodeEditor({
     onChangeRef.current(nextValue)
   }, [])
 
-  const disposeEditorResources = React.useCallback(() => {
-    disposablesRef.current.forEach((disposable) => {
-      disposable.dispose()
-    })
-    disposablesRef.current = []
-    editorRef.current?.dispose()
-    editorRef.current = null
-    modelLeaseRef.current?.release()
-    modelLeaseRef.current = null
-  }, [])
-
   React.useEffect(() => {
     onChangeRef.current = onChange
   }, [onChange])
@@ -98,130 +85,61 @@ export function CodeEditor({
     onSaveRef.current = onSave
   }, [onSave])
 
-  React.useEffect(() => {
-    let cancelled = false
-
-    const mountEditor = async () => {
-      const container = containerRef.current
-
-      if (!container) {
-        return
-      }
-
-      try {
-        const modelLease = await acquireMonacoFileModel(filePath, value)
-
-        if (cancelled) {
-          modelLease.release()
-          return
-        }
-
-        const model = modelLease.modelRef.object.textEditorModel
-        if (!model) {
-          modelLease.release()
-          return
-        }
-
-        const nextLanguage = getCodeLanguage(filePath)
-
-        if (model.getLanguageId() !== nextLanguage) {
-          monaco.editor.setModelLanguage(model, nextLanguage)
-        }
-
-        monaco.editor.setTheme(monacoTheme)
-        container.replaceChildren()
-
-        const editor = createMonacoEditor(container, {
-          ...DEFAULT_EDITOR_OPTIONS,
-          model,
-          readOnly: disabled,
-        })
-
-        if (cancelled) {
-          editor.dispose()
-          modelLease.release()
-          return
-        }
-
-        lastForwardedValueRef.current = model.getValue()
-        editorRef.current = editor
-        modelLeaseRef.current = modelLease
-
-        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-          onSaveRef.current?.(editor.getValue())
-        })
-
-        disposablesRef.current = [
-          editor.onDidFocusEditorText(() => {
-            isFocusedRef.current = true
-            setIsFocused(true)
-          }),
-          editor.onDidBlurEditorText(() => {
-            isFocusedRef.current = false
-            setIsFocused(false)
-          }),
-          editor.onDidCompositionStart(() => {
-            isComposingRef.current = true
-            onCompositionChangeRef.current?.(true)
-          }),
-          editor.onDidCompositionEnd(() => {
-            isComposingRef.current = false
-            onCompositionChangeRef.current?.(false)
-
-            const pendingValue = pendingValueRef.current
-            pendingValueRef.current = null
-
-            if (pendingValue !== null) {
-              emitChange(pendingValue)
-            }
-          }),
-          editor.onDidChangeModelContent(() => {
-            if (isApplyingExternalValueRef.current) {
-              return
-            }
-
-            const nextValue = editor.getValue()
-
-            if (isComposingRef.current) {
-              pendingValueRef.current = nextValue
-              return
-            }
-
-            pendingValueRef.current = null
-            emitChange(nextValue)
-          }),
-        ]
-      } catch (error) {
-        console.error('Failed to initialize Monaco editor', error)
-      }
-    }
-
-    void mountEditor()
-
-    return () => {
-      cancelled = true
-      disposeEditorResources()
-      pendingValueRef.current = null
-      isFocusedRef.current = false
-      isComposingRef.current = false
-      isApplyingExternalValueRef.current = false
-      onCompositionChangeRef.current?.(false)
-    }
-  }, [disposeEditorResources, emitChange, filePath])
-
-  React.useEffect(() => {
-    editorRef.current?.updateOptions({
-      readOnly: disabled,
+  const handleMount = React.useCallback<NonNullable<React.ComponentProps<typeof Editor>['onMount']>>((editor, monacoInstance) => {
+    disposablesRef.current.forEach((disposable) => {
+      disposable.dispose()
     })
-  }, [disabled])
+    disposablesRef.current = []
+    editorRef.current = editor
 
-  React.useEffect(() => {
-    monaco.editor.setTheme(monacoTheme)
-  }, [monacoTheme])
+    editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
+      onSaveRef.current?.(editor.getValue())
+    })
+    disposablesRef.current = [
+      editor.onDidFocusEditorText(() => {
+        isFocusedRef.current = true
+        setIsFocused(true)
+      }),
+      editor.onDidBlurEditorText(() => {
+        isFocusedRef.current = false
+        setIsFocused(false)
+      }),
+      editor.onDidCompositionStart(() => {
+        isComposingRef.current = true
+        onCompositionChangeRef.current?.(true)
+      }),
+      editor.onDidCompositionEnd(() => {
+        isComposingRef.current = false
+        onCompositionChangeRef.current?.(false)
+
+        const pendingValue = pendingValueRef.current
+        pendingValueRef.current = null
+
+        if (pendingValue !== null) {
+          emitChange(pendingValue)
+        }
+      }),
+      editor.onDidChangeModelContent(() => {
+        if (isApplyingExternalValueRef.current) {
+          return
+        }
+
+        const nextValue = editor.getValue()
+
+        if (isComposingRef.current) {
+          pendingValueRef.current = nextValue
+          return
+        }
+
+        pendingValueRef.current = null
+        emitChange(nextValue)
+      }),
+    ]
+  }, [emitChange])
 
   React.useEffect(() => {
     const editor = editorRef.current
-    const model = modelLeaseRef.current?.modelRef.object.textEditorModel ?? editor?.getModel()
+    const model = editor?.getModel()
 
     if (!editor || !model) {
       return
@@ -253,11 +171,32 @@ export function CodeEditor({
     }
   }, [isFocused, value])
 
+  React.useEffect(() => () => {
+    disposablesRef.current.forEach((disposable) => {
+      disposable.dispose()
+    })
+    disposablesRef.current = []
+    editorRef.current = null
+    pendingValueRef.current = null
+    isFocusedRef.current = false
+    isComposingRef.current = false
+    isApplyingExternalValueRef.current = false
+    onCompositionChangeRef.current?.(false)
+  }, [])
+
   return (
     <div className='code-editor-shell'>
-      <div
-        ref={containerRef}
-        style={{ height: '100%', width: '100%' }}
+      <Editor
+        defaultValue={value}
+        height='100%'
+        language={getCodeLanguage(filePath)}
+        onMount={handleMount}
+        options={{
+          ...DEFAULT_EDITOR_OPTIONS,
+          readOnly: disabled,
+        }}
+        path={filePath}
+        theme={monacoTheme}
       />
     </div>
   )
