@@ -51,6 +51,14 @@ function buildIframeSource(wrapperUrl: string, theme: 'light' | 'dark') {
   return url.toString()
 }
 
+function postThemeChanged(iframeWindow: Window, theme: 'light' | 'dark') {
+  iframeWindow.postMessage({
+    theme: undefined,
+    themeKind: theme,
+    type: 'themeChanged',
+  }, '*')
+}
+
 function applyTextChanges(
   content: string,
   changes: Array<{
@@ -177,6 +185,19 @@ export function MeoEditorHost({
   }, [iframeSource])
 
   useEffect(() => {
+    if (!isReady) {
+      return
+    }
+
+    const iframeWindow = iframeRef.current?.contentWindow
+    if (!iframeWindow) {
+      return
+    }
+
+    postThemeChanged(iframeWindow, preferredTheme)
+  }, [isReady, preferredTheme])
+
+  useEffect(() => {
     onCompositionChange?.(false)
 
     return () => {
@@ -233,6 +254,7 @@ export function MeoEditorHost({
         case 'ready': {
           setIsReady(true)
           setStatusMessage(null)
+          postThemeChanged(iframeWindow, preferredTheme)
           iframeWindow.postMessage({
             findOptions: {
               caseSensitive: false,
@@ -246,6 +268,7 @@ export function MeoEditorHost({
             outlineVisible: false,
             text: contentRef.current,
             theme: undefined,
+            themeKind: preferredTheme,
             type: 'init',
             version: versionRef.current,
             vimMode: false,
@@ -345,7 +368,7 @@ export function MeoEditorHost({
     return () => {
       window.removeEventListener('message', handleWindowMessage)
     }
-  }, [filePath, onChange, onSave])
+  }, [filePath, onChange, onSave, preferredTheme])
 
   if (errorMessage) {
     return (
