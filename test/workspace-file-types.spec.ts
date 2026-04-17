@@ -5,6 +5,7 @@ import {
   getWorkspaceEditorKind,
   supportsCodeEditorToggle,
   supportsHtmlPreview,
+  supportsMeoEditor,
 } from '../src/features/workspace/lib/file-types'
 
 describe('workspace file types', () => {
@@ -50,5 +51,13 @@ describe('workspace file types', () => {
     expect(supportsCodeEditorToggle('C:/workspace/notes.txt', 'rich-text')).toBe(true)
     expect(supportsCodeEditorToggle('C:/workspace/main.ts', 'code')).toBe(false)
     expect(supportsCodeEditorToggle('C:/workspace/config.json', 'code')).toBe(false)
+  })
+
+  it('only exposes MEO for markdown-native rich-text files', () => {
+    expect(supportsMeoEditor('C:/workspace/notes.md', 'rich-text')).toBe(true)
+    expect(supportsMeoEditor('C:/workspace/notes.markdown', 'rich-text')).toBe(true)
+    expect(supportsMeoEditor('C:/workspace/notes.mdx', 'rich-text')).toBe(true)
+    expect(supportsMeoEditor('C:/workspace/notes.txt', 'rich-text')).toBe(false)
+    expect(supportsMeoEditor('C:/workspace/index.html', 'code')).toBe(false)
   })
 })

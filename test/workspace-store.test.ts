@@ -96,6 +96,30 @@ describe('useWorkspaceStore', () => {
     expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/draft.md', 'code'))
   })
 
+  it('allows markdown tabs to open in both default and MEO views', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({
+      content: '# Draft',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/draft.md',
+    })
+    store.openTab({
+      content: '# Draft',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/draft.md',
+      viewMode: 'meo',
+    })
+
+    const nextState = useWorkspaceStore.getState()
+    expect(nextState.openTabs).toHaveLength(2)
+    expect(nextState.openTabs.map((tab) => tab.id)).toEqual([
+      createWorkspaceFileTabId('C:/workspace/draft.md', 'default'),
+      createWorkspaceFileTabId('C:/workspace/draft.md', 'meo'),
+    ])
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/draft.md', 'meo'))
+  })
+
   it('falls back to default mode when a preview tab is renamed to a non-html file', () => {
     const store = useWorkspaceStore.getState()
 

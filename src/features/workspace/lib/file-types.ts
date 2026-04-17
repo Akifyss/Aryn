@@ -1,6 +1,6 @@
 export type WorkspaceEditorKind = 'rich-text' | 'code' | 'unsupported'
 export type SupportedWorkspaceEditorKind = Exclude<WorkspaceEditorKind, 'unsupported'>
-export type WorkspaceFileViewMode = 'default' | 'code' | 'preview'
+export type WorkspaceFileViewMode = 'default' | 'code' | 'preview' | 'meo'
 
 const RICH_TEXT_EXTENSIONS = new Set([
   '.md',
@@ -14,6 +14,12 @@ const RICH_TEXT_FILE_NAMES = new Set([
   'readme',
   'changelog',
   'license',
+])
+
+const MEO_EXTENSIONS = new Set([
+  '.md',
+  '.markdown',
+  '.mdx',
 ])
 
 const CODE_EXTENSIONS = new Set([
@@ -142,6 +148,10 @@ export function supportsCodeEditorToggle(
   editorKind: SupportedWorkspaceEditorKind,
 ) {
   return editorKind === 'rich-text' || supportsHtmlPreview(filePath)
+}
+
+export function supportsMeoEditor(filePath: string, editorKind: SupportedWorkspaceEditorKind) {
+  return editorKind === 'rich-text' && MEO_EXTENSIONS.has(getFileExtension(filePath))
 }
 
 export function getDefaultWorkspaceFileViewMode(

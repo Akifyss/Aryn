@@ -11,7 +11,11 @@ import {
 } from '@mingcute/react'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import { pickDominantGitDisplayChange } from '@/features/git/lib/display-change'
-import { getSupportedWorkspaceEditorKind, supportsCodeEditorToggle } from '@/features/workspace/lib/file-types'
+import {
+  getSupportedWorkspaceEditorKind,
+  supportsCodeEditorToggle,
+  supportsMeoEditor,
+} from '@/features/workspace/lib/file-types'
 import {
   areSameWorkspacePaths,
   canMoveNodeToDirectory,
@@ -30,6 +34,7 @@ type WorkspaceTreeProps = {
   workspacePath: string | null
   onSelectFile: (path: string) => void
   onOpenInCodeEditor: (path: string) => void
+  onOpenInMeoEditor: (path: string) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onDeleteNode: (node: WorkspaceNode) => Promise<void>
   onMoveNode: (node: WorkspaceNode, targetDirectoryPath: string) => Promise<void>
@@ -67,14 +72,18 @@ function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | un
 
 function FileRowActions({
   canOpenInCodeEditor,
+  canOpenInMeoEditor,
   onOpenInCodeEditor,
+  onOpenInMeoEditor,
   onRename,
   onDelete,
   isSubmitting,
   gitChange,
 }: {
   canOpenInCodeEditor: boolean
+  canOpenInMeoEditor: boolean
   onOpenInCodeEditor: () => void
+  onOpenInMeoEditor: () => void
   onRename: () => void
   onDelete: () => void
   isSubmitting: boolean
@@ -113,6 +122,7 @@ function FileRowActions({
               aria-label='File actions'
               onAction={(key) => {
                 if (key === 'open-code') onOpenInCodeEditor()
+                if (key === 'open-meo') onOpenInMeoEditor()
                 if (key === 'rename') onRename()
                 if (key === 'delete') onDelete()
               }}
@@ -122,6 +132,14 @@ function FileRowActions({
                   <div className='flex items-center gap-2'>
                     <CodeLine size={16} className='text-(--muted)' />
                     <Label>在代码编辑器打开</Label>
+                  </div>
+                </Dropdown.Item>
+              ) : null}
+              {canOpenInMeoEditor ? (
+                <Dropdown.Item id='open-meo' textValue='Open in MEO'>
+                  <div className='flex items-center gap-2'>
+                    <CodeLine size={16} className='text-(--muted)' />
+                    <Label>Open in MEO</Label>
                   </div>
                 </Dropdown.Item>
               ) : null}
@@ -164,6 +182,7 @@ function FileTreeItem({
   onDragStartNode,
   onDropOnNode,
   onOpenInCodeEditor,
+  onOpenInMeoEditor,
   onRenameNode,
   onSelectFile,
   onToggleDirectory,
@@ -183,6 +202,7 @@ function FileTreeItem({
   onDragStartNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
   onDropOnNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => Promise<void>
   onOpenInCodeEditor: (path: string) => void
+  onOpenInMeoEditor: (path: string) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onSelectFile: (path: string) => void
   onToggleDirectory: (path: string) => void
@@ -198,6 +218,7 @@ function FileTreeItem({
   const isFolder = node.kind === 'directory'
   const editorKind = node.kind === 'file' ? getSupportedWorkspaceEditorKind(node.path) : null
   const canOpenInCodeEditor = node.kind === 'file' && editorKind !== null && supportsCodeEditorToggle(node.path, editorKind)
+  const canOpenInMeoEditor = node.kind === 'file' && editorKind !== null && supportsMeoEditor(node.path, editorKind)
   const isExpanded = expandedPaths.has(node.path)
   const isActive = activeFilePath === node.path
   const gitChange = findGitChangeByFilePath(gitRepositoryState, node)
@@ -357,9 +378,11 @@ function FileTreeItem({
         {!isEditing && (
           <FileRowActions
             canOpenInCodeEditor={canOpenInCodeEditor}
+            canOpenInMeoEditor={canOpenInMeoEditor}
             isSubmitting={isSubmitting}
             gitChange={gitChange}
             onOpenInCodeEditor={() => onOpenInCodeEditor(node.path)}
+            onOpenInMeoEditor={() => onOpenInMeoEditor(node.path)}
             onRename={() => {
               setDraftName(node.name)
               setIsEditing(true)
@@ -431,6 +454,7 @@ function FileTreeItem({
                 onDragStartNode={onDragStartNode}
                 onDropOnNode={onDropOnNode}
                 onOpenInCodeEditor={onOpenInCodeEditor}
+                onOpenInMeoEditor={onOpenInMeoEditor}
                 onRenameNode={onRenameNode}
                 onSelectFile={onSelectFile}
                 onToggleDirectory={onToggleDirectory}
@@ -453,6 +477,7 @@ export function WorkspaceTree({
   workspacePath,
   onSelectFile,
   onOpenInCodeEditor,
+  onOpenInMeoEditor,
   onRenameNode,
   onDeleteNode,
   onMoveNode,
@@ -701,6 +726,7 @@ export function WorkspaceTree({
           onDragStartNode={handleDragStartNode}
           onDropOnNode={handleDropOnNode}
           onOpenInCodeEditor={onOpenInCodeEditor}
+          onOpenInMeoEditor={onOpenInMeoEditor}
           onRenameNode={onRenameNode}
           onSelectFile={onSelectFile}
           onToggleDirectory={handleToggle}

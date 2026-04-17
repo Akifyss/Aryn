@@ -26,6 +26,7 @@ declare global {
       getWorkspaceState: (workspacePath: string) => Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>
       updateWorkspaceState: (workspacePath: string, patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean }) => Promise<{ ok: boolean }>
       loadWorkspaceTree: (rootPath: string) => Promise<WorkspaceNode[]>
+      getMeoEditorBootstrap: () => Promise<{ extensionLabel: string, wrapperUrl: string }>
       resolveWorkspaceEditorKind: (filePath: string) => Promise<'rich-text' | 'code' | null>
       readWorkspaceFile: (filePath: string) => Promise<string>
       saveWorkspaceFile: (filePath: string, content: string) => Promise<{ ok: boolean }>

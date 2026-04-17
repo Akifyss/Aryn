@@ -17,6 +17,7 @@ import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
 import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
 import { GitDiffEditor } from '@/features/editor/components/git-diff-editor'
 import { CodeEditor } from '@/features/editor/components/code-editor'
+import { MeoEditorHost } from '@/features/editor/components/meo-editor-host'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import { GitPanel } from '@/features/git/components/git-panel'
 import type {
@@ -43,6 +44,7 @@ import {
 } from '@/features/workspace/store/use-workspace-store'
 import {
   getDefaultWorkspaceFileViewMode,
+  supportsMeoEditor,
   supportsHtmlPreview,
   type WorkspaceFileViewMode,
 } from '@/features/workspace/lib/file-types'
@@ -318,7 +320,13 @@ function readStoredTabState(workspacePath: string): StoredTabState {
           && entry !== null
           && typeof entry.path === 'string'
           && entry.path.trim().length > 0
-          && (entry.viewMode === undefined || entry.viewMode === 'default' || entry.viewMode === 'code' || entry.viewMode === 'preview')
+          && (
+            entry.viewMode === undefined
+            || entry.viewMode === 'default'
+            || entry.viewMode === 'code'
+            || entry.viewMode === 'preview'
+            || entry.viewMode === 'meo'
+          )
         ),
       )
       : []
@@ -362,6 +370,10 @@ function resolveWorkspaceFileViewMode(
   editorKind: WorkspaceFileTab['editorKind'],
   preferredViewMode?: WorkspaceFileViewMode,
 ) {
+  if (preferredViewMode === 'meo' && supportsMeoEditor(filePath, editorKind)) {
+    return preferredViewMode
+  }
+
   if (preferredViewMode === 'preview' && editorKind === 'code' && supportsHtmlPreview(filePath)) {
     return preferredViewMode
   }
@@ -3027,6 +3039,9 @@ function App() {
                   onOpenInCodeEditor={(filePath) => {
                     void openFile(filePath, currentPath, 'code')
                   }}
+                  onOpenInMeoEditor={(filePath) => {
+                    void openFile(filePath, currentPath, 'meo')
+                  }}
                   onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
                   onDeleteNode={(node) => handleDeleteNode(node)}
                   onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
@@ -3337,6 +3352,9 @@ function App() {
                   onOpenInCodeEditor={(filePath) => {
                     void openFile(filePath, currentPath, 'code')
                   }}
+                  onOpenInMeoEditor={(filePath) => {
+                    void openFile(filePath, currentPath, 'meo')
+                  }}
                   onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
                   onDeleteNode={(node) => handleDeleteNode(node)}
                   onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
@@ -3540,6 +3558,25 @@ function App() {
                   updateTabContent(currentFilePath, nextValue)
                 }}
                 onCompositionChange={setIsActiveEditorComposing}
+                value={currentFileContent}
+                theme={theme}
+              />
+            ) : null}
+
+            {activeFileTab && currentEditorKind === 'rich-text' && currentFileViewMode === 'meo' ? (
+              <MeoEditorHost
+                key={activeFileTab.id}
+                filePath={activeFileTab.filePath}
+                onChange={(nextValue) => {
+                  updateTabContent(activeFileTab.filePath, nextValue)
+                }}
+                onCompositionChange={setIsActiveEditorComposing}
+                onSave={(content) => {
+                  void handleSave({
+                    content,
+                    filePath: activeFileTab.filePath,
+                  })
+                }}
                 value={currentFileContent}
                 theme={theme}
               />

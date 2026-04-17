@@ -5,6 +5,7 @@ import {
   getDefaultWorkspaceFileViewMode,
   getSupportedWorkspaceEditorKind,
   supportsHtmlPreview,
+  supportsMeoEditor,
   type SupportedWorkspaceEditorKind,
   type WorkspaceFileViewMode,
 } from '@/features/workspace/lib/file-types'
@@ -89,6 +90,10 @@ function normalizeViewMode(
   editorKind: SupportedWorkspaceEditorKind,
   viewMode?: WorkspaceFileViewMode,
 ) {
+  if (viewMode === 'meo' && supportsMeoEditor(filePath, editorKind)) {
+    return viewMode
+  }
+
   if (viewMode === 'preview' && isPreviewModeSupported(filePath, editorKind)) {
     return viewMode
   }
