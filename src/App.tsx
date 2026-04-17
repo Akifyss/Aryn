@@ -3571,6 +3571,9 @@ function App() {
                   updateTabContent(activeFileTab.filePath, nextValue)
                 }}
                 onCompositionChange={setIsActiveEditorComposing}
+                onOpenFile={(targetFilePath) => {
+                  void openFile(targetFilePath, currentPath, 'meo')
+                }}
                 onSave={(content) => {
                   void handleSave({
                     content,
@@ -3579,6 +3582,7 @@ function App() {
                 }}
                 value={currentFileContent}
                 theme={theme}
+                workspacePath={currentPath}
               />
             ) : null}
 

@@ -7,7 +7,9 @@ import {
   loadWorkspaceTree,
   moveWorkspaceEntry,
   resolveWorkspaceEditorKind,
+  saveWorkspaceImage,
   shouldIgnoreWorkspacePath,
+  workspaceFileExists,
 } from '../electron/main/workspace'
 
 const tempRoots: string[] = []
@@ -130,5 +132,31 @@ describe('workspace helpers', () => {
 
     await expect(resolveWorkspaceEditorKind(textFilePath)).resolves.toBe('code')
     await expect(resolveWorkspaceEditorKind(binaryFilePath)).resolves.toBeNull()
+  })
+
+  it('saves pasted images inside the workspace and avoids name collisions', async () => {
+    const rootPath = await createTempWorkspace()
+    const imageData = 'data:image/png;base64,aGVsbG8='
+
+    const firstImagePath = await saveWorkspaceImage(rootPath, 'assets', 'clipboard.png', imageData)
+    const secondImagePath = await saveWorkspaceImage(rootPath, 'assets', 'clipboard.png', imageData)
+
+    expect(firstImagePath).toBe(path.join(rootPath, 'assets', 'clipboard.png'))
+    expect(secondImagePath).toBe(path.join(rootPath, 'assets', 'clipboard-1.png'))
+    await expect(readFile(firstImagePath)).resolves.toEqual(Buffer.from('hello'))
+    await expect(readFile(secondImagePath)).resolves.toEqual(Buffer.from('hello'))
+  })
+
+  it('checks file existence only inside the active workspace', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'notes.md')
+    const outsideRootPath = await createTempWorkspace()
+    const outsideFilePath = path.join(outsideRootPath, 'notes.md')
+
+    await writeFile(filePath, '# Notes', 'utf8')
+    await writeFile(outsideFilePath, '# Outside', 'utf8')
+
+    await expect(workspaceFileExists(rootPath, filePath)).resolves.toBe(true)
+    await expect(workspaceFileExists(rootPath, outsideFilePath)).resolves.toBe(false)
   })
 })

@@ -26,6 +26,7 @@ import {
   moveWorkspaceEntry,
   resolveWorkspaceEditorKind,
   saveWorkspaceFile,
+  saveWorkspaceImage,
   unwatchWorkspace,
   watchWorkspace,
   workspaceFileExists,
@@ -501,6 +502,24 @@ ipcMain.handle('workspace:save-file', async (_, filePath: string, content: strin
   await saveWorkspaceFile(filePath, content)
   return { ok: true }
 })
+
+ipcMain.handle('workspace:file-exists', async (_, rootPath: string, filePath: string) => {
+  return { exists: await workspaceFileExists(rootPath, filePath) }
+})
+
+ipcMain.handle(
+  'workspace:save-image',
+  async (
+    _,
+    rootPath: string,
+    relativeDirectoryPath: string,
+    fileName: string,
+    imageData: string,
+  ) => {
+    const filePath = await saveWorkspaceImage(rootPath, relativeDirectoryPath, fileName, imageData)
+    return { filePath }
+  },
+)
 
 ipcMain.handle('workspace:create-file', async (_, rootPath: string, relativeFilePath: string) => {
   const filePath = await createWorkspaceFile(rootPath, relativeFilePath)

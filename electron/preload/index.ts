@@ -27,6 +27,13 @@ contextBridge.exposeInMainWorld('appApi', {
   resolveWorkspaceEditorKind: (filePath: string) => ipcRenderer.invoke('workspace:resolve-editor-kind', filePath) as Promise<'rich-text' | 'code' | null>,
   readWorkspaceFile: (filePath: string) => ipcRenderer.invoke('workspace:read-file', filePath) as Promise<string>,
   saveWorkspaceFile: (filePath: string, content: string) => ipcRenderer.invoke('workspace:save-file', filePath, content) as Promise<{ ok: boolean }>,
+  workspaceFileExists: (rootPath: string, filePath: string) => ipcRenderer.invoke('workspace:file-exists', rootPath, filePath) as Promise<{ exists: boolean }>,
+  saveWorkspaceImage: (
+    rootPath: string,
+    relativeDirectoryPath: string,
+    fileName: string,
+    imageData: string,
+  ) => ipcRenderer.invoke('workspace:save-image', rootPath, relativeDirectoryPath, fileName, imageData) as Promise<{ filePath: string }>,
   createWorkspaceFile: (rootPath: string, relativeFilePath: string) => ipcRenderer.invoke('workspace:create-file', rootPath, relativeFilePath) as Promise<{ filePath: string }>,
   createWorkspaceDirectory: (rootPath: string, relativeDirPath: string) => ipcRenderer.invoke('workspace:create-directory', rootPath, relativeDirPath) as Promise<{ dirPath: string }>,
   moveWorkspaceEntry: (rootPath: string, entryPath: string, nextRelativePath: string) => ipcRenderer.invoke('workspace:move-entry', rootPath, entryPath, nextRelativePath) as Promise<{ filePath: string }>,

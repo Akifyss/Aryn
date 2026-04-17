@@ -30,6 +30,13 @@ declare global {
       resolveWorkspaceEditorKind: (filePath: string) => Promise<'rich-text' | 'code' | null>
       readWorkspaceFile: (filePath: string) => Promise<string>
       saveWorkspaceFile: (filePath: string, content: string) => Promise<{ ok: boolean }>
+      workspaceFileExists: (rootPath: string, filePath: string) => Promise<{ exists: boolean }>
+      saveWorkspaceImage: (
+        rootPath: string,
+        relativeDirectoryPath: string,
+        fileName: string,
+        imageData: string,
+      ) => Promise<{ filePath: string }>
       createWorkspaceFile: (rootPath: string, relativeFilePath: string) => Promise<{ filePath: string }>
       createWorkspaceDirectory: (rootPath: string, relativeDirPath: string) => Promise<{ dirPath: string }>
       moveWorkspaceEntry: (rootPath: string, entryPath: string, nextRelativePath: string) => Promise<{ filePath: string }>

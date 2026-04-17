@@ -79,6 +79,75 @@ function isSamePathOrDescendant(targetPath: string, parentPath: string) {
   return targetPath === parentPath || targetPath.startsWith(parentPath + path.sep)
 }
 
+function sanitizeWorkspaceFileName(fileName: string, fallbackExtension = '.png') {
+  const trimmedName = path.basename(fileName.trim())
+
+  if (!trimmedName || trimmedName === '.' || trimmedName === path.sep) {
+    return `pasted-image${fallbackExtension}`
+  }
+
+  return trimmedName
+}
+
+function decodeWorkspaceDataUrl(imageData: string) {
+  const trimmedData = imageData.trim()
+  const dataUrlMatch = trimmedData.match(/^data:([^;,]+)?(?:;charset=[^;,]+)?(;base64)?,(.*)$/i)
+
+  if (dataUrlMatch) {
+    const mimeType = dataUrlMatch[1]?.toLowerCase() ?? 'application/octet-stream'
+    const isBase64 = Boolean(dataUrlMatch[2])
+    const payload = dataUrlMatch[3] ?? ''
+    const buffer = isBase64
+      ? Buffer.from(payload, 'base64')
+      : Buffer.from(decodeURIComponent(payload), 'utf8')
+
+    return { buffer, mimeType }
+  }
+
+  return {
+    buffer: Buffer.from(trimmedData, 'base64'),
+    mimeType: 'application/octet-stream',
+  }
+}
+
+function getFileExtensionForMimeType(mimeType: string) {
+  switch (mimeType) {
+    case 'image/jpeg':
+      return '.jpg'
+    case 'image/gif':
+      return '.gif'
+    case 'image/webp':
+      return '.webp'
+    case 'image/svg+xml':
+      return '.svg'
+    default:
+      return '.png'
+  }
+}
+
+async function ensureUniqueWorkspaceFilePath(filePath: string) {
+  const extension = path.extname(filePath)
+  const baseName = extension ? path.basename(filePath, extension) : path.basename(filePath)
+  const directoryPath = path.dirname(filePath)
+
+  let candidatePath = filePath
+  let suffix = 1
+
+  while (true) {
+    try {
+      await access(candidatePath)
+      candidatePath = path.join(directoryPath, `${baseName}-${suffix}${extension}`)
+      suffix += 1
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return candidatePath
+      }
+
+      throw error
+    }
+  }
+}
+
 function sortNodes(left: WorkspaceNode, right: WorkspaceNode) {
   if (left.kind !== right.kind) {
     return left.kind === 'directory' ? -1 : 1
@@ -192,6 +261,36 @@ export async function workspaceFileExists(rootPath: string, filePath: string) {
   } catch {
     return false
   }
+}
+
+export async function saveWorkspaceImage(
+  rootPath: string,
+  relativeDirectoryPath: string,
+  fileName: string,
+  imageData: string,
+) {
+  const resolvedRootPath = path.resolve(rootPath)
+  const normalizedRelativeDirectoryPath = relativeDirectoryPath.trim().replace(/^[\\/]+/, '')
+  const targetDirectoryPath = path.resolve(resolvedRootPath, normalizedRelativeDirectoryPath || '.')
+
+  if (!isInsideWorkspace(resolvedRootPath, targetDirectoryPath)) {
+    throw new Error('Image path must stay inside the current workspace.')
+  }
+
+  if (!imageData.trim()) {
+    throw new Error('Image data is required.')
+  }
+
+  const { buffer, mimeType } = decodeWorkspaceDataUrl(imageData)
+  const safeFileName = sanitizeWorkspaceFileName(fileName, getFileExtensionForMimeType(mimeType))
+  const requestedFilePath = path.join(targetDirectoryPath, safeFileName)
+
+  await mkdir(targetDirectoryPath, { recursive: true })
+
+  const targetFilePath = await ensureUniqueWorkspaceFilePath(requestedFilePath)
+  await writeFile(targetFilePath, buffer)
+
+  return targetFilePath
 }
 
 export async function createWorkspaceFile(rootPath: string, relativeFilePath: string) {

@@ -5,6 +5,18 @@ type MeoEditorBootstrap = {
   wrapperUrl: string
 }
 
+type MeoStoredState = {
+  mode?: 'live' | 'source'
+  topLine?: number
+  topLineOffset?: number
+}
+
+type MeoResolvedLinkResult = {
+  exists: boolean
+  filePath?: string
+  target: string
+}
+
 type MeoHostMessage =
   | { type: 'ready' }
   | {
@@ -18,11 +30,13 @@ type MeoHostMessage =
   }
   | { type: 'saveDocument' }
   | { type: 'setMode', mode: 'live' | 'source' }
+  | { type: 'viewPositionChanged', topLine?: number, topLineOffset?: number }
   | { type: 'openLink', href?: string }
   | { type: 'requestGitBlame', lineNumber?: number, localEditGeneration?: number, requestId?: string }
   | { type: 'resolveImageSrc', requestId?: string, url?: string }
   | { type: 'resolveLocalLinks', requestId?: string, targets?: unknown[] }
   | { type: 'resolveWikiLinks', requestId?: string, targets?: unknown[] }
+  | { type: 'saveImageFromClipboard', requestId?: string, fileName?: string, imageData?: string }
   | {
     type: string
     [key: string]: unknown
@@ -31,11 +45,23 @@ type MeoHostMessage =
 type MeoEditorHostProps = {
   filePath: string
   onCompositionChange?: (isComposing: boolean) => void
+  onOpenFile?: (filePath: string) => void
   onSave?: (nextValue: string) => void
   onChange: (nextValue: string) => void
   theme?: 'light' | 'dark' | 'auto'
   value: string
+  workspacePath?: string | null
 }
+
+type ParsedFsPath = {
+  root: string
+  segments: string[]
+  windowsLike: boolean
+}
+
+const MEO_STATE_STORAGE_PREFIX = 'aryn:meo-state:'
+const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx', '.mdc']
+const IMAGE_DIRECTORY = 'assets'
 
 function resolvePreferredTheme(theme: 'light' | 'dark' | 'auto') {
   if (theme !== 'auto') {
@@ -132,18 +158,368 @@ function resolveImageUrl(filePath: string, target: string) {
   return `${toFileUrl(resolvedPath)}${querySuffix}${hashSuffix}`
 }
 
+function parseFsPath(filePath: string): ParsedFsPath | null {
+  const normalizedPath = filePath.replace(/\\/g, '/').trim()
+  const windowsMatch = normalizedPath.match(/^[A-Za-z]:\//)
+
+  if (windowsMatch) {
+    return {
+      root: windowsMatch[0],
+      segments: normalizedPath.slice(windowsMatch[0].length).split('/').filter(Boolean),
+      windowsLike: true,
+    }
+  }
+
+  if (!normalizedPath.startsWith('/')) {
+    return null
+  }
+
+  return {
+    root: '/',
+    segments: normalizedPath.slice(1).split('/').filter(Boolean),
+    windowsLike: false,
+  }
+}
+
+function formatFsPath(parsedPath: ParsedFsPath, useBackslashes: boolean) {
+  const separator = useBackslashes ? '\\' : '/'
+  const renderedRoot = parsedPath.windowsLike && useBackslashes
+    ? parsedPath.root.replace(/\//g, '\\')
+    : parsedPath.root
+  const joinedSegments = parsedPath.segments.join(separator)
+
+  if (!joinedSegments) {
+    return renderedRoot
+  }
+
+  return `${renderedRoot}${joinedSegments}`
+}
+
+function usesBackslashes(filePath: string) {
+  return filePath.includes('\\')
+}
+
+function normalizeFsPath(filePath: string, preferredFilePath = filePath) {
+  const parsedPath = parseFsPath(filePath)
+  if (!parsedPath) {
+    return filePath
+  }
+
+  return formatFsPath(parsedPath, usesBackslashes(preferredFilePath))
+}
+
+function getDirectoryPath(filePath: string) {
+  const parsedPath = parseFsPath(filePath)
+
+  if (!parsedPath) {
+    return filePath
+  }
+
+  return formatFsPath({
+    ...parsedPath,
+    segments: parsedPath.segments.slice(0, -1),
+  }, usesBackslashes(filePath))
+}
+
+function resolveFsPath(baseDirectoryPath: string, targetPath: string) {
+  const normalizedTargetPath = targetPath.replace(/\\/g, '/')
+  const absoluteTargetPath = parseFsPath(normalizedTargetPath)
+
+  if (absoluteTargetPath) {
+    return formatFsPath(absoluteTargetPath, usesBackslashes(baseDirectoryPath))
+  }
+
+  const parsedBasePath = parseFsPath(baseDirectoryPath)
+  if (!parsedBasePath) {
+    return null
+  }
+
+  const nextSegments = [...parsedBasePath.segments]
+
+  for (const segment of normalizedTargetPath.split('/')) {
+    if (!segment || segment === '.') {
+      continue
+    }
+
+    if (segment === '..') {
+      if (nextSegments.length > 0) {
+        nextSegments.pop()
+      }
+      continue
+    }
+
+    nextSegments.push(segment)
+  }
+
+  return formatFsPath({
+    ...parsedBasePath,
+    segments: nextSegments,
+  }, usesBackslashes(baseDirectoryPath))
+}
+
+function getRelativeFsPath(fromFilePath: string, toFilePath: string) {
+  const fromPath = parseFsPath(getDirectoryPath(fromFilePath))
+  const toPath = parseFsPath(toFilePath)
+
+  if (!fromPath || !toPath || fromPath.root.toLowerCase() !== toPath.root.toLowerCase()) {
+    return normalizeFsPath(toFilePath, fromFilePath).replace(/\\/g, '/')
+  }
+
+  let commonSegmentCount = 0
+  while (
+    commonSegmentCount < fromPath.segments.length
+    && commonSegmentCount < toPath.segments.length
+    && fromPath.segments[commonSegmentCount].toLowerCase() === toPath.segments[commonSegmentCount].toLowerCase()
+  ) {
+    commonSegmentCount += 1
+  }
+
+  const upwardSegments = Array.from(
+    { length: fromPath.segments.length - commonSegmentCount },
+    () => '..',
+  )
+  const downwardSegments = toPath.segments.slice(commonSegmentCount)
+  return [...upwardSegments, ...downwardSegments].join('/') || '.'
+}
+
+function getPathExtension(filePath: string) {
+  const baseName = filePath.replace(/\\/g, '/').split('/').pop() ?? filePath
+  const dotIndex = baseName.lastIndexOf('.')
+  return dotIndex > 0 ? baseName.slice(dotIndex).toLowerCase() : ''
+}
+
+function stripFragment(value: string) {
+  return value.split('#', 1)[0] ?? value
+}
+
+function stripQuery(value: string) {
+  return value.split('?', 1)[0] ?? value
+}
+
+function decodeLinkTarget(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function getDisplayTarget(rawTarget: string) {
+  return decodeLinkTarget(stripFragment(rawTarget).trim())
+}
+
+function getPathTarget(rawTarget: string) {
+  return stripQuery(getDisplayTarget(rawTarget)).trim()
+}
+
+function isExternalHref(href: string) {
+  return /^[a-z][a-z0-9+.-]*:/i.test(href) && !/^file:/i.test(href) && !/^meo-wiki:/i.test(href)
+}
+
+function fileUrlToFsPath(fileUrl: string, preferredFilePath: string) {
+  try {
+    const url = new URL(fileUrl)
+    if (url.protocol !== 'file:') {
+      return null
+    }
+
+    let pathname = decodeURIComponent(url.pathname)
+    if (/^\/[A-Za-z]:/.test(pathname)) {
+      pathname = pathname.slice(1)
+    }
+
+    return normalizeFsPath(pathname, preferredFilePath)
+  } catch {
+    return null
+  }
+}
+
+function dedupePaths(paths: string[]) {
+  const seen = new Set<string>()
+
+  return paths.filter((candidatePath) => {
+    const key = candidatePath.replace(/\\/g, '/').toLowerCase()
+    if (seen.has(key)) {
+      return false
+    }
+
+    seen.add(key)
+    return true
+  })
+}
+
+function buildCandidatePaths(
+  filePath: string,
+  workspacePath: string | null | undefined,
+  rawTarget: string,
+  allowedExtensions: string[],
+) {
+  const pathTarget = getPathTarget(rawTarget)
+  if (!pathTarget || isExternalHref(pathTarget)) {
+    return []
+  }
+
+  const currentDirectoryPath = getDirectoryPath(filePath)
+  const resolvedBasePath = /^file:/i.test(pathTarget)
+    ? fileUrlToFsPath(pathTarget, filePath)
+    : resolveFsPath(currentDirectoryPath, pathTarget)
+
+  const candidateRoots = resolvedBasePath
+    ? [resolvedBasePath]
+    : []
+
+  if (workspacePath && !/^file:/i.test(pathTarget) && !parseFsPath(pathTarget)) {
+    const workspaceResolvedPath = resolveFsPath(workspacePath, pathTarget)
+    if (workspaceResolvedPath) {
+      candidateRoots.push(workspaceResolvedPath)
+    }
+  }
+
+  const directPaths = dedupePaths(candidateRoots)
+  const hasExplicitExtension = Boolean(getPathExtension(pathTarget))
+
+  if (hasExplicitExtension || allowedExtensions.length === 0) {
+    return directPaths
+  }
+
+  return dedupePaths([
+    ...directPaths,
+    ...directPaths.flatMap((candidatePath) => allowedExtensions.map((extension) => `${candidatePath}${extension}`)),
+  ])
+}
+
+async function resolveLinkTarget(
+  filePath: string,
+  workspacePath: string | null | undefined,
+  rawTarget: string,
+  allowedExtensions: string[],
+) {
+  const target = getDisplayTarget(rawTarget)
+  if (!target) {
+    return { exists: false, target }
+  }
+
+  const candidatePaths = buildCandidatePaths(filePath, workspacePath, rawTarget, allowedExtensions)
+  for (const candidatePath of candidatePaths) {
+    if (!workspacePath) {
+      continue
+    }
+
+    const { exists } = await window.appApi.workspaceFileExists(workspacePath, candidatePath)
+    if (exists) {
+      return {
+        exists: true,
+        filePath: candidatePath,
+        target,
+      }
+    }
+  }
+
+  return { exists: false, target }
+}
+
+function getStoredStateKey(filePath: string) {
+  return `${MEO_STATE_STORAGE_PREFIX}${encodeURIComponent(filePath)}`
+}
+
+function readStoredState(filePath: string): MeoStoredState {
+  try {
+    const rawValue = window.localStorage.getItem(getStoredStateKey(filePath))
+    if (!rawValue) {
+      return {}
+    }
+
+    const parsedValue = JSON.parse(rawValue) as Partial<MeoStoredState>
+
+    return {
+      mode: parsedValue.mode === 'live' || parsedValue.mode === 'source' ? parsedValue.mode : undefined,
+      topLine: typeof parsedValue.topLine === 'number' && Number.isFinite(parsedValue.topLine)
+        ? parsedValue.topLine
+        : undefined,
+      topLineOffset: typeof parsedValue.topLineOffset === 'number' && Number.isFinite(parsedValue.topLineOffset)
+        ? parsedValue.topLineOffset
+        : undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
+function writeStoredState(filePath: string, patch: Partial<MeoStoredState>) {
+  const nextState = {
+    ...readStoredState(filePath),
+    ...patch,
+  }
+
+  window.localStorage.setItem(getStoredStateKey(filePath), JSON.stringify(nextState))
+  return nextState
+}
+
+async function resolveLocalLinkResults(
+  filePath: string,
+  workspacePath: string | null | undefined,
+  targets: unknown[],
+) {
+  const results: MeoResolvedLinkResult[] = []
+
+  for (const target of targets) {
+    if (typeof target !== 'string') {
+      results.push({ exists: false, target: '' })
+      continue
+    }
+
+    results.push(await resolveLinkTarget(filePath, workspacePath, target, MARKDOWN_EXTENSIONS))
+  }
+
+  return results
+}
+
+async function resolveWikiLinkResults(
+  filePath: string,
+  workspacePath: string | null | undefined,
+  targets: unknown[],
+) {
+  const results: MeoResolvedLinkResult[] = []
+
+  for (const target of targets) {
+    if (typeof target !== 'string') {
+      results.push({ exists: false, target: '' })
+      continue
+    }
+
+    results.push(await resolveLinkTarget(filePath, workspacePath, target, MARKDOWN_EXTENSIONS))
+  }
+
+  return results
+}
+
+async function resolveOpenLinkFilePath(
+  filePath: string,
+  workspacePath: string | null | undefined,
+  href: string,
+) {
+  if (/^meo-wiki:/i.test(href)) {
+    const wikiTarget = href.replace(/^meo-wiki:/i, '')
+    return resolveLinkTarget(filePath, workspacePath, wikiTarget, MARKDOWN_EXTENSIONS)
+  }
+
+  return resolveLinkTarget(filePath, workspacePath, href, MARKDOWN_EXTENSIONS)
+}
+
 export function MeoEditorHost({
   filePath,
   onCompositionChange,
+  onOpenFile,
   onSave,
   onChange,
   theme = 'auto',
   value,
+  workspacePath,
 }: MeoEditorHostProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const contentRef = useRef(value)
   const versionRef = useRef(1)
-  const modeRef = useRef<'live' | 'source'>('source')
+  const modeRef = useRef<'live' | 'source'>(readStoredState(filePath).mode ?? 'source')
   const [bootstrap, setBootstrap] = useState<MeoEditorBootstrap | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>('Loading MEO bootstrap...')
@@ -152,6 +528,11 @@ export function MeoEditorHost({
   const iframeSource = useMemo(() => (
     bootstrap ? buildIframeSource(bootstrap.wrapperUrl, preferredTheme) : null
   ), [bootstrap, preferredTheme])
+
+  useEffect(() => {
+    const storedState = readStoredState(filePath)
+    modeRef.current = storedState.mode ?? 'source'
+  }, [filePath])
 
   useEffect(() => {
     let disposed = false
@@ -252,6 +633,8 @@ export function MeoEditorHost({
 
       switch (payload.type) {
         case 'ready': {
+          const storedState = readStoredState(filePath)
+
           setIsReady(true)
           setStatusMessage(null)
           postThemeChanged(iframeWindow, preferredTheme)
@@ -266,6 +649,8 @@ export function MeoEditorHost({
             mode: modeRef.current,
             outlinePosition: 'right',
             outlineVisible: false,
+            restoreTopLine: storedState.topLine,
+            restoreTopLineOffset: storedState.topLineOffset,
             text: contentRef.current,
             theme: undefined,
             themeKind: preferredTheme,
@@ -309,14 +694,40 @@ export function MeoEditorHost({
         case 'setMode': {
           if (payload.mode === 'live' || payload.mode === 'source') {
             modeRef.current = payload.mode
+            writeStoredState(filePath, { mode: payload.mode })
           }
           return
         }
 
+        case 'viewPositionChanged': {
+          writeStoredState(filePath, {
+            topLine: typeof payload.topLine === 'number' ? payload.topLine : undefined,
+            topLineOffset: typeof payload.topLineOffset === 'number' ? payload.topLineOffset : undefined,
+          })
+          return
+        }
+
         case 'openLink': {
-          if (typeof payload.href === 'string' && payload.href.trim()) {
-            window.open(payload.href, '_blank', 'noopener,noreferrer')
+          if (typeof payload.href !== 'string' || !payload.href.trim()) {
+            return
           }
+
+          const href = payload.href
+          if (href.startsWith('#')) {
+            return
+          }
+
+          if (isExternalHref(href)) {
+            window.open(href, '_blank', 'noopener,noreferrer')
+            return
+          }
+
+          void resolveOpenLinkFilePath(filePath, workspacePath, href)
+            .then((result) => {
+              if (result.exists && result.filePath) {
+                onOpenFile?.(result.filePath)
+              }
+            })
           return
         }
 
@@ -341,20 +752,64 @@ export function MeoEditorHost({
         }
 
         case 'resolveLocalLinks': {
-          iframeWindow.postMessage({
-            requestId: payload.requestId,
-            results: [],
-            type: 'resolvedLocalLinks',
-          }, '*')
+          void resolveLocalLinkResults(filePath, workspacePath, Array.isArray(payload.targets) ? payload.targets : [])
+            .then((results) => {
+              iframeWindow.postMessage({
+                requestId: payload.requestId,
+                results: results.map(({ exists, target }) => ({ exists, target })),
+                type: 'resolvedLocalLinks',
+              }, '*')
+            })
           return
         }
 
         case 'resolveWikiLinks': {
-          iframeWindow.postMessage({
-            requestId: payload.requestId,
-            results: [],
-            type: 'resolvedWikiLinks',
-          }, '*')
+          void resolveWikiLinkResults(filePath, workspacePath, Array.isArray(payload.targets) ? payload.targets : [])
+            .then((results) => {
+              iframeWindow.postMessage({
+                requestId: payload.requestId,
+                results: results.map(({ exists, target }) => ({ exists, target })),
+                type: 'resolvedWikiLinks',
+              }, '*')
+            })
+          return
+        }
+
+        case 'saveImageFromClipboard': {
+          void (async () => {
+            if (!workspacePath) {
+              iframeWindow.postMessage({
+                error: 'No workspace folder is open.',
+                requestId: payload.requestId,
+                success: false,
+                type: 'savedImagePath',
+              }, '*')
+              return
+            }
+
+            try {
+              const { filePath: savedImagePath } = await window.appApi.saveWorkspaceImage(
+                workspacePath,
+                IMAGE_DIRECTORY,
+                typeof payload.fileName === 'string' ? payload.fileName : 'pasted-image.png',
+                typeof payload.imageData === 'string' ? payload.imageData : '',
+              )
+
+              iframeWindow.postMessage({
+                path: getRelativeFsPath(filePath, savedImagePath),
+                requestId: payload.requestId,
+                success: true,
+                type: 'savedImagePath',
+              }, '*')
+            } catch (error) {
+              iframeWindow.postMessage({
+                error: error instanceof Error ? error.message : 'Failed to save image.',
+                requestId: payload.requestId,
+                success: false,
+                type: 'savedImagePath',
+              }, '*')
+            }
+          })()
           return
         }
 
@@ -368,7 +823,7 @@ export function MeoEditorHost({
     return () => {
       window.removeEventListener('message', handleWindowMessage)
     }
-  }, [filePath, onChange, onSave, preferredTheme])
+  }, [filePath, onChange, onOpenFile, onSave, preferredTheme, workspacePath])
 
   if (errorMessage) {
     return (
