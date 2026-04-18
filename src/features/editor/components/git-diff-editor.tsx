@@ -203,6 +203,15 @@ function getNavigationHighlightRange(
   }
 }
 
+function getSingleLineNavigationHighlightRange(lineNumber: number): DiffNavigationHighlightRange {
+  const normalizedLineNumber = Math.max(1, Math.floor(lineNumber))
+
+  return {
+    endLineNumber: normalizedLineNumber,
+    startLineNumber: normalizedLineNumber,
+  }
+}
+
 function clampRequestedLineToSelectionRange(
   selection: GitDiffSelection,
   side: 'modified' | 'original',
@@ -907,28 +916,22 @@ function CodeMirrorDiffRenderer({
         const resolvedSide = target?.target.side ?? preferredSide
 
         if (resolvedSide === 'original') {
-          revealEditorLine(splitView.a, target?.target.lineNumber ?? navigationRequest.lineNumber)
+          const targetLineNumber = target?.target.lineNumber ?? navigationRequest.lineNumber
+
+          revealEditorLine(splitView.a, targetLineNumber)
           applyNavigationHighlight(
             splitView.a,
-            target
-              ? getNavigationHighlightRange(target.selection, 'original')
-              : {
-                endLineNumber: navigationRequest.lineNumber,
-                startLineNumber: navigationRequest.lineNumber,
-              },
+            getSingleLineNavigationHighlightRange(targetLineNumber),
             originalHighlightTimerRef,
           )
           clearNavigationHighlight(splitView.b, modifiedHighlightTimerRef)
         } else {
-          revealEditorLine(splitView.b, target?.target.lineNumber ?? navigationRequest.lineNumber)
+          const targetLineNumber = target?.target.lineNumber ?? navigationRequest.lineNumber
+
+          revealEditorLine(splitView.b, targetLineNumber)
           applyNavigationHighlight(
             splitView.b,
-            target
-              ? getNavigationHighlightRange(target.selection, 'modified')
-              : {
-                endLineNumber: navigationRequest.lineNumber,
-                startLineNumber: navigationRequest.lineNumber,
-              },
+            getSingleLineNavigationHighlightRange(targetLineNumber),
             modifiedHighlightTimerRef,
           )
           clearNavigationHighlight(splitView.a, originalHighlightTimerRef)
@@ -953,16 +956,12 @@ function CodeMirrorDiffRenderer({
         navigationRequest.lineNumber,
         preferredSide,
       )
+      const targetLineNumber = target?.target.lineNumber ?? navigationRequest.lineNumber
 
-      revealEditorLine(unifiedView, target?.target.lineNumber ?? navigationRequest.lineNumber)
+      revealEditorLine(unifiedView, targetLineNumber)
       applyNavigationHighlight(
         unifiedView,
-        target
-          ? getNavigationHighlightRange(target.selection, 'modified')
-          : {
-            endLineNumber: navigationRequest.lineNumber,
-            startLineNumber: navigationRequest.lineNumber,
-          },
+        getSingleLineNavigationHighlightRange(targetLineNumber),
         unifiedHighlightTimerRef,
       )
       lastHandledNavigationRequestKeyRef.current = navigationRequest.requestKey

@@ -115,6 +115,39 @@ async function loadExtensionManifest(extensionRootPath: string) {
   }
 }
 
+const gitGutterAddedClickOriginal =
+  'if(F1==="added")return;if(F1==="modified"){z?.({lineNumber:r});return}G?.({lineNumber:z1})'
+const gitGutterAddedClickPatched =
+  'if(F1==="added"||F1==="modified"){z?.({lineNumber:r});return}G?.({lineNumber:z1})'
+
+async function patchExtractedMeoWebview(extensionRootPath: string) {
+  const webviewDistPath = path.join(extensionRootPath, 'webview', 'dist')
+  const entries = await readdir(webviewDistPath, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== '.js') {
+      continue
+    }
+
+    const filePath = path.join(webviewDistPath, entry.name)
+    const source = await readFile(filePath, 'utf8')
+
+    if (source.includes(gitGutterAddedClickPatched)) {
+      return
+    }
+
+    if (!source.includes(gitGutterAddedClickOriginal)) {
+      continue
+    }
+
+    const nextSource = source.replace(gitGutterAddedClickOriginal, gitGutterAddedClickPatched)
+    if (nextSource !== source) {
+      await writeFile(filePath, nextSource, 'utf8')
+      return
+    }
+  }
+}
+
 function getContentType(filePath: string) {
   switch (path.extname(filePath).toLowerCase()) {
     case '.css':
@@ -285,6 +318,7 @@ function buildWrapperHtml(cacheKey: string) {
     <script>
       (() => {
         let state
+        let lastHoveredAddedGitLine = null
         const applyTheme = (nextTheme) => {
           if (nextTheme === 'light' || nextTheme === 'dark') {
             document.documentElement.dataset.theme = nextTheme
@@ -312,6 +346,127 @@ function buildWrapperHtml(cacheKey: string) {
           }
         }
 
+        const parsePositiveInteger = (value) => {
+          const parsed = Number.parseInt(String(value ?? '').trim(), 10)
+          return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+        }
+
+        const getElementsFromPointSafe = (clientX, clientY) => {
+          if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+            return []
+          }
+
+          if (typeof document.elementsFromPoint === 'function') {
+            return document.elementsFromPoint(clientX, clientY)
+          }
+
+          const fallback = document.elementFromPoint(clientX, clientY)
+          return fallback ? [fallback] : []
+        }
+
+        const resolveGitGutterIntentFromElement = (target) => {
+          if (!(target instanceof Element)) {
+            return null
+          }
+
+          const gutterElement = target.closest('.cm-gutterElement')
+          const gutter = target.closest('.cm-gutter.meo-git-gutter')
+            ?? gutterElement?.closest('.cm-gutter.meo-git-gutter')
+
+          if (!(gutter instanceof HTMLElement) || !(gutterElement instanceof HTMLElement)) {
+            return null
+          }
+
+          const marker = target.closest('.meo-git-gutter-marker')
+            ?? gutterElement.querySelector?.('.meo-git-gutter-marker')
+
+          if (!(marker instanceof HTMLElement)) {
+            return null
+          }
+
+          const liveStartLine = parsePositiveInteger(marker.dataset.meoLiveBlockStartLine)
+          if (liveStartLine) {
+            return {
+              lineNumber: liveStartLine,
+              source: marker.classList.contains('is-added') || marker.classList.contains('is-modified')
+                ? 'worktree'
+                : 'revision',
+            }
+          }
+
+          const lineNumber = parsePositiveInteger(gutterElement.textContent)
+          if (!lineNumber) {
+            return null
+          }
+
+          return {
+            lineNumber,
+            source: marker.classList.contains('is-added') || marker.classList.contains('is-modified')
+              ? 'worktree'
+              : 'revision',
+          }
+        }
+
+        const resolveGitGutterIntentFromPoint = (clientX, clientY) => {
+          for (const element of getElementsFromPointSafe(clientX, clientY)) {
+            const resolvedIntent = resolveGitGutterIntentFromElement(element)
+            if (resolvedIntent) {
+              return resolvedIntent
+            }
+          }
+
+          return null
+        }
+
+        const postOpenGitLineIntent = (intent) => {
+          if (!intent?.lineNumber) {
+            return
+          }
+
+          window.parent.postMessage({
+            __arynMeo: true,
+            payload: {
+              lineNumber: intent.lineNumber,
+              type: intent.source === 'revision' ? 'openGitRevisionForLine' : 'openGitWorktreeForLine',
+            },
+          }, '*')
+        }
+
+        document.addEventListener('mousemove', (event) => {
+          const nextIntent = resolveGitGutterIntentFromPoint(event.clientX, event.clientY)
+          lastHoveredAddedGitLine = nextIntent?.source === 'worktree' ? nextIntent.lineNumber : lastHoveredAddedGitLine
+        }, true)
+
+        document.addEventListener('mouseleave', () => {
+          lastHoveredAddedGitLine = null
+        }, true)
+
+        document.addEventListener('pointerdown', (event) => {
+          if (event.button !== 0) {
+            return
+          }
+
+          const directIntent = resolveGitGutterIntentFromPoint(event.clientX, event.clientY)
+            ?? resolveGitGutterIntentFromElement(event.target)
+          const tooltipIntent = event.target instanceof Element
+            && event.target.closest('.meo-git-blame-tooltip')
+            && lastHoveredAddedGitLine
+            ? {
+              lineNumber: lastHoveredAddedGitLine,
+              source: 'worktree',
+            }
+            : null
+          const nextIntent = directIntent ?? tooltipIntent
+
+          if (!nextIntent) {
+            return
+          }
+
+          event.preventDefault()
+          event.stopPropagation()
+          postOpenGitLineIntent(nextIntent)
+        }, true)
+
         window.addEventListener('message', (event) => {
           const payload = event.data
           if (!payload || typeof payload !== 'object') {
@@ -338,6 +493,7 @@ async function writeWrapperFile(extractedExtension: ExtractedMeoExtension) {
 async function resolveExtractedExtension(vitePublicPath: string, cacheRootPath: string): Promise<ExtractedMeoExtension> {
   const vsixPath = path.join(vitePublicPath, 'extensions', bundledVsixFileName)
   const { cacheKey, extensionRootPath } = await ensureExtractedVsix(vsixPath, cacheRootPath)
+  await patchExtractedMeoWebview(extensionRootPath)
   const extensionInfo = await loadExtensionManifest(extensionRootPath)
   const webviewDistPath = path.join(extensionRootPath, 'webview', 'dist')
 
