@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GitRepositoryState } from '@/features/git/types'
 import type { MeoSettings } from '@/hooks/use-settings-store'
+import { createDefaultMeoHostEnvironment } from '@/features/editor/lib/meo-host-environment'
 import type { MeoEditorBootstrap } from '@/features/editor/lib/meo-protocol'
 import {
   getGitStateRefreshKey,
@@ -62,6 +63,8 @@ export function MeoEditorHost({
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const contentRef = useRef(value)
   const versionRef = useRef(1)
+  const isComposingRef = useRef(false)
+  const pendingExternalValueRef = useRef<string | null>(null)
   const modeRef = useRef<'live' | 'source'>(readStoredState(filePath).mode ?? 'source')
   const gitBaselineRequestRef = useRef(0)
   const channelIdRef = useRef(createMeoChannelId())
@@ -70,11 +73,22 @@ export function MeoEditorHost({
   const [statusMessage, setStatusMessage] = useState<string | null>('Loading MEO bootstrap...')
   const [isReady, setIsReady] = useState(false)
   const [iframeSource, setIframeSource] = useState<string | null>(null)
+  const environment = useMemo(() => createDefaultMeoHostEnvironment(), [])
   const preferredTheme = useMemo(() => resolvePreferredTheme(theme), [theme])
   const gitStateRefreshKey = useMemo(() => getGitStateRefreshKey(gitRepositoryState), [gitRepositoryState])
   const iframeOrigin = useMemo(() => (
     bootstrap ? getMeoIframeOrigin(bootstrap.wrapperUrl) : null
   ), [bootstrap])
+
+  function syncDocumentToIframe(iframeWindow: Window, nextValue: string) {
+    contentRef.current = nextValue
+    versionRef.current += 1
+    postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
+      text: nextValue,
+      type: 'docChanged',
+      version: versionRef.current,
+    })
+  }
 
   useEffect(() => {
     const storedState = readStoredState(filePath)
@@ -84,7 +98,7 @@ export function MeoEditorHost({
   useEffect(() => {
     let disposed = false
 
-    void window.appApi.getMeoEditorBootstrap()
+    void environment.appApi.getMeoEditorBootstrap()
       .then((nextBootstrap) => {
         if (disposed) {
           return
@@ -105,7 +119,7 @@ export function MeoEditorHost({
     return () => {
       disposed = true
     }
-  }, [])
+  }, [environment])
 
   useEffect(() => {
     if (!bootstrap) {
@@ -194,7 +208,7 @@ export function MeoEditorHost({
       return
     }
 
-    void window.appApi.getGitBaseline(workspacePath, filePath)
+    void environment.appApi.getGitBaseline(workspacePath, filePath)
       .then((baseline) => {
         if (gitBaselineRequestRef.current !== requestId) {
           return
@@ -223,12 +237,16 @@ export function MeoEditorHost({
           getUnavailableGitBaseline('error'),
         )
       })
-  }, [filePath, gitStateRefreshKey, isReady, workspacePath])
+  }, [environment, filePath, gitStateRefreshKey, isReady, workspacePath])
 
   useEffect(() => {
     onCompositionChange?.(false)
+    isComposingRef.current = false
+    pendingExternalValueRef.current = null
 
     return () => {
+      isComposingRef.current = false
+      pendingExternalValueRef.current = null
       onCompositionChange?.(false)
     }
   }, [onCompositionChange])
@@ -248,13 +266,13 @@ export function MeoEditorHost({
       return
     }
 
-    contentRef.current = value
-    versionRef.current += 1
-    postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
-      text: value,
-      type: 'docChanged',
-      version: versionRef.current,
-    })
+    if (isComposingRef.current) {
+      pendingExternalValueRef.current = value
+      return
+    }
+
+    pendingExternalValueRef.current = null
+    syncDocumentToIframe(iframeWindow, value)
   }, [isReady, value])
 
   useEffect(() => {
@@ -270,8 +288,32 @@ export function MeoEditorHost({
         return
       }
 
+      if (payload.type === 'compositionChanged') {
+        const nextIsComposing = payload.isComposing === true
+
+        if (isComposingRef.current !== nextIsComposing) {
+          isComposingRef.current = nextIsComposing
+          onCompositionChange?.(nextIsComposing)
+        }
+
+        if (!nextIsComposing) {
+          const pendingExternalValue = pendingExternalValueRef.current
+          pendingExternalValueRef.current = null
+
+          if (
+            typeof pendingExternalValue === 'string'
+            && pendingExternalValue !== contentRef.current
+          ) {
+            syncDocumentToIframe(iframeWindow, pendingExternalValue)
+          }
+        }
+
+        return
+      }
+
       handleMeoHostPayload({
         channelId: channelIdRef.current,
+        environment,
         filePath,
         iframeWindow,
         meoSettings,
@@ -295,7 +337,7 @@ export function MeoEditorHost({
     return () => {
       window.removeEventListener('message', handleWindowMessage)
     }
-  }, [filePath, iframeOrigin, meoSettings.gitDiffLineHighlights, meoSettings.imageFolder, meoSettings.outlinePosition, meoSettings.rememberPositionLines, onChange, onOpenFile, onOpenGitDiff, onSave, preferredTheme, workspacePath])
+  }, [environment, filePath, iframeOrigin, meoSettings.gitDiffLineHighlights, meoSettings.imageFolder, meoSettings.outlinePosition, meoSettings.rememberPositionLines, onChange, onOpenFile, onOpenGitDiff, onSave, preferredTheme, workspacePath])
 
   if (errorMessage) {
     return (

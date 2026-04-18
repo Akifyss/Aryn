@@ -5,6 +5,7 @@ export type MeoEditorBootstrap = {
 
 export type MeoHostMessage =
   | { type: 'ready' }
+  | { type: 'compositionChanged', isComposing?: boolean }
   | {
     type: 'applyChanges'
     baseVersion: number

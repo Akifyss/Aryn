@@ -63,9 +63,11 @@ type WorkspaceState = {
   tree: WorkspaceNode[]
   activateTab: (tabId: string) => void
   closeTab: (tabId: string) => void
-  markTabMissing: (path: string) => void
+  // File tabs are view instances over a shared per-file draft. These mutations
+  // intentionally fan out to every open tab for the same file path.
+  markFileTabsMissing: (path: string) => void
   markDiffTabSaved: (tabId: string, savedContent: string) => void
-  markTabSaved: (path: string, savedContent: string) => void
+  markFileTabsSaved: (path: string, savedContent: string) => void
   moveTab: (movingId: string, targetId: string, position: TabDropPosition) => void
   openDiffTab: (tab: WorkspaceDiffTab, activate?: boolean) => void
   openTab: (tab: {
@@ -79,9 +81,9 @@ type WorkspaceState = {
   resetOpenTabs: () => void
   setCurrentPath: (path: string | null) => void
   setTree: (tree: WorkspaceNode[]) => void
-  syncTabWithDisk: (path: string, nextContent: string) => void
+  syncFileTabsWithDisk: (path: string, nextContent: string) => void
   updateDiffTabDraft: (tabId: string, draftContent: string | null) => void
-  updateTabContent: (path: string, content: string) => void
+  updateFileTabsContent: (path: string, content: string) => void
 }
 
 export function createWorkspaceFileTabId(filePath: string, viewMode: WorkspaceFileViewMode) {
@@ -176,6 +178,29 @@ function mergeWorkspaceDiffTab(existingTab: WorkspaceDiffTab, nextTab: Workspace
   }
 }
 
+function mapWorkspaceFileTabsByPath(
+  openTabs: WorkspaceTab[],
+  path: string,
+  mapTab: (tab: WorkspaceFileTab) => WorkspaceFileTab,
+) {
+  let didChange = false
+
+  const nextTabs = openTabs.map((tab) => {
+    if (tab.kind !== 'file' || tab.filePath !== path) {
+      return tab
+    }
+
+    const nextTab = mapTab(tab)
+    if (nextTab !== tab) {
+      didChange = true
+    }
+
+    return nextTab
+  })
+
+  return { didChange, nextTabs }
+}
+
 export function reorderWorkspaceTabs(
   openTabs: WorkspaceTab[],
   movingId: string,
@@ -220,13 +245,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     activeTabId: getNextActiveTabId(state.openTabs, state.activeTabId, id),
     openTabs: state.openTabs.filter((tab) => tab.id !== id),
   })),
-  markTabMissing: (path) => set((state) => ({
-    openTabs: state.openTabs.map((tab) => (
-      tab.kind === 'file' && tab.filePath === path
-        ? { ...tab, exists: false }
-        : tab
-    )),
-  })),
+  markFileTabsMissing: (path) => set((state) => {
+    const { didChange, nextTabs } = mapWorkspaceFileTabsByPath(state.openTabs, path, (tab) => (
+      tab.exists ? { ...tab, exists: false } : tab
+    ))
+
+    return didChange ? { openTabs: nextTabs } : state
+  }),
   markDiffTabSaved: (tabId, savedContent) => set((state) => {
     let didChange = false
 
@@ -259,15 +284,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
     return didChange ? { openTabs } : state
   }),
-  markTabSaved: (path, savedContent) => set((state) => {
-    let didChange = false
-
-    const openTabs = state.openTabs.map((tab) => {
-      if (tab.kind !== 'file' || tab.filePath !== path) {
-        return tab
-      }
-
-      const nextTab = {
+  markFileTabsSaved: (path, savedContent) => set((state) => {
+    const { didChange, nextTabs } = mapWorkspaceFileTabsByPath(state.openTabs, path, (tab) => {
+      const nextTab: WorkspaceFileTab = {
         ...tab,
         content: savedContent,
         exists: true,
@@ -284,11 +303,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         return tab
       }
 
-      didChange = true
       return nextTab
     })
 
-    return didChange ? { openTabs } : state
+    return didChange ? { openTabs: nextTabs } : state
   }),
   moveTab: (movingId, targetId, position) => set((state) => {
     const nextTabs = reorderWorkspaceTabs(state.openTabs, movingId, targetId, position)
@@ -390,15 +408,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   resetOpenTabs: () => set({ activeTabId: null, openTabs: [] }),
   setCurrentPath: (currentPath) => set({ currentPath }),
   setTree: (tree) => set({ tree }),
-  syncTabWithDisk: (path, nextContent) => set((state) => {
-    let didChange = false
-
-    const openTabs = state.openTabs.map((tab) => {
-      if (tab.kind !== 'file' || tab.filePath !== path) {
-        return tab
-      }
-
-      const nextTab = {
+  syncFileTabsWithDisk: (path, nextContent) => set((state) => {
+    const { didChange, nextTabs } = mapWorkspaceFileTabsByPath(state.openTabs, path, (tab) => {
+      const nextTab: WorkspaceFileTab = {
         ...tab,
         content: nextContent,
         exists: true,
@@ -415,11 +427,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         return tab
       }
 
-      didChange = true
       return nextTab
     })
 
-    return didChange ? { openTabs } : state
+    return didChange ? { openTabs: nextTabs } : state
   }),
   updateDiffTabDraft: (tabId, draftContent) => set((state) => {
     let didChange = false
@@ -448,21 +459,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
     return didChange ? { openTabs } : state
   }),
-  updateTabContent: (path, content) => set((state) => {
-    let didChange = false
-
-    const openTabs = state.openTabs.map((tab) => {
-      if (tab.kind !== 'file' || tab.filePath !== path) {
-        return tab
-      }
-
+  updateFileTabsContent: (path, content) => set((state) => {
+    const { didChange, nextTabs } = mapWorkspaceFileTabsByPath(state.openTabs, path, (tab) => {
       const nextIsDirty = content !== tab.savedContent
 
       if (tab.content === content && tab.isDirty === nextIsDirty) {
         return tab
       }
 
-      didChange = true
       return {
         ...tab,
         content,
@@ -470,6 +474,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       }
     })
 
-    return didChange ? { openTabs } : state
+    return didChange ? { openTabs: nextTabs } : state
   }),
 }))

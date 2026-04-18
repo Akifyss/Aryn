@@ -585,8 +585,8 @@ function App() {
   const closeTab = useWorkspaceStore((state) => state.closeTab)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
   const markDiffTabSaved = useWorkspaceStore((state) => state.markDiffTabSaved)
-  const markTabMissing = useWorkspaceStore((state) => state.markTabMissing)
-  const markTabSaved = useWorkspaceStore((state) => state.markTabSaved)
+  const markFileTabsMissing = useWorkspaceStore((state) => state.markFileTabsMissing)
+  const markFileTabsSaved = useWorkspaceStore((state) => state.markFileTabsSaved)
   const moveTab = useWorkspaceStore((state) => state.moveTab)
   const openDiffTab = useWorkspaceStore((state) => state.openDiffTab)
   const openTab = useWorkspaceStore((state) => state.openTab)
@@ -596,10 +596,10 @@ function App() {
   const resetOpenTabs = useWorkspaceStore((state) => state.resetOpenTabs)
   const setCurrentPath = useWorkspaceStore((state) => state.setCurrentPath)
   const setTree = useWorkspaceStore((state) => state.setTree)
-  const syncTabWithDisk = useWorkspaceStore((state) => state.syncTabWithDisk)
+  const syncFileTabsWithDisk = useWorkspaceStore((state) => state.syncFileTabsWithDisk)
   const tree = useWorkspaceStore((state) => state.tree)
   const updateDiffTabDraft = useWorkspaceStore((state) => state.updateDiffTabDraft)
-  const updateTabContent = useWorkspaceStore((state) => state.updateTabContent)
+  const updateFileTabsContent = useWorkspaceStore((state) => state.updateFileTabsContent)
   const loadTree = useCallback(async (rootPath: string) => {
     const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
     setTree(nextTree)
@@ -934,7 +934,7 @@ function App() {
       throw error
     }
 
-    syncTabWithDisk(filePath, content)
+    syncFileTabsWithDisk(filePath, content)
     markDiffTabSaved(tabId, content)
 
     if (announce) {
@@ -1247,9 +1247,9 @@ function App() {
     }
 
     if (syncMode === 'sync') {
-      syncTabWithDisk(filePath, content)
+      syncFileTabsWithDisk(filePath, content)
     } else {
-      markTabSaved(filePath, content)
+      markFileTabsSaved(filePath, content)
     }
 
     if (announce) {
@@ -1266,9 +1266,9 @@ function App() {
     clearInternalWorkspaceSaveMarker,
     currentPath,
     markInternalWorkspaceSave,
-    markTabSaved,
+    markFileTabsSaved,
     performWorkspaceRefresh,
-    syncTabWithDisk,
+    syncFileTabsWithDisk,
   ])
 
   const flushWorkspaceAutosave = useCallback(async (filePath?: string) => {
@@ -2028,7 +2028,7 @@ function App() {
 
         try {
           const nextContent = await window.appApi.readWorkspaceFile(change.path)
-          syncTabWithDisk(change.path, nextContent)
+          syncFileTabsWithDisk(change.path, nextContent)
         } catch {
           closeFileTabsForPath(change.path)
         }
@@ -2479,7 +2479,7 @@ function App() {
 
       if (event.type === 'unlink') {
         if (affectedTab.isDirty) {
-          markTabMissing(event.path)
+          markFileTabsMissing(event.path)
           setStatusMessage(`${getBaseName(event.path)} was removed externally. Save to recreate it.`)
           return
         }
@@ -2497,7 +2497,7 @@ function App() {
         }
 
         const updatedContent = await window.appApi.readWorkspaceFile(event.path)
-        syncTabWithDisk(event.path, updatedContent)
+        syncFileTabsWithDisk(event.path, updatedContent)
         setStatusMessage(`${getBaseName(event.path)} reloaded`)
         return
       }
@@ -2509,13 +2509,13 @@ function App() {
         }
 
         const updatedContent = await window.appApi.readWorkspaceFile(event.path)
-        syncTabWithDisk(event.path, updatedContent)
+        syncFileTabsWithDisk(event.path, updatedContent)
         setStatusMessage('Synced with external edits')
       }
     })
 
     return unsubscribe
-  }, [consumeInternalWorkspaceSave, currentPath, markTabMissing, requestWorkspaceRefresh, syncTabWithDisk])
+  }, [consumeInternalWorkspaceSave, currentPath, markFileTabsMissing, requestWorkspaceRefresh, syncFileTabsWithDisk])
 
   useEffect(() => {
     const unsubscribe = window.appApi.onWindowCloseRequested(() => {
@@ -3637,7 +3637,7 @@ function App() {
                     return
                   }
 
-                  updateTabContent(currentFilePath, nextValue)
+                  updateFileTabsContent(currentFilePath, nextValue)
                 }}
                 onCompositionChange={setIsActiveEditorComposing}
                 value={currentFileContent}
@@ -3650,7 +3650,7 @@ function App() {
                 key={activeFileTab.id}
                 filePath={activeFileTab.filePath}
                 onChange={(nextValue) => {
-                  updateTabContent(activeFileTab.filePath, nextValue)
+                  updateFileTabsContent(activeFileTab.filePath, nextValue)
                 }}
                 onCompositionChange={setIsActiveEditorComposing}
                 onOpenFile={(targetFilePath) => {
@@ -3703,7 +3703,7 @@ function App() {
                 disabled={false}
                 filePath={activeFileTab.filePath}
                 onChange={(nextValue) => {
-                  updateTabContent(activeFileTab.filePath, nextValue)
+                  updateFileTabsContent(activeFileTab.filePath, nextValue)
                 }}
                 onCompositionChange={setIsActiveEditorComposing}
                 onSave={(content) => {

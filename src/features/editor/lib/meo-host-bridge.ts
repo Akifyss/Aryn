@@ -1,6 +1,7 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { GitBaselinePayload, GitRepositoryState } from '@/features/git/types'
 import type { MeoSettings } from '@/hooks/use-settings-store'
+import type { MeoHostEnvironment } from '@/features/editor/lib/meo-host-environment'
 import type { MeoHostMessage } from '@/features/editor/lib/meo-protocol'
 import {
   getRelativeFsPath,
@@ -38,6 +39,7 @@ type MeoHostPayloadHandlerOptions = {
   channelId: string
   filePath: string
   iframeWindow: Window
+  environment: MeoHostEnvironment
   meoSettings: MeoSettings
   modeRef: MutableRefObject<'live' | 'source'>
   onChange: (nextValue: string) => void
@@ -222,6 +224,7 @@ export function handleMeoHostPayload({
   channelId,
   filePath,
   iframeWindow,
+  environment,
   meoSettings,
   modeRef,
   onChange,
@@ -359,11 +362,16 @@ export function handleMeoHostPayload({
       }
 
       if (isExternalHref(href)) {
-        window.open(href, '_blank', 'noopener,noreferrer')
+        environment.openExternalLink(href)
         return
       }
 
-      void resolveOpenLinkFilePath(filePath, workspacePath, href)
+      void resolveOpenLinkFilePath(
+        filePath,
+        workspacePath,
+        href,
+        environment.appApi.workspaceFileExists,
+      )
         .then((result) => {
           if (result.exists && result.filePath) {
             onOpenFile?.(result.filePath)
@@ -394,7 +402,7 @@ export function handleMeoHostPayload({
           return
         }
 
-        const result = await window.appApi.getGitLineBlame(
+        const result = await environment.appApi.getGitLineBlame(
           workspacePath,
           filePath,
           typeof payload.lineNumber === 'number' ? payload.lineNumber : 1,
@@ -422,7 +430,12 @@ export function handleMeoHostPayload({
     }
 
     case 'resolveLocalLinks': {
-      void resolveLocalLinkResults(filePath, workspacePath, Array.isArray(payload.targets) ? payload.targets : [])
+      void resolveLocalLinkResults(
+        filePath,
+        workspacePath,
+        Array.isArray(payload.targets) ? payload.targets : [],
+        environment.appApi.workspaceFileExists,
+      )
         .then((results) => {
           postMessageToMeoIframe(iframeWindow, channelId, {
             requestId: payload.requestId,
@@ -434,7 +447,12 @@ export function handleMeoHostPayload({
     }
 
     case 'resolveWikiLinks': {
-      void resolveWikiLinkResults(filePath, workspacePath, Array.isArray(payload.targets) ? payload.targets : [])
+      void resolveWikiLinkResults(
+        filePath,
+        workspacePath,
+        Array.isArray(payload.targets) ? payload.targets : [],
+        environment.appApi.workspaceFileExists,
+      )
         .then((results) => {
           postMessageToMeoIframe(iframeWindow, channelId, {
             requestId: payload.requestId,
@@ -458,7 +476,7 @@ export function handleMeoHostPayload({
         }
 
         try {
-          const { filePath: savedImagePath } = await window.appApi.saveWorkspaceImage(
+          const { filePath: savedImagePath } = await environment.appApi.saveWorkspaceImage(
             workspacePath,
             meoSettings.imageFolder,
             typeof payload.fileName === 'string' ? payload.fileName : 'pasted-image.png',

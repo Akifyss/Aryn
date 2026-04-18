@@ -141,6 +141,7 @@ export function buildMeoWrapperHtml({
     <script>
       (() => {
         let state
+        let isComposing = false
         const applyTheme = (nextTheme) => {
           if (nextTheme === 'light' || nextTheme === 'dark') {
             document.documentElement.dataset.theme = nextTheme
@@ -161,6 +162,18 @@ export function buildMeoWrapperHtml({
             channel: channelId,
             payload: message,
           }, parentOrigin)
+        }
+
+        const updateCompositionState = (nextValue) => {
+          if (isComposing === nextValue) {
+            return
+          }
+
+          isComposing = nextValue
+          postMessageToParent({
+            isComposing: nextValue,
+            type: 'compositionChanged',
+          })
         }
 
         window.acquireVsCodeApi = function acquireVsCodeApi() {
@@ -199,6 +212,28 @@ export function buildMeoWrapperHtml({
           if (payload.type === 'themeChanged') {
             applyTheme(payload.themeKind)
           }
+        })
+
+        document.addEventListener('compositionstart', () => {
+          updateCompositionState(true)
+        }, true)
+
+        document.addEventListener('compositionend', () => {
+          updateCompositionState(false)
+        }, true)
+
+        window.addEventListener('blur', () => {
+          updateCompositionState(false)
+        })
+
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState !== 'visible') {
+            updateCompositionState(false)
+          }
+        })
+
+        window.addEventListener('beforeunload', () => {
+          updateCompositionState(false)
         })
       })()
     </script>

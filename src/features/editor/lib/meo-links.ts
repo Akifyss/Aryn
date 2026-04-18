@@ -4,6 +4,11 @@ type MeoResolvedLinkResult = {
   target: string
 }
 
+export type MeoWorkspaceFileExists = (
+  workspacePath: string,
+  filePath: string,
+) => Promise<{ exists: boolean }>
+
 type ParsedFsPath = {
   root: string
   segments: string[]
@@ -302,6 +307,7 @@ async function resolveLinkTarget(
   workspacePath: string | null | undefined,
   rawTarget: string,
   allowedExtensions: string[],
+  workspaceFileExists: MeoWorkspaceFileExists,
 ) {
   const target = getDisplayTarget(rawTarget)
   if (!target) {
@@ -314,7 +320,7 @@ async function resolveLinkTarget(
       continue
     }
 
-    const { exists } = await window.appApi.workspaceFileExists(workspacePath, candidatePath)
+    const { exists } = await workspaceFileExists(workspacePath, candidatePath)
     if (exists) {
       return {
         exists: true,
@@ -331,6 +337,7 @@ export async function resolveLocalLinkResults(
   filePath: string,
   workspacePath: string | null | undefined,
   targets: unknown[],
+  workspaceFileExists: MeoWorkspaceFileExists,
 ) {
   const results: MeoResolvedLinkResult[] = []
 
@@ -340,7 +347,13 @@ export async function resolveLocalLinkResults(
       continue
     }
 
-    results.push(await resolveLinkTarget(filePath, workspacePath, target, MARKDOWN_EXTENSIONS))
+    results.push(await resolveLinkTarget(
+      filePath,
+      workspacePath,
+      target,
+      MARKDOWN_EXTENSIONS,
+      workspaceFileExists,
+    ))
   }
 
   return results
@@ -350,6 +363,7 @@ export async function resolveWikiLinkResults(
   filePath: string,
   workspacePath: string | null | undefined,
   targets: unknown[],
+  workspaceFileExists: MeoWorkspaceFileExists,
 ) {
   const results: MeoResolvedLinkResult[] = []
 
@@ -359,7 +373,13 @@ export async function resolveWikiLinkResults(
       continue
     }
 
-    results.push(await resolveLinkTarget(filePath, workspacePath, target, MARKDOWN_EXTENSIONS))
+    results.push(await resolveLinkTarget(
+      filePath,
+      workspacePath,
+      target,
+      MARKDOWN_EXTENSIONS,
+      workspaceFileExists,
+    ))
   }
 
   return results
@@ -369,11 +389,12 @@ export async function resolveOpenLinkFilePath(
   filePath: string,
   workspacePath: string | null | undefined,
   href: string,
+  workspaceFileExists: MeoWorkspaceFileExists,
 ) {
   if (/^meo-wiki:/i.test(href)) {
     const wikiTarget = href.replace(/^meo-wiki:/i, '')
-    return resolveLinkTarget(filePath, workspacePath, wikiTarget, MARKDOWN_EXTENSIONS)
+    return resolveLinkTarget(filePath, workspacePath, wikiTarget, MARKDOWN_EXTENSIONS, workspaceFileExists)
   }
 
-  return resolveLinkTarget(filePath, workspacePath, href, MARKDOWN_EXTENSIONS)
+  return resolveLinkTarget(filePath, workspacePath, href, MARKDOWN_EXTENSIONS, workspaceFileExists)
 }
