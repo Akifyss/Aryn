@@ -542,7 +542,7 @@ function App() {
   const [isApplyingIconTheme, setIsApplyingIconTheme] = useState(false)
   const [isSettingsTabOpen, setIsSettingsTabOpen] = useState(false)
   const [isSettingsTabActive, setIsSettingsTabActive] = useState(false)
-  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('general')
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance')
   const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
   const [iconTheme, setIconTheme] = useState<WorkspaceIconTheme | null>(null)
   const [iconThemeOptions, setIconThemeOptions] = useState<WorkspaceIconThemeCatalogOption[]>([])

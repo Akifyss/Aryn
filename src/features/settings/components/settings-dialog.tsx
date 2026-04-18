@@ -6,7 +6,7 @@ import type { AppIconCatalogOption } from '@/features/settings/types'
 import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '@/features/workspace/types'
 import { useSettingsStore } from '@/hooks/use-settings-store'
 
-export type SettingsSectionId = 'general' | 'providers'
+export type SettingsSectionId = 'appearance' | 'editor' | 'providers'
 
 type SettingsViewProps = {
   activeSection: SettingsSectionId
@@ -30,12 +30,17 @@ type AuthProviderKey = 'google' | 'openai' | 'openrouter'
 
 const SETTINGS_SECTIONS: Array<{ description: string, id: SettingsSectionId, label: string }> = [
   {
-    description: '应用的界面外观和行为。',
-    id: 'general',
+    description: '主题、图标与界面外观。',
+    id: 'appearance',
     label: '外观',
   },
   {
-    description: '管理 Pi Agent 提供商的 API 密钥。',
+    description: '编辑器行为与 Markdown 工作流设置。',
+    id: 'editor',
+    label: '编辑器',
+  },
+  {
+    description: 'AI 服务商与 API 密钥配置。',
     id: 'providers',
     label: '服务提供商',
   },
@@ -51,16 +56,29 @@ function getBaseName(filePath: string) {
   return filePath.split(/[\\/]/).pop() ?? filePath
 }
 
+function getSectionTitle(section: SettingsSectionId) {
+  switch (section) {
+    case 'appearance':
+      return '外观'
+    case 'editor':
+      return '编辑器'
+    case 'providers':
+      return '服务提供商'
+    default:
+      return '设置'
+  }
+}
+
 function getProviderMeta(state: AgentProviderAuthState) {
   if (state.source === 'stored') {
-    return '正在使用已保存的密钥'
+    return '当前正在使用已保存的密钥'
   }
 
   if (state.source === 'env') {
-    return `正在使用环境变量 ${state.envVarName}`
+    return `当前正在使用环境变量 ${state.envVarName}`
   }
 
-  return `未保存密钥。环境变量 ${state.envVarName} 也可生效。`
+  return `尚未保存密钥，也未检测到环境变量 ${state.envVarName}`
 }
 
 export function SettingsDialog({
@@ -199,7 +217,7 @@ export function SettingsDialog({
         ? `${provider} 密钥已更新`
         : `${provider} 密钥已移除`)
     } catch (error) {
-      setPanelError(error instanceof Error ? error.message : '无法更新提供商身份验证。')
+      setPanelError(error instanceof Error ? error.message : '无法更新服务提供商认证信息。')
     } finally {
       setIsSavingAuth(false)
     }
@@ -215,6 +233,326 @@ export function SettingsDialog({
     })
   }
 
+  function renderAppearanceSection() {
+    return (
+      <div className='settings-card'>
+        <div className='settings-theme-switcher'>
+          <div className='settings-field'>
+            <span className='settings-field-label'>主题模式</span>
+            <div className='settings-tabs-wrapper heroui-tabs-fix'>
+              <Tabs
+                selectedKey={theme}
+                onSelectionChange={(key) => setTheme(key as 'light' | 'dark' | 'auto')}
+                variant='primary'
+                className='w-full'
+              >
+                <Tabs.ListContainer className='w-full'>
+                  <Tabs.List aria-label='主题模式' className='w-full'>
+                    <Tabs.Tab id='light' className='flex-1'>
+                      浅色
+                      <Tabs.Indicator />
+                    </Tabs.Tab>
+                    <Tabs.Tab id='dark' className='flex-1'>
+                      深色
+                      <Tabs.Indicator />
+                    </Tabs.Tab>
+                    <Tabs.Tab id='auto' className='flex-1'>
+                      跟随系统
+                      <Tabs.Indicator />
+                    </Tabs.Tab>
+                  </Tabs.List>
+                </Tabs.ListContainer>
+              </Tabs>
+            </div>
+          </div>
+
+          <div className='settings-field' style={{ marginTop: '24px' }}>
+            <div className='settings-copy-block'>
+              <h4>文件图标主题</h4>
+              <p>控制文件树与工作区中的图标样式。</p>
+            </div>
+            <div className='settings-inline-form' style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <Select
+                className='flex-1 heroui-select-fix'
+                selectedKey={activeIconThemeKey}
+                onSelectionChange={(value) => {
+                  const selectedOption = iconThemeOptions.find((option) => option.key === String(value))
+
+                  if (selectedOption) {
+                    void onSelectIconTheme({
+                      sourceVsixPath: selectedOption.sourceVsixPath,
+                      themeId: selectedOption.themeId,
+                    })
+                  }
+                }}
+                placeholder='选择文件图标主题'
+                isDisabled={isIconThemeBusy || iconThemeOptions.length === 0}
+              >
+                <Select.Trigger className='settings-select-trigger'>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    {iconThemeOptions.map((option) => (
+                      <ListBox.Item key={option.key} id={option.key} textValue={option.label}>
+                        {option.label}
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </Select.Popover>
+              </Select>
+              <Button
+                isDisabled={isIconThemeBusy}
+                variant='primary'
+                className='settings-action-button h-10'
+                onPress={() => void onImportIconTheme()}
+              >
+                导入 VSIX
+              </Button>
+            </div>
+            {iconTheme && (
+              <p className='settings-inline-hint' style={{ marginTop: '8px' }}>
+                当前使用：{iconTheme.activeThemeLabel} / {getBaseName(iconTheme.sourceVsixPath)}
+              </p>
+            )}
+          </div>
+
+          <div className='settings-field' style={{ marginTop: '24px' }}>
+            <div className='settings-copy-block'>
+              <h4>应用图标</h4>
+              <p>选择桌面应用窗口和任务栏使用的图标。</p>
+            </div>
+            <Select
+              className='settings-field-grow heroui-select-fix'
+              selectedKey={selectedAppIcon?.id ?? ''}
+              onSelectionChange={(value) => {
+                if (value == null) {
+                  return
+                }
+
+                const nextAppIconId = String(value)
+                if (nextAppIconId) {
+                  void onSelectAppIcon(nextAppIconId)
+                }
+              }}
+              placeholder='选择应用图标'
+              isDisabled={isAppIconBusy || appIconOptions.length === 0}
+            >
+              <Select.Trigger className='settings-select-trigger settings-app-icon-select-trigger'>
+                {selectedAppIcon ? (
+                  <>
+                    <span className='settings-app-icon-preview is-compact'>
+                      <img src={selectedAppIcon.previewSrc} alt={`${selectedAppIcon.label} app icon`} />
+                    </span>
+                    <span className='settings-app-icon-name'>{selectedAppIcon.label}</span>
+                    <Select.Indicator />
+                  </>
+                ) : (
+                  <>
+                    <span className='settings-app-icon-placeholder'>选择应用图标</span>
+                    <Select.Indicator />
+                  </>
+                )}
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {appIconOptions.map((option) => (
+                    <ListBox.Item key={option.id} id={option.id} textValue={option.label}>
+                      <span className='settings-app-icon-item'>
+                        <span className='settings-app-icon-preview is-compact'>
+                          <img src={option.previewSrc} alt={`${option.label} app icon`} />
+                        </span>
+                        <span className='settings-app-icon-name'>{option.label}</span>
+                      </span>
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function renderEditorSection() {
+    return (
+      <div className='settings-card'>
+        <div className='settings-field'>
+          <div className='settings-copy-block'>
+            <h4>Markdown 编辑器</h4>
+            <p>配置默认 Markdown 编辑器的侧栏、Git 高亮与资源目录行为。</p>
+          </div>
+
+          <div className='settings-inline-form' style={{ marginTop: '12px' }}>
+            <div className='settings-field settings-field-grow'>
+              <span className='settings-field-label'>大纲位置</span>
+              <Select
+                className='settings-field-grow heroui-select-fix'
+                selectedKey={meo.outlinePosition}
+                onSelectionChange={(value) => {
+                  const nextValue = String(value)
+                  if (nextValue === 'left' || nextValue === 'right') {
+                    updateMeoSettings({ outlinePosition: nextValue })
+                  }
+                }}
+              >
+                <Select.Trigger className='settings-select-trigger'>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    <ListBox.Item key='right' id='right' textValue='右侧'>
+                      右侧
+                    </ListBox.Item>
+                    <ListBox.Item key='left' id='left' textValue='左侧'>
+                      左侧
+                    </ListBox.Item>
+                  </ListBox>
+                </Select.Popover>
+              </Select>
+            </div>
+
+            <div className='settings-field settings-field-grow'>
+              <span className='settings-field-label'>Git 行级高亮</span>
+              <Select
+                className='settings-field-grow heroui-select-fix'
+                selectedKey={meo.gitDiffLineHighlights ? 'enabled' : 'disabled'}
+                onSelectionChange={(value) => {
+                  updateMeoSettings({ gitDiffLineHighlights: String(value) === 'enabled' })
+                }}
+              >
+                <Select.Trigger className='settings-select-trigger'>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    <ListBox.Item key='enabled' id='enabled' textValue='开启'>
+                      开启
+                    </ListBox.Item>
+                    <ListBox.Item key='disabled' id='disabled' textValue='关闭'>
+                      关闭
+                    </ListBox.Item>
+                  </ListBox>
+                </Select.Popover>
+              </Select>
+            </div>
+          </div>
+
+          <div className='settings-inline-form' style={{ marginTop: '12px' }}>
+            <div className='settings-field settings-field-grow'>
+              <span className='settings-field-label'>图片保存目录</span>
+              <Input
+                aria-label='编辑器图片保存目录'
+                className='settings-field-grow'
+                onChange={(event) => {
+                  setMeoImageFolderDraft(event.target.value)
+                }}
+                onBlur={commitMeoImageFolderDraft}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    commitMeoImageFolderDraft()
+                  }
+                }}
+                placeholder='assets'
+                value={meoImageFolderDraft}
+                variant='secondary'
+              />
+              <p className='settings-inline-hint'>
+                相对于工作区根目录。留空或无效值会回退到 <code>assets</code>。
+              </p>
+            </div>
+
+            <div className='settings-field settings-field-grow'>
+              <span className='settings-field-label'>滚动位置记忆阈值</span>
+              <Input
+                aria-label='编辑器滚动位置记忆阈值'
+                className='settings-field-grow'
+                min={0}
+                onChange={(event) => {
+                  setMeoRememberPositionDraft(event.target.value)
+                }}
+                onBlur={commitMeoRememberPositionDraft}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    commitMeoRememberPositionDraft()
+                  }
+                }}
+                placeholder='100'
+                type='number'
+                value={meoRememberPositionDraft}
+                variant='secondary'
+              />
+              <p className='settings-inline-hint'>
+                文件行数达到该值后，会记住上次可见位置。设为 <code>0</code> 表示始终记住。
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function renderProvidersSection() {
+    return (
+      <div className='settings-card'>
+        {workspacePath ? (
+          <div className='settings-provider-list'>
+            {authProviders.map((provider) => {
+              const draftValue = authDrafts[provider.key]
+
+              return (
+                <section key={provider.key} className='settings-provider-card'>
+                  <div>
+                    <span className='settings-provider-label'>{provider.label}</span>
+                    <span className='settings-provider-meta'>{getProviderMeta(provider.state)}</span>
+                  </div>
+                  <Input
+                    aria-label={`${provider.label} API key`}
+                    className='settings-provider-input'
+                    disabled={isSavingAuth}
+                    onChange={(event) => setAuthDrafts((prev) => ({ ...prev, [provider.key]: event.target.value }))}
+                    placeholder={provider.placeholder}
+                    type='password'
+                    value={draftValue}
+                    variant='secondary'
+                  />
+                  <div className='settings-provider-actions'>
+                    <Button
+                      isDisabled={isSavingAuth || !draftValue.trim()}
+                      size='sm'
+                      variant='ghost'
+                      className='settings-action-button'
+                      onPress={() => void handleSaveProviderAuth(provider.key, draftValue)}
+                    >
+                      保存密钥
+                    </Button>
+                    <Button
+                      isDisabled={isSavingAuth || !provider.state.hasStoredCredential}
+                      size='sm'
+                      variant='ghost'
+                      className='settings-action-button'
+                      onPress={() => void handleSaveProviderAuth(provider.key, null)}
+                    >
+                      移除已保存密钥
+                    </Button>
+                  </div>
+                </section>
+              )
+            })}
+          </div>
+        ) : (
+          <div className='settings-empty-state'>
+            请先打开一个工作区。服务提供商配置依赖当前活动工作区上下文。
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className={`settings-page ${resolvedTheme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}>
       <aside className='settings-sidebar'>
@@ -222,7 +560,7 @@ export function SettingsDialog({
           <h2 className='settings-sidebar-title'>设置</h2>
         </div>
 
-        <nav className='settings-nav' aria-label='Settings sections'>
+        <nav className='settings-nav' aria-label='设置分区'>
           {SETTINGS_SECTIONS.map((section) => (
             <button
               key={section.id}
@@ -238,9 +576,7 @@ export function SettingsDialog({
 
       <section className='settings-panel'>
         <div className='settings-panel-header'>
-          <h3 className='settings-panel-title'>
-            {activeSection === 'general' ? '外观' : '服务提供商'}
-          </h3>
+          <h3 className='settings-panel-title'>{getSectionTitle(activeSection)}</h3>
         </div>
 
         <AppScrollArea
@@ -249,309 +585,9 @@ export function SettingsDialog({
         >
           {panelError && <div className='settings-alert settings-alert-error'>{panelError}</div>}
 
-          {activeSection === 'general' ? (
-            <div className='settings-card'>
-              <div className='settings-theme-switcher'>
-                <div className='settings-field'>
-                  <span className='settings-field-label'>模式</span>
-                  <div className='settings-tabs-wrapper heroui-tabs-fix'>
-                    <Tabs
-                      selectedKey={theme}
-                      onSelectionChange={(key) => setTheme(key as 'light' | 'dark' | 'auto')}
-                      variant='primary'
-                      className='w-full'
-                    >
-                      <Tabs.ListContainer className='w-full'>
-                        <Tabs.List aria-label='主题配色' className='w-full'>
-                          <Tabs.Tab id='light' className='flex-1'>
-                            浅色
-                            <Tabs.Indicator />
-                          </Tabs.Tab>
-                          <Tabs.Tab id='dark' className='flex-1'>
-                            深色
-                            <Tabs.Indicator />
-                          </Tabs.Tab>
-                          <Tabs.Tab id='auto' className='flex-1'>
-                            跟随系统
-                            <Tabs.Indicator />
-                          </Tabs.Tab>
-                        </Tabs.List>
-                      </Tabs.ListContainer>
-                    </Tabs>
-                  </div>
-                </div>
-
-                <div className='settings-field' style={{ marginTop: '24px' }}>
-                  <div className='settings-copy-block'>
-                    <h4>Markdown Editor Optimized</h4>
-                    <p>Configure the embedded MEO editor behavior.</p>
-                  </div>
-
-                  <div className='settings-inline-form' style={{ marginTop: '12px' }}>
-                    <div className='settings-field settings-field-grow'>
-                      <span className='settings-field-label'>Outline position</span>
-                      <Select
-                        className='settings-field-grow heroui-select-fix'
-                        selectedKey={meo.outlinePosition}
-                        onSelectionChange={(value) => {
-                          const nextValue = String(value)
-                          if (nextValue === 'left' || nextValue === 'right') {
-                            updateMeoSettings({ outlinePosition: nextValue })
-                          }
-                        }}
-                      >
-                        <Select.Trigger className='settings-select-trigger'>
-                          <Select.Value />
-                          <Select.Indicator />
-                        </Select.Trigger>
-                        <Select.Popover>
-                          <ListBox>
-                            <ListBox.Item key='right' id='right' textValue='Right'>
-                              Right
-                            </ListBox.Item>
-                            <ListBox.Item key='left' id='left' textValue='Left'>
-                              Left
-                            </ListBox.Item>
-                          </ListBox>
-                        </Select.Popover>
-                      </Select>
-                    </div>
-
-                    <div className='settings-field settings-field-grow'>
-                      <span className='settings-field-label'>Git line highlights</span>
-                      <Select
-                        className='settings-field-grow heroui-select-fix'
-                        selectedKey={meo.gitDiffLineHighlights ? 'enabled' : 'disabled'}
-                        onSelectionChange={(value) => {
-                          updateMeoSettings({ gitDiffLineHighlights: String(value) === 'enabled' })
-                        }}
-                      >
-                        <Select.Trigger className='settings-select-trigger'>
-                          <Select.Value />
-                          <Select.Indicator />
-                        </Select.Trigger>
-                        <Select.Popover>
-                          <ListBox>
-                            <ListBox.Item key='enabled' id='enabled' textValue='Enabled'>
-                              Enabled
-                            </ListBox.Item>
-                            <ListBox.Item key='disabled' id='disabled' textValue='Disabled'>
-                              Disabled
-                            </ListBox.Item>
-                          </ListBox>
-                        </Select.Popover>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className='settings-inline-form' style={{ marginTop: '12px' }}>
-                    <div className='settings-field settings-field-grow'>
-                      <span className='settings-field-label'>Image folder</span>
-                      <Input
-                        aria-label='MEO image folder'
-                        className='settings-field-grow'
-                        onChange={(event) => {
-                          setMeoImageFolderDraft(event.target.value)
-                        }}
-                        onBlur={commitMeoImageFolderDraft}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            commitMeoImageFolderDraft()
-                          }
-                        }}
-                        placeholder='assets'
-                        value={meoImageFolderDraft}
-                        variant='secondary'
-                      />
-                      <p className='settings-inline-hint'>
-                        Relative to the workspace root. Invalid or empty values fall back to <code>assets</code>.
-                      </p>
-                    </div>
-
-                    <div className='settings-field settings-field-grow'>
-                      <span className='settings-field-label'>Remember scroll after</span>
-                      <Input
-                        aria-label='MEO remember position line threshold'
-                        className='settings-field-grow'
-                        min={0}
-                        onChange={(event) => {
-                          setMeoRememberPositionDraft(event.target.value)
-                        }}
-                        onBlur={commitMeoRememberPositionDraft}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            commitMeoRememberPositionDraft()
-                          }
-                        }}
-                        placeholder='100'
-                        type='number'
-                        value={meoRememberPositionDraft}
-                        variant='secondary'
-                      />
-                      <p className='settings-inline-hint'>
-                        Files with at least this many lines remember the last visible line. Use <code>0</code> to always remember.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className='settings-field' style={{ marginTop: '24px' }}>
-                  <span className='settings-field-label'>图标主题</span>
-                  <div className='settings-inline-form' style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <Select
-                      className='flex-1 heroui-select-fix'
-                      selectedKey={activeIconThemeKey}
-                      onSelectionChange={(value) => {
-                        const selectedOption = iconThemeOptions.find((option) => option.key === String(value))
-
-                        if (selectedOption) {
-                          void onSelectIconTheme({
-                            sourceVsixPath: selectedOption.sourceVsixPath,
-                            themeId: selectedOption.themeId,
-                          })
-                        }
-                      }}
-                      placeholder='选择图标主题'
-                      isDisabled={isIconThemeBusy || iconThemeOptions.length === 0}
-                    >
-                      <Select.Trigger className='settings-select-trigger'>
-                        <Select.Value />
-                        <Select.Indicator />
-                      </Select.Trigger>
-                      <Select.Popover>
-                        <ListBox>
-                          {iconThemeOptions.map((option) => (
-                            <ListBox.Item key={option.key} id={option.key} textValue={option.label}>
-                              {option.label}
-                            </ListBox.Item>
-                          ))}
-                        </ListBox>
-                      </Select.Popover>
-                    </Select>
-                    <Button
-                      isDisabled={isIconThemeBusy}
-                      variant='primary'
-                      className='settings-action-button h-10'
-                      onPress={() => void onImportIconTheme()}
-                    >
-                      导入 VSIX
-                    </Button>
-                  </div>
-                  {iconTheme && (
-                    <p className='settings-inline-hint' style={{ marginTop: '8px' }}>
-                      当前: {iconTheme.activeThemeLabel} / {getBaseName(iconTheme.sourceVsixPath)}
-                    </p>
-                  )}
-                </div>
-
-                <div className='settings-field' style={{ marginTop: '24px' }}>
-                  <div className='settings-copy-block'>
-                    <h4>应用图标</h4>
-                  </div>
-                  <Select
-                    className='settings-field-grow heroui-select-fix'
-                    selectedKey={selectedAppIcon?.id ?? ''}
-                    onSelectionChange={(value) => {
-                      if (value == null) {
-                        return
-                      }
-
-                      const nextAppIconId = String(value)
-                      if (nextAppIconId) {
-                        void onSelectAppIcon(nextAppIconId)
-                      }
-                    }}
-                    placeholder='选择应用图标'
-                    isDisabled={isAppIconBusy || appIconOptions.length === 0}
-                  >
-                    <Select.Trigger className='settings-select-trigger settings-app-icon-select-trigger'>
-                      {selectedAppIcon ? (
-                        <>
-                          <span className='settings-app-icon-preview is-compact'>
-                            <img src={selectedAppIcon.previewSrc} alt={`${selectedAppIcon.label} app icon`} />
-                          </span>
-                          <span className='settings-app-icon-name'>{selectedAppIcon.label}</span>
-                          <Select.Indicator />
-                        </>
-                      ) : (
-                        <>
-                          <span className='settings-app-icon-placeholder'>选择应用图标</span>
-                          <Select.Indicator />
-                        </>
-                      )}
-                    </Select.Trigger>
-                    <Select.Popover>
-                      <ListBox>
-                        {appIconOptions.map((option) => (
-                          <ListBox.Item key={option.id} id={option.id} textValue={option.label}>
-                            <span className='settings-app-icon-item'>
-                              <span className='settings-app-icon-preview is-compact'>
-                                <img src={option.previewSrc} alt={`${option.label} app icon`} />
-                              </span>
-                              <span className='settings-app-icon-name'>{option.label}</span>
-                            </span>
-                          </ListBox.Item>
-                        ))}
-                      </ListBox>
-                    </Select.Popover>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className='settings-card'>
-              {workspacePath ? (
-                <div className='settings-provider-list'>
-                  {authProviders.map((provider) => {
-                    const draftValue = authDrafts[provider.key]
-
-                    return (
-                      <section key={provider.key} className='settings-provider-card'>
-                        <div>
-                          <span className='settings-provider-label'>{provider.label}</span>
-                          <span className='settings-provider-meta'>{getProviderMeta(provider.state)}</span>
-                        </div>
-                        <Input
-                          aria-label={`${provider.label} API key`}
-                          className='settings-provider-input'
-                          disabled={isSavingAuth}
-                          onChange={(event) => setAuthDrafts((prev) => ({ ...prev, [provider.key]: event.target.value }))}
-                          placeholder={provider.placeholder}
-                          type='password'
-                          value={draftValue}
-                          variant='secondary'
-                        />
-                        <div className='settings-provider-actions'>
-                          <Button
-                            isDisabled={isSavingAuth || !draftValue.trim()}
-                            size='sm'
-                            variant='ghost'
-                            className='settings-action-button'
-                            onPress={() => void handleSaveProviderAuth(provider.key, draftValue)}
-                          >
-                            保存密钥
-                          </Button>
-                          <Button
-                            isDisabled={isSavingAuth || !provider.state.hasStoredCredential}
-                            size='sm'
-                            variant='ghost'
-                            className='settings-action-button'
-                            onPress={() => void handleSaveProviderAuth(provider.key, null)}
-                          >
-                            移除已保存
-                          </Button>
-                        </div>
-                      </section>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className='settings-empty-state'>
-                  请先打开一个工作区。服务提供商配置将遵循当前活动工作区上下文。
-                </div>
-              )}
-            </div>
-          )}
+          {activeSection === 'appearance' ? renderAppearanceSection() : null}
+          {activeSection === 'editor' ? renderEditorSection() : null}
+          {activeSection === 'providers' ? renderProvidersSection() : null}
         </AppScrollArea>
       </section>
     </div>
