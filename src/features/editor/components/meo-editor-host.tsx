@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GitBaselinePayload, GitRepositoryState } from '@/features/git/types'
+import type { MeoSettings } from '@/hooks/use-settings-store'
 
 type MeoEditorBootstrap = {
   extensionLabel: string
@@ -68,9 +69,16 @@ type MeoHostMessage =
 type MeoEditorHostProps = {
   filePath: string
   gitRepositoryState?: GitRepositoryState | null
+  meoSettings: MeoSettings
   onCompositionChange?: (isComposing: boolean) => void
   onOpenFile?: (filePath: string) => void
-  onOpenGitDiff?: (filePath: string) => void
+  onOpenGitDiff?: (
+    filePath: string,
+    options?: {
+      lineNumber?: number
+      source: 'revision' | 'worktree'
+    },
+  ) => void
   onSave?: (nextValue: string) => void
   onChange: (nextValue: string) => void
   theme?: 'light' | 'dark' | 'auto'
@@ -86,7 +94,6 @@ type ParsedFsPath = {
 
 const MEO_STATE_STORAGE_PREFIX = 'aryn:meo-state:'
 const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx', '.mdc']
-const IMAGE_DIRECTORY = 'assets'
 const DEFAULT_FIND_OPTIONS = {
   caseSensitive: false,
   wholeWord: false,
@@ -148,6 +155,22 @@ function postThemeChanged(iframeWindow: Window, theme: 'light' | 'dark') {
     themeKind: theme,
     type: 'themeChanged',
   }, '*')
+}
+
+function countTextLines(value: string) {
+  if (!value) {
+    return 1
+  }
+
+  return value.split(/\r\n|\r|\n/).length
+}
+
+function shouldRememberViewPosition(content: string, rememberPositionLines: number) {
+  if (rememberPositionLines <= 0) {
+    return true
+  }
+
+  return countTextLines(content) >= rememberPositionLines
 }
 
 function applyTextChanges(
@@ -604,6 +627,7 @@ async function resolveOpenLinkFilePath(
 export function MeoEditorHost({
   filePath,
   gitRepositoryState,
+  meoSettings,
   onCompositionChange,
   onOpenFile,
   onOpenGitDiff,
@@ -676,6 +700,38 @@ export function MeoEditorHost({
 
     postThemeChanged(iframeWindow, preferredTheme)
   }, [isReady, preferredTheme])
+
+  useEffect(() => {
+    if (!isReady) {
+      return
+    }
+
+    const iframeWindow = iframeRef.current?.contentWindow
+    if (!iframeWindow) {
+      return
+    }
+
+    iframeWindow.postMessage({
+      enabled: meoSettings.gitDiffLineHighlights,
+      type: 'gitDiffLineHighlightsChanged',
+    }, '*')
+  }, [isReady, meoSettings.gitDiffLineHighlights])
+
+  useEffect(() => {
+    if (!isReady) {
+      return
+    }
+
+    const iframeWindow = iframeRef.current?.contentWindow
+    if (!iframeWindow) {
+      return
+    }
+
+    iframeWindow.postMessage({
+      position: meoSettings.outlinePosition,
+      type: 'outlinePositionChanged',
+    }, '*')
+  }, [isReady, meoSettings.outlinePosition])
 
   useEffect(() => {
     if (!isReady) {
@@ -795,6 +851,10 @@ export function MeoEditorHost({
         case 'ready': {
           const storedState = readStoredState(filePath)
           const gitChangesGutter = resolveGitChangesGutterEnabled(storedState)
+          const restoreViewPosition = shouldRememberViewPosition(
+            contentRef.current,
+            meoSettings.rememberPositionLines,
+          )
 
           setIsReady(true)
           setStatusMessage(null)
@@ -802,13 +862,13 @@ export function MeoEditorHost({
           iframeWindow.postMessage({
             findOptions: storedState.findOptions ?? DEFAULT_FIND_OPTIONS,
             gitChangesGutter,
-            gitDiffLineHighlights: false,
+            gitDiffLineHighlights: meoSettings.gitDiffLineHighlights,
             lineNumbers: storedState.lineNumbers ?? true,
             mode: modeRef.current,
-            outlinePosition: 'right',
+            outlinePosition: meoSettings.outlinePosition,
             outlineVisible: storedState.outlineVisible ?? false,
-            restoreTopLine: storedState.topLine,
-            restoreTopLineOffset: storedState.topLineOffset,
+            restoreTopLine: restoreViewPosition ? storedState.topLine : undefined,
+            restoreTopLineOffset: restoreViewPosition ? storedState.topLineOffset : undefined,
             text: contentRef.current,
             theme: undefined,
             themeKind: preferredTheme,
@@ -898,9 +958,17 @@ export function MeoEditorHost({
         }
 
         case 'viewPositionChanged': {
+          const shouldPersistViewPosition = shouldRememberViewPosition(
+            contentRef.current,
+            meoSettings.rememberPositionLines,
+          )
           writeStoredState(filePath, {
-            topLine: typeof payload.topLine === 'number' ? payload.topLine : undefined,
-            topLineOffset: typeof payload.topLineOffset === 'number' ? payload.topLineOffset : undefined,
+            topLine: shouldPersistViewPosition && typeof payload.topLine === 'number'
+              ? payload.topLine
+              : undefined,
+            topLineOffset: shouldPersistViewPosition && typeof payload.topLineOffset === 'number'
+              ? payload.topLineOffset
+              : undefined,
           })
           return
         }
@@ -931,7 +999,10 @@ export function MeoEditorHost({
 
         case 'openGitRevisionForLine':
         case 'openGitWorktreeForLine': {
-          onOpenGitDiff?.(filePath)
+          onOpenGitDiff?.(filePath, {
+            lineNumber: typeof payload.lineNumber === 'number' ? payload.lineNumber : undefined,
+            source: payload.type === 'openGitRevisionForLine' ? 'revision' : 'worktree',
+          })
           return
         }
 
@@ -1014,7 +1085,7 @@ export function MeoEditorHost({
             try {
               const { filePath: savedImagePath } = await window.appApi.saveWorkspaceImage(
                 workspacePath,
-                IMAGE_DIRECTORY,
+                meoSettings.imageFolder,
                 typeof payload.fileName === 'string' ? payload.fileName : 'pasted-image.png',
                 typeof payload.imageData === 'string' ? payload.imageData : '',
               )
@@ -1047,7 +1118,7 @@ export function MeoEditorHost({
     return () => {
       window.removeEventListener('message', handleWindowMessage)
     }
-  }, [filePath, onChange, onOpenFile, onOpenGitDiff, onSave, preferredTheme, workspacePath])
+  }, [filePath, meoSettings.gitDiffLineHighlights, meoSettings.imageFolder, meoSettings.outlinePosition, meoSettings.rememberPositionLines, onChange, onOpenFile, onOpenGitDiff, onSave, preferredTheme, workspacePath])
 
   if (errorMessage) {
     return (

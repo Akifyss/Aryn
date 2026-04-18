@@ -2,9 +2,19 @@ import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 
 export type AppTheme = 'light' | 'dark' | 'auto'
+export type MeoOutlinePosition = 'left' | 'right'
+
+export type MeoSettings = {
+  gitDiffLineHighlights: boolean
+  imageFolder: string
+  outlinePosition: MeoOutlinePosition
+  rememberPositionLines: number
+}
 
 interface SettingsState {
+  meo: MeoSettings
   theme: AppTheme
+  updateMeoSettings: (patch: Partial<MeoSettings>) => void
   setTheme: (theme: AppTheme) => void
 }
 
@@ -67,15 +77,73 @@ const settingsStorage: StateStorage = {
   },
 }
 
+const DEFAULT_MEO_SETTINGS: MeoSettings = {
+  gitDiffLineHighlights: true,
+  imageFolder: 'assets',
+  outlinePosition: 'right',
+  rememberPositionLines: 100,
+}
+
+function sanitizeMeoImageFolder(imageFolder: string) {
+  const segments = imageFolder
+    .replace(/[\\/]+/g, '/')
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  if (segments.length === 0 || segments.some((segment) => segment === '..')) {
+    return DEFAULT_MEO_SETTINGS.imageFolder
+  }
+
+  return segments.filter((segment) => segment !== '.').join('/')
+}
+
+function sanitizeRememberPositionLines(value: number) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_MEO_SETTINGS.rememberPositionLines
+  }
+
+  return Math.max(0, Math.round(value))
+}
+
+function sanitizeMeoSettings(value: Partial<MeoSettings> | undefined): MeoSettings {
+  return {
+    gitDiffLineHighlights: value?.gitDiffLineHighlights ?? DEFAULT_MEO_SETTINGS.gitDiffLineHighlights,
+    imageFolder: sanitizeMeoImageFolder(value?.imageFolder ?? DEFAULT_MEO_SETTINGS.imageFolder),
+    outlinePosition: value?.outlinePosition === 'left' ? 'left' : DEFAULT_MEO_SETTINGS.outlinePosition,
+    rememberPositionLines: sanitizeRememberPositionLines(
+      value?.rememberPositionLines ?? DEFAULT_MEO_SETTINGS.rememberPositionLines,
+    ),
+  }
+}
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
+      meo: DEFAULT_MEO_SETTINGS,
       theme: 'auto',
       setTheme: (theme) => set({ theme }),
+      updateMeoSettings: (patch) => set((state) => ({
+        meo: sanitizeMeoSettings({
+          ...state.meo,
+          ...patch,
+        }),
+      })),
     }),
     {
       name: SETTINGS_STORAGE_KEY,
       storage: createJSONStorage(() => settingsStorage),
+      merge: (persistedState, currentState) => {
+        const candidate = persistedState && typeof persistedState === 'object'
+          ? persistedState as Partial<SettingsState>
+          : {}
+
+        return {
+          ...currentState,
+          ...candidate,
+          meo: sanitizeMeoSettings(candidate.meo),
+        }
+      },
     },
   ),
 )

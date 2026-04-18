@@ -80,9 +80,11 @@ export function SettingsDialog({
   onStatusMessage,
   workspacePath,
 }: SettingsViewProps) {
-  const { theme, setTheme } = useSettingsStore()
+  const { meo, theme, setTheme, updateMeoSettings } = useSettingsStore()
   const [authDrafts, setAuthDrafts] = useState<Record<AuthProviderKey, string>>(EMPTY_AUTH_DRAFTS)
   const [isSavingAuth, setIsSavingAuth] = useState(false)
+  const [meoImageFolderDraft, setMeoImageFolderDraft] = useState(meo.imageFolder)
+  const [meoRememberPositionDraft, setMeoRememberPositionDraft] = useState(String(meo.rememberPositionLines))
   const [panelError, setPanelError] = useState<string | null>(null)
 
   const resolvedTheme = useMemo(() => {
@@ -125,6 +127,14 @@ export function SettingsDialog({
 
     return () => clearTimeout(timer)
   }, [resolvedTheme, iconTheme, iconThemeOptions, isIconThemeBusy, onSelectIconTheme, workspacePath])
+
+  useEffect(() => {
+    setMeoImageFolderDraft(meo.imageFolder)
+  }, [meo.imageFolder])
+
+  useEffect(() => {
+    setMeoRememberPositionDraft(String(meo.rememberPositionLines))
+  }, [meo.rememberPositionLines])
 
   const authProviders = useMemo(() => {
     const runtimeAuth = agentState?.runtime.auth
@@ -195,6 +205,16 @@ export function SettingsDialog({
     }
   }
 
+  function commitMeoImageFolderDraft() {
+    updateMeoSettings({ imageFolder: meoImageFolderDraft })
+  }
+
+  function commitMeoRememberPositionDraft() {
+    updateMeoSettings({
+      rememberPositionLines: Number.parseInt(meoRememberPositionDraft, 10),
+    })
+  }
+
   return (
     <div className={`settings-page ${resolvedTheme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}>
       <aside className='settings-sidebar'>
@@ -258,6 +278,120 @@ export function SettingsDialog({
                         </Tabs.List>
                       </Tabs.ListContainer>
                     </Tabs>
+                  </div>
+                </div>
+
+                <div className='settings-field' style={{ marginTop: '24px' }}>
+                  <div className='settings-copy-block'>
+                    <h4>Markdown Editor Optimized</h4>
+                    <p>Configure the embedded MEO editor behavior.</p>
+                  </div>
+
+                  <div className='settings-inline-form' style={{ marginTop: '12px' }}>
+                    <div className='settings-field settings-field-grow'>
+                      <span className='settings-field-label'>Outline position</span>
+                      <Select
+                        className='settings-field-grow heroui-select-fix'
+                        selectedKey={meo.outlinePosition}
+                        onSelectionChange={(value) => {
+                          const nextValue = String(value)
+                          if (nextValue === 'left' || nextValue === 'right') {
+                            updateMeoSettings({ outlinePosition: nextValue })
+                          }
+                        }}
+                      >
+                        <Select.Trigger className='settings-select-trigger'>
+                          <Select.Value />
+                          <Select.Indicator />
+                        </Select.Trigger>
+                        <Select.Popover>
+                          <ListBox>
+                            <ListBox.Item key='right' id='right' textValue='Right'>
+                              Right
+                            </ListBox.Item>
+                            <ListBox.Item key='left' id='left' textValue='Left'>
+                              Left
+                            </ListBox.Item>
+                          </ListBox>
+                        </Select.Popover>
+                      </Select>
+                    </div>
+
+                    <div className='settings-field settings-field-grow'>
+                      <span className='settings-field-label'>Git line highlights</span>
+                      <Select
+                        className='settings-field-grow heroui-select-fix'
+                        selectedKey={meo.gitDiffLineHighlights ? 'enabled' : 'disabled'}
+                        onSelectionChange={(value) => {
+                          updateMeoSettings({ gitDiffLineHighlights: String(value) === 'enabled' })
+                        }}
+                      >
+                        <Select.Trigger className='settings-select-trigger'>
+                          <Select.Value />
+                          <Select.Indicator />
+                        </Select.Trigger>
+                        <Select.Popover>
+                          <ListBox>
+                            <ListBox.Item key='enabled' id='enabled' textValue='Enabled'>
+                              Enabled
+                            </ListBox.Item>
+                            <ListBox.Item key='disabled' id='disabled' textValue='Disabled'>
+                              Disabled
+                            </ListBox.Item>
+                          </ListBox>
+                        </Select.Popover>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className='settings-inline-form' style={{ marginTop: '12px' }}>
+                    <div className='settings-field settings-field-grow'>
+                      <span className='settings-field-label'>Image folder</span>
+                      <Input
+                        aria-label='MEO image folder'
+                        className='settings-field-grow'
+                        onChange={(event) => {
+                          setMeoImageFolderDraft(event.target.value)
+                        }}
+                        onBlur={commitMeoImageFolderDraft}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            commitMeoImageFolderDraft()
+                          }
+                        }}
+                        placeholder='assets'
+                        value={meoImageFolderDraft}
+                        variant='secondary'
+                      />
+                      <p className='settings-inline-hint'>
+                        Relative to the workspace root. Invalid or empty values fall back to <code>assets</code>.
+                      </p>
+                    </div>
+
+                    <div className='settings-field settings-field-grow'>
+                      <span className='settings-field-label'>Remember scroll after</span>
+                      <Input
+                        aria-label='MEO remember position line threshold'
+                        className='settings-field-grow'
+                        min={0}
+                        onChange={(event) => {
+                          setMeoRememberPositionDraft(event.target.value)
+                        }}
+                        onBlur={commitMeoRememberPositionDraft}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            commitMeoRememberPositionDraft()
+                          }
+                        }}
+                        placeholder='100'
+                        type='number'
+                        value={meoRememberPositionDraft}
+                        variant='secondary'
+                      />
+                      <p className='settings-inline-hint'>
+                        Files with at least this many lines remember the last visible line. Use <code>0</code> to always remember.
+                      </p>
+                    </div>
                   </div>
                 </div>
 

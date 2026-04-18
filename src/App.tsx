@@ -426,7 +426,7 @@ function createDiffTab(change: GitChangeItem, scope: GitChangeScope, diff: Await
 
 function App() {
   const platform = window.appApi.platform
-  const { theme, setTheme } = useSettingsStore()
+  const { meo, theme } = useSettingsStore()
 
   // Apply theme to document root
   useEffect(() => {
@@ -655,15 +655,31 @@ function App() {
     && gitRepositoryState?.isRepository
   )
 
-  function findGitChangeByFilePath(repositoryState: GitRepositoryState | null, filePath: string) {
+  function findGitChangeByFilePath(
+    repositoryState: GitRepositoryState | null,
+    filePath: string,
+    preferredScopes: GitChangeScope[] = ['unstaged', 'staged'],
+  ) {
     if (!repositoryState?.isRepository) {
       return null
     }
 
     const targetPath = normalizeFilePath(filePath)
-    return repositoryState.unstagedChanges.find((change) => normalizeFilePath(change.path) === targetPath)
-      ?? repositoryState.stagedChanges.find((change) => normalizeFilePath(change.path) === targetPath)
-      ?? null
+
+    const changesByScope: Record<GitChangeScope, GitChangeItem[]> = {
+      staged: repositoryState.stagedChanges,
+      unstaged: repositoryState.unstagedChanges,
+    }
+
+    for (const scope of preferredScopes) {
+      const matchingChange = changesByScope[scope].find((change) => normalizeFilePath(change.path) === targetPath)
+
+      if (matchingChange) {
+        return matchingChange
+      }
+    }
+
+    return null
   }
 
   function getPersistedActiveFilePath() {
@@ -3584,10 +3600,14 @@ function App() {
                 onOpenFile={(targetFilePath) => {
                   void openFile(targetFilePath, currentPath, 'meo')
                 }}
-                onOpenGitDiff={(targetFilePath) => {
+                onOpenGitDiff={(targetFilePath, gitAction) => {
                   void (async () => {
                     const latestGitState = await refreshGitState(currentPath, { silent: true })
-                    const nextChange = findGitChangeByFilePath(latestGitState, targetFilePath)
+                    const nextChange = findGitChangeByFilePath(
+                      latestGitState,
+                      targetFilePath,
+                      gitAction?.source === 'revision' ? ['staged', 'unstaged'] : ['unstaged', 'staged'],
+                    )
 
                     if (nextChange) {
                       await openGitDiff(nextChange)
@@ -3606,6 +3626,7 @@ function App() {
                 value={currentFileContent}
                 theme={theme}
                 gitRepositoryState={gitRepositoryState}
+                meoSettings={meo}
                 workspacePath={currentPath}
               />
             ) : null}
