@@ -1325,7 +1325,6 @@
 }
 
 /* When dirty but NOT hovered, hide the functional icons to show the dot */
-.file-tab.is-dirty:not(:hover) .file-tab-diff,
 .file-tab.is-dirty:not(:hover) .file-tab-close svg {
   opacity: 0;
   pointer-events: none;
@@ -1367,7 +1366,7 @@
 }
 
 .file-tab-close,
-.file-tab-diff {
+.file-tabs-toolbar-button {
   position: relative;
   display: flex;
   align-items: center;
@@ -1386,13 +1385,13 @@
 }
 
 .file-tab-close:hover,
-.file-tab-diff:hover {
+.file-tabs-toolbar-button:hover {
   color: var(--foreground);
   background: var(--surface-tertiary);
 }
 
 .file-tab-close svg,
-.file-tab-diff svg {
+.file-tabs-toolbar-button svg {
   flex-shrink: 0;
 }
 

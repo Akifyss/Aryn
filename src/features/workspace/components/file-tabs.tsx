@@ -106,6 +106,15 @@ export function FileTabs({
     () => tabs.filter(isReorderableTab),
     [tabs],
   )
+  const activeFileTab = useMemo(
+    () => tabs.find((tab): tab is WorkspaceDisplayTab & { kind: 'file' } => tab.id === activeTabId && tab.kind === 'file') ?? null,
+    [activeTabId, tabs],
+  )
+  const canOpenActiveDiff = Boolean(
+    activeFileTab
+    && onOpenDiff
+    && getHasDiff?.(activeFileTab.filePath),
+  )
   const duplicateNameSet = useMemo(() => {
     const counts = new Map<string, number>()
 
@@ -474,21 +483,6 @@ export function FileTabs({
               </button>
 
               <div className='file-tab-actions'>
-                {tab.kind === 'file' && getHasDiff?.(tab.filePath) && onOpenDiff && (
-                  <button
-                    type='button'
-                    className='file-tab-diff'
-                    aria-label={`Open diff for ${baseName}`}
-                    title='Open Git diff'
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onOpenDiff(tab.filePath)
-                    }}
-                  >
-                    <GitCompareLine size={16} />
-                  </button>
-                )}
-
                 <button
                   type='button'
                   className='file-tab-close'
@@ -562,7 +556,24 @@ export function FileTabs({
           style={{ left: `${dropIndicatorOffset}px` }}
         />
       )}
-      {actions ? <div className='file-tabs-actions'>{actions}</div> : null}
+      {(canOpenActiveDiff || actions) ? (
+        <div className='file-tabs-actions'>
+          {canOpenActiveDiff && activeFileTab ? (
+            <button
+              type='button'
+              className='file-tabs-toolbar-button'
+              aria-label={`Open diff for ${getBaseName(activeFileTab)}`}
+              title='Open Git diff'
+              onClick={() => {
+                onOpenDiff?.(activeFileTab.filePath)
+              }}
+            >
+              <GitCompareLine size={16} />
+            </button>
+          ) : null}
+          {actions}
+        </div>
+      ) : null}
     </div>
   )
 }
