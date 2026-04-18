@@ -16,6 +16,10 @@ Local project patches:
 - `webview/dist/editor-25490d39.js`
   - Adjusted Git gutter click behavior so added lines open the corresponding diff view instead of being treated as non-interactive.
 
+Patch workflow:
+- After replacing the vendored runtime with a newer upstream build, run `npm run meo:apply-patches`.
+- Production builds also verify the vendored runtime layout and required local patches before copying it into `dist/meo-runtime`.
+
 Maintenance notes:
 - Treat this directory as a vendored third-party runtime, not app-owned source code.
 - If the upstream runtime is updated, replace the vendored files intentionally and re-apply any documented local patches.

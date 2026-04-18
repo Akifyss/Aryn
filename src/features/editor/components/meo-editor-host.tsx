@@ -93,17 +93,25 @@ type ParsedFsPath = {
 }
 
 const MEO_STATE_STORAGE_PREFIX = 'aryn:meo-state:'
+const MEO_HOST_CHANNEL_KEY = '__arynMeoChannel'
 const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx', '.mdc']
 const DEFAULT_FIND_OPTIONS = {
   caseSensitive: false,
   wholeWord: false,
 } as const
 
-function postGitBaselineChanged(iframeWindow: Window, payload: GitBaselinePayload) {
+function createMeoChannelId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  return `meo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function postMessageToMeoIframe(iframeWindow: Window, channelId: string, payload: Record<string, unknown>) {
   iframeWindow.postMessage({
-    payload,
-    type: 'gitBaselineChanged',
-    version: undefined,
+    [MEO_HOST_CHANNEL_KEY]: channelId,
+    ...payload,
   }, '*')
 }
 
@@ -143,18 +151,35 @@ function resolvePreferredTheme(theme: 'light' | 'dark' | 'auto') {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function buildIframeSource(wrapperUrl: string, theme: 'light' | 'dark') {
+function buildIframeSource(wrapperUrl: string, theme: 'light' | 'dark', channelId: string) {
   const url = new URL(wrapperUrl)
+  url.searchParams.set('channel', channelId)
   url.searchParams.set('theme', theme)
   return url.toString()
 }
 
-function postThemeChanged(iframeWindow: Window, theme: 'light' | 'dark') {
-  iframeWindow.postMessage({
+function postGitBaselineChanged(iframeWindow: Window, channelId: string, payload: GitBaselinePayload) {
+  postMessageToMeoIframe(iframeWindow, channelId, {
+    payload,
+    type: 'gitBaselineChanged',
+    version: undefined,
+  })
+}
+
+function postThemeChanged(iframeWindow: Window, channelId: string, theme: 'light' | 'dark') {
+  postMessageToMeoIframe(iframeWindow, channelId, {
     theme: undefined,
     themeKind: theme,
     type: 'themeChanged',
-  }, '*')
+  })
+}
+
+function getIframeOrigin(wrapperUrl: string) {
+  try {
+    return new URL(wrapperUrl).origin
+  } catch {
+    return null
+  }
 }
 
 function countTextLines(value: string) {
@@ -642,15 +667,17 @@ export function MeoEditorHost({
   const versionRef = useRef(1)
   const modeRef = useRef<'live' | 'source'>(readStoredState(filePath).mode ?? 'source')
   const gitBaselineRequestRef = useRef(0)
+  const channelIdRef = useRef(createMeoChannelId())
   const [bootstrap, setBootstrap] = useState<MeoEditorBootstrap | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>('Loading MEO bootstrap...')
   const [isReady, setIsReady] = useState(false)
+  const [iframeSource, setIframeSource] = useState<string | null>(null)
   const preferredTheme = useMemo(() => resolvePreferredTheme(theme), [theme])
   const gitStateRefreshKey = useMemo(() => getGitStateRefreshKey(gitRepositoryState), [gitRepositoryState])
-  const iframeSource = useMemo(() => (
-    bootstrap ? buildIframeSource(bootstrap.wrapperUrl, preferredTheme) : null
-  ), [bootstrap, preferredTheme])
+  const iframeOrigin = useMemo(() => (
+    bootstrap ? getIframeOrigin(bootstrap.wrapperUrl) : null
+  ), [bootstrap])
 
   useEffect(() => {
     const storedState = readStoredState(filePath)
@@ -684,6 +711,17 @@ export function MeoEditorHost({
   }, [])
 
   useEffect(() => {
+    if (!bootstrap) {
+      setIframeSource(null)
+      return
+    }
+
+    // Keep the iframe URL stable after mount so theme changes flow through postMessage
+    // instead of forcing a full MEO reload.
+    setIframeSource(buildIframeSource(bootstrap.wrapperUrl, preferredTheme, channelIdRef.current))
+  }, [bootstrap])
+
+  useEffect(() => {
     setIsReady(false)
     setStatusMessage('Loading MEO iframe...')
   }, [iframeSource])
@@ -698,7 +736,7 @@ export function MeoEditorHost({
       return
     }
 
-    postThemeChanged(iframeWindow, preferredTheme)
+    postThemeChanged(iframeWindow, channelIdRef.current, preferredTheme)
   }, [isReady, preferredTheme])
 
   useEffect(() => {
@@ -711,10 +749,10 @@ export function MeoEditorHost({
       return
     }
 
-    iframeWindow.postMessage({
+    postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
       enabled: meoSettings.gitDiffLineHighlights,
       type: 'gitDiffLineHighlightsChanged',
-    }, '*')
+    })
   }, [isReady, meoSettings.gitDiffLineHighlights])
 
   useEffect(() => {
@@ -727,10 +765,10 @@ export function MeoEditorHost({
       return
     }
 
-    iframeWindow.postMessage({
+    postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
       position: meoSettings.outlinePosition,
       type: 'outlinePositionChanged',
-    }, '*')
+    })
   }, [isReady, meoSettings.outlinePosition])
 
   useEffect(() => {
@@ -747,7 +785,7 @@ export function MeoEditorHost({
     gitBaselineRequestRef.current = requestId
 
     if (!workspacePath) {
-      postGitBaselineChanged(iframeWindow, {
+      postGitBaselineChanged(iframeWindow, channelIdRef.current, {
         available: false,
         baseText: null,
         gitPath: null,
@@ -770,7 +808,7 @@ export function MeoEditorHost({
           return
         }
 
-        postGitBaselineChanged(currentIframeWindow, baseline)
+        postGitBaselineChanged(currentIframeWindow, channelIdRef.current, baseline)
       })
       .catch(() => {
         if (gitBaselineRequestRef.current !== requestId) {
@@ -782,7 +820,7 @@ export function MeoEditorHost({
           return
         }
 
-        postGitBaselineChanged(currentIframeWindow, {
+        postGitBaselineChanged(currentIframeWindow, channelIdRef.current, {
           available: false,
           baseText: null,
           gitPath: null,
@@ -819,11 +857,11 @@ export function MeoEditorHost({
 
     contentRef.current = value
     versionRef.current += 1
-    iframeWindow.postMessage({
+    postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
       text: value,
       type: 'docChanged',
       version: versionRef.current,
-    }, '*')
+    })
   }, [isReady, value])
 
   useEffect(() => {
@@ -837,7 +875,20 @@ export function MeoEditorHost({
         return
       }
 
-      const payload = (message as { __arynMeo: boolean, payload?: MeoHostMessage }).payload
+      const { channel, payload } = message as {
+        __arynMeo: boolean
+        channel?: unknown
+        payload?: MeoHostMessage
+      }
+
+      if (typeof channel !== 'string' || channel !== channelIdRef.current) {
+        return
+      }
+
+      if (iframeOrigin && event.origin !== iframeOrigin) {
+        return
+      }
+
       if (!payload || typeof payload !== 'object' || typeof payload.type !== 'string') {
         return
       }
@@ -858,8 +909,8 @@ export function MeoEditorHost({
 
           setIsReady(true)
           setStatusMessage(null)
-          postThemeChanged(iframeWindow, preferredTheme)
-          iframeWindow.postMessage({
+          postThemeChanged(iframeWindow, channelIdRef.current, preferredTheme)
+          postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
             findOptions: storedState.findOptions ?? DEFAULT_FIND_OPTIONS,
             gitChangesGutter,
             gitDiffLineHighlights: meoSettings.gitDiffLineHighlights,
@@ -875,11 +926,11 @@ export function MeoEditorHost({
             type: 'init',
             version: versionRef.current,
             vimMode: false,
-          }, '*')
-          iframeWindow.postMessage({
+          })
+          postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
             enabled: gitChangesGutter,
             type: 'gitChangesGutterChanged',
-          }, '*')
+          })
           return
         }
 
@@ -889,11 +940,11 @@ export function MeoEditorHost({
           }
 
           if (payload.baseVersion !== versionRef.current) {
-            iframeWindow.postMessage({
+            postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
               text: contentRef.current,
               type: 'docChanged',
               version: versionRef.current,
-            }, '*')
+            })
             return
           }
 
@@ -901,10 +952,10 @@ export function MeoEditorHost({
           contentRef.current = nextContent
           versionRef.current += 1
           onChange(nextContent)
-          iframeWindow.postMessage({
+          postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
             type: 'applied',
             version: versionRef.current,
-          }, '*')
+          })
           return
         }
 
@@ -1009,13 +1060,13 @@ export function MeoEditorHost({
         case 'requestGitBlame': {
           void (async () => {
             if (!workspacePath) {
-              iframeWindow.postMessage({
+              postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
                 lineNumber: payload.lineNumber,
                 localEditGeneration: payload.localEditGeneration,
                 requestId: payload.requestId,
                 result: { kind: 'unavailable', reason: 'not-repo' },
                 type: 'gitBlameResult',
-              }, '*')
+              })
               return
             }
 
@@ -1026,34 +1077,34 @@ export function MeoEditorHost({
               typeof payload.text === 'string' ? payload.text : undefined,
             )
 
-            iframeWindow.postMessage({
+            postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
               lineNumber: payload.lineNumber,
               localEditGeneration: payload.localEditGeneration,
               requestId: payload.requestId,
               result,
               type: 'gitBlameResult',
-            }, '*')
+            })
           })()
           return
         }
 
         case 'resolveImageSrc': {
-          iframeWindow.postMessage({
+          postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
             requestId: payload.requestId,
             resolvedUrl: typeof payload.url === 'string' ? resolveImageUrl(filePath, payload.url) : '',
             type: 'resolvedImageSrc',
-          }, '*')
+          })
           return
         }
 
         case 'resolveLocalLinks': {
           void resolveLocalLinkResults(filePath, workspacePath, Array.isArray(payload.targets) ? payload.targets : [])
             .then((results) => {
-              iframeWindow.postMessage({
+              postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
                 requestId: payload.requestId,
                 results: results.map(({ exists, target }) => ({ exists, target })),
                 type: 'resolvedLocalLinks',
-              }, '*')
+              })
             })
           return
         }
@@ -1061,11 +1112,11 @@ export function MeoEditorHost({
         case 'resolveWikiLinks': {
           void resolveWikiLinkResults(filePath, workspacePath, Array.isArray(payload.targets) ? payload.targets : [])
             .then((results) => {
-              iframeWindow.postMessage({
+              postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
                 requestId: payload.requestId,
                 results: results.map(({ exists, target }) => ({ exists, target })),
                 type: 'resolvedWikiLinks',
-              }, '*')
+              })
             })
           return
         }
@@ -1073,12 +1124,12 @@ export function MeoEditorHost({
         case 'saveImageFromClipboard': {
           void (async () => {
             if (!workspacePath) {
-              iframeWindow.postMessage({
+              postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
                 error: 'No workspace folder is open.',
                 requestId: payload.requestId,
                 success: false,
                 type: 'savedImagePath',
-              }, '*')
+              })
               return
             }
 
@@ -1090,19 +1141,19 @@ export function MeoEditorHost({
                 typeof payload.imageData === 'string' ? payload.imageData : '',
               )
 
-              iframeWindow.postMessage({
+              postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
                 path: getRelativeFsPath(filePath, savedImagePath),
                 requestId: payload.requestId,
                 success: true,
                 type: 'savedImagePath',
-              }, '*')
+              })
             } catch (error) {
-              iframeWindow.postMessage({
+              postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
                 error: error instanceof Error ? error.message : 'Failed to save image.',
                 requestId: payload.requestId,
                 success: false,
                 type: 'savedImagePath',
-              }, '*')
+              })
             }
           })()
           return
@@ -1118,7 +1169,7 @@ export function MeoEditorHost({
     return () => {
       window.removeEventListener('message', handleWindowMessage)
     }
-  }, [filePath, meoSettings.gitDiffLineHighlights, meoSettings.imageFolder, meoSettings.outlinePosition, meoSettings.rememberPositionLines, onChange, onOpenFile, onOpenGitDiff, onSave, preferredTheme, workspacePath])
+  }, [filePath, iframeOrigin, meoSettings.gitDiffLineHighlights, meoSettings.imageFolder, meoSettings.outlinePosition, meoSettings.rememberPositionLines, onChange, onOpenFile, onOpenGitDiff, onSave, preferredTheme, workspacePath])
 
   if (errorMessage) {
     return (
@@ -1139,6 +1190,7 @@ export function MeoEditorHost({
       <iframe
         ref={iframeRef}
         className='meo-editor-frame'
+        sandbox='allow-same-origin allow-scripts'
         src={iframeSource}
         title={bootstrap?.extensionLabel ?? 'Markdown Editor Optimized'}
         onLoad={() => {

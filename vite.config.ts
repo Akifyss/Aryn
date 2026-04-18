@@ -6,6 +6,14 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron/simple'
 import pkg from './package.json'
+import {
+  resolveBuiltMeoRuntimeDirectory,
+  resolveVendoredMeoRuntimeDirectory,
+} from './config/meo-runtime'
+import {
+  ensureMeoRuntimePatches,
+  verifyMeoRuntimeLayout,
+} from './scripts/meo-runtime-utils.mjs'
 
 const bundledElectronRuntimeExternals = new Set([
   'electron',
@@ -54,16 +62,19 @@ function isBundledElectronRuntimeExternal(id: string) {
 }
 
 function copyBundledMeoRuntimePlugin() {
-  const sourceDirectory = path.resolve(__dirname, 'vendor', 'meo-runtime')
-  const targetDirectory = path.resolve(__dirname, 'dist', 'meo-runtime')
+  const sourceDirectory = resolveVendoredMeoRuntimeDirectory(__dirname)
+  const targetDirectory = resolveBuiltMeoRuntimeDirectory(__dirname)
 
   return {
     name: 'copy-bundled-meo-runtime',
     apply: 'build' as const,
-    closeBundle() {
+    async closeBundle() {
       if (!existsSync(sourceDirectory)) {
         throw new Error(`Missing bundled MEO runtime directory: ${sourceDirectory}`)
       }
+
+      await verifyMeoRuntimeLayout(sourceDirectory)
+      await ensureMeoRuntimePatches(sourceDirectory)
 
       rmSync(targetDirectory, { recursive: true, force: true })
       mkdirSync(path.dirname(targetDirectory), { recursive: true })

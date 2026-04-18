@@ -56,6 +56,9 @@ import {
   disposeBundledMeoEditorServer,
   getBundledMeoEditorBootstrap,
 } from './meo-editor'
+import {
+  resolveBundledMeoRuntimePath,
+} from '../../config/meo-runtime'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -102,9 +105,11 @@ const bundledWorkspaceIconThemePath = path.join(
   'icon-themes',
   'thang-nm.flow-icons-1.3.2.vsix',
 )
-const bundledMeoRuntimePath = VITE_DEV_SERVER_URL
-  ? path.join(process.env.APP_ROOT, 'vendor', 'meo-runtime')
-  : path.join(RENDERER_DIST, 'meo-runtime')
+const bundledMeoRuntimePath = resolveBundledMeoRuntimePath({
+  appRoot: process.env.APP_ROOT,
+  isDev: Boolean(VITE_DEV_SERVER_URL),
+  rendererDist: RENDERER_DIST,
+})
 const legacyWorkspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
 const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPath)
 const agentManager = new PiAgentManager(

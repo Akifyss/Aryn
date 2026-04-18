@@ -18,6 +18,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "meo:apply-patches": "node scripts/apply-meo-runtime-patches.mjs",
     "postinstall": "node scripts/patch-pi-coding-agent-loader.mjs",
     "typecheck": "tsc --noEmit",
     "build": "tsc && vite build && electron-builder",

@@ -1,6 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { access, readFile } from 'node:fs/promises'
 import path from 'node:path'
+import {
+  resolveMeoRuntimeEntryPath,
+  resolveMeoRuntimeWebviewDistPath,
+} from '../../config/meo-runtime'
 
 type MeoRuntimeBundle = {
   cacheKey: string
@@ -206,7 +210,6 @@ function buildWrapperHtml(cacheKey: string) {
     <script>
       (() => {
         let state
-        let lastHoveredAddedGitLine = null
         const applyTheme = (nextTheme) => {
           if (nextTheme === 'light' || nextTheme === 'dark') {
             document.documentElement.dataset.theme = nextTheme
@@ -217,12 +220,21 @@ function buildWrapperHtml(cacheKey: string) {
         }
 
         const query = new URLSearchParams(window.location.search)
+        const channelId = query.get('channel') || ''
         applyTheme(query.get('theme'))
+
+        const postMessageToParent = (message) => {
+          window.parent.postMessage({
+            __arynMeo: true,
+            channel: channelId,
+            payload: message,
+          }, '*')
+        }
 
         window.acquireVsCodeApi = function acquireVsCodeApi() {
           return {
             postMessage(message) {
-              window.parent.postMessage({ __arynMeo: true, payload: message }, '*')
+              postMessageToParent(message)
             },
             getState() {
               return state
@@ -235,8 +247,16 @@ function buildWrapperHtml(cacheKey: string) {
         }
 
         window.addEventListener('message', (event) => {
+          if (event.source !== window.parent) {
+            return
+          }
+
           const payload = event.data
           if (!payload || typeof payload !== 'object') {
+            return
+          }
+
+          if (channelId && payload.__arynMeoChannel !== channelId) {
             return
           }
 
@@ -252,9 +272,9 @@ function buildWrapperHtml(cacheKey: string) {
 }
 
 async function resolveBundledRuntime(runtimeRootPath: string): Promise<MeoRuntimeBundle> {
-  const webviewDistPath = path.join(runtimeRootPath, 'webview', 'dist')
+  const webviewDistPath = resolveMeoRuntimeWebviewDistPath(runtimeRootPath)
 
-  if (!(await hasFile(path.join(webviewDistPath, 'index.js')))) {
+  if (!(await hasFile(resolveMeoRuntimeEntryPath(runtimeRootPath)))) {
     throw new Error('The bundled MEO runtime is missing its webview bundle.')
   }
 
