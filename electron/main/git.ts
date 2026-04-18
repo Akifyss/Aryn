@@ -1233,6 +1233,14 @@ export async function getGitFileDiff(
   const { change, repositoryRootPath } = await resolveChangeForPath(workspacePath, targetPath, scope)
   const relativePath = toWorkspaceRelativePath(repositoryRootPath, change.path)
   const editorKind = getSupportedWorkspaceEditorKind(change.path) ?? 'code'
+  const patch = await getPatchForGitChange(repositoryRootPath, change)
+  const parsedPatch = patch ? parseGitPatch(patch) : null
+  const selections = parsedPatch?.hunks.map((hunk) => ({
+    modifiedLineCount: hunk.modifiedLineCount,
+    modifiedStartLine: hunk.modifiedStartLine,
+    originalLineCount: hunk.originalLineCount,
+    originalStartLine: hunk.originalStartLine,
+  })) ?? []
 
   if (scope === 'staged') {
     const originalContent = change.kind === 'added'
@@ -1252,6 +1260,7 @@ export async function getGitFileDiff(
       originalExists: originalContent !== null,
       originalLabel: 'HEAD',
       repositoryRootPath,
+      selections,
     }
   }
 
@@ -1272,6 +1281,7 @@ export async function getGitFileDiff(
     originalExists: originalContent !== null,
     originalLabel: 'Index',
     repositoryRootPath,
+    selections,
   }
 }
 

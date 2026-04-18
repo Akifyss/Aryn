@@ -91,6 +91,7 @@ export type GitFileDiffResult = {
   originalExists: boolean
   originalLabel: string
   repositoryRootPath: string
+  selections: GitDiffSelection[]
 }
 
 export type GitDiffSelection = {

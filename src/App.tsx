@@ -25,6 +25,7 @@ import type {
   GitChangeScope,
   GitDiffBlockAction,
   GitDiffSelection,
+  GitFileDiffResult,
   GitPanelLayout,
   GitRepositoryState,
 } from '@/features/git/types'
@@ -159,6 +160,34 @@ function getWorkspaceTabSourcePath(tab: WorkspaceDisplayTab | WorkspaceDiffTab |
 
 function getPathSeparator(filePath: string) {
   return filePath.includes('\\') ? '\\' : '/'
+}
+
+function isRequestedGitDiffLineWithinSelection(
+  selection: GitDiffSelection,
+  source: 'revision' | 'worktree',
+  lineNumber: number,
+) {
+  const normalizedLineNumber = Math.max(1, Math.floor(lineNumber))
+  const startLine = source === 'revision' ? selection.originalStartLine : selection.modifiedStartLine
+  const lineCount = source === 'revision' ? selection.originalLineCount : selection.modifiedLineCount
+
+  if (!Number.isInteger(startLine) || startLine < 1 || lineCount <= 0) {
+    return false
+  }
+
+  return normalizedLineNumber >= startLine && normalizedLineNumber < startLine + lineCount
+}
+
+function shouldOpenGitDiffForLine(
+  diff: GitFileDiffResult,
+  source: 'revision' | 'worktree',
+  lineNumber?: number,
+) {
+  if (typeof lineNumber !== 'number') {
+    return true
+  }
+
+  return diff.selections.some((selection) => isRequestedGitDiffLineWithinSelection(selection, source, lineNumber))
 }
 
 function joinPath(basePath: string, relativeSuffix: string) {
@@ -1537,11 +1566,17 @@ function App() {
 
     try {
       const diff = await window.appApi.getGitFileDiff(currentPath, change.path, change.scope)
+      const navigationSource = options?.source ?? 'worktree'
+
+      if (!shouldOpenGitDiffForLine(diff, navigationSource, options?.lineNumber)) {
+        return
+      }
+
       const navigationRequest = typeof options?.lineNumber === 'number'
         ? {
           lineNumber: Math.max(1, Math.floor(options.lineNumber)),
-          requestKey: `${change.scope}:${change.path}:${options.source ?? 'worktree'}:${Date.now()}`,
-          source: options.source ?? 'worktree',
+          requestKey: `${change.scope}:${change.path}:${navigationSource}:${Date.now()}`,
+          source: navigationSource,
         } satisfies WorkspaceDiffNavigationRequest
         : null
       openDiffTab(createDiffTab(change, change.scope, diff, navigationRequest))
