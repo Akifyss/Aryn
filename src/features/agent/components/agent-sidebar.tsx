@@ -514,14 +514,14 @@ function AgentMessageDisclosure({
                 {getMessageDisclosureIcon(kind, title)}
                 <span className='agent-message-toggle-title'>{displayTitle}</span>
                 <span className='agent-message-toggle-trailing' title={status ? getToolStatusLabel(status) : undefined}>
-                  {statusIcon ? (
+                  {statusIcon && !disclosureExpanded ? (
                     <span className='agent-message-toggle-status-slot'>
                       {statusIcon}
                     </span>
                   ) : null}
                   <RightLine
                     aria-hidden='true'
-                    className={`agent-message-toggle-arrow ${disclosureExpanded ? 'is-open' : ''} ${statusIcon ? 'has-status' : ''}`}
+                    className={`agent-message-toggle-arrow ${disclosureExpanded ? 'is-open' : ''} ${statusIcon && !disclosureExpanded ? 'has-status' : ''}`}
                   />
                 </span>
               </Disclosure.Trigger>
