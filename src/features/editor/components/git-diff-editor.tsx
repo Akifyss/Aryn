@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { EditorSelection, EditorState, type Text } from '@codemirror/state'
+import { EditorSelection, EditorState, StateEffect, StateField, type Text } from '@codemirror/state'
 import { getChunks, getOriginalDoc, MergeView, unifiedMergeView } from '@codemirror/merge'
 import {
+  Decoration,
   drawSelection,
   EditorView,
   highlightActiveLine,
@@ -41,7 +42,58 @@ type DiffNavigationTarget = {
   side: 'modified' | 'original'
 }
 
+type DiffNavigationHighlightRange = {
+  endLineNumber: number
+  startLineNumber: number
+}
+
+type DiffNavigationMatch = {
+  distance: number
+  selection: GitDiffSelection
+  target: DiffNavigationTarget
+}
+
 const DIFF_AUTO_SAVE_DELAY_MS = 1000
+const DIFF_NAVIGATION_HIGHLIGHT_DURATION_MS = 2200
+
+const setNavigationHighlightEffect = StateEffect.define<DiffNavigationHighlightRange | null>()
+
+const navigationHighlightField = StateField.define<ReturnType<typeof Decoration.set>>({
+  create() {
+    return Decoration.none
+  },
+  update(decorations, transaction) {
+    for (const effect of transaction.effects) {
+      if (!effect.is(setNavigationHighlightEffect)) {
+        continue
+      }
+
+      const range = effect.value
+
+      if (!range) {
+        return Decoration.none
+      }
+
+      const lineDecorations = []
+      const startLineNumber = Math.max(1, Math.floor(range.startLineNumber))
+      const endLineNumber = Math.max(startLineNumber, Math.floor(range.endLineNumber))
+
+      for (let lineNumber = startLineNumber; lineNumber <= endLineNumber; lineNumber += 1) {
+        const line = transaction.state.doc.line(lineNumber)
+        lineDecorations.push(Decoration.line({
+          attributes: {
+            class: 'git-diff-navigation-target-line',
+          },
+        }).range(line.from))
+      }
+
+      return Decoration.set(lineDecorations, true)
+    }
+
+    return decorations.map(transaction.changes)
+  },
+  provide: (field) => EditorView.decorations.from(field),
+})
 
 const DIFF_EDITOR_THEME = EditorView.theme({
   '&': {
@@ -75,6 +127,10 @@ const DIFF_EDITOR_THEME = EditorView.theme({
   },
   '.cm-cursor, .cm-dropCursor': {
     borderLeftColor: 'var(--foreground)',
+  },
+  '.git-diff-navigation-target-line': {
+    backgroundColor: 'color-mix(in srgb, var(--accent) 16%, transparent)',
+    boxShadow: 'inset 3px 0 0 color-mix(in srgb, var(--accent) 72%, transparent)',
   },
 })
 
@@ -126,12 +182,43 @@ function getDistanceToLineRange(lineNumber: number, startLine: number, lineCount
   return 0
 }
 
-function resolveChunkNavigationTarget(
+function getNavigationSelectionLineStart(selection: GitDiffSelection, side: 'modified' | 'original') {
+  return Math.max(1, side === 'modified' ? selection.modifiedStartLine : selection.originalStartLine)
+}
+
+function getNavigationSelectionLineCount(selection: GitDiffSelection, side: 'modified' | 'original') {
+  return side === 'modified' ? selection.modifiedLineCount : selection.originalLineCount
+}
+
+function getNavigationHighlightRange(
+  selection: GitDiffSelection,
+  side: 'modified' | 'original',
+): DiffNavigationHighlightRange {
+  const startLineNumber = getNavigationSelectionLineStart(selection, side)
+  const lineCount = getNavigationSelectionLineCount(selection, side)
+
+  return {
+    endLineNumber: lineCount > 0 ? startLineNumber + lineCount - 1 : startLineNumber,
+    startLineNumber,
+  }
+}
+
+function clampRequestedLineToSelectionRange(
+  selection: GitDiffSelection,
+  side: 'modified' | 'original',
+  requestedLineNumber: number,
+) {
+  const { endLineNumber, startLineNumber } = getNavigationHighlightRange(selection, side)
+  return Math.max(startLineNumber, Math.min(requestedLineNumber, endLineNumber))
+}
+
+function resolveChunkNavigationMatch(
   originalDoc: Text,
   modifiedDoc: Text,
   chunk: CodeMirrorChunk,
   requestedLineNumber: number,
-): DiffNavigationTarget {
+  preferredSide: 'modified' | 'original',
+): DiffNavigationMatch {
   const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
   const modifiedDistance = getDistanceToLineRange(
     requestedLineNumber,
@@ -144,26 +231,29 @@ function resolveChunkNavigationTarget(
     selection.originalLineCount,
   )
 
-  if (modifiedDistance <= originalDistance) {
-    const normalizedStartLine = Math.max(1, selection.modifiedStartLine)
-    const normalizedEndLine = selection.modifiedLineCount > 0
-      ? normalizedStartLine + selection.modifiedLineCount - 1
-      : normalizedStartLine
+  let side: 'modified' | 'original'
 
-    return {
-      lineNumber: Math.max(normalizedStartLine, Math.min(requestedLineNumber, normalizedEndLine)),
-      side: 'modified',
-    }
+  if (modifiedDistance < originalDistance) {
+    side = 'modified'
+  } else if (originalDistance < modifiedDistance) {
+    side = 'original'
+  } else {
+    const fallbackSide = preferredSide === 'modified' ? 'original' : 'modified'
+    const preferredSideLineCount = getNavigationSelectionLineCount(selection, preferredSide)
+    const fallbackSideLineCount = getNavigationSelectionLineCount(selection, fallbackSide)
+
+    side = preferredSideLineCount > 0 || fallbackSideLineCount === 0
+      ? preferredSide
+      : fallbackSide
   }
 
-  const normalizedStartLine = Math.max(1, selection.originalStartLine)
-  const normalizedEndLine = selection.originalLineCount > 0
-    ? normalizedStartLine + selection.originalLineCount - 1
-    : normalizedStartLine
-
   return {
-    lineNumber: Math.max(normalizedStartLine, Math.min(requestedLineNumber, normalizedEndLine)),
-    side: 'original',
+    distance: side === 'modified' ? modifiedDistance : originalDistance,
+    selection,
+    target: {
+      lineNumber: clampRequestedLineToSelectionRange(selection, side, requestedLineNumber),
+      side,
+    },
   }
 }
 
@@ -172,27 +262,35 @@ function findBestNavigationTarget(
   modifiedDoc: Text,
   chunks: readonly CodeMirrorChunk[],
   requestedLineNumber: number,
+  preferredSide: 'modified' | 'original',
 ) {
-  let bestTarget: DiffNavigationTarget | null = null
+  let bestMatch: DiffNavigationMatch | null = null
   let bestDistance = Number.POSITIVE_INFINITY
 
   for (const chunk of chunks) {
-    const nextTarget = resolveChunkNavigationTarget(originalDoc, modifiedDoc, chunk, requestedLineNumber)
-    const nextSelection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
-    const nextDistance = nextTarget.side === 'modified'
-      ? getDistanceToLineRange(requestedLineNumber, nextSelection.modifiedStartLine, nextSelection.modifiedLineCount)
-      : getDistanceToLineRange(requestedLineNumber, nextSelection.originalStartLine, nextSelection.originalLineCount)
+    const nextMatch = resolveChunkNavigationMatch(
+      originalDoc,
+      modifiedDoc,
+      chunk,
+      requestedLineNumber,
+      preferredSide,
+    )
+    const nextDistance = nextMatch.distance
 
     if (
       nextDistance < bestDistance
-      || (nextDistance === bestDistance && nextTarget.side === 'modified' && bestTarget?.side !== 'modified')
+      || (
+        nextDistance === bestDistance
+        && nextMatch.target.side === preferredSide
+        && bestMatch?.target.side !== preferredSide
+      )
     ) {
       bestDistance = nextDistance
-      bestTarget = nextTarget
+      bestMatch = nextMatch
     }
   }
 
-  return bestTarget
+  return bestMatch
 }
 
 function revealEditorLine(view: EditorView, lineNumber: number) {
@@ -204,6 +302,51 @@ function revealEditorLine(view: EditorView, lineNumber: number) {
     selection: EditorSelection.cursor(line.from),
   })
   view.focus()
+}
+
+function clearNavigationHighlight(
+  view: EditorView | null,
+  timerRef: { current: number | null },
+) {
+  if (timerRef.current) {
+    window.clearTimeout(timerRef.current)
+    timerRef.current = null
+  }
+
+  if (!view) {
+    return
+  }
+
+  try {
+    view.dispatch({
+      effects: setNavigationHighlightEffect.of(null),
+    })
+  } catch {
+    // The view may already be tearing down while the diff switches modes or files.
+  }
+}
+
+function applyNavigationHighlight(
+  view: EditorView,
+  range: DiffNavigationHighlightRange,
+  timerRef: { current: number | null },
+) {
+  clearNavigationHighlight(view, timerRef)
+  view.dispatch({
+    effects: setNavigationHighlightEffect.of(range),
+  })
+
+  timerRef.current = window.setTimeout(() => {
+    timerRef.current = null
+
+    try {
+      view.dispatch({
+        effects: setNavigationHighlightEffect.of(null),
+      })
+    } catch {
+      // Ignore teardown races triggered by rapid diff/view switches.
+    }
+  }, DIFF_NAVIGATION_HIGHLIGHT_DURATION_MS)
 }
 
 function getCodeMirrorControlSvg(action: GitDiffBlockAction) {
@@ -266,6 +409,7 @@ function createDiffExtensions({
     ...(wrapLines ? [EditorView.lineWrapping] : []),
     EditorView.editable.of(editable),
     EditorState.readOnly.of(!editable),
+    navigationHighlightField,
     DIFF_EDITOR_THEME,
     getCodeMirrorLanguageSupport(filePath),
     keymap.of([
@@ -351,6 +495,9 @@ function CodeMirrorDiffRenderer({
   const areBlockActionsEnabledRef = useRef(areBlockActionsEnabled)
   const blockActionsDisabledReasonRef = useRef(blockActionsDisabledReason)
   const lastHandledNavigationRequestKeyRef = useRef<string | null>(null)
+  const originalHighlightTimerRef = useRef<number | null>(null)
+  const modifiedHighlightTimerRef = useRef<number | null>(null)
+  const unifiedHighlightTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     onBlockActionRef.current = onBlockAction
@@ -375,7 +522,15 @@ function CodeMirrorDiffRenderer({
 
   useEffect(() => {
     lastHandledNavigationRequestKeyRef.current = null
-  }, [diff.change.path, diff.change.scope])
+  }, [diff.change.path, diff.change.scope, viewMode])
+
+  useEffect(() => {
+    return () => {
+      clearNavigationHighlight(splitViewRef.current?.a ?? null, originalHighlightTimerRef)
+      clearNavigationHighlight(splitViewRef.current?.b ?? null, modifiedHighlightTimerRef)
+      clearNavigationHighlight(unifiedViewRef.current, unifiedHighlightTimerRef)
+    }
+  }, [])
 
   useEffect(() => {
     const host = containerRef.current
@@ -732,6 +887,8 @@ function CodeMirrorDiffRenderer({
     }
 
     const frameHandle = window.requestAnimationFrame(() => {
+      const preferredSide = navigationRequest.source === 'revision' ? 'original' : 'modified'
+
       if (viewMode === 'split') {
         const splitView = splitViewRef.current
 
@@ -745,12 +902,36 @@ function CodeMirrorDiffRenderer({
           splitView.b.state.doc,
           (chunkState?.chunks ?? []) as readonly CodeMirrorChunk[],
           navigationRequest.lineNumber,
+          preferredSide,
         )
+        const resolvedSide = target?.target.side ?? preferredSide
 
-        if (target?.side === 'original') {
-          revealEditorLine(splitView.a, target.lineNumber)
+        if (resolvedSide === 'original') {
+          revealEditorLine(splitView.a, target?.target.lineNumber ?? navigationRequest.lineNumber)
+          applyNavigationHighlight(
+            splitView.a,
+            target
+              ? getNavigationHighlightRange(target.selection, 'original')
+              : {
+                endLineNumber: navigationRequest.lineNumber,
+                startLineNumber: navigationRequest.lineNumber,
+              },
+            originalHighlightTimerRef,
+          )
+          clearNavigationHighlight(splitView.b, modifiedHighlightTimerRef)
         } else {
-          revealEditorLine(splitView.b, target?.lineNumber ?? navigationRequest.lineNumber)
+          revealEditorLine(splitView.b, target?.target.lineNumber ?? navigationRequest.lineNumber)
+          applyNavigationHighlight(
+            splitView.b,
+            target
+              ? getNavigationHighlightRange(target.selection, 'modified')
+              : {
+                endLineNumber: navigationRequest.lineNumber,
+                startLineNumber: navigationRequest.lineNumber,
+              },
+            modifiedHighlightTimerRef,
+          )
+          clearNavigationHighlight(splitView.a, originalHighlightTimerRef)
         }
 
         lastHandledNavigationRequestKeyRef.current = navigationRequest.requestKey
@@ -770,9 +951,20 @@ function CodeMirrorDiffRenderer({
         unifiedView.state.doc,
         (chunkState?.chunks ?? []) as readonly CodeMirrorChunk[],
         navigationRequest.lineNumber,
+        preferredSide,
       )
 
-      revealEditorLine(unifiedView, target?.lineNumber ?? navigationRequest.lineNumber)
+      revealEditorLine(unifiedView, target?.target.lineNumber ?? navigationRequest.lineNumber)
+      applyNavigationHighlight(
+        unifiedView,
+        target
+          ? getNavigationHighlightRange(target.selection, 'modified')
+          : {
+            endLineNumber: navigationRequest.lineNumber,
+            startLineNumber: navigationRequest.lineNumber,
+          },
+        unifiedHighlightTimerRef,
+      )
       lastHandledNavigationRequestKeyRef.current = navigationRequest.requestKey
     })
 
