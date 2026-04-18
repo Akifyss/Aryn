@@ -3,6 +3,7 @@ import { readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import type {
+  GitBlameResult,
   GitChangeItem,
   GitChangeKind,
   GitChangeScope,
@@ -33,6 +34,7 @@ type EnsureUpstreamMode = 'pull' | 'push' | 'sync'
 type EnsureUpstreamResult = 'ready' | 'pushed'
 
 const recentPullsByRepository = new Map<string, GitRecentPullItem[]>()
+const UNCOMMITTED_BLAME_HASH = /^0{40}$/
 
 type ParsedGitPatchHunk = GitDiffSelection & {
   bodyLines: string[]
@@ -615,6 +617,102 @@ async function getTrackingBranch(repositoryRootPath: string) {
   return trackingBranch || null
 }
 
+async function isTrackedGitPath(repositoryRootPath: string, relativePath: string) {
+  const stdout = await runGit(['ls-files', '--error-unmatch', '--', relativePath], {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  })
+
+  return Boolean(stdout?.trim())
+}
+
+function parseGitBlameResult(output: string): GitBlameResult {
+  const lines = output
+    .split(/\r?\n/g)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+
+  const headerParts = lines[0]?.trim().split(/\s+/g) ?? []
+  const commit = headerParts[0]
+
+  if (!commit) {
+    return { kind: 'unavailable', reason: 'error' }
+  }
+
+  const originalLineNumber = Number.parseInt(headerParts[1] ?? '', 10)
+  if (UNCOMMITTED_BLAME_HASH.test(commit)) {
+    return { kind: 'uncommitted' }
+  }
+
+  let author = ''
+  let authorMail: string | undefined
+  let authorTimeUnix = 0
+  let gitPathAtCommit: string | undefined
+  let summary = ''
+
+  for (const line of lines.slice(1)) {
+    if (line.startsWith('\t')) {
+      break
+    }
+
+    if (line.startsWith('author ')) {
+      author = line.slice('author '.length).trim()
+      continue
+    }
+
+    if (line.startsWith('author-mail ')) {
+      authorMail = line.slice('author-mail '.length).trim().replace(/^<|>$/g, '') || undefined
+      continue
+    }
+
+    if (line.startsWith('author-time ')) {
+      const parsedTime = Number.parseInt(line.slice('author-time '.length).trim(), 10)
+      authorTimeUnix = Number.isFinite(parsedTime) ? parsedTime : 0
+      continue
+    }
+
+    if (line.startsWith('summary ')) {
+      summary = line.slice('summary '.length).trim()
+      continue
+    }
+
+    if (line.startsWith('filename ')) {
+      gitPathAtCommit = line.slice('filename '.length) || undefined
+    }
+  }
+
+  return {
+    kind: 'commit',
+    author: author || 'Unknown',
+    authorMail,
+    authorTimeUnix,
+    commit,
+    gitPathAtCommit,
+    originalLineNumber: Number.isFinite(originalLineNumber) && originalLineNumber > 0
+      ? originalLineNumber
+      : undefined,
+    shortCommit: commit.slice(0, 8),
+    summary: summary || '(no commit message)',
+  }
+}
+
+function toGitBlameErrorResult(error: unknown): GitBlameResult {
+  if (isGitMissingError(error)) {
+    return { kind: 'unavailable', reason: 'git-unavailable' }
+  }
+
+  const message = error instanceof Error ? error.message.toLowerCase() : ''
+  if (
+    message.includes('no such path')
+    || message.includes('no such ref')
+    || message.includes('cannot stat path')
+  ) {
+    return { kind: 'unavailable', reason: 'untracked' }
+  }
+
+  return { kind: 'unavailable', reason: 'error' }
+}
+
 async function getCurrentBranch(repositoryRootPath: string) {
   const stdout = await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], {
     cwd: repositoryRootPath,
@@ -797,6 +895,56 @@ export async function getGitRepositoryState(workspacePath: string): Promise<GitR
     unpushedCommits,
     unstagedChanges: parsedStatus.unstagedChanges,
     workspacePath,
+  }
+}
+
+export async function getGitLineBlame(
+  workspacePath: string,
+  filePath: string,
+  lineNumber: number,
+  contentText?: string,
+): Promise<GitBlameResult> {
+  const repositoryRootPath = await resolveRepositoryRoot(workspacePath)
+
+  if (!repositoryRootPath) {
+    return { kind: 'unavailable', reason: 'not-repo' }
+  }
+
+  const relativePath = toWorkspaceRelativePath(repositoryRootPath, filePath)
+  if (!relativePath || relativePath.startsWith('../')) {
+    return { kind: 'unavailable', reason: 'not-repo' }
+  }
+
+  if (!(await isTrackedGitPath(repositoryRootPath, relativePath))) {
+    return { kind: 'unavailable', reason: 'untracked' }
+  }
+
+  const normalizedLineNumber = Math.max(1, Math.floor(lineNumber))
+  const args = [
+    'blame',
+    '--line-porcelain',
+    '-L',
+    `${normalizedLineNumber},${normalizedLineNumber}`,
+  ]
+
+  if (typeof contentText === 'string') {
+    args.push('--contents', '-')
+  }
+
+  args.push('--', relativePath)
+
+  try {
+    const output = typeof contentText === 'string'
+      ? await runGitWithInput(args, contentText, {
+        cwd: repositoryRootPath,
+      })
+      : await runGit(args, {
+        cwd: repositoryRootPath,
+      })
+
+    return parseGitBlameResult(output ?? '')
+  } catch (error) {
+    return toGitBlameErrorResult(error)
   }
 }
 

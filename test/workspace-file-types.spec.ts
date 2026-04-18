@@ -11,6 +11,7 @@ import {
 describe('workspace file types', () => {
   it('routes markdown and plain text files to the rich text editor', () => {
     expect(getWorkspaceEditorKind('C:/workspace/draft.md')).toBe('rich-text')
+    expect(getWorkspaceEditorKind('C:/workspace/snippet.mdc')).toBe('rich-text')
     expect(getWorkspaceEditorKind('C:/workspace/README')).toBe('rich-text')
     expect(getWorkspaceEditorKind('C:/workspace/notes.txt')).toBe('rich-text')
   })
@@ -30,6 +31,7 @@ describe('workspace file types', () => {
   it('maps known code files to monaco languages', () => {
     expect(getCodeLanguage('C:/workspace/main.tsx')).toBe('typescript')
     expect(getCodeLanguage('C:/workspace/index.html')).toBe('html')
+    expect(getCodeLanguage('C:/workspace/component.mdc')).toBe('markdown')
     expect(getCodeLanguage('C:/workspace/theme.css')).toBe('css')
     expect(getCodeLanguage('C:/workspace/config.yaml')).toBe('yaml')
     expect(getCodeLanguage('C:/workspace/.env')).toBe('plaintext')
@@ -56,6 +58,7 @@ describe('workspace file types', () => {
   it('only exposes MEO for markdown-native rich-text files', () => {
     expect(supportsMeoEditor('C:/workspace/notes.md', 'rich-text')).toBe(true)
     expect(supportsMeoEditor('C:/workspace/notes.markdown', 'rich-text')).toBe(true)
+    expect(supportsMeoEditor('C:/workspace/notes.mdc', 'rich-text')).toBe(true)
     expect(supportsMeoEditor('C:/workspace/notes.mdx', 'rich-text')).toBe(true)
     expect(supportsMeoEditor('C:/workspace/notes.txt', 'rich-text')).toBe(false)
     expect(supportsMeoEditor('C:/workspace/index.html', 'code')).toBe(false)

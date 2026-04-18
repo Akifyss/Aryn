@@ -1,6 +1,7 @@
 import { ipcRenderer, contextBridge } from 'electron'
 import type { AgentClientEvent, AgentWorkspaceState } from '../../src/features/agent/types'
 import type {
+  GitBlameResult,
   GitChangeItem,
   GitChangeScope,
   GitDiffBlockAction,
@@ -56,6 +57,12 @@ contextBridge.exposeInMainWorld('appApi', {
   pullGitChanges: (workspacePath: string) => ipcRenderer.invoke('git:pull', workspacePath) as Promise<GitRepositoryState>,
   pushGitChanges: (workspacePath: string) => ipcRenderer.invoke('git:push', workspacePath) as Promise<GitRepositoryState>,
   getGitFileDiff: (workspacePath: string, filePath: string, scope: GitChangeScope) => ipcRenderer.invoke('git:get-file-diff', workspacePath, filePath, scope) as Promise<GitFileDiffResult>,
+  getGitLineBlame: (
+    workspacePath: string,
+    filePath: string,
+    lineNumber: number,
+    contentText?: string,
+  ) => ipcRenderer.invoke('git:get-line-blame', workspacePath, filePath, lineNumber, contentText) as Promise<GitBlameResult>,
   getWorkspaceIconTheme: () => ipcRenderer.invoke('workspace-icons:get-theme') as Promise<WorkspaceIconTheme | null>,
   getWorkspaceIconThemeCatalog: () => ipcRenderer.invoke('workspace-icons:catalog') as Promise<WorkspaceIconThemeCatalogOption[]>,
   pickWorkspaceIconTheme: () => ipcRenderer.invoke('workspace-icons:pick-theme') as Promise<WorkspaceIconTheme | null>,

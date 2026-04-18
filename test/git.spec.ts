@@ -10,6 +10,7 @@ import {
   discardAllGitChanges,
   commitGitChanges,
   getGitFileDiff,
+  getGitLineBlame,
   getGitRepositoryState,
   initializeGitRepository,
   pullGitChanges,
@@ -162,6 +163,27 @@ describe('git helpers', () => {
       modifiedExists: true,
       originalContent: '<div>one</div>\n',
       originalExists: true,
+    })
+  })
+
+  it('returns commit blame for tracked lines and uncommitted blame for unsaved edits', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'draft.md')
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(filePath, 'alpha\nbeta\n', 'utf8')
+    await stageGitPaths(rootPath, [filePath])
+    await commitGitChanges(rootPath, 'initial commit')
+
+    await expect(getGitLineBlame(rootPath, filePath, 1)).resolves.toMatchObject({
+      kind: 'commit',
+      author: 'Codex Test',
+      summary: 'initial commit',
+    })
+
+    await expect(getGitLineBlame(rootPath, filePath, 1, 'alpha changed\nbeta\n')).resolves.toMatchObject({
+      kind: 'uncommitted',
     })
   })
 

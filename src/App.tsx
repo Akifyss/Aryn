@@ -3574,6 +3574,19 @@ function App() {
                 onOpenFile={(targetFilePath) => {
                   void openFile(targetFilePath, currentPath, 'meo')
                 }}
+                onOpenGitDiff={(targetFilePath) => {
+                  void (async () => {
+                    const latestGitState = await refreshGitState(currentPath, { silent: true })
+                    const nextChange = findGitChangeByFilePath(latestGitState, targetFilePath)
+
+                    if (nextChange) {
+                      await openGitDiff(nextChange)
+                      return
+                    }
+
+                    await openFile(targetFilePath, currentPath, 'code')
+                  })()
+                }}
                 onSave={(content) => {
                   void handleSave({
                     content,

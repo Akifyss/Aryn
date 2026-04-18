@@ -5,6 +5,7 @@ export type WorkspaceFileViewMode = 'default' | 'code' | 'preview' | 'meo'
 const RICH_TEXT_EXTENSIONS = new Set([
   '.md',
   '.markdown',
+  '.mdc',
   '.mdx',
   '.txt',
   '.text',
@@ -19,6 +20,7 @@ const RICH_TEXT_FILE_NAMES = new Set([
 const MEO_EXTENSIONS = new Set([
   '.md',
   '.markdown',
+  '.mdc',
   '.mdx',
 ])
 
@@ -205,6 +207,7 @@ export function getCodeLanguage(filePath: string) {
     case '.yml':
       return 'yaml'
     case '.md':
+    case '.mdc':
     case '.markdown':
     case '.mdx':
       return 'markdown'

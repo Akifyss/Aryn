@@ -6,7 +6,14 @@ type MeoEditorBootstrap = {
 }
 
 type MeoStoredState = {
+  findOptions?: {
+    caseSensitive: boolean
+    wholeWord: boolean
+  }
+  gitChangesGutter?: boolean
+  lineNumbers?: boolean
   mode?: 'live' | 'source'
+  outlineVisible?: boolean
   topLine?: number
   topLineOffset?: number
 }
@@ -30,9 +37,23 @@ type MeoHostMessage =
   }
   | { type: 'saveDocument' }
   | { type: 'setMode', mode: 'live' | 'source' }
+  | { type: 'setLineNumbers', enabled?: boolean, visible?: boolean }
+  | { type: 'setGitChangesGutter', enabled?: boolean, visible?: boolean }
+  | { type: 'setOutlineVisible', visible?: boolean }
+  | {
+    type: 'setFindOptions'
+    caseSensitive?: boolean
+    wholeWord?: boolean
+    findOptions?: {
+      caseSensitive?: boolean
+      wholeWord?: boolean
+    }
+  }
   | { type: 'viewPositionChanged', topLine?: number, topLineOffset?: number }
   | { type: 'openLink', href?: string }
-  | { type: 'requestGitBlame', lineNumber?: number, localEditGeneration?: number, requestId?: string }
+  | { type: 'openGitRevisionForLine', lineNumber?: number, text?: string }
+  | { type: 'openGitWorktreeForLine', lineNumber?: number, text?: string }
+  | { type: 'requestGitBlame', lineNumber?: number, localEditGeneration?: number, requestId?: string, text?: string }
   | { type: 'resolveImageSrc', requestId?: string, url?: string }
   | { type: 'resolveLocalLinks', requestId?: string, targets?: unknown[] }
   | { type: 'resolveWikiLinks', requestId?: string, targets?: unknown[] }
@@ -46,6 +67,7 @@ type MeoEditorHostProps = {
   filePath: string
   onCompositionChange?: (isComposing: boolean) => void
   onOpenFile?: (filePath: string) => void
+  onOpenGitDiff?: (filePath: string) => void
   onSave?: (nextValue: string) => void
   onChange: (nextValue: string) => void
   theme?: 'light' | 'dark' | 'auto'
@@ -62,6 +84,10 @@ type ParsedFsPath = {
 const MEO_STATE_STORAGE_PREFIX = 'aryn:meo-state:'
 const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx', '.mdc']
 const IMAGE_DIRECTORY = 'assets'
+const DEFAULT_FIND_OPTIONS = {
+  caseSensitive: false,
+  wholeWord: false,
+} as const
 
 function resolvePreferredTheme(theme: 'light' | 'dark' | 'auto') {
   if (theme !== 'auto') {
@@ -422,6 +448,19 @@ function getStoredStateKey(filePath: string) {
   return `${MEO_STATE_STORAGE_PREFIX}${encodeURIComponent(filePath)}`
 }
 
+function resolveFindOptions(
+  value: unknown,
+) {
+  const candidate = value && typeof value === 'object'
+    ? value as { caseSensitive?: unknown, wholeWord?: unknown }
+    : null
+
+  return {
+    caseSensitive: candidate?.caseSensitive === true,
+    wholeWord: candidate?.wholeWord === true,
+  }
+}
+
 function readStoredState(filePath: string): MeoStoredState {
   try {
     const rawValue = window.localStorage.getItem(getStoredStateKey(filePath))
@@ -432,7 +471,11 @@ function readStoredState(filePath: string): MeoStoredState {
     const parsedValue = JSON.parse(rawValue) as Partial<MeoStoredState>
 
     return {
+      findOptions: resolveFindOptions(parsedValue.findOptions),
+      gitChangesGutter: parsedValue.gitChangesGutter === true,
+      lineNumbers: parsedValue.lineNumbers !== false,
       mode: parsedValue.mode === 'live' || parsedValue.mode === 'source' ? parsedValue.mode : undefined,
+      outlineVisible: parsedValue.outlineVisible === true,
       topLine: typeof parsedValue.topLine === 'number' && Number.isFinite(parsedValue.topLine)
         ? parsedValue.topLine
         : undefined,
@@ -510,6 +553,7 @@ export function MeoEditorHost({
   filePath,
   onCompositionChange,
   onOpenFile,
+  onOpenGitDiff,
   onSave,
   onChange,
   theme = 'auto',
@@ -639,16 +683,13 @@ export function MeoEditorHost({
           setStatusMessage(null)
           postThemeChanged(iframeWindow, preferredTheme)
           iframeWindow.postMessage({
-            findOptions: {
-              caseSensitive: false,
-              wholeWord: false,
-            },
-            gitChangesGutter: false,
+            findOptions: storedState.findOptions ?? DEFAULT_FIND_OPTIONS,
+            gitChangesGutter: storedState.gitChangesGutter ?? false,
             gitDiffLineHighlights: false,
-            lineNumbers: true,
+            lineNumbers: storedState.lineNumbers ?? true,
             mode: modeRef.current,
             outlinePosition: 'right',
-            outlineVisible: false,
+            outlineVisible: storedState.outlineVisible ?? false,
             restoreTopLine: storedState.topLine,
             restoreTopLineOffset: storedState.topLineOffset,
             text: contentRef.current,
@@ -699,6 +740,39 @@ export function MeoEditorHost({
           return
         }
 
+        case 'setLineNumbers': {
+          const lineNumbers = payload.visible ?? payload.enabled
+          if (typeof lineNumbers === 'boolean') {
+            writeStoredState(filePath, { lineNumbers })
+          }
+          return
+        }
+
+        case 'setGitChangesGutter': {
+          const gitChangesGutter = payload.visible ?? payload.enabled
+          if (typeof gitChangesGutter === 'boolean') {
+            writeStoredState(filePath, { gitChangesGutter })
+          }
+          return
+        }
+
+        case 'setOutlineVisible': {
+          if (typeof payload.visible === 'boolean') {
+            writeStoredState(filePath, { outlineVisible: payload.visible })
+          }
+          return
+        }
+
+        case 'setFindOptions': {
+          writeStoredState(filePath, {
+            findOptions: resolveFindOptions(payload.findOptions ?? {
+              caseSensitive: payload.caseSensitive,
+              wholeWord: payload.wholeWord,
+            }),
+          })
+          return
+        }
+
         case 'viewPositionChanged': {
           writeStoredState(filePath, {
             topLine: typeof payload.topLine === 'number' ? payload.topLine : undefined,
@@ -731,14 +805,40 @@ export function MeoEditorHost({
           return
         }
 
+        case 'openGitRevisionForLine':
+        case 'openGitWorktreeForLine': {
+          onOpenGitDiff?.(filePath)
+          return
+        }
+
         case 'requestGitBlame': {
-          iframeWindow.postMessage({
-            lineNumber: payload.lineNumber,
-            localEditGeneration: payload.localEditGeneration,
-            requestId: payload.requestId,
-            result: { kind: 'unavailable', reason: 'error' },
-            type: 'gitBlameResult',
-          }, '*')
+          void (async () => {
+            if (!workspacePath) {
+              iframeWindow.postMessage({
+                lineNumber: payload.lineNumber,
+                localEditGeneration: payload.localEditGeneration,
+                requestId: payload.requestId,
+                result: { kind: 'unavailable', reason: 'not-repo' },
+                type: 'gitBlameResult',
+              }, '*')
+              return
+            }
+
+            const result = await window.appApi.getGitLineBlame(
+              workspacePath,
+              filePath,
+              typeof payload.lineNumber === 'number' ? payload.lineNumber : 1,
+              typeof payload.text === 'string' ? payload.text : undefined,
+            )
+
+            iframeWindow.postMessage({
+              lineNumber: payload.lineNumber,
+              localEditGeneration: payload.localEditGeneration,
+              requestId: payload.requestId,
+              result,
+              type: 'gitBlameResult',
+            }, '*')
+          })()
           return
         }
 
@@ -823,7 +923,7 @@ export function MeoEditorHost({
     return () => {
       window.removeEventListener('message', handleWindowMessage)
     }
-  }, [filePath, onChange, onOpenFile, onSave, preferredTheme, workspacePath])
+  }, [filePath, onChange, onOpenFile, onOpenGitDiff, onSave, preferredTheme, workspacePath])
 
   if (errorMessage) {
     return (

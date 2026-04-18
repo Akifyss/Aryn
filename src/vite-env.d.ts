@@ -1,5 +1,6 @@
 import type { AgentClientEvent, AgentWorkspaceState } from '@/features/agent/types'
 import type {
+  GitBlameResult,
   GitChangeItem,
   GitChangeScope,
   GitDiffBlockAction,
@@ -59,6 +60,12 @@ declare global {
       pullGitChanges: (workspacePath: string) => Promise<GitRepositoryState>
       pushGitChanges: (workspacePath: string) => Promise<GitRepositoryState>
       getGitFileDiff: (workspacePath: string, filePath: string, scope: GitChangeScope) => Promise<GitFileDiffResult>
+      getGitLineBlame: (
+        workspacePath: string,
+        filePath: string,
+        lineNumber: number,
+        contentText?: string,
+      ) => Promise<GitBlameResult>
       getWorkspaceIconTheme: () => Promise<WorkspaceIconTheme | null>
       getWorkspaceIconThemeCatalog: () => Promise<WorkspaceIconThemeCatalogOption[]>
       pickWorkspaceIconTheme: () => Promise<WorkspaceIconTheme | null>

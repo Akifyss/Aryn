@@ -9,6 +9,7 @@ import {
   commitGitChanges,
   discardAllGitChanges,
   discardGitChange,
+  getGitLineBlame,
   getGitFileDiff,
   getGitRepositoryState,
   initializeGitRepository,
@@ -598,6 +599,19 @@ ipcMain.handle('git:push', async (_, workspacePath: string) => {
 ipcMain.handle('git:get-file-diff', async (_, workspacePath: string, filePath: string, scope: GitChangeScope) => {
   return getGitFileDiff(workspacePath, filePath, scope)
 })
+
+ipcMain.handle(
+  'git:get-line-blame',
+  async (
+    _,
+    workspacePath: string,
+    filePath: string,
+    lineNumber: number,
+    contentText?: string,
+  ) => {
+    return getGitLineBlame(workspacePath, filePath, lineNumber, contentText)
+  },
+)
 
 ipcMain.handle('workspace:start-watch', async (_, rootPath: string) => {
   await watchWorkspace(rootPath, (event) => {

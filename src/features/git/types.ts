@@ -51,6 +51,26 @@ export type GitRepositoryState = {
   workspacePath: string
 }
 
+export type GitBlameResult =
+  | {
+    kind: 'commit'
+    author: string
+    authorMail?: string
+    authorTimeUnix: number
+    commit: string
+    gitPathAtCommit?: string
+    originalLineNumber?: number
+    shortCommit: string
+    summary: string
+  }
+  | {
+    kind: 'uncommitted'
+  }
+  | {
+    kind: 'unavailable'
+    reason: 'not-repo' | 'untracked' | 'git-unavailable' | 'error'
+  }
+
 export type GitFileDiffResult = {
   change: GitChangeItem
   editorKind: SupportedWorkspaceEditorKind
