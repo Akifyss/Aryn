@@ -370,6 +370,10 @@ function resolveWorkspaceFileViewMode(
   editorKind: WorkspaceFileTab['editorKind'],
   preferredViewMode?: WorkspaceFileViewMode,
 ) {
+  if (preferredViewMode === 'default' && editorKind === 'rich-text') {
+    return 'default'
+  }
+
   if (preferredViewMode === 'meo' && supportsMeoEditor(filePath, editorKind)) {
     return preferredViewMode
   }
@@ -3036,6 +3040,9 @@ function App() {
                   onSelectFile={(filePath) => {
                     void openFile(filePath)
                   }}
+                  onOpenInWritingEditor={(filePath) => {
+                    void openFile(filePath, currentPath, 'default')
+                  }}
                   onOpenInCodeEditor={(filePath) => {
                     void openFile(filePath, currentPath, 'code')
                   }}
@@ -3348,6 +3355,9 @@ function App() {
                   gitRepositoryState={gitRepositoryState}
                   onSelectFile={(filePath) => {
                     void openFile(filePath)
+                  }}
+                  onOpenInWritingEditor={(filePath) => {
+                    void openFile(filePath, currentPath, 'default')
                   }}
                   onOpenInCodeEditor={(filePath) => {
                     void openFile(filePath, currentPath, 'code')

@@ -37,14 +37,15 @@ describe('workspace file types', () => {
     expect(getCodeLanguage('C:/workspace/.env')).toBe('plaintext')
   })
 
-  it('defaults html files to preview while leaving other editor types in their default view', () => {
+  it('defaults html files to preview and markdown-rich text files to MEO', () => {
     expect(supportsHtmlPreview('C:/workspace/index.html')).toBe(true)
     expect(supportsHtmlPreview('C:/workspace/partial.htm')).toBe(true)
     expect(supportsHtmlPreview('C:/workspace/main.ts')).toBe(false)
 
     expect(getDefaultWorkspaceFileViewMode('C:/workspace/index.html', 'code')).toBe('preview')
     expect(getDefaultWorkspaceFileViewMode('C:/workspace/main.ts', 'code')).toBe('default')
-    expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.md', 'rich-text')).toBe('default')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.md', 'rich-text')).toBe('meo')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.txt', 'rich-text')).toBe('default')
   })
 
   it('only exposes alternate code-view entry points for html and rich-text files', () => {

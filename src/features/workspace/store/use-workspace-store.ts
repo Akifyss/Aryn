@@ -90,6 +90,10 @@ function normalizeViewMode(
   editorKind: SupportedWorkspaceEditorKind,
   viewMode?: WorkspaceFileViewMode,
 ) {
+  if (viewMode === 'default' && editorKind === 'rich-text') {
+    return 'default'
+  }
+
   if (viewMode === 'meo' && supportsMeoEditor(filePath, editorKind)) {
     return viewMode
   }

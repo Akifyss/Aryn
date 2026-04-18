@@ -160,6 +160,10 @@ export function getDefaultWorkspaceFileViewMode(
   filePath: string,
   editorKind: SupportedWorkspaceEditorKind,
 ): WorkspaceFileViewMode {
+  if (supportsMeoEditor(filePath, editorKind)) {
+    return 'meo'
+  }
+
   if (editorKind === 'code' && supportsHtmlPreview(filePath)) {
     return 'preview'
   }

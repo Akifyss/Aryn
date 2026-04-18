@@ -40,11 +40,11 @@ describe('useWorkspaceStore', () => {
 
     const nextState = useWorkspaceStore.getState()
     expect(nextState.openTabs).toHaveLength(2)
-    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/a.md', 'default'))
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/a.md', 'meo'))
     expect(nextState.openTabs[0]).toMatchObject({
       content: 'alpha',
       kind: 'file',
-      viewMode: 'default',
+      viewMode: 'meo',
     })
   })
 
@@ -72,7 +72,7 @@ describe('useWorkspaceStore', () => {
     expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/index.html', 'code'))
   })
 
-  it('allows markdown tabs to open in both default and code views', () => {
+  it('allows markdown tabs to open in both MEO and code views by default', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({
@@ -90,19 +90,20 @@ describe('useWorkspaceStore', () => {
     const nextState = useWorkspaceStore.getState()
     expect(nextState.openTabs).toHaveLength(2)
     expect(nextState.openTabs.map((tab) => tab.id)).toEqual([
-      createWorkspaceFileTabId('C:/workspace/draft.md', 'default'),
+      createWorkspaceFileTabId('C:/workspace/draft.md', 'meo'),
       createWorkspaceFileTabId('C:/workspace/draft.md', 'code'),
     ])
     expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/draft.md', 'code'))
   })
 
-  it('allows markdown tabs to open in both default and MEO views', () => {
+  it('allows markdown tabs to open in both writing and MEO views', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({
       content: '# Draft',
       editorKind: 'rich-text',
       filePath: 'C:/workspace/draft.md',
+      viewMode: 'default',
     })
     store.openTab({
       content: '# Draft',
@@ -197,6 +198,7 @@ describe('useWorkspaceStore', () => {
       content: '# Draft',
       editorKind: 'rich-text',
       filePath: 'C:/workspace/draft.md',
+      viewMode: 'default',
     })
     store.openTab({
       content: '# Draft',
@@ -218,15 +220,15 @@ describe('useWorkspaceStore', () => {
     store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
     store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
     store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
-    store.activateTab(createWorkspaceFileTabId('C:/workspace/b.md', 'default'))
-    store.closeTab(createWorkspaceFileTabId('C:/workspace/b.md', 'default'))
+    store.activateTab(createWorkspaceFileTabId('C:/workspace/b.md', 'meo'))
+    store.closeTab(createWorkspaceFileTabId('C:/workspace/b.md', 'meo'))
 
     const nextState = useWorkspaceStore.getState()
     expect(nextState.openTabs.map((tab) => tab.filePath)).toEqual([
       'C:/workspace/a.md',
       'C:/workspace/c.md',
     ])
-    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/c.md', 'default'))
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/c.md', 'meo'))
   })
 
   it('renames an open active tab without losing its content or selection', () => {
@@ -241,7 +243,7 @@ describe('useWorkspaceStore', () => {
     store.renameTab('C:/workspace/old-name.md', 'C:/workspace/new-name.md')
 
     const nextState = useWorkspaceStore.getState()
-    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/new-name.md', 'default'))
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/new-name.md', 'meo'))
     expect(nextState.openTabs[0]).toMatchObject({
       content: 'content updated',
       filePath: 'C:/workspace/new-name.md',
@@ -304,11 +306,11 @@ describe('useWorkspaceStore', () => {
     store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
     store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
     store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
-    store.activateTab(createWorkspaceFileTabId('C:/workspace/b.md', 'default'))
+    store.activateTab(createWorkspaceFileTabId('C:/workspace/b.md', 'meo'))
 
     store.moveTab(
-      createWorkspaceFileTabId('C:/workspace/c.md', 'default'),
-      createWorkspaceFileTabId('C:/workspace/a.md', 'default'),
+      createWorkspaceFileTabId('C:/workspace/c.md', 'meo'),
+      createWorkspaceFileTabId('C:/workspace/a.md', 'meo'),
       'before',
     )
     expect(useWorkspaceStore.getState().openTabs.map((tab) => tab.filePath)).toEqual([
@@ -316,11 +318,11 @@ describe('useWorkspaceStore', () => {
       'C:/workspace/a.md',
       'C:/workspace/b.md',
     ])
-    expect(useWorkspaceStore.getState().activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/b.md', 'default'))
+    expect(useWorkspaceStore.getState().activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/b.md', 'meo'))
 
     store.moveTab(
-      createWorkspaceFileTabId('C:/workspace/c.md', 'default'),
-      createWorkspaceFileTabId('C:/workspace/b.md', 'default'),
+      createWorkspaceFileTabId('C:/workspace/c.md', 'meo'),
+      createWorkspaceFileTabId('C:/workspace/b.md', 'meo'),
       'after',
     )
     expect(useWorkspaceStore.getState().openTabs.map((tab) => tab.filePath)).toEqual([
@@ -328,7 +330,7 @@ describe('useWorkspaceStore', () => {
       'C:/workspace/b.md',
       'C:/workspace/c.md',
     ])
-    expect(useWorkspaceStore.getState().activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/b.md', 'default'))
+    expect(useWorkspaceStore.getState().activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/b.md', 'meo'))
   })
 
   it('treats self-drops and adjacent no-op drops as stable reorder operations', () => {
@@ -343,32 +345,32 @@ describe('useWorkspaceStore', () => {
     expect(
       reorderWorkspaceTabs(
         currentTabs,
-        createWorkspaceFileTabId('C:/workspace/b.md', 'default'),
-        createWorkspaceFileTabId('C:/workspace/b.md', 'default'),
+        createWorkspaceFileTabId('C:/workspace/b.md', 'meo'),
+        createWorkspaceFileTabId('C:/workspace/b.md', 'meo'),
         'before',
       ),
     ).toBe(currentTabs)
     expect(
       reorderWorkspaceTabs(
         currentTabs,
-        createWorkspaceFileTabId('C:/workspace/b.md', 'default'),
-        createWorkspaceFileTabId('C:/workspace/c.md', 'default'),
+        createWorkspaceFileTabId('C:/workspace/b.md', 'meo'),
+        createWorkspaceFileTabId('C:/workspace/c.md', 'meo'),
         'before',
       ),
     ).toBe(currentTabs)
     expect(
       reorderWorkspaceTabs(
         currentTabs,
-        createWorkspaceFileTabId('C:/workspace/b.md', 'default'),
-        createWorkspaceFileTabId('C:/workspace/a.md', 'default'),
+        createWorkspaceFileTabId('C:/workspace/b.md', 'meo'),
+        createWorkspaceFileTabId('C:/workspace/a.md', 'meo'),
         'after',
       ),
     ).toBe(currentTabs)
     expect(
       reorderWorkspaceTabs(
         currentTabs,
-        createWorkspaceFileTabId('C:/workspace/missing.md', 'default'),
-        createWorkspaceFileTabId('C:/workspace/a.md', 'default'),
+        createWorkspaceFileTabId('C:/workspace/missing.md', 'meo'),
+        createWorkspaceFileTabId('C:/workspace/a.md', 'meo'),
         'before',
       ),
     ).toBe(currentTabs)
@@ -382,8 +384,8 @@ describe('useWorkspaceStore', () => {
     store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
 
     store.moveTab(
-      createWorkspaceFileTabId('C:/workspace/a.md', 'default'),
-      createWorkspaceFileTabId('C:/workspace/c.md', 'default'),
+      createWorkspaceFileTabId('C:/workspace/a.md', 'meo'),
+      createWorkspaceFileTabId('C:/workspace/c.md', 'meo'),
       'after',
     )
 
@@ -430,7 +432,7 @@ describe('useWorkspaceStore', () => {
 
     store.moveTab(
       diffTabId,
-      createWorkspaceFileTabId('C:/workspace/notes.md', 'default'),
+      createWorkspaceFileTabId('C:/workspace/notes.md', 'meo'),
       'after',
     )
 
