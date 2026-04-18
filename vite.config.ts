@@ -1,4 +1,4 @@
-import { rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { builtinModules } from 'node:module'
 import path from 'node:path'
 import { defineConfig } from 'vite'
@@ -53,6 +53,25 @@ function isBundledElectronRuntimeExternal(id: string) {
   return builtinModules.some((moduleName) => id === moduleName || id.startsWith(`${moduleName}/`))
 }
 
+function copyBundledMeoRuntimePlugin() {
+  const sourceDirectory = path.resolve(__dirname, 'vendor', 'meo-runtime')
+  const targetDirectory = path.resolve(__dirname, 'dist', 'meo-runtime')
+
+  return {
+    name: 'copy-bundled-meo-runtime',
+    apply: 'build' as const,
+    closeBundle() {
+      if (!existsSync(sourceDirectory)) {
+        throw new Error(`Missing bundled MEO runtime directory: ${sourceDirectory}`)
+      }
+
+      rmSync(targetDirectory, { recursive: true, force: true })
+      mkdirSync(path.dirname(targetDirectory), { recursive: true })
+      cpSync(sourceDirectory, targetDirectory, { recursive: true })
+    },
+  }
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
   rmSync('dist-electron', { recursive: true, force: true })
@@ -70,6 +89,7 @@ export default defineConfig(({ command }) => {
     plugins: [
       tailwindcss(),
       react(),
+      copyBundledMeoRuntimePlugin(),
       electron({
         main: {
           // Shortcut of `build.lib.entry`

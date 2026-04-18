@@ -6,6 +6,11 @@ dist/
 dist-ssr/
 dist-electron/
 release/
+!vendor/meo-runtime/
+!vendor/meo-runtime/**
+!vendor/meo-runtime/webview/
+!vendor/meo-runtime/webview/dist/
+!vendor/meo-runtime/webview/dist/**
 
 # Logs
 logs/

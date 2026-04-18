@@ -1,18 +1,12 @@
-import { createHash } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { access, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { access, readFile } from 'node:fs/promises'
 import path from 'node:path'
-import extractZip from 'extract-zip'
 
-type ExtensionPackageManifest = {
-  displayName?: string
-  name?: string
-}
-
-type ExtractedMeoExtension = {
+type MeoRuntimeBundle = {
   cacheKey: string
   extensionLabel: string
-  extensionRootPath: string
+  runtimeRootPath: string
+  wrapperHtml: string
 }
 
 type MeoEditorBootstrap = {
@@ -20,14 +14,14 @@ type MeoEditorBootstrap = {
   wrapperUrl: string
 }
 
-const packageFileName = 'package.json'
-const bundledVsixFileName = 'vadimmelnicuk.meo-0.1.23.vsix'
 const meoRoutePrefix = '/meo/'
+const bundledMeoRuntimeCacheKey = 'bundled-meo-runtime-v1'
+const bundledMeoRuntimeLabel = 'Markdown Editor Optimized'
 
 type MeoServer = {
   baseUrl: string
   close: () => Promise<void>
-  extensionsByCacheKey: Map<string, ExtractedMeoExtension>
+  extensionsByCacheKey: Map<string, MeoRuntimeBundle>
 }
 
 let meoServer: MeoServer | null = null
@@ -39,112 +33,6 @@ async function hasFile(filePath: string) {
     return true
   } catch {
     return false
-  }
-}
-
-async function resolveVsixCacheKey(vsixPath: string) {
-  const fileInfo = await stat(vsixPath)
-  return createHash('sha1')
-    .update(path.resolve(vsixPath))
-    .update(':')
-    .update(String(fileInfo.size))
-    .update(':')
-    .update(String(fileInfo.mtimeMs))
-    .digest('hex')
-}
-
-async function resolveExtractedExtensionRoot(extractRootPath: string) {
-  const directPackagePath = path.join(extractRootPath, packageFileName)
-  const nestedPackagePath = path.join(extractRootPath, 'extension', packageFileName)
-
-  if (await hasFile(directPackagePath)) {
-    return extractRootPath
-  }
-
-  if (await hasFile(nestedPackagePath)) {
-    return path.join(extractRootPath, 'extension')
-  }
-
-  const entries = await readdir(extractRootPath, { withFileTypes: true })
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue
-    }
-
-    const candidateRootPath = path.join(extractRootPath, entry.name)
-    if (await hasFile(path.join(candidateRootPath, packageFileName))) {
-      return candidateRootPath
-    }
-  }
-
-  throw new Error('The bundled MEO VSIX package does not contain a resolvable extension manifest.')
-}
-
-async function ensureExtractedVsix(vsixPath: string, cacheRootPath: string) {
-  const cacheKey = await resolveVsixCacheKey(vsixPath)
-  const extractRootPath = path.join(cacheRootPath, cacheKey)
-  const extensionRootMarkerPath = path.join(extractRootPath, 'extension', packageFileName)
-  const directRootMarkerPath = path.join(extractRootPath, packageFileName)
-
-  await mkdir(cacheRootPath, { recursive: true })
-
-  if ((await hasFile(extensionRootMarkerPath)) || (await hasFile(directRootMarkerPath))) {
-    return {
-      cacheKey,
-      extensionRootPath: await resolveExtractedExtensionRoot(extractRootPath),
-    }
-  }
-
-  await rm(extractRootPath, { recursive: true, force: true })
-  await mkdir(extractRootPath, { recursive: true })
-  await extractZip(vsixPath, { dir: extractRootPath })
-
-  return {
-    cacheKey,
-    extensionRootPath: await resolveExtractedExtensionRoot(extractRootPath),
-  }
-}
-
-async function loadExtensionManifest(extensionRootPath: string) {
-  const manifestPath = path.join(extensionRootPath, packageFileName)
-  const rawManifest = await readFile(manifestPath, 'utf8')
-  const manifest = JSON.parse(rawManifest) as ExtensionPackageManifest
-
-  return {
-    extensionLabel: manifest.displayName?.trim() || manifest.name?.trim() || 'Markdown Editor Optimized',
-  }
-}
-
-const gitGutterAddedClickOriginal =
-  'if(F1==="added")return;if(F1==="modified"){z?.({lineNumber:r});return}G?.({lineNumber:z1})'
-const gitGutterAddedClickPatched =
-  'if(F1==="added"||F1==="modified"){z?.({lineNumber:r});return}G?.({lineNumber:z1})'
-
-async function patchExtractedMeoWebview(extensionRootPath: string) {
-  const webviewDistPath = path.join(extensionRootPath, 'webview', 'dist')
-  const entries = await readdir(webviewDistPath, { withFileTypes: true })
-
-  for (const entry of entries) {
-    if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== '.js') {
-      continue
-    }
-
-    const filePath = path.join(webviewDistPath, entry.name)
-    const source = await readFile(filePath, 'utf8')
-
-    if (source.includes(gitGutterAddedClickPatched)) {
-      return
-    }
-
-    if (!source.includes(gitGutterAddedClickOriginal)) {
-      continue
-    }
-
-    const nextSource = source.replace(gitGutterAddedClickOriginal, gitGutterAddedClickPatched)
-    if (nextSource !== source) {
-      await writeFile(filePath, nextSource, 'utf8')
-      return
-    }
   }
 }
 
@@ -363,27 +251,18 @@ function buildWrapperHtml(cacheKey: string) {
 </html>`
 }
 
-async function writeWrapperFile(extractedExtension: ExtractedMeoExtension) {
-  const wrapperPath = path.join(extractedExtension.extensionRootPath, '.aryn-meo-wrapper.html')
-  await writeFile(wrapperPath, buildWrapperHtml(extractedExtension.cacheKey), 'utf8')
-  return wrapperPath
-}
-
-async function resolveExtractedExtension(vitePublicPath: string, cacheRootPath: string): Promise<ExtractedMeoExtension> {
-  const vsixPath = path.join(vitePublicPath, 'extensions', bundledVsixFileName)
-  const { cacheKey, extensionRootPath } = await ensureExtractedVsix(vsixPath, cacheRootPath)
-  await patchExtractedMeoWebview(extensionRootPath)
-  const extensionInfo = await loadExtensionManifest(extensionRootPath)
-  const webviewDistPath = path.join(extensionRootPath, 'webview', 'dist')
+async function resolveBundledRuntime(runtimeRootPath: string): Promise<MeoRuntimeBundle> {
+  const webviewDistPath = path.join(runtimeRootPath, 'webview', 'dist')
 
   if (!(await hasFile(path.join(webviewDistPath, 'index.js')))) {
-    throw new Error('The bundled MEO extension is missing its webview bundle.')
+    throw new Error('The bundled MEO runtime is missing its webview bundle.')
   }
 
   return {
-    cacheKey,
-    extensionLabel: extensionInfo.extensionLabel,
-    extensionRootPath,
+    cacheKey: bundledMeoRuntimeCacheKey,
+    extensionLabel: bundledMeoRuntimeLabel,
+    runtimeRootPath,
+    wrapperHtml: buildWrapperHtml(bundledMeoRuntimeCacheKey),
   }
 }
 
@@ -398,7 +277,7 @@ function sendResponse(response: ServerResponse, statusCode: number, body: string
 async function handleMeoRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  extensionsByCacheKey: Map<string, ExtractedMeoExtension>,
+  extensionsByCacheKey: Map<string, MeoRuntimeBundle>,
 ) {
   const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1')
   const requestPath = decodeURIComponent(requestUrl.pathname)
@@ -423,9 +302,15 @@ async function handleMeoRequest(
   }
 
   const relativeFilePath = relativePathSegments.join('/')
-  const targetPath = path.resolve(extension.extensionRootPath, relativeFilePath)
 
-  if (!isPathInsideRoot(targetPath, extension.extensionRootPath)) {
+  if (relativeFilePath === '.aryn-meo-wrapper.html') {
+    sendResponse(response, 200, extension.wrapperHtml, 'text/html; charset=utf-8')
+    return
+  }
+
+  const targetPath = path.resolve(extension.runtimeRootPath, relativeFilePath)
+
+  if (!isPathInsideRoot(targetPath, extension.runtimeRootPath)) {
     sendResponse(response, 403, 'Forbidden MEO resource path.')
     return
   }
@@ -453,7 +338,7 @@ async function ensureMeoServer() {
   }
 
   meoServerPromise = new Promise((resolve, reject) => {
-    const extensionsByCacheKey = new Map<string, ExtractedMeoExtension>()
+    const extensionsByCacheKey = new Map<string, MeoRuntimeBundle>()
     const server = createServer((request, response) => {
       void handleMeoRequest(request, response, extensionsByCacheKey)
     })
@@ -501,18 +386,16 @@ async function ensureMeoServer() {
 }
 
 export async function getBundledMeoEditorBootstrap(
-  vitePublicPath: string,
-  cacheRootPath: string,
+  bundledRuntimeRootPath: string,
 ): Promise<MeoEditorBootstrap> {
-  const extractedExtension = await resolveExtractedExtension(vitePublicPath, cacheRootPath)
-  await writeWrapperFile(extractedExtension)
+  const runtimeBundle = await resolveBundledRuntime(bundledRuntimeRootPath)
 
   const server = await ensureMeoServer()
-  server.extensionsByCacheKey.set(extractedExtension.cacheKey, extractedExtension)
+  server.extensionsByCacheKey.set(runtimeBundle.cacheKey, runtimeBundle)
 
   return {
-    extensionLabel: extractedExtension.extensionLabel,
-    wrapperUrl: `${server.baseUrl}${meoRoutePrefix}${encodeURIComponent(extractedExtension.cacheKey)}/.aryn-meo-wrapper.html`,
+    extensionLabel: runtimeBundle.extensionLabel,
+    wrapperUrl: `${server.baseUrl}${meoRoutePrefix}${encodeURIComponent(runtimeBundle.cacheKey)}/.aryn-meo-wrapper.html`,
   }
 }
 

@@ -97,12 +97,14 @@ const indexHtml = path.join(RENDERER_DIST, 'index.html')
 const appStatePath = path.join(app.getPath('userData'), 'app-state.json')
 const agentDir = path.join(app.getPath('userData'), 'pi-agent')
 const workspaceIconThemeCacheDir = path.join(app.getPath('temp'), app.getName(), 'workspace-icon-themes')
-const meoEditorCacheDir = path.join(app.getPath('temp'), app.getName(), 'meo-editor')
 const bundledWorkspaceIconThemePath = path.join(
   process.env.VITE_PUBLIC,
   'icon-themes',
   'thang-nm.flow-icons-1.3.2.vsix',
 )
+const bundledMeoRuntimePath = VITE_DEV_SERVER_URL
+  ? path.join(process.env.APP_ROOT, 'vendor', 'meo-runtime')
+  : path.join(RENDERER_DIST, 'meo-runtime')
 const legacyWorkspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
 const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPath)
 const agentManager = new PiAgentManager(
@@ -493,7 +495,7 @@ ipcMain.handle('workspace:read-file', async (_, filePath: string) => {
 })
 
 ipcMain.handle('workspace:get-meo-bootstrap', async () => {
-  return getBundledMeoEditorBootstrap(process.env.VITE_PUBLIC, meoEditorCacheDir)
+  return getBundledMeoEditorBootstrap(bundledMeoRuntimePath)
 })
 
 ipcMain.handle('workspace:resolve-editor-kind', async (_, filePath: string) => {
