@@ -3,6 +3,7 @@ import { readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import type {
+  GitBaselinePayload,
   GitBlameResult,
   GitChangeItem,
   GitChangeKind,
@@ -713,6 +714,28 @@ function toGitBlameErrorResult(error: unknown): GitBlameResult {
   return { kind: 'unavailable', reason: 'error' }
 }
 
+function toGitBaselineErrorPayload(reason: GitBaselinePayload['reason']): GitBaselinePayload {
+  return {
+    available: reason !== 'not-repo',
+    baseText: null,
+    gitPath: null,
+    headOid: null,
+    reason,
+    repoRoot: null,
+    tracked: false,
+  }
+}
+
+async function getHeadOid(repositoryRootPath: string) {
+  const stdout = await runGit(['rev-parse', '--verify', 'HEAD'], {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  })
+
+  const headOid = stdout?.trim() ?? ''
+  return headOid || null
+}
+
 async function getCurrentBranch(repositoryRootPath: string) {
   const stdout = await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], {
     cwd: repositoryRootPath,
@@ -945,6 +968,57 @@ export async function getGitLineBlame(
     return parseGitBlameResult(output ?? '')
   } catch (error) {
     return toGitBlameErrorResult(error)
+  }
+}
+
+export async function getGitBaseline(
+  workspacePath: string,
+  filePath: string,
+): Promise<GitBaselinePayload> {
+  const repositoryRootPath = await resolveRepositoryRoot(workspacePath)
+
+  if (!repositoryRootPath) {
+    return toGitBaselineErrorPayload('not-repo')
+  }
+
+  const relativePath = toWorkspaceRelativePath(repositoryRootPath, filePath)
+  if (!relativePath || relativePath.startsWith('../')) {
+    return toGitBaselineErrorPayload('not-repo')
+  }
+
+  try {
+    const tracked = await isTrackedGitPath(repositoryRootPath, relativePath)
+    if (!tracked) {
+      return {
+        available: true,
+        baseText: null,
+        gitPath: relativePath,
+        headOid: await getHeadOid(repositoryRootPath),
+        reason: 'untracked',
+        repoRoot: repositoryRootPath,
+        tracked: false,
+      }
+    }
+
+    const headOid = await getHeadOid(repositoryRootPath)
+    const baseText = headOid
+      ? await readGitRevisionFile(repositoryRootPath, 'HEAD', relativePath)
+      : null
+
+    return {
+      available: true,
+      baseText: baseText ?? '',
+      gitPath: relativePath,
+      headOid,
+      repoRoot: repositoryRootPath,
+      tracked: true,
+    }
+  } catch (error) {
+    if (isGitMissingError(error)) {
+      return toGitBaselineErrorPayload('git-unavailable')
+    }
+
+    return toGitBaselineErrorPayload('error')
   }
 }
 

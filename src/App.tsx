@@ -3605,6 +3605,7 @@ function App() {
                 }}
                 value={currentFileContent}
                 theme={theme}
+                gitRepositoryState={gitRepositoryState}
                 workspacePath={currentPath}
               />
             ) : null}

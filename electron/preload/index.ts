@@ -1,6 +1,7 @@
 import { ipcRenderer, contextBridge } from 'electron'
 import type { AgentClientEvent, AgentWorkspaceState } from '../../src/features/agent/types'
 import type {
+  GitBaselinePayload,
   GitBlameResult,
   GitChangeItem,
   GitChangeScope,
@@ -57,6 +58,10 @@ contextBridge.exposeInMainWorld('appApi', {
   pullGitChanges: (workspacePath: string) => ipcRenderer.invoke('git:pull', workspacePath) as Promise<GitRepositoryState>,
   pushGitChanges: (workspacePath: string) => ipcRenderer.invoke('git:push', workspacePath) as Promise<GitRepositoryState>,
   getGitFileDiff: (workspacePath: string, filePath: string, scope: GitChangeScope) => ipcRenderer.invoke('git:get-file-diff', workspacePath, filePath, scope) as Promise<GitFileDiffResult>,
+  getGitBaseline: (
+    workspacePath: string,
+    filePath: string,
+  ) => ipcRenderer.invoke('git:get-baseline', workspacePath, filePath) as Promise<GitBaselinePayload>,
   getGitLineBlame: (
     workspacePath: string,
     filePath: string,

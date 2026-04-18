@@ -9,6 +9,7 @@ import {
   commitAndSyncGitChanges,
   discardAllGitChanges,
   commitGitChanges,
+  getGitBaseline,
   getGitFileDiff,
   getGitLineBlame,
   getGitRepositoryState,
@@ -184,6 +185,58 @@ describe('git helpers', () => {
 
     await expect(getGitLineBlame(rootPath, filePath, 1, 'alpha changed\nbeta\n')).resolves.toMatchObject({
       kind: 'uncommitted',
+    })
+  })
+
+  it('returns a HEAD baseline payload for tracked files', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'draft.md')
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(filePath, 'alpha\nbeta\n', 'utf8')
+    await stageGitPaths(rootPath, [filePath])
+    await commitGitChanges(rootPath, 'initial commit')
+    await writeFile(filePath, 'alpha changed\nbeta\n', 'utf8')
+
+    await expect(getGitBaseline(rootPath, filePath)).resolves.toMatchObject({
+      available: true,
+      baseText: 'alpha\nbeta\n',
+      gitPath: 'draft.md',
+      tracked: true,
+    })
+  })
+
+  it('returns an empty baseline for tracked files that are not yet in HEAD', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'draft.md')
+
+    await initializeGitRepository(rootPath)
+    await writeFile(filePath, 'alpha\nbeta\n', 'utf8')
+    await stageGitPaths(rootPath, [filePath])
+
+    await expect(getGitBaseline(rootPath, filePath)).resolves.toMatchObject({
+      available: true,
+      baseText: '',
+      gitPath: 'draft.md',
+      headOid: null,
+      tracked: true,
+    })
+  })
+
+  it('marks untracked files as unavailable for git gutter baseline rendering', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'draft.md')
+
+    await initializeGitRepository(rootPath)
+    await writeFile(filePath, 'alpha\nbeta\n', 'utf8')
+
+    await expect(getGitBaseline(rootPath, filePath)).resolves.toMatchObject({
+      available: true,
+      baseText: null,
+      gitPath: 'draft.md',
+      reason: 'untracked',
+      tracked: false,
     })
   })
 

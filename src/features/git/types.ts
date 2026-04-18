@@ -71,6 +71,16 @@ export type GitBlameResult =
     reason: 'not-repo' | 'untracked' | 'git-unavailable' | 'error'
   }
 
+export type GitBaselinePayload = {
+  available: boolean
+  tracked: boolean
+  repoRoot: string | null
+  gitPath: string | null
+  headOid: string | null
+  baseText: string | null
+  reason?: 'not-repo' | 'untracked' | 'git-unavailable' | 'error'
+}
+
 export type GitFileDiffResult = {
   change: GitChangeItem
   editorKind: SupportedWorkspaceEditorKind

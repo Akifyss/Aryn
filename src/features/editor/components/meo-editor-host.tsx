@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { GitBaselinePayload, GitRepositoryState } from '@/features/git/types'
 
 type MeoEditorBootstrap = {
   extensionLabel: string
@@ -11,6 +12,7 @@ type MeoStoredState = {
     wholeWord: boolean
   }
   gitChangesGutter?: boolean
+  gitChangesGutterConfigured?: boolean
   lineNumbers?: boolean
   mode?: 'live' | 'source'
   outlineVisible?: boolean
@@ -65,6 +67,7 @@ type MeoHostMessage =
 
 type MeoEditorHostProps = {
   filePath: string
+  gitRepositoryState?: GitRepositoryState | null
   onCompositionChange?: (isComposing: boolean) => void
   onOpenFile?: (filePath: string) => void
   onOpenGitDiff?: (filePath: string) => void
@@ -88,6 +91,42 @@ const DEFAULT_FIND_OPTIONS = {
   caseSensitive: false,
   wholeWord: false,
 } as const
+
+function postGitBaselineChanged(iframeWindow: Window, payload: GitBaselinePayload) {
+  iframeWindow.postMessage({
+    payload,
+    type: 'gitBaselineChanged',
+    version: undefined,
+  }, '*')
+}
+
+function getGitStateRefreshKey(repositoryState: GitRepositoryState | null | undefined) {
+  if (!repositoryState) {
+    return 'no-state'
+  }
+
+  return JSON.stringify({
+    ahead: repositoryState.ahead,
+    behind: repositoryState.behind,
+    branch: repositoryState.branch,
+    hasChanges: repositoryState.hasChanges,
+    hasCommits: repositoryState.hasCommits,
+    isRepository: repositoryState.isRepository,
+    repositoryRootPath: repositoryState.repositoryRootPath,
+    stagedChanges: repositoryState.stagedChanges.map((change) => ({
+      kind: change.kind,
+      path: change.path,
+      scope: change.scope,
+      statusCode: change.statusCode,
+    })),
+    unstagedChanges: repositoryState.unstagedChanges.map((change) => ({
+      kind: change.kind,
+      path: change.path,
+      scope: change.scope,
+      statusCode: change.statusCode,
+    })),
+  })
+}
 
 function resolvePreferredTheme(theme: 'light' | 'dark' | 'auto') {
   if (theme !== 'auto') {
@@ -461,6 +500,18 @@ function resolveFindOptions(
   }
 }
 
+function resolveOptionalBoolean(value: unknown) {
+  return typeof value === 'boolean' ? value : undefined
+}
+
+function resolveGitChangesGutterEnabled(storedState: MeoStoredState) {
+  if (storedState.gitChangesGutterConfigured === true && typeof storedState.gitChangesGutter === 'boolean') {
+    return storedState.gitChangesGutter
+  }
+
+  return true
+}
+
 function readStoredState(filePath: string): MeoStoredState {
   try {
     const rawValue = window.localStorage.getItem(getStoredStateKey(filePath))
@@ -472,7 +523,8 @@ function readStoredState(filePath: string): MeoStoredState {
 
     return {
       findOptions: resolveFindOptions(parsedValue.findOptions),
-      gitChangesGutter: parsedValue.gitChangesGutter === true,
+      gitChangesGutter: resolveOptionalBoolean(parsedValue.gitChangesGutter),
+      gitChangesGutterConfigured: resolveOptionalBoolean(parsedValue.gitChangesGutterConfigured),
       lineNumbers: parsedValue.lineNumbers !== false,
       mode: parsedValue.mode === 'live' || parsedValue.mode === 'source' ? parsedValue.mode : undefined,
       outlineVisible: parsedValue.outlineVisible === true,
@@ -551,6 +603,7 @@ async function resolveOpenLinkFilePath(
 
 export function MeoEditorHost({
   filePath,
+  gitRepositoryState,
   onCompositionChange,
   onOpenFile,
   onOpenGitDiff,
@@ -564,11 +617,13 @@ export function MeoEditorHost({
   const contentRef = useRef(value)
   const versionRef = useRef(1)
   const modeRef = useRef<'live' | 'source'>(readStoredState(filePath).mode ?? 'source')
+  const gitBaselineRequestRef = useRef(0)
   const [bootstrap, setBootstrap] = useState<MeoEditorBootstrap | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>('Loading MEO bootstrap...')
   const [isReady, setIsReady] = useState(false)
   const preferredTheme = useMemo(() => resolvePreferredTheme(theme), [theme])
+  const gitStateRefreshKey = useMemo(() => getGitStateRefreshKey(gitRepositoryState), [gitRepositoryState])
   const iframeSource = useMemo(() => (
     bootstrap ? buildIframeSource(bootstrap.wrapperUrl, preferredTheme) : null
   ), [bootstrap, preferredTheme])
@@ -621,6 +676,67 @@ export function MeoEditorHost({
 
     postThemeChanged(iframeWindow, preferredTheme)
   }, [isReady, preferredTheme])
+
+  useEffect(() => {
+    if (!isReady) {
+      return
+    }
+
+    const iframeWindow = iframeRef.current?.contentWindow
+    if (!iframeWindow) {
+      return
+    }
+
+    const requestId = gitBaselineRequestRef.current + 1
+    gitBaselineRequestRef.current = requestId
+
+    if (!workspacePath) {
+      postGitBaselineChanged(iframeWindow, {
+        available: false,
+        baseText: null,
+        gitPath: null,
+        headOid: null,
+        reason: 'not-repo',
+        repoRoot: null,
+        tracked: false,
+      })
+      return
+    }
+
+    void window.appApi.getGitBaseline(workspacePath, filePath)
+      .then((baseline) => {
+        if (gitBaselineRequestRef.current !== requestId) {
+          return
+        }
+
+        const currentIframeWindow = iframeRef.current?.contentWindow
+        if (!currentIframeWindow) {
+          return
+        }
+
+        postGitBaselineChanged(currentIframeWindow, baseline)
+      })
+      .catch(() => {
+        if (gitBaselineRequestRef.current !== requestId) {
+          return
+        }
+
+        const currentIframeWindow = iframeRef.current?.contentWindow
+        if (!currentIframeWindow) {
+          return
+        }
+
+        postGitBaselineChanged(currentIframeWindow, {
+          available: false,
+          baseText: null,
+          gitPath: null,
+          headOid: null,
+          reason: 'error',
+          repoRoot: null,
+          tracked: false,
+        })
+      })
+  }, [filePath, gitStateRefreshKey, isReady, workspacePath])
 
   useEffect(() => {
     onCompositionChange?.(false)
@@ -678,13 +794,14 @@ export function MeoEditorHost({
       switch (payload.type) {
         case 'ready': {
           const storedState = readStoredState(filePath)
+          const gitChangesGutter = resolveGitChangesGutterEnabled(storedState)
 
           setIsReady(true)
           setStatusMessage(null)
           postThemeChanged(iframeWindow, preferredTheme)
           iframeWindow.postMessage({
             findOptions: storedState.findOptions ?? DEFAULT_FIND_OPTIONS,
-            gitChangesGutter: storedState.gitChangesGutter ?? false,
+            gitChangesGutter,
             gitDiffLineHighlights: false,
             lineNumbers: storedState.lineNumbers ?? true,
             mode: modeRef.current,
@@ -698,6 +815,10 @@ export function MeoEditorHost({
             type: 'init',
             version: versionRef.current,
             vimMode: false,
+          }, '*')
+          iframeWindow.postMessage({
+            enabled: gitChangesGutter,
+            type: 'gitChangesGutterChanged',
           }, '*')
           return
         }
@@ -751,7 +872,10 @@ export function MeoEditorHost({
         case 'setGitChangesGutter': {
           const gitChangesGutter = payload.visible ?? payload.enabled
           if (typeof gitChangesGutter === 'boolean') {
-            writeStoredState(filePath, { gitChangesGutter })
+            writeStoredState(filePath, {
+              gitChangesGutter,
+              gitChangesGutterConfigured: true,
+            })
           }
           return
         }

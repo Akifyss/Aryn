@@ -1,5 +1,6 @@
 import type { AgentClientEvent, AgentWorkspaceState } from '@/features/agent/types'
 import type {
+  GitBaselinePayload,
   GitBlameResult,
   GitChangeItem,
   GitChangeScope,
@@ -60,6 +61,7 @@ declare global {
       pullGitChanges: (workspacePath: string) => Promise<GitRepositoryState>
       pushGitChanges: (workspacePath: string) => Promise<GitRepositoryState>
       getGitFileDiff: (workspacePath: string, filePath: string, scope: GitChangeScope) => Promise<GitFileDiffResult>
+      getGitBaseline: (workspacePath: string, filePath: string) => Promise<GitBaselinePayload>
       getGitLineBlame: (
         workspacePath: string,
         filePath: string,
