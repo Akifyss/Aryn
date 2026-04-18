@@ -30,7 +30,14 @@ export type WorkspaceDiffTab = {
   id: string
   isDirty: boolean
   kind: 'diff'
+  navigationRequest?: WorkspaceDiffNavigationRequest | null
   title: string
+}
+
+export type WorkspaceDiffNavigationRequest = {
+  lineNumber: number
+  requestKey: string
+  source: 'revision' | 'worktree'
 }
 
 export type WorkspaceTab = WorkspaceFileTab | WorkspaceDiffTab
@@ -165,6 +172,7 @@ function mergeWorkspaceDiffTab(existingTab: WorkspaceDiffTab, nextTab: Workspace
     ...nextTab,
     draftContent: nextIsDirty ? preservedDraftContent : null,
     isDirty: nextIsDirty,
+    navigationRequest: nextTab.navigationRequest ?? existingTab.navigationRequest ?? null,
   }
 }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { EditorState, type Text } from '@codemirror/state'
+import { EditorSelection, EditorState, type Text } from '@codemirror/state'
 import { getChunks, getOriginalDoc, MergeView, unifiedMergeView } from '@codemirror/merge'
 import {
   drawSelection,
@@ -24,6 +24,7 @@ import { AddLine, Back2Line } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
 import { getCodeMirrorLanguageSupport } from '@/features/editor/lib/codemirror-language'
+import type { WorkspaceDiffNavigationRequest } from '@/features/workspace/store/use-workspace-store'
 
 type DiffViewMode = 'split' | 'unified'
 type CodeMirrorChunk = {
@@ -33,6 +34,11 @@ type CodeMirrorChunk = {
   toB: number
   endA: number
   endB: number
+}
+
+type DiffNavigationTarget = {
+  lineNumber: number
+  side: 'modified' | 'original'
 }
 
 const DIFF_AUTO_SAVE_DELAY_MS = 1000
@@ -94,6 +100,110 @@ function createSelectionFromCodeMirrorChunk(originalDoc: Text, modifiedDoc: Text
     originalLineCount,
     originalStartLine: originalLineCount === 0 ? Math.max(0, originalStartLine - 1) : originalStartLine,
   }
+}
+
+function normalizeEditorLineNumber(lineNumber: number, doc: Text) {
+  return Math.max(1, Math.min(doc.lines, Math.floor(lineNumber)))
+}
+
+function getDistanceToLineRange(lineNumber: number, startLine: number, lineCount: number) {
+  const normalizedStartLine = Math.max(1, startLine)
+
+  if (lineCount <= 0) {
+    return Math.abs(lineNumber - normalizedStartLine)
+  }
+
+  const endLine = normalizedStartLine + lineCount - 1
+
+  if (lineNumber < normalizedStartLine) {
+    return normalizedStartLine - lineNumber
+  }
+
+  if (lineNumber > endLine) {
+    return lineNumber - endLine
+  }
+
+  return 0
+}
+
+function resolveChunkNavigationTarget(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  chunk: CodeMirrorChunk,
+  requestedLineNumber: number,
+): DiffNavigationTarget {
+  const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
+  const modifiedDistance = getDistanceToLineRange(
+    requestedLineNumber,
+    selection.modifiedStartLine,
+    selection.modifiedLineCount,
+  )
+  const originalDistance = getDistanceToLineRange(
+    requestedLineNumber,
+    selection.originalStartLine,
+    selection.originalLineCount,
+  )
+
+  if (modifiedDistance <= originalDistance) {
+    const normalizedStartLine = Math.max(1, selection.modifiedStartLine)
+    const normalizedEndLine = selection.modifiedLineCount > 0
+      ? normalizedStartLine + selection.modifiedLineCount - 1
+      : normalizedStartLine
+
+    return {
+      lineNumber: Math.max(normalizedStartLine, Math.min(requestedLineNumber, normalizedEndLine)),
+      side: 'modified',
+    }
+  }
+
+  const normalizedStartLine = Math.max(1, selection.originalStartLine)
+  const normalizedEndLine = selection.originalLineCount > 0
+    ? normalizedStartLine + selection.originalLineCount - 1
+    : normalizedStartLine
+
+  return {
+    lineNumber: Math.max(normalizedStartLine, Math.min(requestedLineNumber, normalizedEndLine)),
+    side: 'original',
+  }
+}
+
+function findBestNavigationTarget(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  chunks: readonly CodeMirrorChunk[],
+  requestedLineNumber: number,
+) {
+  let bestTarget: DiffNavigationTarget | null = null
+  let bestDistance = Number.POSITIVE_INFINITY
+
+  for (const chunk of chunks) {
+    const nextTarget = resolveChunkNavigationTarget(originalDoc, modifiedDoc, chunk, requestedLineNumber)
+    const nextSelection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
+    const nextDistance = nextTarget.side === 'modified'
+      ? getDistanceToLineRange(requestedLineNumber, nextSelection.modifiedStartLine, nextSelection.modifiedLineCount)
+      : getDistanceToLineRange(requestedLineNumber, nextSelection.originalStartLine, nextSelection.originalLineCount)
+
+    if (
+      nextDistance < bestDistance
+      || (nextDistance === bestDistance && nextTarget.side === 'modified' && bestTarget?.side !== 'modified')
+    ) {
+      bestDistance = nextDistance
+      bestTarget = nextTarget
+    }
+  }
+
+  return bestTarget
+}
+
+function revealEditorLine(view: EditorView, lineNumber: number) {
+  const safeLineNumber = normalizeEditorLineNumber(lineNumber, view.state.doc)
+  const line = view.state.doc.line(safeLineNumber)
+
+  view.dispatch({
+    effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
+    selection: EditorSelection.cursor(line.from),
+  })
+  view.focus()
 }
 
 function getCodeMirrorControlSvg(action: GitDiffBlockAction) {
@@ -210,6 +320,7 @@ function CodeMirrorDiffRenderer({
   areBlockActionsEnabled,
   diff,
   isEditable,
+  navigationRequest,
   onBlockAction,
   onDraftChange,
   onCompositionChange,
@@ -221,6 +332,7 @@ function CodeMirrorDiffRenderer({
   areBlockActionsEnabled: boolean
   diff: GitFileDiffResult
   isEditable: boolean
+  navigationRequest: WorkspaceDiffNavigationRequest | null
   onBlockAction: (selection: GitDiffSelection, action: GitDiffBlockAction) => void
   onDraftChange: (content: string) => void
   onCompositionChange: (isComposing: boolean) => void
@@ -238,6 +350,7 @@ function CodeMirrorDiffRenderer({
   const [isModifiedFocused, setIsModifiedFocused] = useState(false)
   const areBlockActionsEnabledRef = useRef(areBlockActionsEnabled)
   const blockActionsDisabledReasonRef = useRef(blockActionsDisabledReason)
+  const lastHandledNavigationRequestKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     onBlockActionRef.current = onBlockAction
@@ -259,6 +372,10 @@ function CodeMirrorDiffRenderer({
     areBlockActionsEnabledRef.current = areBlockActionsEnabled
     blockActionsDisabledReasonRef.current = blockActionsDisabledReason
   }, [areBlockActionsEnabled, blockActionsDisabledReason])
+
+  useEffect(() => {
+    lastHandledNavigationRequestKeyRef.current = null
+  }, [diff.change.path, diff.change.scope])
 
   useEffect(() => {
     const host = containerRef.current
@@ -609,6 +726,61 @@ function CodeMirrorDiffRenderer({
     viewMode,
   ])
 
+  useEffect(() => {
+    if (!navigationRequest || lastHandledNavigationRequestKeyRef.current === navigationRequest.requestKey) {
+      return
+    }
+
+    const frameHandle = window.requestAnimationFrame(() => {
+      if (viewMode === 'split') {
+        const splitView = splitViewRef.current
+
+        if (!splitView) {
+          return
+        }
+
+        const chunkState = getChunks(splitView.b.state)
+        const target = findBestNavigationTarget(
+          splitView.a.state.doc,
+          splitView.b.state.doc,
+          (chunkState?.chunks ?? []) as readonly CodeMirrorChunk[],
+          navigationRequest.lineNumber,
+        )
+
+        if (target?.side === 'original') {
+          revealEditorLine(splitView.a, target.lineNumber)
+        } else {
+          revealEditorLine(splitView.b, target?.lineNumber ?? navigationRequest.lineNumber)
+        }
+
+        lastHandledNavigationRequestKeyRef.current = navigationRequest.requestKey
+        return
+      }
+
+      const unifiedView = unifiedViewRef.current
+
+      if (!unifiedView) {
+        return
+      }
+
+      const originalDoc = getOriginalDoc(unifiedView.state)
+      const chunkState = getChunks(unifiedView.state)
+      const target = findBestNavigationTarget(
+        originalDoc,
+        unifiedView.state.doc,
+        (chunkState?.chunks ?? []) as readonly CodeMirrorChunk[],
+        navigationRequest.lineNumber,
+      )
+
+      revealEditorLine(unifiedView, target?.lineNumber ?? navigationRequest.lineNumber)
+      lastHandledNavigationRequestKeyRef.current = navigationRequest.requestKey
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameHandle)
+    }
+  }, [navigationRequest, viewMode])
+
   return (
     <div className='git-diff-codemirror-shell'>
       <div
@@ -623,6 +795,7 @@ export function GitDiffEditor({
   diff,
   draftContent: initialDraftContent,
   hasDirtyRelatedFileTab = false,
+  navigationRequest = null,
   onApplyBlockAction,
   onDiscardChange,
   onDraftChange: onDraftContentChange,
@@ -633,6 +806,7 @@ export function GitDiffEditor({
   diff: GitFileDiffResult
   draftContent: string
   hasDirtyRelatedFileTab?: boolean
+  navigationRequest?: WorkspaceDiffNavigationRequest | null
   onApplyBlockAction: (change: GitChangeItem, selection: GitDiffSelection, action: GitDiffBlockAction) => Promise<void>
   onDiscardChange: (change: GitChangeItem) => void
   onDraftChange: (content: string) => void
@@ -834,6 +1008,7 @@ export function GitDiffEditor({
         }}
         isComposing={isComposing}
         isEditable={isEditable}
+        navigationRequest={navigationRequest}
         onBlockAction={(selection, action) => {
           void handleBlockAction(selection, action)
         }}

@@ -39,6 +39,7 @@ import {
   createWorkspaceFileTabId,
   useWorkspaceStore,
   type WorkspaceDiffTab,
+  type WorkspaceDiffNavigationRequest,
   type WorkspaceDisplayTab,
   type WorkspaceFileTab,
 } from '@/features/workspace/store/use-workspace-store'
@@ -409,7 +410,12 @@ function toStoredWorkspaceTab(
   }
 }
 
-function createDiffTab(change: GitChangeItem, scope: GitChangeScope, diff: Awaited<ReturnType<typeof window.appApi.getGitFileDiff>>): WorkspaceDiffTab {
+function createDiffTab(
+  change: GitChangeItem,
+  scope: GitChangeScope,
+  diff: Awaited<ReturnType<typeof window.appApi.getGitFileDiff>>,
+  navigationRequest?: WorkspaceDiffNavigationRequest | null,
+): WorkspaceDiffTab {
   const id = createDiffTabId(change.path, scope)
   return {
     draftContent: null,
@@ -419,6 +425,7 @@ function createDiffTab(change: GitChangeItem, scope: GitChangeScope, diff: Await
     id,
     isDirty: false,
     kind: 'diff',
+    navigationRequest: navigationRequest ?? null,
     title: getBaseName(change.path),
   }
 }
@@ -1517,14 +1524,27 @@ function App() {
     }
   }, [activateTab, currentPath, isRightSidebarDrawer, openFile])
 
-  async function openGitDiff(change: GitChangeItem) {
+  async function openGitDiff(
+    change: GitChangeItem,
+    options?: {
+      lineNumber?: number
+      source?: 'revision' | 'worktree'
+    },
+  ) {
     if (!currentPath) {
       return
     }
 
     try {
       const diff = await window.appApi.getGitFileDiff(currentPath, change.path, change.scope)
-      openDiffTab(createDiffTab(change, change.scope, diff))
+      const navigationRequest = typeof options?.lineNumber === 'number'
+        ? {
+          lineNumber: Math.max(1, Math.floor(options.lineNumber)),
+          requestKey: `${change.scope}:${change.path}:${options.source ?? 'worktree'}:${Date.now()}`,
+          source: options.source ?? 'worktree',
+        } satisfies WorkspaceDiffNavigationRequest
+        : null
+      openDiffTab(createDiffTab(change, change.scope, diff, navigationRequest))
       setIsSettingsTabActive(false)
 
       if (isLeftSidebarDrawer) {
@@ -3550,6 +3570,7 @@ function App() {
                 key={activeDiffTab.id}
                 diff={activeDiffTab.diff}
                 draftContent={activeDiffDraftContent}
+                navigationRequest={activeDiffTab.navigationRequest ?? null}
                 hasDirtyRelatedFileTab={openTabs.some((tab) => (
                   tab.kind === 'file'
                   && tab.filePath === activeDiffTab.diff.change.path
@@ -3610,7 +3631,7 @@ function App() {
                     )
 
                     if (nextChange) {
-                      await openGitDiff(nextChange)
+                      await openGitDiff(nextChange, gitAction)
                       return
                     }
 

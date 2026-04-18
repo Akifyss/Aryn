@@ -497,6 +497,53 @@ describe('useWorkspaceStore', () => {
     })
   })
 
+  it('stores diff navigation requests when opening a diff tab', () => {
+    const store = useWorkspaceStore.getState()
+    const diffTabId = createDiffTabId('C:/workspace/file.md', 'unstaged')
+
+    store.openDiffTab({
+      draftContent: null,
+      diff: {
+        change: {
+          kind: 'modified',
+          originalPath: null,
+          path: 'C:/workspace/file.md',
+          relativePath: 'file.md',
+          scope: 'unstaged',
+          statusCode: 'M',
+        },
+        editorKind: 'rich-text',
+        modifiedContent: 'saved',
+        modifiedExists: true,
+        modifiedLabel: 'Working tree',
+        originalContent: 'base',
+        originalExists: true,
+        originalLabel: 'Index',
+        repositoryRootPath: 'C:/workspace',
+      },
+      exists: true,
+      filePath: diffTabId,
+      id: diffTabId,
+      isDirty: false,
+      kind: 'diff',
+      navigationRequest: {
+        lineNumber: 18,
+        requestKey: 'request-1',
+        source: 'worktree',
+      },
+      title: 'file.md',
+    })
+
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      kind: 'diff',
+      navigationRequest: {
+        lineNumber: 18,
+        requestKey: 'request-1',
+        source: 'worktree',
+      },
+    })
+  })
+
   it('preserves a dirty diff draft when refreshed from Git state', () => {
     const store = useWorkspaceStore.getState()
     const diffTabId = createDiffTabId('C:/workspace/file.md', 'unstaged')
@@ -568,5 +615,83 @@ describe('useWorkspaceStore', () => {
       throw new Error('Expected a diff tab')
     }
     expect(nextTab.diff.modifiedContent).toBe('saved from disk')
+  })
+
+  it('preserves an existing diff navigation request across Git refreshes when the refresh has no new request', () => {
+    const store = useWorkspaceStore.getState()
+    const diffTabId = createDiffTabId('C:/workspace/file.md', 'unstaged')
+
+    store.openDiffTab({
+      draftContent: null,
+      diff: {
+        change: {
+          kind: 'modified',
+          originalPath: null,
+          path: 'C:/workspace/file.md',
+          relativePath: 'file.md',
+          scope: 'unstaged',
+          statusCode: 'M',
+        },
+        editorKind: 'rich-text',
+        modifiedContent: 'saved',
+        modifiedExists: true,
+        modifiedLabel: 'Working tree',
+        originalContent: 'base',
+        originalExists: true,
+        originalLabel: 'Index',
+        repositoryRootPath: 'C:/workspace',
+      },
+      exists: true,
+      filePath: diffTabId,
+      id: diffTabId,
+      isDirty: false,
+      kind: 'diff',
+      navigationRequest: {
+        lineNumber: 12,
+        requestKey: 'request-2',
+        source: 'revision',
+      },
+      title: 'file.md',
+    })
+
+    store.openDiffTab({
+      draftContent: null,
+      diff: {
+        change: {
+          kind: 'modified',
+          originalPath: null,
+          path: 'C:/workspace/file.md',
+          relativePath: 'file.md',
+          scope: 'unstaged',
+          statusCode: 'M',
+        },
+        editorKind: 'rich-text',
+        modifiedContent: 'saved from disk',
+        modifiedExists: true,
+        modifiedLabel: 'Working tree',
+        originalContent: 'base',
+        originalExists: true,
+        originalLabel: 'Index',
+        repositoryRootPath: 'C:/workspace',
+      },
+      exists: true,
+      filePath: diffTabId,
+      id: diffTabId,
+      isDirty: false,
+      kind: 'diff',
+      title: 'file.md',
+    }, false)
+
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      diff: {
+        modifiedContent: 'saved from disk',
+      },
+      kind: 'diff',
+      navigationRequest: {
+        lineNumber: 12,
+        requestKey: 'request-2',
+        source: 'revision',
+      },
+    })
   })
 })
