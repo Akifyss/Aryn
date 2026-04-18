@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GitBaselinePayload, GitRepositoryState } from '@/features/git/types'
 import type { MeoSettings } from '@/hooks/use-settings-store'
+import {
+  buildMeoIframeSource,
+  createMeoChannelId,
+  getMeoIframeOrigin,
+  MEO_HOST_CHANNEL_KEY,
+} from '@/features/editor/lib/meo-transport'
 
 type MeoEditorBootstrap = {
   extensionLabel: string
@@ -93,26 +99,22 @@ type ParsedFsPath = {
 }
 
 const MEO_STATE_STORAGE_PREFIX = 'aryn:meo-state:'
-const MEO_HOST_CHANNEL_KEY = '__arynMeoChannel'
 const MARKDOWN_EXTENSIONS = ['.md', '.markdown', '.mdx', '.mdc']
 const DEFAULT_FIND_OPTIONS = {
   caseSensitive: false,
   wholeWord: false,
 } as const
 
-function createMeoChannelId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-
-  return `meo-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function postMessageToMeoIframe(iframeWindow: Window, channelId: string, payload: Record<string, unknown>) {
+function postMessageToMeoIframe(
+  iframeWindow: Window,
+  channelId: string,
+  payload: Record<string, unknown>,
+  iframeOrigin?: string | null,
+) {
   iframeWindow.postMessage({
     [MEO_HOST_CHANNEL_KEY]: channelId,
     ...payload,
-  }, '*')
+  }, iframeOrigin ?? '*')
 }
 
 function getGitStateRefreshKey(repositoryState: GitRepositoryState | null | undefined) {
@@ -151,13 +153,6 @@ function resolvePreferredTheme(theme: 'light' | 'dark' | 'auto') {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function buildIframeSource(wrapperUrl: string, theme: 'light' | 'dark', channelId: string) {
-  const url = new URL(wrapperUrl)
-  url.searchParams.set('channel', channelId)
-  url.searchParams.set('theme', theme)
-  return url.toString()
-}
-
 function postGitBaselineChanged(iframeWindow: Window, channelId: string, payload: GitBaselinePayload) {
   postMessageToMeoIframe(iframeWindow, channelId, {
     payload,
@@ -172,14 +167,6 @@ function postThemeChanged(iframeWindow: Window, channelId: string, theme: 'light
     themeKind: theme,
     type: 'themeChanged',
   })
-}
-
-function getIframeOrigin(wrapperUrl: string) {
-  try {
-    return new URL(wrapperUrl).origin
-  } catch {
-    return null
-  }
 }
 
 function countTextLines(value: string) {
@@ -676,7 +663,7 @@ export function MeoEditorHost({
   const preferredTheme = useMemo(() => resolvePreferredTheme(theme), [theme])
   const gitStateRefreshKey = useMemo(() => getGitStateRefreshKey(gitRepositoryState), [gitRepositoryState])
   const iframeOrigin = useMemo(() => (
-    bootstrap ? getIframeOrigin(bootstrap.wrapperUrl) : null
+    bootstrap ? getMeoIframeOrigin(bootstrap.wrapperUrl) : null
   ), [bootstrap])
 
   useEffect(() => {
@@ -718,7 +705,11 @@ export function MeoEditorHost({
 
     // Keep the iframe URL stable after mount so theme changes flow through postMessage
     // instead of forcing a full MEO reload.
-    setIframeSource(buildIframeSource(bootstrap.wrapperUrl, preferredTheme, channelIdRef.current))
+    setIframeSource(buildMeoIframeSource(bootstrap.wrapperUrl, {
+      channelId: channelIdRef.current,
+      parentOrigin: window.location.origin,
+      theme: preferredTheme,
+    }))
   }, [bootstrap])
 
   useEffect(() => {

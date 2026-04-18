@@ -221,6 +221,7 @@ function buildWrapperHtml(cacheKey: string) {
 
         const query = new URLSearchParams(window.location.search)
         const channelId = query.get('channel') || ''
+        const parentOrigin = query.get('parentOrigin') || '*'
         applyTheme(query.get('theme'))
 
         const postMessageToParent = (message) => {
@@ -228,7 +229,7 @@ function buildWrapperHtml(cacheKey: string) {
             __arynMeo: true,
             channel: channelId,
             payload: message,
-          }, '*')
+          }, parentOrigin)
         }
 
         window.acquireVsCodeApi = function acquireVsCodeApi() {
@@ -253,6 +254,10 @@ function buildWrapperHtml(cacheKey: string) {
 
           const payload = event.data
           if (!payload || typeof payload !== 'object') {
+            return
+          }
+
+          if (parentOrigin !== '*' && event.origin !== parentOrigin) {
             return
           }
 
