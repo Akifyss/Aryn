@@ -58,7 +58,7 @@ function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab,
   const viewModeLabel = (
     tab.viewMode === 'code' ? 'Code'
       : tab.viewMode === 'preview' ? 'Preview'
-        : tab.viewMode === 'meo' ? 'MEO'
+        : tab.viewMode === 'meo' ? null
           : null
   )
 
