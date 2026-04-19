@@ -171,6 +171,7 @@ export function createEditor({
   let vimModeEnabled = initialVimMode === true;
   let applyingExternal = false;
   let capturedPointerId = null;
+  let selectionPointerId = null;
   let inlineCodeClick = null;
   let checkboxClick = null;
   let frontmatterBoundaryClick = null;
@@ -180,11 +181,14 @@ export function createEditor({
   // External syncs may carry stale selections in their history entries.
   // Preserve the user's current cursor once on the next undo of such a change.
   let pendingExternalUndoSelectionPreserve = false;
+  let pointerSelectionPending = false;
   let tableInteractionActive = false;
   let onTableInteraction = null;
   let onTableOpenLink = null;
   let onTableSelectionChange = null;
   let onScroll = null;
+  let onWindowPointerUp = null;
+  let onWindowPointerCancel = null;
   let gitBlameHover = null;
   let gitDiffOverviewRuler = null;
   let sourceLinkHoverPointerActive = false;
@@ -858,6 +862,41 @@ export function createEditor({
     });
   };
 
+  const hideSelectionMenu = () => {
+    onSelectionChange?.({ visible: false });
+  };
+
+  const emitSelectionChangeAfterPointerUp = () => {
+    requestAnimationFrame(() => {
+      emitSelectionChange();
+    });
+  };
+
+  const finishPointerSelection = (pointerId, { showMenu = true, hideMenu = false } = {}) => {
+    if (selectionPointerId !== pointerId) {
+      return false;
+    }
+
+    releasePointerCaptureIfHeld(pointerId);
+    if (capturedPointerId === pointerId) {
+      capturedPointerId = null;
+    }
+
+    pointerSelectionPending = false;
+    selectionPointerId = null;
+
+    if (hideMenu) {
+      hideSelectionMenu();
+      return true;
+    }
+
+    if (showMenu) {
+      emitSelectionChangeAfterPointerUp();
+    }
+
+    return true;
+  };
+
   const isHistoryReplayUpdate = (update: ViewUpdate): boolean => {
     return update.transactions.some((transaction) => {
       const userEvent = transaction.annotation(Transaction.userEvent);
@@ -1129,14 +1168,21 @@ export function createEditor({
             frontmatterBoundaryClick = null;
             return false;
           }
+          pointerSelectionPending = true;
+          selectionPointerId = event.pointerId;
+          hideSelectionMenu();
           if (openLinkIfModifierClick(event, view)) {
             frontmatterBoundaryClick = null;
+            pointerSelectionPending = false;
+            selectionPointerId = null;
             return true;
           }
 
           const target = event.target;
           const targetElement = targetElementFrom(target);
           if (!(target instanceof Node) || !view.contentDOM.contains(target)) {
+            pointerSelectionPending = false;
+            selectionPointerId = null;
             return false;
           }
 
@@ -1178,18 +1224,16 @@ export function createEditor({
           if (checkboxClick?.pointerId === event.pointerId) {
             frontmatterBoundaryClick = null;
             checkboxClick = null;
+            finishPointerSelection(event.pointerId, { showMenu: false });
             return false;
           }
 
-          if (capturedPointerId !== event.pointerId) {
+          if (selectionPointerId !== event.pointerId) {
             if (frontmatterBoundaryClick?.pointerId === event.pointerId) {
               frontmatterBoundaryClick = null;
             }
             return false;
           }
-
-          releasePointerCaptureIfHeld(event.pointerId);
-          capturedPointerId = null;
 
           if (
             inlineCodeClick?.pointerId === event.pointerId &&
@@ -1221,6 +1265,7 @@ export function createEditor({
               const emptyQuoteCursorEnd = emptyBlockquoteLineCursorEnd(view.state, head);
               if (emptyQuoteCursorEnd !== null && head < emptyQuoteCursorEnd) {
                 view.dispatch({ selection: { anchor: emptyQuoteCursorEnd } });
+                finishPointerSelection(event.pointerId);
                 return false;
               }
 
@@ -1240,21 +1285,21 @@ export function createEditor({
           }
 
           inlineCodeClick = null;
+          finishPointerSelection(event.pointerId);
           return false;
         },
         pointercancel(event, _view) {
-          if (capturedPointerId !== event.pointerId) {
+          if (selectionPointerId !== event.pointerId) {
             if (frontmatterBoundaryClick?.pointerId === event.pointerId) {
               frontmatterBoundaryClick = null;
             }
             return false;
           }
 
-          releasePointerCaptureIfHeld(event.pointerId);
-          capturedPointerId = null;
           frontmatterBoundaryClick = null;
           inlineCodeClick = null;
           checkboxClick = null;
+          finishPointerSelection(event.pointerId, { showMenu: false, hideMenu: true });
           return false;
         },
         pointermove(event, view) {
@@ -1277,7 +1322,9 @@ export function createEditor({
 
         if (update.selectionSet) {
           syncSelectionClass();
-          emitSelectionChange();
+          if (!pointerSelectionPending) {
+            emitSelectionChange();
+          }
         } else if (update.viewportChanged) {
           emitSelectionChange();
           onViewportChange?.();
@@ -1353,6 +1400,17 @@ export function createEditor({
     onViewportChange?.();
   };
   view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
+  onWindowPointerUp = (event) => {
+    finishPointerSelection(event.pointerId);
+  };
+  onWindowPointerCancel = (event) => {
+    inlineCodeClick = null;
+    checkboxClick = null;
+    frontmatterBoundaryClick = null;
+    finishPointerSelection(event.pointerId, { showMenu: false, hideMenu: true });
+  };
+  window.addEventListener('pointerup', onWindowPointerUp, true);
+  window.addEventListener('pointercancel', onWindowPointerCancel, true);
   if (typeof onRequestGitBlame === 'function') {
     gitBlameHover = createGitBlameHoverController({
       view,
@@ -1483,6 +1541,14 @@ export function createEditor({
       if (onScroll) {
         view.scrollDOM.removeEventListener('scroll', onScroll);
         onScroll = null;
+      }
+      if (onWindowPointerUp) {
+        window.removeEventListener('pointerup', onWindowPointerUp, true);
+        onWindowPointerUp = null;
+      }
+      if (onWindowPointerCancel) {
+        window.removeEventListener('pointercancel', onWindowPointerCancel, true);
+        onWindowPointerCancel = null;
       }
       if (onTableInteraction) {
         view.dom.removeEventListener('meo-table-interaction', onTableInteraction);
