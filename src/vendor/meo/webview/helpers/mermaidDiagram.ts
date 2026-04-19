@@ -611,7 +611,7 @@ export class MermaidDiagramWidget extends WidgetType {
     this.svgContent = svgContainer.innerHTML;
 
     const overlay = document.createElement('div');
-    overlay.className = 'meo-mermaid-fullscreen-scrim';
+    overlay.className = 'meo-mermaid-fullscreen-scrim meo-native-theme';
 
     const fullscreenContainer = document.createElement('div');
     fullscreenContainer.className = 'meo-mermaid-fullscreen';

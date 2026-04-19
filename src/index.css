@@ -97,3 +97,9 @@
   --warning: oklch(82.03% 0.1392 77.50);
   --warning-foreground: oklch(21.03% 0.0059 77.50);
 }
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+}

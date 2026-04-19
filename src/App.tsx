@@ -3873,9 +3873,9 @@ function App() {
                  <p className="text-[var(--foreground)] whitespace-pre-wrap">{confirmDialogOptions?.message}</p>
                </AlertDialog.Body>
                <AlertDialog.Footer>
-                 <Button className="confirm-dialog-cancel-button" variant="tertiary" onPress={() => confirmDialogOptions?.onCancel()}>
-                   {confirmDialogOptions?.cancelLabel ?? '取消'}
-                 </Button>
+                <Button variant="tertiary" onPress={() => confirmDialogOptions?.onCancel()}>
+                  {confirmDialogOptions?.cancelLabel ?? '取消'}
+                </Button>
                  <Button variant={confirmDialogOptions?.isDanger ? "danger" : "primary"} onPress={() => confirmDialogOptions?.onConfirm()}>
                    {confirmDialogOptions?.confirmLabel ?? '确认'}
                  </Button>

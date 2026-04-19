@@ -52,13 +52,6 @@
     inset 0 0 0 1px var(--border);
 }
 
-.confirm-dialog-cancel-button {
-  --button-bg: var(--default);
-  --button-bg-hover: var(--surface-tertiary);
-  --button-bg-pressed: var(--surface-secondary);
-  --button-fg: var(--default-foreground);
-}
-
 .titlebar {
   position: absolute;
   inset: 0 0 auto 0;
@@ -2120,25 +2113,16 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  color: var(--foreground);
   font-size: 13px;
   line-height: 1.4;
 }
 
 .workspace-tree-menu-item .workspace-tree-menu-icon {
   flex: 0 0 auto;
-  color: var(--muted);
-}
-
-.workspace-tree-menu-item span {
-  color: inherit;
+  color: currentColor;
 }
 
 .workspace-tree-menu-item.is-danger {
-  color: var(--danger);
-}
-
-.workspace-tree-menu-item.is-danger .workspace-tree-menu-icon {
   color: var(--danger);
 }
 

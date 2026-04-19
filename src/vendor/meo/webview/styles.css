@@ -1,4 +1,4 @@
-:root.meo-native-theme {
+.meo-native-theme {
   --editor-background: var(--surface);
   --editor-foreground: var(--foreground);
   --sideBar-background: var(--surface-secondary);
@@ -72,7 +72,6 @@
 }
 
 :root {
-  color-scheme: light dark;
   --color-base01: var(--foreground);
   --color-base02: var(--muted);
   --color-base03: #3e444d;
@@ -173,6 +172,16 @@
   color: var(--editor-foreground);
   background: var(--editor-background);
   line-height: 1.5em;
+}
+
+.light .meo-native-theme,
+[data-theme="light"] .meo-native-theme {
+  color-scheme: light;
+}
+
+.dark .meo-native-theme,
+[data-theme="dark"] .meo-native-theme {
+  color-scheme: dark;
 }
 
 .meo-native-root,
