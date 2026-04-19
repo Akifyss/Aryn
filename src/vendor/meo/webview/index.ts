@@ -1229,6 +1229,7 @@ const handleInit = (message: any) => {
 const exportHandlerContext: ExportHandlerContext = {
   vscode,
   getEditor: () => editor,
+  getEditorHost: () => root,
   get pendingText() { return pendingText; },
   get pendingInitialText() { return pendingInitialText; },
   get syncedText() { return syncedText; },

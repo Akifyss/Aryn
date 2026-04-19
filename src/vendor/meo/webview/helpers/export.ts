@@ -34,9 +34,17 @@ export const delay = (ms: number): Promise<void> => new Promise((resolve) => {
 });
 
 export const getExportStyleEnvironment = (): ExportStyleEnvironment => {
-  const rootStyles = getComputedStyle(document.documentElement);
+  return getExportStyleEnvironmentForHost();
+};
+
+export const getExportStyleEnvironmentForHost = (
+  host: ParentNode | null = null
+): ExportStyleEnvironment => {
+  const scopedHost = host ?? document;
+  const editorEl = scopedHost.querySelector('.cm-editor');
+  const themeHost = editorEl?.closest('.meo-native-theme') ?? document.documentElement;
+  const rootStyles = getComputedStyle(themeHost);
   const bodyStyles = getComputedStyle(document.body);
-  const editorEl = document.querySelector('.cm-editor');
   const editorStyles = editorEl ? getComputedStyle(editorEl) : null;
 
   const colorVar = (name: string, fallback = ''): string => {
@@ -114,6 +122,7 @@ export const waitForExportSyncIdle = async (
 export interface ExportHandlerContext {
   vscode: any;
   getEditor: () => any;
+  getEditorHost?: () => ParentNode | null;
   pendingText: string | null;
   pendingInitialText: string | null;
   syncedText: string;
@@ -159,7 +168,7 @@ export const createExportHandler = (context: ExportHandlerContext) => {
         type: 'exportSnapshot',
         requestId,
         text: getCurrentExportText(),
-        environment: getExportStyleEnvironment() as unknown as Record<string, unknown>
+        environment: getExportStyleEnvironmentForHost(context.getEditorHost?.() ?? null) as unknown as Record<string, unknown>
       };
       context.vscode.postMessage(msg);
     } catch (error) {

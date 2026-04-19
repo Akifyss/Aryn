@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { gitDiffLineFlagsField } from './gitDiffGutter';
 import { getLiveGitCollapsedBlockAtLine, getLiveRenderedBlockAtLine } from './liveRenderedBlocks';
+import { mountMeoScopedPortal } from './themeScope';
 
 const hoverDelayMs = 0;
 const defaultGutterHoverHitLeftPx = 0;
@@ -361,8 +362,8 @@ export function createGitBlameHoverController({
 }) {
   const ui = buildTooltipDom();
   const hoverOverlay = buildGutterHoverOverlayDom();
-  document.body.appendChild(ui.root);
-  document.body.appendChild(hoverOverlay);
+  const disposeTooltipPortal = mountMeoScopedPortal(ui.root, view.dom);
+  const disposeHoverOverlayPortal = mountMeoScopedPortal(hoverOverlay, view.dom);
 
   let hoverTimer = null;
   let activeLineNumber = 0;
@@ -1252,8 +1253,8 @@ export function createGitBlameHoverController({
       view.dom.removeEventListener('mousedown', onPointerDown, pointerDownCapture);
       view.dom.removeEventListener('click', onClick, true);
       view.scrollDOM.removeEventListener('scroll', onScroll);
-      ui.root.remove();
-      hoverOverlay.remove();
+      disposeTooltipPortal();
+      disposeHoverOverlayPortal();
     }
   };
 }

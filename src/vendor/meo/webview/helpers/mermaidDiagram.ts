@@ -2,6 +2,7 @@
 import { WidgetType } from '@codemirror/view';
 import { createElement, ZoomIn, ZoomOut, RotateCcw, Maximize2, X } from 'lucide';
 import type { EditorState } from '@codemirror/state';
+import { mountMeoScopedPortal } from './themeScope';
 
 declare global {
   interface Window {
@@ -282,6 +283,7 @@ export class MermaidDiagramWidget extends WidgetType {
   inlineCleanup: (() => void) | null;
   fullscreenSvgWrapper: HTMLElement | null;
   fullscreenCleanup: (() => void) | null;
+  fullscreenThemeScopeCleanup: (() => void) | null;
   exitFullscreenHandler: ((e: KeyboardEvent) => void) | null;
 
   constructor(diagramText: string, startLine: number = 0, endLine: number = 0) {
@@ -303,6 +305,7 @@ export class MermaidDiagramWidget extends WidgetType {
     this.inlineCleanup = null;
     this.fullscreenSvgWrapper = null;
     this.fullscreenCleanup = null;
+    this.fullscreenThemeScopeCleanup = null;
     this.exitFullscreenHandler = null;
   }
 
@@ -628,7 +631,7 @@ export class MermaidDiagramWidget extends WidgetType {
     this.attachFullscreenInteractions(svgWrapper, fullscreenContainer);
 
     overlay.appendChild(fullscreenContainer);
-    document.body.appendChild(overlay);
+    this.fullscreenThemeScopeCleanup = mountMeoScopedPortal(overlay, svgContainer);
 
     requestAnimationFrame(() => {
       const svg = svgWrapper.querySelector('svg');
@@ -797,11 +800,13 @@ export class MermaidDiagramWidget extends WidgetType {
       this.fullscreenCleanup = null;
     }
 
-    if (this.fullscreenOverlay) {
-      this.fullscreenOverlay.remove();
-      this.fullscreenOverlay = null;
-      this.fullscreenSvgWrapper = null;
+    if (this.fullscreenThemeScopeCleanup) {
+      this.fullscreenThemeScopeCleanup();
+      this.fullscreenThemeScopeCleanup = null;
     }
+
+    this.fullscreenOverlay = null;
+    this.fullscreenSvgWrapper = null;
 
     if (this.exitFullscreenHandler) {
       document.removeEventListener('keydown', this.exitFullscreenHandler);

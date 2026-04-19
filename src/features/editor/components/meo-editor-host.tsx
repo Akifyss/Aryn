@@ -50,6 +50,7 @@ export function MeoEditorHost({
   value,
   workspacePath,
 }: MeoEditorHostProps) {
+  const shellRef = useRef<HTMLDivElement | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const controllerRef = useRef<MountedNativeMeo | null>(null)
   const contentRef = useRef(value)
@@ -61,7 +62,6 @@ export function MeoEditorHost({
   const onOpenGitDiffRef = useRef(onOpenGitDiff)
   const onSaveRef = useRef(onSave)
   const environment = useMemo(() => createDefaultMeoHostEnvironment(), [])
-  const preferredTheme = useMemo(() => resolvePreferredTheme(theme), [theme])
   const gitStateRefreshKey = useMemo(() => getGitStateRefreshKey(gitRepositoryState), [gitRepositoryState])
 
   useEffect(() => {
@@ -153,27 +153,33 @@ export function MeoEditorHost({
   }, [meoSettings.outlinePosition])
 
   useEffect(() => {
-    const rootElement = document.documentElement
-    rootElement.classList.add('meo-native-theme')
-    controllerRef.current?.refreshLayout()
+    const shellElement = shellRef.current
+    if (!shellElement) {
+      return
+    }
+
+    const applyResolvedTheme = () => {
+      const resolvedTheme = resolvePreferredTheme(theme)
+      shellElement.classList.add('meo-native-theme')
+      shellElement.classList.toggle('light', resolvedTheme === 'light')
+      shellElement.classList.toggle('dark', resolvedTheme === 'dark')
+      shellElement.dataset.theme = resolvedTheme
+      controllerRef.current?.refreshLayout()
+    }
+
+    applyResolvedTheme()
 
     if (theme !== 'auto') {
-      return () => {
-        rootElement.classList.remove('meo-native-theme')
-      }
+      return
     }
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const handleChange = () => {
-      controllerRef.current?.refreshLayout()
-    }
-    mediaQuery.addEventListener('change', handleChange)
+    mediaQuery.addEventListener('change', applyResolvedTheme)
 
     return () => {
-      mediaQuery.removeEventListener('change', handleChange)
-      rootElement.classList.remove('meo-native-theme')
+      mediaQuery.removeEventListener('change', applyResolvedTheme)
     }
-  }, [preferredTheme, theme])
+  }, [theme])
 
   useEffect(() => {
     const controller = controllerRef.current
@@ -206,7 +212,7 @@ export function MeoEditorHost({
   }, [environment, filePath, gitStateRefreshKey, workspacePath])
 
   return (
-    <div className='meo-editor-shell'>
+    <div ref={shellRef} className='meo-editor-shell'>
       <div ref={rootRef} className='meo-editor-root-host' />
     </div>
   )
