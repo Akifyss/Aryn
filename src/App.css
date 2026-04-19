@@ -4900,36 +4900,11 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .meo-editor-shell {
   position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   background: var(--surface);
-}
-
-.meo-editor-frame {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  display: block;
-  background: var(--surface);
-}
-
-.meo-editor-loading,
-.meo-editor-error {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  text-align: center;
-  background: var(--surface);
-  color: var(--muted);
-  z-index: 1;
-}
-
-.meo-editor-error {
-  flex-direction: column;
-  gap: 8px;
-  color: var(--danger);
 }

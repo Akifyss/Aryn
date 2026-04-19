@@ -28,7 +28,6 @@ declare global {
       getWorkspaceState: (workspacePath: string) => Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>
       updateWorkspaceState: (workspacePath: string, patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean }) => Promise<{ ok: boolean }>
       loadWorkspaceTree: (rootPath: string) => Promise<WorkspaceNode[]>
-      getMeoEditorBootstrap: () => Promise<{ extensionLabel: string, wrapperUrl: string }>
       resolveWorkspaceEditorKind: (filePath: string) => Promise<'rich-text' | 'code' | null>
       readWorkspaceFile: (filePath: string) => Promise<string>
       saveWorkspaceFile: (filePath: string, content: string) => Promise<{ ok: boolean }>
@@ -133,6 +132,11 @@ declare module 'monaco-editor/esm/vs/language/typescript/ts.worker?worker' {
     new (): Worker
   }
   export default WorkerFactory
+}
+
+declare module 'mermaid/dist/mermaid.min.js?url' {
+  const src: string
+  export default src
 }
 
 export {}

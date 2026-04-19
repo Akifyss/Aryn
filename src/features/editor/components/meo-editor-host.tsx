@@ -1,23 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { GitRepositoryState } from '@/features/git/types'
 import type { MeoSettings } from '@/hooks/use-settings-store'
 import { createDefaultMeoHostEnvironment } from '@/features/editor/lib/meo-host-environment'
-import type { MeoEditorBootstrap } from '@/features/editor/lib/meo-protocol'
-import {
-  getGitStateRefreshKey,
-  getUnavailableGitBaseline,
-  handleMeoHostPayload,
-  postGitBaselineChanged,
-  postMessageToMeoIframe,
-  postThemeChanged,
-  resolveMeoHostMessageFromEvent,
-} from '@/features/editor/lib/meo-host-bridge'
-import {
-  buildMeoIframeSource,
-  createMeoChannelId,
-  getMeoIframeOrigin,
-} from '@/features/editor/lib/meo-transport'
-import { readStoredState } from '@/features/editor/lib/meo-state'
+import { getGitStateRefreshKey, getUnavailableGitBaseline } from '@/features/editor/lib/meo-git-state'
+import { mountNativeMeoEditor } from '@/features/editor/lib/meo-native-editor'
+import './meo-editor-host.css'
+import '@/vendor/meo/webview/styles.css'
+import 'katex/dist/katex.min.css'
 
 type MeoEditorHostProps = {
   filePath: string
@@ -38,6 +27,8 @@ type MeoEditorHostProps = {
   value: string
   workspacePath?: string | null
 }
+
+type MountedNativeMeo = ReturnType<typeof mountNativeMeoEditor>
 
 function resolvePreferredTheme(theme: 'light' | 'dark' | 'auto') {
   if (theme !== 'auto') {
@@ -60,209 +51,87 @@ export function MeoEditorHost({
   value,
   workspacePath,
 }: MeoEditorHostProps) {
-  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const controllerRef = useRef<MountedNativeMeo | null>(null)
   const contentRef = useRef(value)
-  const versionRef = useRef(1)
-  const isComposingRef = useRef(false)
   const pendingExternalValueRef = useRef<string | null>(null)
-  const modeRef = useRef<'live' | 'source'>(readStoredState(filePath).mode ?? 'source')
-  const gitBaselineRequestRef = useRef(0)
-  const channelIdRef = useRef(createMeoChannelId())
-  const [bootstrap, setBootstrap] = useState<MeoEditorBootstrap | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [statusMessage, setStatusMessage] = useState<string | null>('Loading MEO bootstrap...')
-  const [isReady, setIsReady] = useState(false)
-  const [iframeSource, setIframeSource] = useState<string | null>(null)
+  const isComposingRef = useRef(false)
+  const onChangeRef = useRef(onChange)
+  const onCompositionChangeRef = useRef(onCompositionChange)
+  const onOpenFileRef = useRef(onOpenFile)
+  const onOpenGitDiffRef = useRef(onOpenGitDiff)
+  const onSaveRef = useRef(onSave)
   const environment = useMemo(() => createDefaultMeoHostEnvironment(), [])
   const preferredTheme = useMemo(() => resolvePreferredTheme(theme), [theme])
   const gitStateRefreshKey = useMemo(() => getGitStateRefreshKey(gitRepositoryState), [gitRepositoryState])
-  const iframeOrigin = useMemo(() => (
-    bootstrap ? getMeoIframeOrigin(bootstrap.wrapperUrl) : null
-  ), [bootstrap])
 
-  function syncDocumentToIframe(iframeWindow: Window, nextValue: string) {
-    contentRef.current = nextValue
-    versionRef.current += 1
-    postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
-      text: nextValue,
-      type: 'docChanged',
-      version: versionRef.current,
+  useEffect(() => {
+    onChangeRef.current = onChange
+    onCompositionChangeRef.current = onCompositionChange
+    onOpenFileRef.current = onOpenFile
+    onOpenGitDiffRef.current = onOpenGitDiff
+    onSaveRef.current = onSave
+  }, [onChange, onCompositionChange, onOpenFile, onOpenGitDiff, onSave])
+
+  useEffect(() => {
+    const rootElement = rootRef.current
+    if (!rootElement) {
+      return
+    }
+
+    const controller = mountNativeMeoEditor({
+      environment,
+      filePath,
+      initialValue: value,
+      meoSettings,
+      onChange: (nextValue) => {
+        contentRef.current = nextValue
+        onChangeRef.current(nextValue)
+      },
+      onCompositionChange: (nextValue) => {
+        isComposingRef.current = nextValue
+        onCompositionChangeRef.current?.(nextValue)
+
+        if (!nextValue && pendingExternalValueRef.current !== null) {
+          const pendingValue = pendingExternalValueRef.current
+          pendingExternalValueRef.current = null
+          contentRef.current = pendingValue
+          controller.setText(pendingValue)
+        }
+      },
+      onOpenFile: (nextFilePath) => {
+        onOpenFileRef.current?.(nextFilePath)
+      },
+      onOpenGitDiff: (nextFilePath, options) => {
+        onOpenGitDiffRef.current?.(nextFilePath, options)
+      },
+      onSave: (nextValue) => {
+        onSaveRef.current?.(nextValue)
+      },
+      root: rootElement,
+      workspacePath,
     })
-  }
 
-  useEffect(() => {
-    const storedState = readStoredState(filePath)
-    modeRef.current = storedState.mode ?? 'source'
-  }, [filePath])
-
-  useEffect(() => {
-    let disposed = false
-
-    void environment.appApi.getMeoEditorBootstrap()
-      .then((nextBootstrap) => {
-        if (disposed) {
-          return
-        }
-
-        setBootstrap(nextBootstrap)
-        setErrorMessage(null)
-      })
-      .catch((error) => {
-        if (disposed) {
-          return
-        }
-
-        const message = error instanceof Error ? error.message : 'Unable to load Markdown Editor Optimized.'
-        setErrorMessage(message)
-      })
+    controllerRef.current = controller
+    contentRef.current = value
 
     return () => {
-      disposed = true
-    }
-  }, [environment])
-
-  useEffect(() => {
-    if (!bootstrap) {
-      setIframeSource(null)
-      return
-    }
-
-    // Keep the iframe URL stable after mount so theme changes flow through postMessage
-    // instead of forcing a full MEO reload.
-    setIframeSource(buildMeoIframeSource(bootstrap.wrapperUrl, {
-      channelId: channelIdRef.current,
-      parentOrigin: window.location.origin,
-      theme: preferredTheme,
-    }))
-  }, [bootstrap])
-
-  useEffect(() => {
-    setIsReady(false)
-    setStatusMessage('Loading MEO iframe...')
-  }, [iframeSource])
-
-  useEffect(() => {
-    if (!isReady) {
-      return
-    }
-
-    const iframeWindow = iframeRef.current?.contentWindow
-    if (!iframeWindow) {
-      return
-    }
-
-    postThemeChanged(iframeWindow, channelIdRef.current, preferredTheme)
-  }, [isReady, preferredTheme])
-
-  useEffect(() => {
-    if (!isReady) {
-      return
-    }
-
-    const iframeWindow = iframeRef.current?.contentWindow
-    if (!iframeWindow) {
-      return
-    }
-
-    postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
-      enabled: meoSettings.gitDiffLineHighlights,
-      type: 'gitDiffLineHighlightsChanged',
-    })
-  }, [isReady, meoSettings.gitDiffLineHighlights])
-
-  useEffect(() => {
-    if (!isReady) {
-      return
-    }
-
-    const iframeWindow = iframeRef.current?.contentWindow
-    if (!iframeWindow) {
-      return
-    }
-
-    postMessageToMeoIframe(iframeWindow, channelIdRef.current, {
-      position: meoSettings.outlinePosition,
-      type: 'outlinePositionChanged',
-    })
-  }, [isReady, meoSettings.outlinePosition])
-
-  useEffect(() => {
-    if (!isReady) {
-      return
-    }
-
-    const iframeWindow = iframeRef.current?.contentWindow
-    if (!iframeWindow) {
-      return
-    }
-
-    const requestId = gitBaselineRequestRef.current + 1
-    gitBaselineRequestRef.current = requestId
-
-    if (!workspacePath) {
-      postGitBaselineChanged(
-        iframeWindow,
-        channelIdRef.current,
-        getUnavailableGitBaseline('not-repo'),
-      )
-      return
-    }
-
-    void environment.appApi.getGitBaseline(workspacePath, filePath)
-      .then((baseline) => {
-        if (gitBaselineRequestRef.current !== requestId) {
-          return
-        }
-
-        const currentIframeWindow = iframeRef.current?.contentWindow
-        if (!currentIframeWindow) {
-          return
-        }
-
-        postGitBaselineChanged(currentIframeWindow, channelIdRef.current, baseline)
-      })
-      .catch(() => {
-        if (gitBaselineRequestRef.current !== requestId) {
-          return
-        }
-
-        const currentIframeWindow = iframeRef.current?.contentWindow
-        if (!currentIframeWindow) {
-          return
-        }
-
-        postGitBaselineChanged(
-          currentIframeWindow,
-          channelIdRef.current,
-          getUnavailableGitBaseline('error'),
-        )
-      })
-  }, [environment, filePath, gitStateRefreshKey, isReady, workspacePath])
-
-  useEffect(() => {
-    onCompositionChange?.(false)
-    isComposingRef.current = false
-    pendingExternalValueRef.current = null
-
-    return () => {
-      isComposingRef.current = false
       pendingExternalValueRef.current = null
-      onCompositionChange?.(false)
+      isComposingRef.current = false
+      onCompositionChangeRef.current?.(false)
+      controller.destroy()
+      controllerRef.current = null
     }
-  }, [onCompositionChange])
+  }, [environment, filePath, meoSettings.imageFolder, meoSettings.rememberPositionLines, workspacePath])
 
   useEffect(() => {
-    if (!isReady) {
+    const controller = controllerRef.current
+    if (!controller) {
       contentRef.current = value
       return
     }
 
     if (value === contentRef.current) {
-      return
-    }
-
-    const iframeWindow = iframeRef.current?.contentWindow
-    if (!iframeWindow) {
       return
     }
 
@@ -272,99 +141,74 @@ export function MeoEditorHost({
     }
 
     pendingExternalValueRef.current = null
-    syncDocumentToIframe(iframeWindow, value)
-  }, [isReady, value])
+    contentRef.current = value
+    controller.setText(value)
+  }, [value])
 
   useEffect(() => {
-    const handleWindowMessage = (event: MessageEvent<unknown>) => {
-      const iframeWindow = iframeRef.current?.contentWindow
-      const payload = resolveMeoHostMessageFromEvent(event, {
-        channelId: channelIdRef.current,
-        iframeOrigin,
-        iframeWindow,
-      })
+    controllerRef.current?.setGitDiffLineHighlightsEnabled(meoSettings.gitDiffLineHighlights)
+  }, [meoSettings.gitDiffLineHighlights])
 
-      if (!payload || !iframeWindow) {
-        return
+  useEffect(() => {
+    controllerRef.current?.setOutlinePosition(meoSettings.outlinePosition)
+  }, [meoSettings.outlinePosition])
+
+  useEffect(() => {
+    const rootElement = document.documentElement
+    rootElement.classList.add('meo-native-theme')
+    controllerRef.current?.refreshTheme()
+
+    if (theme !== 'auto') {
+      return () => {
+        rootElement.classList.remove('meo-native-theme')
       }
-
-      if (payload.type === 'compositionChanged') {
-        const nextIsComposing = payload.isComposing === true
-
-        if (isComposingRef.current !== nextIsComposing) {
-          isComposingRef.current = nextIsComposing
-          onCompositionChange?.(nextIsComposing)
-        }
-
-        if (!nextIsComposing) {
-          const pendingExternalValue = pendingExternalValueRef.current
-          pendingExternalValueRef.current = null
-
-          if (
-            typeof pendingExternalValue === 'string'
-            && pendingExternalValue !== contentRef.current
-          ) {
-            syncDocumentToIframe(iframeWindow, pendingExternalValue)
-          }
-        }
-
-        return
-      }
-
-      handleMeoHostPayload({
-        channelId: channelIdRef.current,
-        environment,
-        filePath,
-        iframeWindow,
-        meoSettings,
-        modeRef,
-        onChange,
-        onOpenFile,
-        onOpenGitDiff,
-        onSave,
-        payload,
-        preferredTheme,
-        setIsReady,
-        setStatusMessage,
-        valueRef: contentRef,
-        versionRef,
-        workspacePath,
-      })
     }
 
-    window.addEventListener('message', handleWindowMessage)
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleChange = () => {
+      controllerRef.current?.refreshTheme()
+    }
+    mediaQuery.addEventListener('change', handleChange)
 
     return () => {
-      window.removeEventListener('message', handleWindowMessage)
+      mediaQuery.removeEventListener('change', handleChange)
+      rootElement.classList.remove('meo-native-theme')
     }
-  }, [environment, filePath, iframeOrigin, meoSettings.gitDiffLineHighlights, meoSettings.imageFolder, meoSettings.outlinePosition, meoSettings.rememberPositionLines, onChange, onOpenFile, onOpenGitDiff, onSave, preferredTheme, workspacePath])
+  }, [preferredTheme, theme])
 
-  if (errorMessage) {
-    return (
-      <div className='meo-editor-error'>
-        <strong>Markdown Editor Optimized failed to load.</strong>
-        <span>{errorMessage}</span>
-      </div>
-    )
-  }
+  useEffect(() => {
+    const controller = controllerRef.current
+    if (!controller) {
+      return
+    }
 
-  if (!iframeSource) {
-    return <div className='meo-editor-loading'>{statusMessage}</div>
-  }
+    let disposed = false
+
+    if (!workspacePath) {
+      controller.setGitBaseline(getUnavailableGitBaseline('not-repo'))
+      return
+    }
+
+    void environment.appApi.getGitBaseline(workspacePath, filePath)
+      .then((baseline) => {
+        if (!disposed) {
+          controller.setGitBaseline(baseline)
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          controller.setGitBaseline(getUnavailableGitBaseline('error'))
+        }
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [environment, filePath, gitStateRefreshKey, workspacePath])
 
   return (
     <div className='meo-editor-shell'>
-      {statusMessage ? <div className='meo-editor-loading'>{statusMessage}</div> : null}
-      <iframe
-        ref={iframeRef}
-        className='meo-editor-frame'
-        sandbox='allow-same-origin allow-scripts'
-        src={iframeSource}
-        title={bootstrap?.extensionLabel ?? 'Markdown Editor Optimized'}
-        onLoad={() => {
-          setStatusMessage('Waiting for MEO webview...')
-        }}
-      />
+      <div ref={rootRef} className='meo-editor-root-host' />
     </div>
   )
 }

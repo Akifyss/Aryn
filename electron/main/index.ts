@@ -52,13 +52,6 @@ import {
   getAppIconCatalog,
   resolveAppIconId,
 } from './app-icons'
-import {
-  disposeBundledMeoEditorServer,
-  getBundledMeoEditorBootstrap,
-} from './meo-editor'
-import {
-  resolveBundledMeoRuntimePath,
-} from '../../config/meo-runtime'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -105,11 +98,6 @@ const bundledWorkspaceIconThemePath = path.join(
   'icon-themes',
   'thang-nm.flow-icons-1.3.2.vsix',
 )
-const bundledMeoRuntimePath = resolveBundledMeoRuntimePath({
-  appRoot: process.env.APP_ROOT,
-  isDev: Boolean(VITE_DEV_SERVER_URL),
-  rendererDist: RENDERER_DIST,
-})
 const legacyWorkspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
 const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPath)
 const agentManager = new PiAgentManager(
@@ -318,7 +306,6 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   win = null
   agentManager.dispose()
-  void disposeBundledMeoEditorServer()
   void unwatchWorkspace()
   if (process.platform !== 'darwin') app.quit()
 })
@@ -497,10 +484,6 @@ ipcMain.handle('app-icons:select', async (_, appIconId: string) => {
 
 ipcMain.handle('workspace:read-file', async (_, filePath: string) => {
   return loadWorkspaceFile(filePath)
-})
-
-ipcMain.handle('workspace:get-meo-bootstrap', async () => {
-  return getBundledMeoEditorBootstrap(bundledMeoRuntimePath)
 })
 
 ipcMain.handle('workspace:resolve-editor-kind', async (_, filePath: string) => {

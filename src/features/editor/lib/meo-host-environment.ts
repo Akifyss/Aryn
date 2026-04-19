@@ -1,6 +1,6 @@
 export type MeoHostAppApi = Pick<
   Window['appApi'],
-  'getGitBaseline' | 'getGitLineBlame' | 'getMeoEditorBootstrap' | 'saveWorkspaceImage' | 'workspaceFileExists'
+  'getGitBaseline' | 'getGitLineBlame' | 'saveWorkspaceImage' | 'workspaceFileExists'
 >
 
 export type MeoHostEnvironment = {
