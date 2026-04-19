@@ -418,10 +418,10 @@ export function createEditor({
     view.dom.classList.toggle('meo-mode-source', currentMode !== 'live');
     // Keep active typography vars explicitly synced to mode so source/live
     // font sizing and line-height don't depend on selector cascade.
-    view.dom.style.setProperty('--meo-active-editor-font', isLiveModeActive ? 'var(--meo-font-live)' : 'var(--meo-font-source)');
-    view.dom.style.setProperty('--meo-active-editor-font-weight', isLiveModeActive ? 'var(--meo-font-live-weight)' : 'var(--meo-font-source-weight)');
-    view.dom.style.setProperty('--meo-active-editor-font-size', isLiveModeActive ? 'var(--meo-font-live-size)' : 'var(--meo-font-source-size)');
-    view.dom.style.setProperty('--meo-active-editor-line-height', isLiveModeActive ? 'var(--meo-line-height-live)' : 'var(--meo-line-height-source)');
+    view.dom.style.setProperty('--active-editor-font', isLiveModeActive ? 'var(--font-live)' : 'var(--font-source)');
+    view.dom.style.setProperty('--active-editor-font-weight', isLiveModeActive ? 'var(--font-live-weight)' : 'var(--font-source-weight)');
+    view.dom.style.setProperty('--active-editor-font-size', isLiveModeActive ? 'var(--font-live-size)' : 'var(--font-source-size)');
+    view.dom.style.setProperty('--active-editor-line-height', isLiveModeActive ? 'var(--line-height-live)' : 'var(--line-height-source)');
     if (currentMode !== 'source') {
       setSourceLinkHoverCursor(view, false);
     }

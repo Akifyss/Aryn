@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import { StateField, RangeSetBuilder, EditorState, Transaction } from '@codemirror/state';
 import { Decoration, WidgetType, EditorView } from '@codemirror/view';
 import { parseFrontmatter, isInsideFrontmatterContent } from './frontmatter';
@@ -78,7 +78,7 @@ function listBorderDecoration(widthColumns = 1) {
 
   deco = Decoration.mark({
     class: 'meo-md-list-border',
-    attributes: { style: `--meo-list-border-width:${width}ch;` }
+    attributes: { style: `--list-border-width:${width}ch;` }
   });
   listBorderDecoCache.set(width, deco);
   return deco;

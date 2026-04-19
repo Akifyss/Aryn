@@ -74,19 +74,19 @@ const activeLinkMarkerDeco = Decoration.mark({ class: 'meo-md-marker-active meo-
 const linkLabelBracketDeco = Decoration.mark({
   class: 'meo-md-link-label-bracket',
   attributes: {
-    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;'
+    style: 'color: var(--color-base02) !important; -webkit-text-fill-color: var(--color-base02) !important;'
   }
 });
 const activeLinkLabelBracketDeco = Decoration.mark({
   class: 'meo-md-link-label-bracket-active',
   attributes: {
-    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;'
+    style: 'color: var(--color-base02) !important; -webkit-text-fill-color: var(--color-base02) !important;'
   }
 });
 const footnoteMarkerDeco = Decoration.mark({
   class: 'meo-md-footnote-marker',
   attributes: {
-    style: 'color: var(--meo-color-base02) !important; -webkit-text-fill-color: var(--meo-color-base02) !important;'
+    style: 'color: var(--color-base02) !important; -webkit-text-fill-color: var(--color-base02) !important;'
   }
 });
 const footnoteLiteralDeco = Decoration.mark({ class: 'meo-md-footnote-literal' });
@@ -270,7 +270,7 @@ function listLineDeco(
   deco = Decoration.line({
     class: classes.join(' '),
     attributes: {
-      style: `--meo-list-hanging-indent:${offset}ch;--meo-list-indent-columns:${indent}ch;--meo-list-guide-step:${guideStep}ch;--meo-task-hidden-prefix-columns:${hiddenTaskPrefix}ch;`
+      style: `--list-hanging-indent:${offset}ch;--list-indent-columns:${indent}ch;--list-guide-step:${guideStep}ch;--task-hidden-prefix-columns:${hiddenTaskPrefix}ch;`
     }
   });
   listLineDecoCache.set(key, deco);
