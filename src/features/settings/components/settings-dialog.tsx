@@ -30,7 +30,7 @@ type AuthProviderKey = 'google' | 'openai' | 'openrouter'
 
 const SETTINGS_SECTIONS: Array<{ description: string, id: SettingsSectionId, label: string }> = [
   {
-    description: '主题、图标与界面外观。',
+    description: '主题、图标与界面外观设置。',
     id: 'appearance',
     label: '外观',
   },
@@ -269,7 +269,7 @@ export function SettingsDialog({
           <div className='settings-field' style={{ marginTop: '24px' }}>
             <div className='settings-copy-block'>
               <h4>文件图标主题</h4>
-              <p>控制文件树与工作区中的图标样式。</p>
+              <p>控制文件树与工作区中的图标显示样式。</p>
             </div>
             <div className='settings-inline-form' style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <Select

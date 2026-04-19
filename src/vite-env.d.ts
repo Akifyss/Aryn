@@ -87,6 +87,7 @@ declare global {
       selectAgentModel: (modelKey: string) => Promise<AgentWorkspaceState>
       updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => Promise<AgentWorkspaceState>
       abortAgentPrompt: () => Promise<AgentWorkspaceState>
+      openExternalLink: (href: string) => Promise<{ ok: boolean }>
       minimizeWindow: () => Promise<void>
       toggleMaximizeWindow: () => Promise<{ isMaximized: boolean }>
       closeWindow: () => Promise<void>

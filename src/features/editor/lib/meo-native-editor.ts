@@ -457,7 +457,15 @@ export function mountNativeMeoEditor({
     onCompositionChange?.(nextValue)
   }
 
+  const isEventInsideMeoSurface = (eventTarget: EventTarget | null) => (
+    eventTarget instanceof Node && root.contains(eventTarget)
+  )
+
   const shortcutHandler = (event: KeyboardEvent) => {
+    if (!editor.hasFocus() && !isEventInsideMeoSurface(event.target)) {
+      return
+    }
+
     handleEditorShortcut(event, {
       applyMode: (mode) => {
         applyMode(mode)
@@ -477,6 +485,10 @@ export function mountNativeMeoEditor({
   }
 
   const pasteHandler = async (event: ClipboardEvent) => {
+    if (!editor.hasFocus() && !isEventInsideMeoSurface(event.target)) {
+      return
+    }
+
     const selection = editor.view.state.selection.main
     const line = editor.view.state.doc.lineAt(selection.head)
     await handleImagePaste(event, editor, {

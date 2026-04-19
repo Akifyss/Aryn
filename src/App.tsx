@@ -3658,6 +3658,10 @@ function App() {
                 }}
                 onOpenGitDiff={(targetFilePath, gitAction) => {
                   void (async () => {
+                    if (!currentPath) {
+                      return
+                    }
+
                     const latestGitState = await refreshGitState(currentPath, { silent: true })
                     const nextChange = findGitChangeByFilePath(
                       latestGitState,
@@ -3667,10 +3671,7 @@ function App() {
 
                     if (nextChange) {
                       await openGitDiff(nextChange, gitAction)
-                      return
                     }
-
-                    await openFile(targetFilePath, currentPath, 'code')
                   })()
                 }}
                 onSave={(content) => {

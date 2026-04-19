@@ -1,6 +1,6 @@
 export type MeoHostAppApi = Pick<
   Window['appApi'],
-  'getGitBaseline' | 'getGitLineBlame' | 'saveWorkspaceImage' | 'workspaceFileExists'
+  'getGitBaseline' | 'getGitLineBlame' | 'saveWorkspaceImage' | 'workspaceFileExists' | 'openExternalLink'
 >
 
 export type MeoHostEnvironment = {
@@ -12,7 +12,7 @@ export function createDefaultMeoHostEnvironment(): MeoHostEnvironment {
   return {
     appApi: window.appApi,
     openExternalLink: (href) => {
-      window.open(href, '_blank', 'noopener,noreferrer')
+      void window.appApi.openExternalLink(href)
     },
   }
 }

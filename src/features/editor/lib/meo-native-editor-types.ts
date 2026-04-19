@@ -86,6 +86,7 @@ export type MeoEditorInstance = {
   getHeadings: () => MeoHeading[]
   getText: () => string
   getTopVisiblePosition: () => MeoEditorViewportPosition
+  hasFocus: () => boolean
   insertFormat: (action: MeoEditorInsertFormat, options?: unknown) => void
   moveHeadingSection: (sourceFrom: number, targetFrom: number, placement: 'before' | 'after') => boolean
   refreshDecorations: () => void

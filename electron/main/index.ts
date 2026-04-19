@@ -779,6 +779,16 @@ ipcMain.handle('window:minimize', () => {
   win?.minimize()
 })
 
+ipcMain.handle('shell:open-external', async (_event, href: string) => {
+  const trimmedHref = typeof href === 'string' ? href.trim() : ''
+  if (!trimmedHref) {
+    return { ok: false }
+  }
+
+  await shell.openExternal(trimmedHref)
+  return { ok: true }
+})
+
 ipcMain.handle('window:toggle-maximize', () => {
   if (!win) {
     return { isMaximized: false }
