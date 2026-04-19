@@ -128,10 +128,10 @@ function FileRowActions({
               }}
             >
               {canOpenInWritingEditor ? (
-                <Dropdown.Item id='open-writing' textValue='Open in writing editor'>
+                <Dropdown.Item id='open-writing' textValue='Open in Tiptap'>
                   <div className='workspace-tree-menu-item'>
                     <Edit2Line size={16} className='workspace-tree-menu-icon' />
-                    <span>Open in Writing Editor</span>
+                    <span>在 Tiptap 中打开</span>
                   </div>
                 </Dropdown.Item>
               ) : null}

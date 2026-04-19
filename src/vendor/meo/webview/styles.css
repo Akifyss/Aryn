@@ -131,7 +131,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 8px 14px 8px 82px;
-  background-color: var(--vscode-sideBar-background);
+  background-color: var(--surface);
 }
 
 .editor-root:has(.cm-editor.meo-line-numbers-hidden) .mode-toolbar {
