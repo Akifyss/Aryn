@@ -1,4 +1,4 @@
-.meo-native-theme {
+:root.meo-native-theme {
   --editor-background: var(--surface);
   --editor-foreground: var(--foreground);
   --sideBar-background: var(--surface-secondary);
@@ -174,13 +174,13 @@
   line-height: 1.5em;
 }
 
-.light .meo-native-theme,
-[data-theme="light"] .meo-native-theme {
+:root.light.meo-native-theme,
+:root[data-theme="light"].meo-native-theme {
   color-scheme: light;
 }
 
-.dark .meo-native-theme,
-[data-theme="dark"] .meo-native-theme {
+:root.dark.meo-native-theme,
+:root[data-theme="dark"].meo-native-theme {
   color-scheme: dark;
 }
 

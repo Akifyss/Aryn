@@ -54,7 +54,7 @@ function formatAbsoluteDate(unixSeconds) {
 
 function buildTooltipDom() {
   const root = document.createElement('div');
-  root.className = 'meo-git-blame-tooltip meo-native-theme';
+  root.className = 'meo-git-blame-tooltip';
   root.hidden = true;
 
   const title = document.createElement('div');
@@ -70,7 +70,7 @@ function buildTooltipDom() {
 
 function buildGutterHoverOverlayDom() {
   const root = document.createElement('div');
-  root.className = 'meo-git-hover-overlay meo-native-theme';
+  root.className = 'meo-git-hover-overlay';
   root.hidden = true;
   return root;
 }

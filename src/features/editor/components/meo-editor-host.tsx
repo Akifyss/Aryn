@@ -153,10 +153,14 @@ export function MeoEditorHost({
   }, [meoSettings.outlinePosition])
 
   useEffect(() => {
+    const rootElement = document.documentElement
+    rootElement.classList.add('meo-native-theme')
     controllerRef.current?.refreshLayout()
 
     if (theme !== 'auto') {
-      return
+      return () => {
+        rootElement.classList.remove('meo-native-theme')
+      }
     }
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -167,6 +171,7 @@ export function MeoEditorHost({
 
     return () => {
       mediaQuery.removeEventListener('change', handleChange)
+      rootElement.classList.remove('meo-native-theme')
     }
   }, [preferredTheme, theme])
 
@@ -201,7 +206,7 @@ export function MeoEditorHost({
   }, [environment, filePath, gitStateRefreshKey, workspacePath])
 
   return (
-    <div className='meo-editor-shell meo-native-theme'>
+    <div className='meo-editor-shell'>
       <div ref={rootRef} className='meo-editor-root-host' />
     </div>
   )
