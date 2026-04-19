@@ -25,6 +25,7 @@
   --meo-active-editor-font: var(--vscode-editor-font-family);
   --meo-active-editor-font-weight: var(--vscode-editor-font-weight);
   --meo-active-editor-font-size: var(--vscode-editor-font-size, 13px);
+  --meo-editor-content-padding-top: 48px;
   --meo-foreground: var(--meo-color-base01, var(--vscode-editor-foreground));
   --meo-line-height-live: 1.5;
   --meo-line-height-source: 1.5;
@@ -835,7 +836,7 @@
 }
 
 .meo-native-root .cm-editor .cm-content {
-  padding-top: 0;
+  padding-top: var(--meo-editor-content-padding-top);
   caret-color: var(--vscode-editorCursor-foreground, #ffffff);
 }
 
