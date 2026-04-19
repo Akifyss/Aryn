@@ -2108,6 +2108,33 @@
   color: var(--foreground);
 }
 
+.workspace-tree-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.workspace-tree-menu-item .workspace-tree-menu-icon {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.workspace-tree-menu-item span {
+  color: inherit;
+}
+
+.workspace-tree-menu-item.is-danger {
+  color: var(--danger);
+}
+
+.workspace-tree-menu-item.is-danger .workspace-tree-menu-icon {
+  color: var(--danger);
+}
+
 .git-panel-section-header,
 .git-tree-folder-row,
 .git-tree-folder-toggle,

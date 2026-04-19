@@ -1,5 +1,5 @@
 import { type Dispatch, type DragEvent, type FormEvent, type SetStateAction, useEffect, useRef, useState } from 'react'
-import { AlertDialog, Button, Dropdown, Label, useOverlayState } from '@heroui/react'
+import { AlertDialog, Button, Dropdown, useOverlayState } from '@heroui/react'
 import {
   CheckLine,
   CloseLine,
@@ -14,7 +14,6 @@ import { pickDominantGitDisplayChange } from '@/features/git/lib/display-change'
 import {
   getSupportedWorkspaceEditorKind,
   supportsCodeEditorToggle,
-  supportsMeoEditor,
 } from '@/features/workspace/lib/file-types'
 import {
   areSameWorkspacePaths,
@@ -74,10 +73,8 @@ function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | un
 function FileRowActions({
   canOpenInWritingEditor,
   canOpenInCodeEditor,
-  canOpenInMeoEditor,
   onOpenInWritingEditor,
   onOpenInCodeEditor,
-  onOpenInMeoEditor,
   onRename,
   onDelete,
   isSubmitting,
@@ -85,10 +82,8 @@ function FileRowActions({
 }: {
   canOpenInWritingEditor: boolean
   canOpenInCodeEditor: boolean
-  canOpenInMeoEditor: boolean
   onOpenInWritingEditor: () => void
   onOpenInCodeEditor: () => void
-  onOpenInMeoEditor: () => void
   onRename: () => void
   onDelete: () => void
   isSubmitting: boolean
@@ -128,39 +123,30 @@ function FileRowActions({
               onAction={(key) => {
                 if (key === 'open-writing') onOpenInWritingEditor()
                 if (key === 'open-code') onOpenInCodeEditor()
-                if (key === 'open-meo') onOpenInMeoEditor()
                 if (key === 'rename') onRename()
                 if (key === 'delete') onDelete()
               }}
             >
               {canOpenInWritingEditor ? (
                 <Dropdown.Item id='open-writing' textValue='Open in writing editor'>
-                  <div className='flex items-center gap-2'>
-                    <Edit2Line size={16} className='text-(--muted)' />
-                    <Label>Open in Writing Editor</Label>
+                  <div className='workspace-tree-menu-item'>
+                    <Edit2Line size={16} className='workspace-tree-menu-icon' />
+                    <span>Open in Writing Editor</span>
                   </div>
                 </Dropdown.Item>
               ) : null}
               {canOpenInCodeEditor ? (
                 <Dropdown.Item id='open-code' textValue='Open in code editor'>
-                  <div className='flex items-center gap-2'>
-                    <CodeLine size={16} className='text-(--muted)' />
-                    <Label>在代码编辑器打开</Label>
-                  </div>
-                </Dropdown.Item>
-              ) : null}
-              {canOpenInMeoEditor ? (
-                <Dropdown.Item id='open-meo' textValue='Open in MEO'>
-                  <div className='flex items-center gap-2'>
-                    <CodeLine size={16} className='text-(--muted)' />
-                    <Label>Open in MEO</Label>
+                  <div className='workspace-tree-menu-item'>
+                    <CodeLine size={16} className='workspace-tree-menu-icon' />
+                    <span>在代码编辑器打开</span>
                   </div>
                 </Dropdown.Item>
               ) : null}
               <Dropdown.Item id='rename' textValue='Rename'>
-                <div className='flex items-center gap-2'>
-                  <Edit2Line size={16} className='text-(--muted)' />
-                  <Label>Rename</Label>
+                <div className='workspace-tree-menu-item'>
+                  <Edit2Line size={16} className='workspace-tree-menu-icon' />
+                  <span>Rename</span>
                 </div>
               </Dropdown.Item>
               <Dropdown.Item
@@ -168,9 +154,9 @@ function FileRowActions({
                 textValue='Delete'
                 variant='danger'
               >
-                <div className='flex items-center gap-2'>
-                  <Delete2Line size={16} style={{ color: 'var(--danger)' }} />
-                  <Label>Delete</Label>
+                <div className='workspace-tree-menu-item is-danger'>
+                  <Delete2Line size={16} className='workspace-tree-menu-icon' />
+                  <span>Delete</span>
                 </div>
               </Dropdown.Item>
             </Dropdown.Menu>
@@ -235,7 +221,6 @@ function FileTreeItem({
   const editorKind = node.kind === 'file' ? getSupportedWorkspaceEditorKind(node.path) : null
   const canOpenInWritingEditor = node.kind === 'file' && editorKind === 'rich-text'
   const canOpenInCodeEditor = node.kind === 'file' && editorKind !== null && supportsCodeEditorToggle(node.path, editorKind)
-  const canOpenInMeoEditor = node.kind === 'file' && editorKind !== null && supportsMeoEditor(node.path, editorKind)
   const isExpanded = expandedPaths.has(node.path)
   const isActive = activeFilePath === node.path
   const gitChange = findGitChangeByFilePath(gitRepositoryState, node)
@@ -396,12 +381,10 @@ function FileTreeItem({
           <FileRowActions
             canOpenInWritingEditor={canOpenInWritingEditor}
             canOpenInCodeEditor={canOpenInCodeEditor}
-            canOpenInMeoEditor={canOpenInMeoEditor}
             isSubmitting={isSubmitting}
             gitChange={gitChange}
             onOpenInWritingEditor={() => onOpenInWritingEditor(node.path)}
             onOpenInCodeEditor={() => onOpenInCodeEditor(node.path)}
-            onOpenInMeoEditor={() => onOpenInMeoEditor(node.path)}
             onRename={() => {
               setDraftName(node.name)
               setIsEditing(true)
