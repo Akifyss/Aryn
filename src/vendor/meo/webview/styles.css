@@ -74,7 +74,7 @@
 
 :root {
   color-scheme: light dark;
-  --meo-color-base01: var(--vscode-editor-foreground);
+  --meo-color-base01: var(--foreground);
   --meo-color-base02: #676f7d;
   --meo-color-base03: #3e444d;
   --meo-color-base04: #e06c75;
@@ -119,7 +119,7 @@
   --meo-token-invalid-color: var(--meo-color-base01);
   --meo-token-deleted-color: var(--meo-color-base04);
   --meo-token-monospace-color: var(--meo-color-base07);
-  --meo-token-heading-color: var(--meo-color-base04);
+  --meo-token-heading-color: var(--foreground);
   --meo-token-emphasis-color: var(--meo-color-base01);
   --meo-token-strong-color: var(--meo-color-base07);
   --meo-token-strikethrough-color: var(--meo-color-base01);
@@ -154,7 +154,6 @@
   --meo-active-editor-font-weight: var(--vscode-editor-font-weight);
   --meo-active-editor-font-size: var(--vscode-editor-font-size, 13px);
   --meo-editor-content-padding-top: 48px;
-  --meo-foreground: var(--meo-color-base01, var(--vscode-editor-foreground));
   --meo-line-height-live: 1.5;
   --meo-line-height-source: 1.5;
   --meo-active-editor-line-height: 1.5;
@@ -180,7 +179,7 @@
 .meo-native-root,
 .meo-native-root .editor-root,
 .meo-native-root .editor-host,
-.meo-native-root .editor-host > .cm-editor,
+.meo-native-root .editor-host>.cm-editor,
 .meo-native-root .cm-editor {
   height: 100%;
 }
@@ -277,10 +276,8 @@
   border: 1px solid var(--vscode-inputValidation-infoBorder, var(--vscode-panel-border));
   border-radius: 6px;
   color: var(--vscode-inputValidation-infoForeground, var(--vscode-editor-foreground));
-  background: var(
-    --vscode-inputValidation-infoBackground,
-    var(--vscode-editorWidget-background, var(--vscode-sideBar-background))
-  );
+  background: var(--vscode-inputValidation-infoBackground,
+      var(--vscode-editorWidget-background, var(--vscode-sideBar-background)));
   font-size: 12px;
   line-height: 1.4;
   z-index: 275;
@@ -383,7 +380,7 @@
   padding-right: 76px;
 }
 
-.find-row > .find-input {
+.find-row>.find-input {
   flex: 0 0 var(--find-input-width);
   width: var(--find-input-width);
 }
@@ -699,9 +696,13 @@
   font-family: var(--meo-active-editor-font);
   font-weight: var(--meo-active-editor-font-weight);
   font-size: var(--meo-active-editor-font-size);
-  color: var(--meo-foreground);
+  color: var(--foreground);
   min-width: 0;
   position: relative;
+}
+
+.meo-native-root .cm-editor.cm-focused {
+  outline: none;
 }
 
 .meo-native-root .cm-editor.meo-mode-live {
@@ -722,7 +723,7 @@
 .meo-native-root .cm-editor .cm-content,
 .meo-native-root .cm-editor .cm-line {
   font-family: var(--meo-active-editor-font);
-  color: var(--meo-foreground);
+  color: var(--foreground);
   min-width: 0;
   min-height: 1.2em;
 }
@@ -748,10 +749,8 @@
 
 .meo-native-root .cm-editor .cm-scroller::-webkit-scrollbar-thumb {
   -webkit-appearance: none;
-  background: var(
-    --vscode-scrollbarSlider-background,
-    color-mix(in srgb, var(--meo-color-base03) 70%, transparent)
-  ) !important;
+  background: var(--vscode-scrollbarSlider-background,
+      color-mix(in srgb, var(--meo-color-base03) 70%, transparent)) !important;
   background-clip: border-box !important;
   border: 0 !important;
   border-radius: 0 !important;
@@ -760,20 +759,16 @@
 
 .meo-native-root .cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
   -webkit-appearance: none;
-  background: var(
-    --vscode-scrollbarSlider-hoverBackground,
-    var(--vscode-scrollbarSlider-background, var(--meo-color-base03))
-  ) !important;
+  background: var(--vscode-scrollbarSlider-hoverBackground,
+      var(--vscode-scrollbarSlider-background, var(--meo-color-base03))) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
 }
 
 .meo-native-root .cm-editor .cm-scroller::-webkit-scrollbar-thumb:active {
   -webkit-appearance: none;
-  background: var(
-    --vscode-scrollbarSlider-activeBackground,
-    var(--vscode-scrollbarSlider-hoverBackground, var(--meo-color-base03))
-  ) !important;
+  background: var(--vscode-scrollbarSlider-activeBackground,
+      var(--vscode-scrollbarSlider-hoverBackground, var(--meo-color-base03))) !important;
   border-radius: 0 !important;
   box-shadow: none !important;
 }
@@ -897,16 +892,14 @@
 }
 
 .meo-native-root .cm-editor .cm-line.meo-md-details-summary-line {
-  box-shadow: inset 0 -1px 0 color-mix(
-    in srgb,
-    var(--meo-color-base03, var(--vscode-editorLineNumber-foreground)) 70%,
-    transparent
-  );
+  box-shadow: inset 0 -1px 0 color-mix(in srgb,
+      var(--meo-color-base03, var(--vscode-editorLineNumber-foreground)) 70%,
+      transparent);
 }
 
 .meo-native-root .cm-editor .meo-md-details-summary:hover,
 .meo-native-root .cm-editor .meo-md-details-summary:focus-visible {
-  color: var(--meo-foreground);
+  color: var(--foreground);
   outline: none;
 }
 
@@ -1099,8 +1092,8 @@
 }
 
 .meo-native-root .cm-editor .meo-md-url-boundary {
-  color: var(--meo-foreground) !important;
-  -webkit-text-fill-color: var(--meo-foreground) !important;
+  color: var(--foreground) !important;
+  -webkit-text-fill-color: var(--foreground) !important;
   text-decoration: none;
   text-decoration-color: transparent !important;
 }
@@ -1152,7 +1145,7 @@
   font-size: 0.78em;
 }
 
-.meo-native-root .cm-editor .meo-md-footnote-ref + .meo-md-footnote-ref {
+.meo-native-root .cm-editor .meo-md-footnote-ref+.meo-md-footnote-ref {
   margin-left: 0.24em;
 }
 
@@ -1191,12 +1184,12 @@
 .meo-native-root .cm-editor .meo-md-footnote-ref:focus-visible,
 .meo-native-root .cm-editor .meo-md-footnote-backref:hover,
 .meo-native-root .cm-editor .meo-md-footnote-backref:focus-visible {
-  color: var(--meo-foreground);
+  color: var(--foreground);
   outline: none;
 }
 
 .meo-native-root .cm-editor .cm-line.meo-md-footnote-line {
-  color: var(--meo-foreground);
+  color: var(--foreground);
 }
 
 .meo-native-root .cm-editor .cm-line.meo-md-footnote-continuation {
@@ -1242,7 +1235,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-link-clear-btn:hover {
-  color: var(--meo-foreground);
+  color: var(--foreground);
 }
 
 .meo-native-root .cm-editor .meo-md-wiki-missing-icon {
@@ -1382,7 +1375,7 @@
   background: var(--vscode-sideBar-background);
   /* Keep fill out of the border area so the bottom edge stays crisp. */
   background-clip: padding-box;
-  color: var(--meo-foreground);
+  color: var(--foreground);
   font-size: 0.84em;
   font-weight: 600;
   line-height: 1.2;
@@ -1473,40 +1466,32 @@
   --meo-list-guide-step: 2ch;
   padding-left: var(--meo-effective-list-hanging-indent);
   text-indent: calc(var(--meo-effective-list-hanging-indent) * -1);
-  background-image: repeating-linear-gradient(
-    to right,
-    var(--meo-color-base03) 0,
-    var(--meo-color-base03) 1px,
-    transparent 1px,
-    transparent var(--meo-list-guide-step)
-  );
+  background-image: repeating-linear-gradient(to right,
+      var(--meo-color-base03) 0,
+      var(--meo-color-base03) 1px,
+      transparent 1px,
+      transparent var(--meo-list-guide-step));
   background-size: var(--meo-list-indent-columns) 100%;
   background-position: left top;
   background-repeat: no-repeat;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-list-line.meo-md-list-line-selected {
-  background-image: repeating-linear-gradient(
-      to right,
+  background-image: repeating-linear-gradient(to right,
       var(--meo-color-base03) 0,
       var(--meo-color-base03) 1px,
       transparent 1px,
-      transparent var(--meo-list-guide-step)
-    ),
-    linear-gradient(
-      to right,
+      transparent var(--meo-list-guide-step)),
+    linear-gradient(to right,
       var(--vscode-editor-selectionBackground),
-      var(--vscode-editor-selectionBackground)
-    );
+      var(--vscode-editor-selectionBackground));
   background-size: var(--meo-list-indent-columns) 100%, var(--meo-effective-list-hanging-indent) 100%;
   background-position: left top, left top;
   background-repeat: no-repeat, no-repeat;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-list-line.meo-md-list-line-task {
-  --meo-effective-list-hanging-indent: calc(
-    var(--meo-list-hanging-indent) - var(--meo-task-hidden-prefix-columns) + var(--meo-task-checkbox-size)
-  );
+  --meo-effective-list-hanging-indent: calc(var(--meo-list-hanging-indent) - var(--meo-task-hidden-prefix-columns) + var(--meo-task-checkbox-size));
 }
 
 .meo-native-root .cm-editor .meo-md-list-marker {
@@ -1557,7 +1542,7 @@
 }
 
 .meo-native-root .cm-editor .meo-task-checkbox:hover {
-  border: 1px solid var(--meo-foreground);
+  border: 1px solid var(--foreground);
 }
 
 .meo-native-root .cm-editor .meo-task-checkbox.is-done::after {
@@ -1567,7 +1552,7 @@
   top: 2px;
   width: 4px;
   height: 7px;
-  border: solid var(--meo-foreground);
+  border: solid var(--foreground);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
@@ -1582,9 +1567,10 @@
   width: 7px;
   height: 7px;
   border-radius: 2px;
-  background: var(--meo-foreground);
+  background: var(--foreground);
   transform: translate(-50%, -50%);
 }
+
 .meo-native-root .cm-editor .meo-task-checkbox:focus {
   outline: none;
 }
@@ -1631,8 +1617,8 @@
   margin: 0 !important;
 }
 
-.meo-native-root .cm-editor .meo-mermaid-block.meo-mermaid-math-block .nodeLabel > div,
-.meo-mermaid-fullscreen .nodeLabel > div {
+.meo-native-root .cm-editor .meo-mermaid-block.meo-mermaid-math-block .nodeLabel>div,
+.meo-mermaid-fullscreen .nodeLabel>div {
   line-height: 1 !important;
 }
 
@@ -2132,7 +2118,7 @@
 .meo-native-root .cm-editor .cm-line.meo-merge-current,
 .meo-native-root .cm-editor .cm-line.meo-merge-base,
 .meo-native-root .cm-editor .cm-line.meo-merge-incoming {
-  color: var(--meo-foreground);
+  color: var(--foreground);
 }
 
 .meo-native-root .cm-editor .cm-line.meo-merge-current-header,
@@ -2300,7 +2286,7 @@
   display: grid;
 }
 
-.meo-native-root .cm-editor .meo-md-html-table-cell-content > * {
+.meo-native-root .cm-editor .meo-md-html-table-cell-content>* {
   grid-area: 1 / 1;
 }
 
@@ -2309,7 +2295,7 @@
   box-sizing: border-box;
   min-height: 1lh;
   padding: 0.25em 0.5em;
-  color: var(--meo-foreground);
+  color: var(--foreground);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -2340,7 +2326,7 @@
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--meo-foreground);
+  color: var(--foreground);
   font: inherit;
   font-weight: inherit;
   font-style: inherit;
@@ -2520,7 +2506,7 @@
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-table-header-line .meo-md-table-cell *,
 .meo-native-root .cm-editor.meo-mode-source .meo-md-source-table-header-cell,
 .meo-native-root .cm-editor.meo-mode-source .meo-md-source-table-header-cell * {
-  color: var(--meo-foreground) !important;
+  color: var(--foreground) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .meo-md-table-line .meo-md-marker-active,
@@ -2567,7 +2553,7 @@
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-content .meo-md-frontmatter-value,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-frontmatter-content .meo-md-frontmatter-value {
-  color: var(--meo-foreground) !important;
+  color: var(--foreground) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-content .meo-md-frontmatter-array-pills {
@@ -2585,7 +2571,7 @@
   padding: 0 6px;
   border-radius: 999px;
   background: var(--meo-color-base03);
-  color: var(--meo-foreground) !important;
+  color: var(--foreground) !important;
   font-size: 0.92em;
   line-height: 1.1;
   white-space: nowrap;
@@ -2749,7 +2735,7 @@
   width: 7px;
   height: 7px;
   border-radius: 2px;
-  background: var(--meo-foreground);
+  background: var(--foreground);
   transform: translate(-50%, -50%);
 }
 
