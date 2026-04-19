@@ -121,9 +121,9 @@
   --meo-token-monospace-color: var(--meo-color-base07);
   --meo-token-heading-color: var(--foreground);
   --meo-token-emphasis-color: var(--meo-color-base01);
-  --meo-token-strong-color: var(--meo-color-base07);
+  --meo-token-strong-color: var(--foreground);
   --meo-token-strikethrough-color: var(--meo-color-base01);
-  --meo-token-quote-color: var(--meo-color-base07);
+  --meo-token-quote-color: var(--foreground);
   --meo-token-contentSeparator-color: var(--meo-color-base02);
   --meo-token-link-color: var(--meo-color-base05);
   --meo-token-url-color: var(--meo-color-base05);
@@ -1071,7 +1071,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-strong {
-  color: var(--meo-color-base07);
+  color: var(--foreground);
   font-weight: 600;
 }
 
@@ -1275,7 +1275,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-quote {
-  border-left: 3px solid var(--meo-color-base07);
+  border-left: 3px solid var(--border);
   min-height: calc(var(--meo-active-editor-line-height) * 1em);
   padding-left: 3ch;
   text-indent: -1ch;
@@ -1313,7 +1313,7 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: var(--meo-color-base03);
+  background: var(--border);
   transform: translateY(-50%);
   pointer-events: none;
 }

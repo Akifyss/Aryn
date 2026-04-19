@@ -257,7 +257,7 @@ export const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'quote',
     tags: t.quote,
-    fallbackColor: 'var(--meo-color-base07)',
+    fallbackColor: 'var(--foreground)',
     style: {}
   },
   {
