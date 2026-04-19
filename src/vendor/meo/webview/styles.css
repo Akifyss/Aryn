@@ -42,7 +42,7 @@
   --editor-font-size: 16px;
   --editor-font-weight: 400;
   --git-added: var(--success);
-  --git-changed: var(--accent);
+  --git-changed: var(--color-yellow-500);
 }
 
 .meo-editor-shell {
@@ -158,7 +158,7 @@
   --active-editor-line-height: 1.5;
   --task-checkbox-size: 17px;
   --git-added: #4a9e82;
-  --git-changed: #317ae7;
+  --git-changed: var(--color-yellow-500);
 }
 
 .meo-native-root {
