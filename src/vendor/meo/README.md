@@ -28,8 +28,12 @@ runtime path.
 - Vendor TypeScript files are imported as source and currently use
   `// @ts-nocheck` because upstream source does not match this repository's
   TypeScript settings.
-- Styling is bridged through app-owned CSS variables in
-  `src/features/editor/components/meo-editor-host.css`.
+- Styling is bridged through app-owned CSS variables at the top of
+  `src/vendor/meo/webview/styles.css`.
+- The upstream MEO theme preset/import pipeline is intentionally removed.
+  Runtime-editable token values live in `src/vendor/meo/webview/styles.css`.
+  `src/vendor/meo/shared/designTokens.ts` only keeps CodeMirror syntax tag
+  mapping that cannot be expressed in CSS.
 
 ### Maintenance note
 

@@ -18,7 +18,6 @@ import { cancelPendingLocalLinkStatusRefresh, handleResolvedLocalLinks, initiali
 import { createOutlineController } from '@/vendor/meo/webview/helpers/outline'
 import { createSelectionMenuController } from '@/vendor/meo/webview/helpers/selectionMenu'
 import { handleEditorShortcut, normalizeEol } from '@/vendor/meo/webview/helpers/shortcuts'
-import { applyThemeSettings } from '@/vendor/meo/webview/helpers/theme'
 import { setMermaidRuntimeSource } from '@/vendor/meo/webview/helpers/mermaidDiagram'
 import { cancelPendingWikiStatusRefresh, handleResolvedWikiLinks, initializeWikiLinkHandling, requestWikiLinkStatuses, scheduleWikiLinkStatusRefresh, setWikiLinkRefreshContext } from '@/vendor/meo/webview/helpers/wikiLinks'
 import { meoMermaidRuntimeUrl } from '@/features/editor/lib/meo-mermaid-runtime-url'
@@ -357,7 +356,6 @@ export function mountNativeMeoEditor({
     }
   }
 
-  applyThemeSettings()
   updateModeUi()
   updateLineNumbersUi()
   updateGitChangesGutterUi()
@@ -653,8 +651,7 @@ export function mountNativeMeoEditor({
     focus() {
       focusEditor()
     },
-    refreshTheme() {
-      applyThemeSettings()
+    refreshLayout() {
       editor.refreshLayout()
     },
     setGitBaseline(baseline) {

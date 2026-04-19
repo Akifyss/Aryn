@@ -1,6 +1,4 @@
 // @ts-nocheck
-import { themeColorKeys } from '../../shared/themeDefaults';
-
 export interface ExportStyleEnvironment {
   editorBackgroundColor: string;
   editorForegroundColor: string;
@@ -16,8 +14,20 @@ export interface ExportStyleEnvironment {
   sourceFontWeight: string;
   liveLineHeight: number | undefined;
   sourceLineHeight: number | undefined;
-  meoThemeColors: Record<string, string>;
+  meoTokenColors: Record<string, string>;
 }
+
+const meoTokenColorKeys = [
+  'base01',
+  'base02',
+  'base03',
+  'base04',
+  'base05',
+  'base06',
+  'base07',
+  'base08',
+  'base09'
+] as const;
 
 export const delay = (ms: number): Promise<void> => new Promise((resolve) => {
   window.setTimeout(resolve, ms);
@@ -43,11 +53,11 @@ export const getExportStyleEnvironment = (): ExportStyleEnvironment => {
   const lineHeightSourceRaw = rootStyles.getPropertyValue('--meo-line-height-source').trim();
   const parsedLiveLineHeight = Number.parseFloat(lineHeightLiveRaw);
   const parsedSourceLineHeight = Number.parseFloat(lineHeightSourceRaw);
-  const meoThemeColors: Record<string, string> = {};
-  for (const key of themeColorKeys) {
+  const meoTokenColors: Record<string, string> = {};
+  for (const key of meoTokenColorKeys) {
     const value = rootStyles.getPropertyValue(`--meo-color-${key}`).trim();
     if (value) {
-      meoThemeColors[key] = value;
+      meoTokenColors[key] = value;
     }
   }
 
@@ -66,7 +76,7 @@ export const getExportStyleEnvironment = (): ExportStyleEnvironment => {
     sourceFontWeight: colorVar('--meo-font-source-weight', ''),
     liveLineHeight: Number.isFinite(parsedLiveLineHeight) ? parsedLiveLineHeight : undefined,
     sourceLineHeight: Number.isFinite(parsedSourceLineHeight) ? parsedSourceLineHeight : undefined,
-    meoThemeColors
+    meoTokenColors
   };
 };
 

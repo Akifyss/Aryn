@@ -1,5 +1,133 @@
+:root.meo-native-theme {
+  --vscode-editor-background: var(--surface);
+  --vscode-editor-foreground: var(--foreground);
+  --vscode-foreground: var(--foreground);
+  --vscode-sideBar-background: var(--surface-secondary);
+  --vscode-sideBar-foreground: var(--muted);
+  --vscode-panel-border: var(--border);
+  --vscode-textCodeBlock-background: var(--surface-secondary);
+  --vscode-editor-selectionBackground: color-mix(in oklch, var(--accent) 28%, transparent);
+  --vscode-editorCursor-foreground: var(--accent);
+  --vscode-editorLineNumber-foreground: var(--muted);
+  --vscode-editorWidget-background: var(--surface);
+  --vscode-editorHoverWidget-background: var(--surface);
+  --vscode-editorHoverWidget-foreground: var(--foreground);
+  --vscode-editor-findMatchBackground: color-mix(in oklch, var(--warning) 28%, transparent);
+  --vscode-editor-findMatchBorder: color-mix(in oklch, var(--warning) 62%, transparent);
+  --vscode-toolbar-hoverBackground: color-mix(in oklch, var(--accent) 12%, transparent);
+  --vscode-descriptionForeground: var(--muted);
+  --vscode-focusBorder: color-mix(in oklch, var(--focus) 48%, transparent);
+  --vscode-input-background: var(--field-background);
+  --vscode-input-foreground: var(--field-foreground);
+  --vscode-button-border: color-mix(in oklch, var(--foreground) 12%, transparent);
+  --vscode-button-secondaryBackground: var(--surface-tertiary);
+  --vscode-button-secondaryHoverBackground: color-mix(in oklch, var(--surface-tertiary) 80%, var(--foreground) 10%);
+  --vscode-list-hoverBackground: color-mix(in oklch, var(--accent) 10%, transparent);
+  --vscode-list-activeSelectionBackground: color-mix(in oklch, var(--accent) 14%, transparent);
+  --vscode-list-activeSelectionForeground: var(--foreground);
+  --vscode-scrollbarSlider-background: color-mix(in oklch, var(--scrollbar) 50%, transparent);
+  --vscode-scrollbarSlider-hoverBackground: color-mix(in oklch, var(--scrollbar) 72%, transparent);
+  --vscode-scrollbarSlider-activeBackground: color-mix(in oklch, var(--scrollbar) 86%, transparent);
+  --vscode-errorForeground: var(--danger);
+  --vscode-inputValidation-errorBackground: color-mix(in oklch, var(--danger) 16%, transparent);
+  --vscode-inputValidation-errorBorder: color-mix(in oklch, var(--danger) 42%, transparent);
+  --vscode-inputValidation-errorForeground: var(--danger);
+  --vscode-inputValidation-warningBackground: color-mix(in oklch, var(--warning) 16%, transparent);
+  --vscode-inputValidation-warningBorder: color-mix(in oklch, var(--warning) 42%, transparent);
+  --vscode-inputValidation-warningForeground: var(--warning);
+  --vscode-inputValidation-infoBackground: color-mix(in oklch, var(--accent) 16%, transparent);
+  --vscode-inputValidation-infoBorder: color-mix(in oklch, var(--accent) 42%, transparent);
+  --vscode-inputValidation-infoForeground: var(--accent);
+  --vscode-editor-font-family: var(--font-heading), var(--font-sans), serif;
+  --vscode-font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --vscode-editor-font-size: 16px;
+  --vscode-editor-font-weight: 400;
+  --git-added: var(--success);
+  --git-changed: var(--accent);
+}
+
+.meo-editor-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.meo-editor-root-host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.meo-editor-shell .meo-native-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 :root {
   color-scheme: light dark;
+  --meo-color-base01: var(--vscode-editor-foreground);
+  --meo-color-base02: #676f7d;
+  --meo-color-base03: #3e444d;
+  --meo-color-base04: #e06c75;
+  --meo-color-base05: #61afef;
+  --meo-color-base06: #66d9ef;
+  --meo-color-base07: #e5c07b;
+  --meo-color-base08: #c678dd;
+  --meo-color-base09: #98c379;
+  --meo-token-keyword-color: var(--meo-color-base04);
+  --meo-token-identifier-color: var(--meo-color-base05);
+  --meo-token-macroName-color: var(--meo-color-base06);
+  --meo-token-variableName-color: var(--meo-color-base01);
+  --meo-token-propertyName-color: var(--meo-color-base09);
+  --meo-token-typeName-color: var(--meo-color-base06);
+  --meo-token-className-color: var(--meo-color-base09);
+  --meo-token-namespace-color: var(--meo-color-base05);
+  --meo-token-operator-color: var(--meo-color-base01);
+  --meo-token-operatorKeyword-color: var(--meo-color-base04);
+  --meo-token-punctuation-color: var(--meo-color-base01);
+  --meo-token-functionName-color: var(--meo-color-base06);
+  --meo-token-labelName-color: var(--meo-color-base02);
+  --meo-token-definitionFunction-color: var(--meo-color-base06);
+  --meo-token-definedVariable-color: var(--meo-color-base05);
+  --meo-token-number-color: var(--meo-color-base08);
+  --meo-token-changed-color: var(--meo-color-base08);
+  --meo-token-annotation-color: var(--meo-color-base04);
+  --meo-token-modifier-color: var(--meo-color-base04);
+  --meo-token-self-color: var(--meo-color-base04);
+  --meo-token-color-color: var(--meo-color-base08);
+  --meo-token-constant-color: var(--meo-color-base08);
+  --meo-token-atom-color: var(--meo-color-base05);
+  --meo-token-bool-color: var(--meo-color-base08);
+  --meo-token-specialVariable-color: var(--meo-color-base08);
+  --meo-token-specialString-color: var(--meo-color-base07);
+  --meo-token-regexp-color: var(--meo-color-base07);
+  --meo-token-string-color: var(--meo-color-base07);
+  --meo-token-typeDefinition-color: var(--meo-color-base06);
+  --meo-token-meta-color: var(--meo-color-base02);
+  --meo-token-comment-color: var(--meo-color-base02);
+  --meo-token-tagName-color: var(--meo-color-base04);
+  --meo-token-attributeName-color: var(--meo-color-base09);
+  --meo-token-invalid-color: var(--meo-color-base01);
+  --meo-token-deleted-color: var(--meo-color-base04);
+  --meo-token-monospace-color: var(--meo-color-base07);
+  --meo-token-heading-color: var(--meo-color-base04);
+  --meo-token-emphasis-color: var(--meo-color-base01);
+  --meo-token-strong-color: var(--meo-color-base07);
+  --meo-token-strikethrough-color: var(--meo-color-base01);
+  --meo-token-quote-color: var(--meo-color-base07);
+  --meo-token-contentSeparator-color: var(--meo-color-base02);
+  --meo-token-link-color: var(--meo-color-base05);
+  --meo-token-url-color: var(--meo-color-base05);
+  --meo-token-processingInstruction-color: var(--meo-color-base02);
   --meo-active-line-bg: color-mix(in srgb, var(--vscode-editor-selectionBackground) 20%, transparent 80%);
   --meo-selection-bg: var(--vscode-editor-selectionBackground);
   --meo-code-block-active-line-bg-live: color-mix(in srgb, var(--vscode-textCodeBlock-background) 50%, transparent 50%);
@@ -1383,6 +1511,7 @@
 
 .meo-native-root .cm-editor .meo-md-list-marker {
   display: inline;
+  color: var(--meo-color-base02);
 }
 
 .meo-native-root .cm-editor .meo-md-list-indent-spacer {

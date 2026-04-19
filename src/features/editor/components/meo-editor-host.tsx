@@ -4,7 +4,6 @@ import type { MeoSettings } from '@/hooks/use-settings-store'
 import { createDefaultMeoHostEnvironment } from '@/features/editor/lib/meo-host-environment'
 import { getGitStateRefreshKey, getUnavailableGitBaseline } from '@/features/editor/lib/meo-git-state'
 import { mountNativeMeoEditor } from '@/features/editor/lib/meo-native-editor'
-import './meo-editor-host.css'
 import '@/vendor/meo/webview/styles.css'
 import 'katex/dist/katex.min.css'
 
@@ -156,7 +155,7 @@ export function MeoEditorHost({
   useEffect(() => {
     const rootElement = document.documentElement
     rootElement.classList.add('meo-native-theme')
-    controllerRef.current?.refreshTheme()
+    controllerRef.current?.refreshLayout()
 
     if (theme !== 'auto') {
       return () => {
@@ -166,7 +165,7 @@ export function MeoEditorHost({
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleChange = () => {
-      controllerRef.current?.refreshTheme()
+      controllerRef.current?.refreshLayout()
     }
     mediaQuery.addEventListener('change', handleChange)
 

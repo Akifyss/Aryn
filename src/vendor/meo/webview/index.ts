@@ -6,7 +6,6 @@ import { createOutlineController } from './helpers/outline';
 import { normalizeWikiTarget, replaceWikiLinkStatuses, initializeWikiLinkHandling, collectWikiLinkTargets, requestWikiLinkStatuses, scheduleWikiLinkStatusRefresh, setWikiLinkRefreshContext, cancelPendingWikiStatusRefresh, handleResolvedWikiLinks } from './helpers/wikiLinks';
 import { initializeLocalLinkHandling, requestLocalLinkStatuses, scheduleLocalLinkStatusRefresh, setLocalLinkRefreshContext, cancelPendingLocalLinkStatusRefresh, handleResolvedLocalLinks } from './helpers/localLinks';
 import { setGitDiffLineHighlightsEnabled } from './helpers/gitDiffLineHighlights';
-import { applyThemeSettings } from './helpers/theme';
 import { createFailureNoticeManager, getErrorMessage, isTransientMermaidRuntimeError, shouldAutoFallbackToSourceForLiveError, logWebviewRenderError, type EditorNotice, type FailureNoticeManager } from './helpers/errors';
 import { isPrimaryModifier, isShortcutKey, normalizeEol, handleEditorShortcut, type ShortcutHandlerContext } from './helpers/shortcuts';
 import { createFindPanel, createFindPanelController, type FindPanelController } from './helpers/findPanel';
@@ -66,7 +65,6 @@ initializeImageHandling(vscode);
 initializeWikiLinkHandling(vscode);
 initializeLocalLinkHandling(vscode);
 
-applyThemeSettings();
 setImageSrcResolver(resolveImageSrc);
 
 const root = document.getElementById('app');
@@ -1261,7 +1259,6 @@ window.addEventListener('message', (event) => {
   if (message.type === 'init') {
     acknowledgeReadyHandshake();
     withMessageErrorBoundary('init handler', () => {
-      applyThemeSettings(message.theme);
       initialMountRecoveryAttempted = false;
       failureNotice.clearFailureNotice();
       gitClient?.resetForInit({ hideTooltip: false });
@@ -1289,13 +1286,6 @@ window.addEventListener('message', (event) => {
         });
       }
       failureNotice.updateEditorNotice();
-    });
-    return;
-  }
-
-  if (message.type === 'themeChanged') {
-    withMessageErrorBoundary('themeChanged handler', () => {
-      applyThemeSettings(message.theme);
     });
     return;
   }
