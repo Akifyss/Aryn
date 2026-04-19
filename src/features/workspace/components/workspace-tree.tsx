@@ -416,7 +416,12 @@ function FileTreeItem({
                     </p>
                   </AlertDialog.Body>
                   <AlertDialog.Footer>
-                    <Button variant='tertiary' onPress={close} isDisabled={isSubmitting}>
+                    <Button
+                      className='confirm-dialog-cancel-button'
+                      variant='tertiary'
+                      onPress={close}
+                      isDisabled={isSubmitting}
+                    >
                       Cancel
                     </Button>
                     <Button

@@ -52,6 +52,13 @@
     inset 0 0 0 1px var(--border);
 }
 
+.confirm-dialog-cancel-button {
+  --button-bg: var(--default);
+  --button-bg-hover: var(--surface-tertiary);
+  --button-bg-pressed: var(--surface-secondary);
+  --button-fg: var(--default-foreground);
+}
+
 .titlebar {
   position: absolute;
   inset: 0 0 auto 0;
