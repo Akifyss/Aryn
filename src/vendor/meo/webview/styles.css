@@ -2120,6 +2120,7 @@
 .meo-native-root .cm-editor .meo-md-html-table th,
 .meo-native-root .cm-editor .meo-md-html-table td {
   position: relative;
+  overflow: visible;
   padding: 0;
   border: 1px solid var(--meo-color-base03);
 }
@@ -2263,22 +2264,32 @@
 
 .meo-native-root .cm-editor .meo-md-html-col-btn,
 .meo-native-root .cm-editor .meo-md-html-row-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   width: 15px;
+  min-width: 15px;
   height: 15px;
+  min-height: 15px;
+  margin: 0;
   padding: 0;
   border: 1px solid var(--meo-color-base03);
   border-radius: 5px;
   background: var(--vscode-sideBar-background);
   color: var(--vscode-editor-foreground);
+  font-family: inherit;
   font-size: 11px;
   line-height: 1;
+  text-indent: 0;
   cursor: pointer;
 }
 
-.meo-native-root .cm-editor .meo-md-html-col-btn:hover {
+.meo-native-root .cm-editor .meo-md-html-col-btn:hover,
+.meo-native-root .cm-editor .meo-md-html-row-btn:hover {
   background: var(--vscode-toolbar-hoverBackground);
 }
 
@@ -2307,10 +2318,6 @@
 .meo-native-root .cm-editor .meo-md-html-row-controls:hover,
 .meo-native-root .cm-editor .meo-md-html-row-controls:focus-within {
   opacity: 1;
-}
-
-.meo-native-root .cm-editor .meo-md-html-row-btn:hover {
-  background: var(--vscode-toolbar-hoverBackground);
 }
 
 .meo-native-root .cm-editor .meo-md-table-header-line {
