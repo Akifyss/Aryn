@@ -74,19 +74,19 @@ const activeLinkMarkerDeco = Decoration.mark({ class: 'meo-md-marker-active meo-
 const linkLabelBracketDeco = Decoration.mark({
   class: 'meo-md-link-label-bracket',
   attributes: {
-    style: 'color: var(--color-base02) !important; -webkit-text-fill-color: var(--color-base02) !important;'
+      style: 'color: var(--muted) !important; -webkit-text-fill-color: var(--muted) !important;'
   }
 });
 const activeLinkLabelBracketDeco = Decoration.mark({
   class: 'meo-md-link-label-bracket-active',
   attributes: {
-    style: 'color: var(--color-base02) !important; -webkit-text-fill-color: var(--color-base02) !important;'
+      style: 'color: var(--muted) !important; -webkit-text-fill-color: var(--muted) !important;'
   }
 });
 const footnoteMarkerDeco = Decoration.mark({
   class: 'meo-md-footnote-marker',
   attributes: {
-    style: 'color: var(--color-base02) !important; -webkit-text-fill-color: var(--color-base02) !important;'
+      style: 'color: var(--muted) !important; -webkit-text-fill-color: var(--muted) !important;'
   }
 });
 const footnoteLiteralDeco = Decoration.mark({ class: 'meo-md-footnote-literal' });

@@ -17,211 +17,211 @@ export const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'keyword',
     tags: [t.keyword, t.controlKeyword, t.moduleKeyword],
-    fallbackColor: 'var(--color-base04)',
+    fallbackColor: 'var(--color-rose-600)',
     style: { fontWeight: 'bold' }
   },
   {
     id: 'identifier',
     tags: [t.name, t.deleted, t.character],
-    fallbackColor: 'var(--color-base05)',
+    fallbackColor: 'var(--color-sky-600)',
     style: {}
   },
   {
     id: 'macroName',
     tags: t.macroName,
-    fallbackColor: 'var(--color-base06)',
+    fallbackColor: 'var(--color-cyan-600)',
     style: { fontStyle: 'italic' }
   },
   {
     id: 'variableName',
     tags: t.variableName,
-    fallbackColor: 'var(--color-base01)',
+    fallbackColor: 'var(--foreground)',
     style: {}
   },
   {
     id: 'propertyName',
     tags: t.propertyName,
-    fallbackColor: 'var(--color-base09)',
+    fallbackColor: 'var(--color-green-600)',
     style: { fontStyle: 'normal' }
   },
   {
     id: 'typeName',
     tags: t.typeName,
-    fallbackColor: 'var(--color-base06)',
+    fallbackColor: 'var(--color-cyan-600)',
     style: {}
   },
   {
     id: 'className',
     tags: t.className,
-    fallbackColor: 'var(--color-base09)',
+    fallbackColor: 'var(--color-green-600)',
     style: {}
   },
   {
     id: 'namespace',
     tags: t.namespace,
-    fallbackColor: 'var(--color-base05)',
+    fallbackColor: 'var(--color-sky-600)',
     style: {}
   },
   {
     id: 'operator',
     tags: t.operator,
-    fallbackColor: 'var(--color-base01)',
+    fallbackColor: 'var(--foreground)',
     style: {}
   },
   {
     id: 'operatorKeyword',
     tags: t.operatorKeyword,
-    fallbackColor: 'var(--color-base04)',
+    fallbackColor: 'var(--color-rose-600)',
     style: {}
   },
   {
     id: 'punctuation',
     tags: [t.bracket, t.brace, t.punctuation, t.squareBracket, t.angleBracket],
-    fallbackColor: 'var(--color-base01)',
+    fallbackColor: 'var(--foreground)',
     style: {}
   },
   {
     id: 'functionName',
     tags: t.function(t.variableName),
-    fallbackColor: 'var(--color-base06)',
+    fallbackColor: 'var(--color-cyan-600)',
     style: {}
   },
   {
     id: 'labelName',
     tags: t.labelName,
-    fallbackColor: 'var(--color-base02)',
+    fallbackColor: 'var(--muted)',
     style: {}
   },
   {
     id: 'definitionFunction',
     tags: t.definition(t.function(t.variableName)),
-    fallbackColor: 'var(--color-base06)',
+    fallbackColor: 'var(--color-cyan-600)',
     style: {}
   },
   {
     id: 'definedVariable',
     tags: t.definition(t.variableName),
-    fallbackColor: 'var(--color-base05)',
+    fallbackColor: 'var(--color-sky-600)',
     style: {}
   },
   {
     id: 'number',
     tags: t.number,
-    fallbackColor: 'var(--color-base08)',
+    fallbackColor: 'var(--color-purple-600)',
     style: {}
   },
   {
     id: 'changed',
     tags: t.changed,
-    fallbackColor: 'var(--color-base08)',
+    fallbackColor: 'var(--color-purple-600)',
     style: {}
   },
   {
     id: 'annotation',
     tags: t.annotation,
-    fallbackColor: 'var(--color-base04)',
+    fallbackColor: 'var(--color-rose-600)',
     style: { fontStyle: 'italic' }
   },
   {
     id: 'modifier',
     tags: t.modifier,
-    fallbackColor: 'var(--color-base04)',
+    fallbackColor: 'var(--color-rose-600)',
     style: { fontStyle: 'italic' }
   },
   {
     id: 'self',
     tags: t.self,
-    fallbackColor: 'var(--color-base04)',
+    fallbackColor: 'var(--color-rose-600)',
     style: { fontStyle: 'italic' }
   },
   {
     id: 'color',
     tags: t.color,
-    fallbackColor: 'var(--color-base08)',
+    fallbackColor: 'var(--color-purple-600)',
     style: {}
   },
   {
     id: 'constant',
     tags: [t.constant(t.name), t.standard(t.name)],
-    fallbackColor: 'var(--color-base08)',
+    fallbackColor: 'var(--color-purple-600)',
     style: {}
   },
   {
     id: 'atom',
     tags: t.atom,
-    fallbackColor: 'var(--color-base05)',
+    fallbackColor: 'var(--color-sky-600)',
     style: {}
   },
   {
     id: 'bool',
     tags: t.bool,
-    fallbackColor: 'var(--color-base08)',
+    fallbackColor: 'var(--color-purple-600)',
     style: {}
   },
   {
     id: 'specialVariable',
     tags: t.special(t.variableName),
-    fallbackColor: 'var(--color-base08)',
+    fallbackColor: 'var(--color-purple-600)',
     style: {}
   },
   {
     id: 'specialString',
     tags: t.special(t.string),
-    fallbackColor: 'var(--color-base07)',
+    fallbackColor: 'var(--color-amber-600)',
     style: {}
   },
   {
     id: 'regexp',
     tags: t.regexp,
-    fallbackColor: 'var(--color-base07)',
+    fallbackColor: 'var(--color-amber-600)',
     style: {}
   },
   {
     id: 'string',
     tags: t.string,
-    fallbackColor: 'var(--color-base07)',
+    fallbackColor: 'var(--color-amber-600)',
     style: {}
   },
   {
     id: 'typeDefinition',
     tags: t.definition(t.typeName),
-    fallbackColor: 'var(--color-base06)',
+    fallbackColor: 'var(--color-cyan-600)',
     style: { fontWeight: 'bold' }
   },
   {
     id: 'meta',
     tags: t.meta,
-    fallbackColor: 'var(--color-base02)',
+    fallbackColor: 'var(--muted)',
     style: {}
   },
   {
     id: 'comment',
     tags: [t.comment, t.docComment],
-    fallbackColor: 'var(--color-base02)',
+    fallbackColor: 'var(--muted)',
     style: { fontStyle: 'italic' }
   },
   {
     id: 'tagName',
     tags: t.tagName,
-    fallbackColor: 'var(--color-base04)',
+    fallbackColor: 'var(--color-rose-600)',
     style: {}
   },
   {
     id: 'attributeName',
     tags: t.attributeName,
-    fallbackColor: 'var(--color-base09)',
+    fallbackColor: 'var(--color-green-600)',
     style: {}
   },
   {
     id: 'invalid',
     tags: t.invalid,
-    fallbackColor: 'var(--color-base01)',
+    fallbackColor: 'var(--foreground)',
     style: { textDecoration: 'underline wavy', borderBottom: '1px wavy #e06c75' }
   },
   {
     id: 'deleted',
     tags: t.deleted,
-    fallbackColor: 'var(--color-base04)',
+    fallbackColor: 'var(--color-rose-600)',
     style: {}
   },
   {
@@ -239,7 +239,7 @@ export const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'emphasis',
     tags: t.emphasis,
-    fallbackColor: 'var(--color-base01)',
+    fallbackColor: 'var(--foreground)',
     style: { fontStyle: 'italic' }
   },
   {
@@ -251,7 +251,7 @@ export const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'strikethrough',
     tags: t.strikethrough,
-    fallbackColor: 'var(--color-base01)',
+    fallbackColor: 'var(--foreground)',
     style: { textDecoration: 'line-through' }
   },
   {
@@ -263,25 +263,25 @@ export const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'contentSeparator',
     tags: t.contentSeparator,
-    fallbackColor: 'var(--color-base02)',
+    fallbackColor: 'var(--muted)',
     style: {}
   },
   {
     id: 'link',
     tags: t.link,
-    fallbackColor: 'var(--color-base05)',
+    fallbackColor: 'var(--color-sky-600)',
     style: {}
   },
   {
     id: 'url',
     tags: t.url,
-    fallbackColor: 'var(--color-base05)',
+    fallbackColor: 'var(--color-sky-600)',
     style: {}
   },
   {
     id: 'processingInstruction',
     tags: t.processingInstruction,
-    fallbackColor: 'var(--color-base02)',
+    fallbackColor: 'var(--muted)',
     style: {}
   }
 ] as const;

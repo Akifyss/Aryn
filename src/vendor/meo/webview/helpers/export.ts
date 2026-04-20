@@ -17,18 +17,6 @@ export interface ExportStyleEnvironment {
   meoTokenColors: Record<string, string>;
 }
 
-const meoTokenColorKeys = [
-  'base01',
-  'base02',
-  'base03',
-  'base04',
-  'base05',
-  'base06',
-  'base07',
-  'base08',
-  'base09'
-] as const;
-
 export const delay = (ms: number): Promise<void> => new Promise((resolve) => {
   window.setTimeout(resolve, ms);
 });
@@ -61,14 +49,6 @@ export const getExportStyleEnvironmentForHost = (
   const lineHeightSourceRaw = rootStyles.getPropertyValue('--line-height-source').trim();
   const parsedLiveLineHeight = Number.parseFloat(lineHeightLiveRaw);
   const parsedSourceLineHeight = Number.parseFloat(lineHeightSourceRaw);
-  const meoTokenColors: Record<string, string> = {};
-  for (const key of meoTokenColorKeys) {
-    const value = rootStyles.getPropertyValue(`--color-${key}`).trim();
-    if (value) {
-      meoTokenColors[key] = value;
-    }
-  }
-
   return {
     editorBackgroundColor: colorVar('--editor-background', bodyStyles.backgroundColor || ''),
     editorForegroundColor: colorVar('--editor-foreground', bodyStyles.color || ''),
@@ -84,7 +64,7 @@ export const getExportStyleEnvironmentForHost = (
     sourceFontWeight: colorVar('--font-source-weight', ''),
     liveLineHeight: Number.isFinite(parsedLiveLineHeight) ? parsedLiveLineHeight : undefined,
     sourceLineHeight: Number.isFinite(parsedSourceLineHeight) ? parsedSourceLineHeight : undefined,
-    meoTokenColors
+    meoTokenColors: {}
   };
 };
 

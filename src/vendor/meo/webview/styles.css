@@ -72,60 +72,51 @@
 }
 
 .meo-native-theme {
-  --color-base01: var(--foreground);
-  --color-base02: var(--muted);
-  --color-base03: #3e444d;
-  --color-base04: #e06c75;
-  --color-base05: #61afef;
-  --color-base06: #66d9ef;
-  --color-base07: #e5c07b;
-  --color-base08: #c678dd;
-  --color-base09: #98c379;
-  --token-keyword-color: var(--color-base04);
-  --token-identifier-color: var(--color-base05);
-  --token-macroName-color: var(--color-base06);
-  --token-variableName-color: var(--color-base01);
-  --token-propertyName-color: var(--color-base09);
-  --token-typeName-color: var(--color-base06);
-  --token-className-color: var(--color-base09);
-  --token-namespace-color: var(--color-base05);
-  --token-operator-color: var(--color-base01);
-  --token-operatorKeyword-color: var(--color-base04);
-  --token-punctuation-color: var(--color-base01);
-  --token-functionName-color: var(--color-base06);
-  --token-labelName-color: var(--color-base02);
-  --token-definitionFunction-color: var(--color-base06);
-  --token-definedVariable-color: var(--color-base05);
-  --token-number-color: var(--color-base08);
-  --token-changed-color: var(--color-base08);
-  --token-annotation-color: var(--color-base04);
-  --token-modifier-color: var(--color-base04);
-  --token-self-color: var(--color-base04);
-  --token-color-color: var(--color-base08);
-  --token-constant-color: var(--color-base08);
-  --token-atom-color: var(--color-base05);
-  --token-bool-color: var(--color-base08);
-  --token-specialVariable-color: var(--color-base08);
-  --token-specialString-color: var(--color-base07);
-  --token-regexp-color: var(--color-base07);
-  --token-string-color: var(--color-base07);
-  --token-typeDefinition-color: var(--color-base06);
-  --token-meta-color: var(--color-base02);
-  --token-comment-color: var(--color-base02);
-  --token-tagName-color: var(--color-base04);
-  --token-attributeName-color: var(--color-base09);
-  --token-invalid-color: var(--color-base01);
-  --token-deleted-color: var(--color-base04);
+  --token-keyword-color: var(--color-rose-600);
+  --token-identifier-color: var(--color-sky-600);
+  --token-macroName-color: var(--color-cyan-600);
+  --token-variableName-color: var(--foreground);
+  --token-propertyName-color: var(--color-green-600);
+  --token-typeName-color: var(--color-cyan-600);
+  --token-className-color: var(--color-green-600);
+  --token-namespace-color: var(--color-sky-600);
+  --token-operator-color: var(--foreground);
+  --token-operatorKeyword-color: var(--color-rose-600);
+  --token-punctuation-color: var(--foreground);
+  --token-functionName-color: var(--color-cyan-600);
+  --token-labelName-color: var(--muted);
+  --token-definitionFunction-color: var(--color-cyan-600);
+  --token-definedVariable-color: var(--color-sky-600);
+  --token-number-color: var(--color-purple-600);
+  --token-changed-color: var(--color-purple-600);
+  --token-annotation-color: var(--color-rose-600);
+  --token-modifier-color: var(--color-rose-600);
+  --token-self-color: var(--color-rose-600);
+  --token-color-color: var(--color-purple-600);
+  --token-constant-color: var(--color-purple-600);
+  --token-atom-color: var(--color-sky-600);
+  --token-bool-color: var(--color-purple-600);
+  --token-specialVariable-color: var(--color-purple-600);
+  --token-specialString-color: var(--color-amber-600);
+  --token-regexp-color: var(--color-amber-600);
+  --token-string-color: var(--color-amber-600);
+  --token-typeDefinition-color: var(--color-cyan-600);
+  --token-meta-color: var(--muted);
+  --token-comment-color: var(--muted);
+  --token-tagName-color: var(--color-rose-600);
+  --token-attributeName-color: var(--color-green-600);
+  --token-invalid-color: var(--foreground);
+  --token-deleted-color: var(--color-rose-600);
   --token-monospace-color: var(--muted);
   --token-heading-color: var(--foreground);
-  --token-emphasis-color: var(--color-base01);
+  --token-emphasis-color: var(--foreground);
   --token-strong-color: var(--foreground);
-  --token-strikethrough-color: var(--color-base01);
+  --token-strikethrough-color: var(--foreground);
   --token-quote-color: var(--foreground);
-  --token-contentSeparator-color: var(--color-base02);
-  --token-link-color: var(--color-base05);
-  --token-url-color: var(--color-base05);
-  --token-processingInstruction-color: var(--color-base02);
+  --token-contentSeparator-color: var(--muted);
+  --token-link-color: var(--color-sky-600);
+  --token-url-color: var(--color-sky-600);
+  --token-processingInstruction-color: var(--muted);
   --active-line-bg: color-mix(in srgb, var(--editor-selectionBackground) 20%, transparent 80%);
   --selection-bg: var(--editor-selectionBackground);
   --code-block-active-line-bg-live: color-mix(in srgb, var(--textCodeBlock-background) 50%, transparent 50%);
@@ -630,7 +621,7 @@
 }
 
 .meo-native-theme .format-button.toggle-button:not(.is-active):hover {
-  color: var(--color-base01, var(--editor-foreground));
+  color: var(--foreground);
 }
 
 .meo-native-theme .heading-dropdown-option {
@@ -680,7 +671,7 @@
   z-index: 10;
   cursor: pointer;
   padding: 2px 8px;
-  color: var(--color-base02);
+  color: var(--muted);
   background-color: transparent;
 }
 
@@ -694,7 +685,7 @@
   left: calc(2ch);
   z-index: 10;
   padding: 2px 5px;
-  color: var(--color-base02);
+  color: var(--muted);
   background-color: transparent;
   pointer-events: none;
   cursor: default;
@@ -880,7 +871,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-fold-toggle:not(.is-expanded) {
-  color: var(--color-base01, var(--editor-foreground));
+  color: var(--foreground);
 }
 
 .meo-native-root .cm-editor .meo-md-fold-toggle:not(.is-expanded) .meo-md-fold-chevron {
@@ -1009,12 +1000,12 @@
 
 .meo-native-root .cm-editor.meo-mode-source .meo-md-colon-fence-marker,
 .meo-native-root .cm-editor.meo-mode-source .meo-md-colon-fence-marker * {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-source .meo-md-colon-fence-code,
 .meo-native-root .cm-editor.meo-mode-source .meo-md-colon-fence-code * {
-  color: var(--color-base07) !important;
+  color: var(--color-amber-600) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-activeLine.meo-md-code-block {
@@ -1092,13 +1083,13 @@
 
 .meo-native-root .cm-editor .meo-md-strike-marker,
 .meo-native-root .cm-editor .meo-md-strike-marker-active {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
 }
 
 .meo-native-root .cm-editor .meo-md-link {
-  color: var(--token-link-color, var(--color-base05));
+  color: var(--token-link-color, var(--color-sky-600));
   text-decoration: underline;
-  text-decoration-color: var(--color-base05);
+  text-decoration-color: var(--color-sky-600);
   text-underline-offset: 4px;
 }
 
@@ -1110,7 +1101,7 @@
 }
 
 .meo-native-root .cm-editor.meo-mode-source .meo-md-source-file-link {
-  color: var(--token-link-color, var(--color-base05));
+  color: var(--token-link-color, var(--color-sky-600));
 }
 
 .meo-native-root .cm-editor.meo-mode-live .meo-md-link[data-meo-link-href] {
@@ -1123,7 +1114,7 @@
 
 .meo-native-root .cm-editor .meo-md-link-marker,
 .meo-native-root .cm-editor .meo-md-link-marker-active {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
 }
 
 .meo-native-root .cm-editor .meo-md-link-label-bracket,
@@ -1132,8 +1123,8 @@
 .meo-native-root .cm-editor .meo-md-link-label-bracket-active *,
 .meo-native-root .cm-editor .meo-md-footnote-marker,
 .meo-native-root .cm-editor .meo-md-footnote-marker * {
-  color: var(--color-base02) !important;
-  -webkit-text-fill-color: var(--color-base02) !important;
+  color: var(--muted) !important;
+  -webkit-text-fill-color: var(--muted) !important;
 }
 
 .meo-native-root .cm-editor .meo-md-footnote-ref,
@@ -1144,7 +1135,7 @@
   padding: 0;
   border: 0;
   border-radius: 3px;
-  color: var(--color-base05);
+  color: var(--color-sky-600);
   background: transparent;
   font: inherit;
   line-height: inherit;
@@ -1166,14 +1157,14 @@
   vertical-align: super;
   font-size: 0.72em;
   line-height: 1;
-  color: var(--color-base05);
+  color: var(--color-sky-600);
   pointer-events: none;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .meo-md-footnote-literal,
 .meo-native-root .cm-editor.meo-mode-live .meo-md-footnote-literal * {
-  color: var(--token-link-color, var(--color-base05)) !important;
-  -webkit-text-fill-color: var(--token-link-color, var(--color-base05)) !important;
+  color: var(--token-link-color, var(--color-sky-600)) !important;
+  -webkit-text-fill-color: var(--token-link-color, var(--color-sky-600)) !important;
   text-decoration: none !important;
   vertical-align: baseline !important;
   font-size: inherit !important;
@@ -1187,7 +1178,7 @@
 
 .meo-native-root .cm-editor .meo-md-footnote-backref {
   margin-right: 0.45em;
-  color: var(--color-base05);
+  color: var(--color-sky-600);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1214,7 +1205,7 @@
 
 .meo-native-root .cm-editor .meo-md-wiki-marker,
 .meo-native-root .cm-editor .meo-md-wiki-marker * {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .meo-md-wiki-empty-marker {
@@ -1232,7 +1223,7 @@
   padding: 0;
   border: 0;
   line-height: 0;
-  color: var(--color-base02);
+  color: var(--muted);
   background: transparent;
   cursor: pointer;
   vertical-align: top;
@@ -1257,7 +1248,7 @@
   height: 12px;
   margin-right: 4px;
   line-height: 1;
-  color: var(--color-base04);
+  color: var(--color-rose-600);
   vertical-align: middle;
 }
 
@@ -1275,7 +1266,7 @@
   height: 12px;
   margin-right: 4px;
   line-height: 1;
-  color: var(--color-base04);
+  color: var(--color-rose-600);
   vertical-align: middle;
 }
 
@@ -1450,7 +1441,7 @@
 
 .meo-native-root .cm-editor.meo-mode-live .meo-md-code-marker-active,
 .meo-native-root .cm-editor.meo-mode-live .meo-md-code-marker-active * {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
 }
 
 .meo-native-root .cm-editor .meo-md-code-block,
@@ -1507,7 +1498,7 @@
 
 .meo-native-root .cm-editor .meo-md-list-marker {
   display: inline;
-  color: var(--color-base02);
+  color: var(--muted);
 }
 
 .meo-native-root .cm-editor .meo-md-list-indent-spacer {
@@ -1516,13 +1507,13 @@
 }
 
 .meo-native-root .cm-editor .meo-md-list-prefix {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-source .meo-md-task-bracket,
 .meo-native-root .cm-editor.meo-mode-source .meo-md-task-bracket * {
-  color: var(--token-link-color, var(--color-base05)) !important;
-  -webkit-text-fill-color: var(--token-link-color, var(--color-base05)) !important;
+  color: var(--token-link-color, var(--color-sky-600)) !important;
+  -webkit-text-fill-color: var(--token-link-color, var(--color-sky-600)) !important;
 }
 
 .meo-native-root .cm-editor .meo-md-list-marker-ordered,
@@ -1588,13 +1579,13 @@
 
 .meo-native-root .cm-editor .meo-task-complete,
 .meo-native-root .cm-editor .meo-task-complete * {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
   text-decoration-color: currentColor !important;
 }
 
 .meo-native-root .cm-editor .meo-task-dropped,
 .meo-native-root .cm-editor .meo-task-dropped * {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
   text-decoration: line-through !important;
   text-decoration-color: currentColor !important;
 }
@@ -2136,7 +2127,7 @@
 .meo-native-root .cm-editor .cm-line.meo-merge-base-header,
 .meo-native-root .cm-editor .cm-line.meo-merge-separator,
 .meo-native-root .cm-editor .cm-line.meo-merge-incoming-header {
-  color: var(--color-base02);
+  color: var(--muted);
 }
 
 .meo-native-root .cm-editor .cm-line.meo-merge-current-header *,
@@ -2183,7 +2174,7 @@
 .meo-native-root .cm-editor .meo-merge-action-labels {
   font-size: 11px;
   line-height: 1.35;
-  color: var(--color-base02);
+  color: var(--muted);
   white-space: nowrap;
   user-select: none;
   -webkit-user-select: none;
@@ -2254,7 +2245,7 @@
 
 .meo-native-root .cm-editor .meo-md-html-table th.meo-md-html-table-cell-selected,
 .meo-native-root .cm-editor .meo-md-html-table td.meo-md-html-table-cell-selected {
-  background: color-mix(in srgb, var(--color-base05) 14%, transparent);
+  background: color-mix(in srgb, var(--color-sky-600) 14%, transparent);
   --table-sel-top: transparent;
   --table-sel-right: transparent;
   --table-sel-bottom: transparent;
@@ -2268,22 +2259,22 @@
 
 .meo-native-root .cm-editor .meo-md-html-table th.meo-md-html-table-cell-selected-top,
 .meo-native-root .cm-editor .meo-md-html-table td.meo-md-html-table-cell-selected-top {
-  --table-sel-top: var(--color-base05);
+  --table-sel-top: var(--color-sky-600);
 }
 
 .meo-native-root .cm-editor .meo-md-html-table th.meo-md-html-table-cell-selected-right,
 .meo-native-root .cm-editor .meo-md-html-table td.meo-md-html-table-cell-selected-right {
-  --table-sel-right: var(--color-base05);
+  --table-sel-right: var(--color-sky-600);
 }
 
 .meo-native-root .cm-editor .meo-md-html-table th.meo-md-html-table-cell-selected-bottom,
 .meo-native-root .cm-editor .meo-md-html-table td.meo-md-html-table-cell-selected-bottom {
-  --table-sel-bottom: var(--color-base05);
+  --table-sel-bottom: var(--color-sky-600);
 }
 
 .meo-native-root .cm-editor .meo-md-html-table th.meo-md-html-table-cell-selected-left,
 .meo-native-root .cm-editor .meo-md-html-table td.meo-md-html-table-cell-selected-left {
-  --table-sel-left: var(--color-base05);
+  --table-sel-left: var(--color-sky-600);
 }
 
 .meo-native-root .cm-editor .meo-md-html-table th {
@@ -2314,7 +2305,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-html-table-cell-preview .meo-md-link {
-  color: var(--color-base05);
+  color: var(--color-sky-600);
 }
 
 .meo-native-root .cm-editor .meo-md-html-table-cell-preview .meo-md-math-display {
@@ -2537,7 +2528,7 @@
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-content,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-frontmatter-content {
-  color: var(--color-base07) !important;
+  color: var(--color-amber-600) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-content *,
@@ -2549,7 +2540,7 @@
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-frontmatter-content .meo-md-list-marker,
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-content .meo-md-list-prefix,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-frontmatter-content .meo-md-list-prefix {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-boundary .meo-code-language-label {
@@ -2559,7 +2550,7 @@
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-content .meo-md-frontmatter-key,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-frontmatter-content .meo-md-frontmatter-key {
-  color: var(--color-base07) !important;
+  color: var(--color-amber-600) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-content .meo-md-frontmatter-value,
@@ -2628,7 +2619,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-alert-marker {
-  color: var(--color-base02);
+  color: var(--muted);
 }
 
 .meo-native-root .cm-editor.meo-mode-live .meo-md-alert-marker-hidden {
@@ -2641,33 +2632,33 @@
 }
 
 .meo-native-root .cm-editor .meo-md-alert-note {
-  --alert-color: var(--color-base05);
-  border-left-color: var(--color-base05);
-  background-color: color-mix(in srgb, var(--color-base05) 8%, transparent);
+  --alert-color: var(--color-sky-600);
+  border-left-color: var(--color-sky-600);
+  background-color: color-mix(in srgb, var(--color-sky-600) 8%, transparent);
 }
 
 .meo-native-root .cm-editor .meo-md-alert-tip {
-  --alert-color: var(--color-base09);
-  border-left-color: var(--color-base09);
-  background-color: color-mix(in srgb, var(--color-base09) 8%, transparent);
+  --alert-color: var(--color-green-600);
+  border-left-color: var(--color-green-600);
+  background-color: color-mix(in srgb, var(--color-green-600) 8%, transparent);
 }
 
 .meo-native-root .cm-editor .meo-md-alert-important {
-  --alert-color: var(--color-base08);
-  border-left-color: var(--color-base08);
-  background-color: color-mix(in srgb, var(--color-base08) 8%, transparent);
+  --alert-color: var(--color-purple-600);
+  border-left-color: var(--color-purple-600);
+  background-color: color-mix(in srgb, var(--color-purple-600) 8%, transparent);
 }
 
 .meo-native-root .cm-editor .meo-md-alert-warning {
-  --alert-color: var(--color-base07);
-  border-left-color: var(--color-base07);
-  background-color: color-mix(in srgb, var(--color-base07) 8%, transparent);
+  --alert-color: var(--color-amber-600);
+  border-left-color: var(--color-amber-600);
+  background-color: color-mix(in srgb, var(--color-amber-600) 8%, transparent);
 }
 
 .meo-native-root .cm-editor .meo-md-alert-caution {
-  --alert-color: var(--color-base04);
-  border-left-color: var(--color-base04);
-  background-color: color-mix(in srgb, var(--color-base04) 8%, transparent);
+  --alert-color: var(--color-rose-600);
+  border-left-color: var(--color-rose-600);
+  background-color: color-mix(in srgb, var(--color-rose-600) 8%, transparent);
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert:not(.meo-md-code-block):not(.meo-mermaid-block),
@@ -2694,21 +2685,21 @@
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-strike-marker,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-list-prefix,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-alert-marker {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert .meo-md-wiki-marker,
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert .meo-md-wiki-marker *,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-wiki-marker,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-wiki-marker * {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert .meo-md-code-marker-active,
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert .meo-md-code-marker-active *,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-code-marker,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-code-marker * {
-  color: var(--color-base02) !important;
+  color: var(--muted) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert .meo-md-hr-marker,
@@ -2719,7 +2710,7 @@
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert .meo-md-alert-label-active {
-  color: var(--color-base05) !important;
+  color: var(--color-sky-600) !important;
 }
 
 .meo-native-root .cm-editor .meo-task-checkbox {
