@@ -1286,7 +1286,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-quote {
-  border-left: 3px solid var(--border);
+  border-left: 3px solid var(--muted);
   min-height: calc(var(--active-editor-line-height) * 1em);
   padding-left: 3ch;
   text-indent: -1ch;
