@@ -151,7 +151,7 @@ export function createEditor({
   onRequestGitBlame,
   onOpenGitRevisionForLine,
   onOpenGitWorktreeForLine,
-  initialMode = 'source',
+  initialMode = 'live',
   initialTopLine = null,
   initialTopLineOffset = 0,
   initialLineNumbers = true,
@@ -2396,5 +2396,4 @@ function isRegularInlineSelection(state, from, to) {
   }
   return true;
 }
-
 

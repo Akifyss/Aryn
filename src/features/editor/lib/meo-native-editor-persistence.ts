@@ -70,7 +70,7 @@ export function createMeoViewPositionPersistenceController(options: {
       getFindOptions: () => storedState.findOptions ?? DEFAULT_FIND_OPTIONS,
       getInitialGitChangesGutterVisible: () => resolveGitChangesGutterEnabled(storedState),
       getInitialLineNumbersVisible: () => storedState.lineNumbers ?? true,
-      getInitialMode: () => storedState.mode ?? 'source',
+      getInitialMode: () => storedState.mode ?? 'live',
       getInitialOutlineVisible: () => storedState.outlineVisible ?? false,
       getInitialRestoreTopLine: (content, rememberPositionLines) => (
         shouldRememberViewPosition(content, rememberPositionLines)

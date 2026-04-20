@@ -41,8 +41,8 @@
   --font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --editor-font-size: 16px;
   --editor-font-weight: 400;
-  --git-added: var(--success);
-  --git-changed: var(--color-yellow-500);
+  --git-added: var(--color-green-600);
+  --git-changed: var(--color-sky-600);
 }
 
 .meo-editor-shell {
@@ -156,8 +156,8 @@
   --line-height-source: 1.5;
   --active-editor-line-height: 1.5;
   --task-checkbox-size: 17px;
-  --git-added: #4a9e82;
-  --git-changed: var(--color-yellow-500);
+  --git-added: var(--color-green-600);
+  --git-changed: var(--color-sky-600);
 }
 
 .meo-native-root {
