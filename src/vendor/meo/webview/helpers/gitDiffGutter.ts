@@ -1,17 +1,11 @@
 // @ts-nocheck
 import { RangeSetBuilder, StateEffect, StateField, EditorState, Transaction } from '@codemirror/state';
 import { GutterMarker, gutter, EditorView } from '@codemirror/view';
-import {
-  buildCurrentToBaselineLineMapFromLines,
-  lcsDiffRuns,
-  normalizeDiffLine,
-  splitDiffLines
-} from '../../shared/gitDiffCore';
+import { splitDiffLines } from '../../shared/gitDiffCore';
+import { buildLineFlagsFromCodeMirrorChunks } from '../../shared/gitDiffLineFlags';
 import { getLiveGitCollapsedBlockAtLine, getLiveGitCollapsedBlocks } from './liveRenderedBlocks';
 
 const MAX_DIFF_TEXT_CHARS = 1024 * 1024;
-const MAX_DIFF_LINES = 1200;
-const MAX_DIFF_CELLS = 1_500_000;
 const NON_RENDERABLE_GIT_BASELINE_REASONS = new Set(['not-repo', 'ignored']);
 
 export const setGitBaselineEffect = StateEffect.define<any>();
@@ -138,15 +132,6 @@ function gitMarker(flags: MarkerFlags): GitGutterMarker {
   return marker;
 }
 
-function getDocLines(doc: any): string[] {
-  const lines = new Array(doc.lines);
-  for (let i = 1; i <= doc.lines; i += 1) {
-    const line = doc.line(i);
-    lines[i - 1] = normalizeDiffLine(doc.sliceString(line.from, line.to));
-  }
-  return lines;
-}
-
 function isTrailingEofVisualLine(doc: any, lineNo: number): boolean {
   if (!doc || doc.length <= 0 || doc.lines <= 1 || lineNo !== doc.lines) {
     return false;
@@ -218,7 +203,7 @@ function getTrailingEofProxyFlags(
       return null;
     }
   }
-  if (!previousFlags?.trailingEofProxySource && lineFlags[doc.lines - 1]) {
+  if (!previousFlags?.trailingEofProxySource) {
     return null;
   }
 
@@ -227,112 +212,6 @@ function getTrailingEofProxyFlags(
     modified: previousFlags?.trailingEofProxyOnly ? true : !!previousFlags?.modified,
     eofProxy: true
   };
-}
-
-function buildLineFlagsFromRuns(runs: any[] | null, currentLineCount: number): (MarkerFlags | undefined)[] {
-  const lineFlags: (MarkerFlags | undefined)[] = new Array(currentLineCount);
-  if (!runs) {
-    return lineFlags;
-  }
-
-  let currentLineNo = 1;
-
-  for (let i = 0; i < runs.length; i += 1) {
-    const run = runs[i];
-    if (run.type === 'equal') {
-      currentLineNo += run.count;
-      continue;
-    }
-
-    if (run.type === 'insert') {
-      const next = runs[i + 1];
-      if (next?.type === 'delete') {
-        const pairCount = Math.min(run.count, next.count);
-        for (let offset = 0; offset < pairCount; offset += 1) {
-          const index = currentLineNo - 1 + offset;
-          if (index < 0 || index >= currentLineCount) {
-            continue;
-          }
-          const flags = lineFlags[index] ?? (lineFlags[index] = emptyMarkerFlags());
-          flags.modified = true;
-        }
-        for (let offset = pairCount; offset < run.count; offset += 1) {
-          const index = currentLineNo - 1 + offset;
-          if (index < 0 || index >= currentLineCount) {
-            continue;
-          }
-          const flags = lineFlags[index] ?? (lineFlags[index] = emptyMarkerFlags());
-          flags.added = true;
-        }
-        currentLineNo += run.count;
-        i += 1;
-        continue;
-      }
-
-      for (let offset = 0; offset < run.count; offset += 1) {
-        const index = currentLineNo - 1 + offset;
-        if (index < 0 || index >= currentLineCount) {
-          continue;
-        }
-        const flags = lineFlags[index] ?? (lineFlags[index] = emptyMarkerFlags());
-        flags.added = true;
-      }
-      currentLineNo += run.count;
-      continue;
-    }
-
-    if (run.type === 'delete') {
-      const next = runs[i + 1];
-      if (next?.type === 'insert') {
-        const pairCount = Math.min(run.count, next.count);
-        for (let offset = 0; offset < pairCount; offset += 1) {
-          const index = currentLineNo - 1 + offset;
-          if (index < 0 || index >= currentLineCount) {
-            continue;
-          }
-          const flags = lineFlags[index] ?? (lineFlags[index] = emptyMarkerFlags());
-          flags.modified = true;
-        }
-        for (let offset = pairCount; offset < next.count; offset += 1) {
-          const index = currentLineNo - 1 + offset;
-          if (index < 0 || index >= currentLineCount) {
-            continue;
-          }
-          const flags = lineFlags[index] ?? (lineFlags[index] = emptyMarkerFlags());
-          flags.added = true;
-        }
-        currentLineNo += next.count;
-        i += 1;
-        continue;
-      }
-    }
-  }
-
-  return lineFlags;
-}
-
-function buildLineFlagsFromMapping(baseLines: string[], currentLines: string[], mapping: Record<number, number> | null): (MarkerFlags | undefined)[] {
-  const lineFlags: (MarkerFlags | undefined)[] = new Array(currentLines.length);
-  if (!mapping) {
-    return lineFlags;
-  }
-
-  for (let lineNo = 1; lineNo <= currentLines.length; lineNo += 1) {
-    const mappedBaseLineNo = mapping[lineNo] ?? 0;
-    if (mappedBaseLineNo <= 0) {
-      lineFlags[lineNo - 1] = { ...emptyMarkerFlags(), added: true };
-      continue;
-    }
-
-    const baseText = baseLines[mappedBaseLineNo - 1];
-    const currentText = currentLines[lineNo - 1];
-    if (baseText === currentText) {
-      continue;
-    }
-    lineFlags[lineNo - 1] = { ...emptyMarkerFlags(), modified: true };
-  }
-
-  return lineFlags;
 }
 
 function buildDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | null): (MarkerFlags | undefined)[] | null {
@@ -360,23 +239,7 @@ function buildDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | nul
   }
 
   const baseLines = Array.isArray(baseline.baseLines) ? baseline.baseLines : splitDiffLines(baseline.baseText);
-  const currentLines = getDocLines(state.doc);
-  const mapping = buildCurrentToBaselineLineMapFromLines(baseLines, currentLines, {
-    maxLines: MAX_DIFF_LINES,
-    maxCells: MAX_DIFF_CELLS
-  });
-  if (mapping) {
-    return buildLineFlagsFromMapping(baseLines, currentLines, mapping);
-  }
-  const runs = lcsDiffRuns(baseLines, currentLines, {
-    maxLines: MAX_DIFF_LINES,
-    maxCells: MAX_DIFF_CELLS
-  });
-  if (!runs) {
-    return null;
-  }
-
-  return buildLineFlagsFromRuns(runs, currentLines.length);
+  return buildLineFlagsFromCodeMirrorChunks(baseLines, state.doc);
 }
 
 function buildCoalescedDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | null): (MarkerFlags | undefined)[] | null {
@@ -620,5 +483,3 @@ export function setGitBaseline(view: EditorView, snapshot: any): void {
     effects: setGitBaselineEffect.of(snapshot)
   });
 }
-
-

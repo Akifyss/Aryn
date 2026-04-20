@@ -714,16 +714,16 @@ export function createGitBlameHoverController({
         (rawLineNumber === null ? null : getLiveRenderedBlockAtLine(view.state, rawLineNumber))
       );
       if (fallbackBlock) {
-        const fallbackChangeKind = getLineRangeChangeKind(
-          lineFlags,
-          fallbackBlock.startLine,
-          fallbackBlock.endLine
+        nextRenderedBlockRange = { startLine: fallbackBlock.startLine, endLine: fallbackBlock.endLine };
+        nextGutterRowHoverKind = (
+          getLineRangeChangeKind(lineFlags, fallbackBlock.startLine, fallbackBlock.endLine) ??
+          'empty'
         );
-        if (fallbackChangeKind) {
-          nextRenderedBlockRange = { startLine: fallbackBlock.startLine, endLine: fallbackBlock.endLine };
-          nextGutterRowHoverKind = fallbackChangeKind;
-        }
       }
+    }
+
+    if (!nextMarkers.length && !nextGutterRowHoverKind) {
+      nextGutterRowHoverKind = 'empty';
     }
 
     if (
@@ -1072,18 +1072,6 @@ export function createGitBlameHoverController({
     updateMarkerHoverForY(layout, event.clientX, event.clientY, renderedBlockRange);
     const hoveredGutterRowElement = activeGutterRowElement;
     const hoveredMarkerElement = activeMarkerElements[0] ?? null;
-    const hoverChangeKind = (
-      getMarkerChangeKind(hoveredMarkerElement) ??
-      (activeGutterRowHoverKind === 'added' || activeGutterRowHoverKind === 'modified'
-        ? activeGutterRowHoverKind
-        : null)
-    );
-
-    if (!hoverChangeKind) {
-      clearMarkerHover();
-      hideTooltipOnly();
-      return;
-    }
 
     const hit = lineNumberAtClientY(layout, event.clientY, hoveredGutterRowElement, hoveredMarkerElement);
     if (hit.lineNumber === null && activeRenderedBlockRange) {
@@ -1100,7 +1088,10 @@ export function createGitBlameHoverController({
     );
     const effectiveChangeKind = (
       hit.effectiveChangeKind ??
-      hoverChangeKind
+      getMarkerChangeKind(hoveredMarkerElement) ??
+      (activeGutterRowHoverKind === 'added' || activeGutterRowHoverKind === 'modified'
+        ? activeGutterRowHoverKind
+        : null)
     );
     const proxiedFromTrailingEof = hit.proxiedFromTrailingEof === true;
     const renderedBlock = (
@@ -1258,5 +1249,3 @@ export function createGitBlameHoverController({
     }
   };
 }
-
-

@@ -25,18 +25,13 @@ import { AddLine, Back2Line } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
 import { getCodeMirrorLanguageSupport } from '@/features/editor/lib/codemirror-language'
+import {
+  createSelectionFromCodeMirrorChunk,
+  type CodeMirrorDiffChunk,
+} from '@/features/editor/lib/git-diff-navigation'
 import type { WorkspaceDiffNavigationRequest } from '@/features/workspace/store/use-workspace-store'
 
 type DiffViewMode = 'split' | 'unified'
-type CodeMirrorChunk = {
-  fromA: number
-  toA: number
-  fromB: number
-  toB: number
-  endA: number
-  endB: number
-}
-
 type DiffNavigationTarget = {
   lineNumber: number
   side: 'modified' | 'original'
@@ -134,30 +129,6 @@ const DIFF_EDITOR_THEME = EditorView.theme({
   },
 })
 
-function getTextLineCount(doc: Text, from: number, to: number) {
-  if (from === to) {
-    return 0
-  }
-
-  const startLine = doc.lineAt(Math.min(from, doc.length)).number
-  const endLine = doc.lineAt(Math.max(0, Math.min(doc.length, to) - 1)).number
-  return Math.max(0, endLine - startLine + 1)
-}
-
-function createSelectionFromCodeMirrorChunk(originalDoc: Text, modifiedDoc: Text, chunk: CodeMirrorChunk): GitDiffSelection {
-  const originalStartLine = originalDoc.lineAt(Math.min(chunk.fromA, originalDoc.length)).number
-  const modifiedStartLine = modifiedDoc.lineAt(Math.min(chunk.fromB, modifiedDoc.length)).number
-  const originalLineCount = chunk.fromA === chunk.toA ? 0 : getTextLineCount(originalDoc, chunk.fromA, chunk.endA)
-  const modifiedLineCount = chunk.fromB === chunk.toB ? 0 : getTextLineCount(modifiedDoc, chunk.fromB, chunk.endB)
-
-  return {
-    modifiedLineCount,
-    modifiedStartLine: modifiedLineCount === 0 ? Math.max(0, modifiedStartLine - 1) : modifiedStartLine,
-    originalLineCount,
-    originalStartLine: originalLineCount === 0 ? Math.max(0, originalStartLine - 1) : originalStartLine,
-  }
-}
-
 function normalizeEditorLineNumber(lineNumber: number, doc: Text) {
   return Math.max(1, Math.min(doc.lines, Math.floor(lineNumber)))
 }
@@ -224,7 +195,7 @@ function clampRequestedLineToSelectionRange(
 function resolveChunkNavigationMatch(
   originalDoc: Text,
   modifiedDoc: Text,
-  chunk: CodeMirrorChunk,
+  chunk: CodeMirrorDiffChunk,
   requestedLineNumber: number,
   preferredSide: 'modified' | 'original',
 ): DiffNavigationMatch {
@@ -269,7 +240,7 @@ function resolveChunkNavigationMatch(
 function findBestNavigationTarget(
   originalDoc: Text,
   modifiedDoc: Text,
-  chunks: readonly CodeMirrorChunk[],
+  chunks: readonly CodeMirrorDiffChunk[],
   requestedLineNumber: number,
   preferredSide: 'modified' | 'original',
 ) {
@@ -699,7 +670,7 @@ function CodeMirrorDiffRenderer({
         : -1
       const chunkState = getChunks(splitViewRef.current.b.state)
       const chunk = chunkIndex > -1
-        ? chunkState?.chunks[chunkIndex] as CodeMirrorChunk | undefined
+        ? chunkState?.chunks[chunkIndex] as CodeMirrorDiffChunk | undefined
         : undefined
 
       if (!chunk) {
@@ -756,7 +727,7 @@ function CodeMirrorDiffRenderer({
         const chunkState = getChunks(unifiedViewRef.current.state)
         const chunk = chunkState?.chunks.find((candidate) => (
           candidate.fromB <= position && candidate.endB >= position
-        )) as CodeMirrorChunk | undefined
+        )) as CodeMirrorDiffChunk | undefined
 
         if (!chunk) {
           return
@@ -909,7 +880,7 @@ function CodeMirrorDiffRenderer({
         const target = findBestNavigationTarget(
           splitView.a.state.doc,
           splitView.b.state.doc,
-          (chunkState?.chunks ?? []) as readonly CodeMirrorChunk[],
+          (chunkState?.chunks ?? []) as readonly CodeMirrorDiffChunk[],
           navigationRequest.lineNumber,
           preferredSide,
         )
@@ -952,7 +923,7 @@ function CodeMirrorDiffRenderer({
       const target = findBestNavigationTarget(
         originalDoc,
         unifiedView.state.doc,
-        (chunkState?.chunks ?? []) as readonly CodeMirrorChunk[],
+        (chunkState?.chunks ?? []) as readonly CodeMirrorDiffChunk[],
         navigationRequest.lineNumber,
         preferredSide,
       )
