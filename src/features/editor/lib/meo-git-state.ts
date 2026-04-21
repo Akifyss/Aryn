@@ -34,6 +34,7 @@ export function getUnavailableGitBaseline(reason: GitBaselinePayload['reason']):
     baseText: null,
     gitPath: null,
     headOid: null,
+    indexText: null,
     reason,
     repoRoot: null,
     tracked: false,

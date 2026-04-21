@@ -78,6 +78,7 @@ export type GitBaselinePayload = {
   gitPath: string | null
   headOid: string | null
   baseText: string | null
+  indexText?: string | null
   reason?: 'not-repo' | 'untracked' | 'git-unavailable' | 'error'
 }
 

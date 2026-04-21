@@ -720,6 +720,7 @@ function toGitBaselineErrorPayload(reason: GitBaselinePayload['reason']): GitBas
     baseText: null,
     gitPath: null,
     headOid: null,
+    indexText: null,
     reason,
     repoRoot: null,
     tracked: false,
@@ -994,6 +995,7 @@ export async function getGitBaseline(
         baseText: null,
         gitPath: relativePath,
         headOid: await getHeadOid(repositoryRootPath),
+        indexText: null,
         reason: 'untracked',
         repoRoot: repositoryRootPath,
         tracked: false,
@@ -1004,12 +1006,14 @@ export async function getGitBaseline(
     const baseText = headOid
       ? await readGitRevisionFile(repositoryRootPath, 'HEAD', relativePath)
       : null
+    const indexText = await readGitIndexFile(repositoryRootPath, relativePath)
 
     return {
       available: true,
       baseText: baseText ?? '',
       gitPath: relativePath,
       headOid,
+      indexText: indexText ?? '',
       repoRoot: repositoryRootPath,
       tracked: true,
     }

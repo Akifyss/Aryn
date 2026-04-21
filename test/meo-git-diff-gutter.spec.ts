@@ -1,12 +1,23 @@
 import { Text } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import { splitDiffLines } from '../src/vendor/meo/shared/gitDiffCore'
-import { buildLineFlagsFromCodeMirrorChunks } from '../src/vendor/meo/shared/gitDiffLineFlags'
+import {
+  buildLineFlagsFromCodeMirrorChunks,
+  buildScopedLineFlagsFromCodeMirrorChunks,
+} from '../src/vendor/meo/shared/gitDiffLineFlags'
 
 function flagSummary(flags: ReturnType<typeof buildLineFlagsFromCodeMirrorChunks>) {
   return Array.from(flags, (flag) => {
     if (flag?.modified) return 'modified'
     if (flag?.added) return 'added'
+    return null
+  })
+}
+
+function scopedFlagSummary(flags: ReturnType<typeof buildScopedLineFlagsFromCodeMirrorChunks>) {
+  return Array.from(flags, (flag) => {
+    if (flag?.modified) return `${flag.scope}:modified`
+    if (flag?.added) return `${flag.scope}:added`
     return null
   })
 }
@@ -91,5 +102,36 @@ describe('meo git diff gutter', () => {
     )
 
     expect(flagSummary(flags)).toEqual(['added'])
+  })
+
+  it('separates staged and unstaged gutter lines with unstaged taking precedence', () => {
+    const flags = buildScopedLineFlagsFromCodeMirrorChunks(
+      splitDiffLines('A\nB\nC\n'),
+      splitDiffLines('A staged\nB\nC\n'),
+      Text.of('A staged\nB unstaged\nC\n'.split('\n')),
+    )
+
+    expect(scopedFlagSummary(flags)).toEqual([
+      'staged:modified',
+      'unstaged:modified',
+      null,
+      null,
+    ])
+  })
+
+  it('maps staged lines onto working tree line numbers after unstaged insertions', () => {
+    const flags = buildScopedLineFlagsFromCodeMirrorChunks(
+      splitDiffLines('A\nB\nC\n'),
+      splitDiffLines('A staged\nB\nC\n'),
+      Text.of('X unstaged\nA staged\nB\nC\n'.split('\n')),
+    )
+
+    expect(scopedFlagSummary(flags)).toEqual([
+      'unstaged:added',
+      'staged:modified',
+      null,
+      null,
+      null,
+    ])
   })
 })

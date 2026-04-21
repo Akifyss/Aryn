@@ -2,7 +2,7 @@
 import { RangeSetBuilder, StateEffect, StateField, EditorState, Transaction } from '@codemirror/state';
 import { GutterMarker, gutter, EditorView } from '@codemirror/view';
 import { splitDiffLines } from '../../shared/gitDiffCore';
-import { buildLineFlagsFromCodeMirrorChunks } from '../../shared/gitDiffLineFlags';
+import { buildLineFlagsFromCodeMirrorChunks, buildScopedLineFlagsFromCodeMirrorChunks } from '../../shared/gitDiffLineFlags';
 import { getLiveGitCollapsedBlockAtLine, getLiveGitCollapsedBlocks } from './liveRenderedBlocks';
 
 const MAX_DIFF_TEXT_CHARS = 1024 * 1024;
@@ -15,6 +15,8 @@ interface BaselineSnapshot {
   tracked: boolean;
   baseText: string | null;
   baseLines: string[] | null;
+  indexText: string | null;
+  indexLines: string[] | null;
   headOid?: string | null;
   reason?: 'not-file' | 'git-unavailable' | 'not-repo' | 'ignored' | 'too-large' | 'binary' | 'error';
 }
@@ -27,13 +29,16 @@ export interface MarkerFlags {
   trailingEofProxySource?: boolean;
   liveBlockStartLine?: number;
   liveBlockEndLine?: number;
+  scope?: 'staged' | 'unstaged';
 }
 
 const emptyBaseline: BaselineSnapshot = Object.freeze({
   available: false,
   tracked: false,
   baseText: null,
-  baseLines: null
+  baseLines: null,
+  indexText: null,
+  indexLines: null
 });
 
 function normalizeBaselineSnapshot(snapshot: any): BaselineSnapshot {
@@ -41,12 +46,15 @@ function normalizeBaselineSnapshot(snapshot: any): BaselineSnapshot {
     return emptyBaseline;
   }
   const baseText = typeof snapshot.baseText === 'string' ? snapshot.baseText : null;
+  const indexText = typeof snapshot.indexText === 'string' ? snapshot.indexText : null;
   return {
     available: snapshot.available === true,
     tracked: snapshot.tracked === true,
     headOid: typeof snapshot.headOid === 'string' ? snapshot.headOid : snapshot.headOid === null ? null : undefined,
     baseText,
     baseLines: typeof baseText === 'string' ? splitDiffLines(baseText) : null,
+    indexText,
+    indexLines: typeof indexText === 'string' ? splitDiffLines(indexText) : null,
     reason: typeof snapshot.reason === 'string' ? snapshot.reason : undefined
   };
 }
@@ -90,6 +98,10 @@ class GitGutterMarker extends GutterMarker {
     }
     if (this.flags.eofProxy) {
       el.classList.add('is-eof-proxy');
+    }
+    if (this.flags.scope === 'staged' || this.flags.scope === 'unstaged') {
+      el.dataset.meoGitScope = this.flags.scope;
+      el.classList.add(`is-${this.flags.scope}`);
     }
 
     if (this.flags.added) {
@@ -227,7 +239,7 @@ function buildDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | nul
         return lineFlags;
       }
       for (let i = 0; i < state.doc.lines; i += 1) {
-        lineFlags[i] = { ...emptyMarkerFlags(), added: true };
+        lineFlags[i] = { ...emptyMarkerFlags(), added: true, scope: 'unstaged' };
       }
       return lineFlags;
     }
@@ -239,7 +251,14 @@ function buildDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | nul
   }
 
   const baseLines = Array.isArray(baseline.baseLines) ? baseline.baseLines : splitDiffLines(baseline.baseText);
-  return buildLineFlagsFromCodeMirrorChunks(baseLines, state.doc);
+  const indexLines = Array.isArray(baseline.indexLines) ? baseline.indexLines : null;
+  if (!indexLines || typeof baseline.indexText !== 'string') {
+    return buildLineFlagsFromCodeMirrorChunks(baseLines, state.doc).map((flags) => (
+      flags ? { ...flags, scope: 'unstaged' } : undefined
+    ));
+  }
+
+  return buildScopedLineFlagsFromCodeMirrorChunks(baseLines, indexLines, state.doc);
 }
 
 function buildCoalescedDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | null): (MarkerFlags | undefined)[] | null {
@@ -319,17 +338,19 @@ function buildLiveGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: (
   return builder.finish();
 }
 
-function liveCollapsedBlockMarkerFlags(block: { startLine: number; endLine: number; aggregateChangeKind: 'added' | 'modified' }): MarkerFlags {
+function liveCollapsedBlockMarkerFlags(block: { startLine: number; endLine: number; aggregateChangeKind: 'added' | 'modified'; aggregateChangeScope?: 'staged' | 'unstaged' }): MarkerFlags {
   return block.aggregateChangeKind === 'modified'
     ? {
         ...emptyMarkerFlags(),
         modified: true,
+        scope: block.aggregateChangeScope,
         liveBlockStartLine: block.startLine,
         liveBlockEndLine: block.endLine
       }
     : {
         ...emptyMarkerFlags(),
         added: true,
+        scope: block.aggregateChangeScope,
         liveBlockStartLine: block.startLine,
         liveBlockEndLine: block.endLine
       };
@@ -453,6 +474,10 @@ export function getGitDiffOverviewSegments(state: EditorState): DiffSegment[] {
 
   for (let lineNo = 1; lineNo <= lineFlags.length; lineNo += 1) {
     const flags = lineFlags[lineNo - 1];
+    if (flags?.scope === 'staged') {
+      flush();
+      continue;
+    }
     const added = !!flags?.added;
     const modified = !!flags?.modified || !!flags?.trailingEofProxyOnly;
     if (!added && !modified) {

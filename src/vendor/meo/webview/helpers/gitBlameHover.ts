@@ -265,6 +265,14 @@ function getMarkerChangeKind(marker) {
   return null;
 }
 
+function getMarkerChangeScope(marker) {
+  if (!(marker instanceof HTMLElement)) {
+    return null;
+  }
+  const scope = marker.dataset.meoGitScope;
+  return scope === 'staged' || scope === 'unstaged' ? scope : null;
+}
+
 function isChangedMarker(marker) {
   return getMarkerChangeKind(marker) !== null;
 }
@@ -284,6 +292,41 @@ function getLineFlagChangeKind(lineFlags, lineNumber) {
     return 'added';
   }
   return null;
+}
+
+function getLineFlagChangeScope(lineFlags, lineNumber) {
+  if (!Array.isArray(lineFlags) || !Number.isInteger(lineNumber) || lineNumber < 1) {
+    return null;
+  }
+  const scope = lineFlags[lineNumber - 1]?.scope;
+  return scope === 'staged' || scope === 'unstaged' ? scope : null;
+}
+
+function getLineRangeChangeScope(lineFlags, startLine, endLine) {
+  if (
+    !Array.isArray(lineFlags) ||
+    !Number.isInteger(startLine) ||
+    !Number.isInteger(endLine) ||
+    startLine < 1 ||
+    endLine < startLine
+  ) {
+    return null;
+  }
+
+  let hasStaged = false;
+  for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
+    const lineKind = getLineFlagChangeKind(lineFlags, lineNo);
+    if (!lineKind) {
+      continue;
+    }
+    const scope = getLineFlagChangeScope(lineFlags, lineNo);
+    if (scope !== 'staged') {
+      return 'unstaged';
+    }
+    hasStaged = true;
+  }
+
+  return hasStaged ? 'staged' : null;
 }
 
 function getLineRangeChangeKind(lineFlags, startLine, endLine) {
@@ -326,7 +369,8 @@ function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, ma
       lineNumber,
       requestLineNumber: lineNumber,
       proxiedFromTrailingEof: false,
-      effectiveChangeKind: getMarkerChangeKind(changedMarker)
+      effectiveChangeKind: getMarkerChangeKind(changedMarker),
+      effectiveChangeScope: getMarkerChangeScope(changedMarker)
     };
   }
   const previousRowMarker = (
@@ -349,7 +393,8 @@ function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, ma
     lineNumber: Math.max(1, lineNumber - 1),
     requestLineNumber: lineNumber,
     proxiedFromTrailingEof: true,
-    effectiveChangeKind: getMarkerChangeKind(changedMarker)
+    effectiveChangeKind: getMarkerChangeKind(changedMarker),
+    effectiveChangeScope: getMarkerChangeScope(changedMarker)
   };
 }
 
@@ -373,6 +418,7 @@ export function createGitBlameHoverController({
   let activeMarkerElements = [];
   let activeGutterRowElement = null;
   let activeGutterRowHoverKind = null;
+  let activeGutterRowHoverScope = null;
   let activeRenderedBlockRange = null;
   let pendingBlameLineNumber = 0;
   let pointerDownInBand = false;
@@ -613,6 +659,7 @@ export function createGitBlameHoverController({
     }
     activeGutterRowElement = null;
     activeGutterRowHoverKind = null;
+    activeGutterRowHoverScope = null;
     activeRenderedBlockRange = null;
     hoverOverlay.hidden = true;
     view.dom.classList.remove('meo-git-hover-band');
@@ -662,6 +709,7 @@ export function createGitBlameHoverController({
 
     let nextMarkers = [];
     let nextGutterRowHoverKind = null;
+    let nextGutterRowHoverScope = null;
     let nextRenderedBlockRange = null;
     const changedMarker = getChangedMarkerForRow(gutterRowElement, hit);
     if (changedMarker) {
@@ -703,6 +751,7 @@ export function createGitBlameHoverController({
             nextMarkers = blockMarkers;
           } else {
             nextGutterRowHoverKind = block.aggregateChangeKind;
+            nextGutterRowHoverScope = block.aggregateChangeScope;
           }
         }
       }
@@ -719,6 +768,7 @@ export function createGitBlameHoverController({
           getLineRangeChangeKind(lineFlags, fallbackBlock.startLine, fallbackBlock.endLine) ??
           'empty'
         );
+        nextGutterRowHoverScope = getLineRangeChangeScope(lineFlags, fallbackBlock.startLine, fallbackBlock.endLine);
       }
     }
 
@@ -729,6 +779,7 @@ export function createGitBlameHoverController({
     if (
       sameElements(nextMarkers, activeMarkerElements) &&
       nextGutterRowHoverKind === activeGutterRowHoverKind &&
+      nextGutterRowHoverScope === activeGutterRowHoverScope &&
       sameLineRange(nextRenderedBlockRange, activeRenderedBlockRange)
     ) {
       return;
@@ -744,6 +795,7 @@ export function createGitBlameHoverController({
     }
     activeRenderedBlockRange = nextRenderedBlockRange;
     activeGutterRowHoverKind = nextGutterRowHoverKind;
+    activeGutterRowHoverScope = nextGutterRowHoverScope;
   };
 
   const clearHoverTimer = () => {
@@ -783,6 +835,7 @@ export function createGitBlameHoverController({
         requestLineNumber: block.canonicalLine,
         proxiedFromTrailingEof: false,
         effectiveChangeKind: block.aggregateChangeKind,
+        effectiveChangeScope: block.aggregateChangeScope,
         collapsedBlock: block
       };
     }
@@ -803,7 +856,8 @@ export function createGitBlameHoverController({
 
     return {
       ...hit,
-      effectiveChangeKind: aggregateChangeKind
+      effectiveChangeKind: aggregateChangeKind,
+      effectiveChangeScope: getLineRangeChangeScope(lineFlags, renderedBlock.startLine, renderedBlock.endLine)
     };
   };
 
@@ -1093,6 +1147,11 @@ export function createGitBlameHoverController({
         ? activeGutterRowHoverKind
         : null)
     );
+    const effectiveChangeScope = (
+      hit.effectiveChangeScope ??
+      getMarkerChangeScope(hoveredMarkerElement) ??
+      activeGutterRowHoverScope
+    );
     const proxiedFromTrailingEof = hit.proxiedFromTrailingEof === true;
     const renderedBlock = (
       mode === 'live'
@@ -1135,7 +1194,7 @@ export function createGitBlameHoverController({
       return;
     }
 
-    triggerHover(lineNumber, anchorRect, { proxiedFromTrailingEof, effectiveChangeKind, requestLineNumber });
+    triggerHover(lineNumber, anchorRect, { proxiedFromTrailingEof, effectiveChangeKind, effectiveChangeScope, requestLineNumber });
   };
 
   const onMouseLeave = (event) => {
@@ -1212,17 +1271,24 @@ export function createGitBlameHoverController({
       hit.effectiveChangeKind ??
       getMarkerChangeKind(marker)
     );
+    const effectiveChangeScope = (
+      hit.effectiveChangeScope ??
+      getMarkerChangeScope(marker)
+    );
     if (effectiveChangeKind !== 'added' && effectiveChangeKind !== 'modified') {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
-    void openWorktreeForLine?.({
-      lineNumber: hit.proxiedFromTrailingEof === true
+    const targetLineNumber = hit.proxiedFromTrailingEof === true
         ? Math.max(1, requestLineNumber - 1)
-        : lineNumber,
-    });
+        : lineNumber;
+    if (effectiveChangeScope === 'staged') {
+      void openRevisionForLine?.({ lineNumber: targetLineNumber });
+    } else {
+      void openWorktreeForLine?.({ lineNumber: targetLineNumber });
+    }
   };
 
   view.dom.addEventListener('mousemove', onMouseMove);

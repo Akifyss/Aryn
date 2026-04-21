@@ -1938,6 +1938,15 @@
   background: var(--git-changed);
 }
 
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-staged .meo-git-gutter-stripe {
+  opacity: 0;
+}
+
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-staged:hover .meo-git-gutter-stripe,
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-staged.is-hit-hover .meo-git-gutter-stripe {
+  opacity: 0.55;
+}
+
 .meo-native-root .cm-editor .meo-git-gutter-marker:hover .meo-git-gutter-stripe {
   left: -2px;
   width: 5px;

@@ -35,7 +35,7 @@ function buildGitDiffLineHighlights(state: EditorState): DecorationSet {
 
   for (let i = 1; i <= doc.lines; i++) {
     const flags = lineFlags[i - 1];
-    if (!flags) {
+    if (!flags || flags.scope === 'staged') {
       continue;
     }
 
@@ -110,5 +110,4 @@ export function setGitDiffLineHighlightsEnabled(target: unknown, enabled: boolea
 }
 
 export { gitDiffLineHighlightsField };
-
 

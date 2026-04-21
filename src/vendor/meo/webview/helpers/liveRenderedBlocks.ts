@@ -10,6 +10,7 @@ import { isTableDelimiterLine, parseTableInfo } from './tables';
 type LineFlagLike = {
   added?: boolean;
   modified?: boolean;
+  scope?: 'staged' | 'unstaged';
   trailingEofProxyOnly?: boolean;
 } | undefined;
 
@@ -31,6 +32,7 @@ export interface LiveCollapsedGitBlock {
   endLine: number;
   canonicalLine: number;
   aggregateChangeKind: LiveGitChangeKind;
+  aggregateChangeScope: 'staged' | 'unstaged';
   containsLine(lineNo: number): boolean;
 }
 
@@ -293,7 +295,8 @@ export function getLiveRenderedBlocks(state: EditorState): LiveRenderedBlock[] {
 function createCollapsedBlock(
   block: LiveRenderedBlock,
   canonicalLine: number,
-  aggregateChangeKind: LiveGitChangeKind
+  aggregateChangeKind: LiveGitChangeKind,
+  aggregateChangeScope: 'staged' | 'unstaged'
 ): LiveCollapsedGitBlock {
   return {
     kind: block.kind,
@@ -301,6 +304,7 @@ function createCollapsedBlock(
     endLine: block.endLine,
     canonicalLine,
     aggregateChangeKind,
+    aggregateChangeScope,
     containsLine(lineNo: number): boolean {
       return lineNo >= block.startLine && lineNo <= block.endLine;
     }
@@ -318,6 +322,7 @@ function buildCollapsedBlock(
   let firstChangedLine = 0;
   let hasModified = false;
   let hasAdded = false;
+  let hasUnstaged = false;
   let hasNonDelimiterChange = false;
 
   for (let lineNo = block.startLine; lineNo <= block.endLine; lineNo += 1) {
@@ -332,6 +337,9 @@ function buildCollapsedBlock(
     }
     if (lineNo !== block.delimiterLine) {
       hasNonDelimiterChange = true;
+    }
+    if (flags?.scope !== 'staged') {
+      hasUnstaged = true;
     }
     if (modified) {
       hasModified = true;
@@ -354,7 +362,12 @@ function buildCollapsedBlock(
     canonicalLine = block.startLine;
   }
 
-  return createCollapsedBlock(block, canonicalLine || block.startLine, hasModified ? 'modified' : 'added');
+  return createCollapsedBlock(
+    block,
+    canonicalLine || block.startLine,
+    hasModified ? 'modified' : 'added',
+    hasUnstaged ? 'unstaged' : 'staged'
+  );
 }
 
 function findCollapsedBlockAtLine(
@@ -451,5 +464,4 @@ export function getLiveGitCollapsedBlockAtLine(
   }
   return findCollapsedBlockAtLine(blocks, Math.max(1, Math.floor(lineNo)));
 }
-
 

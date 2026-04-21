@@ -203,6 +203,29 @@ describe('git helpers', () => {
       available: true,
       baseText: 'alpha\nbeta\n',
       gitPath: 'draft.md',
+      indexText: 'alpha\nbeta\n',
+      tracked: true,
+    })
+  })
+
+  it('returns the index text separately for staged rich editor gutter comparisons', async () => {
+    const rootPath = await createTempWorkspace()
+    const filePath = path.join(rootPath, 'draft.md')
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(filePath, 'alpha\nbeta\n', 'utf8')
+    await stageGitPaths(rootPath, [filePath])
+    await commitGitChanges(rootPath, 'initial commit')
+    await writeFile(filePath, 'alpha staged\nbeta\n', 'utf8')
+    await stageGitPaths(rootPath, [filePath])
+    await writeFile(filePath, 'alpha staged\nbeta unstaged\n', 'utf8')
+
+    await expect(getGitBaseline(rootPath, filePath)).resolves.toMatchObject({
+      available: true,
+      baseText: 'alpha\nbeta\n',
+      gitPath: 'draft.md',
+      indexText: 'alpha staged\nbeta\n',
       tracked: true,
     })
   })
