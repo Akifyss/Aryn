@@ -70,6 +70,43 @@ describe('meo git diff gutter', () => {
     ])
   })
 
+  it('does not mark pushed-down content when blank lines are inserted before it', () => {
+    const flags = buildLineFlagsFromVsCodeDiff(
+      [
+        '# Tab',
+        '',
+        '- A',
+        '- B',
+        '- C',
+        '## Project',
+        '-',
+      ],
+      Text.of([
+        '# Tab',
+        '',
+        '- A',
+        '- B',
+        '- C',
+        '',
+        '',
+        '## Project',
+        '-',
+      ]),
+    )
+
+    expect(flagSummary(flags)).toEqual([
+      null,
+      null,
+      null,
+      null,
+      null,
+      'added',
+      'added',
+      null,
+      null,
+    ])
+  })
+
   it('marks replaced current lines as modified', () => {
     const flags = buildLineFlagsFromVsCodeDiff(
       splitDiffLines('A\nB\nC\n'),

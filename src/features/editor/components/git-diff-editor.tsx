@@ -30,6 +30,7 @@ import {
   type CodeMirrorDiffChunk,
 } from '@/features/editor/lib/git-diff-navigation'
 import type { WorkspaceDiffNavigationRequest } from '@/features/workspace/store/use-workspace-store'
+import { buildCodeMirrorChunksFromVsCodeDiff } from '@/vendor/meo/shared/gitDiffLineFlags'
 
 type DiffViewMode = 'split' | 'unified'
 type DiffNavigationTarget = {
@@ -50,6 +51,14 @@ type DiffNavigationMatch = {
 
 const DIFF_AUTO_SAVE_DELAY_MS = 1000
 const DIFF_NAVIGATION_HIGHLIGHT_DURATION_MS = 2200
+
+function createCodeMirrorDiffConfig(isEditable: boolean) {
+  return {
+    overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+    scanLimit: isEditable ? 1000 : 10000,
+    timeout: 200,
+  }
+}
 
 const setNavigationHighlightEffect = StateEffect.define<DiffNavigationHighlightRange | null>()
 
@@ -784,10 +793,7 @@ function CodeMirrorDiffRenderer({
           margin: 4,
           minSize: 6,
         },
-        diffConfig: {
-          scanLimit: isEditable ? 1000 : 10000,
-          timeout: 200,
-        },
+        diffConfig: createCodeMirrorDiffConfig(isEditable),
         renderRevertControl: createSplitBlockControls,
         revertControls: 'a-to-b',
         parent: container,
@@ -823,10 +829,7 @@ function CodeMirrorDiffRenderer({
             margin: 4,
             minSize: 6,
           },
-          diffConfig: {
-            scanLimit: isEditable ? 1000 : 10000,
-            timeout: 200,
-          },
+          diffConfig: createCodeMirrorDiffConfig(isEditable),
           gutter: true,
           highlightChanges: true,
           mergeControls: (kind) => {
