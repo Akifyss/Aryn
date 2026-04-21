@@ -76,7 +76,32 @@ function buildGutterHoverOverlayDom() {
   return root;
 }
 
-function renderBlameResult(ui, result) {
+function getChangeScopeLabel(scope) {
+  if (scope === 'staged') {
+    return 'Staged';
+  }
+  if (scope === 'unstaged') {
+    return 'Unstaged';
+  }
+  return 'Uncommitted';
+}
+
+function getChangeKindLabel(kind) {
+  if (kind === 'added') {
+    return 'addition';
+  }
+  if (kind === 'modified') {
+    return 'modification';
+  }
+  return 'changes';
+}
+
+function renderChangeResult(ui, { scope = null, kind = null } = {}) {
+  ui.title.textContent = `${getChangeScopeLabel(scope)} ${getChangeKindLabel(kind)}`;
+  ui.meta.textContent = '';
+}
+
+function renderBlameResult(ui, result, changeContext = null) {
   if (!result || typeof result !== 'object') {
     ui.title.textContent = 'Blame unavailable';
     ui.meta.textContent = '';
@@ -98,8 +123,7 @@ function renderBlameResult(ui, result) {
   }
 
   if (result.kind === 'uncommitted') {
-    ui.title.textContent = 'Uncommitted changes';
-    ui.meta.textContent = '';
+    renderChangeResult(ui, changeContext ?? {});
     return;
   }
 
@@ -1005,7 +1029,12 @@ export function createGitBlameHoverController({
   const triggerHover = (
     lineNumber,
     anchorRect,
-    { proxiedFromTrailingEof = false, effectiveChangeKind = null, requestLineNumber = lineNumber } = {}
+    {
+      proxiedFromTrailingEof = false,
+      effectiveChangeKind = null,
+      effectiveChangeScope = null,
+      requestLineNumber = lineNumber
+    } = {}
   ) => {
     if (destroyed || !isSupportedMode(getMode?.()) || lineNumber < 1) {
       hide();
@@ -1027,7 +1056,10 @@ export function createGitBlameHoverController({
       // is a proxy interaction though, so let the extension resolve history/mapping.
       if (!proxiedFromTrailingEof && effectiveChangeKind === 'added') {
         pendingBlameLineNumber = 0;
-        renderBlameResult(ui, { kind: 'uncommitted' });
+        renderChangeResult(ui, {
+          scope: effectiveChangeScope,
+          kind: effectiveChangeKind
+        });
         if (lastAnchorRect) {
           positionTooltip(ui, lastAnchorRect);
         }
@@ -1058,7 +1090,10 @@ export function createGitBlameHoverController({
         ui.root.hidden = true;
         return;
       }
-      renderBlameResult(ui, result);
+      renderBlameResult(ui, result, {
+        scope: effectiveChangeScope,
+        kind: effectiveChangeKind
+      });
       pendingBlameLineNumber = 0;
       if (lastAnchorRect) {
         positionTooltip(ui, lastAnchorRect);
