@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   createWorkspaceFile,
+  getGitMetadataWatchPaths,
   loadWorkspaceTree,
   moveWorkspaceEntry,
   resolveWorkspaceEditorKind,
@@ -120,6 +121,50 @@ describe('workspace helpers', () => {
     expect(shouldIgnoreWorkspacePath('/workspace/.git/index.lock')).toBe(true)
     expect(shouldIgnoreWorkspacePath('C:\\workspace\\.git\\objects\\ab\\cd')).toBe(true)
     expect(shouldIgnoreWorkspacePath('/workspace/docs/draft.md')).toBe(false)
+  })
+
+  it('resolves git metadata watch paths for a regular repository', async () => {
+    const rootPath = await createTempWorkspace()
+    const gitDirPath = path.join(rootPath, '.git')
+
+    await mkdir(path.join(gitDirPath, 'refs', 'heads'), { recursive: true })
+    await writeFile(path.join(gitDirPath, 'HEAD'), 'ref: refs/heads/main\n', 'utf8')
+
+    await expect(getGitMetadataWatchPaths(rootPath)).resolves.toEqual(expect.arrayContaining([
+      path.join(gitDirPath, 'index'),
+      path.join(gitDirPath, 'HEAD'),
+      path.join(gitDirPath, 'config'),
+      path.join(gitDirPath, 'info', 'exclude'),
+      path.join(gitDirPath, 'refs'),
+      path.join(gitDirPath, 'packed-refs'),
+    ]))
+  })
+
+  it('does not treat a missing git directory as metadata that should be watched recursively', async () => {
+    const rootPath = await createTempWorkspace()
+
+    await expect(getGitMetadataWatchPaths(rootPath)).resolves.toEqual([])
+  })
+
+  it('resolves git metadata watch paths for linked worktrees and submodule git files', async () => {
+    const rootPath = await createTempWorkspace()
+    const gitDirPath = path.join(rootPath, '..', 'repo.git', 'worktrees', 'draft')
+    const commonGitDirPath = path.join(rootPath, '..', 'repo.git')
+
+    await mkdir(gitDirPath, { recursive: true })
+    await mkdir(path.join(commonGitDirPath, 'refs', 'heads'), { recursive: true })
+    await writeFile(path.join(rootPath, '.git'), 'gitdir: ../repo.git/worktrees/draft\n', 'utf8')
+    await writeFile(path.join(gitDirPath, 'commondir'), '../..\n', 'utf8')
+
+    await expect(getGitMetadataWatchPaths(rootPath)).resolves.toEqual(expect.arrayContaining([
+      path.join(gitDirPath, 'index'),
+      path.join(gitDirPath, 'HEAD'),
+      path.join(gitDirPath, 'config.worktree'),
+      path.join(commonGitDirPath, 'config'),
+      path.join(commonGitDirPath, 'info', 'exclude'),
+      path.join(commonGitDirPath, 'refs'),
+      path.join(commonGitDirPath, 'packed-refs'),
+    ]))
   })
 
   it('falls back unknown text extensions to code and keeps binary files closed', async () => {

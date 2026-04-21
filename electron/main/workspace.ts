@@ -54,6 +54,96 @@ function createWorkspaceChokidarOptions() {
   } satisfies Parameters<typeof chokidar.watch>[1]
 }
 
+function addUniquePath(paths: string[], nextPath: string) {
+  if (!paths.some((candidate) => isSameResolvedPath(candidate, nextPath))) {
+    paths.push(nextPath)
+  }
+}
+
+function isSameResolvedPath(firstPath: string, secondPath: string) {
+  const resolvedFirstPath = path.resolve(firstPath)
+  const resolvedSecondPath = path.resolve(secondPath)
+
+  if (process.platform === 'win32') {
+    return resolvedFirstPath.toLowerCase() === resolvedSecondPath.toLowerCase()
+  }
+
+  return resolvedFirstPath === resolvedSecondPath
+}
+
+function resolveGitInternalPath(basePath: string, targetPath: string) {
+  return path.isAbsolute(targetPath)
+    ? path.normalize(targetPath)
+    : path.resolve(basePath, targetPath)
+}
+
+function parseGitDirPointer(content: string) {
+  const match = content.match(/^gitdir:\s*(.+?)\s*$/m)
+  return match?.[1]?.trim() || null
+}
+
+async function resolveCommonGitDir(gitDirPath: string) {
+  try {
+    const commonDirPointer = (await readFile(path.join(gitDirPath, 'commondir'), 'utf8')).trim()
+    return commonDirPointer
+      ? resolveGitInternalPath(gitDirPath, commonDirPointer)
+      : gitDirPath
+  } catch {
+    return gitDirPath
+  }
+}
+
+function addPerWorktreeGitMetadataPaths(paths: string[], gitDirPath: string) {
+  addUniquePath(paths, path.join(gitDirPath, 'index'))
+  addUniquePath(paths, path.join(gitDirPath, 'HEAD'))
+  addUniquePath(paths, path.join(gitDirPath, 'config.worktree'))
+  addUniquePath(paths, path.join(gitDirPath, 'ORIG_HEAD'))
+  addUniquePath(paths, path.join(gitDirPath, 'FETCH_HEAD'))
+  addUniquePath(paths, path.join(gitDirPath, 'MERGE_HEAD'))
+  addUniquePath(paths, path.join(gitDirPath, 'REBASE_HEAD'))
+  addUniquePath(paths, path.join(gitDirPath, 'CHERRY_PICK_HEAD'))
+}
+
+function addSharedGitMetadataPaths(paths: string[], commonGitDirPath: string) {
+  addUniquePath(paths, path.join(commonGitDirPath, 'config'))
+  addUniquePath(paths, path.join(commonGitDirPath, 'info', 'exclude'))
+  addUniquePath(paths, path.join(commonGitDirPath, 'refs'))
+  addUniquePath(paths, path.join(commonGitDirPath, 'packed-refs'))
+}
+
+export async function getGitMetadataWatchPaths(rootPath: string) {
+  const dotGitPath = path.join(rootPath, '.git')
+  const metadataPaths: string[] = []
+
+  try {
+    const dotGitStat = await stat(dotGitPath)
+
+    if (dotGitStat.isDirectory()) {
+      addPerWorktreeGitMetadataPaths(metadataPaths, dotGitPath)
+      addSharedGitMetadataPaths(metadataPaths, dotGitPath)
+      return metadataPaths
+    }
+
+    if (!dotGitStat.isFile()) {
+      return metadataPaths
+    }
+
+    const gitDirPointer = parseGitDirPointer(await readFile(dotGitPath, 'utf8'))
+    if (!gitDirPointer) {
+      return metadataPaths
+    }
+
+    const gitDirPath = resolveGitInternalPath(rootPath, gitDirPointer)
+    const commonGitDirPath = await resolveCommonGitDir(gitDirPath)
+
+    addPerWorktreeGitMetadataPaths(metadataPaths, gitDirPath)
+    addSharedGitMetadataPaths(metadataPaths, commonGitDirPath)
+    return metadataPaths
+  } catch {
+    return metadataPaths
+  }
+}
+
 function shouldIgnore(entryName: string) {
   return IGNORED_NAMES.has(entryName)
 }
@@ -454,8 +544,14 @@ export async function watchWorkspace(
   const watcherGeneration = workspaceWatcherGeneration + 1
   workspaceWatcherGeneration = watcherGeneration
 
+  let nextWatcher: WorkspaceWatcherHandle
+  let gitMetadataWatcher: FSWatcher | null = null
+  let gitMetadataWatcherRefresh = Promise.resolve()
+
+  const isCurrentWatcher = () => workspaceWatcher === nextWatcher && workspaceWatcherGeneration === watcherGeneration
+
   const relay = (type: WorkspaceChangeEvent['type'], changedPath: string) => {
-    if (workspaceWatcher !== nextWatcher || workspaceWatcherGeneration !== watcherGeneration) {
+    if (!isCurrentWatcher()) {
       return
     }
 
@@ -466,15 +562,95 @@ export async function watchWorkspace(
     })
   }
 
+  const handleWatcherError = (error: unknown) => {
+    if (!isCurrentWatcher()) {
+      return
+    }
+
+    if (isIgnorableWorkspaceWatcherError(error)) {
+      return
+    }
+
+    console.warn('Workspace watcher error:', error)
+  }
+
+  const gitMetadataEventPath = path.join(rootPath, '.git', 'index')
+  const dotGitPath = path.join(rootPath, '.git')
   const workspaceFileWatcher = chokidar.watch(rootPath, {
     ...createWorkspaceChokidarOptions(),
     ignored: shouldIgnoreWorkspacePath,
   })
-  const gitIndexWatcher = chokidar.watch(path.join(rootPath, '.git', 'index'), createWorkspaceChokidarOptions())
-  const watchedBackends = [workspaceFileWatcher, gitIndexWatcher]
-  const nextWatcher: WorkspaceWatcherHandle = {
+  const gitBoundaryWatcher = chokidar.watch(dotGitPath, {
+    ...createWorkspaceChokidarOptions(),
+    depth: 0,
+  })
+
+  const relayGitMetadataChange = (watcher: FSWatcher) => {
+    if (gitMetadataWatcher !== watcher) {
+      return
+    }
+
+    relay('change', gitMetadataEventPath)
+  }
+
+  const closeGitMetadataWatcher = async () => {
+    const activeGitMetadataWatcher = gitMetadataWatcher
+
+    if (!activeGitMetadataWatcher) {
+      return
+    }
+
+    gitMetadataWatcher = null
+    await activeGitMetadataWatcher.close()
+  }
+
+  const startGitMetadataWatcher = async () => {
+    const gitMetadataWatchPaths = await getGitMetadataWatchPaths(rootPath)
+
+    if (!isCurrentWatcher()) {
+      return
+    }
+
+    await closeGitMetadataWatcher()
+
+    if (!isCurrentWatcher() || gitMetadataWatchPaths.length === 0) {
+      return
+    }
+
+    const nextGitMetadataWatcher = chokidar.watch(gitMetadataWatchPaths, createWorkspaceChokidarOptions())
+    gitMetadataWatcher = nextGitMetadataWatcher
+    nextGitMetadataWatcher
+      .on('add', () => relayGitMetadataChange(nextGitMetadataWatcher))
+      .on('addDir', () => relayGitMetadataChange(nextGitMetadataWatcher))
+      .on('change', () => relayGitMetadataChange(nextGitMetadataWatcher))
+      .on('unlink', () => relayGitMetadataChange(nextGitMetadataWatcher))
+      .on('unlinkDir', () => relayGitMetadataChange(nextGitMetadataWatcher))
+      .on('error', handleWatcherError)
+  }
+
+  const refreshGitMetadataWatcher = () => {
+    gitMetadataWatcherRefresh = gitMetadataWatcherRefresh
+      .catch(() => {})
+      .then(startGitMetadataWatcher)
+      .catch(handleWatcherError)
+  }
+
+  const handleGitBoundaryChange = (changedPath: string) => {
+    if (!isSameResolvedPath(changedPath, dotGitPath)) {
+      return
+    }
+
+    relay('change', gitMetadataEventPath)
+    refreshGitMetadataWatcher()
+  }
+
+  nextWatcher = {
     close: async () => {
-      await Promise.all(watchedBackends.map((watcher) => watcher.close()))
+      await Promise.all([
+        workspaceFileWatcher.close(),
+        gitBoundaryWatcher.close(),
+        closeGitMetadataWatcher(),
+      ])
     },
   }
 
@@ -484,34 +660,17 @@ export async function watchWorkspace(
     .on('change', (changedPath) => relay('change', changedPath))
     .on('unlink', (changedPath) => relay('unlink', changedPath))
     .on('unlinkDir', (changedPath) => relay('unlinkDir', changedPath))
-    .on('error', (error) => {
-      if (workspaceWatcher !== nextWatcher || workspaceWatcherGeneration !== watcherGeneration) {
-        return
-      }
-
-      if (isIgnorableWorkspaceWatcherError(error)) {
-        return
-      }
-
-      throw error
-    })
-  gitIndexWatcher
-    .on('add', (changedPath) => relay('change', changedPath))
-    .on('change', (changedPath) => relay('change', changedPath))
-    .on('unlink', (changedPath) => relay('change', changedPath))
-    .on('error', (error) => {
-      if (workspaceWatcher !== nextWatcher || workspaceWatcherGeneration !== watcherGeneration) {
-        return
-      }
-
-      if (isIgnorableWorkspaceWatcherError(error)) {
-        return
-      }
-
-      throw error
-    })
+    .on('error', handleWatcherError)
+  gitBoundaryWatcher
+    .on('add', handleGitBoundaryChange)
+    .on('addDir', handleGitBoundaryChange)
+    .on('change', handleGitBoundaryChange)
+    .on('unlink', handleGitBoundaryChange)
+    .on('unlinkDir', handleGitBoundaryChange)
+    .on('error', handleWatcherError)
 
   workspaceWatcher = nextWatcher
+  refreshGitMetadataWatcher()
 }
 
 export async function unwatchWorkspace() {

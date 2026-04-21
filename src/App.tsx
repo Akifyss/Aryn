@@ -2472,11 +2472,11 @@ function App() {
         return
       }
 
-      const isGitIndexChange = normalizeFilePath(event.path).endsWith('/.git/index')
+      const isGitMetadataChange = normalizeFilePath(event.path).endsWith('/.git/index')
 
       void requestWorkspaceRefresh({
         refreshGit: true,
-        refreshTree: !isGitIndexChange,
+        refreshTree: !isGitMetadataChange,
         rootPath: currentPath,
       }, 'debounced').catch(() => {
         // The workspace may have changed before the debounced refresh executes.
