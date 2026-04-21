@@ -2,7 +2,7 @@
 import { RangeSetBuilder, StateEffect, StateField, EditorState, Transaction } from '@codemirror/state';
 import { GutterMarker, gutter, EditorView } from '@codemirror/view';
 import { splitDiffLines } from '../../shared/gitDiffCore';
-import { buildLineFlagsFromCodeMirrorChunks, buildScopedLineFlagsFromCodeMirrorChunks } from '../../shared/gitDiffLineFlags';
+import { buildLineFlagsFromVsCodeDiff, buildScopedLineFlagsFromVsCodeDiff } from '../../shared/gitDiffLineFlags';
 import { getLiveGitCollapsedBlockAtLine, getLiveGitCollapsedBlocks } from './liveRenderedBlocks';
 
 const MAX_DIFF_TEXT_CHARS = 1024 * 1024;
@@ -253,12 +253,12 @@ function buildDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | nul
   const baseLines = Array.isArray(baseline.baseLines) ? baseline.baseLines : splitDiffLines(baseline.baseText);
   const indexLines = Array.isArray(baseline.indexLines) ? baseline.indexLines : null;
   if (!indexLines || typeof baseline.indexText !== 'string') {
-    return buildLineFlagsFromCodeMirrorChunks(baseLines, state.doc).map((flags) => (
+    return buildLineFlagsFromVsCodeDiff(baseLines, state.doc).map((flags) => (
       flags ? { ...flags, scope: 'unstaged' } : undefined
     ));
   }
 
-  return buildScopedLineFlagsFromCodeMirrorChunks(baseLines, indexLines, state.doc);
+  return buildScopedLineFlagsFromVsCodeDiff(baseLines, indexLines, state.doc);
 }
 
 function buildCoalescedDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | null): (MarkerFlags | undefined)[] | null {

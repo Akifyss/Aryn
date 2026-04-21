@@ -2,11 +2,11 @@ import { Text } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import { splitDiffLines } from '../src/vendor/meo/shared/gitDiffCore'
 import {
-  buildLineFlagsFromCodeMirrorChunks,
-  buildScopedLineFlagsFromCodeMirrorChunks,
+  buildLineFlagsFromVsCodeDiff,
+  buildScopedLineFlagsFromVsCodeDiff,
 } from '../src/vendor/meo/shared/gitDiffLineFlags'
 
-function flagSummary(flags: ReturnType<typeof buildLineFlagsFromCodeMirrorChunks>) {
+function flagSummary(flags: ReturnType<typeof buildLineFlagsFromVsCodeDiff>) {
   return Array.from(flags, (flag) => {
     if (flag?.modified) return 'modified'
     if (flag?.added) return 'added'
@@ -14,7 +14,7 @@ function flagSummary(flags: ReturnType<typeof buildLineFlagsFromCodeMirrorChunks
   })
 }
 
-function scopedFlagSummary(flags: ReturnType<typeof buildScopedLineFlagsFromCodeMirrorChunks>) {
+function scopedFlagSummary(flags: ReturnType<typeof buildScopedLineFlagsFromVsCodeDiff>) {
   return Array.from(flags, (flag) => {
     if (flag?.modified) return `${flag.scope}:modified`
     if (flag?.added) return `${flag.scope}:added`
@@ -23,9 +23,9 @@ function scopedFlagSummary(flags: ReturnType<typeof buildScopedLineFlagsFromCode
 }
 
 describe('meo git diff gutter', () => {
-  it('matches CodeMirror merge ranges for blank lines inserted before the EOF visual line', () => {
+  it('matches VS Code-style line ranges for blank lines inserted before the EOF visual line', () => {
     const baseText = 'L1\nL2\nL3\n'
-    const flags = buildLineFlagsFromCodeMirrorChunks(
+    const flags = buildLineFlagsFromVsCodeDiff(
       splitDiffLines(baseText),
       Text.of(`${baseText}\n\n\n`.split('\n')),
     )
@@ -41,8 +41,22 @@ describe('meo git diff gutter', () => {
     ])
   })
 
+  it('moves trailing newline insertions after a no-final-newline last line onto the new blank lines', () => {
+    const flags = buildLineFlagsFromVsCodeDiff(
+      splitDiffLines('A'),
+      Text.of('A\n\n\n'.split('\n')),
+    )
+
+    expect(flagSummary(flags)).toEqual([
+      null,
+      'added',
+      'added',
+      'added',
+    ])
+  })
+
   it('marks a middle inserted blank line as added', () => {
-    const flags = buildLineFlagsFromCodeMirrorChunks(
+    const flags = buildLineFlagsFromVsCodeDiff(
       splitDiffLines('A\nB\nC\n'),
       Text.of('A\nB\n\nC\n'.split('\n')),
     )
@@ -57,7 +71,7 @@ describe('meo git diff gutter', () => {
   })
 
   it('marks replaced current lines as modified', () => {
-    const flags = buildLineFlagsFromCodeMirrorChunks(
+    const flags = buildLineFlagsFromVsCodeDiff(
       splitDiffLines('A\nB\nC\n'),
       Text.of('A\nX\nC\n'.split('\n')),
     )
@@ -71,7 +85,7 @@ describe('meo git diff gutter', () => {
   })
 
   it('does not mark current lines for pure deletions', () => {
-    const flags = buildLineFlagsFromCodeMirrorChunks(
+    const flags = buildLineFlagsFromVsCodeDiff(
       splitDiffLines('A\nB\nC\n'),
       Text.of('A\nC\n'.split('\n')),
     )
@@ -83,20 +97,43 @@ describe('meo git diff gutter', () => {
     ])
   })
 
-  it('marks final newline changes as a modification of the existing line', () => {
-    const flags = buildLineFlagsFromCodeMirrorChunks(
+  it('marks whitespace-only line edits as modified like VS Code', () => {
+    const flags = buildLineFlagsFromVsCodeDiff(
+      splitDiffLines('A\nB\nC\n'),
+      Text.of('A\nB  \nC\n'.split('\n')),
+    )
+
+    expect(flagSummary(flags)).toEqual([
+      null,
+      'modified',
+      null,
+      null,
+    ])
+  })
+
+  it('keeps an all-content deletion visible on the remaining empty visual line', () => {
+    const flags = buildLineFlagsFromVsCodeDiff(
+      splitDiffLines('hello'),
+      Text.of(''.split('\n')),
+    )
+
+    expect(flagSummary(flags)).toEqual(['modified'])
+  })
+
+  it('marks final newline insertions on the EOF visual line', () => {
+    const flags = buildLineFlagsFromVsCodeDiff(
       splitDiffLines('A'),
       Text.of('A\n'.split('\n')),
     )
 
     expect(flagSummary(flags)).toEqual([
-      'modified',
       null,
+      'added',
     ])
   })
 
   it('treats content added to an empty tracked file as added, not modified', () => {
-    const flags = buildLineFlagsFromCodeMirrorChunks(
+    const flags = buildLineFlagsFromVsCodeDiff(
       splitDiffLines(''),
       Text.of('hello'.split('\n')),
     )
@@ -105,7 +142,7 @@ describe('meo git diff gutter', () => {
   })
 
   it('separates staged and unstaged gutter lines with unstaged taking precedence', () => {
-    const flags = buildScopedLineFlagsFromCodeMirrorChunks(
+    const flags = buildScopedLineFlagsFromVsCodeDiff(
       splitDiffLines('A\nB\nC\n'),
       splitDiffLines('A staged\nB\nC\n'),
       Text.of('A staged\nB unstaged\nC\n'.split('\n')),
@@ -120,7 +157,7 @@ describe('meo git diff gutter', () => {
   })
 
   it('maps staged lines onto working tree line numbers after unstaged insertions', () => {
-    const flags = buildScopedLineFlagsFromCodeMirrorChunks(
+    const flags = buildScopedLineFlagsFromVsCodeDiff(
       splitDiffLines('A\nB\nC\n'),
       splitDiffLines('A staged\nB\nC\n'),
       Text.of('X unstaged\nA staged\nB\nC\n'.split('\n')),

@@ -56,8 +56,19 @@ describe('git diff navigation', () => {
 
     expect(createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)).toMatchObject({
       modifiedLineCount: 1,
-      modifiedStartLine: 1,
-      originalLineCount: 1,
+      modifiedStartLine: 2,
+      originalLineCount: 0,
+      originalStartLine: 1,
+    })
+  })
+
+  it('moves no-final-newline EOF insertions onto the inserted visual lines', () => {
+    const { chunk, modifiedDoc, originalDoc } = getOnlyChunk('A', 'A\n\n\n')
+
+    expect(createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)).toMatchObject({
+      modifiedLineCount: 3,
+      modifiedStartLine: 2,
+      originalLineCount: 0,
       originalStartLine: 1,
     })
   })

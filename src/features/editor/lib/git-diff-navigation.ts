@@ -1,5 +1,6 @@
 import type { Text } from '@codemirror/state'
 import type { GitDiffSelection } from '@/features/git/types'
+import { getVsCodeStyleChangeLineRange } from '@/vendor/meo/shared/gitDiffLineFlags'
 
 export type CodeMirrorDiffChunk = {
   fromA: number
@@ -8,16 +9,12 @@ export type CodeMirrorDiffChunk = {
   toB: number
   endA: number
   endB: number
-}
-
-function getChangedTextLineCount(doc: Text, from: number, to: number) {
-  if (from === to || doc.length === 0) {
-    return 0
-  }
-
-  const startLine = doc.lineAt(Math.min(from, doc.length)).number
-  const endLine = doc.lineAt(Math.max(0, Math.min(doc.length, to) - 1)).number
-  return Math.max(0, endLine - startLine + 1)
+  changes: readonly {
+    fromA: number
+    toA: number
+    fromB: number
+    toB: number
+  }[]
 }
 
 export function createSelectionFromCodeMirrorChunk(
@@ -25,10 +22,42 @@ export function createSelectionFromCodeMirrorChunk(
   modifiedDoc: Text,
   chunk: CodeMirrorDiffChunk,
 ): GitDiffSelection {
-  const originalStartLine = originalDoc.lineAt(Math.min(chunk.fromA, originalDoc.length)).number
-  const modifiedStartLine = modifiedDoc.lineAt(Math.min(chunk.fromB, modifiedDoc.length)).number
-  const originalLineCount = chunk.fromA === chunk.toA ? 0 : getChangedTextLineCount(originalDoc, chunk.fromA, chunk.toA)
-  const modifiedLineCount = chunk.fromB === chunk.toB ? 0 : getChangedTextLineCount(modifiedDoc, chunk.fromB, chunk.toB)
+  if (originalDoc.length === 0 && modifiedDoc.length > 0) {
+    return {
+      modifiedLineCount: modifiedDoc.lines,
+      modifiedStartLine: 1,
+      originalLineCount: 0,
+      originalStartLine: 0,
+    }
+  }
+
+  let originalStartLine = Number.POSITIVE_INFINITY
+  let originalEndLineExclusive = 0
+  let modifiedStartLine = Number.POSITIVE_INFINITY
+  let modifiedEndLineExclusive = 0
+
+  for (const change of chunk.changes) {
+    const range = getVsCodeStyleChangeLineRange(originalDoc, modifiedDoc, {
+      fromA: chunk.fromA + change.fromA,
+      toA: chunk.fromA + change.toA,
+      fromB: chunk.fromB + change.fromB,
+      toB: chunk.fromB + change.toB,
+    })
+    originalStartLine = Math.min(originalStartLine, range.originalStartLine)
+    originalEndLineExclusive = Math.max(originalEndLineExclusive, range.originalEndLineExclusive)
+    modifiedStartLine = Math.min(modifiedStartLine, range.modifiedStartLine)
+    modifiedEndLineExclusive = Math.max(modifiedEndLineExclusive, range.modifiedEndLineExclusive)
+  }
+
+  if (!Number.isFinite(originalStartLine) || !Number.isFinite(modifiedStartLine)) {
+    originalStartLine = originalDoc.lineAt(Math.min(chunk.fromA, originalDoc.length)).number
+    originalEndLineExclusive = originalStartLine
+    modifiedStartLine = modifiedDoc.lineAt(Math.min(chunk.fromB, modifiedDoc.length)).number
+    modifiedEndLineExclusive = modifiedStartLine
+  }
+
+  const originalLineCount = Math.max(0, originalEndLineExclusive - originalStartLine)
+  const modifiedLineCount = Math.max(0, modifiedEndLineExclusive - modifiedStartLine)
 
   return {
     modifiedLineCount,

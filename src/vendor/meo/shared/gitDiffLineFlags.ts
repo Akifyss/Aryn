@@ -1,5 +1,6 @@
 import { Text } from '@codemirror/state'
-import { Chunk, type DiffConfig } from '@codemirror/merge'
+// @ts-expect-error Monaco exposes the VS Code diff implementation as ESM JS without declarations.
+import { DefaultLinesDiffComputer } from 'monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/defaultLinesDiffComputer.js'
 
 export type GitLineChangeFlags = {
   added: boolean
@@ -14,23 +15,79 @@ function emptyLineChangeFlags(): GitLineChangeFlags {
   }
 }
 
-const GIT_LINE_DIFF_CONFIG: DiffConfig = {
-  scanLimit: 1000,
-  timeout: 200,
+const GIT_LINE_DIFF_TIMEOUT_MS = 200
+const vsCodeLineDiffComputer = new DefaultLinesDiffComputer()
+
+function getPosition(doc: Text, offset: number) {
+  const line = doc.lineAt(Math.max(0, Math.min(doc.length, offset)))
+  return {
+    lineNumber: line.number,
+    column: Math.max(1, offset - line.from + 1),
+  }
 }
 
-function getChunkEndLine(doc: Text, to: number): number {
-  return doc.lineAt(Math.max(0, Math.min(doc.length, to) - 1)).number
+function getLineLength(doc: Text, lineNumber: number) {
+  const normalizedLineNumber = Math.max(1, Math.min(doc.lines, lineNumber))
+  const line = doc.line(normalizedLineNumber)
+  return line.to - line.from
 }
 
-function getChangedTextLineCount(doc: Text, from: number, to: number) {
-  if (from === to || doc.length === 0) {
-    return 0
+export function getVsCodeStyleChangeLineRange(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  change: { fromA: number, toA: number, fromB: number, toB: number },
+) {
+  const originalStart = getPosition(originalDoc, change.fromA)
+  const originalEnd = getPosition(originalDoc, change.toA)
+  const modifiedStart = getPosition(modifiedDoc, change.fromB)
+  const modifiedEnd = getPosition(modifiedDoc, change.toB)
+  let lineStartDelta = 0
+  let lineEndDelta = 0
+
+  // Mirrors VS Code's rangeMapping.getLineRangeMapping: if a character diff
+  // starts at the end of an unchanged line, the changed line range starts on
+  // the following visual line instead of marking the unchanged content line.
+  if (
+    modifiedEnd.column === 1 &&
+    originalEnd.column === 1 &&
+    originalStart.lineNumber + lineStartDelta <= originalEnd.lineNumber &&
+    modifiedStart.lineNumber + lineStartDelta <= modifiedEnd.lineNumber
+  ) {
+    lineEndDelta = -1
   }
 
-  const startLine = doc.lineAt(Math.min(from, doc.length)).number
-  const endLine = getChunkEndLine(doc, to)
-  return Math.max(0, endLine - startLine + 1)
+  if (
+    modifiedStart.column - 1 >= getLineLength(modifiedDoc, modifiedStart.lineNumber) &&
+    originalStart.column - 1 >= getLineLength(originalDoc, originalStart.lineNumber) &&
+    originalStart.lineNumber <= originalEnd.lineNumber + lineEndDelta &&
+    modifiedStart.lineNumber <= modifiedEnd.lineNumber + lineEndDelta
+  ) {
+    lineStartDelta = 1
+  }
+
+  return {
+    originalStartLine: originalStart.lineNumber + lineStartDelta,
+    originalEndLineExclusive: originalEnd.lineNumber + 1 + lineEndDelta,
+    modifiedStartLine: modifiedStart.lineNumber + lineStartDelta,
+    modifiedEndLineExclusive: modifiedEnd.lineNumber + 1 + lineEndDelta,
+  }
+}
+
+function getTextLines(doc: Text) {
+  const lines: string[] = []
+  for (let lineNo = 1; lineNo <= doc.lines; lineNo += 1) {
+    lines.push(doc.line(lineNo).text)
+  }
+  return lines
+}
+
+function computeVsCodeLineDiff(originalLines: string[], modifiedLines: string[]) {
+  return vsCodeLineDiffComputer.computeDiff(originalLines, modifiedLines, {
+    computeMoves: false,
+    extendToSubwords: false,
+    ignoreTrimWhitespace: false,
+    maxComputationTimeMs: GIT_LINE_DIFF_TIMEOUT_MS,
+  })
 }
 
 function buildSourceToTargetLineMap(sourceDoc: Text, targetDoc: Text) {
@@ -38,25 +95,27 @@ function buildSourceToTargetLineMap(sourceDoc: Text, targetDoc: Text) {
   let sourceLine = 1
   let targetLine = 1
 
-  for (const chunk of Chunk.build(sourceDoc, targetDoc, GIT_LINE_DIFF_CONFIG)) {
-    const chunkSourceStartLine = sourceDoc.lineAt(Math.min(chunk.fromA, sourceDoc.length)).number
-    const chunkTargetStartLine = targetDoc.lineAt(Math.min(chunk.fromB, targetDoc.length)).number
+  for (const change of computeVsCodeLineDiff(getTextLines(sourceDoc), getTextLines(targetDoc)).changes) {
+    const sourceStartLine = change.original.startLineNumber
+    const sourceEndLineExclusive = change.original.endLineNumberExclusive
+    const targetStartLine = change.modified.startLineNumber
+    const targetEndLineExclusive = change.modified.endLineNumberExclusive
 
-    while (sourceLine < chunkSourceStartLine && targetLine < chunkTargetStartLine) {
+    while (sourceLine < sourceStartLine && targetLine < targetStartLine) {
       lineMap[sourceLine] = targetLine
       sourceLine += 1
       targetLine += 1
     }
 
-    const sourceLineCount = getChangedTextLineCount(sourceDoc, chunk.fromA, chunk.toA)
-    const targetLineCount = getChangedTextLineCount(targetDoc, chunk.fromB, chunk.toB)
+    const sourceLineCount = Math.max(0, sourceEndLineExclusive - sourceStartLine)
+    const targetLineCount = Math.max(0, targetEndLineExclusive - targetStartLine)
     const pairedLineCount = Math.min(sourceLineCount, targetLineCount)
     for (let offset = 0; offset < pairedLineCount; offset += 1) {
-      lineMap[chunkSourceStartLine + offset] = chunkTargetStartLine + offset
+      lineMap[sourceStartLine + offset] = targetStartLine + offset
     }
 
-    sourceLine = chunkSourceStartLine + sourceLineCount
-    targetLine = chunkTargetStartLine + targetLineCount
+    sourceLine = sourceEndLineExclusive
+    targetLine = targetEndLineExclusive
   }
 
   while (sourceLine <= sourceDoc.lines && targetLine <= targetDoc.lines) {
@@ -68,23 +127,28 @@ function buildSourceToTargetLineMap(sourceDoc: Text, targetDoc: Text) {
   return lineMap
 }
 
-export function buildLineFlagsFromCodeMirrorChunks(
+export function buildLineFlagsFromVsCodeDiff(
   baseLines: string[],
   currentDoc: Text,
 ): (GitLineChangeFlags | undefined)[] {
   const lineFlags: (GitLineChangeFlags | undefined)[] = new Array(currentDoc.lines)
   const baseDoc = Text.of(baseLines)
+  const currentLines = getTextLines(currentDoc)
 
-  for (const chunk of Chunk.build(baseDoc, currentDoc, GIT_LINE_DIFF_CONFIG)) {
-    if (chunk.fromB === chunk.toB) {
+  for (const change of computeVsCodeLineDiff(baseLines, currentLines).changes) {
+    const modifiedStartLine = change.modified.startLineNumber
+    const modifiedEndLineExclusive = change.modified.endLineNumberExclusive
+    if (modifiedStartLine >= modifiedEndLineExclusive) {
       continue
     }
-
-    const startLine = currentDoc.lineAt(Math.min(chunk.fromB, currentDoc.length)).number
-    const endLine = getChunkEndLine(currentDoc, chunk.toB)
-    const isPureInsert = chunk.fromA === chunk.toA || baseDoc.length === 0
-
-    for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
+    const originalLineCount = Math.max(0, change.original.endLineNumberExclusive - change.original.startLineNumber)
+    const isPureInsert = originalLineCount === 0 || baseDoc.length === 0
+    const startLine = Math.max(1, modifiedStartLine)
+    const endLine = Math.min(currentDoc.lines + 1, modifiedEndLineExclusive)
+    for (let lineNo = startLine; lineNo < endLine; lineNo += 1) {
+      if (lineNo > currentDoc.lines) {
+        continue
+      }
       const flags = lineFlags[lineNo - 1] ?? (lineFlags[lineNo - 1] = emptyLineChangeFlags())
       if (isPureInsert) {
         flags.added = true
@@ -97,14 +161,14 @@ export function buildLineFlagsFromCodeMirrorChunks(
   return lineFlags
 }
 
-export function buildScopedLineFlagsFromCodeMirrorChunks(
+export function buildScopedLineFlagsFromVsCodeDiff(
   baseLines: string[],
   indexLines: string[],
   currentDoc: Text,
 ): (GitLineChangeFlags | undefined)[] {
   const indexDoc = Text.of(indexLines)
-  const stagedFlags = buildLineFlagsFromCodeMirrorChunks(baseLines, indexDoc)
-  const unstagedFlags = buildLineFlagsFromCodeMirrorChunks(indexLines, currentDoc)
+  const stagedFlags = buildLineFlagsFromVsCodeDiff(baseLines, indexDoc)
+  const unstagedFlags = buildLineFlagsFromVsCodeDiff(indexLines, currentDoc)
   const indexToCurrentLineMap = buildSourceToTargetLineMap(indexDoc, currentDoc)
   const lineFlags: (GitLineChangeFlags | undefined)[] = new Array(currentDoc.lines)
 
@@ -143,3 +207,6 @@ export function buildScopedLineFlagsFromCodeMirrorChunks(
 
   return lineFlags
 }
+
+export const buildLineFlagsFromCodeMirrorChunks = buildLineFlagsFromVsCodeDiff
+export const buildScopedLineFlagsFromCodeMirrorChunks = buildScopedLineFlagsFromVsCodeDiff
