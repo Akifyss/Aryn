@@ -1413,6 +1413,10 @@ function App() {
   }
 
   async function connectWorkspace(nextPath: string) {
+    if (currentPath && normalizeFilePath(currentPath) === normalizeFilePath(nextPath)) {
+      return
+    }
+
     await flushWorkspaceAutosave()
     await window.appApi.stopWorkspaceWatch()
     await loadTree(nextPath)
@@ -1676,6 +1680,11 @@ function App() {
     try {
       const nextPath = await window.appApi.pickWorkspace()
       if (nextPath) {
+        if (currentPath && normalizeFilePath(currentPath) === normalizeFilePath(nextPath)) {
+          setStatusMessage('Workspace already open')
+          return
+        }
+
         await connectWorkspace(nextPath)
         await restoreWorkspaceTabs(nextPath)
         setStatusMessage('Workspace connected')
