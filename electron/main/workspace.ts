@@ -1,7 +1,6 @@
-import { watch as watchFs } from 'node:fs'
 import { access, readFile, readdir, mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import chokidar from 'chokidar'
+import chokidar, { type FSWatcher } from 'chokidar'
 import { getSupportedWorkspaceEditorKind, type SupportedWorkspaceEditorKind } from '../../src/features/workspace/lib/file-types'
 
 export type WorkspaceNode = {
@@ -42,8 +41,17 @@ type WorkspaceWatcherHandle = {
 let workspaceWatcher: WorkspaceWatcherHandle | null = null
 let workspaceWatcherGeneration = 0
 
-function supportsNativeRecursiveWatch() {
+function shouldUsePollingWorkspaceWatch() {
   return process.platform === 'darwin' || process.platform === 'win32'
+}
+
+function createWorkspaceChokidarOptions() {
+  return {
+    binaryInterval: 1500,
+    ignoreInitial: true,
+    interval: 500,
+    usePolling: shouldUsePollingWorkspaceWatch(),
+  } satisfies Parameters<typeof chokidar.watch>[1]
 }
 
 function shouldIgnore(entryName: string) {
@@ -75,36 +83,6 @@ function isIgnorableWorkspaceWatcherError(error: unknown) {
   }
 
   return shouldIgnoreWorkspacePath(error.message)
-}
-
-function isMissingWorkspacePathError(error: unknown) {
-  return (
-    typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && (error as NodeJS.ErrnoException).code === 'ENOENT'
-  )
-}
-
-async function classifyNativeWorkspaceEvent(changedPath: string, eventType: 'change' | 'rename'): Promise<WorkspaceChangeEvent['type'] | null> {
-  if (shouldIgnoreWorkspacePath(changedPath)) {
-    return null
-  }
-
-  if (eventType === 'change') {
-    return 'change'
-  }
-
-  try {
-    const info = await stat(changedPath)
-    return info.isDirectory() ? 'addDir' : 'add'
-  } catch (error) {
-    if (isMissingWorkspacePathError(error)) {
-      return 'unlink'
-    }
-
-    throw error
-  }
 }
 
 function isCreatableFile(entryName: string) {
@@ -488,81 +466,50 @@ export async function watchWorkspace(
     })
   }
 
-  const nextWatcher = (() => {
-    if (supportsNativeRecursiveWatch()) {
-      const nativeWatcher = watchFs(rootPath, { recursive: true }, (eventType, relativePath) => {
-        const nextRelativePath = relativePath?.toString()
-        if (!nextRelativePath) {
-          return
-        }
+  const workspaceFileWatcher = chokidar.watch(rootPath, {
+    ...createWorkspaceChokidarOptions(),
+    ignored: shouldIgnoreWorkspacePath,
+  })
+  const gitIndexWatcher = chokidar.watch(path.join(rootPath, '.git', 'index'), createWorkspaceChokidarOptions())
+  const watchedBackends = [workspaceFileWatcher, gitIndexWatcher]
+  const nextWatcher: WorkspaceWatcherHandle = {
+    close: async () => {
+      await Promise.all(watchedBackends.map((watcher) => watcher.close()))
+    },
+  }
 
-        const changedPath = path.join(rootPath, nextRelativePath)
+  workspaceFileWatcher
+    .on('add', (changedPath) => relay('add', changedPath))
+    .on('addDir', (changedPath) => relay('addDir', changedPath))
+    .on('change', (changedPath) => relay('change', changedPath))
+    .on('unlink', (changedPath) => relay('unlink', changedPath))
+    .on('unlinkDir', (changedPath) => relay('unlinkDir', changedPath))
+    .on('error', (error) => {
+      if (workspaceWatcher !== nextWatcher || workspaceWatcherGeneration !== watcherGeneration) {
+        return
+      }
 
-        void classifyNativeWorkspaceEvent(changedPath, eventType)
-          .then((resolvedEventType) => {
-            if (!resolvedEventType) {
-              return
-            }
+      if (isIgnorableWorkspaceWatcherError(error)) {
+        return
+      }
 
-            relay(resolvedEventType, changedPath)
-          })
-          .catch((error) => {
-            if (workspaceWatcher !== nextWatcher || workspaceWatcherGeneration !== watcherGeneration) {
-              return
-            }
-
-            if (isIgnorableWorkspaceWatcherError(error) || isMissingWorkspacePathError(error)) {
-              return
-            }
-
-            throw error
-          })
-      })
-
-      nativeWatcher.on('error', (error) => {
-        if (workspaceWatcher !== nextWatcher || workspaceWatcherGeneration !== watcherGeneration) {
-          return
-        }
-
-        if (isIgnorableWorkspaceWatcherError(error) || isMissingWorkspacePathError(error)) {
-          return
-        }
-
-        throw error
-      })
-
-      return {
-        close: async () => {
-          nativeWatcher.close()
-        },
-      } satisfies WorkspaceWatcherHandle
-    }
-
-    const chokidarWatcher = chokidar.watch(rootPath, {
-      ignoreInitial: true,
-      ignored: shouldIgnoreWorkspacePath,
+      throw error
     })
+  gitIndexWatcher
+    .on('add', (changedPath) => relay('change', changedPath))
+    .on('change', (changedPath) => relay('change', changedPath))
+    .on('unlink', (changedPath) => relay('change', changedPath))
+    .on('error', (error) => {
+      if (workspaceWatcher !== nextWatcher || workspaceWatcherGeneration !== watcherGeneration) {
+        return
+      }
 
-    chokidarWatcher
-      .on('add', (changedPath) => relay('add', changedPath))
-      .on('addDir', (changedPath) => relay('addDir', changedPath))
-      .on('change', (changedPath) => relay('change', changedPath))
-      .on('unlink', (changedPath) => relay('unlink', changedPath))
-      .on('unlinkDir', (changedPath) => relay('unlinkDir', changedPath))
-      .on('error', (error) => {
-        if (workspaceWatcher !== nextWatcher || workspaceWatcherGeneration !== watcherGeneration) {
-          return
-        }
+      if (isIgnorableWorkspaceWatcherError(error)) {
+        return
+      }
 
-        if (isIgnorableWorkspaceWatcherError(error)) {
-          return
-        }
-
-        throw error
-      })
-
-    return chokidarWatcher
-  })()
+      throw error
+    })
 
   workspaceWatcher = nextWatcher
 }
