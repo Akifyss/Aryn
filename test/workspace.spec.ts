@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -74,6 +74,78 @@ describe('workspace helpers', () => {
         path: path.join(rootPath, 'image.png'),
       },
     ])
+  })
+
+  it('skips symbolic links so recursive workspace loading stays bounded', async () => {
+    const rootPath = await createTempWorkspace()
+    const linkedDirectoryPath = path.join(rootPath, 'linked-dir')
+    const linkedFilePath = path.join(rootPath, 'linked-file.md')
+
+    await mkdir(path.join(rootPath, 'docs'), { recursive: true })
+    await writeFile(path.join(rootPath, 'docs', 'draft.md'), '# Draft', 'utf8')
+    await writeFile(path.join(rootPath, 'real.md'), '# Real', 'utf8')
+    await symlink(path.join(rootPath, 'docs'), linkedDirectoryPath)
+    await symlink(path.join(rootPath, 'real.md'), linkedFilePath)
+
+    const tree = await loadWorkspaceTree(rootPath)
+
+    expect(tree).toEqual([
+      {
+        children: [
+          {
+            kind: 'file',
+            name: 'draft.md',
+            path: path.join(rootPath, 'docs', 'draft.md'),
+          },
+        ],
+        kind: 'directory',
+        name: 'docs',
+        path: path.join(rootPath, 'docs'),
+      },
+      {
+        kind: 'file',
+        name: 'real.md',
+        path: path.join(rootPath, 'real.md'),
+      },
+    ])
+  })
+
+  it('keeps loading the workspace when one child directory is unreadable', async () => {
+    const rootPath = await createTempWorkspace()
+    const lockedDirectoryPath = path.join(rootPath, 'locked')
+
+    await mkdir(path.join(rootPath, 'notes'), { recursive: true })
+    await mkdir(lockedDirectoryPath, { recursive: true })
+    await writeFile(path.join(rootPath, 'notes', 'draft.md'), '# Draft', 'utf8')
+    await writeFile(path.join(lockedDirectoryPath, 'secret.md'), 'secret', 'utf8')
+    await chmod(lockedDirectoryPath, 0o000)
+
+    try {
+      const tree = await loadWorkspaceTree(rootPath)
+
+      expect(tree).toEqual([
+        {
+          children: [],
+          kind: 'directory',
+          name: 'locked',
+          path: lockedDirectoryPath,
+        },
+        {
+          children: [
+            {
+              kind: 'file',
+              name: 'draft.md',
+              path: path.join(rootPath, 'notes', 'draft.md'),
+            },
+          ],
+          kind: 'directory',
+          name: 'notes',
+          path: path.join(rootPath, 'notes'),
+        },
+      ])
+    } finally {
+      await chmod(lockedDirectoryPath, 0o700)
+    }
   })
 
   it('creates and renames files while keeping them inside the workspace', async () => {

@@ -157,35 +157,55 @@ function sortNodes(left: WorkspaceNode, right: WorkspaceNode) {
 }
 
 export async function loadWorkspaceTree(rootPath: string): Promise<WorkspaceNode[]> {
-  async function walk(currentPath: string): Promise<WorkspaceNode[]> {
-    const entries = await readdir(currentPath, { withFileTypes: true })
-    const nodes: Array<WorkspaceNode | null> = await Promise.all(entries
-      .filter((entry) => !shouldIgnore(entry.name))
-      .map(async (entry) => {
-        const entryPath = path.join(currentPath, entry.name)
+  async function walk(currentPath: string, isRoot = false): Promise<WorkspaceNode[]> {
+    let entries
 
-        if (entry.isDirectory()) {
-          const children = await walk(entryPath)
+    try {
+      entries = await readdir(currentPath, { withFileTypes: true })
+    } catch (error) {
+      if (isRoot) {
+        throw error
+      }
 
-          return {
-            name: entry.name,
-            path: entryPath,
-            kind: 'directory' as const,
-            children,
-          }
-        }
+      // Skip unreadable or transient directories so a single bad child does not
+      // block opening the entire workspace.
+      return []
+    }
 
-        return {
+    const nodes: WorkspaceNode[] = []
+
+    for (const entry of entries) {
+      if (shouldIgnore(entry.name) || entry.isSymbolicLink()) {
+        continue
+      }
+
+      const entryPath = path.join(currentPath, entry.name)
+
+      if (entry.isDirectory()) {
+        nodes.push({
+          children: await walk(entryPath),
+          kind: 'directory',
           name: entry.name,
           path: entryPath,
-          kind: 'file' as const,
-        }
-      }))
+        })
+        continue
+      }
 
-    return nodes.filter((node): node is WorkspaceNode => node !== null).sort(sortNodes)
+      if (!entry.isFile()) {
+        continue
+      }
+
+      nodes.push({
+        kind: 'file',
+        name: entry.name,
+        path: entryPath,
+      })
+    }
+
+    return nodes.sort(sortNodes)
   }
 
-  return walk(rootPath)
+  return walk(rootPath, true)
 }
 
 export async function loadWorkspaceFile(filePath: string) {
@@ -434,7 +454,9 @@ export async function watchWorkspace(
   await unwatchWorkspace()
 
   workspaceWatcher = chokidar.watch(rootPath, {
+    followSymlinks: false,
     ignoreInitial: true,
+    ignorePermissionErrors: true,
     ignored: shouldIgnoreWorkspacePath,
   })
 
