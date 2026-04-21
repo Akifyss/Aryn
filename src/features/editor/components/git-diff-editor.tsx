@@ -49,7 +49,6 @@ type DiffNavigationMatch = {
   target: DiffNavigationTarget
 }
 
-const DIFF_AUTO_SAVE_DELAY_MS = 1000
 const DIFF_NAVIGATION_HIGHLIGHT_DURATION_MS = 2200
 
 function createCodeMirrorDiffConfig(isEditable: boolean) {
@@ -990,9 +989,7 @@ export function GitDiffEditor({
   const [isSaving, setIsSaving] = useState(false)
   const isSavingRef = useRef(false)
   const isComposingRef = useRef(false)
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isEditable = diff.change.scope === 'unstaged' && diff.modifiedExists
-  const isDirty = draftContent !== diff.modifiedContent
   const blockActionsDisabledReason = getBlockActionsDisabledReason({
     isComposing,
     isApplyingAction: isApplyingBlockAction,
@@ -1041,16 +1038,7 @@ export function GitDiffEditor({
     setDraftContent((current) => current === content ? current : content)
   }, [])
 
-  const clearAutoSaveTimer = useCallback(() => {
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current)
-      autoSaveTimerRef.current = null
-    }
-  }, [])
-
   const handleSave = useCallback(async () => {
-    clearAutoSaveTimer()
-
     if (
       !isEditable
       || hasDirtyRelatedFileTab
@@ -1071,20 +1059,7 @@ export function GitDiffEditor({
       isSavingRef.current = false
       setIsSaving(false)
     }
-  }, [clearAutoSaveTimer, diff.change.path, hasDirtyRelatedFileTab, isEditable, onSaveEditedFile])
-
-  useEffect(() => {
-    if (!isEditable || hasDirtyRelatedFileTab || isComposing || isSaving || !isDirty) {
-      clearAutoSaveTimer()
-      return
-    }
-
-    autoSaveTimerRef.current = setTimeout(() => {
-      void handleSave()
-    }, DIFF_AUTO_SAVE_DELAY_MS)
-
-    return clearAutoSaveTimer
-  }, [clearAutoSaveTimer, handleSave, hasDirtyRelatedFileTab, isComposing, isDirty, isEditable, isSaving])
+  }, [diff.change.path, hasDirtyRelatedFileTab, isEditable, onSaveEditedFile])
 
   const handleBlockAction = useCallback(async (selection: GitDiffSelection, action: GitDiffBlockAction) => {
     if (!areBlockActionsEnabled) {

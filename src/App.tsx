@@ -43,6 +43,7 @@ import {
   type WorkspaceDiffNavigationRequest,
   type WorkspaceDisplayTab,
   type WorkspaceFileTab,
+  type WorkspaceTab,
 } from '@/features/workspace/store/use-workspace-store'
 import {
   getDefaultWorkspaceFileViewMode,
@@ -611,6 +612,19 @@ function App() {
   const activeFileTab = isWorkspaceFileTab(activeTab) ? activeTab : null
   const activeDiffTab = isWorkspaceDiffTab(activeTab) ? activeTab : null
   const activeDiffDraftContent = activeDiffTab?.draftContent ?? activeDiffTab?.diff.modifiedContent ?? ''
+  const activeDiffHasDirtyRelatedFileTab = useMemo(() => {
+    if (!activeDiffTab) {
+      return false
+    }
+
+    const diffPath = normalizeFilePath(activeDiffTab.diff.change.path)
+
+    return openTabs.some((tab: WorkspaceTab) => (
+      tab.kind === 'file'
+      && tab.isDirty
+      && normalizeFilePath(tab.filePath) === diffPath
+    ))
+  }, [activeDiffTab?.diff.change.path, openTabs])
   const displayTabs = useMemo<WorkspaceDisplayTab[]>(
     () => {
       if (!isSettingsTabOpen) {
@@ -643,6 +657,10 @@ function App() {
   const workspaceAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const workspaceAutosaveTargetRef = useRef<{ content: string, filePath: string } | null>(null)
   const workspaceAutosavePromiseRef = useRef<Promise<void> | null>(null)
+  const diffAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const diffAutosaveTargetRef = useRef<{ tabId: string } | null>(null)
+  const diffAutosavePromiseRef = useRef<Promise<boolean> | null>(null)
+  const flushDiffTabRef = useRef<(tab: WorkspaceDiffTab, options?: { announce?: boolean }) => Promise<boolean>>(async () => false)
   const previousWorkspaceAutosavePathRef = useRef<string | null>(null)
   const previousActiveDiffTabIdRef = useRef<string | null>(null)
   const internalWorkspaceSavePathsRef = useRef(new Set<string>())
@@ -993,6 +1011,62 @@ function App() {
     return didSave
   }
 
+  flushDiffTabRef.current = flushDiffTab
+
+  const clearDiffAutosaveTimer = useCallback(() => {
+    if (!diffAutosaveTimerRef.current) {
+      return
+    }
+
+    clearTimeout(diffAutosaveTimerRef.current)
+    diffAutosaveTimerRef.current = null
+  }, [])
+
+  const flushDiffAutosave = useCallback(async (tabId?: string) => {
+    clearDiffAutosaveTimer()
+
+    if (diffAutosavePromiseRef.current) {
+      await diffAutosavePromiseRef.current
+    }
+
+    const targetTabId = tabId ?? diffAutosaveTargetRef.current?.tabId
+
+    if (!targetTabId) {
+      return false
+    }
+
+    const targetTab = useWorkspaceStore.getState().openTabs.find(
+      (tab): tab is WorkspaceDiffTab => (
+        tab.kind === 'diff'
+        && tab.id === targetTabId
+        && tab.isDirty
+      ),
+    )
+
+    if (!targetTab) {
+      if (diffAutosaveTargetRef.current?.tabId === targetTabId) {
+        diffAutosaveTargetRef.current = null
+      }
+
+      return false
+    }
+
+    const savePromise = flushDiffTabRef.current(targetTab)
+    diffAutosavePromiseRef.current = savePromise
+
+    try {
+      return await savePromise
+    } finally {
+      if (diffAutosavePromiseRef.current === savePromise) {
+        diffAutosavePromiseRef.current = null
+      }
+
+      if (diffAutosaveTargetRef.current?.tabId === targetTab.id) {
+        diffAutosaveTargetRef.current = null
+      }
+    }
+  }, [clearDiffAutosaveTimer])
+
   async function ensureWorkspaceTabsSavedBeforeNodeMutation(options: {
     actionLabel: string
     nodePath: string
@@ -1007,6 +1081,7 @@ function App() {
     }
 
     await flushWorkspaceAutosave()
+    await flushDiffAutosave()
 
     const dirtyDiffPaths = Array.from(new Set(
       getDirtyWorkspaceTabsForNodePath(options.nodePath)
@@ -1055,6 +1130,7 @@ function App() {
     }
 
     await flushWorkspaceAutosave()
+    await flushDiffAutosave()
 
     if (options.filePaths?.length) {
       const uniqueFilePaths = Array.from(new Set(options.filePaths.map((filePath) => normalizeFilePath(filePath))))
@@ -1322,6 +1398,7 @@ function App() {
 
   async function confirmDiscardDirtyTabs(reason: 'close' | 'switch-workspace') {
     await flushWorkspaceAutosave()
+    await flushDiffAutosave()
     try {
       await flushDirtyDiffTabs()
     } catch {
@@ -1418,6 +1495,7 @@ function App() {
     }
 
     await flushWorkspaceAutosave()
+    await flushDiffAutosave()
     await window.appApi.stopWorkspaceWatch()
     await loadTree(nextPath)
     setCurrentPath(nextPath)
@@ -1895,6 +1973,7 @@ function App() {
     }
 
     await flushWorkspaceAutosave()
+    await flushDiffAutosave()
 
     const dirtyDiffPaths = Array.from(new Set(
       getDirtyWorkspaceTabsForNodePath(node.path)
@@ -1990,7 +2069,11 @@ function App() {
         return
       }
 
-      await handleSaveDiffFile(activeDiffTab.diff.change.path, activeDiffDraftContent, { announce: true })
+      const targetDiffTab = useWorkspaceStore.getState().openTabs.find(
+        (tab): tab is WorkspaceDiffTab => tab.kind === 'diff' && tab.id === activeDiffTab.id,
+      ) ?? activeDiffTab
+
+      await flushDiffTab(targetDiffTab, { announce: true })
       return
     }
 
@@ -2417,12 +2500,50 @@ function App() {
       )
 
       if (previousDiffTab?.isDirty) {
-        void flushDiffTab(previousDiffTab)
+        void flushDiffAutosave(previousDiffTab.id)
       }
     }
 
     previousActiveDiffTabIdRef.current = nextTabId
-  }, [activeDiffTab?.id, flushDiffTab])
+  }, [activeDiffTab?.id, flushDiffAutosave])
+
+  useEffect(() => {
+    clearDiffAutosaveTimer()
+
+    if (
+      !activeDiffTab?.isDirty
+      || activeDiffTab.diff.change.scope !== 'unstaged'
+      || !activeDiffTab.diff.modifiedExists
+      || isActiveEditorComposing
+      || activeDiffHasDirtyRelatedFileTab
+    ) {
+      if (!activeDiffTab) {
+        diffAutosaveTargetRef.current = null
+      }
+      return
+    }
+
+    diffAutosaveTargetRef.current = {
+      tabId: activeDiffTab.id,
+    }
+    diffAutosaveTimerRef.current = setTimeout(() => {
+      void flushDiffAutosave(activeDiffTab.id)
+    }, WORKSPACE_AUTO_SAVE_DELAY_MS)
+
+    return clearDiffAutosaveTimer
+  }, [
+    activeDiffTab?.diff.change.path,
+    activeDiffTab?.diff.change.scope,
+    activeDiffTab?.diff.modifiedContent,
+    activeDiffTab?.diff.modifiedExists,
+    activeDiffTab?.draftContent,
+    activeDiffTab?.id,
+    activeDiffTab?.isDirty,
+    activeDiffHasDirtyRelatedFileTab,
+    clearDiffAutosaveTimer,
+    flushDiffAutosave,
+    isActiveEditorComposing,
+  ])
 
   useEffect(() => {
     clearWorkspaceAutosaveTimer()
@@ -2454,13 +2575,15 @@ function App() {
 
   useEffect(() => () => {
     clearWorkspaceAutosaveTimer()
+    clearDiffAutosaveTimer()
     void flushWorkspaceAutosave()
+    void flushDiffAutosave()
     internalWorkspaceSaveTimersRef.current.forEach((timer) => {
       clearTimeout(timer)
     })
     internalWorkspaceSaveTimersRef.current.clear()
     internalWorkspaceSavePathsRef.current.clear()
-  }, [clearWorkspaceAutosaveTimer, flushWorkspaceAutosave])
+  }, [clearDiffAutosaveTimer, clearWorkspaceAutosaveTimer, flushDiffAutosave, flushWorkspaceAutosave])
 
   useEffect(() => {
     const unsubscribe = window.appApi.onWorkspaceChanged(async (event) => {
@@ -3617,11 +3740,7 @@ function App() {
                 diff={activeDiffTab.diff}
                 draftContent={activeDiffDraftContent}
                 navigationRequest={activeDiffTab.navigationRequest ?? null}
-                hasDirtyRelatedFileTab={openTabs.some((tab) => (
-                  tab.kind === 'file'
-                  && tab.filePath === activeDiffTab.diff.change.path
-                  && tab.isDirty
-                ))}
+                hasDirtyRelatedFileTab={activeDiffHasDirtyRelatedFileTab}
                 onApplyBlockAction={handleApplyGitDiffSelection}
                 onDiscardChange={(change) => {
                   void handleDiscardGitChange(change)
