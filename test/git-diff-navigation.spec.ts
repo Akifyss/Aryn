@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createSelectionFromCodeMirrorChunk,
   createVisualDiffSelections,
+  findBestNavigationTarget,
   isLineWithinVisualDiff,
 } from '@/features/editor/lib/git-diff-navigation'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '@/vendor/meo/shared/gitDiffLineFlags'
@@ -31,6 +32,19 @@ function getOnlyVsCodeStyleChunk(originalText: string, modifiedText: string) {
   expect(chunks).toHaveLength(1)
   return {
     chunk: chunks[0],
+    modifiedDoc,
+    originalDoc,
+  }
+}
+
+function getVsCodeStyleChunks(originalText: string, modifiedText: string) {
+  const originalDoc = Text.of(originalText.split('\n'))
+  const modifiedDoc = Text.of(modifiedText.split('\n'))
+
+  return {
+    chunks: Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+    }),
     modifiedDoc,
     originalDoc,
   }
@@ -284,6 +298,50 @@ describe('git diff navigation', () => {
     expect(isLineWithinVisualDiff('A\nB\nC\n', 'A\nB\n', 'worktree', 1)).toBe(false)
   })
 
+  it('targets the original side for split-view worktree navigation to pure deletions', () => {
+    const leading = getVsCodeStyleChunks('A\nB\nC\n', 'B\nC\n')
+    expect(findBestNavigationTarget(
+      leading.originalDoc,
+      leading.modifiedDoc,
+      leading.chunks,
+      1,
+      'modified',
+    )?.target).toEqual({
+      focusEditor: false,
+      lineNumber: 1,
+      selectLine: false,
+      side: 'original',
+    })
+
+    const middle = getVsCodeStyleChunks('A\nB\nC\n', 'A\nC\n')
+    expect(findBestNavigationTarget(
+      middle.originalDoc,
+      middle.modifiedDoc,
+      middle.chunks,
+      1,
+      'modified',
+    )?.target).toEqual({
+      focusEditor: false,
+      lineNumber: 2,
+      selectLine: false,
+      side: 'original',
+    })
+
+    const trailing = getVsCodeStyleChunks('A\nB\nC\n', 'A\nB\n')
+    expect(findBestNavigationTarget(
+      trailing.originalDoc,
+      trailing.modifiedDoc,
+      trailing.chunks,
+      2,
+      'modified',
+    )?.target).toEqual({
+      focusEditor: false,
+      lineNumber: 3,
+      selectLine: false,
+      side: 'original',
+    })
+  })
+
   it('keeps inserted-line navigation scoped to inserted worktree lines', () => {
     const originalText = 'A\nC\n'
     const modifiedText = 'A\nB\nC\n'
@@ -291,6 +349,14 @@ describe('git diff navigation', () => {
     expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 2)).toBe(true)
     expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 1)).toBe(false)
     expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 3)).toBe(false)
+
+    const { chunks, modifiedDoc, originalDoc } = getVsCodeStyleChunks(originalText, modifiedText)
+    expect(findBestNavigationTarget(originalDoc, modifiedDoc, chunks, 2, 'modified')?.target).toEqual({
+      focusEditor: true,
+      lineNumber: 2,
+      selectLine: true,
+      side: 'modified',
+    })
   })
 
   it('keeps modified-line navigation scoped to changed lines', () => {
@@ -300,5 +366,13 @@ describe('git diff navigation', () => {
     expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 2)).toBe(true)
     expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 1)).toBe(false)
     expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 3)).toBe(false)
+
+    const { chunks, modifiedDoc, originalDoc } = getVsCodeStyleChunks(originalText, modifiedText)
+    expect(findBestNavigationTarget(originalDoc, modifiedDoc, chunks, 2, 'modified')?.target).toEqual({
+      focusEditor: true,
+      lineNumber: 2,
+      selectLine: true,
+      side: 'modified',
+    })
   })
 })

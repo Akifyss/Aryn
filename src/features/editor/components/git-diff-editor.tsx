@@ -28,25 +28,16 @@ import { getCodeMirrorLanguageSupport } from '@/features/editor/lib/codemirror-l
 import {
   createSelectionFromCodeMirrorChunk,
   type CodeMirrorDiffChunk,
+  findBestNavigationTarget,
 } from '@/features/editor/lib/git-diff-navigation'
 import type { WorkspaceDiffNavigationRequest } from '@/features/workspace/store/use-workspace-store'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '@/vendor/meo/shared/gitDiffLineFlags'
 
 type DiffViewMode = 'split' | 'unified'
-type DiffNavigationTarget = {
-  lineNumber: number
-  side: 'modified' | 'original'
-}
 
 type DiffNavigationHighlightRange = {
   endLineNumber: number
   startLineNumber: number
-}
-
-type DiffNavigationMatch = {
-  distance: number
-  selection: GitDiffSelection
-  target: DiffNavigationTarget
 }
 
 const DIFF_NAVIGATION_HIGHLIGHT_DURATION_MS = 2200
@@ -141,47 +132,6 @@ function normalizeEditorLineNumber(lineNumber: number, doc: Text) {
   return Math.max(1, Math.min(doc.lines, Math.floor(lineNumber)))
 }
 
-function getDistanceToLineRange(lineNumber: number, startLine: number, lineCount: number) {
-  const normalizedStartLine = Math.max(1, startLine)
-
-  if (lineCount <= 0) {
-    return Math.abs(lineNumber - normalizedStartLine)
-  }
-
-  const endLine = normalizedStartLine + lineCount - 1
-
-  if (lineNumber < normalizedStartLine) {
-    return normalizedStartLine - lineNumber
-  }
-
-  if (lineNumber > endLine) {
-    return lineNumber - endLine
-  }
-
-  return 0
-}
-
-function getNavigationSelectionLineStart(selection: GitDiffSelection, side: 'modified' | 'original') {
-  return Math.max(1, side === 'modified' ? selection.modifiedStartLine : selection.originalStartLine)
-}
-
-function getNavigationSelectionLineCount(selection: GitDiffSelection, side: 'modified' | 'original') {
-  return side === 'modified' ? selection.modifiedLineCount : selection.originalLineCount
-}
-
-function getNavigationHighlightRange(
-  selection: GitDiffSelection,
-  side: 'modified' | 'original',
-): DiffNavigationHighlightRange {
-  const startLineNumber = getNavigationSelectionLineStart(selection, side)
-  const lineCount = getNavigationSelectionLineCount(selection, side)
-
-  return {
-    endLineNumber: lineCount > 0 ? startLineNumber + lineCount - 1 : startLineNumber,
-    startLineNumber,
-  }
-}
-
 function getSingleLineNavigationHighlightRange(lineNumber: number): DiffNavigationHighlightRange {
   const normalizedLineNumber = Math.max(1, Math.floor(lineNumber))
 
@@ -191,105 +141,21 @@ function getSingleLineNavigationHighlightRange(lineNumber: number): DiffNavigati
   }
 }
 
-function clampRequestedLineToSelectionRange(
-  selection: GitDiffSelection,
-  side: 'modified' | 'original',
-  requestedLineNumber: number,
+function revealEditorLine(
+  view: EditorView,
+  lineNumber: number,
+  { focusEditor = true, selectLine = true }: { focusEditor?: boolean, selectLine?: boolean } = {},
 ) {
-  const { endLineNumber, startLineNumber } = getNavigationHighlightRange(selection, side)
-  return Math.max(startLineNumber, Math.min(requestedLineNumber, endLineNumber))
-}
-
-function resolveChunkNavigationMatch(
-  originalDoc: Text,
-  modifiedDoc: Text,
-  chunk: CodeMirrorDiffChunk,
-  requestedLineNumber: number,
-  preferredSide: 'modified' | 'original',
-): DiffNavigationMatch {
-  const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
-  const modifiedDistance = getDistanceToLineRange(
-    requestedLineNumber,
-    selection.modifiedStartLine,
-    selection.modifiedLineCount,
-  )
-  const originalDistance = getDistanceToLineRange(
-    requestedLineNumber,
-    selection.originalStartLine,
-    selection.originalLineCount,
-  )
-
-  let side: 'modified' | 'original'
-
-  if (modifiedDistance < originalDistance) {
-    side = 'modified'
-  } else if (originalDistance < modifiedDistance) {
-    side = 'original'
-  } else {
-    const fallbackSide = preferredSide === 'modified' ? 'original' : 'modified'
-    const preferredSideLineCount = getNavigationSelectionLineCount(selection, preferredSide)
-    const fallbackSideLineCount = getNavigationSelectionLineCount(selection, fallbackSide)
-
-    side = preferredSideLineCount > 0 || fallbackSideLineCount === 0
-      ? preferredSide
-      : fallbackSide
-  }
-
-  return {
-    distance: side === 'modified' ? modifiedDistance : originalDistance,
-    selection,
-    target: {
-      lineNumber: clampRequestedLineToSelectionRange(selection, side, requestedLineNumber),
-      side,
-    },
-  }
-}
-
-function findBestNavigationTarget(
-  originalDoc: Text,
-  modifiedDoc: Text,
-  chunks: readonly CodeMirrorDiffChunk[],
-  requestedLineNumber: number,
-  preferredSide: 'modified' | 'original',
-) {
-  let bestMatch: DiffNavigationMatch | null = null
-  let bestDistance = Number.POSITIVE_INFINITY
-
-  for (const chunk of chunks) {
-    const nextMatch = resolveChunkNavigationMatch(
-      originalDoc,
-      modifiedDoc,
-      chunk,
-      requestedLineNumber,
-      preferredSide,
-    )
-    const nextDistance = nextMatch.distance
-
-    if (
-      nextDistance < bestDistance
-      || (
-        nextDistance === bestDistance
-        && nextMatch.target.side === preferredSide
-        && bestMatch?.target.side !== preferredSide
-      )
-    ) {
-      bestDistance = nextDistance
-      bestMatch = nextMatch
-    }
-  }
-
-  return bestMatch
-}
-
-function revealEditorLine(view: EditorView, lineNumber: number) {
   const safeLineNumber = normalizeEditorLineNumber(lineNumber, view.state.doc)
   const line = view.state.doc.line(safeLineNumber)
 
   view.dispatch({
     effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
-    selection: EditorSelection.cursor(line.from),
+    ...(selectLine ? { selection: EditorSelection.cursor(line.from) } : null),
   })
-  view.focus()
+  if (focusEditor) {
+    view.focus()
+  }
 }
 
 function clearNavigationHighlight(
@@ -891,7 +757,10 @@ function CodeMirrorDiffRenderer({
         if (resolvedSide === 'original') {
           const targetLineNumber = target?.target.lineNumber ?? navigationRequest.lineNumber
 
-          revealEditorLine(splitView.a, targetLineNumber)
+          revealEditorLine(splitView.a, targetLineNumber, {
+            focusEditor: target?.target.focusEditor ?? true,
+            selectLine: target?.target.selectLine ?? true,
+          })
           applyNavigationHighlight(
             splitView.a,
             getSingleLineNavigationHighlightRange(targetLineNumber),
@@ -901,7 +770,10 @@ function CodeMirrorDiffRenderer({
         } else {
           const targetLineNumber = target?.target.lineNumber ?? navigationRequest.lineNumber
 
-          revealEditorLine(splitView.b, targetLineNumber)
+          revealEditorLine(splitView.b, targetLineNumber, {
+            focusEditor: target?.target.focusEditor ?? true,
+            selectLine: target?.target.selectLine ?? true,
+          })
           applyNavigationHighlight(
             splitView.b,
             getSingleLineNavigationHighlightRange(targetLineNumber),
@@ -931,7 +803,10 @@ function CodeMirrorDiffRenderer({
       )
       const targetLineNumber = target?.target.lineNumber ?? navigationRequest.lineNumber
 
-      revealEditorLine(unifiedView, targetLineNumber)
+      revealEditorLine(unifiedView, targetLineNumber, {
+        focusEditor: target?.target.focusEditor ?? true,
+        selectLine: target?.target.selectLine ?? true,
+      })
       applyNavigationHighlight(
         unifiedView,
         getSingleLineNavigationHighlightRange(targetLineNumber),

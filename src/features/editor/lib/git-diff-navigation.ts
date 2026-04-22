@@ -5,6 +5,8 @@ import {
   getVsCodeStyleChangeLineRange,
 } from '@/vendor/meo/shared/gitDiffLineFlags'
 
+export type DiffNavigationSide = 'modified' | 'original'
+
 export type CodeMirrorDiffChunk = {
   fromA: number
   toA: number
@@ -22,6 +24,19 @@ export type CodeMirrorDiffChunk = {
     fromB: number
     toB: number
   }[]
+}
+
+export type DiffNavigationTarget = {
+  focusEditor: boolean
+  lineNumber: number
+  selectLine: boolean
+  side: DiffNavigationSide
+}
+
+export type DiffNavigationMatch = {
+  distance: number
+  selection: GitDiffSelection
+  target: DiffNavigationTarget
 }
 
 export function createSelectionFromCodeMirrorChunk(
@@ -154,4 +169,146 @@ export function isLineWithinVisualDiff(
 ) {
   return createVisualDiffSelections(originalContent, modifiedContent)
     .some((selection) => isLineWithinSelection(selection, source, lineNumber))
+}
+
+function getDistanceToLineRange(lineNumber: number, startLine: number, lineCount: number) {
+  const normalizedStartLine = Math.max(1, startLine)
+
+  if (lineCount <= 0) {
+    return Math.abs(lineNumber - normalizedStartLine)
+  }
+
+  const endLine = normalizedStartLine + lineCount - 1
+
+  if (lineNumber < normalizedStartLine) {
+    return normalizedStartLine - lineNumber
+  }
+
+  if (lineNumber > endLine) {
+    return lineNumber - endLine
+  }
+
+  return 0
+}
+
+function getNavigationSelectionLineStart(selection: GitDiffSelection, side: DiffNavigationSide) {
+  return Math.max(1, side === 'modified' ? selection.modifiedStartLine : selection.originalStartLine)
+}
+
+function getNavigationSelectionLineCount(selection: GitDiffSelection, side: DiffNavigationSide) {
+  return side === 'modified' ? selection.modifiedLineCount : selection.originalLineCount
+}
+
+function getNavigationHighlightRange(
+  selection: GitDiffSelection,
+  side: DiffNavigationSide,
+) {
+  const startLineNumber = getNavigationSelectionLineStart(selection, side)
+  const lineCount = getNavigationSelectionLineCount(selection, side)
+
+  return {
+    endLineNumber: lineCount > 0 ? startLineNumber + lineCount - 1 : startLineNumber,
+    startLineNumber,
+  }
+}
+
+function clampRequestedLineToSelectionRange(
+  selection: GitDiffSelection,
+  side: DiffNavigationSide,
+  requestedLineNumber: number,
+) {
+  const { endLineNumber, startLineNumber } = getNavigationHighlightRange(selection, side)
+  return Math.max(startLineNumber, Math.min(requestedLineNumber, endLineNumber))
+}
+
+export function resolveChunkNavigationMatch(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  chunk: CodeMirrorDiffChunk,
+  requestedLineNumber: number,
+  preferredSide: DiffNavigationSide,
+): DiffNavigationMatch {
+  const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
+  const fallbackSide = preferredSide === 'modified' ? 'original' : 'modified'
+  const preferredSideLineCount = getNavigationSelectionLineCount(selection, preferredSide)
+  const fallbackSideLineCount = getNavigationSelectionLineCount(selection, fallbackSide)
+  const preferredDistance = getDistanceToLineRange(
+    requestedLineNumber,
+    getNavigationSelectionLineStart(selection, preferredSide),
+    preferredSideLineCount,
+  )
+  const fallbackDistance = getDistanceToLineRange(
+    requestedLineNumber,
+    getNavigationSelectionLineStart(selection, fallbackSide),
+    fallbackSideLineCount,
+  )
+
+  let side: DiffNavigationSide
+  let distance: number
+  let passiveBoundaryReveal = false
+
+  if (preferredSideLineCount <= 0 && fallbackSideLineCount > 0) {
+    side = fallbackSide
+    distance = preferredDistance
+    passiveBoundaryReveal = true
+  } else if (fallbackSideLineCount <= 0 && preferredSideLineCount > 0) {
+    side = preferredSide
+    distance = preferredDistance
+  } else if (preferredDistance < fallbackDistance) {
+    side = preferredSide
+    distance = preferredDistance
+  } else if (fallbackDistance < preferredDistance) {
+    side = fallbackSide
+    distance = fallbackDistance
+  } else {
+    side = preferredSide
+    distance = preferredDistance
+  }
+
+  return {
+    distance,
+    selection,
+    target: {
+      focusEditor: !passiveBoundaryReveal,
+      lineNumber: clampRequestedLineToSelectionRange(selection, side, requestedLineNumber),
+      selectLine: !passiveBoundaryReveal,
+      side,
+    },
+  }
+}
+
+export function findBestNavigationTarget(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  chunks: readonly CodeMirrorDiffChunk[],
+  requestedLineNumber: number,
+  preferredSide: DiffNavigationSide,
+) {
+  let bestMatch: DiffNavigationMatch | null = null
+  let bestDistance = Number.POSITIVE_INFINITY
+
+  for (const chunk of chunks) {
+    const nextMatch = resolveChunkNavigationMatch(
+      originalDoc,
+      modifiedDoc,
+      chunk,
+      requestedLineNumber,
+      preferredSide,
+    )
+    const nextDistance = nextMatch.distance
+
+    if (
+      nextDistance < bestDistance
+      || (
+        nextDistance === bestDistance
+        && nextMatch.target.side === preferredSide
+        && bestMatch?.target.side !== preferredSide
+      )
+    ) {
+      bestDistance = nextDistance
+      bestMatch = nextMatch
+    }
+  }
+
+  return bestMatch
 }
