@@ -435,7 +435,7 @@ function getLineRangeChangeKind(lineFlags, startLine, endLine) {
   return hasAdded ? 'added' : null;
 }
 
-function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, markerElement = null, clientY = null) {
+export function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, markerElement = null, clientY = null) {
   const rowMarker = gutterRowElement?.querySelector?.('.meo-git-gutter-marker') ?? null;
   const hitMarker = markerElement instanceof HTMLElement ? markerElement : null;
   const ownChangedMarker = (
@@ -477,11 +477,12 @@ function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, ma
         ? previousRowMarker
         : null
   );
+  const proxiedLineNumber = Math.max(1, lineNumber - 1);
   // The synthetic trailing EOF row should always proxy to the previous real line so
   // unchanged last lines still support blame hover/click like the line above.
   return {
-    lineNumber: Math.max(1, lineNumber - 1),
-    requestLineNumber: lineNumber,
+    lineNumber: proxiedLineNumber,
+    requestLineNumber: proxiedLineNumber,
     proxiedFromTrailingEof: true,
     effectiveChangeKind: getMarkerChangeKindAt(changedMarker, clientY),
     effectiveChangeScope: getMarkerChangeScope(changedMarker)
@@ -1418,9 +1419,6 @@ export function createGitBlameHoverController({
     if (lineNumber === null) {
       return;
     }
-    const requestLineNumber = (
-      Number.isFinite(hit.requestLineNumber) ? hit.requestLineNumber : lineNumber
-    );
     const effectiveChangeKind = (
       hit.effectiveChangeKind ??
       getMarkerChangeKindAt(marker, event.clientY)
@@ -1435,9 +1433,7 @@ export function createGitBlameHoverController({
 
     event.preventDefault();
     event.stopPropagation();
-    const targetLineNumber = hit.proxiedFromTrailingEof === true
-        ? Math.max(1, requestLineNumber - 1)
-        : lineNumber;
+    const targetLineNumber = lineNumber;
     if (effectiveChangeScope === 'staged') {
       void openRevisionForLine?.({ lineNumber: targetLineNumber });
     } else {
