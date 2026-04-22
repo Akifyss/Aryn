@@ -38,3 +38,4 @@
 - [openchamber](https://github.com/openchamber/openchamber): 具有分支时间线和深度 Git 集成的桌面 AI Agent UI。
 - [craft-agents-oss](https://github.com/lukilabs/craft-agents-oss): 基于 Pi SDK 模式构建的 Agent 原生架构。
 - [obsidian git](https://github.com/Vinzent03/obsidian-git): Obsidian 的 Git 集成插件。
+- [tolaria](https://github.com/refactoringhq/tolaria)
