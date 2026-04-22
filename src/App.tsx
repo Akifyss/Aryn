@@ -62,7 +62,7 @@ import type {
   WorkspaceIconThemeCatalogOption,
 } from '@/features/workspace/types'
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
-import { useSettingsStore } from '@/hooks/use-settings-store'
+import { useSettingsStore, type AppTheme } from '@/hooks/use-settings-store'
 import { HtmlPreview } from '@/features/editor/components/html-preview'
 import {
   COMPACT_LAYOUT_BREAKPOINT,
@@ -79,6 +79,31 @@ import './App.css'
 function getBaseName(filePath: string) {
   return filePath.split(/[\\/]/).pop() ?? filePath
 }
+
+type ResolvedAppTheme = 'light' | 'dark'
+
+function resolveAppTheme(theme: AppTheme): ResolvedAppTheme {
+  if (theme !== 'auto') {
+    return theme
+  }
+
+  if (typeof window === 'undefined') {
+    return 'light'
+  }
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function getThemeLinkedWorkspaceIconOption(
+  resolvedTheme: ResolvedAppTheme,
+  iconThemeOptions: WorkspaceIconThemeCatalogOption[],
+) {
+  const targetLabel = resolvedTheme === 'dark' ? 'flow dawn' : 'flow deep'
+
+  return iconThemeOptions.find((option) => option.label.toLowerCase().includes(targetLabel)) ?? null
+}
+
+const THEME_LINKED_ICON_SWITCH_DELAY_MS = 300
 
 function getRelativePath(rootPath: string, filePath: string) {
   const normalizedRoot = rootPath.replace(/[\\/]+$/, '')
@@ -449,22 +474,23 @@ function createDiffTab(
 function App() {
   const platform = window.appApi.platform
   const { meo, theme } = useSettingsStore()
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedAppTheme>(() => resolveAppTheme(theme))
 
   // Apply theme to document root
   useEffect(() => {
-    const root = window.document.documentElement
     const applyTheme = (t: 'light' | 'dark') => {
       const body = window.document.body
       const root = window.document.documentElement
-      
+      setResolvedTheme(t)
+
       // HeroUI/Tailwind official pattern: apply to html and body
       root.classList.remove('light', 'dark')
       root.classList.add(t)
       root.setAttribute('data-theme', t)
-      
+
       body.classList.remove('light', 'dark')
       body.classList.add(t)
-      
+
       // Also set the theme-color meta tag for better UI integration
       const meta = window.document.querySelector('meta[name="theme-color"]')
       if (meta) {
@@ -535,6 +561,8 @@ function App() {
   const [appIconId, setAppIconId] = useState<string | null>(null)
   const [appIconOptions, setAppIconOptions] = useState<AppIconCatalogOption[]>([])
   const [isApplyingAppIcon, setIsApplyingAppIcon] = useState(false)
+  const lastIconThemeLinkedThemeRef = useRef<ResolvedAppTheme>(resolvedTheme)
+  const iconThemeLinkRequestRef = useRef(0)
   const [, setStatusMessage] = useState('Open a folder to start.')
   const [isCreatingFile, setIsCreatingFile] = useState(false)
   const [isCreatingDirectory, setIsCreatingDirectory] = useState(false)
@@ -2437,6 +2465,81 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (!currentPath || isImportingIconTheme || isApplyingIconTheme || iconThemeOptions.length === 0) {
+      return
+    }
+
+    if (lastIconThemeLinkedThemeRef.current === resolvedTheme) {
+      return
+    }
+
+    const targetOption = getThemeLinkedWorkspaceIconOption(resolvedTheme, iconThemeOptions)
+
+    if (!targetOption) {
+      lastIconThemeLinkedThemeRef.current = resolvedTheme
+      return
+    }
+
+    if (
+      iconTheme?.activeThemeId === targetOption.themeId
+      && iconTheme.sourceVsixPath === targetOption.sourceVsixPath
+    ) {
+      lastIconThemeLinkedThemeRef.current = resolvedTheme
+      return
+    }
+
+    const requestId = iconThemeLinkRequestRef.current + 1
+    iconThemeLinkRequestRef.current = requestId
+    lastIconThemeLinkedThemeRef.current = resolvedTheme
+
+    // Let the lightweight color theme repaint before importing the heavier icon theme.
+    const timerId = window.setTimeout(() => {
+      setIsApplyingIconTheme(true)
+
+      void (async () => {
+        try {
+          const nextIconTheme = await window.appApi.setWorkspaceIconTheme({
+            sourceVsixPath: targetOption.sourceVsixPath,
+            themeId: targetOption.themeId,
+          })
+
+          if (iconThemeLinkRequestRef.current !== requestId || !nextIconTheme) {
+            return
+          }
+
+          const nextIconThemeOptions = await window.appApi.getWorkspaceIconThemeCatalog()
+
+          if (iconThemeLinkRequestRef.current !== requestId) {
+            return
+          }
+
+          setIconTheme(nextIconTheme)
+          setIconThemeOptions(nextIconThemeOptions)
+          setStatusMessage(`${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`)
+        } catch (error) {
+          if (iconThemeLinkRequestRef.current === requestId) {
+            const message = error instanceof Error ? error.message : 'Unable to switch the icon theme.'
+            setStatusMessage(message)
+          }
+        } finally {
+          if (iconThemeLinkRequestRef.current === requestId) {
+            setIsApplyingIconTheme(false)
+          }
+        }
+      })()
+    }, THEME_LINKED_ICON_SWITCH_DELAY_MS)
+
+    return () => window.clearTimeout(timerId)
+  }, [
+    currentPath,
+    iconTheme,
+    iconThemeOptions,
+    isApplyingIconTheme,
+    isImportingIconTheme,
+    resolvedTheme,
+  ])
+
+  useEffect(() => {
     setIsActiveEditorComposing(false)
   }, [currentEditorKind, currentFilePath, currentFileViewMode])
 
@@ -3685,6 +3788,7 @@ function App() {
                 iconThemeOptions={iconThemeOptions}
                 isAppIconBusy={isApplyingAppIcon}
                 isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
+                resolvedTheme={resolvedTheme}
                 workspacePath={currentPath}
                 onAgentStateChange={setAgentWorkspaceState}
                 onImportIconTheme={handlePickWorkspaceIconTheme}
@@ -3886,7 +3990,7 @@ function App() {
             <Drawer.Content placement='left' className='panel-drawer panel-drawer-left' data-platform={shellPlatform}>
               <Drawer.Dialog
                 aria-label='Workspace'
-                className={`panel-drawer-dialog ${theme === 'dark' ? 'dark' : ''}`}
+                className={`panel-drawer-dialog ${resolvedTheme === 'dark' ? 'dark' : ''}`}
               >
                 <Drawer.Body className='panel-drawer-body'>
                   {renderWorkspaceSidebar('drawer')}
@@ -3909,7 +4013,7 @@ function App() {
             <Drawer.Content placement='right' className='panel-drawer panel-drawer-right' data-platform={shellPlatform}>
               <Drawer.Dialog
                 aria-label='Assistant'
-                className={`panel-drawer-dialog ${theme === 'dark' ? 'dark' : ''}`}
+                className={`panel-drawer-dialog ${resolvedTheme === 'dark' ? 'dark' : ''}`}
               >
                 <Drawer.Body className='panel-drawer-body panel-drawer-body-agent'>
                   <div
@@ -3937,7 +4041,7 @@ function App() {
           variant='opaque'
         >
           <Modal.Container scroll='inside' className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'>
-            <Modal.Dialog className={`settings-modal p-0 m-0 relative ${theme === 'dark' ? 'dark' : ''}`}>
+            <Modal.Dialog className={`settings-modal p-0 m-0 relative ${resolvedTheme === 'dark' ? 'dark' : ''}`}>
               <Modal.CloseTrigger 
                 className='settings-modal-close'
                 aria-label='Close settings'
@@ -3954,6 +4058,7 @@ function App() {
                   iconThemeOptions={iconThemeOptions}
                   isAppIconBusy={isApplyingAppIcon}
                   isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
+                  resolvedTheme={resolvedTheme}
                   workspacePath={currentPath}
                   onAgentStateChange={setAgentWorkspaceState}
                   onImportIconTheme={handlePickWorkspaceIconTheme}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, ListBox, Select, Tabs } from '@heroui/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import type { AgentProviderAuthState, AgentWorkspaceState } from '@/features/agent/types'
@@ -23,6 +23,7 @@ type SettingsViewProps = {
   onSelectAppIcon: (appIconId: string) => Promise<void>
   onSelectIconTheme: (selection: { sourceVsixPath: string, themeId: string }) => Promise<void>
   onStatusMessage: (message: string) => void
+  resolvedTheme: 'light' | 'dark'
   workspacePath: string | null
 }
 
@@ -96,6 +97,7 @@ export function SettingsDialog({
   onSelectAppIcon,
   onSelectIconTheme,
   onStatusMessage,
+  resolvedTheme,
   workspacePath,
 }: SettingsViewProps) {
   const { meo, theme, setTheme, updateMeoSettings } = useSettingsStore()
@@ -104,47 +106,6 @@ export function SettingsDialog({
   const [meoImageFolderDraft, setMeoImageFolderDraft] = useState(meo.imageFolder)
   const [meoRememberPositionDraft, setMeoRememberPositionDraft] = useState(String(meo.rememberPositionLines))
   const [panelError, setPanelError] = useState<string | null>(null)
-
-  const resolvedTheme = useMemo(() => {
-    if (theme === 'auto') {
-      return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light'
-    }
-
-    return theme
-  }, [theme])
-
-  const prevThemeRef = useRef(resolvedTheme)
-
-  useEffect(() => {
-    if (!workspacePath || isIconThemeBusy || iconThemeOptions.length === 0) {
-      return
-    }
-
-    if (prevThemeRef.current === resolvedTheme) {
-      return
-    }
-
-    const targetLabel = resolvedTheme === 'dark' ? 'flow dawn' : 'flow deep'
-    const targetOption = iconThemeOptions.find((option) => option.label.toLowerCase().includes(targetLabel))
-    const timer = setTimeout(() => {
-      if (targetOption && (
-        !iconTheme
-        || iconTheme.activeThemeId !== targetOption.themeId
-        || iconTheme.sourceVsixPath !== targetOption.sourceVsixPath
-      )) {
-        void onSelectIconTheme({
-          sourceVsixPath: targetOption.sourceVsixPath,
-          themeId: targetOption.themeId,
-        })
-      }
-    }, 300)
-
-    prevThemeRef.current = resolvedTheme
-
-    return () => clearTimeout(timer)
-  }, [resolvedTheme, iconTheme, iconThemeOptions, isIconThemeBusy, onSelectIconTheme, workspacePath])
 
   useEffect(() => {
     setMeoImageFolderDraft(meo.imageFolder)

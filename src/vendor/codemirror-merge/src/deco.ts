@@ -50,7 +50,8 @@ function buildChunkDeco(chunk: Chunk, doc: Text, isA: boolean, highlight: boolea
   let changeI = 0
   if (from != to) {
     builder.add(from, from, changedLine)
-    builder.add(from, to, isA ? deleted : inserted)
+    let markTo = Math.min(to, doc.length)
+    if (from < markTo) builder.add(from, markTo, isA ? deleted : inserted)
     if (gutterBuilder) gutterBuilder.add(from, from, changedLineGutterMarker)
     for (let iter = doc.iterRange(from, to - 1), pos = from; !iter.next().done;) {
       if (iter.lineBreak) {

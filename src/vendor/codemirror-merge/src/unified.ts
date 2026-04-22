@@ -50,7 +50,7 @@ const deletedChunkGutterMarker = new class extends GutterMarker {
 const unifiedChangeGutter = Prec.low(gutter({
   class: "cm-changeGutter",
   markers: view => view.plugin(decorateChunks)?.gutter || RangeSet.empty,
-  widgetMarker: (view, widget) => widget instanceof DeletionWidget ? deletedChunkGutterMarker : null
+  widgetMarker: (view, widget) => widget instanceof DeletionWidget && widget.marksDeletedLines ? deletedChunkGutterMarker : null
 }))
 
 /// Create an extension that causes the editor to display changes
@@ -114,7 +114,10 @@ const DeletionWidgets: WeakMap<readonly Change[], Decoration> = new WeakMap
 
 class DeletionWidget extends WidgetType {
   dom: HTMLElement | null = null
-  constructor(readonly buildDOM: (view: EditorView) => HTMLElement) { super() }
+  constructor(
+    readonly buildDOM: (view: EditorView) => HTMLElement,
+    readonly marksDeletedLines: boolean,
+  ) { super() }
   eq(other: DeletionWidget) { return this.dom == other.dom }
   toDOM(view: EditorView) { return this.dom || (this.dom = this.buildDOM(view)) }
 }
@@ -123,11 +126,12 @@ function deletionWidget(state: EditorState, chunk: Chunk, hideContent: boolean) 
   let known = DeletionWidgets.get(chunk.changes)
   if (known) return known
 
+  let marksDeletedLines = chunk.fromA < chunk.toA
   let buildDOM = (view: EditorView) => {
     let {highlightChanges, syntaxHighlightDeletions, syntaxHighlightDeletionsMaxLength, mergeControls} =
       state.facet(mergeConfig)
     let dom = document.createElement("div")
-    dom.className = "cm-deletedChunk"
+    dom.className = marksDeletedLines ? "cm-deletedChunk" : "cm-deletedChunk cm-insertedChunkHost"
     if (mergeControls) {
       let buttons = dom.appendChild(document.createElement("div"))
       buttons.className = "cm-chunkButtons"
@@ -209,7 +213,7 @@ function deletionWidget(state: EditorState, chunk: Chunk, hideContent: boolean) 
   let deco = Decoration.widget({
     block: true,
     side: -1,
-    widget: new DeletionWidget(buildDOM)
+    widget: new DeletionWidget(buildDOM, marksDeletedLines)
   })
   DeletionWidgets.set(chunk.changes, deco)
   return deco

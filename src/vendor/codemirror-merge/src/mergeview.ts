@@ -300,15 +300,29 @@ export class MergeView {
     return elt
   }
 
+  private chunkActualRange(chunk: Chunk, side: "a" | "b"): [number, number, boolean] {
+    let fromKey = side == "a" ? "actualFromA" : "actualFromB"
+    let toKey = side == "a" ? "actualToA" : "actualToB"
+    let chunkWithActualRange = chunk as Chunk & Record<string, unknown>
+    return typeof chunkWithActualRange[fromKey] == "number" && typeof chunkWithActualRange[toKey] == "number"
+      ? [chunkWithActualRange[fromKey] as number, chunkWithActualRange[toKey] as number, true]
+      : side == "a" ? [chunk.fromA, chunk.toA, false] : [chunk.fromB, chunk.toB, false]
+  }
+
   private revertClicked(e: MouseEvent) {
     let target = e.target as HTMLElement | null, chunk
     while (target && target.parentNode != this.revertDOM) target = target.parentNode as HTMLElement | null
     if (target && (chunk = this.chunks[target.dataset.chunk as any])) {
-      let [source, dest, srcFrom, srcTo, destFrom, destTo] = this.revertToA
-        ? [this.b, this.a, chunk.fromB, chunk.toB, chunk.fromA, chunk.toA]
-        : [this.a, this.b, chunk.fromA, chunk.toA, chunk.fromB, chunk.toB]
-      let insert = source.state.sliceDoc(srcFrom, Math.max(srcFrom, srcTo - 1))
-      if (srcFrom != srcTo && destTo <= dest.state.doc.length) insert += source.state.lineBreak
+      let sourceSide: "a" | "b" = this.revertToA ? "b" : "a"
+      let destSide: "a" | "b" = this.revertToA ? "a" : "b"
+      let source = this.revertToA ? this.b : this.a
+      let dest = this.revertToA ? this.a : this.b
+      let [srcFrom, srcTo, hasActualSourceRange] = this.chunkActualRange(chunk, sourceSide)
+      let [destFrom, destTo] = this.chunkActualRange(chunk, destSide)
+      let insert = hasActualSourceRange
+        ? source.state.sliceDoc(srcFrom, srcTo)
+        : source.state.sliceDoc(srcFrom, Math.max(srcFrom, srcTo - 1))
+      if (!hasActualSourceRange && srcFrom != srcTo && destTo <= dest.state.doc.length) insert += source.state.lineBreak
       dest.dispatch({
         changes: {from: destFrom, to: Math.min(dest.state.doc.length, destTo), insert},
         userEvent: "revert"

@@ -87,6 +87,10 @@ export const baseTheme = EditorView.baseTheme({
     },
   },
 
+  ".cm-insertedChunkHost": {
+    backgroundColor: "transparent",
+  },
+
   ".cm-collapsedLines": {
     padding: "5px 5px 5px 10px",
     cursor: "pointer",
