@@ -1,6 +1,9 @@
-import type { Text } from '@codemirror/state'
+import { Text } from '@codemirror/state'
 import type { GitDiffSelection } from '@/features/git/types'
-import { getVsCodeStyleChangeLineRange } from '@/vendor/meo/shared/gitDiffLineFlags'
+import {
+  buildCodeMirrorChunksFromVsCodeDiff,
+  getVsCodeStyleChangeLineRange,
+} from '@/vendor/meo/shared/gitDiffLineFlags'
 
 export type CodeMirrorDiffChunk = {
   fromA: number
@@ -99,4 +102,42 @@ export function createSelectionFromCodeMirrorChunk(
     originalLineCount,
     originalStartLine: originalLineCount === 0 ? Math.max(0, originalStartLine - 1) : originalStartLine,
   }
+}
+
+function createTextDocFromContent(content: string) {
+  return Text.of(content.split('\n'))
+}
+
+export function createVisualDiffSelections(originalContent: string, modifiedContent: string): GitDiffSelection[] {
+  const originalDoc = createTextDocFromContent(originalContent)
+  const modifiedDoc = createTextDocFromContent(modifiedContent)
+  const chunks = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+
+  return chunks.map((chunk) => createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk))
+}
+
+function isLineWithinSelection(
+  selection: GitDiffSelection,
+  source: 'revision' | 'worktree',
+  lineNumber: number,
+) {
+  const normalizedLineNumber = Math.max(1, Math.floor(lineNumber))
+  const startLine = source === 'revision' ? selection.originalStartLine : selection.modifiedStartLine
+  const lineCount = source === 'revision' ? selection.originalLineCount : selection.modifiedLineCount
+
+  if (!Number.isInteger(startLine) || startLine < 1 || lineCount <= 0) {
+    return false
+  }
+
+  return normalizedLineNumber >= startLine && normalizedLineNumber < startLine + lineCount
+}
+
+export function isLineWithinVisualDiff(
+  originalContent: string,
+  modifiedContent: string,
+  source: 'revision' | 'worktree',
+  lineNumber: number,
+) {
+  return createVisualDiffSelections(originalContent, modifiedContent)
+    .some((selection) => isLineWithinSelection(selection, source, lineNumber))
 }

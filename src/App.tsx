@@ -17,6 +17,7 @@ import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
 import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
 import { GitDiffEditor } from '@/features/editor/components/git-diff-editor'
 import { CodeEditor } from '@/features/editor/components/code-editor'
+import { isLineWithinVisualDiff } from '@/features/editor/lib/git-diff-navigation'
 import { MeoEditorHost } from '@/features/editor/components/meo-editor-host'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import { GitPanel } from '@/features/git/components/git-panel'
@@ -163,22 +164,6 @@ function getPathSeparator(filePath: string) {
   return filePath.includes('\\') ? '\\' : '/'
 }
 
-function isRequestedGitDiffLineWithinSelection(
-  selection: GitDiffSelection,
-  source: 'revision' | 'worktree',
-  lineNumber: number,
-) {
-  const normalizedLineNumber = Math.max(1, Math.floor(lineNumber))
-  const startLine = source === 'revision' ? selection.originalStartLine : selection.modifiedStartLine
-  const lineCount = source === 'revision' ? selection.originalLineCount : selection.modifiedLineCount
-
-  if (!Number.isInteger(startLine) || startLine < 1 || lineCount <= 0) {
-    return false
-  }
-
-  return normalizedLineNumber >= startLine && normalizedLineNumber < startLine + lineCount
-}
-
 function shouldOpenGitDiffForLine(
   diff: GitFileDiffResult,
   source: 'revision' | 'worktree',
@@ -188,7 +173,7 @@ function shouldOpenGitDiffForLine(
     return true
   }
 
-  return diff.selections.some((selection) => isRequestedGitDiffLineWithinSelection(selection, source, lineNumber))
+  return isLineWithinVisualDiff(diff.originalContent, diff.modifiedContent, source, lineNumber)
 }
 
 function joinPath(basePath: string, relativeSuffix: string) {

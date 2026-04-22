@@ -1,7 +1,11 @@
 import { Text } from '@codemirror/state'
 import { Chunk } from '@codemirror/merge'
 import { describe, expect, it } from 'vitest'
-import { createSelectionFromCodeMirrorChunk } from '@/features/editor/lib/git-diff-navigation'
+import {
+  createSelectionFromCodeMirrorChunk,
+  createVisualDiffSelections,
+  isLineWithinVisualDiff,
+} from '@/features/editor/lib/git-diff-navigation'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '@/vendor/meo/shared/gitDiffLineFlags'
 
 function getOnlyChunk(originalText: string, modifiedText: string) {
@@ -251,5 +255,21 @@ describe('git diff navigation', () => {
       originalLineCount: 0,
       originalStartLine: 0,
     })
+  })
+
+  it('uses visual diff selections for final newline-only navigation hits', () => {
+    const originalText = '\n\ntest'
+    const modifiedText = '\n\ntest\n'
+
+    expect(createVisualDiffSelections(originalText, modifiedText)).toEqual([
+      {
+        modifiedLineCount: 1,
+        modifiedStartLine: 4,
+        originalLineCount: 0,
+        originalStartLine: 3,
+      },
+    ])
+    expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 4)).toBe(true)
+    expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 3)).toBe(false)
   })
 })
