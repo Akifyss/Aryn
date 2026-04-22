@@ -9,6 +9,10 @@ export type CodeMirrorDiffChunk = {
   toB: number
   endA: number
   endB: number
+  vscodeModifiedEndLineExclusive?: number
+  vscodeModifiedStartLine?: number
+  vscodeOriginalEndLineExclusive?: number
+  vscodeOriginalStartLine?: number
   changes: readonly {
     fromA: number
     toA: number
@@ -28,6 +32,36 @@ export function createSelectionFromCodeMirrorChunk(
       modifiedStartLine: 1,
       originalLineCount: 0,
       originalStartLine: 0,
+    }
+  }
+
+  const vscodeOriginalStartLine = chunk.vscodeOriginalStartLine
+  const vscodeOriginalEndLineExclusive = chunk.vscodeOriginalEndLineExclusive
+  const vscodeModifiedStartLine = chunk.vscodeModifiedStartLine
+  const vscodeModifiedEndLineExclusive = chunk.vscodeModifiedEndLineExclusive
+
+  if (
+    typeof vscodeOriginalStartLine === 'number'
+    && typeof vscodeOriginalEndLineExclusive === 'number'
+    && typeof vscodeModifiedStartLine === 'number'
+    && typeof vscodeModifiedEndLineExclusive === 'number'
+    && Number.isInteger(vscodeOriginalStartLine)
+    && Number.isInteger(vscodeOriginalEndLineExclusive)
+    && Number.isInteger(vscodeModifiedStartLine)
+    && Number.isInteger(vscodeModifiedEndLineExclusive)
+  ) {
+    const originalStartLine = Math.max(1, vscodeOriginalStartLine)
+    const originalEndLineExclusive = Math.max(originalStartLine, vscodeOriginalEndLineExclusive)
+    const modifiedStartLine = Math.max(1, vscodeModifiedStartLine)
+    const modifiedEndLineExclusive = Math.max(modifiedStartLine, vscodeModifiedEndLineExclusive)
+    const originalLineCount = Math.max(0, originalEndLineExclusive - originalStartLine)
+    const modifiedLineCount = Math.max(0, modifiedEndLineExclusive - modifiedStartLine)
+
+    return {
+      modifiedLineCount,
+      modifiedStartLine: modifiedLineCount === 0 ? Math.max(0, modifiedStartLine - 1) : modifiedStartLine,
+      originalLineCount,
+      originalStartLine: originalLineCount === 0 ? Math.max(0, originalStartLine - 1) : originalStartLine,
     }
   }
 

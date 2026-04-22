@@ -24,9 +24,6 @@ interface BaselineSnapshot {
 export interface MarkerFlags {
   added: boolean;
   modified: boolean;
-  eofProxy?: boolean;
-  trailingEofProxyOnly?: boolean;
-  trailingEofProxySource?: boolean;
   liveBlockStartLine?: number;
   liveBlockEndLine?: number;
   scope?: 'staged' | 'unstaged';
@@ -96,9 +93,6 @@ class GitGutterMarker extends GutterMarker {
     if (Number.isInteger(this.flags.liveBlockEndLine)) {
       el.dataset.meoLiveBlockEndLine = String(this.flags.liveBlockEndLine);
     }
-    if (this.flags.eofProxy) {
-      el.classList.add('is-eof-proxy');
-    }
     if (this.flags.scope === 'staged' || this.flags.scope === 'unstaged') {
       el.dataset.meoGitScope = this.flags.scope;
       el.classList.add(`is-${this.flags.scope}`);
@@ -144,51 +138,11 @@ function gitMarker(flags: MarkerFlags): GitGutterMarker {
   return marker;
 }
 
-function isTrailingEofVisualLine(doc: any, lineNo: number): boolean {
-  if (!doc || doc.length <= 0 || doc.lines <= 1 || lineNo !== doc.lines) {
-    return false;
-  }
-  const lastLine = doc.line(doc.lines);
-  return lastLine.from === lastLine.to;
-}
-
 function emptyMarkerFlags(): MarkerFlags {
   return {
     added: false,
     modified: false
   };
-}
-
-function coalesceTrailingEofVisualLineFlag(doc: any, lineFlags: (MarkerFlags | undefined)[] | null): (MarkerFlags | undefined)[] | null {
-  if (!Array.isArray(lineFlags) || !isTrailingEofVisualLine(doc, doc.lines) || doc.lines < 2) {
-    return lineFlags;
-  }
-
-  const trailingIndex = doc.lines - 1;
-  const previousIndex = trailingIndex - 1;
-  const trailingFlags = lineFlags[trailingIndex];
-  if (!trailingFlags) {
-    return lineFlags;
-  }
-
-  const previousFlags = lineFlags[previousIndex] ?? emptyMarkerFlags();
-  const previousHadChange = !!(previousFlags.added || previousFlags.modified);
-  if (trailingFlags.modified) {
-    previousFlags.modified = true;
-  }
-  if (trailingFlags.added) {
-    if (previousFlags.added) {
-      previousFlags.added = true;
-    } else if (!previousHadChange && !trailingFlags.modified) {
-      previousFlags.trailingEofProxyOnly = true;
-    } else {
-      previousFlags.modified = true;
-    }
-  }
-  previousFlags.trailingEofProxySource = true;
-  lineFlags[previousIndex] = previousFlags;
-  lineFlags[trailingIndex] = undefined;
-  return lineFlags;
 }
 
 function canRenderGitDiffBaseline(snapshot: BaselineSnapshot | null): boolean {
@@ -199,31 +153,6 @@ function canRenderGitDiffBaseline(snapshot: BaselineSnapshot | null): boolean {
     return true;
   }
   return !NON_RENDERABLE_GIT_BASELINE_REASONS.has(snapshot.reason);
-}
-
-function getTrailingEofProxyFlags(
-  doc: any,
-  lineFlags: (MarkerFlags | undefined)[] | null
-): MarkerFlags | null {
-  if (!isTrailingEofVisualLine(doc, doc.lines) || doc.lines <= 1 || !Array.isArray(lineFlags)) {
-    return null;
-  }
-
-  const previousFlags = lineFlags[doc.lines - 2];
-  if (!previousFlags || (!previousFlags.added && !previousFlags.modified)) {
-    if (!previousFlags?.trailingEofProxyOnly) {
-      return null;
-    }
-  }
-  if (!previousFlags?.trailingEofProxySource) {
-    return null;
-  }
-
-  return {
-    added: previousFlags?.trailingEofProxyOnly ? false : !!previousFlags?.added,
-    modified: previousFlags?.trailingEofProxyOnly ? true : !!previousFlags?.modified,
-    eofProxy: true
-  };
 }
 
 function buildDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | null): (MarkerFlags | undefined)[] | null {
@@ -261,8 +190,8 @@ function buildDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | nul
   return buildScopedLineFlagsFromVsCodeDiff(baseLines, indexLines, state.doc);
 }
 
-function buildCoalescedDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | null): (MarkerFlags | undefined)[] | null {
-  return coalesceTrailingEofVisualLineFlag(state.doc, buildDiffLineFlags(state, baseline));
+function buildCurrentDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | null): (MarkerFlags | undefined)[] | null {
+  return buildDiffLineFlags(state, baseline);
 }
 
 function buildGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: (MarkerFlags | undefined)[] | null): any {
@@ -270,21 +199,10 @@ function buildGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: (Mark
   if (!lineFlags) {
     return builder.finish();
   }
-  const trailingEofProxyFlags = getTrailingEofProxyFlags(state.doc, lineFlags);
 
   for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
-    if (isTrailingEofVisualLine(state.doc, lineNo)) {
-      if (trailingEofProxyFlags) {
-        const line = state.doc.line(lineNo);
-        builder.add(line.from, line.from, gitMarker(trailingEofProxyFlags));
-      }
-      continue;
-    }
     const flags = lineFlags[lineNo - 1];
     if (!flags) {
-      continue;
-    }
-    if (flags.trailingEofProxyOnly) {
       continue;
     }
     const line = state.doc.line(lineNo);
@@ -305,8 +223,6 @@ function buildLiveGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: (
   let activeCollapsedBlock = collapsedBlocks[collapsedBlockIndex] ?? null;
   let activeCollapsedFlags = activeCollapsedBlock ? liveCollapsedBlockMarkerFlags(activeCollapsedBlock) : null;
 
-  const trailingEofProxyFlags = getTrailingEofProxyFlags(state.doc, lineFlags);
-
   for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
     const line = state.doc.line(lineNo);
 
@@ -321,15 +237,8 @@ function buildLiveGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: (
       continue;
     }
 
-    if (isTrailingEofVisualLine(state.doc, lineNo)) {
-      if (trailingEofProxyFlags) {
-        builder.add(line.from, line.from, gitMarker(trailingEofProxyFlags));
-      }
-      continue;
-    }
-
     const flags = lineFlags[lineNo - 1];
-    if (!flags || flags.trailingEofProxyOnly) {
+    if (!flags) {
       continue;
     }
     builder.add(line.from, line.from, gitMarker(flags));
@@ -371,7 +280,7 @@ function liveCollapsedBlockMarkerAtPos(
 
 export const gitDiffLineFlagsField = StateField.define<(MarkerFlags | undefined)[] | null>({
   create(state: EditorState): (MarkerFlags | undefined)[] | null {
-    return buildCoalescedDiffLineFlags(state, state.field(gitBaselineField));
+    return buildCurrentDiffLineFlags(state, state.field(gitBaselineField));
   },
   update(value: (MarkerFlags | undefined)[] | null, tr: Transaction): (MarkerFlags | undefined)[] | null {
     let baselineChanged = false;
@@ -385,7 +294,7 @@ export const gitDiffLineFlagsField = StateField.define<(MarkerFlags | undefined)
       return value;
     }
     const baseline = tr.state.field(gitBaselineField);
-    return buildCoalescedDiffLineFlags(tr.state, baseline);
+    return buildCurrentDiffLineFlags(tr.state, baseline);
   }
 });
 
@@ -479,7 +388,7 @@ export function getGitDiffOverviewSegments(state: EditorState): DiffSegment[] {
       continue;
     }
     const added = !!flags?.added;
-    const modified = !!flags?.modified || !!flags?.trailingEofProxyOnly;
+    const modified = !!flags?.modified;
     if (!added && !modified) {
       flush();
       continue;

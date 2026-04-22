@@ -11,7 +11,6 @@ type LineFlagLike = {
   added?: boolean;
   modified?: boolean;
   scope?: 'staged' | 'unstaged';
-  trailingEofProxyOnly?: boolean;
 } | undefined;
 
 export type LiveRenderedBlockKind = 'table' | 'mermaid' | 'math';
@@ -327,7 +326,7 @@ function buildCollapsedBlock(
 
   for (let lineNo = block.startLine; lineNo <= block.endLine; lineNo += 1) {
     const flags = lineFlags[lineNo - 1];
-    const modified = !!(flags?.modified || flags?.trailingEofProxyOnly);
+    const modified = !!flags?.modified;
     const added = !!flags?.added;
     if (!modified && !added) {
       continue;
@@ -464,4 +463,3 @@ export function getLiveGitCollapsedBlockAtLine(
   }
   return findCollapsedBlockAtLine(blocks, Math.max(1, Math.floor(lineNo)));
 }
-

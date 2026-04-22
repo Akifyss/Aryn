@@ -133,6 +133,38 @@ function getActualChangeOffsets(
     : fallbackOffsets
 }
 
+function createWholeChunkChange(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  originalOffsets: { from: number, to: number },
+  modifiedOffsets: { from: number, to: number },
+) {
+  return new Change(
+    0,
+    Math.max(0, Math.min(originalDoc.length, originalOffsets.to) - Math.min(originalDoc.length, originalOffsets.from)),
+    0,
+    Math.max(0, Math.min(modifiedDoc.length, modifiedOffsets.to) - Math.min(modifiedDoc.length, modifiedOffsets.from)),
+  )
+}
+
+function isRelativeChangeInsideChunk(
+  change: Change,
+  originalOffsets: { from: number, to: number },
+  modifiedOffsets: { from: number, to: number },
+) {
+  const originalLength = Math.max(0, originalOffsets.to - originalOffsets.from)
+  const modifiedLength = Math.max(0, modifiedOffsets.to - modifiedOffsets.from)
+
+  return (
+    change.fromA >= 0
+    && change.toA >= change.fromA
+    && change.toA <= originalLength
+    && change.fromB >= 0
+    && change.toB >= change.fromB
+    && change.toB <= modifiedLength
+  )
+}
+
 export function getVsCodeStyleChangeLineRange(
   originalDoc: Text,
   modifiedDoc: Text,
@@ -210,21 +242,20 @@ export function buildCodeMirrorChunksFromVsCodeDiff(originalDoc: Text, modifiedD
       change.modified.endLineNumberExclusive,
       fallbackFromB,
     )
-    const innerChanges = change.innerChanges?.length
+    const relativeInnerChanges = change.innerChanges?.length
       ? change.innerChanges.map((innerChange) => new Change(
         rangeStartToOffset(originalDoc, innerChange.originalRange) - originalOffsets.from,
         rangeEndToOffset(originalDoc, innerChange.originalRange) - originalOffsets.from,
         rangeStartToOffset(modifiedDoc, innerChange.modifiedRange) - modifiedOffsets.from,
         rangeEndToOffset(modifiedDoc, innerChange.modifiedRange) - modifiedOffsets.from,
       ))
-      : [
-        new Change(
-          0,
-          originalOffsets.to - originalOffsets.from,
-          0,
-          modifiedOffsets.to - modifiedOffsets.from,
-        ),
-      ]
+      : []
+    const innerChanges = relativeInnerChanges.length > 0
+      && relativeInnerChanges.every((innerChange) => (
+        isRelativeChangeInsideChunk(innerChange, originalOffsets, modifiedOffsets)
+      ))
+      ? relativeInnerChanges
+      : [createWholeChunkChange(originalDoc, modifiedDoc, originalOffsets, modifiedOffsets)]
     const actualOriginalOffsets = getActualChangeOffsets(originalDoc, change.innerChanges, 'originalRange', originalOffsets)
     const actualModifiedOffsets = getActualChangeOffsets(modifiedDoc, change.innerChanges, 'modifiedRange', modifiedOffsets)
 
@@ -239,6 +270,10 @@ export function buildCodeMirrorChunksFromVsCodeDiff(originalDoc: Text, modifiedD
       actualFromB: actualModifiedOffsets.from,
       actualToA: actualOriginalOffsets.to,
       actualToB: actualModifiedOffsets.to,
+      vscodeModifiedEndLineExclusive: change.modified.endLineNumberExclusive,
+      vscodeModifiedStartLine: change.modified.startLineNumber,
+      vscodeOriginalEndLineExclusive: change.original.endLineNumberExclusive,
+      vscodeOriginalStartLine: change.original.startLineNumber,
     })
   })
 }

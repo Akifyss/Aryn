@@ -309,7 +309,7 @@ function getLineFlagChangeKind(lineFlags, lineNumber) {
   if (!flags) {
     return null;
   }
-  if (flags.modified || flags.trailingEofProxyOnly) {
+  if (flags.modified) {
     return 'modified';
   }
   if (flags.added) {
@@ -381,20 +381,29 @@ function getLineRangeChangeKind(lineFlags, startLine, endLine) {
 function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, markerElement = null) {
   const rowMarker = gutterRowElement?.querySelector?.('.meo-git-gutter-marker') ?? null;
   const hitMarker = markerElement instanceof HTMLElement ? markerElement : null;
+  const ownChangedMarker = (
+    isChangedMarker(rowMarker)
+      ? rowMarker
+      : isChangedMarker(hitMarker)
+        ? hitMarker
+        : null
+  );
   if (!isTrailingEofVisualLine(doc, lineNumber)) {
-    const changedMarker = (
-      isChangedMarker(rowMarker)
-        ? rowMarker
-        : isChangedMarker(hitMarker)
-          ? hitMarker
-          : null
-    );
     return {
       lineNumber,
       requestLineNumber: lineNumber,
       proxiedFromTrailingEof: false,
-      effectiveChangeKind: getMarkerChangeKind(changedMarker),
-      effectiveChangeScope: getMarkerChangeScope(changedMarker)
+      effectiveChangeKind: getMarkerChangeKind(ownChangedMarker),
+      effectiveChangeScope: getMarkerChangeScope(ownChangedMarker)
+    };
+  }
+  if (ownChangedMarker) {
+    return {
+      lineNumber,
+      requestLineNumber: lineNumber,
+      proxiedFromTrailingEof: false,
+      effectiveChangeKind: getMarkerChangeKind(ownChangedMarker),
+      effectiveChangeScope: getMarkerChangeScope(ownChangedMarker)
     };
   }
   const previousRowMarker = (

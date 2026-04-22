@@ -81,7 +81,7 @@ function getChunkDeco(view: EditorView) {
   let gutterBuilder = markGutter ? new RangeSetBuilder<GutterMarker>() : null
   let {from, to} = view.viewport
   for (let chunk of chunks) {
-    if ((isA ? chunk.fromA : chunk.fromB) >= to) break
+    if ((isA ? chunk.fromA : chunk.fromB) > to) break
     if ((isA ? chunk.toA : chunk.toB) > from) {
       if (!overrideChunk || !overrideChunk(view.state, chunk, builder, gutterBuilder))
         buildChunkDeco(chunk, view.state.doc, isA, highlightChanges, builder, gutterBuilder)

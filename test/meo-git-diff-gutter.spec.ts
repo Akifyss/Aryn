@@ -1,10 +1,15 @@
-import { Text } from '@codemirror/state'
+import { EditorState, Text } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import { splitDiffLines } from '../src/vendor/meo/shared/gitDiffCore'
 import {
   buildLineFlagsFromVsCodeDiff,
   buildScopedLineFlagsFromVsCodeDiff,
 } from '../src/vendor/meo/shared/gitDiffLineFlags'
+import {
+  gitDiffGutterBaselineExtensions,
+  gitDiffLineFlagsField,
+  setGitBaselineEffect,
+} from '../src/vendor/meo/webview/helpers/gitDiffGutter'
 
 function flagSummary(flags: ReturnType<typeof buildLineFlagsFromVsCodeDiff>) {
   return Array.from(flags, (flag) => {
@@ -164,6 +169,29 @@ describe('meo git diff gutter', () => {
     )
 
     expect(flagSummary(flags)).toEqual([
+      null,
+      'added',
+    ])
+  })
+
+  it('keeps a single inserted EOF blank line added in meo gutter state', () => {
+    const initialState = EditorState.create({
+      doc: '\n\ntest\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    const transaction = initialState.update({
+      effects: setGitBaselineEffect.of({
+        available: true,
+        baseText: '\n\ntest',
+        headOid: 'HEAD',
+        indexText: null,
+        tracked: true,
+      }),
+    })
+
+    expect(flagSummary(transaction.state.field(gitDiffLineFlagsField))).toEqual([
+      null,
+      null,
       null,
       'added',
     ])

@@ -159,6 +159,17 @@ describe('git diff navigation', () => {
     {
       expected: {
         modifiedLineCount: 1,
+        modifiedStartLine: 4,
+        originalLineCount: 0,
+        originalStartLine: 3,
+      },
+      modifiedText: '\n\ntest\n',
+      name: 'single EOF blank line insertion after a no-final-newline content line',
+      originalText: '\n\ntest',
+    },
+    {
+      expected: {
+        modifiedLineCount: 1,
         modifiedStartLine: 2,
         originalLineCount: 0,
         originalStartLine: 1,
@@ -197,6 +208,38 @@ describe('git diff navigation', () => {
       toA: 1,
       toB: 5,
     })
+  })
+
+  it('does not generate negative inner change offsets for EOF blank-line chunks', () => {
+    const { chunk } = getOnlyVsCodeStyleChunk('\n\ntest', '\n\ntest\n')
+
+    expect(chunk).toMatchObject({
+      actualFromA: 6,
+      actualFromB: 6,
+      actualToA: 6,
+      actualToB: 7,
+      fromA: 6,
+      fromB: 7,
+      toA: 6,
+      toB: 8,
+      vscodeModifiedEndLineExclusive: 5,
+      vscodeModifiedStartLine: 4,
+      vscodeOriginalEndLineExclusive: 4,
+      vscodeOriginalStartLine: 4,
+    })
+    expect(Array.from(chunk.changes, (change) => ({
+      fromA: change.fromA,
+      fromB: change.fromB,
+      toA: change.toA,
+      toB: change.toB,
+    }))).toEqual([
+      {
+        fromA: 0,
+        fromB: 0,
+        toA: 0,
+        toB: 0,
+      },
+    ])
   })
 
   it('does not count CodeMirror’s visual empty original line as changed content for empty files', () => {
