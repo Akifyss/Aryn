@@ -272,4 +272,33 @@ describe('git diff navigation', () => {
     expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 4)).toBe(true)
     expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 3)).toBe(false)
   })
+
+  it('treats pure deletion boundaries as worktree navigation hits', () => {
+    expect(isLineWithinVisualDiff('A\nB\nC\n', 'B\nC\n', 'worktree', 1)).toBe(true)
+    expect(isLineWithinVisualDiff('A\nB\nC\n', 'B\nC\n', 'worktree', 2)).toBe(false)
+
+    expect(isLineWithinVisualDiff('A\nB\nC\n', 'A\nC\n', 'worktree', 1)).toBe(true)
+    expect(isLineWithinVisualDiff('A\nB\nC\n', 'A\nC\n', 'worktree', 2)).toBe(false)
+
+    expect(isLineWithinVisualDiff('A\nB\nC\n', 'A\nB\n', 'worktree', 2)).toBe(true)
+    expect(isLineWithinVisualDiff('A\nB\nC\n', 'A\nB\n', 'worktree', 1)).toBe(false)
+  })
+
+  it('keeps inserted-line navigation scoped to inserted worktree lines', () => {
+    const originalText = 'A\nC\n'
+    const modifiedText = 'A\nB\nC\n'
+
+    expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 2)).toBe(true)
+    expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 1)).toBe(false)
+    expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 3)).toBe(false)
+  })
+
+  it('keeps modified-line navigation scoped to changed lines', () => {
+    const originalText = 'A\nB\nC\n'
+    const modifiedText = 'A\nX\nC\n'
+
+    expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 2)).toBe(true)
+    expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 1)).toBe(false)
+    expect(isLineWithinVisualDiff(originalText, modifiedText, 'worktree', 3)).toBe(false)
+  })
 })

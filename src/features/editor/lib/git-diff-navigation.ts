@@ -124,8 +124,22 @@ function isLineWithinSelection(
   const normalizedLineNumber = Math.max(1, Math.floor(lineNumber))
   const startLine = source === 'revision' ? selection.originalStartLine : selection.modifiedStartLine
   const lineCount = source === 'revision' ? selection.originalLineCount : selection.modifiedLineCount
+  const counterpartLineCount = source === 'revision' ? selection.modifiedLineCount : selection.originalLineCount
 
-  if (!Number.isInteger(startLine) || startLine < 1 || lineCount <= 0) {
+  if (!Number.isInteger(startLine)) {
+    return false
+  }
+
+  if (lineCount <= 0) {
+    if (counterpartLineCount <= 0) {
+      return false
+    }
+
+    const boundaryLine = Math.max(1, startLine)
+    return normalizedLineNumber === boundaryLine
+  }
+
+  if (startLine < 1) {
     return false
   }
 
