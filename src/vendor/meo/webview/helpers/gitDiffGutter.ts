@@ -23,6 +23,7 @@ interface BaselineSnapshot {
 
 export interface MarkerFlags {
   added: boolean;
+  deleted: boolean;
   modified: boolean;
   liveBlockStartLine?: number;
   liveBlockEndLine?: number;
@@ -104,14 +105,23 @@ class GitGutterMarker extends GutterMarker {
     if (this.flags.modified) {
       el.classList.add('is-modified');
     }
+    if (this.flags.deleted) {
+      el.classList.add('is-deleted');
+    }
 
-    if (!this.flags.added && !this.flags.modified) {
+    if (!this.flags.added && !this.flags.modified && !this.flags.deleted) {
       el.classList.add('is-empty');
     }
 
     const stripe = document.createElement('span');
     stripe.className = 'meo-git-gutter-stripe';
     el.appendChild(stripe);
+
+    if (this.flags.deleted) {
+      const deletedTriangle = document.createElement('span');
+      deletedTriangle.className = 'meo-git-gutter-deleted-triangle';
+      el.appendChild(deletedTriangle);
+    }
 
     return el;
   }
@@ -141,6 +151,7 @@ function gitMarker(flags: MarkerFlags): GitGutterMarker {
 function emptyMarkerFlags(): MarkerFlags {
   return {
     added: false,
+    deleted: false,
     modified: false
   };
 }
@@ -247,22 +258,104 @@ function buildLiveGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: (
   return builder.finish();
 }
 
-function liveCollapsedBlockMarkerFlags(block: { startLine: number; endLine: number; aggregateChangeKind: 'added' | 'modified'; aggregateChangeScope?: 'staged' | 'unstaged' }): MarkerFlags {
-  return block.aggregateChangeKind === 'modified'
-    ? {
-        ...emptyMarkerFlags(),
-        modified: true,
-        scope: block.aggregateChangeScope,
-        liveBlockStartLine: block.startLine,
-        liveBlockEndLine: block.endLine
-      }
-    : {
-        ...emptyMarkerFlags(),
-        added: true,
-        scope: block.aggregateChangeScope,
-        liveBlockStartLine: block.startLine,
-        liveBlockEndLine: block.endLine
-      };
+function liveCollapsedBlockMarkerFlags(block: { startLine: number; endLine: number; aggregateChangeKind: 'added' | 'deleted' | 'modified'; aggregateChangeScope?: 'staged' | 'unstaged' }): MarkerFlags {
+  if (block.aggregateChangeKind === 'modified') {
+    return {
+      ...emptyMarkerFlags(),
+      modified: true,
+      scope: block.aggregateChangeScope,
+      liveBlockStartLine: block.startLine,
+      liveBlockEndLine: block.endLine
+    };
+  }
+
+  if (block.aggregateChangeKind === 'deleted') {
+    return {
+      ...emptyMarkerFlags(),
+      deleted: true,
+      scope: block.aggregateChangeScope,
+      liveBlockStartLine: block.startLine,
+      liveBlockEndLine: block.endLine
+    };
+  }
+
+  return {
+    ...emptyMarkerFlags(),
+    added: true,
+    scope: block.aggregateChangeScope,
+    liveBlockStartLine: block.startLine,
+    liveBlockEndLine: block.endLine
+  };
+}
+
+interface DiffSegment {
+  fromLine: number;
+  toLine: number;
+  added: boolean;
+  deleted: boolean;
+  modified: boolean;
+}
+
+function sameSegmentKind(segment: DiffSegment, flags: { added?: boolean; deleted?: boolean; modified?: boolean }): boolean {
+  return (
+    segment.added === !!flags.added &&
+    segment.deleted === !!flags.deleted &&
+    segment.modified === !!flags.modified
+  );
+}
+
+export function getGitDiffOverviewSegments(state: EditorState): DiffSegment[] {
+  const lineFlags = state.field(gitDiffLineFlagsField, false);
+  if (!Array.isArray(lineFlags) || !lineFlags.length) {
+    return [];
+  }
+
+  const segments: DiffSegment[] = [];
+  let active: DiffSegment | null = null;
+
+  const flush = () => {
+    if (!active) {
+      return;
+    }
+    segments.push(active);
+    active = null;
+  };
+
+  for (let lineNo = 1; lineNo <= lineFlags.length; lineNo += 1) {
+    const flags = lineFlags[lineNo - 1];
+    if (flags?.scope === 'staged') {
+      flush();
+      continue;
+    }
+    const added = !!flags?.added;
+    const deleted = !!flags?.deleted;
+    const modified = !!flags?.modified;
+    if (!added && !deleted && !modified) {
+      flush();
+      continue;
+    }
+
+    if (
+      active &&
+      active.toLine + 1 === lineNo &&
+      sameSegmentKind(active, { added, deleted, modified })
+    ) {
+      active.toLine = lineNo;
+      continue;
+    }
+
+    flush();
+    active = { fromLine: lineNo, toLine: lineNo, added, deleted, modified };
+  }
+
+  flush();
+  return segments;
+}
+
+export function setGitBaseline(view: EditorView, snapshot: any): void {
+  view.dispatch({
+    effects: setGitBaselineEffect.of(snapshot)
+  });
 }
 
 function liveCollapsedBlockMarkerAtPos(
@@ -355,65 +448,4 @@ export function gitDiffGutterRenderExtensions(): any[] {
 
 export function gitDiffGutterLiveRenderExtensions(): any[] {
   return [gitDiffGutterLiveExtension];
-}
-
-interface DiffSegment {
-  fromLine: number;
-  toLine: number;
-  added: boolean;
-  modified: boolean;
-}
-
-export function getGitDiffOverviewSegments(state: EditorState): DiffSegment[] {
-  const lineFlags = state.field(gitDiffLineFlagsField, false);
-  if (!Array.isArray(lineFlags) || !lineFlags.length) {
-    return [];
-  }
-
-  const segments: DiffSegment[] = [];
-  let active: DiffSegment | null = null;
-
-  const flush = () => {
-    if (!active) {
-      return;
-    }
-    segments.push(active);
-    active = null;
-  };
-
-  for (let lineNo = 1; lineNo <= lineFlags.length; lineNo += 1) {
-    const flags = lineFlags[lineNo - 1];
-    if (flags?.scope === 'staged') {
-      flush();
-      continue;
-    }
-    const added = !!flags?.added;
-    const modified = !!flags?.modified;
-    if (!added && !modified) {
-      flush();
-      continue;
-    }
-
-    if (
-      active &&
-      active.toLine + 1 === lineNo &&
-      active.added === added &&
-      active.modified === modified
-    ) {
-      active.toLine = lineNo;
-      continue;
-    }
-
-    flush();
-    active = { fromLine: lineNo, toLine: lineNo, added, modified };
-  }
-
-  flush();
-  return segments;
-}
-
-export function setGitBaseline(view: EditorView, snapshot: any): void {
-  view.dispatch({
-    effects: setGitBaselineEffect.of(snapshot)
-  });
 }

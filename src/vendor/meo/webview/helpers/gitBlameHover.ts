@@ -90,6 +90,9 @@ function getChangeKindLabel(kind) {
   if (kind === 'added') {
     return 'addition';
   }
+  if (kind === 'deleted') {
+    return 'deletion';
+  }
   if (kind === 'modified') {
     return 'modification';
   }
@@ -286,7 +289,45 @@ function getMarkerChangeKind(marker) {
   if (marker.classList.contains('is-modified')) {
     return 'modified';
   }
+  if (marker.classList.contains('is-deleted')) {
+    return 'deleted';
+  }
   return null;
+}
+
+function markerHasDeletedChange(marker) {
+  return marker instanceof HTMLElement && marker.classList.contains('is-deleted');
+}
+
+function markerHasLineChange(marker) {
+  return marker instanceof HTMLElement && (
+    marker.classList.contains('is-added') ||
+    marker.classList.contains('is-modified')
+  );
+}
+
+function isDeletedBoundaryHit(marker, clientY = null) {
+  if (!markerHasDeletedChange(marker)) {
+    return false;
+  }
+  if (!markerHasLineChange(marker)) {
+    return true;
+  }
+  if (!Number.isFinite(clientY)) {
+    return false;
+  }
+  const rect = marker.getBoundingClientRect();
+  return clientY >= rect.bottom - 8 && clientY <= rect.bottom + 8;
+}
+
+function getMarkerChangeKindAt(marker, clientY = null) {
+  if (!(marker instanceof HTMLElement)) {
+    return null;
+  }
+  if (isDeletedBoundaryHit(marker, clientY)) {
+    return 'deleted';
+  }
+  return getMarkerChangeKind(marker);
 }
 
 function getMarkerChangeScope(marker) {
@@ -299,6 +340,16 @@ function getMarkerChangeScope(marker) {
 
 function isChangedMarker(marker) {
   return getMarkerChangeKind(marker) !== null;
+}
+
+function getMarkerGutterRowElement(marker) {
+  if (!(marker instanceof HTMLElement)) {
+    return null;
+  }
+  const row = marker.closest('.cm-gutterElement');
+  return row instanceof HTMLElement && row.closest('.cm-gutter.meo-git-gutter')
+    ? row
+    : null;
 }
 
 function getLineFlagChangeKind(lineFlags, lineNumber) {
@@ -314,6 +365,9 @@ function getLineFlagChangeKind(lineFlags, lineNumber) {
   }
   if (flags.added) {
     return 'added';
+  }
+  if (flags.deleted) {
+    return 'deleted';
   }
   return null;
 }
@@ -370,6 +424,9 @@ function getLineRangeChangeKind(lineFlags, startLine, endLine) {
     if (lineKind === 'modified') {
       return 'modified';
     }
+    if (lineKind === 'deleted') {
+      return 'deleted';
+    }
     if (lineKind === 'added') {
       hasAdded = true;
     }
@@ -378,7 +435,7 @@ function getLineRangeChangeKind(lineFlags, startLine, endLine) {
   return hasAdded ? 'added' : null;
 }
 
-function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, markerElement = null) {
+function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, markerElement = null, clientY = null) {
   const rowMarker = gutterRowElement?.querySelector?.('.meo-git-gutter-marker') ?? null;
   const hitMarker = markerElement instanceof HTMLElement ? markerElement : null;
   const ownChangedMarker = (
@@ -393,7 +450,7 @@ function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, ma
       lineNumber,
       requestLineNumber: lineNumber,
       proxiedFromTrailingEof: false,
-      effectiveChangeKind: getMarkerChangeKind(ownChangedMarker),
+      effectiveChangeKind: getMarkerChangeKindAt(ownChangedMarker, clientY),
       effectiveChangeScope: getMarkerChangeScope(ownChangedMarker)
     };
   }
@@ -402,7 +459,7 @@ function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, ma
       lineNumber,
       requestLineNumber: lineNumber,
       proxiedFromTrailingEof: false,
-      effectiveChangeKind: getMarkerChangeKind(ownChangedMarker),
+      effectiveChangeKind: getMarkerChangeKindAt(ownChangedMarker, clientY),
       effectiveChangeScope: getMarkerChangeScope(ownChangedMarker)
     };
   }
@@ -426,7 +483,7 @@ function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElement, ma
     lineNumber: Math.max(1, lineNumber - 1),
     requestLineNumber: lineNumber,
     proxiedFromTrailingEof: true,
-    effectiveChangeKind: getMarkerChangeKind(changedMarker),
+    effectiveChangeKind: getMarkerChangeKindAt(changedMarker, clientY),
     effectiveChangeScope: getMarkerChangeScope(changedMarker)
   };
 }
@@ -452,6 +509,7 @@ export function createGitBlameHoverController({
   let activeGutterRowElement = null;
   let activeGutterRowHoverKind = null;
   let activeGutterRowHoverScope = null;
+  let activeMarkerHoverKind = null;
   let activeRenderedBlockRange = null;
   let pendingBlameLineNumber = 0;
   let pointerDownInBand = false;
@@ -619,7 +677,7 @@ export function createGitBlameHoverController({
     )
   );
 
-  const getChangedMarkerForRow = (gutterRowElement, markerElement = null) => {
+  const getChangedMarkerForRow = (gutterRowElement, markerElement = null, clientY = null) => {
     const rowMarker = gutterRowElement?.querySelector?.('.meo-git-gutter-marker') ?? null;
     const marker = markerElement instanceof Element ? markerElement.closest('.meo-git-gutter-marker') : null;
     let changedMarker = isChangedMarker(rowMarker)
@@ -627,6 +685,15 @@ export function createGitBlameHoverController({
       : isChangedMarker(marker)
         ? marker
         : null;
+
+    if (!changedMarker && gutterRowElement instanceof HTMLElement && Number.isFinite(clientY)) {
+      const previousRowMarker = gutterRowElement.previousElementSibling?.querySelector?.('.meo-git-gutter-marker') ?? null;
+      const rowRect = gutterRowElement.getBoundingClientRect();
+      const nearPreviousLineBoundary = clientY <= rowRect.top + 8;
+      if (nearPreviousLineBoundary && markerHasDeletedChange(previousRowMarker)) {
+        changedMarker = previousRowMarker;
+      }
+    }
 
     if (!changedMarker && gutterRowElement instanceof HTMLElement) {
       const rawLineNumber = getRawLineNumberAtGutterRow(gutterRowElement);
@@ -687,12 +754,14 @@ export function createGitBlameHoverController({
     if (activeMarkerElements.length) {
       for (const marker of activeMarkerElements) {
         marker.classList.remove('is-hit-hover');
+        marker.classList.remove('is-hit-hover-added', 'is-hit-hover-deleted', 'is-hit-hover-modified');
       }
       activeMarkerElements = [];
     }
     activeGutterRowElement = null;
     activeGutterRowHoverKind = null;
     activeGutterRowHoverScope = null;
+    activeMarkerHoverKind = null;
     activeRenderedBlockRange = null;
     hoverOverlay.hidden = true;
     view.dom.classList.remove('meo-git-hover-band');
@@ -709,7 +778,7 @@ export function createGitBlameHoverController({
       !Number.isFinite(anchorRect.bottom)
     ) {
       hoverOverlay.hidden = true;
-      hoverOverlay.classList.remove('is-empty', 'is-added', 'is-modified');
+      hoverOverlay.classList.remove('is-empty', 'is-added', 'is-deleted', 'is-modified');
       return;
     }
 
@@ -718,7 +787,7 @@ export function createGitBlameHoverController({
     const height = Math.max(0, bottom - top);
     if (height <= 0) {
       hoverOverlay.hidden = true;
-      hoverOverlay.classList.remove('is-empty', 'is-added', 'is-modified');
+      hoverOverlay.classList.remove('is-empty', 'is-added', 'is-deleted', 'is-modified');
       return;
     }
 
@@ -727,6 +796,7 @@ export function createGitBlameHoverController({
 
     hoverOverlay.classList.toggle('is-empty', kind === 'empty');
     hoverOverlay.classList.toggle('is-added', kind === 'added');
+    hoverOverlay.classList.toggle('is-deleted', kind === 'deleted');
     hoverOverlay.classList.toggle('is-modified', kind === 'modified');
     hoverOverlay.style.left = `${left}px`;
     hoverOverlay.style.top = `${top}px`;
@@ -741,12 +811,17 @@ export function createGitBlameHoverController({
     activeGutterRowElement = gutterRowElement;
 
     let nextMarkers = [];
+    let nextMarkerHoverKind = null;
     let nextGutterRowHoverKind = null;
     let nextGutterRowHoverScope = null;
     let nextRenderedBlockRange = null;
-    const changedMarker = getChangedMarkerForRow(gutterRowElement, hit);
+    const changedMarker = getChangedMarkerForRow(gutterRowElement, hit, y);
     if (changedMarker) {
       nextMarkers = [changedMarker];
+      nextMarkerHoverKind = getMarkerChangeKindAt(changedMarker, y);
+      if (nextMarkerHoverKind === 'deleted') {
+        activeGutterRowElement = getMarkerGutterRowElement(changedMarker) ?? gutterRowElement;
+      }
     }
 
     const rawLineNumber = (
@@ -782,6 +857,7 @@ export function createGitBlameHoverController({
           }
           if (blockMarkers.length) {
             nextMarkers = blockMarkers;
+            nextMarkerHoverKind = block.aggregateChangeKind;
           } else {
             nextGutterRowHoverKind = block.aggregateChangeKind;
             nextGutterRowHoverScope = block.aggregateChangeScope;
@@ -813,6 +889,7 @@ export function createGitBlameHoverController({
       sameElements(nextMarkers, activeMarkerElements) &&
       nextGutterRowHoverKind === activeGutterRowHoverKind &&
       nextGutterRowHoverScope === activeGutterRowHoverScope &&
+      nextMarkerHoverKind === activeMarkerHoverKind &&
       sameLineRange(nextRenderedBlockRange, activeRenderedBlockRange)
     ) {
       return;
@@ -820,11 +897,16 @@ export function createGitBlameHoverController({
     if (activeMarkerElements.length) {
       for (const marker of activeMarkerElements) {
         marker.classList.remove('is-hit-hover');
+        marker.classList.remove('is-hit-hover-added', 'is-hit-hover-deleted', 'is-hit-hover-modified');
       }
     }
     activeMarkerElements = nextMarkers;
+    activeMarkerHoverKind = nextMarkerHoverKind;
     for (const marker of activeMarkerElements) {
       marker.classList.add('is-hit-hover');
+      if (activeMarkerHoverKind === 'added' || activeMarkerHoverKind === 'deleted' || activeMarkerHoverKind === 'modified') {
+        marker.classList.add(`is-hit-hover-${activeMarkerHoverKind}`);
+      }
     }
     activeRenderedBlockRange = nextRenderedBlockRange;
     activeGutterRowHoverKind = nextGutterRowHoverKind;
@@ -895,14 +977,20 @@ export function createGitBlameHoverController({
   };
 
   const lineNumberAtClientY = (layout, clientY, gutterRowElement = null, markerElement = null) => {
+    const markerRowElement = (
+      getMarkerChangeKindAt(markerElement, clientY) === 'deleted'
+        ? getMarkerGutterRowElement(markerElement)
+        : null
+    );
+    const effectiveGutterRowElement = markerRowElement ?? gutterRowElement;
     const viewAny = /** @type {any} */ (view);
     if (typeof viewAny.lineBlockAtHeight === 'function') {
-      const rowRect = gutterRowElement instanceof HTMLElement ? gutterRowElement.getBoundingClientRect() : null;
+      const rowRect = effectiveGutterRowElement instanceof HTMLElement ? effectiveGutterRowElement.getBoundingClientRect() : null;
       const probeY = rowRect ? (rowRect.top + rowRect.bottom) / 2 : clientY;
       const block = viewAny.lineBlockAtHeight(probeY - view.documentTop);
       if (block && Number.isFinite(block.from)) {
         const lineNumber = view.state.doc.lineAt(block.from).number;
-        return remapLiveHit(normalizeTrailingEofVisualLineHit(view.state.doc, lineNumber, gutterRowElement, markerElement));
+        return remapLiveHit(normalizeTrailingEofVisualLineHit(view.state.doc, lineNumber, effectiveGutterRowElement, markerElement, clientY));
       }
     }
 
@@ -922,105 +1010,32 @@ export function createGitBlameHoverController({
       };
     }
     const lineNumber = view.state.doc.lineAt(pos).number;
-    return remapLiveHit(normalizeTrailingEofVisualLineHit(view.state.doc, lineNumber, gutterRowElement, markerElement));
+    return remapLiveHit(normalizeTrailingEofVisualLineHit(view.state.doc, lineNumber, gutterRowElement, markerElement, clientY));
   };
 
-  const getLineAnchorRect = (
-    lineNumber,
-    layout,
-    gutterRowElement,
-    clientY,
-    lineRange = null,
-    { target = null, collapseTall = true } = {}
-  ) => {
-    if (
-      lineRange &&
-      Number.isInteger(lineRange.startLine) &&
-      Number.isInteger(lineRange.endLine)
-    ) {
-      const renderedBlockElement = getRenderedBlockElement(view, lineRange, target);
-      const gutterRows = getGutterRowsInLineRange(lineRange.startLine, lineRange.endLine);
-      const topCandidates = [];
-      const bottomCandidates = [];
-
-      if (renderedBlockElement) {
-        const blockRect = renderedBlockElement.getBoundingClientRect();
-        topCandidates.push(Math.min(blockRect.top, blockRect.bottom));
-        bottomCandidates.push(Math.max(blockRect.top, blockRect.bottom));
-      }
-
-      if (gutterRows.length) {
-        const firstRect = gutterRows[0].getBoundingClientRect();
-        const lastRect = gutterRows[gutterRows.length - 1].getBoundingClientRect();
-        topCandidates.push(Math.min(firstRect.top, lastRect.top));
-        bottomCandidates.push(Math.max(firstRect.bottom, lastRect.bottom));
-      }
-
-      if (topCandidates.length && bottomCandidates.length) {
-        const visibleTop = Math.max(
-          Math.min(...topCandidates),
-          layout.gutterRect.top,
-          8
-        );
-        const visibleBottom = Math.min(
-          Math.max(...bottomCandidates),
-          layout.gutterRect.bottom,
-          Math.max(8, window.innerHeight - 8)
-        );
-        const visibleHeight = Math.max(0, visibleBottom - visibleTop);
-
-        if (collapseTall && visibleHeight > 160) {
-          const hoverTop = clamp(clientY - 10, visibleTop, visibleBottom);
-          const hoverBottom = clamp(clientY + 10, hoverTop, visibleBottom);
-          return {
-            left: layout.gutterRect.left,
-            right: layout.gutterRect.right,
-            top: hoverTop,
-            bottom: hoverBottom
-          };
-        }
-
-        return {
-          left: layout.gutterRect.left,
-          right: layout.gutterRect.right,
-          top: visibleTop,
-          bottom: visibleBottom
-        };
-      }
-
-      if (gutterRowElement instanceof HTMLElement) {
-        const rowRect = gutterRowElement.getBoundingClientRect();
-        return {
-          left: layout.gutterRect.left,
-          right: layout.gutterRect.right,
-          top: clamp(Math.min(rowRect.top, clientY - 10), layout.gutterRect.top, layout.gutterRect.bottom),
-          bottom: clamp(Math.max(rowRect.bottom, clientY + 10), layout.gutterRect.top, layout.gutterRect.bottom)
-        };
-      }
-
+  const getSingleLineAnchorRect = (lineNumber, layout, gutterRowElement, clientY) => {
+    const rowRect = gutterRowElement instanceof HTMLElement ? gutterRowElement.getBoundingClientRect() : null;
+    if (rowRect) {
       return {
         left: layout.gutterRect.left,
         right: layout.gutterRect.right,
-        top: clamp(clientY - 10, layout.gutterRect.top, layout.gutterRect.bottom),
-        bottom: clamp(clientY + 10, layout.gutterRect.top, layout.gutterRect.bottom)
+        top: rowRect.top,
+        bottom: rowRect.bottom
       };
     }
 
     const line = view.state.doc.line(lineNumber);
-    const rowRect = gutterRowElement instanceof HTMLElement ? gutterRowElement.getBoundingClientRect() : null;
     const startCoords = view.coordsAtPos(line.from);
     const endCoords = view.coordsAtPos(line.to, -1) || view.coordsAtPos(line.to);
 
     const topCandidates = [
       startCoords?.top,
       endCoords?.top,
-      rowRect?.top,
       clientY
     ].filter(Number.isFinite);
     const bottomCandidates = [
       startCoords?.bottom,
       endCoords?.bottom,
-      rowRect?.bottom,
       clientY
     ].filter(Number.isFinite);
 
@@ -1034,6 +1049,101 @@ export function createGitBlameHoverController({
       bottom
     };
   };
+
+  const getLineRangeAnchorRect = (
+    layout,
+    gutterRowElement,
+    clientY,
+    lineRange,
+    { target = null, collapseTall = true } = {}
+  ) => {
+    if (
+      !lineRange ||
+      !Number.isInteger(lineRange.startLine) ||
+      !Number.isInteger(lineRange.endLine)
+    ) {
+      return null;
+    }
+
+    const renderedBlockElement = getRenderedBlockElement(view, lineRange, target);
+    const gutterRows = getGutterRowsInLineRange(lineRange.startLine, lineRange.endLine);
+    const topCandidates = [];
+    const bottomCandidates = [];
+
+    if (renderedBlockElement) {
+      const blockRect = renderedBlockElement.getBoundingClientRect();
+      topCandidates.push(Math.min(blockRect.top, blockRect.bottom));
+      bottomCandidates.push(Math.max(blockRect.top, blockRect.bottom));
+    }
+
+    if (gutterRows.length) {
+      const firstRect = gutterRows[0].getBoundingClientRect();
+      const lastRect = gutterRows[gutterRows.length - 1].getBoundingClientRect();
+      topCandidates.push(Math.min(firstRect.top, lastRect.top));
+      bottomCandidates.push(Math.max(firstRect.bottom, lastRect.bottom));
+    }
+
+    if (topCandidates.length && bottomCandidates.length) {
+      const visibleTop = Math.max(
+        Math.min(...topCandidates),
+        layout.gutterRect.top,
+        8
+      );
+      const visibleBottom = Math.min(
+        Math.max(...bottomCandidates),
+        layout.gutterRect.bottom,
+        Math.max(8, window.innerHeight - 8)
+      );
+      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+
+      if (collapseTall && visibleHeight > 160) {
+        const hoverTop = clamp(clientY - 10, visibleTop, visibleBottom);
+        const hoverBottom = clamp(clientY + 10, hoverTop, visibleBottom);
+        return {
+          left: layout.gutterRect.left,
+          right: layout.gutterRect.right,
+          top: hoverTop,
+          bottom: hoverBottom
+        };
+      }
+
+      return {
+        left: layout.gutterRect.left,
+        right: layout.gutterRect.right,
+        top: visibleTop,
+        bottom: visibleBottom
+      };
+    }
+
+    if (gutterRowElement instanceof HTMLElement) {
+      const rowRect = gutterRowElement.getBoundingClientRect();
+      return {
+        left: layout.gutterRect.left,
+        right: layout.gutterRect.right,
+        top: clamp(Math.min(rowRect.top, clientY - 10), layout.gutterRect.top, layout.gutterRect.bottom),
+        bottom: clamp(Math.max(rowRect.bottom, clientY + 10), layout.gutterRect.top, layout.gutterRect.bottom)
+      };
+    }
+
+    return {
+      left: layout.gutterRect.left,
+      right: layout.gutterRect.right,
+      top: clamp(clientY - 10, layout.gutterRect.top, layout.gutterRect.bottom),
+      bottom: clamp(clientY + 10, layout.gutterRect.top, layout.gutterRect.bottom)
+    };
+  };
+
+  const getLineAnchorRect = (
+    lineNumber,
+    layout,
+    gutterRowElement,
+    clientY,
+    lineRange = null,
+    { target = null, collapseTall = true } = {}
+  ) => (
+    getLineRangeAnchorRect(layout, gutterRowElement, clientY, lineRange, { target, collapseTall }) ??
+    getSingleLineAnchorRect(lineNumber, layout, gutterRowElement, clientY)
+  );
 
   const triggerHover = (
     lineNumber,
@@ -1061,9 +1171,9 @@ export function createGitBlameHoverController({
         return;
       }
 
-      // Pure inserted lines should always show as uncommitted. The synthetic EOF row
-      // is a proxy interaction though, so let the extension resolve history/mapping.
-      if (!proxiedFromTrailingEof && effectiveChangeKind === 'added') {
+      // Pure inserted/deleted lines should always show as uncommitted. The synthetic
+      // EOF row is a proxy interaction though, so let the extension resolve history.
+      if (!proxiedFromTrailingEof && (effectiveChangeKind === 'added' || effectiveChangeKind === 'deleted')) {
         pendingBlameLineNumber = 0;
         renderChangeResult(ui, {
           scope: effectiveChangeScope,
@@ -1186,8 +1296,8 @@ export function createGitBlameHoverController({
     );
     const effectiveChangeKind = (
       hit.effectiveChangeKind ??
-      getMarkerChangeKind(hoveredMarkerElement) ??
-      (activeGutterRowHoverKind === 'added' || activeGutterRowHoverKind === 'modified'
+      getMarkerChangeKindAt(hoveredMarkerElement, event.clientY) ??
+      (activeGutterRowHoverKind === 'added' || activeGutterRowHoverKind === 'deleted' || activeGutterRowHoverKind === 'modified'
         ? activeGutterRowHoverKind
         : null)
     );
@@ -1313,13 +1423,13 @@ export function createGitBlameHoverController({
     );
     const effectiveChangeKind = (
       hit.effectiveChangeKind ??
-      getMarkerChangeKind(marker)
+      getMarkerChangeKindAt(marker, event.clientY)
     );
     const effectiveChangeScope = (
       hit.effectiveChangeScope ??
       getMarkerChangeScope(marker)
     );
-    if (effectiveChangeKind !== 'added' && effectiveChangeKind !== 'modified') {
+    if (effectiveChangeKind !== 'added' && effectiveChangeKind !== 'deleted' && effectiveChangeKind !== 'modified') {
       return;
     }
 

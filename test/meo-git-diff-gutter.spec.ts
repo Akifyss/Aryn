@@ -13,6 +13,7 @@ import {
 
 function flagSummary(flags: ReturnType<typeof buildLineFlagsFromVsCodeDiff>) {
   return Array.from(flags, (flag) => {
+    if (flag?.deleted) return 'deleted'
     if (flag?.modified) return 'modified'
     if (flag?.added) return 'added'
     return null
@@ -21,6 +22,7 @@ function flagSummary(flags: ReturnType<typeof buildLineFlagsFromVsCodeDiff>) {
 
 function scopedFlagSummary(flags: ReturnType<typeof buildScopedLineFlagsFromVsCodeDiff>) {
   return Array.from(flags, (flag) => {
+    if (flag?.deleted) return `${flag.scope}:deleted`
     if (flag?.modified) return `${flag.scope}:modified`
     if (flag?.added) return `${flag.scope}:added`
     return null
@@ -126,14 +128,81 @@ describe('meo git diff gutter', () => {
     ])
   })
 
-  it('does not mark current lines for pure deletions', () => {
+  it('anchors middle pure deletions to the previous current line like VS Code', () => {
     const flags = buildLineFlagsFromVsCodeDiff(
       splitDiffLines('A\nB\nC\n'),
       Text.of('A\nC\n'.split('\n')),
     )
 
     expect(flagSummary(flags)).toEqual([
+      'deleted',
       null,
+      null,
+    ])
+  })
+
+  it('anchors leading pure deletions to the first current line bottom edge like VS Code', () => {
+    const flags = buildLineFlagsFromVsCodeDiff(
+      splitDiffLines('A\nB\nC\n'),
+      Text.of('B\nC\n'.split('\n')),
+    )
+
+    expect(flagSummary(flags)).toEqual([
+      'deleted',
+      null,
+      null,
+    ])
+  })
+
+  it('anchors trailing pure deletions to the last remaining current line', () => {
+    const flags = buildLineFlagsFromVsCodeDiff(
+      splitDiffLines('A\nB\nC\n'),
+      Text.of('A\nB\n'.split('\n')),
+    )
+
+    expect(flagSummary(flags)).toEqual([
+      null,
+      'deleted',
+      null,
+    ])
+  })
+
+  it('matches VS Code anchors for leading and mid-file deletion blocks', () => {
+    const flags = buildLineFlagsFromVsCodeDiff(
+      [
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        'test',
+        '',
+        '',
+        '',
+        'Agent',
+      ],
+      Text.of([
+        '',
+        '',
+        '',
+        '',
+        '',
+        'test',
+        '',
+        'Agent',
+      ]),
+    )
+
+    expect(flagSummary(flags)).toEqual([
+      'deleted',
+      null,
+      null,
+      null,
+      null,
+      'deleted',
       null,
       null,
     ])
@@ -232,6 +301,34 @@ describe('meo git diff gutter', () => {
       'unstaged:added',
       'staged:modified',
       null,
+      null,
+      null,
+    ])
+  })
+
+  it('marks unstaged pure deletions in scoped gutter state', () => {
+    const flags = buildScopedLineFlagsFromVsCodeDiff(
+      splitDiffLines('A\nB\nC\n'),
+      splitDiffLines('A\nB\nC\n'),
+      Text.of('A\nC\n'.split('\n')),
+    )
+
+    expect(scopedFlagSummary(flags)).toEqual([
+      'unstaged:deleted',
+      null,
+      null,
+    ])
+  })
+
+  it('maps staged pure deletions onto the current worktree anchor line', () => {
+    const flags = buildScopedLineFlagsFromVsCodeDiff(
+      splitDiffLines('A\nB\nC\n'),
+      splitDiffLines('A\nC\n'),
+      Text.of('A\nC\n'.split('\n')),
+    )
+
+    expect(scopedFlagSummary(flags)).toEqual([
+      'staged:deleted',
       null,
       null,
     ])

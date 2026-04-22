@@ -43,6 +43,7 @@
   --editor-font-weight: 400;
   --git-added: var(--color-green-600);
   --git-changed: var(--color-sky-600);
+  --git-deleted: var(--color-rose-600);
 }
 
 .meo-editor-shell {
@@ -149,6 +150,7 @@
   --task-checkbox-size: 17px;
   --git-added: var(--color-green-600);
   --git-changed: var(--color-sky-600);
+  --git-deleted: var(--color-rose-600);
 }
 
 .meo-native-root {
@@ -1920,6 +1922,11 @@
   background: transparent;
 }
 
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-deleted::before {
+  top: -4px;
+  height: calc(100% + 8px);
+}
+
 .meo-native-root .cm-editor .meo-git-gutter-stripe {
   position: absolute;
   left: 0;
@@ -1938,12 +1945,30 @@
   background: var(--git-changed);
 }
 
-.meo-native-root .cm-editor .meo-git-gutter-marker.is-staged .meo-git-gutter-stripe {
+.meo-native-root .cm-editor .meo-git-gutter-deleted-triangle {
+  position: absolute;
+  left: 0;
+  top: auto;
+  bottom: -4px;
+  box-sizing: border-box;
+  width: 0;
+  height: 0;
+  z-index: 1;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 4px solid var(--git-deleted);
+  pointer-events: none;
+}
+
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-staged .meo-git-gutter-stripe,
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-staged .meo-git-gutter-deleted-triangle {
   opacity: 0;
 }
 
 .meo-native-root .cm-editor .meo-git-gutter-marker.is-staged:hover .meo-git-gutter-stripe,
-.meo-native-root .cm-editor .meo-git-gutter-marker.is-staged.is-hit-hover .meo-git-gutter-stripe {
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-staged.is-hit-hover .meo-git-gutter-stripe,
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-staged:hover .meo-git-gutter-deleted-triangle,
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-staged.is-hit-hover .meo-git-gutter-deleted-triangle {
   opacity: 0.55;
 }
 
@@ -1955,6 +1980,23 @@
 .meo-native-root .cm-editor .meo-git-gutter-marker.is-hit-hover:not(.is-staged) .meo-git-gutter-stripe {
   left: -2px;
   width: 5px;
+}
+
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-deleted.is-hit-hover-deleted:not(.is-staged) .meo-git-gutter-stripe {
+  left: -2px;
+  top: 0;
+  bottom: auto;
+  width: 5px;
+  height: 100%;
+  border: 0;
+  background: var(--git-deleted);
+}
+
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-deleted.is-hit-hover-deleted:not(.is-staged) .meo-git-gutter-deleted-triangle {
+  bottom: 0;
+  border-top-width: 0;
+  border-bottom-width: 0;
+  opacity: 0;
 }
 
 .meo-native-root .cm-editor .meo-diff-added-line {
@@ -2009,6 +2051,10 @@
   background: color-mix(in srgb, var(--git-changed) 50%, transparent);
 }
 
+.meo-native-root .cm-editor .meo-git-overview-ruler-marker.is-deleted {
+  background: color-mix(in srgb, var(--git-deleted) 55%, transparent);
+}
+
 .meo-native-root .cm-editor .meo-git-overview-ruler-file-end {
   position: absolute;
   left: 0;
@@ -2055,6 +2101,10 @@
 
 .meo-git-hover-overlay.is-added {
   background: var(--git-added);
+}
+
+.meo-git-hover-overlay.is-deleted {
+  background: var(--git-deleted);
 }
 
 .meo-git-hover-overlay.is-modified {

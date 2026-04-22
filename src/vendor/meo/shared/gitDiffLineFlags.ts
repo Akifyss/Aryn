@@ -5,6 +5,7 @@ import { DefaultLinesDiffComputer } from 'monaco-editor/esm/vs/editor/common/dif
 
 export type GitLineChangeFlags = {
   added: boolean
+  deleted: boolean
   modified: boolean
   scope?: 'staged' | 'unstaged'
 }
@@ -12,6 +13,7 @@ export type GitLineChangeFlags = {
 function emptyLineChangeFlags(): GitLineChangeFlags {
   return {
     added: false,
+    deleted: false,
     modified: false,
   }
 }
@@ -223,6 +225,20 @@ function computeVsCodeLineDiff(originalLines: string[], modifiedLines: string[])
   })
 }
 
+function hasLineChange(flags: GitLineChangeFlags | undefined) {
+  return !!(flags?.added || flags?.deleted || flags?.modified)
+}
+
+function clampDeletedAnchorLine(modifiedStartLine: number, currentLineCount: number) {
+  if (currentLineCount <= 1) {
+    return 1
+  }
+  if (modifiedStartLine <= 1) {
+    return 1
+  }
+  return Math.max(1, Math.min(currentLineCount, modifiedStartLine - 1))
+}
+
 export function buildCodeMirrorChunksFromVsCodeDiff(originalDoc: Text, modifiedDoc: Text) {
   const changes = computeVsCodeLineDiff(getTextLines(originalDoc), getTextLines(modifiedDoc)).changes as VsCodeLineChange[]
 
@@ -326,10 +342,15 @@ export function buildLineFlagsFromVsCodeDiff(
   for (const change of computeVsCodeLineDiff(baseLines, currentLines).changes) {
     const modifiedStartLine = change.modified.startLineNumber
     const modifiedEndLineExclusive = change.modified.endLineNumberExclusive
+    const originalLineCount = Math.max(0, change.original.endLineNumberExclusive - change.original.startLineNumber)
     if (modifiedStartLine >= modifiedEndLineExclusive) {
+      if (originalLineCount > 0) {
+        const anchorLine = clampDeletedAnchorLine(modifiedStartLine, currentDoc.lines)
+        const flags = lineFlags[anchorLine - 1] ?? (lineFlags[anchorLine - 1] = emptyLineChangeFlags())
+        flags.deleted = true
+      }
       continue
     }
-    const originalLineCount = Math.max(0, change.original.endLineNumberExclusive - change.original.startLineNumber)
     const isPureInsert = originalLineCount === 0 || baseDoc.length === 0
     const startLine = Math.max(1, modifiedStartLine)
     const endLine = Math.min(currentDoc.lines + 1, modifiedEndLineExclusive)
@@ -362,9 +383,10 @@ export function buildScopedLineFlagsFromVsCodeDiff(
 
   for (let lineNo = 1; lineNo <= currentDoc.lines; lineNo += 1) {
     const unstaged = unstagedFlags[lineNo - 1]
-    if (unstaged?.added || unstaged?.modified) {
+    if (unstaged && hasLineChange(unstaged)) {
       lineFlags[lineNo - 1] = {
         added: !!unstaged.added,
+        deleted: !!unstaged.deleted,
         modified: !!unstaged.modified,
         scope: 'unstaged',
       }
@@ -375,7 +397,8 @@ export function buildScopedLineFlagsFromVsCodeDiff(
     const staged = stagedFlags[indexLineNo - 1]
     const mappedCurrentLineNo = indexToCurrentLineMap[indexLineNo]
     if (
-      !(staged?.added || staged?.modified) ||
+      !staged ||
+      !hasLineChange(staged) ||
       typeof mappedCurrentLineNo !== 'number' ||
       !Number.isInteger(mappedCurrentLineNo) ||
       mappedCurrentLineNo < 1 ||
@@ -388,6 +411,7 @@ export function buildScopedLineFlagsFromVsCodeDiff(
     const currentLineNo = mappedCurrentLineNo
     lineFlags[currentLineNo - 1] = {
       added: !!staged.added,
+      deleted: !!staged.deleted,
       modified: !!staged.modified,
       scope: 'staged',
     }
