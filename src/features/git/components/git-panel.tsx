@@ -663,7 +663,7 @@ export function GitPanel({
             </button>
           <button
             type='button'
-            className={`git-toolbar-action git-toolbar-icon-button${repositoryState.unpushedCommits > 0 ? ' is-accent' : ''}`}
+            className='git-toolbar-action git-toolbar-icon-button'
             aria-label='Push'
             title={syncDisabledReason ?? 'Push'}
             disabled={Boolean(syncDisabledReason)}
