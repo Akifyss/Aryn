@@ -612,6 +612,12 @@ export function GitPanel({
     : Boolean(busyLabel)
       ? busyLabel
       : null
+  const unpushedCommitCount = repositoryState.unpushedCommits
+  const hasUnpushedCommits = unpushedCommitCount > 0
+  const pushBadgeLabel = unpushedCommitCount > 99 ? '99+' : String(unpushedCommitCount)
+  const pushAccessibleLabel = hasUnpushedCommits
+    ? `Push ${unpushedCommitCount} unpushed commit${unpushedCommitCount === 1 ? '' : 's'}`
+    : 'Push'
 
   return (
     <div className='git-panel'>
@@ -663,13 +669,14 @@ export function GitPanel({
             </button>
           <button
             type='button'
-            className='git-toolbar-action git-toolbar-icon-button'
-            aria-label='Push'
-            title={syncDisabledReason ?? 'Push'}
+            className={`git-toolbar-action git-toolbar-icon-button${hasUnpushedCommits ? ' git-toolbar-action-with-badge' : ''}`}
+            aria-label={pushAccessibleLabel}
+            title={syncDisabledReason ?? pushAccessibleLabel}
             disabled={Boolean(syncDisabledReason)}
             onClick={onPush}
           >
             <UploadLine size={16} />
+            {hasUnpushedCommits ? <span className='git-toolbar-action-badge'>{pushBadgeLabel}</span> : null}
           </button>
           <button
             type='button'
