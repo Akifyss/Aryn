@@ -36,6 +36,10 @@ import { extractHeadings, extractHeadingSections } from '@/vendor/meo/webview/he
 import { insertTable } from '@/vendor/meo/webview/helpers/tables'
 import { liveModeExtensions } from '@/vendor/meo/webview/liveMode'
 import { expandAllCollapsibleSections } from '@/vendor/meo/webview/helpers/headingCollapse'
+import {
+  createGitDiffOverviewRulerController,
+  type GitDiffOverviewSegment,
+} from '@/vendor/meo/webview/helpers/gitDiffOverviewRuler'
 
 type MeoDiffSplitControllerOptions = {
   baseline: GitBaselinePayload | null
@@ -152,6 +156,10 @@ const setSearchQueryEffect = StateEffect.define<SearchQueryState>()
 const searchMatchMark = Decoration.mark({ class: 'meo-search-match' })
 const allowReadOnlyDocumentUpdate = Annotation.define<boolean>()
 const externalDocumentSync = Annotation.define<boolean>()
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
 
 function createSearchQueryState(query: string | null | undefined, options: SearchOptions = {}): SearchQueryState {
   return {
@@ -1200,6 +1208,7 @@ export function createMeoDiffSplitController({
   let pendingFrameSync = false
   let cleanupMergeViewDomListeners: (() => void) | null = null
   let cleanupReadOnlyWidgetLock: (() => void) | null = null
+  let diffOverviewRuler: ReturnType<typeof createGitDiffOverviewRulerController> | null = null
   const originalLineNumbersCompartment = new Compartment()
   const modifiedLineNumbersCompartment = new Compartment()
   const host = document.createElement('div')
@@ -1221,11 +1230,81 @@ export function createMeoDiffSplitController({
   host.append(header, body)
   parent.appendChild(host)
 
+  const getDiffOverviewSegments = (): GitDiffOverviewSegment[] => {
+    if (!mergeView) {
+      return []
+    }
+
+    const currentMergeView = mergeView
+    const modifiedDoc = currentMergeView.b.state.doc
+    const totalLines = Math.max(1, modifiedDoc.lines)
+    const chunks = (getChunks(currentMergeView.b.state)?.chunks as CodeMirrorDiffChunk[] | undefined) ?? []
+
+    return chunks.map((chunk) => {
+      const selection = createSelectionFromCodeMirrorChunk(currentMergeView.a.state.doc, modifiedDoc, chunk)
+      const modifiedLineCount = Math.max(0, selection.modifiedLineCount)
+      const originalLineCount = Math.max(0, selection.originalLineCount)
+      const fromLine = clampNumber(
+        modifiedLineCount === 0 ? Math.max(1, selection.modifiedStartLine) : selection.modifiedStartLine,
+        1,
+        totalLines,
+      )
+      const toLine = clampNumber(
+        modifiedLineCount === 0 ? fromLine : fromLine + modifiedLineCount - 1,
+        fromLine,
+        totalLines,
+      )
+
+      return {
+        added: originalLineCount === 0 && modifiedLineCount > 0,
+        deleted: modifiedLineCount === 0 && originalLineCount > 0,
+        fromLine,
+        modified: originalLineCount > 0 && modifiedLineCount > 0,
+        toLine,
+      }
+    })
+  }
+
+  const ensureDiffOverviewRuler = () => {
+    if (!mergeView || diffOverviewRuler) {
+      diffOverviewRuler?.refresh()
+      return
+    }
+
+    diffOverviewRuler = createGitDiffOverviewRulerController({
+      getMode: () => 'diff-split',
+      getScrollElement: () => mergeView?.dom,
+      getSegments: getDiffOverviewSegments,
+      getTrackHeight: () => body.clientHeight,
+      hostClassName: 'meo-diff-split-overview-ruler',
+      hostParent: body,
+      isGitChangesVisible: () => currentDiffGutterVisible,
+      observeElements: () => [
+        body,
+        mergeView?.dom,
+        mergeView?.b.dom,
+        mergeView?.b.contentDOM,
+      ],
+      view: mergeView.b,
+    })
+  }
+
+  const resetDiffOverviewRender = () => {
+    ensureDiffOverviewRuler()
+    diffOverviewRuler?.refresh()
+  }
+
+  const destroyDiffOverview = () => {
+    diffOverviewRuler?.destroy()
+    diffOverviewRuler = null
+  }
+
   const destroyMergeView = () => {
     cleanupReadOnlyWidgetLock?.()
     cleanupReadOnlyWidgetLock = null
     cleanupMergeViewDomListeners?.()
     cleanupMergeViewDomListeners = null
+    destroyDiffOverview()
     mergeView?.destroy()
     mergeView = null
   }
@@ -1475,6 +1554,7 @@ export function createMeoDiffSplitController({
             if (hasResolvedViewFrameChanged(previousState, nextState)) {
               requestResolvedFrameSync()
             }
+            resetDiffOverviewRender()
             onChange(nextValue)
           },
           onCompositionChange: handleCompositionChange,
@@ -1510,6 +1590,7 @@ export function createMeoDiffSplitController({
     const handleMergeScroll = () => {
       onSelectionChange?.(null)
       onViewportChange?.()
+      resetDiffOverviewRender()
     }
     const handleTableInteraction = (event: Event) => {
       const active = Boolean((event as CustomEvent<{ active?: boolean }>).detail?.active)
@@ -1556,6 +1637,7 @@ export function createMeoDiffSplitController({
     forceParsing(mergeView.b, mergeView.b.state.doc.length, 500)
     expandAllCollapsibleSections(mergeView.a)
     expandAllCollapsibleSections(mergeView.b)
+    resetDiffOverviewRender()
   }
 
   render()
@@ -1602,6 +1684,7 @@ export function createMeoDiffSplitController({
         },
       })
     }
+    resetDiffOverviewRender()
   }
 
   const findMatch = (
@@ -1767,6 +1850,7 @@ export function createMeoDiffSplitController({
         forceParsing(mergeView.a, mergeView.a.state.doc.length, 500)
         forceParsing(mergeView.b, mergeView.b.state.doc.length, 500)
       }
+      resetDiffOverviewRender()
     },
     refreshDecorations() {
       mergeView?.a.dispatch({})
@@ -1850,6 +1934,7 @@ export function createMeoDiffSplitController({
     setDiffGutterVisible(visible) {
       currentDiffGutterVisible = visible !== false
       mergeView?.reconfigure({ gutter: currentDiffGutterVisible })
+      resetDiffOverviewRender()
     },
     setLineNumbersVisible(visible) {
       currentLineNumbersVisible = visible !== false
@@ -1918,6 +2003,7 @@ export function createMeoDiffSplitController({
       } finally {
         applyingExternal = false
       }
+      resetDiffOverviewRender()
     },
     undo() {
       return undo(getEditableView())

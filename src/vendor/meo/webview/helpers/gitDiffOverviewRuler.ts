@@ -15,8 +15,8 @@ interface TrackMetrics {
   showFileEndLine: boolean;
 }
 
-function getTrackMetrics(view: EditorView, trackHeight: number): TrackMetrics {
-  const scrollEl = view?.scrollDOM;
+function getTrackMetrics(view: EditorView, trackHeight: number, scrollElement?: HTMLElement | null): TrackMetrics {
+  const scrollEl = scrollElement ?? view?.scrollDOM;
   if (!scrollEl || trackHeight <= 0) {
     return {
       drawableHeight: trackHeight,
@@ -61,6 +61,14 @@ function getTrackMetrics(view: EditorView, trackHeight: number): TrackMetrics {
   };
 }
 
+export interface GitDiffOverviewSegment {
+  fromLine: number;
+  toLine: number;
+  added: boolean;
+  deleted: boolean;
+  modified: boolean;
+}
+
 interface PixelSegment {
   top: number;
   height: number;
@@ -78,12 +86,24 @@ interface GitDiffOverviewRulerOptions {
   view: EditorView;
   getMode: () => string;
   isGitChangesVisible: () => boolean;
+  getSegments?: (state: EditorState, view: EditorView) => GitDiffOverviewSegment[];
+  getScrollElement?: () => HTMLElement | null | undefined;
+  getTrackHeight?: () => number;
+  hostClassName?: string;
+  hostParent?: HTMLElement;
+  observeElements?: () => (Element | null | undefined)[];
 }
 
 export function createGitDiffOverviewRulerController({
   view,
   getMode,
-  isGitChangesVisible
+  isGitChangesVisible,
+  getSegments,
+  getScrollElement,
+  getTrackHeight,
+  hostClassName,
+  hostParent,
+  observeElements
 }: GitDiffOverviewRulerOptions): GitDiffOverviewRulerController {
   let destroyed = false;
   let host: HTMLElement | null = null;
@@ -97,9 +117,9 @@ export function createGitDiffOverviewRulerController({
       return host;
     }
     host = document.createElement('div');
-    host.className = 'meo-git-overview-ruler';
+    host.className = hostClassName ? `meo-git-overview-ruler ${hostClassName}` : 'meo-git-overview-ruler';
     host.hidden = true;
-    view.dom.appendChild(host);
+    (hostParent ?? view.dom).appendChild(host);
     return host;
   };
 
@@ -126,13 +146,15 @@ export function createGitDiffOverviewRulerController({
     const mode = typeof getMode === 'function' ? getMode() : 'source';
     const visible = typeof isGitChangesVisible === 'function' ? isGitChangesVisible() : true;
     const root = ensureHost();
-    const trackHeight = Math.floor(root.clientHeight || view.dom.clientHeight || 0);
+    const customTrackHeight = typeof getTrackHeight === 'function' ? getTrackHeight() : 0;
+    const trackHeight = Math.floor(customTrackHeight || root.clientHeight || view.dom.clientHeight || 0);
     if (trackHeight <= 0) {
       lastRenderKey = `hidden:${mode}:no-height`;
       hide();
       return;
     }
-    const trackMetrics = getTrackMetrics(view, trackHeight);
+    const scrollElement = typeof getScrollElement === 'function' ? getScrollElement() : null;
+    const trackMetrics = getTrackMetrics(view, trackHeight, scrollElement);
 
     if (!visible) {
       const renderKey = `track-only:${mode}:${trackHeight}:${trackMetrics.fileEndY}:${trackMetrics.showFileEndLine ? 1 : 0}`;
@@ -152,7 +174,9 @@ export function createGitDiffOverviewRulerController({
     }
 
     const totalLines = Math.max(1, view.state.doc.lines);
-    const segments = getGitDiffOverviewSegments(view.state);
+    const segments = typeof getSegments === 'function'
+      ? getSegments(view.state, view)
+      : getGitDiffOverviewSegments(view.state);
     if (!segments.length) {
       const renderKey = `track-only:${mode}:no-segments:${totalLines}:${trackHeight}:${trackMetrics.fileEndY}:${trackMetrics.showFileEndLine ? 1 : 0}`;
       if (renderKey === lastRenderKey) {
@@ -266,6 +290,13 @@ export function createGitDiffOverviewRulerController({
     resizeObserver.observe(view.dom);
     resizeObserver.observe(view.scrollDOM);
     resizeObserver.observe(view.contentDOM);
+    if (typeof observeElements === 'function') {
+      for (const element of observeElements()) {
+        if (element) {
+          resizeObserver.observe(element);
+        }
+      }
+    }
   } else {
     onWindowResize = () => {
       lastRenderKey = '';

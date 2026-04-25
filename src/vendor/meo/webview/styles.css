@@ -273,6 +273,7 @@
 }
 
 .meo-native-theme .meo-diff-split-body {
+  position: relative;
   display: flex;
   flex: 1;
   min-width: 0;
@@ -287,6 +288,48 @@
   min-height: 0;
   background: var(--editor-background);
   overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar {
+  -webkit-appearance: none;
+  width: 10px !important;
+  height: 10px !important;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-track {
+  -webkit-appearance: none;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb {
+  -webkit-appearance: none;
+  border: 3px solid transparent !important;
+  border-radius: 999px !important;
+  background: var(--scrollbarSlider-background,
+      color-mix(in oklch, var(--scrollbar) 50%, transparent)) !important;
+  background-clip: content-box !important;
+  box-shadow: none !important;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbarSlider-hoverBackground,
+      var(--scrollbarSlider-background,
+        color-mix(in oklch, var(--scrollbar) 50%, transparent))) !important;
+  background-clip: content-box !important;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbarSlider-activeBackground,
+      var(--scrollbarSlider-hoverBackground,
+        var(--scrollbarSlider-background,
+          color-mix(in oklch, var(--scrollbar) 50%, transparent)))) !important;
+  background-clip: content-box !important;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-corner {
+  background: transparent !important;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeViewEditors {
@@ -920,6 +963,17 @@
   cursor: pointer;
   color: var(--foreground);
   background: transparent;
+}
+
+.meo-native-theme .mode-button.mode-button-icon {
+  width: 28px;
+  min-width: 28px;
+  padding: 4px;
+}
+
+.meo-native-theme .mode-button.mode-button-icon svg {
+  display: block;
+  margin: 0 auto;
 }
 
 .meo-copy-code-btn {
@@ -2318,6 +2372,42 @@
   height: 5px;
   opacity: 0.65;
   background: color-mix(in srgb, var(--editor-foreground, #ffffff) 55%, transparent);
+}
+
+.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler {
+  position: absolute;
+  top: 0;
+  right: 10px;
+  bottom: 0;
+  width: 3px;
+  border-left: 1px solid var(--border);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler[hidden] {
+  display: none;
+}
+
+.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler .meo-git-overview-ruler-marker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-radius: 1px;
+  opacity: 0.95;
+  background: transparent;
+}
+
+.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler .meo-git-overview-ruler-marker.is-added {
+  background: color-mix(in srgb, var(--git-added) 50%, transparent);
+}
+
+.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler .meo-git-overview-ruler-marker.is-modified {
+  background: color-mix(in srgb, var(--git-changed) 50%, transparent);
+}
+
+.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler .meo-git-overview-ruler-marker.is-deleted {
+  background: color-mix(in srgb, var(--git-deleted) 55%, transparent);
 }
 
 .meo-git-blame-tooltip {
