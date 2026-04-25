@@ -38,6 +38,11 @@ import { insertTable } from '@/vendor/meo/webview/helpers/tables'
 import { liveModeExtensions } from '@/vendor/meo/webview/liveMode'
 import { expandAllCollapsibleSections } from '@/vendor/meo/webview/helpers/headingCollapse'
 import {
+  gitDiffGutterBaselineExtensions,
+  gitDiffGutterLiveRenderExtensions,
+  setGitBaseline,
+} from '@/vendor/meo/webview/helpers/gitDiffGutter'
+import {
   createGitDiffOverviewRulerController,
   type GitDiffOverviewSegment,
 } from '@/vendor/meo/webview/helpers/gitDiffOverviewRuler'
@@ -490,10 +495,49 @@ function getHunkActionIcon(action: GitDiffBlockAction) {
 }
 
 function createLineNumberExtensions(visible: boolean) {
-  return visible ? [lineNumbers(), highlightActiveLineGutter()] : []
+  return visible ? [lineNumbers()] : []
+}
+
+function createActiveLineGutterExtensions(visible: boolean) {
+  return visible ? [highlightActiveLineGutter()] : []
+}
+
+type DiffSplitGutterFlags = {
+  added: boolean
+  deleted: boolean
+  modified: boolean
+  removed?: boolean
+  liveBlockEndLine?: number
+  liveBlockStartLine?: number
+  scope?: 'staged' | 'unstaged'
+}
+
+function mapDiffSplitOriginalGutterFlag(flags: DiffSplitGutterFlags) {
+  return {
+    added: false,
+    deleted: false,
+    liveBlockEndLine: flags.liveBlockEndLine,
+    liveBlockStartLine: flags.liveBlockStartLine,
+    modified: false,
+    removed: flags.added || flags.modified || flags.deleted || !!flags.removed,
+    scope: flags.scope,
+  }
+}
+
+function mapDiffSplitModifiedGutterFlag(flags: DiffSplitGutterFlags) {
+  return {
+    added: flags.added || flags.modified || flags.deleted || !!flags.removed,
+    deleted: false,
+    liveBlockEndLine: flags.liveBlockEndLine,
+    liveBlockStartLine: flags.liveBlockStartLine,
+    modified: false,
+    removed: false,
+    scope: flags.scope,
+  }
 }
 
 function createDiffExtensions({
+  activeLineGutterCompartment,
   editable,
   lineNumbersCompartment,
   lineNumbersVisible,
@@ -504,7 +548,9 @@ function createDiffExtensions({
   onSelectionChange,
   onViewportChange,
   readOnly,
+  side,
 }: {
+  activeLineGutterCompartment: Compartment
   editable: boolean
   lineNumbersCompartment: Compartment
   lineNumbersVisible: boolean
@@ -515,9 +561,15 @@ function createDiffExtensions({
   onSelectionChange?: (selectionState: { visible?: boolean, anchorX?: number, anchorY?: number } | null) => void
   onViewportChange?: () => void
   readOnly: boolean
+  side: 'original' | 'modified'
 }) {
   const extensions = [
     lineNumbersCompartment.of(createLineNumberExtensions(lineNumbersVisible)),
+    ...gitDiffGutterBaselineExtensions(),
+    ...gitDiffGutterLiveRenderExtensions({
+      mapLineFlag: side === 'original' ? mapDiffSplitOriginalGutterFlag : mapDiffSplitModifiedGutterFlag,
+    }),
+    activeLineGutterCompartment.of(createActiveLineGutterExtensions(lineNumbersVisible)),
     drawSelection(),
     history(),
     indentOnInput(),
@@ -1215,6 +1267,8 @@ export function createMeoDiffSplitController({
   let diffScrollPastEndFrame = 0
   const originalLineNumbersCompartment = new Compartment()
   const modifiedLineNumbersCompartment = new Compartment()
+  const originalActiveLineGutterCompartment = new Compartment()
+  const modifiedActiveLineGutterCompartment = new Compartment()
   const host = document.createElement('div')
   host.className = 'meo-diff-split-host'
 
@@ -1357,6 +1411,32 @@ export function createMeoDiffSplitController({
     destroyDiffOverview()
     mergeView?.destroy()
     mergeView = null
+  }
+
+  const syncDiffGutterVisibility = () => {
+    mergeView?.a.dom.classList.toggle('meo-git-gutter-hidden', !currentDiffGutterVisible)
+    mergeView?.b.dom.classList.toggle('meo-git-gutter-hidden', !currentDiffGutterVisible)
+  }
+
+  const syncDiffSplitGitBaselines = (originalState: DiffSplitResolvedState) => {
+    if (!mergeView) {
+      return
+    }
+
+    setGitBaseline(mergeView.a, {
+      available: true,
+      baseText: originalState.modifiedText,
+      headOid: null,
+      indexText: null,
+      tracked: true,
+    })
+    setGitBaseline(mergeView.b, {
+      available: true,
+      baseText: originalState.text,
+      headOid: null,
+      indexText: null,
+      tracked: true,
+    })
   }
 
   const lockReadOnlyWidgets = (rootElement: HTMLElement) => {
@@ -1581,16 +1661,19 @@ export function createMeoDiffSplitController({
       a: {
         doc: originalState.text,
         extensions: createDiffExtensions({
+          activeLineGutterCompartment: originalActiveLineGutterCompartment,
           editable: false,
           lineNumbersCompartment: originalLineNumbersCompartment,
           lineNumbersVisible: currentLineNumbersVisible,
           onChange: () => undefined,
           readOnly: true,
+          side: 'original',
         }),
       },
       b: {
         doc: originalState.modifiedText,
         extensions: createDiffExtensions({
+          activeLineGutterCompartment: modifiedActiveLineGutterCompartment,
           editable,
           lineNumbersCompartment: modifiedLineNumbersCompartment,
           lineNumbersVisible: currentLineNumbersVisible,
@@ -1603,6 +1686,9 @@ export function createMeoDiffSplitController({
             const nextState = getOriginalState()
             if (hasResolvedViewFrameChanged(previousState, nextState)) {
               requestResolvedFrameSync()
+            } else {
+              lastRenderedState = nextState
+              syncDiffSplitGitBaselines(nextState)
             }
             resetDiffOverviewRender()
             onChange(nextValue)
@@ -1613,10 +1699,11 @@ export function createMeoDiffSplitController({
           onSelectionChange,
           onViewportChange,
           readOnly: false,
+          side: 'modified',
         }),
       },
       diffConfig: getDiffConfig(editable),
-      gutter: currentDiffGutterVisible,
+      gutter: false,
       highlightChanges: true,
       parent: body,
       renderRevertControl: createHunkActionControls,
@@ -1624,6 +1711,8 @@ export function createMeoDiffSplitController({
     })
 
     mergeView.dom.classList.add('meo-diff-split-merge-view')
+    syncDiffSplitGitBaselines(originalState)
+    syncDiffGutterVisibility()
     mergeScrollArea = mountMeoBaseScrollArea({
       className: 'meo-diff-split-base-scroll-area',
       hostParent: body,
@@ -1743,6 +1832,7 @@ export function createMeoDiffSplitController({
         },
       })
     }
+    syncDiffSplitGitBaselines(originalState)
     resetDiffOverviewRender()
   }
 
@@ -1994,17 +2084,24 @@ export function createMeoDiffSplitController({
     },
     setDiffGutterVisible(visible) {
       currentDiffGutterVisible = visible !== false
-      mergeView?.reconfigure({ gutter: currentDiffGutterVisible })
+      syncDiffGutterVisibility()
       resetDiffOverviewRender()
     },
     setLineNumbersVisible(visible) {
       currentLineNumbersVisible = visible !== false
-      const extensions = createLineNumberExtensions(currentLineNumbersVisible)
+      const lineNumberExtensions = createLineNumberExtensions(currentLineNumbersVisible)
+      const activeLineGutterExtensions = createActiveLineGutterExtensions(currentLineNumbersVisible)
       mergeView?.a.dispatch({
-        effects: originalLineNumbersCompartment.reconfigure(extensions),
+        effects: [
+          originalLineNumbersCompartment.reconfigure(lineNumberExtensions),
+          originalActiveLineGutterCompartment.reconfigure(activeLineGutterExtensions),
+        ],
       })
       mergeView?.b.dispatch({
-        effects: modifiedLineNumbersCompartment.reconfigure(extensions),
+        effects: [
+          modifiedLineNumbersCompartment.reconfigure(lineNumberExtensions),
+          modifiedActiveLineGutterCompartment.reconfigure(activeLineGutterExtensions),
+        ],
       })
       mergeView?.reconfigure({})
     },
@@ -2034,6 +2131,7 @@ export function createMeoDiffSplitController({
 
       lastRenderedState = originalState
       syncLabels(originalState)
+      syncDiffSplitGitBaselines(originalState)
 
       const view = mergeView?.b
       if (!view) {

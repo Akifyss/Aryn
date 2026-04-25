@@ -25,10 +25,15 @@ export interface MarkerFlags {
   added: boolean;
   deleted: boolean;
   modified: boolean;
+  removed?: boolean;
   liveBlockStartLine?: number;
   liveBlockEndLine?: number;
   scope?: 'staged' | 'unstaged';
 }
+
+type GitDiffGutterRenderOptions = {
+  mapLineFlag?: (flags: MarkerFlags) => MarkerFlags;
+};
 
 const emptyBaseline: BaselineSnapshot = Object.freeze({
   available: false,
@@ -105,11 +110,14 @@ class GitGutterMarker extends GutterMarker {
     if (this.flags.modified) {
       el.classList.add('is-modified');
     }
+    if (this.flags.removed) {
+      el.classList.add('is-removed');
+    }
     if (this.flags.deleted) {
       el.classList.add('is-deleted');
     }
 
-    if (!this.flags.added && !this.flags.modified && !this.flags.deleted) {
+    if (!this.flags.added && !this.flags.modified && !this.flags.deleted && !this.flags.removed) {
       el.classList.add('is-empty');
     }
 
@@ -152,7 +160,8 @@ function emptyMarkerFlags(): MarkerFlags {
   return {
     added: false,
     deleted: false,
-    modified: false
+    modified: false,
+    removed: false
   };
 }
 
@@ -258,7 +267,18 @@ function buildLiveGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: (
   return builder.finish();
 }
 
-function liveCollapsedBlockMarkerFlags(block: { startLine: number; endLine: number; aggregateChangeKind: 'added' | 'deleted' | 'modified'; aggregateChangeScope?: 'staged' | 'unstaged' }): MarkerFlags {
+function mapLineFlags(
+  lineFlags: (MarkerFlags | undefined)[] | null,
+  mapLineFlag?: (flags: MarkerFlags) => MarkerFlags
+): (MarkerFlags | undefined)[] | null {
+  if (!lineFlags || typeof mapLineFlag !== 'function') {
+    return lineFlags;
+  }
+
+  return lineFlags.map((flags) => flags ? mapLineFlag(flags) : undefined);
+}
+
+function liveCollapsedBlockMarkerFlags(block: { startLine: number; endLine: number; aggregateChangeKind: 'added' | 'deleted' | 'modified' | 'removed'; aggregateChangeScope?: 'staged' | 'unstaged' }): MarkerFlags {
   if (block.aggregateChangeKind === 'modified') {
     return {
       ...emptyMarkerFlags(),
@@ -273,6 +293,16 @@ function liveCollapsedBlockMarkerFlags(block: { startLine: number; endLine: numb
     return {
       ...emptyMarkerFlags(),
       deleted: true,
+      scope: block.aggregateChangeScope,
+      liveBlockStartLine: block.startLine,
+      liveBlockEndLine: block.endLine
+    };
+  }
+
+  if (block.aggregateChangeKind === 'removed') {
+    return {
+      ...emptyMarkerFlags(),
+      removed: true,
       scope: block.aggregateChangeScope,
       liveBlockStartLine: block.startLine,
       liveBlockEndLine: block.endLine
@@ -328,7 +358,7 @@ export function getGitDiffOverviewSegments(state: EditorState): DiffSegment[] {
       continue;
     }
     const added = !!flags?.added;
-    const deleted = !!flags?.deleted;
+    const deleted = !!flags?.deleted || !!flags?.removed;
     const modified = !!flags?.modified;
     if (!added && !deleted && !modified) {
       flush();
@@ -361,14 +391,19 @@ export function setGitBaseline(view: EditorView, snapshot: any): void {
 function liveCollapsedBlockMarkerAtPos(
   state: EditorState,
   lineFlags: (MarkerFlags | undefined)[] | null,
-  pos: number
+  pos: number,
+  mapLineFlag?: (flags: MarkerFlags) => MarkerFlags
 ): GitGutterMarker | null {
   if (!Array.isArray(lineFlags)) {
     return null;
   }
   const lineNo = state.doc.lineAt(Math.max(0, Math.min(pos, state.doc.length))).number;
   const block = getLiveGitCollapsedBlockAtLine(state, lineFlags, lineNo);
-  return block ? gitMarker(liveCollapsedBlockMarkerFlags(block)) : null;
+  if (!block) {
+    return null;
+  }
+  const flags = liveCollapsedBlockMarkerFlags(block);
+  return gitMarker(typeof mapLineFlag === 'function' ? mapLineFlag(flags) : flags);
 }
 
 export const gitDiffLineFlagsField = StateField.define<(MarkerFlags | undefined)[] | null>({
@@ -424,19 +459,29 @@ const gitDiffGutterExtension = gutter({
   }
 });
 
-const gitDiffGutterLiveExtension = gutter({
-  class: 'meo-git-gutter',
-  renderEmptyElements: true,
-  initialSpacer() {
-    return spacerMarker;
-  },
-  markers(view: EditorView) {
-    return buildLiveGitGutterMarkersFromLineFlags(view.state, view.state.field(gitDiffLineFlagsField, false));
-  },
-  widgetMarker(view: EditorView, _widget: any, block: any) {
-    return liveCollapsedBlockMarkerAtPos(view.state, view.state.field(gitDiffLineFlagsField, false), block.from);
-  }
-});
+function gitDiffGutterLiveExtension(options: GitDiffGutterRenderOptions = {}) {
+  return gutter({
+    class: 'meo-git-gutter',
+    renderEmptyElements: true,
+    initialSpacer() {
+      return spacerMarker;
+    },
+    markers(view: EditorView) {
+      return buildLiveGitGutterMarkersFromLineFlags(
+        view.state,
+        mapLineFlags(view.state.field(gitDiffLineFlagsField, false), options.mapLineFlag)
+      );
+    },
+    widgetMarker(view: EditorView, _widget: any, block: any) {
+      return liveCollapsedBlockMarkerAtPos(
+        view.state,
+        view.state.field(gitDiffLineFlagsField, false),
+        block.from,
+        options.mapLineFlag
+      );
+    }
+  });
+}
 
 export function gitDiffGutterBaselineExtensions(): any[] {
   return [gitBaselineField, gitDiffLineFlagsField];
@@ -446,6 +491,6 @@ export function gitDiffGutterRenderExtensions(): any[] {
   return [gitDiffGutterField, gitDiffGutterExtension];
 }
 
-export function gitDiffGutterLiveRenderExtensions(): any[] {
-  return [gitDiffGutterLiveExtension];
+export function gitDiffGutterLiveRenderExtensions(options: GitDiffGutterRenderOptions = {}): any[] {
+  return [gitDiffGutterLiveExtension(options)];
 }

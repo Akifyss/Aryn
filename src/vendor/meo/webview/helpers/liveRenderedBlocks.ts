@@ -11,11 +11,12 @@ type LineFlagLike = {
   added?: boolean;
   deleted?: boolean;
   modified?: boolean;
+  removed?: boolean;
   scope?: 'staged' | 'unstaged';
 } | undefined;
 
 export type LiveRenderedBlockKind = 'table' | 'mermaid' | 'math';
-export type LiveGitChangeKind = 'added' | 'deleted' | 'modified';
+export type LiveGitChangeKind = 'added' | 'deleted' | 'modified' | 'removed';
 
 export interface LiveRenderedBlock {
   kind: LiveRenderedBlockKind;
@@ -322,6 +323,7 @@ function buildCollapsedBlock(
   let firstChangedLine = 0;
   let hasModified = false;
   let hasDeleted = false;
+  let hasRemoved = false;
   let hasAdded = false;
   let hasUnstaged = false;
   let hasNonDelimiterChange = false;
@@ -330,8 +332,9 @@ function buildCollapsedBlock(
     const flags = lineFlags[lineNo - 1];
     const modified = !!flags?.modified;
     const deleted = !!flags?.deleted;
+    const removed = !!flags?.removed;
     const added = !!flags?.added;
-    if (!modified && !deleted && !added) {
+    if (!modified && !deleted && !removed && !added) {
       continue;
     }
     if (!firstChangedLine) {
@@ -351,10 +354,14 @@ function buildCollapsedBlock(
       hasDeleted = true;
       continue;
     }
+    if (removed) {
+      hasRemoved = true;
+      continue;
+    }
     hasAdded = true;
   }
 
-  if (!firstChangedLine || (!hasModified && !hasDeleted && !hasAdded)) {
+  if (!firstChangedLine || (!hasModified && !hasDeleted && !hasRemoved && !hasAdded)) {
     return null;
   }
 
@@ -371,7 +378,7 @@ function buildCollapsedBlock(
   return createCollapsedBlock(
     block,
     canonicalLine || block.startLine,
-    hasModified ? 'modified' : hasDeleted ? 'deleted' : 'added',
+    hasModified ? 'modified' : hasDeleted ? 'deleted' : hasRemoved ? 'removed' : 'added',
     hasUnstaged ? 'unstaged' : 'staged'
   );
 }

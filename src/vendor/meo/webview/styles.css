@@ -2340,6 +2340,10 @@
   background: var(--git-changed);
 }
 
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-removed .meo-git-gutter-stripe {
+  background: var(--git-deleted);
+}
+
 .meo-native-root .cm-editor .meo-git-gutter-deleted-triangle {
   position: absolute;
   left: 0;
