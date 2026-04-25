@@ -296,6 +296,20 @@ export function toggleCollapsibleSection(view: EditorView, anchor: number): bool
   return true;
 }
 
+export function expandAllCollapsibleSections(view: EditorView): void {
+  const anchors = getCollapsibleSections(view.state)
+    .map((section) => section.anchor);
+
+  if (!anchors.length) {
+    return;
+  }
+
+  view.dispatch({
+    effects: expandHeadingCollapseEffect.of(anchors),
+    annotations: Transaction.addToHistory.of(false)
+  });
+}
+
 function collectCollapsedHeadingAnchorsForSelection(state: EditorState): readonly number[] {
   const collapsedSections = getCollapsedSections(state);
   if (!collapsedSections.length) {

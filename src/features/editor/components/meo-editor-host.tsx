@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import type { GitRepositoryState } from '@/features/git/types'
+import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitRepositoryState } from '@/features/git/types'
 import type { MeoSettings } from '@/hooks/use-settings-store'
 import { createDefaultMeoHostEnvironment } from '@/features/editor/lib/meo-host-environment'
 import { getGitStateRefreshKey, getUnavailableGitBaseline } from '@/features/editor/lib/meo-git-state'
@@ -20,8 +20,10 @@ type MeoEditorHostProps = {
       source: 'revision' | 'worktree'
     },
   ) => void
+  onApplyGitDiffSelection?: (change: GitChangeItem, selection: GitDiffSelection, action: GitDiffBlockAction) => Promise<void>
   onSave?: (nextValue: string) => void
   onChange: (nextValue: string) => void
+  savedValue: string
   theme?: 'light' | 'dark' | 'auto'
   value: string
   workspacePath?: string | null
@@ -37,6 +39,15 @@ function resolvePreferredTheme(theme: 'light' | 'dark' | 'auto') {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
+function normalizeFsPath(filePath: string) {
+  return filePath.replace(/[\\/]+/g, '/').toLowerCase()
+}
+
+function findGitChangeForFile(changes: GitChangeItem[] | undefined, filePath: string) {
+  const normalizedFilePath = normalizeFsPath(filePath)
+  return changes?.find((change) => normalizeFsPath(change.path) === normalizedFilePath) ?? null
+}
+
 export function MeoEditorHost({
   filePath,
   gitRepositoryState,
@@ -44,8 +55,10 @@ export function MeoEditorHost({
   onCompositionChange,
   onOpenFile,
   onOpenGitDiff,
+  onApplyGitDiffSelection,
   onSave,
   onChange,
+  savedValue,
   theme = 'auto',
   value,
   workspacePath,
@@ -60,17 +73,23 @@ export function MeoEditorHost({
   const onCompositionChangeRef = useRef(onCompositionChange)
   const onOpenFileRef = useRef(onOpenFile)
   const onOpenGitDiffRef = useRef(onOpenGitDiff)
+  const onApplyGitDiffSelectionRef = useRef(onApplyGitDiffSelection)
   const onSaveRef = useRef(onSave)
   const environment = useMemo(() => createDefaultMeoHostEnvironment(), [])
   const gitStateRefreshKey = useMemo(() => getGitStateRefreshKey(gitRepositoryState), [gitRepositoryState])
+  const gitChangeContext = useMemo(() => ({
+    stagedChange: findGitChangeForFile(gitRepositoryState?.stagedChanges, filePath),
+    unstagedChange: findGitChangeForFile(gitRepositoryState?.unstagedChanges, filePath),
+  }), [filePath, gitStateRefreshKey, gitRepositoryState])
 
   useEffect(() => {
     onChangeRef.current = onChange
     onCompositionChangeRef.current = onCompositionChange
     onOpenFileRef.current = onOpenFile
     onOpenGitDiffRef.current = onOpenGitDiff
+    onApplyGitDiffSelectionRef.current = onApplyGitDiffSelection
     onSaveRef.current = onSave
-  }, [onChange, onCompositionChange, onOpenFile, onOpenGitDiff, onSave])
+  }, [onChange, onCompositionChange, onOpenFile, onOpenGitDiff, onApplyGitDiffSelection, onSave])
 
   useEffect(() => {
     const rootElement = rootRef.current
@@ -81,6 +100,7 @@ export function MeoEditorHost({
     const controller = mountNativeMeoEditor({
       environment,
       filePath,
+      gitChangeContext,
       initialValue: value,
       meoSettings,
       onChange: (nextValue) => {
@@ -104,10 +124,14 @@ export function MeoEditorHost({
       onOpenGitDiff: (nextFilePath, options) => {
         onOpenGitDiffRef.current?.(nextFilePath, options)
       },
+      onApplyGitDiffSelection: async (change, selection, action) => {
+        await onApplyGitDiffSelectionRef.current?.(change, selection, action)
+      },
       onSave: (nextValue) => {
         onSaveRef.current?.(nextValue)
       },
       root: rootElement,
+      savedValue,
       workspacePath,
     })
 
@@ -143,6 +167,14 @@ export function MeoEditorHost({
     contentRef.current = value
     controller.setText(value)
   }, [value])
+
+  useEffect(() => {
+    controllerRef.current?.setSavedText(savedValue)
+  }, [savedValue])
+
+  useEffect(() => {
+    controllerRef.current?.setGitChangeContext(gitChangeContext)
+  }, [gitChangeContext])
 
   useEffect(() => {
     controllerRef.current?.setGitDiffLineHighlightsEnabled(meoSettings.gitDiffLineHighlights)

@@ -6,7 +6,7 @@ import {
   shouldRememberViewPosition,
   writeStoredState,
 } from '@/features/editor/lib/meo-state'
-import type { MeoEditorViewportPosition } from '@/features/editor/lib/meo-native-editor-types'
+import type { MeoEditorMode, MeoEditorViewportPosition } from '@/features/editor/lib/meo-native-editor-types'
 
 type ViewPositionPersistenceController = {
   captureViewPosition: () => void
@@ -19,11 +19,11 @@ type ViewPositionPersistenceController = {
   getInitialOutlineVisible: () => boolean
   getInitialRestoreTopLine: (content: string, rememberPositionLines: number) => number | undefined
   getInitialRestoreTopLineOffset: (content: string, rememberPositionLines: number) => number
-  getInitialMode: () => 'live' | 'source'
+  getInitialMode: () => MeoEditorMode
   persistFindOptions: (value: unknown) => void
   persistGitChangesGutterVisible: (visible: boolean) => void
   persistLineNumbersVisible: (visible: boolean) => void
-  persistMode: (mode: 'live' | 'source') => void
+  persistMode: (mode: MeoEditorMode) => void
   persistOutlineVisible: (visible: boolean) => void
   persistViewPositionFromMessage: (message: { topLine?: number, topLineOffset?: number }, content: string, rememberPositionLines: number) => void
   scheduleViewPositionCapture: () => void

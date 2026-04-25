@@ -1,4 +1,10 @@
-import type { GitBaselinePayload, GitBlameResult } from '@/features/git/types'
+import type {
+  GitBaselinePayload,
+  GitBlameResult,
+  GitChangeItem,
+  GitDiffBlockAction,
+  GitDiffSelection,
+} from '@/features/git/types'
 import type { MeoSettings } from '@/hooks/use-settings-store'
 import type { MeoHostEnvironment } from '@/features/editor/lib/meo-host-environment'
 
@@ -20,7 +26,7 @@ export type NativeMeoMessage =
   | { type: 'setFindOptions', findOptions?: { caseSensitive?: boolean, wholeWord?: boolean } }
   | { type: 'setGitChangesGutter', enabled?: boolean, visible?: boolean }
   | { type: 'setLineNumbers', enabled?: boolean, visible?: boolean }
-  | { type: 'setMode', mode?: 'live' | 'source' }
+  | { type: 'setMode', mode?: MeoEditorMode }
   | { type: 'setOutlineVisible', visible?: boolean }
   | { type: 'viewPositionChanged', topLine?: number, topLineOffset?: number }
   | { type: string, [key: string]: unknown }
@@ -29,38 +35,56 @@ export type NativeMeoController = {
   destroy: () => void
   focus: () => void
   refreshLayout: () => void
+  setGitChangeContext: (context: MeoDiffSplitGitChangeContext) => void
   setGitBaseline: (baseline: GitBaselinePayload) => void
   setGitDiffLineHighlightsEnabled: (enabled: boolean) => void
   setOutlinePosition: (position: 'left' | 'right') => void
+  setSavedText: (text: string) => void
   setText: (text: string) => void
 }
 
 export type MountNativeMeoEditorOptions = {
   environment: MeoHostEnvironment
   filePath: string
+  gitChangeContext: MeoDiffSplitGitChangeContext
   initialValue: string
   meoSettings: MeoSettings
   onChange: (nextValue: string) => void
   onCompositionChange?: (isComposing: boolean) => void
   onOpenFile?: (filePath: string) => void
   onOpenGitDiff?: MeoOpenGitDiffHandler
+  onApplyGitDiffSelection?: (change: GitChangeItem, selection: GitDiffSelection, action: GitDiffBlockAction) => Promise<void>
   onSave?: (nextValue: string) => void
   root: HTMLElement
+  savedValue: string
   workspacePath?: string | null
 }
 
 export type MeoEditorInsertFormat =
+  | 'bold'
   | 'bulletList'
   | 'codeBlock'
   | 'heading'
   | 'hr'
   | 'image'
+  | 'inlineCode'
+  | 'italic'
+  | 'kbd'
   | 'link'
+  | 'lineover'
   | 'numberedList'
   | 'quote'
+  | 'strike'
   | 'table'
   | 'task'
   | 'wikiLink'
+
+export type MeoEditorMode = 'diff-split' | 'live' | 'source'
+
+export type MeoDiffSplitGitChangeContext = {
+  stagedChange: GitChangeItem | null
+  unstagedChange: GitChangeItem | null
+}
 
 export type MeoEditorViewportPosition = {
   line: number
@@ -92,6 +116,7 @@ export type MeoEditorInstance = {
   refreshDecorations: () => void
   refreshLayout: () => void
   refreshSelectionOverlay: () => void
+  restoreTopLine: (line: number, lineOffset: number) => void
   scrollToLine: (line: number, position: string) => void
   setGitBaseline: (baseline: GitBaselinePayload) => void
   setGitGutterVisible: (visible: boolean) => void

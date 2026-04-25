@@ -1,6 +1,9 @@
 import {
   Brackets,
+  ChevronDown,
+  ChevronUp,
   Code,
+  Columns2,
   GitCompare,
   Hash,
   Heading,
@@ -28,6 +31,9 @@ import { createSelectionMenu } from '@/vendor/meo/webview/helpers/selectionMenu'
 type NativeMeoButtonMap = {
   bulletListBtn: HTMLButtonElement
   codeBlockBtn: HTMLButtonElement
+  diffNextChangeBtn: HTMLButtonElement
+  diffPreviousChangeBtn: HTMLButtonElement
+  diffSplitButton: HTMLButtonElement
   findToggleBtn: HTMLButtonElement
   gitChangesGutterBtn: HTMLButtonElement
   headingDropdown: HTMLDivElement
@@ -129,6 +135,8 @@ export function createNativeMeoEditorShell(): NativeMeoEditorShell {
   const findToggleBtn = createIconButton('Find and Replace', 'find', Search, 'format-button toggle-button')
   const lineNumbersBtn = createIconButton('Toggle Line Numbers', 'lineNumbers', Hash, 'format-button toggle-button')
   const gitChangesGutterBtn = createIconButton('Toggle Git Changes', 'gitChangesGutter', GitCompare, 'format-button toggle-button')
+  const diffPreviousChangeBtn = createIconButton('Previous Change', 'diffPreviousChange', ChevronUp, 'format-button diff-split-only-button')
+  const diffNextChangeBtn = createIconButton('Next Change', 'diffNextChange', ChevronDown, 'format-button diff-split-only-button')
 
   formatGroup.append(
     headingWrapper,
@@ -145,7 +153,7 @@ export function createNativeMeoEditorShell(): NativeMeoEditorShell {
     hrBtn,
   )
 
-  rightGroup.append(outlineBtn, findToggleBtn, lineNumbersBtn, gitChangesGutterBtn)
+  rightGroup.append(outlineBtn, findToggleBtn, diffPreviousChangeBtn, diffNextChangeBtn, lineNumbersBtn, gitChangesGutterBtn)
 
   const liveButton = document.createElement('button')
   liveButton.type = 'button'
@@ -161,7 +169,16 @@ export function createNativeMeoEditorShell(): NativeMeoEditorShell {
   sourceButton.textContent = 'Source'
   sourceButton.setAttribute('role', 'tab')
 
-  modeGroup.append(liveButton, sourceButton)
+  const diffSplitButton = document.createElement('button')
+  diffSplitButton.type = 'button'
+  diffSplitButton.className = 'mode-button mode-button-icon'
+  diffSplitButton.dataset.mode = 'diff-split'
+  diffSplitButton.title = 'Diff Split'
+  diffSplitButton.setAttribute('aria-label', 'Diff Split')
+  diffSplitButton.setAttribute('role', 'tab')
+  diffSplitButton.appendChild(createElement(Columns2, { width: 16, height: 16 }))
+
+  modeGroup.append(liveButton, sourceButton, diffSplitButton)
 
   const findPanelElements = createFindPanel(findToggleBtn)
   const selectionMenuElements = createSelectionMenu()
@@ -177,6 +194,9 @@ export function createNativeMeoEditorShell(): NativeMeoEditorShell {
     buttons: {
       bulletListBtn,
       codeBlockBtn,
+      diffNextChangeBtn,
+      diffPreviousChangeBtn,
+      diffSplitButton,
       findToggleBtn,
       gitChangesGutterBtn,
       headingDropdown,

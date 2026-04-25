@@ -3893,6 +3893,7 @@ function App() {
                     }
                   })()
                 }}
+                onApplyGitDiffSelection={handleApplyGitDiffSelection}
                 onSave={(content) => {
                   void handleSave({
                     content,
@@ -3900,6 +3901,7 @@ function App() {
                   })
                 }}
                 value={currentFileContent}
+                savedValue={activeFileTab.savedContent}
                 theme={theme}
                 gitRepositoryState={gitRepositoryState}
                 meoSettings={meo}
