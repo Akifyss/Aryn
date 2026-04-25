@@ -239,6 +239,7 @@
 }
 
 .meo-native-theme .editor-host.meo-diff-split-active>.meo-diff-split-host {
+  position: relative;
   display: flex;
   flex: 1;
   width: 100%;
@@ -255,32 +256,41 @@
 }
 
 .meo-native-theme .meo-diff-split-header {
+  position: absolute;
+  top: 9px;
+  left: 0;
+  right: 0;
+  z-index: 6;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
   gap: 0;
-  min-height: 32px;
-  border-bottom: 1px solid var(--panel-border);
-  background: var(--sideBar-background);
+  min-height: 0;
+  pointer-events: none;
 }
 
 .meo-native-theme .meo-diff-split-label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-self: start;
+  width: max-content;
+  max-width: calc(100% - 44px);
+  height: 17px;
   min-width: 0;
-  padding: 0 16px;
-  color: var(--descriptionForeground);
-  font-size: 11px;
+  margin-inline-start: 22px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--editor-background) 86%, var(--sideBar-background) 14%);
+  color: color-mix(in srgb, var(--descriptionForeground) 78%, transparent);
+  font-size: 10px;
   font-weight: 600;
+  line-height: 1;
   letter-spacing: 0;
   text-transform: uppercase;
-  border-right: 1px solid var(--panel-border);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.meo-native-theme .meo-diff-split-label:last-child {
-  border-right: 0;
 }
 
 .meo-native-theme .meo-diff-split-body {
@@ -415,6 +425,7 @@
 
 .meo-native-theme .meo-diff-split-body .cm-content {
   min-height: 100%;
+  padding-bottom: var(--meo-diff-split-scroll-past-end-padding, 0px);
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changedLine,
@@ -444,11 +455,11 @@
 
 .meo-native-theme .meo-diff-split-body .cm-merge-revert {
   position: relative;
-  width: 24px;
-  min-width: 24px;
+  width: 18px;
+  min-width: 18px;
   border-left: 1px solid var(--panel-border);
   border-right: 1px solid var(--panel-border);
-  background: var(--sideBar-background);
+  background: transparent;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-revert>* {
@@ -463,9 +474,9 @@
   justify-content: center;
   gap: 1px;
   width: 100%;
-  min-height: 37px;
+  min-height: 33px;
   margin-top: var(--editor-content-padding-top, 0px);
-  padding: 1px;
+  padding: 0;
   pointer-events: auto;
 }
 
@@ -476,8 +487,8 @@
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  width: 18px !important;
-  height: 18px !important;
+  width: 16px !important;
+  height: 16px !important;
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -497,8 +508,8 @@
 
 .meo-native-theme .meo-diff-split-body .meo-diff-hunk-action svg {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .meo-native-theme .meo-diff-split-body .meo-diff-hunk-action:disabled {

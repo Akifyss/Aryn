@@ -1211,6 +1211,8 @@ export function createMeoDiffSplitController({
   let cleanupReadOnlyWidgetLock: (() => void) | null = null
   let mergeScrollArea: ReturnType<typeof mountMeoBaseScrollArea> | null = null
   let diffOverviewRuler: ReturnType<typeof createGitDiffOverviewRulerController> | null = null
+  let diffScrollPastEndObserver: ResizeObserver | null = null
+  let diffScrollPastEndFrame = 0
   const originalLineNumbersCompartment = new Compartment()
   const modifiedLineNumbersCompartment = new Compartment()
   const host = document.createElement('div')
@@ -1301,7 +1303,51 @@ export function createMeoDiffSplitController({
     diffOverviewRuler = null
   }
 
+  const syncDiffScrollPastEndPadding = () => {
+    if (!mergeView) {
+      return
+    }
+
+    const scrollContainer = mergeView.dom
+    const syncViewPadding = (view: EditorView) => {
+      const height = scrollContainer.clientHeight
+        - view.defaultLineHeight
+        - view.documentPadding.top
+        - 0.5
+      view.dom.style.setProperty(
+        '--meo-diff-split-scroll-past-end-padding',
+        `${Math.max(0, height)}px`,
+      )
+    }
+
+    syncViewPadding(mergeView.a)
+    syncViewPadding(mergeView.b)
+  }
+
+  const scheduleDiffScrollPastEndPaddingSync = () => {
+    if (diffScrollPastEndFrame) {
+      return
+    }
+
+    diffScrollPastEndFrame = window.requestAnimationFrame(() => {
+      diffScrollPastEndFrame = 0
+      syncDiffScrollPastEndPadding()
+    })
+  }
+
+  const destroyDiffScrollPastEndObserver = () => {
+    diffScrollPastEndObserver?.disconnect()
+    diffScrollPastEndObserver = null
+    if (diffScrollPastEndFrame) {
+      window.cancelAnimationFrame(diffScrollPastEndFrame)
+      diffScrollPastEndFrame = 0
+    }
+    mergeView?.a.dom.style.removeProperty('--meo-diff-split-scroll-past-end-padding')
+    mergeView?.b.dom.style.removeProperty('--meo-diff-split-scroll-past-end-padding')
+  }
+
   const destroyMergeView = () => {
+    destroyDiffScrollPastEndObserver()
     cleanupReadOnlyWidgetLock?.()
     cleanupReadOnlyWidgetLock = null
     cleanupMergeViewDomListeners?.()
@@ -1583,6 +1629,8 @@ export function createMeoDiffSplitController({
       hostParent: body,
       viewport: mergeView.dom,
     })
+    diffScrollPastEndObserver = new ResizeObserver(scheduleDiffScrollPastEndPaddingSync)
+    diffScrollPastEndObserver.observe(mergeView.dom)
     lockReadOnlyWidgets(mergeView.a.dom)
     const readOnlyWidgetObserver = new MutationObserver(() => {
       if (mergeView?.a.dom) {
@@ -1646,6 +1694,7 @@ export function createMeoDiffSplitController({
     forceParsing(mergeView.b, mergeView.b.state.doc.length, 500)
     expandAllCollapsibleSections(mergeView.a)
     expandAllCollapsibleSections(mergeView.b)
+    syncDiffScrollPastEndPadding()
     mergeScrollArea.refresh()
     resetDiffOverviewRender()
   }
@@ -1860,6 +1909,7 @@ export function createMeoDiffSplitController({
         forceParsing(mergeView.a, mergeView.a.state.doc.length, 500)
         forceParsing(mergeView.b, mergeView.b.state.doc.length, 500)
       }
+      syncDiffScrollPastEndPadding()
       mergeScrollArea?.refresh()
       resetDiffOverviewRender()
     },
