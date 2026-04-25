@@ -300,32 +300,37 @@
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-track {
   -webkit-appearance: none;
   background: transparent !important;
+  border-radius: 0 !important;
   box-shadow: none !important;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb {
   -webkit-appearance: none;
-  border: 3px solid transparent !important;
-  border-radius: 999px !important;
   background: var(--scrollbarSlider-background,
       color-mix(in oklch, var(--scrollbar) 50%, transparent)) !important;
-  background-clip: content-box !important;
+  background-clip: border-box !important;
+  border: 0 !important;
+  border-radius: 0 !important;
   box-shadow: none !important;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb:hover {
+  -webkit-appearance: none;
   background: var(--scrollbarSlider-hoverBackground,
       var(--scrollbarSlider-background,
         color-mix(in oklch, var(--scrollbar) 50%, transparent))) !important;
-  background-clip: content-box !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb:active {
+  -webkit-appearance: none;
   background: var(--scrollbarSlider-activeBackground,
       var(--scrollbarSlider-hoverBackground,
         var(--scrollbarSlider-background,
           color-mix(in oklch, var(--scrollbar) 50%, transparent)))) !important;
-  background-clip: content-box !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-corner {
