@@ -2334,7 +2334,7 @@
   cursor: pointer;
 }
 
-.meo-native-root .cm-editor .meo-git-overview-ruler {
+.meo-native-root .meo-git-overview-ruler {
   position: absolute;
   top: 0;
   right: 10px;
@@ -2345,11 +2345,11 @@
   z-index: 5;
 }
 
-.meo-native-root .cm-editor .meo-git-overview-ruler[hidden] {
+.meo-native-root .meo-git-overview-ruler[hidden] {
   display: none;
 }
 
-.meo-native-root .cm-editor .meo-git-overview-ruler-marker {
+.meo-native-root .meo-git-overview-ruler-marker {
   position: absolute;
   left: 0;
   right: 0;
@@ -2358,61 +2358,25 @@
   background: transparent;
 }
 
-.meo-native-root .cm-editor .meo-git-overview-ruler-marker.is-added {
+.meo-native-root .meo-git-overview-ruler-marker.is-added {
   background: color-mix(in srgb, var(--git-added) 50%, transparent);
 }
 
-.meo-native-root .cm-editor .meo-git-overview-ruler-marker.is-modified {
+.meo-native-root .meo-git-overview-ruler-marker.is-modified {
   background: color-mix(in srgb, var(--git-changed) 50%, transparent);
 }
 
-.meo-native-root .cm-editor .meo-git-overview-ruler-marker.is-deleted {
+.meo-native-root .meo-git-overview-ruler-marker.is-deleted {
   background: color-mix(in srgb, var(--git-deleted) 55%, transparent);
 }
 
-.meo-native-root .cm-editor .meo-git-overview-ruler-file-end {
+.meo-native-root .meo-git-overview-ruler-file-end {
   position: absolute;
   left: 0;
   right: 0;
   height: 5px;
   opacity: 0.65;
   background: color-mix(in srgb, var(--editor-foreground, #ffffff) 55%, transparent);
-}
-
-.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler {
-  position: absolute;
-  top: 0;
-  right: 10px;
-  bottom: 0;
-  width: 3px;
-  border-left: 1px solid var(--border);
-  pointer-events: none;
-  z-index: 5;
-}
-
-.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler[hidden] {
-  display: none;
-}
-
-.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler .meo-git-overview-ruler-marker {
-  position: absolute;
-  left: 0;
-  right: 0;
-  border-radius: 1px;
-  opacity: 0.95;
-  background: transparent;
-}
-
-.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler .meo-git-overview-ruler-marker.is-added {
-  background: color-mix(in srgb, var(--git-added) 50%, transparent);
-}
-
-.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler .meo-git-overview-ruler-marker.is-modified {
-  background: color-mix(in srgb, var(--git-changed) 50%, transparent);
-}
-
-.meo-native-theme .meo-diff-split-body>.meo-git-overview-ruler .meo-git-overview-ruler-marker.is-deleted {
-  background: color-mix(in srgb, var(--git-deleted) 55%, transparent);
 }
 
 .meo-git-blame-tooltip {
