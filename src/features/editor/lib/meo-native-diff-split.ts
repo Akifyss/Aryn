@@ -14,6 +14,7 @@ import {
   lineNumbers,
 } from '@codemirror/view'
 import type { GitBaselinePayload, GitChangeItem, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
+import { mountMeoBaseScrollArea } from '@/features/editor/lib/meo-base-scroll-area'
 import type { MeoDiffSplitGitChangeContext, MeoEditorInsertFormat, MeoEditorViewportPosition } from '@/features/editor/lib/meo-native-editor-types'
 import { createSelectionFromCodeMirrorChunk, type CodeMirrorDiffChunk } from '@/features/editor/lib/git-diff-navigation'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '@/vendor/meo/shared/gitDiffLineFlags'
@@ -1208,6 +1209,7 @@ export function createMeoDiffSplitController({
   let pendingFrameSync = false
   let cleanupMergeViewDomListeners: (() => void) | null = null
   let cleanupReadOnlyWidgetLock: (() => void) | null = null
+  let mergeScrollArea: ReturnType<typeof mountMeoBaseScrollArea> | null = null
   let diffOverviewRuler: ReturnType<typeof createGitDiffOverviewRulerController> | null = null
   const originalLineNumbersCompartment = new Compartment()
   const modifiedLineNumbersCompartment = new Compartment()
@@ -1304,6 +1306,8 @@ export function createMeoDiffSplitController({
     cleanupReadOnlyWidgetLock = null
     cleanupMergeViewDomListeners?.()
     cleanupMergeViewDomListeners = null
+    mergeScrollArea?.destroy()
+    mergeScrollArea = null
     destroyDiffOverview()
     mergeView?.destroy()
     mergeView = null
@@ -1574,6 +1578,11 @@ export function createMeoDiffSplitController({
     })
 
     mergeView.dom.classList.add('meo-diff-split-merge-view')
+    mergeScrollArea = mountMeoBaseScrollArea({
+      className: 'meo-diff-split-base-scroll-area',
+      hostParent: body,
+      viewport: mergeView.dom,
+    })
     lockReadOnlyWidgets(mergeView.a.dom)
     const readOnlyWidgetObserver = new MutationObserver(() => {
       if (mergeView?.a.dom) {
@@ -1637,6 +1646,7 @@ export function createMeoDiffSplitController({
     forceParsing(mergeView.b, mergeView.b.state.doc.length, 500)
     expandAllCollapsibleSections(mergeView.a)
     expandAllCollapsibleSections(mergeView.b)
+    mergeScrollArea.refresh()
     resetDiffOverviewRender()
   }
 
@@ -1850,6 +1860,7 @@ export function createMeoDiffSplitController({
         forceParsing(mergeView.a, mergeView.a.state.doc.length, 500)
         forceParsing(mergeView.b, mergeView.b.state.doc.length, 500)
       }
+      mergeScrollArea?.refresh()
       resetDiffOverviewRender()
     },
     refreshDecorations() {

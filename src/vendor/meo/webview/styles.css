@@ -24,15 +24,19 @@
   --list-hoverBackground: color-mix(in oklch, var(--accent) 10%, transparent);
   --list-activeSelectionBackground: color-mix(in oklch, var(--accent) 14%, transparent);
   --list-activeSelectionForeground: var(--foreground);
-  --meo-scroll-area-scrollbar-thickness: var(--app-scroll-area-scrollbar-thickness, 6px);
-  --meo-scroll-area-scrollbar-gap: var(--app-scroll-area-scrollbar-gap, 1px);
-  --meo-scroll-area-scrollbar-size: calc(var(--meo-scroll-area-scrollbar-thickness) + (var(--meo-scroll-area-scrollbar-gap) * 2));
+  --app-scroll-area-scrollbar-thickness: 6px;
+  --app-scroll-area-scrollbar-gap: 1px;
+  --app-scroll-area-thumb-color: color-mix(in srgb, var(--muted) 9%, transparent);
+  --app-scroll-area-thumb-hover-color: color-mix(in srgb, var(--foreground) 13%, transparent);
+  --app-scroll-area-thumb-active-color: color-mix(in srgb, var(--foreground) 18%, transparent);
+  --meo-scroll-area-scrollbar-size: calc(var(--app-scroll-area-scrollbar-thickness) + (var(--app-scroll-area-scrollbar-gap) * 2));
+  --meo-git-overview-ruler-right: calc(var(--app-scroll-area-scrollbar-thickness) + var(--app-scroll-area-scrollbar-gap) + 1px);
   --scrollbarSlider-background: var(--app-scroll-area-thumb-color,
-      color-mix(in srgb, var(--muted) 9%, transparent));
+      color-mix(in oklch, var(--scrollbar) 50%, transparent));
   --scrollbarSlider-hoverBackground: var(--app-scroll-area-thumb-hover-color,
-      color-mix(in srgb, var(--foreground) 13%, transparent));
+      color-mix(in oklch, var(--scrollbar) 72%, transparent));
   --scrollbarSlider-activeBackground: var(--app-scroll-area-thumb-active-color,
-      color-mix(in srgb, var(--foreground) 18%, transparent));
+      color-mix(in oklch, var(--scrollbar) 86%, transparent));
   --errorForeground: var(--danger);
   --inputValidation-errorBackground: color-mix(in oklch, var(--danger) 16%, transparent);
   --inputValidation-errorBorder: color-mix(in oklch, var(--danger) 42%, transparent);
@@ -213,6 +217,7 @@
 }
 
 .meo-native-theme .editor-host {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -287,6 +292,47 @@
   overflow: hidden;
 }
 
+.meo-native-theme .meo-base-scroll-area-host {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: none;
+  z-index: 8;
+}
+
+.meo-native-theme .editor-host.meo-diff-split-active>.meo-base-scroll-area-host {
+  display: none;
+}
+
+.meo-native-theme .meo-base-scroll-area {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.meo-native-theme .meo-base-scroll-area .app-scroll-area-scrollbar {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.meo-native-theme .meo-base-scroll-area-host.is-hovering .app-scroll-area-scrollbar,
+.meo-native-theme .meo-base-scroll-area[data-scrolling] .app-scroll-area-scrollbar,
+.meo-native-theme .meo-base-scroll-area .app-scroll-area-scrollbar[data-hovering],
+.meo-native-theme .meo-base-scroll-area .app-scroll-area-scrollbar[data-scrolling] {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.meo-native-theme .meo-base-scroll-area-host.is-hovering .app-scroll-area-thumb {
+  background: var(--app-scroll-area-thumb-hover-color);
+}
+
+.meo-native-theme .meo-base-scroll-area-scrollbar {
+  z-index: 8;
+}
+
 .meo-native-theme .meo-diff-split-body .cm-mergeView {
   width: 100%;
   height: 100%;
@@ -295,8 +341,6 @@
   background: var(--editor-background);
   overflow: auto;
   scrollbar-gutter: stable;
-  scrollbar-color: var(--scrollbarSlider-background) transparent;
-  scrollbar-width: thin;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar {
@@ -314,10 +358,10 @@
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb {
   -webkit-appearance: none;
-  border: var(--meo-scroll-area-scrollbar-gap) solid transparent !important;
+  border: var(--app-scroll-area-scrollbar-gap) solid transparent !important;
   border-radius: 999px !important;
   background: var(--scrollbarSlider-background,
-      color-mix(in srgb, var(--muted) 9%, transparent)) !important;
+      color-mix(in oklch, var(--scrollbar) 50%, transparent)) !important;
   background-clip: content-box !important;
   box-shadow: none !important;
 }
@@ -326,7 +370,7 @@
   -webkit-appearance: none;
   background: var(--scrollbarSlider-hoverBackground,
       var(--scrollbarSlider-background,
-        color-mix(in srgb, var(--foreground) 13%, transparent))) !important;
+        color-mix(in oklch, var(--scrollbar) 50%, transparent))) !important;
   border-radius: 999px !important;
   box-shadow: none !important;
 }
@@ -336,7 +380,7 @@
   background: var(--scrollbarSlider-activeBackground,
       var(--scrollbarSlider-hoverBackground,
         var(--scrollbarSlider-background,
-          color-mix(in srgb, var(--foreground) 18%, transparent)))) !important;
+          color-mix(in oklch, var(--scrollbar) 50%, transparent)))) !important;
   border-radius: 999px !important;
   box-shadow: none !important;
 }
@@ -1054,9 +1098,7 @@
 
 .meo-native-root .cm-editor .cm-scroller {
   scrollbar-gutter: stable;
-  scrollbar-color: var(--scrollbarSlider-background) transparent;
-  scrollbar-width: thin;
-  padding-right: calc(var(--meo-scroll-area-scrollbar-size) + 2px);
+  padding-right: var(--meo-scroll-area-scrollbar-size);
   box-sizing: border-box;
 }
 
@@ -1075,10 +1117,10 @@
 
 .meo-native-root .cm-editor .cm-scroller::-webkit-scrollbar-thumb {
   -webkit-appearance: none;
-  border: var(--meo-scroll-area-scrollbar-gap) solid transparent !important;
+  border: var(--app-scroll-area-scrollbar-gap) solid transparent !important;
   border-radius: 999px !important;
   background: var(--scrollbarSlider-background,
-      color-mix(in srgb, var(--muted) 9%, transparent)) !important;
+      color-mix(in oklch, var(--scrollbar) 50%, transparent)) !important;
   background-clip: content-box !important;
   box-shadow: none !important;
 }
@@ -1087,7 +1129,7 @@
   -webkit-appearance: none;
   background: var(--scrollbarSlider-hoverBackground,
       var(--scrollbarSlider-background,
-        color-mix(in srgb, var(--foreground) 13%, transparent))) !important;
+        color-mix(in oklch, var(--scrollbar) 50%, transparent))) !important;
   border-radius: 999px !important;
   box-shadow: none !important;
 }
@@ -1097,13 +1139,30 @@
   background: var(--scrollbarSlider-activeBackground,
       var(--scrollbarSlider-hoverBackground,
         var(--scrollbarSlider-background,
-          color-mix(in srgb, var(--foreground) 18%, transparent)))) !important;
+          color-mix(in oklch, var(--scrollbar) 50%, transparent)))) !important;
   border-radius: 999px !important;
   box-shadow: none !important;
 }
 
 .meo-native-root .cm-editor .cm-scroller::-webkit-scrollbar-corner {
   background: transparent !important;
+}
+
+.meo-native-theme .meo-base-scroll-area-viewport {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  scrollbar-gutter: auto;
+}
+
+.meo-native-root .cm-editor .cm-scroller.meo-base-scroll-area-viewport {
+  padding-right: 0;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-mergeView.meo-base-scroll-area-viewport::-webkit-scrollbar,
+.meo-native-root .cm-editor .cm-scroller.meo-base-scroll-area-viewport::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .meo-native-root .cm-editor .cm-gutters {
@@ -2347,10 +2406,9 @@
 .meo-native-root .meo-git-overview-ruler {
   position: absolute;
   top: 0;
-  right: calc(var(--meo-scroll-area-scrollbar-size) + 2px);
+  right: var(--meo-git-overview-ruler-right);
   bottom: 0;
   width: 3px;
-  border-left: 1px solid var(--border);
   pointer-events: none;
   z-index: 5;
 }

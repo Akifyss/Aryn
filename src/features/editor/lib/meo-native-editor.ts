@@ -25,6 +25,7 @@ import {
   createMeoDiffSplitController,
   type MeoDiffSplitController,
 } from '@/features/editor/lib/meo-native-diff-split'
+import { mountMeoBaseScrollArea } from '@/features/editor/lib/meo-base-scroll-area'
 import { createMeoViewPositionPersistenceController } from '@/features/editor/lib/meo-native-editor-persistence'
 import { createNativeMeoEditorShell } from '@/features/editor/lib/meo-native-editor-shell'
 import type {
@@ -137,6 +138,7 @@ export function mountNativeMeoEditor({
   } = shell
 
   let editor!: MeoEditorInstance
+  let editorScrollArea: ReturnType<typeof mountMeoBaseScrollArea> | null = null
   let diffSplitController: MeoDiffSplitController | null = null
 
   const getActiveEditor = () => (
@@ -528,6 +530,15 @@ export function mountNativeMeoEditor({
     },
     parent: editorHost,
   })
+  const editorScrollDOM = editor.view.scrollDOM
+  const editorDOM = editor.view.dom
+  if (editorScrollDOM instanceof HTMLElement && editorDOM instanceof HTMLElement) {
+    editorScrollArea = mountMeoBaseScrollArea({
+      className: 'meo-editor-base-scroll-area',
+      hostParent: editorDOM,
+      viewport: editorScrollDOM,
+    })
+  }
 
   syncGitDiffLineHighlights()
   if (currentMode === 'diff-split') {
@@ -870,6 +881,8 @@ export function mountNativeMeoEditor({
       root.removeEventListener('compositionend', compositionEndHandler, true)
       persistenceController.captureViewPosition()
       destroyDiffSplit()
+      editorScrollArea?.destroy()
+      editorScrollArea = null
       editor.destroy()
       root.replaceChildren()
     },
@@ -878,6 +891,7 @@ export function mountNativeMeoEditor({
     },
     refreshLayout() {
       editor.refreshLayout()
+      editorScrollArea?.refresh()
       diffSplitController?.refreshLayout()
     },
     setGitBaseline(baseline) {

@@ -124,6 +124,8 @@ export type MeoEditorInstance = {
   setMode: (mode: 'live' | 'source') => void
   setText: (text: string) => void
   view: {
+    dom: HTMLElement
+    scrollDOM: HTMLElement
     state: {
       doc: {
         lineAt: (position: number) => { from: number, number: number }
