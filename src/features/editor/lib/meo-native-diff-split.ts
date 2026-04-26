@@ -529,14 +529,14 @@ function mapDiffSplitOriginalGutterFlag(flags: DiffSplitGutterFlags) {
     liveBlockEndLine: flags.liveBlockEndLine,
     liveBlockStartLine: flags.liveBlockStartLine,
     modified: false,
-    removed: flags.added || flags.modified || flags.deleted || !!flags.removed,
+    removed: flags.added || flags.modified || !!flags.removed,
     scope: flags.scope,
   }
 }
 
 function mapDiffSplitModifiedGutterFlag(flags: DiffSplitGutterFlags) {
   return {
-    added: flags.added || flags.modified || flags.deleted || !!flags.removed,
+    added: flags.added || flags.modified || !!flags.removed,
     deleted: false,
     liveBlockEndLine: flags.liveBlockEndLine,
     liveBlockStartLine: flags.liveBlockStartLine,
