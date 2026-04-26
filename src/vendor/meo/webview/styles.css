@@ -428,6 +428,17 @@
   padding-bottom: var(--meo-diff-split-scroll-past-end-padding, 0px);
 }
 
+.meo-native-theme .meo-diff-split-body .cm-mergeSpacer {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0,
+      transparent 4px,
+      color-mix(in srgb, var(--muted) 26%, transparent) 4px,
+      color-mix(in srgb, var(--muted) 26%, transparent) 6px
+    );
+}
+
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changedLine,
 .meo-native-theme .meo-diff-split-body .cm-deletedChunk {
   background-color: color-mix(in srgb, var(--git-deleted) 7%, transparent);
