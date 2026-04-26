@@ -187,6 +187,7 @@ export function createEditor({
   let onTableOpenLink = null;
   let onTableSelectionChange = null;
   let onScroll = null;
+  let pendingScrollFrame = 0;
   let onWindowPointerUp = null;
   let onWindowPointerCancel = null;
   let gitBlameHover = null;
@@ -199,6 +200,12 @@ export function createEditor({
     return Math.max(0, Number(value));
   };
   const vimExtensionsForState = () => (vimModeEnabled && currentMode === 'source' ? vim() : []);
+  const cancelPendingScrollSync = () => {
+    if (pendingScrollFrame) {
+      cancelAnimationFrame(pendingScrollFrame);
+      pendingScrollFrame = 0;
+    }
+  };
   const getLineStartOffset = (docText, targetLineNumber) => {
     const targetLine = Math.max(1, Math.floor(targetLineNumber));
     if (targetLine === 1) {
@@ -1395,9 +1402,19 @@ export function createEditor({
   };
   view.dom.addEventListener('meo-table-selection-change', onTableSelectionChange);
   onScroll = () => {
-    emitSelectionChange();
     gitBlameHover?.hide();
-    onViewportChange?.();
+    if (pendingScrollFrame) {
+      return;
+    }
+
+    pendingScrollFrame = requestAnimationFrame(() => {
+      pendingScrollFrame = 0;
+      if (!view) {
+        return;
+      }
+      emitSelectionChange();
+      onViewportChange?.();
+    });
   };
   view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
   onWindowPointerUp = (event) => {
@@ -1542,6 +1559,7 @@ export function createEditor({
         view.scrollDOM.removeEventListener('scroll', onScroll);
         onScroll = null;
       }
+      cancelPendingScrollSync();
       if (onWindowPointerUp) {
         window.removeEventListener('pointerup', onWindowPointerUp, true);
         onWindowPointerUp = null;

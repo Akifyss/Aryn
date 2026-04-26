@@ -264,7 +264,6 @@ export function mountNativeMeoEditor({
       lineNumbersVisible,
       onChange: (nextValue) => {
         currentText = nextValue
-        editor.setText(nextValue)
         onChange(nextValue)
         scheduleWikiLinkStatusRefresh(nextValue)
         scheduleLocalLinkStatusRefresh(nextValue)
@@ -921,6 +920,11 @@ export function mountNativeMeoEditor({
       const normalizedNextText = normalizeEol(text)
       const normalizedCurrentText = normalizeEol(editor.getText())
       currentText = text
+
+      if (currentMode === 'diff-split') {
+        diffSplitController?.setText(text)
+        return
+      }
 
       if (normalizedNextText === normalizedCurrentText) {
         diffSplitController?.setText(text)

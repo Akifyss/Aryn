@@ -1263,8 +1263,13 @@ export function createMeoDiffSplitController({
   let cleanupReadOnlyWidgetLock: (() => void) | null = null
   let mergeScrollArea: ReturnType<typeof mountMeoBaseScrollArea> | null = null
   let diffOverviewRuler: ReturnType<typeof createGitDiffOverviewRulerController> | null = null
+  let diffOverviewSegmentsCache: GitDiffOverviewSegment[] | null = null
   let diffScrollPastEndObserver: ResizeObserver | null = null
   let diffScrollPastEndFrame = 0
+  let pendingGitBaselineFrame = 0
+  let pendingScrollFrame = 0
+  let syncedOriginalGitBaseText: string | null = null
+  let syncedModifiedGitBaseText: string | null = null
   const originalLineNumbersCompartment = new Compartment()
   const modifiedLineNumbersCompartment = new Compartment()
   const originalActiveLineGutterCompartment = new Compartment()
@@ -1288,7 +1293,15 @@ export function createMeoDiffSplitController({
   host.append(header, body)
   parent.appendChild(host)
 
+  const invalidateDiffOverviewSegments = () => {
+    diffOverviewSegmentsCache = null
+  }
+
   const getDiffOverviewSegments = (): GitDiffOverviewSegment[] => {
+    if (diffOverviewSegmentsCache) {
+      return diffOverviewSegmentsCache
+    }
+
     if (!mergeView) {
       return []
     }
@@ -1298,7 +1311,7 @@ export function createMeoDiffSplitController({
     const totalLines = Math.max(1, modifiedDoc.lines)
     const chunks = (getChunks(currentMergeView.b.state)?.chunks as CodeMirrorDiffChunk[] | undefined) ?? []
 
-    return chunks.map((chunk) => {
+    diffOverviewSegmentsCache = chunks.map((chunk) => {
       const selection = createSelectionFromCodeMirrorChunk(currentMergeView.a.state.doc, modifiedDoc, chunk)
       const modifiedLineCount = Math.max(0, selection.modifiedLineCount)
       const originalLineCount = Math.max(0, selection.originalLineCount)
@@ -1321,6 +1334,7 @@ export function createMeoDiffSplitController({
         toLine,
       }
     })
+    return diffOverviewSegmentsCache
   }
 
   const ensureDiffOverviewRuler = () => {
@@ -1355,6 +1369,21 @@ export function createMeoDiffSplitController({
   const destroyDiffOverview = () => {
     diffOverviewRuler?.destroy()
     diffOverviewRuler = null
+    invalidateDiffOverviewSegments()
+  }
+
+  const cancelPendingGitBaselineSync = () => {
+    if (pendingGitBaselineFrame) {
+      window.cancelAnimationFrame(pendingGitBaselineFrame)
+      pendingGitBaselineFrame = 0
+    }
+  }
+
+  const cancelPendingScrollSync = () => {
+    if (pendingScrollFrame) {
+      window.cancelAnimationFrame(pendingScrollFrame)
+      pendingScrollFrame = 0
+    }
   }
 
   const syncDiffScrollPastEndPadding = () => {
@@ -1401,6 +1430,11 @@ export function createMeoDiffSplitController({
   }
 
   const destroyMergeView = () => {
+    cancelPendingGitBaselineSync()
+    cancelPendingScrollSync()
+    invalidateDiffOverviewSegments()
+    syncedOriginalGitBaseText = null
+    syncedModifiedGitBaseText = null
     destroyDiffScrollPastEndObserver()
     cleanupReadOnlyWidgetLock?.()
     cleanupReadOnlyWidgetLock = null
@@ -1418,24 +1452,48 @@ export function createMeoDiffSplitController({
     mergeView?.b.dom.classList.toggle('meo-git-gutter-hidden', !currentDiffGutterVisible)
   }
 
-  const syncDiffSplitGitBaselines = (originalState: DiffSplitResolvedState) => {
+  const syncDiffSplitGitBaselines = (
+    originalState: DiffSplitResolvedState,
+    options: { force?: boolean } = {},
+  ) => {
     if (!mergeView) {
       return
     }
 
-    setGitBaseline(mergeView.a, {
-      available: true,
-      baseText: originalState.modifiedText,
-      headOid: null,
-      indexText: null,
-      tracked: true,
-    })
-    setGitBaseline(mergeView.b, {
-      available: true,
-      baseText: originalState.text,
-      headOid: null,
-      indexText: null,
-      tracked: true,
+    if (options.force || syncedOriginalGitBaseText !== originalState.modifiedText) {
+      syncedOriginalGitBaseText = originalState.modifiedText
+      setGitBaseline(mergeView.a, {
+        available: true,
+        baseText: originalState.modifiedText,
+        headOid: null,
+        indexText: null,
+        tracked: true,
+      })
+    }
+
+    if (options.force || syncedModifiedGitBaseText !== originalState.text) {
+      syncedModifiedGitBaseText = originalState.text
+      setGitBaseline(mergeView.b, {
+        available: true,
+        baseText: originalState.text,
+        headOid: null,
+        indexText: null,
+        tracked: true,
+      })
+    }
+  }
+
+  const scheduleDiffSplitGitBaselineSync = () => {
+    if (pendingGitBaselineFrame) {
+      return
+    }
+
+    pendingGitBaselineFrame = window.requestAnimationFrame(() => {
+      pendingGitBaselineFrame = 0
+      if (destroyed || !mergeView) {
+        return
+      }
+      syncDiffSplitGitBaselines(getOriginalState())
     })
   }
 
@@ -1496,6 +1554,10 @@ export function createMeoDiffSplitController({
 
     return []
   }
+
+  const getRevertControls = (originalState: DiffSplitResolvedState) => (
+    editable && originalState.actionChange && onApplyGitDiffSelection ? 'a-to-b' : undefined
+  )
 
   const getChunkForActionControl = (control: HTMLElement) => {
     if (!mergeView) {
@@ -1592,18 +1654,6 @@ export function createMeoDiffSplitController({
     return container
   }
 
-  const rerenderPreservingPosition = () => {
-    const previousTopPosition = mergeView ? getTopVisiblePosition(mergeView.b, mergeView.dom) : null
-    const hadFocus = mergeView?.b.hasFocus === true
-    render()
-    if (previousTopPosition && mergeView) {
-      restoreTopLine(mergeView.b, previousTopPosition.line, previousTopPosition.lineOffset, mergeView.dom)
-    }
-    if (hadFocus) {
-      mergeView?.b.focus()
-    }
-  }
-
   const scheduleResolvedFrameSync = () => {
     if (pendingFrameSync) {
       return
@@ -1618,11 +1668,12 @@ export function createMeoDiffSplitController({
 
       const nextState = getOriginalState()
       if (lastRenderedState && !hasResolvedViewFrameChanged(lastRenderedState, nextState)) {
+        lastRenderedState = nextState
         syncLabels(nextState)
         return
       }
 
-      rerenderPreservingPosition()
+      syncResolvedDocuments()
     })
   }
 
@@ -1688,8 +1739,9 @@ export function createMeoDiffSplitController({
               requestResolvedFrameSync()
             } else {
               lastRenderedState = nextState
-              syncDiffSplitGitBaselines(nextState)
+              scheduleDiffSplitGitBaselineSync()
             }
+            invalidateDiffOverviewSegments()
             resetDiffOverviewRender()
             onChange(nextValue)
           },
@@ -1707,11 +1759,11 @@ export function createMeoDiffSplitController({
       highlightChanges: true,
       parent: body,
       renderRevertControl: createHunkActionControls,
-      revertControls: editable && originalState.actionChange && onApplyGitDiffSelection ? 'a-to-b' : undefined,
+      revertControls: getRevertControls(originalState),
     })
 
     mergeView.dom.classList.add('meo-diff-split-merge-view')
-    syncDiffSplitGitBaselines(originalState)
+    syncDiffSplitGitBaselines(originalState, { force: true })
     syncDiffGutterVisibility()
     mergeScrollArea = mountMeoBaseScrollArea({
       className: 'meo-diff-split-base-scroll-area',
@@ -1734,9 +1786,18 @@ export function createMeoDiffSplitController({
       readOnlyWidgetObserver.disconnect()
     }
     const handleMergeScroll = () => {
-      onSelectionChange?.(null)
-      onViewportChange?.()
-      resetDiffOverviewRender()
+      if (pendingScrollFrame) {
+        return
+      }
+
+      pendingScrollFrame = window.requestAnimationFrame(() => {
+        pendingScrollFrame = 0
+        if (destroyed || !mergeView) {
+          return
+        }
+        onSelectionChange?.(null)
+        onViewportChange?.()
+      })
     }
     const handleTableInteraction = (event: Event) => {
       const active = Boolean((event as CustomEvent<{ active?: boolean }>).detail?.active)
@@ -1809,6 +1870,7 @@ export function createMeoDiffSplitController({
     }
 
     if (originalView.state.doc.toString() !== originalState.text) {
+      invalidateDiffOverviewSegments()
       originalView.dispatch({
         annotations: allowReadOnlyDocumentUpdate.of(true),
         changes: {
@@ -1820,6 +1882,7 @@ export function createMeoDiffSplitController({
     }
 
     if (modifiedView.state.doc.toString() !== originalState.modifiedText) {
+      invalidateDiffOverviewSegments()
       modifiedView.dispatch({
         annotations: [
           externalDocumentSync.of(true),
@@ -1832,7 +1895,13 @@ export function createMeoDiffSplitController({
         },
       })
     }
+    cancelPendingGitBaselineSync()
     syncDiffSplitGitBaselines(originalState)
+    mergeView?.reconfigure({
+      diffConfig: getDiffConfig(editable),
+      renderRevertControl: createHunkActionControls,
+      revertControls: getRevertControls(originalState),
+    })
     resetDiffOverviewRender()
   }
 
@@ -2070,7 +2139,7 @@ export function createMeoDiffSplitController({
     },
     setBaseline(nextBaseline) {
       currentBaseline = nextBaseline
-      rerenderPreservingPosition()
+      syncResolvedDocuments()
     },
     setFallbackOriginal(fallback) {
       currentFallbackOriginal = fallback
@@ -2080,7 +2149,7 @@ export function createMeoDiffSplitController({
     },
     setGitChangeContext(context) {
       currentGitChangeContext = context
-      rerenderPreservingPosition()
+      syncResolvedDocuments()
     },
     setDiffGutterVisible(visible) {
       currentDiffGutterVisible = visible !== false
@@ -2125,13 +2194,15 @@ export function createMeoDiffSplitController({
       currentText = nextText
       const originalState = getOriginalState()
       if (hasResolvedViewFrameChanged(previousState, originalState)) {
-        rerenderPreservingPosition()
+        invalidateDiffOverviewSegments()
+        syncResolvedDocuments()
         return
       }
 
       lastRenderedState = originalState
       syncLabels(originalState)
       syncDiffSplitGitBaselines(originalState)
+      invalidateDiffOverviewSegments()
 
       const view = mergeView?.b
       if (!view) {
