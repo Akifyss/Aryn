@@ -1,5 +1,7 @@
 // @ts-nocheck
 import { createElement, Bold, Italic, Strikethrough, Terminal, Link, Brackets, Keyboard } from 'lucide';
+import { syntaxTree } from '@codemirror/language';
+import { collectLatexMathRanges } from './math';
 
 export interface SelectionMenuElements {
   menu: HTMLDivElement;
@@ -83,5 +85,82 @@ export const createSelectionMenuController = (
 };
 
 export type SelectionMenuController = ReturnType<typeof createSelectionMenuController>;
+
+const blockedInlineSelectionAncestors = new Set([
+  'FencedCode',
+  'CodeBlock',
+  'CodeText',
+  'InlineCode',
+  'URL',
+  'Autolink',
+  'HTMLBlock',
+  'HTMLTag',
+  'TableDelimiter'
+]);
+
+const latexSelectionBlockCache = new WeakMap();
+
+function hasBlockedInlineAncestor(state, position) {
+  let node = syntaxTree(state).resolveInner(position, 1);
+  while (node) {
+    if (blockedInlineSelectionAncestors.has(node.name)) {
+      return true;
+    }
+    node = node.parent;
+  }
+  return false;
+}
+
+function getLatexSelectionBlockRanges(state) {
+  const docKey = state.doc;
+  const cached = latexSelectionBlockCache.get(docKey);
+  if (cached) {
+    return cached;
+  }
+
+  const text = state.doc.toString();
+  if (text.indexOf('$') === -1) {
+    latexSelectionBlockCache.set(docKey, []);
+    return [];
+  }
+
+  const ranges = collectLatexMathRanges(text).map((range) => ({ from: range.from, to: range.to }));
+  latexSelectionBlockCache.set(docKey, ranges);
+  return ranges;
+}
+
+function overlapsLatexMathSelection(state, from, to) {
+  if (to <= from) {
+    return false;
+  }
+  const ranges = getLatexSelectionBlockRanges(state);
+  for (const range of ranges) {
+    if (range.from < to && range.to > from) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function isRegularInlineSelection(state, from, to) {
+  if (to <= from) {
+    return false;
+  }
+  const text = state.doc.sliceString(from, to);
+  const trimmedText = text.trim();
+  if (!trimmedText) {
+    return false;
+  }
+  if (trimmedText.includes('\n')) {
+    return false;
+  }
+  if (hasBlockedInlineAncestor(state, from) || hasBlockedInlineAncestor(state, to - 1)) {
+    return false;
+  }
+  if (overlapsLatexMathSelection(state, from, to)) {
+    return false;
+  }
+  return true;
+}
 
 

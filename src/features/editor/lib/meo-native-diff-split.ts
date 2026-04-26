@@ -12,6 +12,7 @@ import {
   highlightActiveLineGutter,
   keymap,
   lineNumbers,
+  ViewPlugin,
 } from '@codemirror/view'
 import type { GitBaselinePayload, GitChangeItem, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
 import { mountMeoBaseScrollArea } from '@/features/editor/lib/meo-base-scroll-area'
@@ -37,6 +38,7 @@ import { extractHeadings, extractHeadingSections } from '@/vendor/meo/webview/he
 import { insertTable } from '@/vendor/meo/webview/helpers/tables'
 import { liveModeExtensions } from '@/vendor/meo/webview/liveMode'
 import { expandAllCollapsibleSections } from '@/vendor/meo/webview/helpers/headingCollapse'
+import { isRegularInlineSelection } from '@/vendor/meo/webview/helpers/selectionMenu'
 import {
   gitDiffGutterBaselineExtensions,
   gitDiffGutterLiveRenderExtensions,
@@ -469,6 +471,14 @@ function getDiffConfig(editable: boolean) {
   }
 }
 
+function isPlainPrimaryPointerEvent(event: PointerEvent) {
+  return event.button === 0
+    && !event.altKey
+    && !event.ctrlKey
+    && !event.metaKey
+    && !event.shiftKey
+}
+
 function getHunkActionLabel(action: GitDiffBlockAction) {
   switch (action) {
     case 'stage':
@@ -563,6 +573,83 @@ function createDiffExtensions({
   readOnly: boolean
   side: 'original' | 'modified'
 }) {
+  let pointerSelectionPending = false
+  let selectionPointerId: number | null = null
+  let capturedPointerId: number | null = null
+
+  const releasePointerCaptureIfHeld = (view: EditorView, pointerId: number | null) => {
+    if (pointerId === null || !view.dom.releasePointerCapture) {
+      return
+    }
+
+    if (view.dom.hasPointerCapture?.(pointerId)) {
+      view.dom.releasePointerCapture(pointerId)
+    }
+  }
+
+  const emitSelectionChange = (view: EditorView) => {
+    if (readOnly) {
+      return
+    }
+
+    const selection = view.state.selection.main
+    if (selection.empty) {
+      onSelectionChange?.(null)
+      return
+    }
+
+    const from = Math.min(selection.from, selection.to)
+    const to = Math.max(selection.from, selection.to)
+    if (!isRegularInlineSelection(view.state, from, to)) {
+      onSelectionChange?.(null)
+      return
+    }
+
+    const coords = view.coordsAtPos(selection.head) ?? view.coordsAtPos(selection.from)
+    onSelectionChange?.(coords
+      ? {
+          anchorX: coords.left + (coords.right - coords.left) / 2,
+          anchorY: coords.top,
+          visible: true,
+        }
+      : null)
+  }
+
+  const emitSelectionChangeAfterPointerUp = (view: EditorView) => {
+    window.requestAnimationFrame(() => {
+      emitSelectionChange(view)
+    })
+  }
+
+  const finishPointerSelection = (
+    view: EditorView,
+    pointerId: number,
+    { hideMenu = false, showMenu = true }: { hideMenu?: boolean, showMenu?: boolean } = {},
+  ) => {
+    if (selectionPointerId !== pointerId) {
+      return false
+    }
+
+    releasePointerCaptureIfHeld(view, pointerId)
+    if (capturedPointerId === pointerId) {
+      capturedPointerId = null
+    }
+
+    pointerSelectionPending = false
+    selectionPointerId = null
+
+    if (hideMenu) {
+      onSelectionChange?.(null)
+      return true
+    }
+
+    if (showMenu) {
+      emitSelectionChangeAfterPointerUp(view)
+    }
+
+    return true
+  }
+
   const extensions = [
     lineNumbersCompartment.of(createLineNumberExtensions(lineNumbersVisible)),
     ...gitDiffGutterBaselineExtensions(),
@@ -643,18 +730,8 @@ function createDiffExtensions({
       }
 
       if (update.selectionSet && !readOnly) {
-        const selection = update.state.selection.main
-        if (selection.empty) {
-          onSelectionChange?.(null)
-        } else {
-          const coords = update.view.coordsAtPos(selection.head) ?? update.view.coordsAtPos(selection.from)
-          onSelectionChange?.(coords
-            ? {
-                anchorX: coords.left + (coords.right - coords.left) / 2,
-                anchorY: coords.top,
-                visible: true,
-              }
-            : null)
+        if (!pointerSelectionPending) {
+          emitSelectionChange(update.view)
         }
       }
 
@@ -662,21 +739,72 @@ function createDiffExtensions({
         onViewportChange?.()
       }
     }),
+    ViewPlugin.fromClass(class {
+      private readonly onWindowPointerUp = (event: PointerEvent) => {
+        finishPointerSelection(this.view, event.pointerId)
+      }
+
+      private readonly onWindowPointerCancel = (event: PointerEvent) => {
+        finishPointerSelection(this.view, event.pointerId, { hideMenu: true, showMenu: false })
+      }
+
+      constructor(private readonly view: EditorView) {
+        window.addEventListener('pointerup', this.onWindowPointerUp, true)
+        window.addEventListener('pointercancel', this.onWindowPointerCancel, true)
+      }
+
+      destroy() {
+        window.removeEventListener('pointerup', this.onWindowPointerUp, true)
+        window.removeEventListener('pointercancel', this.onWindowPointerCancel, true)
+      }
+    }),
     EditorView.domEventHandlers({
       pointerdown: (event, view) => {
-        if (readOnly || !isPrimaryModifierPointerClick(event)) {
+        if (readOnly) {
           return false
         }
 
-        const href = getLinkHrefAtPointer(event, view)
-        if (!href) {
+        if (isPrimaryModifierPointerClick(event)) {
+          const href = getLinkHrefAtPointer(event, view)
+          if (!href) {
+            return false
+          }
+
+          event.preventDefault()
+          event.stopPropagation()
+          onOpenLink?.(href)
+          return true
+        }
+
+        if (!isPlainPrimaryPointerEvent(event)) {
           return false
         }
 
-        event.preventDefault()
-        event.stopPropagation()
-        onOpenLink?.(href)
-        return true
+        const target = event.target
+        if (!(target instanceof Node) || !view.contentDOM.contains(target)) {
+          pointerSelectionPending = false
+          selectionPointerId = null
+          return false
+        }
+
+        pointerSelectionPending = true
+        selectionPointerId = event.pointerId
+        onSelectionChange?.(null)
+
+        if (view.dom.setPointerCapture) {
+          view.dom.setPointerCapture(event.pointerId)
+          capturedPointerId = event.pointerId
+        }
+
+        return false
+      },
+      pointerup: (event, view) => {
+        finishPointerSelection(view, event.pointerId)
+        return false
+      },
+      pointercancel: (event, view) => {
+        finishPointerSelection(view, event.pointerId, { hideMenu: true, showMenu: false })
+        return false
       },
       compositionstart: () => {
         if (!readOnly) {
