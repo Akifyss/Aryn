@@ -39,8 +39,46 @@ export const changedText = Decoration.mark({class: "cm-changedText"})
 const inserted = Decoration.mark({tagName: "ins", class: "cm-insertedLine"})
 const deleted = Decoration.mark({tagName: "del", class: "cm-deletedLine"})
 
+class ChangedTextEmpty extends WidgetType {
+  eq(other: ChangedTextEmpty) { return other instanceof ChangedTextEmpty }
+
+  toDOM() {
+    let elt = document.createElement("span")
+    elt.className = "cm-changedTextEmpty"
+    return elt
+  }
+
+  ignoreEvent() { return true }
+}
+
+const changedTextEmpty = Decoration.widget({widget: new ChangedTextEmpty(), side: 1})
+
 const changedLineGutterMarker = new class extends GutterMarker {
   elementClass = "cm-changedLineGutter"
+}
+
+function addInlineChangeDeco(chunk: Chunk, from: number, pos: number, lineEnd: number, isA: boolean,
+                             builder: RangeSetBuilder<Decoration>, changeI: number) {
+  while (changeI < chunk.changes.length) {
+    let nextChange = chunk.changes[changeI]
+    let nextFrom = from + (isA ? nextChange.fromA : nextChange.fromB)
+    let nextTo = from + (isA ? nextChange.toA : nextChange.toB)
+    if (nextTo < pos) {
+      changeI++
+      continue
+    }
+    if (nextFrom > lineEnd) break
+    let chFrom = Math.max(pos, nextFrom), chTo = Math.min(lineEnd, nextTo)
+    if (chFrom < chTo) builder.add(chFrom, chTo, changedText)
+    else if (nextFrom == nextTo && nextFrom >= pos && nextFrom <= lineEnd) {
+      let otherFrom = isA ? nextChange.fromB : nextChange.fromA
+      let otherTo = isA ? nextChange.toB : nextChange.toA
+      if (otherFrom < otherTo) builder.add(nextFrom, nextFrom, changedTextEmpty)
+    }
+    if (nextTo <= lineEnd) changeI++
+    else break
+  }
+  return changeI
 }
 
 function buildChunkDeco(chunk: Chunk, doc: Text, isA: boolean, highlight: boolean,
@@ -55,21 +93,14 @@ function buildChunkDeco(chunk: Chunk, doc: Text, isA: boolean, highlight: boolea
     if (gutterBuilder) gutterBuilder.add(from, from, changedLineGutterMarker)
     for (let iter = doc.iterRange(from, to - 1), pos = from; !iter.next().done;) {
       if (iter.lineBreak) {
+        if (highlight) changeI = addInlineChangeDeco(chunk, from, pos, pos, isA, builder, changeI)
         pos++
         builder.add(pos, pos, changedLine)
         if (gutterBuilder) gutterBuilder.add(pos, pos, changedLineGutterMarker)
         continue
       }
       let lineEnd = pos + iter.value.length
-      if (highlight) while (changeI < chunk.changes.length) {
-        let nextChange = chunk.changes[changeI]
-        let nextFrom = from + (isA ? nextChange.fromA : nextChange.fromB)
-        let nextTo = from + (isA ? nextChange.toA : nextChange.toB)
-        let chFrom = Math.max(pos, nextFrom), chTo = Math.min(lineEnd, nextTo)
-        if (chFrom < chTo) builder.add(chFrom, chTo, changedText)
-        if (nextTo < lineEnd) changeI++
-        else break
-      }
+      if (highlight) changeI = addInlineChangeDeco(chunk, from, pos, lineEnd, isA, builder, changeI)
       pos = lineEnd
     }
   }

@@ -47,19 +47,57 @@ export const baseTheme = EditorView.baseTheme({
   },
 
   "&light.cm-merge-a .cm-changedText, &light .cm-deletedChunk .cm-deletedText": {
-    background: "linear-gradient(#ee443366, #ee443366) bottom/100% 2px no-repeat",
+    background: "#ee443344",
+    borderRadius: "2px",
   },
 
   "&dark.cm-merge-a .cm-changedText, &dark .cm-deletedChunk .cm-deletedText": {
-    background: "linear-gradient(#ffaa9966, #ffaa9966) bottom/100% 2px no-repeat",
+    background: "#ffaa9944",
+    borderRadius: "2px",
   },
 
   "&light.cm-merge-b .cm-changedText": {
-    background: "linear-gradient(#22bb22aa, #22bb22aa) bottom/100% 2px no-repeat",
+    background: "#22bb2244",
+    borderRadius: "2px",
   },
 
   "&dark.cm-merge-b .cm-changedText": {
-    background: "linear-gradient(#88ff88aa, #88ff88aa) bottom/100% 2px no-repeat",
+    background: "#88ff8844",
+    borderRadius: "2px",
+  },
+
+  ".cm-changedTextEmpty": {
+    display: "inline-block",
+    position: "relative",
+    width: 0,
+    height: "1.05em",
+    verticalAlign: "-0.12em",
+  },
+
+  ".cm-changedTextEmpty::after": {
+    content: '""',
+    position: "absolute",
+    left: "-1px",
+    top: 0,
+    width: "2px",
+    height: "100%",
+    borderRadius: "999px",
+  },
+
+  "&light.cm-merge-a .cm-changedTextEmpty::after": {
+    background: "#ee443377",
+  },
+
+  "&dark.cm-merge-a .cm-changedTextEmpty::after": {
+    background: "#ffaa9977",
+  },
+
+  "&light.cm-merge-b .cm-changedTextEmpty::after": {
+    background: "#22bb2277",
+  },
+
+  "&dark.cm-merge-b .cm-changedTextEmpty::after": {
+    background: "#88ff8877",
   },
 
   "&.cm-merge-b .cm-deletedText": {

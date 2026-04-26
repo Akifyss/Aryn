@@ -440,11 +440,39 @@
 
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changedText,
 .meo-native-theme .meo-diff-split-body .cm-deletedChunk .cm-deletedText {
-  background: linear-gradient(color-mix(in srgb, var(--git-deleted) 52%, transparent), color-mix(in srgb, var(--git-deleted) 52%, transparent)) bottom/100% 2px no-repeat;
+  background: color-mix(in srgb, var(--git-deleted) 24%, transparent);
+  border-radius: 2px;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-b .cm-changedText {
-  background: linear-gradient(color-mix(in srgb, var(--git-added) 52%, transparent), color-mix(in srgb, var(--git-added) 52%, transparent)) bottom/100% 2px no-repeat;
+  background: color-mix(in srgb, var(--git-added) 24%, transparent);
+  border-radius: 2px;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-changedTextEmpty {
+  display: inline-block;
+  position: relative;
+  width: 0;
+  height: 1.05em;
+  vertical-align: -0.12em;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-changedTextEmpty::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changedTextEmpty::after {
+  background-color: color-mix(in srgb, var(--git-deleted) 48%, transparent);
+}
+
+.meo-native-theme .meo-diff-split-body .cm-merge-b .cm-changedTextEmpty::after {
+  background-color: color-mix(in srgb, var(--git-added) 48%, transparent);
 }
 
 .meo-native-theme .meo-diff-split-body .cm-changeGutter {
