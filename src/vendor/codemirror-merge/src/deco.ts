@@ -122,21 +122,28 @@ function getChunkDeco(view: EditorView) {
   return {deco: builder.finish(), gutter: gutterBuilder && gutterBuilder.finish()}
 }
 
-class Spacer extends WidgetType {
-  constructor(readonly height: number) { super() }
+type SpacerKind = "alignment" | "fakeLines"
 
-  eq(other: Spacer) { return this.height == other.height }
+class Spacer extends WidgetType {
+  constructor(readonly height: number, readonly kind: SpacerKind = "alignment") { super() }
+
+  eq(other: Spacer) { return this.height == other.height && this.kind == other.kind }
 
   toDOM() {
     let elt = document.createElement("div")
-    elt.className = "cm-mergeSpacer"
+    elt.className = this.className
     elt.style.height = this.height + "px"
     return elt
   }
 
   updateDOM(dom: HTMLElement) {
+    dom.className = this.className
     dom.style.height = this.height + "px"
     return true
+  }
+
+  get className() {
+    return this.kind == "fakeLines" ? "cm-mergeSpacer cm-mergeSpacerFakeLines" : "cm-mergeSpacer"
   }
 
   get estimatedHeight() { return this.height }
@@ -159,12 +166,36 @@ export const Spacers = StateField.define<DecorationSet>({
 
 const epsilon = .01
 
+function documentBottom(view: EditorView) {
+  return view.lineBlockAt(view.state.doc.length).bottom
+}
+
+function lineSpan(doc: Text, from: number, to: number) {
+  if (from == to) return 0
+  let safeTo = Math.min(Math.max(from, to - 1), doc.length)
+  return doc.lineAt(safeTo).number - doc.lineAt(from).number + 1
+}
+
+function spacerKindAfterChunk(
+  chunk: Chunk | null,
+  side: "a" | "b",
+  viewportAlignment: boolean,
+  aDoc: Text,
+  bDoc: Text
+): SpacerKind {
+  if (viewportAlignment || !chunk) return "alignment"
+  let linesA = lineSpan(aDoc, chunk.fromA, chunk.toA)
+  let linesB = lineSpan(bDoc, chunk.fromB, chunk.toB)
+  return side == "a" ? linesA < linesB ? "fakeLines" : "alignment" : linesB < linesA ? "fakeLines" : "alignment"
+}
+
 function compareSpacers(a: DecorationSet, b: DecorationSet) {
   if (a.size != b.size) return false
   let iA = a.iter(), iB = b.iter()
   while (iA.value) {
-    if (iA.from != iB.from ||
-        Math.abs((iA.value.spec.widget as Spacer).height - (iB.value!.spec.widget as Spacer).height) > 1)
+    let spacerA = iA.value.spec.widget as Spacer, spacerB = iB.value!.spec.widget as Spacer
+    if (iA.from != iB.from || spacerA.kind != spacerB.kind ||
+        Math.abs(spacerA.height - spacerB.height) > 1)
       return false
     iA.next(); iB.next()
   }
@@ -175,25 +206,29 @@ export function updateSpacers(a: EditorView, b: EditorView, chunks: readonly Chu
   let buildA = new RangeSetBuilder<Decoration>(), buildB = new RangeSetBuilder<Decoration>()
   let spacersA = a.state.field(Spacers).iter(), spacersB = b.state.field(Spacers).iter()
   let posA = 0, posB = 0, offA = 0, offB = 0, vpA = a.viewport, vpB = b.viewport
+  let nextSpacerIsViewportAlignment = false
   chunks: for (let chunkI = 0;; chunkI++) {
     let chunk = chunkI < chunks.length ? chunks[chunkI] : null
     let endA = chunk ? chunk.fromA : a.state.doc.length, endB = chunk ? chunk.fromB : b.state.doc.length
     // A range at posA/posB is unchanged, must be aligned.
     if (posA < endA) {
+      let previousChunk = chunkI > 0 ? chunks[chunkI - 1] : null
+      let viewportAlignment = nextSpacerIsViewportAlignment
+      nextSpacerIsViewportAlignment = false
       let heightA = a.lineBlockAt(posA).top + offA
       let heightB = b.lineBlockAt(posB).top + offB
       let diff = heightA - heightB
       if (diff < -epsilon) {
         offA -= diff
         buildA.add(posA, posA, Decoration.widget({
-          widget: new Spacer(-diff),
+          widget: new Spacer(-diff, spacerKindAfterChunk(previousChunk, "a", viewportAlignment, a.state.doc, b.state.doc)),
           block: true,
           side: -1
         }))
       } else if (diff > epsilon) {
         offB += diff
         buildB.add(posB, posB, Decoration.widget({
-          widget: new Spacer(diff),
+          widget: new Spacer(diff, spacerKindAfterChunk(previousChunk, "b", viewportAlignment, a.state.doc, b.state.doc)),
           block: true,
           side: -1
         }))
@@ -206,6 +241,7 @@ export function updateSpacers(a: EditorView, b: EditorView, chunks: readonly Chu
     if (endA > posA + 1000 && posA < vpA.from && endA > vpA.from && posB < vpB.from && endB > vpB.from) {
       let off = Math.min(vpA.from - posA, vpB.from - posB)
       posA += off; posB += off
+      nextSpacerIsViewportAlignment = true
       chunkI--
     } else if (!chunk) {
       break
@@ -229,18 +265,19 @@ export function updateSpacers(a: EditorView, b: EditorView, chunks: readonly Chu
     offB -= (spacersB.value.spec.widget as any).height
     spacersB.next()
   }
-  let docDiff = (a.contentHeight + offA) - (b.contentHeight + offB)
+  let docDiff = (documentBottom(a) + offA) - (documentBottom(b) + offB)
+  let lastChunk = chunks.length ? chunks[chunks.length - 1] : null
   if (docDiff < epsilon) {
     buildA.add(a.state.doc.length, a.state.doc.length, Decoration.widget({
-      widget: new Spacer(-docDiff),
+      widget: new Spacer(-docDiff, spacerKindAfterChunk(lastChunk, "a", false, a.state.doc, b.state.doc)),
       block: true,
-      side: 1
+      side: -1
     }))
   } else if (docDiff > epsilon) {
     buildB.add(b.state.doc.length, b.state.doc.length, Decoration.widget({
-      widget: new Spacer(docDiff),
+      widget: new Spacer(docDiff, spacerKindAfterChunk(lastChunk, "b", false, a.state.doc, b.state.doc)),
       block: true,
-      side: 1
+      side: -1
     }))
   }
 

@@ -428,7 +428,7 @@
   padding-bottom: var(--meo-diff-split-scroll-past-end-padding, 0px);
 }
 
-.meo-native-theme .meo-diff-split-body .cm-mergeSpacer {
+.meo-native-theme .meo-diff-split-body .cm-mergeSpacerFakeLines {
   background:
     repeating-linear-gradient(
       -45deg,
