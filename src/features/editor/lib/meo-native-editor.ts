@@ -350,6 +350,36 @@ export function mountNativeMeoEditor({
     }
   }
 
+  const openGitMarkerInDiffSplit = (
+    scope: 'staged' | 'unstaged',
+    options: { lineNumber?: number } = {},
+  ) => {
+    const lineNumber = typeof options.lineNumber === 'number'
+      ? Math.max(1, Math.floor(options.lineNumber))
+      : null
+
+    if (lineNumber === null) {
+      applyMode('diff-split')
+      return
+    }
+
+    ensureDiffSplit()
+    const didNavigate = diffSplitController?.revealGitChangeLine({
+      lineNumber,
+      scope,
+    }) === true
+
+    if (didNavigate) {
+      applyMode('diff-split')
+      return
+    }
+
+    onOpenGitDiff?.(filePath, {
+      lineNumber,
+      source: scope === 'staged' ? 'revision' : 'worktree',
+    })
+  }
+
   const handleNativeMessage = async (message: NativeMeoMessage) => {
     switch (message.type) {
       case 'saveDocument':
@@ -496,16 +526,10 @@ export function mountNativeMeoEditor({
       }
     },
     onOpenGitRevisionForLine: (options: { lineNumber?: number }) => {
-      onOpenGitDiff?.(filePath, {
-        lineNumber: typeof options?.lineNumber === 'number' ? options.lineNumber : undefined,
-        source: 'revision',
-      })
+      openGitMarkerInDiffSplit('staged', options)
     },
     onOpenGitWorktreeForLine: (options: { lineNumber?: number }) => {
-      onOpenGitDiff?.(filePath, {
-        lineNumber: typeof options?.lineNumber === 'number' ? options.lineNumber : undefined,
-        source: 'worktree',
-      })
+      openGitMarkerInDiffSplit('unstaged', options)
     },
     onOpenLink: (href: string) => {
       void openLink(href)

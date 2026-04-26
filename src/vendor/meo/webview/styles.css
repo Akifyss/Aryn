@@ -586,6 +586,10 @@
   background: var(--git-added);
 }
 
+.meo-native-theme .meo-diff-split-body .cm-line.meo-diff-split-navigation-target-line {
+  background: color-mix(in srgb, var(--focusBorder, #2563eb) 16%, transparent);
+}
+
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changeGutter .cm-gutterElement.cm-activeLineGutter.cm-changedLineGutter,
 .meo-native-theme .meo-diff-split-body .cm-changeGutter .cm-gutterElement.cm-activeLineGutter.cm-deletedLineGutter {
   background: var(--git-deleted) !important;

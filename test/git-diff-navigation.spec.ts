@@ -7,7 +7,7 @@ import {
   findBestNavigationTarget,
   isLineWithinVisualDiff,
 } from '@/features/editor/lib/git-diff-navigation'
-import { buildCodeMirrorChunksFromVsCodeDiff } from '@/vendor/meo/shared/gitDiffLineFlags'
+import { buildCodeMirrorChunksFromVsCodeDiff, buildSourceToTargetLineMap } from '@/vendor/meo/shared/gitDiffLineFlags'
 
 function getOnlyChunk(originalText: string, modifiedText: string) {
   const originalDoc = Text.of(originalText.split('\n'))
@@ -352,6 +352,27 @@ describe('git diff navigation', () => {
 
     const { chunks, modifiedDoc, originalDoc } = getVsCodeStyleChunks(originalText, modifiedText)
     expect(findBestNavigationTarget(originalDoc, modifiedDoc, chunks, 2, 'modified')?.target).toEqual({
+      focusEditor: true,
+      lineNumber: 2,
+      selectLine: true,
+      side: 'modified',
+    })
+  })
+
+  it('targets staged additions on the index side when navigating from a live gutter marker', () => {
+    const headText = 'A\nC\n'
+    const indexText = 'A\nB staged\nC\n'
+    const currentText = 'intro\nA\nB staged\nC\n'
+    const indexDoc = Text.of(indexText.split('\n'))
+    const currentDoc = Text.of(currentText.split('\n'))
+    const indexToCurrentLineMap = buildSourceToTargetLineMap(indexDoc, currentDoc)
+    const clickedCurrentLine = 3
+    const clickedIndexLine = indexToCurrentLineMap.findIndex((lineNumber) => lineNumber === clickedCurrentLine)
+
+    expect(clickedIndexLine).toBe(2)
+
+    const { chunks, modifiedDoc, originalDoc } = getVsCodeStyleChunks(headText, indexText)
+    expect(findBestNavigationTarget(originalDoc, modifiedDoc, chunks, clickedIndexLine, 'modified')?.target).toEqual({
       focusEditor: true,
       lineNumber: 2,
       selectLine: true,

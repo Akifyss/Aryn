@@ -3,7 +3,7 @@ import { markdownKeymap } from '@codemirror/lang-markdown'
 import { bracketMatching, forceParsing, indentOnInput, indentUnit } from '@codemirror/language'
 import { getChunks, goToNextChunk, goToPreviousChunk, MergeView } from '@codemirror/merge'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
-import { Annotation, Compartment, EditorSelection, EditorState, RangeSetBuilder, StateEffect, StateField, Transaction } from '@codemirror/state'
+import { Annotation, Compartment, EditorSelection, EditorState, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
 import {
   Decoration,
   drawSelection,
@@ -14,11 +14,16 @@ import {
   lineNumbers,
   ViewPlugin,
 } from '@codemirror/view'
-import type { GitBaselinePayload, GitChangeItem, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
+import type { GitBaselinePayload, GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
 import { mountMeoBaseScrollArea } from '@/features/editor/lib/meo-base-scroll-area'
 import type { MeoDiffSplitGitChangeContext, MeoEditorInsertFormat, MeoEditorViewportPosition } from '@/features/editor/lib/meo-native-editor-types'
-import { createSelectionFromCodeMirrorChunk, type CodeMirrorDiffChunk } from '@/features/editor/lib/git-diff-navigation'
-import { buildCodeMirrorChunksFromVsCodeDiff } from '@/vendor/meo/shared/gitDiffLineFlags'
+import {
+  createSelectionFromCodeMirrorChunk,
+  findBestNavigationTarget,
+  type CodeMirrorDiffChunk,
+  type DiffNavigationSide,
+} from '@/features/editor/lib/git-diff-navigation'
+import { buildCodeMirrorChunksFromVsCodeDiff, buildSourceToTargetLineMap } from '@/vendor/meo/shared/gitDiffLineFlags'
 import { insertCodeBlock } from '@/vendor/meo/webview/helpers/codeBlocks'
 import { getLinkHrefAtPointer, isPrimaryModifierPointerClick } from '@/vendor/meo/webview/helpers/linkNavigation'
 import {
@@ -68,6 +73,11 @@ type MeoDiffSplitControllerOptions = {
   text: string
 }
 
+type MeoDiffSplitGitNavigationRequest = {
+  lineNumber: number
+  scope: GitChangeScope
+}
+
 export type MeoDiffSplitController = {
   countMatches: (query: string, options?: SearchOptions) => number
   destroy: () => void
@@ -81,6 +91,7 @@ export type MeoDiffSplitController = {
   insertFormat: (action: MeoEditorInsertFormat, options?: unknown) => void
   moveHeadingSection: (sourceFrom: number, targetFrom: number, placement: 'before' | 'after') => boolean
   nextChange: () => boolean
+  revealGitChangeLine: (request: MeoDiffSplitGitNavigationRequest) => boolean
   refreshLayout: () => void
   refreshDecorations: () => void
   replaceAll: (query: string, replacement: string, options?: SearchOptions) => { replaced: number, total: number }
@@ -117,6 +128,11 @@ type SearchMatchRange = {
   start: number
 }
 
+type DiffSplitNavigationHighlightRange = {
+  endLineNumber: number
+  startLineNumber: number
+}
+
 type SearchNavigationResult = {
   current: number
   found: boolean
@@ -134,6 +150,7 @@ type DiffSplitResolvedState = {
   actionScope: 'staged' | 'unstaged' | null
   isFallback: boolean
   label: string
+  modifiedReadOnly: boolean
   modifiedLabel: string
   modifiedText: string
   reason: GitBaselinePayload['reason'] | null
@@ -162,6 +179,41 @@ const existingTaskMarkerRegex = /^[-+*]\s+\[[ xX~\-]\]/
 
 const setSearchQueryEffect = StateEffect.define<SearchQueryState>()
 const searchMatchMark = Decoration.mark({ class: 'meo-search-match' })
+const setDiffSplitNavigationHighlightEffect = StateEffect.define<DiffSplitNavigationHighlightRange | null>()
+const diffSplitNavigationHighlightField = StateField.define<ReturnType<typeof Decoration.set>>({
+  create() {
+    return Decoration.none
+  },
+  update(decorations, transaction) {
+    for (const effect of transaction.effects) {
+      if (!effect.is(setDiffSplitNavigationHighlightEffect)) {
+        continue
+      }
+
+      const range = effect.value
+      if (!range) {
+        return Decoration.none
+      }
+
+      const lineDecorations = []
+      const startLineNumber = Math.max(1, Math.min(transaction.state.doc.lines, Math.floor(range.startLineNumber)))
+      const endLineNumber = Math.max(startLineNumber, Math.min(transaction.state.doc.lines, Math.floor(range.endLineNumber)))
+      for (let lineNumber = startLineNumber; lineNumber <= endLineNumber; lineNumber += 1) {
+        const line = transaction.state.doc.line(lineNumber)
+        lineDecorations.push(Decoration.line({
+          attributes: {
+            class: 'meo-diff-split-navigation-target-line',
+          },
+        }).range(line.from))
+      }
+
+      return Decoration.set(lineDecorations, true)
+    }
+
+    return decorations.map(transaction.changes)
+  },
+  provide: (field) => EditorView.decorations.from(field),
+})
 const allowReadOnlyDocumentUpdate = Annotation.define<boolean>()
 const externalDocumentSync = Annotation.define<boolean>()
 
@@ -334,13 +386,52 @@ function normalizeLineEndings(text: string) {
   return text.replace(/\r\n?/g, '\n')
 }
 
+function createTextDocFromContent(content: string) {
+  return Text.of(content.split('\n'))
+}
+
+function mapCurrentLineToIndexLine(indexText: string, currentText: string, currentLineNumber: number) {
+  const indexDoc = createTextDocFromContent(indexText)
+  const currentDoc = createTextDocFromContent(currentText)
+  const indexToCurrentLineMap = buildSourceToTargetLineMap(indexDoc, currentDoc)
+  const normalizedLineNumber = Math.max(1, Math.floor(currentLineNumber))
+
+  for (let indexLineNumber = 1; indexLineNumber < indexToCurrentLineMap.length; indexLineNumber += 1) {
+    if (indexToCurrentLineMap[indexLineNumber] === normalizedLineNumber) {
+      return indexLineNumber
+    }
+  }
+
+  return normalizedLineNumber
+}
+
 function resolveOriginalText(
   baseline: GitBaselinePayload | null,
   fallback: { label: string, text: string },
   currentText: string,
   gitChangeContext: MeoDiffSplitGitChangeContext,
+  preferredScope: GitChangeScope | null = null,
 ): DiffSplitResolvedState {
-  if (gitChangeContext.unstagedChange) {
+  if (
+    preferredScope === 'staged'
+    && gitChangeContext.stagedChange
+    && typeof baseline?.baseText === 'string'
+    && typeof baseline.indexText === 'string'
+  ) {
+    return {
+      actionChange: gitChangeContext.stagedChange,
+      actionScope: 'staged' as const,
+      isFallback: false,
+      label: baseline.headOid ? 'HEAD' : 'Empty baseline',
+      modifiedLabel: 'Index',
+      modifiedReadOnly: normalizeLineEndings(currentText) !== normalizeLineEndings(baseline.indexText),
+      modifiedText: baseline.indexText,
+      reason: null,
+      text: baseline.baseText,
+    }
+  }
+
+  if (gitChangeContext.unstagedChange && preferredScope !== 'staged') {
     if (gitChangeContext.unstagedChange.kind === 'untracked') {
       return {
         actionChange: gitChangeContext.unstagedChange,
@@ -348,6 +439,7 @@ function resolveOriginalText(
         isFallback: false,
         label: 'Index',
         modifiedLabel: 'Working tree',
+        modifiedReadOnly: false,
         modifiedText: currentText,
         reason: null,
         text: '',
@@ -361,6 +453,7 @@ function resolveOriginalText(
         isFallback: false,
         label: 'Index',
         modifiedLabel: 'Working tree',
+        modifiedReadOnly: false,
         modifiedText: currentText,
         reason: null,
         text: baseline.indexText,
@@ -380,6 +473,7 @@ function resolveOriginalText(
         isFallback: false,
         label: 'Index',
         modifiedLabel: 'Current document',
+        modifiedReadOnly: false,
         modifiedText: currentText,
         reason: null,
         text: baseline.indexText,
@@ -392,6 +486,7 @@ function resolveOriginalText(
       isFallback: false,
       label: baseline.headOid ? 'HEAD' : 'Empty baseline',
       modifiedLabel: 'Index',
+      modifiedReadOnly: false,
       modifiedText: baseline.indexText,
       reason: null,
       text: baseline.baseText,
@@ -405,6 +500,7 @@ function resolveOriginalText(
       isFallback: false,
       label: baseline.headOid ? 'HEAD' : 'Empty baseline',
       modifiedLabel: 'Current document',
+      modifiedReadOnly: false,
       modifiedText: currentText,
       reason: null,
       text: baseline.baseText,
@@ -418,6 +514,7 @@ function resolveOriginalText(
       isFallback: false,
       label: 'Untracked',
       modifiedLabel: 'Current document',
+      modifiedReadOnly: false,
       modifiedText: currentText,
       reason: null,
       text: '',
@@ -430,6 +527,7 @@ function resolveOriginalText(
     isFallback: true,
     label: fallback.label,
     modifiedLabel: 'Current document',
+    modifiedReadOnly: false,
     modifiedText: currentText,
     reason: baseline?.reason ?? null,
     text: fallback.text,
@@ -459,6 +557,7 @@ function hasResolvedViewFrameChanged(
     || previous.modifiedLabel !== next.modifiedLabel
     || previous.actionScope !== next.actionScope
     || previous.isFallback !== next.isFallback
+    || previous.modifiedReadOnly !== next.modifiedReadOnly
     || previous.reason !== next.reason
     || getActionChangeKey(previous.actionChange) !== getActionChangeKey(next.actionChange)
 }
@@ -512,6 +611,14 @@ function createActiveLineGutterExtensions(visible: boolean) {
   return visible ? [highlightActiveLineGutter()] : []
 }
 
+function createEditableExtension(editable: boolean, readOnly: boolean) {
+  return EditorView.editable.of(editable && !readOnly)
+}
+
+function createReadOnlyExtension(editable: boolean, readOnly: boolean) {
+  return EditorState.readOnly.of(readOnly || !editable)
+}
+
 type DiffSplitGutterFlags = {
   added: boolean
   deleted: boolean
@@ -549,6 +656,7 @@ function mapDiffSplitModifiedGutterFlag(flags: DiffSplitGutterFlags) {
 function createDiffExtensions({
   activeLineGutterCompartment,
   editable,
+  editableCompartment,
   lineNumbersCompartment,
   lineNumbersVisible,
   onChange,
@@ -558,10 +666,12 @@ function createDiffExtensions({
   onSelectionChange,
   onViewportChange,
   readOnly,
+  readOnlyCompartment,
   side,
 }: {
   activeLineGutterCompartment: Compartment
   editable: boolean
+  editableCompartment: Compartment
   lineNumbersCompartment: Compartment
   lineNumbersVisible: boolean
   onChange: (nextValue: string) => void
@@ -570,12 +680,14 @@ function createDiffExtensions({
   onSave?: (nextValue: string) => void
   onSelectionChange?: (selectionState: { visible?: boolean, anchorX?: number, anchorY?: number } | null) => void
   onViewportChange?: () => void
-  readOnly: boolean
+  readOnly: boolean | (() => boolean)
+  readOnlyCompartment: Compartment
   side: 'original' | 'modified'
 }) {
   let pointerSelectionPending = false
   let selectionPointerId: number | null = null
   let capturedPointerId: number | null = null
+  const isReadOnly = () => typeof readOnly === 'function' ? readOnly() : readOnly
 
   const releasePointerCaptureIfHeld = (view: EditorView, pointerId: number | null) => {
     if (pointerId === null || !view.dom.releasePointerCapture) {
@@ -588,7 +700,7 @@ function createDiffExtensions({
   }
 
   const emitSelectionChange = (view: EditorView) => {
-    if (readOnly) {
+    if (isReadOnly()) {
       return
     }
 
@@ -663,13 +775,17 @@ function createDiffExtensions({
     bracketMatching(),
     highlightActiveLine(),
     highlightSelectionMatches(),
+    diffSplitNavigationHighlightField,
     EditorState.tabSize.of(4),
     indentUnit.of('  '),
     EditorView.lineWrapping,
-    EditorView.editable.of(editable && !readOnly),
-    EditorState.readOnly.of(readOnly || !editable),
+    editableCompartment.of(createEditableExtension(editable, isReadOnly())),
+    readOnlyCompartment.of(createReadOnlyExtension(editable, isReadOnly())),
     EditorState.transactionFilter.of((transaction) => (
-      readOnly && transaction.docChanged && !transaction.annotation(allowReadOnlyDocumentUpdate)
+      isReadOnly()
+      && transaction.docChanged
+      && !transaction.annotation(allowReadOnlyDocumentUpdate)
+      && !transaction.annotation(externalDocumentSync)
         ? []
         : transaction
     )),
@@ -684,7 +800,7 @@ function createDiffExtensions({
         key: 'Mod-s',
         preventDefault: true,
         run: (view) => {
-          if (readOnly || !editable) {
+          if (isReadOnly() || !editable) {
             return false
           }
 
@@ -692,14 +808,14 @@ function createDiffExtensions({
           return true
         },
       },
-      { key: 'Tab', run: (view) => !readOnly && (indentListByTwoSpaces(view) || indentMore(view)) },
-      { key: 'Shift-Tab', run: (view) => !readOnly && (outdentListByTwoSpaces(view) || indentLess(view)) },
-      { key: 'Backspace', run: (view) => !readOnly && handleBackspaceAtListContentStart(view) },
+      { key: 'Tab', run: (view) => !isReadOnly() && (indentListByTwoSpaces(view) || indentMore(view)) },
+      { key: 'Shift-Tab', run: (view) => !isReadOnly() && (outdentListByTwoSpaces(view) || indentLess(view)) },
+      { key: 'Backspace', run: (view) => !isReadOnly() && handleBackspaceAtListContentStart(view) },
       { key: 'ArrowLeft', run: (view) => handleArrowLeftAtListContentStart(view) },
       { key: 'ArrowRight', run: (view) => handleArrowRightAtListLineStart(view) },
       {
         key: 'Enter',
-        run: (view) => !readOnly && (
+        run: (view) => !isReadOnly() && (
           handleEnterOnEmptyListItem(view)
           || handleEnterAtListContentStart(view)
           || handleEnterContinueList(view)
@@ -712,7 +828,7 @@ function createDiffExtensions({
       ...searchKeymap,
     ]),
     EditorView.updateListener.of((update) => {
-      if (update.docChanged && !readOnly) {
+      if (update.docChanged && !isReadOnly()) {
         if (update.transactions.some((transaction) => transaction.annotation(externalDocumentSync))) {
           return
         }
@@ -729,7 +845,7 @@ function createDiffExtensions({
         onChange(update.state.doc.toString())
       }
 
-      if (update.selectionSet && !readOnly) {
+      if (update.selectionSet && !isReadOnly()) {
         if (!pointerSelectionPending) {
           emitSelectionChange(update.view)
         }
@@ -760,7 +876,7 @@ function createDiffExtensions({
     }),
     EditorView.domEventHandlers({
       pointerdown: (event, view) => {
-        if (readOnly) {
+        if (isReadOnly()) {
           return false
         }
 
@@ -807,13 +923,13 @@ function createDiffExtensions({
         return false
       },
       compositionstart: () => {
-        if (!readOnly) {
+        if (!isReadOnly()) {
           onCompositionChange?.(true)
         }
         return false
       },
       compositionend: () => {
-        if (!readOnly) {
+        if (!isReadOnly()) {
           window.setTimeout(() => {
             onCompositionChange?.(false)
           }, 0)
@@ -868,6 +984,80 @@ function scrollToLine(view: EditorView, lineNumber: number, align = 'center', sc
   })
   scrollPositionIntoView(view, line.from, align, scrollContainer)
   view.focus()
+}
+
+function revealLine(
+  view: EditorView,
+  lineNumber: number,
+  {
+    focusEditor = true,
+    scrollContainer,
+    selectLine = true,
+  }: {
+    focusEditor?: boolean
+    scrollContainer?: HTMLElement | null
+    selectLine?: boolean
+  } = {},
+) {
+  const normalizedLine = Math.min(Math.max(1, Math.floor(lineNumber)), view.state.doc.lines)
+  const line = view.state.doc.line(normalizedLine)
+  if (selectLine) {
+    view.dispatch({
+      selection: { anchor: line.from },
+    })
+  }
+  scrollPositionIntoView(view, line.from, 'center', scrollContainer)
+  if (focusEditor) {
+    view.focus()
+  }
+}
+
+function clearDiffSplitNavigationHighlight(
+  view: EditorView | null,
+  timerRef: { current: number | null },
+) {
+  if (timerRef.current) {
+    window.clearTimeout(timerRef.current)
+    timerRef.current = null
+  }
+
+  if (!view) {
+    return
+  }
+
+  try {
+    view.dispatch({
+      effects: setDiffSplitNavigationHighlightEffect.of(null),
+    })
+  } catch {
+    // The view may be tearing down while a split navigation request is resolving.
+  }
+}
+
+function applyDiffSplitNavigationHighlight(
+  view: EditorView,
+  lineNumber: number,
+  timerRef: { current: number | null },
+) {
+  const normalizedLine = Math.min(Math.max(1, Math.floor(lineNumber)), view.state.doc.lines)
+  clearDiffSplitNavigationHighlight(view, timerRef)
+  view.dispatch({
+    effects: setDiffSplitNavigationHighlightEffect.of({
+      endLineNumber: normalizedLine,
+      startLineNumber: normalizedLine,
+    }),
+  })
+
+  timerRef.current = window.setTimeout(() => {
+    timerRef.current = null
+    try {
+      view.dispatch({
+        effects: setDiffSplitNavigationHighlightEffect.of(null),
+      })
+    } catch {
+      // Ignore teardown races triggered by rapid mode or file switches.
+    }
+  }, 1600)
 }
 
 function restoreTopLine(view: EditorView, lineNumber: number, lineOffset = 0, scrollContainer?: HTMLElement | null) {
@@ -1385,6 +1575,7 @@ export function createMeoDiffSplitController({
   let isComposing = false
   let mergeView: MergeView | null = null
   let lastRenderedState: DiffSplitResolvedState | null = null
+  let preferredGitDiffScope: GitChangeScope | null = null
   let deferredFrameSyncUntilCompositionEnd = false
   let pendingFrameSync = false
   let cleanupMergeViewDomListeners: (() => void) | null = null
@@ -1398,10 +1589,17 @@ export function createMeoDiffSplitController({
   let pendingScrollFrame = 0
   let syncedOriginalGitBaseText: string | null = null
   let syncedModifiedGitBaseText: string | null = null
+  let appliedModifiedReadOnly: boolean | null = null
+  const originalNavigationHighlightTimerRef = { current: null as number | null }
+  const modifiedNavigationHighlightTimerRef = { current: null as number | null }
   const originalLineNumbersCompartment = new Compartment()
   const modifiedLineNumbersCompartment = new Compartment()
   const originalActiveLineGutterCompartment = new Compartment()
   const modifiedActiveLineGutterCompartment = new Compartment()
+  const originalEditableCompartment = new Compartment()
+  const modifiedEditableCompartment = new Compartment()
+  const originalReadOnlyCompartment = new Compartment()
+  const modifiedReadOnlyCompartment = new Compartment()
   const host = document.createElement('div')
   host.className = 'meo-diff-split-host'
 
@@ -1560,6 +1758,8 @@ export function createMeoDiffSplitController({
   const destroyMergeView = () => {
     cancelPendingGitBaselineSync()
     cancelPendingScrollSync()
+    clearDiffSplitNavigationHighlight(mergeView?.a ?? null, originalNavigationHighlightTimerRef)
+    clearDiffSplitNavigationHighlight(mergeView?.b ?? null, modifiedNavigationHighlightTimerRef)
     invalidateDiffOverviewSegments()
     syncedOriginalGitBaseText = null
     syncedModifiedGitBaseText = null
@@ -1573,11 +1773,26 @@ export function createMeoDiffSplitController({
     destroyDiffOverview()
     mergeView?.destroy()
     mergeView = null
+    appliedModifiedReadOnly = null
   }
 
   const syncDiffGutterVisibility = () => {
     mergeView?.a.dom.classList.toggle('meo-git-gutter-hidden', !currentDiffGutterVisible)
     mergeView?.b.dom.classList.toggle('meo-git-gutter-hidden', !currentDiffGutterVisible)
+  }
+
+  const syncModifiedEditability = (readOnly: boolean) => {
+    if (!mergeView || appliedModifiedReadOnly === readOnly) {
+      return
+    }
+
+    appliedModifiedReadOnly = readOnly
+    mergeView.b.dispatch({
+      effects: [
+        modifiedEditableCompartment.reconfigure(createEditableExtension(editable, readOnly)),
+        modifiedReadOnlyCompartment.reconfigure(createReadOnlyExtension(editable, readOnly)),
+      ],
+    })
   }
 
   const syncDiffSplitGitBaselines = (
@@ -1660,6 +1875,7 @@ export function createMeoDiffSplitController({
     currentFallbackOriginal,
     currentText,
     currentGitChangeContext,
+    preferredGitDiffScope,
   )
 
   const syncLabels = (originalState = getOriginalState()) => {
@@ -1842,9 +2058,11 @@ export function createMeoDiffSplitController({
         extensions: createDiffExtensions({
           activeLineGutterCompartment: originalActiveLineGutterCompartment,
           editable: false,
+          editableCompartment: originalEditableCompartment,
           lineNumbersCompartment: originalLineNumbersCompartment,
           lineNumbersVisible: currentLineNumbersVisible,
           onChange: () => undefined,
+          readOnlyCompartment: originalReadOnlyCompartment,
           readOnly: true,
           side: 'original',
         }),
@@ -1854,6 +2072,7 @@ export function createMeoDiffSplitController({
         extensions: createDiffExtensions({
           activeLineGutterCompartment: modifiedActiveLineGutterCompartment,
           editable,
+          editableCompartment: modifiedEditableCompartment,
           lineNumbersCompartment: modifiedLineNumbersCompartment,
           lineNumbersVisible: currentLineNumbersVisible,
           onChange: (nextValue) => {
@@ -1878,7 +2097,8 @@ export function createMeoDiffSplitController({
           onSave,
           onSelectionChange,
           onViewportChange,
-          readOnly: false,
+          readOnlyCompartment: modifiedReadOnlyCompartment,
+          readOnly: () => getOriginalState().modifiedReadOnly,
           side: 'modified',
         }),
       },
@@ -1891,6 +2111,7 @@ export function createMeoDiffSplitController({
     })
 
     mergeView.dom.classList.add('meo-diff-split-merge-view')
+    appliedModifiedReadOnly = originalState.modifiedReadOnly
     syncDiffSplitGitBaselines(originalState, { force: true })
     syncDiffGutterVisibility()
     mergeScrollArea = mountMeoBaseScrollArea({
@@ -1986,10 +2207,77 @@ export function createMeoDiffSplitController({
     return mergeView.b
   }
 
+  const getRequestedLineForScope = (request: MeoDiffSplitGitNavigationRequest) => {
+    const normalizedLine = Math.max(1, Math.floor(request.lineNumber))
+    if (
+      request.scope !== 'staged'
+      || typeof currentBaseline?.indexText !== 'string'
+      || normalizeLineEndings(currentText) === normalizeLineEndings(currentBaseline.indexText)
+    ) {
+      return normalizedLine
+    }
+
+    return mapCurrentLineToIndexLine(currentBaseline.indexText, currentText, normalizedLine)
+  }
+
+  const resolveGitNavigationTarget = (request: MeoDiffSplitGitNavigationRequest) => {
+    if (!mergeView) {
+      return null
+    }
+
+    const originalState = getOriginalState()
+    if (originalState.actionScope !== request.scope) {
+      return null
+    }
+
+    const requestedLineNumber = getRequestedLineForScope(request)
+    const preferredSide: DiffNavigationSide = 'modified'
+    const chunkState = getChunks(mergeView.b.state)
+    const target = findBestNavigationTarget(
+      mergeView.a.state.doc,
+      mergeView.b.state.doc,
+      (chunkState?.chunks ?? []) as readonly CodeMirrorDiffChunk[],
+      requestedLineNumber,
+      preferredSide,
+    )
+
+    if (!target || target.distance !== 0) {
+      return null
+    }
+
+    return target
+  }
+
+  const revealGitNavigationTarget = (request: MeoDiffSplitGitNavigationRequest) => {
+    const target = resolveGitNavigationTarget(request)
+    if (!target || !mergeView) {
+      return false
+    }
+
+    const view = target.target.side === 'original' ? mergeView.a : mergeView.b
+    const activeTimerRef = target.target.side === 'original'
+      ? originalNavigationHighlightTimerRef
+      : modifiedNavigationHighlightTimerRef
+    const inactiveTimerRef = target.target.side === 'original'
+      ? modifiedNavigationHighlightTimerRef
+      : originalNavigationHighlightTimerRef
+    const inactiveView = target.target.side === 'original' ? mergeView.b : mergeView.a
+
+    revealLine(view, target.target.lineNumber, {
+      focusEditor: target.target.focusEditor,
+      scrollContainer: mergeView.dom,
+      selectLine: target.target.selectLine,
+    })
+    applyDiffSplitNavigationHighlight(view, target.target.lineNumber, activeTimerRef)
+    clearDiffSplitNavigationHighlight(inactiveView, inactiveTimerRef)
+    return true
+  }
+
   const syncResolvedDocuments = () => {
     const originalState = getOriginalState()
     lastRenderedState = originalState
     syncLabels(originalState)
+    syncModifiedEditability(originalState.modifiedReadOnly)
 
     const originalView = mergeView?.a
     const modifiedView = mergeView?.b
@@ -2118,6 +2406,9 @@ export function createMeoDiffSplitController({
       return extractHeadings(getEditableView().state)
     },
     getText() {
+      if (getOriginalState().modifiedReadOnly) {
+        return currentText
+      }
       return mergeView?.b.state.doc.toString() ?? currentText
     },
     getTopVisiblePosition() {
@@ -2188,6 +2479,29 @@ export function createMeoDiffSplitController({
         scrollPositionIntoView(getEditableView(), getEditableView().state.selection.main.head, 'center', mergeView?.dom ?? null)
       }
       return found
+    },
+    revealGitChangeLine(request) {
+      if (destroyed || !mergeView) {
+        return false
+      }
+
+      const previousScope = preferredGitDiffScope
+      preferredGitDiffScope = request.scope
+      syncResolvedDocuments()
+
+      if (!resolveGitNavigationTarget(request)) {
+        preferredGitDiffScope = previousScope
+        syncResolvedDocuments()
+        return false
+      }
+
+      window.requestAnimationFrame(() => {
+        if (destroyed) {
+          return
+        }
+        revealGitNavigationTarget(request)
+      })
+      return true
     },
     refreshLayout() {
       mergeView?.a.requestMeasure()

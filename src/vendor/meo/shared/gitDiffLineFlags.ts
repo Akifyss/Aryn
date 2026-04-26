@@ -294,7 +294,7 @@ export function buildCodeMirrorChunksFromVsCodeDiff(originalDoc: Text, modifiedD
   })
 }
 
-function buildSourceToTargetLineMap(sourceDoc: Text, targetDoc: Text) {
+export function buildSourceToTargetLineMap(sourceDoc: Text, targetDoc: Text) {
   const lineMap = new Array<number | undefined>(sourceDoc.lines + 1)
   let sourceLine = 1
   let targetLine = 1
