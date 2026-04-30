@@ -451,21 +451,31 @@
 
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changedText,
 .meo-native-theme .meo-diff-split-body .cm-deletedChunk .cm-deletedText {
-  background: color-mix(in srgb, var(--git-deleted) 16%, transparent);
-  border-radius: 2px;
+  --meo-diff-split-changed-text-background: color-mix(in srgb, var(--git-deleted) 16%, transparent);
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-b .cm-changedText {
-  background: color-mix(in srgb, var(--git-added) 16%, transparent);
+  --meo-diff-split-changed-text-background: color-mix(in srgb, var(--git-added) 16%, transparent);
+}
+
+.meo-native-theme .meo-diff-split-body .cm-changedText,
+.meo-native-theme .meo-diff-split-body .cm-deletedChunk .cm-deletedText {
+  background: var(--meo-diff-split-changed-text-background);
   border-radius: 2px;
+  /* Keep native inline fragmentation while extending the text diff fill to the editor line height. */
+  box-shadow:
+    0 calc((1lh - 1em) / -2 + 1px) 0 var(--meo-diff-split-changed-text-background),
+    0 calc((1lh - 1em) / 2) 0 var(--meo-diff-split-changed-text-background);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-changedTextEmpty {
   display: inline-block;
   position: relative;
   width: 0;
-  height: 1.05em;
-  vertical-align: -0.12em;
+  height: 1lh;
+  vertical-align: top;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-changedTextEmpty::after {
