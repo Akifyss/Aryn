@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { RangeSetBuilder, StateField, EditorState } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType } from '@codemirror/view';
+import { textIncludes } from './docText';
 
 const lineDecos = {
   currentHeader: Decoration.line({ class: 'meo-merge-line meo-merge-current-header' }),
@@ -31,6 +32,8 @@ interface MergeConflictState {
   decorations: any;
 }
 
+const mergeConflictCache = new WeakMap<object, MergeConflict[]>();
+
 function lineText(state: EditorState, lineNo: number): string {
   const line = state.doc.line(lineNo);
   return state.doc.sliceString(line.from, line.to);
@@ -48,6 +51,17 @@ function markerLabel(text: string, marker: string): string {
 }
 
 export function parseMergeConflicts(state: EditorState): MergeConflict[] {
+  const cached = mergeConflictCache.get(state.doc);
+  if (cached) {
+    return cached;
+  }
+
+  if (!textIncludes(state.doc, '<<<<<<<')) {
+    const conflicts: MergeConflict[] = [];
+    mergeConflictCache.set(state.doc, conflicts);
+    return conflicts;
+  }
+
   const conflicts: MergeConflict[] = [];
   const { doc } = state;
   let lineNo = 1;
@@ -129,6 +143,7 @@ export function parseMergeConflicts(state: EditorState): MergeConflict[] {
     lineNo = endLineNo + 1;
   }
 
+  mergeConflictCache.set(state.doc, conflicts);
   return conflicts;
 }
 

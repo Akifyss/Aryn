@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { EditorState } from '@codemirror/state';
+import { textIncludes } from './docText';
 
 export interface MermaidColonBlock {
   startLine: number;
@@ -57,6 +58,11 @@ export function getMermaidColonBlocks(state: EditorState): MermaidColonBlock[] {
   }
 
   const blocks: MermaidColonBlock[] = [];
+  if (!textIncludes(state.doc, ':::')) {
+    mermaidColonBlockCache.set(state, blocks);
+    return blocks;
+  }
+
   let standardFence: { char: '`' | '~'; length: number } | null = null;
   let pending: {
     startLine: number;

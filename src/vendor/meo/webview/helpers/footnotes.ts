@@ -3,6 +3,7 @@ import { EditorState } from '@codemirror/state';
 import { parseFrontmatter, isInsideFrontmatter } from './frontmatter';
 import { resolvedSyntaxTree } from './markdownSyntax';
 import { collectInlineFootnoteMarkerRanges } from './inlineFootnotes';
+import { textIncludes } from './docText';
 
 export interface FootnoteReference {
   from: number;
@@ -55,6 +56,15 @@ interface ProtectedRange {
 const footnoteCache = new WeakMap<object, ParsedFootnotes>();
 const definitionMarkerPattern = /^[ \t]{0,3}\[\^([^\]\r\n]+)\]:(?:[ \t]|$)/;
 
+function emptyParsedFootnotes(): ParsedFootnotes {
+  return {
+    definitions: [],
+    numberByLabel: new Map(),
+    references: [],
+    referencesByContainerKey: new Map()
+  };
+}
+
 export function normalizeFootnoteLabel(rawLabel: string): string {
   return String(rawLabel ?? '')
     .trim()
@@ -66,6 +76,12 @@ export function parseFootnotes(state: EditorState): ParsedFootnotes {
   const cached = footnoteCache.get(state.doc);
   if (cached) {
     return cached;
+  }
+
+  if (!textIncludes(state.doc, '[^')) {
+    const parsed = emptyParsedFootnotes();
+    footnoteCache.set(state.doc, parsed);
+    return parsed;
   }
 
   const frontmatter = parseFrontmatter(state);

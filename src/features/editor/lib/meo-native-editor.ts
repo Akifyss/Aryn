@@ -85,6 +85,8 @@ export function mountNativeMeoEditor({
   let gitChangesGutterVisible = persistenceController.getInitialGitChangesGutterVisible()
   let currentGitBaseline: GitBaselinePayload | null = null
   let currentGitChangeContext = gitChangeContext
+  let pendingOutlineRefreshFrame = 0
+  let pendingResizeFrame = 0
 
   const vscode = {
     getState: () => persistedWebviewState,
@@ -151,6 +153,33 @@ export function mountNativeMeoEditor({
     outlineButton: outlineBtn,
     root,
   })
+
+  const cancelScheduledOutlineRefresh = () => {
+    if (pendingOutlineRefreshFrame) {
+      window.cancelAnimationFrame(pendingOutlineRefreshFrame)
+      pendingOutlineRefreshFrame = 0
+    }
+  }
+
+  const scheduleOutlineRefreshIfVisible = () => {
+    if (!outlineController.isVisible() || pendingOutlineRefreshFrame) {
+      return
+    }
+
+    pendingOutlineRefreshFrame = window.requestAnimationFrame(() => {
+      pendingOutlineRefreshFrame = 0
+      if (!destroyed && outlineController.isVisible()) {
+        outlineController.refresh()
+      }
+    })
+  }
+
+  const cancelScheduledResizeRefresh = () => {
+    if (pendingResizeFrame) {
+      window.cancelAnimationFrame(pendingResizeFrame)
+      pendingResizeFrame = 0
+    }
+  }
 
   editorWrapper.replaceChildren(editorHost, outlineController.sidebar, selectionMenuElements.menu)
   root.replaceChildren(toolbar, editorWrapper)
@@ -268,9 +297,7 @@ export function mountNativeMeoEditor({
         scheduleWikiLinkStatusRefresh(nextValue)
         scheduleLocalLinkStatusRefresh(nextValue)
         findPanelController.updateFindStatusSummary()
-        if (outlineController.isVisible()) {
-          outlineController.refresh()
-        }
+        scheduleOutlineRefreshIfVisible()
       },
       onCompositionChange: updateCompositionState,
       onOpenLink: (href) => {
@@ -321,7 +348,7 @@ export function mountNativeMeoEditor({
     syncGitDiffLineHighlights()
     vscode.setState({ mode: currentMode })
     if (outlineController.isVisible()) {
-      outlineController.refresh()
+      scheduleOutlineRefreshIfVisible()
     }
     if (options?.persist !== false) {
       persistenceController.persistMode(currentMode)
@@ -521,9 +548,7 @@ export function mountNativeMeoEditor({
       scheduleWikiLinkStatusRefresh(nextText)
       scheduleLocalLinkStatusRefresh(nextText)
       findPanelController.updateFindStatusSummary()
-      if (outlineController.isVisible()) {
-        outlineController.refresh()
-      }
+      scheduleOutlineRefreshIfVisible()
     },
     onOpenGitRevisionForLine: (options: { lineNumber?: number }) => {
       openGitMarkerInDiffSplit('staged', options)
@@ -742,10 +767,20 @@ export function mountNativeMeoEditor({
   }
 
   const resizeHandler = () => {
-    findPanelController.updateAnchor()
-    editor.refreshSelectionOverlay()
-    editor.refreshLayout()
-    diffSplitController?.refreshLayout()
+    if (pendingResizeFrame) {
+      return
+    }
+
+    pendingResizeFrame = window.requestAnimationFrame(() => {
+      pendingResizeFrame = 0
+      if (destroyed) {
+        return
+      }
+      findPanelController.updateAnchor()
+      editor.refreshSelectionOverlay()
+      editor.refreshLayout()
+      diffSplitController?.refreshLayout()
+    })
   }
 
   const blurHandler = () => {
@@ -886,6 +921,8 @@ export function mountNativeMeoEditor({
       destroyed = true
       updateCompositionState(false)
       cancelScheduledViewPositionCapture()
+      cancelScheduledOutlineRefresh()
+      cancelScheduledResizeRefresh()
       cancelPendingWikiStatusRefresh()
       cancelPendingLocalLinkStatusRefresh()
       setWikiLinkRefreshContext({
@@ -960,9 +997,7 @@ export function mountNativeMeoEditor({
       scheduleWikiLinkStatusRefresh(text)
       scheduleLocalLinkStatusRefresh(text)
       findPanelController.updateFindStatusSummary()
-      if (outlineController.isVisible()) {
-        outlineController.refresh()
-      }
+      scheduleOutlineRefreshIfVisible()
     },
   }
 }

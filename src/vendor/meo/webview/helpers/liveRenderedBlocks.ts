@@ -6,6 +6,7 @@ import { resolvedSyntaxTree } from './markdownSyntax';
 import { getMermaidColonBlocks, rangeOverlapsMermaidColonBlock } from './mermaidColonBlocks';
 import { collectLatexMathRanges, resolveFencedDisplayMathInnerLineRange } from './math';
 import { isTableDelimiterLine, parseTableInfo } from './tables';
+import { textIncludes } from './docText';
 
 type LineFlagLike = {
   added?: boolean;
@@ -99,6 +100,10 @@ function detectFallbackTableBlocks(
   parsedTableRanges: Array<{ from: number; to: number }>,
   mermaidColonBlocks: ReadonlyArray<{ from: number; to: number }>
 ): LiveRenderedBlock[] {
+  if (!textIncludes(state.doc, '|')) {
+    return [];
+  }
+
   const blocks: LiveRenderedBlock[] = [];
 
   for (let lineNo = 2; lineNo <= state.doc.lines; lineNo += 1) {
@@ -255,32 +260,34 @@ export function getLiveRenderedBlocks(state: EditorState): LiveRenderedBlock[] {
     }
   }
 
-  const mathRanges = collectLatexMathRanges(state.doc.toString(), {
-    excludedRanges: codeLikeRanges
-  });
-  for (const mathRange of mathRanges) {
-    if (mathRange.mode !== 'display' || mathRange.fencedDisplay !== true) {
-      continue;
-    }
-    const startLine = state.doc.lineAt(mathRange.from).number;
-    const endLine = state.doc.lineAt(Math.max(mathRange.to - 1, mathRange.from)).number;
-    if (endLine <= startLine) {
-      continue;
-    }
-    if (selectionTouchesLineRange(state, startLine, endLine)) {
-      continue;
-    }
-    const block = createRenderedBlock('math', startLine, endLine, null);
-    if (block) {
-      const hiddenRange = resolveMathHiddenLineRange(startLine, endLine);
-      if (hiddenRange) {
-        block.lineNumberHiddenFrom = hiddenRange.from;
-        block.lineNumberHiddenTo = hiddenRange.to;
-      } else {
-        block.lineNumberHiddenFrom = 1;
-        block.lineNumberHiddenTo = 0;
+  if (textIncludes(state.doc, '$')) {
+    const mathRanges = collectLatexMathRanges(state.doc.toString(), {
+      excludedRanges: codeLikeRanges
+    });
+    for (const mathRange of mathRanges) {
+      if (mathRange.mode !== 'display' || mathRange.fencedDisplay !== true) {
+        continue;
       }
-      blocks.push(block);
+      const startLine = state.doc.lineAt(mathRange.from).number;
+      const endLine = state.doc.lineAt(Math.max(mathRange.to - 1, mathRange.from)).number;
+      if (endLine <= startLine) {
+        continue;
+      }
+      if (selectionTouchesLineRange(state, startLine, endLine)) {
+        continue;
+      }
+      const block = createRenderedBlock('math', startLine, endLine, null);
+      if (block) {
+        const hiddenRange = resolveMathHiddenLineRange(startLine, endLine);
+        if (hiddenRange) {
+          block.lineNumberHiddenFrom = hiddenRange.from;
+          block.lineNumberHiddenTo = hiddenRange.to;
+        } else {
+          block.lineNumberHiddenFrom = 1;
+          block.lineNumberHiddenTo = 0;
+        }
+        blocks.push(block);
+      }
     }
   }
 

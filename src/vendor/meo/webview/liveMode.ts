@@ -65,6 +65,7 @@ import {
   type LatexMathRange,
   type LatexMathMode
 } from './helpers/math';
+import { textIncludes } from './helpers/docText';
 
 const markerDeco = Decoration.mark({ class: 'meo-md-marker' });
 const activeLineMarkerDeco = Decoration.mark({ class: 'meo-md-marker-active' });
@@ -1806,6 +1807,10 @@ function collectMathRanges(
   renderedTableRanges,
   frontmatter = null
 ): LatexMathRange[] {
+  if (!textIncludes(state.doc, '$')) {
+    return [];
+  }
+
   const excludedRanges = [
     ...collectInlineCodeRanges(tree),
     ...collectCodeBlockRanges(state, tree, mermaidColonBlocks),
@@ -1816,12 +1821,7 @@ function collectMathRanges(
     excludedRanges.push({ from: frontmatter.openingFrom, to: frontmatter.closingTo });
   }
 
-  const text = state.doc.toString();
-  if (text.indexOf('$') === -1) {
-    return [];
-  }
-
-  return collectLatexMathRanges(text, {
+  return collectLatexMathRanges(state.doc.toString(), {
     excludedRanges: mergeSimpleRanges(excludedRanges)
   });
 }
@@ -1942,48 +1942,48 @@ function addKbdTagDecorations(
   frontmatter = null,
   codeBlockLines = null
 ) {
-  for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
-    if (activeLines.has(lineNo) || codeBlockLines?.has(lineNo)) {
-      continue;
-    }
+  let lineNo = 1;
+  let lineFrom = 0;
+  const lines = state.doc.iterLines();
 
-    const line = state.doc.line(lineNo);
-    if (isInsideFrontmatterContent(frontmatter, line.from)) {
-      continue;
-    }
+  while (!lines.next().done) {
+    const lineText = lines.value;
+    const lineTo = lineFrom + lineText.length;
+    if (
+      !activeLines.has(lineNo) &&
+      !codeBlockLines?.has(lineNo) &&
+      !isInsideFrontmatterContent(frontmatter, lineFrom) &&
+      hasKbdTagMarker(lineText) &&
+      !overlapsParsedTableRange(lineFrom, lineTo, renderedTableRanges)
+    ) {
+      const kbdRanges = collectKbdTagRangesFromText(lineText, lineFrom);
+      for (const kbdRange of kbdRanges) {
+        if (overlapsSelection(state, kbdRange.from, kbdRange.to)) {
+          continue;
+        }
+        if (overlapsParsedTableRange(kbdRange.from, kbdRange.to, renderedTableRanges)) {
+          continue;
+        }
+        if (overlapsParsedTableRange(kbdRange.from, kbdRange.to, mathRanges)) {
+          continue;
+        }
 
-    const lineText = state.doc.sliceString(line.from, line.to);
-    if (!hasKbdTagMarker(lineText)) {
-      continue;
-    }
-    if (overlapsParsedTableRange(line.from, line.to, renderedTableRanges)) {
-      continue;
-    }
+        const keyText = kbdRange.content.trim();
+        if (!keyText) {
+          continue;
+        }
 
-    const kbdRanges = collectKbdTagRangesFromText(lineText, line.from);
-    for (const kbdRange of kbdRanges) {
-      if (overlapsSelection(state, kbdRange.from, kbdRange.to)) {
-        continue;
+        builder.push(
+          Decoration.replace({
+            widget: getKbdWidget(keyText),
+            inclusive: false
+          }).range(kbdRange.from, kbdRange.to)
+        );
       }
-      if (overlapsParsedTableRange(kbdRange.from, kbdRange.to, renderedTableRanges)) {
-        continue;
-      }
-      if (overlapsParsedTableRange(kbdRange.from, kbdRange.to, mathRanges)) {
-        continue;
-      }
-
-      const keyText = kbdRange.content.trim();
-      if (!keyText) {
-        continue;
-      }
-
-      builder.push(
-        Decoration.replace({
-          widget: getKbdWidget(keyText),
-          inclusive: false
-        }).range(kbdRange.from, kbdRange.to)
-      );
     }
+
+    lineFrom = lineTo + 1;
+    lineNo += 1;
   }
 }
 
@@ -2012,32 +2012,34 @@ function addEmojiDecorationsWithMath(
   mathRanges,
   codeBlockLines = null
 ) {
-  for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
-    if (codeBlockLines?.has(lineNo)) {
-      continue;
-    }
-    const line = state.doc.line(lineNo);
-    const lineText = state.doc.sliceString(line.from, line.to);
-    if (overlapsParsedTableRange(line.from, line.to, mathRanges)) {
-      continue;
-    }
+  let lineNo = 1;
+  let lineFrom = 0;
+  const lines = state.doc.iterLines();
 
-    if (lineText.indexOf(':') === -1) {
-      continue;
-    }
-
-    const emojiRanges = collectEmojiRangesFromText(lineText, line.from);
-    for (const emojiRange of emojiRanges) {
-      if (overlapsParsedTableRange(emojiRange.from, emojiRange.to, mathRanges)) {
-        continue;
+  while (!lines.next().done) {
+    const lineText = lines.value;
+    const lineTo = lineFrom + lineText.length;
+    if (
+      !codeBlockLines?.has(lineNo) &&
+      lineText.indexOf(':') !== -1 &&
+      !overlapsParsedTableRange(lineFrom, lineTo, mathRanges)
+    ) {
+      const emojiRanges = collectEmojiRangesFromText(lineText, lineFrom);
+      for (const emojiRange of emojiRanges) {
+        if (overlapsParsedTableRange(emojiRange.from, emojiRange.to, mathRanges)) {
+          continue;
+        }
+        builder.push(
+          Decoration.replace({
+            widget: getEmojiWidget(emojiRange.emoji),
+            inclusive: false
+          }).range(emojiRange.from, emojiRange.to)
+        );
       }
-      builder.push(
-        Decoration.replace({
-          widget: getEmojiWidget(emojiRange.emoji),
-          inclusive: false
-        }).range(emojiRange.from, emojiRange.to)
-      );
     }
+
+    lineFrom = lineTo + 1;
+    lineNo += 1;
   }
 }
 
@@ -2087,6 +2089,10 @@ function buildLiveLineNumberMarkers(state) {
 }
 
 function detectTableBlocks(state) {
+  if (!textIncludes(state.doc, '|')) {
+    return [];
+  }
+
   const blocks = [];
   for (let lineNo = 2; lineNo <= state.doc.lines; lineNo += 1) {
     const delimiterLine = state.doc.line(lineNo);
@@ -2140,6 +2146,10 @@ function hasBlockedRawFileUrlAncestor(tree, from, to) {
 }
 
 function addRawFileUrlDecorations(builder, state, tree, frontmatter = null) {
+  if (!textIncludes(state.doc, fileSchemePrefix)) {
+    return;
+  }
+
   for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
     const line = state.doc.line(lineNo);
     if (line.text.indexOf(fileSchemePrefix) === -1) {
