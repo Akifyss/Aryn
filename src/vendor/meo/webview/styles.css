@@ -449,6 +449,14 @@
   background-color: color-mix(in srgb, var(--git-added) 7%, transparent);
 }
 
+.meo-native-theme .meo-diff-split-body .cm-merge-a .cm-deletedLineFull {
+  background-color: color-mix(in srgb, var(--git-deleted) 16%, transparent);
+}
+
+.meo-native-theme .meo-diff-split-body .cm-merge-b .cm-insertedLineFull {
+  background-color: color-mix(in srgb, var(--git-added) 16%, transparent);
+}
+
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changedText,
 .meo-native-theme .meo-diff-split-body .cm-deletedChunk .cm-deletedText {
   --meo-diff-split-changed-text-background: color-mix(in srgb, var(--git-deleted) 16%, transparent);
@@ -468,6 +476,11 @@
     0 calc((1lh - 1em) / 2) 0 var(--meo-diff-split-changed-text-background);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-line:has(.cm-changedText),
+.meo-native-theme .meo-diff-split-body .cm-deletedLine:has(.cm-deletedText) {
+  overflow: clip;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-changedTextEmpty {

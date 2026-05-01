@@ -35,6 +35,8 @@ function configChanged(s1: EditorState, s2: EditorState) {
 }
 
 const changedLine = Decoration.line({class: "cm-changedLine"})
+const insertedLineFull = Decoration.line({class: "cm-insertedLineFull"})
+const deletedLineFull = Decoration.line({class: "cm-deletedLineFull"})
 export const changedText = Decoration.mark({class: "cm-changedText"})
 const inserted = Decoration.mark({tagName: "ins", class: "cm-insertedLine"})
 const deleted = Decoration.mark({tagName: "del", class: "cm-deletedLine"})
@@ -55,6 +57,15 @@ const changedTextEmpty = Decoration.widget({widget: new ChangedTextEmpty(), side
 
 const changedLineGutterMarker = new class extends GutterMarker {
   elementClass = "cm-changedLineGutter"
+}
+
+export function isWholeLineChange(chunk: Chunk, isA: boolean) {
+  return isA ? chunk.fromB == chunk.toB : chunk.fromA == chunk.toA
+}
+
+function addChangedLineDeco(builder: RangeSetBuilder<Decoration>, pos: number, fullLine: Decoration | null) {
+  builder.add(pos, pos, changedLine)
+  if (fullLine) builder.add(pos, pos, fullLine)
 }
 
 function addInlineChangeDeco(chunk: Chunk, from: number, pos: number, lineEnd: number, isA: boolean,
@@ -87,20 +98,22 @@ function buildChunkDeco(chunk: Chunk, doc: Text, isA: boolean, highlight: boolea
   let from = isA ? chunk.fromA : chunk.fromB, to = isA ? chunk.toA : chunk.toB
   let changeI = 0
   if (from != to) {
-    builder.add(from, from, changedLine)
+    let wholeLineChange = isWholeLineChange(chunk, isA)
+    let fullLine = wholeLineChange ? isA ? deletedLineFull : insertedLineFull : null
+    addChangedLineDeco(builder, from, fullLine)
     let markTo = Math.min(to, doc.length)
     if (from < markTo) builder.add(from, markTo, isA ? deleted : inserted)
     if (gutterBuilder) gutterBuilder.add(from, from, changedLineGutterMarker)
     for (let iter = doc.iterRange(from, to - 1), pos = from; !iter.next().done;) {
       if (iter.lineBreak) {
-        if (highlight) changeI = addInlineChangeDeco(chunk, from, pos, pos, isA, builder, changeI)
+        if (highlight && !wholeLineChange) changeI = addInlineChangeDeco(chunk, from, pos, pos, isA, builder, changeI)
         pos++
-        builder.add(pos, pos, changedLine)
+        addChangedLineDeco(builder, pos, fullLine)
         if (gutterBuilder) gutterBuilder.add(pos, pos, changedLineGutterMarker)
         continue
       }
       let lineEnd = pos + iter.value.length
-      if (highlight) changeI = addInlineChangeDeco(chunk, from, pos, lineEnd, isA, builder, changeI)
+      if (highlight && !wholeLineChange) changeI = addInlineChangeDeco(chunk, from, pos, lineEnd, isA, builder, changeI)
       pos = lineEnd
     }
   }
