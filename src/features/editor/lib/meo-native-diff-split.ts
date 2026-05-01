@@ -3,7 +3,7 @@ import { markdownKeymap } from '@codemirror/lang-markdown'
 import { bracketMatching, forceParsing, indentOnInput, indentUnit } from '@codemirror/language'
 import { getChunks, goToNextChunk, goToPreviousChunk, MergeView } from '@codemirror/merge'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
-import { Annotation, Compartment, EditorSelection, EditorState, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
+import { Annotation, Compartment, EditorSelection, EditorState, type Extension, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
 import {
   Decoration,
   drawSelection,
@@ -657,6 +657,7 @@ function createDiffExtensions({
   activeLineGutterCompartment,
   editable,
   editableCompartment,
+  interactive,
   lineNumbersCompartment,
   lineNumbersVisible,
   onChange,
@@ -667,11 +668,13 @@ function createDiffExtensions({
   onViewportChange,
   readOnly,
   readOnlyCompartment,
+  reportViewportChanges = true,
   side,
 }: {
   activeLineGutterCompartment: Compartment
   editable: boolean
   editableCompartment: Compartment
+  interactive?: boolean
   lineNumbersCompartment: Compartment
   lineNumbersVisible: boolean
   onChange: (nextValue: string) => void
@@ -682,11 +685,13 @@ function createDiffExtensions({
   onViewportChange?: () => void
   readOnly: boolean | (() => boolean)
   readOnlyCompartment: Compartment
+  reportViewportChanges?: boolean
   side: 'original' | 'modified'
 }) {
   let pointerSelectionPending = false
   let selectionPointerId: number | null = null
   let capturedPointerId: number | null = null
+  const isInteractivePane = interactive ?? side === 'modified'
   const isReadOnly = () => typeof readOnly === 'function' ? readOnly() : readOnly
 
   const releasePointerCaptureIfHeld = (view: EditorView, pointerId: number | null) => {
@@ -762,19 +767,14 @@ function createDiffExtensions({
     return true
   }
 
-  const extensions = [
+  const extensions: Extension[] = [
     lineNumbersCompartment.of(createLineNumberExtensions(lineNumbersVisible)),
     ...gitDiffGutterBaselineExtensions(),
     ...gitDiffGutterLiveRenderExtensions({
       mapLineFlag: side === 'original' ? mapDiffSplitOriginalGutterFlag : mapDiffSplitModifiedGutterFlag,
     }),
     activeLineGutterCompartment.of(createActiveLineGutterExtensions(lineNumbersVisible)),
-    drawSelection(),
-    history(),
-    indentOnInput(),
-    bracketMatching(),
     highlightActiveLine(),
-    highlightSelectionMatches(),
     diffSplitNavigationHighlightField,
     EditorState.tabSize.of(4),
     indentUnit.of('  '),
@@ -792,41 +792,54 @@ function createDiffExtensions({
     EditorView.editorAttributes.of({
       class: 'meo-mode-live meo-diff-split-editor',
     }),
-    searchQueryField,
-    searchMatchField,
     ...liveModeExtensions(),
-    keymap.of([
-      {
-        key: 'Mod-s',
-        preventDefault: true,
-        run: (view) => {
-          if (isReadOnly() || !editable) {
-            return false
-          }
+  ]
 
-          onSave?.(view.state.doc.toString())
-          return true
+  if (isInteractivePane) {
+    extensions.push(
+      drawSelection(),
+      history(),
+      indentOnInput(),
+      bracketMatching(),
+      highlightSelectionMatches(),
+      searchQueryField,
+      searchMatchField,
+      keymap.of([
+        {
+          key: 'Mod-s',
+          preventDefault: true,
+          run: (view) => {
+            if (isReadOnly() || !editable) {
+              return false
+            }
+
+            onSave?.(view.state.doc.toString())
+            return true
+          },
         },
-      },
-      { key: 'Tab', run: (view) => !isReadOnly() && (indentListByTwoSpaces(view) || indentMore(view)) },
-      { key: 'Shift-Tab', run: (view) => !isReadOnly() && (outdentListByTwoSpaces(view) || indentLess(view)) },
-      { key: 'Backspace', run: (view) => !isReadOnly() && handleBackspaceAtListContentStart(view) },
-      { key: 'ArrowLeft', run: (view) => handleArrowLeftAtListContentStart(view) },
-      { key: 'ArrowRight', run: (view) => handleArrowRightAtListLineStart(view) },
-      {
-        key: 'Enter',
-        run: (view) => !isReadOnly() && (
-          handleEnterOnEmptyListItem(view)
-          || handleEnterAtListContentStart(view)
-          || handleEnterContinueList(view)
-          || handleEnterBeforeNestedList(view)
-        ),
-      },
-      ...markdownKeymap,
-      ...defaultKeymap,
-      ...historyKeymap,
-      ...searchKeymap,
-    ]),
+        { key: 'Tab', run: (view) => !isReadOnly() && (indentListByTwoSpaces(view) || indentMore(view)) },
+        { key: 'Shift-Tab', run: (view) => !isReadOnly() && (outdentListByTwoSpaces(view) || indentLess(view)) },
+        { key: 'Backspace', run: (view) => !isReadOnly() && handleBackspaceAtListContentStart(view) },
+        { key: 'ArrowLeft', run: (view) => handleArrowLeftAtListContentStart(view) },
+        { key: 'ArrowRight', run: (view) => handleArrowRightAtListLineStart(view) },
+        {
+          key: 'Enter',
+          run: (view) => !isReadOnly() && (
+            handleEnterOnEmptyListItem(view)
+            || handleEnterAtListContentStart(view)
+            || handleEnterContinueList(view)
+            || handleEnterBeforeNestedList(view)
+          ),
+        },
+        ...markdownKeymap,
+        ...defaultKeymap,
+        ...historyKeymap,
+        ...searchKeymap,
+      ]),
+    )
+  }
+
+  extensions.push(
     EditorView.updateListener.of((update) => {
       if (update.docChanged && !isReadOnly()) {
         if (update.transactions.some((transaction) => transaction.annotation(externalDocumentSync))) {
@@ -851,93 +864,98 @@ function createDiffExtensions({
         }
       }
 
-      if (update.viewportChanged) {
+      if (update.viewportChanged && reportViewportChanges) {
         onViewportChange?.()
       }
     }),
-    ViewPlugin.fromClass(class {
-      private readonly onWindowPointerUp = (event: PointerEvent) => {
-        finishPointerSelection(this.view, event.pointerId)
-      }
+  )
 
-      private readonly onWindowPointerCancel = (event: PointerEvent) => {
-        finishPointerSelection(this.view, event.pointerId, { hideMenu: true, showMenu: false })
-      }
-
-      constructor(private readonly view: EditorView) {
-        window.addEventListener('pointerup', this.onWindowPointerUp, true)
-        window.addEventListener('pointercancel', this.onWindowPointerCancel, true)
-      }
-
-      destroy() {
-        window.removeEventListener('pointerup', this.onWindowPointerUp, true)
-        window.removeEventListener('pointercancel', this.onWindowPointerCancel, true)
-      }
-    }),
-    EditorView.domEventHandlers({
-      pointerdown: (event, view) => {
-        if (isReadOnly()) {
-          return false
+  if (isInteractivePane) {
+    extensions.push(
+      ViewPlugin.fromClass(class {
+        private readonly onWindowPointerUp = (event: PointerEvent) => {
+          finishPointerSelection(this.view, event.pointerId)
         }
 
-        if (isPrimaryModifierPointerClick(event)) {
-          const href = getLinkHrefAtPointer(event, view)
-          if (!href) {
+        private readonly onWindowPointerCancel = (event: PointerEvent) => {
+          finishPointerSelection(this.view, event.pointerId, { hideMenu: true, showMenu: false })
+        }
+
+        constructor(private readonly view: EditorView) {
+          window.addEventListener('pointerup', this.onWindowPointerUp, true)
+          window.addEventListener('pointercancel', this.onWindowPointerCancel, true)
+        }
+
+        destroy() {
+          window.removeEventListener('pointerup', this.onWindowPointerUp, true)
+          window.removeEventListener('pointercancel', this.onWindowPointerCancel, true)
+        }
+      }),
+      EditorView.domEventHandlers({
+        pointerdown: (event, view) => {
+          if (isReadOnly()) {
             return false
           }
 
-          event.preventDefault()
-          event.stopPropagation()
-          onOpenLink?.(href)
-          return true
-        }
+          if (isPrimaryModifierPointerClick(event)) {
+            const href = getLinkHrefAtPointer(event, view)
+            if (!href) {
+              return false
+            }
 
-        if (!isPlainPrimaryPointerEvent(event)) {
+            event.preventDefault()
+            event.stopPropagation()
+            onOpenLink?.(href)
+            return true
+          }
+
+          if (!isPlainPrimaryPointerEvent(event)) {
+            return false
+          }
+
+          const target = event.target
+          if (!(target instanceof Node) || !view.contentDOM.contains(target)) {
+            pointerSelectionPending = false
+            selectionPointerId = null
+            return false
+          }
+
+          pointerSelectionPending = true
+          selectionPointerId = event.pointerId
+          onSelectionChange?.(null)
+
+          if (view.dom.setPointerCapture) {
+            view.dom.setPointerCapture(event.pointerId)
+            capturedPointerId = event.pointerId
+          }
+
           return false
-        }
-
-        const target = event.target
-        if (!(target instanceof Node) || !view.contentDOM.contains(target)) {
-          pointerSelectionPending = false
-          selectionPointerId = null
+        },
+        pointerup: (event, view) => {
+          finishPointerSelection(view, event.pointerId)
           return false
-        }
-
-        pointerSelectionPending = true
-        selectionPointerId = event.pointerId
-        onSelectionChange?.(null)
-
-        if (view.dom.setPointerCapture) {
-          view.dom.setPointerCapture(event.pointerId)
-          capturedPointerId = event.pointerId
-        }
-
-        return false
-      },
-      pointerup: (event, view) => {
-        finishPointerSelection(view, event.pointerId)
-        return false
-      },
-      pointercancel: (event, view) => {
-        finishPointerSelection(view, event.pointerId, { hideMenu: true, showMenu: false })
-        return false
-      },
-      compositionstart: () => {
-        if (!isReadOnly()) {
-          onCompositionChange?.(true)
-        }
-        return false
-      },
-      compositionend: () => {
-        if (!isReadOnly()) {
-          window.setTimeout(() => {
-            onCompositionChange?.(false)
-          }, 0)
-        }
-        return false
-      },
-    }),
-  ]
+        },
+        pointercancel: (event, view) => {
+          finishPointerSelection(view, event.pointerId, { hideMenu: true, showMenu: false })
+          return false
+        },
+        compositionstart: () => {
+          if (!isReadOnly()) {
+            onCompositionChange?.(true)
+          }
+          return false
+        },
+        compositionend: () => {
+          if (!isReadOnly()) {
+            window.setTimeout(() => {
+              onCompositionChange?.(false)
+            }, 0)
+          }
+          return false
+        },
+      }),
+    )
+  }
 
   return extensions
 }
@@ -1586,10 +1604,12 @@ export function createMeoDiffSplitController({
   let diffScrollPastEndObserver: ResizeObserver | null = null
   let diffScrollPastEndFrame = 0
   let pendingGitBaselineFrame = 0
+  let pendingReadOnlyWidgetLockFrame = 0
   let pendingScrollFrame = 0
   let syncedOriginalGitBaseText: string | null = null
   let syncedModifiedGitBaseText: string | null = null
   let appliedModifiedReadOnly: boolean | null = null
+  const pendingReadOnlyWidgetRoots = new Set<Element>()
   const originalNavigationHighlightTimerRef = { current: null as number | null }
   const modifiedNavigationHighlightTimerRef = { current: null as number | null }
   const originalLineNumbersCompartment = new Compartment()
@@ -1712,6 +1732,14 @@ export function createMeoDiffSplitController({
     }
   }
 
+  const cancelPendingReadOnlyWidgetLock = () => {
+    if (pendingReadOnlyWidgetLockFrame) {
+      window.cancelAnimationFrame(pendingReadOnlyWidgetLockFrame)
+      pendingReadOnlyWidgetLockFrame = 0
+    }
+    pendingReadOnlyWidgetRoots.clear()
+  }
+
   const syncDiffScrollPastEndPadding = () => {
     if (!mergeView) {
       return
@@ -1764,6 +1792,7 @@ export function createMeoDiffSplitController({
     syncedOriginalGitBaseText = null
     syncedModifiedGitBaseText = null
     destroyDiffScrollPastEndObserver()
+    cancelPendingReadOnlyWidgetLock()
     cleanupReadOnlyWidgetLock?.()
     cleanupReadOnlyWidgetLock = null
     cleanupMergeViewDomListeners?.()
@@ -1840,34 +1869,60 @@ export function createMeoDiffSplitController({
     })
   }
 
-  const lockReadOnlyWidgets = (rootElement: HTMLElement) => {
-    for (const element of rootElement.querySelectorAll('textarea, input, select')) {
-      if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
-        element.readOnly = true
-        element.tabIndex = -1
-        element.setAttribute('aria-readonly', 'true')
-      } else if (element instanceof HTMLSelectElement) {
-        element.disabled = true
-        element.tabIndex = -1
-        element.setAttribute('aria-disabled', 'true')
-      }
+  const readOnlyWidgetSelector = 'textarea, input, select, button, [contenteditable="true"]'
+
+  const lockReadOnlyWidgetElement = (element: Element) => {
+    if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
+      element.readOnly = true
+      element.tabIndex = -1
+      element.setAttribute('aria-readonly', 'true')
+      return
     }
 
-    for (const element of rootElement.querySelectorAll('button')) {
-      if (element instanceof HTMLButtonElement) {
-        element.disabled = true
-        element.tabIndex = -1
-        element.setAttribute('aria-disabled', 'true')
-      }
+    if (element instanceof HTMLSelectElement || element instanceof HTMLButtonElement) {
+      element.disabled = true
+      element.tabIndex = -1
+      element.setAttribute('aria-disabled', 'true')
+      return
     }
 
-    for (const element of rootElement.querySelectorAll('[contenteditable="true"]')) {
-      if (element instanceof HTMLElement) {
-        element.contentEditable = 'false'
-        element.tabIndex = -1
-        element.setAttribute('aria-readonly', 'true')
-      }
+    if (element instanceof HTMLElement && element.contentEditable === 'true') {
+      element.contentEditable = 'false'
+      element.tabIndex = -1
+      element.setAttribute('aria-readonly', 'true')
     }
+  }
+
+  const lockReadOnlyWidgets = (rootElement: Element) => {
+    if (rootElement.matches(readOnlyWidgetSelector)) {
+      lockReadOnlyWidgetElement(rootElement)
+    }
+
+    for (const element of rootElement.querySelectorAll(readOnlyWidgetSelector)) {
+      lockReadOnlyWidgetElement(element)
+    }
+  }
+
+  const scheduleReadOnlyWidgetLock = (rootElement: Element) => {
+    pendingReadOnlyWidgetRoots.add(rootElement)
+    if (pendingReadOnlyWidgetLockFrame) {
+      return
+    }
+
+    pendingReadOnlyWidgetLockFrame = window.requestAnimationFrame(() => {
+      pendingReadOnlyWidgetLockFrame = 0
+      const roots = Array.from(pendingReadOnlyWidgetRoots)
+      pendingReadOnlyWidgetRoots.clear()
+      if (destroyed) {
+        return
+      }
+
+      for (const rootElement of roots) {
+        if (rootElement.isConnected) {
+          lockReadOnlyWidgets(rootElement)
+        }
+      }
+    })
   }
 
   const getOriginalState = () => resolveOriginalText(
@@ -2059,6 +2114,7 @@ export function createMeoDiffSplitController({
           activeLineGutterCompartment: originalActiveLineGutterCompartment,
           editable: false,
           editableCompartment: originalEditableCompartment,
+          interactive: false,
           lineNumbersCompartment: originalLineNumbersCompartment,
           lineNumbersVisible: currentLineNumbersVisible,
           onChange: () => undefined,
@@ -2098,6 +2154,7 @@ export function createMeoDiffSplitController({
           onSelectionChange,
           onViewportChange,
           readOnlyCompartment: modifiedReadOnlyCompartment,
+          reportViewportChanges: false,
           readOnly: () => getOriginalState().modifiedReadOnly,
           side: 'modified',
         }),
@@ -2105,6 +2162,8 @@ export function createMeoDiffSplitController({
       diffConfig: getDiffConfig(editable),
       gutter: false,
       highlightChanges: true,
+      outerScrollViewportMargin: 8000,
+      outerScrollViewportRetention: 32000,
       parent: body,
       renderRevertControl: createHunkActionControls,
       revertControls: getRevertControls(originalState),
@@ -2122,9 +2181,13 @@ export function createMeoDiffSplitController({
     diffScrollPastEndObserver = new ResizeObserver(scheduleDiffScrollPastEndPaddingSync)
     diffScrollPastEndObserver.observe(mergeView.dom)
     lockReadOnlyWidgets(mergeView.a.dom)
-    const readOnlyWidgetObserver = new MutationObserver(() => {
-      if (mergeView?.a.dom) {
-        lockReadOnlyWidgets(mergeView.a.dom)
+    const readOnlyWidgetObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node instanceof Element) {
+            scheduleReadOnlyWidgetLock(node)
+          }
+        }
       }
     })
     readOnlyWidgetObserver.observe(mergeView.a.dom, {
@@ -2133,6 +2196,7 @@ export function createMeoDiffSplitController({
     })
     cleanupReadOnlyWidgetLock = () => {
       readOnlyWidgetObserver.disconnect()
+      cancelPendingReadOnlyWidgetLock()
     }
     const handleMergeScroll = () => {
       if (pendingScrollFrame) {

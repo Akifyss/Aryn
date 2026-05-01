@@ -29,6 +29,8 @@ export const changeGutter = Prec.low(gutter({
 export const inlineChangeLayer = layer({
   above: true,
   class: "cm-inlineChangeLayer",
+  // update() already covers viewport/doc/chunk changes; avoid a second layout read.
+  updateOnDocViewUpdate: false,
   update(update) {
     return update.docChanged || update.viewportChanged ||
       chunksChanged(update.startState, update.state) ||
