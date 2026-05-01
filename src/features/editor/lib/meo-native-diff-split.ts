@@ -12,6 +12,7 @@ import {
   highlightActiveLineGutter,
   keymap,
   lineNumbers,
+  type ViewUpdate,
   ViewPlugin,
 } from '@codemirror/view'
 import type { GitBaselinePayload, GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
@@ -38,6 +39,7 @@ import {
   indentListByTwoSpaces,
   listMarkerData,
   outdentListByTwoSpaces,
+  shouldCollectOrderedListRenumberChanges,
 } from '@/vendor/meo/webview/helpers/listMarkers'
 import { extractHeadings, extractHeadingSections } from '@/vendor/meo/webview/helpers/markdownSyntax'
 import { insertTable } from '@/vendor/meo/webview/helpers/tables'
@@ -47,6 +49,7 @@ import { isRegularInlineSelection } from '@/vendor/meo/webview/helpers/selection
 import {
   gitDiffGutterBaselineExtensions,
   gitDiffGutterLiveRenderExtensions,
+  refreshGitDiffLineFlagsEffect,
   setGitBaseline,
 } from '@/vendor/meo/webview/helpers/gitDiffGutter'
 import {
@@ -562,8 +565,12 @@ function hasResolvedViewFrameChanged(
     || getActionChangeKey(previous.actionChange) !== getActionChangeKey(next.actionChange)
 }
 
+const SPLIT_DIFF_REFRESH_IDLE_DELAY_MS = 200
+const SPLIT_DIFF_REFRESH_AFTER_COMPOSITION_MS = 80
+
 function getDiffConfig(editable: boolean) {
   return {
+    incrementalUpdates: editable,
     overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
     scanLimit: editable ? 1000 : 10000,
     timeout: 200,
@@ -691,6 +698,9 @@ function createDiffExtensions({
   let pointerSelectionPending = false
   let selectionPointerId: number | null = null
   let capturedPointerId: number | null = null
+  let pendingCompositionDocChange = false
+  let pendingCompositionFlushFrame = 0
+  let pendingCompositionView: EditorView | null = null
   const isInteractivePane = interactive ?? side === 'modified'
   const isReadOnly = () => typeof readOnly === 'function' ? readOnly() : readOnly
 
@@ -767,9 +777,43 @@ function createDiffExtensions({
     return true
   }
 
+  const isCompositionInputUpdate = (update: ViewUpdate) => update.transactions.some((transaction) => {
+    const userEvent = transaction.annotation(Transaction.userEvent)
+    return typeof userEvent === 'string' && userEvent.startsWith('input.type.compose')
+  })
+
+  const cancelPendingCompositionFlush = () => {
+    if (pendingCompositionFlushFrame) {
+      window.cancelAnimationFrame(pendingCompositionFlushFrame)
+      pendingCompositionFlushFrame = 0
+    }
+  }
+
+  const flushPendingCompositionDocChange = () => {
+    if (!pendingCompositionDocChange || !pendingCompositionView || isReadOnly()) {
+      return
+    }
+
+    pendingCompositionDocChange = false
+    onChange(pendingCompositionView.state.doc.toString())
+    pendingCompositionView = null
+  }
+
+  const schedulePendingCompositionFlush = (view: EditorView) => {
+    pendingCompositionView = view
+    if (!pendingCompositionDocChange || pendingCompositionFlushFrame) {
+      return
+    }
+
+    pendingCompositionFlushFrame = window.requestAnimationFrame(() => {
+      pendingCompositionFlushFrame = 0
+      flushPendingCompositionDocChange()
+    })
+  }
+
   const extensions: Extension[] = [
     lineNumbersCompartment.of(createLineNumberExtensions(lineNumbersVisible)),
-    ...gitDiffGutterBaselineExtensions(),
+    ...gitDiffGutterBaselineExtensions({ deferDocChanges: true }),
     ...gitDiffGutterLiveRenderExtensions({
       mapLineFlag: side === 'original' ? mapDiffSplitOriginalGutterFlag : mapDiffSplitModifiedGutterFlag,
     }),
@@ -792,7 +836,7 @@ function createDiffExtensions({
     EditorView.editorAttributes.of({
       class: 'meo-mode-live meo-diff-split-editor',
     }),
-    ...liveModeExtensions(),
+    ...liveModeExtensions({ deferDocChanges: true }),
   ]
 
   if (isInteractivePane) {
@@ -846,7 +890,19 @@ function createDiffExtensions({
           return
         }
 
-        const renumberChanges = collectOrderedListRenumberChanges(update.state)
+        if (isCompositionInputUpdate(update)) {
+          pendingCompositionDocChange = true
+          pendingCompositionView = update.view
+          return
+        }
+
+        cancelPendingCompositionFlush()
+        pendingCompositionDocChange = false
+        pendingCompositionView = null
+
+        const renumberChanges = shouldCollectOrderedListRenumberChanges(update)
+          ? collectOrderedListRenumberChanges(update.state)
+          : []
         if (renumberChanges.length) {
           update.view.dispatch({
             changes: renumberChanges,
@@ -887,6 +943,8 @@ function createDiffExtensions({
         }
 
         destroy() {
+          cancelPendingCompositionFlush()
+          flushPendingCompositionDocChange()
           window.removeEventListener('pointerup', this.onWindowPointerUp, true)
           window.removeEventListener('pointercancel', this.onWindowPointerCancel, true)
         }
@@ -945,8 +1003,9 @@ function createDiffExtensions({
           }
           return false
         },
-        compositionend: () => {
+        compositionend: (_event, view) => {
           if (!isReadOnly()) {
+            schedulePendingCompositionFlush(view)
             window.setTimeout(() => {
               onCompositionChange?.(false)
             }, 0)
@@ -1603,9 +1662,10 @@ export function createMeoDiffSplitController({
   let diffOverviewSegmentsCache: GitDiffOverviewSegment[] | null = null
   let diffScrollPastEndObserver: ResizeObserver | null = null
   let diffScrollPastEndFrame = 0
-  let pendingGitBaselineFrame = 0
   let pendingReadOnlyWidgetLockFrame = 0
   let pendingScrollFrame = 0
+  let pendingDeferredDiffRefreshFrame = 0
+  let pendingDeferredDiffRefreshTimer = 0
   let syncedOriginalGitBaseText: string | null = null
   let syncedModifiedGitBaseText: string | null = null
   let appliedModifiedReadOnly: boolean | null = null
@@ -1718,18 +1778,59 @@ export function createMeoDiffSplitController({
     invalidateDiffOverviewSegments()
   }
 
-  const cancelPendingGitBaselineSync = () => {
-    if (pendingGitBaselineFrame) {
-      window.cancelAnimationFrame(pendingGitBaselineFrame)
-      pendingGitBaselineFrame = 0
-    }
-  }
-
   const cancelPendingScrollSync = () => {
     if (pendingScrollFrame) {
       window.cancelAnimationFrame(pendingScrollFrame)
       pendingScrollFrame = 0
     }
+  }
+
+  const cancelPendingDeferredDiffRefresh = () => {
+    if (pendingDeferredDiffRefreshTimer) {
+      window.clearTimeout(pendingDeferredDiffRefreshTimer)
+      pendingDeferredDiffRefreshTimer = 0
+    }
+    if (pendingDeferredDiffRefreshFrame) {
+      window.cancelAnimationFrame(pendingDeferredDiffRefreshFrame)
+      pendingDeferredDiffRefreshFrame = 0
+    }
+  }
+
+  const refreshDiffArtifactsNow = () => {
+    cancelPendingDeferredDiffRefresh()
+    if (destroyed || !mergeView || isComposing) {
+      return
+    }
+
+    const refreshedByBaseline = syncDiffSplitGitBaselines(getOriginalState())
+    if (!refreshedByBaseline.original) {
+      mergeView.a.dispatch({ effects: refreshGitDiffLineFlagsEffect.of(null) })
+    }
+    if (!refreshedByBaseline.modified) {
+      mergeView.b.dispatch({ effects: refreshGitDiffLineFlagsEffect.of(null) })
+    }
+    mergeView.refreshChunks()
+    invalidateDiffOverviewSegments()
+    resetDiffOverviewRender()
+  }
+
+  const scheduleDeferredDiffRefresh = (delayMs = SPLIT_DIFF_REFRESH_IDLE_DELAY_MS) => {
+    if (pendingDeferredDiffRefreshTimer) {
+      window.clearTimeout(pendingDeferredDiffRefreshTimer)
+      pendingDeferredDiffRefreshTimer = 0
+    }
+
+    pendingDeferredDiffRefreshTimer = window.setTimeout(() => {
+      pendingDeferredDiffRefreshTimer = 0
+      if (pendingDeferredDiffRefreshFrame) {
+        return
+      }
+
+      pendingDeferredDiffRefreshFrame = window.requestAnimationFrame(() => {
+        pendingDeferredDiffRefreshFrame = 0
+        refreshDiffArtifactsNow()
+      })
+    }, Math.max(0, delayMs))
   }
 
   const cancelPendingReadOnlyWidgetLock = () => {
@@ -1784,7 +1885,6 @@ export function createMeoDiffSplitController({
   }
 
   const destroyMergeView = () => {
-    cancelPendingGitBaselineSync()
     cancelPendingScrollSync()
     clearDiffSplitNavigationHighlight(mergeView?.a ?? null, originalNavigationHighlightTimerRef)
     clearDiffSplitNavigationHighlight(mergeView?.b ?? null, modifiedNavigationHighlightTimerRef)
@@ -1792,6 +1892,7 @@ export function createMeoDiffSplitController({
     syncedOriginalGitBaseText = null
     syncedModifiedGitBaseText = null
     destroyDiffScrollPastEndObserver()
+    cancelPendingDeferredDiffRefresh()
     cancelPendingReadOnlyWidgetLock()
     cleanupReadOnlyWidgetLock?.()
     cleanupReadOnlyWidgetLock = null
@@ -1828,12 +1929,17 @@ export function createMeoDiffSplitController({
     originalState: DiffSplitResolvedState,
     options: { force?: boolean } = {},
   ) => {
+    const changed = {
+      modified: false,
+      original: false,
+    }
     if (!mergeView) {
-      return
+      return changed
     }
 
     if (options.force || syncedOriginalGitBaseText !== originalState.modifiedText) {
       syncedOriginalGitBaseText = originalState.modifiedText
+      changed.original = true
       setGitBaseline(mergeView.a, {
         available: true,
         baseText: originalState.modifiedText,
@@ -1845,6 +1951,7 @@ export function createMeoDiffSplitController({
 
     if (options.force || syncedModifiedGitBaseText !== originalState.text) {
       syncedModifiedGitBaseText = originalState.text
+      changed.modified = true
       setGitBaseline(mergeView.b, {
         available: true,
         baseText: originalState.text,
@@ -1853,20 +1960,8 @@ export function createMeoDiffSplitController({
         tracked: true,
       })
     }
-  }
 
-  const scheduleDiffSplitGitBaselineSync = () => {
-    if (pendingGitBaselineFrame) {
-      return
-    }
-
-    pendingGitBaselineFrame = window.requestAnimationFrame(() => {
-      pendingGitBaselineFrame = 0
-      if (destroyed || !mergeView) {
-        return
-      }
-      syncDiffSplitGitBaselines(getOriginalState())
-    })
+    return changed
   }
 
   const readOnlyWidgetSelector = 'textarea, input, select, button, [contenteditable="true"]'
@@ -2088,9 +2183,15 @@ export function createMeoDiffSplitController({
   const handleCompositionChange = (nextValue: boolean) => {
     isComposing = nextValue
     onCompositionChange?.(nextValue)
+    if (nextValue) {
+      cancelPendingDeferredDiffRefresh()
+    }
     if (!nextValue && deferredFrameSyncUntilCompositionEnd) {
       deferredFrameSyncUntilCompositionEnd = false
       scheduleResolvedFrameSync()
+    }
+    if (!nextValue) {
+      scheduleDeferredDiffRefresh(SPLIT_DIFF_REFRESH_AFTER_COMPOSITION_MS)
     }
   }
 
@@ -2142,10 +2243,9 @@ export function createMeoDiffSplitController({
               requestResolvedFrameSync()
             } else {
               lastRenderedState = nextState
-              scheduleDiffSplitGitBaselineSync()
+              scheduleDeferredDiffRefresh()
             }
             invalidateDiffOverviewSegments()
-            resetDiffOverviewRender()
             onChange(nextValue)
           },
           onCompositionChange: handleCompositionChange,
@@ -2375,14 +2475,12 @@ export function createMeoDiffSplitController({
         },
       })
     }
-    cancelPendingGitBaselineSync()
-    syncDiffSplitGitBaselines(originalState)
     mergeView?.reconfigure({
       diffConfig: getDiffConfig(editable),
       renderRevertControl: createHunkActionControls,
       revertControls: getRevertControls(originalState),
     })
-    resetDiffOverviewRender()
+    scheduleDeferredDiffRefresh()
   }
 
   const findMatch = (

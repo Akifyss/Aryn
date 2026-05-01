@@ -6,7 +6,7 @@ import { markdown, markdownKeymap, markdownLanguage } from '@codemirror/lang-mar
 import { indentUnit, syntaxHighlighting, syntaxTree, forceParsing } from '@codemirror/language';
 import { vim } from '@replit/codemirror-vim';
 import { highlightStyle } from './theme';
-import { liveModeExtensions } from './liveMode';
+import { liveModeExtensions, refreshLiveDecorationsEffect } from './liveMode';
 import { headingCollapseSharedExtensions, headingCollapseSourceSpacerExtensions } from './helpers/headingCollapse';
 import { resolveCodeLanguage, insertCodeBlock, sourceCodeBlockField } from './helpers/codeBlocks';
 import { sourceStrikeMarkerField } from './helpers/strikeMarkers';
@@ -39,7 +39,8 @@ import {
   handleEnterBeforeNestedList,
   collectOrderedListRenumberChanges,
   indentListByTwoSpaces,
-  outdentListByTwoSpaces
+  outdentListByTwoSpaces,
+  shouldCollectOrderedListRenumberChanges
 } from './helpers/listMarkers';
 import { insertTable, sourceTableHeaderLineField } from './helpers/tables';
 import { parseFrontmatter, sourceFrontmatterField } from './helpers/frontmatter';
@@ -178,6 +179,9 @@ export function createEditor({
   let view = null;
   let currentMode = startMode;
   let applyingRenumber = false;
+  let pendingCompositionDocChange = false;
+  let pendingCompositionFlushFrame = 0;
+  let pendingLiveDecorationRefreshFrame = 0;
   // External syncs may carry stale selections in their history entries.
   // Preserve the user's current cursor once on the next undo of such a change.
   let pendingExternalUndoSelectionPreserve = false;
@@ -914,6 +918,64 @@ export function createEditor({
     });
   };
 
+  const isCompositionInputUpdate = (update: ViewUpdate): boolean => {
+    return update.transactions.some((transaction) => {
+      const userEvent = transaction.annotation(Transaction.userEvent);
+      return typeof userEvent === 'string' && userEvent.startsWith('input.type.compose');
+    });
+  };
+
+  const cancelPendingCompositionFlush = () => {
+    if (pendingCompositionFlushFrame) {
+      cancelAnimationFrame(pendingCompositionFlushFrame);
+      pendingCompositionFlushFrame = 0;
+    }
+  };
+
+  const flushPendingCompositionDocChange = () => {
+    if (!pendingCompositionDocChange || !view) {
+      return;
+    }
+
+    pendingCompositionDocChange = false;
+    onApplyChanges(view.state.doc.toString());
+  };
+
+  const schedulePendingCompositionFlush = () => {
+    if (!pendingCompositionDocChange || pendingCompositionFlushFrame) {
+      return;
+    }
+
+    pendingCompositionFlushFrame = requestAnimationFrame(() => {
+      pendingCompositionFlushFrame = 0;
+      flushPendingCompositionDocChange();
+    });
+  };
+
+  const cancelPendingLiveDecorationRefresh = () => {
+    if (pendingLiveDecorationRefreshFrame) {
+      cancelAnimationFrame(pendingLiveDecorationRefreshFrame);
+      pendingLiveDecorationRefreshFrame = 0;
+    }
+  };
+
+  const schedulePostCompositionLiveRefresh = (targetView = view) => {
+    if (!targetView || currentMode !== 'live' || pendingLiveDecorationRefreshFrame) {
+      return;
+    }
+
+    pendingLiveDecorationRefreshFrame = requestAnimationFrame(() => {
+      pendingLiveDecorationRefreshFrame = 0;
+      if (!view || view !== targetView || currentMode !== 'live') {
+        return;
+      }
+      view.dispatch({
+        effects: refreshLiveDecorationsEffect.of(null),
+        annotations: Transaction.addToHistory.of(false)
+      });
+    });
+  };
+
   const inlineCodeCaretPosition = (state, position) => {
     let node = syntaxTree(state).resolveInner(position, -1);
     while (node && node.name !== 'InlineCode' && node.name !== 'CodeText') {
@@ -1170,6 +1232,11 @@ export function createEditor({
       EditorView.lineWrapping,
       scrollPastEnd(),
       EditorView.domEventHandlers({
+        compositionend(_event, view) {
+          schedulePendingCompositionFlush();
+          schedulePostCompositionLiveRefresh(view);
+          return false;
+        },
         pointerdown(event, view) {
           if (event.button !== 0) {
             frontmatterBoundaryClick = null;
@@ -1345,12 +1412,22 @@ export function createEditor({
 
         pendingExternalUndoSelectionPreserve = false;
 
+        if (isCompositionInputUpdate(update)) {
+          pendingCompositionDocChange = true;
+          return;
+        }
+
+        cancelPendingCompositionFlush();
+        pendingCompositionDocChange = false;
+
         if (isHistoryReplayUpdate(update)) {
           onApplyChanges(update.state.doc.toString());
           return;
         }
 
-        const renumberChanges = collectOrderedListRenumberChanges(update.state);
+        const renumberChanges = shouldCollectOrderedListRenumberChanges(update)
+          ? collectOrderedListRenumberChanges(update.state)
+          : [];
         if (renumberChanges.length) {
           applyingRenumber = true;
           view.dispatch({
@@ -1580,6 +1657,9 @@ export function createEditor({
         view.dom.removeEventListener('meo-table-selection-change', onTableSelectionChange);
         onTableSelectionChange = null;
       }
+      cancelPendingCompositionFlush();
+      cancelPendingLiveDecorationRefresh();
+      flushPendingCompositionDocChange();
       if (capturedPointerId !== null) {
         releasePointerCaptureIfHeld(capturedPointerId);
         capturedPointerId = null;
@@ -1818,7 +1898,7 @@ export function createEditor({
       emitSelectionChange();
     },
     refreshDecorations() {
-      view.dispatch({ effects: refreshDecorationsEffect.of(null) });
+      view.dispatch({ effects: [refreshDecorationsEffect.of(null), refreshLiveDecorationsEffect.of(null)] });
     },
     refreshLayout() {
       view.requestMeasure();

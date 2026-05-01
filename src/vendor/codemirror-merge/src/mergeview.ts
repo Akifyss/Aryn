@@ -240,6 +240,13 @@ export class MergeView {
     }
   }
 
+  refreshChunks() {
+    this.chunks = Chunk.build(this.a.state.doc, this.b.state.doc, this.diffConf)
+    this.a.update([this.a.state.update({effects: setChunks.of(this.chunks)})])
+    this.b.update([this.b.state.update({effects: setChunks.of(this.chunks)})])
+    this.scheduleMeasure()
+  }
+
   /// Reconfigure an existing merge view.
   reconfigure(config: MergeConfig) {
     if ("diffConfig" in config) {

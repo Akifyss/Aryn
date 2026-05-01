@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { RangeSetBuilder, StateEffect, StateField, EditorState, Transaction } from '@codemirror/state';
+import { Facet, RangeSetBuilder, StateEffect, StateField, EditorState, Transaction } from '@codemirror/state';
 import { GutterMarker, gutter, EditorView } from '@codemirror/view';
 import { splitDiffLines } from '../../shared/gitDiffCore';
 import { buildLineFlagsFromVsCodeDiff, buildScopedLineFlagsFromVsCodeDiff } from '../../shared/gitDiffLineFlags';
@@ -9,6 +9,12 @@ const MAX_DIFF_TEXT_CHARS = 1024 * 1024;
 const NON_RENDERABLE_GIT_BASELINE_REASONS = new Set(['not-repo', 'ignored']);
 
 export const setGitBaselineEffect = StateEffect.define<any>();
+export const refreshGitDiffLineFlagsEffect = StateEffect.define<any>();
+const deferGitDiffLineFlagDocChangesFacet = Facet.define<boolean, boolean>({
+  combine(values) {
+    return values.some(Boolean);
+  }
+});
 
 interface BaselineSnapshot {
   available: boolean;
@@ -33,6 +39,10 @@ export interface MarkerFlags {
 
 type GitDiffGutterRenderOptions = {
   mapLineFlag?: (flags: MarkerFlags) => MarkerFlags;
+};
+
+type GitDiffGutterBaselineOptions = {
+  deferDocChanges?: boolean;
 };
 
 const emptyBaseline: BaselineSnapshot = Object.freeze({
@@ -212,6 +222,23 @@ function buildDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | nul
 
 function buildCurrentDiffLineFlags(state: EditorState, baseline: BaselineSnapshot | null): (MarkerFlags | undefined)[] | null {
   return buildDiffLineFlags(state, baseline);
+}
+
+function isCompositionInputTransaction(tr: Transaction): boolean {
+  const userEvent = tr.annotation(Transaction.userEvent);
+  return typeof userEvent === 'string' && userEvent.startsWith('input.type.compose');
+}
+
+function hasGitDiffRefreshEffect(tr: Transaction): boolean {
+  return tr.effects.some((effect) => effect.is(refreshGitDiffLineFlagsEffect));
+}
+
+function hasGitBaselineEffect(tr: Transaction): boolean {
+  return tr.effects.some((effect) => effect.is(setGitBaselineEffect));
+}
+
+function shouldDeferGitDiffLineFlagDocChange(tr: Transaction): boolean {
+  return tr.docChanged && tr.state.facet(deferGitDiffLineFlagDocChangesFacet);
 }
 
 function buildGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: (MarkerFlags | undefined)[] | null): any {
@@ -411,14 +438,17 @@ export const gitDiffLineFlagsField = StateField.define<(MarkerFlags | undefined)
     return buildCurrentDiffLineFlags(state, state.field(gitBaselineField));
   },
   update(value: (MarkerFlags | undefined)[] | null, tr: Transaction): (MarkerFlags | undefined)[] | null {
-    let baselineChanged = false;
-    for (const effect of tr.effects) {
-      if (effect.is(setGitBaselineEffect)) {
-        baselineChanged = true;
-        break;
-      }
+    const baselineChanged = hasGitBaselineEffect(tr);
+    const forceRefresh = hasGitDiffRefreshEffect(tr);
+    if (
+      tr.docChanged
+      && !baselineChanged
+      && !forceRefresh
+      && (isCompositionInputTransaction(tr) || shouldDeferGitDiffLineFlagDocChange(tr))
+    ) {
+      return value;
     }
-    if (!tr.docChanged && !baselineChanged) {
+    if (!tr.docChanged && !baselineChanged && !forceRefresh) {
       return value;
     }
     const baseline = tr.state.field(gitBaselineField);
@@ -431,14 +461,17 @@ const gitDiffGutterField = StateField.define<any>({
     return buildGitGutterMarkersFromLineFlags(state, state.field(gitDiffLineFlagsField));
   },
   update(value: any, tr: Transaction): any {
-    let baselineChanged = false;
-    for (const effect of tr.effects) {
-      if (effect.is(setGitBaselineEffect)) {
-        baselineChanged = true;
-        break;
-      }
+    const baselineChanged = hasGitBaselineEffect(tr);
+    const forceRefresh = hasGitDiffRefreshEffect(tr);
+    if (
+      tr.docChanged
+      && !baselineChanged
+      && !forceRefresh
+      && (isCompositionInputTransaction(tr) || shouldDeferGitDiffLineFlagDocChange(tr))
+    ) {
+      return typeof value?.map === 'function' ? value.map(tr.changes) : value;
     }
-    if (!tr.docChanged && !baselineChanged) {
+    if (!tr.docChanged && !baselineChanged && !forceRefresh) {
       return value;
     }
     return buildGitGutterMarkersFromLineFlags(tr.state, tr.state.field(gitDiffLineFlagsField));
@@ -459,7 +492,37 @@ const gitDiffGutterExtension = gutter({
   }
 });
 
-function gitDiffGutterLiveExtension(options: GitDiffGutterRenderOptions = {}) {
+function createGitDiffLiveGutterField(options: GitDiffGutterRenderOptions = {}) {
+  return StateField.define<any>({
+    create(state: EditorState): any {
+      return buildLiveGitGutterMarkersFromLineFlags(
+        state,
+        mapLineFlags(state.field(gitDiffLineFlagsField, false), options.mapLineFlag)
+      );
+    },
+    update(value: any, tr: Transaction): any {
+      const baselineChanged = hasGitBaselineEffect(tr);
+      const forceRefresh = hasGitDiffRefreshEffect(tr);
+      if (
+        tr.docChanged
+        && !baselineChanged
+        && !forceRefresh
+        && (isCompositionInputTransaction(tr) || shouldDeferGitDiffLineFlagDocChange(tr))
+      ) {
+        return typeof value?.map === 'function' ? value.map(tr.changes) : value;
+      }
+      if (!tr.docChanged && !baselineChanged && !forceRefresh) {
+        return value;
+      }
+      return buildLiveGitGutterMarkersFromLineFlags(
+        tr.state,
+        mapLineFlags(tr.state.field(gitDiffLineFlagsField, false), options.mapLineFlag)
+      );
+    }
+  });
+}
+
+function gitDiffGutterLiveExtension(options: GitDiffGutterRenderOptions = {}, liveGutterField?: StateField<any>) {
   return gutter({
     class: 'meo-git-gutter',
     renderEmptyElements: true,
@@ -467,10 +530,15 @@ function gitDiffGutterLiveExtension(options: GitDiffGutterRenderOptions = {}) {
       return spacerMarker;
     },
     markers(view: EditorView) {
-      return buildLiveGitGutterMarkersFromLineFlags(
-        view.state,
-        mapLineFlags(view.state.field(gitDiffLineFlagsField, false), options.mapLineFlag)
-      );
+      return liveGutterField
+        ? view.state.field(liveGutterField, false) ?? buildLiveGitGutterMarkersFromLineFlags(
+          view.state,
+          mapLineFlags(view.state.field(gitDiffLineFlagsField, false), options.mapLineFlag)
+        )
+        : buildLiveGitGutterMarkersFromLineFlags(
+          view.state,
+          mapLineFlags(view.state.field(gitDiffLineFlagsField, false), options.mapLineFlag)
+        );
     },
     widgetMarker(view: EditorView, _widget: any, block: any) {
       return liveCollapsedBlockMarkerAtPos(
@@ -483,8 +551,10 @@ function gitDiffGutterLiveExtension(options: GitDiffGutterRenderOptions = {}) {
   });
 }
 
-export function gitDiffGutterBaselineExtensions(): any[] {
-  return [gitBaselineField, gitDiffLineFlagsField];
+export function gitDiffGutterBaselineExtensions(options: GitDiffGutterBaselineOptions = {}): any[] {
+  return options.deferDocChanges
+    ? [gitBaselineField, gitDiffLineFlagsField, deferGitDiffLineFlagDocChangesFacet.of(true)]
+    : [gitBaselineField, gitDiffLineFlagsField];
 }
 
 export function gitDiffGutterRenderExtensions(): any[] {
@@ -492,5 +562,6 @@ export function gitDiffGutterRenderExtensions(): any[] {
 }
 
 export function gitDiffGutterLiveRenderExtensions(options: GitDiffGutterRenderOptions = {}): any[] {
-  return [gitDiffGutterLiveExtension(options)];
+  const liveGutterField = createGitDiffLiveGutterField(options);
+  return [liveGutterField, gitDiffGutterLiveExtension(options, liveGutterField)];
 }

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { RangeSetBuilder, StateField, EditorState } from '@codemirror/state';
+import { Facet, RangeSetBuilder, StateEffect, StateField, EditorState, Transaction } from '@codemirror/state';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { syntaxHighlighting } from '@codemirror/language';
 import { Decoration, EditorView, GutterMarker, WidgetType, gutterLineClass } from '@codemirror/view';
@@ -163,6 +163,26 @@ const rawFileUrlBlockedAncestorNames = new Set([
 const listLineDecoCache = new Map();
 const listIndentWidgetCache = new Map();
 const frontmatterArrayPillWidgetCache = new Map();
+
+export const refreshLiveDecorationsEffect = StateEffect.define();
+const deferLiveDecorationDocChangesFacet = Facet.define({
+  combine(values) {
+    return values.some(Boolean);
+  }
+});
+
+function isCompositionInputTransaction(transaction): boolean {
+  const userEvent = transaction.annotation(Transaction.userEvent);
+  return typeof userEvent === 'string' && userEvent.startsWith('input.type.compose');
+}
+
+function hasRefreshLiveDecorationsEffect(transaction): boolean {
+  return transaction.effects.some((effect) => effect.is(refreshLiveDecorationsEffect));
+}
+
+function shouldDeferLiveDecorationDocChange(transaction): boolean {
+  return transaction.docChanged && transaction.state.facet(deferLiveDecorationDocChangesFacet);
+}
 
 function isMergeConflictMarkerLine(state, pos) {
   const line = state.doc.lineAt(pos);
@@ -2048,8 +2068,17 @@ const liveDecorationField = StateField.define({
     return safeBuildDecorations(state, Decoration.none, 'create');
   },
   update(decorations, transaction) {
-    // Recompute on every transaction so live mode stays in sync with parser updates
-    // that may arrive without direct doc/selection changes.
+    const forceRefresh = hasRefreshLiveDecorationsEffect(transaction);
+    if (!forceRefresh && (isCompositionInputTransaction(transaction) || shouldDeferLiveDecorationDocChange(transaction))) {
+      return transaction.docChanged ? decorations.map(transaction.changes) : decorations;
+    }
+
+    if (!forceRefresh && !transaction.docChanged && transaction.startState.selection.eq(transaction.state.selection)) {
+      return decorations;
+    }
+
+    // Recompute for document, selection, and explicit refresh changes. Metadata-only
+    // transactions, such as split diff chunk updates, should not rebuild the document.
     const next = safeBuildDecorations(transaction.state, decorations, 'update', {
       docChanged: transaction.docChanged,
       selection: transaction.selection
@@ -2203,7 +2232,12 @@ const liveLineNumberMarkerField = StateField.define({
     return buildLiveLineNumberMarkers(state);
   },
   update(markers, transaction) {
-    if (!transaction.docChanged && transaction.startState.selection.eq(transaction.state.selection)) {
+    const forceRefresh = hasRefreshLiveDecorationsEffect(transaction);
+    if (!forceRefresh && (isCompositionInputTransaction(transaction) || shouldDeferLiveDecorationDocChange(transaction))) {
+      return transaction.docChanged ? markers.map(transaction.changes) : markers;
+    }
+
+    if (!forceRefresh && !transaction.docChanged && transaction.startState.selection.eq(transaction.state.selection)) {
       return markers;
     }
     return buildLiveLineNumberMarkers(transaction.state);
@@ -2211,8 +2245,8 @@ const liveLineNumberMarkerField = StateField.define({
   provide: (field) => gutterLineClass.from(field)
 });
 
-export function liveModeExtensions() {
-  return [
+export function liveModeExtensions(options = {}) {
+  const extensions = [
     markdown({
       base: markdownLanguage,
       addKeymap: false,
@@ -2226,6 +2260,10 @@ export function liveModeExtensions() {
     ...headingCollapseSharedExtensions(),
     ...headingCollapseLiveExtensions()
   ];
+  if (options.deferDocChanges) {
+    extensions.push(deferLiveDecorationDocChangesFacet.of(true));
+  }
+  return extensions;
 }
 
 function isEmptyDecorationSet(set) {

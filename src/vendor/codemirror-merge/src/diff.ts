@@ -463,6 +463,9 @@ export interface DiffConfig {
   /// Provide your own chunk builder, replacing this package's character
   /// diff-to-line-chunk conversion. This is an Aryn fork extension.
   overrideChunks?: (a: Text, b: Text) => readonly Chunk[]
+  /// When `overrideChunks` is configured, keep document updates on this
+  /// package's local incremental path instead of rebuilding all chunks.
+  incrementalUpdates?: boolean
 }
 
 /// Compute the difference between two strings.

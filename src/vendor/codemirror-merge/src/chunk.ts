@@ -55,13 +55,13 @@ export class Chunk {
   /// Update a set of chunks for changes in document A. `a` should
   /// hold the updated document A.
   static updateA(chunks: readonly Chunk[], a: Text, b: Text, changes: ChangeDesc, conf?: DiffConfig) {
-    if (conf?.overrideChunks) return conf.overrideChunks(a, b)
+    if (conf?.overrideChunks && !conf.incrementalUpdates) return conf.overrideChunks(a, b)
     return updateChunks(findRangesForChange(chunks, changes, true, b.length), chunks, a, b, conf)
   }
 
   /// Update a set of chunks for changes in document B.
   static updateB(chunks: readonly Chunk[], a: Text, b: Text, changes: ChangeDesc, conf?: DiffConfig) {
-    if (conf?.overrideChunks) return conf.overrideChunks(a, b)
+    if (conf?.overrideChunks && !conf.incrementalUpdates) return conf.overrideChunks(a, b)
     return updateChunks(findRangesForChange(chunks, changes, false, a.length), chunks, a, b, conf)
   }
 }

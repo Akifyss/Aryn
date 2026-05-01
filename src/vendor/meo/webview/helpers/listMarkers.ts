@@ -858,6 +858,53 @@ export function collectOrderedListRenumberChanges(state) {
   return changes;
 }
 
+function changeTouchesListMarker(state, from, to) {
+  const doc = state.doc;
+  if (!doc.length) {
+    return false;
+  }
+
+  const position = Math.min(Math.max(0, from), doc.length);
+  const line = doc.lineAt(position);
+  const lineText = doc.sliceString(line.from, line.to);
+  const marker = listMarkerData(lineText);
+  if (!marker) {
+    return false;
+  }
+
+  const localFrom = Math.max(0, from - line.from);
+  const localTo = Math.max(localFrom, to - line.from);
+  return localFrom < marker.toOffset && localTo > marker.fromOffset;
+}
+
+function changeSpansLineBreak(state, from, to) {
+  if (from === to) {
+    return false;
+  }
+
+  const doc = state.doc;
+  const endPosition = Math.min(Math.max(from, to - 1), doc.length);
+  return doc.lineAt(from).number !== doc.lineAt(endPosition).number;
+}
+
+export function shouldCollectOrderedListRenumberChanges(update) {
+  let shouldCollect = false;
+  update.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+    if (shouldCollect) {
+      return;
+    }
+
+    if (inserted.lines > 1 || changeSpansLineBreak(update.startState, fromA, toA)) {
+      shouldCollect = true;
+      return;
+    }
+
+    shouldCollect = changeTouchesListMarker(update.startState, fromA, toA)
+      || changeTouchesListMarker(update.state, fromB, toB);
+  });
+  return shouldCollect;
+}
+
 function computeSourceListBorders(state) {
   const stylesByLine = detectListIndentStylesByLine(state);
   const frontmatter = parseFrontmatter(state);
