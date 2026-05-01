@@ -470,10 +470,7 @@
 .meo-native-theme .meo-diff-split-body .cm-deletedChunk .cm-deletedText {
   background: var(--meo-diff-split-changed-text-background);
   border-radius: 2px;
-  /* Keep native inline fragmentation while extending the text diff fill to the editor line height. */
-  box-shadow:
-    0 calc((1lh - 1em) / -2 + 1px) 0 var(--meo-diff-split-changed-text-background),
-    0 calc((1lh - 1em) / 2) 0 var(--meo-diff-split-changed-text-background);
+  /* Match Monaco's native inline diff rendering; vertical expansion overlaps wrapped fragments. */
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
