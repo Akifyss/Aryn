@@ -6,7 +6,7 @@ import {highlightTree} from "@lezer/highlight"
 import {Chunk, defaultDiffConfig} from "./chunk"
 import {computeChunks, ChunkField, mergeConfig} from "./merge"
 import {Change, DiffConfig} from "./diff"
-import {decorateChunks, collapseUnchanged, changedText} from "./deco"
+import {decorateChunks, inlineChangeLayer, collapseUnchanged, changedText} from "./deco"
 import {baseTheme} from "./theme"
 
 interface UnifiedMergeConfig {
@@ -62,6 +62,7 @@ export function unifiedMergeView(config: UnifiedMergeConfig) {
   let diffConf = config.diffConfig || defaultDiffConfig
   return [
     Prec.low(decorateChunks),
+    inlineChangeLayer,
     deletedChunks,
     baseTheme,
     EditorView.editorAttributes.of({class: "cm-merge-b"}),

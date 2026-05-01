@@ -3,7 +3,7 @@ import {EditorStateConfig, Transaction, EditorState, StateEffect, Prec, Compartm
 import {Chunk, defaultDiffConfig} from "./chunk"
 import {DiffConfig} from "./diff"
 import {setChunks, ChunkField, mergeConfig} from "./merge"
-import {decorateChunks, updateSpacers, Spacers, adjustSpacers, collapseUnchanged, changeGutter} from "./deco"
+import {decorateChunks, inlineChangeLayer, updateSpacers, Spacers, adjustSpacers, collapseUnchanged, changeGutter} from "./deco"
 import {baseTheme, externalTheme} from "./theme"
 
 /// Configuration options to `MergeView` that can be provided both
@@ -84,6 +84,7 @@ export class MergeView {
 
     let sharedExtensions = [
       Prec.low(decorateChunks),
+      inlineChangeLayer,
       baseTheme,
       externalTheme,
       Spacers,

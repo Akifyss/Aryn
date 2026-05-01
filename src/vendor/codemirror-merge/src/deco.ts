@@ -1,5 +1,5 @@
-import {EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate,
-        WidgetType, GutterMarker, gutter} from "@codemirror/view"
+import {EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate, Direction,
+        WidgetType, GutterMarker, gutter, layer, type LayerMarker} from "@codemirror/view"
 import {EditorState, RangeSetBuilder, Text, StateField, StateEffect, RangeSet, Prec} from "@codemirror/state"
 import {Chunk} from "./chunk"
 import {ChunkField, mergeConfig} from "./merge"
@@ -25,6 +25,19 @@ export const changeGutter = Prec.low(gutter({
   class: "cm-changeGutter",
   markers: view => view.plugin(decorateChunks)?.gutter || RangeSet.empty
 }))
+
+export const inlineChangeLayer = layer({
+  above: true,
+  class: "cm-inlineChangeLayer",
+  update(update) {
+    return update.docChanged || update.viewportChanged ||
+      chunksChanged(update.startState, update.state) ||
+      configChanged(update.startState, update.state)
+  },
+  markers(view) {
+    return getInlineChangeLayerMarkers(view)
+  }
+})
 
 function chunksChanged(s1: EditorState, s2: EditorState) {
   return s1.field(ChunkField, false) != s2.field(ChunkField, false)
@@ -57,6 +70,149 @@ const changedTextEmpty = Decoration.widget({widget: new ChangedTextEmpty(), side
 
 const changedLineGutterMarker = new class extends GutterMarker {
   elementClass = "cm-changedLineGutter"
+}
+
+type InlineChangeRect = {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+type InlineChangeLayerSpec = {
+  selector: string
+  className: string
+}
+
+const inlineChangeLayerSpecs: readonly InlineChangeLayerSpec[] = [
+  {selector: ".cm-changedText", className: "cm-changedTextLayerRanges"},
+  {selector: ".cm-deletedText", className: "cm-deletedTextLayerRanges"},
+]
+
+class InlineChangeLayerMarker implements LayerMarker {
+  constructor(
+    readonly className: string,
+    readonly left: number,
+    readonly top: number,
+    readonly width: number,
+    readonly height: number,
+    readonly path: string
+  ) {}
+
+  eq(other: LayerMarker): boolean {
+    return other instanceof InlineChangeLayerMarker &&
+      this.className == other.className &&
+      this.left == other.left && this.top == other.top &&
+      this.width == other.width && this.height == other.height &&
+      this.path == other.path
+  }
+
+  draw() {
+    let elt = document.createElement("div")
+    elt.className = this.className
+    let svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    let path = document.createElementNS("http://www.w3.org/2000/svg", "path")
+    path.setAttribute("class", "cm-inlineChangeLayerPath")
+    svg.appendChild(path)
+    elt.appendChild(svg)
+    this.adjust(elt)
+    return elt
+  }
+
+  update(elt: HTMLElement, prev: LayerMarker) {
+    if (!(prev instanceof InlineChangeLayerMarker) || prev.className != this.className) return false
+    this.adjust(elt)
+    return true
+  }
+
+  private adjust(elt: HTMLElement) {
+    elt.style.left = this.left + "px"
+    elt.style.top = this.top + "px"
+    elt.style.width = this.width + "px"
+    elt.style.height = this.height + "px"
+    let svg = elt.firstChild as SVGSVGElement
+    svg.setAttribute("viewBox", `0 0 ${this.width} ${this.height}`)
+    let path = svg.firstChild as SVGPathElement
+    path.setAttribute("d", this.path)
+  }
+}
+
+function getInlineChangeLayerMarkers(view: EditorView) {
+  if (!view.state.facet(mergeConfig).highlightChanges) return []
+  let markers: LayerMarker[] = []
+  for (let spec of inlineChangeLayerSpecs) {
+    let rects = getInlineChangeRects(view, spec.selector)
+    if (rects.length) markers.push(inlineChangeLayerMarker(rects, spec.className))
+  }
+  return markers
+}
+
+function getInlineChangeRects(view: EditorView, selector: string) {
+  let scrollRect = view.scrollDOM.getBoundingClientRect()
+  let baseLeft = (view.textDirection == Direction.LTR ? scrollRect.left : scrollRect.right - view.scrollDOM.clientWidth * view.scaleX) -
+    view.scrollDOM.scrollLeft * view.scaleX
+  let baseTop = scrollRect.top - view.scrollDOM.scrollTop * view.scaleY
+  let rects: InlineChangeRect[] = []
+  for (let elt of view.contentDOM.querySelectorAll<HTMLElement>(selector)) {
+    for (let rect of elt.getClientRects()) {
+      if (rect.width > 0 && rect.height > 0)
+        rects.push({left: rect.left - baseLeft, top: rect.top - baseTop, width: rect.width, height: rect.height})
+    }
+  }
+  return normalizeInlineChangeRects(rects, view.defaultLineHeight)
+}
+
+function normalizeInlineChangeRects(rects: readonly InlineChangeRect[], lineHeight: number): InlineChangeRect[] {
+  if (!rects.length) return []
+
+  let groups: {center: number, rects: InlineChangeRect[]}[] = []
+  let threshold = Math.max(1, lineHeight * 0.05)
+  for (let rect of rects.slice().sort((a, b) => a.top - b.top || a.left - b.left)) {
+    let center = rect.top + rect.height / 2
+    let group = groups[groups.length - 1]
+    if (group && Math.abs(group.center - center) <= threshold) {
+      group.rects.push(rect)
+      group.center = (group.center * (group.rects.length - 1) + center) / group.rects.length
+    } else {
+      groups.push({center, rects: [rect]})
+    }
+  }
+
+  let overlap = 0.5
+  let slots = groups.map((group, i) => {
+    let top = group.center - lineHeight / 2
+    let bottom = group.center + lineHeight / 2
+    if (i) {
+      let prev = groups[i - 1], distance = group.center - prev.center
+      if (distance <= lineHeight * 1.6) top = (prev.center + group.center) / 2 - overlap
+    }
+    if (i < groups.length - 1) {
+      let next = groups[i + 1], distance = next.center - group.center
+      if (distance <= lineHeight * 1.6) bottom = (group.center + next.center) / 2 + overlap
+    }
+    return {top, bottom}
+  })
+
+  let result: InlineChangeRect[] = []
+  for (let i = 0; i < groups.length; i++) {
+    let slot = slots[i]
+    if (slot.bottom <= slot.top) continue
+    for (let rect of groups[i].rects)
+      result.push({...rect, top: slot.top, height: slot.bottom - slot.top})
+  }
+  return result
+}
+
+function inlineChangeLayerMarker(rects: readonly InlineChangeRect[], className: string) {
+  let left = Math.min(...rects.map(rect => rect.left))
+  let top = Math.min(...rects.map(rect => rect.top))
+  let right = Math.max(...rects.map(rect => rect.left + rect.width))
+  let bottom = Math.max(...rects.map(rect => rect.top + rect.height))
+  let path = rects.map(rect => {
+    let x = rect.left - left, y = rect.top - top
+    return `M${x} ${y}H${x + rect.width}V${y + rect.height}H${x}Z`
+  }).join("")
+  return new InlineChangeLayerMarker(className, left, top, right - left, bottom - top, path)
 }
 
 export function isWholeLineChange(chunk: Chunk, isA: boolean) {

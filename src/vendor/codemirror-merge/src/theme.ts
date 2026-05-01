@@ -46,24 +46,71 @@ export const baseTheme = EditorView.baseTheme({
     backgroundColor: "rgba(100, 160, 128, .08)"
   },
 
+  ".cm-changedText, .cm-deletedChunk .cm-deletedText": {
+    background: "transparent",
+  },
+
   "&light.cm-merge-a .cm-changedText, &light .cm-deletedChunk .cm-deletedText": {
-    background: "#ee443344",
-    borderRadius: "2px",
+    background: "transparent",
   },
 
   "&dark.cm-merge-a .cm-changedText, &dark .cm-deletedChunk .cm-deletedText": {
-    background: "#ffaa9944",
-    borderRadius: "2px",
+    background: "transparent",
   },
 
   "&light.cm-merge-b .cm-changedText": {
-    background: "#22bb2244",
-    borderRadius: "2px",
+    background: "transparent",
   },
 
   "&dark.cm-merge-b .cm-changedText": {
-    background: "#88ff8844",
-    borderRadius: "2px",
+    background: "transparent",
+  },
+
+  ".cm-inlineChangeLayer": {
+    pointerEvents: "none",
+  },
+
+  ".cm-changedTextLayerRanges > svg, .cm-deletedTextLayerRanges > svg": {
+    display: "block",
+    width: "100%",
+    height: "100%",
+    overflow: "visible",
+  },
+
+  ".cm-inlineChangeLayerPath": {
+    fill: "currentColor",
+  },
+
+  "&light .cm-deletedChunk .cm-deletedText": {
+    background: "transparent",
+  },
+
+  "&dark .cm-deletedChunk .cm-deletedText": {
+    background: "transparent",
+  },
+
+  "&light.cm-merge-a .cm-changedTextLayerRanges": {
+    color: "#ee443344",
+  },
+
+  "&dark.cm-merge-a .cm-changedTextLayerRanges": {
+    color: "#ffaa9944",
+  },
+
+  "&light.cm-merge-b .cm-changedTextLayerRanges": {
+    color: "#22bb2244",
+  },
+
+  "&dark.cm-merge-b .cm-changedTextLayerRanges": {
+    color: "#88ff8844",
+  },
+
+  "&light .cm-deletedTextLayerRanges": {
+    color: "#ee443344",
+  },
+
+  "&dark .cm-deletedTextLayerRanges": {
+    color: "#ffaa9944",
   },
 
   ".cm-changedTextEmpty": {
@@ -101,7 +148,11 @@ export const baseTheme = EditorView.baseTheme({
   },
 
   "&.cm-merge-b .cm-deletedText": {
-    background: "#ff000033"
+    background: "transparent"
+  },
+
+  "&.cm-merge-b .cm-deletedTextLayerRanges": {
+    color: "#ff000033"
   },
 
   ".cm-insertedLine, .cm-deletedLine, .cm-deletedLine del": {
