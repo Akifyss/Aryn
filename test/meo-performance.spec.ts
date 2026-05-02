@@ -120,7 +120,7 @@ describe('meo performance guards', () => {
     expect(durationMs).toBeLessThan(100)
   })
 
-  it('keeps split search highlights off the full document scan path during live typing', () => {
+  it('keeps split search highlights off the full document scan path during live typing and IME composition', () => {
     let state = EditorState.create({
       doc: createPlainLongDocument(12_000),
       extensions: [
@@ -150,6 +150,16 @@ describe('meo performance guards', () => {
       const durationMs = performance.now() - startedAt
       expect(state.doc.sliceString(state.doc.length - 1)).toBe('x')
       expect(durationMs).toBeLessThan(100)
+
+      const compositionStartedAt = performance.now()
+      state = state.update({
+        changes: { from: state.doc.length, insert: 'ime' },
+        annotations: Transaction.userEvent.of('input.type.compose'),
+      }).state
+
+      const compositionDurationMs = performance.now() - compositionStartedAt
+      expect(state.doc.sliceString(state.doc.length - 3)).toBe('ime')
+      expect(compositionDurationMs).toBeLessThan(100)
     } finally {
       docPrototype.toString = originalToString
     }

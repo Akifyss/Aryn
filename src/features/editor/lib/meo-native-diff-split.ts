@@ -845,12 +845,26 @@ function createDiffExtensions({
   let pointerSelectionPending = false
   let selectionPointerId: number | null = null
   let capturedPointerId: number | null = null
+  let compositionActive = false
   let pendingCompositionDocChange = false
   let pendingCompositionFlushFrame = 0
   let pendingCompositionView: EditorView | null = null
+  const selectionMatchCompartment = new Compartment()
+  const selectionMatchExtension = highlightSelectionMatches()
   const isInteractivePane = interactive ?? side === 'modified'
   const isReadOnly = () => typeof readOnly === 'function' ? readOnly() : readOnly
-  const getCurrentText = (view: EditorView) => textSnapshot?.value ?? view.state.doc.toString()
+  const readViewText = (view: EditorView) => {
+    const nextText = view.state.doc.toString()
+    if (textSnapshot) {
+      textSnapshot.value = nextText
+    }
+    return nextText
+  }
+  const getCurrentText = (view: EditorView) => (
+    pendingCompositionDocChange && pendingCompositionView === view
+      ? readViewText(view)
+      : textSnapshot?.value ?? view.state.doc.toString()
+  )
   const readChangedText = (update: ViewUpdate) => {
     if (!textSnapshot) {
       return update.state.doc.toString()
@@ -956,9 +970,10 @@ function createDiffExtensions({
       return
     }
 
+    const pendingView = pendingCompositionView
     pendingCompositionDocChange = false
-    onChange(getCurrentText(pendingCompositionView))
     pendingCompositionView = null
+    onChange(readViewText(pendingView))
   }
 
   const schedulePendingCompositionFlush = (view: EditorView) => {
@@ -970,6 +985,35 @@ function createDiffExtensions({
     pendingCompositionFlushFrame = window.requestAnimationFrame(() => {
       pendingCompositionFlushFrame = 0
       flushPendingCompositionDocChange()
+    })
+  }
+
+  const syncPendingCompositionSnapshotBeforeChange = (update: ViewUpdate) => {
+    if (!pendingCompositionDocChange || !textSnapshot) {
+      return
+    }
+
+    const pendingView = pendingCompositionView
+    pendingCompositionDocChange = false
+    pendingCompositionView = null
+    if (pendingView === update.view) {
+      textSnapshot.value = update.startState.doc.toString()
+    } else if (pendingView) {
+      textSnapshot.value = pendingView.state.doc.toString()
+    }
+  }
+
+  const setCompositionActive = (view: EditorView, nextValue: boolean) => {
+    if (compositionActive === nextValue) {
+      return
+    }
+
+    compositionActive = nextValue
+    view.dom.classList.toggle('meo-ime-composing', nextValue)
+    // IME marked text is exposed as a transient selection. Do not let the
+    // selection-match highlighter scan or paint that preedit range.
+    view.dispatch({
+      effects: selectionMatchCompartment.reconfigure(nextValue ? [] : selectionMatchExtension),
     })
   }
 
@@ -1007,7 +1051,7 @@ function createDiffExtensions({
       history(),
       indentOnInput(),
       bracketMatching(),
-      highlightSelectionMatches(),
+      selectionMatchCompartment.of(selectionMatchExtension),
       searchQueryField,
       searchMatchField,
       keymap.of([
@@ -1055,11 +1099,13 @@ function createDiffExtensions({
         if (isCompositionInputUpdate(update)) {
           pendingCompositionDocChange = true
           pendingCompositionView = update.view
-          readChangedText(update)
+          // Keep preedit updates out of the string-snapshot path. The committed
+          // text is read once on compositionend.
           return
         }
 
         cancelPendingCompositionFlush()
+        syncPendingCompositionSnapshotBeforeChange(update)
         pendingCompositionDocChange = false
         pendingCompositionView = null
         const nextValue = readChangedText(update)
@@ -1081,7 +1127,7 @@ function createDiffExtensions({
         onChange(nextValue)
       }
 
-      if (update.selectionSet && !isReadOnly()) {
+      if (update.selectionSet && !isReadOnly() && !compositionActive) {
         if (!pointerSelectionPending) {
           emitSelectionChange(update.view)
         }
@@ -1164,16 +1210,21 @@ function createDiffExtensions({
           finishPointerSelection(view, event.pointerId, { hideMenu: true, showMenu: false })
           return false
         },
-        compositionstart: () => {
+        compositionstart: (_event, view) => {
           if (!isReadOnly()) {
+            setCompositionActive(view, true)
             onCompositionChange?.(true)
           }
           return false
         },
         compositionend: (_event, view) => {
+          const shouldCompleteComposition = compositionActive
           if (!isReadOnly()) {
             schedulePendingCompositionFlush(view)
+          }
+          if (shouldCompleteComposition) {
             window.setTimeout(() => {
+              setCompositionActive(view, false)
               onCompositionChange?.(false)
             }, 0)
           }
