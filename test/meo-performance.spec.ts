@@ -21,6 +21,7 @@ import {
   applyCodeMirrorChangesToText,
   buildDiffSplitGutterFlagsFromChunks,
   shouldDeferSplitMergeChunkUpdate,
+  shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange,
 } from '../src/features/editor/lib/meo-native-diff-split'
 import {
   __gitDiffGutterTestHooks,
@@ -367,6 +368,26 @@ describe('meo performance guards', () => {
     expect(shouldDeferSplitMergeChunkUpdate([outdentTransaction], 'b')).toBe(true)
     expect(shouldDeferSplitMergeChunkUpdate([backspaceTransaction], 'b')).toBe(true)
     expect(shouldDeferSplitMergeChunkUpdate([enterTransaction], 'b')).toBe(true)
+  })
+
+  it('refreshes split live decorations when a task marker status changes', () => {
+    const taskState = EditorState.create({ doc: '- [ ] todo item' })
+    const checkedTransaction = taskState.update({
+      changes: { from: 3, to: 4, insert: 'x' },
+      annotations: Transaction.userEvent.of('input.type'),
+    })
+    const contentTransaction = taskState.update({
+      changes: { from: taskState.doc.length, insert: ' typed' },
+      annotations: Transaction.userEvent.of('input.type'),
+    })
+    const plainTransaction = EditorState.create({ doc: 'plain text' }).update({
+      changes: { from: 'plain'.length, insert: ' typed' },
+      annotations: Transaction.userEvent.of('input.type'),
+    })
+
+    expect(shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(checkedTransaction)).toBe(true)
+    expect(shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(contentTransaction)).toBe(false)
+    expect(shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(plainTransaction)).toBe(false)
   })
 
   it('keeps split merge deletion chunks bounded to the edited line on the incremental path', () => {

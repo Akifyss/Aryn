@@ -43,7 +43,7 @@ import {
 } from '@/vendor/meo/webview/helpers/listMarkers'
 import { extractHeadings, extractHeadingSections } from '@/vendor/meo/webview/helpers/markdownSyntax'
 import { insertTable } from '@/vendor/meo/webview/helpers/tables'
-import { liveModeExtensions } from '@/vendor/meo/webview/liveMode'
+import { liveModeExtensions, refreshLiveDecorationsEffect } from '@/vendor/meo/webview/liveMode'
 import { expandAllCollapsibleSections } from '@/vendor/meo/webview/helpers/headingCollapse'
 import { isRegularInlineSelection } from '@/vendor/meo/webview/helpers/selectionMenu'
 import {
@@ -672,6 +672,45 @@ function isPlainPrimaryPointerEvent(event: PointerEvent) {
     && !event.shiftKey
 }
 
+function rangeTouchesTaskStatusMarker(state: EditorState, from: number, to: number) {
+  if (!Number.isFinite(from) || !Number.isFinite(to)) {
+    return false
+  }
+
+  const clampedFrom = clampNumber(Math.floor(from), 0, state.doc.length)
+  const clampedTo = clampNumber(Math.floor(to), clampedFrom, state.doc.length)
+  const line = state.doc.lineAt(Math.min(clampedFrom, state.doc.length))
+  const marker = listMarkerData(state.doc.sliceString(line.from, line.to))
+  if (marker?.taskBracketStart === undefined) {
+    return false
+  }
+
+  const statusFrom = line.from + marker.taskBracketStart + 1
+  const statusTo = statusFrom + 1
+  if (clampedFrom === clampedTo) {
+    return clampedFrom === statusFrom
+  }
+
+  return clampedFrom < statusTo && clampedTo > statusFrom
+}
+
+export function shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(transaction: Transaction) {
+  if (!transaction.docChanged) {
+    return false
+  }
+
+  let shouldRefresh = false
+  transaction.changes.iterChanges((fromA, toA, fromB, toB) => {
+    if (shouldRefresh) {
+      return
+    }
+
+    shouldRefresh = rangeTouchesTaskStatusMarker(transaction.startState, fromA, toA)
+      || rangeTouchesTaskStatusMarker(transaction.state, fromB, toB)
+  })
+  return shouldRefresh
+}
+
 function getHunkActionLabel(action: GitDiffBlockAction) {
   switch (action) {
     case 'stage':
@@ -845,6 +884,7 @@ function createDiffExtensions({
   let pointerSelectionPending = false
   let selectionPointerId: number | null = null
   let capturedPointerId: number | null = null
+  let checkboxClick: { pointerId: number } | null = null
   let compositionActive = false
   let pendingCompositionDocChange = false
   let pendingCompositionFlushFrame = 0
@@ -1039,6 +1079,11 @@ function createDiffExtensions({
         ? []
         : transaction
     )),
+    EditorState.transactionExtender.of((transaction) => (
+      shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(transaction)
+        ? { effects: refreshLiveDecorationsEffect.of(null) }
+        : null
+    )),
     EditorView.editorAttributes.of({
       class: 'meo-mode-live meo-diff-split-editor',
     }),
@@ -1116,6 +1161,7 @@ function createDiffExtensions({
         if (renumberChanges.length) {
           update.view.dispatch({
             changes: renumberChanges,
+            effects: refreshLiveDecorationsEffect.of(null),
             annotations: [
               Transaction.addToHistory.of(false),
               Transaction.userEvent.of('input.type'),
@@ -1188,13 +1234,21 @@ function createDiffExtensions({
           if (!(target instanceof Node) || !view.contentDOM.contains(target)) {
             pointerSelectionPending = false
             selectionPointerId = null
+            checkboxClick = null
             return false
           }
 
+          const targetElement = target instanceof Element ? target : target.parentElement
           pointerSelectionPending = true
           selectionPointerId = event.pointerId
           onSelectionChange?.(null)
 
+          if (targetElement?.closest('.meo-task-checkbox')) {
+            checkboxClick = { pointerId: event.pointerId }
+            return false
+          }
+
+          checkboxClick = null
           if (view.dom.setPointerCapture) {
             view.dom.setPointerCapture(event.pointerId)
             capturedPointerId = event.pointerId
@@ -1203,10 +1257,17 @@ function createDiffExtensions({
           return false
         },
         pointerup: (event, view) => {
+          if (checkboxClick?.pointerId === event.pointerId) {
+            checkboxClick = null
+            finishPointerSelection(view, event.pointerId, { showMenu: false })
+            return false
+          }
+
           finishPointerSelection(view, event.pointerId)
           return false
         },
         pointercancel: (event, view) => {
+          checkboxClick = null
           finishPointerSelection(view, event.pointerId, { hideMenu: true, showMenu: false })
           return false
         },
