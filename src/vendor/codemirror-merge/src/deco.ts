@@ -94,11 +94,23 @@ const changedLineGutterMarker = new class extends GutterMarker {
   elementClass = "cm-changedLineGutter"
 }
 
-type InlineChangeRect = {
+export type InlineChangeRect = {
   left: number
   top: number
   width: number
   height: number
+  lineHeight?: number
+  rowTop?: number
+  rowBottom?: number
+}
+
+type InlineChangeRectGroup = {
+  top: number
+  bottom: number
+  lineHeight: number
+  rowTop: number | null
+  rowBottom: number | null
+  rects: InlineChangeRect[]
 }
 
 type InlineChangeLayerSpec = {
@@ -175,52 +187,119 @@ function getInlineChangeRects(view: EditorView, selector: string) {
     view.scrollDOM.scrollLeft * view.scaleX
   let baseTop = scrollRect.top - view.scrollDOM.scrollTop * view.scaleY
   let rects: InlineChangeRect[] = []
+  let lineMetrics = new WeakMap<HTMLElement, LineMetrics>()
   for (let elt of view.contentDOM.querySelectorAll<HTMLElement>(selector)) {
+    let line = elt.closest(".cm-line") as HTMLElement | null
+    let metrics = line && getLineMetrics(line, baseTop, view.defaultLineHeight, view.scaleY, lineMetrics)
     for (let rect of elt.getClientRects()) {
-      if (rect.width > 0 && rect.height > 0)
-        rects.push({left: rect.left - baseLeft, top: rect.top - baseTop, width: rect.width, height: rect.height})
+      if (rect.width > 0 && rect.height > 0) {
+        let top = rect.top - baseTop, height = rect.height
+        rects.push({...getInlineChangeRectLineBox(top, height, metrics),
+          left: rect.left - baseLeft, top, width: rect.width, height})
+      }
     }
   }
   return normalizeInlineChangeRects(rects, view.defaultLineHeight)
 }
 
-function normalizeInlineChangeRects(rects: readonly InlineChangeRect[], lineHeight: number): InlineChangeRect[] {
+type LineMetrics = {
+  top: number
+  bottom: number
+  lineHeight: number
+}
+
+function getLineMetrics(line: HTMLElement, baseTop: number, fallbackLineHeight: number, scaleY: number,
+                        cache: WeakMap<HTMLElement, LineMetrics>) {
+  let cached = cache.get(line)
+  if (cached) return cached
+  let style = getComputedStyle(line)
+  let rect = line.getBoundingClientRect()
+  let paddingTop = parsedPixelValue(style.paddingTop) * scaleY
+  let paddingBottom = parsedPixelValue(style.paddingBottom) * scaleY
+  let cssLineHeight = parsedPixelValue(style.lineHeight) * scaleY
+  let lineHeight = cssLineHeight > 0 ? cssLineHeight : fallbackLineHeight
+  let metrics = {
+    top: rect.top - baseTop + paddingTop,
+    bottom: rect.bottom - baseTop - paddingBottom,
+    lineHeight,
+  }
+  cache.set(line, metrics)
+  return metrics
+}
+
+function parsedPixelValue(value: string) {
+  let parsed = parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function getInlineChangeRectLineBox(top: number, height: number, metrics: LineMetrics | null): Pick<InlineChangeRect, "lineHeight" | "rowTop" | "rowBottom"> {
+  if (!metrics || metrics.lineHeight <= 0 || metrics.bottom <= metrics.top)
+    return {}
+  let row = Math.max(0, Math.floor((top + height / 2 - metrics.top) / metrics.lineHeight))
+  let maxRow = Math.max(0, Math.ceil((metrics.bottom - metrics.top) / metrics.lineHeight) - 1)
+  row = Math.min(row, maxRow)
+  let rowTop = metrics.top + row * metrics.lineHeight
+  return {lineHeight: metrics.lineHeight, rowTop, rowBottom: rowTop + metrics.lineHeight}
+}
+
+export function normalizeInlineChangeRects(rects: readonly InlineChangeRect[], lineHeight: number): InlineChangeRect[] {
   if (!rects.length) return []
 
-  let groups: {center: number, rects: InlineChangeRect[]}[] = []
-  let threshold = Math.max(1, lineHeight * 0.05)
+  let groups: InlineChangeRectGroup[] = []
+  let threshold = Math.max(1, lineHeight * 0.25)
   for (let rect of rects.slice().sort((a, b) => a.top - b.top || a.left - b.left)) {
-    let center = rect.top + rect.height / 2
+    let top = rect.top, bottom = rect.top + rect.height, center = (top + bottom) / 2
     let group = groups[groups.length - 1]
-    if (group && Math.abs(group.center - center) <= threshold) {
+    if (group && center >= group.top - threshold && center <= group.bottom + threshold) {
       group.rects.push(rect)
-      group.center = (group.center * (group.rects.length - 1) + center) / group.rects.length
+      group.top = Math.min(group.top, top)
+      group.bottom = Math.max(group.bottom, bottom)
+      group.lineHeight = Math.max(group.lineHeight, rect.lineHeight || lineHeight)
+      group.rowTop = rect.rowTop == null ? group.rowTop :
+        group.rowTop == null ? rect.rowTop : Math.min(group.rowTop, rect.rowTop)
+      group.rowBottom = rect.rowBottom == null ? group.rowBottom :
+        group.rowBottom == null ? rect.rowBottom : Math.max(group.rowBottom, rect.rowBottom)
     } else {
-      groups.push({center, rects: [rect]})
+      groups.push({
+        top,
+        bottom,
+        lineHeight: rect.lineHeight || lineHeight,
+        rowTop: rect.rowTop ?? null,
+        rowBottom: rect.rowBottom ?? null,
+        rects: [rect],
+      })
     }
   }
 
   let overlap = 0.5
-  let slots = groups.map((group, i) => {
-    let top = group.center - lineHeight / 2
-    let bottom = group.center + lineHeight / 2
-    if (i) {
-      let prev = groups[i - 1], distance = group.center - prev.center
-      if (distance <= lineHeight * 1.6) top = (prev.center + group.center) / 2 - overlap
+  let slots = groups.map(group => {
+    if (group.rowTop != null && group.rowBottom != null) {
+      let top = Math.min(group.rowTop, group.top)
+      let bottom = Math.max(group.rowBottom, group.bottom)
+      return {center: (top + bottom) / 2, top, bottom, height: bottom - top}
     }
-    if (i < groups.length - 1) {
-      let next = groups[i + 1], distance = next.center - group.center
-      if (distance <= lineHeight * 1.6) bottom = (group.center + next.center) / 2 + overlap
-    }
-    return {top, bottom}
+    let center = (group.top + group.bottom) / 2
+    let height = Math.max(group.lineHeight, group.bottom - group.top)
+    return {center, top: center - height / 2, bottom: center + height / 2, height}
   })
+  for (let i = 0; i < slots.length - 1; i++) {
+    let slot = slots[i], next = slots[i + 1]
+    let distance = next.center - slot.center
+    let close = distance <= Math.max(lineHeight, (slot.height + next.height) / 2) * 1.6
+    let gap = next.top - slot.bottom
+    if (close && gap > 0) {
+      let boundary = slot.bottom + gap / 2
+      slot.bottom = boundary + overlap
+      next.top = boundary - overlap
+    }
+  }
 
   let result: InlineChangeRect[] = []
   for (let i = 0; i < groups.length; i++) {
     let slot = slots[i]
     if (slot.bottom <= slot.top) continue
     for (let rect of groups[i].rects)
-      result.push({...rect, top: slot.top, height: slot.bottom - slot.top})
+      result.push({left: rect.left, top: slot.top, width: rect.width, height: slot.bottom - slot.top})
   }
   return result
 }
