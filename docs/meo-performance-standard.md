@@ -14,6 +14,8 @@ complete benchmark suite. They currently cover:
 - Long plain Markdown documents with 12,000 lines.
 - Optional syntax scanners staying token-gated and cheap.
 - Live typing and IME composition avoiding full decoration rebuilds.
+- Active split find/search highlights staying mapped during live typing and
+  refreshing after the deferred find-status pass.
 - Split diff gutter flags staying deferred until explicit refresh.
 - Split merge chunk updates avoiding full document flattening on incremental
   paths.
@@ -67,6 +69,8 @@ For these changes, the review must answer:
 - Are stale cached artifacts either frozen/mapped or refreshed before use?
 - Do chunk-sensitive commands refresh before reading chunks?
 - Does any new `doc.toString()` or full-line traversal run in a hot input path?
+- If find/search state is active, are existing match decorations mapped during
+  live input instead of rebuilding from a full document scan?
 - Does the change keep behavior correct for hunk actions, navigation, undo,
   redo, external sync, and read-only updates?
 

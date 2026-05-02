@@ -198,6 +198,7 @@ const existingHeadingMarkerRegex = /^(\s*)(#{1,6})\s+/
 const existingTaskMarkerRegex = /^[-+*]\s+\[[ xX~\-]\]/
 
 const setSearchQueryEffect = StateEffect.define<SearchQueryState>()
+const refreshSearchMatchesEffect = StateEffect.define<null>()
 const searchMatchMark = Decoration.mark({ class: 'meo-search-match' })
 const setDiffSplitNavigationHighlightEffect = StateEffect.define<DiffSplitNavigationHighlightRange | null>()
 const diffSplitNavigationHighlightField = StateField.define<ReturnType<typeof Decoration.set>>({
@@ -320,6 +321,10 @@ function buildSearchDecorations(doc: EditorState['doc'], searchQuery: SearchQuer
   return builder.finish()
 }
 
+export function shouldDeferSplitSearchMatchUpdate(transaction: Transaction, searchQueryText: string): boolean {
+  return !!searchQueryText && isLiveTextEditTransaction(transaction)
+}
+
 const searchQueryField = StateField.define<SearchQueryState>({
   create() {
     return createSearchQueryState('')
@@ -339,14 +344,23 @@ const searchMatchField = StateField.define({
     return Decoration.none
   },
   update(value, transaction) {
-    if (transaction.docChanged) {
-      return buildSearchDecorations(transaction.state.doc, transaction.state.field(searchQueryField))
-    }
-
     for (const effect of transaction.effects) {
       if (effect.is(setSearchQueryEffect)) {
         return buildSearchDecorations(transaction.state.doc, effect.value)
       }
+    }
+
+    const refreshSearchMatches = transaction.effects.some((effect) => effect.is(refreshSearchMatchesEffect))
+    if (transaction.docChanged) {
+      const searchQuery = transaction.state.field(searchQueryField)
+      if (!refreshSearchMatches && shouldDeferSplitSearchMatchUpdate(transaction, searchQuery.text)) {
+        return value.map(transaction.changes)
+      }
+      return buildSearchDecorations(transaction.state.doc, searchQuery)
+    }
+
+    if (refreshSearchMatches) {
+      return buildSearchDecorations(transaction.state.doc, transaction.state.field(searchQueryField))
     }
 
     return value
@@ -355,6 +369,14 @@ const searchMatchField = StateField.define({
     return EditorView.decorations.from(field)
   },
 })
+
+export const __meoDiffSplitSearchTestHooks = {
+  createSearchQueryState,
+  refreshSearchMatchesEffect,
+  searchMatchField,
+  searchQueryField,
+  setSearchQueryEffect,
+} as const
 
 function countSearchMatches(text: string, query: string, options: SearchOptions = {}) {
   return findSearchMatchRanges(text, query, options).length
@@ -2530,6 +2552,10 @@ export function createMeoDiffSplitController({
     return mergeView.b
   }
 
+  const getEditableTextValue = () => (
+    mergeView ? modifiedTextSnapshot.value : currentText
+  )
+
   const getRequestedLineForScope = (request: MeoDiffSplitGitNavigationRequest) => {
     const normalizedLine = Math.max(1, Math.floor(request.lineNumber))
     if (
@@ -2651,7 +2677,7 @@ export function createMeoDiffSplitController({
       return { current: 0, found: false, total: 0 }
     }
 
-    const textValue = view.state.doc.toString()
+    const textValue = getEditableTextValue()
     const matches = findSearchMatchRanges(textValue, query, options)
     const total = matches.length
     if (!total) {
@@ -2696,7 +2722,7 @@ export function createMeoDiffSplitController({
 
   return {
     countMatches(query, options = {}) {
-      return countSearchMatches(getEditableView().state.doc.toString(), query, options)
+      return countSearchMatches(getEditableTextValue(), query, options)
     },
     destroy() {
       if (destroyed) {
@@ -2765,7 +2791,7 @@ export function createMeoDiffSplitController({
         return false
       }
 
-      const textValue = view.state.doc.toString()
+      const textValue = getEditableTextValue()
       const movedText = textValue.slice(source.sectionFrom, source.sectionTo)
       if (!movedText) {
         return false
@@ -2850,7 +2876,7 @@ export function createMeoDiffSplitController({
       }
 
       const view = getEditableView()
-      const textValue = view.state.doc.toString()
+      const textValue = getEditableTextValue()
       const matches = findSearchMatchRanges(textValue, query, options)
       const replaced = matches.length
       if (!replaced) {
@@ -2870,7 +2896,7 @@ export function createMeoDiffSplitController({
       }
 
       const view = getEditableView()
-      const textValue = view.state.doc.toString()
+      const textValue = getEditableTextValue()
       const selection = view.state.selection.main
       const from = Math.min(selection.from, selection.to)
       const to = Math.max(selection.from, selection.to)
@@ -2887,7 +2913,7 @@ export function createMeoDiffSplitController({
       const nextMatch = findMatch(query, false, options)
       return nextMatch.found
         ? { replaced: true, ...nextMatch }
-        : { current: 0, found: false, replaced: true, total: countSearchMatches(view.state.doc.toString(), query, options) }
+        : { current: 0, found: false, replaced: true, total: countSearchMatches(getEditableTextValue(), query, options) }
     },
     restoreTopLine(lineNumber, lineOffset = 0) {
       restoreTopLine(getEditableView(), lineNumber, lineOffset, mergeView?.dom ?? null)
@@ -2951,6 +2977,11 @@ export function createMeoDiffSplitController({
         && currentQuery.wholeWord === nextQuery.wholeWord
         && currentQuery.caseSensitive === nextQuery.caseSensitive
       ) {
+        if (nextQuery.text) {
+          view.dispatch({
+            effects: refreshSearchMatchesEffect.of(null),
+          })
+        }
         return
       }
       view.dispatch({

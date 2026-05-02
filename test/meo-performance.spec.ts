@@ -13,6 +13,7 @@ import {
   shouldCollectOrderedListRenumberChanges,
 } from '../src/vendor/meo/webview/helpers/listMarkers'
 import {
+  __meoDiffSplitSearchTestHooks,
   applyCodeMirrorChangesToText,
   shouldDeferSplitMergeChunkUpdate,
 } from '../src/features/editor/lib/meo-native-diff-split'
@@ -97,6 +98,41 @@ describe('meo performance guards', () => {
     const durationMs = performance.now() - startedAt
     expect(state.doc.sliceString(state.doc.length - 1)).toBe('x')
     expect(durationMs).toBeLessThan(100)
+  })
+
+  it('keeps split search highlights off the full document scan path during live typing', () => {
+    let state = EditorState.create({
+      doc: createPlainLongDocument(12_000),
+      extensions: [
+        __meoDiffSplitSearchTestHooks.searchQueryField,
+        __meoDiffSplitSearchTestHooks.searchMatchField,
+      ],
+    })
+    state = state.update({
+      effects: __meoDiffSplitSearchTestHooks.setSearchQueryEffect.of(
+        __meoDiffSplitSearchTestHooks.createSearchQueryState('plain'),
+      ),
+    }).state
+
+    const docPrototype = Object.getPrototypeOf(state.doc) as { toString: () => string }
+    const originalToString = docPrototype.toString
+    docPrototype.toString = () => {
+      throw new Error('split search highlight input path should not flatten the CodeMirror document')
+    }
+
+    try {
+      const startedAt = performance.now()
+      state = state.update({
+        changes: { from: state.doc.length, insert: 'x' },
+        annotations: Transaction.userEvent.of('input.type'),
+      }).state
+
+      const durationMs = performance.now() - startedAt
+      expect(state.doc.sliceString(state.doc.length - 1)).toBe('x')
+      expect(durationMs).toBeLessThan(100)
+    } finally {
+      docPrototype.toString = originalToString
+    }
   })
 
   it('keeps split IME composition updates off the git diff line recompute path', () => {
