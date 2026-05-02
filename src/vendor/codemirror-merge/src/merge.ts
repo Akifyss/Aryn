@@ -1,5 +1,5 @@
 import {EditorView, Decoration, GutterMarker} from "@codemirror/view"
-import {EditorState, EditorSelection, Facet, Transaction, StateEffect, StateField,
+import {EditorState, EditorSelection, Facet, Transaction, StateEffect, StateField, Annotation,
         StateCommand, RangeSetBuilder} from "@codemirror/state"
 import {Chunk} from "./chunk"
 
@@ -25,6 +25,7 @@ export const mergeConfig = Facet.define<Config, Config>({
 
 
 export const setChunks = StateEffect.define<readonly Chunk[]>()
+export const deferredChunkUpdate = Annotation.define<boolean>()
 
 export const computeChunks = Facet.define<(current: readonly Chunk[], tr: Transaction) => readonly Chunk[]>()
 

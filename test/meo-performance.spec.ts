@@ -12,7 +12,10 @@ import {
   collectOrderedListRenumberChanges,
   shouldCollectOrderedListRenumberChanges,
 } from '../src/vendor/meo/webview/helpers/listMarkers'
-import { applyCodeMirrorChangesToText } from '../src/features/editor/lib/meo-native-diff-split'
+import {
+  applyCodeMirrorChangesToText,
+  shouldDeferSplitMergeChunkUpdate,
+} from '../src/features/editor/lib/meo-native-diff-split'
 import {
   gitDiffGutterBaselineExtensions,
   gitDiffLineFlagsField,
@@ -178,6 +181,78 @@ describe('meo performance guards', () => {
     expect(refreshedFlags).not.toBe(previousFlags)
     expect(Array.isArray(refreshedFlags)).toBe(true)
     expect(refreshedFlags).toHaveLength(refreshedState.doc.lines)
+  })
+
+  it('defers split merge chunk refresh for live typing and IME composition', () => {
+    const state = EditorState.create({ doc: createPlainLongDocument(12_000) })
+    const typing = state.update({
+      changes: { from: state.doc.length, insert: 'x' },
+      annotations: Transaction.userEvent.of('input.type'),
+    })
+    const composing = state.update({
+      changes: { from: state.doc.length, insert: 'ime' },
+      annotations: Transaction.userEvent.of('input.type.compose'),
+    })
+    const deletion = state.update({
+      changes: { from: state.doc.length - 1, to: state.doc.length },
+      annotations: Transaction.userEvent.of('delete.backward'),
+    })
+    const undo = state.update({
+      changes: { from: state.doc.length, insert: 'x' },
+      annotations: Transaction.userEvent.of('undo'),
+    })
+    const structural = state.update({
+      changes: { from: 0, insert: '# ' },
+    })
+
+    expect(shouldDeferSplitMergeChunkUpdate([typing], 'b')).toBe(true)
+    expect(shouldDeferSplitMergeChunkUpdate([composing], 'b')).toBe(true)
+    expect(shouldDeferSplitMergeChunkUpdate([deletion], 'b')).toBe(true)
+    expect(shouldDeferSplitMergeChunkUpdate([typing], 'a')).toBe(false)
+    expect(shouldDeferSplitMergeChunkUpdate([undo], 'b')).toBe(false)
+    expect(shouldDeferSplitMergeChunkUpdate([typing, structural], 'b')).toBe(false)
+  })
+
+  it('keeps split merge deletion chunks bounded to the edited line on the incremental path', () => {
+    const originalDoc = Text.of([
+      '# Notes',
+      'Markdown supports LaTeX formulas.',
+      '',
+      '## Inline formula',
+      'Use one dollar pair, for example: E = mc^2.',
+    ])
+    const modifiedDoc = Text.of([
+      '# Notes',
+      'Markdown supports LaTeX formulas. skyrim typing typing typing',
+      '',
+      '## Inline formula',
+      'Use one dollar pair, for example: E = mc^2.',
+    ])
+    const initialChunks = Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const changedLine = modifiedDoc.line(2)
+    const changes = ChangeSet.of([{
+      from: changedLine.to - ' typing'.length,
+      to: changedLine.to,
+    }], modifiedDoc.length)
+    const nextModifiedDoc = changes.apply(modifiedDoc)
+
+    const nextChunks = Chunk.updateB(initialChunks, originalDoc, nextModifiedDoc, changes, {
+      incrementalUpdates: true,
+      overrideChunks: () => {
+        throw new Error('split deletion should stay on the local incremental chunk path')
+      },
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const nextChangedLine = nextModifiedDoc.line(2)
+    const unrelatedHeading = nextModifiedDoc.line(4)
+
+    expect(nextChunks.some(chunk => chunk.fromB <= nextChangedLine.from && chunk.toB > nextChangedLine.from)).toBe(true)
+    expect(nextChunks.some(chunk => chunk.fromB <= unrelatedHeading.from && chunk.toB > unrelatedHeading.from)).toBe(false)
   })
 
   it('applies split text snapshots from CodeMirror changes without flattening the document', () => {

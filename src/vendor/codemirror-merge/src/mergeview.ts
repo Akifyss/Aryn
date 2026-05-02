@@ -2,7 +2,7 @@ import {EditorView} from "@codemirror/view"
 import {EditorStateConfig, Transaction, EditorState, StateEffect, Prec, Compartment, ChangeSet} from "@codemirror/state"
 import {Chunk, defaultDiffConfig} from "./chunk"
 import {DiffConfig} from "./diff"
-import {setChunks, ChunkField, mergeConfig} from "./merge"
+import {deferredChunkUpdate, setChunks, ChunkField, mergeConfig} from "./merge"
 import {decorateChunks, inlineChangeLayer, updateSpacers, Spacers, adjustSpacers, collapseUnchanged, changeGutter} from "./deco"
 import {baseTheme, externalTheme} from "./theme"
 
@@ -31,6 +31,10 @@ export interface MergeConfig {
   /// Pass options to the diff algorithm. By default, the merge view
   /// sets [`scanLimit`](#merge.DiffConfig.scanLimit) to 500.
   diffConfig?: DiffConfig
+  /// When this returns true for a document-changing transaction, the
+  /// document is updated immediately while diff chunks and chunk
+  /// decorations stay frozen until `refreshChunks` is called.
+  deferChunkUpdates?: (transactions: readonly Transaction[], target: "a" | "b") => boolean
   /// Keep the child editor viewports in sync with the merge view's
   /// outer scroll container. This avoids blank frames when the outer
   /// scroller moves faster than CodeMirror's normal viewport redraw.
@@ -120,6 +124,8 @@ export class MergeView {
   private outerScrollViewportSync = true
   private outerScrollViewportMargin = 1000
   private outerScrollViewportRetention = 1000
+  private deferChunkUpdates: MergeConfig["deferChunkUpdates"]
+  private chunksStale = false
 
   /// The current set of changed chunks.
   chunks: readonly Chunk[]
@@ -131,6 +137,7 @@ export class MergeView {
   /// Create a new merge view.
   constructor(config: DirectMergeConfig) {
     this.diffConf = config.diffConfig || defaultDiffConfig
+    this.deferChunkUpdates = config.deferChunkUpdates
     this.outerScrollViewportSync = config.outerScrollViewportSync !== false
     this.outerScrollViewportMargin = Math.max(1000, config.outerScrollViewportMargin ?? 1000)
     this.outerScrollViewportRetention = Math.max(
@@ -145,7 +152,7 @@ export class MergeView {
       externalTheme,
       Spacers,
       EditorView.updateListener.of(update => {
-        if (this.measuring < 0 && (update.heightChanged || update.viewportChanged) &&
+        if (!this.chunksStale && this.measuring < 0 && (update.heightChanged || update.viewportChanged) &&
             !update.transactions.some(tr => tr.effects.some(e => e.is(adjustSpacers))))
           this.measure()
       }),
@@ -229,8 +236,18 @@ export class MergeView {
     if (trs.some(tr => tr.docChanged)) {
       let last = trs[trs.length - 1]
       let changes = trs.reduce((chs, tr) => chs.compose(tr.changes), ChangeSet.empty(trs[0].startState.doc.length))
-      this.chunks = target == this.a ? Chunk.updateA(this.chunks, last.newDoc, this.b.state.doc, changes, this.diffConf)
-        : Chunk.updateB(this.chunks, this.a.state.doc, last.newDoc, changes, this.diffConf)
+      let targetSide: "a" | "b" = target == this.a ? "a" : "b"
+      if (this.deferChunkUpdates?.(trs, targetSide)) {
+        this.chunksStale = true
+        target.update([...trs, last.state.update({annotations: deferredChunkUpdate.of(true)})])
+        return
+      }
+      this.chunks = this.chunksStale
+        ? target == this.a ? Chunk.build(last.newDoc, this.b.state.doc, this.diffConf)
+          : Chunk.build(this.a.state.doc, last.newDoc, this.diffConf)
+        : target == this.a ? Chunk.updateA(this.chunks, last.newDoc, this.b.state.doc, changes, this.diffConf)
+          : Chunk.updateB(this.chunks, this.a.state.doc, last.newDoc, changes, this.diffConf)
+      this.chunksStale = false
       target.update([...trs, last.state.update({effects: setChunks.of(this.chunks)})])
       let other = target == this.a ? this.b : this.a
       other.update([other.state.update({effects: setChunks.of(this.chunks)})])
@@ -242,15 +259,23 @@ export class MergeView {
 
   refreshChunks() {
     this.chunks = Chunk.build(this.a.state.doc, this.b.state.doc, this.diffConf)
+    this.chunksStale = false
     this.a.update([this.a.state.update({effects: setChunks.of(this.chunks)})])
     this.b.update([this.b.state.update({effects: setChunks.of(this.chunks)})])
     this.scheduleMeasure()
+  }
+
+  hasPendingChunkRefresh() {
+    return this.chunksStale
   }
 
   /// Reconfigure an existing merge view.
   reconfigure(config: MergeConfig) {
     if ("diffConfig" in config) {
       this.diffConf = config.diffConfig
+    }
+    if ("deferChunkUpdates" in config) {
+      this.deferChunkUpdates = config.deferChunkUpdates
     }
     if ("outerScrollViewportSync" in config) {
       this.outerScrollViewportSync = config.outerScrollViewportSync !== false

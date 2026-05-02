@@ -1,7 +1,7 @@
 import { defaultKeymap, history, historyKeymap, indentLess, indentMore, redo, undo } from '@codemirror/commands'
 import { markdownKeymap } from '@codemirror/lang-markdown'
 import { bracketMatching, forceParsing, indentOnInput, indentUnit } from '@codemirror/language'
-import { getChunks, goToNextChunk, goToPreviousChunk, MergeView } from '@codemirror/merge'
+import { goToNextChunk, goToPreviousChunk, MergeView } from '@codemirror/merge'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
 import { Annotation, Compartment, EditorSelection, EditorState, type Extension, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
 import {
@@ -236,6 +236,29 @@ const diffSplitNavigationHighlightField = StateField.define<ReturnType<typeof De
 })
 const allowReadOnlyDocumentUpdate = Annotation.define<boolean>()
 const externalDocumentSync = Annotation.define<boolean>()
+
+function isLiveTextEditTransaction(transaction: Transaction) {
+  if (
+    !transaction.docChanged
+    || transaction.annotation(allowReadOnlyDocumentUpdate)
+    || transaction.annotation(externalDocumentSync)
+  ) {
+    return false
+  }
+
+  const userEvent = transaction.annotation(Transaction.userEvent)
+  return typeof userEvent === 'string'
+    && (userEvent.startsWith('input') || userEvent.startsWith('delete'))
+}
+
+export function shouldDeferSplitMergeChunkUpdate(
+  transactions: readonly Transaction[],
+  side: 'a' | 'b',
+) {
+  return side === 'b'
+    && transactions.some(isLiveTextEditTransaction)
+    && transactions.every((transaction) => !transaction.docChanged || isLiveTextEditTransaction(transaction))
+}
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -1763,6 +1786,9 @@ export function createMeoDiffSplitController({
   parent.appendChild(host)
 
   const invalidateDiffOverviewSegments = () => {
+    if (mergeView?.hasPendingChunkRefresh()) {
+      return
+    }
     diffOverviewSegmentsCache = null
   }
 
@@ -1776,9 +1802,13 @@ export function createMeoDiffSplitController({
     }
 
     const currentMergeView = mergeView
+    if (currentMergeView.hasPendingChunkRefresh()) {
+      return diffOverviewSegmentsCache ?? []
+    }
+
     const modifiedDoc = currentMergeView.b.state.doc
     const totalLines = Math.max(1, modifiedDoc.lines)
-    const chunks = (getChunks(currentMergeView.b.state)?.chunks as CodeMirrorDiffChunk[] | undefined) ?? []
+    const chunks = currentMergeView.chunks as readonly CodeMirrorDiffChunk[]
 
     diffOverviewSegmentsCache = chunks.map((chunk) => {
       const selection = createSelectionFromCodeMirrorChunk(currentMergeView.a.state.doc, modifiedDoc, chunk)
@@ -1875,6 +1905,19 @@ export function createMeoDiffSplitController({
     mergeView.refreshChunks()
     invalidateDiffOverviewSegments()
     resetDiffOverviewRender()
+  }
+
+  const refreshDeferredDiffArtifactsBeforeChunkAction = () => {
+    if (!mergeView?.hasPendingChunkRefresh()) {
+      return true
+    }
+
+    if (isComposing) {
+      return false
+    }
+
+    refreshDiffArtifactsNow()
+    return !mergeView?.hasPendingChunkRefresh()
   }
 
   const scheduleDeferredDiffRefresh = (delayMs = SPLIT_DIFF_REFRESH_IDLE_DELAY_MS) => {
@@ -2153,13 +2196,18 @@ export function createMeoDiffSplitController({
       return null
     }
 
+    const hadPendingChunkRefresh = mergeView.hasPendingChunkRefresh()
+    if (!refreshDeferredDiffArtifactsBeforeChunkAction() || hadPendingChunkRefresh) {
+      return null
+    }
+
     const controlsRoot = control.closest<HTMLElement>('.meo-diff-hunk-actions')
     const chunkIndex = Number.parseInt(controlsRoot?.dataset.chunk ?? '', 10)
     if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
       return null
     }
 
-    return (getChunks(mergeView.b.state)?.chunks[chunkIndex] as CodeMirrorDiffChunk | undefined) ?? null
+    return (mergeView.chunks[chunkIndex] as CodeMirrorDiffChunk | undefined) ?? null
   }
 
   const applyHunkAction = async (
@@ -2370,6 +2418,7 @@ export function createMeoDiffSplitController({
         }),
       },
       diffConfig: getDiffConfig(editable),
+      deferChunkUpdates: shouldDeferSplitMergeChunkUpdate,
       gutter: false,
       highlightChanges: true,
       outerScrollViewportMargin: 8000,
@@ -2499,6 +2548,10 @@ export function createMeoDiffSplitController({
       return null
     }
 
+    if (!refreshDeferredDiffArtifactsBeforeChunkAction()) {
+      return null
+    }
+
     const originalState = getOriginalState()
     if (originalState.actionScope !== request.scope) {
       return null
@@ -2506,11 +2559,10 @@ export function createMeoDiffSplitController({
 
     const requestedLineNumber = getRequestedLineForScope(request)
     const preferredSide: DiffNavigationSide = 'modified'
-    const chunkState = getChunks(mergeView.b.state)
     const target = findBestNavigationTarget(
       mergeView.a.state.doc,
       mergeView.b.state.doc,
-      (chunkState?.chunks ?? []) as readonly CodeMirrorDiffChunk[],
+      mergeView.chunks as readonly CodeMirrorDiffChunk[],
       requestedLineNumber,
       preferredSide,
     )
@@ -2735,6 +2787,9 @@ export function createMeoDiffSplitController({
       return true
     },
     nextChange() {
+      if (!refreshDeferredDiffArtifactsBeforeChunkAction()) {
+        return false
+      }
       const found = goToNextChunk(getEditableView())
       if (found) {
         scrollPositionIntoView(getEditableView(), getEditableView().state.selection.main.head, 'center', mergeView?.dom ?? null)
@@ -2742,6 +2797,9 @@ export function createMeoDiffSplitController({
       return found
     },
     previousChange() {
+      if (!refreshDeferredDiffArtifactsBeforeChunkAction()) {
+        return false
+      }
       const found = goToPreviousChunk(getEditableView())
       if (found) {
         scrollPositionIntoView(getEditableView(), getEditableView().state.selection.main.head, 'center', mergeView?.dom ?? null)

@@ -2,19 +2,34 @@ import {EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate, Direction
         WidgetType, GutterMarker, gutter, layer, type LayerMarker} from "@codemirror/view"
 import {EditorState, RangeSetBuilder, Text, StateField, StateEffect, RangeSet, Prec} from "@codemirror/state"
 import {Chunk} from "./chunk"
-import {ChunkField, mergeConfig} from "./merge"
+import {ChunkField, deferredChunkUpdate, mergeConfig} from "./merge"
 
 export const decorateChunks = ViewPlugin.fromClass(class {
   deco: DecorationSet
   gutter: RangeSet<GutterMarker> | null
+  frozen = false
 
   constructor(view: EditorView) {
     ({deco: this.deco, gutter: this.gutter} = getChunkDeco(view))
   }
 
   update(update: ViewUpdate) {
-    if (update.docChanged || update.viewportChanged || chunksChanged(update.startState, update.state) ||
-        configChanged(update.startState, update.state))
+    if (chunksChanged(update.startState, update.state)) {
+      this.frozen = false;
+      ({deco: this.deco, gutter: this.gutter} = getChunkDeco(update.view))
+      return
+    }
+
+    if (isDeferredChunkUpdate(update)) this.frozen = true
+    if (this.frozen) {
+      if (update.docChanged) {
+        this.deco = this.deco.map(update.changes)
+        if (this.gutter) this.gutter = this.gutter.map(update.changes)
+      }
+      return
+    }
+
+    if (update.docChanged || update.viewportChanged || configChanged(update.startState, update.state))
       ({deco: this.deco, gutter: this.gutter} = getChunkDeco(update.view))
   }
 }, {
@@ -32,6 +47,7 @@ export const inlineChangeLayer = layer({
   // update() already covers viewport/doc/chunk changes; avoid a second layout read.
   updateOnDocViewUpdate: false,
   update(update) {
+    if (isDeferredChunkUpdate(update)) return false
     return update.docChanged || update.viewportChanged ||
       chunksChanged(update.startState, update.state) ||
       configChanged(update.startState, update.state)
@@ -47,6 +63,10 @@ function chunksChanged(s1: EditorState, s2: EditorState) {
 
 function configChanged(s1: EditorState, s2: EditorState) {
   return s1.facet(mergeConfig) != s2.facet(mergeConfig)
+}
+
+function isDeferredChunkUpdate(update: ViewUpdate) {
+  return update.transactions.some(tr => tr.annotation(deferredChunkUpdate))
 }
 
 const changedLine = Decoration.line({class: "cm-changedLine"})
