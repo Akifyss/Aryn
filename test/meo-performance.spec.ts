@@ -12,6 +12,7 @@ import {
   collectOrderedListRenumberChanges,
   shouldCollectOrderedListRenumberChanges,
 } from '../src/vendor/meo/webview/helpers/listMarkers'
+import { applyCodeMirrorChangesToText } from '../src/features/editor/lib/meo-native-diff-split'
 import {
   gitDiffGutterBaselineExtensions,
   gitDiffLineFlagsField,
@@ -177,6 +178,32 @@ describe('meo performance guards', () => {
     expect(refreshedFlags).not.toBe(previousFlags)
     expect(Array.isArray(refreshedFlags)).toBe(true)
     expect(refreshedFlags).toHaveLength(refreshedState.doc.lines)
+  })
+
+  it('applies split text snapshots from CodeMirror changes without flattening the document', () => {
+    const documentText = createPlainLongDocument(12_000)
+    const document = Text.of(documentText.split('\n'))
+    const firstLine = document.line(1)
+    const middleLine = document.line(6000)
+    const changes = ChangeSet.of([
+      { from: firstLine.to, insert: ' typed' },
+      { from: middleLine.from, to: middleLine.from + 'plain'.length, insert: 'edited' },
+      { from: document.length, insert: '\nappendix' },
+    ], document.length)
+    const originalToString = document.toString
+    ;(document as unknown as { toString: () => string }).toString = () => {
+      throw new Error('split text snapshot sync should not flatten the CodeMirror document')
+    }
+
+    try {
+      const nextText = applyCodeMirrorChangesToText(documentText, changes)
+
+      expect(nextText.startsWith('plain prose line 0 typed\n')).toBe(true)
+      expect(nextText).toContain('edited prose line 5999')
+      expect(nextText.endsWith('\nappendix')).toBe(true)
+    } finally {
+      ;(document as unknown as { toString: () => string }).toString = originalToString
+    }
   })
 
   it('keeps plain text edits off the full ordered-list renumber scan path', () => {

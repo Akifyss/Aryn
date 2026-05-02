@@ -148,6 +148,23 @@ type TextSyncChange = {
   to: number
 }
 
+type TextChangeSetLike = {
+  length?: number
+  iterChanges: (
+    callback: (
+      fromA: number,
+      toA: number,
+      fromB: number,
+      toB: number,
+      inserted: Text,
+    ) => void,
+  ) => void
+}
+
+type TextSnapshot = {
+  value: string
+}
+
 type DiffSplitResolvedState = {
   actionChange: GitChangeItem | null
   actionScope: 'staged' | 'unstaged' | null
@@ -363,6 +380,22 @@ function findSyncChange(previousText: string, nextText: string): TextSyncChange 
     insert: nextText.slice(from, nextTo),
     to: previousTo,
   }
+}
+
+export function applyCodeMirrorChangesToText(text: string, changes: TextChangeSetLike): string {
+  let cursor = 0
+  let nextText = ''
+
+  changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    const from = Math.max(cursor, Math.min(text.length, fromA))
+    const to = Math.max(from, Math.min(text.length, toA))
+    nextText += text.slice(cursor, from)
+    nextText += inserted.toString()
+    cursor = to
+  })
+
+  nextText += text.slice(cursor)
+  return nextText
 }
 
 function mapPositionThroughChange(position: number, change: TextSyncChange): number {
@@ -686,6 +719,7 @@ function createDiffExtensions({
   readOnlyCompartment,
   reportViewportChanges = true,
   side,
+  textSnapshot,
 }: {
   activeLineGutterCompartment: Compartment
   editable: boolean
@@ -703,6 +737,7 @@ function createDiffExtensions({
   readOnlyCompartment: Compartment
   reportViewportChanges?: boolean
   side: 'original' | 'modified'
+  textSnapshot?: TextSnapshot
 }) {
   let pointerSelectionPending = false
   let selectionPointerId: number | null = null
@@ -712,6 +747,21 @@ function createDiffExtensions({
   let pendingCompositionView: EditorView | null = null
   const isInteractivePane = interactive ?? side === 'modified'
   const isReadOnly = () => typeof readOnly === 'function' ? readOnly() : readOnly
+  const getCurrentText = (view: EditorView) => textSnapshot?.value ?? view.state.doc.toString()
+  const readChangedText = (update: ViewUpdate) => {
+    if (!textSnapshot) {
+      return update.state.doc.toString()
+    }
+
+    if (typeof update.changes.length === 'number' && update.changes.length !== textSnapshot.value.length) {
+      textSnapshot.value = update.state.doc.toString()
+      return textSnapshot.value
+    }
+
+    const nextText = applyCodeMirrorChangesToText(textSnapshot.value, update.changes)
+    textSnapshot.value = nextText
+    return nextText
+  }
 
   const releasePointerCaptureIfHeld = (view: EditorView, pointerId: number | null) => {
     if (pointerId === null || !view.dom.releasePointerCapture) {
@@ -804,7 +854,7 @@ function createDiffExtensions({
     }
 
     pendingCompositionDocChange = false
-    onChange(pendingCompositionView.state.doc.toString())
+    onChange(getCurrentText(pendingCompositionView))
     pendingCompositionView = null
   }
 
@@ -866,7 +916,7 @@ function createDiffExtensions({
               return false
             }
 
-            onSave?.(view.state.doc.toString())
+            onSave?.(getCurrentText(view))
             return true
           },
         },
@@ -902,12 +952,14 @@ function createDiffExtensions({
         if (isCompositionInputUpdate(update)) {
           pendingCompositionDocChange = true
           pendingCompositionView = update.view
+          readChangedText(update)
           return
         }
 
         cancelPendingCompositionFlush()
         pendingCompositionDocChange = false
         pendingCompositionView = null
+        const nextValue = readChangedText(update)
 
         const renumberChanges = shouldCollectOrderedListRenumberChanges(update)
           ? collectOrderedListRenumberChanges(update.state)
@@ -920,7 +972,7 @@ function createDiffExtensions({
           return
         }
 
-        onChange(update.state.doc.toString())
+        onChange(nextValue)
       }
 
       if (update.selectionSet && !isReadOnly()) {
@@ -1689,6 +1741,8 @@ export function createMeoDiffSplitController({
   const modifiedEditableCompartment = new Compartment()
   const originalReadOnlyCompartment = new Compartment()
   const modifiedReadOnlyCompartment = new Compartment()
+  const originalTextSnapshot: TextSnapshot = { value: '' }
+  const modifiedTextSnapshot: TextSnapshot = { value: '' }
   const host = document.createElement('div')
   host.className = 'meo-diff-split-host'
 
@@ -1973,6 +2027,38 @@ export function createMeoDiffSplitController({
     return changed
   }
 
+  const syncTextSnapshotToView = (
+    view: EditorView,
+    snapshot: TextSnapshot,
+    nextText: string,
+    annotations: Annotation<unknown> | readonly Annotation<unknown>[],
+  ) => {
+    if (snapshot.value.length !== view.state.doc.length) {
+      view.dispatch({
+        annotations,
+        changes: {
+          from: 0,
+          insert: nextText,
+          to: view.state.doc.length,
+        },
+      })
+      snapshot.value = nextText
+      return true
+    }
+
+    const syncChange = findSyncChange(snapshot.value, nextText)
+    if (!syncChange) {
+      return false
+    }
+
+    view.dispatch({
+      annotations,
+      changes: syncChange,
+    })
+    snapshot.value = nextText
+    return true
+  }
+
   const readOnlyWidgetSelector = 'textarea, input, select, button, [contenteditable="true"]'
 
   const lockReadOnlyWidgetElement = (element: Element) => {
@@ -2214,6 +2300,8 @@ export function createMeoDiffSplitController({
 
     const originalState = getOriginalState()
     lastRenderedState = originalState
+    originalTextSnapshot.value = originalState.text
+    modifiedTextSnapshot.value = originalState.modifiedText
     syncLabels(originalState)
     header.replaceChildren(originalLabel, modifiedLabel)
 
@@ -2231,6 +2319,7 @@ export function createMeoDiffSplitController({
           readOnlyCompartment: originalReadOnlyCompartment,
           readOnly: true,
           side: 'original',
+          textSnapshot: originalTextSnapshot,
         }),
       },
       b: {
@@ -2277,6 +2366,7 @@ export function createMeoDiffSplitController({
           reportViewportChanges: false,
           readOnly: () => getOriginalState().modifiedReadOnly,
           side: 'modified',
+          textSnapshot: modifiedTextSnapshot,
         }),
       },
       diffConfig: getDiffConfig(editable),
@@ -2469,31 +2559,27 @@ export function createMeoDiffSplitController({
       return
     }
 
-    if (originalView.state.doc.toString() !== originalState.text) {
+    if (originalTextSnapshot.value !== originalState.text) {
       invalidateDiffOverviewSegments()
-      originalView.dispatch({
-        annotations: allowReadOnlyDocumentUpdate.of(true),
-        changes: {
-          from: 0,
-          insert: originalState.text,
-          to: originalView.state.doc.length,
-        },
-      })
+      syncTextSnapshotToView(
+        originalView,
+        originalTextSnapshot,
+        originalState.text,
+        allowReadOnlyDocumentUpdate.of(true),
+      )
     }
 
-    if (modifiedView.state.doc.toString() !== originalState.modifiedText) {
+    if (modifiedTextSnapshot.value !== originalState.modifiedText) {
       invalidateDiffOverviewSegments()
-      modifiedView.dispatch({
-        annotations: [
+      syncTextSnapshotToView(
+        modifiedView,
+        modifiedTextSnapshot,
+        originalState.modifiedText,
+        [
           externalDocumentSync.of(true),
           Transaction.addToHistory.of(false),
         ],
-        changes: {
-          from: 0,
-          insert: originalState.modifiedText,
-          to: modifiedView.state.doc.length,
-        },
-      })
+      )
     }
     mergeView?.reconfigure({
       diffConfig: getDiffConfig(editable),
@@ -2591,7 +2677,7 @@ export function createMeoDiffSplitController({
       if (getOriginalState().modifiedReadOnly) {
         return currentText
       }
-      return mergeView?.b.state.doc.toString() ?? currentText
+      return mergeView ? modifiedTextSnapshot.value : currentText
     },
     getTopVisiblePosition() {
       return getTopVisiblePosition(mergeView?.b ?? null, mergeView?.dom ?? null)
@@ -2833,7 +2919,7 @@ export function createMeoDiffSplitController({
         return
       }
 
-      const previousText = view.state.doc.toString()
+      const previousText = modifiedTextSnapshot.value
       const syncChange = findSyncChange(previousText, originalState.modifiedText)
       if (!syncChange) {
         return
@@ -2854,6 +2940,7 @@ export function createMeoDiffSplitController({
           changes: syncChange,
           selection: { anchor: mappedAnchor, head: mappedHead },
         })
+        modifiedTextSnapshot.value = originalState.modifiedText
       } finally {
         applyingExternal = false
       }
