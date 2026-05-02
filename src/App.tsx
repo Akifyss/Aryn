@@ -268,6 +268,7 @@ const LEGACY_TAB_STORAGE_PREFIXES = [
   `${LEGACY_APP_STORAGE_PREFIX}:editor-tabs:`,
 ]
 const LAYOUT_STORAGE_KEYS = {
+  activeLeftSidebarTab: `${APP_STORAGE_PREFIX}:active-left-sidebar-tab`,
   gitPanelHeight: `${APP_STORAGE_PREFIX}:git-panel-height`,
   gitPanelLayout: `${APP_STORAGE_PREFIX}:git-panel-layout`,
   leftSidebarCollapsed: `${APP_STORAGE_PREFIX}:left-sidebar-collapsed`,
@@ -276,6 +277,7 @@ const LAYOUT_STORAGE_KEYS = {
   rightSidebarWidth: `${APP_STORAGE_PREFIX}:right-sidebar-width`,
 } as const
 const LEGACY_LAYOUT_STORAGE_KEYS: Record<keyof typeof LAYOUT_STORAGE_KEYS, string[]> = {
+  activeLeftSidebarTab: [],
   gitPanelHeight: [`${LEGACY_APP_STORAGE_PREFIX}:git-panel-height`],
   gitPanelLayout: [`${LEGACY_APP_STORAGE_PREFIX}:git-panel-layout`],
   leftSidebarCollapsed: [`${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-collapsed`],
@@ -291,6 +293,7 @@ const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
 
 type ResizePanel = 'left' | 'right'
 type PanelSurfaceMode = 'docked' | 'drawer'
+type LeftSidebarTab = 'file' | 'git'
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
@@ -326,6 +329,45 @@ function readStoredLocalStorageValue(
   }
 
   return null
+}
+
+function getLocalStorage() {
+  return typeof window === 'undefined' ? null : window.localStorage
+}
+
+function readStoredLayoutNumber(
+  key: keyof typeof LAYOUT_STORAGE_KEYS,
+  fallback: number,
+) {
+  const storage = getLocalStorage()
+  const value = storage ? readStoredLocalStorageValue(storage, key) : null
+  const parsedValue = value === null ? NaN : Number(value)
+
+  return Number.isFinite(parsedValue) ? parsedValue : fallback
+}
+
+function readStoredLayoutBoolean(
+  key: keyof typeof LAYOUT_STORAGE_KEYS,
+  fallback: boolean,
+) {
+  const storage = getLocalStorage()
+  const value = storage ? readStoredLocalStorageValue(storage, key) : null
+
+  return value === null ? fallback : value === 'true'
+}
+
+function readStoredGitPanelLayout() {
+  const storage = getLocalStorage()
+  const value = storage ? readStoredLocalStorageValue(storage, 'gitPanelLayout') : null
+
+  return value === 'list' || value === 'tree' ? value : DEFAULT_GIT_PANEL_LAYOUT
+}
+
+function readStoredLeftSidebarTab() {
+  const storage = getLocalStorage()
+  const value = storage ? readStoredLocalStorageValue(storage, 'activeLeftSidebarTab') : null
+
+  return value === 'git' ? value : 'file'
 }
 
 function readStoredTabState(workspacePath: string): StoredTabState {
@@ -571,20 +613,30 @@ function App() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'file-icons' | 'agent'>('general')
 
-  const [leftSidebarWidth, setLeftSidebarWidth] = useState(DEFAULT_LEFT_SIDEBAR_WIDTH)
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(DEFAULT_RIGHT_SIDEBAR_WIDTH)
-  const [gitPanelHeight, setGitPanelHeight] = useState(DEFAULT_GIT_PANEL_HEIGHT)
-  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false)
-  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(false)
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(
+    () => readStoredLayoutNumber('leftSidebarWidth', DEFAULT_LEFT_SIDEBAR_WIDTH),
+  )
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(
+    () => readStoredLayoutNumber('rightSidebarWidth', DEFAULT_RIGHT_SIDEBAR_WIDTH),
+  )
+  const [gitPanelHeight, setGitPanelHeight] = useState(
+    () => readStoredLayoutNumber('gitPanelHeight', DEFAULT_GIT_PANEL_HEIGHT),
+  )
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(
+    () => readStoredLayoutBoolean('leftSidebarCollapsed', false),
+  )
+  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(
+    () => readStoredLayoutBoolean('rightSidebarCollapsed', false),
+  )
   const [activeResizePanel, setActiveResizePanel] = useState<ResizePanel | null>(null)
   const [isGitPanelResizing, setIsGitPanelResizing] = useState(false)
-  const [activeLeftSidebarTab, setActiveLeftSidebarTab] = useState<'file' | 'git'>('file')
+  const [activeLeftSidebarTab, setActiveLeftSidebarTab] = useState<LeftSidebarTab>(() => readStoredLeftSidebarTab())
   const [gitRepositoryState, setGitRepositoryState] = useState<GitRepositoryState | null>(null)
   const [isGitLoading, setIsGitLoading] = useState(false)
   const [gitBusyLabel, setGitBusyLabel] = useState<string | null>(null)
   const [gitErrorMessage, setGitErrorMessage] = useState<string | null>(null)
   const [gitCommitMessage, setGitCommitMessage] = useState('')
-  const [gitPanelLayout, setGitPanelLayout] = useState<GitPanelLayout>(DEFAULT_GIT_PANEL_LAYOUT)
+  const [gitPanelLayout, setGitPanelLayout] = useState<GitPanelLayout>(() => readStoredGitPanelLayout())
   const [shellWidth, setShellWidth] = useState(() => (
     typeof window !== 'undefined' ? window.innerWidth : FULL_LAYOUT_BREAKPOINT + 1
   ))
@@ -2877,49 +2929,6 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const storage = window.localStorage
-    const savedLeftWidth = readStoredLocalStorageValue(storage, 'leftSidebarWidth')
-    const savedRightWidth = readStoredLocalStorageValue(storage, 'rightSidebarWidth')
-    const savedLeftCollapsed = readStoredLocalStorageValue(storage, 'leftSidebarCollapsed')
-    const savedRightCollapsed = readStoredLocalStorageValue(storage, 'rightSidebarCollapsed')
-    const savedGitPanelHeight = readStoredLocalStorageValue(storage, 'gitPanelHeight')
-    const savedGitPanelLayout = readStoredLocalStorageValue(storage, 'gitPanelLayout')
-
-    if (savedLeftWidth) {
-      const parsedLeftWidth = Number(savedLeftWidth)
-      if (Number.isFinite(parsedLeftWidth)) {
-        setLeftSidebarWidth(parsedLeftWidth)
-      }
-    }
-
-    if (savedRightWidth) {
-      const parsedRightWidth = Number(savedRightWidth)
-      if (Number.isFinite(parsedRightWidth)) {
-        setRightSidebarWidth(parsedRightWidth)
-      }
-    }
-
-    if (savedGitPanelHeight) {
-      const parsedGitPanelHeight = Number(savedGitPanelHeight)
-      if (Number.isFinite(parsedGitPanelHeight)) {
-        setGitPanelHeight(parsedGitPanelHeight)
-      }
-    }
-
-    if (savedGitPanelLayout === 'list' || savedGitPanelLayout === 'tree') {
-      setGitPanelLayout(savedGitPanelLayout)
-    }
-
-    if (savedLeftCollapsed) {
-      setIsLeftSidebarCollapsed(savedLeftCollapsed === 'true')
-    }
-
-    if (savedRightCollapsed) {
-      setIsRightSidebarCollapsed(savedRightCollapsed === 'true')
-    }
-  }, [])
-
-  useEffect(() => {
     window.localStorage.setItem(LAYOUT_STORAGE_KEYS.leftSidebarWidth, String(leftSidebarWidth))
   }, [leftSidebarWidth])
 
@@ -2934,6 +2943,10 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(LAYOUT_STORAGE_KEYS.gitPanelLayout, gitPanelLayout)
   }, [gitPanelLayout])
+
+  useEffect(() => {
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.activeLeftSidebarTab, activeLeftSidebarTab)
+  }, [activeLeftSidebarTab])
 
   useEffect(() => {
     window.localStorage.setItem(LAYOUT_STORAGE_KEYS.leftSidebarCollapsed, String(isLeftSidebarCollapsed))
