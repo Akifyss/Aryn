@@ -10,6 +10,8 @@ const NON_RENDERABLE_GIT_BASELINE_REASONS = new Set(['not-repo', 'ignored']);
 
 export const setGitBaselineEffect = StateEffect.define<any>();
 export const refreshGitDiffLineFlagsEffect = StateEffect.define<any>();
+const setGitDiffLineFlagsEffect = StateEffect.define<(MarkerFlags | undefined)[] | null>();
+const deferGitDiffLineFlagsRefreshEffect = StateEffect.define<null>();
 const deferGitDiffLineFlagDocChangesFacet = Facet.define<boolean, boolean>({
   combine(values) {
     return values.some(Boolean);
@@ -43,6 +45,10 @@ type GitDiffGutterRenderOptions = {
 
 type GitDiffGutterBaselineOptions = {
   deferDocChanges?: boolean;
+};
+
+type SetGitBaselineOptions = {
+  deferLineFlags?: boolean;
 };
 
 const emptyBaseline: BaselineSnapshot = Object.freeze({
@@ -237,6 +243,19 @@ function hasGitBaselineEffect(tr: Transaction): boolean {
   return tr.effects.some((effect) => effect.is(setGitBaselineEffect));
 }
 
+function hasDeferredGitDiffLineFlagRefreshEffect(tr: Transaction): boolean {
+  return tr.effects.some((effect) => effect.is(deferGitDiffLineFlagsRefreshEffect));
+}
+
+function getDirectGitDiffLineFlagsEffect(tr: Transaction): (MarkerFlags | undefined)[] | null | undefined {
+  for (const effect of tr.effects) {
+    if (effect.is(setGitDiffLineFlagsEffect)) {
+      return effect.value;
+    }
+  }
+  return undefined;
+}
+
 function shouldDeferGitDiffLineFlagDocChange(tr: Transaction): boolean {
   return tr.docChanged && tr.state.facet(deferGitDiffLineFlagDocChangesFacet);
 }
@@ -409,9 +428,20 @@ export function getGitDiffOverviewSegments(state: EditorState): DiffSegment[] {
   return segments;
 }
 
-export function setGitBaseline(view: EditorView, snapshot: any): void {
+export function setGitBaseline(view: EditorView, snapshot: any, options: SetGitBaselineOptions = {}): void {
+  const effects = [setGitBaselineEffect.of(snapshot)];
+  if (options.deferLineFlags) {
+    effects.push(deferGitDiffLineFlagsRefreshEffect.of(null));
+  }
+
   view.dispatch({
-    effects: setGitBaselineEffect.of(snapshot)
+    effects
+  });
+}
+
+export function setGitDiffLineFlags(view: EditorView, lineFlags: (MarkerFlags | undefined)[] | null): void {
+  view.dispatch({
+    effects: setGitDiffLineFlagsEffect.of(lineFlags)
   });
 }
 
@@ -438,8 +468,16 @@ export const gitDiffLineFlagsField = StateField.define<(MarkerFlags | undefined)
     return buildCurrentDiffLineFlags(state, state.field(gitBaselineField));
   },
   update(value: (MarkerFlags | undefined)[] | null, tr: Transaction): (MarkerFlags | undefined)[] | null {
+    const directLineFlags = getDirectGitDiffLineFlagsEffect(tr);
+    if (directLineFlags !== undefined) {
+      return directLineFlags;
+    }
+
     const baselineChanged = hasGitBaselineEffect(tr);
     const forceRefresh = hasGitDiffRefreshEffect(tr);
+    if (baselineChanged && !forceRefresh && hasDeferredGitDiffLineFlagRefreshEffect(tr)) {
+      return value;
+    }
     if (
       tr.docChanged
       && !baselineChanged
@@ -461,8 +499,16 @@ const gitDiffGutterField = StateField.define<any>({
     return buildGitGutterMarkersFromLineFlags(state, state.field(gitDiffLineFlagsField));
   },
   update(value: any, tr: Transaction): any {
+    const directLineFlags = getDirectGitDiffLineFlagsEffect(tr);
+    if (directLineFlags !== undefined) {
+      return buildGitGutterMarkersFromLineFlags(tr.state, tr.state.field(gitDiffLineFlagsField));
+    }
+
     const baselineChanged = hasGitBaselineEffect(tr);
     const forceRefresh = hasGitDiffRefreshEffect(tr);
+    if (baselineChanged && !forceRefresh && hasDeferredGitDiffLineFlagRefreshEffect(tr)) {
+      return value;
+    }
     if (
       tr.docChanged
       && !baselineChanged
@@ -501,8 +547,19 @@ function createGitDiffLiveGutterField(options: GitDiffGutterRenderOptions = {}) 
       );
     },
     update(value: any, tr: Transaction): any {
+      const directLineFlags = getDirectGitDiffLineFlagsEffect(tr);
+      if (directLineFlags !== undefined) {
+        return buildLiveGitGutterMarkersFromLineFlags(
+          tr.state,
+          mapLineFlags(tr.state.field(gitDiffLineFlagsField, false), options.mapLineFlag)
+        );
+      }
+
       const baselineChanged = hasGitBaselineEffect(tr);
       const forceRefresh = hasGitDiffRefreshEffect(tr);
+      if (baselineChanged && !forceRefresh && hasDeferredGitDiffLineFlagRefreshEffect(tr)) {
+        return value;
+      }
       if (
         tr.docChanged
         && !baselineChanged

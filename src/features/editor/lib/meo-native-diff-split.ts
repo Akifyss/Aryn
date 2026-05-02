@@ -49,8 +49,8 @@ import { isRegularInlineSelection } from '@/vendor/meo/webview/helpers/selection
 import {
   gitDiffGutterBaselineExtensions,
   gitDiffGutterLiveRenderExtensions,
-  refreshGitDiffLineFlagsEffect,
   setGitBaseline,
+  setGitDiffLineFlags,
 } from '@/vendor/meo/webview/helpers/gitDiffGutter'
 import {
   createGitDiffOverviewRulerController,
@@ -721,6 +721,64 @@ type DiffSplitGutterFlags = {
   liveBlockEndLine?: number
   liveBlockStartLine?: number
   scope?: 'staged' | 'unstaged'
+}
+
+function createDiffSplitGutterFlags(flags: Partial<DiffSplitGutterFlags>): DiffSplitGutterFlags {
+  return {
+    added: flags.added === true,
+    deleted: flags.deleted === true,
+    liveBlockEndLine: flags.liveBlockEndLine,
+    liveBlockStartLine: flags.liveBlockStartLine,
+    modified: flags.modified === true,
+    removed: flags.removed === true,
+    scope: flags.scope,
+  }
+}
+
+export function buildDiffSplitGutterFlagsFromChunks(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  chunks: readonly CodeMirrorDiffChunk[],
+  side: 'original' | 'modified',
+): (DiffSplitGutterFlags | undefined)[] {
+  const doc = side === 'original' ? originalDoc : modifiedDoc
+  const lineFlags = new Array<DiffSplitGutterFlags | undefined>(doc.lines)
+
+  for (const chunk of chunks) {
+    const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
+    if (side === 'original') {
+      const lineCount = Math.max(0, selection.originalLineCount)
+      if (!lineCount) {
+        continue
+      }
+
+      const startLine = clampNumber(selection.originalStartLine, 1, doc.lines)
+      const endLine = clampNumber(startLine + lineCount - 1, startLine, doc.lines)
+      for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
+        lineFlags[lineNo - 1] = createDiffSplitGutterFlags({
+          removed: true,
+          scope: 'unstaged',
+        })
+      }
+      continue
+    }
+
+    const lineCount = Math.max(0, selection.modifiedLineCount)
+    if (!lineCount) {
+      continue
+    }
+
+    const startLine = clampNumber(selection.modifiedStartLine, 1, doc.lines)
+    const endLine = clampNumber(startLine + lineCount - 1, startLine, doc.lines)
+    for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
+      lineFlags[lineNo - 1] = createDiffSplitGutterFlags({
+        added: true,
+        scope: 'unstaged',
+      })
+    }
+  }
+
+  return lineFlags
 }
 
 function mapDiffSplitOriginalGutterFlag(flags: DiffSplitGutterFlags) {
@@ -1911,20 +1969,33 @@ export function createMeoDiffSplitController({
     }
   }
 
+  const syncSplitGutterLineFlagsFromChunks = () => {
+    if (!mergeView) {
+      return
+    }
+
+    const chunks = mergeView.chunks as readonly CodeMirrorDiffChunk[]
+    const originalDoc = mergeView.a.state.doc
+    const modifiedDoc = mergeView.b.state.doc
+    setGitDiffLineFlags(
+      mergeView.a,
+      buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'original'),
+    )
+    setGitDiffLineFlags(
+      mergeView.b,
+      buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'modified'),
+    )
+  }
+
   const refreshDiffArtifactsNow = () => {
     cancelPendingDeferredDiffRefresh()
     if (destroyed || !mergeView || isComposing) {
       return
     }
 
-    const refreshedByBaseline = syncDiffSplitGitBaselines(getOriginalState())
-    if (!refreshedByBaseline.original) {
-      mergeView.a.dispatch({ effects: refreshGitDiffLineFlagsEffect.of(null) })
-    }
-    if (!refreshedByBaseline.modified) {
-      mergeView.b.dispatch({ effects: refreshGitDiffLineFlagsEffect.of(null) })
-    }
+    syncDiffSplitGitBaselines(getOriginalState(), { deferLineFlags: true })
     mergeView.refreshChunks()
+    syncSplitGutterLineFlagsFromChunks()
     invalidateDiffOverviewSegments()
     resetDiffOverviewRender()
   }
@@ -2055,7 +2126,7 @@ export function createMeoDiffSplitController({
 
   const syncDiffSplitGitBaselines = (
     originalState: DiffSplitResolvedState,
-    options: { force?: boolean } = {},
+    options: { deferLineFlags?: boolean, force?: boolean } = {},
   ) => {
     const changed = {
       modified: false,
@@ -2074,7 +2145,7 @@ export function createMeoDiffSplitController({
         headOid: null,
         indexText: null,
         tracked: true,
-      })
+      }, { deferLineFlags: options.deferLineFlags === true })
     }
 
     if (options.force || syncedModifiedGitBaseText !== originalState.text) {
@@ -2086,7 +2157,7 @@ export function createMeoDiffSplitController({
         headOid: null,
         indexText: null,
         tracked: true,
-      })
+      }, { deferLineFlags: options.deferLineFlags === true })
     }
 
     return changed
@@ -2452,7 +2523,8 @@ export function createMeoDiffSplitController({
 
     mergeView.dom.classList.add('meo-diff-split-merge-view')
     appliedModifiedReadOnly = originalState.modifiedReadOnly
-    syncDiffSplitGitBaselines(originalState, { force: true })
+    syncDiffSplitGitBaselines(originalState, { deferLineFlags: true, force: true })
+    syncSplitGutterLineFlagsFromChunks()
     syncDiffGutterVisibility()
     mergeScrollArea = mountMeoBaseScrollArea({
       className: 'meo-diff-split-base-scroll-area',

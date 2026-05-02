@@ -15,6 +15,7 @@ import {
 import {
   __meoDiffSplitSearchTestHooks,
   applyCodeMirrorChangesToText,
+  buildDiffSplitGutterFlagsFromChunks,
   shouldDeferSplitMergeChunkUpdate,
 } from '../src/features/editor/lib/meo-native-diff-split'
 import {
@@ -289,6 +290,53 @@ describe('meo performance guards', () => {
 
     expect(nextChunks.some(chunk => chunk.fromB <= nextChangedLine.from && chunk.toB > nextChangedLine.from)).toBe(true)
     expect(nextChunks.some(chunk => chunk.fromB <= unrelatedHeading.from && chunk.toB > unrelatedHeading.from)).toBe(false)
+  })
+
+  it('derives split gutter flags from existing merge chunks', () => {
+    const originalDoc = Text.of(['one', 'two', 'three', 'four'])
+    const modifiedDoc = Text.of(['one', 'TWO', 'three', 'four', 'five'])
+    const chunks = Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+
+    const originalFlags = buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'original')
+    const modifiedFlags = buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'modified')
+
+    expect(originalFlags).toHaveLength(originalDoc.lines)
+    expect(modifiedFlags).toHaveLength(modifiedDoc.lines)
+    expect(originalFlags[1]).toMatchObject({
+      added: false,
+      modified: false,
+      removed: true,
+      scope: 'unstaged',
+    })
+    expect(modifiedFlags[1]).toMatchObject({
+      added: true,
+      modified: false,
+      removed: false,
+      scope: 'unstaged',
+    })
+    expect(modifiedFlags[4]).toMatchObject({
+      added: true,
+      scope: 'unstaged',
+    })
+
+    const deletionDoc = Text.of(['one', 'three', 'four'])
+    const deletionChunks = Chunk.build(originalDoc, deletionDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const deletionOriginalFlags = buildDiffSplitGutterFlagsFromChunks(originalDoc, deletionDoc, deletionChunks, 'original')
+    const deletionModifiedFlags = buildDiffSplitGutterFlagsFromChunks(originalDoc, deletionDoc, deletionChunks, 'modified')
+
+    expect(deletionOriginalFlags[1]).toMatchObject({
+      removed: true,
+      scope: 'unstaged',
+    })
+    expect(deletionModifiedFlags.some(Boolean)).toBe(false)
   })
 
   it('applies split text snapshots from CodeMirror changes without flattening the document', () => {
