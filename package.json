@@ -23,7 +23,9 @@
     "build": "tsc && vite build && electron-builder",
     "preview": "vite preview",
     "pretest": "vite build --mode=test",
-    "test": "vitest run"
+    "test": "vitest run",
+    "perf:meo": "vitest run test/meo-performance.spec.ts test/meo-git-diff-gutter.spec.ts test/git-diff-navigation.spec.ts",
+    "perf:meo:full": "npm run typecheck && npm test -- test/meo-performance.spec.ts test/meo-git-diff-gutter.spec.ts test/git-diff-navigation.spec.ts"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",
