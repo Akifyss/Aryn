@@ -611,7 +611,6 @@
 .meo-native-theme .meo-diff-split-body .cm-cursor {
   border-left-color: var(--editorCursor-foreground, currentColor) !important;
   border-left-width: 1.5px !important;
-  min-height: calc(var(--active-editor-line-height, 1.5) * 1em);
 }
 
 .meo-native-theme .meo-diff-split-body .cm-selectionLayer {
