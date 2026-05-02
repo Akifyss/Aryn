@@ -38,6 +38,9 @@ import type {
   NativeMeoMessage,
 } from '@/features/editor/lib/meo-native-editor-types'
 
+const SPLIT_PARENT_CHANGE_FLUSH_DELAY_MS = 50
+const DOCUMENT_FIND_REFRESH_DELAY_MS = 120
+
 function buildUnavailableBlameResult(
   reason: 'not-repo' | 'untracked' | 'git-unavailable' | 'error',
 ): GitBlameResult {
@@ -87,6 +90,11 @@ export function mountNativeMeoEditor({
   let currentGitChangeContext = gitChangeContext
   let pendingOutlineRefreshFrame = 0
   let pendingResizeFrame = 0
+  let pendingFindStatusRefreshFrame = 0
+  let pendingFindStatusRefreshTimer = 0
+  let pendingSplitParentChangeFrame = 0
+  let pendingSplitParentChangeText: string | null = null
+  let pendingSplitParentChangeTimer = 0
 
   const vscode = {
     getState: () => persistedWebviewState,
@@ -192,6 +200,107 @@ export function mountNativeMeoEditor({
   )
   const selectionMenuController = createSelectionMenuController(selectionMenuElements, getActiveEditor)
 
+  const cancelScheduledFindStatusRefresh = () => {
+    if (pendingFindStatusRefreshTimer) {
+      window.clearTimeout(pendingFindStatusRefreshTimer)
+      pendingFindStatusRefreshTimer = 0
+    }
+    if (pendingFindStatusRefreshFrame) {
+      window.cancelAnimationFrame(pendingFindStatusRefreshFrame)
+      pendingFindStatusRefreshFrame = 0
+    }
+  }
+
+  const scheduleFindStatusRefresh = () => {
+    if (pendingFindStatusRefreshTimer) {
+      window.clearTimeout(pendingFindStatusRefreshTimer)
+      pendingFindStatusRefreshTimer = 0
+    }
+
+    pendingFindStatusRefreshTimer = window.setTimeout(() => {
+      pendingFindStatusRefreshTimer = 0
+      if (pendingFindStatusRefreshFrame) {
+        return
+      }
+
+      pendingFindStatusRefreshFrame = window.requestAnimationFrame(() => {
+        pendingFindStatusRefreshFrame = 0
+        if (!destroyed) {
+          findPanelController.updateFindStatusSummary()
+        }
+      })
+    }, DOCUMENT_FIND_REFRESH_DELAY_MS)
+  }
+
+  const cancelPendingSplitParentChange = () => {
+    if (pendingSplitParentChangeTimer) {
+      window.clearTimeout(pendingSplitParentChangeTimer)
+      pendingSplitParentChangeTimer = 0
+    }
+    if (pendingSplitParentChangeFrame) {
+      window.cancelAnimationFrame(pendingSplitParentChangeFrame)
+      pendingSplitParentChangeFrame = 0
+    }
+  }
+
+  const flushPendingSplitParentChange = () => {
+    if (pendingSplitParentChangeText === null) {
+      cancelPendingSplitParentChange()
+      return null
+    }
+
+    const nextText = pendingSplitParentChangeText
+    pendingSplitParentChangeText = null
+    cancelPendingSplitParentChange()
+    onChange(nextText)
+    return nextText
+  }
+
+  const scheduleSplitParentChange = (nextText: string) => {
+    pendingSplitParentChangeText = nextText
+    if (pendingSplitParentChangeTimer) {
+      window.clearTimeout(pendingSplitParentChangeTimer)
+      pendingSplitParentChangeTimer = 0
+    }
+
+    pendingSplitParentChangeTimer = window.setTimeout(() => {
+      pendingSplitParentChangeTimer = 0
+      if (pendingSplitParentChangeFrame) {
+        return
+      }
+
+      pendingSplitParentChangeFrame = window.requestAnimationFrame(() => {
+        pendingSplitParentChangeFrame = 0
+        flushPendingSplitParentChange()
+      })
+    }, SPLIT_PARENT_CHANGE_FLUSH_DELAY_MS)
+  }
+
+  const emitContentChange = (
+    nextText: string,
+    options: { deferParent?: boolean, deferFindStatus?: boolean } = {},
+  ) => {
+    currentText = nextText
+    if (options.deferParent) {
+      scheduleSplitParentChange(nextText)
+    } else {
+      const flushedText = flushPendingSplitParentChange()
+      if (flushedText !== nextText) {
+        onChange(nextText)
+      }
+    }
+
+    scheduleWikiLinkStatusRefresh(nextText)
+    scheduleLocalLinkStatusRefresh(nextText)
+    if (options.deferFindStatus) {
+      scheduleFindStatusRefresh()
+    } else {
+      cancelScheduledFindStatusRefresh()
+      findPanelController.updateFindStatusSummary()
+    }
+    scheduleOutlineRefreshIfVisible()
+  }
+
   const updateModeUi = () => {
     liveButton.classList.toggle('is-active', currentMode === 'live')
     sourceButton.classList.toggle('is-active', currentMode === 'source')
@@ -292,12 +401,10 @@ export function mountNativeMeoEditor({
       gitChangeContext: currentGitChangeContext,
       lineNumbersVisible,
       onChange: (nextValue) => {
-        currentText = nextValue
-        onChange(nextValue)
-        scheduleWikiLinkStatusRefresh(nextValue)
-        scheduleLocalLinkStatusRefresh(nextValue)
-        findPanelController.updateFindStatusSummary()
-        scheduleOutlineRefreshIfVisible()
+        emitContentChange(nextValue, {
+          deferFindStatus: true,
+          deferParent: true,
+        })
       },
       onCompositionChange: updateCompositionState,
       onOpenLink: (href) => {
@@ -330,6 +437,9 @@ export function mountNativeMeoEditor({
       return
     }
 
+    if (currentMode === 'diff-split') {
+      flushPendingSplitParentChange()
+    }
     currentMode = nextMode
     if (currentMode === 'diff-split') {
       ensureDiffSplit()
@@ -410,6 +520,7 @@ export function mountNativeMeoEditor({
   const handleNativeMessage = async (message: NativeMeoMessage) => {
     switch (message.type) {
       case 'saveDocument':
+        flushPendingSplitParentChange()
         onSave?.(currentMode === 'diff-split' ? diffSplitController?.getText() ?? currentText : editor.getText())
         return
       case 'setMode':
@@ -543,12 +654,7 @@ export function mountNativeMeoEditor({
     initialTopLineOffset: persistenceController.getInitialRestoreTopLineOffset(initialValue, meoSettings.rememberPositionLines),
     initialVimMode: false,
     onApplyChanges: (nextText: string) => {
-      currentText = nextText
-      onChange(nextText)
-      scheduleWikiLinkStatusRefresh(nextText)
-      scheduleLocalLinkStatusRefresh(nextText)
-      findPanelController.updateFindStatusSummary()
-      scheduleOutlineRefreshIfVisible()
+      emitContentChange(nextText)
     },
     onOpenGitRevisionForLine: (options: { lineNumber?: number }) => {
       openGitMarkerInDiffSplit('staged', options)
@@ -659,6 +765,7 @@ export function mountNativeMeoEditor({
       const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's'
       if (isSaveShortcut) {
         event.preventDefault()
+        flushPendingSplitParentChange()
         onSave?.(diffSplitController?.getText() ?? currentText)
         return
       }
@@ -923,6 +1030,8 @@ export function mountNativeMeoEditor({
       cancelScheduledViewPositionCapture()
       cancelScheduledOutlineRefresh()
       cancelScheduledResizeRefresh()
+      cancelScheduledFindStatusRefresh()
+      flushPendingSplitParentChange()
       cancelPendingWikiStatusRefresh()
       cancelPendingLocalLinkStatusRefresh()
       setWikiLinkRefreshContext({
@@ -980,6 +1089,10 @@ export function mountNativeMeoEditor({
     setText(text) {
       const normalizedNextText = normalizeEol(text)
       const normalizedCurrentText = normalizeEol(editor.getText())
+      if (currentMode === 'diff-split') {
+        cancelPendingSplitParentChange()
+        pendingSplitParentChangeText = null
+      }
       currentText = text
 
       if (currentMode === 'diff-split') {

@@ -565,6 +565,15 @@ function hasResolvedViewFrameChanged(
     || getActionChangeKey(previous.actionChange) !== getActionChangeKey(next.actionChange)
 }
 
+function canUseTextOnlyResolvedUpdate(
+  previous: DiffSplitResolvedState,
+  gitChangeContext: MeoDiffSplitGitChangeContext,
+): boolean {
+  return previous.actionScope !== 'staged'
+    && !gitChangeContext.stagedChange
+    && !previous.modifiedReadOnly
+}
+
 const SPLIT_DIFF_REFRESH_IDLE_DELAY_MS = 200
 const SPLIT_DIFF_REFRESH_AFTER_COMPOSITION_MS = 80
 
@@ -2238,6 +2247,17 @@ export function createMeoDiffSplitController({
             }
             const previousState = lastRenderedState ?? getOriginalState()
             currentText = nextValue
+            if (canUseTextOnlyResolvedUpdate(previousState, currentGitChangeContext)) {
+              lastRenderedState = {
+                ...previousState,
+                modifiedText: nextValue,
+              }
+              scheduleDeferredDiffRefresh()
+              invalidateDiffOverviewSegments()
+              onChange(nextValue)
+              return
+            }
+
             const nextState = getOriginalState()
             if (hasResolvedViewFrameChanged(previousState, nextState)) {
               requestResolvedFrameSync()
