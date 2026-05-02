@@ -1,4 +1,4 @@
-import { EditorState, Text } from '@codemirror/state'
+import { EditorState, Text, Transaction } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import { splitDiffLines } from '../src/vendor/meo/shared/gitDiffCore'
 import {
@@ -8,6 +8,7 @@ import {
 import {
   gitDiffGutterBaselineExtensions,
   gitDiffLineFlagsField,
+  refreshGitDiffLineFlagsEffect,
   setGitBaselineEffect,
 } from '../src/vendor/meo/webview/helpers/gitDiffGutter'
 
@@ -263,6 +264,42 @@ describe('meo git diff gutter', () => {
       null,
       null,
       'added',
+    ])
+  })
+
+  it('refreshes git gutter flags after deferred IME composition edits', () => {
+    let state = EditorState.create({
+      doc: 'A\nB\nC\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    state = state.update({
+      effects: setGitBaselineEffect.of({
+        available: true,
+        baseText: 'A\nB\nC\n',
+        headOid: 'HEAD',
+        indexText: null,
+        tracked: true,
+      }),
+    }).state
+
+    const previousFlags = state.field(gitDiffLineFlagsField)
+    const line = state.doc.line(2)
+    const composedState = state.update({
+      changes: { from: line.to, insert: ' changed' },
+      annotations: Transaction.userEvent.of('input.type.compose'),
+    }).state
+
+    expect(composedState.field(gitDiffLineFlagsField)).toBe(previousFlags)
+
+    const refreshedState = composedState.update({
+      effects: refreshGitDiffLineFlagsEffect.of(null),
+    }).state
+
+    expect(flagSummary(refreshedState.field(gitDiffLineFlagsField))).toEqual([
+      null,
+      'modified',
+      null,
+      null,
     ])
   })
 

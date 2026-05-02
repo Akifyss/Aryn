@@ -19,6 +19,7 @@ import {
   gitDiffGutterBaselineExtensions,
   gitDiffGutterLiveRenderExtensions,
   gitDiffGutterRenderExtensions,
+  refreshGitDiffLineFlagsEffect,
   setGitBaseline as applyGitBaseline
 } from './helpers/gitDiffGutter';
 import { gitDiffLineHighlightsField } from './helpers/gitDiffLineHighlights';
@@ -970,7 +971,10 @@ export function createEditor({
         return;
       }
       view.dispatch({
-        effects: refreshLiveDecorationsEffect.of(null),
+        effects: [
+          refreshLiveDecorationsEffect.of(null),
+          refreshGitDiffLineFlagsEffect.of(null)
+        ],
         annotations: Transaction.addToHistory.of(false)
       });
     });
@@ -1898,7 +1902,13 @@ export function createEditor({
       emitSelectionChange();
     },
     refreshDecorations() {
-      view.dispatch({ effects: [refreshDecorationsEffect.of(null), refreshLiveDecorationsEffect.of(null)] });
+      view.dispatch({
+        effects: [
+          refreshDecorationsEffect.of(null),
+          refreshLiveDecorationsEffect.of(null),
+          refreshGitDiffLineFlagsEffect.of(null)
+        ]
+      });
     },
     refreshLayout() {
       view.requestMeasure();
