@@ -1070,7 +1070,10 @@ function createDiffExtensions({
         if (renumberChanges.length) {
           update.view.dispatch({
             changes: renumberChanges,
-            annotations: Transaction.addToHistory.of(false),
+            annotations: [
+              Transaction.addToHistory.of(false),
+              Transaction.userEvent.of('input.type'),
+            ],
           })
           return
         }
@@ -3072,7 +3075,7 @@ export function createMeoDiffSplitController({
 
       lastRenderedState = originalState
       syncLabels(originalState)
-      syncDiffSplitGitBaselines(originalState)
+      const baselineChanges = syncDiffSplitGitBaselines(originalState, { deferLineFlags: true })
       invalidateDiffOverviewSegments()
 
       const view = mergeView?.b
@@ -3083,6 +3086,13 @@ export function createMeoDiffSplitController({
       const previousText = modifiedTextSnapshot.value
       const syncChange = findSyncChange(previousText, originalState.modifiedText)
       if (!syncChange) {
+        if (baselineChanges.original || baselineChanges.modified) {
+          if (mergeView?.hasPendingChunkRefresh()) {
+            scheduleDeferredDiffRefresh()
+          } else {
+            syncSplitGutterLineFlagsFromChunks()
+          }
+        }
         return
       }
 
@@ -3104,6 +3114,11 @@ export function createMeoDiffSplitController({
         modifiedTextSnapshot.value = originalState.modifiedText
       } finally {
         applyingExternal = false
+      }
+      if (mergeView?.hasPendingChunkRefresh()) {
+        scheduleDeferredDiffRefresh()
+      } else {
+        syncSplitGutterLineFlagsFromChunks()
       }
       resetDiffOverviewRender()
     },

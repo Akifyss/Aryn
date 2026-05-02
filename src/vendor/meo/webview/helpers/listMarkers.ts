@@ -255,7 +255,10 @@ export function indentListByTwoSpaces(view) {
     return false;
   }
 
-  view.dispatch({ changes });
+  view.dispatch({
+    changes,
+    annotations: Transaction.userEvent.of('input.indent')
+  });
   return true;
 }
 
@@ -285,7 +288,10 @@ export function outdentListByTwoSpaces(view) {
     return false;
   }
 
-  view.dispatch({ changes });
+  view.dispatch({
+    changes,
+    annotations: Transaction.userEvent.of('input.indent')
+  });
   return true;
 }
 
@@ -480,7 +486,8 @@ class CheckboxWidget extends WidgetType {
     checkbox.addEventListener('change', () => {
       const newChar = checkbox.checked ? 'x' : ' ';
       view.dispatch({
-        changes: { from: this.bracketStart + 1, to: this.bracketStart + 2, insert: newChar }
+        changes: { from: this.bracketStart + 1, to: this.bracketStart + 2, insert: newChar },
+        annotations: Transaction.userEvent.of('input.type')
       });
     });
 
@@ -598,6 +605,7 @@ export function handleEnterContinueList(view) {
   const insert = `\n${marker}`;
   view.dispatch({
     changes: { from: position, insert },
+    annotations: Transaction.userEvent.of('input.type'),
     selection: { anchor: position + insert.length }
   });
   return true;
@@ -629,6 +637,7 @@ export function handleEnterOnEmptyListItem(view) {
 
   view.dispatch({
     changes: { from: line.from, to: contentStart, insert: '' },
+    annotations: Transaction.userEvent.of('input.type'),
     selection: { anchor: line.from }
   });
   return true;
@@ -692,6 +701,7 @@ export function handleBackspaceAtListContentStart(view) {
 
   view.dispatch({
     changes,
+    annotations: Transaction.userEvent.of('delete.backward'),
     selection: { anchor: selectionAnchor }
   });
   return true;
@@ -780,6 +790,7 @@ export function handleEnterAtListContentStart(view) {
   const insert = `${sameMarker}\n`;
   view.dispatch({
     changes: { from: line.from, insert },
+    annotations: Transaction.userEvent.of('input.type'),
     selection: { anchor: line.from + sameMarker.length }
   });
   return true;
@@ -814,6 +825,7 @@ export function handleEnterBeforeNestedList(view) {
   const insert = `\n${marker}`;
   view.dispatch({
     changes: { from: position, insert },
+    annotations: Transaction.userEvent.of('input.type'),
     selection: { anchor: position + insert.length }
   });
   return true;

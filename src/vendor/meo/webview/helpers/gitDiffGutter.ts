@@ -622,3 +622,7 @@ export function gitDiffGutterLiveRenderExtensions(options: GitDiffGutterRenderOp
   const liveGutterField = createGitDiffLiveGutterField(options);
   return [liveGutterField, gitDiffGutterLiveExtension(options, liveGutterField)];
 }
+
+export const __gitDiffGutterTestHooks = {
+  deferGitDiffLineFlagsRefreshEffect
+};

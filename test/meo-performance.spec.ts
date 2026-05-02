@@ -10,6 +10,10 @@ import { getMermaidColonBlocks } from '../src/vendor/meo/webview/helpers/mermaid
 import { parseMergeConflicts } from '../src/vendor/meo/webview/helpers/mergeConflicts'
 import {
   collectOrderedListRenumberChanges,
+  handleBackspaceAtListContentStart,
+  handleEnterContinueList,
+  indentListByTwoSpaces,
+  outdentListByTwoSpaces,
   shouldCollectOrderedListRenumberChanges,
 } from '../src/vendor/meo/webview/helpers/listMarkers'
 import {
@@ -19,6 +23,7 @@ import {
   shouldDeferSplitMergeChunkUpdate,
 } from '../src/features/editor/lib/meo-native-diff-split'
 import {
+  __gitDiffGutterTestHooks,
   gitDiffGutterBaselineExtensions,
   gitDiffLineFlagsField,
   refreshGitDiffLineFlagsEffect,
@@ -40,6 +45,20 @@ function createMarkdownState(doc: string) {
 
 function createPlainLongDocument(lineCount: number) {
   return Array.from({ length: lineCount }, (_, index) => `plain prose line ${index}`).join('\n')
+}
+
+function dispatchCommandSpec(state: EditorState, command: (view: any) => boolean) {
+  let dispatchedSpec: any = null
+  const handled = command({
+    dispatch: (spec: any) => {
+      dispatchedSpec = spec
+    },
+    state,
+  })
+
+  expect(handled).toBe(true)
+  expect(dispatchedSpec).not.toBeNull()
+  return state.update(dispatchedSpec)
 }
 
 describe('meo performance guards', () => {
@@ -220,6 +239,60 @@ describe('meo performance guards', () => {
     expect(refreshedFlags).toHaveLength(refreshedState.doc.lines)
   })
 
+  it('keeps split baseline echo updates off the git diff line recompute path until chunk refresh', () => {
+    const documentText = createPlainLongDocument(12_000)
+    const initialBaselineText = documentText.replace(
+      'plain prose line 6000',
+      'plain prose line 6000 before'
+    )
+    const nextBaselineText = documentText.replace(
+      'plain prose line 7000',
+      'plain prose line 7000 before'
+    )
+    let state = EditorState.create({
+      doc: documentText,
+      extensions: gitDiffGutterBaselineExtensions({ deferDocChanges: true }),
+    })
+    state = state.update({
+      effects: setGitBaselineEffect.of({
+        available: true,
+        baseText: initialBaselineText,
+        headOid: 'head',
+        indexText: null,
+        tracked: true,
+      }),
+    }).state
+
+    const previousFlags = state.field(gitDiffLineFlagsField)
+    expect(previousFlags).not.toBeNull()
+
+    const startedAt = performance.now()
+    const deferredBaselineState = state.update({
+      effects: [
+        setGitBaselineEffect.of({
+          available: true,
+          baseText: nextBaselineText,
+          headOid: 'head',
+          indexText: null,
+          tracked: true,
+        }),
+        __gitDiffGutterTestHooks.deferGitDiffLineFlagsRefreshEffect.of(null),
+      ],
+    }).state
+
+    const durationMs = performance.now() - startedAt
+    expect(deferredBaselineState.field(gitDiffLineFlagsField)).toBe(previousFlags)
+    expect(durationMs).toBeLessThan(100)
+
+    const refreshedState = deferredBaselineState.update({
+      effects: refreshGitDiffLineFlagsEffect.of(null),
+    }).state
+    const refreshedFlags = refreshedState.field(gitDiffLineFlagsField)
+    expect(refreshedFlags).not.toBe(previousFlags)
+    expect(Array.isArray(refreshedFlags)).toBe(true)
+    expect(refreshedFlags).toHaveLength(refreshedState.doc.lines)
+  })
+
   it('defers split merge chunk refresh for live typing and IME composition', () => {
     const state = EditorState.create({ doc: createPlainLongDocument(12_000) })
     const typing = state.update({
@@ -241,13 +314,49 @@ describe('meo performance guards', () => {
     const structural = state.update({
       changes: { from: 0, insert: '# ' },
     })
+    const generatedTyping = state.update({
+      changes: { from: state.doc.length, insert: ' generated' },
+      annotations: [
+        Transaction.addToHistory.of(false),
+        Transaction.userEvent.of('input.type'),
+      ],
+    })
 
     expect(shouldDeferSplitMergeChunkUpdate([typing], 'b')).toBe(true)
     expect(shouldDeferSplitMergeChunkUpdate([composing], 'b')).toBe(true)
     expect(shouldDeferSplitMergeChunkUpdate([deletion], 'b')).toBe(true)
+    expect(shouldDeferSplitMergeChunkUpdate([generatedTyping], 'b')).toBe(true)
     expect(shouldDeferSplitMergeChunkUpdate([typing], 'a')).toBe(false)
     expect(shouldDeferSplitMergeChunkUpdate([undo], 'b')).toBe(false)
     expect(shouldDeferSplitMergeChunkUpdate([typing, structural], 'b')).toBe(false)
+  })
+
+  it('marks list helper edits as live input for split chunk deferral', () => {
+    const indentTransaction = dispatchCommandSpec(
+      EditorState.create({ doc: '- item' }),
+      indentListByTwoSpaces,
+    )
+    const outdentTransaction = dispatchCommandSpec(
+      EditorState.create({ doc: '  - item' }),
+      outdentListByTwoSpaces,
+    )
+    const backspaceTransaction = dispatchCommandSpec(
+      EditorState.create({ doc: '- item', selection: { anchor: 2 } }),
+      handleBackspaceAtListContentStart,
+    )
+    const enterTransaction = dispatchCommandSpec(
+      EditorState.create({ doc: '1. item', selection: { anchor: '1. item'.length } }),
+      handleEnterContinueList,
+    )
+
+    expect(indentTransaction.annotation(Transaction.userEvent)).toBe('input.indent')
+    expect(outdentTransaction.annotation(Transaction.userEvent)).toBe('input.indent')
+    expect(backspaceTransaction.annotation(Transaction.userEvent)).toBe('delete.backward')
+    expect(enterTransaction.annotation(Transaction.userEvent)).toBe('input.type')
+    expect(shouldDeferSplitMergeChunkUpdate([indentTransaction], 'b')).toBe(true)
+    expect(shouldDeferSplitMergeChunkUpdate([outdentTransaction], 'b')).toBe(true)
+    expect(shouldDeferSplitMergeChunkUpdate([backspaceTransaction], 'b')).toBe(true)
+    expect(shouldDeferSplitMergeChunkUpdate([enterTransaction], 'b')).toBe(true)
   })
 
   it('keeps split merge deletion chunks bounded to the edited line on the incremental path', () => {
