@@ -1052,10 +1052,6 @@ class InlineSplitWidgetView {
       controls.appendChild(actions)
     }
 
-    const range = document.createElement('div')
-    range.className = 'meo-live-inline-diff-range'
-    range.textContent = `Hunk ${Math.max(1, this.descriptor.modifiedLineStart)}`
-
     const nav = document.createElement('div')
     nav.className = 'meo-live-inline-diff-nav'
     nav.append(
@@ -1063,7 +1059,7 @@ class InlineSplitWidgetView {
       this.createNavButton('next'),
     )
 
-    controls.append(range, nav)
+    controls.append(nav)
     this.header.appendChild(controls)
   }
 
