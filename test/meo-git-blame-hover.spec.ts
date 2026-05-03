@@ -1,6 +1,9 @@
 import { Text } from '@codemirror/state'
 import { afterEach, describe, expect, it } from 'vitest'
-import { normalizeTrailingEofVisualLineHit } from '../src/vendor/meo/webview/helpers/gitBlameHover'
+import {
+  getGitGutterClickIntent,
+  normalizeTrailingEofVisualLineHit,
+} from '../src/vendor/meo/webview/helpers/gitBlameHover'
 
 const originalHTMLElement = globalThis.HTMLElement
 
@@ -45,5 +48,42 @@ describe('meo git blame hover', () => {
       requestLineNumber: 2,
       proxiedFromTrailingEof: false,
     })
+  })
+
+  it('keeps plain gutter clicks on inline hunk expansion', () => {
+    expect(getGitGutterClickIntent(
+      { altKey: false, ctrlKey: false, metaKey: false, shiftKey: false },
+      { platform: 'Win32' },
+    )).toBe('inline')
+    expect(getGitGutterClickIntent(
+      { altKey: false, ctrlKey: false, metaKey: false, shiftKey: false },
+      { platform: 'MacIntel' },
+    )).toBe('inline')
+  })
+
+  it('uses the platform primary modifier for jump clicks', () => {
+    expect(getGitGutterClickIntent(
+      { altKey: false, ctrlKey: true, metaKey: false, shiftKey: false },
+      { platform: 'Win32' },
+    )).toBe('jump')
+    expect(getGitGutterClickIntent(
+      { altKey: false, ctrlKey: false, metaKey: true, shiftKey: false },
+      { platform: 'MacIntel' },
+    )).toBe('jump')
+  })
+
+  it('ignores non-primary or chorded gutter modifier clicks', () => {
+    expect(getGitGutterClickIntent(
+      { altKey: false, ctrlKey: false, metaKey: true, shiftKey: false },
+      { platform: 'Linux x86_64' },
+    )).toBe('ignore')
+    expect(getGitGutterClickIntent(
+      { altKey: false, ctrlKey: true, metaKey: false, shiftKey: false },
+      { platform: 'MacIntel' },
+    )).toBe('ignore')
+    expect(getGitGutterClickIntent(
+      { altKey: true, ctrlKey: false, metaKey: false, shiftKey: false },
+      { platform: 'Win32' },
+    )).toBe('ignore')
   })
 })

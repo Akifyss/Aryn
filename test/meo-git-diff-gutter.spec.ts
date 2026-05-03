@@ -6,6 +6,7 @@ import {
   buildScopedLineFlagsFromVsCodeDiff,
 } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import {
+  __gitDiffGutterTestHooks,
   gitDiffGutterBaselineExtensions,
   gitDiffLineFlagsField,
   refreshGitDiffLineFlagsEffect,
@@ -127,6 +128,32 @@ describe('meo git diff gutter', () => {
       null,
       null,
     ])
+  })
+
+  it('keeps the native live gutter marker for a line replaced by an inline diff widget', () => {
+    let state = EditorState.create({
+      doc: 'A\nX\nC\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    state = state.update({
+      effects: setGitBaselineEffect.of({
+        available: true,
+        baseText: 'A\nB\nC\n',
+        headOid: 'HEAD',
+        indexText: null,
+        tracked: true,
+      }),
+    }).state
+
+    const line = state.doc.line(2)
+    const marker = __gitDiffGutterTestHooks.liveCollapsedBlockMarkerAtPos(
+      state,
+      state.field(gitDiffLineFlagsField),
+      line.from,
+    ) as { flags?: { modified?: boolean, scope?: string } } | null
+
+    expect(marker?.flags?.modified).toBe(true)
+    expect(marker?.flags?.scope).toBe('unstaged')
   })
 
   it('anchors middle pure deletions to the previous current line like VS Code', () => {

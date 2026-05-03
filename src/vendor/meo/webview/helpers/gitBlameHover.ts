@@ -9,6 +9,36 @@ const defaultGutterHoverHitWidthPx = 10;
 const gutterClickDragThresholdPx = 4;
 const gutterClickDragThresholdSquared = gutterClickDragThresholdPx * gutterClickDragThresholdPx;
 
+export function isMacLikeGitPlatform(platform = '', userAgentDataPlatform = '') {
+  return /Mac|iPhone|iPad|iPod/i.test(`${platform} ${userAgentDataPlatform}`);
+}
+
+export function getGitGutterClickIntent(event, platformInfo = {}) {
+  const isMacLikePlatform = isMacLikeGitPlatform(
+    platformInfo.platform ?? '',
+    platformInfo.userAgentDataPlatform ?? ''
+  );
+  const isPrimaryJumpClick = (
+    !event.altKey &&
+    !event.shiftKey &&
+    (
+      isMacLikePlatform
+        ? event.metaKey && !event.ctrlKey
+        : event.ctrlKey && !event.metaKey
+    )
+  );
+  if (isPrimaryJumpClick) {
+    return 'jump';
+  }
+
+  const hasUnsupportedModifier = event.altKey || event.shiftKey || (
+    isMacLikePlatform
+      ? event.ctrlKey
+      : event.metaKey
+  );
+  return hasUnsupportedModifier ? 'ignore' : 'inline';
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -494,7 +524,8 @@ export function createGitBlameHoverController({
   getMode,
   requestBlame,
   openRevisionForLine,
-  openWorktreeForLine
+  openWorktreeForLine,
+  toggleInlineSplitForLine
 }) {
   const ui = buildTooltipDom();
   const hoverOverlay = buildGutterHoverOverlayDom();
@@ -1361,6 +1392,11 @@ export function createGitBlameHoverController({
   };
 
   const onScroll = () => hide();
+  const getPlatformInfo = () => {
+    const platform = navigator.platform || '';
+    const userAgentDataPlatform = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform || '';
+    return { platform, userAgentDataPlatform };
+  };
   const onPointerDown = (event) => {
     hide();
     pointerDownWasLeftButton = event.button === 0;
@@ -1431,10 +1467,25 @@ export function createGitBlameHoverController({
       return;
     }
 
+    const targetLineNumber = lineNumber;
+
+    const clickIntent = getGitGutterClickIntent(event, getPlatformInfo());
+    if (clickIntent === 'ignore') {
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
-    const targetLineNumber = lineNumber;
-    if (effectiveChangeScope === 'staged') {
+
+    const scope = effectiveChangeScope === 'staged' ? 'staged' : 'unstaged';
+    if (clickIntent === 'inline' && typeof toggleInlineSplitForLine === 'function') {
+      const handled = toggleInlineSplitForLine({ lineNumber: targetLineNumber, scope });
+      if (handled !== false) {
+        return;
+      }
+    }
+
+    if (scope === 'staged') {
       void openRevisionForLine?.({ lineNumber: targetLineNumber });
     } else {
       void openWorktreeForLine?.({ lineNumber: targetLineNumber });

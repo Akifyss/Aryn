@@ -25,6 +25,10 @@ import {
   createMeoDiffSplitController,
   type MeoDiffSplitController,
 } from '@/features/editor/lib/meo-native-diff-split'
+import {
+  createMeoLiveInlineDiffController,
+  type MeoLiveInlineDiffController,
+} from '@/features/editor/lib/meo-native-live-inline-diff'
 import { mountMeoBaseScrollArea } from '@/features/editor/lib/meo-base-scroll-area'
 import { createMeoViewPositionPersistenceController } from '@/features/editor/lib/meo-native-editor-persistence'
 import { createNativeMeoEditorShell } from '@/features/editor/lib/meo-native-editor-shell'
@@ -150,6 +154,7 @@ export function mountNativeMeoEditor({
   let editor!: MeoEditorInstance
   let editorScrollArea: ReturnType<typeof mountMeoBaseScrollArea> | null = null
   let diffSplitController: MeoDiffSplitController | null = null
+  let liveInlineDiffController: MeoLiveInlineDiffController | null = null
 
   const getActiveEditor = () => (
     currentMode === 'diff-split' ? diffSplitController : editor
@@ -339,6 +344,7 @@ export function mountNativeMeoEditor({
     lineNumbersVisible = visible !== false
     editor.setLineNumbers(lineNumbersVisible)
     diffSplitController?.setLineNumbersVisible(lineNumbersVisible)
+    liveInlineDiffController?.setLineNumbersVisible(lineNumbersVisible)
     updateLineNumbersUi()
     if (options?.persist !== false) {
       persistenceController.persistLineNumbersVisible(lineNumbersVisible)
@@ -349,6 +355,7 @@ export function mountNativeMeoEditor({
     gitChangesGutterVisible = visible !== false
     editor.setGitGutterVisible(gitChangesGutterVisible)
     diffSplitController?.setDiffGutterVisible(gitChangesGutterVisible)
+    liveInlineDiffController?.setDiffGutterVisible(gitChangesGutterVisible)
     updateGitChangesGutterUi()
     syncGitDiffLineHighlights()
     if (options?.persist !== false) {
@@ -662,6 +669,9 @@ export function mountNativeMeoEditor({
     onOpenGitWorktreeForLine: (options: { lineNumber?: number }) => {
       openGitMarkerInDiffSplit('unstaged', options)
     },
+    onToggleGitInlineSplitForLine: (request: { lineNumber?: number, scope: 'staged' | 'unstaged' }) => (
+      liveInlineDiffController?.toggleHunkForLine(request) ?? false
+    ),
     onOpenLink: (href: string) => {
       void openLink(href)
     },
@@ -693,6 +703,31 @@ export function mountNativeMeoEditor({
       viewport: editorScrollDOM,
     })
   }
+
+  liveInlineDiffController = createMeoLiveInlineDiffController({
+    baseline: currentGitBaseline,
+    diffGutterVisible: gitChangesGutterVisible,
+    fallbackOriginalLabel: 'Saved document',
+    fallbackOriginalText: currentSavedText,
+    gitChangeContext: currentGitChangeContext,
+    lineNumbersVisible,
+    onApplyGitDiffSelection,
+    onCompositionChange: updateCompositionState,
+    onOpenLink: (href) => {
+      void openLink(href)
+    },
+    onSave: (nextValue) => {
+      onSave?.(nextValue)
+    },
+    onSelectionChange: (selectionState) => {
+      selectionMenuController.update(selectionState)
+    },
+    onViewportChange: () => {
+      persistenceController.scheduleViewPositionCapture()
+    },
+    text: currentText,
+    view: editor.view as unknown as import('@codemirror/view').EditorView,
+  })
 
   syncGitDiffLineHighlights()
   if (currentMode === 'diff-split') {
@@ -1050,6 +1085,8 @@ export function mountNativeMeoEditor({
       root.removeEventListener('compositionend', compositionEndHandler, true)
       persistenceController.captureViewPosition()
       destroyDiffSplit()
+      liveInlineDiffController?.destroy()
+      liveInlineDiffController = null
       editorScrollArea?.destroy()
       editorScrollArea = null
       editor.destroy()
@@ -1062,15 +1099,18 @@ export function mountNativeMeoEditor({
       editor.refreshLayout()
       editorScrollArea?.refresh()
       diffSplitController?.refreshLayout()
+      liveInlineDiffController?.refreshLayout()
     },
     setGitBaseline(baseline) {
       currentGitBaseline = baseline
       editor.setGitBaseline(baseline)
       diffSplitController?.setBaseline(baseline)
+      liveInlineDiffController?.setBaseline(baseline)
     },
     setGitChangeContext(context) {
       currentGitChangeContext = context
       diffSplitController?.setGitChangeContext(context)
+      liveInlineDiffController?.setGitChangeContext(context)
     },
     setGitDiffLineHighlightsEnabled(enabled) {
       gitDiffLineHighlightsEnabled = enabled
@@ -1082,6 +1122,10 @@ export function mountNativeMeoEditor({
     setSavedText(text) {
       currentSavedText = text
       diffSplitController?.setFallbackOriginal({
+        label: 'Saved document',
+        text,
+      })
+      liveInlineDiffController?.setFallbackOriginal({
         label: 'Saved document',
         text,
       })
@@ -1097,16 +1141,19 @@ export function mountNativeMeoEditor({
 
       if (currentMode === 'diff-split') {
         diffSplitController?.setText(text)
+        liveInlineDiffController?.setText(text)
         return
       }
 
       if (normalizedNextText === normalizedCurrentText) {
         diffSplitController?.setText(text)
+        liveInlineDiffController?.setText(text)
         return
       }
 
       editor.setText(text)
       diffSplitController?.setText(text)
+      liveInlineDiffController?.setText(text)
       scheduleWikiLinkStatusRefresh(text)
       scheduleLocalLinkStatusRefresh(text)
       findPanelController.updateFindStatusSummary()

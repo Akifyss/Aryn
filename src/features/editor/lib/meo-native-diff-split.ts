@@ -161,11 +161,11 @@ type TextChangeSetLike = {
   ) => void
 }
 
-type TextSnapshot = {
+export type TextSnapshot = {
   value: string
 }
 
-type DiffSplitResolvedState = {
+export type DiffSplitResolvedState = {
   actionChange: GitChangeItem | null
   actionScope: 'staged' | 'unstaged' | null
   isFallback: boolean
@@ -467,11 +467,11 @@ function normalizeLineEndings(text: string) {
   return text.replace(/\r\n?/g, '\n')
 }
 
-function createTextDocFromContent(content: string) {
+export function createTextDocFromContent(content: string) {
   return Text.of(content.split('\n'))
 }
 
-function mapCurrentLineToIndexLine(indexText: string, currentText: string, currentLineNumber: number) {
+export function mapCurrentLineToIndexLine(indexText: string, currentText: string, currentLineNumber: number) {
   const indexDoc = createTextDocFromContent(indexText)
   const currentDoc = createTextDocFromContent(currentText)
   const indexToCurrentLineMap = buildSourceToTargetLineMap(indexDoc, currentDoc)
@@ -486,7 +486,7 @@ function mapCurrentLineToIndexLine(indexText: string, currentText: string, curre
   return normalizedLineNumber
 }
 
-function resolveOriginalText(
+export function resolveOriginalText(
   baseline: GitBaselinePayload | null,
   fallback: { label: string, text: string },
   currentText: string,
@@ -655,7 +655,7 @@ function canUseTextOnlyResolvedUpdate(
 const SPLIT_DIFF_REFRESH_IDLE_DELAY_MS = 200
 const SPLIT_DIFF_REFRESH_AFTER_COMPOSITION_MS = 80
 
-function getDiffConfig(editable: boolean) {
+export function getDiffConfig(editable: boolean) {
   return {
     incrementalUpdates: editable,
     overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
@@ -711,7 +711,7 @@ export function shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(transacti
   return shouldRefresh
 }
 
-function getHunkActionLabel(action: GitDiffBlockAction) {
+export function getHunkActionLabel(action: GitDiffBlockAction) {
   switch (action) {
     case 'stage':
       return 'Stage block'
@@ -724,7 +724,7 @@ function getHunkActionLabel(action: GitDiffBlockAction) {
   }
 }
 
-function getHunkActionIcon(action: GitDiffBlockAction) {
+export function getHunkActionIcon(action: GitDiffBlockAction) {
   if (action === 'stage') {
     return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3.25v9.5"/><path d="M3.25 8h9.5"/></svg>'
   }
@@ -736,8 +736,51 @@ function getHunkActionIcon(action: GitDiffBlockAction) {
   return '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="color:currentColor" aria-hidden="true"><g fill="none"><path d="M24 0v24H0V0zM12.593 23.258l-.011.002-.071.035-.02.004-.014-.004-.071-.035q-.016-.005-.024.005l-.004.01-.017.428.005.02.01.013.104.074.015.004.012-.004.104-.074.012-.016.004-.017-.017-.427q-.004-.016-.017-.018m.265-.113-.013.002-.185.093-.01.01-.003.011.018.43.005.012.008.007.201.093q.019.005.029-.008l.004-.014-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014-.034.614q.001.018.017.024l.015-.002.201-.093.01-.008.004-.011.017-.43-.003-.012-.01-.01z"></path><path fill="currentColor" d="M6.046 11.677A7.5 7.5 0 0 1 20 15.5a1 1 0 1 0 2 0A9.5 9.5 0 0 0 4.78 9.963l-.537-3.045a1 1 0 1 0-1.97.347l1.042 5.909a1 1 0 0 0 .412.645 1.1 1.1 0 0 0 .975.125l5.68-1.001a1 1 0 1 0-.347-1.97z"></path></g></svg>'
 }
 
-function createLineNumberExtensions(visible: boolean) {
-  return visible ? [lineNumbers()] : []
+const readOnlyWidgetSelector = 'textarea, input, select, button, [contenteditable="true"]'
+
+function lockReadOnlyWidgetElement(element: Element) {
+  if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
+    element.readOnly = true
+    element.tabIndex = -1
+    element.setAttribute('aria-readonly', 'true')
+    return
+  }
+
+  if (element instanceof HTMLSelectElement || element instanceof HTMLButtonElement) {
+    element.disabled = true
+    element.tabIndex = -1
+    element.setAttribute('aria-disabled', 'true')
+    return
+  }
+
+  if (element instanceof HTMLElement && element.contentEditable === 'true') {
+    element.contentEditable = 'false'
+    element.tabIndex = -1
+    element.setAttribute('aria-readonly', 'true')
+  }
+}
+
+export function lockReadOnlyWidgets(rootElement: Element) {
+  if (rootElement.matches(readOnlyWidgetSelector)) {
+    lockReadOnlyWidgetElement(rootElement)
+  }
+
+  for (const element of rootElement.querySelectorAll(readOnlyWidgetSelector)) {
+    lockReadOnlyWidgetElement(element)
+  }
+}
+
+export function createLineNumberExtensions(visible: boolean, startLineNumber = 1) {
+  if (!visible) {
+    return []
+  }
+
+  const normalizedStartLineNumber = Math.max(1, Math.floor(startLineNumber))
+  return normalizedStartLineNumber === 1
+    ? [lineNumbers()]
+    : [lineNumbers({
+        formatNumber: (lineNumber) => String(normalizedStartLineNumber + lineNumber - 1),
+      })]
 }
 
 function createActiveLineGutterExtensions(visible: boolean) {
@@ -844,12 +887,13 @@ function mapDiffSplitModifiedGutterFlag(flags: DiffSplitGutterFlags) {
   }
 }
 
-function createDiffExtensions({
+export function createDiffExtensions({
   activeLineGutterCompartment,
   editable,
   editableCompartment,
   interactive,
   lineNumbersCompartment,
+  lineNumberStart = 1,
   lineNumbersVisible,
   onChange,
   onCompositionChange,
@@ -868,6 +912,7 @@ function createDiffExtensions({
   editableCompartment: Compartment
   interactive?: boolean
   lineNumbersCompartment: Compartment
+  lineNumberStart?: number
   lineNumbersVisible: boolean
   onChange: (nextValue: string) => void
   onCompositionChange?: (isComposing: boolean) => void
@@ -1058,7 +1103,7 @@ function createDiffExtensions({
   }
 
   const extensions: Extension[] = [
-    lineNumbersCompartment.of(createLineNumberExtensions(lineNumbersVisible)),
+    lineNumbersCompartment.of(createLineNumberExtensions(lineNumbersVisible, lineNumberStart)),
     ...gitDiffGutterBaselineExtensions({ deferDocChanges: true }),
     ...gitDiffGutterLiveRenderExtensions({
       mapLineFlag: side === 'original' ? mapDiffSplitOriginalGutterFlag : mapDiffSplitModifiedGutterFlag,
@@ -2308,40 +2353,6 @@ export function createMeoDiffSplitController({
     })
     snapshot.value = nextText
     return true
-  }
-
-  const readOnlyWidgetSelector = 'textarea, input, select, button, [contenteditable="true"]'
-
-  const lockReadOnlyWidgetElement = (element: Element) => {
-    if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
-      element.readOnly = true
-      element.tabIndex = -1
-      element.setAttribute('aria-readonly', 'true')
-      return
-    }
-
-    if (element instanceof HTMLSelectElement || element instanceof HTMLButtonElement) {
-      element.disabled = true
-      element.tabIndex = -1
-      element.setAttribute('aria-disabled', 'true')
-      return
-    }
-
-    if (element instanceof HTMLElement && element.contentEditable === 'true') {
-      element.contentEditable = 'false'
-      element.tabIndex = -1
-      element.setAttribute('aria-readonly', 'true')
-    }
-  }
-
-  const lockReadOnlyWidgets = (rootElement: Element) => {
-    if (rootElement.matches(readOnlyWidgetSelector)) {
-      lockReadOnlyWidgetElement(rootElement)
-    }
-
-    for (const element of rootElement.querySelectorAll(readOnlyWidgetSelector)) {
-      lockReadOnlyWidgetElement(element)
-    }
   }
 
   const scheduleReadOnlyWidgetLock = (rootElement: Element) => {

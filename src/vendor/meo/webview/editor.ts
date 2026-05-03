@@ -153,6 +153,7 @@ export function createEditor({
   onRequestGitBlame,
   onOpenGitRevisionForLine,
   onOpenGitWorktreeForLine,
+  onToggleGitInlineSplitForLine,
   initialMode = 'live',
   initialTopLine = null,
   initialTopLineOffset = 0,
@@ -1515,7 +1516,8 @@ export function createEditor({
       getMode: () => currentMode,
       requestBlame: onRequestGitBlame,
       openRevisionForLine: onOpenGitRevisionForLine,
-      openWorktreeForLine: onOpenGitWorktreeForLine
+      openWorktreeForLine: onOpenGitWorktreeForLine,
+      toggleInlineSplitForLine: onToggleGitInlineSplitForLine
     });
   }
   gitDiffOverviewRuler = createGitDiffOverviewRulerController({

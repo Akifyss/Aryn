@@ -456,10 +456,15 @@ function liveCollapsedBlockMarkerAtPos(
   }
   const lineNo = state.doc.lineAt(Math.max(0, Math.min(pos, state.doc.length))).number;
   const block = getLiveGitCollapsedBlockAtLine(state, lineFlags, lineNo);
-  if (!block) {
+  if (block) {
+    const flags = liveCollapsedBlockMarkerFlags(block);
+    return gitMarker(typeof mapLineFlag === 'function' ? mapLineFlag(flags) : flags);
+  }
+
+  const flags = lineFlags[lineNo - 1];
+  if (!flags) {
     return null;
   }
-  const flags = liveCollapsedBlockMarkerFlags(block);
   return gitMarker(typeof mapLineFlag === 'function' ? mapLineFlag(flags) : flags);
 }
 
@@ -624,5 +629,6 @@ export function gitDiffGutterLiveRenderExtensions(options: GitDiffGutterRenderOp
 }
 
 export const __gitDiffGutterTestHooks = {
-  deferGitDiffLineFlagsRefreshEffect
+  deferGitDiffLineFlagsRefreshEffect,
+  liveCollapsedBlockMarkerAtPos
 };

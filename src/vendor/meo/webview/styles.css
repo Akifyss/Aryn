@@ -670,6 +670,153 @@
   font-weight: 600;
 }
 
+.meo-native-theme .meo-live-inline-diff {
+  --editor-content-padding-top: 0px;
+  --meo-live-inline-diff-floating-height: 18px;
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+  contain: layout style;
+}
+
+.meo-native-theme .meo-live-inline-diff[data-line-numbers='hidden'] {
+  --meo-live-inline-diff-floating-height: 16px;
+}
+
+.meo-native-theme .meo-live-inline-diff-header {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 12;
+  height: var(--meo-live-inline-diff-floating-height);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.meo-native-theme .meo-live-inline-diff-title,
+.meo-native-theme .meo-live-inline-diff-range {
+  position: absolute;
+  top: 2px;
+  min-width: 0;
+  color: color-mix(in srgb, var(--descriptionForeground) 84%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meo-native-theme .meo-live-inline-diff-title {
+  left: 8px;
+  max-width: min(42%, 360px);
+}
+
+.meo-native-theme .meo-live-inline-diff-range {
+  right: 50px;
+  max-width: 120px;
+  color: color-mix(in srgb, var(--descriptionForeground) 66%, transparent);
+  font-weight: 500;
+}
+
+.meo-native-theme .meo-live-inline-diff-nav {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--meo-live-inline-diff-floating-height);
+  pointer-events: auto;
+}
+
+.meo-native-theme .meo-live-inline-diff-nav-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--descriptionForeground);
+  background: transparent;
+  cursor: pointer;
+}
+
+.meo-native-theme .meo-live-inline-diff-nav-button:hover,
+.meo-native-theme .meo-live-inline-diff-nav-button:focus-visible {
+  color: var(--editor-foreground);
+  background: var(--toolbar-hoverBackground);
+  outline: none;
+}
+
+.meo-native-theme .meo-live-inline-diff-nav-button svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.meo-native-theme .meo-live-inline-diff-body {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  padding-top: var(--meo-live-inline-diff-floating-height);
+  overflow: hidden;
+}
+
+.meo-native-theme .meo-live-inline-diff-body .cm-mergeView {
+  width: 100%;
+  height: auto;
+  max-height: min(52vh, 520px);
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  background: var(--editor-background);
+}
+
+.meo-native-theme .meo-live-inline-diff-body .cm-mergeViewEditors {
+  min-height: 100%;
+}
+
+.meo-native-theme .meo-live-inline-diff-body .cm-mergeViewEditor+.cm-mergeViewEditor {
+  border-left-color: color-mix(in srgb, var(--panel-border) 58%, transparent);
+}
+
+.meo-native-theme .meo-live-inline-diff-body .cm-editor,
+.meo-native-theme .meo-live-inline-diff-body .cm-scroller,
+.meo-native-theme .meo-live-inline-diff-body .cm-mergeView .cm-editor {
+  height: auto !important;
+}
+
+.meo-native-theme .meo-live-inline-diff-body .cm-editor .cm-gutters {
+  background: var(--editor-background);
+}
+
+.meo-native-theme .meo-live-inline-diff-body .cm-editor:not(.meo-line-numbers-hidden) .cm-lineNumbers .cm-gutterElement.meo-md-hide-line-number {
+  color: var(--editorLineNumber-foreground) !important;
+}
+
+.meo-native-theme .meo-live-inline-diff-body .cm-content {
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.meo-native-theme .meo-live-inline-diff-body .meo-diff-hunk-actions {
+  margin-top: 0;
+}
+
 .meo-native-theme .selection-inline-menu {
   position: fixed;
   top: 0;
