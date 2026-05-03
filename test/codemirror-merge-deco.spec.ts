@@ -63,6 +63,44 @@ describe('CodeMirror merge decorations', () => {
     expect(spacerSideAfterChunk(chunk, 'fakeLines', originalDoc, originalDoc.length)).toBe(1)
   })
 
+  it('keeps VS Code-style middle insertion spacers before the following unchanged line', () => {
+    const originalDoc = Text.of(['formula', 'tail'])
+    const modifiedDoc = Text.of(['formula', 'added', 'tail'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const insertionPoint = originalDoc.line(2).from
+
+    expect(chunk).toMatchObject({
+      fromA: insertionPoint,
+      toA: insertionPoint,
+    })
+    expect(spacerSideAfterChunk(chunk, 'fakeLines', originalDoc, insertionPoint)).toBe(-1)
+  })
+
+  it('keeps VS Code-style replacement spacers after the changed middle line', () => {
+    const originalDoc = Text.of(['formula', 'old', 'tail'])
+    const modifiedDoc = Text.of(['formula', 'new 1', 'new 2', 'tail'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const followingLineStart = originalDoc.line(3).from
+
+    expect(chunk).toMatchObject({
+      fromA: originalDoc.line(2).from,
+      toA: followingLineStart,
+    })
+    expect(spacerSideAfterChunk(chunk, 'fakeLines', originalDoc, followingLineStart)).toBe(-1)
+  })
+
+  it('places VS Code-style EOF deletion spacers after the final modified line', () => {
+    const originalDoc = Text.of(['formula', 'deleted'])
+    const modifiedDoc = Text.of(['formula'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+
+    expect(chunk).toMatchObject({
+      fromB: modifiedDoc.length,
+      toB: modifiedDoc.length,
+    })
+    expect(spacerSideAfterChunk(chunk, 'fakeLines', modifiedDoc, modifiedDoc.length)).toBe(1)
+  })
+
   it('uses normal before-line placement for non-fake alignment spacers', () => {
     const doc = Text.of(['line 1'])
     const chunk = new Chunk([], doc.length, doc.length, doc.length, doc.length + 1)
