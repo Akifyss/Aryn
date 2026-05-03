@@ -393,6 +393,7 @@ function getChunkDeco(view: EditorView) {
 }
 
 export type SpacerKind = "alignment" | "fakeLines"
+export type TrailingSpacerMode = "all" | "fakeLines" | "none"
 
 class Spacer extends WidgetType {
   constructor(readonly height: number, readonly kind: SpacerKind = "alignment") { super() }
@@ -446,7 +447,28 @@ function lineSpan(doc: Text, from: number, to: number) {
   return doc.lineAt(safeTo).number - doc.lineAt(from).number + 1
 }
 
-function spacerKindAfterChunk(
+function rangeCrossesLineBreak(doc: Text, from: number, to: number) {
+  if (from == to) return false
+  let safeFrom = Math.max(0, Math.min(from, doc.length))
+  let safeTo = Math.max(safeFrom, Math.min(to, doc.length))
+  let last = Math.min(Math.max(safeFrom, safeTo - 1), doc.length)
+  return doc.lineAt(last).number > doc.lineAt(safeFrom).number
+}
+
+function rangeCoversWholeLines(doc: Text, from: number, to: number) {
+  if (from == to) return false
+  let safeFrom = Math.max(0, Math.min(from, doc.length))
+  let safeTo = Math.max(safeFrom, Math.min(to, doc.length))
+  let startLine = doc.lineAt(safeFrom)
+  let lastLine = doc.lineAt(Math.min(Math.max(safeFrom, safeTo - 1), doc.length))
+  return safeFrom == startLine.from && safeTo == lastLine.to
+}
+
+function rangeHasLineShape(doc: Text, from: number, to: number) {
+  return rangeCrossesLineBreak(doc, from, to) || rangeCoversWholeLines(doc, from, to)
+}
+
+export function spacerKindAfterChunk(
   chunk: Chunk | null,
   side: "a" | "b",
   viewportAlignment: boolean,
@@ -456,7 +478,13 @@ function spacerKindAfterChunk(
   if (viewportAlignment || !chunk) return "alignment"
   let linesA = lineSpan(aDoc, chunk.fromA, chunk.toA)
   let linesB = lineSpan(bDoc, chunk.fromB, chunk.toB)
-  return side == "a" ? linesA < linesB ? "fakeLines" : "alignment" : linesB < linesA ? "fakeLines" : "alignment"
+  let lineShapeA = rangeHasLineShape(aDoc, chunk.fromA, chunk.toA)
+  let lineShapeB = rangeHasLineShape(bDoc, chunk.fromB, chunk.toB)
+  return side == "a" ? linesA < linesB && lineShapeB ? "fakeLines" : "alignment" : linesB < linesA && lineShapeA ? "fakeLines" : "alignment"
+}
+
+export function shouldAddTrailingSpacer(kind: SpacerKind, mode: TrailingSpacerMode = "all") {
+  return mode == "all" || (mode == "fakeLines" && kind == "fakeLines")
 }
 
 export function spacerSideAfterChunk(
@@ -485,7 +513,12 @@ function compareSpacers(a: DecorationSet, b: DecorationSet) {
   return true
 }
 
-export function updateSpacers(a: EditorView, b: EditorView, chunks: readonly Chunk[]) {
+export function updateSpacers(
+  a: EditorView,
+  b: EditorView,
+  chunks: readonly Chunk[],
+  trailingSpacer: TrailingSpacerMode = "all"
+) {
   let buildA = new RangeSetBuilder<Decoration>(), buildB = new RangeSetBuilder<Decoration>()
   let spacersA = a.state.field(Spacers).iter(), spacersB = b.state.field(Spacers).iter()
   let posA = 0, posB = 0, offA = 0, offB = 0, vpA = a.viewport, vpB = b.viewport
@@ -554,18 +587,20 @@ export function updateSpacers(a: EditorView, b: EditorView, chunks: readonly Chu
   let lastChunk = chunks.length ? chunks[chunks.length - 1] : null
   if (docDiff < epsilon) {
     let kind = spacerKindAfterChunk(lastChunk, "a", false, a.state.doc, b.state.doc)
-    buildA.add(a.state.doc.length, a.state.doc.length, Decoration.widget({
-      widget: new Spacer(-docDiff, kind),
-      block: true,
-      side: spacerSideAfterChunk(lastChunk, kind, a.state.doc, a.state.doc.length)
-    }))
+    if (shouldAddTrailingSpacer(kind, trailingSpacer))
+      buildA.add(a.state.doc.length, a.state.doc.length, Decoration.widget({
+        widget: new Spacer(-docDiff, kind),
+        block: true,
+        side: spacerSideAfterChunk(lastChunk, kind, a.state.doc, a.state.doc.length)
+      }))
   } else if (docDiff > epsilon) {
     let kind = spacerKindAfterChunk(lastChunk, "b", false, a.state.doc, b.state.doc)
-    buildB.add(b.state.doc.length, b.state.doc.length, Decoration.widget({
-      widget: new Spacer(docDiff, kind),
-      block: true,
-      side: spacerSideAfterChunk(lastChunk, kind, b.state.doc, b.state.doc.length)
-    }))
+    if (shouldAddTrailingSpacer(kind, trailingSpacer))
+      buildB.add(b.state.doc.length, b.state.doc.length, Decoration.widget({
+        widget: new Spacer(docDiff, kind),
+        block: true,
+        side: spacerSideAfterChunk(lastChunk, kind, b.state.doc, b.state.doc.length)
+      }))
   }
 
   let decoA = buildA.finish(), decoB = buildB.finish()

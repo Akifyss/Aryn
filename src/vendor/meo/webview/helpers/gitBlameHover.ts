@@ -39,6 +39,14 @@ export function getGitGutterClickIntent(event, platformInfo = {}) {
   return hasUnsupportedModifier ? 'ignore' : 'inline';
 }
 
+export function isInsideLiveInlineDiff(target) {
+  return (
+    typeof Element !== 'undefined' &&
+    target instanceof Element &&
+    target.closest('.meo-live-inline-diff') instanceof HTMLElement
+  );
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -1274,6 +1282,10 @@ export function createGitBlameHoverController({
       hide();
       return;
     }
+    if (isInsideLiveInlineDiff(target)) {
+      hide();
+      return;
+    }
 
     const mode = getMode?.();
     if (!isSupportedMode(mode) || view.dom.classList.contains('meo-git-gutter-hidden')) {
@@ -1404,6 +1416,11 @@ export function createGitBlameHoverController({
     pointerDownClientY = event.clientY;
     pointerDownInBand = false;
 
+    const target = event.target instanceof Element ? event.target : null;
+    if (isInsideLiveInlineDiff(target)) {
+      return;
+    }
+
     if (
       !pointerDownWasLeftButton ||
       destroyed ||
@@ -1435,6 +1452,9 @@ export function createGitBlameHoverController({
       return;
     }
     const target = event.target instanceof Element ? event.target : null;
+    if (isInsideLiveInlineDiff(target)) {
+      return;
+    }
     if (target?.closest('.meo-md-fold-toggle')) {
       return;
     }

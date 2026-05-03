@@ -2,12 +2,19 @@ import { Text } from '@codemirror/state'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   getGitGutterClickIntent,
+  isInsideLiveInlineDiff,
   normalizeTrailingEofVisualLineHit,
 } from '../src/vendor/meo/webview/helpers/gitBlameHover'
 
 const originalHTMLElement = globalThis.HTMLElement
+const originalElement = globalThis.Element
 
 afterEach(() => {
+  Object.defineProperty(globalThis, 'Element', {
+    configurable: true,
+    writable: true,
+    value: originalElement,
+  })
   Object.defineProperty(globalThis, 'HTMLElement', {
     configurable: true,
     writable: true,
@@ -85,5 +92,30 @@ describe('meo git blame hover', () => {
       { altKey: true, ctrlKey: false, metaKey: false, shiftKey: false },
       { platform: 'Win32' },
     )).toBe('ignore')
+  })
+
+  it('recognizes inline split diff targets so outer live gutter hover ignores them', () => {
+    class FakeElement {
+      constructor(private readonly insideInlineDiff: boolean) {}
+
+      closest(selector: string) {
+        return selector === '.meo-live-inline-diff' && this.insideInlineDiff ? this : null
+      }
+    }
+
+    Object.defineProperty(globalThis, 'Element', {
+      configurable: true,
+      writable: true,
+      value: FakeElement,
+    })
+    Object.defineProperty(globalThis, 'HTMLElement', {
+      configurable: true,
+      writable: true,
+      value: FakeElement,
+    })
+
+    expect(isInsideLiveInlineDiff(new FakeElement(true))).toBe(true)
+    expect(isInsideLiveInlineDiff(new FakeElement(false))).toBe(false)
+    expect(isInsideLiveInlineDiff(null)).toBe(false)
   })
 })

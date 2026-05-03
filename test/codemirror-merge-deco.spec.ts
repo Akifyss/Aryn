@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
-import { isWholeLineChange, normalizeInlineChangeRects, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 
@@ -63,6 +63,22 @@ describe('CodeMirror merge decorations', () => {
     expect(spacerSideAfterChunk(chunk, 'fakeLines', originalDoc, originalDoc.length)).toBe(1)
   })
 
+  it('does not classify inline EOF insertions as fake lines', () => {
+    const originalDoc = Text.of(['Markdown 支持 LaTeX 语法来书写数学公式。'])
+    const modifiedDoc = Text.of(['Markdown 支持 LaTeX 语法来书写数学公式。哒哒哒哒'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+
+    expect(spacerKindAfterChunk(chunk, 'a', false, originalDoc, modifiedDoc)).toBe('alignment')
+  })
+
+  it('keeps whole-line EOF insertions classified as fake lines', () => {
+    const originalDoc = Text.of(['formula'])
+    const modifiedDoc = Text.of(['formula', 'added'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+
+    expect(spacerKindAfterChunk(chunk, 'a', false, originalDoc, modifiedDoc)).toBe('fakeLines')
+  })
+
   it('keeps VS Code-style middle insertion spacers before the following unchanged line', () => {
     const originalDoc = Text.of(['formula', 'tail'])
     const modifiedDoc = Text.of(['formula', 'added', 'tail'])
@@ -106,6 +122,11 @@ describe('CodeMirror merge decorations', () => {
     const chunk = new Chunk([], doc.length, doc.length, doc.length, doc.length + 1)
 
     expect(spacerSideAfterChunk(chunk, 'alignment', doc, doc.length)).toBe(-1)
+  })
+
+  it('can suppress trailing alignment spacers while keeping fake-line spacers', () => {
+    expect(shouldAddTrailingSpacer('alignment', 'fakeLines')).toBe(false)
+    expect(shouldAddTrailingSpacer('fakeLines', 'fakeLines')).toBe(true)
   })
 
   it('expands inline highlight rects to the default line height', () => {

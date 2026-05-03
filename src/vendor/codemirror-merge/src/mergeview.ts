@@ -3,7 +3,7 @@ import {EditorStateConfig, Transaction, EditorState, StateEffect, Prec, Compartm
 import {Chunk, defaultDiffConfig} from "./chunk"
 import {DiffConfig} from "./diff"
 import {deferredChunkUpdate, setChunks, ChunkField, mergeConfig} from "./merge"
-import {decorateChunks, inlineChangeLayer, updateSpacers, Spacers, adjustSpacers, collapseUnchanged, changeGutter} from "./deco"
+import {decorateChunks, inlineChangeLayer, updateSpacers, Spacers, adjustSpacers, collapseUnchanged, changeGutter, type TrailingSpacerMode} from "./deco"
 import {baseTheme, externalTheme} from "./theme"
 
 /// Configuration options to `MergeView` that can be provided both
@@ -45,6 +45,11 @@ export interface MergeConfig {
   /// Maximum vertical pixel span retained around recently visited merge
   /// view content. Higher values reduce redraw flashes at the cost of DOM.
   outerScrollViewportRetention?: number
+  /// Controls whether the merge view may add a spacer at the document
+  /// end to equalize editor heights. Defaults to `"all"`. Use
+  /// `"fakeLines"` to keep semantic inserted/deleted empty rows while
+  /// suppressing plain end padding.
+  trailingSpacer?: TrailingSpacerMode
 }
 
 /// Configuration options given to the [`MergeView`](#merge.MergeView)
@@ -125,6 +130,7 @@ export class MergeView {
   private outerScrollViewportMargin = 1000
   private outerScrollViewportRetention = 1000
   private deferChunkUpdates: MergeConfig["deferChunkUpdates"]
+  private trailingSpacer: TrailingSpacerMode = "all"
   private chunksStale = false
 
   /// The current set of changed chunks.
@@ -144,6 +150,7 @@ export class MergeView {
       this.outerScrollViewportMargin,
       config.outerScrollViewportRetention ?? this.outerScrollViewportMargin,
     )
+    this.trailingSpacer = config.trailingSpacer ?? "all"
 
     let sharedExtensions = [
       Prec.low(decorateChunks),
@@ -290,6 +297,9 @@ export class MergeView {
         this.outerScrollViewportMargin,
         config.outerScrollViewportRetention ?? this.outerScrollViewportMargin,
       )
+    }
+    if ("trailingSpacer" in config) {
+      this.trailingSpacer = config.trailingSpacer ?? "all"
     }
     if ("orientation" in config) {
       let aB = config.orientation != "b-a"
@@ -537,7 +547,7 @@ export class MergeView {
   }
 
   private measure() {
-    updateSpacers(this.a, this.b, this.chunks)
+    updateSpacers(this.a, this.b, this.chunks, this.trailingSpacer)
     if (this.revertDOM) this.updateRevertButtons()
   }
 

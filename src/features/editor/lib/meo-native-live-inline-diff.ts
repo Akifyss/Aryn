@@ -3,9 +3,7 @@ import { Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, Tex
 import {
   Decoration,
   EditorView,
-  GutterMarker,
   WidgetType,
-  lineNumberWidgetMarker,
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view'
@@ -101,32 +99,6 @@ export type MeoLiveInlineDiffController = {
 
 const setInlineHunksEffect = StateEffect.define<InlineHunkDescriptor[]>()
 const INLINE_DIFF_SYNC_DELAY_MS = 120
-
-class InlineDiffLineNumberMarker extends GutterMarker {
-  constructor(private readonly lineNumber: number) {
-    super()
-  }
-
-  eq(other: GutterMarker): boolean {
-    return other instanceof InlineDiffLineNumberMarker && other.lineNumber === this.lineNumber
-  }
-
-  toDOM(): Node {
-    return document.createTextNode(String(this.lineNumber))
-  }
-}
-
-const inlineDiffLineNumberMarkerCache = new Map<number, InlineDiffLineNumberMarker>()
-
-function getInlineDiffLineNumberMarker(lineNumber: number) {
-  const normalized = Math.max(1, Math.floor(lineNumber))
-  let marker = inlineDiffLineNumberMarkerCache.get(normalized)
-  if (!marker) {
-    marker = new InlineDiffLineNumberMarker(normalized)
-    inlineDiffLineNumberMarkerCache.set(normalized, marker)
-  }
-  return marker
-}
 
 function normalizeLineEndings(text: string) {
   return text.replace(/\r\n?/g, '\n')
@@ -299,6 +271,8 @@ function buildInlineDecorations(
 }
 
 class InlineDiffWidget extends WidgetType {
+  readonly isMeoLiveInlineDiffWidget = true
+
   constructor(
     private readonly descriptor: InlineHunkDescriptor,
     private readonly controller: MeoLiveInlineDiffControllerImpl,
@@ -309,16 +283,6 @@ class InlineDiffWidget extends WidgetType {
   eq(other: WidgetType): boolean {
     return other instanceof InlineDiffWidget
       && getDescriptorRenderKey(other.descriptor) === getDescriptorRenderKey(this.descriptor)
-  }
-
-  getLineNumberMarker(): GutterMarker | null {
-    if (!this.descriptor.lineNumbersVisible) {
-      return null
-    }
-
-    return getInlineDiffLineNumberMarker(
-      this.descriptor.modifiedLineStart || this.descriptor.originalLineStart || 1,
-    )
   }
 
   toDOM(): HTMLElement {
@@ -366,6 +330,7 @@ class InlineSplitWidgetView {
   private readonly originalTextSnapshot: TextSnapshot
   private readonly modifiedTextSnapshot: TextSnapshot
   private cleanupReadOnlyWidgetLock: (() => void) | null = null
+  private pendingOuterGutterMeasureFrame = 0
   private pendingReadOnlyWidgetLockFrame = 0
   private readonly pendingReadOnlyWidgetRoots = new Set<Element>()
 
@@ -395,6 +360,8 @@ class InlineSplitWidgetView {
     this.installReadOnlyWidgetLock()
     this.syncDiffGutterVisibility()
     this.syncDiffArtifacts()
+    this.installInlineRowHandlers()
+    this.scheduleOuterGutterMeasure()
   }
 
   get root() {
@@ -404,6 +371,8 @@ class InlineSplitWidgetView {
   destroy() {
     this.cleanupReadOnlyWidgetLock?.()
     this.cleanupReadOnlyWidgetLock = null
+    this.cancelOuterGutterMeasure()
+    this.componentRoot.removeEventListener('mousedown', this.handleInlineRowMouseDown, true)
     this.mergeView.destroy()
     this.componentRoot.remove()
   }
@@ -413,6 +382,7 @@ class InlineSplitWidgetView {
     this.mergeView.b.requestMeasure()
     this.syncDiffGutterVisibility()
     this.syncDiffArtifacts()
+    this.scheduleOuterGutterMeasure()
   }
 
   updateDescriptor(nextDescriptor: InlineHunkDescriptor) {
@@ -439,8 +409,7 @@ class InlineSplitWidgetView {
       this.syncModifiedEditability()
       this.mergeView.reconfigure({
         diffConfig: getDiffConfig(this.controller.editable),
-        renderRevertControl: () => this.createHunkActionControls(),
-        revertControls: this.getRevertControls(),
+        revertControls: undefined,
       })
     }
 
@@ -452,6 +421,69 @@ class InlineSplitWidgetView {
       this.applyingExternal = false
     }
     this.syncDiffArtifacts()
+    this.scheduleOuterGutterMeasure()
+  }
+
+  private installInlineRowHandlers() {
+    this.componentRoot.addEventListener('mousedown', this.handleInlineRowMouseDown, true)
+  }
+
+  private readonly handleInlineRowMouseDown = (event: MouseEvent) => {
+    if (event.button !== 0) {
+      return
+    }
+
+    const target = event.target instanceof Element ? event.target : null
+    if (!target?.closest('.cm-merge-a .cm-gutter.meo-git-gutter')) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    this.controller.collapseInlineHunk(this.descriptor.requestId)
+  }
+
+  private cancelOuterGutterMeasure() {
+    if (!this.pendingOuterGutterMeasureFrame) {
+      return
+    }
+    window.cancelAnimationFrame(this.pendingOuterGutterMeasureFrame)
+    this.pendingOuterGutterMeasureFrame = 0
+  }
+
+  private scheduleOuterGutterMeasure() {
+    if (this.pendingOuterGutterMeasureFrame) {
+      return
+    }
+    this.pendingOuterGutterMeasureFrame = window.requestAnimationFrame(() => {
+      this.pendingOuterGutterMeasureFrame = 0
+      this.syncOuterGutterOffset()
+    })
+  }
+
+  private syncOuterGutterOffset() {
+    if (!this.componentRoot.isConnected) {
+      this.scheduleOuterGutterMeasure()
+      return
+    }
+
+    const outerGutters = Array.from(
+      this.controller.view.dom.querySelectorAll<HTMLElement>('.cm-gutters'),
+    ).find((element) => !this.componentRoot.contains(element))
+    if (!outerGutters) {
+      this.componentRoot.style.removeProperty('--meo-live-inline-outer-gutter-width')
+      return
+    }
+
+    const guttersRect = outerGutters.getBoundingClientRect()
+    const contentRect = this.controller.view.contentDOM.getBoundingClientRect()
+    if (!guttersRect.width || !contentRect.width) {
+      this.scheduleOuterGutterMeasure()
+      return
+    }
+
+    const offset = Math.max(0, Math.ceil(contentRect.left - guttersRect.left))
+    this.componentRoot.style.setProperty('--meo-live-inline-outer-gutter-width', `${offset}px`)
   }
 
   private createMergeView() {
@@ -512,13 +544,9 @@ class InlineSplitWidgetView {
       gutter: false,
       highlightChanges: true,
       parent: this.body,
-      renderRevertControl: () => this.createHunkActionControls(),
-      revertControls: this.getRevertControls(),
+      revertControls: undefined,
+      trailingSpacer: 'fakeLines',
     })
-  }
-
-  private getRevertControls() {
-    return this.controller.canApplyHunkAction(this.descriptor) ? 'a-to-b' as const : undefined
   }
 
   private replaceDocument(view: EditorView, snapshot: TextSnapshot, nextText: string) {
@@ -648,10 +676,17 @@ class InlineSplitWidgetView {
   private renderHeader() {
     this.header.replaceChildren()
 
-    const label = document.createElement('div')
-    label.className = 'meo-live-inline-diff-title'
-    label.textContent = `${this.descriptor.originalLabel} -> ${this.descriptor.modifiedLabel}`
-    label.title = label.textContent
+    const controls = document.createElement('div')
+    controls.className = 'meo-live-inline-diff-controls'
+    controls.onmousedown = (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    const actions = this.createHunkActionControls()
+    if (actions.hasChildNodes()) {
+      controls.appendChild(actions)
+    }
 
     const range = document.createElement('div')
     range.className = 'meo-live-inline-diff-range'
@@ -664,7 +699,8 @@ class InlineSplitWidgetView {
       this.createNavButton('next'),
     )
 
-    this.header.append(label, range, nav)
+    controls.append(range, nav)
+    this.header.appendChild(controls)
   }
 
   private createNavButton(direction: 'next' | 'previous') {
@@ -865,6 +901,22 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     return true
   }
 
+  collapseInlineHunk(requestId: string) {
+    if (this.destroyed) {
+      return false
+    }
+
+    const index = this.requests.findIndex((request) => request.id === requestId)
+    if (index < 0) {
+      return false
+    }
+
+    this.requests.splice(index, 1)
+    this.descriptorsByRequestId.delete(requestId)
+    this.syncNow()
+    return true
+  }
+
   mountWidget(descriptor: InlineHunkDescriptor) {
     const component = new InlineSplitWidgetView(descriptor, this)
     this.widgets.set(component.root, component)
@@ -922,15 +974,6 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       return
     }
     this.options.onSave?.(this.view.state.doc.toString())
-  }
-
-  collapseInlineHunk(requestId: string) {
-    const index = this.requests.findIndex((request) => request.id === requestId)
-    if (index < 0) {
-      return
-    }
-    this.requests.splice(index, 1)
-    this.syncNow()
   }
 
   canApplyHunkAction(descriptor: InlineHunkDescriptor) {
@@ -1036,9 +1079,6 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     this.view.dispatch({
       effects: StateEffect.appendConfig.of([
         inlineField,
-        lineNumberWidgetMarker.of((_view, widget) => (
-          widget instanceof InlineDiffWidget ? widget.getLineNumberMarker() : null
-        )),
         EditorView.updateListener.of((update) => this.handleViewUpdate(update)),
       ]),
     })

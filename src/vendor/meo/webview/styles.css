@@ -672,28 +672,33 @@
 
 .meo-native-theme .meo-live-inline-diff {
   --editor-content-padding-top: 0px;
-  --meo-live-inline-diff-floating-height: 18px;
+  --meo-live-inline-outer-gutter-width: 0px;
+  --meo-live-inline-diff-floating-height: 24px;
+  --meo-live-inline-diff-floating-lift: 26px;
   position: relative;
   display: block;
-  width: 100%;
+  width: calc(100% + var(--meo-live-inline-outer-gutter-width));
+  box-sizing: border-box;
   margin: 0;
+  margin-left: calc(-1 * var(--meo-live-inline-outer-gutter-width));
   border: 0;
   border-radius: 0;
-  background: transparent;
+  background: var(--editor-background);
   box-shadow: none;
   overflow: visible;
   contain: layout style;
+  z-index: 210;
 }
 
 .meo-native-theme .meo-live-inline-diff[data-line-numbers='hidden'] {
-  --meo-live-inline-diff-floating-height: 16px;
+  --meo-live-inline-diff-floating-height: 24px;
 }
 
 .meo-native-theme .meo-live-inline-diff-header {
   position: absolute;
   inset: 0 0 auto 0;
   z-index: 12;
-  height: var(--meo-live-inline-diff-floating-height);
+  height: 0;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -701,14 +706,30 @@
   pointer-events: none;
 }
 
-.meo-native-theme .meo-live-inline-diff-title,
-.meo-native-theme .meo-live-inline-diff-range {
+.meo-native-theme .meo-live-inline-diff-controls {
   position: absolute;
-  top: 2px;
+  top: calc(-1 * var(--meo-live-inline-diff-floating-lift));
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  max-width: min(54%, 420px);
+  height: var(--meo-live-inline-diff-floating-height);
+  padding: 1px 4px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--editorWidget-background, var(--sideBar-background)) 96%, transparent);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--shadow, #000) 16%, transparent);
+  pointer-events: auto;
+}
+
+.meo-native-theme .meo-live-inline-diff-range {
+  flex: 0 1 auto;
   min-width: 0;
   color: color-mix(in srgb, var(--descriptionForeground) 84%, transparent);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.2;
   letter-spacing: 0;
   overflow: hidden;
@@ -716,27 +737,12 @@
   white-space: nowrap;
 }
 
-.meo-native-theme .meo-live-inline-diff-title {
-  left: 8px;
-  max-width: min(42%, 360px);
-}
-
-.meo-native-theme .meo-live-inline-diff-range {
-  right: 50px;
-  max-width: 120px;
-  color: color-mix(in srgb, var(--descriptionForeground) 66%, transparent);
-  font-weight: 500;
-}
-
 .meo-native-theme .meo-live-inline-diff-nav {
-  position: absolute;
-  top: 0;
-  right: 8px;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  height: var(--meo-live-inline-diff-floating-height);
-  pointer-events: auto;
+  gap: 1px;
+  height: 100%;
 }
 
 .meo-native-theme .meo-live-inline-diff-nav-button {
@@ -744,8 +750,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 21px;
+  height: 21px;
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -771,7 +777,7 @@
   display: block;
   min-width: 0;
   min-height: 0;
-  padding-top: var(--meo-live-inline-diff-floating-height);
+  padding-top: 0;
   overflow: hidden;
 }
 
@@ -813,8 +819,54 @@
   padding-bottom: 0;
 }
 
-.meo-native-theme .meo-live-inline-diff-body .meo-diff-hunk-actions {
-  margin-top: 0;
+.meo-native-theme .meo-live-inline-diff-header .meo-live-inline-diff-hunk-actions {
+  position: static !important;
+  display: inline-flex !important;
+  flex: 0 0 auto;
+  flex-flow: row nowrap !important;
+  align-items: center;
+  gap: 1px;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action {
+  appearance: none;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
+  min-width: 21px;
+  min-height: 21px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--descriptionForeground);
+  background: transparent;
+  cursor: pointer;
+}
+
+.meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action:hover,
+.meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action:focus-visible {
+  color: var(--editor-foreground);
+  background: var(--toolbar-hoverBackground);
+  outline: none;
+}
+
+.meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action:disabled {
+  cursor: default;
+  opacity: 0.48;
 }
 
 .meo-native-theme .selection-inline-menu {

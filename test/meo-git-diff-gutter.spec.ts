@@ -130,7 +130,7 @@ describe('meo git diff gutter', () => {
     ])
   })
 
-  it('keeps the native live gutter marker for a line replaced by an inline diff widget', () => {
+  it('keeps native live gutter markers for normal block widgets', () => {
     let state = EditorState.create({
       doc: 'A\nX\nC\n',
       extensions: gitDiffGutterBaselineExtensions(),
@@ -146,14 +146,41 @@ describe('meo git diff gutter', () => {
     }).state
 
     const line = state.doc.line(2)
-    const marker = __gitDiffGutterTestHooks.liveCollapsedBlockMarkerAtPos(
+    const marker = __gitDiffGutterTestHooks.liveWidgetMarkerAtPos(
       state,
       state.field(gitDiffLineFlagsField),
+      {},
       line.from,
     ) as { flags?: { modified?: boolean, scope?: string } } | null
 
     expect(marker?.flags?.modified).toBe(true)
     expect(marker?.flags?.scope).toBe('unstaged')
+  })
+
+  it('lets inline split diff widgets own their own gutter row', () => {
+    let state = EditorState.create({
+      doc: 'A\nX\nC\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    state = state.update({
+      effects: setGitBaselineEffect.of({
+        available: true,
+        baseText: 'A\nB\nC\n',
+        headOid: 'HEAD',
+        indexText: null,
+        tracked: true,
+      }),
+    }).state
+
+    const line = state.doc.line(2)
+    const marker = __gitDiffGutterTestHooks.liveWidgetMarkerAtPos(
+      state,
+      state.field(gitDiffLineFlagsField),
+      { isMeoLiveInlineDiffWidget: true },
+      line.from,
+    )
+
+    expect(marker).toBeNull()
   })
 
   it('anchors middle pure deletions to the previous current line like VS Code', () => {

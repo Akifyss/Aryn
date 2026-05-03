@@ -602,15 +602,29 @@ function gitDiffGutterLiveExtension(options: GitDiffGutterRenderOptions = {}, li
           mapLineFlags(view.state.field(gitDiffLineFlagsField, false), options.mapLineFlag)
         );
     },
-    widgetMarker(view: EditorView, _widget: any, block: any) {
-      return liveCollapsedBlockMarkerAtPos(
+    widgetMarker(view: EditorView, widget: any, block: any) {
+      return liveWidgetMarkerAtPos(
         view.state,
         view.state.field(gitDiffLineFlagsField, false),
+        widget,
         block.from,
         options.mapLineFlag
       );
     }
   });
+}
+
+function liveWidgetMarkerAtPos(state: EditorState, lineFlags: (MarkerFlags | undefined)[] | null, widget: any, pos: number, mapLineFlag?: (flags: MarkerFlags) => MarkerFlags) {
+  if (widget?.isMeoLiveInlineDiffWidget === true) {
+    return null;
+  }
+
+  return liveCollapsedBlockMarkerAtPos(
+    state,
+    lineFlags,
+    pos,
+    mapLineFlag
+  );
 }
 
 export function gitDiffGutterBaselineExtensions(options: GitDiffGutterBaselineOptions = {}): any[] {
@@ -630,5 +644,6 @@ export function gitDiffGutterLiveRenderExtensions(options: GitDiffGutterRenderOp
 
 export const __gitDiffGutterTestHooks = {
   deferGitDiffLineFlagsRefreshEffect,
-  liveCollapsedBlockMarkerAtPos
+  liveCollapsedBlockMarkerAtPos,
+  liveWidgetMarkerAtPos
 };
