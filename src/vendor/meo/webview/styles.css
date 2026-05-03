@@ -809,6 +809,51 @@
   background: var(--editor-background);
 }
 
+.meo-native-theme .meo-live-inline-diff-body .cm-editor .cm-gutter.meo-git-gutter {
+  position: relative;
+}
+
+.meo-native-theme .meo-live-inline-diff-body .cm-editor .cm-gutter.meo-git-gutter::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.meo-native-theme .meo-live-inline-diff[data-change-kind='added'] .cm-merge-b .cm-gutter.meo-git-gutter::before,
+.meo-native-theme .meo-live-inline-diff[data-change-kind='copied'] .cm-merge-b .cm-gutter.meo-git-gutter::before,
+.meo-native-theme .meo-live-inline-diff[data-change-kind='untracked'] .cm-merge-b .cm-gutter.meo-git-gutter::before {
+  background: var(--git-added);
+}
+
+.meo-native-theme .meo-live-inline-diff[data-change-kind='deleted'] .cm-merge-a .cm-gutter.meo-git-gutter::before {
+  background: var(--git-deleted);
+}
+
+.meo-native-theme .meo-live-inline-diff[data-change-kind='modified'] .cm-merge-a .cm-gutter.meo-git-gutter::before,
+.meo-native-theme .meo-live-inline-diff[data-change-kind='renamed'] .cm-merge-a .cm-gutter.meo-git-gutter::before,
+.meo-native-theme .meo-live-inline-diff[data-change-kind='type-changed'] .cm-merge-a .cm-gutter.meo-git-gutter::before,
+.meo-native-theme .meo-live-inline-diff[data-change-kind='conflicted'] .cm-merge-a .cm-gutter.meo-git-gutter::before {
+  background: var(--git-deleted);
+}
+
+.meo-native-theme .meo-live-inline-diff[data-change-kind='modified'] .cm-merge-b .cm-gutter.meo-git-gutter::before,
+.meo-native-theme .meo-live-inline-diff[data-change-kind='renamed'] .cm-merge-b .cm-gutter.meo-git-gutter::before,
+.meo-native-theme .meo-live-inline-diff[data-change-kind='type-changed'] .cm-merge-b .cm-gutter.meo-git-gutter::before,
+.meo-native-theme .meo-live-inline-diff[data-change-kind='conflicted'] .cm-merge-b .cm-gutter.meo-git-gutter::before {
+  background: var(--git-added);
+}
+
+.meo-native-theme .meo-live-inline-diff[data-scope='staged'] .cm-gutter.meo-git-gutter::before {
+  opacity: 0;
+}
+
+.meo-native-theme .meo-live-inline-diff[data-scope='staged'] .cm-gutter.meo-git-gutter:hover::before {
+  opacity: 0.55;
+}
+
 .meo-native-theme .meo-live-inline-diff-body .cm-editor:not(.meo-line-numbers-hidden) .cm-lineNumbers .cm-gutterElement.meo-md-hide-line-number {
   color: var(--editorLineNumber-foreground) !important;
 }
@@ -817,6 +862,13 @@
   min-height: 0;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+.meo-native-theme .meo-live-inline-diff-body .cm-editor:not(.cm-focused) .meo-md-marker-active,
+.meo-native-theme .meo-live-inline-diff-body .cm-editor:not(.cm-focused) .meo-md-link-marker-active,
+.meo-native-theme .meo-live-inline-diff-body .cm-editor:not(.cm-focused) .meo-md-strike-marker-active,
+.meo-native-theme .meo-live-inline-diff-body .cm-editor:not(.cm-focused) .meo-md-code-marker-active {
+  display: none !important;
 }
 
 .meo-native-theme .meo-live-inline-diff-header .meo-live-inline-diff-hunk-actions {

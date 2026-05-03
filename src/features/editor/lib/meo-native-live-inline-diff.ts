@@ -64,6 +64,22 @@ type InlineHunkDescriptor = {
   selection: GitDiffSelection
 }
 
+type InlineLineRange = {
+  endLineExclusive: number
+  startLine: number
+}
+
+type InlineChunkEntry = {
+  chunk: CodeMirrorDiffChunk
+  selection: GitDiffSelection
+}
+
+type InlineChunkMatch = {
+  chunk: CodeMirrorDiffChunk
+  displaySelection: GitDiffSelection
+  selection: GitDiffSelection
+}
+
 type InlineDiffControllerOptions = {
   baseline: GitBaselinePayload | null
   diffGutterVisible: boolean
@@ -134,6 +150,142 @@ function lineRangeOffsets(doc: Text, startLine: number, lineCount: number, fallb
   }
 }
 
+function lineRangeLineCount(range: InlineLineRange) {
+  return Math.max(0, range.endLineExclusive - range.startLine)
+}
+
+function selectionLineRange(selection: GitDiffSelection, side: 'modified' | 'original'): InlineLineRange {
+  const startLine = side === 'original' ? selection.originalStartLine : selection.modifiedStartLine
+  const lineCount = side === 'original' ? selection.originalLineCount : selection.modifiedLineCount
+  const normalizedStartLine = Math.max(1, Math.floor(startLine || 1))
+  return {
+    endLineExclusive: normalizedStartLine + Math.max(0, Math.floor(lineCount)),
+    startLine: normalizedStartLine,
+  }
+}
+
+function selectionFromLineRanges(
+  originalRange: InlineLineRange,
+  modifiedRange: InlineLineRange,
+): GitDiffSelection {
+  return {
+    modifiedLineCount: lineRangeLineCount(modifiedRange),
+    modifiedStartLine: lineRangeLineCount(modifiedRange) <= 0
+      ? Math.max(0, modifiedRange.startLine)
+      : modifiedRange.startLine,
+    originalLineCount: lineRangeLineCount(originalRange),
+    originalStartLine: lineRangeLineCount(originalRange) <= 0
+      ? Math.max(0, originalRange.startLine)
+      : originalRange.startLine,
+  }
+}
+
+function mergeLineRanges(left: InlineLineRange, right: InlineLineRange): InlineLineRange {
+  return {
+    endLineExclusive: Math.max(left.endLineExclusive, right.endLineExclusive),
+    startLine: Math.min(left.startLine, right.startLine),
+  }
+}
+
+function mergeDiffSelections(selections: readonly [GitDiffSelection, ...GitDiffSelection[]]): GitDiffSelection {
+  const [first, ...rest] = selections
+  let originalRange = selectionLineRange(first, 'original')
+  let modifiedRange = selectionLineRange(first, 'modified')
+
+  for (const selection of rest) {
+    originalRange = mergeLineRanges(originalRange, selectionLineRange(selection, 'original'))
+    modifiedRange = mergeLineRanges(modifiedRange, selectionLineRange(selection, 'modified'))
+  }
+
+  return selectionFromLineRanges(originalRange, modifiedRange)
+}
+
+function lineRangesTouchOrOverlap(left: InlineLineRange, right: InlineLineRange) {
+  return left.startLine <= right.endLineExclusive && right.startLine <= left.endLineExclusive
+}
+
+function selectionsTouchOrOverlap(left: GitDiffSelection, right: GitDiffSelection) {
+  return lineRangesTouchOrOverlap(selectionLineRange(left, 'modified'), selectionLineRange(right, 'modified'))
+    || lineRangesTouchOrOverlap(selectionLineRange(left, 'original'), selectionLineRange(right, 'original'))
+}
+
+function lineRangeContainsLine(range: InlineLineRange, lineNumber: number) {
+  return lineNumber >= range.startLine && lineNumber < range.endLineExclusive
+}
+
+function hasLineRangeContent(range: InlineLineRange) {
+  return lineRangeLineCount(range) > 0
+}
+
+function projectModifiedRangeToOriginalRange(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  selection: GitDiffSelection,
+): InlineLineRange {
+  const fallbackOriginalRange = selectionLineRange(selection, 'original')
+  const modifiedRange = selectionLineRange(selection, 'modified')
+  if (!hasLineRangeContent(modifiedRange)) {
+    return fallbackOriginalRange
+  }
+
+  const originalToModifiedLineMap = buildSourceToTargetLineMap(originalDoc, modifiedDoc)
+  let firstOriginalLine = Number.POSITIVE_INFINITY
+  let lastOriginalLine = 0
+
+  for (let originalLine = 1; originalLine < originalToModifiedLineMap.length; originalLine += 1) {
+    const mappedModifiedLine = originalToModifiedLineMap[originalLine]
+    if (
+      typeof mappedModifiedLine !== 'number'
+      || !Number.isInteger(mappedModifiedLine)
+      || !lineRangeContainsLine(modifiedRange, mappedModifiedLine)
+    ) {
+      continue
+    }
+
+    firstOriginalLine = Math.min(firstOriginalLine, originalLine)
+    lastOriginalLine = Math.max(lastOriginalLine, originalLine)
+  }
+
+  const projectedOriginalRange = Number.isFinite(firstOriginalLine)
+    ? {
+        endLineExclusive: lastOriginalLine + 1,
+        startLine: firstOriginalLine,
+      }
+    : null
+
+  if (!projectedOriginalRange) {
+    return fallbackOriginalRange
+  }
+
+  return hasLineRangeContent(fallbackOriginalRange)
+    ? mergeLineRanges(projectedOriginalRange, fallbackOriginalRange)
+    : projectedOriginalRange
+}
+
+function createInlineDisplaySelection(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  selection: GitDiffSelection,
+): GitDiffSelection {
+  return selectionFromLineRanges(
+    projectModifiedRangeToOriginalRange(originalDoc, modifiedDoc, selection),
+    selectionLineRange(selection, 'modified'),
+  )
+}
+
+function getDistanceToLineRange(lineNumber: number, range: InlineLineRange) {
+  const startLine = Math.max(1, range.startLine)
+  const endLine = Math.max(startLine, range.endLineExclusive - 1)
+
+  if (lineNumber < startLine) {
+    return startLine - lineNumber
+  }
+  if (lineNumber > endLine) {
+    return lineNumber - endLine
+  }
+  return 0
+}
+
 function getDescriptorRenderKey(descriptor: InlineHunkDescriptor) {
   return [
     descriptor.key,
@@ -149,6 +301,10 @@ function getDescriptorRenderKey(descriptor: InlineHunkDescriptor) {
     descriptor.actionBusy ? 'busy' : 'idle',
     descriptor.actionScope ?? '',
     descriptor.actionChange ? `${descriptor.actionChange.scope}:${descriptor.actionChange.path}:${descriptor.actionChange.statusCode}` : '',
+    descriptor.selection.originalStartLine,
+    descriptor.selection.originalLineCount,
+    descriptor.selection.modifiedStartLine,
+    descriptor.selection.modifiedLineCount,
   ].join('\0')
 }
 
@@ -187,39 +343,100 @@ function getHunkActions(descriptor: InlineHunkDescriptor): GitDiffBlockAction[] 
   return []
 }
 
-function findChunkForLine(
+function createInlineChunkEntries(
   originalDoc: Text,
   modifiedDoc: Text,
   chunks: readonly CodeMirrorDiffChunk[],
+): InlineChunkEntry[] {
+  return chunks.map((chunk) => {
+    const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
+    return {
+      chunk,
+      selection,
+    }
+  })
+}
+
+function findSeedInlineChunkEntry(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  entries: readonly InlineChunkEntry[],
   requestedLineNumber: number,
 ) {
-  let best: { chunk: CodeMirrorDiffChunk, distance: number, selection: GitDiffSelection } | null = null
+  let best: { distance: number, entry: InlineChunkEntry, targetSide: 'modified' | 'original' } | null = null
 
-  for (const chunk of chunks) {
+  for (const entry of entries) {
     const match = resolveChunkNavigationMatch(
       originalDoc,
       modifiedDoc,
-      chunk,
+      entry.chunk,
       requestedLineNumber,
       'modified',
     )
+    const displayDistance = getDistanceToLineRange(
+      requestedLineNumber,
+      selectionLineRange(entry.selection, 'modified'),
+    )
+    const distance = Math.min(match.distance, displayDistance)
     if (
       !best
-      || match.distance < best.distance
+      || distance < best.distance
       || (
-        match.distance === best.distance
+        distance === best.distance
         && match.target.side === 'modified'
+        && best.targetSide !== 'modified'
       )
     ) {
       best = {
-        chunk,
-        distance: match.distance,
-        selection: match.selection,
+        distance,
+        entry,
+        targetSide: match.target.side,
       }
     }
   }
 
-  return best?.distance === 0 ? best : null
+  return best?.distance === 0 ? best.entry : null
+}
+
+function findInlineChunkMatch(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  chunks: readonly CodeMirrorDiffChunk[],
+  requestedLineNumber: number,
+): InlineChunkMatch | null {
+  const entries = createInlineChunkEntries(originalDoc, modifiedDoc, chunks)
+  const seed = findSeedInlineChunkEntry(originalDoc, modifiedDoc, entries, requestedLineNumber)
+  if (!seed) {
+    return null
+  }
+
+  const selectedEntries = new Set<InlineChunkEntry>([seed])
+  let selection = seed.selection
+  let changed = true
+
+  while (changed) {
+    changed = false
+    for (const entry of entries) {
+      if (selectedEntries.has(entry)) {
+        continue
+      }
+      if (
+        !selectionsTouchOrOverlap(selection, entry.selection)
+      ) {
+        continue
+      }
+
+      selectedEntries.add(entry)
+      selection = mergeDiffSelections([selection, entry.selection])
+      changed = true
+    }
+  }
+
+  return {
+    chunk: seed.chunk,
+    displaySelection: createInlineDisplaySelection(originalDoc, modifiedDoc, selection),
+    selection,
+  }
 }
 
 function buildDescriptorKey(scope: GitChangeScope, selection: GitDiffSelection) {
@@ -230,6 +447,10 @@ function buildDescriptorKey(scope: GitChangeScope, selection: GitDiffSelection) 
     selection.modifiedStartLine,
     selection.modifiedLineCount,
   ].join(':')
+}
+
+function getInlineMergeDiffConfig() {
+  return getDiffConfig(false)
 }
 
 function mapIndexLineToCurrentLine(indexText: string, currentText: string, indexLineNumber: number) {
@@ -392,7 +613,7 @@ class InlineSplitWidgetView {
     this.componentRoot.dataset.scope = nextDescriptor.scope
     this.componentRoot.dataset.lineNumbers = nextDescriptor.lineNumbersVisible ? 'visible' : 'hidden'
 
-    if (
+    const chromeChanged = (
       previousDescriptor.originalLabel !== nextDescriptor.originalLabel
       || previousDescriptor.modifiedLabel !== nextDescriptor.modifiedLabel
       || previousDescriptor.originalLineStart !== nextDescriptor.originalLineStart
@@ -403,23 +624,31 @@ class InlineSplitWidgetView {
       || previousDescriptor.actionBusy !== nextDescriptor.actionBusy
       || previousDescriptor.actionScope !== nextDescriptor.actionScope
       || previousDescriptor.actionChange !== nextDescriptor.actionChange
-    ) {
+    )
+    if (chromeChanged) {
       this.renderHeader()
+    }
+
+    const currentOriginalText = this.mergeView.a.state.doc.toString()
+    const currentModifiedText = this.mergeView.b.state.doc.toString()
+    const documentsMatch = currentOriginalText === nextDescriptor.originalText
+      && currentModifiedText === nextDescriptor.modifiedText
+
+    if (!documentsMatch) {
+      this.recreateMergeView()
+      this.scheduleOuterGutterMeasure()
+      return
+    }
+
+    if (chromeChanged) {
       this.syncLineNumberOffsets()
       this.syncModifiedEditability()
       this.mergeView.reconfigure({
-        diffConfig: getDiffConfig(this.controller.editable),
+        diffConfig: getInlineMergeDiffConfig(),
         revertControls: undefined,
       })
     }
 
-    this.applyingExternal = true
-    try {
-      this.replaceDocument(this.mergeView.a, this.originalTextSnapshot, nextDescriptor.originalText)
-      this.replaceDocument(this.mergeView.b, this.modifiedTextSnapshot, nextDescriptor.modifiedText)
-    } finally {
-      this.applyingExternal = false
-    }
     this.syncDiffArtifacts()
     this.scheduleOuterGutterMeasure()
   }
@@ -434,7 +663,8 @@ class InlineSplitWidgetView {
     }
 
     const target = event.target instanceof Element ? event.target : null
-    if (!target?.closest('.cm-merge-a .cm-gutter.meo-git-gutter')) {
+    const gitGutter = target?.closest('.cm-gutter.meo-git-gutter')
+    if (!gitGutter || !this.componentRoot.contains(gitGutter)) {
       return
     }
 
@@ -539,7 +769,7 @@ class InlineSplitWidgetView {
           textSnapshot: this.modifiedTextSnapshot,
         }),
       },
-      diffConfig: getDiffConfig(this.controller.editable),
+      diffConfig: getInlineMergeDiffConfig(),
       deferChunkUpdates: shouldDeferSplitMergeChunkUpdate,
       gutter: false,
       highlightChanges: true,
@@ -549,20 +779,21 @@ class InlineSplitWidgetView {
     })
   }
 
-  private replaceDocument(view: EditorView, snapshot: TextSnapshot, nextText: string) {
-    if (snapshot.value === nextText && view.state.doc.toString() === nextText) {
-      return
+  private recreateMergeView() {
+    this.applyingExternal = true
+    try {
+      this.cleanupReadOnlyWidgetLock?.()
+      this.cleanupReadOnlyWidgetLock = null
+      this.mergeView.destroy()
+      this.originalTextSnapshot.value = this.descriptor.originalText
+      this.modifiedTextSnapshot.value = this.descriptor.modifiedText
+      this.mergeView = this.createMergeView()
+      this.installReadOnlyWidgetLock()
+      this.syncDiffGutterVisibility()
+      this.syncDiffArtifacts()
+    } finally {
+      this.applyingExternal = false
     }
-
-    view.dispatch({
-      annotations: Transaction.addToHistory.of(false),
-      changes: {
-        from: 0,
-        insert: nextText,
-        to: view.state.doc.length,
-      },
-    })
-    snapshot.value = nextText
   }
 
   private syncLineNumberOffsets() {
@@ -671,6 +902,14 @@ class InlineSplitWidgetView {
   syncDiffGutterVisibility() {
     this.mergeView.a.dom.classList.toggle('meo-git-gutter-hidden', !this.controller.diffGutterVisible)
     this.mergeView.b.dom.classList.toggle('meo-git-gutter-hidden', !this.controller.diffGutterVisible)
+    this.syncGitGutterCollapseHints()
+  }
+
+  private syncGitGutterCollapseHints() {
+    for (const gutter of this.componentRoot.querySelectorAll<HTMLElement>('.cm-gutter.meo-git-gutter')) {
+      gutter.title = 'Collapse inline split'
+      gutter.setAttribute('aria-label', 'Collapse inline split')
+    }
   }
 
   private renderHeader() {
@@ -1157,6 +1396,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
         continue
       }
       usedKeys.add(descriptor.key)
+      request.anchor = descriptor.replaceFrom
       nextRequests.push(request)
       descriptors.push(descriptor)
       nextDescriptorsByRequestId.set(request.id, descriptor)
@@ -1190,24 +1430,25 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     const modifiedDoc = createTextDocFromContent(resolvedState.modifiedText)
     const requestedLineNumber = this.getRequestedLineForScope(request.scope, currentLine)
     const chunks = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc) as readonly CodeMirrorDiffChunk[]
-    const found = findChunkForLine(originalDoc, modifiedDoc, chunks, requestedLineNumber)
+    const found = findInlineChunkMatch(originalDoc, modifiedDoc, chunks, requestedLineNumber)
     if (!found) {
       return null
     }
 
-    const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, found.chunk)
-    const originalLineStart = Math.max(1, selection.originalStartLine)
-    const modifiedLineStart = Math.max(1, selection.modifiedStartLine)
-    const originalText = lineRangeText(originalDoc, originalLineStart, selection.originalLineCount)
-    const modifiedText = lineRangeText(modifiedDoc, modifiedLineStart, selection.modifiedLineCount)
-    const replaceLineStart = this.resolveCurrentReplaceStartLine(resolvedState, selection, currentLine)
+    const selection = found.selection
+    const displaySelection = found.displaySelection
+    const originalLineStart = Math.max(1, displaySelection.originalStartLine)
+    const modifiedLineStart = Math.max(1, displaySelection.modifiedStartLine)
+    const originalText = lineRangeText(originalDoc, originalLineStart, displaySelection.originalLineCount)
+    const modifiedText = lineRangeText(modifiedDoc, modifiedLineStart, displaySelection.modifiedLineCount)
+    const replaceLineStart = this.resolveCurrentReplaceStartLine(resolvedState, displaySelection, currentLine)
     const fallbackOffset = resolvedState.modifiedText === this.currentText
       ? found.chunk.fromB
       : request.anchor
     const replaceOffsets = lineRangeOffsets(
       currentDoc,
       replaceLineStart,
-      selection.modifiedLineCount,
+      displaySelection.modifiedLineCount,
       fallbackOffset,
     )
 
@@ -1216,7 +1457,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       actionBusy: this.isApplyingHunkAction,
       actionScope: resolvedState.actionScope,
       changeKind: inferInlineHunkChangeKind(resolvedState.actionChange, selection),
-      key: buildDescriptorKey(request.scope, selection),
+      key: buildDescriptorKey(request.scope, displaySelection),
       lineNumbersVisible: this.lineNumbersVisible,
       modifiedLabel: resolvedState.modifiedLabel,
       modifiedLineStart,
@@ -1322,3 +1563,9 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
 export function createMeoLiveInlineDiffController(options: InlineDiffControllerOptions): MeoLiveInlineDiffController {
   return new MeoLiveInlineDiffControllerImpl(options)
 }
+
+export const __meoLiveInlineDiffTestHooks = {
+  createInlineDisplaySelection,
+  findInlineChunkMatch,
+  mergeDiffSelections,
+} as const
