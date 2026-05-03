@@ -1,5 +1,5 @@
 import { MergeView } from '@codemirror/merge'
-import { Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
+import { Compartment, EditorSelection, EditorState, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
 import {
   Decoration,
   EditorView,
@@ -79,6 +79,18 @@ type InlineChunkMatch = {
   displaySelection: GitDiffSelection
   selection: GitDiffSelection
 }
+
+type InlineModifiedSelectionPoint = {
+  column: number
+  lineOffset: number
+}
+
+type InlineModifiedSelectionTarget = {
+  anchor: InlineModifiedSelectionPoint
+  head: InlineModifiedSelectionPoint
+}
+
+type InlineModifiedSelectionDescriptor = Pick<InlineHunkDescriptor, 'modifiedText' | 'replaceFrom' | 'replaceTo'>
 
 type InlineDiffControllerOptions = {
   baseline: GitBaselinePayload | null
@@ -465,6 +477,79 @@ function mapIndexLineToCurrentLine(indexText: string, currentText: string, index
     : indexLineNumber
 }
 
+function createModifiedSelectionPoint(
+  doc: Text,
+  descriptor: InlineModifiedSelectionDescriptor,
+  position: number,
+): InlineModifiedSelectionPoint | null {
+  const from = Math.max(0, Math.min(doc.length, Math.floor(descriptor.replaceFrom)))
+  const to = Math.max(from, Math.min(doc.length, Math.floor(descriptor.replaceTo)))
+  const clampedPosition = Math.max(0, Math.min(doc.length, Math.floor(position)))
+  if (clampedPosition < from || clampedPosition > to) {
+    return null
+  }
+
+  const modifiedDoc = createTextDocFromContent(descriptor.modifiedText)
+  if (modifiedDoc.lines <= 0) {
+    return null
+  }
+
+  const replaceStartLine = doc.lineAt(from).number
+  const line = doc.lineAt(clampedPosition)
+  const lineOffset = line.number - replaceStartLine
+  if (lineOffset < 0 || lineOffset >= modifiedDoc.lines) {
+    return null
+  }
+
+  return {
+    column: clampedPosition - line.from,
+    lineOffset,
+  }
+}
+
+function createModifiedSelectionTarget(
+  doc: Text,
+  descriptor: InlineModifiedSelectionDescriptor,
+  selection: { anchor: number, head: number },
+): InlineModifiedSelectionTarget | null {
+  const anchor = createModifiedSelectionPoint(doc, descriptor, selection.anchor)
+  const head = createModifiedSelectionPoint(doc, descriptor, selection.head)
+  if (!anchor || !head) {
+    return null
+  }
+
+  return { anchor, head }
+}
+
+function resolveModifiedSelectionPoint(doc: Text, point: InlineModifiedSelectionPoint) {
+  if (doc.lines <= 0) {
+    return 0
+  }
+
+  const lineNumber = Math.max(1, Math.min(doc.lines, Math.floor(point.lineOffset) + 1))
+  const line = doc.line(lineNumber)
+  const column = Math.max(0, Math.floor(point.column))
+  return Math.max(line.from, Math.min(line.to, line.from + column))
+}
+
+function resolveModifiedSelectionTargetOffsets(
+  doc: Text,
+  target: InlineModifiedSelectionTarget,
+) {
+  return {
+    anchor: resolveModifiedSelectionPoint(doc, target.anchor),
+    head: resolveModifiedSelectionPoint(doc, target.head),
+  }
+}
+
+function resolveModifiedEditorSelection(
+  doc: Text,
+  target: InlineModifiedSelectionTarget,
+) {
+  const { anchor, head } = resolveModifiedSelectionTargetOffsets(doc, target)
+  return EditorSelection.single(anchor, head)
+}
+
 function buildInlineDecorations(
   state: EditorState,
   descriptors: readonly InlineHunkDescriptor[],
@@ -553,6 +638,7 @@ class InlineSplitWidgetView {
   private readonly originalTextSnapshot: TextSnapshot
   private readonly modifiedTextSnapshot: TextSnapshot
   private cleanupReadOnlyWidgetLock: (() => void) | null = null
+  private pendingModifiedSelectionFocusFrame = 0
   private pendingOuterGutterMeasureFrame = 0
   private pendingReadOnlyWidgetLockFrame = 0
   private readonly pendingReadOnlyWidgetRoots = new Set<Element>()
@@ -594,6 +680,7 @@ class InlineSplitWidgetView {
   destroy() {
     this.cleanupReadOnlyWidgetLock?.()
     this.cleanupReadOnlyWidgetLock = null
+    this.cancelPendingModifiedSelectionFocus()
     this.cancelOuterGutterMeasure()
     this.componentRoot.removeEventListener('mousedown', this.handleInlineRowMouseDown, true)
     this.mergeView.destroy()
@@ -606,6 +693,34 @@ class InlineSplitWidgetView {
     this.syncDiffGutterVisibility()
     this.syncDiffArtifacts()
     this.scheduleOuterGutterMeasure()
+  }
+
+  focusModifiedSelection(target: InlineModifiedSelectionTarget) {
+    if (this.pendingModifiedSelectionFocusFrame) {
+      window.cancelAnimationFrame(this.pendingModifiedSelectionFocusFrame)
+    }
+
+    this.pendingModifiedSelectionFocusFrame = window.requestAnimationFrame(() => {
+      this.pendingModifiedSelectionFocusFrame = 0
+      if (
+        !this.componentRoot.isConnected
+        || this.descriptor.modifiedReadOnly
+        || !this.controller.editable
+      ) {
+        return
+      }
+
+      // Live mode reveals Markdown source markers only while the editor is
+      // focused, so focus before setting the selection to avoid stale caret
+      // coordinates from the unfocused, marker-hidden layout.
+      this.mergeView.b.focus()
+      const selection = resolveModifiedEditorSelection(this.mergeView.b.state.doc, target)
+      this.mergeView.b.dispatch({
+        effects: EditorView.scrollIntoView(selection.main.head, { x: 'nearest', y: 'nearest' }),
+        selection,
+      })
+      this.mergeView.b.focus()
+    })
   }
 
   updateDescriptor(nextDescriptor: InlineHunkDescriptor) {
@@ -653,6 +768,14 @@ class InlineSplitWidgetView {
 
     this.syncDiffArtifacts()
     this.scheduleOuterGutterMeasure()
+  }
+
+  private cancelPendingModifiedSelectionFocus() {
+    if (!this.pendingModifiedSelectionFocusFrame) {
+      return
+    }
+    window.cancelAnimationFrame(this.pendingModifiedSelectionFocusFrame)
+    this.pendingModifiedSelectionFocusFrame = 0
   }
 
   private installInlineRowHandlers() {
@@ -1026,6 +1149,12 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
   private destroyed = false
   private extensionInstalled = false
   private nextRequestId = 1
+  private pendingModifiedSelectionCleanupFrame = 0
+  private pendingModifiedSelectionGeneration = 0
+  private readonly pendingModifiedSelectionTargets = new Map<string, {
+    generation: number
+    target: InlineModifiedSelectionTarget
+  }>()
   private pendingSyncAfterComposition = false
   private pendingSyncFrame = 0
   private pendingSyncTimer = 0
@@ -1065,6 +1194,8 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
 
     this.destroyed = true
     this.cancelScheduledSync()
+    this.cancelPendingModifiedSelectionCleanup()
+    this.pendingModifiedSelectionTargets.clear()
     this.pendingSyncAfterComposition = false
     this.requests.length = 0
     this.descriptorsByRequestId.clear()
@@ -1164,6 +1295,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
   mountWidget(descriptor: InlineHunkDescriptor) {
     const component = new InlineSplitWidgetView(descriptor, this)
     this.widgets.set(component.root, component)
+    this.restorePendingModifiedSelection(component, descriptor.requestId)
     return component.root
   }
 
@@ -1173,12 +1305,23 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       return
     }
     component.updateDescriptor(descriptor)
+    this.restorePendingModifiedSelection(component, descriptor.requestId)
   }
 
   destroyWidget(dom: HTMLElement) {
     const component = this.widgets.get(dom)
     component?.destroy()
     this.widgets.delete(dom)
+  }
+
+  private restorePendingModifiedSelection(component: InlineSplitWidgetView, requestId: string) {
+    const entry = this.pendingModifiedSelectionTargets.get(requestId)
+    if (!entry || entry.generation !== this.pendingModifiedSelectionGeneration) {
+      return
+    }
+
+    this.pendingModifiedSelectionTargets.delete(requestId)
+    component.focusModifiedSelection(entry.target)
   }
 
   applyInlineModifiedText(requestId: string, nextText: string) {
@@ -1347,6 +1490,65 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     })
   }
 
+  private capturePendingModifiedSelectionTargets(descriptors: readonly InlineHunkDescriptor[]) {
+    this.pendingModifiedSelectionGeneration += 1
+    const generation = this.pendingModifiedSelectionGeneration
+    this.pendingModifiedSelectionTargets.clear()
+    this.cancelPendingModifiedSelectionCleanup()
+
+    if (!descriptors.length || !this.hasOuterEditorSelectionFocus()) {
+      return
+    }
+
+    const selection = this.view.state.selection.main
+    const doc = this.view.state.doc
+    for (const descriptor of descriptors) {
+      if (descriptor.modifiedReadOnly) {
+        continue
+      }
+
+      const target = createModifiedSelectionTarget(doc, descriptor, selection)
+      if (!target) {
+        continue
+      }
+
+      this.pendingModifiedSelectionTargets.set(descriptor.requestId, {
+        generation,
+        target,
+      })
+      break
+    }
+
+    if (!this.pendingModifiedSelectionTargets.size) {
+      return
+    }
+
+    this.pendingModifiedSelectionCleanupFrame = window.requestAnimationFrame(() => {
+      this.pendingModifiedSelectionCleanupFrame = 0
+      if (this.pendingModifiedSelectionGeneration === generation) {
+        this.pendingModifiedSelectionTargets.clear()
+      }
+    })
+  }
+
+  private cancelPendingModifiedSelectionCleanup() {
+    if (!this.pendingModifiedSelectionCleanupFrame) {
+      return
+    }
+    window.cancelAnimationFrame(this.pendingModifiedSelectionCleanupFrame)
+    this.pendingModifiedSelectionCleanupFrame = 0
+  }
+
+  private hasOuterEditorSelectionFocus() {
+    const activeElement = this.view.root.activeElement
+    if (!(activeElement instanceof Element)) {
+      return this.view.hasFocus
+    }
+
+    return this.view.contentDOM.contains(activeElement)
+      && !activeElement.closest('.meo-live-inline-diff')
+  }
+
   private hasActiveInlineHunks() {
     return this.requests.length > 0 || this.descriptorsByRequestId.size > 0
   }
@@ -1431,6 +1633,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       nextDescriptorsByRequestId.set(request.id, descriptor)
     }
 
+    this.capturePendingModifiedSelectionTargets(descriptors)
     this.requests.length = 0
     this.requests.push(...nextRequests)
     this.descriptorsByRequestId = nextDescriptorsByRequestId
@@ -1616,6 +1819,8 @@ export function createMeoLiveInlineDiffController(options: InlineDiffControllerO
 
 export const __meoLiveInlineDiffTestHooks = {
   createInlineDisplaySelection,
+  createModifiedSelectionTarget,
   findInlineChunkMatch,
   mergeDiffSelections,
+  resolveModifiedSelectionTargetOffsets,
 } as const

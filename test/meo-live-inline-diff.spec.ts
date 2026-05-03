@@ -163,4 +163,41 @@ describe('meo live inline diff', () => {
       originalStartLine: 58,
     })
   })
+
+  it('maps an outer live caret inside a refreshed hunk to the inline modified editor', () => {
+    const lines = Array.from({ length: 62 }, (_, index) => `line ${index + 1}`)
+    lines[57] = '## 9. Math formulasaa'
+    lines[58] = 'Markdown supports LaTeX formulas. extra'
+
+    const outerDoc = Text.of(lines)
+    const line58 = outerDoc.line(58)
+    const line59 = outerDoc.line(59)
+    const inlineDoc = Text.of([line58.text, line59.text])
+    const cursor = line58.to
+
+    const target = __meoLiveInlineDiffTestHooks.createModifiedSelectionTarget(
+      outerDoc,
+      {
+        modifiedText: inlineDoc.toString(),
+        replaceFrom: line58.from,
+        replaceTo: line59.to,
+      },
+      { anchor: cursor, head: cursor },
+    )
+
+    expect(target).toEqual({
+      anchor: {
+        column: line58.text.length,
+        lineOffset: 0,
+      },
+      head: {
+        column: line58.text.length,
+        lineOffset: 0,
+      },
+    })
+    expect(__meoLiveInlineDiffTestHooks.resolveModifiedSelectionTargetOffsets(inlineDoc, target!)).toEqual({
+      anchor: inlineDoc.line(1).to,
+      head: inlineDoc.line(1).to,
+    })
+  })
 })
