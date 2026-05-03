@@ -9,6 +9,6 @@ export type {MergeConfig, DirectMergeConfig} from "./mergeview"
 export {unifiedMergeView, acceptChunk, rejectChunk, getOriginalDoc,
         originalDocChangeEffect, updateOriginalDoc} from "./unified"
 
-export {uncollapseUnchanged, mergeViewSiblings} from "./deco"
+export {refreshInlineChangeLayerEffect, uncollapseUnchanged, mergeViewSiblings} from "./deco"
 
 export {Chunk} from "./chunk"

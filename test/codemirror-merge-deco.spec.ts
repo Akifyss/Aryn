@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
-import { isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 
@@ -172,5 +172,11 @@ describe('CodeMirror merge decorations', () => {
     expect(heading.height).toBeGreaterThan(38)
     expect(next.top).toBeLessThan(40)
     expect(next.height).toBeGreaterThan(24)
+  })
+
+  it('remeasures inline highlights for focus and explicit live-layout refreshes', () => {
+    expect(shouldMeasureInlineChangeLayer({ focusChanged: true })).toBe(true)
+    expect(shouldMeasureInlineChangeLayer({ refreshRequested: true })).toBe(true)
+    expect(shouldMeasureInlineChangeLayer({})).toBe(false)
   })
 })

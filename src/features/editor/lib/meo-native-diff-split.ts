@@ -1,7 +1,7 @@
 import { defaultKeymap, history, historyKeymap, indentLess, indentMore, redo, undo } from '@codemirror/commands'
 import { markdownKeymap } from '@codemirror/lang-markdown'
 import { bracketMatching, forceParsing, indentOnInput, indentUnit } from '@codemirror/language'
-import { goToNextChunk, goToPreviousChunk, MergeView } from '@codemirror/merge'
+import { goToNextChunk, goToPreviousChunk, MergeView, refreshInlineChangeLayerEffect } from '@codemirror/merge'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
 import { Annotation, Compartment, EditorSelection, EditorState, type Extension, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
 import {
@@ -711,6 +711,28 @@ export function shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(transacti
   return shouldRefresh
 }
 
+type SplitInlineChangeLayerRefreshOptions = {
+  liveDecorationsWillRefresh?: boolean
+}
+
+function hasRefreshLiveDecorationsEffect(transaction: Transaction) {
+  return transaction.effects.some((effect) => effect.is(refreshLiveDecorationsEffect))
+}
+
+// Live mode can reveal Markdown source markers from selection/focus changes
+// without changing diff chunks. Refresh the measured merge overlay in the same
+// transaction so inline text highlights follow the rendered marker layout.
+export function shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(
+  transaction: Transaction,
+  options: SplitInlineChangeLayerRefreshOptions = {},
+) {
+  const liveDecorationsWillRefresh = options.liveDecorationsWillRefresh
+    ?? shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(transaction)
+  return !transaction.startState.selection.eq(transaction.state.selection)
+    || hasRefreshLiveDecorationsEffect(transaction)
+    || liveDecorationsWillRefresh
+}
+
 export function getHunkActionLabel(action: GitDiffBlockAction) {
   switch (action) {
     case 'stage':
@@ -1124,11 +1146,22 @@ export function createDiffExtensions({
         ? []
         : transaction
     )),
-    EditorState.transactionExtender.of((transaction) => (
-      shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(transaction)
-        ? { effects: refreshLiveDecorationsEffect.of(null) }
-        : null
-    )),
+    EditorState.transactionExtender.of((transaction) => {
+      const effects: StateEffect<unknown>[] = []
+      const refreshLiveDecorations = shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(transaction)
+      if (refreshLiveDecorations) {
+        effects.push(refreshLiveDecorationsEffect.of(null))
+      }
+      if (
+        refreshLiveDecorations
+        || shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(transaction, {
+          liveDecorationsWillRefresh: refreshLiveDecorations,
+        })
+      ) {
+        effects.push(refreshInlineChangeLayerEffect.of(null))
+      }
+      return effects.length ? { effects } : null
+    }),
     EditorView.editorAttributes.of({
       class: 'meo-mode-live meo-diff-split-editor',
     }),

@@ -21,6 +21,7 @@ import {
   applyCodeMirrorChangesToText,
   buildDiffSplitGutterFlagsFromChunks,
   shouldDeferSplitMergeChunkUpdate,
+  shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange,
   shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange,
 } from '../src/features/editor/lib/meo-native-diff-split'
 import {
@@ -388,6 +389,17 @@ describe('meo performance guards', () => {
     expect(shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(checkedTransaction)).toBe(true)
     expect(shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(contentTransaction)).toBe(false)
     expect(shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(plainTransaction)).toBe(false)
+  })
+
+  it('refreshes split inline change overlay when live marker layout can change', () => {
+    const state = EditorState.create({ doc: '## Heading\nParagraph' })
+    const selectionTransaction = state.update({
+      selection: { anchor: '## Heading'.length },
+    })
+    const noOpTransaction = state.update({})
+
+    expect(shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(selectionTransaction)).toBe(true)
+    expect(shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(noOpTransaction)).toBe(false)
   })
 
   it('keeps split merge deletion chunks bounded to the edited line on the incremental path', () => {

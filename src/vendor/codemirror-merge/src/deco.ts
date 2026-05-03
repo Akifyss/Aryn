@@ -4,6 +4,8 @@ import {EditorState, RangeSetBuilder, Text, StateField, StateEffect, RangeSet, P
 import {Chunk} from "./chunk"
 import {ChunkField, deferredChunkUpdate, mergeConfig} from "./merge"
 
+export const refreshInlineChangeLayerEffect = StateEffect.define<null>()
+
 export const decorateChunks = ViewPlugin.fromClass(class {
   deco: DecorationSet
   gutter: RangeSet<GutterMarker> | null
@@ -48,14 +50,37 @@ export const inlineChangeLayer = layer({
   updateOnDocViewUpdate: false,
   update(update) {
     if (isDeferredChunkUpdate(update)) return false
-    return update.docChanged || update.viewportChanged ||
-      chunksChanged(update.startState, update.state) ||
-      configChanged(update.startState, update.state)
+    return shouldMeasureInlineChangeLayer({
+      chunksChanged: chunksChanged(update.startState, update.state),
+      configChanged: configChanged(update.startState, update.state),
+      docChanged: update.docChanged,
+      focusChanged: update.focusChanged,
+      refreshRequested: hasRefreshInlineChangeLayerEffect(update),
+      viewportChanged: update.viewportChanged,
+    })
   },
   markers(view) {
     return getInlineChangeLayerMarkers(view)
   }
 })
+
+export function shouldMeasureInlineChangeLayer(update: {
+  chunksChanged?: boolean,
+  configChanged?: boolean,
+  docChanged?: boolean,
+  focusChanged?: boolean,
+  refreshRequested?: boolean,
+  viewportChanged?: boolean,
+}) {
+  return !!(
+    update.docChanged ||
+    update.viewportChanged ||
+    update.focusChanged ||
+    update.refreshRequested ||
+    update.chunksChanged ||
+    update.configChanged
+  )
+}
 
 function chunksChanged(s1: EditorState, s2: EditorState) {
   return s1.field(ChunkField, false) != s2.field(ChunkField, false)
@@ -67,6 +92,11 @@ function configChanged(s1: EditorState, s2: EditorState) {
 
 function isDeferredChunkUpdate(update: ViewUpdate) {
   return update.transactions.some(tr => tr.annotation(deferredChunkUpdate))
+}
+
+function hasRefreshInlineChangeLayerEffect(update: ViewUpdate) {
+  return update.transactions.some(tr =>
+    tr.effects.some(effect => effect.is(refreshInlineChangeLayerEffect)))
 }
 
 const changedLine = Decoration.line({class: "cm-changedLine"})
