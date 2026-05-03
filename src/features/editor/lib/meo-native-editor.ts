@@ -378,6 +378,7 @@ export function mountNativeMeoEditor({
       return
     }
     compositionState = nextValue
+    liveInlineDiffController?.setCompositionActive(nextValue)
     onCompositionChange?.(nextValue)
   }
 

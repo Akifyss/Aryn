@@ -105,6 +105,7 @@ export type MeoLiveInlineDiffController = {
   destroy: () => void
   refreshLayout: () => void
   setBaseline: (baseline: GitBaselinePayload | null) => void
+  setCompositionActive: (isComposing: boolean) => void
   setDiffGutterVisible: (visible: boolean) => void
   setFallbackOriginal: (fallback: { label: string, text: string }) => void
   setGitChangeContext: (context: { stagedChange: GitChangeItem | null, unstagedChange: GitChangeItem | null }) => void
@@ -115,6 +116,7 @@ export type MeoLiveInlineDiffController = {
 
 const setInlineHunksEffect = StateEffect.define<InlineHunkDescriptor[]>()
 const INLINE_DIFF_SYNC_DELAY_MS = 120
+const INLINE_DIFF_SYNC_AFTER_COMPOSITION_MS = 80
 
 function normalizeLineEndings(text: string) {
   return text.replace(/\r\n?/g, '\n')
@@ -1020,9 +1022,11 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
   private currentGitChangeContext: InlineDiffControllerOptions['gitChangeContext']
   private currentText: string
   private descriptorsByRequestId = new Map<string, InlineHunkDescriptor>()
+  private compositionActive = false
   private destroyed = false
   private extensionInstalled = false
   private nextRequestId = 1
+  private pendingSyncAfterComposition = false
   private pendingSyncFrame = 0
   private pendingSyncTimer = 0
   private readonly requests: InlineHunkRequest[] = []
@@ -1061,6 +1065,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
 
     this.destroyed = true
     this.cancelScheduledSync()
+    this.pendingSyncAfterComposition = false
     this.requests.length = 0
     this.descriptorsByRequestId.clear()
     this.dispatchDescriptors([])
@@ -1319,6 +1324,16 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       effects: StateEffect.appendConfig.of([
         inlineField,
         EditorView.updateListener.of((update) => this.handleViewUpdate(update)),
+        EditorView.domEventHandlers({
+          compositionstart: () => {
+            controller.setCompositionActive(true)
+            return false
+          },
+          compositionend: () => {
+            controller.setCompositionActive(false)
+            return false
+          },
+        }),
       ]),
     })
   }
@@ -1338,6 +1353,10 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
 
   private syncIfActive() {
     if (this.hasActiveInlineHunks()) {
+      if (this.compositionActive) {
+        this.pendingSyncAfterComposition = true
+        return
+      }
       this.syncNow()
     }
   }
@@ -1358,6 +1377,11 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       return
     }
     if (!this.hasActiveInlineHunks()) {
+      return
+    }
+    if (this.compositionActive) {
+      this.pendingSyncAfterComposition = true
+      this.cancelScheduledSync()
       return
     }
 
@@ -1385,6 +1409,11 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
 
     this.cancelScheduledSync()
     this.currentText = this.view.state.doc.toString()
+    if (this.compositionActive) {
+      this.pendingSyncAfterComposition = true
+      return
+    }
+
     const descriptors: InlineHunkDescriptor[] = []
     const nextRequests: InlineHunkRequest[] = []
     const nextDescriptorsByRequestId = new Map<string, InlineHunkDescriptor>()
@@ -1406,6 +1435,27 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     this.requests.push(...nextRequests)
     this.descriptorsByRequestId = nextDescriptorsByRequestId
     this.dispatchDescriptors(descriptors)
+  }
+
+  setCompositionActive(nextValue: boolean) {
+    if (this.destroyed || this.compositionActive === nextValue) {
+      return
+    }
+
+    this.compositionActive = nextValue
+    if (nextValue) {
+      if (this.hasActiveInlineHunks()) {
+        this.pendingSyncAfterComposition = true
+      }
+      this.cancelScheduledSync()
+      return
+    }
+
+    if (!this.pendingSyncAfterComposition) {
+      return
+    }
+    this.pendingSyncAfterComposition = false
+    this.scheduleSync(INLINE_DIFF_SYNC_AFTER_COMPOSITION_MS)
   }
 
   private createDescriptorForRequest(request: InlineHunkRequest): InlineHunkDescriptor | null {
