@@ -392,7 +392,7 @@ function getChunkDeco(view: EditorView) {
   return {deco: builder.finish(), gutter: gutterBuilder && gutterBuilder.finish()}
 }
 
-type SpacerKind = "alignment" | "fakeLines"
+export type SpacerKind = "alignment" | "fakeLines"
 
 class Spacer extends WidgetType {
   constructor(readonly height: number, readonly kind: SpacerKind = "alignment") { super() }
@@ -459,12 +459,25 @@ function spacerKindAfterChunk(
   return side == "a" ? linesA < linesB ? "fakeLines" : "alignment" : linesB < linesA ? "fakeLines" : "alignment"
 }
 
+export function spacerSideAfterChunk(
+  chunk: Chunk | null,
+  kind: SpacerKind,
+  doc: Text,
+  pos: number
+) {
+  if (kind != "fakeLines" || !chunk || pos <= 0) return -1
+  let clampedPos = Math.min(pos, doc.length)
+  let line = doc.lineAt(clampedPos)
+  return clampedPos == doc.length || clampedPos == line.to && line.from < line.to ? 1 : -1
+}
+
 function compareSpacers(a: DecorationSet, b: DecorationSet) {
   if (a.size != b.size) return false
   let iA = a.iter(), iB = b.iter()
   while (iA.value) {
     let spacerA = iA.value.spec.widget as Spacer, spacerB = iB.value!.spec.widget as Spacer
     if (iA.from != iB.from || spacerA.kind != spacerB.kind ||
+        iA.value.spec.side != iB.value!.spec.side ||
         Math.abs(spacerA.height - spacerB.height) > 1)
       return false
     iA.next(); iB.next()
@@ -490,17 +503,19 @@ export function updateSpacers(a: EditorView, b: EditorView, chunks: readonly Chu
       let diff = heightA - heightB
       if (diff < -epsilon) {
         offA -= diff
+        let kind = spacerKindAfterChunk(previousChunk, "a", viewportAlignment, a.state.doc, b.state.doc)
         buildA.add(posA, posA, Decoration.widget({
-          widget: new Spacer(-diff, spacerKindAfterChunk(previousChunk, "a", viewportAlignment, a.state.doc, b.state.doc)),
+          widget: new Spacer(-diff, kind),
           block: true,
-          side: -1
+          side: spacerSideAfterChunk(previousChunk, kind, a.state.doc, posA)
         }))
       } else if (diff > epsilon) {
         offB += diff
+        let kind = spacerKindAfterChunk(previousChunk, "b", viewportAlignment, a.state.doc, b.state.doc)
         buildB.add(posB, posB, Decoration.widget({
-          widget: new Spacer(diff, spacerKindAfterChunk(previousChunk, "b", viewportAlignment, a.state.doc, b.state.doc)),
+          widget: new Spacer(diff, kind),
           block: true,
-          side: -1
+          side: spacerSideAfterChunk(previousChunk, kind, b.state.doc, posB)
         }))
       }
     }
@@ -538,16 +553,18 @@ export function updateSpacers(a: EditorView, b: EditorView, chunks: readonly Chu
   let docDiff = (documentBottom(a) + offA) - (documentBottom(b) + offB)
   let lastChunk = chunks.length ? chunks[chunks.length - 1] : null
   if (docDiff < epsilon) {
+    let kind = spacerKindAfterChunk(lastChunk, "a", false, a.state.doc, b.state.doc)
     buildA.add(a.state.doc.length, a.state.doc.length, Decoration.widget({
-      widget: new Spacer(-docDiff, spacerKindAfterChunk(lastChunk, "a", false, a.state.doc, b.state.doc)),
+      widget: new Spacer(-docDiff, kind),
       block: true,
-      side: -1
+      side: spacerSideAfterChunk(lastChunk, kind, a.state.doc, a.state.doc.length)
     }))
   } else if (docDiff > epsilon) {
+    let kind = spacerKindAfterChunk(lastChunk, "b", false, a.state.doc, b.state.doc)
     buildB.add(b.state.doc.length, b.state.doc.length, Decoration.widget({
-      widget: new Spacer(docDiff, spacerKindAfterChunk(lastChunk, "b", false, a.state.doc, b.state.doc)),
+      widget: new Spacer(docDiff, kind),
       block: true,
-      side: -1
+      side: spacerSideAfterChunk(lastChunk, kind, b.state.doc, b.state.doc.length)
     }))
   }
 
