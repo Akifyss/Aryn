@@ -1,4 +1,4 @@
-import { getChunks, getOriginalDoc, MergeView, unifiedMergeView } from '@codemirror/merge'
+import { getChunks, getOriginalDoc, type MergeView } from '@codemirror/merge'
 import { Compartment, EditorSelection, EditorState, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
 import {
   Decoration,
@@ -16,16 +16,17 @@ import {
 } from '@/features/editor/lib/git-diff-navigation'
 import {
   buildDiffSplitGutterFlagsFromChunks,
-  createDiffExtensions,
-  createLineNumberExtensions,
+  createMeoDiffSplitMergeView,
+  createMeoDiffUnifiedEditorView,
   createTextDocFromContent,
-  createUnifiedLineNumberExtensions,
   getDiffConfig,
   getHunkActionIcon,
   getHunkActionLabel,
   lockReadOnlyWidgets,
   mapUnifiedDiffWidgetGutterFlag,
   mapCurrentLineToIndexLine,
+  reconfigureMeoDiffSplitLineNumbers,
+  reconfigureMeoDiffUnifiedLineNumbers,
   renderUnifiedDeletedContent,
   resolveOriginalText,
   shouldDeferSplitMergeChunkUpdate,
@@ -1023,59 +1024,55 @@ class InlineDiffWidgetView {
   }
 
   private createSplitView() {
-    return new MergeView({
+    return createMeoDiffSplitMergeView({
       a: {
         doc: this.descriptor.originalText,
-        extensions: createDiffExtensions({
-          activeLineGutterCompartment: this.originalActiveLineGutterCompartment,
-          editable: false,
-          editableCompartment: this.originalEditableCompartment,
-          interactive: false,
-          lineNumberStart: this.descriptor.originalLineStart,
-          lineNumbersCompartment: this.originalLineNumbersCompartment,
-          lineNumbersVisible: this.descriptor.lineNumbersVisible,
-          onChange: () => undefined,
-          readOnly: true,
-          readOnlyCompartment: this.originalReadOnlyCompartment,
-          side: 'original',
-          textSnapshot: this.originalTextSnapshot,
-        }),
+        activeLineGutterCompartment: this.originalActiveLineGutterCompartment,
+        editable: false,
+        editableCompartment: this.originalEditableCompartment,
+        interactive: false,
+        lineNumberStart: this.descriptor.originalLineStart,
+        lineNumbersCompartment: this.originalLineNumbersCompartment,
+        lineNumbersVisible: this.descriptor.lineNumbersVisible,
+        onChange: () => undefined,
+        readOnly: true,
+        readOnlyCompartment: this.originalReadOnlyCompartment,
+        side: 'original',
+        textSnapshot: this.originalTextSnapshot,
       },
       b: {
         doc: this.descriptor.modifiedText,
-        extensions: createDiffExtensions({
-          activeLineGutterCompartment: this.modifiedActiveLineGutterCompartment,
-          editable: this.controller.editable,
-          editableCompartment: this.modifiedEditableCompartment,
-          lineNumberStart: this.descriptor.modifiedLineStart,
-          lineNumbersCompartment: this.modifiedLineNumbersCompartment,
-          lineNumbersVisible: this.descriptor.lineNumbersVisible,
-          onChange: (nextValue) => {
-            if (this.applyingExternal) {
-              return
-            }
+        activeLineGutterCompartment: this.modifiedActiveLineGutterCompartment,
+        editable: this.controller.editable,
+        editableCompartment: this.modifiedEditableCompartment,
+        lineNumberStart: this.descriptor.modifiedLineStart,
+        lineNumbersCompartment: this.modifiedLineNumbersCompartment,
+        lineNumbersVisible: this.descriptor.lineNumbersVisible,
+        onChange: (nextValue) => {
+          if (this.applyingExternal) {
+            return
+          }
+          this.modifiedTextSnapshot.value = nextValue
+          const selection = this.mergeView?.b.state.selection.main
+          this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue, selection)
+        },
+        onCompositionChange: this.controller.onCompositionChange,
+        onOpenLink: this.controller.onOpenLink,
+        onSave: (nextValue) => {
+          if (!this.descriptor.modifiedReadOnly) {
             this.modifiedTextSnapshot.value = nextValue
             const selection = this.mergeView?.b.state.selection.main
             this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue, selection)
-          },
-          onCompositionChange: this.controller.onCompositionChange,
-          onOpenLink: this.controller.onOpenLink,
-          onSave: (nextValue) => {
-            if (!this.descriptor.modifiedReadOnly) {
-              this.modifiedTextSnapshot.value = nextValue
-              const selection = this.mergeView?.b.state.selection.main
-              this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue, selection)
-            }
-            this.controller.saveCurrentText()
-          },
-          onSelectionChange: this.controller.onSelectionChange,
-          onViewportChange: this.controller.onViewportChange,
-          readOnly: () => this.descriptor.modifiedReadOnly,
-          readOnlyCompartment: this.modifiedReadOnlyCompartment,
-          reportViewportChanges: false,
-          side: 'modified',
-          textSnapshot: this.modifiedTextSnapshot,
-        }),
+          }
+          this.controller.saveCurrentText()
+        },
+        onSelectionChange: this.controller.onSelectionChange,
+        onViewportChange: this.controller.onViewportChange,
+        readOnly: () => this.descriptor.modifiedReadOnly,
+        readOnlyCompartment: this.modifiedReadOnlyCompartment,
+        reportViewportChanges: false,
+        side: 'modified',
+        textSnapshot: this.modifiedTextSnapshot,
       },
       diffConfig: getInlineMergeDiffConfig(),
       deferChunkUpdates: shouldDeferSplitMergeChunkUpdate,
@@ -1088,62 +1085,57 @@ class InlineDiffWidgetView {
   }
 
   private createUnifiedView() {
-    const view = new EditorView({
+    return createMeoDiffUnifiedEditorView({
       doc: this.descriptor.modifiedText,
-      extensions: [
-        ...createDiffExtensions({
-          activeLineGutterCompartment: this.unifiedActiveLineGutterCompartment,
-          diffGutterWidgetLineFlagMapper: mapUnifiedDiffWidgetGutterFlag,
-          editable: this.controller.editable,
-          editableCompartment: this.unifiedEditableCompartment,
-          lineNumberExtensionFactory: (visible) => createUnifiedLineNumberExtensions(visible, {
-            display: 'single',
-            modifiedLineStart: this.descriptor.modifiedLineStart,
-            originalLineStart: this.descriptor.originalLineStart,
-          }),
-          lineNumbersCompartment: this.unifiedLineNumbersCompartment,
-          lineNumbersVisible: this.descriptor.lineNumbersVisible,
-          onChange: (nextValue) => {
-            if (this.applyingExternal) {
-              return
-            }
+      pane: {
+        activeLineGutterCompartment: this.unifiedActiveLineGutterCompartment,
+        diffGutterWidgetLineFlagMapper: mapUnifiedDiffWidgetGutterFlag,
+        editable: this.controller.editable,
+        editableCompartment: this.unifiedEditableCompartment,
+        lineNumbersCompartment: this.unifiedLineNumbersCompartment,
+        lineNumbersVisible: this.descriptor.lineNumbersVisible,
+        onChange: (nextValue) => {
+          if (this.applyingExternal) {
+            return
+          }
+          this.modifiedTextSnapshot.value = nextValue
+          const selection = this.unifiedView?.state.selection.main
+          this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue, selection)
+        },
+        onCompositionChange: this.controller.onCompositionChange,
+        onOpenLink: this.controller.onOpenLink,
+        onSave: (nextValue) => {
+          if (!this.descriptor.modifiedReadOnly) {
             this.modifiedTextSnapshot.value = nextValue
             const selection = this.unifiedView?.state.selection.main
             this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue, selection)
-          },
-          onCompositionChange: this.controller.onCompositionChange,
-          onOpenLink: this.controller.onOpenLink,
-          onSave: (nextValue) => {
-            if (!this.descriptor.modifiedReadOnly) {
-              this.modifiedTextSnapshot.value = nextValue
-              const selection = this.unifiedView?.state.selection.main
-              this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue, selection)
-            }
-            this.controller.saveCurrentText()
-          },
-          onSelectionChange: this.controller.onSelectionChange,
-          onViewportChange: this.controller.onViewportChange,
-          readOnly: () => this.descriptor.modifiedReadOnly,
-          readOnlyCompartment: this.unifiedReadOnlyCompartment,
-          reportViewportChanges: false,
-          side: 'modified',
-          textSnapshot: this.modifiedTextSnapshot,
-        }),
-        unifiedMergeView({
-          allowInlineDiffs: false,
-          diffConfig: getInlineMergeDiffConfig(),
-          gutter: false,
-          highlightChanges: true,
-          mergeControls: undefined,
-          original: this.descriptor.originalText,
-          renderDeletedContent: renderUnifiedDeletedContent,
-          syntaxHighlightDeletions: true,
-        }),
-      ],
+          }
+          this.controller.saveCurrentText()
+        },
+        onSelectionChange: this.controller.onSelectionChange,
+        onViewportChange: this.controller.onViewportChange,
+        readOnly: () => this.descriptor.modifiedReadOnly,
+        readOnlyCompartment: this.unifiedReadOnlyCompartment,
+        reportViewportChanges: false,
+        side: 'modified',
+        textSnapshot: this.modifiedTextSnapshot,
+      },
+      lineNumberOptions: {
+        display: 'single',
+        modifiedLineStart: this.descriptor.modifiedLineStart,
+        originalLineStart: this.descriptor.originalLineStart,
+      },
+      allowInlineDiffs: false,
+      className: 'meo-diff-unified-editor',
+      diffConfig: getInlineMergeDiffConfig(),
+      gutter: false,
+      highlightChanges: true,
+      mergeControls: undefined,
+      original: this.descriptor.originalText,
       parent: this.body,
+      renderDeletedContent: renderUnifiedDeletedContent,
+      syntaxHighlightDeletions: true,
     })
-    view.dom.classList.add('meo-diff-unified-editor')
-    return view
   }
 
   private recreateCurrentView() {
@@ -1160,28 +1152,29 @@ class InlineDiffWidgetView {
 
   private syncLineNumberOffsets() {
     if (this.mergeView) {
-      this.mergeView.a.dispatch({
-        effects: this.originalLineNumbersCompartment.reconfigure(
-          createLineNumberExtensions(this.descriptor.lineNumbersVisible, this.descriptor.originalLineStart),
-        ),
-      })
-      this.mergeView.b.dispatch({
-        effects: this.modifiedLineNumbersCompartment.reconfigure(
-          createLineNumberExtensions(this.descriptor.lineNumbersVisible, this.descriptor.modifiedLineStart),
-        ),
+      reconfigureMeoDiffSplitLineNumbers({
+        lineNumbersVisible: this.descriptor.lineNumbersVisible,
+        mergeView: this.mergeView,
+        modifiedLineNumbersCompartment: this.modifiedLineNumbersCompartment,
+        modifiedLineStart: this.descriptor.modifiedLineStart,
+        originalLineNumbersCompartment: this.originalLineNumbersCompartment,
+        originalLineStart: this.descriptor.originalLineStart,
       })
       return
     }
 
-    this.unifiedView?.dispatch({
-      effects: this.unifiedLineNumbersCompartment.reconfigure(
-        createUnifiedLineNumberExtensions(this.descriptor.lineNumbersVisible, {
+    if (this.unifiedView) {
+      reconfigureMeoDiffUnifiedLineNumbers({
+        lineNumbersCompartment: this.unifiedLineNumbersCompartment,
+        lineNumbersVisible: this.descriptor.lineNumbersVisible,
+        lineNumberOptions: {
           display: 'single',
           modifiedLineStart: this.descriptor.modifiedLineStart,
           originalLineStart: this.descriptor.originalLineStart,
-        }),
-      ),
-    })
+        },
+        view: this.unifiedView,
+      })
+    }
   }
 
   private syncModifiedEditability() {

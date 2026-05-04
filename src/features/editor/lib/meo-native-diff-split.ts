@@ -9,6 +9,7 @@ import {
   MergeView,
   originalDocChangeEffect,
   refreshInlineChangeLayerEffect,
+  type DirectMergeConfig,
   type DeletedContentRenderer,
   unifiedMergeView,
 } from '@codemirror/merge'
@@ -1337,28 +1338,7 @@ export function mapUnifiedDiffWidgetGutterFlag(
   })
 }
 
-export function createDiffExtensions({
-  activeLineGutterCompartment,
-  diffGutterWidgetLineFlagMapper,
-  editable,
-  editableCompartment,
-  interactive,
-  lineNumbersCompartment,
-  lineNumberStart = 1,
-  lineNumberExtensionFactory = createLineNumberExtensions,
-  lineNumbersVisible,
-  onChange,
-  onCompositionChange,
-  onOpenLink,
-  onSave,
-  onSelectionChange,
-  onViewportChange,
-  readOnly,
-  readOnlyCompartment,
-  reportViewportChanges = true,
-  side,
-  textSnapshot,
-}: {
+export type MeoDiffPaneExtensionOptions = {
   activeLineGutterCompartment: Compartment
   diffGutterWidgetLineFlagMapper?: (
     flags: DiffSplitGutterFlags | undefined,
@@ -1382,7 +1362,30 @@ export function createDiffExtensions({
   reportViewportChanges?: boolean
   side: 'original' | 'modified'
   textSnapshot?: TextSnapshot
-}) {
+}
+
+export function createDiffExtensions({
+  activeLineGutterCompartment,
+  diffGutterWidgetLineFlagMapper,
+  editable,
+  editableCompartment,
+  interactive,
+  lineNumbersCompartment,
+  lineNumberStart = 1,
+  lineNumberExtensionFactory = createLineNumberExtensions,
+  lineNumbersVisible,
+  onChange,
+  onCompositionChange,
+  onOpenLink,
+  onSave,
+  onSelectionChange,
+  onViewportChange,
+  readOnly,
+  readOnlyCompartment,
+  reportViewportChanges = true,
+  side,
+  textSnapshot,
+}: MeoDiffPaneExtensionOptions) {
   let pointerSelectionPending = false
   let selectionPointerId: number | null = null
   let capturedPointerId: number | null = null
@@ -1810,6 +1813,169 @@ export function createDiffExtensions({
   }
 
   return extensions
+}
+
+export type MeoDiffSplitPaneOptions = MeoDiffPaneExtensionOptions & {
+  doc: DirectMergeConfig['a']['doc']
+}
+
+export type MeoDiffSplitMergeViewOptions = Omit<DirectMergeConfig, 'a' | 'b'> & {
+  a: MeoDiffSplitPaneOptions
+  b: MeoDiffSplitPaneOptions
+  className?: string
+}
+
+export function createMeoDiffSplitMergeView({
+  a,
+  b,
+  className,
+  ...config
+}: MeoDiffSplitMergeViewOptions) {
+  const { doc: originalDoc, ...originalExtensions } = a
+  const { doc: modifiedDoc, ...modifiedExtensions } = b
+  const mergeView = new MergeView({
+    ...config,
+    a: {
+      doc: originalDoc,
+      extensions: createDiffExtensions(originalExtensions),
+    },
+    b: {
+      doc: modifiedDoc,
+      extensions: createDiffExtensions(modifiedExtensions),
+    },
+  })
+
+  if (className) {
+    mergeView.dom.classList.add(className)
+  }
+
+  return mergeView
+}
+
+type MeoUnifiedMergeViewConfig = Parameters<typeof unifiedMergeView>[0]
+
+export type MeoDiffUnifiedEditorViewOptions = MeoUnifiedMergeViewConfig & {
+  className?: string
+  doc: DirectMergeConfig['a']['doc']
+  lineNumberOptions?: UnifiedDiffLineNumberOptions | number
+  pane: MeoDiffPaneExtensionOptions
+  parent?: Element | DocumentFragment
+}
+
+export function createMeoDiffUnifiedEditorView({
+  className,
+  doc,
+  lineNumberOptions,
+  pane,
+  parent,
+  ...mergeConfig
+}: MeoDiffUnifiedEditorViewOptions) {
+  const extensionOptions = lineNumberOptions === undefined
+    ? pane
+    : {
+        ...pane,
+        lineNumberExtensionFactory: (visible: boolean) => (
+          createUnifiedLineNumberExtensions(visible, lineNumberOptions)
+        ),
+      }
+  const view = new EditorView({
+    doc,
+    extensions: [
+      ...createDiffExtensions(extensionOptions),
+      unifiedMergeView(mergeConfig),
+    ],
+    parent,
+  })
+
+  if (className) {
+    view.dom.classList.add(className)
+  }
+
+  return view
+}
+
+export function reconfigureMeoDiffSplitLineNumbers({
+  activeLineGutterVisible,
+  lineNumbersVisible,
+  mergeView,
+  modifiedActiveLineGutterCompartment,
+  modifiedLineNumbersCompartment,
+  modifiedLineStart = 1,
+  originalActiveLineGutterCompartment,
+  originalLineNumbersCompartment,
+  originalLineStart = 1,
+}: {
+  activeLineGutterVisible?: boolean
+  lineNumbersVisible: boolean
+  mergeView: MergeView
+  modifiedActiveLineGutterCompartment?: Compartment
+  modifiedLineNumbersCompartment: Compartment
+  modifiedLineStart?: number
+  originalActiveLineGutterCompartment?: Compartment
+  originalLineNumbersCompartment: Compartment
+  originalLineStart?: number
+}) {
+  const resolvedActiveLineGutterVisible = activeLineGutterVisible ?? lineNumbersVisible
+  mergeView.a.dispatch({
+    effects: [
+      originalLineNumbersCompartment.reconfigure(
+        createLineNumberExtensions(lineNumbersVisible, originalLineStart),
+      ),
+      ...(originalActiveLineGutterCompartment
+        ? [
+            originalActiveLineGutterCompartment.reconfigure(
+              createActiveLineGutterExtensions(resolvedActiveLineGutterVisible),
+            ),
+          ]
+        : []),
+    ],
+  })
+  mergeView.b.dispatch({
+    effects: [
+      modifiedLineNumbersCompartment.reconfigure(
+        createLineNumberExtensions(lineNumbersVisible, modifiedLineStart),
+      ),
+      ...(modifiedActiveLineGutterCompartment
+        ? [
+            modifiedActiveLineGutterCompartment.reconfigure(
+              createActiveLineGutterExtensions(resolvedActiveLineGutterVisible),
+            ),
+          ]
+        : []),
+    ],
+  })
+}
+
+export function reconfigureMeoDiffUnifiedLineNumbers({
+  activeLineGutterCompartment,
+  activeLineGutterVisible,
+  lineNumbersCompartment,
+  lineNumbersVisible,
+  lineNumberOptions,
+  view,
+}: {
+  activeLineGutterCompartment?: Compartment
+  activeLineGutterVisible?: boolean
+  lineNumbersCompartment: Compartment
+  lineNumbersVisible: boolean
+  lineNumberOptions?: UnifiedDiffLineNumberOptions | number
+  view: EditorView
+}) {
+  const resolvedActiveLineGutterVisible = activeLineGutterVisible ?? lineNumbersVisible
+  view.dispatch({
+    effects: [
+      lineNumbersCompartment.reconfigure(
+        createUnifiedLineNumberExtensions(lineNumbersVisible, lineNumberOptions),
+      ),
+      ...(activeLineGutterCompartment
+        ? [
+            activeLineGutterCompartment.reconfigure(
+              createActiveLineGutterExtensions(resolvedActiveLineGutterVisible),
+            ),
+          ]
+        : []),
+    ],
+  })
 }
 
 function getTopVisiblePosition(view: EditorView | null, scrollContainer?: HTMLElement | null) {
@@ -3189,45 +3355,41 @@ export function createMeoDiffSplitController({
     body.classList.toggle('meo-diff-view-split', currentViewMode === 'split')
 
     if (currentViewMode === 'unified') {
-      unifiedView = new EditorView({
+      unifiedView = createMeoDiffUnifiedEditorView({
+        allowInlineDiffs: false,
+        className: 'meo-diff-unified-editor',
+        diffConfig: getDiffConfig(editable),
         doc: originalState.modifiedText,
-        extensions: [
-          ...createDiffExtensions({
-            activeLineGutterCompartment: unifiedActiveLineGutterCompartment,
-            diffGutterWidgetLineFlagMapper: mapUnifiedDiffWidgetGutterFlag,
-            editable,
-            editableCompartment: unifiedEditableCompartment,
-            lineNumberExtensionFactory: createUnifiedLineNumberExtensions,
-            lineNumbersCompartment: unifiedLineNumbersCompartment,
-            lineNumbersVisible: currentLineNumbersVisible,
-            onChange: handleModifiedTextChange,
-            onCompositionChange: handleCompositionChange,
-            onOpenLink,
-            onSave,
-            onSelectionChange,
-            onViewportChange,
-            readOnlyCompartment: unifiedReadOnlyCompartment,
-            readOnly: () => getOriginalState().modifiedReadOnly,
-            side: 'modified',
-            textSnapshot: modifiedTextSnapshot,
-          }),
-          unifiedMergeView({
-            allowInlineDiffs: false,
-            diffConfig: getDiffConfig(editable),
-            gutter: false,
-            highlightChanges: true,
-            mergeControls: getRevertControls(originalState)
-              ? (kind) => createUnifiedHunkActionControl(kind)
-              : false,
-            original: originalState.text,
-            renderDeletedContent: renderUnifiedDeletedContent,
-            syntaxHighlightDeletions: true,
-          }),
-        ],
+        gutter: false,
+        highlightChanges: true,
+        mergeControls: getRevertControls(originalState)
+          ? (kind) => createUnifiedHunkActionControl(kind)
+          : false,
+        original: originalState.text,
         parent: body,
+        renderDeletedContent: renderUnifiedDeletedContent,
+        syntaxHighlightDeletions: true,
+        pane: {
+          activeLineGutterCompartment: unifiedActiveLineGutterCompartment,
+          diffGutterWidgetLineFlagMapper: mapUnifiedDiffWidgetGutterFlag,
+          editable,
+          editableCompartment: unifiedEditableCompartment,
+          lineNumberExtensionFactory: createUnifiedLineNumberExtensions,
+          lineNumbersCompartment: unifiedLineNumbersCompartment,
+          lineNumbersVisible: currentLineNumbersVisible,
+          onChange: handleModifiedTextChange,
+          onCompositionChange: handleCompositionChange,
+          onOpenLink,
+          onSave,
+          onSelectionChange,
+          onViewportChange,
+          readOnlyCompartment: unifiedReadOnlyCompartment,
+          readOnly: () => getOriginalState().modifiedReadOnly,
+          side: 'modified',
+          textSnapshot: modifiedTextSnapshot,
+        },
       })
 
-      unifiedView.dom.classList.add('meo-diff-unified-editor')
       appliedModifiedReadOnly = originalState.modifiedReadOnly
       syncDiffSplitGitBaselines(originalState, { deferLineFlags: true, force: true })
       syncSplitGutterLineFlagsFromChunks()
@@ -3302,44 +3464,41 @@ export function createMeoDiffSplitController({
       return
     }
 
-    mergeView = new MergeView({
+    mergeView = createMeoDiffSplitMergeView({
       a: {
         doc: originalState.text,
-        extensions: createDiffExtensions({
-          activeLineGutterCompartment: originalActiveLineGutterCompartment,
-          editable: false,
-          editableCompartment: originalEditableCompartment,
-          interactive: false,
-          lineNumbersCompartment: originalLineNumbersCompartment,
-          lineNumbersVisible: currentLineNumbersVisible,
-          onChange: () => undefined,
-          readOnlyCompartment: originalReadOnlyCompartment,
-          readOnly: true,
-          side: 'original',
-          textSnapshot: originalTextSnapshot,
-        }),
+        activeLineGutterCompartment: originalActiveLineGutterCompartment,
+        editable: false,
+        editableCompartment: originalEditableCompartment,
+        interactive: false,
+        lineNumbersCompartment: originalLineNumbersCompartment,
+        lineNumbersVisible: currentLineNumbersVisible,
+        onChange: () => undefined,
+        readOnlyCompartment: originalReadOnlyCompartment,
+        readOnly: true,
+        side: 'original',
+        textSnapshot: originalTextSnapshot,
       },
       b: {
         doc: originalState.modifiedText,
-        extensions: createDiffExtensions({
-          activeLineGutterCompartment: modifiedActiveLineGutterCompartment,
-          editable,
-          editableCompartment: modifiedEditableCompartment,
-          lineNumbersCompartment: modifiedLineNumbersCompartment,
-          lineNumbersVisible: currentLineNumbersVisible,
-          onChange: handleModifiedTextChange,
-          onCompositionChange: handleCompositionChange,
-          onOpenLink,
-          onSave,
-          onSelectionChange,
-          onViewportChange,
-          readOnlyCompartment: modifiedReadOnlyCompartment,
-          reportViewportChanges: false,
-          readOnly: () => getOriginalState().modifiedReadOnly,
-          side: 'modified',
-          textSnapshot: modifiedTextSnapshot,
-        }),
+        activeLineGutterCompartment: modifiedActiveLineGutterCompartment,
+        editable,
+        editableCompartment: modifiedEditableCompartment,
+        lineNumbersCompartment: modifiedLineNumbersCompartment,
+        lineNumbersVisible: currentLineNumbersVisible,
+        onChange: handleModifiedTextChange,
+        onCompositionChange: handleCompositionChange,
+        onOpenLink,
+        onSave,
+        onSelectionChange,
+        onViewportChange,
+        readOnlyCompartment: modifiedReadOnlyCompartment,
+        reportViewportChanges: false,
+        readOnly: () => getOriginalState().modifiedReadOnly,
+        side: 'modified',
+        textSnapshot: modifiedTextSnapshot,
       },
+      className: 'meo-diff-split-merge-view',
       diffConfig: getDiffConfig(editable),
       deferChunkUpdates: shouldDeferSplitMergeChunkUpdate,
       gutter: false,
@@ -3351,7 +3510,6 @@ export function createMeoDiffSplitController({
       revertControls: getRevertControls(originalState),
     })
 
-    mergeView.dom.classList.add('meo-diff-split-merge-view')
     appliedModifiedReadOnly = originalState.modifiedReadOnly
     syncDiffSplitGitBaselines(originalState, { deferLineFlags: true, force: true })
     syncSplitGutterLineFlagsFromChunks()
@@ -3940,27 +4098,24 @@ export function createMeoDiffSplitController({
     },
     setLineNumbersVisible(visible) {
       currentLineNumbersVisible = visible !== false
-      const lineNumberExtensions = createLineNumberExtensions(currentLineNumbersVisible)
-      const unifiedLineNumberExtensions = createUnifiedLineNumberExtensions(currentLineNumbersVisible)
-      const activeLineGutterExtensions = createActiveLineGutterExtensions(currentLineNumbersVisible)
-      unifiedView?.dispatch({
-        effects: [
-          unifiedLineNumbersCompartment.reconfigure(unifiedLineNumberExtensions),
-          unifiedActiveLineGutterCompartment.reconfigure(activeLineGutterExtensions),
-        ],
-      })
-      mergeView?.a.dispatch({
-        effects: [
-          originalLineNumbersCompartment.reconfigure(lineNumberExtensions),
-          originalActiveLineGutterCompartment.reconfigure(activeLineGutterExtensions),
-        ],
-      })
-      mergeView?.b.dispatch({
-        effects: [
-          modifiedLineNumbersCompartment.reconfigure(lineNumberExtensions),
-          modifiedActiveLineGutterCompartment.reconfigure(activeLineGutterExtensions),
-        ],
-      })
+      if (unifiedView) {
+        reconfigureMeoDiffUnifiedLineNumbers({
+          activeLineGutterCompartment: unifiedActiveLineGutterCompartment,
+          lineNumbersCompartment: unifiedLineNumbersCompartment,
+          lineNumbersVisible: currentLineNumbersVisible,
+          view: unifiedView,
+        })
+      }
+      if (mergeView) {
+        reconfigureMeoDiffSplitLineNumbers({
+          lineNumbersVisible: currentLineNumbersVisible,
+          mergeView,
+          modifiedActiveLineGutterCompartment,
+          modifiedLineNumbersCompartment,
+          originalActiveLineGutterCompartment,
+          originalLineNumbersCompartment,
+        })
+      }
       mergeView?.reconfigure({})
       unifiedView?.dispatch({
         effects: refreshInlineChangeLayerEffect.of(null),
