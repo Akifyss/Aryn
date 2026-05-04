@@ -925,11 +925,6 @@
   outline: none;
 }
 
-.meo-native-theme .meo-live-inline-diff-nav-button.is-active {
-  color: var(--editor-foreground);
-  background: var(--toolbar-hoverBackground);
-}
-
 .meo-native-theme .meo-live-inline-diff-nav-button svg {
   display: block;
   width: 14px;

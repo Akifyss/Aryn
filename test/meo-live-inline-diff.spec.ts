@@ -40,6 +40,8 @@ describe('meo live inline diff', () => {
     expect(__meoLiveInlineDiffTestHooks.getNextInlineDiffViewMode('unified')).toBe('split')
     expect(__meoLiveInlineDiffTestHooks.getInlineDiffViewModeToggleLabel('split')).toBe('Switch to inline unified')
     expect(__meoLiveInlineDiffTestHooks.getInlineDiffViewModeToggleLabel('unified')).toBe('Switch to inline split')
+    expect(__meoLiveInlineDiffTestHooks.getInlineDiffViewModeToggleIconName('split')).toBe('unified')
+    expect(__meoLiveInlineDiffTestHooks.getInlineDiffViewModeToggleIconName('unified')).toBe('split')
   })
 
   it('projects the current-side render envelope back to original lines', () => {

@@ -7,6 +7,7 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view'
+import { Columns2, Rows2, createElement } from 'lucide'
 import type { GitBaselinePayload, GitChangeItem, GitChangeKind, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
 import {
   createSelectionFromCodeMirrorChunk,
@@ -152,12 +153,19 @@ function getNavigateIcon(direction: 'next' | 'previous') {
     : '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>'
 }
 
-function getInlineDiffViewModeIcon() {
-  return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.25 4.5h9.5"/><path d="M3.25 8h9.5"/><path d="M3.25 11.5h9.5"/></svg>'
-}
-
 function getNextInlineDiffViewMode(mode: InlineDiffViewMode): InlineDiffViewMode {
   return mode === 'unified' ? 'split' : 'unified'
+}
+
+function getInlineDiffViewModeToggleIconName(mode: InlineDiffViewMode): InlineDiffViewMode {
+  return getNextInlineDiffViewMode(mode)
+}
+
+function createInlineDiffViewModeToggleIcon(mode: InlineDiffViewMode) {
+  const IconComponent = getInlineDiffViewModeToggleIconName(mode) === 'unified'
+    ? Rows2
+    : Columns2
+  return createElement(IconComponent, { width: 14, height: 14 })
 }
 
 function getInlineDiffViewModeToggleLabel(mode: InlineDiffViewMode) {
@@ -1363,14 +1371,13 @@ class InlineDiffWidgetView {
   private createViewModeToggleButton() {
     const button = document.createElement('button')
     const label = getInlineDiffViewModeToggleLabel(this.currentViewMode)
+    const targetMode = getNextInlineDiffViewMode(this.currentViewMode)
     button.type = 'button'
     button.className = 'meo-live-inline-diff-nav-button meo-live-inline-diff-view-toggle'
-    button.dataset.mode = this.currentViewMode
+    button.dataset.targetMode = targetMode
     button.setAttribute('aria-label', label)
-    button.setAttribute('aria-pressed', this.currentViewMode === 'unified' ? 'true' : 'false')
     button.title = label
-    button.innerHTML = getInlineDiffViewModeIcon()
-    button.classList.toggle('is-active', this.currentViewMode === 'unified')
+    button.appendChild(createInlineDiffViewModeToggleIcon(this.currentViewMode))
     button.onmousedown = (event) => {
       event.preventDefault()
       event.stopPropagation()
@@ -1378,7 +1385,7 @@ class InlineDiffWidgetView {
     button.onclick = (event) => {
       event.preventDefault()
       event.stopPropagation()
-      this.controller.setInlineDiffViewMode(getNextInlineDiffViewMode(this.currentViewMode))
+      this.controller.setInlineDiffViewMode(targetMode)
     }
     return button
   }
@@ -2185,6 +2192,7 @@ export const __meoLiveInlineDiffTestHooks = {
   createInlineDisplaySelection,
   createModifiedSelectionTarget,
   findInlineChunkMatch,
+  getInlineDiffViewModeToggleIconName,
   getInlineDiffViewModeToggleLabel,
   getNextInlineDiffViewMode,
   mergeDiffSelections,
