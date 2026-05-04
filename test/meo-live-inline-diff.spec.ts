@@ -200,4 +200,41 @@ describe('meo live inline diff', () => {
       head: inlineDoc.line(1).to,
     })
   })
+
+  it('restores an inline caret to the outer editor when its line leaves the refreshed hunk', () => {
+    const lines = Array.from({ length: 62 }, (_, index) => `line ${index + 1}`)
+    lines[57] = '## 9. Math formulasaa'
+    lines[58] = 'Markdown supports LaTeX formulas.'
+
+    const outerDoc = Text.of(lines)
+    const line58 = outerDoc.line(58)
+    const line59 = outerDoc.line(59)
+    const nextInlineDoc = Text.of([line58.text, line59.text])
+    const inlineCursor = nextInlineDoc.line(2).to
+
+    const outerTarget = __meoLiveInlineDiffTestHooks.createOuterSelectionTargetFromInlineSelection(
+      line58.from,
+      nextInlineDoc.toString(),
+      { anchor: inlineCursor, head: inlineCursor },
+    )
+
+    expect(__meoLiveInlineDiffTestHooks.createModifiedSelectionTarget(
+      outerDoc,
+      {
+        modifiedText: line58.text,
+        replaceFrom: line58.from,
+        replaceTo: line58.to,
+      },
+      outerTarget,
+    )).toBeNull()
+
+    const restoredSelection = __meoLiveInlineDiffTestHooks.resolveOuterEditorSelection(outerDoc, outerTarget)
+    expect({
+      anchor: restoredSelection.main.anchor,
+      head: restoredSelection.main.head,
+    }).toEqual({
+      anchor: line59.to,
+      head: line59.to,
+    })
+  })
 })

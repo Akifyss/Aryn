@@ -92,6 +92,12 @@ type InlineModifiedSelectionTarget = {
 
 type InlineModifiedSelectionDescriptor = Pick<InlineHunkDescriptor, 'modifiedText' | 'replaceFrom' | 'replaceTo'>
 
+type InlineOuterSelectionTarget = {
+  anchor: number
+  head: number
+  source: 'inline' | 'outer'
+}
+
 type InlineDiffControllerOptions = {
   baseline: GitBaselinePayload | null
   diffGutterVisible: boolean
@@ -550,6 +556,49 @@ function resolveModifiedEditorSelection(
   return EditorSelection.single(anchor, head)
 }
 
+function createOuterSelectionTargetFromInlineSelection(
+  replaceFrom: number,
+  modifiedText: string,
+  selection: { anchor: number, head: number },
+): InlineOuterSelectionTarget {
+  const modifiedDoc = createTextDocFromContent(modifiedText)
+  const from = Math.max(0, Math.floor(replaceFrom))
+  const clampInlinePosition = (position: number) => Math.max(0, Math.min(modifiedDoc.length, Math.floor(position)))
+  return {
+    anchor: from + clampInlinePosition(selection.anchor),
+    head: from + clampInlinePosition(selection.head),
+    source: 'inline',
+  }
+}
+
+function createOuterSelectionTargetFromOuterSelection(
+  doc: Text,
+  selection: { anchor: number, head: number },
+): InlineOuterSelectionTarget {
+  const clampPosition = (position: number) => Math.max(0, Math.min(doc.length, Math.floor(position)))
+  return {
+    anchor: clampPosition(selection.anchor),
+    head: clampPosition(selection.head),
+    source: 'outer',
+  }
+}
+
+function mapOuterSelectionTarget(
+  target: InlineOuterSelectionTarget,
+  changes: Transaction['changes'],
+): InlineOuterSelectionTarget {
+  return {
+    ...target,
+    anchor: changes.mapPos(target.anchor, 1),
+    head: changes.mapPos(target.head, 1),
+  }
+}
+
+function resolveOuterEditorSelection(doc: Text, target: InlineOuterSelectionTarget) {
+  const clampPosition = (position: number) => Math.max(0, Math.min(doc.length, Math.floor(position)))
+  return EditorSelection.single(clampPosition(target.anchor), clampPosition(target.head))
+}
+
 function buildInlineDecorations(
   state: EditorState,
   descriptors: readonly InlineHunkDescriptor[],
@@ -874,14 +923,16 @@ class InlineSplitWidgetView {
               return
             }
             this.modifiedTextSnapshot.value = nextValue
-            this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue)
+            const selection = this.mergeView.b.state.selection.main
+            this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue, selection)
           },
           onCompositionChange: this.controller.onCompositionChange,
           onOpenLink: this.controller.onOpenLink,
           onSave: (nextValue) => {
             if (!this.descriptor.modifiedReadOnly) {
               this.modifiedTextSnapshot.value = nextValue
-              this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue)
+              const selection = this.mergeView.b.state.selection.main
+              this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue, selection)
             }
             this.controller.saveCurrentText()
           },
@@ -1145,12 +1196,17 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
   private destroyed = false
   private extensionInstalled = false
   private nextRequestId = 1
+  private pendingActiveOuterSelection: InlineOuterSelectionTarget | null = null
   private pendingModifiedSelectionCleanupFrame = 0
   private pendingModifiedSelectionGeneration = 0
   private readonly pendingModifiedSelectionTargets = new Map<string, {
     generation: number
     target: InlineModifiedSelectionTarget
   }>()
+  private pendingOuterSelectionRestore: {
+    generation: number
+    target: InlineOuterSelectionTarget
+  } | null = null
   private pendingSyncAfterComposition = false
   private pendingSyncFrame = 0
   private pendingSyncTimer = 0
@@ -1191,7 +1247,9 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     this.destroyed = true
     this.cancelScheduledSync()
     this.cancelPendingModifiedSelectionCleanup()
+    this.pendingActiveOuterSelection = null
     this.pendingModifiedSelectionTargets.clear()
+    this.pendingOuterSelectionRestore = null
     this.pendingSyncAfterComposition = false
     this.requests.length = 0
     this.descriptorsByRequestId.clear()
@@ -1320,7 +1378,11 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     component.focusModifiedSelection(entry.target)
   }
 
-  applyInlineModifiedText(requestId: string, nextText: string) {
+  applyInlineModifiedText(
+    requestId: string,
+    nextText: string,
+    selection?: { anchor: number, head: number } | null,
+  ) {
     const descriptor = this.descriptorsByRequestId.get(requestId)
     if (!descriptor || descriptor.modifiedReadOnly || this.destroyed) {
       return
@@ -1336,6 +1398,9 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
         to,
       },
     })
+    if (selection) {
+      this.pendingActiveOuterSelection = createOuterSelectionTargetFromInlineSelection(from, nextText, selection)
+    }
     this.currentText = this.view.state.doc.toString()
 
     const nextDescriptor = {
@@ -1428,6 +1493,15 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       for (const request of this.requests) {
         request.anchor = transaction.changes.mapPos(request.anchor, 1)
       }
+      if (this.pendingActiveOuterSelection) {
+        this.pendingActiveOuterSelection = mapOuterSelectionTarget(this.pendingActiveOuterSelection, transaction.changes)
+      }
+      if (this.pendingOuterSelectionRestore) {
+        this.pendingOuterSelectionRestore = {
+          ...this.pendingOuterSelectionRestore,
+          target: mapOuterSelectionTarget(this.pendingOuterSelectionRestore.target, transaction.changes),
+        }
+      }
     }
     if (!this.hasActiveInlineHunks()) {
       return
@@ -1490,13 +1564,20 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     this.pendingModifiedSelectionGeneration += 1
     const generation = this.pendingModifiedSelectionGeneration
     this.pendingModifiedSelectionTargets.clear()
+    this.pendingOuterSelectionRestore = null
     this.cancelPendingModifiedSelectionCleanup()
 
-    if (!descriptors.length || !this.hasOuterEditorSelectionFocus()) {
+    const pendingInlineSelection = this.pendingActiveOuterSelection
+    this.pendingActiveOuterSelection = null
+    const selection = pendingInlineSelection
+      ?? (this.hasOuterEditorSelectionFocus()
+        ? createOuterSelectionTargetFromOuterSelection(this.view.state.doc, this.view.state.selection.main)
+        : null)
+
+    if (!selection) {
       return
     }
 
-    const selection = this.view.state.selection.main
     const doc = this.view.state.doc
     for (const descriptor of descriptors) {
       if (descriptor.modifiedReadOnly) {
@@ -1515,7 +1596,14 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       break
     }
 
-    if (!this.pendingModifiedSelectionTargets.size) {
+    if (!this.pendingModifiedSelectionTargets.size && selection.source === 'inline') {
+      this.pendingOuterSelectionRestore = {
+        generation,
+        target: selection,
+      }
+    }
+
+    if (!this.pendingModifiedSelectionTargets.size && !this.pendingOuterSelectionRestore) {
       return
     }
 
@@ -1523,8 +1611,24 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       this.pendingModifiedSelectionCleanupFrame = 0
       if (this.pendingModifiedSelectionGeneration === generation) {
         this.pendingModifiedSelectionTargets.clear()
+        this.pendingOuterSelectionRestore = null
       }
     })
+  }
+
+  private restorePendingOuterSelection() {
+    const entry = this.pendingOuterSelectionRestore
+    if (!entry || entry.generation !== this.pendingModifiedSelectionGeneration) {
+      return
+    }
+
+    this.pendingOuterSelectionRestore = null
+    const selection = resolveOuterEditorSelection(this.view.state.doc, entry.target)
+    this.view.dispatch({
+      effects: EditorView.scrollIntoView(selection.main.head, { x: 'nearest', y: 'nearest' }),
+      selection,
+    })
+    this.view.focus()
   }
 
   private cancelPendingModifiedSelectionCleanup() {
@@ -1634,6 +1738,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     this.requests.push(...nextRequests)
     this.descriptorsByRequestId = nextDescriptorsByRequestId
     this.dispatchDescriptors(descriptors)
+    this.restorePendingOuterSelection()
   }
 
   setCompositionActive(nextValue: boolean) {
@@ -1814,9 +1919,11 @@ export function createMeoLiveInlineDiffController(options: InlineDiffControllerO
 }
 
 export const __meoLiveInlineDiffTestHooks = {
+  createOuterSelectionTargetFromInlineSelection,
   createInlineDisplaySelection,
   createModifiedSelectionTarget,
   findInlineChunkMatch,
   mergeDiffSelections,
   resolveModifiedSelectionTargetOffsets,
+  resolveOuterEditorSelection,
 } as const
