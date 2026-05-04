@@ -1,10 +1,5 @@
 import { useEffect, useState } from 'react'
-import {
-  CloseLine,
-  FullscreenExitLine,
-  FullscreenLine,
-  MinimizeLine,
-} from '@mingcute/react'
+import { Icon } from '@iconify/react'
 import { MacosWindowControls } from '@/components/macos-window-controls'
 
 export function AppTitlebar({
@@ -63,7 +58,7 @@ export function AppTitlebar({
                       void window.appApi.minimizeWindow()
                     }}
                   >
-                    <MinimizeLine size={16} />
+                    <Icon icon='material-symbols:chrome-minimize-rounded' width={16} height={16} />
                   </button>
                   <button
                     aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
@@ -75,7 +70,13 @@ export function AppTitlebar({
                       })
                     }}
                   >
-                    {isMaximized ? <FullscreenExitLine size={16} /> : <FullscreenLine size={16} />}
+                    <Icon
+                      icon={isMaximized
+                        ? 'material-symbols:chrome-restore-outline-rounded'
+                        : 'material-symbols:chrome-maximize-outline'}
+                      width={16}
+                      height={16}
+                    />
                   </button>
                   <button
                     aria-label='Close window'
@@ -90,7 +91,7 @@ export function AppTitlebar({
                       void window.appApi.closeWindow()
                     }}
                   >
-                    <CloseLine size={18} />
+                    <Icon icon='material-symbols:close-rounded' width={16} height={16} />
                   </button>
                 </div>
               </>
