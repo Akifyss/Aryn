@@ -41,6 +41,10 @@ export interface MarkerFlags {
 
 type GitDiffGutterRenderOptions = {
   mapLineFlag?: (flags: MarkerFlags) => MarkerFlags;
+  mapWidgetLineFlag?: (
+    flags: MarkerFlags | undefined,
+    context: { block: any; pos: number; state: EditorState; widget: any }
+  ) => MarkerFlags | null | undefined;
 };
 
 type GitDiffGutterBaselineOptions = {
@@ -445,23 +449,30 @@ export function setGitDiffLineFlags(view: EditorView, lineFlags: (MarkerFlags | 
   });
 }
 
-function liveCollapsedBlockMarkerAtPos(
+function liveMarkerFlagsAtPos(
   state: EditorState,
   lineFlags: (MarkerFlags | undefined)[] | null,
-  pos: number,
-  mapLineFlag?: (flags: MarkerFlags) => MarkerFlags
-): GitGutterMarker | null {
+  pos: number
+): MarkerFlags | null {
   if (!Array.isArray(lineFlags)) {
     return null;
   }
   const lineNo = state.doc.lineAt(Math.max(0, Math.min(pos, state.doc.length))).number;
   const block = getLiveGitCollapsedBlockAtLine(state, lineFlags, lineNo);
   if (block) {
-    const flags = liveCollapsedBlockMarkerFlags(block);
-    return gitMarker(typeof mapLineFlag === 'function' ? mapLineFlag(flags) : flags);
+    return liveCollapsedBlockMarkerFlags(block);
   }
 
-  const flags = lineFlags[lineNo - 1];
+  return lineFlags[lineNo - 1] ?? null;
+}
+
+function liveCollapsedBlockMarkerAtPos(
+  state: EditorState,
+  lineFlags: (MarkerFlags | undefined)[] | null,
+  pos: number,
+  mapLineFlag?: (flags: MarkerFlags) => MarkerFlags
+): GitGutterMarker | null {
+  const flags = liveMarkerFlagsAtPos(state, lineFlags, pos);
   if (!flags) {
     return null;
   }
@@ -608,23 +619,42 @@ function gitDiffGutterLiveExtension(options: GitDiffGutterRenderOptions = {}, li
         view.state.field(gitDiffLineFlagsField, false),
         widget,
         block.from,
-        options.mapLineFlag
+        options.mapLineFlag,
+        options.mapWidgetLineFlag,
+        block
       );
     }
   });
 }
 
-function liveWidgetMarkerAtPos(state: EditorState, lineFlags: (MarkerFlags | undefined)[] | null, widget: any, pos: number, mapLineFlag?: (flags: MarkerFlags) => MarkerFlags) {
+function liveWidgetMarkerAtPos(
+  state: EditorState,
+  lineFlags: (MarkerFlags | undefined)[] | null,
+  widget: any,
+  pos: number,
+  mapLineFlag?: (flags: MarkerFlags) => MarkerFlags,
+  mapWidgetLineFlag?: GitDiffGutterRenderOptions['mapWidgetLineFlag'],
+  block?: any
+) {
   if (widget?.isMeoLiveInlineDiffWidget === true) {
     return null;
   }
 
-  return liveCollapsedBlockMarkerAtPos(
-    state,
-    lineFlags,
-    pos,
-    mapLineFlag
-  );
+  const flags = liveMarkerFlagsAtPos(state, lineFlags, pos) ?? undefined;
+  if (typeof mapWidgetLineFlag === 'function') {
+    const widgetFlags = mapWidgetLineFlag(flags, { block, pos, state, widget });
+    if (widgetFlags === null) {
+      return null;
+    }
+    if (widgetFlags) {
+      return gitMarker(widgetFlags);
+    }
+  }
+
+  if (!flags) {
+    return null;
+  }
+  return gitMarker(typeof mapLineFlag === 'function' ? mapLineFlag(flags) : flags);
 }
 
 export function gitDiffGutterBaselineExtensions(options: GitDiffGutterBaselineOptions = {}): any[] {

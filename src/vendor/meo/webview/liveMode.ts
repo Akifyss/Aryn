@@ -111,6 +111,7 @@ const tableDelimiterGutterLineClassMarker = new (class extends GutterMarker {
   elementClass = 'meo-md-hide-line-number';
 })();
 const isTableContentLine = (lineText: string): boolean => lineText.includes('|');
+const atxHeadingPrefixRegex = /^(\s*)(#{1,6})([ \t]+)/;
 
 const lineStyleDecos = {
   h1: Decoration.line({ class: 'meo-md-h1' }),
@@ -261,6 +262,22 @@ class FootnoteReferenceSeparatorWidget extends WidgetType {
 }
 
 const footnoteReferenceSeparatorWidget = new FootnoteReferenceSeparatorWidget();
+
+function createLiveMarkdownLanguageExtension() {
+  return markdown({
+    base: markdownLanguage,
+    addKeymap: false,
+    codeLanguages: resolveCodeLanguage,
+    extensions: [{ remove: ['SetextHeading'] }]
+  });
+}
+
+function getAtxHeadingPrefixLength(text: string): number | null {
+  const headingPrefix = atxHeadingPrefixRegex.exec(text);
+  return headingPrefix
+    ? headingPrefix[1].length + headingPrefix[2].length + headingPrefix[3].length
+    : null;
+}
 
 function listLineDeco(
   contentOffsetColumns,
@@ -1055,12 +1072,12 @@ function addFootnoteDefinitionDecorations(builder, state, footnotes, activeLines
 function addAtxHeadingPrefixMarkers(builder, state, from, activeLines) {
   const line = state.doc.lineAt(from);
   const text = state.doc.sliceString(line.from, line.to);
-  const match = /^(#{1,6}[ \t]+)/.exec(text);
-  if (!match) {
+  const prefixLength = getAtxHeadingPrefixLength(text);
+  if (prefixLength === null) {
     return;
   }
 
-  const prefixTo = line.from + match[1].length;
+  const prefixTo = line.from + prefixLength;
   if (activeLines.has(line.number)) {
     addRange(builder, line.from, prefixTo, activeLineMarkerDeco);
     return;
@@ -2246,19 +2263,19 @@ const liveLineNumberMarkerField = StateField.define({
 });
 
 export function liveModeExtensions(options = {}) {
+  const includeHeadingCollapse = options.headingCollapse !== false;
   const extensions = [
-    markdown({
-      base: markdownLanguage,
-      addKeymap: false,
-      codeLanguages: resolveCodeLanguage,
-      extensions: [{ remove: ['SetextHeading'] }]
-    }),
+    createLiveMarkdownLanguageExtension(),
     syntaxHighlighting(highlightStyle),
     liveDecorationField,
     liveLineNumberMarkerField,
     ...mergeConflictSourceExtensions(),
-    ...headingCollapseSharedExtensions(),
-    ...headingCollapseLiveExtensions()
+    ...(includeHeadingCollapse
+      ? [
+          ...headingCollapseSharedExtensions(),
+          ...headingCollapseLiveExtensions()
+        ]
+      : [])
   ];
   if (options.deferDocChanges) {
     extensions.push(deferLiveDecorationDocChangesFacet.of(true));

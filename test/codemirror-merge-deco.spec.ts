@@ -3,6 +3,13 @@ import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
 import { isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
+import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor/lib/meo-native-diff-split'
+
+const {
+  buildUnifiedDiffLineNumberMap,
+  getLineNumbersInRange,
+  getUnifiedDiffChunkLineRange,
+} = __meoDiffSplitUnifiedLineNumberTestHooks
 
 describe('CodeMirror merge decorations', () => {
   it('treats pure inserted lines as whole-line changes only on the modified side', () => {
@@ -115,6 +122,50 @@ describe('CodeMirror merge decorations', () => {
       toB: modifiedDoc.length,
     })
     expect(spacerSideAfterChunk(chunk, 'fakeLines', modifiedDoc, modifiedDoc.length)).toBe(1)
+  })
+
+  it('maps unified diff line numbers to old/new columns', () => {
+    const originalDoc = Text.of([
+      'task 1',
+      'task 2',
+      '## 9. old title',
+      'old formula',
+      'after',
+    ])
+    const modifiedDoc = Text.of([
+      'task 1',
+      'task 2',
+      '## 9. new title',
+      'new formula phone',
+      'after',
+    ])
+    const chunks = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const lineNumberMap = buildUnifiedDiffLineNumberMap(originalDoc, modifiedDoc, chunks)
+    const [chunk] = chunks
+    const range = getUnifiedDiffChunkLineRange(originalDoc, modifiedDoc, chunk)
+
+    expect(lineNumberMap.originalByModifiedLine.slice(1)).toEqual([1, 2, null, null, 5])
+    expect(lineNumberMap.modifiedLineChanged.slice(1)).toEqual([false, false, true, true, false])
+    expect(getLineNumbersInRange(range.originalStartLine, range.originalEndLineExclusive)).toEqual([3, 4])
+  })
+
+  it('maps pure insertions and deletions without shifting unchanged unified line numbers', () => {
+    const originalDoc = Text.of(['A', 'B', 'C', 'D'])
+    const insertedDoc = Text.of(['A', 'X', 'Y', 'B', 'C', 'D'])
+    const deletedDoc = Text.of(['A', 'D'])
+
+    const insertionMap = buildUnifiedDiffLineNumberMap(
+      originalDoc,
+      insertedDoc,
+      buildCodeMirrorChunksFromVsCodeDiff(originalDoc, insertedDoc),
+    )
+    const deletionChunks = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, deletedDoc)
+    const deletionMap = buildUnifiedDiffLineNumberMap(originalDoc, deletedDoc, deletionChunks)
+    const deletionRange = getUnifiedDiffChunkLineRange(originalDoc, deletedDoc, deletionChunks[0])
+
+    expect(insertionMap.originalByModifiedLine.slice(1)).toEqual([1, null, null, 2, 3, 4])
+    expect(deletionMap.originalByModifiedLine.slice(1)).toEqual([1, 4])
+    expect(getLineNumbersInRange(deletionRange.originalStartLine, deletionRange.originalEndLineExclusive)).toEqual([2, 3])
   })
 
   it('uses normal before-line placement for non-fake alignment spacers', () => {

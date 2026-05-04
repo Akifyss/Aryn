@@ -21,6 +21,7 @@ import {
   ListTree,
   Minus,
   Quote,
+  Rows2,
   Search,
   Table2,
   createElement,
@@ -34,6 +35,7 @@ type NativeMeoButtonMap = {
   diffNextChangeBtn: HTMLButtonElement
   diffPreviousChangeBtn: HTMLButtonElement
   diffSplitButton: HTMLButtonElement
+  diffUnifiedButton: HTMLButtonElement
   findToggleBtn: HTMLButtonElement
   gitChangesGutterBtn: HTMLButtonElement
   headingDropdown: HTMLDivElement
@@ -178,7 +180,16 @@ export function createNativeMeoEditorShell(): NativeMeoEditorShell {
   diffSplitButton.setAttribute('role', 'tab')
   diffSplitButton.appendChild(createElement(Columns2, { width: 16, height: 16 }))
 
-  modeGroup.append(liveButton, sourceButton, diffSplitButton)
+  const diffUnifiedButton = document.createElement('button')
+  diffUnifiedButton.type = 'button'
+  diffUnifiedButton.className = 'mode-button mode-button-icon'
+  diffUnifiedButton.dataset.mode = 'diff-unified'
+  diffUnifiedButton.title = 'Diff Unified'
+  diffUnifiedButton.setAttribute('aria-label', 'Diff Unified')
+  diffUnifiedButton.setAttribute('role', 'tab')
+  diffUnifiedButton.appendChild(createElement(Rows2, { width: 16, height: 16 }))
+
+  modeGroup.append(liveButton, sourceButton, diffSplitButton, diffUnifiedButton)
 
   const findPanelElements = createFindPanel(findToggleBtn)
   const selectionMenuElements = createSelectionMenu()
@@ -197,6 +208,7 @@ export function createNativeMeoEditorShell(): NativeMeoEditorShell {
       diffNextChangeBtn,
       diffPreviousChangeBtn,
       diffSplitButton,
+      diffUnifiedButton,
       findToggleBtn,
       gitChangesGutterBtn,
       headingDropdown,

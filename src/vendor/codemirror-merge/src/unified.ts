@@ -5,6 +5,7 @@ import {language, highlightingFor} from "@codemirror/language"
 import {highlightTree} from "@lezer/highlight"
 import {Chunk, defaultDiffConfig} from "./chunk"
 import {computeChunks, ChunkField, mergeConfig} from "./merge"
+import type {DeletedContentRenderResult} from "./merge"
 import {Change, DiffConfig} from "./diff"
 import {decorateChunks, inlineChangeLayer, collapseUnchanged, changedText} from "./deco"
 import {baseTheme} from "./theme"
@@ -33,6 +34,14 @@ interface UnifiedMergeConfig {
   /// changed chunk. Defaults to true. When set to a function, that
   /// function is used to render the buttons.
   mergeControls?: boolean | ((type: "reject" | "accept", action: (e: MouseEvent) => void) => HTMLElement)
+  /// When given, this is used to render deleted content in unified
+  /// views. Returning null falls back to the default plain DOM renderer.
+  renderDeletedContent?: (context: {
+    chunk: Chunk,
+    state: EditorState,
+    text: string,
+    view: EditorView
+  }) => DeletedContentRenderResult | null | undefined
   /// Pass options to the diff algorithm. By default, the merge view
   /// sets [`scanLimit`](#merge.DiffConfig.scanLimit) to 500.
   diffConfig?: DiffConfig
@@ -76,9 +85,10 @@ export function unifiedMergeView(config: UnifiedMergeConfig) {
       highlightChanges: config.highlightChanges !== false,
       markGutter: config.gutter !== false,
       syntaxHighlightDeletions: config.syntaxHighlightDeletions !== false,
-      syntaxHighlightDeletionsMaxLength: 3000,
+      syntaxHighlightDeletionsMaxLength: config.syntaxHighlightDeletionsMaxLength ?? 3000,
       mergeControls: config.mergeControls ?? true,
       overrideChunk: config.allowInlineDiffs ? overrideChunkInline : undefined,
+      renderDeletedContent: config.renderDeletedContent,
       side: "b"
     }),
     originalDoc.init(() => orig),
@@ -115,12 +125,23 @@ const DeletionWidgets: WeakMap<readonly Change[], Decoration> = new WeakMap
 
 class DeletionWidget extends WidgetType {
   dom: HTMLElement | null = null
+  private cleanup: (() => void) | null = null
   constructor(
-    readonly buildDOM: (view: EditorView) => HTMLElement,
+    readonly buildDOM: (view: EditorView, widget: DeletionWidget) => HTMLElement,
     readonly marksDeletedLines: boolean,
   ) { super() }
   eq(other: DeletionWidget) { return this.dom == other.dom }
-  toDOM(view: EditorView) { return this.dom || (this.dom = this.buildDOM(view)) }
+  toDOM(view: EditorView) { return this.dom || (this.dom = this.buildDOM(view, this)) }
+  destroy() {
+    if (this.cleanup) {
+      this.cleanup()
+      this.cleanup = null
+    }
+    this.dom = null
+  }
+  setDeletedContentCleanup(cleanup: (() => void) | null | undefined) {
+    this.cleanup = cleanup || null
+  }
 }
 
 function deletionWidget(state: EditorState, chunk: Chunk, hideContent: boolean) {
@@ -128,9 +149,10 @@ function deletionWidget(state: EditorState, chunk: Chunk, hideContent: boolean) 
   if (known) return known
 
   let marksDeletedLines = chunk.fromA < chunk.toA
-  let buildDOM = (view: EditorView) => {
-    let {highlightChanges, syntaxHighlightDeletions, syntaxHighlightDeletionsMaxLength, mergeControls} =
-      state.facet(mergeConfig)
+  let buildDOM = (view: EditorView, widget: DeletionWidget) => {
+    let viewState = view.state
+    let {highlightChanges, syntaxHighlightDeletions, syntaxHighlightDeletionsMaxLength, mergeControls, renderDeletedContent} =
+      viewState.facet(mergeConfig)
     let dom = document.createElement("div")
     dom.className = marksDeletedLines ? "cm-deletedChunk" : "cm-deletedChunk cm-insertedChunkHost"
     if (mergeControls) {
@@ -144,18 +166,29 @@ function deletionWidget(state: EditorState, chunk: Chunk, hideContent: boolean) 
       } else {
         let accept = buttons.appendChild(document.createElement("button"))
         accept.name = "accept"
-        accept.textContent = state.phrase("Accept")
+        accept.textContent = viewState.phrase("Accept")
         accept.onmousedown = onAccept
         let reject = buttons.appendChild(document.createElement("button"))
         reject.name = "reject"
-        reject.textContent = state.phrase("Reject")
+        reject.textContent = viewState.phrase("Reject")
         reject.onmousedown = onReject
       }
     }
     if (hideContent || chunk.fromA >= chunk.toA) return dom
 
-    let text = view.state.field(originalDoc).sliceString(chunk.fromA, chunk.endA)
-    let lang = syntaxHighlightDeletions && state.facet(language)
+    let text = viewState.field(originalDoc).sliceString(chunk.fromA, chunk.endA)
+    let rendered = renderDeletedContent && renderDeletedContent({chunk, state: viewState, text, view})
+    if (rendered) {
+      if (rendered instanceof HTMLElement) {
+        dom.appendChild(rendered)
+      } else {
+        dom.appendChild(rendered.dom)
+        widget.setDeletedContentCleanup(rendered.destroy)
+      }
+      return dom
+    }
+
+    let lang = syntaxHighlightDeletions && viewState.facet(language)
     let line: HTMLElement = makeLine()
     let changes = chunk.changes, changeI = 0, inside = false
     function makeLine() {
@@ -199,7 +232,7 @@ function deletionWidget(state: EditorState, chunk: Chunk, hideContent: boolean) 
 
     if (lang && chunk.toA - chunk.fromA <= syntaxHighlightDeletionsMaxLength!) {
       let tree = lang.parser.parse(text), pos = 0
-      highlightTree(tree, {style: tags => highlightingFor(state, tags)}, (from, to, cls) => {
+      highlightTree(tree, {style: tags => highlightingFor(viewState, tags)}, (from, to, cls) => {
         if (from > pos) add(pos, from, "")
         add(from, to, cls)
         pos = to

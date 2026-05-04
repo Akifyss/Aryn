@@ -79,7 +79,7 @@ export type MeoEditorInsertFormat =
   | 'task'
   | 'wikiLink'
 
-export type MeoEditorMode = 'diff-split' | 'live' | 'source'
+export type MeoEditorMode = 'diff-split' | 'diff-unified' | 'live' | 'source'
 
 export type MeoDiffSplitGitChangeContext = {
   stagedChange: GitChangeItem | null

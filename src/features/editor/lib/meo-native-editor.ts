@@ -24,6 +24,7 @@ import { meoMermaidRuntimeUrl } from '@/features/editor/lib/meo-mermaid-runtime-
 import {
   createMeoDiffSplitController,
   type MeoDiffSplitController,
+  type MeoDiffViewMode,
 } from '@/features/editor/lib/meo-native-diff-split'
 import {
   createMeoLiveInlineDiffController,
@@ -44,6 +45,14 @@ import type {
 
 const SPLIT_PARENT_CHANGE_FLUSH_DELAY_MS = 50
 const DOCUMENT_FIND_REFRESH_DELAY_MS = 120
+
+function isDiffMode(mode: MeoEditorMode): mode is 'diff-split' | 'diff-unified' {
+  return mode === 'diff-split' || mode === 'diff-unified'
+}
+
+function getDiffViewMode(mode: MeoEditorMode): MeoDiffViewMode {
+  return mode === 'diff-unified' ? 'unified' : 'split'
+}
 
 function buildUnavailableBlameResult(
   reason: 'not-repo' | 'untracked' | 'git-unavailable' | 'error',
@@ -80,7 +89,7 @@ export function mountNativeMeoEditor({
     filePath,
     getCurrentText: () => currentText,
     getEditorPosition: () => (
-      currentMode === 'diff-split'
+      isDiffMode(currentMode)
         ? diffSplitController?.getTopVisiblePosition() ?? null
         : editor ? editor.getTopVisiblePosition() : null
     ),
@@ -127,6 +136,7 @@ export function mountNativeMeoEditor({
       diffNextChangeBtn,
       diffPreviousChangeBtn,
       diffSplitButton,
+      diffUnifiedButton,
       findToggleBtn,
       gitChangesGutterBtn,
       headingDropdown,
@@ -157,7 +167,7 @@ export function mountNativeMeoEditor({
   let liveInlineDiffController: MeoLiveInlineDiffController | null = null
 
   const getActiveEditor = () => (
-    currentMode === 'diff-split' ? diffSplitController : editor
+    isDiffMode(currentMode) ? diffSplitController : editor
   )
 
   const outlineController = createOutlineController({
@@ -310,11 +320,15 @@ export function mountNativeMeoEditor({
     liveButton.classList.toggle('is-active', currentMode === 'live')
     sourceButton.classList.toggle('is-active', currentMode === 'source')
     diffSplitButton.classList.toggle('is-active', currentMode === 'diff-split')
+    diffUnifiedButton.classList.toggle('is-active', currentMode === 'diff-unified')
     liveButton.setAttribute('aria-selected', currentMode === 'live' ? 'true' : 'false')
     sourceButton.setAttribute('aria-selected', currentMode === 'source' ? 'true' : 'false')
     diffSplitButton.setAttribute('aria-selected', currentMode === 'diff-split' ? 'true' : 'false')
-    editorHost.classList.toggle('meo-diff-split-active', currentMode === 'diff-split')
+    diffUnifiedButton.setAttribute('aria-selected', currentMode === 'diff-unified' ? 'true' : 'false')
+    editorHost.classList.toggle('meo-diff-split-active', isDiffMode(currentMode))
+    root.classList.toggle('is-diff-mode', isDiffMode(currentMode))
     root.classList.toggle('is-diff-split-mode', currentMode === 'diff-split')
+    root.classList.toggle('is-diff-unified-mode', currentMode === 'diff-unified')
   }
 
   const updateLineNumbersUi = () => {
@@ -387,8 +401,9 @@ export function mountNativeMeoEditor({
     diffSplitController = null
   }
 
-  const ensureDiffSplit = () => {
+  const ensureDiffSplit = (viewMode: MeoDiffViewMode = getDiffViewMode(currentMode)) => {
     if (diffSplitController) {
+      diffSplitController.setViewMode(viewMode)
       diffSplitController.setText(currentText)
       diffSplitController.setBaseline(currentGitBaseline)
       diffSplitController.setFallbackOriginal({
@@ -430,27 +445,28 @@ export function mountNativeMeoEditor({
       },
       parent: editorHost,
       text: currentText,
+      viewMode,
     })
   }
 
   const applyMode = (mode: MeoEditorMode, options?: { persist?: boolean }) => {
-    const nextMode = mode === 'diff-split' ? 'diff-split' : mode === 'live' ? 'live' : 'source'
+    const nextMode = mode === 'diff-split' || mode === 'diff-unified' ? mode : mode === 'live' ? 'live' : 'source'
     const previousTopPosition = getActiveEditor()?.getTopVisiblePosition?.() ?? null
     if (nextMode === currentMode) {
-      if (nextMode === 'diff-split') {
-        ensureDiffSplit()
+      if (isDiffMode(nextMode)) {
+        ensureDiffSplit(getDiffViewMode(nextMode))
         updateModeUi()
         diffSplitController?.refreshLayout()
       }
       return
     }
 
-    if (currentMode === 'diff-split') {
+    if (isDiffMode(currentMode)) {
       flushPendingSplitParentChange()
     }
     currentMode = nextMode
-    if (currentMode === 'diff-split') {
-      ensureDiffSplit()
+    if (isDiffMode(currentMode)) {
+      ensureDiffSplit(getDiffViewMode(currentMode))
       if (previousTopPosition) {
         diffSplitController?.restoreTopLine(previousTopPosition.line, previousTopPosition.lineOffset)
       }
@@ -529,10 +545,10 @@ export function mountNativeMeoEditor({
     switch (message.type) {
       case 'saveDocument':
         flushPendingSplitParentChange()
-        onSave?.(currentMode === 'diff-split' ? diffSplitController?.getText() ?? currentText : editor.getText())
+        onSave?.(isDiffMode(currentMode) ? diffSplitController?.getText() ?? currentText : editor.getText())
         return
       case 'setMode':
-        if (message.mode === 'live' || message.mode === 'source' || message.mode === 'diff-split') {
+        if (message.mode === 'live' || message.mode === 'source' || message.mode === 'diff-split' || message.mode === 'diff-unified') {
           applyMode(message.mode)
         }
         return
@@ -656,7 +672,7 @@ export function mountNativeMeoEditor({
   editor = createVendorEditor({
     initialGitGutter: gitChangesGutterVisible,
     initialLineNumbers: lineNumbersVisible,
-    initialMode: currentMode === 'diff-split' ? 'live' : currentMode,
+    initialMode: isDiffMode(currentMode) ? 'live' : currentMode,
     text: initialValue,
     initialTopLine: persistenceController.getInitialRestoreTopLine(initialValue, meoSettings.rememberPositionLines),
     initialTopLineOffset: persistenceController.getInitialRestoreTopLineOffset(initialValue, meoSettings.rememberPositionLines),
@@ -731,8 +747,8 @@ export function mountNativeMeoEditor({
   })
 
   syncGitDiffLineHighlights()
-  if (currentMode === 'diff-split') {
-    ensureDiffSplit()
+  if (isDiffMode(currentMode)) {
+    ensureDiffSplit(getDiffViewMode(currentMode))
     const initialDiffTopLine = persistenceController.getInitialRestoreTopLine(initialValue, meoSettings.rememberPositionLines)
     if (typeof initialDiffTopLine === 'number') {
       ;(diffSplitController as MeoDiffSplitController | null)?.restoreTopLine(
@@ -753,7 +769,7 @@ export function mountNativeMeoEditor({
   })
 
   const focusEditor = () => {
-    if (currentMode === 'diff-split') {
+    if (isDiffMode(currentMode)) {
       diffSplitController?.focus()
       return
     }
@@ -789,7 +805,7 @@ export function mountNativeMeoEditor({
   )
 
   const shortcutHandler = (event: KeyboardEvent) => {
-    const hasEditorFocus = currentMode === 'diff-split'
+    const hasEditorFocus = isDiffMode(currentMode)
       ? diffSplitController?.hasFocus() === true
       : editor.hasFocus()
 
@@ -797,7 +813,7 @@ export function mountNativeMeoEditor({
       return
     }
 
-    if (currentMode === 'diff-split') {
+    if (isDiffMode(currentMode)) {
       const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's'
       if (isSaveShortcut) {
         event.preventDefault()
@@ -879,7 +895,7 @@ export function mountNativeMeoEditor({
   }
 
   const pasteHandler = async (event: ClipboardEvent) => {
-    if (currentMode === 'diff-split') {
+    if (isDiffMode(currentMode)) {
       if (diffSplitController?.hasFocus() !== true && !isEventInsideDiffEditablePane(event.target)) {
         return
       }
@@ -1005,6 +1021,9 @@ export function mountNativeMeoEditor({
   })
   diffSplitButton.addEventListener('click', () => {
     applyMode('diff-split')
+  })
+  diffUnifiedButton.addEventListener('click', () => {
+    applyMode('diff-unified')
   })
 
   findPanelElements.findInput.addEventListener('input', () => {
@@ -1134,13 +1153,13 @@ export function mountNativeMeoEditor({
     setText(text) {
       const normalizedNextText = normalizeEol(text)
       const normalizedCurrentText = normalizeEol(editor.getText())
-      if (currentMode === 'diff-split') {
+      if (isDiffMode(currentMode)) {
         cancelPendingSplitParentChange()
         pendingSplitParentChangeText = null
       }
       currentText = text
 
-      if (currentMode === 'diff-split') {
+      if (isDiffMode(currentMode)) {
         diffSplitController?.setText(text)
         liveInlineDiffController?.setText(text)
         return

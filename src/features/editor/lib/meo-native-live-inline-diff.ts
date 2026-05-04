@@ -1092,7 +1092,7 @@ class InlineSplitWidgetView {
     this.header.replaceChildren()
 
     const controls = document.createElement('div')
-    controls.className = 'meo-live-inline-diff-controls'
+    controls.className = 'meo-live-inline-diff-controls meo-diff-floating-hunk-toolbar'
     controls.onmousedown = (event) => {
       event.preventDefault()
       event.stopPropagation()

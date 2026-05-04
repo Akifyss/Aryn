@@ -230,7 +230,7 @@
 }
 
 .meo-native-theme .editor-host.meo-diff-split-active>.cm-editor,
-.meo-native-theme .meo-native-root.is-diff-split-mode .editor-host>.cm-editor:not(.meo-diff-split-editor) {
+.meo-native-theme .meo-native-root.is-diff-mode .editor-host>.cm-editor:not(.meo-diff-split-editor) {
   display: none !important;
 }
 
@@ -251,7 +251,7 @@
   overflow: hidden;
 }
 
-.meo-native-root:not(.is-diff-split-mode) .diff-split-only-button {
+.meo-native-root:not(.is-diff-mode) .diff-split-only-button {
   display: none;
 }
 
@@ -267,6 +267,14 @@
   gap: 0;
   min-height: 0;
   pointer-events: none;
+}
+
+.meo-native-theme .meo-diff-unified-host .meo-diff-split-header {
+  right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 44px);
 }
 
 .meo-native-theme .meo-diff-split-label {
@@ -291,6 +299,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.meo-native-theme .meo-diff-unified-host .meo-diff-split-label {
+  max-width: min(34vw, 280px);
+  margin-inline-start: 18px;
+}
+
+.meo-native-theme .meo-diff-unified-host .meo-diff-split-label+.meo-diff-split-label {
+  margin-inline-start: 0;
 }
 
 .meo-native-theme .meo-diff-split-body {
@@ -353,20 +370,113 @@
   scrollbar-gutter: stable;
 }
 
-.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar {
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--editor-background);
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller {
+  height: 100% !important;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-content {
+  min-height: 100%;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-gutters {
+  min-width: 0;
+  max-width: none;
+  flex-shrink: 0;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-gutter.meo-diff-unified-lineNumbers {
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+  color: var(--editorLineNumber-foreground);
+  font-variant-numeric: tabular-nums;
+  border-right: 1px solid color-mix(in srgb, var(--panel-border) 70%, transparent);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-gutterElement.meo-diff-unified-line-number-cell {
+  box-sizing: border-box;
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+  padding: 0;
+  text-align: right;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-line-number {
+  display: block;
+  min-height: 1lh;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-line-number-stack {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-line-number-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 1lh;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-line-number-value {
+  box-sizing: border-box;
+  display: block;
+  min-width: 0;
+  min-height: 1lh;
+  padding: 0 7px;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-line-number-original {
+  border-right: 1px solid color-mix(in srgb, var(--panel-border) 58%, transparent);
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-line-number-modified {
+  color: color-mix(in srgb, var(--editorLineNumber-foreground) 94%, var(--editor-foreground));
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-gutterElement.meo-diff-unified-line-number-changed {
+  background-color: color-mix(in srgb, var(--git-added) 7%, transparent) !important;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-gutterElement.meo-diff-unified-line-number-deleted {
+  background-color: color-mix(in srgb, var(--git-deleted) 7%, transparent) !important;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar {
   -webkit-appearance: none;
   width: var(--meo-scroll-area-scrollbar-size) !important;
   height: var(--meo-scroll-area-scrollbar-size) !important;
 }
 
-.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-track {
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-track,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-track {
   -webkit-appearance: none;
   background: transparent !important;
   border-radius: 999px !important;
   box-shadow: none !important;
 }
 
-.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb {
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-thumb {
   -webkit-appearance: none;
   border: var(--app-scroll-area-scrollbar-gap) solid transparent !important;
   border-radius: 999px !important;
@@ -376,7 +486,8 @@
   box-shadow: none !important;
 }
 
-.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb:hover {
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb:hover,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
   -webkit-appearance: none;
   background: var(--scrollbarSlider-hoverBackground,
       var(--scrollbarSlider-background,
@@ -385,7 +496,8 @@
   box-shadow: none !important;
 }
 
-.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb:active {
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb:active,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-thumb:active {
   -webkit-appearance: none;
   background: var(--scrollbarSlider-activeBackground,
       var(--scrollbarSlider-hoverBackground,
@@ -395,7 +507,8 @@
   box-shadow: none !important;
 }
 
-.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-corner {
+.meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-corner,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-corner {
   background: transparent !important;
 }
 
@@ -552,6 +665,60 @@
   position: absolute;
 }
 
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedChunk {
+  position: relative;
+  margin: 0;
+  padding: 0;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedChunk .cm-chunkButtons {
+  position: absolute;
+  top: calc(-1 * var(--meo-live-inline-diff-floating-lift, 26px));
+  right: 10px;
+  z-index: 12;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedLine {
+  min-height: 1lh;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedLine>del {
+  display: block;
+  padding-right: 64px;
+  text-decoration: none;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-deleted-live-content {
+  display: block;
+  padding-right: 64px;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-deleted-live-content .cm-editor,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-deleted-live-content .cm-scroller {
+  height: auto !important;
+  min-height: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-deleted-live-content .cm-scroller {
+  overflow: visible;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-deleted-live-content .cm-gutters {
+  display: none;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-deleted-live-content .cm-content {
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .meo-diff-unified-deleted-live-content .cm-focused {
+  outline: none;
+}
+
 .meo-native-theme .meo-diff-split-body .meo-diff-hunk-actions {
   box-sizing: border-box;
   display: inline-flex !important;
@@ -706,22 +873,26 @@
   pointer-events: none;
 }
 
-.meo-native-theme .meo-live-inline-diff-controls {
+.meo-native-theme .meo-diff-floating-hunk-toolbar,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedChunk .cm-chunkButtons {
   position: absolute;
-  top: calc(-1 * var(--meo-live-inline-diff-floating-lift));
   right: 10px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
   min-width: 0;
   max-width: min(54%, 420px);
-  height: var(--meo-live-inline-diff-floating-height);
+  height: var(--meo-live-inline-diff-floating-height, 24px);
   padding: 1px 4px;
   border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--editorWidget-background, var(--sideBar-background)) 96%, transparent);
   box-shadow: 0 6px 16px color-mix(in srgb, var(--shadow, #000) 16%, transparent);
   pointer-events: auto;
+}
+
+.meo-native-theme .meo-live-inline-diff-controls {
+  top: calc(-1 * var(--meo-live-inline-diff-floating-lift));
 }
 
 .meo-native-theme .meo-live-inline-diff-nav {
@@ -873,15 +1044,17 @@
   box-shadow: none;
 }
 
+.meo-native-theme .meo-diff-floating-hunk-toolbar .meo-diff-hunk-action,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-chunkButtons .meo-diff-hunk-action,
 .meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action {
   appearance: none;
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  width: 21px;
-  height: 21px;
-  min-width: 21px;
-  min-height: 21px;
+  width: 21px !important;
+  height: 21px !important;
+  min-width: 21px !important;
+  min-height: 21px !important;
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -890,6 +1063,10 @@
   cursor: pointer;
 }
 
+.meo-native-theme .meo-diff-floating-hunk-toolbar .meo-diff-hunk-action:hover,
+.meo-native-theme .meo-diff-floating-hunk-toolbar .meo-diff-hunk-action:focus-visible,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-chunkButtons .meo-diff-hunk-action:hover,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-chunkButtons .meo-diff-hunk-action:focus-visible,
 .meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action:hover,
 .meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action:focus-visible {
   color: var(--editor-foreground);
@@ -897,12 +1074,16 @@
   outline: none;
 }
 
+.meo-native-theme .meo-diff-floating-hunk-toolbar .meo-diff-hunk-action svg,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-chunkButtons .meo-diff-hunk-action svg,
 .meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action svg {
   display: block;
   width: 14px;
   height: 14px;
 }
 
+.meo-native-theme .meo-diff-floating-hunk-toolbar .meo-diff-hunk-action:disabled,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-chunkButtons .meo-diff-hunk-action:disabled,
 .meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action:disabled {
   cursor: default;
   opacity: 0.48;

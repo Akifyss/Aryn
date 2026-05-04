@@ -157,6 +157,71 @@ describe('meo git diff gutter', () => {
     expect(marker?.flags?.scope).toBe('unstaged')
   })
 
+  it('lets unified deleted widgets override the live gutter marker color', () => {
+    let state = EditorState.create({
+      doc: 'A\nX\nC\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    state = state.update({
+      effects: setGitBaselineEffect.of({
+        available: true,
+        baseText: 'A\nB\nC\n',
+        headOid: 'HEAD',
+        indexText: null,
+        tracked: true,
+      }),
+    }).state
+
+    const line = state.doc.line(2)
+    const marker = __gitDiffGutterTestHooks.liveWidgetMarkerAtPos(
+      state,
+      state.field(gitDiffLineFlagsField),
+      { marksDeletedLines: true },
+      line.from,
+      undefined,
+      (flags, context) => context.widget?.marksDeletedLines
+        ? {
+            added: false,
+            deleted: false,
+            modified: false,
+            removed: true,
+            scope: flags?.scope ?? 'unstaged',
+          }
+        : undefined,
+    ) as { flags?: { added?: boolean, removed?: boolean, scope?: string } } | null
+
+    expect(marker?.flags?.removed).toBe(true)
+    expect(marker?.flags?.added).toBe(false)
+    expect(marker?.flags?.scope).toBe('unstaged')
+  })
+
+  it('lets unified pure deletion widgets render a red marker without a modified line flag', () => {
+    const state = EditorState.create({
+      doc: 'A\nC\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    const line = state.doc.line(2)
+    const marker = __gitDiffGutterTestHooks.liveWidgetMarkerAtPos(
+      state,
+      null,
+      { marksDeletedLines: true },
+      line.from,
+      undefined,
+      (_flags, context) => context.widget?.marksDeletedLines
+        ? {
+            added: false,
+            deleted: false,
+            modified: false,
+            removed: true,
+            scope: 'unstaged',
+          }
+        : undefined,
+    ) as { flags?: { removed?: boolean, scope?: string } } | null
+
+    expect(marker?.flags?.removed).toBe(true)
+    expect(marker?.flags?.scope).toBe('unstaged')
+  })
+
   it('lets inline split diff widgets own their own gutter row', () => {
     let state = EditorState.create({
       doc: 'A\nX\nC\n',

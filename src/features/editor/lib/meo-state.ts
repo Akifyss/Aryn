@@ -6,7 +6,7 @@ export type MeoStoredState = {
   gitChangesGutter?: boolean
   gitChangesGutterConfigured?: boolean
   lineNumbers?: boolean
-  mode?: 'diff-split' | 'live' | 'source'
+  mode?: 'diff-split' | 'diff-unified' | 'live' | 'source'
   outlineVisible?: boolean
   topLine?: number
   topLineOffset?: number
@@ -78,7 +78,7 @@ export function readStoredState(filePath: string): MeoStoredState {
       gitChangesGutter: resolveOptionalBoolean(parsedValue.gitChangesGutter),
       gitChangesGutterConfigured: resolveOptionalBoolean(parsedValue.gitChangesGutterConfigured),
       lineNumbers: parsedValue.lineNumbers !== false,
-      mode: parsedValue.mode === 'diff-split' || parsedValue.mode === 'live' || parsedValue.mode === 'source'
+      mode: parsedValue.mode === 'diff-split' || parsedValue.mode === 'diff-unified' || parsedValue.mode === 'live' || parsedValue.mode === 'source'
         ? parsedValue.mode
         : undefined,
       outlineVisible: parsedValue.outlineVisible === true,

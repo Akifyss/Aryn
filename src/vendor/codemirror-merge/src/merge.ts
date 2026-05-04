@@ -3,6 +3,18 @@ import {EditorState, EditorSelection, Facet, Transaction, StateEffect, StateFiel
         StateCommand, RangeSetBuilder} from "@codemirror/state"
 import {Chunk} from "./chunk"
 
+export type DeletedContentRenderResult = HTMLElement | {
+  dom: HTMLElement,
+  destroy?: () => void
+}
+
+export type DeletedContentRenderer = (context: {
+  chunk: Chunk,
+  state: EditorState,
+  text: string,
+  view: EditorView
+}) => DeletedContentRenderResult | null | undefined
+
 type Config = {
   sibling?: () => EditorView,
   highlightChanges: boolean,
@@ -16,6 +28,7 @@ type Config = {
     builder: RangeSetBuilder<Decoration>,
     gutterBuilder: RangeSetBuilder<GutterMarker> | null
   ) => boolean) | undefined,
+  renderDeletedContent?: DeletedContentRenderer,
   side: "a" | "b"
 }
 
