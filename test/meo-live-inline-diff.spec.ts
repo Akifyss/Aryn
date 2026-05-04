@@ -35,6 +35,13 @@ function createChineseMarkdownScenarioDocs() {
 }
 
 describe('meo live inline diff', () => {
+  it('keeps inline split as the default and toggles to unified explicitly', () => {
+    expect(__meoLiveInlineDiffTestHooks.getNextInlineDiffViewMode('split')).toBe('unified')
+    expect(__meoLiveInlineDiffTestHooks.getNextInlineDiffViewMode('unified')).toBe('split')
+    expect(__meoLiveInlineDiffTestHooks.getInlineDiffViewModeToggleLabel('split')).toBe('Switch to inline unified')
+    expect(__meoLiveInlineDiffTestHooks.getInlineDiffViewModeToggleLabel('unified')).toBe('Switch to inline split')
+  })
+
   it('projects the current-side render envelope back to original lines', () => {
     const { modifiedDoc, originalDoc } = createScenarioDocs()
     const originalParagraph = originalDoc.line(59)

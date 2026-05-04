@@ -7,8 +7,10 @@ import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor
 
 const {
   buildUnifiedDiffLineNumberMap,
+  getUnifiedSingleLineNumber,
   getLineNumbersInRange,
   getUnifiedDiffChunkLineRange,
+  normalizeUnifiedLineNumberOptions,
 } = __meoDiffSplitUnifiedLineNumberTestHooks
 
 describe('CodeMirror merge decorations', () => {
@@ -166,6 +168,25 @@ describe('CodeMirror merge decorations', () => {
     expect(insertionMap.originalByModifiedLine.slice(1)).toEqual([1, null, null, 2, 3, 4])
     expect(deletionMap.originalByModifiedLine.slice(1)).toEqual([1, 4])
     expect(getLineNumbersInRange(deletionRange.originalStartLine, deletionRange.originalEndLineExclusive)).toEqual([2, 3])
+  })
+
+  it('keeps unified diff line numbers dual by default and supports inline single-column display', () => {
+    expect(normalizeUnifiedLineNumberOptions(58)).toEqual({
+      display: 'dual',
+      modifiedLineStart: 58,
+      originalLineStart: 58,
+    })
+    expect(normalizeUnifiedLineNumberOptions({
+      display: 'single',
+      modifiedLineStart: 58,
+      originalLineStart: 55,
+    })).toEqual({
+      display: 'single',
+      modifiedLineStart: 58,
+      originalLineStart: 55,
+    })
+    expect(getUnifiedSingleLineNumber({ modified: 58, original: null })).toBe(58)
+    expect(getUnifiedSingleLineNumber({ modified: null, original: 55 })).toBe(55)
   })
 
   it('uses normal before-line placement for non-fake alignment spacers', () => {

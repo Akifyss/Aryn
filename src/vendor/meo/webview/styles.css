@@ -925,6 +925,11 @@
   outline: none;
 }
 
+.meo-native-theme .meo-live-inline-diff-nav-button.is-active {
+  color: var(--editor-foreground);
+  background: var(--toolbar-hoverBackground);
+}
+
 .meo-native-theme .meo-live-inline-diff-nav-button svg {
   display: block;
   width: 14px;
@@ -947,6 +952,37 @@
   overflow: auto;
   scrollbar-gutter: stable;
   background: var(--editor-background);
+}
+
+.meo-native-theme .meo-live-inline-diff-body.meo-diff-view-unified>.cm-editor {
+  max-height: min(52vh, 520px);
+  overflow: hidden;
+  background: var(--editor-background);
+}
+
+.meo-native-theme .meo-live-inline-diff-body.meo-diff-view-unified>.cm-editor .cm-scroller {
+  max-height: min(52vh, 520px);
+}
+
+.meo-native-theme .meo-live-inline-diff-body.meo-diff-view-unified .cm-gutter.meo-diff-unified-lineNumbers-single {
+  width: 68px;
+  min-width: 68px;
+  max-width: 68px;
+  border-right: 0;
+}
+
+.meo-native-theme .meo-live-inline-diff-body.meo-diff-view-unified .cm-gutter.meo-diff-unified-lineNumbers-single .cm-gutterElement.meo-diff-unified-line-number-cell {
+  width: 68px;
+  min-width: 68px;
+  max-width: 68px;
+}
+
+.meo-native-theme .meo-live-inline-diff-body.meo-diff-view-unified .cm-gutter.meo-diff-unified-lineNumbers-single .meo-diff-unified-line-number-pair {
+  display: block;
+}
+
+.meo-native-theme .meo-live-inline-diff-body.meo-diff-view-unified .cm-gutter.meo-diff-unified-lineNumbers-single .meo-diff-unified-line-number-single-value {
+  padding: 0 5px 0 4px;
 }
 
 .meo-native-theme .meo-live-inline-diff-body .cm-mergeViewEditors {

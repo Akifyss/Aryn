@@ -958,17 +958,64 @@ function buildUnifiedDiffLineNumberMap(
 
 export const __meoDiffSplitUnifiedLineNumberTestHooks = {
   buildUnifiedDiffLineNumberMap,
+  getUnifiedSingleLineNumber,
   getLineNumbersInRange,
   getUnifiedDiffChunkLineRange,
+  normalizeUnifiedLineNumberOptions,
 } as const
 
 type UnifiedLineNumberTone = 'changed' | 'context' | 'deleted'
+type UnifiedLineNumberDisplay = 'dual' | 'single'
 type UnifiedDiffLineNumberPair = {
   modified: number | null
   original: number | null
 }
+export type UnifiedDiffLineNumberOptions = {
+  display?: UnifiedLineNumberDisplay
+  modifiedLineStart?: number
+  originalLineStart?: number
+}
 
 const unifiedDiffLineNumberMapCache = new WeakMap<EditorState, UnifiedDiffLineNumberMap>()
+
+function normalizeUnifiedLineNumberStart(value: unknown) {
+  return Number.isInteger(value) && typeof value === 'number' && value >= 1
+    ? value
+    : 1
+}
+
+function normalizeUnifiedLineNumberDisplay(value: unknown): UnifiedLineNumberDisplay {
+  return value === 'single' ? 'single' : 'dual'
+}
+
+function normalizeUnifiedLineNumberOptions(
+  optionsOrLineStart?: UnifiedDiffLineNumberOptions | number,
+): Required<UnifiedDiffLineNumberOptions> {
+  if (typeof optionsOrLineStart === 'number') {
+    const lineStart = normalizeUnifiedLineNumberStart(optionsOrLineStart)
+    return {
+      display: 'dual',
+      modifiedLineStart: lineStart,
+      originalLineStart: lineStart,
+    }
+  }
+
+  return {
+    display: normalizeUnifiedLineNumberDisplay(optionsOrLineStart?.display),
+    modifiedLineStart: normalizeUnifiedLineNumberStart(optionsOrLineStart?.modifiedLineStart),
+    originalLineStart: normalizeUnifiedLineNumberStart(optionsOrLineStart?.originalLineStart),
+  }
+}
+
+function offsetUnifiedLineNumber(lineNumber: number | null, lineStart: number) {
+  return typeof lineNumber === 'number'
+    ? lineStart + lineNumber - 1
+    : null
+}
+
+function getUnifiedSingleLineNumber(row: UnifiedDiffLineNumberPair) {
+  return row.modified ?? row.original
+}
 
 class UnifiedDiffLineNumberMarker extends GutterMarker {
   elementClass: string
@@ -976,11 +1023,13 @@ class UnifiedDiffLineNumberMarker extends GutterMarker {
   constructor(
     private readonly rows: readonly UnifiedDiffLineNumberPair[],
     private readonly tone: UnifiedLineNumberTone,
+    private readonly display: UnifiedLineNumberDisplay,
   ) {
     super()
     this.elementClass = [
       'meo-diff-unified-line-number-cell',
       `meo-diff-unified-line-number-${tone}`,
+      `meo-diff-unified-line-number-display-${display}`,
     ].join(' ')
   }
 
@@ -990,6 +1039,7 @@ class UnifiedDiffLineNumberMarker extends GutterMarker {
     }
 
     return this.tone === other.tone
+      && this.display === other.display
       && this.rows.length === other.rows.length
       && this.rows.every((row, index) => (
         row.original === other.rows[index]?.original
@@ -1006,6 +1056,16 @@ class UnifiedDiffLineNumberMarker extends GutterMarker {
     for (const row of this.rows) {
       const pair = document.createElement('span')
       pair.className = 'meo-diff-unified-line-number-pair'
+
+      if (this.display === 'single') {
+        const value = document.createElement('span')
+        value.className = 'meo-diff-unified-line-number-value meo-diff-unified-line-number-single-value'
+        const lineNumber = getUnifiedSingleLineNumber(row)
+        value.textContent = typeof lineNumber === 'number' ? String(lineNumber) : ''
+        pair.append(value)
+        wrapper.appendChild(pair)
+        continue
+      }
 
       const original = document.createElement('span')
       original.className = 'meo-diff-unified-line-number-value meo-diff-unified-line-number-original'
@@ -1061,30 +1121,34 @@ function getUnifiedDeletedWidgetLineNumbers(
   return getLineNumbersInRange(range.originalStartLine, range.originalEndLineExclusive)
 }
 
-function createUnifiedLineNumberSpacer(view: EditorView) {
+function createUnifiedLineNumberSpacer(
+  view: EditorView,
+  options: Required<UnifiedDiffLineNumberOptions>,
+) {
   return new UnifiedDiffLineNumberMarker([{
-    modified: Math.max(1, view.state.doc.lines),
-    original: Math.max(1, getOriginalDoc(view.state).lines),
-  }], 'context')
+    modified: offsetUnifiedLineNumber(Math.max(1, view.state.doc.lines), options.modifiedLineStart),
+    original: offsetUnifiedLineNumber(Math.max(1, getOriginalDoc(view.state).lines), options.originalLineStart),
+  }], 'context', options.display)
 }
 
-function createUnifiedLineNumberGutter() {
+function createUnifiedLineNumberGutter(optionsOrLineStart?: UnifiedDiffLineNumberOptions | number) {
+  const options = normalizeUnifiedLineNumberOptions(optionsOrLineStart)
   return gutter({
-    class: 'meo-diff-unified-lineNumbers',
-    initialSpacer: createUnifiedLineNumberSpacer,
+    class: `meo-diff-unified-lineNumbers meo-diff-unified-lineNumbers-${options.display}`,
+    initialSpacer: (view) => createUnifiedLineNumberSpacer(view, options),
     lineMarker(view, line) {
       const modifiedLineNumber = view.state.doc.lineAt(line.from).number
       const lineNumberMap = getUnifiedDiffLineNumberMap(view.state)
       const changed = lineNumberMap.modifiedLineChanged[modifiedLineNumber] === true
 
       return new UnifiedDiffLineNumberMarker([{
-        modified: modifiedLineNumber,
-        original: lineNumberMap.originalByModifiedLine[modifiedLineNumber] ?? null,
-      }], changed ? 'changed' : 'context')
+        modified: offsetUnifiedLineNumber(modifiedLineNumber, options.modifiedLineStart),
+        original: offsetUnifiedLineNumber(lineNumberMap.originalByModifiedLine[modifiedLineNumber] ?? null, options.originalLineStart),
+      }], changed ? 'changed' : 'context', options.display)
     },
     lineMarkerChange: hasUnifiedDiffLineNumberInputsChanged,
     updateSpacer: (spacer, update) => hasUnifiedDiffLineNumberInputsChanged(update)
-      ? createUnifiedLineNumberSpacer(update.view)
+      ? createUnifiedLineNumberSpacer(update.view, options)
       : spacer,
     widgetMarker(view, widget, block) {
       if (!isUnifiedDeletedWidget(widget)) {
@@ -1099,18 +1163,22 @@ function createUnifiedLineNumberGutter() {
       return new UnifiedDiffLineNumberMarker(
         originalLineNumbers.map((originalLineNumber) => ({
           modified: null,
-          original: originalLineNumber,
+          original: offsetUnifiedLineNumber(originalLineNumber, options.originalLineStart),
         })),
         'deleted',
+        options.display,
       )
     },
   })
 }
 
-function createUnifiedLineNumberExtensions(visible: boolean) {
+export function createUnifiedLineNumberExtensions(
+  visible: boolean,
+  optionsOrLineStart?: UnifiedDiffLineNumberOptions | number,
+) {
   return visible
     ? [
-        createUnifiedLineNumberGutter(),
+        createUnifiedLineNumberGutter(optionsOrLineStart),
       ]
     : []
 }
@@ -1147,7 +1215,7 @@ function renderUnifiedDeletedContentAsLiveEditor(text: string) {
   }
 }
 
-const renderUnifiedDeletedContent: DeletedContentRenderer = ({ text }) => (
+export const renderUnifiedDeletedContent: DeletedContentRenderer = ({ text }) => (
   renderUnifiedDeletedContentAsLiveEditor(text)
 )
 
@@ -1255,7 +1323,7 @@ function mapDiffSplitModifiedGutterFlag(flags: DiffSplitGutterFlags) {
   }
 }
 
-function mapUnifiedDiffWidgetGutterFlag(
+export function mapUnifiedDiffWidgetGutterFlag(
   flags: DiffSplitGutterFlags | undefined,
   context: { widget?: unknown },
 ) {
