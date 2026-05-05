@@ -791,6 +791,11 @@ function App() {
   const isRightDrawerFullWidth = shellWidth <= RIGHT_DRAWER_MAX_WIDTH
   const isLeftSidebarVisible = !isLeftSidebarDrawer && !isLeftSidebarCollapsed
   const isRightSidebarVisible = !isRightSidebarDrawer && !isRightSidebarCollapsed
+  const isAppModalLayerOpen = isSettingsOpen || isCommandPaletteOpen || Boolean(confirmDialogOptions?.isOpen)
+  const isLeftPanelOverlayElevated = !isAppModalLayerOpen && !isRightDrawerOpen
+  const isRightPanelOverlayElevated = !isAppModalLayerOpen && !isLeftDrawerOpen
+  const isLeftPanelOverlayTopLayer = !isAppModalLayerOpen && isLeftDrawerOpen
+  const isRightPanelOverlayTopLayer = !isAppModalLayerOpen && isRightDrawerOpen
   const effectiveLeftSidebarWidth = isLeftSidebarVisible ? leftSidebarWidth : 0
   const effectiveRightSidebarWidth = isRightSidebarVisible ? rightSidebarWidth : 0
   const activeTreePath = activeFileTab?.filePath ?? activeDiffTab?.diff.change.path ?? null
@@ -3568,8 +3573,11 @@ function App() {
       data-layout={layoutMode}
       data-platform={shellPlatform}
       data-left-collapsed={isLeftSidebarDrawer || !isLeftSidebarVisible ? 'true' : 'false'}
+      data-left-drawer-open={isLeftDrawerOpen ? 'true' : 'false'}
+      data-modal-layer-open={isAppModalLayerOpen ? 'true' : 'false'}
       data-resizing={activeResizePanel || isGitPanelResizing ? 'true' : 'false'}
       data-right-collapsed={isRightSidebarDrawer || !isRightSidebarVisible ? 'true' : 'false'}
+      data-right-drawer-open={isRightDrawerOpen ? 'true' : 'false'}
       style={
         {
           '--git-panel-height': `${gitPanelHeight}px`,
@@ -3583,7 +3591,8 @@ function App() {
         <button
           type='button'
           className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-left workspace-toggle-brand-button'
-          data-react-aria-top-layer='true'
+          data-overlay-elevated={isLeftPanelOverlayElevated ? 'true' : 'false'}
+          data-react-aria-top-layer={isLeftPanelOverlayTopLayer ? 'true' : undefined}
           aria-label={isLeftSidebarDrawer
             ? (isLeftDrawerOpen ? 'Close workspace panel' : 'Open workspace panel')
             : (isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar')}
@@ -3608,7 +3617,8 @@ function App() {
       <button
         type='button'
         className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
-        data-react-aria-top-layer='true'
+        data-overlay-elevated={isRightPanelOverlayElevated ? 'true' : 'false'}
+        data-react-aria-top-layer={isRightPanelOverlayTopLayer ? 'true' : undefined}
         aria-label={isRightSidebarDrawer
           ? (isRightDrawerOpen ? 'Close assistant panel' : 'Open assistant panel')
           : (isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar')}

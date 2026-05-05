@@ -1,3 +1,12 @@
+:root {
+  --app-z-panel-resize: 15;
+  --app-z-panel-toggle-underlay: 20;
+  --app-z-drawer-layer: 28;
+  --app-z-window-chrome: 30;
+  --app-z-panel-toggle: 60;
+  --app-z-window-controls: 70;
+}
+
 .app-shell {
   --git-panel-height: 292px;
   --left-sidebar-width: 320px;
@@ -61,29 +70,35 @@
   min-width: 0;
   height: var(--chrome-height);
   background: transparent;
-  z-index: 30;
   pointer-events: none;
 }
 
 .titlebar-side {
+  position: fixed;
+  top: 0;
+  z-index: var(--app-z-window-controls);
   display: flex;
   align-items: center;
-  height: 100%;
+  height: var(--chrome-height);
   pointer-events: auto;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
 .titlebar-side-left {
+  left: 0;
   justify-content: flex-start;
 }
 
 .titlebar-side-right {
+  right: 0;
   justify-content: flex-end;
   gap: 8px;
 }
 
 .titlebar-spacer {
+  position: relative;
+  z-index: var(--app-z-window-chrome);
   flex: 1;
   min-width: 0;
   pointer-events: auto;
@@ -141,9 +156,18 @@
 .panel-toggle-button-overlay {
   position: absolute;
   top: calc((var(--chrome-height) - var(--panel-toggle-size)) / 2);
-  z-index: 60;
+  z-index: var(--app-z-panel-toggle);
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+.panel-toggle-button-overlay[data-overlay-elevated='false'],
+.app-shell[data-modal-layer-open='true'] .panel-toggle-button-overlay,
+.app-shell[data-left-drawer-open='true'] .panel-toggle-button-overlay-right,
+.app-shell[data-right-drawer-open='true'] .panel-toggle-button-overlay-left,
+body:has([data-slot='modal-backdrop']) .panel-toggle-button-overlay,
+body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
+  z-index: var(--app-z-panel-toggle-underlay);
 }
 
 .panel-toggle-button-overlay-left {
@@ -195,6 +219,12 @@
   height: 100%;
   color: var(--muted);
   transition: background-color 140ms ease, color 140ms ease;
+}
+
+.app-shell[data-modal-layer-open='true'] .window-button:not(:hover),
+.app-shell[data-left-drawer-open='true'] .window-button:not(:hover),
+.app-shell[data-right-drawer-open='true'] .window-button:not(:hover) {
+  color: var(--foreground);
 }
 
 .window-button:hover {
@@ -342,8 +372,8 @@
   min-width: 0;
 }
 
-.panel-drawer-backdrop {
-  z-index: 28;
+.panel-drawer-backdrop.panel-drawer-backdrop {
+  z-index: var(--app-z-drawer-layer);
 }
 
 .panel-drawer {
@@ -456,7 +486,7 @@
   bottom: 0;
   width: var(--resize-handle-width);
   transform: translateX(-50%);
-  z-index: 15;
+  z-index: var(--app-z-panel-resize);
 }
 
 .panel-resize-slot-left {
