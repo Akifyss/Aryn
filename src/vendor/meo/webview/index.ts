@@ -147,6 +147,7 @@ let vimModeEnabled = false;
 let lineNumbersVisible = true;
 let gitChangesGutterVisible = true;
 let gitDiffLineHighlightsEnabled = true;
+let focusedLineHighlightVisible = false;
 
 const outlineBtn = document.createElement('button');
 outlineBtn.type = 'button';
@@ -1087,6 +1088,7 @@ const mountInitialEditor = async () => {
       initialTopLineOffset,
       initialLineNumbers: lineNumbersVisible,
       initialGitGutter: gitChangesGutterVisible,
+      initialFocusedLineHighlight: focusedLineHighlightVisible,
       initialVimMode: vimModeEnabled,
       onApplyChanges: queueChanges,
       onOpenLink: (href: string) => {
@@ -1206,6 +1208,10 @@ const handleInit = (message: any) => {
   if (typeof message.gitDiffLineHighlights === 'boolean') {
     gitDiffLineHighlightsEnabled = message.gitDiffLineHighlights;
     syncGitDiffLineHighlights();
+  }
+  if (typeof message.focusedLineHighlight === 'boolean') {
+    focusedLineHighlightVisible = message.focusedLineHighlight;
+    editor?.setFocusedLineHighlightVisible(focusedLineHighlightVisible);
   }
   if (typeof message.vimMode === 'boolean') {
     setVimModeEnabled(message.vimMode);
@@ -1409,6 +1415,12 @@ window.addEventListener('message', (event) => {
   if (message.type === 'gitDiffLineHighlightsChanged') {
     gitDiffLineHighlightsEnabled = message.enabled;
     syncGitDiffLineHighlights();
+    return;
+  }
+
+  if (message.type === 'focusedLineHighlightChanged') {
+    focusedLineHighlightVisible = message.enabled === true;
+    editor?.setFocusedLineHighlightVisible(focusedLineHighlightVisible);
     return;
   }
 

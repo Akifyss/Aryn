@@ -75,6 +75,7 @@ export function mountNativeMeoEditor({
 }: MountNativeMeoEditorOptions): NativeMeoController {
   let currentText = initialValue
   let currentSavedText = savedValue
+  let focusedLineHighlightVisible = meoSettings.focusedLineHighlight
   let gitDiffLineHighlightsEnabled = meoSettings.gitDiffLineHighlights
   let destroyed = false
   let compositionState = false
@@ -419,6 +420,7 @@ export function mountNativeMeoEditor({
       diffGutterVisible: gitChangesGutterVisible,
       fallbackOriginalLabel: 'Saved document',
       fallbackOriginalText: currentSavedText,
+      focusedLineHighlightVisible,
       gitChangeContext: currentGitChangeContext,
       lineNumbersVisible,
       onChange: (nextValue) => {
@@ -680,6 +682,7 @@ export function mountNativeMeoEditor({
     initialGitGutter: gitChangesGutterVisible,
     initialLineNumbers: lineNumbersVisible,
     initialMode: isDiffMode(currentMode) ? 'live' : currentMode,
+    initialFocusedLineHighlight: focusedLineHighlightVisible,
     text: initialValue,
     initialTopLine: initialRestoreTopLine,
     initialTopLineOffset: initialRestoreTopLineOffset,
@@ -733,6 +736,7 @@ export function mountNativeMeoEditor({
     diffGutterVisible: gitChangesGutterVisible,
     fallbackOriginalLabel: 'Saved document',
     fallbackOriginalText: currentSavedText,
+    focusedLineHighlightVisible,
     gitChangeContext: currentGitChangeContext,
     lineNumbersVisible,
     onApplyGitDiffSelection,
@@ -1165,6 +1169,12 @@ export function mountNativeMeoEditor({
     setGitDiffLineHighlightsEnabled(enabled) {
       gitDiffLineHighlightsEnabled = enabled
       syncGitDiffLineHighlights()
+    },
+    setFocusedLineHighlightVisible(visible) {
+      focusedLineHighlightVisible = visible === true
+      editor.setFocusedLineHighlightVisible(focusedLineHighlightVisible)
+      diffSplitController?.setFocusedLineHighlightVisible(focusedLineHighlightVisible)
+      liveInlineDiffController?.setFocusedLineHighlightVisible(focusedLineHighlightVisible)
     },
     setOutlinePosition(position) {
       outlineController.setPosition(position)

@@ -78,6 +78,7 @@ type MeoDiffSplitControllerOptions = {
   editable?: boolean
   fallbackOriginalLabel: string
   fallbackOriginalText: string
+  focusedLineHighlightVisible: boolean
   gitChangeContext: MeoDiffSplitGitChangeContext
   lineNumbersVisible: boolean
   onChange: (nextValue: string) => void
@@ -125,6 +126,7 @@ export type MeoDiffSplitController = {
   setGitChangeContext: (context: MeoDiffSplitGitChangeContext) => void
   setPreferredGitDiffScope: (scope: GitChangeScope | null) => void
   setDiffGutterVisible: (visible: boolean) => void
+  setFocusedLineHighlightVisible: (visible: boolean) => void
   setLineNumbersVisible: (visible: boolean) => void
   setSearchQuery: (query: string | null | undefined, options?: SearchOptions) => void
   setText: (text: string) => void
@@ -1225,6 +1227,10 @@ function createActiveLineGutterExtensions(visible: boolean) {
   return visible ? [highlightActiveLineGutter()] : []
 }
 
+export function createActiveLineHighlightExtensions(visible: boolean) {
+  return visible ? [highlightActiveLine()] : []
+}
+
 function createEditableExtension(editable: boolean, readOnly: boolean) {
   return EditorView.editable.of(editable && !readOnly)
 }
@@ -1340,6 +1346,8 @@ export function mapUnifiedDiffWidgetGutterFlag(
 }
 
 export type MeoDiffPaneExtensionOptions = {
+  activeLineHighlightCompartment: Compartment
+  focusedLineHighlightVisible: boolean
   activeLineGutterCompartment: Compartment
   diffGutterWidgetLineFlagMapper?: (
     flags: DiffSplitGutterFlags | undefined,
@@ -1366,6 +1374,8 @@ export type MeoDiffPaneExtensionOptions = {
 }
 
 export function createDiffExtensions({
+  activeLineHighlightCompartment,
+  focusedLineHighlightVisible,
   activeLineGutterCompartment,
   diffGutterWidgetLineFlagMapper,
   editable,
@@ -1571,7 +1581,7 @@ export function createDiffExtensions({
       mapWidgetLineFlag: diffGutterWidgetLineFlagMapper,
     }),
     activeLineGutterCompartment.of(createActiveLineGutterExtensions(lineNumbersVisible)),
-    highlightActiveLine(),
+    activeLineHighlightCompartment.of(createActiveLineHighlightExtensions(focusedLineHighlightVisible)),
     diffSplitNavigationHighlightField,
     EditorState.tabSize.of(4),
     indentUnit.of('  '),
@@ -2629,6 +2639,7 @@ export function createMeoDiffSplitController({
   editable = true,
   fallbackOriginalLabel,
   fallbackOriginalText,
+  focusedLineHighlightVisible,
   gitChangeContext,
   lineNumbersVisible,
   onChange,
@@ -2650,6 +2661,7 @@ export function createMeoDiffSplitController({
   let currentGitChangeContext = gitChangeContext
   let currentText = text
   let currentDiffGutterVisible = diffGutterVisible !== false
+  let currentFocusedLineHighlightVisible = focusedLineHighlightVisible === true
   let currentLineNumbersVisible = lineNumbersVisible
   let applyingHunkAction = false
   let destroyed = false
@@ -2683,6 +2695,9 @@ export function createMeoDiffSplitController({
   const originalLineNumbersCompartment = new Compartment()
   const modifiedLineNumbersCompartment = new Compartment()
   const unifiedLineNumbersCompartment = new Compartment()
+  const originalActiveLineHighlightCompartment = new Compartment()
+  const modifiedActiveLineHighlightCompartment = new Compartment()
+  const unifiedActiveLineHighlightCompartment = new Compartment()
   const originalActiveLineGutterCompartment = new Compartment()
   const modifiedActiveLineGutterCompartment = new Compartment()
   const unifiedActiveLineGutterCompartment = new Compartment()
@@ -3415,10 +3430,12 @@ export function createMeoDiffSplitController({
         renderDeletedContent: renderUnifiedDeletedContent,
         syntaxHighlightDeletions: true,
         pane: {
+          activeLineHighlightCompartment: unifiedActiveLineHighlightCompartment,
           activeLineGutterCompartment: unifiedActiveLineGutterCompartment,
           diffGutterWidgetLineFlagMapper: mapUnifiedDiffWidgetGutterFlag,
           editable,
           editableCompartment: unifiedEditableCompartment,
+          focusedLineHighlightVisible: currentFocusedLineHighlightVisible,
           lineNumberExtensionFactory: createUnifiedLineNumberExtensions,
           lineNumbersCompartment: unifiedLineNumbersCompartment,
           lineNumbersVisible: currentLineNumbersVisible,
@@ -3512,9 +3529,11 @@ export function createMeoDiffSplitController({
     mergeView = createMeoDiffSplitMergeView({
       a: {
         doc: originalState.text,
+        activeLineHighlightCompartment: originalActiveLineHighlightCompartment,
         activeLineGutterCompartment: originalActiveLineGutterCompartment,
         editable: false,
         editableCompartment: originalEditableCompartment,
+        focusedLineHighlightVisible: currentFocusedLineHighlightVisible,
         interactive: false,
         lineNumbersCompartment: originalLineNumbersCompartment,
         lineNumbersVisible: currentLineNumbersVisible,
@@ -3526,9 +3545,11 @@ export function createMeoDiffSplitController({
       },
       b: {
         doc: originalState.modifiedText,
+        activeLineHighlightCompartment: modifiedActiveLineHighlightCompartment,
         activeLineGutterCompartment: modifiedActiveLineGutterCompartment,
         editable,
         editableCompartment: modifiedEditableCompartment,
+        focusedLineHighlightVisible: currentFocusedLineHighlightVisible,
         lineNumbersCompartment: modifiedLineNumbersCompartment,
         lineNumbersVisible: currentLineNumbersVisible,
         onChange: handleModifiedTextChange,
@@ -4148,6 +4169,19 @@ export function createMeoDiffSplitController({
       currentDiffGutterVisible = visible !== false
       syncDiffGutterVisibility()
       resetDiffOverviewRender()
+    },
+    setFocusedLineHighlightVisible(visible) {
+      currentFocusedLineHighlightVisible = visible === true
+      const nextExtensions = createActiveLineHighlightExtensions(currentFocusedLineHighlightVisible)
+      unifiedView?.dispatch({
+        effects: unifiedActiveLineHighlightCompartment.reconfigure(nextExtensions),
+      })
+      mergeView?.a.dispatch({
+        effects: originalActiveLineHighlightCompartment.reconfigure(nextExtensions),
+      })
+      mergeView?.b.dispatch({
+        effects: modifiedActiveLineHighlightCompartment.reconfigure(nextExtensions),
+      })
     },
     setLineNumbersVisible(visible) {
       currentLineNumbersVisible = visible !== false

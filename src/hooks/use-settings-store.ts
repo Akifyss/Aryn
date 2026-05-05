@@ -5,6 +5,7 @@ export type AppTheme = 'light' | 'dark' | 'auto'
 export type MeoOutlinePosition = 'left' | 'right'
 
 export type MeoSettings = {
+  focusedLineHighlight: boolean
   gitDiffLineHighlights: boolean
   imageFolder: string
   outlinePosition: MeoOutlinePosition
@@ -77,6 +78,7 @@ const settingsStorage: StateStorage = {
 }
 
 const DEFAULT_MEO_SETTINGS: MeoSettings = {
+  focusedLineHighlight: false,
   gitDiffLineHighlights: true,
   imageFolder: 'assets',
   outlinePosition: 'right',
@@ -98,6 +100,7 @@ function sanitizeMeoImageFolder(imageFolder: string) {
 
 function sanitizeMeoSettings(value: Partial<MeoSettings> | undefined): MeoSettings {
   return {
+    focusedLineHighlight: value?.focusedLineHighlight === true,
     gitDiffLineHighlights: value?.gitDiffLineHighlights ?? DEFAULT_MEO_SETTINGS.gitDiffLineHighlights,
     imageFolder: sanitizeMeoImageFolder(value?.imageFolder ?? DEFAULT_MEO_SETTINGS.imageFolder),
     outlinePosition: value?.outlinePosition === 'left' ? 'left' : DEFAULT_MEO_SETTINGS.outlinePosition,

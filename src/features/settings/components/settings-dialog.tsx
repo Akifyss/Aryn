@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Input, ListBox, Select, Tabs } from '@heroui/react'
+import { Button, Input, ListBox, Select, Switch, Tabs } from '@heroui/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import type { AgentProviderAuthState, AgentWorkspaceState } from '@/features/agent/types'
 import type { AppIconCatalogOption } from '@/features/settings/types'
@@ -365,30 +365,36 @@ export function SettingsDialog({
               </Select>
             </div>
 
-            <div className='settings-field settings-field-grow'>
-              <span className='settings-field-label'>Git 行级高亮</span>
-              <Select
-                className='settings-field-grow heroui-select-fix'
-                selectedKey={meo.gitDiffLineHighlights ? 'enabled' : 'disabled'}
-                onSelectionChange={(value) => {
-                  updateMeoSettings({ gitDiffLineHighlights: String(value) === 'enabled' })
+            <div className='settings-field settings-field-grow settings-switch-row'>
+              <span className='settings-field-label'>Git 行级高亮（Source 专用）</span>
+              <Switch
+                aria-label='Git 行级高亮'
+                className='settings-switch-control'
+                isSelected={meo.gitDiffLineHighlights}
+                onChange={(isSelected) => {
+                  updateMeoSettings({ gitDiffLineHighlights: isSelected })
                 }}
               >
-                <Select.Trigger className='settings-select-trigger'>
-                  <Select.Value />
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox>
-                    <ListBox.Item key='enabled' id='enabled' textValue='开启'>
-                      开启
-                    </ListBox.Item>
-                    <ListBox.Item key='disabled' id='disabled' textValue='关闭'>
-                      关闭
-                    </ListBox.Item>
-                  </ListBox>
-                </Select.Popover>
-              </Select>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+              </Switch>
+            </div>
+
+            <div className='settings-field settings-field-grow settings-switch-row'>
+              <span className='settings-field-label'>聚焦行高亮</span>
+              <Switch
+                aria-label='聚焦行高亮'
+                className='settings-switch-control'
+                isSelected={meo.focusedLineHighlight}
+                onChange={(isSelected) => {
+                  updateMeoSettings({ focusedLineHighlight: isSelected })
+                }}
+              >
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+              </Switch>
             </div>
           </div>
 

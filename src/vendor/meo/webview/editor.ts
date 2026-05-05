@@ -159,6 +159,7 @@ export function createEditor({
   initialTopLineOffset = 0,
   initialLineNumbers = true,
   initialGitGutter = true,
+  initialFocusedLineHighlight = false,
   initialVimMode = false
 }) {
   // VS Code webviews can hit cross-origin window access issues in the EditContext path.
@@ -167,10 +168,12 @@ export function createEditor({
 
   const modeCompartment = new Compartment();
   const gitGutterCompartment = new Compartment();
+  const activeLineCompartment = new Compartment();
   const vimCompartment = new Compartment();
   const startMode = initialMode === 'live' ? 'live' : 'source';
   let lineNumbersVisible = initialLineNumbers !== false;
   let gitGutterVisible = initialGitGutter !== false;
+  let focusedLineHighlightVisible = initialFocusedLineHighlight === true;
   let vimModeEnabled = initialVimMode === true;
   let applyingExternal = false;
   let capturedPointerId = null;
@@ -462,6 +465,8 @@ export function createEditor({
     }
     gitDiffOverviewRuler?.refresh();
   };
+
+  const focusedLineHighlightExtensions = () => focusedLineHighlightVisible ? [highlightActiveLine()] : [];
 
   const releasePointerCaptureIfHeld = (pointerId) => {
     if (!view || pointerId === null) {
@@ -1246,7 +1251,7 @@ export function createEditor({
       ...gitDiffGutterBaselineExtensions(),
       gitGutterCompartment.of(startMode === 'live' ? gitDiffGutterLiveRenderExtensions() : gitDiffGutterRenderExtensions()),
       highlightActiveLineGutter(),
-      highlightActiveLine(),
+      activeLineCompartment.of(focusedLineHighlightExtensions()),
       EditorView.lineWrapping,
       scrollPastEnd(),
       EditorView.domEventHandlers({
@@ -1755,6 +1760,16 @@ export function createEditor({
       }
       gitGutterVisible = nextVisible;
       syncGitGutterVisibility();
+    },
+    setFocusedLineHighlightVisible(visible) {
+      const nextVisible = visible === true;
+      if (nextVisible === focusedLineHighlightVisible) {
+        return;
+      }
+      focusedLineHighlightVisible = nextVisible;
+      view.dispatch({
+        effects: activeLineCompartment.reconfigure(focusedLineHighlightExtensions())
+      });
     },
     setVimMode(enabled) {
       const nextEnabled = enabled === true;

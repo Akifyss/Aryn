@@ -197,6 +197,10 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
   }, [meoSettings.gitDiffLineHighlights])
 
   useEffect(() => {
+    controllerRef.current?.setFocusedLineHighlightVisible(meoSettings.focusedLineHighlight)
+  }, [meoSettings.focusedLineHighlight])
+
+  useEffect(() => {
     controllerRef.current?.setOutlinePosition(meoSettings.outlinePosition)
   }, [meoSettings.outlinePosition])
 

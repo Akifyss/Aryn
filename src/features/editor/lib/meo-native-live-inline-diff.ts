@@ -16,6 +16,7 @@ import {
 } from '@/features/editor/lib/git-diff-navigation'
 import {
   buildDiffSplitGutterFlagsFromChunks,
+  createActiveLineHighlightExtensions,
   createMeoDiffSplitMergeView,
   createMeoDiffUnifiedEditorView,
   createTextDocFromContent,
@@ -111,6 +112,7 @@ type InlineDiffControllerOptions = {
   editable?: boolean
   fallbackOriginalLabel: string
   fallbackOriginalText: string
+  focusedLineHighlightVisible: boolean
   gitChangeContext: {
     stagedChange: GitChangeItem | null
     unstagedChange: GitChangeItem | null
@@ -135,6 +137,7 @@ export type MeoLiveInlineDiffController = {
   setFallbackOriginal: (fallback: { label: string, text: string }) => void
   setGitChangeContext: (context: { stagedChange: GitChangeItem | null, unstagedChange: GitChangeItem | null }) => void
   setInlineDiffViewMode: (mode: InlineDiffViewMode) => void
+  setFocusedLineHighlightVisible: (visible: boolean) => void
   setLineNumbersVisible: (visible: boolean) => void
   setText: (text: string) => void
   toggleHunkForLine: (request: { lineNumber?: number, scope: GitChangeScope }) => boolean
@@ -707,14 +710,17 @@ class InlineDiffWidgetView {
   private currentViewMode: InlineDiffViewMode
   private mergeView: MergeView | null = null
   private unifiedView: EditorView | null = null
+  private readonly modifiedActiveLineHighlightCompartment = new Compartment()
   private readonly modifiedActiveLineGutterCompartment = new Compartment()
   private readonly modifiedEditableCompartment = new Compartment()
   private readonly modifiedLineNumbersCompartment = new Compartment()
   private readonly modifiedReadOnlyCompartment = new Compartment()
+  private readonly originalActiveLineHighlightCompartment = new Compartment()
   private readonly originalActiveLineGutterCompartment = new Compartment()
   private readonly originalEditableCompartment = new Compartment()
   private readonly originalLineNumbersCompartment = new Compartment()
   private readonly originalReadOnlyCompartment = new Compartment()
+  private readonly unifiedActiveLineHighlightCompartment = new Compartment()
   private readonly unifiedActiveLineGutterCompartment = new Compartment()
   private readonly unifiedEditableCompartment = new Compartment()
   private readonly unifiedLineNumbersCompartment = new Compartment()
@@ -1027,9 +1033,11 @@ class InlineDiffWidgetView {
     return createMeoDiffSplitMergeView({
       a: {
         doc: this.descriptor.originalText,
+        activeLineHighlightCompartment: this.originalActiveLineHighlightCompartment,
         activeLineGutterCompartment: this.originalActiveLineGutterCompartment,
         editable: false,
         editableCompartment: this.originalEditableCompartment,
+        focusedLineHighlightVisible: this.controller.focusedLineHighlightVisible,
         interactive: false,
         lineNumberStart: this.descriptor.originalLineStart,
         lineNumbersCompartment: this.originalLineNumbersCompartment,
@@ -1042,9 +1050,11 @@ class InlineDiffWidgetView {
       },
       b: {
         doc: this.descriptor.modifiedText,
+        activeLineHighlightCompartment: this.modifiedActiveLineHighlightCompartment,
         activeLineGutterCompartment: this.modifiedActiveLineGutterCompartment,
         editable: this.controller.editable,
         editableCompartment: this.modifiedEditableCompartment,
+        focusedLineHighlightVisible: this.controller.focusedLineHighlightVisible,
         lineNumberStart: this.descriptor.modifiedLineStart,
         lineNumbersCompartment: this.modifiedLineNumbersCompartment,
         lineNumbersVisible: this.descriptor.lineNumbersVisible,
@@ -1088,10 +1098,12 @@ class InlineDiffWidgetView {
     return createMeoDiffUnifiedEditorView({
       doc: this.descriptor.modifiedText,
       pane: {
+        activeLineHighlightCompartment: this.unifiedActiveLineHighlightCompartment,
         activeLineGutterCompartment: this.unifiedActiveLineGutterCompartment,
         diffGutterWidgetLineFlagMapper: mapUnifiedDiffWidgetGutterFlag,
         editable: this.controller.editable,
         editableCompartment: this.unifiedEditableCompartment,
+        focusedLineHighlightVisible: this.controller.focusedLineHighlightVisible,
         lineNumbersCompartment: this.unifiedLineNumbersCompartment,
         lineNumbersVisible: this.descriptor.lineNumbersVisible,
         onChange: (nextValue) => {
@@ -1307,6 +1319,19 @@ class InlineDiffWidgetView {
     this.syncGitGutterCollapseHints()
   }
 
+  syncFocusedLineHighlightVisibility() {
+    const nextExtensions = createActiveLineHighlightExtensions(this.controller.focusedLineHighlightVisible)
+    this.mergeView?.a.dispatch({
+      effects: this.originalActiveLineHighlightCompartment.reconfigure(nextExtensions),
+    })
+    this.mergeView?.b.dispatch({
+      effects: this.modifiedActiveLineHighlightCompartment.reconfigure(nextExtensions),
+    })
+    this.unifiedView?.dispatch({
+      effects: this.unifiedActiveLineHighlightCompartment.reconfigure(nextExtensions),
+    })
+  }
+
   private syncGitGutterCollapseHints() {
     for (const gutter of this.componentRoot.querySelectorAll<HTMLElement>('.cm-gutter.meo-git-gutter')) {
       gutter.title = 'Collapse inline diff'
@@ -1464,6 +1489,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
   inlineDiffViewMode: InlineDiffViewMode = 'split'
   isApplyingHunkAction = false
   diffGutterVisible: boolean
+  focusedLineHighlightVisible: boolean
   lineNumbersVisible: boolean
 
   constructor(private readonly options: InlineDiffControllerOptions) {
@@ -1476,6 +1502,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     this.currentText = options.text
     this.editable = options.editable !== false
     this.diffGutterVisible = options.diffGutterVisible !== false
+    this.focusedLineHighlightVisible = options.focusedLineHighlightVisible === true
     this.lineNumbersVisible = options.lineNumbersVisible
     this.onCompositionChange = options.onCompositionChange
     this.onOpenLink = options.onOpenLink
@@ -1521,6 +1548,13 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     this.diffGutterVisible = visible !== false
     for (const component of this.getMountedComponents()) {
       component.syncDiffGutterVisibility()
+    }
+  }
+
+  setFocusedLineHighlightVisible(visible: boolean) {
+    this.focusedLineHighlightVisible = visible === true
+    for (const component of this.getMountedComponents()) {
+      component.syncFocusedLineHighlightVisibility()
     }
   }
 

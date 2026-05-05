@@ -2905,6 +2905,20 @@ body.workspace-tree-dragging .workspace-tree-row {
   line-height: 1.5;
 }
 
+.settings-switch-row {
+  width: 100%;
+  min-height: 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 0;
+}
+
+.settings-switch-control {
+  justify-self: end;
+}
+
 .settings-empty-state,
 .settings-alert {
   padding: 16px 17px;

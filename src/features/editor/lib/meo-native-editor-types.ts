@@ -41,6 +41,7 @@ export type NativeMeoController = {
   setGitChangeContext: (context: MeoDiffSplitGitChangeContext) => void
   setGitBaseline: (baseline: GitBaselinePayload) => void
   setGitDiffLineHighlightsEnabled: (enabled: boolean) => void
+  setFocusedLineHighlightVisible: (visible: boolean) => void
   setOutlinePosition: (position: 'left' | 'right') => void
   setSavedText: (text: string) => void
   setText: (text: string) => void
@@ -132,6 +133,7 @@ export type MeoEditorInstance = {
   restoreTopLine: (line: number, lineOffset: number) => void
   scrollToLine: (line: number, position: string) => void
   setGitBaseline: (baseline: GitBaselinePayload) => void
+  setFocusedLineHighlightVisible: (visible: boolean) => void
   setGitGutterVisible: (visible: boolean) => void
   setLineNumbers: (visible: boolean) => void
   setMode: (mode: 'live' | 'source') => void
@@ -153,6 +155,7 @@ export type MeoEditorInstance = {
 }
 
 export type MeoEditorCreateOptions = {
+  initialFocusedLineHighlight: boolean
   initialGitGutter: boolean
   initialLineNumbers: boolean
   initialMode: 'live' | 'source'
