@@ -1,15 +1,15 @@
 import {
   DEFAULT_FIND_OPTIONS,
+  type MeoStoredViewPosition,
   readStoredState,
   resolveFindOptions,
   resolveGitChangesGutterEnabled,
-  shouldRememberViewPosition,
   writeStoredState,
 } from '@/features/editor/lib/meo-state'
 import type { MeoEditorMode, MeoEditorViewportPosition } from '@/features/editor/lib/meo-native-editor-types'
 
 type ViewPositionPersistenceController = {
-  captureViewPosition: () => void
+  captureViewPosition: (mode?: MeoEditorMode) => void
   getFindOptions: () => {
     caseSensitive: boolean
     wholeWord: boolean
@@ -17,45 +17,108 @@ type ViewPositionPersistenceController = {
   getInitialGitChangesGutterVisible: () => boolean
   getInitialLineNumbersVisible: () => boolean
   getInitialOutlineVisible: () => boolean
-  getInitialRestoreTopLine: (content: string, rememberPositionLines: number) => number | undefined
-  getInitialRestoreTopLineOffset: (content: string, rememberPositionLines: number) => number
+  getInitialRestoreTopLine: (mode?: MeoEditorMode) => number | undefined
+  getInitialRestoreTopLineOffset: (mode?: MeoEditorMode) => number
   getInitialMode: () => MeoEditorMode
+  getStoredViewPosition: (mode?: MeoEditorMode) => MeoStoredViewPosition | undefined
   persistFindOptions: (value: unknown) => void
   persistGitChangesGutterVisible: (visible: boolean) => void
   persistLineNumbersVisible: (visible: boolean) => void
   persistMode: (mode: MeoEditorMode) => void
   persistOutlineVisible: (visible: boolean) => void
-  persistViewPositionFromMessage: (message: { topLine?: number, topLineOffset?: number }, content: string, rememberPositionLines: number) => void
-  scheduleViewPositionCapture: () => void
+  persistViewPositionFromMessage: (message: { topLine?: number, topLineOffset?: number }, mode?: MeoEditorMode) => void
+  scheduleViewPositionCapture: (mode?: MeoEditorMode) => void
 }
 
 const VIEW_POSITION_DEBOUNCE_MS = 250
 
 export function createMeoViewPositionPersistenceController(options: {
   filePath: string
-  getCurrentText: () => string
   getEditorPosition: () => MeoEditorViewportPosition | null
-  rememberPositionLines: number
+  getMode: () => MeoEditorMode
 }) {
   let pendingViewPositionTimer: number | null = null
 
   const storedState = readStoredState(options.filePath)
+  const initialMode = storedState.mode ?? 'live'
+  let storedViewPositions: Partial<Record<MeoEditorMode, MeoStoredViewPosition>> = {
+    ...storedState.viewPositions,
+  }
+  const observedNonDefaultModes = new Set<MeoEditorMode>()
 
-  const captureViewPosition = () => {
+  if (
+    typeof storedState.topLine === 'number'
+    && !storedViewPositions[initialMode]
+  ) {
+    storedViewPositions = {
+      ...storedViewPositions,
+      [initialMode]: {
+        topLine: storedState.topLine,
+        topLineOffset: storedState.topLineOffset ?? 0,
+      },
+    }
+  }
+
+  const resolveMode = (mode?: MeoEditorMode) => mode ?? options.getMode()
+
+  const getStoredViewPosition = (mode?: MeoEditorMode) => storedViewPositions[resolveMode(mode)]
+
+  const isDefaultTopPosition = (position: MeoEditorViewportPosition) => (
+    position.line <= 1 && position.lineOffset <= 0
+  )
+
+  const hasInvalidViewportMetrics = (position: MeoEditorViewportPosition) => (
+    (typeof position.clientHeight === 'number' && position.clientHeight <= 0)
+    || (typeof position.scrollHeight === 'number' && position.scrollHeight <= 0)
+  )
+
+  const shouldSkipDefaultTopOverwrite = (mode: MeoEditorMode, position: MeoEditorViewportPosition) => {
+    const storedPosition = getStoredViewPosition(mode)
+
+    return Boolean(
+      storedPosition
+      && storedPosition.topLine > 1
+      && !observedNonDefaultModes.has(mode)
+      && isDefaultTopPosition(position),
+    )
+  }
+
+  const markObservedPosition = (mode: MeoEditorMode, position: MeoEditorViewportPosition) => {
+    if (!isDefaultTopPosition(position) && !hasInvalidViewportMetrics(position)) {
+      observedNonDefaultModes.add(mode)
+    }
+  }
+
+  const writeViewPosition = (mode: MeoEditorMode, position: MeoEditorViewportPosition) => {
+    const nextPosition = {
+      topLine: position.line,
+      topLineOffset: position.lineOffset,
+    }
+    storedViewPositions = {
+      ...storedViewPositions,
+      [mode]: nextPosition,
+    }
+
+    writeStoredState(options.filePath, {
+      topLine: nextPosition.topLine,
+      topLineOffset: nextPosition.topLineOffset,
+      viewPositions: storedViewPositions,
+    })
+  }
+
+  const captureViewPosition = (requestedMode?: MeoEditorMode) => {
+    const mode = resolveMode(requestedMode)
     const position = options.getEditorPosition()
     if (!position) {
       return
     }
 
-    const shouldPersistViewPosition = shouldRememberViewPosition(
-      options.getCurrentText(),
-      options.rememberPositionLines,
-    )
+    if (hasInvalidViewportMetrics(position) || shouldSkipDefaultTopOverwrite(mode, position)) {
+      return
+    }
 
-    writeStoredState(options.filePath, {
-      topLine: shouldPersistViewPosition ? position.line : undefined,
-      topLineOffset: shouldPersistViewPosition ? position.lineOffset : undefined,
-    })
+    markObservedPosition(mode, position)
+    writeViewPosition(mode, position)
   }
 
   return {
@@ -70,18 +133,11 @@ export function createMeoViewPositionPersistenceController(options: {
       getFindOptions: () => storedState.findOptions ?? DEFAULT_FIND_OPTIONS,
       getInitialGitChangesGutterVisible: () => resolveGitChangesGutterEnabled(storedState),
       getInitialLineNumbersVisible: () => storedState.lineNumbers ?? true,
-      getInitialMode: () => storedState.mode ?? 'live',
+      getInitialMode: () => initialMode,
       getInitialOutlineVisible: () => storedState.outlineVisible ?? false,
-      getInitialRestoreTopLine: (content, rememberPositionLines) => (
-        shouldRememberViewPosition(content, rememberPositionLines)
-          ? storedState.topLine ?? undefined
-          : undefined
-      ),
-      getInitialRestoreTopLineOffset: (content, rememberPositionLines) => (
-        shouldRememberViewPosition(content, rememberPositionLines)
-          ? storedState.topLineOffset ?? 0
-          : 0
-      ),
+      getInitialRestoreTopLine: (mode) => getStoredViewPosition(mode)?.topLine,
+      getInitialRestoreTopLineOffset: (mode) => getStoredViewPosition(mode)?.topLineOffset ?? 0,
+      getStoredViewPosition,
       persistFindOptions: (value) => {
         writeStoredState(options.filePath, {
           findOptions: resolveFindOptions(value),
@@ -102,26 +158,32 @@ export function createMeoViewPositionPersistenceController(options: {
       persistOutlineVisible: (visible) => {
         writeStoredState(options.filePath, { outlineVisible: visible })
       },
-      persistViewPositionFromMessage: (message, content, rememberPositionLines) => {
-        writeStoredState(options.filePath, {
-          topLine: shouldRememberViewPosition(content, rememberPositionLines)
-            && typeof message.topLine === 'number'
-            ? message.topLine
-            : undefined,
-          topLineOffset: shouldRememberViewPosition(content, rememberPositionLines)
-            && typeof message.topLineOffset === 'number'
-            ? message.topLineOffset
-            : undefined,
-        })
+      persistViewPositionFromMessage: (message, requestedMode?: MeoEditorMode) => {
+        if (typeof message.topLine !== 'number') {
+          return
+        }
+
+        const mode = resolveMode(requestedMode)
+        const position = {
+          line: message.topLine,
+          lineOffset: typeof message.topLineOffset === 'number' ? message.topLineOffset : 0,
+        } satisfies MeoEditorViewportPosition
+        if (shouldSkipDefaultTopOverwrite(mode, position)) {
+          return
+        }
+
+        markObservedPosition(mode, position)
+        writeViewPosition(mode, position)
       },
-      scheduleViewPositionCapture: () => {
+      scheduleViewPositionCapture: (requestedMode?: MeoEditorMode) => {
+        const mode = resolveMode(requestedMode)
         if (pendingViewPositionTimer !== null) {
           window.clearTimeout(pendingViewPositionTimer)
         }
 
         pendingViewPositionTimer = window.setTimeout(() => {
           pendingViewPositionTimer = null
-          captureViewPosition()
+          captureViewPosition(mode)
         }, VIEW_POSITION_DEBOUNCE_MS)
       },
     } satisfies ViewPositionPersistenceController,

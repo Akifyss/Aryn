@@ -7,9 +7,6 @@ import {
   resolveOpenLinkFilePath,
   resolveWikiLinkResults,
 } from '@/features/editor/lib/meo-links'
-import {
-  shouldRememberViewPosition,
-} from '@/features/editor/lib/meo-state'
 import { createEditor } from '@/vendor/meo/webview/editor'
 import { createFindPanelController } from '@/vendor/meo/webview/helpers/findPanel'
 import { setGitDiffLineHighlightsEnabled } from '@/vendor/meo/webview/helpers/gitDiffLineHighlights'
@@ -87,15 +84,16 @@ export function mountNativeMeoEditor({
     controller: persistenceController,
   } = createMeoViewPositionPersistenceController({
     filePath,
-    getCurrentText: () => currentText,
     getEditorPosition: () => (
       isDiffMode(currentMode)
         ? diffSplitController?.getTopVisiblePosition() ?? null
         : editor ? editor.getTopVisiblePosition() : null
     ),
-    rememberPositionLines: meoSettings.rememberPositionLines,
+    getMode: () => currentMode,
   })
   let currentMode: MeoEditorMode = persistenceController.getInitialMode()
+  const initialRestoreTopLine = persistenceController.getInitialRestoreTopLine(currentMode)
+  const initialRestoreTopLineOffset = persistenceController.getInitialRestoreTopLineOffset(currentMode)
   let persistedWebviewState: unknown = { mode: currentMode }
   let lineNumbersVisible = persistenceController.getInitialLineNumbersVisible()
   let gitChangesGutterVisible = persistenceController.getInitialGitChangesGutterVisible()
@@ -451,6 +449,7 @@ export function mountNativeMeoEditor({
 
   const applyMode = (mode: MeoEditorMode, options?: { persist?: boolean }) => {
     const nextMode = mode === 'diff-split' || mode === 'diff-unified' ? mode : mode === 'live' ? 'live' : 'source'
+    const previousMode = currentMode
     const previousTopPosition = getActiveEditor()?.getTopVisiblePosition?.() ?? null
     if (nextMode === currentMode) {
       if (isDiffMode(nextMode)) {
@@ -461,21 +460,30 @@ export function mountNativeMeoEditor({
       return
     }
 
+    cancelScheduledViewPositionCapture()
+    persistenceController.captureViewPosition(previousMode)
     if (isDiffMode(currentMode)) {
       flushPendingSplitParentChange()
     }
     currentMode = nextMode
+    const storedTopPosition = persistenceController.getStoredViewPosition(currentMode)
+    const restoreTopPosition = storedTopPosition
+      ? {
+        line: storedTopPosition.topLine,
+        lineOffset: storedTopPosition.topLineOffset,
+      }
+      : previousTopPosition
     if (isDiffMode(currentMode)) {
       ensureDiffSplit(getDiffViewMode(currentMode))
-      if (previousTopPosition) {
-        diffSplitController?.restoreTopLine(previousTopPosition.line, previousTopPosition.lineOffset)
+      if (restoreTopPosition) {
+        diffSplitController?.restoreTopLine(restoreTopPosition.line, restoreTopPosition.lineOffset)
       }
     } else {
       destroyDiffSplit()
       editor.setText(currentText)
       editor.setMode(currentMode)
-      if (previousTopPosition) {
-        editor.restoreTopLine(previousTopPosition.line, previousTopPosition.lineOffset)
+      if (restoreTopPosition) {
+        editor.restoreTopLine(restoreTopPosition.line, restoreTopPosition.lineOffset)
       }
     }
     updateModeUi()
@@ -580,8 +588,7 @@ export function mountNativeMeoEditor({
             topLine: typeof message.topLine === 'number' ? message.topLine : undefined,
             topLineOffset: typeof message.topLineOffset === 'number' ? message.topLineOffset : undefined,
           },
-          currentText,
-          meoSettings.rememberPositionLines,
+          currentMode,
         )
         return
       case 'openLink':
@@ -674,8 +681,8 @@ export function mountNativeMeoEditor({
     initialLineNumbers: lineNumbersVisible,
     initialMode: isDiffMode(currentMode) ? 'live' : currentMode,
     text: initialValue,
-    initialTopLine: persistenceController.getInitialRestoreTopLine(initialValue, meoSettings.rememberPositionLines),
-    initialTopLineOffset: persistenceController.getInitialRestoreTopLineOffset(initialValue, meoSettings.rememberPositionLines),
+    initialTopLine: initialRestoreTopLine,
+    initialTopLineOffset: initialRestoreTopLineOffset,
     initialVimMode: false,
     onApplyChanges: (nextText: string) => {
       emitContentChange(nextText)
@@ -749,11 +756,10 @@ export function mountNativeMeoEditor({
   syncGitDiffLineHighlights()
   if (isDiffMode(currentMode)) {
     ensureDiffSplit(getDiffViewMode(currentMode))
-    const initialDiffTopLine = persistenceController.getInitialRestoreTopLine(initialValue, meoSettings.rememberPositionLines)
-    if (typeof initialDiffTopLine === 'number') {
+    if (typeof initialRestoreTopLine === 'number') {
       ;(diffSplitController as MeoDiffSplitController | null)?.restoreTopLine(
-        initialDiffTopLine,
-        persistenceController.getInitialRestoreTopLineOffset(initialValue, meoSettings.rememberPositionLines),
+        initialRestoreTopLine,
+        initialRestoreTopLineOffset,
       )
     }
     updateModeUi()
@@ -1076,6 +1082,9 @@ export function mountNativeMeoEditor({
   })
 
   return {
+    captureViewPosition() {
+      persistenceController.captureViewPosition()
+    },
     destroy() {
       if (destroyed) {
         return

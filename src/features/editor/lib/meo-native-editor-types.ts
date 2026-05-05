@@ -33,6 +33,7 @@ export type NativeMeoMessage =
   | { type: string, [key: string]: unknown }
 
 export type NativeMeoController = {
+  captureViewPosition: () => void
   destroy: () => void
   focus: () => void
   openGitDiff: (request: MeoOpenGitDiffRequest) => void
@@ -95,8 +96,12 @@ export type MeoDiffSplitGitChangeContext = {
 }
 
 export type MeoEditorViewportPosition = {
+  clientHeight?: number
   line: number
   lineOffset: number
+  scrollElementClassName?: string
+  scrollHeight?: number
+  scrollTop?: number
 }
 
 export type MeoEditorSelectionState = {

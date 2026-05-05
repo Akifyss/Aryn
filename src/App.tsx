@@ -18,7 +18,7 @@ import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features
 import { GitDiffEditor } from '@/features/editor/components/git-diff-editor'
 import { CodeEditor } from '@/features/editor/components/code-editor'
 import { isLineWithinVisualDiff } from '@/features/editor/lib/git-diff-navigation'
-import { MeoEditorHost } from '@/features/editor/components/meo-editor-host'
+import { MeoEditorHost, type MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host'
 import { WritingEditor } from '@/features/editor/components/writing-editor'
 import { GitPanel } from '@/features/git/components/git-panel'
 import type {
@@ -662,6 +662,7 @@ function App() {
   const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
   const leftDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
   const rightDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
+  const meoEditorHostRef = useRef<MeoEditorHostHandle | null>(null)
   const activeTabId = useWorkspaceStore((state) => state.activeTabId)
   const activateTab = useWorkspaceStore((state) => state.activateTab)
   const closeTab = useWorkspaceStore((state) => state.closeTab)
@@ -733,6 +734,8 @@ function App() {
   const currentEditorKind = activeFileTab?.editorKind ?? null
   const currentFileViewMode = activeFileTab?.viewMode ?? null
   const currentFilePath = activeFileTab?.filePath ?? null
+  const isActiveMeoEditorMountedRef = useRef(false)
+  isActiveMeoEditorMountedRef.current = currentEditorKind === 'rich-text' && currentFileViewMode === 'meo'
   const activeWorkspaceAutosaveTab = isWorkspaceAutosaveTab(activeFileTab) ? activeFileTab : null
   const [isActiveEditorComposing, setIsActiveEditorComposing] = useState(false)
   const workspaceAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -762,6 +765,13 @@ function App() {
       onFlush: (request) => performWorkspaceRefreshRef.current(request),
     })
   }
+  const captureActiveMeoViewPosition = useCallback(() => {
+    if (!isActiveMeoEditorMountedRef.current) {
+      return
+    }
+
+    meoEditorHostRef.current?.captureViewPosition()
+  }, [])
   const rootFileNames = useMemo(
     () => tree.filter((node) => node.kind === 'file').map((node) => node.name),
     [tree],
@@ -1511,6 +1521,10 @@ function App() {
   }
 
   async function closeEditorTab(tabId: string, options: { force?: boolean, silent?: boolean } = {}) {
+    if (tabId === displayActiveTabId) {
+      captureActiveMeoViewPosition()
+    }
+
     if (tabId === SETTINGS_TAB_ID) {
       setIsSettingsTabOpen(false)
       setIsSettingsTabActive(false)
@@ -1613,6 +1627,7 @@ function App() {
     workspacePath: string | null = currentPath,
     preferredViewMode?: WorkspaceFileViewMode,
   ) => {
+    captureActiveMeoViewPosition()
     setIsSettingsTabActive(false)
 
     const editorKind = await window.appApi.resolveWorkspaceEditorKind(filePath)
@@ -1675,7 +1690,7 @@ function App() {
     }
 
     setStatusMessage(`${getBaseName(filePath)} opened`)
-  }, [currentPath, activateTab, isLeftSidebarDrawer, openTab])
+  }, [currentPath, activateTab, captureActiveMeoViewPosition, isLeftSidebarDrawer, openTab])
 
   const openAgentMessageFile = useCallback(async (
     filePath: string,
@@ -1686,6 +1701,7 @@ function App() {
     )
 
     if (existingFileTab) {
+      captureActiveMeoViewPosition()
       setIsSettingsTabActive(false)
       activateTab(existingFileTab.id)
 
@@ -1714,7 +1730,7 @@ function App() {
     if (isRightSidebarDrawer) {
       setIsRightDrawerOpen(false)
     }
-  }, [activateTab, currentPath, isRightSidebarDrawer, openFile])
+  }, [activateTab, captureActiveMeoViewPosition, currentPath, isRightSidebarDrawer, openFile])
 
   async function openMeoGitDiff(
     change: GitChangeItem,
@@ -1773,6 +1789,8 @@ function App() {
     if (!currentPath) {
       return
     }
+
+    captureActiveMeoViewPosition()
 
     try {
       const diff = await window.appApi.getGitFileDiff(currentPath, change.path, change.scope)
@@ -2274,6 +2292,10 @@ function App() {
   }
 
   function activateFileTab(tabId: string) {
+    if (tabId !== displayActiveTabId) {
+      captureActiveMeoViewPosition()
+    }
+
     if (tabId === SETTINGS_TAB_ID) {
       setIsSettingsTabOpen(true)
       setIsSettingsTabActive(true)
@@ -3958,6 +3980,7 @@ function App() {
             {activeFileTab && currentEditorKind === 'rich-text' && currentFileViewMode === 'meo' ? (
               <MeoEditorHost
                 key={activeFileTab.id}
+                ref={meoEditorHostRef}
                 filePath={activeFileTab.filePath}
                 gitDiffRequest={activeFileTab.gitDiffRequest ?? null}
                 onChange={(nextValue) => {

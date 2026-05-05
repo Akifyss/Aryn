@@ -8,7 +8,6 @@ export type MeoSettings = {
   gitDiffLineHighlights: boolean
   imageFolder: string
   outlinePosition: MeoOutlinePosition
-  rememberPositionLines: number
 }
 
 interface SettingsState {
@@ -81,7 +80,6 @@ const DEFAULT_MEO_SETTINGS: MeoSettings = {
   gitDiffLineHighlights: true,
   imageFolder: 'assets',
   outlinePosition: 'right',
-  rememberPositionLines: 100,
 }
 
 function sanitizeMeoImageFolder(imageFolder: string) {
@@ -98,22 +96,11 @@ function sanitizeMeoImageFolder(imageFolder: string) {
   return segments.filter((segment) => segment !== '.').join('/')
 }
 
-function sanitizeRememberPositionLines(value: number) {
-  if (!Number.isFinite(value)) {
-    return DEFAULT_MEO_SETTINGS.rememberPositionLines
-  }
-
-  return Math.max(0, Math.round(value))
-}
-
 function sanitizeMeoSettings(value: Partial<MeoSettings> | undefined): MeoSettings {
   return {
     gitDiffLineHighlights: value?.gitDiffLineHighlights ?? DEFAULT_MEO_SETTINGS.gitDiffLineHighlights,
     imageFolder: sanitizeMeoImageFolder(value?.imageFolder ?? DEFAULT_MEO_SETTINGS.imageFolder),
     outlinePosition: value?.outlinePosition === 'left' ? 'left' : DEFAULT_MEO_SETTINGS.outlinePosition,
-    rememberPositionLines: sanitizeRememberPositionLines(
-      value?.rememberPositionLines ?? DEFAULT_MEO_SETTINGS.rememberPositionLines,
-    ),
   }
 }
 

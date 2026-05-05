@@ -104,16 +104,11 @@ export function SettingsDialog({
   const [authDrafts, setAuthDrafts] = useState<Record<AuthProviderKey, string>>(EMPTY_AUTH_DRAFTS)
   const [isSavingAuth, setIsSavingAuth] = useState(false)
   const [meoImageFolderDraft, setMeoImageFolderDraft] = useState(meo.imageFolder)
-  const [meoRememberPositionDraft, setMeoRememberPositionDraft] = useState(String(meo.rememberPositionLines))
   const [panelError, setPanelError] = useState<string | null>(null)
 
   useEffect(() => {
     setMeoImageFolderDraft(meo.imageFolder)
   }, [meo.imageFolder])
-
-  useEffect(() => {
-    setMeoRememberPositionDraft(String(meo.rememberPositionLines))
-  }, [meo.rememberPositionLines])
 
   const authProviders = useMemo(() => {
     const runtimeAuth = agentState?.runtime.auth
@@ -186,12 +181,6 @@ export function SettingsDialog({
 
   function commitMeoImageFolderDraft() {
     updateMeoSettings({ imageFolder: meoImageFolderDraft })
-  }
-
-  function commitMeoRememberPositionDraft() {
-    updateMeoSettings({
-      rememberPositionLines: Number.parseInt(meoRememberPositionDraft, 10),
-    })
   }
 
   function renderAppearanceSection() {
@@ -427,30 +416,6 @@ export function SettingsDialog({
               </p>
             </div>
 
-            <div className='settings-field settings-field-grow'>
-              <span className='settings-field-label'>滚动位置记忆阈值</span>
-              <Input
-                aria-label='编辑器滚动位置记忆阈值'
-                className='settings-field-grow'
-                min={0}
-                onChange={(event) => {
-                  setMeoRememberPositionDraft(event.target.value)
-                }}
-                onBlur={commitMeoRememberPositionDraft}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    commitMeoRememberPositionDraft()
-                  }
-                }}
-                placeholder='100'
-                type='number'
-                value={meoRememberPositionDraft}
-                variant='secondary'
-              />
-              <p className='settings-inline-hint'>
-                文件行数达到该值后，会记住上次可见位置。设为 <code>0</code> 表示始终记住。
-              </p>
-            </div>
           </div>
         </div>
       </div>

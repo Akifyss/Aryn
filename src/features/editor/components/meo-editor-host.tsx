@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitRepositoryState } from '@/features/git/types'
 import type { WorkspaceFileGitDiffRequest } from '@/features/workspace/store/use-workspace-store'
 import type { MeoSettings } from '@/hooks/use-settings-store'
@@ -33,6 +33,10 @@ type MeoEditorHostProps = {
 
 type MountedNativeMeo = ReturnType<typeof mountNativeMeoEditor>
 
+export type MeoEditorHostHandle = {
+  captureViewPosition: () => void
+}
+
 function resolvePreferredTheme(theme: 'light' | 'dark' | 'auto') {
   if (theme !== 'auto') {
     return theme
@@ -50,7 +54,7 @@ function findGitChangeForFile(changes: GitChangeItem[] | undefined, filePath: st
   return changes?.find((change) => normalizeFsPath(change.path) === normalizedFilePath) ?? null
 }
 
-export function MeoEditorHost({
+export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>(function MeoEditorHost({
   filePath,
   gitDiffRequest = null,
   gitRepositoryState,
@@ -65,7 +69,7 @@ export function MeoEditorHost({
   theme = 'auto',
   value,
   workspacePath,
-}: MeoEditorHostProps) {
+}, forwardedRef) {
   const shellRef = useRef<HTMLDivElement | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const controllerRef = useRef<MountedNativeMeo | null>(null)
@@ -88,6 +92,12 @@ export function MeoEditorHost({
     unstagedChange: findGitChangeForFile(gitRepositoryState?.unstagedChanges, filePath),
   }), [filePath, gitStateRefreshKey, gitRepositoryState])
 
+  useImperativeHandle(forwardedRef, () => ({
+    captureViewPosition() {
+      controllerRef.current?.captureViewPosition()
+    },
+  }), [])
+
   useEffect(() => {
     onChangeRef.current = onChange
     onCompositionChangeRef.current = onCompositionChange
@@ -97,7 +107,7 @@ export function MeoEditorHost({
     onSaveRef.current = onSave
   }, [onChange, onCompositionChange, onOpenFile, onOpenGitDiff, onApplyGitDiffSelection, onSave])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const rootElement = rootRef.current
     if (!rootElement) {
       return
@@ -151,7 +161,7 @@ export function MeoEditorHost({
       controller.destroy()
       controllerRef.current = null
     }
-  }, [environment, filePath, meoSettings.imageFolder, meoSettings.rememberPositionLines, workspacePath])
+  }, [environment, filePath, meoSettings.imageFolder, workspacePath])
 
   useEffect(() => {
     const controller = controllerRef.current
@@ -288,4 +298,4 @@ export function MeoEditorHost({
       <div ref={rootRef} className='meo-editor-root-host' />
     </div>
   )
-}
+})

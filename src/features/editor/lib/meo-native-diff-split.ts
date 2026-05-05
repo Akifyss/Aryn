@@ -1984,13 +1984,19 @@ function getTopVisiblePosition(view: EditorView | null, scrollContainer?: HTMLEl
     return null
   }
 
-  const block = view.lineBlockAtHeight(scrollContainer?.scrollTop ?? view.scrollDOM.scrollTop)
+  const container = scrollContainer ?? view.scrollDOM
+  const block = view.lineBlockAtHeight(container.scrollTop)
   const line = view.state.doc.lineAt(block.from)
-
-  return {
+  const position = {
+    clientHeight: container.clientHeight,
     line: line.number,
-    lineOffset: Math.max(0, (scrollContainer?.scrollTop ?? view.scrollDOM.scrollTop) - block.top),
+    lineOffset: Math.max(0, container.scrollTop - block.top),
+    scrollElementClassName: container.className,
+    scrollHeight: container.scrollHeight,
+    scrollTop: container.scrollTop,
   }
+
+  return position
 }
 
 function scrollPositionIntoView(view: EditorView, position: number, align = 'center', scrollContainer?: HTMLElement | null) {
@@ -2097,21 +2103,59 @@ function applyDiffSplitNavigationHighlight(
   }, 1600)
 }
 
-function restoreTopLine(view: EditorView, lineNumber: number, lineOffset = 0, scrollContainer?: HTMLElement | null) {
-  const normalizedLine = Math.min(Math.max(1, Math.floor(lineNumber || 1)), view.state.doc.lines)
-  const normalizedOffset = Number.isFinite(lineOffset) ? Math.max(0, Number(lineOffset)) : 0
-  const line = view.state.doc.line(normalizedLine)
-  const block = view.lineBlockAt(line.from)
+const DIFF_SCROLL_RESTORE_EPSILON = 0.5
+const DIFF_SCROLL_RESTORE_MAX_ATTEMPTS = 60
 
-  if (scrollContainer) {
-    scrollContainer.scrollTop = Math.max(0, block.top + normalizedOffset)
-  } else {
-    view.scrollDOM.scrollTop = Math.max(0, block.top + normalizedOffset)
+function restoreTopLine(view: EditorView, lineNumber: number, lineOffset = 0, scrollContainer?: HTMLElement | null) {
+  const requestedLine = Math.max(1, Math.floor(lineNumber || 1))
+  const normalizedOffset = Number.isFinite(lineOffset) ? Math.max(0, Number(lineOffset)) : 0
+  let attempts = 0
+  let didSyncSelection = false
+  let stableFrames = 0
+
+  const syncSelection = () => {
+    if (didSyncSelection || !view.dom.isConnected) {
+      return
+    }
+    didSyncSelection = true
+    const normalizedLine = Math.min(requestedLine, view.state.doc.lines)
+    const line = view.state.doc.line(normalizedLine)
+    view.dispatch({
+      selection: { anchor: line.from },
+    })
   }
 
-  view.dispatch({
-    selection: { anchor: line.from },
-  })
+  const restoreScroll = () => {
+    if (!view.dom.isConnected || ++attempts > DIFF_SCROLL_RESTORE_MAX_ATTEMPTS) {
+      syncSelection()
+      return
+    }
+
+    const container = scrollContainer ?? view.scrollDOM
+    const isViewportReady = container.clientHeight > 0 && container.scrollHeight > 0
+    if (!isViewportReady && attempts < DIFF_SCROLL_RESTORE_MAX_ATTEMPTS) {
+      window.requestAnimationFrame(restoreScroll)
+      return
+    }
+
+    const normalizedLine = Math.min(requestedLine, view.state.doc.lines)
+    const line = view.state.doc.line(normalizedLine)
+    const block = view.lineBlockAt(line.from)
+    const targetTop = Math.max(0, block.top + normalizedOffset)
+    container.scrollTop = targetTop
+    stableFrames = Math.abs(container.scrollTop - targetTop) <= DIFF_SCROLL_RESTORE_EPSILON
+      ? stableFrames + 1
+      : 0
+
+    if (stableFrames >= 2 || attempts >= DIFF_SCROLL_RESTORE_MAX_ATTEMPTS) {
+      syncSelection()
+      return
+    }
+
+    window.requestAnimationFrame(restoreScroll)
+  }
+
+  restoreScroll()
 }
 
 function trimInlineSelection(view: EditorView, selection: InlineSelectionRange): InlineSelectionRange {
@@ -3403,6 +3447,7 @@ export function createMeoDiffSplitController({
       diffScrollPastEndObserver = new ResizeObserver(scheduleDiffScrollPastEndPaddingSync)
       diffScrollPastEndObserver.observe(unifiedView.scrollDOM)
       const handleUnifiedScroll = () => {
+        onViewportChange?.()
         if (pendingScrollFrame) {
           return
         }
@@ -3413,7 +3458,6 @@ export function createMeoDiffSplitController({
             return
           }
           onSelectionChange?.(null)
-          onViewportChange?.()
         })
       }
       const handleTableInteraction = (event: Event) => {
@@ -3541,6 +3585,7 @@ export function createMeoDiffSplitController({
       cancelPendingReadOnlyWidgetLock()
     }
     const handleMergeScroll = () => {
+      onViewportChange?.()
       if (pendingScrollFrame) {
         return
       }
@@ -3551,7 +3596,6 @@ export function createMeoDiffSplitController({
           return
         }
         onSelectionChange?.(null)
-        onViewportChange?.()
       })
     }
     const handleTableInteraction = (event: Event) => {

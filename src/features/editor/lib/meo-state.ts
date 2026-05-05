@@ -1,3 +1,10 @@
+export type MeoStoredMode = 'diff-split' | 'diff-unified' | 'live' | 'source'
+
+export type MeoStoredViewPosition = {
+  topLine: number
+  topLineOffset: number
+}
+
 export type MeoStoredState = {
   findOptions?: {
     caseSensitive: boolean
@@ -6,13 +13,15 @@ export type MeoStoredState = {
   gitChangesGutter?: boolean
   gitChangesGutterConfigured?: boolean
   lineNumbers?: boolean
-  mode?: 'diff-split' | 'diff-unified' | 'live' | 'source'
+  mode?: MeoStoredMode
   outlineVisible?: boolean
   topLine?: number
   topLineOffset?: number
+  viewPositions?: Partial<Record<MeoStoredMode, MeoStoredViewPosition>>
 }
 
 const MEO_STATE_STORAGE_PREFIX = 'aryn:meo-state:'
+const MEO_STORED_MODES: MeoStoredMode[] = ['diff-split', 'diff-unified', 'live', 'source']
 
 export const DEFAULT_FIND_OPTIONS = {
   caseSensitive: false,
@@ -23,20 +32,12 @@ function getStoredStateKey(filePath: string) {
   return `${MEO_STATE_STORAGE_PREFIX}${encodeURIComponent(filePath)}`
 }
 
-export function countTextLines(value: string) {
-  if (!value) {
-    return 1
-  }
-
-  return value.split(/\r\n|\r|\n/).length
+function isStoredMode(value: unknown): value is MeoStoredMode {
+  return MEO_STORED_MODES.includes(value as MeoStoredMode)
 }
 
-export function shouldRememberViewPosition(content: string, rememberPositionLines: number) {
-  if (rememberPositionLines <= 0) {
-    return true
-  }
-
-  return countTextLines(content) >= rememberPositionLines
+function resolveStoredMode(value: unknown) {
+  return isStoredMode(value) ? value : undefined
 }
 
 export function resolveFindOptions(
@@ -54,6 +55,44 @@ export function resolveFindOptions(
 
 function resolveOptionalBoolean(value: unknown) {
   return typeof value === 'boolean' ? value : undefined
+}
+
+function resolveOptionalNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function resolveStoredViewPosition(value: unknown): MeoStoredViewPosition | undefined {
+  const candidate = value && typeof value === 'object'
+    ? value as { topLine?: unknown, topLineOffset?: unknown }
+    : null
+  const topLine = resolveOptionalNumber(candidate?.topLine)
+
+  if (typeof topLine !== 'number') {
+    return undefined
+  }
+
+  return {
+    topLine,
+    topLineOffset: resolveOptionalNumber(candidate?.topLineOffset) ?? 0,
+  }
+}
+
+function resolveStoredViewPositions(value: unknown): Partial<Record<MeoStoredMode, MeoStoredViewPosition>> | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+
+  const source = value as Record<string, unknown>
+  const viewPositions: Partial<Record<MeoStoredMode, MeoStoredViewPosition>> = {}
+
+  MEO_STORED_MODES.forEach((mode) => {
+    const position = resolveStoredViewPosition(source[mode])
+    if (position) {
+      viewPositions[mode] = position
+    }
+  })
+
+  return Object.keys(viewPositions).length > 0 ? viewPositions : undefined
 }
 
 export function resolveGitChangesGutterEnabled(storedState: MeoStoredState) {
@@ -78,16 +117,11 @@ export function readStoredState(filePath: string): MeoStoredState {
       gitChangesGutter: resolveOptionalBoolean(parsedValue.gitChangesGutter),
       gitChangesGutterConfigured: resolveOptionalBoolean(parsedValue.gitChangesGutterConfigured),
       lineNumbers: parsedValue.lineNumbers !== false,
-      mode: parsedValue.mode === 'diff-split' || parsedValue.mode === 'diff-unified' || parsedValue.mode === 'live' || parsedValue.mode === 'source'
-        ? parsedValue.mode
-        : undefined,
+      mode: resolveStoredMode(parsedValue.mode),
       outlineVisible: parsedValue.outlineVisible === true,
-      topLine: typeof parsedValue.topLine === 'number' && Number.isFinite(parsedValue.topLine)
-        ? parsedValue.topLine
-        : undefined,
-      topLineOffset: typeof parsedValue.topLineOffset === 'number' && Number.isFinite(parsedValue.topLineOffset)
-        ? parsedValue.topLineOffset
-        : undefined,
+      topLine: resolveOptionalNumber(parsedValue.topLine),
+      topLineOffset: resolveOptionalNumber(parsedValue.topLineOffset),
+      viewPositions: resolveStoredViewPositions(parsedValue.viewPositions),
     }
   } catch {
     return {}

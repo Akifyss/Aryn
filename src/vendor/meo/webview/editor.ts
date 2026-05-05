@@ -1049,7 +1049,7 @@ export function createEditor({
 
   const TOP_LINE_VISIBILITY_EPSILON = 0.5;
   const SCROLL_RESTORE_EPSILON = 0.5;
-  const SCROLL_RESTORE_MAX_ATTEMPTS = 3;
+  const SCROLL_RESTORE_MAX_ATTEMPTS = 60;
 
   const getTopLineMetrics = (scrollTopValue = view.scrollDOM.scrollTop) => {
     const scrollTop = Math.max(0, scrollTopValue);
@@ -1089,14 +1089,19 @@ export function createEditor({
     const { line, hiddenTopPixels } = getTopLineMetrics();
     return {
       lineNumber: line.number,
-      lineOffset: normalizeTopLineOffset(hiddenTopPixels)
+      lineOffset: normalizeTopLineOffset(hiddenTopPixels),
+      clientHeight: view.scrollDOM.clientHeight,
+      scrollElementClassName: view.scrollDOM.className,
+      scrollHeight: view.scrollDOM.scrollHeight,
+      scrollTop: view.scrollDOM.scrollTop
     };
   };
 
   const restoreTopVisibleLine = (lineNumber, lineOffset = 0, { syncCursor = true } = {}) => {
-    const targetLineNumber = Math.min(Math.max(1, Math.floor(lineNumber || 1)), view.state.doc.lines);
+    const requestedLineNumber = Math.max(1, Math.floor(lineNumber || 1));
     const targetOffset = normalizeTopLineOffset(lineOffset);
     let attempts = 0;
+    let stableFrames = 0;
     const restoreScroll = () => {
       if (!view || ++attempts > SCROLL_RESTORE_MAX_ATTEMPTS) {
         if (syncCursor && view) {
@@ -1104,11 +1109,19 @@ export function createEditor({
         }
         return;
       }
+      const isViewportReady = view.scrollDOM.clientHeight > 0 && view.scrollDOM.scrollHeight > 0;
+      if (!isViewportReady && attempts < SCROLL_RESTORE_MAX_ATTEMPTS) {
+        requestAnimationFrame(restoreScroll);
+        return;
+      }
+      const targetLineNumber = Math.min(requestedLineNumber, view.state.doc.lines);
       const targetLine = view.state.doc.line(targetLineNumber);
       const targetTop = Math.max(0, view.lineBlockAt(targetLine.from).top + targetOffset);
-      const currentTop = view.scrollDOM.scrollTop;
       view.scrollDOM.scrollTop = targetTop;
-      if (Math.abs(currentTop - targetTop) <= SCROLL_RESTORE_EPSILON) {
+      stableFrames = Math.abs(view.scrollDOM.scrollTop - targetTop) <= SCROLL_RESTORE_EPSILON
+        ? stableFrames + 1
+        : 0;
+      if (stableFrames >= 2 || attempts >= SCROLL_RESTORE_MAX_ATTEMPTS) {
         if (syncCursor) {
           syncCursorToTopVisibleLine();
         }
@@ -1485,6 +1498,7 @@ export function createEditor({
   view.dom.addEventListener('meo-table-selection-change', onTableSelectionChange);
   onScroll = () => {
     gitBlameHover?.hide();
+    onViewportChange?.();
     if (pendingScrollFrame) {
       return;
     }
@@ -1495,7 +1509,6 @@ export function createEditor({
         return;
       }
       emitSelectionChange();
-      onViewportChange?.();
     });
   };
   view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
@@ -1891,7 +1904,11 @@ export function createEditor({
       const position = computeTopVisiblePosition();
       return {
         line: position.lineNumber,
-        lineOffset: position.lineOffset
+        lineOffset: position.lineOffset,
+        clientHeight: position.clientHeight,
+        scrollElementClassName: position.scrollElementClassName,
+        scrollHeight: position.scrollHeight,
+        scrollTop: position.scrollTop
       };
     },
     getTopVisibleLine() {
