@@ -1,4 +1,4 @@
-import { getChunks, getOriginalDoc, type MergeView } from '@codemirror/merge'
+import { getChunks, getOriginalDoc, type MergeView } from '@aryn/codemirror-merge'
 import { Compartment, EditorSelection, EditorState, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
 import {
   Decoration,

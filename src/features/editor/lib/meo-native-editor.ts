@@ -1115,6 +1115,27 @@ export function mountNativeMeoEditor({
     focus() {
       focusEditor()
     },
+    openGitDiff(request) {
+      const nextMode = request.mode === 'unified' ? 'diff-unified' : 'diff-split'
+      applyMode(nextMode)
+      diffSplitController?.setPreferredGitDiffScope(request.scope)
+
+      if (typeof request.lineNumber !== 'number') {
+        diffSplitController?.focus()
+        return
+      }
+
+      const lineNumber = Math.max(1, Math.floor(request.lineNumber))
+      const didNavigate = diffSplitController?.revealGitChangeLine({
+        lineNumber,
+        scope: request.scope,
+      }) === true
+
+      if (!didNavigate) {
+        diffSplitController?.scrollToLine(lineNumber, 'center')
+      }
+      diffSplitController?.focus()
+    },
     refreshLayout() {
       editor.refreshLayout()
       editorScrollArea?.refresh()

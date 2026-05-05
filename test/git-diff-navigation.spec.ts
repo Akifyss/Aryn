@@ -1,5 +1,5 @@
 import { Text } from '@codemirror/state'
-import { Chunk } from '@codemirror/merge'
+import { Chunk } from '@aryn/codemirror-merge'
 import { describe, expect, it } from 'vitest'
 import {
   createSelectionFromCodeMirrorChunk,

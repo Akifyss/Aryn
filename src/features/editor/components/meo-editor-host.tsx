@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitRepositoryState } from '@/features/git/types'
+import type { WorkspaceFileGitDiffRequest } from '@/features/workspace/store/use-workspace-store'
 import type { MeoSettings } from '@/hooks/use-settings-store'
 import { createDefaultMeoHostEnvironment } from '@/features/editor/lib/meo-host-environment'
 import { getGitStateRefreshKey, getUnavailableGitBaseline } from '@/features/editor/lib/meo-git-state'
@@ -9,6 +10,7 @@ import 'katex/dist/katex.min.css'
 
 type MeoEditorHostProps = {
   filePath: string
+  gitDiffRequest?: WorkspaceFileGitDiffRequest | null
   gitRepositoryState?: GitRepositoryState | null
   meoSettings: MeoSettings
   onCompositionChange?: (isComposing: boolean) => void
@@ -50,6 +52,7 @@ function findGitChangeForFile(changes: GitChangeItem[] | undefined, filePath: st
 
 export function MeoEditorHost({
   filePath,
+  gitDiffRequest = null,
   gitRepositoryState,
   meoSettings,
   onCompositionChange,
@@ -67,6 +70,8 @@ export function MeoEditorHost({
   const rootRef = useRef<HTMLDivElement | null>(null)
   const controllerRef = useRef<MountedNativeMeo | null>(null)
   const contentRef = useRef(value)
+  const isGitBaselineReadyRef = useRef(false)
+  const lastHandledGitDiffRequestKeyRef = useRef<string | null>(null)
   const pendingExternalValueRef = useRef<string | null>(null)
   const isComposingRef = useRef(false)
   const onChangeRef = useRef(onChange)
@@ -76,6 +81,7 @@ export function MeoEditorHost({
   const onApplyGitDiffSelectionRef = useRef(onApplyGitDiffSelection)
   const onSaveRef = useRef(onSave)
   const environment = useMemo(() => createDefaultMeoHostEnvironment(), [])
+  const [gitBaselineVersion, setGitBaselineVersion] = useState(0)
   const gitStateRefreshKey = useMemo(() => getGitStateRefreshKey(gitRepositoryState), [gitRepositoryState])
   const gitChangeContext = useMemo(() => ({
     stagedChange: findGitChangeForFile(gitRepositoryState?.stagedChanges, filePath),
@@ -185,6 +191,26 @@ export function MeoEditorHost({
   }, [meoSettings.outlinePosition])
 
   useEffect(() => {
+    const controller = controllerRef.current
+
+    if (
+      !controller
+      || !gitDiffRequest
+      || !isGitBaselineReadyRef.current
+      || lastHandledGitDiffRequestKeyRef.current === gitDiffRequest.requestKey
+    ) {
+      return
+    }
+
+    controller.openGitDiff({
+      lineNumber: gitDiffRequest.lineNumber,
+      mode: gitDiffRequest.mode,
+      scope: gitDiffRequest.scope,
+    })
+    lastHandledGitDiffRequestKeyRef.current = gitDiffRequest.requestKey
+  }, [gitBaselineVersion, gitDiffRequest])
+
+  useEffect(() => {
     const shellElement = shellRef.current
     if (!shellElement) {
       return
@@ -220,9 +246,20 @@ export function MeoEditorHost({
     }
 
     let disposed = false
+    isGitBaselineReadyRef.current = false
+
+    const markGitBaselineReady = () => {
+      if (disposed) {
+        return
+      }
+
+      isGitBaselineReadyRef.current = true
+      setGitBaselineVersion((version) => version + 1)
+    }
 
     if (!workspacePath) {
       controller.setGitBaseline(getUnavailableGitBaseline('not-repo'))
+      markGitBaselineReady()
       return
     }
 
@@ -230,16 +267,19 @@ export function MeoEditorHost({
       .then((baseline) => {
         if (!disposed) {
           controller.setGitBaseline(baseline)
+          markGitBaselineReady()
         }
       })
       .catch(() => {
         if (!disposed) {
           controller.setGitBaseline(getUnavailableGitBaseline('error'))
+          markGitBaselineReady()
         }
       })
 
     return () => {
       disposed = true
+      isGitBaselineReadyRef.current = false
     }
   }, [environment, filePath, gitStateRefreshKey, workspacePath])
 

@@ -1552,6 +1552,11 @@
   padding: 0;
 }
 
+.git-diff-view-mode-with-label {
+  gap: 6px;
+  white-space: nowrap;
+}
+
 .git-toolbar-icon-button,
 .git-change-icon-button {
   width: 32px;
@@ -1606,7 +1611,7 @@
   color: var(--danger-foreground);
 }
 
-.git-diff-codemirror-shell {
+.git-diff-monaco-shell {
   display: flex;
   flex: 1;
   min-width: 0;
@@ -1626,163 +1631,16 @@
   line-height: 1.55;
 }
 
-.git-diff-codemirror-host {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  min-height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--surface);
-}
-
-.git-diff-codemirror-host,
-.git-diff-codemirror-host * {
-  font-family: var(--font-sans) !important;
-}
-
-.git-diff-codemirror-host .cm-editor {
+.git-diff-monaco-shell .monaco-diff-editor,
+.git-diff-monaco-shell .monaco-editor,
+.git-diff-monaco-shell .overflow-guard {
   width: 100%;
   height: 100%;
-  font-family: var(--font-sans);
 }
 
-.git-diff-codemirror-host .cm-scroller {
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.git-diff-codemirror-host .cm-scroller::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.git-diff-codemirror-host .cm-scroller::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.git-diff-codemirror-host .cm-scroller::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: transparent;
-}
-
-.git-diff-codemirror-host:hover .cm-scroller,
-.git-diff-codemirror-host:focus-within .cm-scroller {
-  scrollbar-color: color-mix(in srgb, var(--muted) 9%, transparent) transparent;
-}
-
-.git-diff-codemirror-host:hover .cm-scroller::-webkit-scrollbar-thumb,
-.git-diff-codemirror-host:focus-within .cm-scroller::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--muted) 9%, transparent);
-}
-
-.git-diff-codemirror-host .cm-scroller::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--foreground) 13%, transparent);
-}
-
-.git-diff-codemirror-host .cm-scroller::-webkit-scrollbar-thumb:active {
-  background: color-mix(in srgb, var(--foreground) 18%, transparent);
-}
-
-.git-diff-codemirror-host .cm-mergeView {
-  width: 100%;
-  background: var(--surface);
-}
-
-.git-diff-codemirror-host-unified .cm-mergeViewEditors,
-.git-diff-codemirror-host-unified .cm-mergeViewEditor {
-  height: 100%;
-}
-
-.git-diff-codemirror-host-split .cm-mergeView {
-  height: 100%;
-  overflow-y: auto;
-}
-
-.git-diff-codemirror-host-split .cm-mergeViewEditors {
-  min-height: 100%;
-}
-
-.git-diff-codemirror-host .cm-editor.cm-focused {
-  outline: none;
-}
-
-.git-diff-codemirror-host .cm-content,
-.git-diff-codemirror-host .cm-line,
-.git-diff-codemirror-host .cm-gutter,
-.git-diff-codemirror-host .cm-gutterElement,
-.git-diff-codemirror-host .cm-tooltip {
-  font-family: var(--font-sans) !important;
-  font-style: normal;
-}
-
-.git-diff-codemirror-host .cm-merge-revert {
-  position: relative;
-  width: 20px;
-  min-width: 20px;
-}
-
-.git-diff-codemirror-host .cm-merge-revert>* {
-  position: absolute;
-  display: flex;
-}
-
-.git-diff-native-controls {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  pointer-events: auto;
-  padding: 0;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--surface-secondary) 94%, transparent);
-  border: 1px solid color-mix(in srgb, var(--separator) 70%, transparent);
-  box-shadow:
-    0 6px 16px color-mix(in srgb, var(--background) 18%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent);
-}
-
-.git-diff-native-control {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  color: var(--muted);
-  cursor: pointer;
-  border-radius: 6px;
-  background: transparent;
-  box-shadow: none;
-  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
-}
-
-.git-diff-native-control svg {
-  width: 14px;
-  height: 14px;
-  display: block;
-}
-
-.git-diff-native-control:hover,
-.git-diff-native-control:focus-visible {
-  background: var(--surface-tertiary);
-  color: var(--foreground);
-  outline: none;
-}
-
-.git-diff-native-control[aria-disabled='true'] {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.git-diff-codemirror-host .cm-deletedChunk .cm-chunkButtons {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.git-diff-codemirror-host .cm-deletedText,
-.git-diff-codemirror-host .cm-insertedText {
-  border-radius: 4px;
+.git-diff-monaco-navigation-line {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 72%, transparent);
 }
 
 .git-panel {

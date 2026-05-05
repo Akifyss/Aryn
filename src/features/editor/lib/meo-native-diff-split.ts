@@ -12,7 +12,7 @@ import {
   type DirectMergeConfig,
   type DeletedContentRenderer,
   unifiedMergeView,
-} from '@codemirror/merge'
+} from '@aryn/codemirror-merge'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
 import { Annotation, ChangeSet, Compartment, EditorSelection, EditorState, type Extension, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
 import {
@@ -123,6 +123,7 @@ export type MeoDiffSplitController = {
   setBaseline: (baseline: GitBaselinePayload | null) => void
   setFallbackOriginal: (fallback: { label: string, text: string }) => void
   setGitChangeContext: (context: MeoDiffSplitGitChangeContext) => void
+  setPreferredGitDiffScope: (scope: GitChangeScope | null) => void
   setDiffGutterVisible: (visible: boolean) => void
   setLineNumbersVisible: (visible: boolean) => void
   setSearchQuery: (query: string | null | undefined, options?: SearchOptions) => void
@@ -531,7 +532,7 @@ export function resolveOriginalText(
     }
   }
 
-  if (gitChangeContext.unstagedChange && preferredScope !== 'staged') {
+  if (gitChangeContext.unstagedChange && !(preferredScope === 'staged' && gitChangeContext.stagedChange)) {
     if (gitChangeContext.unstagedChange.kind === 'untracked') {
       return {
         actionChange: gitChangeContext.unstagedChange,
@@ -3807,6 +3808,15 @@ export function createMeoDiffSplitController({
     scheduleDeferredDiffRefresh()
   }
 
+  const setPreferredGitDiffScope = (scope: GitChangeScope | null) => {
+    if (preferredGitDiffScope === scope) {
+      return
+    }
+
+    preferredGitDiffScope = scope
+    syncResolvedDocuments()
+  }
+
   const findMatch = (
     query: string,
     backward = false,
@@ -3979,12 +3989,10 @@ export function createMeoDiffSplitController({
       }
 
       const previousScope = preferredGitDiffScope
-      preferredGitDiffScope = request.scope
-      syncResolvedDocuments()
+      setPreferredGitDiffScope(request.scope)
 
       if (!resolveGitNavigationTarget(request)) {
-        preferredGitDiffScope = previousScope
-        syncResolvedDocuments()
+        setPreferredGitDiffScope(previousScope)
         return false
       }
 
@@ -4091,6 +4099,7 @@ export function createMeoDiffSplitController({
       currentGitChangeContext = context
       syncResolvedDocuments()
     },
+    setPreferredGitDiffScope,
     setDiffGutterVisible(visible) {
       currentDiffGutterVisible = visible !== false
       syncDiffGutterVisibility()

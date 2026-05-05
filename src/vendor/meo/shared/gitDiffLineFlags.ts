@@ -1,5 +1,5 @@
 import { Text } from '@codemirror/state'
-import { Change, Chunk } from '@codemirror/merge'
+import { Change, Chunk } from '@aryn/codemirror-merge'
 // @ts-expect-error Monaco exposes the VS Code diff implementation as ESM JS without declarations.
 import { DefaultLinesDiffComputer } from 'monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/defaultLinesDiffComputer.js'
 

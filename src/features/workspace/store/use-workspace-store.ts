@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { GitFileDiffResult } from '@/features/git/types'
+import type { GitChangeScope, GitFileDiffResult } from '@/features/git/types'
 import type { WorkspaceNode } from '@/features/workspace/types'
 import {
   getDefaultWorkspaceFileViewMode,
@@ -15,11 +15,20 @@ export type WorkspaceFileTab = {
   editorKind: SupportedWorkspaceEditorKind
   exists: boolean
   filePath: string
+  gitDiffRequest?: WorkspaceFileGitDiffRequest | null
   id: string
   isDirty: boolean
   kind: 'file'
   savedContent: string
   viewMode: WorkspaceFileViewMode
+}
+
+export type WorkspaceFileGitDiffRequest = {
+  lineNumber?: number
+  mode: 'split' | 'unified'
+  requestKey: string
+  scope: GitChangeScope
+  source: 'revision' | 'worktree'
 }
 
 export type WorkspaceDiffTab = {
@@ -73,7 +82,9 @@ type WorkspaceState = {
   openTab: (tab: {
     content: string
     editorKind: SupportedWorkspaceEditorKind
+    exists?: boolean
     filePath: string
+    gitDiffRequest?: WorkspaceFileGitDiffRequest | null
     viewMode?: WorkspaceFileViewMode
   }) => void
   renameTab: (currentPath: string, nextPath: string) => void
@@ -313,17 +324,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
     return nextTabs === state.openTabs ? state : { openTabs: nextTabs }
   }),
-  openTab: ({ content, editorKind, filePath, viewMode }) => set((state) => {
+  openTab: ({ content, editorKind, exists = true, filePath, gitDiffRequest, viewMode }) => set((state) => {
     const nextViewMode = normalizeViewMode(filePath, editorKind, viewMode)
     const tabId = createWorkspaceFileTabId(filePath, nextViewMode)
     const existingTab = state.openTabs.find((tab) => tab.id === tabId)
+    const shouldUpdateGitDiffRequest = gitDiffRequest !== undefined
 
     if (existingTab) {
       return {
         activeTabId: tabId,
         openTabs: state.openTabs.map((tab) => (
           tab.kind === 'file' && tab.id === tabId
-            ? { ...tab, editorKind, exists: true }
+            ? {
+              ...tab,
+              editorKind,
+              exists: tab.exists || exists,
+              ...(shouldUpdateGitDiffRequest ? { gitDiffRequest } : null),
+            }
             : tab
         )),
       }
@@ -336,8 +353,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         {
           content,
           editorKind,
-          exists: true,
+          exists,
           filePath,
+          ...(shouldUpdateGitDiffRequest ? { gitDiffRequest } : null),
           id: tabId,
           isDirty: false,
           kind: 'file',

@@ -36,6 +36,10 @@ function normalizePath(value: string) {
   return value.replace(/[\\/]+/g, '/')
 }
 
+function normalizeLineEndings(content: string) {
+  return content.replace(/\r\n/g, '\n')
+}
+
 async function runGit(cwd: string, args: string[]) {
   const result = await execFileAsync('git', args, {
     cwd,
@@ -389,11 +393,12 @@ describe('git helpers', () => {
       modifiedStartLine: 1,
     }, 'discard')
 
-    await expect(readFile(filePath, 'utf8')).resolves.toBe(partiallyDiscardedContent)
-    await expect(getGitFileDiff(rootPath, filePath, 'unstaged')).resolves.toMatchObject({
-      modifiedContent: partiallyDiscardedContent,
-      originalContent,
-    })
+    const fileContent = await readFile(filePath, 'utf8')
+    expect(normalizeLineEndings(fileContent)).toBe(partiallyDiscardedContent)
+
+    const diff = await getGitFileDiff(rootPath, filePath, 'unstaged')
+    expect(diff).toMatchObject({ originalContent })
+    expect(normalizeLineEndings(diff.modifiedContent)).toBe(partiallyDiscardedContent)
   })
 
   it('unstages only the selected staged diff block', async () => {

@@ -2,6 +2,7 @@ import type {
   GitBaselinePayload,
   GitBlameResult,
   GitChangeItem,
+  GitChangeScope,
   GitDiffBlockAction,
   GitDiffSelection,
 } from '@/features/git/types'
@@ -34,6 +35,7 @@ export type NativeMeoMessage =
 export type NativeMeoController = {
   destroy: () => void
   focus: () => void
+  openGitDiff: (request: MeoOpenGitDiffRequest) => void
   refreshLayout: () => void
   setGitChangeContext: (context: MeoDiffSplitGitChangeContext) => void
   setGitBaseline: (baseline: GitBaselinePayload) => void
@@ -41,6 +43,12 @@ export type NativeMeoController = {
   setOutlinePosition: (position: 'left' | 'right') => void
   setSavedText: (text: string) => void
   setText: (text: string) => void
+}
+
+export type MeoOpenGitDiffRequest = {
+  lineNumber?: number
+  mode?: 'split' | 'unified'
+  scope: GitChangeScope
 }
 
 export type MountNativeMeoEditorOptions = {

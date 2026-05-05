@@ -43,6 +43,7 @@ import {
   type WorkspaceDiffTab,
   type WorkspaceDiffNavigationRequest,
   type WorkspaceDisplayTab,
+  type WorkspaceFileGitDiffRequest,
   type WorkspaceFileTab,
   type WorkspaceTab,
 } from '@/features/workspace/store/use-workspace-store'
@@ -199,6 +200,21 @@ function shouldOpenGitDiffForLine(
   }
 
   return isLineWithinVisualDiff(diff.originalContent, diff.modifiedContent, source, lineNumber)
+}
+
+function createWorkspaceFileGitDiffRequest(
+  change: GitChangeItem,
+  source: 'revision' | 'worktree',
+  lineNumber?: number,
+  mode: WorkspaceFileGitDiffRequest['mode'] = 'split',
+): WorkspaceFileGitDiffRequest {
+  return {
+    ...(typeof lineNumber === 'number' ? { lineNumber: Math.max(1, Math.floor(lineNumber)) } : null),
+    mode,
+    requestKey: `${change.scope}:${change.path}:${source}:${lineNumber ?? 'open'}:${Date.now()}`,
+    scope: change.scope,
+    source,
+  }
 }
 
 function joinPath(basePath: string, relativeSuffix: string) {
@@ -1700,10 +1716,57 @@ function App() {
     }
   }, [activateTab, currentPath, isRightSidebarDrawer, openFile])
 
+  async function openMeoGitDiff(
+    change: GitChangeItem,
+    diff: GitFileDiffResult,
+    gitDiffRequest: WorkspaceFileGitDiffRequest,
+  ) {
+    const targetViewMode: WorkspaceFileViewMode = 'meo'
+    const existingTab = useWorkspaceStore.getState().openTabs.find(
+      (tab): tab is WorkspaceFileTab => (
+        tab.kind === 'file'
+        && tab.filePath === change.path
+        && tab.viewMode === targetViewMode
+      ),
+    )
+    let fileContent = existingTab?.content ?? diff.modifiedContent
+    let fileExists = existingTab?.exists ?? diff.modifiedExists
+
+    if (!existingTab) {
+      try {
+        fileContent = await window.appApi.readWorkspaceFile(change.path)
+        fileExists = true
+      } catch {
+        fileExists = diff.modifiedExists
+      }
+    }
+
+    openTab({
+      content: fileContent,
+      editorKind: diff.editorKind,
+      exists: fileExists,
+      filePath: change.path,
+      gitDiffRequest,
+      viewMode: targetViewMode,
+    })
+    setIsSettingsTabActive(false)
+
+    if (currentPath) {
+      await updateWorkspaceState(currentPath, { lastFilePath: change.path })
+    }
+
+    if (isLeftSidebarDrawer) {
+      setIsLeftDrawerOpen(false)
+    }
+
+    setStatusMessage(`${getBaseName(change.path)} diff opened`)
+  }
+
   async function openGitDiff(
     change: GitChangeItem,
     options?: {
       lineNumber?: number
+      mode?: WorkspaceFileGitDiffRequest['mode']
       source?: 'revision' | 'worktree'
     },
   ) {
@@ -1716,6 +1779,20 @@ function App() {
       const navigationSource = options?.source ?? 'worktree'
 
       if (!shouldOpenGitDiffForLine(diff, navigationSource, options?.lineNumber)) {
+        return
+      }
+
+      if (supportsMeoEditor(change.path, diff.editorKind)) {
+        await openMeoGitDiff(
+          change,
+          diff,
+          createWorkspaceFileGitDiffRequest(
+            change,
+            navigationSource,
+            options?.lineNumber,
+            options?.mode ?? 'split',
+          ),
+        )
         return
       }
 
@@ -3843,6 +3920,7 @@ function App() {
                 draftContent={activeDiffDraftContent}
                 navigationRequest={activeDiffTab.navigationRequest ?? null}
                 hasDirtyRelatedFileTab={activeDiffHasDirtyRelatedFileTab}
+                theme={theme}
                 onApplyBlockAction={handleApplyGitDiffSelection}
                 onDiscardChange={(change) => {
                   void handleDiscardGitChange(change)
@@ -3881,6 +3959,7 @@ function App() {
               <MeoEditorHost
                 key={activeFileTab.id}
                 filePath={activeFileTab.filePath}
+                gitDiffRequest={activeFileTab.gitDiffRequest ?? null}
                 onChange={(nextValue) => {
                   updateFileTabsContent(activeFileTab.filePath, nextValue)
                 }}

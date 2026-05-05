@@ -1,223 +1,58 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import { EditorSelection, EditorState, StateEffect, StateField, type Text } from '@codemirror/state'
-import { getChunks, getOriginalDoc, MergeView, unifiedMergeView } from '@codemirror/merge'
-import {
-  Decoration,
-  drawSelection,
-  EditorView,
-  highlightActiveLine,
-  highlightActiveLineGutter,
-  keymap,
-  lineNumbers,
-} from '@codemirror/view'
-import {
-  bracketMatching,
-  defaultHighlightStyle,
-  foldGutter,
-  foldKeymap,
-  indentOnInput,
-  syntaxHighlighting,
-} from '@codemirror/language'
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
-import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
+import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react'
+import * as monaco from 'monaco-editor'
 import { AddLine, Back2Line } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
-import { getCodeMirrorLanguageSupport } from '@/features/editor/lib/codemirror-language'
+import { getCodeLanguage } from '@/features/workspace/lib/file-types'
 import {
-  createSelectionFromCodeMirrorChunk,
-  type CodeMirrorDiffChunk,
-  findBestNavigationTarget,
-} from '@/features/editor/lib/git-diff-navigation'
+  DiffEditor,
+  configureMonaco,
+  resolveMonacoTheme,
+  type MonacoDiffEditorOptions,
+  type MonacoThemePreference,
+} from '@/features/editor/lib/monaco'
 import type { WorkspaceDiffNavigationRequest } from '@/features/workspace/store/use-workspace-store'
-import { buildCodeMirrorChunksFromVsCodeDiff } from '@/vendor/meo/shared/gitDiffLineFlags'
 
-type DiffViewMode = 'split' | 'unified'
+type DiffNavigationSide = 'modified' | 'original'
 
-type DiffNavigationHighlightRange = {
-  endLineNumber: number
-  startLineNumber: number
+type DiffNavigationTarget = {
+  focusEditor: boolean
+  lineNumber: number
+  selectLine: boolean
+  side: DiffNavigationSide
 }
 
 const DIFF_NAVIGATION_HIGHLIGHT_DURATION_MS = 2200
 
-function createCodeMirrorDiffConfig(isEditable: boolean) {
-  return {
-    overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
-    scanLimit: isEditable ? 1000 : 10000,
-    timeout: 200,
-  }
+configureMonaco()
+
+const DEFAULT_DIFF_OPTIONS: MonacoDiffEditorOptions = {
+  automaticLayout: true,
+  diffWordWrap: 'on',
+  fontFamily: '"SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace',
+  fontLigatures: true,
+  fontSize: 13.5,
+  ignoreTrimWhitespace: false,
+  lineNumbersMinChars: 3,
+  minimap: { enabled: false },
+  originalEditable: false,
+  overviewRulerBorder: false,
+  padding: {
+    bottom: 18,
+    top: 18,
+  },
+  readOnly: false,
+  renderLineHighlight: 'gutter',
+  renderSideBySide: true,
+  renderWhitespace: 'selection',
+  roundedSelection: false,
+  scrollBeyondLastLine: false,
+  smoothScrolling: true,
 }
 
-const setNavigationHighlightEffect = StateEffect.define<DiffNavigationHighlightRange | null>()
-
-const navigationHighlightField = StateField.define<ReturnType<typeof Decoration.set>>({
-  create() {
-    return Decoration.none
-  },
-  update(decorations, transaction) {
-    for (const effect of transaction.effects) {
-      if (!effect.is(setNavigationHighlightEffect)) {
-        continue
-      }
-
-      const range = effect.value
-
-      if (!range) {
-        return Decoration.none
-      }
-
-      const lineDecorations = []
-      const startLineNumber = Math.max(1, Math.floor(range.startLineNumber))
-      const endLineNumber = Math.max(startLineNumber, Math.floor(range.endLineNumber))
-
-      for (let lineNumber = startLineNumber; lineNumber <= endLineNumber; lineNumber += 1) {
-        const line = transaction.state.doc.line(lineNumber)
-        lineDecorations.push(Decoration.line({
-          attributes: {
-            class: 'git-diff-navigation-target-line',
-          },
-        }).range(line.from))
-      }
-
-      return Decoration.set(lineDecorations, true)
-    }
-
-    return decorations.map(transaction.changes)
-  },
-  provide: (field) => EditorView.decorations.from(field),
-})
-
-const DIFF_EDITOR_THEME = EditorView.theme({
-  '&': {
-    height: '100%',
-    backgroundColor: 'transparent',
-    color: 'var(--foreground)',
-  },
-  '.cm-scroller': {
-    fontFamily: 'var(--font-sans)',
-    lineHeight: '1.72',
-  },
-  '.cm-content, .cm-line, .cm-gutter, .cm-gutterElement, .cm-tooltip': {
-    fontFamily: 'var(--font-sans)',
-    fontSize: '14px',
-  },
-  '.cm-gutters, .cm-gutter, .cm-gutterElement': {
-    backgroundColor: 'var(--surface)',
-  },
-  '.cm-content': {
-    caretColor: 'var(--foreground)',
-    paddingBottom: '2rem',
-  },
-  '.cm-activeLine': {
-    backgroundColor: 'var(--default)',
-  },
-  '.cm-activeLineGutter': {
-    backgroundColor: 'var(--surface)',
-  },
-  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-content ::selection': {
-    backgroundColor: 'var(--default)',
-  },
-  '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: 'var(--foreground)',
-  },
-  '.git-diff-navigation-target-line': {
-    backgroundColor: 'color-mix(in srgb, var(--accent) 16%, transparent)',
-    boxShadow: 'inset 3px 0 0 color-mix(in srgb, var(--accent) 72%, transparent)',
-  },
-})
-
-function normalizeEditorLineNumber(lineNumber: number, doc: Text) {
-  return Math.max(1, Math.min(doc.lines, Math.floor(lineNumber)))
-}
-
-function getSingleLineNavigationHighlightRange(lineNumber: number): DiffNavigationHighlightRange {
-  const normalizedLineNumber = Math.max(1, Math.floor(lineNumber))
-
-  return {
-    endLineNumber: normalizedLineNumber,
-    startLineNumber: normalizedLineNumber,
-  }
-}
-
-function revealEditorLine(
-  view: EditorView,
-  lineNumber: number,
-  { focusEditor = true, selectLine = true }: { focusEditor?: boolean, selectLine?: boolean } = {},
-) {
-  const safeLineNumber = normalizeEditorLineNumber(lineNumber, view.state.doc)
-  const line = view.state.doc.line(safeLineNumber)
-
-  view.dispatch({
-    effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
-    ...(selectLine ? { selection: EditorSelection.cursor(line.from) } : null),
-  })
-  if (focusEditor) {
-    view.focus()
-  }
-}
-
-function clearNavigationHighlight(
-  view: EditorView | null,
-  timerRef: { current: number | null },
-) {
-  if (timerRef.current) {
-    window.clearTimeout(timerRef.current)
-    timerRef.current = null
-  }
-
-  if (!view) {
-    return
-  }
-
-  try {
-    view.dispatch({
-      effects: setNavigationHighlightEffect.of(null),
-    })
-  } catch {
-    // The view may already be tearing down while the diff switches modes or files.
-  }
-}
-
-function applyNavigationHighlight(
-  view: EditorView,
-  range: DiffNavigationHighlightRange,
-  timerRef: { current: number | null },
-) {
-  clearNavigationHighlight(view, timerRef)
-  view.dispatch({
-    effects: setNavigationHighlightEffect.of(range),
-  })
-
-  timerRef.current = window.setTimeout(() => {
-    timerRef.current = null
-
-    try {
-      view.dispatch({
-        effects: setNavigationHighlightEffect.of(null),
-      })
-    } catch {
-      // Ignore teardown races triggered by rapid diff/view switches.
-    }
-  }, DIFF_NAVIGATION_HIGHLIGHT_DURATION_MS)
-}
-
-function getCodeMirrorControlSvg(action: GitDiffBlockAction) {
-  if (action === 'stage') {
-    return renderToStaticMarkup(<AddLine aria-hidden='true' size={14} />)
-  }
-
-  if (action === 'unstage') {
-    return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.25 8h9.5"/></svg>'
-  }
-
-  return renderToStaticMarkup(<Back2Line aria-hidden='true' size={14} />)
-}
-
-function getBlockActionsDisabledReason(options: {
-  isComposing: boolean
+function getGitActionsDisabledReason(options: {
   isApplyingAction: boolean
+  isComposing: boolean
   isSaving: boolean
 }) {
   if (options.isSaving || options.isApplyingAction) {
@@ -231,503 +66,485 @@ function getBlockActionsDisabledReason(options: {
   return null
 }
 
-function createDiffExtensions({
-  editable,
-  filePath,
-  onChange,
-  onCompositionChange,
-  onFocusChange,
-  onSave,
-  wrapLines,
-}: {
-  editable: boolean
-  filePath: string
-  onChange: (content: string) => void
-  onCompositionChange: (isComposing: boolean) => void
-  onFocusChange: (isFocused: boolean) => void
-  onSave: () => void
-  wrapLines: boolean
-}) {
-  return [
-    lineNumbers(),
-    highlightActiveLineGutter(),
-    drawSelection(),
-    history(),
-    foldGutter(),
-    indentOnInput(),
-    bracketMatching(),
-    highlightActiveLine(),
-    highlightSelectionMatches(),
-    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-    EditorState.tabSize.of(2),
-    ...(wrapLines ? [EditorView.lineWrapping] : []),
-    EditorView.editable.of(editable),
-    EditorState.readOnly.of(!editable),
-    navigationHighlightField,
-    DIFF_EDITOR_THEME,
-    getCodeMirrorLanguageSupport(filePath),
-    keymap.of([
-      {
-        key: 'Mod-s',
-        preventDefault: true,
-        run: () => {
-          if (!editable) {
-            return false
-          }
-
-          onSave()
-          return true
-        },
-      },
-      indentWithTab,
-      ...defaultKeymap,
-      ...historyKeymap,
-      ...foldKeymap,
-      ...searchKeymap,
-    ]),
-    EditorView.updateListener.of((update) => {
-      if (update.docChanged) {
-        onChange(update.state.doc.toString())
-      }
-    }),
-    EditorView.domEventHandlers({
-      compositionstart: () => {
-        onCompositionChange(true)
-        return false
-      },
-      compositionend: () => {
-        window.setTimeout(() => {
-          onCompositionChange(false)
-        }, 0)
-        return false
-      },
-      focus: () => {
-        onFocusChange(true)
-        return false
-      },
-      blur: () => {
-        onFocusChange(false)
-        return false
-      },
-    }),
-  ]
+function getNavigationSelectionLineStart(
+  selection: GitFileDiffResult['selections'][number],
+  side: DiffNavigationSide,
+) {
+  return Math.max(1, side === 'modified' ? selection.modifiedStartLine : selection.originalStartLine)
 }
 
-function CodeMirrorDiffRenderer({
-  blockActionsDisabledReason,
-  areBlockActionsEnabled,
+function getNavigationSelectionLineCount(
+  selection: GitFileDiffResult['selections'][number],
+  side: DiffNavigationSide,
+) {
+  return side === 'modified' ? selection.modifiedLineCount : selection.originalLineCount
+}
+
+function getDistanceToLineRange(lineNumber: number, startLine: number, lineCount: number) {
+  const normalizedStartLine = Math.max(1, startLine)
+
+  if (lineCount <= 0) {
+    return Math.abs(lineNumber - normalizedStartLine)
+  }
+
+  const endLine = normalizedStartLine + lineCount - 1
+
+  if (lineNumber < normalizedStartLine) {
+    return normalizedStartLine - lineNumber
+  }
+
+  if (lineNumber > endLine) {
+    return lineNumber - endLine
+  }
+
+  return 0
+}
+
+function clampRequestedLineToSelectionRange(
+  selection: GitFileDiffResult['selections'][number],
+  side: DiffNavigationSide,
+  requestedLineNumber: number,
+) {
+  const startLineNumber = getNavigationSelectionLineStart(selection, side)
+  const lineCount = getNavigationSelectionLineCount(selection, side)
+  const endLineNumber = lineCount > 0 ? startLineNumber + lineCount - 1 : startLineNumber
+
+  return Math.max(startLineNumber, Math.min(requestedLineNumber, endLineNumber))
+}
+
+function resolveNavigationTarget(
+  selections: GitFileDiffResult['selections'],
+  requestedLineNumber: number,
+  preferredSide: DiffNavigationSide,
+): DiffNavigationTarget | null {
+  let bestTarget: DiffNavigationTarget | null = null
+  let bestDistance = Number.POSITIVE_INFINITY
+
+  for (const selection of selections) {
+    const fallbackSide = preferredSide === 'modified' ? 'original' : 'modified'
+    const preferredSideLineCount = getNavigationSelectionLineCount(selection, preferredSide)
+    const fallbackSideLineCount = getNavigationSelectionLineCount(selection, fallbackSide)
+    const preferredDistance = getDistanceToLineRange(
+      requestedLineNumber,
+      getNavigationSelectionLineStart(selection, preferredSide),
+      preferredSideLineCount,
+    )
+    const fallbackDistance = getDistanceToLineRange(
+      requestedLineNumber,
+      getNavigationSelectionLineStart(selection, fallbackSide),
+      fallbackSideLineCount,
+    )
+    let side: DiffNavigationSide
+    let distance: number
+    let passiveBoundaryReveal = false
+
+    if (preferredSideLineCount <= 0 && fallbackSideLineCount > 0) {
+      side = fallbackSide
+      distance = preferredDistance
+      passiveBoundaryReveal = true
+    } else if (fallbackSideLineCount <= 0 && preferredSideLineCount > 0) {
+      side = preferredSide
+      distance = preferredDistance
+    } else if (preferredDistance < fallbackDistance) {
+      side = preferredSide
+      distance = preferredDistance
+    } else if (fallbackDistance < preferredDistance) {
+      side = fallbackSide
+      distance = fallbackDistance
+    } else {
+      side = preferredSide
+      distance = preferredDistance
+    }
+
+    if (
+      distance < bestDistance
+      || (
+        distance === bestDistance
+        && side === preferredSide
+        && bestTarget?.side !== preferredSide
+      )
+    ) {
+      bestDistance = distance
+      bestTarget = {
+        focusEditor: !passiveBoundaryReveal,
+        lineNumber: clampRequestedLineToSelectionRange(selection, side, requestedLineNumber),
+        selectLine: !passiveBoundaryReveal,
+        side,
+      }
+    }
+  }
+
+  return bestTarget
+}
+
+function normalizeEditorLineNumber(lineNumber: number, model: monaco.editor.ITextModel) {
+  return Math.max(1, Math.min(model.getLineCount(), Math.floor(lineNumber)))
+}
+
+function getDiffSelectionKey(selection: GitDiffSelection | null) {
+  if (!selection) {
+    return ''
+  }
+
+  return [
+    selection.originalStartLine,
+    selection.originalLineCount,
+    selection.modifiedStartLine,
+    selection.modifiedLineCount,
+  ].join(':')
+}
+
+function isLineInsideSelection(selection: GitDiffSelection, side: DiffNavigationSide, lineNumber: number) {
+  const normalizedLineNumber = Math.max(1, Math.floor(lineNumber))
+  const startLine = getNavigationSelectionLineStart(selection, side)
+  const lineCount = getNavigationSelectionLineCount(selection, side)
+
+  if (lineCount <= 0) {
+    return normalizedLineNumber === startLine
+  }
+
+  return normalizedLineNumber >= startLine && normalizedLineNumber < startLine + lineCount
+}
+
+function findSelectionAtLine(
+  selections: readonly GitDiffSelection[],
+  side: DiffNavigationSide,
+  lineNumber: number,
+) {
+  return selections.find((selection) => isLineInsideSelection(selection, side, lineNumber)) ?? null
+}
+
+function clearNavigationHighlight(
+  decorations: monaco.editor.IEditorDecorationsCollection | null,
+  timerRef: { current: number | null },
+) {
+  if (timerRef.current) {
+    window.clearTimeout(timerRef.current)
+    timerRef.current = null
+  }
+
+  decorations?.clear()
+}
+
+function revealEditorLine(
+  editor: monaco.editor.IStandaloneCodeEditor,
+  lineNumber: number,
+  decorationsRef: { current: monaco.editor.IEditorDecorationsCollection | null },
+  timerRef: { current: number | null },
+  { focusEditor = true, selectLine = true }: { focusEditor?: boolean, selectLine?: boolean } = {},
+) {
+  const model = editor.getModel()
+
+  if (!model) {
+    return
+  }
+
+  const safeLineNumber = normalizeEditorLineNumber(lineNumber, model)
+  const range = new monaco.Range(safeLineNumber, 1, safeLineNumber, model.getLineMaxColumn(safeLineNumber))
+
+  if (selectLine) {
+    editor.setSelection(range)
+    editor.setPosition({
+      column: 1,
+      lineNumber: safeLineNumber,
+    })
+  }
+
+  editor.revealLineInCenter(safeLineNumber, monaco.editor.ScrollType.Smooth)
+
+  if (focusEditor) {
+    editor.focus()
+  }
+
+  clearNavigationHighlight(decorationsRef.current, timerRef)
+  if (!decorationsRef.current) {
+    decorationsRef.current = editor.createDecorationsCollection()
+  }
+
+  decorationsRef.current.set([{
+    options: {
+      className: 'git-diff-monaco-navigation-line',
+      isWholeLine: true,
+    },
+    range,
+  }])
+
+  timerRef.current = window.setTimeout(() => {
+    timerRef.current = null
+    decorationsRef.current?.clear()
+  }, DIFF_NAVIGATION_HIGHLIGHT_DURATION_MS)
+}
+
+function MonacoDiffRenderer({
   diff,
   isEditable,
-  navigationRequest,
-  onBlockAction,
-  onDraftChange,
-  onCompositionChange,
   isComposing,
+  navigationRequest,
+  onCompositionChange,
+  onActiveSelectionChange,
+  onDraftChange,
   onSave,
-  viewMode,
+  theme = 'auto',
 }: {
-  blockActionsDisabledReason: string | null
-  areBlockActionsEnabled: boolean
   diff: GitFileDiffResult
   isEditable: boolean
-  navigationRequest: WorkspaceDiffNavigationRequest | null
-  onBlockAction: (selection: GitDiffSelection, action: GitDiffBlockAction) => void
-  onDraftChange: (content: string) => void
-  onCompositionChange: (isComposing: boolean) => void
   isComposing: boolean
+  navigationRequest: WorkspaceDiffNavigationRequest | null
+  onActiveSelectionChange: (selection: GitDiffSelection | null) => void
+  onCompositionChange: (isComposing: boolean) => void
+  onDraftChange: (content: string) => void
   onSave: () => void
-  viewMode: DiffViewMode
+  theme?: MonacoThemePreference
 }) {
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const splitViewRef = useRef<MergeView | null>(null)
-  const unifiedViewRef = useRef<EditorView | null>(null)
-  const onBlockActionRef = useRef(onBlockAction)
-  const onDraftChangeRef = useRef(onDraftChange)
-  const onCompositionChangeRef = useRef(onCompositionChange)
-  const onSaveRef = useRef(onSave)
-  const [isModifiedFocused, setIsModifiedFocused] = useState(false)
-  const areBlockActionsEnabledRef = useRef(areBlockActionsEnabled)
-  const blockActionsDisabledReasonRef = useRef(blockActionsDisabledReason)
+  const diffEditorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null)
+  const disposablesRef = useRef<monaco.IDisposable[]>([])
+  const isApplyingExternalValueRef = useRef(false)
+  const activeSideRef = useRef<DiffNavigationSide | null>(null)
+  const isModifiedFocusedRef = useRef(false)
+  const isComposingRef = useRef(isComposing)
+  const lastActiveSelectionKeyRef = useRef('')
+  const lastForwardedValueRef = useRef(diff.modifiedContent)
   const lastHandledNavigationRequestKeyRef = useRef<string | null>(null)
-  const originalHighlightTimerRef = useRef<number | null>(null)
-  const modifiedHighlightTimerRef = useRef<number | null>(null)
-  const unifiedHighlightTimerRef = useRef<number | null>(null)
+  const compositionEndTimerRef = useRef<number | null>(null)
+  const modifiedNavigationDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
+  const originalNavigationDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
+  const modifiedNavigationHighlightTimerRef = useRef<number | null>(null)
+  const originalNavigationHighlightTimerRef = useRef<number | null>(null)
+  const onActiveSelectionChangeRef = useRef(onActiveSelectionChange)
+  const onCompositionChangeRef = useRef(onCompositionChange)
+  const onDraftChangeRef = useRef(onDraftChange)
+  const onSaveRef = useRef(onSave)
+  const selectionsRef = useRef(diff.selections)
+  const monacoTheme = resolveMonacoTheme(theme)
+  const language = getCodeLanguage(diff.change.path)
+
+  const emitActiveSelectionChange = useCallback((nextSelection: GitDiffSelection | null) => {
+    const nextKey = getDiffSelectionKey(nextSelection)
+
+    if (lastActiveSelectionKeyRef.current === nextKey) {
+      return
+    }
+
+    lastActiveSelectionKeyRef.current = nextKey
+    onActiveSelectionChangeRef.current(nextSelection)
+  }, [])
+
+  const updateActiveSelectionFromEditor = useCallback((
+    side: DiffNavigationSide,
+    editor: monaco.editor.IStandaloneCodeEditor,
+  ) => {
+    const lineNumber = editor.getPosition()?.lineNumber
+
+    if (typeof lineNumber !== 'number') {
+      emitActiveSelectionChange(null)
+      return
+    }
+
+    emitActiveSelectionChange(findSelectionAtLine(selectionsRef.current, side, lineNumber))
+  }, [emitActiveSelectionChange])
+
+  const emitDraftChange = useCallback((nextValue: string) => {
+    if (nextValue === lastForwardedValueRef.current) {
+      return
+    }
+
+    lastForwardedValueRef.current = nextValue
+    onDraftChangeRef.current(nextValue)
+  }, [])
 
   useEffect(() => {
-    onBlockActionRef.current = onBlockAction
-  }, [onBlockAction])
-
-  useEffect(() => {
-    onDraftChangeRef.current = onDraftChange
-  }, [onDraftChange])
+    onActiveSelectionChangeRef.current = onActiveSelectionChange
+  }, [onActiveSelectionChange])
 
   useEffect(() => {
     onCompositionChangeRef.current = onCompositionChange
   }, [onCompositionChange])
 
   useEffect(() => {
+    onDraftChangeRef.current = onDraftChange
+  }, [onDraftChange])
+
+  useEffect(() => {
     onSaveRef.current = onSave
   }, [onSave])
 
   useEffect(() => {
-    areBlockActionsEnabledRef.current = areBlockActionsEnabled
-    blockActionsDisabledReasonRef.current = blockActionsDisabledReason
-  }, [areBlockActionsEnabled, blockActionsDisabledReason])
+    isComposingRef.current = isComposing
+  }, [isComposing])
 
   useEffect(() => {
-    lastHandledNavigationRequestKeyRef.current = null
-  }, [diff.change.path, diff.change.scope, viewMode])
+    selectionsRef.current = diff.selections
+    const diffEditor = diffEditorRef.current
+    const activeSide = activeSideRef.current
 
-  useEffect(() => {
-    return () => {
-      clearNavigationHighlight(splitViewRef.current?.a ?? null, originalHighlightTimerRef)
-      clearNavigationHighlight(splitViewRef.current?.b ?? null, modifiedHighlightTimerRef)
-      clearNavigationHighlight(unifiedViewRef.current, unifiedHighlightTimerRef)
-    }
-  }, [])
-
-  useEffect(() => {
-    const host = containerRef.current
-
-    if (!host) {
+    if (!diffEditor || !activeSide) {
+      emitActiveSelectionChange(null)
       return
     }
 
-    const controls = host.querySelectorAll<HTMLElement>('.git-diff-native-control')
-    controls.forEach((control) => {
-      const action = control.dataset.action as GitDiffBlockAction | undefined
+    updateActiveSelectionFromEditor(
+      activeSide,
+      activeSide === 'original'
+        ? diffEditor.getOriginalEditor()
+        : diffEditor.getModifiedEditor(),
+    )
+  }, [diff.selections, emitActiveSelectionChange, updateActiveSelectionFromEditor])
 
-      if (!action) {
-        return
-      }
+  useEffect(() => {
+    activeSideRef.current = null
+    emitActiveSelectionChange(null)
+  }, [diff.change.path, diff.change.scope, emitActiveSelectionChange])
 
-      const title = areBlockActionsEnabled
-        ? action === 'stage'
-          ? 'Stage block'
-          : action === 'unstage'
-            ? 'Unstage block'
-            : 'Discard block'
-        : blockActionsDisabledReason ?? (
-          action === 'stage'
-            ? 'Stage block'
-            : action === 'unstage'
-              ? 'Unstage block'
-              : 'Discard block'
-        )
+  useEffect(() => {
+    const diffEditor = diffEditorRef.current
 
-      control.title = title
-      control.setAttribute('aria-label', title)
-      control.setAttribute('aria-disabled', areBlockActionsEnabled ? 'false' : 'true')
-      control.setAttribute('tabindex', areBlockActionsEnabled ? '0' : '-1')
+    if (!diffEditor) {
+      return
+    }
+
+    diffEditor.updateOptions({
+      originalEditable: false,
+      readOnly: !isEditable,
     })
-  }, [areBlockActionsEnabled, blockActionsDisabledReason])
+  }, [isEditable])
 
-  useEffect(() => {
-    const splitView = splitViewRef.current
-
-    if (!splitView) {
-      return
-    }
-
-    const currentDoc = splitView.b.state.doc.toString()
-
-    if (currentDoc === diff.modifiedContent) {
-      return
-    }
-
-    if (isModifiedFocused || isComposing) {
-      return
-    }
-
-    splitView.b.dispatch({
-      changes: {
-        from: 0,
-        to: splitView.b.state.doc.length,
-        insert: diff.modifiedContent,
-      },
+  const handleMount = useCallback<NonNullable<ComponentProps<typeof DiffEditor>['onMount']>>((editor, monacoInstance) => {
+    disposablesRef.current.forEach((disposable) => {
+      disposable.dispose()
     })
-  }, [diff.modifiedContent, isComposing, isModifiedFocused])
+    disposablesRef.current = []
+    diffEditorRef.current = editor
 
-  useEffect(() => {
-    const unifiedView = unifiedViewRef.current
+    const modifiedEditor = editor.getModifiedEditor()
+    const originalEditor = editor.getOriginalEditor()
 
-    if (!unifiedView) {
-      return
-    }
-
-    const currentDoc = unifiedView.state.doc.toString()
-
-    if (currentDoc === diff.modifiedContent) {
-      return
-    }
-
-    if (isModifiedFocused || isComposing) {
-      return
-    }
-
-    unifiedView.dispatch({
-      changes: {
-        from: 0,
-        to: unifiedView.state.doc.length,
-        insert: diff.modifiedContent,
-      },
+    modifiedEditor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
+      onSaveRef.current()
     })
-  }, [diff.modifiedContent, isComposing, isModifiedFocused])
 
-  useEffect(() => {
-    const container = containerRef.current
+    disposablesRef.current = [
+      modifiedEditor.onDidFocusEditorText(() => {
+        activeSideRef.current = 'modified'
+        isModifiedFocusedRef.current = true
+        updateActiveSelectionFromEditor('modified', modifiedEditor)
+      }),
+      modifiedEditor.onDidBlurEditorText(() => {
+        isModifiedFocusedRef.current = false
+      }),
+      modifiedEditor.onDidCompositionStart(() => {
+        isComposingRef.current = true
+        onCompositionChangeRef.current(true)
+      }),
+      modifiedEditor.onDidCompositionEnd(() => {
+        if (compositionEndTimerRef.current) {
+          window.clearTimeout(compositionEndTimerRef.current)
+        }
 
-    if (!container) {
-      return
-    }
-
-    container.replaceChildren()
-    splitViewRef.current?.destroy()
-    splitViewRef.current = null
-    unifiedViewRef.current?.destroy()
-    unifiedViewRef.current = null
-
-    const rightDoc = diff.modifiedExists ? diff.modifiedContent : ''
-    const leftDoc = diff.originalExists ? diff.originalContent : ''
-    const createCodeMirrorIconControl = ({
-      action,
-      onActivate,
-      title,
-    }: {
-      action: GitDiffBlockAction
-      onActivate: (event: MouseEvent | KeyboardEvent, action: GitDiffBlockAction) => void
-      title: string
-    }) => {
-      const control = document.createElement('div')
-      control.className = 'git-diff-native-control clickable-icon'
-      const resolvedTitle = areBlockActionsEnabledRef.current ? title : blockActionsDisabledReasonRef.current ?? title
-      control.title = resolvedTitle
-      control.dataset.action = action
-      control.setAttribute('role', 'button')
-      control.setAttribute('tabindex', areBlockActionsEnabledRef.current ? '0' : '-1')
-      control.setAttribute('aria-label', resolvedTitle)
-      control.setAttribute('aria-disabled', areBlockActionsEnabledRef.current ? 'false' : 'true')
-      control.innerHTML = getCodeMirrorControlSvg(action)
-
-      const handleActivate = (event: MouseEvent | KeyboardEvent) => {
-        event.preventDefault()
-        event.stopPropagation()
-
-        if (!areBlockActionsEnabledRef.current) {
+        compositionEndTimerRef.current = window.setTimeout(() => {
+          compositionEndTimerRef.current = null
+          isComposingRef.current = false
+          onCompositionChangeRef.current(false)
+          emitDraftChange(modifiedEditor.getValue())
+        }, 0)
+      }),
+      modifiedEditor.onDidChangeModelContent(() => {
+        if (isApplyingExternalValueRef.current) {
           return
         }
 
-        onActivate(event, action)
-      }
+        const nextValue = modifiedEditor.getValue()
 
-      control.onmousedown = handleActivate
-      control.onkeydown = (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          handleActivate(event)
-        }
-      }
-
-      return control
-    }
-    const handleSplitBlockAction = (
-      event: MouseEvent | KeyboardEvent,
-      action: GitDiffBlockAction,
-    ) => {
-      if (!areBlockActionsEnabledRef.current || !splitViewRef.current) {
-        return
-      }
-
-      const controlsRoot = (event.currentTarget as HTMLElement).closest<HTMLElement>('.git-diff-native-controls')
-      const controlsParent = controlsRoot?.parentElement
-      const chunkIndex = controlsRoot && controlsParent
-        ? Array.from(controlsParent.children).indexOf(controlsRoot)
-        : -1
-      const chunkState = getChunks(splitViewRef.current.b.state)
-      const chunk = chunkIndex > -1
-        ? chunkState?.chunks[chunkIndex] as CodeMirrorDiffChunk | undefined
-        : undefined
-
-      if (!chunk) {
-        return
-      }
-
-      onBlockActionRef.current(
-        createSelectionFromCodeMirrorChunk(splitViewRef.current.a.state.doc, splitViewRef.current.b.state.doc, chunk),
-        action,
-      )
-    }
-    const createSplitBlockControls = () => {
-      const container = document.createElement('div')
-      container.className = 'git-diff-native-controls'
-      container.onmousedown = (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-      }
-
-      if (diff.change.scope === 'unstaged') {
-        container.append(createCodeMirrorIconControl({
-          action: 'stage',
-          onActivate: handleSplitBlockAction,
-          title: 'Stage block',
-        }))
-        container.append(createCodeMirrorIconControl({
-          action: 'discard',
-          onActivate: handleSplitBlockAction,
-          title: 'Discard block',
-        }))
-      } else {
-        container.append(createCodeMirrorIconControl({
-          action: 'unstage',
-          onActivate: handleSplitBlockAction,
-          title: 'Unstage block',
-        }))
-      }
-
-      return container
-    }
-    const createUnifiedBlockControl = (action: GitDiffBlockAction, title: string) => {
-      const handleUnifiedBlockAction = (event: MouseEvent | KeyboardEvent, requestedAction: GitDiffBlockAction) => {
-        if (!areBlockActionsEnabledRef.current || !unifiedViewRef.current) {
+        if (isComposingRef.current) {
           return
         }
 
-        const chunkHost = (event.currentTarget as HTMLElement).closest<HTMLElement>('.cm-deletedChunk')
-
-        if (!chunkHost) {
-          return
+        emitDraftChange(nextValue)
+      }),
+      modifiedEditor.onDidChangeCursorPosition(() => {
+        if (activeSideRef.current === 'modified') {
+          updateActiveSelectionFromEditor('modified', modifiedEditor)
         }
-
-        const position = unifiedViewRef.current.posAtDOM(chunkHost)
-        const chunkState = getChunks(unifiedViewRef.current.state)
-        const chunk = chunkState?.chunks.find((candidate) => (
-          candidate.fromB <= position && candidate.endB >= position
-        )) as CodeMirrorDiffChunk | undefined
-
-        if (!chunk) {
-          return
+      }),
+      originalEditor.onDidFocusEditorText(() => {
+        activeSideRef.current = 'original'
+        isModifiedFocusedRef.current = false
+        updateActiveSelectionFromEditor('original', originalEditor)
+      }),
+      originalEditor.onDidChangeCursorPosition(() => {
+        if (activeSideRef.current === 'original') {
+          updateActiveSelectionFromEditor('original', originalEditor)
         }
+      }),
+    ]
+  }, [emitDraftChange, updateActiveSelectionFromEditor])
 
-        onBlockActionRef.current(
-          createSelectionFromCodeMirrorChunk(getOriginalDoc(unifiedViewRef.current.state), unifiedViewRef.current.state.doc, chunk),
-          requestedAction,
-        )
-      }
-
-      return createCodeMirrorIconControl({
-        action,
-        onActivate: handleUnifiedBlockAction,
-        title,
-      })
-    }
-
-    if (viewMode === 'split') {
-      splitViewRef.current = new MergeView({
-        a: {
-          doc: leftDoc,
-          extensions: createDiffExtensions({
-            editable: false,
-            filePath: diff.change.path,
-            onChange: () => { },
-            onCompositionChange: () => { },
-            onFocusChange: () => { },
-            onSave: () => { },
-            wrapLines: diff.editorKind === 'rich-text',
-          }),
-        },
-        b: {
-          doc: rightDoc,
-          extensions: createDiffExtensions({
-            editable: isEditable,
-            filePath: diff.change.path,
-            onChange: (content) => {
-              onDraftChangeRef.current(content)
-            },
-            onCompositionChange: (nextValue) => {
-              onCompositionChangeRef.current(nextValue)
-            },
-            onFocusChange: setIsModifiedFocused,
-            onSave: () => {
-              onSaveRef.current()
-            },
-            wrapLines: diff.editorKind === 'rich-text',
-          }),
-        },
-        gutter: true,
-        highlightChanges: true,
-        collapseUnchanged: {
-          margin: 4,
-          minSize: 6,
-        },
-        diffConfig: createCodeMirrorDiffConfig(isEditable),
-        renderRevertControl: createSplitBlockControls,
-        revertControls: 'a-to-b',
-        parent: container,
-      })
-
-      return () => {
-        splitViewRef.current?.destroy()
-        splitViewRef.current = null
-      }
-    }
-
-    unifiedViewRef.current = new EditorView({
-      doc: rightDoc,
-      extensions: [
-        ...createDiffExtensions({
-          editable: isEditable,
-          filePath: diff.change.path,
-          onChange: (content) => {
-            onDraftChangeRef.current(content)
-          },
-          onCompositionChange: (nextValue) => {
-            onCompositionChangeRef.current(nextValue)
-          },
-          onFocusChange: setIsModifiedFocused,
-          onSave: () => {
-            onSaveRef.current()
-          },
-          wrapLines: diff.editorKind === 'rich-text',
-        }),
-        unifiedMergeView({
-          allowInlineDiffs: true,
-          collapseUnchanged: {
-            margin: 4,
-            minSize: 6,
-          },
-          diffConfig: createCodeMirrorDiffConfig(isEditable),
-          gutter: true,
-          highlightChanges: true,
-          mergeControls: (kind) => {
-            if (diff.change.scope === 'unstaged') {
-              return kind === 'accept'
-                ? createUnifiedBlockControl('stage', 'Stage block')
-                : createUnifiedBlockControl('discard', 'Discard block')
-            }
-
-            return kind === 'accept'
-              ? createUnifiedBlockControl('unstage', 'Unstage block')
-              : document.createElement('span')
-          },
-          original: leftDoc,
-          syntaxHighlightDeletions: true,
-        }),
-      ],
-      parent: container,
+  useEffect(() => () => {
+    disposablesRef.current.forEach((disposable) => {
+      disposable.dispose()
     })
-
-    return () => {
-      unifiedViewRef.current?.destroy()
-      unifiedViewRef.current = null
+    disposablesRef.current = []
+    if (compositionEndTimerRef.current) {
+      window.clearTimeout(compositionEndTimerRef.current)
+      compositionEndTimerRef.current = null
     }
-  }, [
-    diff.change.path,
-    diff.change.scope,
-    diff.modifiedExists,
-    diff.originalContent,
-    diff.originalExists,
-    isEditable,
-    viewMode,
-  ])
+    clearNavigationHighlight(modifiedNavigationDecorationsRef.current, modifiedNavigationHighlightTimerRef)
+    clearNavigationHighlight(originalNavigationDecorationsRef.current, originalNavigationHighlightTimerRef)
+    modifiedNavigationDecorationsRef.current = null
+    originalNavigationDecorationsRef.current = null
+    activeSideRef.current = null
+    diffEditorRef.current = null
+    isApplyingExternalValueRef.current = false
+    isComposingRef.current = false
+    isModifiedFocusedRef.current = false
+    emitActiveSelectionChange(null)
+    onCompositionChangeRef.current(false)
+  }, [emitActiveSelectionChange])
+
+  useEffect(() => {
+    const diffEditor = diffEditorRef.current
+    const originalModel = diffEditor?.getOriginalEditor().getModel()
+
+    if (!originalModel || originalModel.getValue() === diff.originalContent) {
+      return
+    }
+
+    originalModel.setValue(diff.originalContent)
+  }, [diff.change.path, diff.change.scope, diff.originalContent])
+
+  useEffect(() => {
+    const diffEditor = diffEditorRef.current
+    const modifiedEditor = diffEditor?.getModifiedEditor()
+    const modifiedModel = modifiedEditor?.getModel()
+
+    if (!modifiedEditor || !modifiedModel) {
+      lastForwardedValueRef.current = diff.modifiedContent
+      return
+    }
+
+    const currentValue = modifiedModel.getValue()
+
+    if (currentValue === diff.modifiedContent) {
+      lastForwardedValueRef.current = diff.modifiedContent
+      return
+    }
+
+    if (isModifiedFocusedRef.current || isComposingRef.current) {
+      return
+    }
+
+    isApplyingExternalValueRef.current = true
+    try {
+      modifiedEditor.executeEdits('external-sync', [{
+        forceMoveMarkers: true,
+        range: modifiedModel.getFullModelRange(),
+        text: diff.modifiedContent,
+      }])
+      modifiedEditor.pushUndoStop()
+      lastForwardedValueRef.current = diff.modifiedContent
+    } finally {
+      isApplyingExternalValueRef.current = false
+    }
+  }, [diff.change.path, diff.change.scope, diff.modifiedContent])
 
   useEffect(() => {
     if (!navigationRequest || lastHandledNavigationRequestKeyRef.current === navigationRequest.requestKey) {
@@ -735,96 +552,74 @@ function CodeMirrorDiffRenderer({
     }
 
     const frameHandle = window.requestAnimationFrame(() => {
+      const diffEditor = diffEditorRef.current
+
+      if (!diffEditor) {
+        return
+      }
+
       const preferredSide = navigationRequest.source === 'revision' ? 'original' : 'modified'
-
-      if (viewMode === 'split') {
-        const splitView = splitViewRef.current
-
-        if (!splitView) {
-          return
-        }
-
-        const chunkState = getChunks(splitView.b.state)
-        const target = findBestNavigationTarget(
-          splitView.a.state.doc,
-          splitView.b.state.doc,
-          (chunkState?.chunks ?? []) as readonly CodeMirrorDiffChunk[],
-          navigationRequest.lineNumber,
-          preferredSide,
-        )
-        const resolvedSide = target?.target.side ?? preferredSide
-
-        if (resolvedSide === 'original') {
-          const targetLineNumber = target?.target.lineNumber ?? navigationRequest.lineNumber
-
-          revealEditorLine(splitView.a, targetLineNumber, {
-            focusEditor: target?.target.focusEditor ?? true,
-            selectLine: target?.target.selectLine ?? true,
-          })
-          applyNavigationHighlight(
-            splitView.a,
-            getSingleLineNavigationHighlightRange(targetLineNumber),
-            originalHighlightTimerRef,
-          )
-          clearNavigationHighlight(splitView.b, modifiedHighlightTimerRef)
-        } else {
-          const targetLineNumber = target?.target.lineNumber ?? navigationRequest.lineNumber
-
-          revealEditorLine(splitView.b, targetLineNumber, {
-            focusEditor: target?.target.focusEditor ?? true,
-            selectLine: target?.target.selectLine ?? true,
-          })
-          applyNavigationHighlight(
-            splitView.b,
-            getSingleLineNavigationHighlightRange(targetLineNumber),
-            modifiedHighlightTimerRef,
-          )
-          clearNavigationHighlight(splitView.a, originalHighlightTimerRef)
-        }
-
-        lastHandledNavigationRequestKeyRef.current = navigationRequest.requestKey
-        return
-      }
-
-      const unifiedView = unifiedViewRef.current
-
-      if (!unifiedView) {
-        return
-      }
-
-      const originalDoc = getOriginalDoc(unifiedView.state)
-      const chunkState = getChunks(unifiedView.state)
-      const target = findBestNavigationTarget(
-        originalDoc,
-        unifiedView.state.doc,
-        (chunkState?.chunks ?? []) as readonly CodeMirrorDiffChunk[],
+      const target = resolveNavigationTarget(
+        diff.selections,
         navigationRequest.lineNumber,
         preferredSide,
-      )
-      const targetLineNumber = target?.target.lineNumber ?? navigationRequest.lineNumber
+      ) ?? {
+        focusEditor: true,
+        lineNumber: navigationRequest.lineNumber,
+        selectLine: true,
+        side: preferredSide,
+      }
 
-      revealEditorLine(unifiedView, targetLineNumber, {
-        focusEditor: target?.target.focusEditor ?? true,
-        selectLine: target?.target.selectLine ?? true,
-      })
-      applyNavigationHighlight(
-        unifiedView,
-        getSingleLineNavigationHighlightRange(targetLineNumber),
-        unifiedHighlightTimerRef,
-      )
+      if (target.side === 'original') {
+        revealEditorLine(
+          diffEditor.getOriginalEditor(),
+          target.lineNumber,
+          originalNavigationDecorationsRef,
+          originalNavigationHighlightTimerRef,
+          {
+            focusEditor: target.focusEditor,
+            selectLine: target.selectLine,
+          },
+        )
+        clearNavigationHighlight(modifiedNavigationDecorationsRef.current, modifiedNavigationHighlightTimerRef)
+      } else {
+        revealEditorLine(
+          diffEditor.getModifiedEditor(),
+          target.lineNumber,
+          modifiedNavigationDecorationsRef,
+          modifiedNavigationHighlightTimerRef,
+          {
+            focusEditor: target.focusEditor,
+            selectLine: target.selectLine,
+          },
+        )
+        clearNavigationHighlight(originalNavigationDecorationsRef.current, originalNavigationHighlightTimerRef)
+      }
+
       lastHandledNavigationRequestKeyRef.current = navigationRequest.requestKey
     })
 
     return () => {
       window.cancelAnimationFrame(frameHandle)
     }
-  }, [navigationRequest, viewMode])
+  }, [diff.selections, navigationRequest])
 
   return (
-    <div className='git-diff-codemirror-shell'>
-      <div
-        ref={containerRef}
-        className={`git-diff-codemirror-host git-diff-codemirror-host-${viewMode}`}
+    <div className='git-diff-monaco-shell'>
+      <DiffEditor
+        height='100%'
+        modified={diff.modifiedContent}
+        modifiedLanguage={language}
+        modifiedModelPath={`git-diff-modified://${diff.change.scope}/${encodeURIComponent(diff.change.path)}`}
+        onMount={handleMount}
+        options={{
+          ...DEFAULT_DIFF_OPTIONS,
+          readOnly: !isEditable,
+        }}
+        original={diff.originalContent}
+        originalLanguage={language}
+        originalModelPath={`git-diff-original://${diff.change.scope}/${encodeURIComponent(diff.change.path)}`}
+        theme={monacoTheme}
       />
     </div>
   )
@@ -841,6 +636,7 @@ export function GitDiffEditor({
   onSaveEditedFile,
   onStageChange,
   onUnstageChange,
+  theme = 'auto',
 }: {
   diff: GitFileDiffResult
   draftContent: string
@@ -852,30 +648,26 @@ export function GitDiffEditor({
   onSaveEditedFile: (filePath: string, content: string) => Promise<void>
   onStageChange: (change: GitChangeItem) => void
   onUnstageChange: (change: GitChangeItem) => void
+  theme?: MonacoThemePreference
 }) {
-  const defaultMode: DiffViewMode = 'split'
-  const [viewMode, setViewMode] = useState<DiffViewMode>(defaultMode)
   const [draftContent, setDraftContent] = useState(initialDraftContent)
-  const draftContentRef = useRef(initialDraftContent)
-  const latestModifiedContentRef = useRef(diff.modifiedContent)
-  const onDraftContentChangeRef = useRef(onDraftContentChange)
-  const [isApplyingBlockAction, setIsApplyingBlockAction] = useState(false)
+  const [activeHunkSelection, setActiveHunkSelection] = useState<GitDiffSelection | null>(null)
+  const [isApplyingHunkAction, setIsApplyingHunkAction] = useState(false)
   const [isComposing, setIsComposing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const isSavingRef = useRef(false)
+  const draftContentRef = useRef(initialDraftContent)
   const isComposingRef = useRef(false)
+  const isSavingRef = useRef(false)
+  const latestModifiedContentRef = useRef(diff.modifiedContent)
+  const onDraftContentChangeRef = useRef(onDraftContentChange)
   const isEditable = diff.change.scope === 'unstaged' && diff.modifiedExists
-  const blockActionsDisabledReason = getBlockActionsDisabledReason({
+  const gitActionsDisabledReason = getGitActionsDisabledReason({
+    isApplyingAction: isApplyingHunkAction,
     isComposing,
-    isApplyingAction: isApplyingBlockAction,
     isSaving,
   })
-  const areBlockActionsEnabled = blockActionsDisabledReason === null
-  const areFileGitActionsEnabled = !(isSaving || isApplyingBlockAction || isComposing)
-
-  useEffect(() => {
-    setViewMode(defaultMode)
-  }, [defaultMode, diff.change.path, diff.change.scope])
+  const areFileGitActionsEnabled = gitActionsDisabledReason === null
+  const areHunkGitActionsEnabled = areFileGitActionsEnabled && Boolean(activeHunkSelection)
 
   useEffect(() => {
     setDraftContent((current) => current === initialDraftContent ? current : initialDraftContent)
@@ -902,6 +694,7 @@ export function GitDiffEditor({
   useEffect(() => {
     setIsComposing(false)
     isComposingRef.current = false
+    setActiveHunkSelection(null)
   }, [diff.change.path, diff.change.scope])
 
   const handleCompositionChange = useCallback((nextValue: boolean) => {
@@ -936,19 +729,32 @@ export function GitDiffEditor({
     }
   }, [diff.change.path, hasDirtyRelatedFileTab, isEditable, onSaveEditedFile])
 
-  const handleBlockAction = useCallback(async (selection: GitDiffSelection, action: GitDiffBlockAction) => {
-    if (!areBlockActionsEnabled) {
+  const getHunkActionTitle = useCallback((label: string) => {
+    if (gitActionsDisabledReason) {
+      return gitActionsDisabledReason
+    }
+
+    if (!activeHunkSelection) {
+      return 'Select a changed hunk first.'
+    }
+
+    return label
+  }, [activeHunkSelection, gitActionsDisabledReason])
+
+  const handleHunkAction = useCallback(async (action: GitDiffBlockAction) => {
+    if (!areHunkGitActionsEnabled || !activeHunkSelection) {
       return
     }
 
-    setIsApplyingBlockAction(true)
+    setIsApplyingHunkAction(true)
 
     try {
-      await onApplyBlockAction(diff.change, selection, action)
+      await onApplyBlockAction(diff.change, activeHunkSelection, action)
+      setActiveHunkSelection(null)
     } finally {
-      setIsApplyingBlockAction(false)
+      setIsApplyingHunkAction(false)
     }
-  }, [areBlockActionsEnabled, diff.change, onApplyBlockAction])
+  }, [activeHunkSelection, areHunkGitActionsEnabled, diff.change, onApplyBlockAction])
 
   return (
     <div className='git-diff-editor'>
@@ -984,39 +790,66 @@ export function GitDiffEditor({
               >
                 <AddLine size={16} />
               </button>
+              <button
+                type='button'
+                className='git-diff-view-mode git-diff-view-mode-with-label'
+                aria-label='Discard current hunk'
+                title={getHunkActionTitle('Discard current hunk')}
+                disabled={!areHunkGitActionsEnabled}
+                onClick={() => {
+                  void handleHunkAction('discard')
+                }}
+              >
+                <Back2Line size={16} />
+                <span>Discard hunk</span>
+              </button>
+              <button
+                type='button'
+                className='git-diff-view-mode git-diff-view-mode-with-label'
+                aria-label='Stage current hunk'
+                title={getHunkActionTitle('Stage current hunk')}
+                disabled={!areHunkGitActionsEnabled}
+                onClick={() => {
+                  void handleHunkAction('stage')
+                }}
+              >
+                <AddLine size={16} />
+                <span>Stage hunk</span>
+              </button>
             </>
           ) : (
-            <button
-              type='button'
-              className='git-diff-view-mode git-diff-view-mode-icon-only'
-              aria-label='Unstage'
-              title='Unstage'
-              disabled={!areFileGitActionsEnabled}
-              onClick={() => {
-                onUnstageChange(diff.change)
-              }}
-            >
-              <Icon icon='mdi:minus' width={16} height={16} />
-            </button>
+            <>
+              <button
+                type='button'
+                className='git-diff-view-mode git-diff-view-mode-icon-only'
+                aria-label='Unstage'
+                title='Unstage'
+                disabled={!areFileGitActionsEnabled}
+                onClick={() => {
+                  onUnstageChange(diff.change)
+                }}
+              >
+                <Icon icon='mdi:minus' width={16} height={16} />
+              </button>
+              <button
+                type='button'
+                className='git-diff-view-mode git-diff-view-mode-with-label'
+                aria-label='Unstage current hunk'
+                title={getHunkActionTitle('Unstage current hunk')}
+                disabled={!areHunkGitActionsEnabled}
+                onClick={() => {
+                  void handleHunkAction('unstage')
+                }}
+              >
+                <Icon icon='mdi:minus' width={16} height={16} />
+                <span>Unstage hunk</span>
+              </button>
+            </>
           )}
-          <button
-            type='button'
-            className='git-diff-view-mode git-diff-view-mode-icon-only'
-            aria-label={viewMode === 'split' ? 'Current diff view: split. Click to switch to inline.' : 'Current diff view: inline. Click to switch to split.'}
-            aria-pressed={viewMode === 'split'}
-            title={viewMode === 'split' ? 'Current diff view: split. Click to switch to inline.' : 'Current diff view: inline. Click to switch to split.'}
-            onClick={() => {
-              setViewMode((currentMode) => (currentMode === 'split' ? 'unified' : 'split'))
-            }}
-          >
-            <Icon icon={viewMode === 'split' ? 'lucide:columns-2' : 'lucide:between-horizontal-start'} width={16} height={16} />
-          </button>
         </div>
       </header>
 
-      <CodeMirrorDiffRenderer
-        blockActionsDisabledReason={blockActionsDisabledReason}
-        areBlockActionsEnabled={areBlockActionsEnabled}
+      <MonacoDiffRenderer
         diff={{
           ...diff,
           modifiedContent: draftContent,
@@ -1024,15 +857,13 @@ export function GitDiffEditor({
         isComposing={isComposing}
         isEditable={isEditable}
         navigationRequest={navigationRequest}
-        onBlockAction={(selection, action) => {
-          void handleBlockAction(selection, action)
-        }}
+        onActiveSelectionChange={setActiveHunkSelection}
         onCompositionChange={handleCompositionChange}
         onDraftChange={handleDraftChange}
         onSave={() => {
           void handleSave()
         }}
-        viewMode={viewMode}
+        theme={theme}
       />
     </div>
   )

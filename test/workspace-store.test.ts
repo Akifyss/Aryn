@@ -48,6 +48,68 @@ describe('useWorkspaceStore', () => {
     })
   })
 
+  it('upserts Git diff requests on existing file tabs without resetting file content', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({
+      content: '# Draft',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/draft.md',
+      gitDiffRequest: {
+        lineNumber: 8,
+        mode: 'split',
+        requestKey: 'request-1',
+        scope: 'unstaged',
+        source: 'revision',
+      },
+    })
+    store.updateFileTabsContent('C:/workspace/draft.md', '# Draft edited')
+    store.openTab({
+      content: '# Ignored',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/draft.md',
+    })
+
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      content: '# Draft edited',
+      gitDiffRequest: {
+        lineNumber: 8,
+        mode: 'split',
+        requestKey: 'request-1',
+        scope: 'unstaged',
+        source: 'revision',
+      },
+      isDirty: true,
+      kind: 'file',
+    })
+
+    store.openTab({
+      content: '# Still ignored',
+      editorKind: 'rich-text',
+      filePath: 'C:/workspace/draft.md',
+      gitDiffRequest: {
+        lineNumber: 3,
+        mode: 'unified',
+        requestKey: 'request-2',
+        scope: 'staged',
+        source: 'worktree',
+      },
+    })
+
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      content: '# Draft edited',
+      gitDiffRequest: {
+        lineNumber: 3,
+        mode: 'unified',
+        requestKey: 'request-2',
+        scope: 'staged',
+        source: 'worktree',
+      },
+      isDirty: true,
+      kind: 'file',
+    })
+  })
+
   it('keeps html preview and code tabs as separate tabs', () => {
     const store = useWorkspaceStore.getState()
 
@@ -172,19 +234,19 @@ describe('useWorkspaceStore', () => {
       editorKind: 'rich-text',
       filePath: 'C:/workspace/draft.md',
     })
-    store.updateTabContent('C:/workspace/draft.md', 'draft updated')
+    store.updateFileTabsContent('C:/workspace/draft.md', 'draft updated')
     expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
       isDirty: true,
       kind: 'file',
     })
 
-    store.markTabSaved('C:/workspace/draft.md', 'draft updated')
+    store.markFileTabsSaved('C:/workspace/draft.md', 'draft updated')
     expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
       isDirty: false,
       kind: 'file',
     })
 
-    store.updateTabContent('C:/workspace/draft.md', 'draft updated')
+    store.updateFileTabsContent('C:/workspace/draft.md', 'draft updated')
     expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
       isDirty: false,
       kind: 'file',
@@ -206,7 +268,7 @@ describe('useWorkspaceStore', () => {
       filePath: 'C:/workspace/draft.md',
       viewMode: 'code',
     })
-    store.updateTabContent('C:/workspace/draft.md', '# Draft updated')
+    store.updateFileTabsContent('C:/workspace/draft.md', '# Draft updated')
 
     expect(useWorkspaceStore.getState().openTabs).toMatchObject([
       { content: '# Draft updated', isDirty: true, viewMode: 'default' },
@@ -239,7 +301,7 @@ describe('useWorkspaceStore', () => {
       editorKind: 'rich-text',
       filePath: 'C:/workspace/old-name.md',
     })
-    store.updateTabContent('C:/workspace/old-name.md', 'content updated')
+    store.updateFileTabsContent('C:/workspace/old-name.md', 'content updated')
     store.renameTab('C:/workspace/old-name.md', 'C:/workspace/new-name.md')
 
     const nextState = useWorkspaceStore.getState()
