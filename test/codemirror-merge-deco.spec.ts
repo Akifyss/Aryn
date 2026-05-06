@@ -98,6 +98,7 @@ describe('CodeMirror merge decorations', () => {
       fromA: insertionPoint,
       toA: insertionPoint,
     })
+    expect(spacerKindAfterChunk(chunk, 'a', false, originalDoc, modifiedDoc)).toBe('fakeLines')
     expect(spacerSideAfterChunk(chunk, 'fakeLines', originalDoc, insertionPoint)).toBe(-1)
   })
 
@@ -111,7 +112,22 @@ describe('CodeMirror merge decorations', () => {
       fromA: originalDoc.line(2).from,
       toA: followingLineStart,
     })
+    expect(spacerKindAfterChunk(chunk, 'a', false, originalDoc, modifiedDoc)).toBe('fakeLines')
     expect(spacerSideAfterChunk(chunk, 'fakeLines', originalDoc, followingLineStart)).toBe(-1)
+  })
+
+  it('keeps VS Code-style middle deletion spacers before the following unchanged line', () => {
+    const originalDoc = Text.of(['formula', 'deleted', 'tail'])
+    const modifiedDoc = Text.of(['formula', 'tail'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const followingLineStart = modifiedDoc.line(2).from
+
+    expect(chunk).toMatchObject({
+      fromB: followingLineStart,
+      toB: followingLineStart,
+    })
+    expect(spacerKindAfterChunk(chunk, 'b', false, originalDoc, modifiedDoc)).toBe('fakeLines')
+    expect(spacerSideAfterChunk(chunk, 'fakeLines', modifiedDoc, followingLineStart)).toBe(-1)
   })
 
   it('places VS Code-style EOF deletion spacers after the final modified line', () => {

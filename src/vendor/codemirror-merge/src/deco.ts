@@ -491,7 +491,9 @@ function rangeCoversWholeLines(doc: Text, from: number, to: number) {
   let safeTo = Math.max(safeFrom, Math.min(to, doc.length))
   let startLine = doc.lineAt(safeFrom)
   let lastLine = doc.lineAt(Math.min(Math.max(safeFrom, safeTo - 1), doc.length))
-  return safeFrom == startLine.from && safeTo == lastLine.to
+  let endsAtLineTextBoundary = safeTo == lastLine.to
+  let endsAtNextLineBoundary = lastLine.number < doc.lines && safeTo == doc.line(lastLine.number + 1).from
+  return safeFrom == startLine.from && (endsAtLineTextBoundary || endsAtNextLineBoundary)
 }
 
 function rangeHasLineShape(doc: Text, from: number, to: number) {
