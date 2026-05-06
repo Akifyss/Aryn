@@ -59,7 +59,7 @@ import {
 } from '@/vendor/meo/webview/helpers/listMarkers'
 import { extractHeadings, extractHeadingSections } from '@/vendor/meo/webview/helpers/markdownSyntax'
 import { insertTable } from '@/vendor/meo/webview/helpers/tables'
-import { liveModeExtensions, refreshLiveDecorationsEffect } from '@/vendor/meo/webview/liveMode'
+import { liveModeExtensions, refreshLiveDecorationsEffect, shouldRefreshLiveMarkerLayoutForTransaction } from '@/vendor/meo/webview/liveMode'
 import { expandAllCollapsibleSections } from '@/vendor/meo/webview/helpers/headingCollapse'
 import { isRegularInlineSelection } from '@/vendor/meo/webview/helpers/selectionMenu'
 import {
@@ -868,9 +868,10 @@ export function shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(
 ) {
   const liveDecorationsWillRefresh = options.liveDecorationsWillRefresh
     ?? shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(transaction)
-  return !transaction.startState.selection.eq(transaction.state.selection)
-    || hasRefreshLiveDecorationsEffect(transaction)
-    || liveDecorationsWillRefresh
+  return shouldRefreshLiveMarkerLayoutForTransaction(
+    transaction,
+    hasRefreshLiveDecorationsEffect(transaction) || liveDecorationsWillRefresh,
+  )
 }
 
 export function getHunkActionLabel(action: GitDiffBlockAction) {
@@ -3116,6 +3117,43 @@ export function createMeoDiffSplitController({
     unifiedView?.dom.style.removeProperty('--meo-diff-split-scroll-past-end-padding')
   }
 
+  const refreshViewDecorations = (view: EditorView | null | undefined) => {
+    if (!view || !view.dom.isConnected) {
+      return
+    }
+
+    forceParsing(view, view.state.doc.length, 500)
+    view.dispatch({
+      effects: [
+        refreshLiveDecorationsEffect.of(null),
+        refreshInlineChangeLayerEffect.of(null),
+      ],
+    })
+    view.requestMeasure()
+  }
+
+  const refreshActiveViewDecorations = () => {
+    refreshViewDecorations(mergeView?.a)
+    refreshViewDecorations(mergeView?.b)
+    refreshViewDecorations(unifiedView)
+  }
+
+  const refreshAfterLayoutSettles = () => {
+    window.requestAnimationFrame(() => {
+      if (destroyed) {
+        return
+      }
+
+      mergeView?.refreshLayout()
+      unifiedView?.requestMeasure()
+      refreshActiveViewDecorations()
+      syncDiffScrollPastEndPadding()
+      syncSplitGutterLineFlagsFromChunks()
+      invalidateDiffOverviewSegments()
+      resetDiffOverviewRender()
+    })
+  }
+
   const destroyMergeView = () => {
     cancelPendingScrollSync()
     clearDiffSplitNavigationHighlight(mergeView?.a ?? null, originalNavigationHighlightTimerRef)
@@ -3782,6 +3820,7 @@ export function createMeoDiffSplitController({
       syncDiffScrollPastEndPadding()
       mergeScrollArea.refresh()
       resetDiffOverviewRender()
+      refreshAfterLayoutSettles()
       return
     }
 
@@ -3926,6 +3965,7 @@ export function createMeoDiffSplitController({
     syncDiffScrollPastEndPadding()
     mergeScrollArea.refresh()
     resetDiffOverviewRender()
+    refreshAfterLayoutSettles()
   }
 
   render()
@@ -4331,24 +4371,18 @@ export function createMeoDiffSplitController({
       return true
     },
     refreshLayout() {
-      mergeView?.a.requestMeasure()
-      mergeView?.b.requestMeasure()
+      mergeView?.refreshLayout()
       unifiedView?.requestMeasure()
-      if (mergeView) {
-        forceParsing(mergeView.a, mergeView.a.state.doc.length, 500)
-        forceParsing(mergeView.b, mergeView.b.state.doc.length, 500)
-      }
-      if (unifiedView) {
-        forceParsing(unifiedView, unifiedView.state.doc.length, 500)
-      }
+      refreshActiveViewDecorations()
       syncDiffScrollPastEndPadding()
       mergeScrollArea?.refresh()
       resetDiffOverviewRender()
     },
     refreshDecorations() {
-      mergeView?.a.dispatch({})
-      mergeView?.b.dispatch({})
-      unifiedView?.dispatch({})
+      refreshActiveViewDecorations()
+      syncSplitGutterLineFlagsFromChunks()
+      invalidateDiffOverviewSegments()
+      resetDiffOverviewRender()
     },
     replaceAll(query, replacement, options = {}) {
       if (!query) {
@@ -4397,6 +4431,7 @@ export function createMeoDiffSplitController({
     },
     restoreTopLine(lineNumber, lineOffset = 0) {
       restoreTopLine(getEditableView(), lineNumber, lineOffset, getActiveScrollElement())
+      refreshAfterLayoutSettles()
     },
     scrollToLine(lineNumber, align = 'center') {
       scrollToLine(getEditableView(), lineNumber, align, getActiveScrollElement())

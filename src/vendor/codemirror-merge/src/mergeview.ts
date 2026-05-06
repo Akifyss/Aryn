@@ -363,6 +363,13 @@ export class MergeView {
     this.ensureOuterScrollViewport(this.b)
   }
 
+  refreshLayout() {
+    this.syncOuterScrollViewports()
+    this.measureEditorViewport(this.a)
+    this.measureEditorViewport(this.b)
+    this.scheduleMeasure()
+  }
+
   private ensureOuterScrollViewport(view: EditorView) {
     let retained = this.updateRetainedOuterScrollViewport(view)
     let blocks = view.viewportLineBlocks

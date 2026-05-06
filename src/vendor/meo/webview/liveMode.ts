@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { Facet, RangeSetBuilder, StateEffect, StateField, EditorState, Transaction } from '@codemirror/state';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { syntaxHighlighting } from '@codemirror/language';
-import { Decoration, EditorView, GutterMarker, WidgetType, gutterLineClass } from '@codemirror/view';
+import { ensureSyntaxTree, syntaxHighlighting, syntaxTree } from '@codemirror/language';
+import { Decoration, EditorView, GutterMarker, WidgetType, gutterLineClass, ViewPlugin } from '@codemirror/view';
 import { createElement, AlertCircle, Delete } from 'lucide';
 import {
   resolveCodeLanguage,
@@ -184,6 +184,118 @@ function hasRefreshLiveDecorationsEffect(transaction): boolean {
 function shouldDeferLiveDecorationDocChange(transaction): boolean {
   return transaction.docChanged && transaction.state.facet(deferLiveDecorationDocChangesFacet);
 }
+
+function syntaxTreeChanged(transaction): boolean {
+  return syntaxTree(transaction.startState) !== syntaxTree(transaction.state);
+}
+
+function syntaxTreeOnlyChanged(transaction): boolean {
+  return !transaction.docChanged
+    && transaction.startState.selection.eq(transaction.state.selection)
+    && syntaxTreeChanged(transaction);
+}
+
+export function shouldRefreshLiveDecorationsForTransaction(transaction, forceRefresh = hasRefreshLiveDecorationsEffect(transaction)): boolean {
+  if (forceRefresh) {
+    return true;
+  }
+
+  if (isCompositionInputTransaction(transaction) || shouldDeferLiveDecorationDocChange(transaction)) {
+    return false;
+  }
+
+  return transaction.docChanged
+    || !transaction.startState.selection.eq(transaction.state.selection)
+    || syntaxTreeChanged(transaction);
+}
+
+export function shouldRefreshLiveMarkerLayoutForTransaction(transaction, forceRefresh = hasRefreshLiveDecorationsEffect(transaction)): boolean {
+  if (forceRefresh) {
+    return true;
+  }
+
+  if (isCompositionInputTransaction(transaction) || shouldDeferLiveDecorationDocChange(transaction)) {
+    return false;
+  }
+
+  return !transaction.startState.selection.eq(transaction.state.selection)
+    || syntaxTreeOnlyChanged(transaction);
+}
+
+function liveViewportTo(view): number {
+  let to = view.viewport?.to ?? view.state.doc.length;
+  for (const range of view.visibleRanges ?? []) {
+    if (range.to > to) {
+      to = range.to;
+    }
+  }
+  return Math.min(Math.max(0, to), view.state.doc.length);
+}
+
+export function shouldRefreshLiveDecorationsForViewportChange(update): boolean {
+  if (update.docChanged || (!update.viewportMoved && !update.viewportChanged)) {
+    return false;
+  }
+
+  const view = update.view;
+  if (!view) {
+    return false;
+  }
+
+  return syntaxTree(view.state).length < liveViewportTo(view);
+}
+
+const liveViewportDecorationRefreshPlugin = ViewPlugin.fromClass(class {
+  pendingFrame = 0;
+
+  constructor(readonly view) {}
+
+  update(update) {
+    if (shouldRefreshLiveDecorationsForViewportChange(update)) {
+      this.schedule();
+    }
+  }
+
+  schedule() {
+    if (this.pendingFrame) {
+      return;
+    }
+
+    const win = this.view.dom.ownerDocument.defaultView ?? window;
+    this.pendingFrame = win.requestAnimationFrame(() => {
+      this.pendingFrame = 0;
+      if (!this.view.dom.isConnected) {
+        return;
+      }
+
+      const targetTo = liveViewportTo(this.view);
+      const currentTree = syntaxTree(this.view.state);
+      if (currentTree.length >= targetTo) {
+        return;
+      }
+
+      const parsedTree = ensureSyntaxTree(this.view.state, targetTo, 100);
+      if (!parsedTree || parsedTree === currentTree) {
+        return;
+      }
+
+      this.view.dispatch({
+        effects: refreshLiveDecorationsEffect.of(null),
+        annotations: Transaction.addToHistory.of(false)
+      });
+    });
+  }
+
+  destroy() {
+    if (!this.pendingFrame) {
+      return;
+    }
+
+    const win = this.view.dom.ownerDocument.defaultView ?? window;
+    win.cancelAnimationFrame(this.pendingFrame);
+    this.pendingFrame = 0;
+  }
+});
 
 function isMergeConflictMarkerLine(state, pos) {
   const line = state.doc.lineAt(pos);
@@ -2090,7 +2202,7 @@ const liveDecorationField = StateField.define({
       return transaction.docChanged ? decorations.map(transaction.changes) : decorations;
     }
 
-    if (!forceRefresh && !transaction.docChanged && transaction.startState.selection.eq(transaction.state.selection)) {
+    if (!shouldRefreshLiveDecorationsForTransaction(transaction, forceRefresh)) {
       return decorations;
     }
 
@@ -2254,7 +2366,7 @@ const liveLineNumberMarkerField = StateField.define({
       return transaction.docChanged ? markers.map(transaction.changes) : markers;
     }
 
-    if (!forceRefresh && !transaction.docChanged && transaction.startState.selection.eq(transaction.state.selection)) {
+    if (!shouldRefreshLiveDecorationsForTransaction(transaction, forceRefresh)) {
       return markers;
     }
     return buildLiveLineNumberMarkers(transaction.state);
@@ -2268,6 +2380,7 @@ export function liveModeExtensions(options = {}) {
     createLiveMarkdownLanguageExtension(),
     syntaxHighlighting(highlightStyle),
     liveDecorationField,
+    liveViewportDecorationRefreshPlugin,
     liveLineNumberMarkerField,
     ...mergeConflictSourceExtensions(),
     ...(includeHeadingCollapse
@@ -2287,5 +2400,3 @@ function isEmptyDecorationSet(set) {
   const cursor = set.iter();
   return cursor.value === null;
 }
-
-

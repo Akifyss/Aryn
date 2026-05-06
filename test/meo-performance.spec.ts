@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { ensureSyntaxTree } from '@codemirror/language'
 import { ChangeSet, EditorState, Text, Transaction } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
@@ -31,7 +32,11 @@ import {
   refreshGitDiffLineFlagsEffect,
   setGitBaselineEffect,
 } from '../src/vendor/meo/webview/helpers/gitDiffGutter'
-import { liveModeExtensions } from '../src/vendor/meo/webview/liveMode'
+import {
+  liveModeExtensions,
+  shouldRefreshLiveDecorationsForTransaction,
+  shouldRefreshLiveDecorationsForViewportChange,
+} from '../src/vendor/meo/webview/liveMode'
 
 function createMarkdownState(doc: string) {
   return EditorState.create({
@@ -47,6 +52,14 @@ function createMarkdownState(doc: string) {
 
 function createPlainLongDocument(lineCount: number) {
   return Array.from({ length: lineCount }, (_, index) => `plain prose line ${index}`).join('\n')
+}
+
+function createLongMarkdownDocument(lineCount: number) {
+  return Array.from({ length: lineCount }, (_, index) => (
+    index % 5 === 0
+      ? `## Heading ${index}`
+      : `Paragraph ${index} with **strong** text and [link](https://example.com/${index}).`
+  )).join('\n')
 }
 
 function dispatchCommandSpec(state: EditorState, command: (view: any) => boolean) {
@@ -120,6 +133,54 @@ describe('meo performance guards', () => {
     const durationMs = performance.now() - startedAt
     expect(state.doc.sliceString(state.doc.length - 1)).toBe('x')
     expect(durationMs).toBeLessThan(100)
+  })
+
+  it('refreshes live decorations when background parsing advances without a document change', () => {
+    const state = createMarkdownState(createLongMarkdownDocument(5_000))
+
+    expect(ensureSyntaxTree(state, state.doc.length, 1000)).not.toBeNull()
+
+    const parseRefreshTransaction = state.update({})
+    expect(parseRefreshTransaction.docChanged).toBe(false)
+    expect(parseRefreshTransaction.startState.selection.eq(parseRefreshTransaction.state.selection)).toBe(true)
+    expect(shouldRefreshLiveDecorationsForTransaction(parseRefreshTransaction)).toBe(true)
+  })
+
+  it('refreshes live decorations when scrolling exposes an unparsed markdown viewport', () => {
+    const state = createMarkdownState(createLongMarkdownDocument(5_000))
+    const update = {
+      docChanged: false,
+      view: {
+        state,
+        viewport: { from: Math.max(0, state.doc.length - 500), to: state.doc.length },
+        visibleRanges: [{ from: Math.max(0, state.doc.length - 500), to: state.doc.length }],
+      },
+      viewportChanged: true,
+      viewportMoved: true,
+    }
+
+    expect(shouldRefreshLiveDecorationsForViewportChange(update)).toBe(true)
+    expect(shouldRefreshLiveDecorationsForViewportChange({
+      ...update,
+      docChanged: true,
+    })).toBe(false)
+    expect(shouldRefreshLiveDecorationsForViewportChange({
+      ...update,
+      viewportChanged: false,
+      viewportMoved: false,
+    })).toBe(false)
+
+    expect(ensureSyntaxTree(state, state.doc.length, 1000)).not.toBeNull()
+    const syncedState = state.update({}).state
+    const parsedUpdate = {
+      ...update,
+      view: {
+        ...update.view,
+        state: syncedState,
+      },
+    }
+
+    expect(shouldRefreshLiveDecorationsForViewportChange(parsedUpdate)).toBe(false)
   })
 
   it('keeps split search highlights off the full document scan path during live typing and IME composition', () => {
@@ -392,13 +453,21 @@ describe('meo performance guards', () => {
   })
 
   it('refreshes split inline change overlay when live marker layout can change', () => {
-    const state = EditorState.create({ doc: '## Heading\nParagraph' })
+    const state = createMarkdownState(createLongMarkdownDocument(5_000))
     const selectionTransaction = state.update({
       selection: { anchor: '## Heading'.length },
     })
-    const noOpTransaction = state.update({})
+    const contentTransaction = state.update({
+      changes: { from: state.doc.length, insert: ' typed' },
+      annotations: Transaction.userEvent.of('input.type'),
+    })
+    expect(ensureSyntaxTree(state, state.doc.length, 1000)).not.toBeNull()
+    const parseRefreshTransaction = state.update({})
+    const noOpTransaction = parseRefreshTransaction.state.update({})
 
     expect(shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(selectionTransaction)).toBe(true)
+    expect(shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(contentTransaction)).toBe(false)
+    expect(shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(parseRefreshTransaction)).toBe(true)
     expect(shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(noOpTransaction)).toBe(false)
   })
 
