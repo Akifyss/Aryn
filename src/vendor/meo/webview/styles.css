@@ -364,12 +364,13 @@
 }
 
 .meo-native-theme .meo-diff-comparison-menu-item {
+  position: relative;
   display: flex;
   align-items: center;
   min-height: 26px;
   width: 100%;
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 8px 0 24px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -386,11 +387,33 @@
   cursor: pointer;
 }
 
-.meo-native-theme .meo-diff-comparison-menu-item:hover,
-.meo-native-theme .meo-diff-comparison-menu-item:focus-visible,
-.meo-native-theme .meo-diff-comparison-menu-item.is-active {
-  background: var(--toolbar-hoverBackground);
+.meo-native-theme .meo-diff-comparison-menu-item:not(.is-active):hover,
+.meo-native-theme .meo-diff-comparison-menu-item:not(.is-active):focus-visible {
+  background: color-mix(in srgb, var(--editor-foreground) 5%, transparent);
+  color: var(--editor-foreground);
   outline: none;
+}
+
+.meo-native-theme .meo-diff-comparison-menu-item.is-active:hover,
+.meo-native-theme .meo-diff-comparison-menu-item.is-active:focus-visible,
+.meo-native-theme .meo-diff-comparison-menu-item.is-active {
+  background: var(--list-activeSelectionBackground);
+  color: var(--list-activeSelectionForeground);
+  outline: none;
+}
+
+.meo-native-theme .meo-diff-comparison-menu-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  width: 5px;
+  height: 9px;
+  margin-top: -1px;
+  border-color: currentColor;
+  border-style: solid;
+  border-width: 0 1.5px 1.5px 0;
+  opacity: 0.9;
+  transform: rotate(45deg);
 }
 
 .meo-native-theme .meo-diff-comparison-menu-item:disabled {

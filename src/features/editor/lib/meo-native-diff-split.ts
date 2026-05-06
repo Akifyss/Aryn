@@ -550,13 +550,7 @@ export function buildDiffComparisonOptions(
     })
   }
 
-  if (
-    gitChangeContext.unstagedChange
-    || (
-      preferredScope === 'unstaged'
-      && typeof baseline?.indexText === 'string'
-    )
-  ) {
+  if (typeof baseline?.indexText === 'string') {
     const label = createDiffComparisonLabel('Index', 'Working tree')
     pushOption({
       disabled: false,

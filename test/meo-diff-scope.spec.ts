@@ -131,4 +131,49 @@ describe('meo diff scope resolution', () => {
       },
     ])
   })
+
+  it('keeps the unstaged comparison selectable when index and working tree match', () => {
+    const baseline = createBaseline('base\n', 'index\n')
+    const resolved = resolveOriginalText(
+      baseline,
+      { label: 'Saved document', text: 'saved\n' },
+      'index\n',
+      {
+        stagedChange: createChange('staged'),
+        unstagedChange: null,
+      },
+      'staged',
+    )
+
+    expect(resolved).toMatchObject({
+      label: 'HEAD',
+      modifiedLabel: 'Index',
+      viewScope: 'staged',
+    })
+
+    expect(buildDiffComparisonOptions(
+      baseline,
+      {
+        stagedChange: createChange('staged'),
+        unstagedChange: null,
+      },
+      resolved,
+      'staged',
+    ).map((option) => ({
+      disabled: option.disabled,
+      label: option.label,
+      scope: option.scope,
+    }))).toEqual([
+      {
+        disabled: false,
+        label: 'HEAD - Index',
+        scope: 'staged',
+      },
+      {
+        disabled: false,
+        label: 'Index - Working tree',
+        scope: 'unstaged',
+      },
+    ])
+  })
 })
