@@ -12,6 +12,7 @@ import {
   MIN_WINDOW_WIDTH,
   normalizePersistedAppState,
 } from '../electron/main/app-state'
+import { DEFAULT_APP_ICON_ID } from '../electron/main/app-icons'
 
 const tempRoots: string[] = []
 
@@ -41,6 +42,7 @@ describe('app state persistence', () => {
     expect(state).toEqual({
       ui: {
         agentComposerHeight: DEFAULT_AGENT_COMPOSER_HEIGHT,
+        appIconId: DEFAULT_APP_ICON_ID,
         workspaceIconTheme: {
           activeThemeId: null,
           sourceVsixPath: null,
@@ -89,6 +91,7 @@ describe('app state persistence', () => {
     expect(nextState).toEqual({
       ui: {
         agentComposerHeight: 132,
+        appIconId: DEFAULT_APP_ICON_ID,
         workspaceIconTheme: {
           activeThemeId: null,
           sourceVsixPath: null,

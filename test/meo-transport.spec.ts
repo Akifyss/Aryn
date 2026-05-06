@@ -20,6 +20,15 @@ describe('meo transport helpers', () => {
     expect(url.searchParams.get('theme')).toBe('dark')
   })
 
+  it('removes stale theme parameters when no theme is provided', () => {
+    const source = buildMeoIframeSource('http://127.0.0.1:4312/meo/demo/.aryn-meo-wrapper.html?theme=dark', {
+      channelId: 'channel-123',
+      parentOrigin: 'http://127.0.0.1:7777',
+    })
+
+    expect(new URL(source).searchParams.has('theme')).toBe(false)
+  })
+
   it('resolves the iframe origin from a wrapper URL', () => {
     expect(getMeoIframeOrigin('http://127.0.0.1:4312/meo/demo/.aryn-meo-wrapper.html')).toBe('http://127.0.0.1:4312')
     expect(getMeoIframeOrigin('not-a-valid-url')).toBeNull()

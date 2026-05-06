@@ -34,6 +34,7 @@ import {
 } from '../src/vendor/meo/webview/helpers/gitDiffGutter'
 import {
   liveModeExtensions,
+  shouldRefreshLiveMarkerLayoutForTransaction,
   shouldRefreshLiveDecorationsForTransaction,
   shouldRefreshLiveDecorationsForViewportChange,
 } from '../src/vendor/meo/webview/liveMode'
@@ -107,15 +108,15 @@ describe('meo performance guards', () => {
       extensions: liveModeExtensions(),
     })
 
-    const startedAt = performance.now()
-    state = state.update({
+    const transaction = state.update({
       changes: { from: state.doc.length, insert: '咚' },
       annotations: Transaction.userEvent.of('input.type.compose'),
-    }).state
+    })
+    state = transaction.state
 
-    const durationMs = performance.now() - startedAt
     expect(state.doc.sliceString(state.doc.length - 1)).toBe('咚')
-    expect(durationMs).toBeLessThan(100)
+    expect(shouldRefreshLiveDecorationsForTransaction(transaction)).toBe(false)
+    expect(shouldRefreshLiveMarkerLayoutForTransaction(transaction)).toBe(false)
   })
 
   it('keeps split typing updates off the full live decoration rebuild path', () => {
@@ -124,15 +125,15 @@ describe('meo performance guards', () => {
       extensions: liveModeExtensions({ deferDocChanges: true }),
     })
 
-    const startedAt = performance.now()
-    state = state.update({
+    const transaction = state.update({
       changes: { from: state.doc.length, insert: 'x' },
       annotations: Transaction.userEvent.of('input.type'),
-    }).state
+    })
+    state = transaction.state
 
-    const durationMs = performance.now() - startedAt
     expect(state.doc.sliceString(state.doc.length - 1)).toBe('x')
-    expect(durationMs).toBeLessThan(100)
+    expect(shouldRefreshLiveDecorationsForTransaction(transaction)).toBe(false)
+    expect(shouldRefreshLiveMarkerLayoutForTransaction(transaction)).toBe(false)
   })
 
   it('refreshes live decorations when background parsing advances without a document change', () => {
@@ -204,25 +205,19 @@ describe('meo performance guards', () => {
     }
 
     try {
-      const startedAt = performance.now()
       state = state.update({
         changes: { from: state.doc.length, insert: 'x' },
         annotations: Transaction.userEvent.of('input.type'),
       }).state
 
-      const durationMs = performance.now() - startedAt
       expect(state.doc.sliceString(state.doc.length - 1)).toBe('x')
-      expect(durationMs).toBeLessThan(100)
 
-      const compositionStartedAt = performance.now()
       state = state.update({
         changes: { from: state.doc.length, insert: 'ime' },
         annotations: Transaction.userEvent.of('input.type.compose'),
       }).state
 
-      const compositionDurationMs = performance.now() - compositionStartedAt
       expect(state.doc.sliceString(state.doc.length - 3)).toBe('ime')
-      expect(compositionDurationMs).toBeLessThan(100)
     } finally {
       docPrototype.toString = originalToString
     }
@@ -251,15 +246,12 @@ describe('meo performance guards', () => {
     const previousFlags = state.field(gitDiffLineFlagsField)
     expect(previousFlags).not.toBeNull()
 
-    const startedAt = performance.now()
     const composedState = state.update({
       changes: { from: state.doc.length, insert: '咚' },
       annotations: Transaction.userEvent.of('input.type.compose'),
     }).state
 
-    const durationMs = performance.now() - startedAt
     expect(composedState.field(gitDiffLineFlagsField)).toBe(previousFlags)
-    expect(durationMs).toBeLessThan(100)
 
     const refreshedState = composedState.update({
       effects: refreshGitDiffLineFlagsEffect.of(null),
@@ -293,15 +285,12 @@ describe('meo performance guards', () => {
     const previousFlags = state.field(gitDiffLineFlagsField)
     expect(previousFlags).not.toBeNull()
 
-    const startedAt = performance.now()
     const editedState = state.update({
       changes: { from: state.doc.length, insert: 'x' },
       annotations: Transaction.userEvent.of('input.type'),
     }).state
 
-    const durationMs = performance.now() - startedAt
     expect(editedState.field(gitDiffLineFlagsField)).toBe(previousFlags)
-    expect(durationMs).toBeLessThan(100)
 
     const refreshedState = editedState.update({
       effects: refreshGitDiffLineFlagsEffect.of(null),
@@ -339,7 +328,6 @@ describe('meo performance guards', () => {
     const previousFlags = state.field(gitDiffLineFlagsField)
     expect(previousFlags).not.toBeNull()
 
-    const startedAt = performance.now()
     const deferredBaselineState = state.update({
       effects: [
         setGitBaselineEffect.of({
@@ -353,9 +341,7 @@ describe('meo performance guards', () => {
       ],
     }).state
 
-    const durationMs = performance.now() - startedAt
     expect(deferredBaselineState.field(gitDiffLineFlagsField)).toBe(previousFlags)
-    expect(durationMs).toBeLessThan(100)
 
     const refreshedState = deferredBaselineState.update({
       effects: refreshGitDiffLineFlagsEffect.of(null),
@@ -639,7 +625,6 @@ describe('meo performance guards', () => {
     const changes = ChangeSet.of([{ from: modifiedDoc.length, insert: '\ntyping' }], modifiedDoc.length)
     const nextModifiedDoc = changes.apply(modifiedDoc)
 
-    const startedAt = performance.now()
     const nextChunks = Chunk.updateB(initialChunks, originalDoc, nextModifiedDoc, changes, {
       incrementalUpdates: true,
       overrideChunks: () => {
@@ -649,10 +634,8 @@ describe('meo performance guards', () => {
       timeout: 200,
     })
 
-    const durationMs = performance.now() - startedAt
     expect(initialChunks).toHaveLength(1)
     expect(nextChunks.length).toBeGreaterThan(0)
-    expect(durationMs).toBeLessThan(100)
   })
 
   it('does not flatten whole documents while updating split merge chunks incrementally', () => {

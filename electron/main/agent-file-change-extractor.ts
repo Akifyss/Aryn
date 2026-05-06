@@ -7,6 +7,17 @@ import type {
 
 type DirectToolFileChangeKind = Extract<AgentMessageFileChange['kind'], 'created' | 'updated'>
 
+function usesWindowsPathSemantics(...values: Array<string | undefined>) {
+  return values.some((value) => (
+    typeof value === 'string'
+    && (/^[a-zA-Z]:/.test(value) || value.startsWith('\\\\'))
+  ))
+}
+
+function getPathModule(...values: Array<string | undefined>) {
+  return usesWindowsPathSemantics(...values) ? path.win32 : path
+}
+
 function unquoteShellToken(value: string) {
   if (
     (value.startsWith('"') && value.endsWith('"'))
@@ -52,11 +63,13 @@ function resolveShellPath(cwd: string, candidate: string | null, relativeBasePat
     return null
   }
 
-  if (relativeBasePath && !/[\\/]/.test(normalizedCandidate) && !path.isAbsolute(normalizedCandidate)) {
-    return path.resolve(path.dirname(relativeBasePath), normalizedCandidate)
+  const pathModule = getPathModule(cwd, normalizedCandidate, relativeBasePath)
+
+  if (relativeBasePath && !/[\\/]/.test(normalizedCandidate) && !pathModule.isAbsolute(normalizedCandidate)) {
+    return pathModule.resolve(pathModule.dirname(relativeBasePath), normalizedCandidate)
   }
 
-  return path.resolve(cwd, normalizedCandidate)
+  return pathModule.resolve(cwd, normalizedCandidate)
 }
 
 export function extractWritableToolFilePath(cwd: string, toolName: string, args: unknown) {
@@ -73,7 +86,7 @@ export function extractWritableToolFilePath(cwd: string, toolName: string, args:
     return null
   }
 
-  return path.resolve(cwd, candidate)
+  return getPathModule(cwd, candidate).resolve(cwd, candidate)
 }
 
 // This only recognizes explicit, top-level file commands. It intentionally

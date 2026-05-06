@@ -3,6 +3,7 @@ import type { SessionEntry } from '@mariozechner/pi-coding-agent'
 import {
   collectDirectToolPathsByEntryId,
   extractExplicitBashFileChanges,
+  extractWritableToolFilePath,
   filterAnnotationsByDirectToolPaths,
 } from '../electron/main/agent-file-change-extractor'
 
@@ -24,6 +25,35 @@ describe('agent file change extractor', () => {
         kind: 'created',
       },
     ])
+  })
+
+  it('preserves Windows absolute paths without prefixing the host cwd', () => {
+    expect(extractExplicitBashFileChanges('/Users/local/project', {
+      command: 'rm C:\\workspace\\notes\\todo.md && mv C:\\workspace\\draft.md final.md',
+    })).toEqual([
+      {
+        filePath: 'C:\\workspace\\notes\\todo.md',
+        kind: 'deleted',
+      },
+      {
+        filePath: 'C:\\workspace\\draft.md',
+        kind: 'deleted',
+      },
+      {
+        filePath: 'C:\\workspace\\final.md',
+        kind: 'created',
+      },
+    ])
+  })
+
+  it('resolves direct write tool paths with the workspace path style', () => {
+    expect(extractWritableToolFilePath('C:/workspace', 'write', {
+      path: 'notes/worldview.md',
+    })).toBe('C:\\workspace\\notes\\worldview.md')
+
+    expect(extractWritableToolFilePath('/Users/local/project', 'write', {
+      path: 'C:\\workspace\\absolute.md',
+    })).toBe('C:\\workspace\\absolute.md')
   })
 
   it('filters stored annotations down to paths backed by session tool calls', () => {
