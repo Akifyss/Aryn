@@ -30,6 +30,7 @@ import {
   type WidgetType,
   ViewPlugin,
 } from '@codemirror/view'
+import { ChevronDown, createElement } from 'lucide'
 import type { GitBaselinePayload, GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
 import { mountMeoBaseScrollArea } from '@/features/editor/lib/meo-base-scroll-area'
 import type { MeoDiffSplitGitChangeContext, MeoEditorInsertFormat, MeoEditorViewportPosition } from '@/features/editor/lib/meo-native-editor-types'
@@ -197,6 +198,15 @@ export type DiffSplitResolvedState = {
   modifiedText: string
   reason: GitBaselinePayload['reason'] | null
   text: string
+  viewScope: GitChangeScope | null
+}
+
+export type DiffComparisonOption = {
+  disabled: boolean
+  key: string
+  label: string
+  scope: GitChangeScope | null
+  title: string
 }
 
 type InlineSelectionRange = {
@@ -489,6 +499,90 @@ function normalizeLineEndings(text: string) {
   return text.replace(/\r\n?/g, '\n')
 }
 
+function createDiffComparisonLabel(originalLabel: string, modifiedLabel: string) {
+  return `${originalLabel} - ${modifiedLabel}`
+}
+
+function getDiffComparisonScopeKey(scope: GitChangeScope) {
+  return `scope:${scope}`
+}
+
+function getDiffComparisonStateKey(originalLabel: string, modifiedLabel: string) {
+  return `state:${originalLabel}\0${modifiedLabel}`
+}
+
+function getResolvedDiffComparisonKey(state: DiffSplitResolvedState) {
+  return state.viewScope
+    ? getDiffComparisonScopeKey(state.viewScope)
+    : getDiffComparisonStateKey(state.label, state.modifiedLabel)
+}
+
+function getBaselineHeadLabel(baseline: GitBaselinePayload | null) {
+  return baseline?.headOid ? 'HEAD' : 'Empty baseline'
+}
+
+export function buildDiffComparisonOptions(
+  baseline: GitBaselinePayload | null,
+  gitChangeContext: MeoDiffSplitGitChangeContext,
+  resolvedState: DiffSplitResolvedState,
+  preferredScope: GitChangeScope | null = null,
+): DiffComparisonOption[] {
+  const options: DiffComparisonOption[] = []
+  const pushOption = (option: DiffComparisonOption) => {
+    if (!options.some((candidate) => candidate.key === option.key)) {
+      options.push(option)
+    }
+  }
+
+  if (
+    gitChangeContext.stagedChange
+    && typeof baseline?.baseText === 'string'
+    && typeof baseline.indexText === 'string'
+  ) {
+    const label = createDiffComparisonLabel(getBaselineHeadLabel(baseline), 'Index')
+    pushOption({
+      disabled: false,
+      key: getDiffComparisonScopeKey('staged'),
+      label,
+      scope: 'staged',
+      title: label,
+    })
+  }
+
+  if (
+    gitChangeContext.unstagedChange
+    || (
+      preferredScope === 'unstaged'
+      && typeof baseline?.indexText === 'string'
+    )
+  ) {
+    const label = createDiffComparisonLabel('Index', 'Working tree')
+    pushOption({
+      disabled: false,
+      key: getDiffComparisonScopeKey('unstaged'),
+      label,
+      scope: 'unstaged',
+      title: label,
+    })
+  }
+
+  const activeKey = getResolvedDiffComparisonKey(resolvedState)
+  if (!options.some((option) => option.key === activeKey)) {
+    const label = createDiffComparisonLabel(resolvedState.label, resolvedState.modifiedLabel)
+    pushOption({
+      disabled: resolvedState.viewScope === null,
+      key: activeKey,
+      label,
+      scope: resolvedState.viewScope,
+      title: resolvedState.isFallback && resolvedState.reason
+        ? `Using saved document because Git baseline is unavailable: ${resolvedState.reason}`
+        : label,
+    })
+  }
+
+  return options
+}
+
 export function createTextDocFromContent(content: string) {
   return Text.of(content.split('\n'))
 }
@@ -531,6 +625,7 @@ export function resolveOriginalText(
       modifiedText: baseline.indexText,
       reason: null,
       text: baseline.baseText,
+      viewScope: 'staged',
     }
   }
 
@@ -546,6 +641,7 @@ export function resolveOriginalText(
         modifiedText: currentText,
         reason: null,
         text: '',
+        viewScope: 'unstaged',
       }
     }
 
@@ -560,7 +656,23 @@ export function resolveOriginalText(
         modifiedText: currentText,
         reason: null,
         text: baseline.indexText,
+        viewScope: 'unstaged',
       }
+    }
+  }
+
+  if (preferredScope === 'unstaged' && typeof baseline?.indexText === 'string') {
+    return {
+      actionChange: null,
+      actionScope: null,
+      isFallback: false,
+      label: 'Index',
+      modifiedLabel: 'Working tree',
+      modifiedReadOnly: false,
+      modifiedText: currentText,
+      reason: null,
+      text: baseline.indexText,
+      viewScope: 'unstaged',
     }
   }
 
@@ -580,6 +692,7 @@ export function resolveOriginalText(
         modifiedText: currentText,
         reason: null,
         text: baseline.indexText,
+        viewScope: null,
       }
     }
 
@@ -593,6 +706,7 @@ export function resolveOriginalText(
       modifiedText: baseline.indexText,
       reason: null,
       text: baseline.baseText,
+      viewScope: 'staged',
     }
   }
 
@@ -607,6 +721,7 @@ export function resolveOriginalText(
       modifiedText: currentText,
       reason: null,
       text: baseline.baseText,
+      viewScope: null,
     }
   }
 
@@ -621,6 +736,7 @@ export function resolveOriginalText(
       modifiedText: currentText,
       reason: null,
       text: '',
+      viewScope: null,
     }
   }
 
@@ -634,6 +750,7 @@ export function resolveOriginalText(
     modifiedText: currentText,
     reason: baseline?.reason ?? null,
     text: fallback.text,
+    viewScope: null,
   }
 }
 
@@ -659,6 +776,7 @@ function hasResolvedViewFrameChanged(
     || previous.label !== next.label
     || previous.modifiedLabel !== next.modifiedLabel
     || previous.actionScope !== next.actionScope
+    || previous.viewScope !== next.viewScope
     || previous.isFallback !== next.isFallback
     || previous.modifiedReadOnly !== next.modifiedReadOnly
     || previous.reason !== next.reason
@@ -2715,12 +2833,28 @@ export function createMeoDiffSplitController({
   const header = document.createElement('div')
   header.className = 'meo-diff-split-header'
 
-  const originalLabel = document.createElement('div')
-  originalLabel.className = 'meo-diff-split-label'
+  const comparisonDropdown = document.createElement('div')
+  comparisonDropdown.className = 'meo-diff-comparison-dropdown'
 
-  const modifiedLabel = document.createElement('div')
-  modifiedLabel.className = 'meo-diff-split-label'
-  modifiedLabel.textContent = 'Current document'
+  const comparisonButton = document.createElement('button')
+  comparisonButton.type = 'button'
+  comparisonButton.className = 'meo-diff-split-label meo-diff-comparison-button'
+  comparisonButton.setAttribute('aria-haspopup', 'menu')
+  comparisonButton.setAttribute('aria-expanded', 'false')
+
+  const comparisonButtonLabel = document.createElement('span')
+  comparisonButtonLabel.className = 'meo-diff-comparison-button-label'
+  const comparisonButtonIcon = document.createElement('span')
+  comparisonButtonIcon.className = 'meo-diff-comparison-button-icon'
+  comparisonButtonIcon.appendChild(createElement(ChevronDown, { width: 12, height: 12 }))
+  comparisonButton.append(comparisonButtonLabel, comparisonButtonIcon)
+
+  const comparisonMenu = document.createElement('div')
+  comparisonMenu.className = 'meo-diff-comparison-menu'
+  comparisonMenu.setAttribute('role', 'menu')
+  comparisonMenu.setAttribute('aria-label', 'Git comparison')
+
+  comparisonDropdown.append(comparisonButton, comparisonMenu)
 
   const body = document.createElement('div')
   body.className = 'meo-diff-split-body'
@@ -3147,13 +3281,137 @@ export function createMeoDiffSplitController({
     preferredGitDiffScope,
   )
 
-  const syncLabels = (originalState = getOriginalState()) => {
-    originalLabel.textContent = originalState.label
-    originalLabel.title = originalState.isFallback && originalState.reason
+  let comparisonMenuOpen = false
+  let latestComparisonOptions: DiffComparisonOption[] = []
+
+  const removeComparisonMenuGlobalListeners = () => {
+    document.removeEventListener('pointerdown', handleComparisonMenuGlobalPointerDown, true)
+    document.removeEventListener('keydown', handleComparisonMenuGlobalKeyDown, true)
+  }
+
+  function handleComparisonMenuGlobalPointerDown(event: PointerEvent) {
+    if (event.target instanceof Node && comparisonDropdown.contains(event.target)) {
+      return
+    }
+
+    setComparisonMenuOpen(false)
+  }
+
+  function handleComparisonMenuGlobalKeyDown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') {
+      return
+    }
+
+    event.preventDefault()
+    setComparisonMenuOpen(false)
+    comparisonButton.focus()
+  }
+
+  const setComparisonMenuOpen = (open: boolean) => {
+    const hasSelectableOptions = latestComparisonOptions.some((option) => !option.disabled)
+    const nextOpen = open && latestComparisonOptions.length > 0 && hasSelectableOptions
+    if (comparisonMenuOpen === nextOpen) {
+      return
+    }
+
+    comparisonMenuOpen = nextOpen
+    comparisonDropdown.classList.toggle('is-open', comparisonMenuOpen)
+    comparisonButton.setAttribute('aria-expanded', comparisonMenuOpen ? 'true' : 'false')
+    if (comparisonMenuOpen) {
+      document.addEventListener('pointerdown', handleComparisonMenuGlobalPointerDown, true)
+      document.addEventListener('keydown', handleComparisonMenuGlobalKeyDown, true)
+      comparisonMenu.querySelector<HTMLButtonElement>('.is-active:not(:disabled), button:not(:disabled)')?.focus()
+    } else {
+      removeComparisonMenuGlobalListeners()
+    }
+  }
+
+  const selectComparisonOption = (option: DiffComparisonOption) => {
+    setComparisonMenuOpen(false)
+    if (option.disabled || !option.scope) {
+      return
+    }
+
+    setPreferredGitDiffScope(option.scope)
+  }
+
+  const syncComparisonSelector = (originalState = getOriginalState()) => {
+    const label = createDiffComparisonLabel(originalState.label, originalState.modifiedLabel)
+    const options = buildDiffComparisonOptions(
+      currentBaseline,
+      currentGitChangeContext,
+      originalState,
+      preferredGitDiffScope,
+    )
+    const activeKey = getResolvedDiffComparisonKey(originalState)
+    const hasSelectableOptions = options.some((option) => !option.disabled)
+    const canOpenMenu = options.length > 0 && hasSelectableOptions
+
+    latestComparisonOptions = options
+    comparisonButtonLabel.textContent = label
+    comparisonButton.title = originalState.isFallback && originalState.reason
       ? `Using saved document because Git baseline is unavailable: ${originalState.reason}`
-      : `${originalState.label} vs ${originalState.modifiedLabel}`
-    modifiedLabel.textContent = originalState.modifiedLabel
-    modifiedLabel.title = `${originalState.label} vs ${originalState.modifiedLabel}`
+      : label
+    comparisonButton.classList.toggle('has-options', canOpenMenu)
+    comparisonButton.setAttribute('aria-disabled', canOpenMenu ? 'false' : 'true')
+    comparisonButtonIcon.setAttribute('aria-hidden', canOpenMenu ? 'true' : 'false')
+
+    comparisonMenu.replaceChildren()
+    for (const option of options) {
+      const item = document.createElement('button')
+      item.type = 'button'
+      item.className = 'meo-diff-comparison-menu-item'
+      item.textContent = option.label
+      item.title = option.title
+      item.dataset.scope = option.scope ?? ''
+      item.disabled = option.disabled
+      item.setAttribute('role', 'menuitemradio')
+      item.setAttribute('aria-checked', option.key === activeKey ? 'true' : 'false')
+      item.classList.toggle('is-active', option.key === activeKey)
+      item.onmousedown = (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      item.onclick = (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        selectComparisonOption(option)
+      }
+      comparisonMenu.appendChild(item)
+    }
+
+    if (!canOpenMenu) {
+      setComparisonMenuOpen(false)
+    }
+  }
+
+  const syncLabels = (originalState = getOriginalState()) => {
+    syncComparisonSelector(originalState)
+  }
+
+  const rememberResolvedViewScope = (originalState: DiffSplitResolvedState) => {
+    if (!preferredGitDiffScope && originalState.viewScope) {
+      preferredGitDiffScope = originalState.viewScope
+    }
+  }
+
+  comparisonButton.onmousedown = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  comparisonButton.onclick = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setComparisonMenuOpen(!comparisonMenuOpen)
+  }
+  comparisonButton.onkeydown = (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    setComparisonMenuOpen(!comparisonMenuOpen)
   }
 
   const getHunkActions = (originalState = getOriginalState()): GitDiffBlockAction[] => {
@@ -3404,11 +3662,12 @@ export function createMeoDiffSplitController({
     body.replaceChildren()
 
     const originalState = getOriginalState()
+    rememberResolvedViewScope(originalState)
     lastRenderedState = originalState
     originalTextSnapshot.value = originalState.text
     modifiedTextSnapshot.value = originalState.modifiedText
     syncLabels(originalState)
-    header.replaceChildren(originalLabel, modifiedLabel)
+    header.replaceChildren(comparisonDropdown)
     host.classList.toggle('meo-diff-unified-host', currentViewMode === 'unified')
     host.classList.toggle('meo-diff-split-view-host', currentViewMode === 'split')
     body.classList.toggle('meo-diff-view-unified', currentViewMode === 'unified')
@@ -3784,6 +4043,7 @@ export function createMeoDiffSplitController({
   const syncResolvedDocuments = () => {
     const previousState = lastRenderedState
     const originalState = getOriginalState()
+    rememberResolvedViewScope(originalState)
     lastRenderedState = originalState
     syncLabels(originalState)
     syncModifiedEditability(originalState.modifiedReadOnly)
@@ -3946,6 +4206,7 @@ export function createMeoDiffSplitController({
 
       destroyed = true
       handleCompositionChange(false)
+      removeComparisonMenuGlobalListeners()
       destroyMergeView()
       host.remove()
     },

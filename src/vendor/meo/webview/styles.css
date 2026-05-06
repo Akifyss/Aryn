@@ -261,31 +261,24 @@
   left: 0;
   right: 0;
   z-index: 6;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: start;
-  gap: 0;
+  display: flex;
+  align-items: flex-start;
   min-height: 0;
   pointer-events: none;
 }
 
 .meo-native-theme .meo-diff-unified-host .meo-diff-split-header {
   right: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   max-width: calc(100% - 44px);
 }
 
 .meo-native-theme .meo-diff-split-label {
   display: inline-flex;
   align-items: center;
-  justify-self: start;
   width: max-content;
   max-width: calc(100% - 44px);
   height: 17px;
   min-width: 0;
-  margin-inline-start: 22px;
   padding: 0 7px;
   border: 1px solid color-mix(in srgb, var(--panel-border) 42%, transparent);
   border-radius: 999px;
@@ -301,13 +294,117 @@
   white-space: nowrap;
 }
 
-.meo-native-theme .meo-diff-unified-host .meo-diff-split-label {
-  max-width: min(34vw, 280px);
-  margin-inline-start: 18px;
+.meo-native-theme .meo-diff-comparison-dropdown {
+  position: relative;
+  min-width: 0;
+  margin-inline-start: 22px;
+  pointer-events: auto;
 }
 
-.meo-native-theme .meo-diff-unified-host .meo-diff-split-label+.meo-diff-split-label {
-  margin-inline-start: 0;
+.meo-native-theme .meo-diff-comparison-button {
+  gap: 3px;
+  max-width: min(42vw, 320px);
+  border-style: solid;
+  cursor: default;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.meo-native-theme .meo-diff-comparison-button.has-options {
+  cursor: pointer;
+}
+
+.meo-native-theme .meo-diff-comparison-button.has-options:hover,
+.meo-native-theme .meo-diff-comparison-dropdown.is-open .meo-diff-comparison-button {
+  border-color: color-mix(in srgb, var(--panel-border) 72%, transparent);
+  background: color-mix(in srgb, var(--editor-background) 72%, var(--toolbar-hoverBackground) 28%);
+  color: var(--editor-foreground);
+}
+
+.meo-native-theme .meo-diff-comparison-button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meo-native-theme .meo-diff-comparison-button-icon {
+  display: none;
+  flex: 0 0 auto;
+  color: currentColor;
+  opacity: 0.72;
+}
+
+.meo-native-theme .meo-diff-comparison-button.has-options .meo-diff-comparison-button-icon {
+  display: inline-flex;
+}
+
+.meo-native-theme .meo-diff-comparison-button-icon svg {
+  display: block;
+}
+
+.meo-native-theme .meo-diff-comparison-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 120;
+  display: none;
+  min-width: 190px;
+  max-width: min(360px, calc(100vw - 40px));
+  padding: 4px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--sideBar-background);
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 14%, transparent);
+}
+
+.meo-native-theme .meo-diff-comparison-dropdown.is-open .meo-diff-comparison-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.meo-native-theme .meo-diff-comparison-menu-item {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--editor-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.meo-native-theme .meo-diff-comparison-menu-item:hover,
+.meo-native-theme .meo-diff-comparison-menu-item:focus-visible,
+.meo-native-theme .meo-diff-comparison-menu-item.is-active {
+  background: var(--toolbar-hoverBackground);
+  outline: none;
+}
+
+.meo-native-theme .meo-diff-comparison-menu-item:disabled {
+  cursor: default;
+  color: color-mix(in srgb, var(--descriptionForeground) 72%, transparent);
+  opacity: 0.72;
+}
+
+.meo-native-theme .meo-diff-unified-host .meo-diff-split-label {
+  max-width: min(34vw, 280px);
+}
+
+.meo-native-theme .meo-diff-unified-host .meo-diff-comparison-dropdown {
+  margin-inline-start: 18px;
 }
 
 .meo-native-theme .meo-diff-split-body {
