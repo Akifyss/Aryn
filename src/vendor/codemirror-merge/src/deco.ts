@@ -27,6 +27,12 @@ export const decorateChunks = ViewPlugin.fromClass(class {
       if (update.docChanged) {
         this.deco = this.deco.map(update.changes)
         if (this.gutter) this.gutter = this.gutter.map(update.changes)
+      } else if (shouldRefreshFrozenChunkDecorationsForUpdate({
+        configChanged: configChanged(update.startState, update.state),
+        docChanged: update.docChanged,
+        viewportChanged: update.viewportChanged,
+      })) {
+        ({deco: this.deco, gutter: this.gutter} = getChunkDeco(update.view))
       }
       return
     }
@@ -97,6 +103,14 @@ function isDeferredChunkUpdate(update: ViewUpdate) {
 function hasRefreshInlineChangeLayerEffect(update: ViewUpdate) {
   return update.transactions.some(tr =>
     tr.effects.some(effect => effect.is(refreshInlineChangeLayerEffect)))
+}
+
+export function shouldRefreshFrozenChunkDecorationsForUpdate(update: {
+  configChanged?: boolean,
+  docChanged?: boolean,
+  viewportChanged?: boolean,
+}) {
+  return !!(!update.docChanged && (update.viewportChanged || update.configChanged))
 }
 
 const changedLine = Decoration.line({class: "cm-changedLine"})

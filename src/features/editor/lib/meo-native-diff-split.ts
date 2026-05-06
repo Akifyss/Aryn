@@ -2802,6 +2802,7 @@ export function createMeoDiffSplitController({
   let diffScrollPastEndFrame = 0
   let pendingReadOnlyWidgetLockFrame = 0
   let pendingScrollFrame = 0
+  let pendingScrollDecorationFrame = 0
   let pendingDeferredDiffRefreshFrame = 0
   let pendingDeferredDiffRefreshTimer = 0
   let syncedOriginalGitBaseText: string | null = null
@@ -2976,6 +2977,10 @@ export function createMeoDiffSplitController({
       window.cancelAnimationFrame(pendingScrollFrame)
       pendingScrollFrame = 0
     }
+    if (pendingScrollDecorationFrame) {
+      window.cancelAnimationFrame(pendingScrollDecorationFrame)
+      pendingScrollDecorationFrame = 0
+    }
   }
 
   const cancelPendingDeferredDiffRefresh = () => {
@@ -3136,6 +3141,40 @@ export function createMeoDiffSplitController({
     refreshViewDecorations(mergeView?.a)
     refreshViewDecorations(mergeView?.b)
     refreshViewDecorations(unifiedView)
+  }
+
+  const refreshInlineChangeLayerForScroll = (view: EditorView | null | undefined) => {
+    if (!view || !view.dom.isConnected) {
+      return
+    }
+
+    view.dispatch({
+      effects: refreshInlineChangeLayerEffect.of(null),
+    })
+    view.requestMeasure()
+  }
+
+  const refreshActiveInlineChangeLayersForScroll = () => {
+    refreshInlineChangeLayerForScroll(mergeView?.a)
+    refreshInlineChangeLayerForScroll(mergeView?.b)
+    refreshInlineChangeLayerForScroll(unifiedView)
+  }
+
+  const scheduleScrollDecorationRefresh = () => {
+    if (pendingScrollDecorationFrame) {
+      return
+    }
+
+    pendingScrollDecorationFrame = window.requestAnimationFrame(() => {
+      pendingScrollDecorationFrame = 0
+      if (destroyed) {
+        return
+      }
+
+      mergeView?.refreshLayout()
+      unifiedView?.requestMeasure()
+      refreshActiveInlineChangeLayersForScroll()
+    })
   }
 
   const refreshAfterLayoutSettles = () => {
@@ -3762,6 +3801,7 @@ export function createMeoDiffSplitController({
       diffScrollPastEndObserver.observe(unifiedView.scrollDOM)
       const handleUnifiedScroll = () => {
         onViewportChange?.()
+        scheduleScrollDecorationRefresh()
         if (pendingScrollFrame) {
           return
         }
@@ -3905,6 +3945,7 @@ export function createMeoDiffSplitController({
     }
     const handleMergeScroll = () => {
       onViewportChange?.()
+      scheduleScrollDecorationRefresh()
       if (pendingScrollFrame) {
         return
       }

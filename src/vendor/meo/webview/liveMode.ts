@@ -245,18 +245,25 @@ export function shouldRefreshLiveDecorationsForViewportChange(update): boolean {
   return syntaxTree(view.state).length < liveViewportTo(view);
 }
 
+const LIVE_VIEWPORT_PARSE_RETRY_LIMIT = 8;
+const LIVE_VIEWPORT_PARSE_TIMEOUT_MS = 25;
+
 const liveViewportDecorationRefreshPlugin = ViewPlugin.fromClass(class {
   pendingFrame = 0;
+  retryCount = 0;
 
   constructor(readonly view) {}
 
   update(update) {
     if (shouldRefreshLiveDecorationsForViewportChange(update)) {
-      this.schedule();
+      this.schedule(true);
     }
   }
 
-  schedule() {
+  schedule(resetRetry = false) {
+    if (resetRetry) {
+      this.retryCount = 0;
+    }
     if (this.pendingFrame) {
       return;
     }
@@ -271,14 +278,20 @@ const liveViewportDecorationRefreshPlugin = ViewPlugin.fromClass(class {
       const targetTo = liveViewportTo(this.view);
       const currentTree = syntaxTree(this.view.state);
       if (currentTree.length >= targetTo) {
+        this.retryCount = 0;
         return;
       }
 
-      const parsedTree = ensureSyntaxTree(this.view.state, targetTo, 100);
+      const parsedTree = ensureSyntaxTree(this.view.state, targetTo, LIVE_VIEWPORT_PARSE_TIMEOUT_MS);
       if (!parsedTree || parsedTree === currentTree) {
+        if (this.retryCount < LIVE_VIEWPORT_PARSE_RETRY_LIMIT) {
+          this.retryCount += 1;
+          this.schedule();
+        }
         return;
       }
 
+      this.retryCount = 0;
       this.view.dispatch({
         effects: refreshLiveDecorationsEffect.of(null),
         annotations: Transaction.addToHistory.of(false)
