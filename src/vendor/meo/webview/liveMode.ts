@@ -232,7 +232,7 @@ function liveViewportTo(view): number {
   return Math.min(Math.max(0, to), view.state.doc.length);
 }
 
-export function shouldRefreshLiveDecorationsForViewportChange(update): boolean {
+export function shouldRefreshLiveDecorationsForViewportChange(update, lastDecoratedTree = null): boolean {
   if (update.docChanged || (!update.viewportMoved && !update.viewportChanged)) {
     return false;
   }
@@ -242,20 +242,29 @@ export function shouldRefreshLiveDecorationsForViewportChange(update): boolean {
     return false;
   }
 
-  return syntaxTree(view.state).length < liveViewportTo(view);
+  const currentTree = syntaxTree(view.state);
+  return currentTree.length < liveViewportTo(view)
+    || (lastDecoratedTree !== null && currentTree !== lastDecoratedTree);
 }
 
 const LIVE_VIEWPORT_PARSE_RETRY_LIMIT = 8;
 const LIVE_VIEWPORT_PARSE_TIMEOUT_MS = 25;
 
 const liveViewportDecorationRefreshPlugin = ViewPlugin.fromClass(class {
+  lastDecoratedTree = null;
   pendingFrame = 0;
   retryCount = 0;
 
-  constructor(readonly view) {}
+  constructor(readonly view) {
+    this.lastDecoratedTree = syntaxTree(view.state);
+  }
 
   update(update) {
-    if (shouldRefreshLiveDecorationsForViewportChange(update)) {
+    if (update.transactions.some((transaction) => shouldRefreshLiveDecorationsForTransaction(transaction))) {
+      this.lastDecoratedTree = syntaxTree(update.state);
+    }
+
+    if (shouldRefreshLiveDecorationsForViewportChange(update, this.lastDecoratedTree)) {
       this.schedule(true);
     }
   }
@@ -277,18 +286,20 @@ const liveViewportDecorationRefreshPlugin = ViewPlugin.fromClass(class {
 
       const targetTo = liveViewportTo(this.view);
       const currentTree = syntaxTree(this.view.state);
-      if (currentTree.length >= targetTo) {
+      if (currentTree.length >= targetTo && currentTree === this.lastDecoratedTree) {
         this.retryCount = 0;
         return;
       }
 
-      const parsedTree = ensureSyntaxTree(this.view.state, targetTo, LIVE_VIEWPORT_PARSE_TIMEOUT_MS);
-      if (!parsedTree || parsedTree === currentTree) {
-        if (this.retryCount < LIVE_VIEWPORT_PARSE_RETRY_LIMIT) {
-          this.retryCount += 1;
-          this.schedule();
+      if (currentTree.length < targetTo) {
+        const parsedTree = ensureSyntaxTree(this.view.state, targetTo, LIVE_VIEWPORT_PARSE_TIMEOUT_MS);
+        if (!parsedTree || parsedTree === currentTree) {
+          if (this.retryCount < LIVE_VIEWPORT_PARSE_RETRY_LIMIT) {
+            this.retryCount += 1;
+            this.schedule();
+          }
+          return;
         }
-        return;
       }
 
       this.retryCount = 0;

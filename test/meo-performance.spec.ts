@@ -184,6 +184,28 @@ describe('meo performance guards', () => {
     expect(shouldRefreshLiveDecorationsForViewportChange(parsedUpdate)).toBe(false)
   })
 
+  it('refreshes live decorations when viewport parsing already advanced before decoration rebuild', () => {
+    const state = createMarkdownState(createLongMarkdownDocument(5_000))
+    const staleDecoratedTree = ensureSyntaxTree(state, 1_000, 1000)
+    expect(staleDecoratedTree).not.toBeNull()
+
+    expect(ensureSyntaxTree(state, state.doc.length, 1000)).not.toBeNull()
+    const syncedState = state.update({}).state
+    const update = {
+      docChanged: false,
+      view: {
+        state: syncedState,
+        viewport: { from: Math.max(0, syncedState.doc.length - 500), to: syncedState.doc.length },
+        visibleRanges: [{ from: Math.max(0, syncedState.doc.length - 500), to: syncedState.doc.length }],
+      },
+      viewportChanged: true,
+      viewportMoved: true,
+    }
+
+    expect(shouldRefreshLiveDecorationsForViewportChange(update, staleDecoratedTree)).toBe(true)
+    expect(shouldRefreshLiveDecorationsForViewportChange(update, ensureSyntaxTree(syncedState, syncedState.doc.length, 1000))).toBe(false)
+  })
+
   it('keeps split search highlights off the full document scan path during live typing and IME composition', () => {
     let state = EditorState.create({
       doc: createPlainLongDocument(12_000),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
-import { isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRefreshFrozenChunkDecorationsForUpdate, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor/lib/meo-native-diff-split'
@@ -273,5 +273,13 @@ describe('CodeMirror merge decorations', () => {
     expect(shouldRefreshFrozenChunkDecorationsForUpdate({ configChanged: true })).toBe(true)
     expect(shouldRefreshFrozenChunkDecorationsForUpdate({ docChanged: true, viewportChanged: true })).toBe(false)
     expect(shouldRefreshFrozenChunkDecorationsForUpdate({})).toBe(false)
+  })
+
+  it('refreshes chunk decorations for explicit refresh requests', () => {
+    expect(shouldRefreshChunkDecorationsForUpdate({ refreshRequested: true })).toBe(true)
+    expect(shouldRefreshChunkDecorationsForUpdate({ viewportChanged: true })).toBe(true)
+    expect(shouldRefreshChunkDecorationsForUpdate({ docChanged: true })).toBe(true)
+    expect(shouldRefreshChunkDecorationsForUpdate({ configChanged: true })).toBe(true)
+    expect(shouldRefreshChunkDecorationsForUpdate({})).toBe(false)
   })
 })

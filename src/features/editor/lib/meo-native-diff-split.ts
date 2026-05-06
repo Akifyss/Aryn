@@ -8,6 +8,7 @@ import {
   goToPreviousChunk,
   MergeView,
   originalDocChangeEffect,
+  refreshChunkDecorationsEffect,
   refreshInlineChangeLayerEffect,
   type DirectMergeConfig,
   type DeletedContentRenderer,
@@ -2803,6 +2804,7 @@ export function createMeoDiffSplitController({
   let pendingReadOnlyWidgetLockFrame = 0
   let pendingScrollFrame = 0
   let pendingScrollDecorationFrame = 0
+  let pendingScrollDecorationCommitFrame = 0
   let pendingDeferredDiffRefreshFrame = 0
   let pendingDeferredDiffRefreshTimer = 0
   let syncedOriginalGitBaseText: string | null = null
@@ -2981,6 +2983,10 @@ export function createMeoDiffSplitController({
       window.cancelAnimationFrame(pendingScrollDecorationFrame)
       pendingScrollDecorationFrame = 0
     }
+    if (pendingScrollDecorationCommitFrame) {
+      window.cancelAnimationFrame(pendingScrollDecorationCommitFrame)
+      pendingScrollDecorationCommitFrame = 0
+    }
   }
 
   const cancelPendingDeferredDiffRefresh = () => {
@@ -3143,21 +3149,25 @@ export function createMeoDiffSplitController({
     refreshViewDecorations(unifiedView)
   }
 
-  const refreshInlineChangeLayerForScroll = (view: EditorView | null | undefined) => {
+  const refreshViewDecorationsForScroll = (view: EditorView | null | undefined) => {
     if (!view || !view.dom.isConnected) {
       return
     }
 
     view.dispatch({
-      effects: refreshInlineChangeLayerEffect.of(null),
+      effects: [
+        refreshChunkDecorationsEffect.of(null),
+        refreshInlineChangeLayerEffect.of(null),
+      ],
+      annotations: Transaction.addToHistory.of(false),
     })
     view.requestMeasure()
   }
 
-  const refreshActiveInlineChangeLayersForScroll = () => {
-    refreshInlineChangeLayerForScroll(mergeView?.a)
-    refreshInlineChangeLayerForScroll(mergeView?.b)
-    refreshInlineChangeLayerForScroll(unifiedView)
+  const refreshActiveViewDecorationsForScroll = () => {
+    refreshViewDecorationsForScroll(mergeView?.a)
+    refreshViewDecorationsForScroll(mergeView?.b)
+    refreshViewDecorationsForScroll(unifiedView)
   }
 
   const scheduleScrollDecorationRefresh = () => {
@@ -3173,7 +3183,16 @@ export function createMeoDiffSplitController({
 
       mergeView?.refreshLayout()
       unifiedView?.requestMeasure()
-      refreshActiveInlineChangeLayersForScroll()
+      if (pendingScrollDecorationCommitFrame) {
+        return
+      }
+      pendingScrollDecorationCommitFrame = window.requestAnimationFrame(() => {
+        pendingScrollDecorationCommitFrame = 0
+        if (destroyed) {
+          return
+        }
+        refreshActiveViewDecorationsForScroll()
+      })
     })
   }
 

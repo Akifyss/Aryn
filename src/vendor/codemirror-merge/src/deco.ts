@@ -5,6 +5,7 @@ import {Chunk} from "./chunk"
 import {ChunkField, deferredChunkUpdate, mergeConfig} from "./merge"
 
 export const refreshInlineChangeLayerEffect = StateEffect.define<null>()
+export const refreshChunkDecorationsEffect = StateEffect.define<null>()
 
 export const decorateChunks = ViewPlugin.fromClass(class {
   deco: DecorationSet
@@ -22,9 +23,12 @@ export const decorateChunks = ViewPlugin.fromClass(class {
       return
     }
 
+    let refreshRequested = hasRefreshChunkDecorationsEffect(update)
     if (isDeferredChunkUpdate(update)) this.frozen = true
     if (this.frozen) {
-      if (update.docChanged) {
+      if (refreshRequested) {
+        ({deco: this.deco, gutter: this.gutter} = getChunkDeco(update.view))
+      } else if (update.docChanged) {
         this.deco = this.deco.map(update.changes)
         if (this.gutter) this.gutter = this.gutter.map(update.changes)
       } else if (shouldRefreshFrozenChunkDecorationsForUpdate({
@@ -37,7 +41,12 @@ export const decorateChunks = ViewPlugin.fromClass(class {
       return
     }
 
-    if (update.docChanged || update.viewportChanged || configChanged(update.startState, update.state))
+    if (shouldRefreshChunkDecorationsForUpdate({
+      configChanged: configChanged(update.startState, update.state),
+      docChanged: update.docChanged,
+      refreshRequested,
+      viewportChanged: update.viewportChanged,
+    }))
       ({deco: this.deco, gutter: this.gutter} = getChunkDeco(update.view))
   }
 }, {
@@ -88,6 +97,20 @@ export function shouldMeasureInlineChangeLayer(update: {
   )
 }
 
+export function shouldRefreshChunkDecorationsForUpdate(update: {
+  configChanged?: boolean,
+  docChanged?: boolean,
+  refreshRequested?: boolean,
+  viewportChanged?: boolean,
+}) {
+  return !!(
+    update.refreshRequested ||
+    update.docChanged ||
+    update.viewportChanged ||
+    update.configChanged
+  )
+}
+
 function chunksChanged(s1: EditorState, s2: EditorState) {
   return s1.field(ChunkField, false) != s2.field(ChunkField, false)
 }
@@ -103,6 +126,11 @@ function isDeferredChunkUpdate(update: ViewUpdate) {
 function hasRefreshInlineChangeLayerEffect(update: ViewUpdate) {
   return update.transactions.some(tr =>
     tr.effects.some(effect => effect.is(refreshInlineChangeLayerEffect)))
+}
+
+function hasRefreshChunkDecorationsEffect(update: ViewUpdate) {
+  return update.transactions.some(tr =>
+    tr.effects.some(effect => effect.is(refreshChunkDecorationsEffect)))
 }
 
 export function shouldRefreshFrozenChunkDecorationsForUpdate(update: {
