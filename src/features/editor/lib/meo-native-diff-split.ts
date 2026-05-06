@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap, indentLess, indentMore, redo, undo } from '@codemirror/commands'
 import { markdownKeymap } from '@codemirror/lang-markdown'
-import { bracketMatching, forceParsing, indentOnInput, indentUnit } from '@codemirror/language'
+import { bracketMatching, forceParsing, indentOnInput, indentUnit, syntaxTree } from '@codemirror/language'
 import {
   getChunks,
   getOriginalDoc,
@@ -409,6 +409,12 @@ export const __meoDiffSplitSearchTestHooks = {
   searchMatchField,
   searchQueryField,
   setSearchQueryEffect,
+} as const
+
+export const __meoDiffSplitRenderHealthTestHooks = {
+  findSplitPaneRenderHealthIssue,
+  markdownLineLooksUnrendered,
+  splitRenderRefreshEffects,
 } as const
 
 function countSearchMatches(text: string, query: string, options: SearchOptions = {}) {
@@ -850,9 +856,317 @@ type SplitInlineChangeLayerRefreshOptions = {
   liveDecorationsWillRefresh?: boolean
 }
 
+const SPLIT_RENDER_HEALTH_MAX_RETRIES = 4
+const SPLIT_RENDER_HEALTH_PARSE_TIMEOUT_MS = 80
+type SplitRenderRefreshReason = 'split-render-health' | 'split-scroll-refresh' | 'split-layout-refresh'
+
+const splitRenderRefreshReason = Annotation.define<SplitRenderRefreshReason>()
+
 function hasRefreshLiveDecorationsEffect(transaction: Transaction) {
   return transaction.effects.some((effect) => effect.is(refreshLiveDecorationsEffect))
 }
+
+function hasRefreshChunkDecorationsEffect(transaction: Transaction) {
+  return transaction.effects.some((effect) => effect.is(refreshChunkDecorationsEffect))
+}
+
+function hasRefreshInlineChangeLayerEffect(transaction: Transaction) {
+  return transaction.effects.some((effect) => effect.is(refreshInlineChangeLayerEffect))
+}
+
+function hasSplitRenderRefreshEffects(transaction: Transaction) {
+  return hasRefreshLiveDecorationsEffect(transaction)
+    || hasRefreshChunkDecorationsEffect(transaction)
+    || hasRefreshInlineChangeLayerEffect(transaction)
+}
+
+function splitRenderRefreshEffects() {
+  return [
+    refreshLiveDecorationsEffect.of(null),
+    refreshChunkDecorationsEffect.of(null),
+    refreshInlineChangeLayerEffect.of(null),
+  ]
+}
+
+function visibleRenderParseTarget(view: EditorView) {
+  let to = view.viewport?.to ?? view.state.doc.length
+  for (const range of view.visibleRanges) {
+    if (range.to > to) {
+      to = range.to
+    }
+  }
+  return Math.min(Math.max(0, to), view.state.doc.length)
+}
+
+function forceSplitPaneRenderRefresh(
+  view: EditorView,
+  reason: SplitRenderRefreshReason,
+  options: { parseDocument?: boolean } = {},
+) {
+  if (!view.dom.isConnected) {
+    return
+  }
+
+  forceParsing(
+    view,
+    options.parseDocument ? view.state.doc.length : visibleRenderParseTarget(view),
+    SPLIT_RENDER_HEALTH_PARSE_TIMEOUT_MS,
+  )
+  view.dispatch({
+    annotations: [
+      Transaction.addToHistory.of(false),
+      splitRenderRefreshReason.of(reason),
+    ],
+    effects: splitRenderRefreshEffects(),
+  })
+  view.requestMeasure()
+}
+
+function getDomLineText(lineElement: HTMLElement) {
+  return lineElement.textContent ?? ''
+}
+
+function expectedMarkdownHeadingClass(lineText: string) {
+  const match = /^(\s*)(#{1,6})(?:\s|$)/.exec(lineText)
+  if (!match) {
+    return null
+  }
+
+  return `meo-md-h${match[2].length}`
+}
+
+function markdownLineLooksUnrendered(lineElement: HTMLElement, lineText = getDomLineText(lineElement)) {
+  const headingClass = expectedMarkdownHeadingClass(lineText)
+  if (headingClass && !lineElement.classList.contains(headingClass)) {
+    return true
+  }
+
+  return Boolean(listMarkerData(lineText)) && !lineElement.classList.contains('meo-md-list-line')
+}
+
+function isLineInsideMarkdownCodeBlock(state: EditorState, line: { from: number, to: number }) {
+  const tree = syntaxTree(state)
+  if (tree.length < line.to) {
+    return false
+  }
+
+  let node: ReturnType<typeof tree.resolveInner> | null = tree.resolveInner(line.from, 1)
+  while (node) {
+    if (node.name === 'FencedCode' || node.name === 'CodeBlock') {
+      return true
+    }
+    node = node.parent
+  }
+  return false
+}
+
+function markdownLineLooksUnrenderedInView(
+  state: EditorState,
+  lineElement: HTMLElement,
+  line: { from: number, to: number, text: string },
+) {
+  if (!markdownLineLooksUnrendered(lineElement, line.text)) {
+    return false
+  }
+
+  if (isLineInsideMarkdownCodeBlock(state, line)) {
+    return false
+  }
+
+  return true
+}
+
+function domLineForViewLine(view: EditorView, lineElement: HTMLElement) {
+  try {
+    const pos = view.posAtDOM(lineElement, 0)
+    return view.state.doc.lineAt(Math.max(0, Math.min(pos, view.state.doc.length)))
+  } catch {
+    return null
+  }
+}
+
+function chunkLineRange(chunk: CodeMirrorDiffChunk, side: 'a' | 'b') {
+  return side === 'a'
+    ? { from: chunk.fromA, to: chunk.toA }
+    : { from: chunk.fromB, to: chunk.toB }
+}
+
+function lineOverlapsChunkRange(line: { from: number, to: number }, chunk: CodeMirrorDiffChunk, side: 'a' | 'b') {
+  const range = chunkLineRange(chunk, side)
+  return range.from !== range.to && line.from < range.to && line.to >= range.from
+}
+
+function chunkHasInlineChangeOnLine(chunk: CodeMirrorDiffChunk, line: { from: number, to: number }, side: 'a' | 'b') {
+  const range = chunkLineRange(chunk, side)
+  if (range.from === range.to || isWholeLineChangeForSide(chunk, side)) {
+    return false
+  }
+
+  for (const change of chunk.changes) {
+    const from = range.from + (side === 'a' ? change.fromA : change.fromB)
+    const to = range.from + (side === 'a' ? change.toA : change.toB)
+    if (from < to && from <= line.to && to >= line.from) {
+      return true
+    }
+
+    if (from === to && from >= line.from && from <= line.to) {
+      const otherFrom = side === 'a' ? change.fromB : change.fromA
+      const otherTo = side === 'a' ? change.toB : change.toA
+      if (otherFrom < otherTo) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+function isWholeLineChangeForSide(chunk: CodeMirrorDiffChunk, side: 'a' | 'b') {
+  return side === 'a'
+    ? chunk.fromB === chunk.toB
+    : chunk.fromA === chunk.toA
+}
+
+function findChunkForLine(view: EditorView, line: { from: number, to: number }) {
+  const chunkInfo = getChunks(view.state)
+  if (!chunkInfo?.side) {
+    return null
+  }
+
+  const side = chunkInfo.side
+  const chunk = (chunkInfo.chunks as readonly CodeMirrorDiffChunk[]).find((candidate) => (
+    lineOverlapsChunkRange(line, candidate, side)
+  ))
+  return chunk ? { chunk, side } : null
+}
+
+export type SplitRenderHealthIssue = 'markdown' | 'diff-line' | 'diff-text'
+
+export function findSplitPaneRenderHealthIssue(view: EditorView): SplitRenderHealthIssue | null {
+  const lineElements = view.contentDOM.querySelectorAll<HTMLElement>('.cm-line')
+  for (const lineElement of lineElements) {
+    const line = domLineForViewLine(view, lineElement)
+    if (!line) {
+      continue
+    }
+
+    if (markdownLineLooksUnrenderedInView(view.state, lineElement, line)) {
+      return 'markdown'
+    }
+
+    const match = findChunkForLine(view, line)
+    if (!match) {
+      continue
+    }
+
+    if (!lineElement.classList.contains('cm-changedLine')) {
+      return 'diff-line'
+    }
+
+    if (
+      chunkHasInlineChangeOnLine(match.chunk, line, match.side)
+      && !lineElement.querySelector('.cm-changedText, .cm-changedTextEmpty, .cm-deletedText')
+    ) {
+      return 'diff-text'
+    }
+  }
+
+  return null
+}
+
+function splitPaneRenderHealthSignature(view: EditorView, issue: SplitRenderHealthIssue) {
+  const viewport = view.viewport
+  const chunkInfo = getChunks(view.state)
+  return [
+    issue,
+    viewport.from,
+    viewport.to,
+    view.state.doc.length,
+    chunkInfo?.side ?? 'none',
+    chunkInfo?.chunks.length ?? 0,
+  ].join(':')
+}
+
+const splitPaneRenderHealthPlugin = ViewPlugin.fromClass(class {
+  private pendingFrame = 0
+  private retryCount = 0
+  private lastSignature = ''
+
+  constructor(private readonly view: EditorView) {
+    this.schedule(true)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged) {
+      this.retryCount = 0
+      this.lastSignature = ''
+      this.schedule(true)
+      return
+    }
+
+    if (
+      update.selectionSet
+      || update.heightChanged
+      || update.geometryChanged
+      || update.transactions.some((transaction) => hasSplitRenderRefreshEffects(transaction))
+    ) {
+      this.schedule(false)
+    }
+  }
+
+  private schedule(resetRetry: boolean) {
+    if (resetRetry) {
+      this.retryCount = 0
+      this.lastSignature = ''
+    }
+    if (this.pendingFrame) {
+      return
+    }
+
+    const win = this.view.dom.ownerDocument.defaultView ?? window
+    this.pendingFrame = win.requestAnimationFrame(() => {
+      this.pendingFrame = 0
+      this.check()
+    })
+  }
+
+  private check() {
+    if (!this.view.dom.isConnected) {
+      return
+    }
+
+    const issue = findSplitPaneRenderHealthIssue(this.view)
+    if (!issue) {
+      this.retryCount = 0
+      this.lastSignature = ''
+      return
+    }
+
+    const signature = splitPaneRenderHealthSignature(this.view, issue)
+    if (signature !== this.lastSignature) {
+      this.lastSignature = signature
+      this.retryCount = 0
+    } else if (this.retryCount >= SPLIT_RENDER_HEALTH_MAX_RETRIES) {
+      return
+    }
+
+    this.retryCount += 1
+    forceSplitPaneRenderRefresh(this.view, 'split-render-health', {
+      parseDocument: this.retryCount >= SPLIT_RENDER_HEALTH_MAX_RETRIES,
+    })
+    this.schedule(false)
+  }
+
+  destroy() {
+    if (!this.pendingFrame) {
+      return
+    }
+
+    const win = this.view.dom.ownerDocument.defaultView ?? window
+    win.cancelAnimationFrame(this.pendingFrame)
+    this.pendingFrame = 0
+  }
+})
 
 // Live mode can reveal Markdown source markers from selection/focus changes
 // without changing diff chunks. Refresh the measured merge overlay in the same
@@ -1730,6 +2044,7 @@ export function createDiffExtensions({
       class: 'meo-mode-live meo-diff-split-editor',
     }),
     ...liveModeExtensions({ deferDocChanges: true }),
+    splitPaneRenderHealthPlugin,
   ]
 
   if (isInteractivePane) {
@@ -3127,14 +3442,7 @@ export function createMeoDiffSplitController({
       return
     }
 
-    forceParsing(view, view.state.doc.length, 500)
-    view.dispatch({
-      effects: [
-        refreshLiveDecorationsEffect.of(null),
-        refreshInlineChangeLayerEffect.of(null),
-      ],
-    })
-    view.requestMeasure()
+    forceSplitPaneRenderRefresh(view, 'split-layout-refresh', { parseDocument: true })
   }
 
   const refreshActiveViewDecorations = () => {
@@ -3148,14 +3456,7 @@ export function createMeoDiffSplitController({
       return
     }
 
-    view.dispatch({
-      effects: [
-        refreshChunkDecorationsEffect.of(null),
-        refreshInlineChangeLayerEffect.of(null),
-      ],
-      annotations: Transaction.addToHistory.of(false),
-    })
-    view.requestMeasure()
+    forceSplitPaneRenderRefresh(view, 'split-scroll-refresh')
   }
 
   const refreshActiveViewDecorationsForScroll = () => {

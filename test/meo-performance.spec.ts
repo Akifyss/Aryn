@@ -18,6 +18,7 @@ import {
   shouldCollectOrderedListRenumberChanges,
 } from '../src/vendor/meo/webview/helpers/listMarkers'
 import {
+  __meoDiffSplitRenderHealthTestHooks,
   __meoDiffSplitSearchTestHooks,
   applyCodeMirrorChangesToText,
   buildDiffSplitGutterFlagsFromChunks,
@@ -477,6 +478,34 @@ describe('meo performance guards', () => {
     expect(shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(contentTransaction)).toBe(false)
     expect(shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(parseRefreshTransaction)).toBe(true)
     expect(shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(noOpTransaction)).toBe(false)
+  })
+
+  it('detects visible split markdown lines that are still in raw source form', () => {
+    const createLine = (className: string, textContent: string) => ({
+      classList: {
+        contains: (name: string) => className.split(/\s+/).includes(name),
+      },
+      textContent,
+    }) as HTMLElement
+
+    const headingLine = createLine('cm-line', '## Raw heading')
+    const renderedHeadingLine = createLine('cm-line meo-md-h2', '## Rendered heading')
+    const listLine = createLine('cm-line', '- raw item')
+    const renderedListLine = createLine('cm-line meo-md-list-line', '- rendered item')
+
+    expect(__meoDiffSplitRenderHealthTestHooks.markdownLineLooksUnrendered(headingLine)).toBe(true)
+    expect(__meoDiffSplitRenderHealthTestHooks.markdownLineLooksUnrendered(renderedHeadingLine)).toBe(false)
+    expect(__meoDiffSplitRenderHealthTestHooks.markdownLineLooksUnrendered(listLine)).toBe(true)
+    expect(__meoDiffSplitRenderHealthTestHooks.markdownLineLooksUnrendered(renderedListLine)).toBe(false)
+  })
+
+  it('uses one split render refresh bundle for markdown, chunk lines, and inline text overlays', () => {
+    const effects = __meoDiffSplitRenderHealthTestHooks.splitRenderRefreshEffects()
+    const state = EditorState.create({ doc: 'one' })
+    const transaction = state.update({ effects })
+
+    expect(effects).toHaveLength(3)
+    expect(shouldRefreshLiveDecorationsForTransaction(transaction)).toBe(true)
   })
 
   it('keeps split merge deletion chunks bounded to the edited line on the incremental path', () => {
