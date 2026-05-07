@@ -1,12 +1,25 @@
 import {EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate, Direction,
         WidgetType, GutterMarker, gutter, layer, type LayerMarker} from "@codemirror/view"
-import {EditorState, RangeSetBuilder, Text, StateField, StateEffect, RangeSet, Prec} from "@codemirror/state"
+import {EditorState, RangeSetBuilder, Text, StateField, StateEffect, RangeSet, Prec, type Extension} from "@codemirror/state"
 import {Chunk} from "./chunk"
 import type {Change} from "./diff"
-import {ChunkField, deferredChunkUpdate, mergeConfig} from "./merge"
+import {ChunkField, deferredChunkUpdate, mergeConfig, setChunks} from "./merge"
 
 export const refreshInlineChangeLayerEffect = StateEffect.define<null>()
 export const refreshChunkDecorationsEffect = StateEffect.define<null>()
+
+// MergeView can defer chunk recomputation during live edits/IME. While chunks
+// are stale, the DOM-backed inline layer must not measure old change marks.
+const chunksDeferredField = StateField.define<boolean>({
+  create() {
+    return false
+  },
+  update(value, tr) {
+    if (tr.effects.some(effect => effect.is(setChunks))) return false
+    if (tr.annotation(deferredChunkUpdate)) return true
+    return value
+  },
+})
 
 export const decorateChunks = ViewPlugin.fromClass(class {
   deco: DecorationSet
@@ -59,7 +72,9 @@ export const changeGutter = Prec.low(gutter({
   markers: view => view.plugin(decorateChunks)?.gutter || RangeSet.empty
 }))
 
-export const inlineChangeLayer = layer({
+const cachedInlineChangeLayerMarkers = new WeakMap<EditorView, readonly LayerMarker[]>()
+
+const inlineChangeLayerExtension = layer({
   above: true,
   class: "cm-inlineChangeLayer",
   // update() already covers viewport/doc/chunk changes; avoid a second layout read.
@@ -69,6 +84,7 @@ export const inlineChangeLayer = layer({
     return shouldMeasureInlineChangeLayer({
       chunksChanged: chunksChanged(update.startState, update.state),
       configChanged: configChanged(update.startState, update.state),
+      deferredChunkUpdate: update.state.field(chunksDeferredField, false) === true,
       docChanged: update.docChanged,
       focusChanged: update.focusChanged,
       refreshRequested: hasRefreshInlineChangeLayerEffect(update),
@@ -76,18 +92,29 @@ export const inlineChangeLayer = layer({
     })
   },
   markers(view) {
-    return getInlineChangeLayerMarkers(view)
+    if (!shouldReadInlineChangeLayerDom(view.state.field(chunksDeferredField, false)))
+      return cachedInlineChangeLayerMarkers.get(view) ?? []
+    let markers = getInlineChangeLayerMarkers(view)
+    cachedInlineChangeLayerMarkers.set(view, markers)
+    return markers
   }
 })
+
+export const inlineChangeLayer: Extension = [
+  chunksDeferredField,
+  inlineChangeLayerExtension,
+]
 
 export function shouldMeasureInlineChangeLayer(update: {
   chunksChanged?: boolean,
   configChanged?: boolean,
+  deferredChunkUpdate?: boolean,
   docChanged?: boolean,
   focusChanged?: boolean,
   refreshRequested?: boolean,
   viewportChanged?: boolean,
 }) {
+  if (!shouldReadInlineChangeLayerDom(update.deferredChunkUpdate)) return false
   return !!(
     update.docChanged ||
     update.viewportChanged ||
@@ -96,6 +123,10 @@ export function shouldMeasureInlineChangeLayer(update: {
     update.chunksChanged ||
     update.configChanged
   )
+}
+
+export function shouldReadInlineChangeLayerDom(chunksDeferred?: boolean) {
+  return chunksDeferred !== true
 }
 
 export function shouldRefreshChunkDecorationsForUpdate(update: {

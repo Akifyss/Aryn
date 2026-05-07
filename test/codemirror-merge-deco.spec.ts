@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
-import { addChunkDecorations, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { addChunkDecorations, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldReadInlineChangeLayerDom, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { RangeSetBuilder, Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor/lib/meo-native-diff-split'
@@ -400,6 +400,18 @@ describe('CodeMirror merge decorations', () => {
     expect(shouldMeasureInlineChangeLayer({ focusChanged: true })).toBe(true)
     expect(shouldMeasureInlineChangeLayer({ refreshRequested: true })).toBe(true)
     expect(shouldMeasureInlineChangeLayer({})).toBe(false)
+  })
+
+  it('does not remeasure inline highlights while merge chunks are deferred', () => {
+    expect(shouldMeasureInlineChangeLayer({ deferredChunkUpdate: true, docChanged: true })).toBe(false)
+    expect(shouldMeasureInlineChangeLayer({ deferredChunkUpdate: true, viewportChanged: true })).toBe(false)
+    expect(shouldMeasureInlineChangeLayer({ deferredChunkUpdate: true, refreshRequested: true })).toBe(false)
+  })
+
+  it('does not read inline highlight DOM while merge chunks are deferred', () => {
+    expect(shouldReadInlineChangeLayerDom(true)).toBe(false)
+    expect(shouldReadInlineChangeLayerDom(false)).toBe(true)
+    expect(shouldReadInlineChangeLayerDom()).toBe(true)
   })
 
   it('keeps frozen chunk decorations responsive to viewport changes', () => {
