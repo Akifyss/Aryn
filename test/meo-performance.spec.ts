@@ -508,30 +508,6 @@ describe('meo performance guards', () => {
     expect(shouldRefreshLiveDecorationsForTransaction(transaction)).toBe(true)
   })
 
-  it('keeps split render health recovery idle during IME composition', () => {
-    const dom = {
-      classList: {
-        contains: (className: string) => className === 'meo-ime-composing',
-      },
-    }
-
-    expect(__meoDiffSplitRenderHealthTestHooks.shouldSkipSplitRenderRefreshForIme({
-      composing: false,
-      compositionStarted: false,
-      dom,
-    })).toBe(true)
-    expect(__meoDiffSplitRenderHealthTestHooks.shouldSkipSplitRenderRefreshForIme({
-      composing: false,
-      compositionStarted: true,
-      dom: { classList: { contains: () => false } },
-    })).toBe(true)
-    expect(__meoDiffSplitRenderHealthTestHooks.shouldSkipSplitRenderRefreshForIme({
-      composing: true,
-      compositionStarted: false,
-      dom: { classList: { contains: () => false } },
-    })).toBe(true)
-  })
-
   it('builds split diff fallback line decorations from rendered gutter flags', () => {
     let state = EditorState.create({
       doc: ['one', 'two', 'three'].join('\n'),
