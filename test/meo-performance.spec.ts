@@ -504,7 +504,7 @@ describe('meo performance guards', () => {
     const state = EditorState.create({ doc: 'one' })
     const transaction = state.update({ effects })
 
-    expect(effects).toHaveLength(3)
+    expect(effects).toHaveLength(4)
     expect(shouldRefreshLiveDecorationsForTransaction(transaction)).toBe(true)
   })
 
@@ -532,7 +532,7 @@ describe('meo performance guards', () => {
     ])
   })
 
-  it('builds split diff fallback text decorations symmetrically from merge chunks', () => {
+  it('keeps split diff fallback text decorations out of the default render path', () => {
     const originalDoc = Text.of(['one', 'two', 'three'])
     const modifiedDoc = Text.of(['one', 'TWO', 'three'])
     const chunks = Chunk.build(originalDoc, modifiedDoc, {
@@ -573,12 +573,41 @@ describe('meo performance guards', () => {
     expect(originalRanges).toEqual(expect.arrayContaining([
       { from: originalDoc.line(2).from, to: originalDoc.line(2).from, classes: 'cm-changedLine' },
       { from: originalDoc.line(2).from, to: originalDoc.line(3).from, classes: 'cm-deletedLine' },
-      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText meo-diff-split-fallback-changedText' },
     ]))
+    expect(originalRanges.some((range) => range.classes.includes('cm-changedText'))).toBe(false)
     expect(modifiedRanges).toEqual(expect.arrayContaining([
       { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedLine' },
       { from: modifiedDoc.line(2).from, to: modifiedDoc.line(3).from, classes: 'cm-insertedLine' },
-      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-changedText meo-diff-split-fallback-changedText' },
+    ]))
+    expect(modifiedRanges.some((range) => range.classes.includes('cm-changedText'))).toBe(false)
+  })
+
+  it('can make split diff fallback text decorations visible after render health retries fail', () => {
+    const originalDoc = Text.of(['one', 'two', 'three'])
+    const modifiedDoc = Text.of(['one', 'TWO', 'three'])
+    const [chunk] = Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const decorations = __meoDiffSplitRenderHealthTestHooks.buildSplitDiffFallbackDecorationsFromInputs(
+      originalDoc,
+      [
+        undefined,
+        { added: false, deleted: false, modified: false, removed: true, scope: 'unstaged' },
+        undefined,
+      ],
+      [chunk],
+      'a',
+      true,
+    )
+    const ranges: Array<{ from: number, to: number, classes: string }> = []
+    decorations.between(0, originalDoc.length, (from: number, to: number, value: any) => {
+      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+    })
+
+    expect(ranges).toEqual(expect.arrayContaining([
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText meo-diff-split-fallback-changedText' },
     ]))
   })
 

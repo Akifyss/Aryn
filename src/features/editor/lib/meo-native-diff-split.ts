@@ -868,6 +868,23 @@ const SPLIT_RENDER_HEALTH_PARSE_TIMEOUT_MS = 80
 type SplitRenderRefreshReason = 'split-render-health' | 'split-scroll-refresh' | 'split-layout-refresh'
 
 const splitRenderRefreshReason = Annotation.define<SplitRenderRefreshReason>()
+const setSplitVisibleTextFallbackEffect = StateEffect.define<boolean>()
+const splitVisibleTextFallbackState = StateField.define({
+  create() {
+    return false
+  },
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setSplitVisibleTextFallbackEffect)) {
+        value = effect.value
+      }
+    }
+    return value
+  },
+  provide: (field) => EditorView.editorAttributes.from(field, (enabled) => ({
+    class: enabled ? 'meo-diff-split-visible-text-fallback' : '',
+  })),
+})
 const splitFallbackChangedTextDeco = Decoration.mark({ class: 'cm-changedText meo-diff-split-fallback-changedText' })
 
 function hasRefreshLiveDecorationsEffect(transaction: Transaction) {
@@ -893,6 +910,7 @@ function splitRenderRefreshEffects() {
     refreshLiveDecorationsEffect.of(null),
     refreshChunkDecorationsEffect.of(null),
     refreshInlineChangeLayerEffect.of(null),
+    setSplitVisibleTextFallbackEffect.of(false),
   ]
 }
 
@@ -1063,6 +1081,12 @@ function getSplitDiffLineFlag(view: EditorView, lineNumber: number) {
   return Array.isArray(flags) ? flags[lineNumber - 1] : undefined
 }
 
+function lineHasPrimaryInlineChangeDecoration(lineElement: HTMLElement) {
+  return !!lineElement.querySelector(
+    '.cm-changedText:not(.meo-diff-split-fallback-changedText), .cm-changedTextEmpty, .cm-deletedText',
+  )
+}
+
 export function findSplitPaneRenderHealthIssue(view: EditorView): SplitRenderHealthIssue | null {
   const lineElements = view.contentDOM.querySelectorAll<HTMLElement>('.cm-line')
   for (const lineElement of lineElements) {
@@ -1091,7 +1115,7 @@ export function findSplitPaneRenderHealthIssue(view: EditorView): SplitRenderHea
 
     if (
       chunkHasInlineChangeOnLine(match.chunk, line, match.side)
-      && !lineElement.querySelector('.cm-changedText, .cm-changedTextEmpty, .cm-deletedText')
+      && !lineHasPrimaryInlineChangeDecoration(lineElement)
     ) {
       return 'diff-text'
     }
@@ -1117,6 +1141,7 @@ const splitPaneRenderHealthPlugin = ViewPlugin.fromClass(class {
   private pendingFrame = 0
   private retryCount = 0
   private lastSignature = ''
+  private visibleTextFallbackEnabled = false
 
   constructor(private readonly view: EditorView) {
     this.schedule(true)
@@ -1165,6 +1190,7 @@ const splitPaneRenderHealthPlugin = ViewPlugin.fromClass(class {
     if (!issue) {
       this.retryCount = 0
       this.lastSignature = ''
+      this.setVisibleTextFallback(false)
       return
     }
 
@@ -1177,10 +1203,26 @@ const splitPaneRenderHealthPlugin = ViewPlugin.fromClass(class {
     }
 
     this.retryCount += 1
+    if (issue === 'diff-text' && this.retryCount >= SPLIT_RENDER_HEALTH_MAX_RETRIES) {
+      this.setVisibleTextFallback(true)
+      return
+    }
     forceSplitPaneRenderRefresh(this.view, 'split-render-health', {
       parseDocument: this.retryCount >= SPLIT_RENDER_HEALTH_MAX_RETRIES,
     })
     this.schedule(false)
+  }
+
+  private setVisibleTextFallback(enabled: boolean) {
+    if (this.visibleTextFallbackEnabled === enabled) {
+      return
+    }
+
+    this.visibleTextFallbackEnabled = enabled
+    this.view.dispatch({
+      annotations: splitRenderRefreshReason.of('split-render-health'),
+      effects: setSplitVisibleTextFallbackEffect.of(enabled),
+    })
   }
 
   destroy() {
@@ -1203,6 +1245,7 @@ const splitDiffFallbackDecorationField = StateField.define({
       transaction.effects.some((effect) => (
         effect.is(refreshChunkDecorationsEffect)
         || effect.is(refreshInlineChangeLayerEffect)
+        || effect.is(setSplitVisibleTextFallbackEffect)
       ))
       || transaction.startState.field(gitDiffLineFlagsField, false) !== transaction.state.field(gitDiffLineFlagsField, false)
       || getChunks(transaction.startState)?.chunks !== getChunks(transaction.state)?.chunks
@@ -1223,6 +1266,7 @@ function buildSplitDiffFallbackDecorations(state: EditorState) {
     flags,
     (chunkInfo?.chunks ?? []) as readonly CodeMirrorDiffChunk[],
     chunkInfo?.side ?? undefined,
+    state.field(splitVisibleTextFallbackState, false),
   )
 }
 
@@ -1231,6 +1275,7 @@ function buildSplitDiffFallbackDecorationsFromInputs(
   flags: readonly (MarkerFlags | undefined)[] | null | undefined,
   chunks: readonly CodeMirrorDiffChunk[] = [],
   side?: 'a' | 'b',
+  visibleTextFallback = false,
 ) {
   const hasRenderableFlags = Array.isArray(flags) && flags.some(flagsIndicateRenderableDiff)
   if (!hasRenderableFlags && (!side || !chunks.length)) {
@@ -1247,7 +1292,8 @@ function buildSplitDiffFallbackDecorationsFromInputs(
         continue
       }
       addChunkDecorations(chunk as Chunk, doc, side === 'a', true, builder, null, {
-        changedText: splitFallbackChangedTextDeco,
+        changedText: visibleTextFallback ? splitFallbackChangedTextDeco : null,
+        changedTextEmpty: visibleTextFallback ? undefined : null,
         gutter: false,
       })
 
@@ -2148,6 +2194,7 @@ export function createDiffExtensions({
       class: 'meo-mode-live meo-diff-split-editor',
     }),
     ...liveModeExtensions({ deferDocChanges: true }),
+    splitVisibleTextFallbackState,
     splitDiffFallbackDecorationField,
     splitPaneRenderHealthPlugin,
   ]

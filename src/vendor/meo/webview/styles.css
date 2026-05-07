@@ -720,6 +720,15 @@
   box-decoration-break: clone;
 }
 
+.meo-native-theme .meo-diff-split-body .cm-editor:not(.meo-diff-split-visible-text-fallback) .meo-diff-split-fallback-changedText {
+  background: transparent;
+}
+
+.meo-native-theme .meo-diff-split-body .cm-editor.meo-diff-split-visible-text-fallback .cm-changedTextLayerRanges,
+.meo-native-theme .meo-diff-split-body .cm-editor.meo-diff-split-visible-text-fallback .cm-deletedTextLayerRanges {
+  display: none;
+}
+
 .meo-native-theme .meo-diff-split-body .cm-inlineChangeLayer {
   pointer-events: none;
 }

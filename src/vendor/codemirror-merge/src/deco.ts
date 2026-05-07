@@ -219,6 +219,7 @@ class InlineChangeLayerMarker implements LayerMarker {
     let svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
     let path = document.createElementNS("http://www.w3.org/2000/svg", "path")
     path.setAttribute("class", "cm-inlineChangeLayerPath")
+    path.setAttribute("shape-rendering", "crispEdges")
     svg.appendChild(path)
     elt.appendChild(svg)
     this.adjust(elt)
@@ -246,11 +247,17 @@ class InlineChangeLayerMarker implements LayerMarker {
 function getInlineChangeLayerMarkers(view: EditorView) {
   if (!view.state.facet(mergeConfig).highlightChanges) return []
   let markers: LayerMarker[] = []
+  let pixelRatio = inlineChangeLayerPixelRatio(view)
   for (let spec of inlineChangeLayerSpecs) {
     let rects = getInlineChangeRects(view, spec.selector)
-    if (rects.length) markers.push(inlineChangeLayerMarker(rects, spec.className))
+    if (rects.length) markers.push(inlineChangeLayerMarker(rects, spec.className, pixelRatio))
   }
   return markers
+}
+
+function inlineChangeLayerPixelRatio(view: EditorView) {
+  let ratio = view.dom.ownerDocument.defaultView?.devicePixelRatio
+  return typeof ratio == "number" && Number.isFinite(ratio) && ratio > 0 ? ratio : 1
 }
 
 function getInlineChangeRects(view: EditorView, selector: string) {
@@ -376,12 +383,28 @@ export function normalizeInlineChangeRects(rects: readonly InlineChangeRect[], l
   return result
 }
 
-function inlineChangeLayerMarker(rects: readonly InlineChangeRect[], className: string) {
-  let left = Math.min(...rects.map(rect => rect.left))
-  let top = Math.min(...rects.map(rect => rect.top))
-  let right = Math.max(...rects.map(rect => rect.left + rect.width))
-  let bottom = Math.max(...rects.map(rect => rect.top + rect.height))
-  let path = rects.map(rect => {
+export function snapInlineChangeLayerRect(rect: InlineChangeRect, pixelRatio = 1): InlineChangeRect {
+  let ratio = Number.isFinite(pixelRatio) && pixelRatio > 0 ? pixelRatio : 1
+  let left = Math.floor(rect.left * ratio) / ratio
+  let top = Math.floor(rect.top * ratio) / ratio
+  let right = Math.ceil((rect.left + rect.width) * ratio) / ratio
+  let bottom = Math.ceil((rect.top + rect.height) * ratio) / ratio
+  return {
+    ...rect,
+    left,
+    top,
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
+  }
+}
+
+function inlineChangeLayerMarker(rects: readonly InlineChangeRect[], className: string, pixelRatio = 1) {
+  let snappedRects = rects.map(rect => snapInlineChangeLayerRect(rect, pixelRatio))
+  let left = Math.min(...snappedRects.map(rect => rect.left))
+  let top = Math.min(...snappedRects.map(rect => rect.top))
+  let right = Math.max(...snappedRects.map(rect => rect.left + rect.width))
+  let bottom = Math.max(...snappedRects.map(rect => rect.top + rect.height))
+  let path = snappedRects.map(rect => {
     let x = rect.left - left, y = rect.top - top
     return `M${x} ${y}H${x + rect.width}V${y + rect.height}H${x}Z`
   }).join("")
@@ -409,8 +432,8 @@ function addInlineChangeDeco(
   isA: boolean,
   builder: RangeSetBuilder<Decoration>,
   changeI: number,
-  inlineChangedText: Decoration = changedText,
-  inlineChangedTextEmpty: Decoration = changedTextEmpty,
+  inlineChangedText: Decoration | null = changedText,
+  inlineChangedTextEmpty: Decoration | null = changedTextEmpty,
 ) {
   while (changeI < chunk.changes.length) {
     let nextChange = chunk.changes[changeI]
@@ -422,11 +445,13 @@ function addInlineChangeDeco(
     }
     if (nextFrom > lineEnd) break
     let chFrom = Math.max(pos, nextFrom), chTo = Math.min(lineEnd, nextTo)
-    if (chFrom < chTo) builder.add(chFrom, chTo, inlineChangedText)
+    if (chFrom < chTo) {
+      if (inlineChangedText) builder.add(chFrom, chTo, inlineChangedText)
+    }
     else if (nextFrom == nextTo && nextFrom >= pos && nextFrom <= lineEnd) {
       let otherFrom = isA ? nextChange.fromB : nextChange.fromA
       let otherTo = isA ? nextChange.toB : nextChange.toA
-      if (otherFrom < otherTo) builder.add(nextFrom, nextFrom, inlineChangedTextEmpty)
+      if (otherFrom < otherTo && inlineChangedTextEmpty) builder.add(nextFrom, nextFrom, inlineChangedTextEmpty)
     }
     if (nextTo <= lineEnd) changeI++
     else break
@@ -435,8 +460,8 @@ function addInlineChangeDeco(
 }
 
 export type ChunkDecorationOptions = {
-  changedText?: Decoration
-  changedTextEmpty?: Decoration
+  changedText?: Decoration | null
+  changedTextEmpty?: Decoration | null
   gutter?: boolean
 }
 

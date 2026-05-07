@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
-import { addChunkDecorations, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { addChunkDecorations, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { RangeSetBuilder, Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor/lib/meo-native-diff-split'
@@ -37,6 +37,15 @@ describe('CodeMirror merge decorations', () => {
       { from: originalDoc.line(2).from, to: originalDoc.line(3).from, classes: 'cm-deletedLine' },
       { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText' },
     ]))
+  })
+
+  it('snaps inline change layer rectangles to device pixels', () => {
+    expect(snapInlineChangeLayerRect({ left: 10.2, top: 4.25, width: 12.1, height: 20.3 }, 2)).toMatchObject({
+      left: 10,
+      top: 4,
+      width: 12.5,
+      height: 21,
+    })
   })
 
   it('treats pure inserted lines as whole-line changes only on the modified side', () => {
