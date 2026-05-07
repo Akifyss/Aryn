@@ -66,8 +66,10 @@ import { isRegularInlineSelection } from '@/vendor/meo/webview/helpers/selection
 import {
   gitDiffGutterBaselineExtensions,
   gitDiffGutterLiveRenderExtensions,
+  gitDiffLineFlagsField,
   setGitBaseline,
   setGitDiffLineFlags,
+  type MarkerFlags,
 } from '@/vendor/meo/webview/helpers/gitDiffGutter'
 import {
   createGitDiffOverviewRulerController,
@@ -412,6 +414,8 @@ export const __meoDiffSplitSearchTestHooks = {
 } as const
 
 export const __meoDiffSplitRenderHealthTestHooks = {
+  buildSplitDiffFallbackDecorations,
+  buildSplitDiffFallbackDecorationsFromInputs,
   findSplitPaneRenderHealthIssue,
   markdownLineLooksUnrendered,
   splitRenderRefreshEffects,
@@ -861,6 +865,12 @@ const SPLIT_RENDER_HEALTH_PARSE_TIMEOUT_MS = 80
 type SplitRenderRefreshReason = 'split-render-health' | 'split-scroll-refresh' | 'split-layout-refresh'
 
 const splitRenderRefreshReason = Annotation.define<SplitRenderRefreshReason>()
+const splitFallbackChangedLineDeco = Decoration.line({ class: 'cm-changedLine' })
+const splitFallbackInsertedLineFullDeco = Decoration.line({ class: 'cm-insertedLineFull' })
+const splitFallbackDeletedLineFullDeco = Decoration.line({ class: 'cm-deletedLineFull' })
+const splitFallbackInsertedLineDeco = Decoration.mark({ tagName: 'ins', class: 'cm-insertedLine' })
+const splitFallbackDeletedLineDeco = Decoration.mark({ tagName: 'del', class: 'cm-deletedLine' })
+const splitFallbackChangedTextDeco = Decoration.mark({ class: 'cm-changedText meo-diff-split-fallback-changedText' })
 
 function hasRefreshLiveDecorationsEffect(transaction: Transaction) {
   return transaction.effects.some((effect) => effect.is(refreshLiveDecorationsEffect))
@@ -1021,6 +1031,63 @@ function chunkHasInlineChangeOnLine(chunk: CodeMirrorDiffChunk, line: { from: nu
   return false
 }
 
+function addChunkInlineFallbackDecorations(
+  builder: RangeSetBuilder<Decoration>,
+  chunk: CodeMirrorDiffChunk,
+  line: { from: number, to: number },
+  side: 'a' | 'b',
+) {
+  const range = chunkLineRange(chunk, side)
+  if (range.from === range.to || isWholeLineChangeForSide(chunk, side)) {
+    return
+  }
+
+  for (const change of chunk.changes) {
+    const from = range.from + (side === 'a' ? change.fromA : change.fromB)
+    const to = range.from + (side === 'a' ? change.toA : change.toB)
+    const markFrom = Math.max(line.from, from)
+    const markTo = Math.min(line.to, to)
+    if (markFrom < markTo) {
+      builder.add(markFrom, markTo, splitFallbackChangedTextDeco)
+    }
+  }
+}
+
+function addChunkLineFallbackDecorations(
+  builder: RangeSetBuilder<Decoration>,
+  chunk: CodeMirrorDiffChunk,
+  line: { from: number, to: number },
+  side: 'a' | 'b',
+) {
+  const range = chunkLineRange(chunk, side)
+  if (range.from === range.to) {
+    return
+  }
+
+  const wholeLineChange = isWholeLineChangeForSide(chunk, side)
+  const lineTextDeco = side === 'a' ? splitFallbackDeletedLineDeco : splitFallbackInsertedLineDeco
+  const fullLineDeco = wholeLineChange
+    ? side === 'a'
+      ? splitFallbackDeletedLineFullDeco
+      : splitFallbackInsertedLineFullDeco
+    : null
+
+  builder.add(line.from, line.from, splitFallbackChangedLineDeco)
+  if (fullLineDeco) {
+    builder.add(line.from, line.from, fullLineDeco)
+  }
+
+  const lineMarkFrom = Math.max(line.from, range.from)
+  const lineMarkTo = Math.min(line.to, Math.min(range.to, line.to))
+  if (lineMarkFrom < lineMarkTo) {
+    builder.add(lineMarkFrom, lineMarkTo, lineTextDeco)
+  }
+
+  if (!wholeLineChange) {
+    addChunkInlineFallbackDecorations(builder, chunk, line, side)
+  }
+}
+
 function isWholeLineChangeForSide(chunk: CodeMirrorDiffChunk, side: 'a' | 'b') {
   return side === 'a'
     ? chunk.fromB === chunk.toB
@@ -1042,6 +1109,36 @@ function findChunkForLine(view: EditorView, line: { from: number, to: number }) 
 
 export type SplitRenderHealthIssue = 'markdown' | 'diff-line' | 'diff-text'
 
+function flagsIndicateRenderableDiff(flags: MarkerFlags | undefined | null) {
+  return !!flags && flags.scope !== 'staged' && (flags.added || flags.deleted || flags.modified || flags.removed)
+}
+
+function getSplitDiffLineFlags(view: EditorView) {
+  return view.state.field(gitDiffLineFlagsField, false)
+}
+
+function getSplitDiffLineFlag(view: EditorView, lineNumber: number) {
+  const flags = getSplitDiffLineFlags(view)
+  return Array.isArray(flags) ? flags[lineNumber - 1] : undefined
+}
+
+function buildSplitChunkByLine(doc: Text, side: 'a' | 'b', chunks: readonly CodeMirrorDiffChunk[]) {
+  const chunksByLine = new Map<number, CodeMirrorDiffChunk>()
+  for (const chunk of chunks) {
+    const range = chunkLineRange(chunk, side)
+    if (range.from === range.to) {
+      continue
+    }
+
+    const startLineNo = doc.lineAt(range.from).number
+    const endLineNo = doc.lineAt(Math.max(range.from, Math.min(doc.length, range.to - 1))).number
+    for (let lineNo = startLineNo; lineNo <= endLineNo; lineNo += 1) {
+      chunksByLine.set(lineNo, chunk)
+    }
+  }
+  return chunksByLine
+}
+
 export function findSplitPaneRenderHealthIssue(view: EditorView): SplitRenderHealthIssue | null {
   const lineElements = view.contentDOM.querySelectorAll<HTMLElement>('.cm-line')
   for (const lineElement of lineElements) {
@@ -1055,12 +1152,17 @@ export function findSplitPaneRenderHealthIssue(view: EditorView): SplitRenderHea
     }
 
     const match = findChunkForLine(view, line)
-    if (!match) {
+    const lineHasDiffFlag = flagsIndicateRenderableDiff(getSplitDiffLineFlag(view, line.number))
+    if (!match && !lineHasDiffFlag) {
       continue
     }
 
     if (!lineElement.classList.contains('cm-changedLine')) {
       return 'diff-line'
+    }
+
+    if (!match) {
+      continue
     }
 
     if (
@@ -1167,6 +1269,70 @@ const splitPaneRenderHealthPlugin = ViewPlugin.fromClass(class {
     this.pendingFrame = 0
   }
 })
+
+const splitDiffFallbackDecorationField = StateField.define({
+  create(state) {
+    return buildSplitDiffFallbackDecorations(state)
+  },
+  update(value, transaction) {
+    if (
+      transaction.effects.some((effect) => (
+        effect.is(refreshChunkDecorationsEffect)
+        || effect.is(refreshInlineChangeLayerEffect)
+      ))
+      || transaction.startState.field(gitDiffLineFlagsField, false) !== transaction.state.field(gitDiffLineFlagsField, false)
+      || getChunks(transaction.startState)?.chunks !== getChunks(transaction.state)?.chunks
+    ) {
+      return buildSplitDiffFallbackDecorations(transaction.state)
+    }
+
+    return value.map(transaction.changes)
+  },
+  provide: (field) => EditorView.decorations.from(field),
+})
+
+function buildSplitDiffFallbackDecorations(state: EditorState) {
+  const flags = state.field(gitDiffLineFlagsField, false)
+  const chunkInfo = getChunks(state)
+  return buildSplitDiffFallbackDecorationsFromInputs(
+    state.doc,
+    flags,
+    (chunkInfo?.chunks ?? []) as readonly CodeMirrorDiffChunk[],
+    chunkInfo?.side ?? undefined,
+  )
+}
+
+function buildSplitDiffFallbackDecorationsFromInputs(
+  doc: Text,
+  flags: readonly (MarkerFlags | undefined)[] | null | undefined,
+  chunks: readonly CodeMirrorDiffChunk[] = [],
+  side?: 'a' | 'b',
+) {
+  const hasRenderableFlags = Array.isArray(flags) && flags.some(flagsIndicateRenderableDiff)
+  if (!hasRenderableFlags && (!side || !chunks.length)) {
+    return Decoration.none
+  }
+
+  const builder = new RangeSetBuilder<Decoration>()
+  const chunksByLine = side ? buildSplitChunkByLine(doc, side, chunks) : null
+
+  for (let lineNo = 1; lineNo <= doc.lines; lineNo += 1) {
+    const chunk = chunksByLine?.get(lineNo)
+    const flag = Array.isArray(flags) ? flags[lineNo - 1] : undefined
+    if (!chunk && !flagsIndicateRenderableDiff(flag)) {
+      continue
+    }
+
+    const line = doc.line(lineNo)
+    if (chunk && side) {
+      addChunkLineFallbackDecorations(builder, chunk, line, side)
+    } else {
+      builder.add(line.from, line.from, splitFallbackChangedLineDeco)
+    }
+  }
+
+  return builder.finish()
+}
 
 // Live mode can reveal Markdown source markers from selection/focus changes
 // without changing diff chunks. Refresh the measured merge overlay in the same
@@ -2044,6 +2210,7 @@ export function createDiffExtensions({
       class: 'meo-mode-live meo-diff-split-editor',
     }),
     ...liveModeExtensions({ deferDocChanges: true }),
+    splitDiffFallbackDecorationField,
     splitPaneRenderHealthPlugin,
   ]
 

@@ -675,5 +675,6 @@ export function gitDiffGutterLiveRenderExtensions(options: GitDiffGutterRenderOp
 export const __gitDiffGutterTestHooks = {
   deferGitDiffLineFlagsRefreshEffect,
   liveCollapsedBlockMarkerAtPos,
-  liveWidgetMarkerAtPos
+  liveWidgetMarkerAtPos,
+  setGitDiffLineFlagsEffect
 };

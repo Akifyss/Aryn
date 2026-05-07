@@ -714,6 +714,12 @@
   background: transparent;
 }
 
+.meo-native-theme .meo-diff-split-body .meo-diff-split-fallback-changedText {
+  background: var(--meo-diff-split-changed-text-background);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 .meo-native-theme .meo-diff-split-body .cm-inlineChangeLayer {
   pointer-events: none;
 }

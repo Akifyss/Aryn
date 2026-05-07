@@ -508,6 +508,80 @@ describe('meo performance guards', () => {
     expect(shouldRefreshLiveDecorationsForTransaction(transaction)).toBe(true)
   })
 
+  it('builds split diff fallback line decorations from rendered gutter flags', () => {
+    let state = EditorState.create({
+      doc: ['one', 'two', 'three'].join('\n'),
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    state = state.update({
+      effects: __gitDiffGutterTestHooks.setGitDiffLineFlagsEffect.of([
+        undefined,
+        { added: false, deleted: false, modified: false, removed: true, scope: 'unstaged' },
+        undefined,
+      ]),
+    }).state
+
+    const decorations = __meoDiffSplitRenderHealthTestHooks.buildSplitDiffFallbackDecorations(state)
+    const ranges: Array<{ from: number, classes: string }> = []
+    decorations.between(0, state.doc.length, (from: number, _to: number, value: any) => {
+      ranges.push({ from, classes: value.spec?.class ?? '' })
+    })
+
+    expect(ranges).toEqual([
+      { from: state.doc.line(2).from, classes: 'cm-changedLine' },
+    ])
+  })
+
+  it('builds split diff fallback text decorations symmetrically from merge chunks', () => {
+    const originalDoc = Text.of(['one', 'two', 'three'])
+    const modifiedDoc = Text.of(['one', 'TWO', 'three'])
+    const chunks = Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const [chunk] = chunks
+    const collectClasses = (
+      doc: Text,
+      side: 'a' | 'b',
+      flags: readonly ({ added: boolean, deleted: boolean, modified: boolean, removed?: boolean, scope: 'unstaged' } | undefined)[],
+    ) => {
+      const decorations = __meoDiffSplitRenderHealthTestHooks.buildSplitDiffFallbackDecorationsFromInputs(
+        doc,
+        flags,
+        [chunk],
+        side,
+      )
+      const ranges: Array<{ from: number, to: number, classes: string }> = []
+      decorations.between(0, doc.length, (from: number, to: number, value: any) => {
+        ranges.push({ from, to, classes: value.spec?.class ?? '' })
+      })
+      return ranges
+    }
+
+    const originalRanges = collectClasses(originalDoc, 'a', [
+      undefined,
+      { added: false, deleted: false, modified: false, removed: true, scope: 'unstaged' },
+      undefined,
+    ])
+    const modifiedRanges = collectClasses(modifiedDoc, 'b', [
+      undefined,
+      { added: true, deleted: false, modified: false, removed: false, scope: 'unstaged' },
+      undefined,
+    ])
+
+    expect(originalRanges).toEqual(expect.arrayContaining([
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).from, classes: 'cm-changedLine' },
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-deletedLine' },
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText meo-diff-split-fallback-changedText' },
+    ]))
+    expect(modifiedRanges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedLine' },
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-insertedLine' },
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-changedText meo-diff-split-fallback-changedText' },
+    ]))
+  })
+
   it('keeps split merge deletion chunks bounded to the edited line on the incremental path', () => {
     const originalDoc = Text.of([
       '# Notes',
