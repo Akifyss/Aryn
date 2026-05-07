@@ -672,6 +672,11 @@
     );
 }
 
+.meo-native-theme .meo-diff-split-body {
+  --meo-diff-split-deleted-text-background: color-mix(in srgb, var(--git-deleted) 16%, transparent);
+  --meo-diff-split-added-text-background: color-mix(in srgb, var(--git-added) 16%, transparent);
+}
+
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changedLine,
 .meo-native-theme .meo-diff-split-body .cm-deletedChunk {
   background-color: color-mix(in srgb, var(--git-deleted) 7%, transparent);
@@ -683,23 +688,23 @@
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-deletedLineFull {
-  background-color: color-mix(in srgb, var(--git-deleted) 16%, transparent);
+  background-image: linear-gradient(var(--meo-diff-split-deleted-text-background), var(--meo-diff-split-deleted-text-background));
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-b .cm-insertedLineFull {
-  background-color: color-mix(in srgb, var(--git-added) 16%, transparent);
+  background-image: linear-gradient(var(--meo-diff-split-added-text-background), var(--meo-diff-split-added-text-background));
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changedText,
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changedTextLayerRanges,
 .meo-native-theme .meo-diff-split-body .cm-deletedTextLayerRanges,
 .meo-native-theme .meo-diff-split-body .cm-deletedChunk .cm-deletedText {
-  --meo-diff-split-changed-text-background: color-mix(in srgb, var(--git-deleted) 16%, transparent);
+  --meo-diff-split-changed-text-background: var(--meo-diff-split-deleted-text-background);
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-b .cm-changedText,
 .meo-native-theme .meo-diff-split-body .cm-merge-b .cm-changedTextLayerRanges {
-  --meo-diff-split-changed-text-background: color-mix(in srgb, var(--git-added) 16%, transparent);
+  --meo-diff-split-changed-text-background: var(--meo-diff-split-added-text-background);
 }
 
 .meo-native-theme .meo-diff-split-body .cm-changedText,
