@@ -436,6 +436,19 @@ export function isWholeLineChange(chunk: Chunk, isA: boolean) {
   return isA ? chunk.fromB == chunk.toB : chunk.fromA == chunk.toA
 }
 
+export function isLineFilledByDiffText(
+  chunk: Chunk,
+  from: number,
+  lineFrom: number,
+  lineTo: number,
+  isA: boolean,
+) {
+  for (let change of chunk.changes) {
+    if (changeFillsLineOnLineBreak(change, from, lineFrom, lineTo, isA)) return true
+  }
+  return false
+}
+
 export function isLineFullyInsertedOrDeleted(
   chunk: Chunk,
   from: number,
@@ -449,7 +462,7 @@ export function isLineFullyInsertedOrDeleted(
   return false
 }
 
-function changeFullyInsertsOrDeletesLine(
+function changeFillsLineOnLineBreak(
   change: Change,
   from: number,
   lineFrom: number,
@@ -458,9 +471,23 @@ function changeFullyInsertsOrDeletesLine(
 ) {
   let changeFrom = from + (isA ? change.fromA : change.fromB)
   let changeTo = from + (isA ? change.toA : change.toB)
+  // Mirrors VS Code's char decoration behavior:
+  // - Pure single-sided line-range mappings are handled by isWholeLineChange.
+  // - Inner char decorations only fill the row when shouldFillLineOnLineBreak
+  //   can apply, which means the changed range continues past this line's text.
+  return changeFrom <= lineFrom && changeTo > lineTo && changeFrom < changeTo
+}
+
+function changeFullyInsertsOrDeletesLine(
+  change: Change,
+  from: number,
+  lineFrom: number,
+  lineTo: number,
+  isA: boolean,
+) {
   let otherFrom = isA ? change.fromB : change.fromA
   let otherTo = isA ? change.toB : change.toA
-  return otherFrom == otherTo && changeFrom <= lineFrom && changeTo > lineTo && changeFrom < changeTo
+  return otherFrom == otherTo && changeFillsLineOnLineBreak(change, from, lineFrom, lineTo, isA)
 }
 
 function addChangedLineDeco(builder: RangeSetBuilder<Decoration> | PendingDecoration[], pos: number, fullLine: Decoration | null) {
@@ -536,7 +563,7 @@ export function addChunkDecorations(
     let fullLine = isA ? deletedLineFull : insertedLineFull
     let pendingDecorations: PendingDecoration[] = []
     let lineFullDeco = (lineFrom: number, lineTo: number) =>
-      wholeLineChange || isLineFullyInsertedOrDeleted(chunk, from, lineFrom, lineTo, isA) ? fullLine : null
+      wholeLineChange || isLineFilledByDiffText(chunk, from, lineFrom, lineTo, isA) ? fullLine : null
     let addLine = (pos: number, fullLine: Decoration | null) => {
       addChangedLineDeco(pendingDecorations, pos, fullLine)
     }
@@ -550,7 +577,7 @@ export function addChunkDecorations(
         let line = doc.lineAt(Math.min(pos, doc.length))
         let lineIsFullChange = !!lineFullDeco(line.from, line.to)
         let shouldSkipChange = lineIsFullChange
-          ? (change: Change) => changeFullyInsertsOrDeletesLine(change, from, line.from, line.to, isA) ? "full" : null
+          ? (change: Change) => changeFillsLineOnLineBreak(change, from, line.from, line.to, isA) ? "full" : null
           : null
         if (highlight) changeI = addInlineChangeDeco(
           chunk,
@@ -576,10 +603,11 @@ export function addChunkDecorations(
       let shouldSkipChange = (change: Change) => {
         let changeFrom = from + (isA ? change.fromA : change.fromB)
         let changeTo = from + (isA ? change.toA : change.toB)
+        if (changeTo <= changeFrom) return null
+        if (lineIsFullChange && changeFillsLineOnLineBreak(change, from, line.from, line.to, isA)) return "full"
         let otherFrom = isA ? change.fromB : change.fromA
         let otherTo = isA ? change.toB : change.toA
-        if (otherFrom != otherTo || changeTo <= changeFrom) return null
-        if (lineIsFullChange && changeFullyInsertsOrDeletesLine(change, from, line.from, line.to, isA)) return "full"
+        if (otherFrom != otherTo) return null
         return changeFrom <= line.from && changeTo > line.to && changeFrom == lineEnd ? "empty" : null
       }
       if (highlight) changeI = addInlineChangeDeco(

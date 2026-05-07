@@ -10,6 +10,6 @@ export type {MergeConfig, DirectMergeConfig} from "./mergeview"
 export {unifiedMergeView, acceptChunk, rejectChunk, getOriginalDoc,
         originalDocChangeEffect, updateOriginalDoc} from "./unified"
 
-export {addChangedLineDecoration, addChunkDecorations, changedText, isLineFullyInsertedOrDeleted, refreshChunkDecorationsEffect, refreshInlineChangeLayerEffect, uncollapseUnchanged, mergeViewSiblings} from "./deco"
+export {addChangedLineDecoration, addChunkDecorations, changedText, isLineFilledByDiffText, isLineFullyInsertedOrDeleted, refreshChunkDecorationsEffect, refreshInlineChangeLayerEffect, uncollapseUnchanged, mergeViewSiblings} from "./deco"
 
 export {Chunk} from "./chunk"

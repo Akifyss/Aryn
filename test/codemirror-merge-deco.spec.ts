@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
-import { addChunkDecorations, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { addChunkDecorations, isLineFilledByDiffText, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { RangeSetBuilder, Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor/lib/meo-native-diff-split'
@@ -62,6 +62,46 @@ describe('CodeMirror merge decorations', () => {
     expect(isWholeLineChange(chunk, false)).toBe(false)
   })
 
+  it('layers line and full-line text decorations for pure inserted line ranges', () => {
+    const originalDoc = Text.of(['same', 'tail'])
+    const modifiedDoc = Text.of(['same', 'inserted line', 'tail'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const builder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, modifiedDoc, false, true, builder, null, { gutter: false })
+
+    const ranges: Array<{ from: number, to: number, classes: string }> = []
+    builder.finish().between(0, modifiedDoc.length, (from, to, value) => {
+      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+    })
+
+    expect(isWholeLineChange(chunk, false)).toBe(true)
+    expect(ranges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedLine' },
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-insertedLineFull' },
+    ]))
+  })
+
+  it('layers line and full-line text decorations for pure deleted line ranges', () => {
+    const originalDoc = Text.of(['same', 'deleted line', 'tail'])
+    const modifiedDoc = Text.of(['same', 'tail'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const builder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, originalDoc, true, true, builder, null, { gutter: false })
+
+    const ranges: Array<{ from: number, to: number, classes: string }> = []
+    builder.finish().between(0, originalDoc.length, (from, to, value) => {
+      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+    })
+
+    expect(isWholeLineChange(chunk, true)).toBe(true)
+    expect(ranges).toEqual(expect.arrayContaining([
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).from, classes: 'cm-changedLine' },
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).from, classes: 'cm-deletedLineFull' },
+    ]))
+  })
+
   it('keeps replacements in the inline-change path', () => {
     const chunk = new Chunk([], 4, 10, 4, 10)
 
@@ -85,6 +125,48 @@ describe('CodeMirror merge decorations', () => {
     expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromA, originalDoc.line(2).from, originalDoc.line(2).to, true)).toBe(false)
     expect(ranges.some((range) => range.classes.includes('cm-deletedLineFull'))).toBe(false)
     expect(ranges.some((range) => range.classes.includes('cm-changedText'))).toBe(true)
+  })
+
+  it('fills lines when VS Code char ranges continue across line breaks', () => {
+    const originalDoc = Text.of(['same', 'aaaa', 'cccc', 'tail'])
+    const modifiedDoc = Text.of(['same', 'bbbb', 'dddd', 'tail'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const originalBuilder = new RangeSetBuilder<Decoration>()
+    const modifiedBuilder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, originalDoc, true, true, originalBuilder, null, { gutter: false })
+    addChunkDecorations(chunk, modifiedDoc, false, true, modifiedBuilder, null, { gutter: false })
+
+    const collectClasses = (doc: Text, builder: RangeSetBuilder<Decoration>) => {
+      const ranges: Array<{ from: number, to: number, classes: string }> = []
+      builder.finish().between(0, doc.length, (from, to, value) => {
+        ranges.push({ from, to, classes: value.spec?.class ?? '' })
+      })
+      return ranges
+    }
+    const originalRanges = collectClasses(originalDoc, originalBuilder)
+    const modifiedRanges = collectClasses(modifiedDoc, modifiedBuilder)
+
+    expect(isWholeLineChange(chunk, true)).toBe(false)
+    expect(isWholeLineChange(chunk, false)).toBe(false)
+    expect(isLineFilledByDiffText(chunk, chunk.fromA, originalDoc.line(2).from, originalDoc.line(2).to, true)).toBe(true)
+    expect(isLineFilledByDiffText(chunk, chunk.fromB, modifiedDoc.line(2).from, modifiedDoc.line(2).to, false)).toBe(true)
+    expect(originalRanges).toEqual(expect.arrayContaining([
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).from, classes: 'cm-deletedLineFull' },
+    ]))
+    expect(modifiedRanges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-insertedLineFull' },
+    ]))
+    expect(originalRanges.some((range) => (
+      range.classes.includes('cm-changedText')
+      && range.from <= originalDoc.line(2).to
+      && range.to >= originalDoc.line(2).from
+    ))).toBe(false)
+    expect(modifiedRanges.some((range) => (
+      range.classes.includes('cm-changedText')
+      && range.from <= modifiedDoc.line(2).to
+      && range.to >= modifiedDoc.line(2).from
+    ))).toBe(false)
   })
 
   it('promotes single-sided ranges inside replacement chunks to full-line decorations', () => {
@@ -129,7 +211,7 @@ describe('CodeMirror merge decorations', () => {
     ))).toBe(false)
   })
 
-  it('does not promote same-line empty/non-empty edits to full-line decorations', () => {
+  it('keeps same-line empty/non-empty edits in the inline-change path', () => {
     const originalDoc = Text.of(['same', '', 'tail'])
     const modifiedDoc = Text.of(['same', 'abc', 'tail'])
     const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
@@ -149,7 +231,7 @@ describe('CodeMirror merge decorations', () => {
     ]))
   })
 
-  it('does not promote same-line non-empty/empty edits to full-line decorations', () => {
+  it('keeps same-line non-empty/empty edits in the inline-change path', () => {
     const originalDoc = Text.of(['same', 'abc', 'tail'])
     const modifiedDoc = Text.of(['same', '', 'tail'])
     const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
