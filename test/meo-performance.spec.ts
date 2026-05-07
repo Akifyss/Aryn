@@ -582,6 +582,58 @@ describe('meo performance guards', () => {
     expect(modifiedRanges.some((range) => range.classes.includes('cm-changedText'))).toBe(false)
   })
 
+  it('uses full-line fallback backgrounds for single-sided ranges inside replacement chunks', () => {
+    const originalDoc = Text.of(['same', 'shared original', 'tail'])
+    const modifiedDoc = Text.of(['same', 'inserted standalone', 'shared modified', 'tail', 'same'])
+    const [chunk] = Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const collectClasses = (doc: Text, side: 'a' | 'b') => {
+      const decorations = __meoDiffSplitRenderHealthTestHooks.buildSplitDiffFallbackDecorationsFromInputs(
+        doc,
+        [
+          ...(side === 'a'
+            ? [
+              undefined,
+              { added: false, deleted: false, modified: false, removed: true, scope: 'unstaged' } as const,
+              undefined,
+            ]
+            : [
+              undefined,
+              { added: true, deleted: false, modified: true, removed: false, scope: 'unstaged' } as const,
+              { added: true, deleted: false, modified: true, removed: false, scope: 'unstaged' } as const,
+              undefined,
+              { added: true, deleted: false, modified: true, removed: false, scope: 'unstaged' } as const,
+            ]),
+        ],
+        [chunk],
+        side,
+        true,
+      )
+      const ranges: Array<{ from: number, to: number, classes: string }> = []
+      decorations.between(0, doc.length, (from: number, to: number, value: any) => {
+        ranges.push({ from, to, classes: value.spec?.class ?? '' })
+      })
+      return ranges
+    }
+
+    const originalRanges = collectClasses(originalDoc, 'a')
+    const modifiedRanges = collectClasses(modifiedDoc, 'b')
+
+    expect(originalRanges.some((range) => range.classes.includes('cm-deletedLineFull'))).toBe(false)
+    expect(modifiedRanges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-insertedLineFull' },
+    ]))
+    expect(originalRanges.some((range) => range.classes.includes('meo-diff-split-fallback-changedText'))).toBe(true)
+    expect(modifiedRanges.some((range) => (
+      range.classes.includes('meo-diff-split-fallback-changedText')
+      && range.from <= modifiedDoc.line(2).to
+      && range.to >= modifiedDoc.line(2).from
+    ))).toBe(false)
+  })
+
   it('can make split diff fallback text decorations visible after render health retries fail', () => {
     const originalDoc = Text.of(['one', 'two', 'three'])
     const modifiedDoc = Text.of(['one', 'TWO', 'three'])

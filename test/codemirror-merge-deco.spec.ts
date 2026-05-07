@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
-import { addChunkDecorations, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { addChunkDecorations, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { RangeSetBuilder, Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor/lib/meo-native-diff-split'
@@ -67,6 +67,66 @@ describe('CodeMirror merge decorations', () => {
 
     expect(isWholeLineChange(chunk, true)).toBe(false)
     expect(isWholeLineChange(chunk, false)).toBe(false)
+  })
+
+  it('keeps full-line replacements in the inline-change path', () => {
+    const originalDoc = Text.of(['same', 'old sentence', 'same'])
+    const modifiedDoc = Text.of(['same', 'new sentence', 'same'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const builder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, originalDoc, true, true, builder, null, { gutter: false })
+
+    const ranges: Array<{ from: number, to: number, classes: string }> = []
+    builder.finish().between(0, originalDoc.length, (from, to, value) => {
+      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+    })
+
+    expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromA, originalDoc.line(2).from, originalDoc.line(2).to, true)).toBe(false)
+    expect(ranges.some((range) => range.classes.includes('cm-deletedLineFull'))).toBe(false)
+    expect(ranges.some((range) => range.classes.includes('cm-changedText'))).toBe(true)
+  })
+
+  it('promotes single-sided ranges inside replacement chunks to full-line decorations', () => {
+    const originalDoc = Text.of([
+      'same',
+      'shared original',
+      'tail',
+    ])
+    const modifiedDoc = Text.of([
+      'same',
+      'inserted standalone',
+      'shared modified',
+      'tail',
+      'same',
+    ])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const originalBuilder = new RangeSetBuilder<Decoration>()
+    const modifiedBuilder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, originalDoc, true, true, originalBuilder, null, { gutter: false })
+    addChunkDecorations(chunk, modifiedDoc, false, true, modifiedBuilder, null, { gutter: false })
+
+    const collectClasses = (doc: Text, builder: RangeSetBuilder<Decoration>) => {
+      const ranges: Array<{ from: number, to: number, classes: string }> = []
+      builder.finish().between(0, doc.length, (from, to, value) => {
+        ranges.push({ from, to, classes: value.spec?.class ?? '' })
+      })
+      return ranges
+    }
+    const originalRanges = collectClasses(originalDoc, originalBuilder)
+    const modifiedRanges = collectClasses(modifiedDoc, modifiedBuilder)
+
+    expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromB, modifiedDoc.line(2).from, modifiedDoc.line(2).to, false)).toBe(true)
+    expect(originalRanges.some((range) => range.classes.includes('cm-deletedLineFull'))).toBe(false)
+    expect(modifiedRanges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-insertedLineFull' },
+    ]))
+    expect(modifiedRanges.some((range) => (
+      range.classes.includes('cm-changedText')
+      && range.from <= modifiedDoc.line(2).to
+      && range.to >= modifiedDoc.line(2).from
+    ))).toBe(false)
   })
 
   it('places EOF fake-line spacers after the final content line', () => {

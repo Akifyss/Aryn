@@ -2,6 +2,7 @@ import {EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate, Direction
         WidgetType, GutterMarker, gutter, layer, type LayerMarker} from "@codemirror/view"
 import {EditorState, RangeSetBuilder, Text, StateField, StateEffect, RangeSet, Prec} from "@codemirror/state"
 import {Chunk} from "./chunk"
+import type {Change} from "./diff"
 import {ChunkField, deferredChunkUpdate, mergeConfig} from "./merge"
 
 export const refreshInlineChangeLayerEffect = StateEffect.define<null>()
@@ -160,10 +161,27 @@ class ChangedTextEmpty extends WidgetType {
   ignoreEvent() { return true }
 }
 
-const changedTextEmpty = Decoration.widget({widget: new ChangedTextEmpty(), side: 1})
+const placeEmptyTextMarkersAfterTextMarks = 500000000
+const changedTextEmpty = Decoration.widget({widget: new ChangedTextEmpty(), side: placeEmptyTextMarkersAfterTextMarks})
 
 const changedLineGutterMarker = new class extends GutterMarker {
   elementClass = "cm-changedLineGutter"
+}
+
+type PendingDecoration = {from: number, to: number, decoration: Decoration}
+
+function addPendingDecoration(target: RangeSetBuilder<Decoration> | PendingDecoration[], from: number, to: number, decoration: Decoration) {
+  if (Array.isArray(target)) target.push({from, to, decoration})
+  else target.add(from, to, decoration)
+}
+
+function flushPendingDecorations(builder: RangeSetBuilder<Decoration>, decorations: PendingDecoration[]) {
+  decorations.sort((a, b) =>
+    a.from - b.from ||
+    a.decoration.startSide - b.decoration.startSide ||
+    a.to - b.to ||
+    a.decoration.endSide - b.decoration.endSide)
+  for (let {from, to, decoration} of decorations) builder.add(from, to, decoration)
 }
 
 export type InlineChangeRect = {
@@ -415,9 +433,40 @@ export function isWholeLineChange(chunk: Chunk, isA: boolean) {
   return isA ? chunk.fromB == chunk.toB : chunk.fromA == chunk.toA
 }
 
-function addChangedLineDeco(builder: RangeSetBuilder<Decoration>, pos: number, fullLine: Decoration | null) {
-  builder.add(pos, pos, changedLine)
-  if (fullLine) builder.add(pos, pos, fullLine)
+export function isLineFullyInsertedOrDeleted(
+  chunk: Chunk,
+  from: number,
+  lineFrom: number,
+  lineTo: number,
+  isA: boolean,
+) {
+  for (let change of chunk.changes) {
+    let changeFrom = from + (isA ? change.fromA : change.fromB)
+    let changeTo = from + (isA ? change.toA : change.toB)
+    let otherFrom = isA ? change.fromB : change.fromA
+    let otherTo = isA ? change.toB : change.toA
+    if (otherFrom == otherTo && changeFrom <= lineFrom && changeTo >= lineTo && changeFrom < changeTo) return true
+  }
+  return false
+}
+
+function changeFullyInsertsOrDeletesLine(
+  change: Change,
+  from: number,
+  lineFrom: number,
+  lineTo: number,
+  isA: boolean,
+) {
+  let changeFrom = from + (isA ? change.fromA : change.fromB)
+  let changeTo = from + (isA ? change.toA : change.toB)
+  let otherFrom = isA ? change.fromB : change.fromA
+  let otherTo = isA ? change.toB : change.toA
+  return otherFrom == otherTo && changeFrom <= lineFrom && changeTo >= lineTo && changeFrom < changeTo
+}
+
+function addChangedLineDeco(builder: RangeSetBuilder<Decoration> | PendingDecoration[], pos: number, fullLine: Decoration | null) {
+  addPendingDecoration(builder, pos, pos, changedLine)
+  if (fullLine) addPendingDecoration(builder, pos, pos, fullLine)
 }
 
 export function addChangedLineDecoration(builder: RangeSetBuilder<Decoration>, pos: number) {
@@ -430,10 +479,11 @@ function addInlineChangeDeco(
   pos: number,
   lineEnd: number,
   isA: boolean,
-  builder: RangeSetBuilder<Decoration>,
+  builder: RangeSetBuilder<Decoration> | PendingDecoration[],
   changeI: number,
   inlineChangedText: Decoration | null = changedText,
   inlineChangedTextEmpty: Decoration | null = changedTextEmpty,
+  shouldSkipChange: ((change: Change) => "empty" | "full" | null) | null = null,
 ) {
   while (changeI < chunk.changes.length) {
     let nextChange = chunk.changes[changeI]
@@ -444,14 +494,20 @@ function addInlineChangeDeco(
       continue
     }
     if (nextFrom > lineEnd) break
+    let skipChange = shouldSkipChange?.(nextChange) ?? null
+    if (skipChange == "full") {
+      if (nextTo <= lineEnd) changeI++
+      else break
+      continue
+    }
     let chFrom = Math.max(pos, nextFrom), chTo = Math.min(lineEnd, nextTo)
     if (chFrom < chTo) {
-      if (inlineChangedText) builder.add(chFrom, chTo, inlineChangedText)
+      if (inlineChangedText) addPendingDecoration(builder, chFrom, chTo, inlineChangedText)
     }
-    else if (nextFrom == nextTo && nextFrom >= pos && nextFrom <= lineEnd) {
+    else if (skipChange != "empty" && nextFrom == nextTo && nextFrom >= pos && nextFrom <= lineEnd) {
       let otherFrom = isA ? nextChange.fromB : nextChange.fromA
       let otherTo = isA ? nextChange.toB : nextChange.toA
-      if (otherFrom < otherTo && inlineChangedTextEmpty) builder.add(nextFrom, nextFrom, inlineChangedTextEmpty)
+      if (otherFrom < otherTo && inlineChangedTextEmpty) addPendingDecoration(builder, nextFrom, nextFrom, inlineChangedTextEmpty)
     }
     if (nextTo <= lineEnd) changeI++
     else break
@@ -478,43 +534,70 @@ export function addChunkDecorations(
   let changeI = 0
   if (from != to) {
     let wholeLineChange = isWholeLineChange(chunk, isA)
-    let fullLine = wholeLineChange ? isA ? deletedLineFull : insertedLineFull : null
-    addChangedLineDeco(builder, from, fullLine)
+    let fullLine = isA ? deletedLineFull : insertedLineFull
+    let pendingDecorations: PendingDecoration[] = []
+    let lineFullDeco = (lineFrom: number, lineTo: number) =>
+      wholeLineChange || isLineFullyInsertedOrDeleted(chunk, from, lineFrom, lineTo, isA) ? fullLine : null
+    let addLine = (pos: number, fullLine: Decoration | null) => {
+      addChangedLineDeco(pendingDecorations, pos, fullLine)
+    }
+    let firstLine = doc.lineAt(Math.min(from, doc.length))
+    addLine(from, lineFullDeco(firstLine.from, firstLine.to))
     let markTo = Math.min(to, doc.length)
-    if (from < markTo) builder.add(from, markTo, isA ? deleted : inserted)
+    if (from < markTo) addPendingDecoration(pendingDecorations, from, markTo, isA ? deleted : inserted)
     if (options.gutter !== false && gutterBuilder) gutterBuilder.add(from, from, changedLineGutterMarker)
     for (let iter = doc.iterRange(from, to - 1), pos = from; !iter.next().done;) {
       if (iter.lineBreak) {
-        if (highlight && !wholeLineChange) changeI = addInlineChangeDeco(
+        let line = doc.lineAt(Math.min(pos, doc.length))
+        let lineIsFullChange = !!lineFullDeco(line.from, line.to)
+        let shouldSkipChange = lineIsFullChange
+          ? (change: Change) => changeFullyInsertsOrDeletesLine(change, from, line.from, line.to, isA) ? "full" : null
+          : null
+        if (highlight) changeI = addInlineChangeDeco(
           chunk,
           from,
           pos,
           pos,
           isA,
-          builder,
+          pendingDecorations,
           changeI,
           options.changedText,
           options.changedTextEmpty,
+          shouldSkipChange,
         )
         pos++
-        addChangedLineDeco(builder, pos, fullLine)
+        let nextLine = doc.lineAt(Math.min(pos, doc.length))
+        addLine(pos, lineFullDeco(nextLine.from, nextLine.to))
         if (options.gutter !== false && gutterBuilder) gutterBuilder.add(pos, pos, changedLineGutterMarker)
         continue
       }
       let lineEnd = pos + iter.value.length
-      if (highlight && !wholeLineChange) changeI = addInlineChangeDeco(
+      let line = doc.lineAt(Math.min(pos, doc.length))
+      let lineIsFullChange = !!lineFullDeco(line.from, line.to)
+      let shouldSkipChange = (change: Change) => {
+        let changeFrom = from + (isA ? change.fromA : change.fromB)
+        let changeTo = from + (isA ? change.toA : change.toB)
+        let otherFrom = isA ? change.fromB : change.fromA
+        let otherTo = isA ? change.toB : change.toA
+        if (otherFrom != otherTo || changeTo <= changeFrom) return null
+        if (lineIsFullChange && changeFullyInsertsOrDeletesLine(change, from, line.from, line.to, isA)) return "full"
+        return changeFrom <= line.from && changeTo > line.to && changeFrom == lineEnd ? "empty" : null
+      }
+      if (highlight) changeI = addInlineChangeDeco(
         chunk,
         from,
         pos,
         lineEnd,
         isA,
-        builder,
+        pendingDecorations,
         changeI,
         options.changedText,
         options.changedTextEmpty,
+        shouldSkipChange,
       )
       pos = lineEnd
     }
+    flushPendingDecorations(builder, pendingDecorations)
   }
 }
 

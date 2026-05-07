@@ -8,6 +8,7 @@ import {
   getOriginalDoc,
   goToNextChunk,
   goToPreviousChunk,
+  isLineFullyInsertedOrDeleted,
   MergeView,
   originalDocChangeEffect,
   refreshChunkDecorationsEffect,
@@ -1028,7 +1029,11 @@ function lineOverlapsChunkRange(line: { from: number, to: number }, chunk: CodeM
 
 function chunkHasInlineChangeOnLine(chunk: CodeMirrorDiffChunk, line: { from: number, to: number }, side: 'a' | 'b') {
   const range = chunkLineRange(chunk, side)
-  if (range.from === range.to || isWholeLineChangeForSide(chunk, side)) {
+  if (
+    range.from === range.to
+    || isWholeLineChangeForSide(chunk, side)
+    || isLineFullyInsertedOrDeleted(chunk as Chunk, range.from, line.from, line.to, side === 'a')
+  ) {
     return false
   }
 
