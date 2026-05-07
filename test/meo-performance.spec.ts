@@ -508,6 +508,27 @@ describe('meo performance guards', () => {
     expect(shouldRefreshLiveDecorationsForTransaction(transaction)).toBe(true)
   })
 
+  it('keeps split render health recovery off live typing, deletion, and IME transactions', () => {
+    const state = EditorState.create({ doc: 'abc' })
+    const typing = state.update({
+      changes: { from: state.doc.length, insert: 'x' },
+      annotations: Transaction.userEvent.of('input.type'),
+    })
+    const deletion = state.update({
+      changes: { from: 1, to: 2 },
+      annotations: Transaction.userEvent.of('delete.backward'),
+    })
+    const composing = state.update({
+      changes: { from: state.doc.length, insert: '咚' },
+      annotations: Transaction.userEvent.of('input.type.compose'),
+    })
+
+    expect(__meoDiffSplitRenderHealthTestHooks.shouldSkipSplitRenderHealthForTransactions([typing])).toBe(true)
+    expect(__meoDiffSplitRenderHealthTestHooks.shouldSkipSplitRenderHealthForTransactions([deletion])).toBe(true)
+    expect(__meoDiffSplitRenderHealthTestHooks.shouldSkipSplitRenderHealthForTransactions([composing])).toBe(true)
+    expect(__meoDiffSplitRenderHealthTestHooks.shouldSkipSplitRenderHealthForTransactions([state.update({})])).toBe(false)
+  })
+
   it('builds split diff fallback line decorations from rendered gutter flags', () => {
     let state = EditorState.create({
       doc: ['one', 'two', 'three'].join('\n'),

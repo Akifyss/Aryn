@@ -422,6 +422,7 @@ export const __meoDiffSplitRenderHealthTestHooks = {
   buildSplitDiffFallbackDecorationsFromInputs,
   findSplitPaneRenderHealthIssue,
   markdownLineLooksUnrendered,
+  shouldSkipSplitRenderHealthForTransactions,
   splitRenderRefreshEffects,
 } as const
 
@@ -904,6 +905,19 @@ function hasRefreshInlineChangeLayerEffect(transaction: Transaction) {
   return transaction.effects.some((effect) => effect.is(refreshInlineChangeLayerEffect))
 }
 
+function isCompositionInputTransaction(transaction: Transaction) {
+  const userEvent = transaction.annotation(Transaction.userEvent)
+  return typeof userEvent === 'string' && userEvent.startsWith('input.type.compose')
+}
+
+function shouldSkipSplitRenderHealthForTransaction(transaction: Transaction) {
+  return isLiveTextEditTransaction(transaction) || isCompositionInputTransaction(transaction)
+}
+
+function shouldSkipSplitRenderHealthForTransactions(transactions: readonly Transaction[]) {
+  return transactions.some(shouldSkipSplitRenderHealthForTransaction)
+}
+
 function hasSplitRenderRefreshEffects(transaction: Transaction) {
   return hasRefreshLiveDecorationsEffect(transaction)
     || hasRefreshChunkDecorationsEffect(transaction)
@@ -1157,6 +1171,11 @@ const splitPaneRenderHealthPlugin = ViewPlugin.fromClass(class {
   }
 
   update(update: ViewUpdate) {
+    if (shouldSkipSplitRenderHealthForTransactions(update.transactions)) {
+      this.cancelPendingCheck()
+      return
+    }
+
     if (update.docChanged || update.viewportChanged) {
       this.retryCount = 0
       this.lastSignature = ''
@@ -1172,6 +1191,16 @@ const splitPaneRenderHealthPlugin = ViewPlugin.fromClass(class {
     ) {
       this.schedule(false)
     }
+  }
+
+  private cancelPendingCheck() {
+    if (!this.pendingFrame) {
+      return
+    }
+
+    const win = this.view.dom.ownerDocument.defaultView ?? window
+    win.cancelAnimationFrame(this.pendingFrame)
+    this.pendingFrame = 0
   }
 
   private schedule(resetRetry: boolean) {
@@ -1235,13 +1264,7 @@ const splitPaneRenderHealthPlugin = ViewPlugin.fromClass(class {
   }
 
   destroy() {
-    if (!this.pendingFrame) {
-      return
-    }
-
-    const win = this.view.dom.ownerDocument.defaultView ?? window
-    win.cancelAnimationFrame(this.pendingFrame)
-    this.pendingFrame = 0
+    this.cancelPendingCheck()
   }
 })
 
@@ -1992,7 +2015,6 @@ export function createDiffExtensions({
   let pendingCompositionDocChange = false
   let pendingCompositionFlushFrame = 0
   let pendingCompositionView: EditorView | null = null
-  const selectionMatchCompartment = new Compartment()
   const selectionMatchExtension = highlightSelectionMatches()
   const isInteractivePane = interactive ?? side === 'modified'
   const isReadOnly = () => typeof readOnly === 'function' ? readOnly() : readOnly
@@ -2096,10 +2118,7 @@ export function createDiffExtensions({
     return true
   }
 
-  const isCompositionInputUpdate = (update: ViewUpdate) => update.transactions.some((transaction) => {
-    const userEvent = transaction.annotation(Transaction.userEvent)
-    return typeof userEvent === 'string' && userEvent.startsWith('input.type.compose')
-  })
+  const isCompositionInputUpdate = (update: ViewUpdate) => update.transactions.some(isCompositionInputTransaction)
 
   const cancelPendingCompositionFlush = () => {
     if (pendingCompositionFlushFrame) {
@@ -2153,11 +2172,6 @@ export function createDiffExtensions({
 
     compositionActive = nextValue
     view.dom.classList.toggle('meo-ime-composing', nextValue)
-    // IME marked text is exposed as a transient selection. Do not let the
-    // selection-match highlighter scan or paint that preedit range.
-    view.dispatch({
-      effects: selectionMatchCompartment.reconfigure(nextValue ? [] : selectionMatchExtension),
-    })
   }
 
   const extensions: Extension[] = [
@@ -2214,7 +2228,7 @@ export function createDiffExtensions({
       history(),
       indentOnInput(),
       bracketMatching(),
-      selectionMatchCompartment.of(selectionMatchExtension),
+      selectionMatchExtension,
       searchQueryField,
       searchMatchField,
       keymap.of([
