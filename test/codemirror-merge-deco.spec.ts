@@ -375,6 +375,14 @@ describe('CodeMirror merge decorations', () => {
     expect(rect).toEqual({ left: 0, top: 0, width: 12, height: 38 })
   })
 
+  it('clips inline highlight rects to the measured visual row box when text boxes leak outside', () => {
+    const [rect] = normalizeInlineChangeRects([
+      { left: 0, top: -2, width: 12, height: 30, lineHeight: 24, rowTop: 0, rowBottom: 24 },
+    ], 24)
+
+    expect(rect).toEqual({ left: 0, top: 0, width: 12, height: 24 })
+  })
+
   it('keeps wrapped visual rows aligned to their measured row boxes', () => {
     const [first, second] = normalizeInlineChangeRects([
       { left: 0, top: 4, width: 12, height: 16, lineHeight: 24, rowTop: 0, rowBottom: 24 },

@@ -371,9 +371,12 @@ export function normalizeInlineChangeRects(rects: readonly InlineChangeRect[], l
   let overlap = 0.5
   let slots = groups.map(group => {
     if (group.rowTop != null && group.rowBottom != null) {
-      let top = Math.min(group.rowTop, group.top)
-      let bottom = Math.max(group.rowBottom, group.bottom)
-      return {center: (top + bottom) / 2, top, bottom, height: bottom - top}
+      return {
+        center: (group.rowTop + group.rowBottom) / 2,
+        top: group.rowTop,
+        bottom: group.rowBottom,
+        height: group.rowBottom - group.rowTop
+      }
     }
     let center = (group.top + group.bottom) / 2
     let height = Math.max(group.lineHeight, group.bottom - group.top)

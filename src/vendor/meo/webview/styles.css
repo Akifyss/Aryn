@@ -694,12 +694,12 @@
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changedTextLayerRanges,
 .meo-native-theme .meo-diff-split-body .cm-deletedTextLayerRanges,
 .meo-native-theme .meo-diff-split-body .cm-deletedChunk .cm-deletedText {
-  --meo-diff-split-changed-text-background: color-mix(in srgb, var(--git-deleted) 16%, transparent);
+  --meo-diff-split-changed-text-background: color-mix(in srgb, var(--git-deleted) 9.7%, transparent);
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-b .cm-changedText,
 .meo-native-theme .meo-diff-split-body .cm-merge-b .cm-changedTextLayerRanges {
-  --meo-diff-split-changed-text-background: color-mix(in srgb, var(--git-added) 16%, transparent);
+  --meo-diff-split-changed-text-background: color-mix(in srgb, var(--git-added) 9.7%, transparent);
 }
 
 .meo-native-theme .meo-diff-split-body .cm-changedText,
