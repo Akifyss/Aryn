@@ -2,6 +2,8 @@ import { defaultKeymap, history, historyKeymap, indentLess, indentMore, redo, un
 import { markdownKeymap } from '@codemirror/lang-markdown'
 import { bracketMatching, forceParsing, indentOnInput, indentUnit, syntaxTree } from '@codemirror/language'
 import {
+  addChangedLineDecoration,
+  addChunkDecorations,
   getChunks,
   getOriginalDoc,
   goToNextChunk,
@@ -10,6 +12,7 @@ import {
   originalDocChangeEffect,
   refreshChunkDecorationsEffect,
   refreshInlineChangeLayerEffect,
+  type Chunk,
   type DirectMergeConfig,
   type DeletedContentRenderer,
   unifiedMergeView,
@@ -865,11 +868,6 @@ const SPLIT_RENDER_HEALTH_PARSE_TIMEOUT_MS = 80
 type SplitRenderRefreshReason = 'split-render-health' | 'split-scroll-refresh' | 'split-layout-refresh'
 
 const splitRenderRefreshReason = Annotation.define<SplitRenderRefreshReason>()
-const splitFallbackChangedLineDeco = Decoration.line({ class: 'cm-changedLine' })
-const splitFallbackInsertedLineFullDeco = Decoration.line({ class: 'cm-insertedLineFull' })
-const splitFallbackDeletedLineFullDeco = Decoration.line({ class: 'cm-deletedLineFull' })
-const splitFallbackInsertedLineDeco = Decoration.mark({ tagName: 'ins', class: 'cm-insertedLine' })
-const splitFallbackDeletedLineDeco = Decoration.mark({ tagName: 'del', class: 'cm-deletedLine' })
 const splitFallbackChangedTextDeco = Decoration.mark({ class: 'cm-changedText meo-diff-split-fallback-changedText' })
 
 function hasRefreshLiveDecorationsEffect(transaction: Transaction) {
@@ -1031,63 +1029,6 @@ function chunkHasInlineChangeOnLine(chunk: CodeMirrorDiffChunk, line: { from: nu
   return false
 }
 
-function addChunkInlineFallbackDecorations(
-  builder: RangeSetBuilder<Decoration>,
-  chunk: CodeMirrorDiffChunk,
-  line: { from: number, to: number },
-  side: 'a' | 'b',
-) {
-  const range = chunkLineRange(chunk, side)
-  if (range.from === range.to || isWholeLineChangeForSide(chunk, side)) {
-    return
-  }
-
-  for (const change of chunk.changes) {
-    const from = range.from + (side === 'a' ? change.fromA : change.fromB)
-    const to = range.from + (side === 'a' ? change.toA : change.toB)
-    const markFrom = Math.max(line.from, from)
-    const markTo = Math.min(line.to, to)
-    if (markFrom < markTo) {
-      builder.add(markFrom, markTo, splitFallbackChangedTextDeco)
-    }
-  }
-}
-
-function addChunkLineFallbackDecorations(
-  builder: RangeSetBuilder<Decoration>,
-  chunk: CodeMirrorDiffChunk,
-  line: { from: number, to: number },
-  side: 'a' | 'b',
-) {
-  const range = chunkLineRange(chunk, side)
-  if (range.from === range.to) {
-    return
-  }
-
-  const wholeLineChange = isWholeLineChangeForSide(chunk, side)
-  const lineTextDeco = side === 'a' ? splitFallbackDeletedLineDeco : splitFallbackInsertedLineDeco
-  const fullLineDeco = wholeLineChange
-    ? side === 'a'
-      ? splitFallbackDeletedLineFullDeco
-      : splitFallbackInsertedLineFullDeco
-    : null
-
-  builder.add(line.from, line.from, splitFallbackChangedLineDeco)
-  if (fullLineDeco) {
-    builder.add(line.from, line.from, fullLineDeco)
-  }
-
-  const lineMarkFrom = Math.max(line.from, range.from)
-  const lineMarkTo = Math.min(line.to, Math.min(range.to, line.to))
-  if (lineMarkFrom < lineMarkTo) {
-    builder.add(lineMarkFrom, lineMarkTo, lineTextDeco)
-  }
-
-  if (!wholeLineChange) {
-    addChunkInlineFallbackDecorations(builder, chunk, line, side)
-  }
-}
-
 function isWholeLineChangeForSide(chunk: CodeMirrorDiffChunk, side: 'a' | 'b') {
   return side === 'a'
     ? chunk.fromB === chunk.toB
@@ -1120,23 +1061,6 @@ function getSplitDiffLineFlags(view: EditorView) {
 function getSplitDiffLineFlag(view: EditorView, lineNumber: number) {
   const flags = getSplitDiffLineFlags(view)
   return Array.isArray(flags) ? flags[lineNumber - 1] : undefined
-}
-
-function buildSplitChunkByLine(doc: Text, side: 'a' | 'b', chunks: readonly CodeMirrorDiffChunk[]) {
-  const chunksByLine = new Map<number, CodeMirrorDiffChunk>()
-  for (const chunk of chunks) {
-    const range = chunkLineRange(chunk, side)
-    if (range.from === range.to) {
-      continue
-    }
-
-    const startLineNo = doc.lineAt(range.from).number
-    const endLineNo = doc.lineAt(Math.max(range.from, Math.min(doc.length, range.to - 1))).number
-    for (let lineNo = startLineNo; lineNo <= endLineNo; lineNo += 1) {
-      chunksByLine.set(lineNo, chunk)
-    }
-  }
-  return chunksByLine
 }
 
 export function findSplitPaneRenderHealthIssue(view: EditorView): SplitRenderHealthIssue | null {
@@ -1314,21 +1238,35 @@ function buildSplitDiffFallbackDecorationsFromInputs(
   }
 
   const builder = new RangeSetBuilder<Decoration>()
-  const chunksByLine = side ? buildSplitChunkByLine(doc, side, chunks) : null
+  const chunkLines = new Set<number>()
+
+  if (side) {
+    for (const chunk of chunks) {
+      const range = chunkLineRange(chunk, side)
+      if (range.from === range.to) {
+        continue
+      }
+      addChunkDecorations(chunk as Chunk, doc, side === 'a', true, builder, null, {
+        changedText: splitFallbackChangedTextDeco,
+        gutter: false,
+      })
+
+      const startLineNo = doc.lineAt(range.from).number
+      const endLineNo = doc.lineAt(Math.max(range.from, Math.min(doc.length, range.to - 1))).number
+      for (let lineNo = startLineNo; lineNo <= endLineNo; lineNo += 1) {
+        chunkLines.add(lineNo)
+      }
+    }
+  }
 
   for (let lineNo = 1; lineNo <= doc.lines; lineNo += 1) {
-    const chunk = chunksByLine?.get(lineNo)
     const flag = Array.isArray(flags) ? flags[lineNo - 1] : undefined
-    if (!chunk && !flagsIndicateRenderableDiff(flag)) {
+    if (chunkLines.has(lineNo) || !flagsIndicateRenderableDiff(flag)) {
       continue
     }
 
     const line = doc.line(lineNo)
-    if (chunk && side) {
-      addChunkLineFallbackDecorations(builder, chunk, line, side)
-    } else {
-      builder.add(line.from, line.from, splitFallbackChangedLineDeco)
-    }
+    addChangedLineDecoration(builder, line.from)
   }
 
   return builder.finish()

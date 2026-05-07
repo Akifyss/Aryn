@@ -397,8 +397,21 @@ function addChangedLineDeco(builder: RangeSetBuilder<Decoration>, pos: number, f
   if (fullLine) builder.add(pos, pos, fullLine)
 }
 
-function addInlineChangeDeco(chunk: Chunk, from: number, pos: number, lineEnd: number, isA: boolean,
-                             builder: RangeSetBuilder<Decoration>, changeI: number) {
+export function addChangedLineDecoration(builder: RangeSetBuilder<Decoration>, pos: number) {
+  addChangedLineDeco(builder, pos, null)
+}
+
+function addInlineChangeDeco(
+  chunk: Chunk,
+  from: number,
+  pos: number,
+  lineEnd: number,
+  isA: boolean,
+  builder: RangeSetBuilder<Decoration>,
+  changeI: number,
+  inlineChangedText: Decoration = changedText,
+  inlineChangedTextEmpty: Decoration = changedTextEmpty,
+) {
   while (changeI < chunk.changes.length) {
     let nextChange = chunk.changes[changeI]
     let nextFrom = from + (isA ? nextChange.fromA : nextChange.fromB)
@@ -409,11 +422,11 @@ function addInlineChangeDeco(chunk: Chunk, from: number, pos: number, lineEnd: n
     }
     if (nextFrom > lineEnd) break
     let chFrom = Math.max(pos, nextFrom), chTo = Math.min(lineEnd, nextTo)
-    if (chFrom < chTo) builder.add(chFrom, chTo, changedText)
+    if (chFrom < chTo) builder.add(chFrom, chTo, inlineChangedText)
     else if (nextFrom == nextTo && nextFrom >= pos && nextFrom <= lineEnd) {
       let otherFrom = isA ? nextChange.fromB : nextChange.fromA
       let otherTo = isA ? nextChange.toB : nextChange.toA
-      if (otherFrom < otherTo) builder.add(nextFrom, nextFrom, changedTextEmpty)
+      if (otherFrom < otherTo) builder.add(nextFrom, nextFrom, inlineChangedTextEmpty)
     }
     if (nextTo <= lineEnd) changeI++
     else break
@@ -421,9 +434,21 @@ function addInlineChangeDeco(chunk: Chunk, from: number, pos: number, lineEnd: n
   return changeI
 }
 
-function buildChunkDeco(chunk: Chunk, doc: Text, isA: boolean, highlight: boolean,
-                        builder: RangeSetBuilder<Decoration>,
-                        gutterBuilder: RangeSetBuilder<GutterMarker> | null) {
+export type ChunkDecorationOptions = {
+  changedText?: Decoration
+  changedTextEmpty?: Decoration
+  gutter?: boolean
+}
+
+export function addChunkDecorations(
+  chunk: Chunk,
+  doc: Text,
+  isA: boolean,
+  highlight: boolean,
+  builder: RangeSetBuilder<Decoration>,
+  gutterBuilder: RangeSetBuilder<GutterMarker> | null = null,
+  options: ChunkDecorationOptions = {},
+) {
   let from = isA ? chunk.fromA : chunk.fromB, to = isA ? chunk.toA : chunk.toB
   let changeI = 0
   if (from != to) {
@@ -432,20 +457,46 @@ function buildChunkDeco(chunk: Chunk, doc: Text, isA: boolean, highlight: boolea
     addChangedLineDeco(builder, from, fullLine)
     let markTo = Math.min(to, doc.length)
     if (from < markTo) builder.add(from, markTo, isA ? deleted : inserted)
-    if (gutterBuilder) gutterBuilder.add(from, from, changedLineGutterMarker)
+    if (options.gutter !== false && gutterBuilder) gutterBuilder.add(from, from, changedLineGutterMarker)
     for (let iter = doc.iterRange(from, to - 1), pos = from; !iter.next().done;) {
       if (iter.lineBreak) {
-        if (highlight && !wholeLineChange) changeI = addInlineChangeDeco(chunk, from, pos, pos, isA, builder, changeI)
+        if (highlight && !wholeLineChange) changeI = addInlineChangeDeco(
+          chunk,
+          from,
+          pos,
+          pos,
+          isA,
+          builder,
+          changeI,
+          options.changedText,
+          options.changedTextEmpty,
+        )
         pos++
         addChangedLineDeco(builder, pos, fullLine)
-        if (gutterBuilder) gutterBuilder.add(pos, pos, changedLineGutterMarker)
+        if (options.gutter !== false && gutterBuilder) gutterBuilder.add(pos, pos, changedLineGutterMarker)
         continue
       }
       let lineEnd = pos + iter.value.length
-      if (highlight && !wholeLineChange) changeI = addInlineChangeDeco(chunk, from, pos, lineEnd, isA, builder, changeI)
+      if (highlight && !wholeLineChange) changeI = addInlineChangeDeco(
+        chunk,
+        from,
+        pos,
+        lineEnd,
+        isA,
+        builder,
+        changeI,
+        options.changedText,
+        options.changedTextEmpty,
+      )
       pos = lineEnd
     }
   }
+}
+
+function buildChunkDeco(chunk: Chunk, doc: Text, isA: boolean, highlight: boolean,
+                        builder: RangeSetBuilder<Decoration>,
+                        gutterBuilder: RangeSetBuilder<GutterMarker> | null) {
+  addChunkDecorations(chunk, doc, isA, highlight, builder, gutterBuilder)
 }
 
 function getChunkDeco(view: EditorView) {

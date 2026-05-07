@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
-import { isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
-import { Text } from '@codemirror/state'
+import { addChunkDecorations, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { RangeSetBuilder, Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor/lib/meo-native-diff-split'
+import { Decoration } from '@codemirror/view'
 
 const {
   buildUnifiedDiffLineNumberMap,
@@ -14,6 +15,30 @@ const {
 } = __meoDiffSplitUnifiedLineNumberTestHooks
 
 describe('CodeMirror merge decorations', () => {
+  it('builds reusable chunk decorations with the canonical merge classes', () => {
+    const originalDoc = Text.of(['one', 'two', 'three'])
+    const modifiedDoc = Text.of(['one', 'TWO', 'three'])
+    const [chunk] = Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const builder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, originalDoc, true, true, builder, null, { gutter: false })
+
+    const ranges: Array<{ from: number, to: number, classes: string }> = []
+    builder.finish().between(0, originalDoc.length, (from, to, value) => {
+      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+    })
+
+    expect(ranges).toEqual(expect.arrayContaining([
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).from, classes: 'cm-changedLine' },
+      { from: originalDoc.line(2).from, to: originalDoc.line(3).from, classes: 'cm-deletedLine' },
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText' },
+    ]))
+  })
+
   it('treats pure inserted lines as whole-line changes only on the modified side', () => {
     const chunk = new Chunk([], 4, 4, 4, 10)
 

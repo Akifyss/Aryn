@@ -572,12 +572,12 @@ describe('meo performance guards', () => {
 
     expect(originalRanges).toEqual(expect.arrayContaining([
       { from: originalDoc.line(2).from, to: originalDoc.line(2).from, classes: 'cm-changedLine' },
-      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-deletedLine' },
+      { from: originalDoc.line(2).from, to: originalDoc.line(3).from, classes: 'cm-deletedLine' },
       { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText meo-diff-split-fallback-changedText' },
     ]))
     expect(modifiedRanges).toEqual(expect.arrayContaining([
       { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedLine' },
-      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-insertedLine' },
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(3).from, classes: 'cm-insertedLine' },
       { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-changedText meo-diff-split-fallback-changedText' },
     ]))
   })
