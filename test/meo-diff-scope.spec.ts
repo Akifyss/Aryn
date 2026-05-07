@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GitBaselinePayload, GitChangeItem, GitChangeScope } from '../src/features/git/types'
-import { buildDiffComparisonOptions, resolveOriginalText } from '../src/features/editor/lib/meo-native-diff-split'
+import { buildDiffComparisonOptions, canOpenDiffComparisonMenu, resolveOriginalText } from '../src/features/editor/lib/meo-native-diff-split'
 
 function createBaseline(baseText = 'base\n', indexText = 'index\n'): GitBaselinePayload {
   return {
@@ -175,5 +175,49 @@ describe('meo diff scope resolution', () => {
         scope: 'unstaged',
       },
     ])
+  })
+
+  it('only treats the comparison selector as a dropdown when there is more than one enabled option', () => {
+    const baseline = createBaseline('base\n', 'index\n')
+    const unstagedOnlyResolved = resolveOriginalText(
+      baseline,
+      { label: 'Saved document', text: 'saved\n' },
+      'index\n',
+      {
+        stagedChange: null,
+        unstagedChange: null,
+      },
+      'unstaged',
+    )
+    const stagedResolved = resolveOriginalText(
+      baseline,
+      { label: 'Saved document', text: 'saved\n' },
+      'index\n',
+      {
+        stagedChange: createChange('staged'),
+        unstagedChange: null,
+      },
+      'staged',
+    )
+
+    expect(canOpenDiffComparisonMenu(buildDiffComparisonOptions(
+      baseline,
+      {
+        stagedChange: null,
+        unstagedChange: null,
+      },
+      unstagedOnlyResolved,
+      'unstaged',
+    ))).toBe(false)
+
+    expect(canOpenDiffComparisonMenu(buildDiffComparisonOptions(
+      baseline,
+      {
+        stagedChange: createChange('staged'),
+        unstagedChange: null,
+      },
+      stagedResolved,
+      'staged',
+    ))).toBe(true)
   })
 })

@@ -535,6 +535,10 @@ function getBaselineHeadLabel(baseline: GitBaselinePayload | null) {
   return baseline?.headOid ? 'HEAD' : 'Empty baseline'
 }
 
+export function canOpenDiffComparisonMenu(options: readonly DiffComparisonOption[]) {
+  return options.filter((option) => !option.disabled).length > 1
+}
+
 export function buildDiffComparisonOptions(
   baseline: GitBaselinePayload | null,
   gitChangeContext: MeoDiffSplitGitChangeContext,
@@ -3851,8 +3855,7 @@ export function createMeoDiffSplitController({
   }
 
   const setComparisonMenuOpen = (open: boolean) => {
-    const hasSelectableOptions = latestComparisonOptions.some((option) => !option.disabled)
-    const nextOpen = open && latestComparisonOptions.length > 0 && hasSelectableOptions
+    const nextOpen = open && canOpenDiffComparisonMenu(latestComparisonOptions)
     if (comparisonMenuOpen === nextOpen) {
       return
     }
@@ -3887,8 +3890,7 @@ export function createMeoDiffSplitController({
       preferredGitDiffScope,
     )
     const activeKey = getResolvedDiffComparisonKey(originalState)
-    const hasSelectableOptions = options.some((option) => !option.disabled)
-    const canOpenMenu = options.length > 0 && hasSelectableOptions
+    const canOpenMenu = canOpenDiffComparisonMenu(options)
 
     latestComparisonOptions = options
     comparisonButtonLabel.textContent = label
