@@ -8,7 +8,7 @@ import {
   getOriginalDoc,
   goToNextChunk,
   goToPreviousChunk,
-  isLineFilledByDiffText,
+  isLineFullyInsertedOrDeleted,
   MergeView,
   originalDocChangeEffect,
   refreshChunkDecorationsEffect,
@@ -1032,7 +1032,7 @@ function chunkHasInlineChangeOnLine(chunk: CodeMirrorDiffChunk, line: { from: nu
   if (
     range.from === range.to
     || isWholeLineChangeForSide(chunk, side)
-    || isLineFilledByDiffText(chunk as Chunk, range.from, line.from, line.to, side === 'a')
+    || isLineFullyInsertedOrDeleted(chunk as Chunk, range.from, line.from, line.to, side === 'a')
   ) {
     return false
   }

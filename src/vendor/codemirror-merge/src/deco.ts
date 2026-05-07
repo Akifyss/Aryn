@@ -371,12 +371,9 @@ export function normalizeInlineChangeRects(rects: readonly InlineChangeRect[], l
   let overlap = 0.5
   let slots = groups.map(group => {
     if (group.rowTop != null && group.rowBottom != null) {
-      return {
-        center: (group.rowTop + group.rowBottom) / 2,
-        top: group.rowTop,
-        bottom: group.rowBottom,
-        height: group.rowBottom - group.rowTop
-      }
+      let top = Math.min(group.rowTop, group.top)
+      let bottom = Math.max(group.rowBottom, group.bottom)
+      return {center: (top + bottom) / 2, top, bottom, height: bottom - top}
     }
     let center = (group.top + group.bottom) / 2
     let height = Math.max(group.lineHeight, group.bottom - group.top)
@@ -436,19 +433,6 @@ export function isWholeLineChange(chunk: Chunk, isA: boolean) {
   return isA ? chunk.fromB == chunk.toB : chunk.fromA == chunk.toA
 }
 
-export function isLineFilledByDiffText(
-  chunk: Chunk,
-  from: number,
-  lineFrom: number,
-  lineTo: number,
-  isA: boolean,
-) {
-  for (let change of chunk.changes) {
-    if (changeFillsLineOnLineBreak(change, from, lineFrom, lineTo, isA)) return true
-  }
-  return false
-}
-
 export function isLineFullyInsertedOrDeleted(
   chunk: Chunk,
   from: number,
@@ -462,7 +446,7 @@ export function isLineFullyInsertedOrDeleted(
   return false
 }
 
-function changeFillsLineOnLineBreak(
+function changeFullyInsertsOrDeletesLine(
   change: Change,
   from: number,
   lineFrom: number,
@@ -471,23 +455,9 @@ function changeFillsLineOnLineBreak(
 ) {
   let changeFrom = from + (isA ? change.fromA : change.fromB)
   let changeTo = from + (isA ? change.toA : change.toB)
-  // Mirrors VS Code's char decoration behavior:
-  // - Pure single-sided line-range mappings are handled by isWholeLineChange.
-  // - Inner char decorations only fill the row when shouldFillLineOnLineBreak
-  //   can apply, which means the changed range continues past this line's text.
-  return changeFrom <= lineFrom && changeTo > lineTo && changeFrom < changeTo
-}
-
-function changeFullyInsertsOrDeletesLine(
-  change: Change,
-  from: number,
-  lineFrom: number,
-  lineTo: number,
-  isA: boolean,
-) {
   let otherFrom = isA ? change.fromB : change.fromA
   let otherTo = isA ? change.toB : change.toA
-  return otherFrom == otherTo && changeFillsLineOnLineBreak(change, from, lineFrom, lineTo, isA)
+  return otherFrom == otherTo && changeFrom <= lineFrom && changeTo > lineTo && changeFrom < changeTo
 }
 
 function addChangedLineDeco(builder: RangeSetBuilder<Decoration> | PendingDecoration[], pos: number, fullLine: Decoration | null) {
@@ -563,7 +533,7 @@ export function addChunkDecorations(
     let fullLine = isA ? deletedLineFull : insertedLineFull
     let pendingDecorations: PendingDecoration[] = []
     let lineFullDeco = (lineFrom: number, lineTo: number) =>
-      wholeLineChange || isLineFilledByDiffText(chunk, from, lineFrom, lineTo, isA) ? fullLine : null
+      wholeLineChange || isLineFullyInsertedOrDeleted(chunk, from, lineFrom, lineTo, isA) ? fullLine : null
     let addLine = (pos: number, fullLine: Decoration | null) => {
       addChangedLineDeco(pendingDecorations, pos, fullLine)
     }
@@ -577,7 +547,7 @@ export function addChunkDecorations(
         let line = doc.lineAt(Math.min(pos, doc.length))
         let lineIsFullChange = !!lineFullDeco(line.from, line.to)
         let shouldSkipChange = lineIsFullChange
-          ? (change: Change) => changeFillsLineOnLineBreak(change, from, line.from, line.to, isA) ? "full" : null
+          ? (change: Change) => changeFullyInsertsOrDeletesLine(change, from, line.from, line.to, isA) ? "full" : null
           : null
         if (highlight) changeI = addInlineChangeDeco(
           chunk,
@@ -603,11 +573,10 @@ export function addChunkDecorations(
       let shouldSkipChange = (change: Change) => {
         let changeFrom = from + (isA ? change.fromA : change.fromB)
         let changeTo = from + (isA ? change.toA : change.toB)
-        if (changeTo <= changeFrom) return null
-        if (lineIsFullChange && changeFillsLineOnLineBreak(change, from, line.from, line.to, isA)) return "full"
         let otherFrom = isA ? change.fromB : change.fromA
         let otherTo = isA ? change.toB : change.toA
-        if (otherFrom != otherTo) return null
+        if (otherFrom != otherTo || changeTo <= changeFrom) return null
+        if (lineIsFullChange && changeFullyInsertsOrDeletesLine(change, from, line.from, line.to, isA)) return "full"
         return changeFrom <= line.from && changeTo > line.to && changeFrom == lineEnd ? "empty" : null
       }
       if (highlight) changeI = addInlineChangeDeco(
