@@ -682,13 +682,13 @@
   background-color: color-mix(in srgb, var(--git-added) 7%, transparent);
 }
 
-/* Match VS Code's visual stacking: 7% line background plus 16% char layer. */
+/* Match VS Code's decoration stack: line background plus whole-line char layer. */
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-deletedLineFull {
-  background-color: color-mix(in srgb, var(--git-deleted) 21.9%, transparent);
+  background-image: linear-gradient(color-mix(in srgb, var(--git-deleted) 16%, transparent), color-mix(in srgb, var(--git-deleted) 16%, transparent));
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-b .cm-insertedLineFull {
-  background-color: color-mix(in srgb, var(--git-added) 21.9%, transparent);
+  background-image: linear-gradient(color-mix(in srgb, var(--git-added) 16%, transparent), color-mix(in srgb, var(--git-added) 16%, transparent));
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-a .cm-changedText,
