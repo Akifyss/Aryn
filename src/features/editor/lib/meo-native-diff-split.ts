@@ -420,6 +420,7 @@ export const __meoDiffSplitSearchTestHooks = {
 export const __meoDiffSplitRenderHealthTestHooks = {
   buildSplitDiffFallbackDecorations,
   buildSplitDiffFallbackDecorationsFromInputs,
+  chunkHasInlineChangeOnLine,
   findSplitPaneRenderHealthIssue,
   markdownLineLooksUnrendered,
   shouldSkipSplitRenderHealthForTransactions,
@@ -892,6 +893,9 @@ const splitVisibleTextFallbackState = StateField.define({
   })),
 })
 const splitFallbackChangedTextDeco = Decoration.mark({ class: 'cm-changedText meo-diff-split-fallback-changedText' })
+const splitFallbackChangedTextFullLineDeco = Decoration.mark({
+  class: 'cm-changedText cm-changedTextFullLine meo-diff-split-fallback-changedText',
+})
 
 function hasRefreshLiveDecorationsEffect(transaction: Transaction) {
   return transaction.effects.some((effect) => effect.is(refreshLiveDecorationsEffect))
@@ -1043,12 +1047,15 @@ function lineOverlapsChunkRange(line: { from: number, to: number }, chunk: CodeM
 
 function chunkHasInlineChangeOnLine(chunk: CodeMirrorDiffChunk, line: { from: number, to: number }, side: 'a' | 'b') {
   const range = chunkLineRange(chunk, side)
+  if (range.from === range.to) {
+    return false
+  }
+
   if (
-    range.from === range.to
-    || isWholeLineChangeForSide(chunk, side)
+    isWholeLineChangeForSide(chunk, side)
     || isLineFullyInsertedOrDeleted(chunk as Chunk, range.from, line.from, line.to, side === 'a')
   ) {
-    return false
+    return line.from < line.to
   }
 
   for (const change of chunk.changes) {
@@ -1326,6 +1333,7 @@ function buildSplitDiffFallbackDecorationsFromInputs(
       addChunkDecorations(chunk as Chunk, doc, side === 'a', true, builder, null, {
         changedText: visibleTextFallback ? splitFallbackChangedTextDeco : null,
         changedTextEmpty: visibleTextFallback ? undefined : null,
+        changedTextFullLine: visibleTextFallback ? splitFallbackChangedTextFullLineDeco : undefined,
         gutter: false,
       })
 

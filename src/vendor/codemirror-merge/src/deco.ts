@@ -177,6 +177,7 @@ const changedLine = Decoration.line({class: "cm-changedLine"})
 const insertedLineFull = Decoration.line({class: "cm-insertedLineFull"})
 const deletedLineFull = Decoration.line({class: "cm-deletedLineFull"})
 export const changedText = Decoration.mark({class: "cm-changedText"})
+export const changedTextFullLine = Decoration.mark({class: "cm-changedText cm-changedTextFullLine"})
 const inserted = Decoration.mark({tagName: "ins", class: "cm-insertedLine"})
 const deleted = Decoration.mark({tagName: "del", class: "cm-deletedLine"})
 
@@ -319,15 +320,27 @@ function getInlineChangeRects(view: EditorView, selector: string) {
   for (let elt of view.contentDOM.querySelectorAll<HTMLElement>(selector)) {
     let line = elt.closest(".cm-line") as HTMLElement | null
     let metrics = line && getLineMetrics(line, baseTop, view.defaultLineHeight, view.scaleY, lineMetrics)
+    let fullLine = elt.classList.contains("cm-changedTextFullLine")
     for (let rect of elt.getClientRects()) {
       if (rect.width > 0 && rect.height > 0) {
         let top = rect.top - baseTop, height = rect.height
+        let box = fullLine && line ? fullLineInlineChangeBox(line, baseLeft, rect, view) : null
         rects.push({...getInlineChangeRectLineBox(top, height, metrics),
-          left: rect.left - baseLeft, top, width: rect.width, height})
+          left: box ? box.left : rect.left - baseLeft,
+          top,
+          width: box ? box.width : rect.width,
+          height})
       }
     }
   }
   return normalizeInlineChangeRects(rects, view.defaultLineHeight)
+}
+
+function fullLineInlineChangeBox(line: HTMLElement, baseLeft: number, rect: DOMRect, view: EditorView) {
+  let lineRect = line.getBoundingClientRect()
+  let lineLeft = lineRect.left - baseLeft
+  let lineWidth = Math.max(rect.width, view.scrollDOM.clientWidth * view.scaleX - lineLeft)
+  return {left: lineLeft, width: lineWidth}
 }
 
 type LineMetrics = {
@@ -504,13 +517,13 @@ function addFullLineDiffTextDeco(
   lineFrom: number,
   lineTo: number,
   emptyLineFull: Decoration,
-  inlineChangedText: Decoration | null | undefined,
+  fullLineChangedText: Decoration | null | undefined,
 ) {
   // Match VS Code's layering: every changed line keeps the line background, and
   // a whole inserted/deleted line also receives the regular text-level mark.
   // Empty lines have no text range, so they still need the line-only fallback.
   if (lineFrom < lineTo) {
-    if (inlineChangedText) addPendingDecoration(builder, lineFrom, lineTo, inlineChangedText)
+    if (fullLineChangedText) addPendingDecoration(builder, lineFrom, lineTo, fullLineChangedText)
     return
   }
 
@@ -562,6 +575,7 @@ function addInlineChangeDeco(
 export type ChunkDecorationOptions = {
   changedText?: Decoration | null
   changedTextEmpty?: Decoration | null
+  changedTextFullLine?: Decoration | null
   gutter?: boolean
 }
 
@@ -579,6 +593,9 @@ export function addChunkDecorations(
   if (from != to) {
     let inlineChangedText = options.changedText === undefined ? changedText : options.changedText
     let inlineChangedTextEmpty = options.changedTextEmpty === undefined ? changedTextEmpty : options.changedTextEmpty
+    let inlineChangedTextFullLine = options.changedTextFullLine === undefined
+      ? options.changedText === null ? null : changedTextFullLine
+      : options.changedTextFullLine
     let wholeLineChange = isWholeLineChange(chunk, isA)
     let emptyLineFull = isA ? deletedLineFull : insertedLineFull
     let pendingDecorations: PendingDecoration[] = []
@@ -591,7 +608,7 @@ export function addChunkDecorations(
     addLine(from)
     let firstLineFullDeco = lineFullDeco(firstLine.from, firstLine.to)
     if (firstLineFullDeco) {
-      addFullLineDiffTextDeco(pendingDecorations, firstLine.from, firstLine.to, firstLineFullDeco, inlineChangedText)
+      addFullLineDiffTextDeco(pendingDecorations, firstLine.from, firstLine.to, firstLineFullDeco, inlineChangedTextFullLine)
     }
     let markTo = Math.min(to, doc.length)
     if (from < markTo) addPendingDecoration(pendingDecorations, from, markTo, isA ? deleted : inserted)
@@ -620,7 +637,7 @@ export function addChunkDecorations(
         addLine(pos)
         let nextLineFullDeco = lineFullDeco(nextLine.from, nextLine.to)
         if (nextLineFullDeco) {
-          addFullLineDiffTextDeco(pendingDecorations, nextLine.from, nextLine.to, nextLineFullDeco, inlineChangedText)
+          addFullLineDiffTextDeco(pendingDecorations, nextLine.from, nextLine.to, nextLineFullDeco, inlineChangedTextFullLine)
         }
         if (options.gutter !== false && gutterBuilder) gutterBuilder.add(pos, pos, changedLineGutterMarker)
         continue

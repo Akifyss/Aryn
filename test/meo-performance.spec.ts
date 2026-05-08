@@ -648,8 +648,33 @@ describe('meo performance guards', () => {
     expect(originalRanges.some((range) => range.classes.includes('meo-diff-split-fallback-changedText'))).toBe(true)
     expect(modifiedRanges).toEqual(expect.arrayContaining([
       { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedLine' },
-      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-changedText meo-diff-split-fallback-changedText' },
+      {
+        from: modifiedDoc.line(2).from,
+        to: modifiedDoc.line(2).to,
+        classes: 'cm-changedText cm-changedTextFullLine meo-diff-split-fallback-changedText',
+      },
     ]))
+  })
+
+  it('treats non-empty full-line changes as text render health requirements', () => {
+    const originalDoc = Text.of(['same', 'shared original', 'tail'])
+    const modifiedDoc = Text.of(['same', 'inserted standalone', 'shared modified', 'tail', 'same'])
+    const [chunk] = Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+
+    expect(__meoDiffSplitRenderHealthTestHooks.chunkHasInlineChangeOnLine(
+      chunk,
+      modifiedDoc.line(2),
+      'b',
+    )).toBe(true)
+    expect(__meoDiffSplitRenderHealthTestHooks.chunkHasInlineChangeOnLine(
+      chunk,
+      Text.of(['same', '', 'shared modified', 'tail']).line(2),
+      'b',
+    )).toBe(false)
   })
 
   it('can make split diff fallback text decorations visible after render health retries fail', () => {

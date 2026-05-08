@@ -122,7 +122,7 @@ describe('CodeMirror merge decorations', () => {
     expect(modifiedRanges.some((range) => range.classes.includes('cm-insertedLineFull'))).toBe(false)
     expect(modifiedRanges).toEqual(expect.arrayContaining([
       { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedLine' },
-      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-changedText' },
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-changedText cm-changedTextFullLine' },
     ]))
   })
 
