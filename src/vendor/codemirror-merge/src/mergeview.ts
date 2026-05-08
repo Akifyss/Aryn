@@ -519,12 +519,12 @@ export class MergeView {
   }
 
   private resolveOuterScrollViewportMargin() {
-    return Math.max(this.outerScrollViewportMargin, this.dom.clientHeight * 4, 1000)
+    return Math.max(this.outerScrollViewportMargin, 1000)
   }
 
   private resolveOuterScrollViewportRetention() {
     let margin = this.resolveOuterScrollViewportMargin()
-    return Math.max(this.outerScrollViewportRetention, margin * 3, this.dom.clientHeight * 8)
+    return Math.max(this.outerScrollViewportRetention, margin * 2)
   }
 
   private setupRevertControls(controls: boolean, toA: boolean, render: (() => HTMLElement) | undefined) {

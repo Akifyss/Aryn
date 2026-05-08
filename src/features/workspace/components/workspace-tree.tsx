@@ -21,6 +21,7 @@ import {
   normalizeWorkspacePath,
   resolveDropTargetDirectoryPath,
 } from '@/features/workspace/lib/workspace-tree-dnd'
+import { recordOpenFileProfile } from '@/lib/open-file-profile'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 import type { GitDisplayChange, GitRepositoryState } from '@/features/git/types'
 
@@ -290,7 +291,17 @@ function FileTreeItem({
       <div
         ref={rowRef}
         className={`workspace-tree-row${isEditing ? ' is-editing' : ''}${isActive ? ' is-active' : ''}${isDragSource ? ' is-drag-source' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
-        onClick={() => (isFolder ? onToggleDirectory(node.path) : onSelectFile(node.path))}
+        onClick={() => {
+          recordOpenFileProfile('workspace-tree:row-click', {
+            kind: node.kind,
+            path: node.path,
+          })
+          if (isFolder) {
+            onToggleDirectory(node.path)
+          } else {
+            onSelectFile(node.path)
+          }
+        }}
         onDragLeave={(event) => onDragLeaveNode(node, event)}
         onDragOver={(event) => onDragOverNode(node, event)}
         onDrop={(event) => void onDropOnNode(node, event)}

@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
 import {
   FileLine,
@@ -15,11 +15,8 @@ import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
 import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
-import { GitDiffEditor } from '@/features/editor/components/git-diff-editor'
-import { CodeEditor } from '@/features/editor/components/code-editor'
 import { isLineWithinVisualDiff } from '@/features/editor/lib/git-diff-navigation'
-import { MeoEditorHost, type MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host'
-import { WritingEditor } from '@/features/editor/components/writing-editor'
+import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host'
 import { GitPanel } from '@/features/git/components/git-panel'
 import type {
   GitChangeItem,
@@ -58,6 +55,7 @@ import {
   type WorkspaceRefreshRequest,
   type WorkspaceRefreshScheduleMode,
 } from '@/features/workspace/lib/workspace-refresh-coordinator'
+import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
 import type {
   WorkspaceIconTheme,
   WorkspaceIconThemeCatalogOption,
@@ -77,8 +75,80 @@ import {
 } from '@/features/layout/shell-layout'
 import './App.css'
 
+const CodeEditor = lazy(async () => {
+  const startedAt = performance.now()
+  recordOpenFileProfile('lazy:code-editor:start')
+  const module = await import('@/features/editor/components/code-editor')
+  recordOpenFileProfile('lazy:code-editor:end', { durationMs: getOpenFileProfileDuration(startedAt) })
+  return { default: module.CodeEditor }
+})
+const GitDiffEditor = lazy(async () => {
+  const startedAt = performance.now()
+  recordOpenFileProfile('lazy:git-diff-editor:start')
+  const module = await import('@/features/editor/components/git-diff-editor')
+  recordOpenFileProfile('lazy:git-diff-editor:end', { durationMs: getOpenFileProfileDuration(startedAt) })
+  return { default: module.GitDiffEditor }
+})
+let meoEditorHostModulePromise: Promise<typeof import('@/features/editor/components/meo-editor-host')> | null = null
+
+function loadMeoEditorHostModule(reason: 'lazy' | 'startup-preload') {
+  if (!meoEditorHostModulePromise) {
+    const startedAt = performance.now()
+    recordOpenFileProfile('lazy:meo-editor-host:start', { reason })
+    meoEditorHostModulePromise = import('@/features/editor/components/meo-editor-host')
+      .then((module) => {
+        recordOpenFileProfile('lazy:meo-editor-host:end', {
+          durationMs: getOpenFileProfileDuration(startedAt),
+          reason,
+        })
+        return module
+      })
+  } else {
+    recordOpenFileProfile('lazy:meo-editor-host:reuse', { reason })
+  }
+
+  return meoEditorHostModulePromise
+}
+
+if (typeof window !== 'undefined') {
+  window.setTimeout(() => {
+    void loadMeoEditorHostModule('startup-preload')
+  }, 0)
+}
+
+const MeoEditorHost = lazy(async () => {
+  const startedAt = performance.now()
+  const module = await loadMeoEditorHostModule('lazy')
+  recordOpenFileProfile('lazy:meo-editor-host:lazy-resolved', { durationMs: getOpenFileProfileDuration(startedAt) })
+  return { default: module.MeoEditorHost }
+})
+const WritingEditor = lazy(async () => {
+  const startedAt = performance.now()
+  recordOpenFileProfile('lazy:writing-editor:start')
+  const module = await import('@/features/editor/components/writing-editor')
+  recordOpenFileProfile('lazy:writing-editor:end', { durationMs: getOpenFileProfileDuration(startedAt) })
+  return { default: module.WritingEditor }
+})
+
 function getBaseName(filePath: string) {
   return filePath.split(/[\\/]/).pop() ?? filePath
+}
+
+function EditorLoadingState({ label = 'Loading editor...' }: { label?: string }) {
+  useEffect(() => {
+    recordOpenFileProfile('editor:fallback:mounted', { label })
+
+    return () => {
+      recordOpenFileProfile('editor:fallback:unmounted', { label })
+    }
+  }, [label])
+
+  return (
+    <div className='editor-lazy-fallback' role='status' aria-live='polite'>
+      <span className='editor-lazy-spinner' aria-hidden='true' />
+      <span>{label}</span>
+    </div>
+  )
 }
 
 type ResolvedAppTheme = 'light' | 'dark'
@@ -736,6 +806,19 @@ function App() {
   const currentFilePath = activeFileTab?.filePath ?? null
   const isActiveMeoEditorMountedRef = useRef(false)
   isActiveMeoEditorMountedRef.current = currentEditorKind === 'rich-text' && currentFileViewMode === 'meo'
+  useEffect(() => {
+    if (!activeFileTab) {
+      return
+    }
+
+    recordOpenFileProfile('app:active-file-tab:committed', {
+      chars: activeFileTab.content.length,
+      editorKind: activeFileTab.editorKind,
+      filePath: activeFileTab.filePath,
+      tabId: activeFileTab.id,
+      viewMode: activeFileTab.viewMode,
+    })
+  }, [activeFileTab?.id])
   const activeWorkspaceAutosaveTab = isWorkspaceAutosaveTab(activeFileTab) ? activeFileTab : null
   const [isActiveEditorComposing, setIsActiveEditorComposing] = useState(false)
   const workspaceAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1632,21 +1715,43 @@ function App() {
     workspacePath: string | null = currentPath,
     preferredViewMode?: WorkspaceFileViewMode,
   ) => {
+    const openStartedAt = performance.now()
+    recordOpenFileProfile('app:open-file:start', {
+      filePath,
+      preferredViewMode: preferredViewMode ?? null,
+      workspacePath,
+    })
     captureActiveMeoViewPosition()
+    recordOpenFileProfile('app:open-file:capture-active-position:end', {
+      elapsedMs: getOpenFileProfileDuration(openStartedAt),
+    })
     setIsSettingsTabActive(false)
 
+    const editorKindStartedAt = performance.now()
+    recordOpenFileProfile('app:open-file:resolve-editor-kind:start', { filePath })
     const editorKind = await window.appApi.resolveWorkspaceEditorKind(filePath)
+    recordOpenFileProfile('app:open-file:resolve-editor-kind:end', {
+      durationMs: getOpenFileProfileDuration(editorKindStartedAt),
+      editorKind,
+    })
 
     if (!editorKind) {
       toast.warning(`Cannot open ${getBaseName(filePath)} yet`, {
         description: 'Only text files can open in tabs right now. This file looks binary or unsupported.',
       })
       setStatusMessage(`${getBaseName(filePath)} is not supported yet`)
+      recordOpenFileProfile('app:open-file:unsupported:end', {
+        elapsedMs: getOpenFileProfileDuration(openStartedAt),
+      })
       return
     }
 
     try {
       const targetViewMode = resolveWorkspaceFileViewMode(filePath, editorKind, preferredViewMode)
+      recordOpenFileProfile('app:open-file:resolve-view-mode:end', {
+        elapsedMs: getOpenFileProfileDuration(openStartedAt),
+        targetViewMode,
+      })
       const existingTab = useWorkspaceStore.getState().openTabs.find(
         (tab): tab is WorkspaceFileTab => (
           tab.kind === 'file'
@@ -1656,26 +1761,55 @@ function App() {
       )
 
       if (existingTab) {
+        const activateStartedAt = performance.now()
+        recordOpenFileProfile('app:open-file:existing-tab:activate:start', { tabId: existingTab.id })
         activateTab(existingTab.id)
+        recordOpenFileProfile('app:open-file:existing-tab:activate:end', {
+          durationMs: getOpenFileProfileDuration(activateStartedAt),
+        })
 
         if (isLeftSidebarDrawer) {
           setIsLeftDrawerOpen(false)
         }
 
         if (workspacePath) {
+          const updateStateStartedAt = performance.now()
+          recordOpenFileProfile('app:open-file:update-workspace-state:start', { filePath, workspacePath })
           await updateWorkspaceState(workspacePath, { lastFilePath: filePath })
+          recordOpenFileProfile('app:open-file:update-workspace-state:end', {
+            durationMs: getOpenFileProfileDuration(updateStateStartedAt),
+          })
         }
 
         setStatusMessage(`${getBaseName(filePath)} focused`)
+        recordOpenFileProfile('app:open-file:existing-tab:end', {
+          elapsedMs: getOpenFileProfileDuration(openStartedAt),
+        })
         return
       }
 
+      const readStartedAt = performance.now()
+      recordOpenFileProfile('app:open-file:read-file:start', { filePath })
       const fileContent = await window.appApi.readWorkspaceFile(filePath)
+      recordOpenFileProfile('app:open-file:read-file:end', {
+        chars: fileContent.length,
+        durationMs: getOpenFileProfileDuration(readStartedAt),
+      })
+      const openTabStartedAt = performance.now()
+      recordOpenFileProfile('app:open-file:open-tab:start', {
+        editorKind,
+        filePath,
+        targetViewMode,
+      })
       openTab({
         filePath,
         content: fileContent,
         editorKind,
         viewMode: targetViewMode,
+      })
+      recordOpenFileProfile('app:open-file:open-tab:end', {
+        durationMs: getOpenFileProfileDuration(openTabStartedAt),
+        elapsedMs: getOpenFileProfileDuration(openStartedAt),
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to open file.'
@@ -1683,11 +1817,20 @@ function App() {
         description: message,
       })
       setStatusMessage(message)
+      recordOpenFileProfile('app:open-file:error:end', {
+        elapsedMs: getOpenFileProfileDuration(openStartedAt),
+        message,
+      })
       return
     }
 
     if (workspacePath) {
+      const updateStateStartedAt = performance.now()
+      recordOpenFileProfile('app:open-file:update-workspace-state:start', { filePath, workspacePath })
       await updateWorkspaceState(workspacePath, { lastFilePath: filePath })
+      recordOpenFileProfile('app:open-file:update-workspace-state:end', {
+        durationMs: getOpenFileProfileDuration(updateStateStartedAt),
+      })
     }
 
     if (isLeftSidebarDrawer) {
@@ -1695,6 +1838,9 @@ function App() {
     }
 
     setStatusMessage(`${getBaseName(filePath)} opened`)
+    recordOpenFileProfile('app:open-file:end', {
+      elapsedMs: getOpenFileProfileDuration(openStartedAt),
+    })
   }, [currentPath, activateTab, captureActiveMeoViewPosition, isLeftSidebarDrawer, openTab])
 
   const openAgentMessageFile = useCallback(async (
@@ -3946,92 +4092,98 @@ function App() {
             ) : null}
 
             {activeDiffTab ? (
-              <GitDiffEditor
-                key={activeDiffTab.id}
-                diff={activeDiffTab.diff}
-                draftContent={activeDiffDraftContent}
-                navigationRequest={activeDiffTab.navigationRequest ?? null}
-                hasDirtyRelatedFileTab={activeDiffHasDirtyRelatedFileTab}
-                theme={theme}
-                onApplyBlockAction={handleApplyGitDiffSelection}
-                onDiscardChange={(change) => {
-                  void handleDiscardGitChange(change)
-                }}
-                onDraftChange={(nextValue) => {
-                  updateDiffTabDraft(activeDiffTab.id, nextValue)
-                }}
-                onSaveEditedFile={handleSaveDiffFile}
-                onStageChange={(change) => {
-                  void handleStageGitPaths([change.path])
-                }}
-                onUnstageChange={(change) => {
-                  void handleUnstageGitPaths([change.path])
-                }}
-              />
+              <Suspense fallback={<EditorLoadingState label='Loading diff editor...' />}>
+                <GitDiffEditor
+                  key={activeDiffTab.id}
+                  diff={activeDiffTab.diff}
+                  draftContent={activeDiffDraftContent}
+                  navigationRequest={activeDiffTab.navigationRequest ?? null}
+                  hasDirtyRelatedFileTab={activeDiffHasDirtyRelatedFileTab}
+                  theme={theme}
+                  onApplyBlockAction={handleApplyGitDiffSelection}
+                  onDiscardChange={(change) => {
+                    void handleDiscardGitChange(change)
+                  }}
+                  onDraftChange={(nextValue) => {
+                    updateDiffTabDraft(activeDiffTab.id, nextValue)
+                  }}
+                  onSaveEditedFile={handleSaveDiffFile}
+                  onStageChange={(change) => {
+                    void handleStageGitPaths([change.path])
+                  }}
+                  onUnstageChange={(change) => {
+                    void handleUnstageGitPaths([change.path])
+                  }}
+                />
+              </Suspense>
             ) : null}
 
             {activeFileTab && currentEditorKind === 'rich-text' && currentFileViewMode === 'default' ? (
-              <WritingEditor
-                key={activeFileTab.id}
-                disabled={!currentFilePath}
-                onChange={(nextValue) => {
-                  if (!currentFilePath) {
-                    return
-                  }
-
-                  updateFileTabsContent(currentFilePath, nextValue)
-                }}
-                onCompositionChange={setIsActiveEditorComposing}
-                value={currentFileContent}
-                theme={theme}
-              />
-            ) : null}
-
-            {activeFileTab && currentEditorKind === 'rich-text' && currentFileViewMode === 'meo' ? (
-              <MeoEditorHost
-                key={activeFileTab.id}
-                ref={meoEditorHostRef}
-                filePath={activeFileTab.filePath}
-                gitDiffRequest={activeFileTab.gitDiffRequest ?? null}
-                onChange={(nextValue) => {
-                  updateFileTabsContent(activeFileTab.filePath, nextValue)
-                }}
-                onCompositionChange={setIsActiveEditorComposing}
-                onOpenFile={(targetFilePath) => {
-                  void openFile(targetFilePath, currentPath, 'meo')
-                }}
-                onOpenGitDiff={(targetFilePath, gitAction) => {
-                  void (async () => {
-                    if (!currentPath) {
+              <Suspense fallback={<EditorLoadingState />}>
+                <WritingEditor
+                  key={activeFileTab.id}
+                  disabled={!currentFilePath}
+                  onChange={(nextValue) => {
+                    if (!currentFilePath) {
                       return
                     }
 
-                    const latestGitState = await refreshGitState(currentPath, { silent: true })
-                    const nextChange = findGitChangeByFilePath(
-                      latestGitState,
-                      targetFilePath,
-                      gitAction?.source === 'revision' ? ['staged', 'unstaged'] : ['unstaged', 'staged'],
-                    )
+                    updateFileTabsContent(currentFilePath, nextValue)
+                  }}
+                  onCompositionChange={setIsActiveEditorComposing}
+                  value={currentFileContent}
+                  theme={theme}
+                />
+              </Suspense>
+            ) : null}
 
-                    if (nextChange) {
-                      await openGitDiff(nextChange, gitAction)
-                    }
-                  })()
-                }}
-                onApplyGitDiffSelection={handleApplyGitDiffSelection}
-                onSave={(content) => {
-                  void handleSave({
-                    content,
-                    filePath: activeFileTab.filePath,
-                  })
-                }}
-                value={currentFileContent}
-                savedValue={activeFileTab.savedContent}
-                theme={theme}
-                gitRepositoryState={gitRepositoryState}
-                meoSettings={meo}
-                workspacePath={currentPath}
-              />
+            {activeFileTab && currentEditorKind === 'rich-text' && currentFileViewMode === 'meo' ? (
+              <Suspense fallback={<EditorLoadingState />}>
+                <MeoEditorHost
+                  key={activeFileTab.id}
+                  ref={meoEditorHostRef}
+                  filePath={activeFileTab.filePath}
+                  gitDiffRequest={activeFileTab.gitDiffRequest ?? null}
+                  onChange={(nextValue) => {
+                    updateFileTabsContent(activeFileTab.filePath, nextValue)
+                  }}
+                  onCompositionChange={setIsActiveEditorComposing}
+                  onOpenFile={(targetFilePath) => {
+                    void openFile(targetFilePath, currentPath, 'meo')
+                  }}
+                  onOpenGitDiff={(targetFilePath, gitAction) => {
+                    void (async () => {
+                      if (!currentPath) {
+                        return
+                      }
+
+                      const latestGitState = await refreshGitState(currentPath, { silent: true })
+                      const nextChange = findGitChangeByFilePath(
+                        latestGitState,
+                        targetFilePath,
+                        gitAction?.source === 'revision' ? ['staged', 'unstaged'] : ['unstaged', 'staged'],
+                      )
+
+                      if (nextChange) {
+                        await openGitDiff(nextChange, gitAction)
+                      }
+                    })()
+                  }}
+                  onApplyGitDiffSelection={handleApplyGitDiffSelection}
+                  onSave={(content) => {
+                    void handleSave({
+                      content,
+                      filePath: activeFileTab.filePath,
+                    })
+                  }}
+                  value={currentFileContent}
+                  savedValue={activeFileTab.savedContent}
+                  theme={theme}
+                  gitRepositoryState={gitRepositoryState}
+                  meoSettings={meo}
+                  workspacePath={currentPath}
+                />
+              </Suspense>
             ) : null}
 
             {activeFileTab && currentEditorKind === 'code' && currentFileViewMode === 'preview' ? (
@@ -4045,23 +4197,25 @@ function App() {
               (currentEditorKind === 'code' && currentFileViewMode !== 'preview')
               || (currentEditorKind === 'rich-text' && currentFileViewMode === 'code')
             ) ? (
-              <CodeEditor
-                key={activeFileTab.id}
-                disabled={false}
-                filePath={activeFileTab.filePath}
-                onChange={(nextValue) => {
-                  updateFileTabsContent(activeFileTab.filePath, nextValue)
-                }}
-                onCompositionChange={setIsActiveEditorComposing}
-                onSave={(content) => {
-                  void handleSave({
-                    content,
-                    filePath: activeFileTab.filePath,
-                  })
-                }}
-                value={currentFileContent}
-                theme={theme}
-              />
+              <Suspense fallback={<EditorLoadingState />}>
+                <CodeEditor
+                  key={activeFileTab.id}
+                  disabled={false}
+                  filePath={activeFileTab.filePath}
+                  onChange={(nextValue) => {
+                    updateFileTabsContent(activeFileTab.filePath, nextValue)
+                  }}
+                  onCompositionChange={setIsActiveEditorComposing}
+                  onSave={(content) => {
+                    void handleSave({
+                      content,
+                      filePath: activeFileTab.filePath,
+                    })
+                  }}
+                  value={currentFileContent}
+                  theme={theme}
+                />
+              </Suspense>
             ) : null}
           </div>
         </div>

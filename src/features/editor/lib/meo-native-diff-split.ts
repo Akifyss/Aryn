@@ -79,6 +79,7 @@ import {
   createGitDiffOverviewRulerController,
   type GitDiffOverviewSegment,
 } from '@/vendor/meo/webview/helpers/gitDiffOverviewRuler'
+import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
 
 type MeoDiffSplitControllerOptions = {
   baseline: GitBaselinePayload | null
@@ -295,9 +296,22 @@ export function shouldDeferSplitMergeChunkUpdate(
   transactions: readonly Transaction[],
   side: 'a' | 'b',
 ) {
-  return side === 'b'
+  const isExternalDocumentSync = (transaction: Transaction) => (
+    transaction.docChanged
+    && (
+      transaction.annotation(allowReadOnlyDocumentUpdate)
+      || transaction.annotation(externalDocumentSync)
+    )
+  )
+
+  return (
+    side === 'b'
     && transactions.some(isLiveTextEditTransaction)
     && transactions.every((transaction) => !transaction.docChanged || isLiveTextEditTransaction(transaction))
+  ) || (
+    transactions.some(isExternalDocumentSync)
+    && transactions.every((transaction) => !transaction.docChanged || isExternalDocumentSync(transaction))
+  )
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -872,6 +886,8 @@ type SplitInlineChangeLayerRefreshOptions = {
 
 const SPLIT_RENDER_HEALTH_MAX_RETRIES = 4
 const SPLIT_RENDER_HEALTH_PARSE_TIMEOUT_MS = 80
+const SPLIT_RENDER_HEALTH_MAX_DOC_CHARS = 12_000
+const SPLIT_GUTTER_LINE_FLAGS_MAX_DOC_CHARS = 12_000
 type SplitRenderRefreshReason = 'split-render-health' | 'split-scroll-refresh' | 'split-layout-refresh'
 
 const splitRenderRefreshReason = Annotation.define<SplitRenderRefreshReason>()
@@ -1987,6 +2003,7 @@ export type MeoDiffPaneExtensionOptions = {
   readOnly: boolean | (() => boolean)
   readOnlyCompartment: Compartment
   reportViewportChanges?: boolean
+  renderHealthEnabled?: boolean
   side: 'original' | 'modified'
   textSnapshot?: TextSnapshot
 }
@@ -2012,6 +2029,7 @@ export function createDiffExtensions({
   readOnly,
   readOnlyCompartment,
   reportViewportChanges = true,
+  renderHealthEnabled = true,
   side,
   textSnapshot,
 }: MeoDiffPaneExtensionOptions) {
@@ -2227,8 +2245,11 @@ export function createDiffExtensions({
     ...liveModeExtensions({ deferDocChanges: true }),
     splitVisibleTextFallbackState,
     splitDiffFallbackDecorationField,
-    splitPaneRenderHealthPlugin,
   ]
+
+  if (renderHealthEnabled) {
+    extensions.push(splitPaneRenderHealthPlugin)
+  }
 
   if (isInteractivePane) {
     extensions.push(
@@ -3265,6 +3286,12 @@ export function createMeoDiffSplitController({
   text,
   viewMode = 'split',
 }: MeoDiffSplitControllerOptions): MeoDiffSplitController {
+  const controllerStartedAt = performance.now()
+  recordOpenFileProfile('diff-split:controller:start', {
+    fallbackOriginalChars: fallbackOriginalText.length,
+    textChars: text.length,
+    viewMode,
+  })
   let currentBaseline = baseline
   let currentFallbackOriginal = {
     label: fallbackOriginalLabel,
@@ -3299,6 +3326,8 @@ export function createMeoDiffSplitController({
   let pendingScrollDecorationCommitFrame = 0
   let pendingDeferredDiffRefreshFrame = 0
   let pendingDeferredDiffRefreshTimer = 0
+  let pendingInitialRenderWorkFrame = 0
+  let pendingInitialRenderWorkTimer = 0
   let syncedOriginalGitBaseText: string | null = null
   let syncedModifiedGitBaseText: string | null = null
   let appliedModifiedReadOnly: boolean | null = null
@@ -3492,7 +3521,19 @@ export function createMeoDiffSplitController({
     }
   }
 
+  const cancelPendingInitialRenderWork = () => {
+    if (pendingInitialRenderWorkFrame) {
+      window.cancelAnimationFrame(pendingInitialRenderWorkFrame)
+      pendingInitialRenderWorkFrame = 0
+    }
+    if (pendingInitialRenderWorkTimer) {
+      window.clearTimeout(pendingInitialRenderWorkTimer)
+      pendingInitialRenderWorkTimer = 0
+    }
+  }
+
   const syncSplitGutterLineFlagsFromChunks = () => {
+    const startedAt = performance.now()
     const originalDoc = getOriginalDiffDoc()
     const modifiedDoc = getModifiedDiffDoc()
     const modifiedView = getModifiedView()
@@ -3500,33 +3541,66 @@ export function createMeoDiffSplitController({
       return
     }
 
+    if (
+      mergeView
+      && Math.max(originalDoc.length, modifiedDoc.length) >= SPLIT_GUTTER_LINE_FLAGS_MAX_DOC_CHARS
+    ) {
+      recordOpenFileProfile('diff-split:sync-gutter-line-flags:skip', {
+        mode: currentViewMode,
+        reason: 'long-split-document-gutter-flags',
+      })
+      return
+    }
+
     const chunks = getActiveDiffChunks()
-    if (mergeView) {
+    if (!mergeView && unifiedView) {
       setGitDiffLineFlags(
-        mergeView.a,
-        buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'original'),
+        unifiedView,
+        buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'modified'),
+      )
+    } else {
+      setGitDiffLineFlags(
+        modifiedView,
+        buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'modified'),
       )
     }
-    setGitDiffLineFlags(
-      modifiedView,
-      buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'modified'),
-    )
+    recordOpenFileProfile('diff-split:sync-gutter-line-flags:end', {
+      chunks: chunks.length,
+      durationMs: getOpenFileProfileDuration(startedAt),
+      mode: currentViewMode,
+    })
   }
 
   const refreshDiffArtifactsNow = () => {
+    const startedAt = performance.now()
+    recordOpenFileProfile('diff-split:refresh-artifacts:start', {
+      mode: currentViewMode,
+      pendingChunks: hasPendingChunkRefresh(),
+    })
     cancelPendingDeferredDiffRefresh()
     if (destroyed || !getModifiedView() || isComposing) {
       return
     }
 
     syncDiffSplitGitBaselines(getOriginalState(), { deferLineFlags: true })
+    const chunksStartedAt = performance.now()
     mergeView?.refreshChunks()
+    if (mergeView) {
+      recordOpenFileProfile('diff-split:refresh-chunks:end', {
+        chunks: mergeView.chunks.length,
+        durationMs: getOpenFileProfileDuration(chunksStartedAt),
+      })
+    }
     unifiedView?.dispatch({
       effects: refreshInlineChangeLayerEffect.of(null),
     })
     syncSplitGutterLineFlagsFromChunks()
     invalidateDiffOverviewSegments()
     resetDiffOverviewRender()
+    recordOpenFileProfile('diff-split:refresh-artifacts:end', {
+      durationMs: getOpenFileProfileDuration(startedAt),
+      mode: currentViewMode,
+    })
   }
 
   const refreshDeferredDiffArtifactsBeforeChunkAction = () => {
@@ -3556,6 +3630,10 @@ export function createMeoDiffSplitController({
 
       pendingDeferredDiffRefreshFrame = window.requestAnimationFrame(() => {
         pendingDeferredDiffRefreshFrame = 0
+        recordOpenFileProfile('diff-split:deferred-refresh:run', {
+          delayMs,
+          mode: currentViewMode,
+        })
         refreshDiffArtifactsNow()
       })
     }, Math.max(0, delayMs))
@@ -3625,7 +3703,7 @@ export function createMeoDiffSplitController({
       return
     }
 
-    forceSplitPaneRenderRefresh(view, 'split-layout-refresh', { parseDocument: true })
+    forceSplitPaneRenderRefresh(view, 'split-layout-refresh')
   }
 
   const refreshActiveViewDecorations = () => {
@@ -3690,6 +3768,51 @@ export function createMeoDiffSplitController({
     })
   }
 
+  const scheduleInitialRenderWork = (mode: MeoDiffViewMode) => {
+    cancelPendingInitialRenderWork()
+
+    const scheduledMergeView = mergeView
+    const scheduledUnifiedView = unifiedView
+    pendingInitialRenderWorkFrame = window.requestAnimationFrame(() => {
+      pendingInitialRenderWorkFrame = 0
+      pendingInitialRenderWorkTimer = window.setTimeout(() => {
+        pendingInitialRenderWorkTimer = 0
+        if (
+          destroyed
+          || scheduledMergeView !== mergeView
+          || scheduledUnifiedView !== unifiedView
+        ) {
+          return
+        }
+
+        const startedAt = performance.now()
+        recordOpenFileProfile('diff-split:initial-post-render-work:start', {
+          mode,
+          textChars: currentText.length,
+        })
+        syncDiffSplitGitBaselines(getOriginalState(), { deferLineFlags: true })
+        syncSplitGutterLineFlagsFromChunks()
+
+        if (scheduledMergeView) {
+          forceParsing(scheduledMergeView.a, visibleRenderParseTarget(scheduledMergeView.a), 50)
+          forceParsing(scheduledMergeView.b, visibleRenderParseTarget(scheduledMergeView.b), 50)
+          expandAllCollapsibleSections(scheduledMergeView.a)
+          expandAllCollapsibleSections(scheduledMergeView.b)
+        } else if (scheduledUnifiedView) {
+          forceParsing(scheduledUnifiedView, visibleRenderParseTarget(scheduledUnifiedView), 50)
+          expandAllCollapsibleSections(scheduledUnifiedView)
+        }
+
+        syncDiffScrollPastEndPadding()
+        mergeScrollArea?.refresh()
+        recordOpenFileProfile('diff-split:initial-post-render-work:end', {
+          durationMs: getOpenFileProfileDuration(startedAt),
+          mode,
+        })
+      }, 0)
+    })
+  }
+
   const destroyMergeView = () => {
     cancelPendingScrollSync()
     clearDiffSplitNavigationHighlight(mergeView?.a ?? null, originalNavigationHighlightTimerRef)
@@ -3700,6 +3823,7 @@ export function createMeoDiffSplitController({
     syncedModifiedGitBaseText = null
     destroyDiffScrollPastEndObserver()
     cancelPendingDeferredDiffRefresh()
+    cancelPendingInitialRenderWork()
     cancelPendingReadOnlyWidgetLock()
     cleanupReadOnlyWidgetLock?.()
     cleanupReadOnlyWidgetLock = null
@@ -3742,6 +3866,7 @@ export function createMeoDiffSplitController({
     originalState: DiffSplitResolvedState,
     options: { deferLineFlags?: boolean, force?: boolean } = {},
   ) => {
+    const startedAt = performance.now()
     const changed = {
       modified: false,
       original: false,
@@ -3769,27 +3894,20 @@ export function createMeoDiffSplitController({
     if (options.force || syncedOriginalGitBaseText !== originalState.modifiedText) {
       syncedOriginalGitBaseText = originalState.modifiedText
       changed.original = true
-      setGitBaseline(mergeView.a, {
-        available: true,
-        baseText: originalState.modifiedText,
-        headOid: null,
-        indexText: null,
-        tracked: true,
-      }, { deferLineFlags: options.deferLineFlags === true })
     }
 
     if (options.force || syncedModifiedGitBaseText !== originalState.text) {
       syncedModifiedGitBaseText = originalState.text
       changed.modified = true
-      setGitBaseline(mergeView.b, {
-        available: true,
-        baseText: originalState.text,
-        headOid: null,
-        indexText: null,
-        tracked: true,
-      }, { deferLineFlags: options.deferLineFlags === true })
     }
 
+    recordOpenFileProfile('diff-split:sync-git-baselines:end', {
+      changedModified: changed.modified,
+      changedOriginal: changed.original,
+      deferLineFlags: options.deferLineFlags === true,
+      durationMs: getOpenFileProfileDuration(startedAt),
+      mode: currentViewMode,
+    })
     return changed
   }
 
@@ -3799,6 +3917,7 @@ export function createMeoDiffSplitController({
     nextText: string,
     annotations: Annotation<unknown> | readonly Annotation<unknown>[],
   ) => {
+    const startedAt = performance.now()
     if (snapshot.value.length !== view.state.doc.length) {
       view.dispatch({
         annotations,
@@ -3809,11 +3928,22 @@ export function createMeoDiffSplitController({
         },
       })
       snapshot.value = nextText
+      recordOpenFileProfile('diff-split:sync-text-snapshot:end', {
+        durationMs: getOpenFileProfileDuration(startedAt),
+        fullReplace: true,
+        nextChars: nextText.length,
+      })
       return true
     }
 
     const syncChange = findSyncChange(snapshot.value, nextText)
     if (!syncChange) {
+      recordOpenFileProfile('diff-split:sync-text-snapshot:end', {
+        durationMs: getOpenFileProfileDuration(startedAt),
+        fullReplace: false,
+        noChange: true,
+        nextChars: nextText.length,
+      })
       return false
     }
 
@@ -3822,6 +3952,11 @@ export function createMeoDiffSplitController({
       changes: syncChange,
     })
     snapshot.value = nextText
+    recordOpenFileProfile('diff-split:sync-text-snapshot:end', {
+      durationMs: getOpenFileProfileDuration(startedAt),
+      fullReplace: false,
+      nextChars: nextText.length,
+    })
     return true
   }
 
@@ -4001,6 +4136,8 @@ export function createMeoDiffSplitController({
   const getRevertControls = (originalState: DiffSplitResolvedState) => (
     editable && originalState.actionChange && onApplyGitDiffSelection ? 'a-to-b' : undefined
   )
+
+  const shouldHighlightInlineChanges = (_originalState: DiffSplitResolvedState) => true
 
   const getChunkForActionControl = (control: HTMLElement) => {
     if (unifiedView) {
@@ -4230,6 +4367,10 @@ export function createMeoDiffSplitController({
       return
     }
 
+    const renderStartedAt = performance.now()
+    recordOpenFileProfile('diff-split:render:start', {
+      viewMode: currentViewMode,
+    })
     destroyMergeView()
     body.replaceChildren()
 
@@ -4252,7 +4393,7 @@ export function createMeoDiffSplitController({
         diffConfig: getDiffConfig(editable),
         doc: originalState.modifiedText,
         gutter: false,
-        highlightChanges: true,
+        highlightChanges: shouldHighlightInlineChanges(originalState),
         mergeControls: getRevertControls(originalState)
           ? (kind) => createUnifiedHunkActionControl(kind)
           : false,
@@ -4276,16 +4417,15 @@ export function createMeoDiffSplitController({
           onSave,
           onSelectionChange,
           onViewportChange,
-          readOnlyCompartment: unifiedReadOnlyCompartment,
-          readOnly: () => getOriginalState().modifiedReadOnly,
-          side: 'modified',
-          textSnapshot: modifiedTextSnapshot,
-        },
+        readOnlyCompartment: unifiedReadOnlyCompartment,
+        readOnly: () => getOriginalState().modifiedReadOnly,
+        renderHealthEnabled: originalState.modifiedText.length < SPLIT_RENDER_HEALTH_MAX_DOC_CHARS,
+        side: 'modified',
+        textSnapshot: modifiedTextSnapshot,
+      },
       })
 
       appliedModifiedReadOnly = originalState.modifiedReadOnly
-      syncDiffSplitGitBaselines(originalState, { deferLineFlags: true, force: true })
-      syncSplitGutterLineFlagsFromChunks()
       syncDiffGutterVisibility()
       mergeScrollArea = mountMeoBaseScrollArea({
         className: 'meo-diff-split-base-scroll-area',
@@ -4350,15 +4490,19 @@ export function createMeoDiffSplitController({
         unifiedView?.dom.removeEventListener('meo-open-link', handleTableOpenLink)
         unifiedView?.dom.removeEventListener('meo-table-selection-change', handleTableSelectionChange)
       }
-      forceParsing(unifiedView, unifiedView.state.doc.length, 500)
-      expandAllCollapsibleSections(unifiedView)
-      syncDiffScrollPastEndPadding()
-      mergeScrollArea.refresh()
-      resetDiffOverviewRender()
-      refreshAfterLayoutSettles()
+      scheduleInitialRenderWork('unified')
+      recordOpenFileProfile('diff-split:render:end', {
+        durationMs: getOpenFileProfileDuration(renderStartedAt),
+        viewMode: currentViewMode,
+      })
       return
     }
 
+    const mergeViewStartedAt = performance.now()
+    recordOpenFileProfile('diff-split:create-merge-view:start', {
+      modifiedChars: originalState.modifiedText.length,
+      originalChars: originalState.text.length,
+    })
     mergeView = createMeoDiffSplitMergeView({
       a: {
         doc: originalState.text,
@@ -4373,6 +4517,7 @@ export function createMeoDiffSplitController({
         onChange: () => undefined,
         readOnlyCompartment: originalReadOnlyCompartment,
         readOnly: true,
+        renderHealthEnabled: originalState.text.length < SPLIT_RENDER_HEALTH_MAX_DOC_CHARS,
         side: 'original',
         textSnapshot: originalTextSnapshot,
       },
@@ -4394,6 +4539,7 @@ export function createMeoDiffSplitController({
         readOnlyCompartment: modifiedReadOnlyCompartment,
         reportViewportChanges: false,
         readOnly: () => getOriginalState().modifiedReadOnly,
+        renderHealthEnabled: originalState.modifiedText.length < SPLIT_RENDER_HEALTH_MAX_DOC_CHARS,
         side: 'modified',
         textSnapshot: modifiedTextSnapshot,
       },
@@ -4401,17 +4547,19 @@ export function createMeoDiffSplitController({
       diffConfig: getDiffConfig(editable),
       deferChunkUpdates: shouldDeferSplitMergeChunkUpdate,
       gutter: false,
-      highlightChanges: true,
-      outerScrollViewportMargin: 8000,
-      outerScrollViewportRetention: 32000,
+      highlightChanges: shouldHighlightInlineChanges(originalState),
+      outerScrollViewportMargin: 1000,
+      outerScrollViewportRetention: 3000,
       parent: body,
       renderRevertControl: createHunkActionControls,
       revertControls: getRevertControls(originalState),
     })
+    recordOpenFileProfile('diff-split:create-merge-view:end', {
+      chunks: mergeView.chunks.length,
+      durationMs: getOpenFileProfileDuration(mergeViewStartedAt),
+    })
 
     appliedModifiedReadOnly = originalState.modifiedReadOnly
-    syncDiffSplitGitBaselines(originalState, { deferLineFlags: true, force: true })
-    syncSplitGutterLineFlagsFromChunks()
     syncDiffGutterVisibility()
     mergeScrollArea = mountMeoBaseScrollArea({
       className: 'meo-diff-split-base-scroll-area',
@@ -4420,7 +4568,7 @@ export function createMeoDiffSplitController({
     })
     diffScrollPastEndObserver = new ResizeObserver(scheduleDiffScrollPastEndPaddingSync)
     diffScrollPastEndObserver.observe(mergeView.dom)
-    lockReadOnlyWidgets(mergeView.a.dom)
+    scheduleReadOnlyWidgetLock(mergeView.a.dom)
     const readOnlyWidgetObserver = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
@@ -4494,17 +4642,18 @@ export function createMeoDiffSplitController({
       mergeView?.b.dom.removeEventListener('meo-open-link', handleTableOpenLink)
       mergeView?.b.dom.removeEventListener('meo-table-selection-change', handleTableSelectionChange)
     }
-    forceParsing(mergeView.a, mergeView.a.state.doc.length, 500)
-    forceParsing(mergeView.b, mergeView.b.state.doc.length, 500)
-    expandAllCollapsibleSections(mergeView.a)
-    expandAllCollapsibleSections(mergeView.b)
-    syncDiffScrollPastEndPadding()
-    mergeScrollArea.refresh()
-    resetDiffOverviewRender()
-    refreshAfterLayoutSettles()
+    scheduleInitialRenderWork('split')
+    recordOpenFileProfile('diff-split:render:end', {
+      durationMs: getOpenFileProfileDuration(renderStartedAt),
+      viewMode: currentViewMode,
+    })
   }
 
   render()
+  recordOpenFileProfile('diff-split:controller:end', {
+    durationMs: getOpenFileProfileDuration(controllerStartedAt),
+    viewMode: currentViewMode,
+  })
 
   const getEditableView = () => {
     const view = getModifiedView()
@@ -4617,8 +4766,16 @@ export function createMeoDiffSplitController({
   }
 
   const syncResolvedDocuments = () => {
+    const startedAt = performance.now()
     const previousState = lastRenderedState
     const originalState = getOriginalState()
+    recordOpenFileProfile('diff-split:sync-resolved-documents:start', {
+      hasPreviousState: !!previousState,
+      mode: currentViewMode,
+      modifiedChars: originalState.modifiedText.length,
+      originalChars: originalState.text.length,
+      viewScope: originalState.viewScope,
+    })
     rememberResolvedViewScope(originalState)
     lastRenderedState = originalState
     syncLabels(originalState)
@@ -4636,6 +4793,11 @@ export function createMeoDiffSplitController({
       if (topPosition && unifiedView) {
         restoreTopLine(unifiedView, topPosition.line, topPosition.lineOffset, unifiedView.scrollDOM)
       }
+      recordOpenFileProfile('diff-split:sync-resolved-documents:end', {
+        durationMs: getOpenFileProfileDuration(startedAt),
+        mode: currentViewMode,
+        rendered: true,
+      })
       return
     }
 
@@ -4670,6 +4832,11 @@ export function createMeoDiffSplitController({
       syncDiffSplitGitBaselines(originalState, { deferLineFlags: true })
       syncSplitGutterLineFlagsFromChunks()
       resetDiffOverviewRender()
+      recordOpenFileProfile('diff-split:sync-resolved-documents:end', {
+        durationMs: getOpenFileProfileDuration(startedAt),
+        mode: currentViewMode,
+        unified: true,
+      })
       return
     }
 
@@ -4703,10 +4870,16 @@ export function createMeoDiffSplitController({
     }
     mergeView?.reconfigure({
       diffConfig: getDiffConfig(editable),
+      highlightChanges: shouldHighlightInlineChanges(originalState),
       renderRevertControl: createHunkActionControls,
       revertControls: getRevertControls(originalState),
     })
     scheduleDeferredDiffRefresh()
+    recordOpenFileProfile('diff-split:sync-resolved-documents:end', {
+      durationMs: getOpenFileProfileDuration(startedAt),
+      mode: currentViewMode,
+      pendingChunks: hasPendingChunkRefresh(),
+    })
   }
 
   const setPreferredGitDiffScope = (scope: GitChangeScope | null) => {
@@ -4983,8 +5156,19 @@ export function createMeoDiffSplitController({
       return true
     },
     setBaseline(nextBaseline) {
+      const startedAt = performance.now()
+      recordOpenFileProfile('diff-split:set-baseline:start', {
+        available: nextBaseline?.available === true,
+        baseChars: typeof nextBaseline?.baseText === 'string' ? nextBaseline.baseText.length : null,
+        indexChars: typeof nextBaseline?.indexText === 'string' ? nextBaseline.indexText.length : null,
+        mode: currentViewMode,
+      })
       currentBaseline = nextBaseline
       syncResolvedDocuments()
+      recordOpenFileProfile('diff-split:set-baseline:end', {
+        durationMs: getOpenFileProfileDuration(startedAt),
+        mode: currentViewMode,
+      })
     },
     setFallbackOriginal(fallback) {
       currentFallbackOriginal = fallback
