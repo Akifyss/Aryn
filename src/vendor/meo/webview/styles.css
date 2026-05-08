@@ -498,17 +498,76 @@
   background: var(--editor-background);
 }
 
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview>.meo-diff-split-preview-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--editor-background);
+  overflow: hidden;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-pane {
+  flex: 1 1 0;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--editor-background);
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-modified {
+  border-left: 1px solid var(--panel-border);
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-original {
+  pointer-events: none;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-editor,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-original-editor {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--editor-background);
+}
+
 .meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller {
   height: 100% !important;
   overflow: auto;
   scrollbar-gutter: stable;
 }
 
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-editor .cm-scroller,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-original-editor .cm-scroller {
+  height: 100% !important;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-original-editor .cm-scroller {
+  overflow: hidden;
+}
+
 .meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-content {
   min-height: 100%;
 }
 
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-editor .cm-content,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-original-editor .cm-content {
+  min-height: 100%;
+}
+
 .meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-gutters {
+  min-width: 0;
+  max-width: none;
+  flex-shrink: 0;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-editor .cm-gutters,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-original-editor .cm-gutters {
   min-width: 0;
   max-width: none;
   flex-shrink: 0;
@@ -581,14 +640,16 @@
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar,
-.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar {
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-editor .cm-scroller::-webkit-scrollbar {
   -webkit-appearance: none;
   width: var(--meo-scroll-area-scrollbar-size) !important;
   height: var(--meo-scroll-area-scrollbar-size) !important;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-track,
-.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-track {
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-track,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-editor .cm-scroller::-webkit-scrollbar-track {
   -webkit-appearance: none;
   background: transparent !important;
   border-radius: 999px !important;
@@ -596,7 +657,8 @@
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb,
-.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-thumb {
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-thumb,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-editor .cm-scroller::-webkit-scrollbar-thumb {
   -webkit-appearance: none;
   border: var(--app-scroll-area-scrollbar-gap) solid transparent !important;
   border-radius: 999px !important;
@@ -607,7 +669,8 @@
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb:hover,
-.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-thumb:hover,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
   -webkit-appearance: none;
   background: var(--scrollbarSlider-hoverBackground,
       var(--scrollbarSlider-background,
@@ -617,7 +680,8 @@
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-thumb:active,
-.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-thumb:active {
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-thumb:active,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-editor .cm-scroller::-webkit-scrollbar-thumb:active {
   -webkit-appearance: none;
   background: var(--scrollbarSlider-activeBackground,
       var(--scrollbarSlider-hoverBackground,
@@ -628,7 +692,8 @@
 }
 
 .meo-native-theme .meo-diff-split-body .cm-mergeView::-webkit-scrollbar-corner,
-.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-corner {
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified>.cm-editor .cm-scroller::-webkit-scrollbar-corner,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-preview .meo-diff-split-preview-editor .cm-scroller::-webkit-scrollbar-corner {
   background: transparent !important;
 }
 

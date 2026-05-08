@@ -175,7 +175,7 @@ export function mountNativeMeoEditor({
     toolbar,
   } = shell
 
-  let editor!: MeoEditorInstance
+  let editor: MeoEditorInstance | null = null
   let editorScrollArea: ReturnType<typeof mountMeoBaseScrollArea> | null = null
   let diffSplitController: MeoDiffSplitController | null = null
   let liveInlineDiffController: MeoLiveInlineDiffController | null = null
@@ -385,7 +385,7 @@ export function mountNativeMeoEditor({
 
   const setLineNumbersVisible = (visible: boolean, options?: { persist?: boolean }) => {
     lineNumbersVisible = visible !== false
-    editor.setLineNumbers(lineNumbersVisible)
+    editor?.setLineNumbers(lineNumbersVisible)
     diffSplitController?.setLineNumbersVisible(lineNumbersVisible)
     liveInlineDiffController?.setLineNumbersVisible(lineNumbersVisible)
     updateLineNumbersUi()
@@ -396,7 +396,7 @@ export function mountNativeMeoEditor({
 
   const setGitChangesGutterVisible = (visible: boolean, options?: { persist?: boolean }) => {
     gitChangesGutterVisible = visible !== false
-    editor.setGitGutterVisible(gitChangesGutterVisible)
+    editor?.setGitGutterVisible(gitChangesGutterVisible)
     diffSplitController?.setDiffGutterVisible(gitChangesGutterVisible)
     liveInlineDiffController?.setDiffGutterVisible(gitChangesGutterVisible)
     updateGitChangesGutterUi()
@@ -523,14 +523,15 @@ export function mountNativeMeoEditor({
       }
     } else {
       destroyDiffSplit()
-      editor.setText(currentText)
-      editor.setMode(currentMode)
+      const primaryEditor = ensurePrimaryEditor('mode-switch')
+      primaryEditor.setText(currentText)
+      primaryEditor.setMode(currentMode)
       if (currentGitBaseline) {
-        editor.setGitBaseline(currentGitBaseline)
+        primaryEditor.setGitBaseline(currentGitBaseline)
       }
       scheduleLiveInlineDiffController()
       if (restoreTopPosition) {
-        editor.restoreTopLine(restoreTopPosition.line, restoreTopPosition.lineOffset)
+        primaryEditor.restoreTopLine(restoreTopPosition.line, restoreTopPosition.lineOffset)
       }
     }
     updateModeUi()
@@ -600,7 +601,7 @@ export function mountNativeMeoEditor({
     switch (message.type) {
       case 'saveDocument':
         flushPendingSplitParentChange()
-        onSave?.(isDiffMode(currentMode) ? diffSplitController?.getText() ?? currentText : editor.getText())
+        onSave?.(isDiffMode(currentMode) ? diffSplitController?.getText() ?? currentText : ensurePrimaryEditor('save-document').getText())
         return
       case 'setMode':
         if (message.mode === 'live' || message.mode === 'source' || message.mode === 'diff-split' || message.mode === 'diff-unified') {
@@ -660,7 +661,7 @@ export function mountNativeMeoEditor({
           requestId: typeof message.requestId === 'string' ? message.requestId : '',
           results: results.map(({ exists, target }) => ({ exists, target })),
         })
-        editor.refreshDecorations()
+        getActiveEditor()?.refreshDecorations?.()
         return
       }
       case 'resolveWikiLinks': {
@@ -674,7 +675,7 @@ export function mountNativeMeoEditor({
           requestId: typeof message.requestId === 'string' ? message.requestId : '',
           results: results.map(({ exists, target }) => ({ exists, target })),
         })
-        editor.refreshDecorations()
+        getActiveEditor()?.refreshDecorations?.()
         return
       }
       case 'saveImageFromClipboard': {
@@ -722,77 +723,93 @@ export function mountNativeMeoEditor({
   findPanelController.setSearchOptions(persistenceController.getFindOptions())
 
   const createVendorEditor = createEditor as unknown as (options: MeoEditorCreateOptions) => MeoEditorInstance
-  const primaryEditorInitialText = isDiffMode(currentMode) ? '' : initialValue
+  const ensurePrimaryEditor = (
+    reason: 'api' | 'focus' | 'initial' | 'live-inline-diff' | 'mode-switch' | 'paste' | 'save-document' | 'shortcut' | 'set-text',
+  ) => {
+    if (editor) {
+      return editor
+    }
 
-  const vendorEditorStartedAt = performance.now()
-  recordOpenFileProfile('native-meo:create-vendor-editor:start', {
-    deferredContentChars: initialValue.length - primaryEditorInitialText.length,
-    filePath,
-    initialChars: primaryEditorInitialText.length,
-    mode: currentMode,
-  })
-  editor = createVendorEditor({
-    initialGitGutter: gitChangesGutterVisible,
-    initialLineNumbers: lineNumbersVisible,
-    initialMode: isDiffMode(currentMode) ? 'live' : currentMode,
-    initialFocusedLineHighlight: focusedLineHighlightVisible,
-    text: primaryEditorInitialText,
-    initialTopLine: initialRestoreTopLine,
-    initialTopLineOffset: initialRestoreTopLineOffset,
-    initialVimMode: false,
-    onApplyChanges: (nextText: string) => {
-      emitContentChange(nextText)
-    },
-    onOpenGitRevisionForLine: (options: { lineNumber?: number }) => {
-      openGitMarkerInDiffSplit('staged', options)
-    },
-    onOpenGitWorktreeForLine: (options: { lineNumber?: number }) => {
-      openGitMarkerInDiffSplit('unstaged', options)
-    },
-    onToggleGitInlineSplitForLine: (request: { lineNumber?: number, scope: 'staged' | 'unstaged' }) => (
-      liveInlineDiffController?.toggleHunkForLine(request) ?? false
-    ),
-    onOpenLink: (href: string) => {
-      void openLink(href)
-    },
-    onRequestGitBlame: async (request: { lineNumber?: number }) => {
-      if (!workspacePath) {
-        return buildUnavailableBlameResult('not-repo')
-      }
-
-      return environment.appApi.getGitLineBlame(
-        workspacePath,
-        filePath,
-        typeof request.lineNumber === 'number' ? request.lineNumber : 1,
-      )
-    },
-    onSelectionChange: (selectionState: { visible?: boolean, anchorX?: number, anchorY?: number } | null) => {
-      selectionMenuController.update(selectionState)
-    },
-    onViewportChange: () => {
-      persistenceController.scheduleViewPositionCapture()
-    },
-    parent: editorHost,
-  })
-  recordOpenFileProfile('native-meo:create-vendor-editor:end', {
-    durationMs: getOpenFileProfileDuration(vendorEditorStartedAt),
-    elapsedMs: getOpenFileProfileDuration(mountStartedAt),
-    filePath,
-  })
-  const editorScrollDOM = editor.view.scrollDOM
-  const editorDOM = editor.view.dom
-  if (editorScrollDOM instanceof HTMLElement && editorDOM instanceof HTMLElement) {
-    const scrollAreaStartedAt = performance.now()
-    editorScrollArea = mountMeoBaseScrollArea({
-      className: 'meo-editor-base-scroll-area',
-      hostParent: editorDOM,
-      viewport: editorScrollDOM,
+    const primaryEditorMode = isDiffMode(currentMode) ? 'live' : currentMode
+    const vendorEditorStartedAt = performance.now()
+    recordOpenFileProfile('native-meo:create-vendor-editor:start', {
+      deferredContentChars: 0,
+      filePath,
+      initialChars: currentText.length,
+      mode: currentMode,
+      reason,
     })
-    recordOpenFileProfile('native-meo:mount-scroll-area:end', {
-      durationMs: getOpenFileProfileDuration(scrollAreaStartedAt),
+    const primaryEditor = createVendorEditor({
+      initialGitGutter: gitChangesGutterVisible,
+      initialLineNumbers: lineNumbersVisible,
+      initialMode: primaryEditorMode,
+      initialFocusedLineHighlight: focusedLineHighlightVisible,
+      text: currentText,
+      initialTopLine: initialRestoreTopLine,
+      initialTopLineOffset: initialRestoreTopLineOffset,
+      initialVimMode: false,
+      onApplyChanges: (nextText: string) => {
+        emitContentChange(nextText)
+      },
+      onOpenGitRevisionForLine: (options: { lineNumber?: number }) => {
+        openGitMarkerInDiffSplit('staged', options)
+      },
+      onOpenGitWorktreeForLine: (options: { lineNumber?: number }) => {
+        openGitMarkerInDiffSplit('unstaged', options)
+      },
+      onToggleGitInlineSplitForLine: (request: { lineNumber?: number, scope: 'staged' | 'unstaged' }) => (
+        liveInlineDiffController?.toggleHunkForLine(request) ?? false
+      ),
+      onOpenLink: (href: string) => {
+        void openLink(href)
+      },
+      onRequestGitBlame: async (request: { lineNumber?: number }) => {
+        if (!workspacePath) {
+          return buildUnavailableBlameResult('not-repo')
+        }
+
+        return environment.appApi.getGitLineBlame(
+          workspacePath,
+          filePath,
+          typeof request.lineNumber === 'number' ? request.lineNumber : 1,
+        )
+      },
+      onSelectionChange: (selectionState: { visible?: boolean, anchorX?: number, anchorY?: number } | null) => {
+        selectionMenuController.update(selectionState)
+      },
+      onViewportChange: () => {
+        persistenceController.scheduleViewPositionCapture()
+      },
+      parent: editorHost,
+    })
+    editor = primaryEditor
+    recordOpenFileProfile('native-meo:create-vendor-editor:end', {
+      durationMs: getOpenFileProfileDuration(vendorEditorStartedAt),
       elapsedMs: getOpenFileProfileDuration(mountStartedAt),
       filePath,
+      reason,
     })
+    const editorScrollDOM = primaryEditor.view.scrollDOM
+    const editorDOM = primaryEditor.view.dom
+    if (editorScrollDOM instanceof HTMLElement && editorDOM instanceof HTMLElement) {
+      const scrollAreaStartedAt = performance.now()
+      editorScrollArea = mountMeoBaseScrollArea({
+        className: 'meo-editor-base-scroll-area',
+        hostParent: editorDOM,
+        viewport: editorScrollDOM,
+      })
+      recordOpenFileProfile('native-meo:mount-scroll-area:end', {
+        durationMs: getOpenFileProfileDuration(scrollAreaStartedAt),
+        elapsedMs: getOpenFileProfileDuration(mountStartedAt),
+        filePath,
+      })
+    }
+    syncGitDiffLineHighlights()
+    return primaryEditor
+  }
+
+  if (!isDiffMode(currentMode)) {
+    ensurePrimaryEditor('initial')
   }
 
   const createLiveInlineDiffControllerWhenReady = (reason: 'deferred' | 'immediate') => {
@@ -806,6 +823,7 @@ export function mountNativeMeoEditor({
       filePath,
       reason,
     })
+    const primaryEditor = ensurePrimaryEditor('live-inline-diff')
     liveInlineDiffController = createMeoLiveInlineDiffController({
       baseline: currentGitBaseline,
       diffGutterVisible: gitChangesGutterVisible,
@@ -829,7 +847,7 @@ export function mountNativeMeoEditor({
         persistenceController.scheduleViewPositionCapture()
       },
       text: currentText,
-      view: editor.view as unknown as import('@codemirror/view').EditorView,
+      view: primaryEditor.view as unknown as import('@codemirror/view').EditorView,
     })
     if (compositionState) {
       liveInlineDiffController.setCompositionActive(compositionState)
@@ -891,7 +909,7 @@ export function mountNativeMeoEditor({
       return
     }
 
-    editor.focus()
+    ensurePrimaryEditor('focus').focus()
   }
 
   const toggleFindPanel = () => {
@@ -924,7 +942,7 @@ export function mountNativeMeoEditor({
   const shortcutHandler = (event: KeyboardEvent) => {
     const hasEditorFocus = isDiffMode(currentMode)
       ? diffSplitController?.hasFocus() === true
-      : editor.hasFocus()
+      : ensurePrimaryEditor('shortcut').hasFocus()
 
     if (!hasEditorFocus && !isEventInsideMeoSurface(event.target)) {
       return
@@ -993,18 +1011,19 @@ export function mountNativeMeoEditor({
       return
     }
 
+    const primaryEditor = ensurePrimaryEditor('shortcut')
     handleEditorShortcut(event, {
       applyMode: (mode) => {
         applyMode(mode)
         return true
       },
       currentMode,
-      editor,
+      editor: primaryEditor,
       flushPendingChangesNow: () => undefined,
       openFindPanel: (target) => findPanelController.open(target),
       pendingText: null,
       requestSave: () => {
-        onSave?.(editor.getText())
+        onSave?.(primaryEditor.getText())
       },
       syncedText: normalizeEol(currentText),
       vimModeEnabled: false,
@@ -1030,13 +1049,14 @@ export function mountNativeMeoEditor({
       return
     }
 
-    if (!editor.hasFocus() && !isEventInsideMeoSurface(event.target)) {
+    const primaryEditor = ensurePrimaryEditor('paste')
+    if (!primaryEditor.hasFocus() && !isEventInsideMeoSurface(event.target)) {
       return
     }
 
-    const selection = editor.view.state.selection.main
-    const line = editor.view.state.doc.lineAt(selection.head)
-    await handleImagePaste(event, editor, {
+    const selection = primaryEditor.view.state.selection.main
+    const line = primaryEditor.view.state.doc.lineAt(selection.head)
+    await handleImagePaste(event, primaryEditor, {
       lineNumber: line.number,
       lineOffset: selection.head - line.from,
     })
@@ -1053,8 +1073,8 @@ export function mountNativeMeoEditor({
         return
       }
       findPanelController.updateAnchor()
-      editor.refreshSelectionOverlay()
-      editor.refreshLayout()
+      editor?.refreshSelectionOverlay()
+      editor?.refreshLayout()
       diffSplitController?.refreshLayout()
     })
   }
@@ -1071,7 +1091,7 @@ export function mountNativeMeoEditor({
       return
     }
 
-    editor.refreshLayout()
+    editor?.refreshLayout()
     diffSplitController?.refreshLayout()
   }
 
@@ -1230,7 +1250,8 @@ export function mountNativeMeoEditor({
       liveInlineDiffController = null
       editorScrollArea?.destroy()
       editorScrollArea = null
-      editor.destroy()
+      editor?.destroy()
+      editor = null
       root.replaceChildren()
     },
     focus() {
@@ -1261,7 +1282,7 @@ export function mountNativeMeoEditor({
       if (isDiffMode(currentMode)) {
         diffSplitController?.refreshLayout()
       } else {
-        editor.refreshLayout()
+        ensurePrimaryEditor('api').refreshLayout()
         editorScrollArea?.refresh()
         liveInlineDiffController?.refreshLayout()
       }
@@ -1269,7 +1290,7 @@ export function mountNativeMeoEditor({
     setGitBaseline(baseline) {
       currentGitBaseline = baseline
       if (!isDiffMode(currentMode)) {
-        editor.setGitBaseline(baseline)
+        ensurePrimaryEditor('api').setGitBaseline(baseline)
       }
       diffSplitController?.setBaseline(baseline)
       liveInlineDiffController?.setBaseline(baseline)
@@ -1285,7 +1306,7 @@ export function mountNativeMeoEditor({
     },
     setFocusedLineHighlightVisible(visible) {
       focusedLineHighlightVisible = visible === true
-      editor.setFocusedLineHighlightVisible(focusedLineHighlightVisible)
+      editor?.setFocusedLineHighlightVisible(focusedLineHighlightVisible)
       diffSplitController?.setFocusedLineHighlightVisible(focusedLineHighlightVisible)
       liveInlineDiffController?.setFocusedLineHighlightVisible(focusedLineHighlightVisible)
     },
@@ -1305,7 +1326,6 @@ export function mountNativeMeoEditor({
     },
     setText(text) {
       const normalizedNextText = normalizeEol(text)
-      const normalizedCurrentText = normalizeEol(editor.getText())
       if (isDiffMode(currentMode)) {
         cancelPendingSplitParentChange()
         pendingSplitParentChangeText = null
@@ -1318,13 +1338,15 @@ export function mountNativeMeoEditor({
         return
       }
 
+      const primaryEditor = ensurePrimaryEditor('set-text')
+      const normalizedCurrentText = normalizeEol(primaryEditor.getText())
       if (normalizedNextText === normalizedCurrentText) {
         diffSplitController?.setText(text)
         liveInlineDiffController?.setText(text)
         return
       }
 
-      editor.setText(text)
+      primaryEditor.setText(text)
       diffSplitController?.setText(text)
       liveInlineDiffController?.setText(text)
       scheduleWikiLinkStatusRefresh(text)

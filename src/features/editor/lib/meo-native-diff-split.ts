@@ -3309,6 +3309,8 @@ export function createMeoDiffSplitController({
   let currentViewMode: MeoDiffViewMode = viewMode
   let mergeView: MergeView | null = null
   let unifiedView: EditorView | null = null
+  let previewOriginalView: EditorView | null = null
+  let previewView: EditorView | null = null
   let lastRenderedState: DiffSplitResolvedState | null = null
   let preferredGitDiffScope: GitChangeScope | null = null
   let deferredFrameSyncUntilCompositionEnd = false
@@ -3387,11 +3389,14 @@ export function createMeoDiffSplitController({
   host.append(header, body)
   parent.appendChild(host)
 
-  const getModifiedView = () => mergeView?.b ?? unifiedView
+  const getModifiedView = () => mergeView?.b ?? unifiedView ?? previewView
 
   const getOriginalDiffDoc = () => {
     if (mergeView) {
       return mergeView.a.state.doc
+    }
+    if (previewOriginalView) {
+      return previewOriginalView.state.doc
     }
     return unifiedView ? getOriginalDoc(unifiedView.state) : null
   }
@@ -3404,7 +3409,7 @@ export function createMeoDiffSplitController({
       : (unifiedView ? (getChunks(unifiedView.state)?.chunks ?? []) as readonly CodeMirrorDiffChunk[] : [])
   )
 
-  const getActiveScrollElement = () => mergeView?.dom ?? unifiedView?.scrollDOM ?? null
+  const getActiveScrollElement = () => mergeView?.dom ?? unifiedView?.scrollDOM ?? previewView?.scrollDOM ?? null
 
   const hasPendingChunkRefresh = () => mergeView?.hasPendingChunkRefresh() === true
 
@@ -3773,6 +3778,8 @@ export function createMeoDiffSplitController({
 
     const scheduledMergeView = mergeView
     const scheduledUnifiedView = unifiedView
+    const scheduledPreviewOriginalView = previewOriginalView
+    const scheduledPreviewView = previewView
     pendingInitialRenderWorkFrame = window.requestAnimationFrame(() => {
       pendingInitialRenderWorkFrame = 0
       pendingInitialRenderWorkTimer = window.setTimeout(() => {
@@ -3781,6 +3788,8 @@ export function createMeoDiffSplitController({
           destroyed
           || scheduledMergeView !== mergeView
           || scheduledUnifiedView !== unifiedView
+          || scheduledPreviewOriginalView !== previewOriginalView
+          || scheduledPreviewView !== previewView
         ) {
           return
         }
@@ -3801,6 +3810,13 @@ export function createMeoDiffSplitController({
         } else if (scheduledUnifiedView) {
           forceParsing(scheduledUnifiedView, visibleRenderParseTarget(scheduledUnifiedView), 50)
           expandAllCollapsibleSections(scheduledUnifiedView)
+        } else if (scheduledPreviewView) {
+          if (scheduledPreviewOriginalView) {
+            forceParsing(scheduledPreviewOriginalView, visibleRenderParseTarget(scheduledPreviewOriginalView), 50)
+            expandAllCollapsibleSections(scheduledPreviewOriginalView)
+          }
+          forceParsing(scheduledPreviewView, visibleRenderParseTarget(scheduledPreviewView), 50)
+          expandAllCollapsibleSections(scheduledPreviewView)
         }
 
         syncDiffScrollPastEndPadding()
@@ -3836,6 +3852,10 @@ export function createMeoDiffSplitController({
     mergeView = null
     unifiedView?.destroy()
     unifiedView = null
+    previewOriginalView?.destroy()
+    previewOriginalView = null
+    previewView?.destroy()
+    previewView = null
     appliedModifiedReadOnly = null
   }
 
@@ -3843,6 +3863,8 @@ export function createMeoDiffSplitController({
     mergeView?.a.dom.classList.toggle('meo-git-gutter-hidden', !currentDiffGutterVisible)
     mergeView?.b.dom.classList.toggle('meo-git-gutter-hidden', !currentDiffGutterVisible)
     unifiedView?.dom.classList.toggle('meo-git-gutter-hidden', !currentDiffGutterVisible)
+    previewOriginalView?.dom.classList.toggle('meo-git-gutter-hidden', !currentDiffGutterVisible)
+    previewView?.dom.classList.toggle('meo-git-gutter-hidden', !currentDiffGutterVisible)
   }
 
   const syncModifiedEditability = (readOnly: boolean) => {
@@ -3852,8 +3874,8 @@ export function createMeoDiffSplitController({
     }
 
     appliedModifiedReadOnly = readOnly
-    const editableCompartment = mergeView ? modifiedEditableCompartment : unifiedEditableCompartment
-    const readOnlyCompartment = mergeView ? modifiedReadOnlyCompartment : unifiedReadOnlyCompartment
+    const editableCompartment = mergeView || previewView ? modifiedEditableCompartment : unifiedEditableCompartment
+    const readOnlyCompartment = mergeView || previewView ? modifiedReadOnlyCompartment : unifiedReadOnlyCompartment
     modifiedView.dispatch({
       effects: [
         editableCompartment.reconfigure(createEditableExtension(editable, readOnly)),
@@ -4139,6 +4161,12 @@ export function createMeoDiffSplitController({
 
   const shouldHighlightInlineChanges = (_originalState: DiffSplitResolvedState) => true
 
+  const shouldUseFastSplitPreview = (originalState: DiffSplitResolvedState) => (
+    currentViewMode === 'split'
+    && originalState.isFallback
+    && normalizeLineEndings(originalState.text) === normalizeLineEndings(originalState.modifiedText)
+  )
+
   const getChunkForActionControl = (control: HTMLElement) => {
     if (unifiedView) {
       const chunkHost = control.closest<HTMLElement>('.cm-deletedChunk')
@@ -4385,6 +4413,7 @@ export function createMeoDiffSplitController({
     host.classList.toggle('meo-diff-split-view-host', currentViewMode === 'split')
     body.classList.toggle('meo-diff-view-unified', currentViewMode === 'unified')
     body.classList.toggle('meo-diff-view-split', currentViewMode === 'split')
+    body.classList.toggle('meo-diff-view-preview', shouldUseFastSplitPreview(originalState))
 
     if (currentViewMode === 'unified') {
       unifiedView = createMeoDiffUnifiedEditorView({
@@ -4493,6 +4522,150 @@ export function createMeoDiffSplitController({
       scheduleInitialRenderWork('unified')
       recordOpenFileProfile('diff-split:render:end', {
         durationMs: getOpenFileProfileDuration(renderStartedAt),
+        viewMode: currentViewMode,
+      })
+      return
+    }
+
+    if (shouldUseFastSplitPreview(originalState)) {
+      const previewStartedAt = performance.now()
+      recordOpenFileProfile('diff-split:create-preview-view:start', {
+        modifiedChars: originalState.modifiedText.length,
+        reason: 'fallback-identical-docs',
+      })
+      const previewShell = document.createElement('div')
+      previewShell.className = 'meo-diff-split-preview-shell'
+      const previewOriginalPane = document.createElement('div')
+      previewOriginalPane.className = 'meo-diff-split-preview-pane meo-diff-split-preview-original'
+      previewOriginalPane.setAttribute('aria-hidden', 'true')
+      const previewModifiedPane = document.createElement('div')
+      previewModifiedPane.className = 'meo-diff-split-preview-pane meo-diff-split-preview-modified'
+      previewShell.append(previewOriginalPane, previewModifiedPane)
+      body.appendChild(previewShell)
+      previewOriginalView = new EditorView({
+        doc: originalState.text,
+        extensions: createDiffExtensions({
+          activeLineHighlightCompartment: originalActiveLineHighlightCompartment,
+          activeLineGutterCompartment: originalActiveLineGutterCompartment,
+          editable: false,
+          editableCompartment: originalEditableCompartment,
+          focusedLineHighlightVisible: currentFocusedLineHighlightVisible,
+          interactive: false,
+          lineNumbersCompartment: originalLineNumbersCompartment,
+          lineNumbersVisible: currentLineNumbersVisible,
+          onChange: () => undefined,
+          readOnly: true,
+          readOnlyCompartment: originalReadOnlyCompartment,
+          reportViewportChanges: false,
+          renderHealthEnabled: false,
+          side: 'original',
+          textSnapshot: originalTextSnapshot,
+        }),
+        parent: previewOriginalPane,
+      })
+      previewOriginalView.dom.classList.add('meo-diff-split-preview-original-editor')
+      previewView = new EditorView({
+        doc: originalState.modifiedText,
+        extensions: createDiffExtensions({
+          activeLineHighlightCompartment: modifiedActiveLineHighlightCompartment,
+          activeLineGutterCompartment: modifiedActiveLineGutterCompartment,
+          editable,
+          editableCompartment: modifiedEditableCompartment,
+          focusedLineHighlightVisible: currentFocusedLineHighlightVisible,
+          lineNumbersCompartment: modifiedLineNumbersCompartment,
+          lineNumbersVisible: currentLineNumbersVisible,
+          onChange: handleModifiedTextChange,
+          onCompositionChange: handleCompositionChange,
+          onOpenLink,
+          onSave,
+          onSelectionChange,
+          onViewportChange,
+          readOnlyCompartment: modifiedReadOnlyCompartment,
+          readOnly: () => getOriginalState().modifiedReadOnly,
+          renderHealthEnabled: false,
+          side: 'modified',
+          textSnapshot: modifiedTextSnapshot,
+        }),
+        parent: previewModifiedPane,
+      })
+      previewView.dom.classList.add('meo-diff-split-preview-editor')
+      recordOpenFileProfile('diff-split:create-preview-view:end', {
+        durationMs: getOpenFileProfileDuration(previewStartedAt),
+      })
+
+      appliedModifiedReadOnly = originalState.modifiedReadOnly
+      syncDiffGutterVisibility()
+      mergeScrollArea = mountMeoBaseScrollArea({
+        className: 'meo-diff-split-base-scroll-area',
+        hostParent: body,
+        viewport: previewView.scrollDOM,
+      })
+      diffScrollPastEndObserver = new ResizeObserver(scheduleDiffScrollPastEndPaddingSync)
+      diffScrollPastEndObserver.observe(previewView.scrollDOM)
+      const handlePreviewScroll = () => {
+        if (previewOriginalView && previewView) {
+          previewOriginalView.scrollDOM.scrollTop = previewView.scrollDOM.scrollTop
+          previewOriginalView.scrollDOM.scrollLeft = previewView.scrollDOM.scrollLeft
+        }
+        onViewportChange?.()
+        scheduleScrollDecorationRefresh()
+        if (pendingScrollFrame) {
+          return
+        }
+
+        pendingScrollFrame = window.requestAnimationFrame(() => {
+          pendingScrollFrame = 0
+          if (destroyed || !previewView) {
+            return
+          }
+          onSelectionChange?.(null)
+        })
+      }
+      const handleTableInteraction = (event: Event) => {
+        const active = Boolean((event as CustomEvent<{ active?: boolean }>).detail?.active)
+        previewView?.dom.classList.toggle('meo-table-interaction-active', active)
+      }
+      const handleTableOpenLink = (event: Event) => {
+        const href = (event as CustomEvent<{ href?: unknown }>).detail?.href
+        if (typeof href === 'string' && href) {
+          onOpenLink?.(href)
+        }
+      }
+      const handleTableSelectionChange = () => {
+        const activeElement = document.activeElement
+        if (!(activeElement instanceof HTMLTextAreaElement) || !previewView?.dom.contains(activeElement)) {
+          onSelectionChange?.(null)
+          return
+        }
+
+        const rawStart = activeElement.selectionStart ?? 0
+        const rawEnd = activeElement.selectionEnd ?? rawStart
+        if (rawStart === rawEnd) {
+          onSelectionChange?.(null)
+          return
+        }
+
+        const rect = activeElement.getBoundingClientRect()
+        onSelectionChange?.({
+          anchorX: rect.left + Math.min(rect.width / 2, 48),
+          anchorY: rect.top,
+          visible: true,
+        })
+      }
+      previewView.scrollDOM.addEventListener('scroll', handlePreviewScroll, { passive: true })
+      previewView.dom.addEventListener('meo-table-interaction', handleTableInteraction)
+      previewView.dom.addEventListener('meo-open-link', handleTableOpenLink)
+      previewView.dom.addEventListener('meo-table-selection-change', handleTableSelectionChange)
+      cleanupMergeViewDomListeners = () => {
+        previewView?.scrollDOM.removeEventListener('scroll', handlePreviewScroll)
+        previewView?.dom.removeEventListener('meo-table-interaction', handleTableInteraction)
+        previewView?.dom.removeEventListener('meo-open-link', handleTableOpenLink)
+        previewView?.dom.removeEventListener('meo-table-selection-change', handleTableSelectionChange)
+      }
+      scheduleInitialRenderWork('split')
+      recordOpenFileProfile('diff-split:render:end', {
+        durationMs: getOpenFileProfileDuration(renderStartedAt),
+        preview: true,
         viewMode: currentViewMode,
       })
       return
@@ -4780,6 +4953,55 @@ export function createMeoDiffSplitController({
     lastRenderedState = originalState
     syncLabels(originalState)
     syncModifiedEditability(originalState.modifiedReadOnly)
+
+    if (previewView) {
+      const frameChanged = !!previousState && hasResolvedViewFrameChanged(previousState, originalState)
+      if (frameChanged) {
+        const topPosition = getTopVisiblePosition(previewView, previewView.scrollDOM)
+        render()
+        const nextView = getModifiedView()
+        if (topPosition && nextView) {
+          restoreTopLine(nextView, topPosition.line, topPosition.lineOffset, getActiveScrollElement())
+        }
+        recordOpenFileProfile('diff-split:sync-resolved-documents:end', {
+          durationMs: getOpenFileProfileDuration(startedAt),
+          mode: currentViewMode,
+          previewPromoted: true,
+          rendered: true,
+        })
+        return
+      }
+
+      if (modifiedTextSnapshot.value !== originalState.modifiedText) {
+        invalidateDiffOverviewSegments()
+        syncTextSnapshotToView(
+          previewView,
+          modifiedTextSnapshot,
+          originalState.modifiedText,
+          [
+            externalDocumentSync.of(true),
+            Transaction.addToHistory.of(false),
+          ],
+        )
+      }
+      if (previewOriginalView && originalTextSnapshot.value !== originalState.text) {
+        syncTextSnapshotToView(
+          previewOriginalView,
+          originalTextSnapshot,
+          originalState.text,
+          [
+            externalDocumentSync.of(true),
+            Transaction.addToHistory.of(false),
+          ],
+        )
+      }
+      recordOpenFileProfile('diff-split:sync-resolved-documents:end', {
+        durationMs: getOpenFileProfileDuration(startedAt),
+        mode: currentViewMode,
+        preview: true,
+      })
+      return
+    }
 
     if (
       unifiedView
@@ -5198,6 +5420,12 @@ export function createMeoDiffSplitController({
       mergeView?.b.dispatch({
         effects: modifiedActiveLineHighlightCompartment.reconfigure(nextExtensions),
       })
+      previewOriginalView?.dispatch({
+        effects: originalActiveLineHighlightCompartment.reconfigure(nextExtensions),
+      })
+      previewView?.dispatch({
+        effects: modifiedActiveLineHighlightCompartment.reconfigure(nextExtensions),
+      })
     },
     setLineNumbersVisible(visible) {
       currentLineNumbersVisible = visible !== false
@@ -5217,6 +5445,29 @@ export function createMeoDiffSplitController({
           modifiedLineNumbersCompartment,
           originalActiveLineGutterCompartment,
           originalLineNumbersCompartment,
+        })
+      }
+      if (previewView) {
+        const resolvedActiveLineGutterVisible = currentLineNumbersVisible
+        previewOriginalView?.dispatch({
+          effects: [
+            originalLineNumbersCompartment.reconfigure(
+              createLineNumberExtensions(currentLineNumbersVisible),
+            ),
+            originalActiveLineGutterCompartment.reconfigure(
+              createActiveLineGutterExtensions(resolvedActiveLineGutterVisible),
+            ),
+          ],
+        })
+        previewView.dispatch({
+          effects: [
+            modifiedLineNumbersCompartment.reconfigure(
+              createLineNumberExtensions(currentLineNumbersVisible),
+            ),
+            modifiedActiveLineGutterCompartment.reconfigure(
+              createActiveLineGutterExtensions(resolvedActiveLineGutterVisible),
+            ),
+          ],
         })
       }
       mergeView?.reconfigure({})
