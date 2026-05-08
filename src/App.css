@@ -243,6 +243,7 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   height: 12px;
   border-radius: 999px;
   margin-top: 1px;
+  cursor: default;
 }
 
 .traffic-button::before,
