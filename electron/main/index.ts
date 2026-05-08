@@ -81,7 +81,7 @@ if (os.release().startsWith('6.1')) app.disableHardwareAcceleration()
 // Set application name for Windows 10+ notifications
 if (process.platform === 'win32') app.setAppUserModelId(app.getName())
 
-if (!app.requestSingleInstanceLock()) {
+if (process.env.ARYN_ELECTRON_DEBUG !== '1' && !app.requestSingleInstanceLock()) {
   app.quit()
   process.exit(0)
 }

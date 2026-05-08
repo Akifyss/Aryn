@@ -534,12 +534,14 @@ function addInlineChangeDeco(
   chunk: Chunk,
   from: number,
   pos: number,
+  lineFrom: number,
   lineEnd: number,
   isA: boolean,
   builder: RangeSetBuilder<Decoration> | PendingDecoration[],
   changeI: number,
   inlineChangedText: Decoration | null = changedText,
   inlineChangedTextEmpty: Decoration | null = changedTextEmpty,
+  inlineChangedTextFullLine: Decoration | null = changedTextFullLine,
   shouldSkipChange: ((change: Change) => "empty" | "full" | null) | null = null,
 ) {
   while (changeI < chunk.changes.length) {
@@ -559,7 +561,12 @@ function addInlineChangeDeco(
     }
     let chFrom = Math.max(pos, nextFrom), chTo = Math.min(lineEnd, nextTo)
     if (chFrom < chTo) {
-      if (inlineChangedText) addPendingDecoration(builder, chFrom, chTo, inlineChangedText)
+      let otherFrom = isA ? nextChange.fromB : nextChange.fromA
+      let otherTo = isA ? nextChange.toB : nextChange.toA
+      let fullLineReplacement = lineFrom < lineEnd && otherFrom < otherTo &&
+        nextFrom <= lineFrom && nextTo >= lineEnd
+      let textDecoration = fullLineReplacement ? inlineChangedTextFullLine : inlineChangedText
+      if (textDecoration) addPendingDecoration(builder, chFrom, chTo, textDecoration)
     }
     else if (skipChange != "empty" && nextFrom == nextTo && nextFrom >= pos && nextFrom <= lineEnd) {
       let otherFrom = isA ? nextChange.fromB : nextChange.fromA
@@ -624,12 +631,14 @@ export function addChunkDecorations(
           chunk,
           from,
           pos,
+          line.from,
           pos,
           isA,
           pendingDecorations,
           changeI,
           inlineChangedText,
           inlineChangedTextEmpty,
+          inlineChangedTextFullLine,
           shouldSkipChange,
         )
         pos++
@@ -658,12 +667,14 @@ export function addChunkDecorations(
         chunk,
         from,
         pos,
+        line.from,
         lineEnd,
         isA,
         pendingDecorations,
         changeI,
         inlineChangedText,
         inlineChangedTextEmpty,
+        inlineChangedTextFullLine,
         shouldSkipChange,
       )
       pos = lineEnd

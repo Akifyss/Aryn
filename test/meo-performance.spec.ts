@@ -702,7 +702,11 @@ describe('meo performance guards', () => {
     })
 
     expect(ranges).toEqual(expect.arrayContaining([
-      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText meo-diff-split-fallback-changedText' },
+      {
+        from: originalDoc.line(2).from,
+        to: originalDoc.line(2).to,
+        classes: 'cm-changedText cm-changedTextFullLine meo-diff-split-fallback-changedText',
+      },
     ]))
   })
 

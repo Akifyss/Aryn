@@ -35,7 +35,7 @@ describe('CodeMirror merge decorations', () => {
     expect(ranges).toEqual(expect.arrayContaining([
       { from: originalDoc.line(2).from, to: originalDoc.line(2).from, classes: 'cm-changedLine' },
       { from: originalDoc.line(2).from, to: originalDoc.line(3).from, classes: 'cm-deletedLine' },
-      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText' },
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText cm-changedTextFullLine' },
     ]))
   })
 
@@ -70,8 +70,8 @@ describe('CodeMirror merge decorations', () => {
   })
 
   it('keeps full-line replacements in the inline-change path', () => {
-    const originalDoc = Text.of(['same', 'old sentence', 'same'])
-    const modifiedDoc = Text.of(['same', 'new sentence', 'same'])
+    const originalDoc = Text.of(['same', 'adjust container size', 'same'])
+    const modifiedDoc = Text.of(['same', 'dj id ji 飞飞飞刺激', 'same'])
     const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
     const builder = new RangeSetBuilder<Decoration>()
 
@@ -84,7 +84,26 @@ describe('CodeMirror merge decorations', () => {
 
     expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromA, originalDoc.line(2).from, originalDoc.line(2).to, true)).toBe(false)
     expect(ranges.some((range) => range.classes.includes('cm-deletedLineFull'))).toBe(false)
-    expect(ranges.some((range) => range.classes.includes('cm-changedText'))).toBe(true)
+    expect(ranges).toEqual(expect.arrayContaining([
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText cm-changedTextFullLine' },
+    ]))
+  })
+
+  it('keeps partial line replacements in the inline-change path', () => {
+    const originalDoc = Text.of(['same', 'prefix old', 'same'])
+    const modifiedDoc = Text.of(['same', 'prefix new', 'same'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const builder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, originalDoc, true, true, builder, null, { gutter: false })
+
+    const ranges: Array<{ from: number, to: number, classes: string }> = []
+    builder.finish().between(0, originalDoc.length, (from, to, value) => {
+      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+    })
+
+    expect(ranges.some((range) => range.classes.includes('cm-changedTextFullLine'))).toBe(false)
+    expect(ranges.some((range) => range.classes === 'cm-changedText')).toBe(true)
   })
 
   it('promotes single-sided ranges inside replacement chunks to full-line decorations', () => {
