@@ -644,15 +644,12 @@ describe('meo performance guards', () => {
     const modifiedRanges = collectClasses(modifiedDoc, 'b')
 
     expect(originalRanges.some((range) => range.classes.includes('cm-deletedLineFull'))).toBe(false)
-    expect(modifiedRanges).toEqual(expect.arrayContaining([
-      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-insertedLineFull' },
-    ]))
+    expect(modifiedRanges.some((range) => range.classes.includes('cm-insertedLineFull'))).toBe(false)
     expect(originalRanges.some((range) => range.classes.includes('meo-diff-split-fallback-changedText'))).toBe(true)
-    expect(modifiedRanges.some((range) => (
-      range.classes.includes('meo-diff-split-fallback-changedText')
-      && range.from <= modifiedDoc.line(2).to
-      && range.to >= modifiedDoc.line(2).from
-    ))).toBe(false)
+    expect(modifiedRanges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedLine' },
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-changedText meo-diff-split-fallback-changedText' },
+    ]))
   })
 
   it('can make split diff fallback text decorations visible after render health retries fail', () => {

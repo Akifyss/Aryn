@@ -119,14 +119,11 @@ describe('CodeMirror merge decorations', () => {
 
     expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromB, modifiedDoc.line(2).from, modifiedDoc.line(2).to, false)).toBe(true)
     expect(originalRanges.some((range) => range.classes.includes('cm-deletedLineFull'))).toBe(false)
+    expect(modifiedRanges.some((range) => range.classes.includes('cm-insertedLineFull'))).toBe(false)
     expect(modifiedRanges).toEqual(expect.arrayContaining([
-      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-insertedLineFull' },
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedLine' },
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-changedText' },
     ]))
-    expect(modifiedRanges.some((range) => (
-      range.classes.includes('cm-changedText')
-      && range.from <= modifiedDoc.line(2).to
-      && range.to >= modifiedDoc.line(2).from
-    ))).toBe(false)
   })
 
   it('does not promote same-line empty/non-empty edits to full-line decorations', () => {
@@ -166,6 +163,25 @@ describe('CodeMirror merge decorations', () => {
     expect(ranges.some((range) => range.classes.includes('cm-deletedLineFull'))).toBe(false)
     expect(ranges).toEqual(expect.arrayContaining([
       { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText' },
+    ]))
+  })
+
+  it('keeps empty single-sided lines on full-line decorations because there is no text range', () => {
+    const originalDoc = Text.of(['same', 'shared original', 'tail'])
+    const modifiedDoc = Text.of(['same', '', 'shared modified', 'tail', 'same'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const builder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, modifiedDoc, false, true, builder, null, { gutter: false })
+
+    const ranges: Array<{ from: number, to: number, classes: string }> = []
+    builder.finish().between(0, modifiedDoc.length, (from, to, value) => {
+      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+    })
+
+    expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromB, modifiedDoc.line(2).from, modifiedDoc.line(2).to, false)).toBe(true)
+    expect(ranges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-insertedLineFull' },
     ]))
   })
 
