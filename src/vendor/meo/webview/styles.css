@@ -2178,33 +2178,41 @@
   color: transparent !important;
 }
 
+/* Live mode filters inline syntax marks on the focused line, so heading weight
+   belongs on the structural line class alongside heading size. */
 .meo-native-root .cm-editor .meo-md-h1 {
   font-size: var(--heading-1-size);
+  font-weight: var(--heading-1-weight);
   --heading-token-weight: var(--heading-1-weight);
 }
 
 .meo-native-root .cm-editor .meo-md-h2 {
   font-size: var(--heading-2-size);
+  font-weight: var(--heading-2-weight);
   --heading-token-weight: var(--heading-2-weight);
 }
 
 .meo-native-root .cm-editor .meo-md-h3 {
   font-size: var(--heading-3-size);
+  font-weight: var(--heading-3-weight);
   --heading-token-weight: var(--heading-3-weight);
 }
 
 .meo-native-root .cm-editor .meo-md-h4 {
   font-size: var(--heading-4-size);
+  font-weight: var(--heading-4-weight);
   --heading-token-weight: var(--heading-4-weight);
 }
 
 .meo-native-root .cm-editor .meo-md-h5 {
   font-size: var(--heading-5-size);
+  font-weight: var(--heading-5-weight);
   --heading-token-weight: var(--heading-5-weight);
 }
 
 .meo-native-root .cm-editor .meo-md-h6 {
   font-size: var(--heading-6-size);
+  font-weight: var(--heading-6-weight);
   --heading-token-weight: var(--heading-6-weight);
 }
 
