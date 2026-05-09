@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { gitDiffLineFlagsField } from './gitDiffGutter';
+import { getGitGutterHunkMarkers, gitDiffLineFlagsField } from './gitDiffGutter';
 import { getLiveGitCollapsedBlockAtLine, getLiveRenderedBlockAtLine } from './liveRenderedBlocks';
 import { mountMeoScopedPortal } from './themeScope';
 
@@ -717,6 +717,23 @@ export function createGitBlameHoverController({
     )
   );
 
+  const expandMarkersToGitHunk = (markers) => {
+    const expandedMarkers = [];
+    const seen = new Set();
+    for (const marker of markers) {
+      const hunkMarkers = getGitGutterHunkMarkers(marker);
+      const candidates = hunkMarkers.length ? hunkMarkers : [marker];
+      for (const candidate of candidates) {
+        if (!(candidate instanceof HTMLElement) || seen.has(candidate)) {
+          continue;
+        }
+        seen.add(candidate);
+        expandedMarkers.push(candidate);
+      }
+    }
+    return expandedMarkers;
+  };
+
   const getChangedMarkerForRow = (gutterRowElement, markerElement = null, clientY = null) => {
     const rowMarker = gutterRowElement?.querySelector?.('.meo-git-gutter-marker') ?? null;
     const marker = markerElement instanceof Element ? markerElement.closest('.meo-git-gutter-marker') : null;
@@ -925,6 +942,10 @@ export function createGitBlameHoverController({
       nextGutterRowHoverKind = 'empty';
     }
 
+    if (nextMarkers.length) {
+      nextMarkers = expandMarkersToGitHunk(nextMarkers);
+    }
+
     if (
       sameElements(nextMarkers, activeMarkerElements) &&
       nextGutterRowHoverKind === activeGutterRowHoverKind &&
@@ -944,8 +965,9 @@ export function createGitBlameHoverController({
     activeMarkerHoverKind = nextMarkerHoverKind;
     for (const marker of activeMarkerElements) {
       marker.classList.add('is-hit-hover');
-      if (activeMarkerHoverKind === 'added' || activeMarkerHoverKind === 'deleted' || activeMarkerHoverKind === 'modified') {
-        marker.classList.add(`is-hit-hover-${activeMarkerHoverKind}`);
+      const markerHoverKind = getMarkerChangeKind(marker) ?? activeMarkerHoverKind;
+      if (markerHoverKind === 'added' || markerHoverKind === 'deleted' || markerHoverKind === 'modified') {
+        marker.classList.add(`is-hit-hover-${markerHoverKind}`);
       }
     }
     activeRenderedBlockRange = nextRenderedBlockRange;

@@ -32,6 +32,36 @@ function scopedFlagSummary(flags: ReturnType<typeof buildScopedLineFlagsFromVsCo
 }
 
 describe('meo git diff gutter', () => {
+  it('assigns one hover hunk id to adjacent changed gutter lines regardless of change kind', () => {
+    const withHunks = __gitDiffGutterTestHooks.addGitHunkMetadataToLineFlags([
+      { added: true, deleted: false, modified: false, scope: 'unstaged' },
+      { added: false, deleted: false, modified: true, scope: 'unstaged' },
+      undefined,
+      { added: true, deleted: false, modified: false, scope: 'unstaged' },
+    ])
+
+    expect(withHunks?.[0]?.hunkId).toBe(withHunks?.[1]?.hunkId)
+    expect(withHunks?.[0]?.hunkStartLine).toBe(1)
+    expect(withHunks?.[0]?.hunkEndLine).toBe(2)
+    expect(withHunks?.[2]).toBeUndefined()
+    expect(withHunks?.[3]?.hunkId).not.toBe(withHunks?.[0]?.hunkId)
+    expect(withHunks?.[3]?.hunkStartLine).toBe(4)
+    expect(withHunks?.[3]?.hunkEndLine).toBe(4)
+  })
+
+  it('keeps adjacent staged and unstaged gutter lines in separate hover hunks', () => {
+    const withHunks = __gitDiffGutterTestHooks.addGitHunkMetadataToLineFlags([
+      { added: false, deleted: false, modified: true, scope: 'staged' },
+      { added: false, deleted: false, modified: true, scope: 'unstaged' },
+    ])
+
+    expect(withHunks?.[0]?.hunkId).not.toBe(withHunks?.[1]?.hunkId)
+    expect(withHunks?.[0]?.hunkStartLine).toBe(1)
+    expect(withHunks?.[0]?.hunkEndLine).toBe(1)
+    expect(withHunks?.[1]?.hunkStartLine).toBe(2)
+    expect(withHunks?.[1]?.hunkEndLine).toBe(2)
+  })
+
   it('matches VS Code-style line ranges for blank lines inserted before the EOF visual line', () => {
     const baseText = 'L1\nL2\nL3\n'
     const flags = buildLineFlagsFromVsCodeDiff(
@@ -193,6 +223,44 @@ describe('meo git diff gutter', () => {
     expect(marker?.flags?.removed).toBe(true)
     expect(marker?.flags?.added).toBe(false)
     expect(marker?.flags?.scope).toBe('unstaged')
+  })
+
+  it('keeps unified deleted widget markers in the same hover hunk as the changed line', () => {
+    let state = EditorState.create({
+      doc: 'A\nX\nC\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    state = state.update({
+      effects: setGitBaselineEffect.of({
+        available: true,
+        baseText: 'A\nB\nC\n',
+        headOid: 'HEAD',
+        indexText: null,
+        tracked: true,
+      }),
+    }).state
+
+    const flags = state.field(gitDiffLineFlagsField)
+    const line = state.doc.line(2)
+    const marker = __gitDiffGutterTestHooks.liveWidgetMarkerAtPos(
+      state,
+      flags,
+      { marksDeletedLines: true },
+      line.from,
+      undefined,
+      (lineFlags, context) => context.widget?.marksDeletedLines
+        ? {
+            added: false,
+            deleted: false,
+            modified: false,
+            removed: true,
+            scope: lineFlags?.scope ?? 'unstaged',
+          }
+        : undefined,
+    ) as { flags?: { hunkId?: string, removed?: boolean } } | null
+
+    expect(marker?.flags?.removed).toBe(true)
+    expect(marker?.flags?.hunkId).toBe(flags?.[1]?.hunkId)
   })
 
   it('lets unified pure deletion widgets render a red marker without a modified line flag', () => {
