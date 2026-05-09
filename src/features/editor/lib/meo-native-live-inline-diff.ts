@@ -31,6 +31,7 @@ import {
   renderUnifiedDeletedContent,
   resolveOriginalText,
   shouldDeferSplitMergeChunkUpdate,
+  syncUnifiedDiffChunkToolbarStickState,
   type DiffSplitResolvedState,
   type TextSnapshot,
 } from '@/features/editor/lib/meo-native-diff-split'
@@ -146,6 +147,15 @@ export type MeoLiveInlineDiffController = {
 const setInlineHunksEffect = StateEffect.define<InlineHunkDescriptor[]>()
 const INLINE_DIFF_SYNC_DELAY_MS = 120
 const INLINE_DIFF_SYNC_AFTER_COMPOSITION_MS = 80
+const INLINE_DIFF_TOOLBAR_STUCK_CLASS = 'is-toolbar-stuck'
+const INLINE_DIFF_TOOLBAR_DEFAULT_HEIGHT = 24
+const INLINE_DIFF_TOOLBAR_DEFAULT_LIFT = 26
+const INLINE_DIFF_TOOLBAR_DEFAULT_STICKY_INSET = 8
+
+function readCssPixelValue(element: Element, propertyName: string, fallback: number) {
+  const value = Number.parseFloat(getComputedStyle(element).getPropertyValue(propertyName))
+  return Number.isFinite(value) ? value : fallback
+}
 
 function normalizeLineEndings(text: string) {
   return text.replace(/\r\n?/g, '\n')
@@ -731,6 +741,7 @@ class InlineDiffWidgetView {
   private pendingModifiedSelectionFocusFrame = 0
   private pendingOuterGutterMeasureFrame = 0
   private pendingReadOnlyWidgetLockFrame = 0
+  private pendingToolbarStickFrame = 0
   private readonly pendingReadOnlyWidgetRoots = new Set<Element>()
 
   constructor(
@@ -760,6 +771,7 @@ class InlineDiffWidgetView {
     this.createCurrentView()
     this.installInlineRowHandlers()
     this.scheduleOuterGutterMeasure()
+    this.installToolbarStickHandlers()
   }
 
   get root() {
@@ -771,6 +783,7 @@ class InlineDiffWidgetView {
     this.cleanupReadOnlyWidgetLock = null
     this.cancelPendingModifiedSelectionFocus()
     this.cancelOuterGutterMeasure()
+    this.uninstallToolbarStickHandlers()
     this.componentRoot.removeEventListener('mousedown', this.handleInlineRowMouseDown, true)
     this.destroyCurrentView()
     this.componentRoot.remove()
@@ -783,6 +796,7 @@ class InlineDiffWidgetView {
     this.syncDiffGutterVisibility()
     this.syncDiffArtifacts()
     this.scheduleOuterGutterMeasure()
+    this.scheduleToolbarStickSync()
   }
 
   focusModifiedSelection(target: InlineModifiedSelectionTarget) {
@@ -848,6 +862,7 @@ class InlineDiffWidgetView {
     if (!documentsMatch) {
       this.recreateCurrentView()
       this.scheduleOuterGutterMeasure()
+      this.scheduleToolbarStickSync()
       return
     }
 
@@ -862,6 +877,79 @@ class InlineDiffWidgetView {
 
     this.syncDiffArtifacts()
     this.scheduleOuterGutterMeasure()
+    this.scheduleToolbarStickSync()
+  }
+
+  private installToolbarStickHandlers() {
+    this.controller.view.scrollDOM.addEventListener('scroll', this.handleToolbarViewportChange, { passive: true })
+    window.addEventListener('resize', this.handleToolbarViewportChange)
+    this.scheduleToolbarStickSync()
+  }
+
+  private uninstallToolbarStickHandlers() {
+    this.controller.view.scrollDOM.removeEventListener('scroll', this.handleToolbarViewportChange)
+    window.removeEventListener('resize', this.handleToolbarViewportChange)
+    this.cancelToolbarStickSync()
+  }
+
+  private readonly handleToolbarViewportChange = () => {
+    this.scheduleToolbarStickSync()
+  }
+
+  private cancelToolbarStickSync() {
+    if (!this.pendingToolbarStickFrame) {
+      return
+    }
+    window.cancelAnimationFrame(this.pendingToolbarStickFrame)
+    this.pendingToolbarStickFrame = 0
+  }
+
+  private scheduleToolbarStickSync() {
+    if (this.pendingToolbarStickFrame) {
+      return
+    }
+
+    this.pendingToolbarStickFrame = window.requestAnimationFrame(() => {
+      this.pendingToolbarStickFrame = 0
+      this.syncToolbarStickState()
+    })
+  }
+
+  private syncToolbarStickState() {
+    if (!this.componentRoot.isConnected) {
+      return
+    }
+
+    const rootRect = this.componentRoot.getBoundingClientRect()
+    const scrollRect = this.controller.view.scrollDOM.getBoundingClientRect()
+    const stickyInset = readCssPixelValue(
+      this.componentRoot,
+      '--meo-live-inline-diff-sticky-inset',
+      INLINE_DIFF_TOOLBAR_DEFAULT_STICKY_INSET,
+    )
+    const floatingLift = readCssPixelValue(
+      this.componentRoot,
+      '--meo-live-inline-diff-floating-lift',
+      INLINE_DIFF_TOOLBAR_DEFAULT_LIFT,
+    )
+    const toolbarHeight = readCssPixelValue(
+      this.componentRoot,
+      '--meo-live-inline-diff-floating-height',
+      INLINE_DIFF_TOOLBAR_DEFAULT_HEIGHT,
+    )
+    const stickyTop = Math.max(0, scrollRect.top) + stickyInset
+    const shouldStickInside = (
+      rootRect.top - floatingLift < stickyTop
+      && rootRect.bottom > stickyTop + toolbarHeight
+    )
+
+    this.componentRoot.classList.toggle(INLINE_DIFF_TOOLBAR_STUCK_CLASS, shouldStickInside)
+    if (this.unifiedView) {
+      syncUnifiedDiffChunkToolbarStickState(this.unifiedView, {
+        root: this.componentRoot,
+        viewport: this.controller.view.scrollDOM,
+      })
+    }
   }
 
   private cancelPendingModifiedSelectionFocus() {
@@ -948,6 +1036,7 @@ class InlineDiffWidgetView {
     this.componentRoot.dataset.viewMode = mode
     this.renderHeader()
     this.recreateCurrentView()
+    this.scheduleToolbarStickSync()
 
     const nextView = this.getModifiedView()
     if (nextView && previousSelection) {
@@ -1364,6 +1453,7 @@ class InlineDiffWidgetView {
 
     controls.append(nav)
     this.header.appendChild(controls)
+    this.scheduleToolbarStickSync()
   }
 
   private createNavButton(direction: 'next' | 'previous') {

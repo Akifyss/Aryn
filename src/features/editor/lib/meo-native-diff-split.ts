@@ -840,6 +840,11 @@ function canUseTextOnlyResolvedUpdate(
 
 const SPLIT_DIFF_REFRESH_IDLE_DELAY_MS = 200
 const SPLIT_DIFF_REFRESH_AFTER_COMPOSITION_MS = 80
+const DIFF_CHUNK_TOOLBAR_STUCK_CLASS = 'is-toolbar-stuck'
+const DIFF_CHUNK_TOOLBAR_DEFAULT_HEIGHT = 24
+const DIFF_CHUNK_TOOLBAR_DEFAULT_LIFT = 26
+const DIFF_CHUNK_TOOLBAR_DEFAULT_RIGHT = 10
+const DIFF_CHUNK_TOOLBAR_DEFAULT_STICKY_INSET = 8
 
 export function getDiffConfig(editable: boolean) {
   return {
@@ -849,6 +854,172 @@ export function getDiffConfig(editable: boolean) {
     timeout: 200,
   }
 }
+
+function readCssPixelValue(element: Element, propertyName: string, fallback: number) {
+  const value = Number.parseFloat(getComputedStyle(element).getPropertyValue(propertyName))
+  return Number.isFinite(value) ? value : fallback
+}
+
+function getDirectChunkButtons(chunk: HTMLElement) {
+  return Array.from(chunk.children).find((child): child is HTMLElement => (
+    child instanceof HTMLElement && child.classList.contains('cm-chunkButtons')
+  )) ?? null
+}
+
+type UnifiedDiffChunkToolbarStickOptions = {
+  root?: HTMLElement
+  viewport?: HTMLElement
+}
+
+function findUnifiedDiffChunkForWidget(view: EditorView, chunks: readonly Chunk[], widget: HTMLElement) {
+  let position: number
+  try {
+    position = view.posAtDOM(widget)
+  } catch {
+    return null
+  }
+
+  return chunks.find((chunk) => chunk.fromB <= position && chunk.endB >= position)
+    ?? chunks.find((chunk) => chunk.fromB <= position && chunk.toB >= position)
+    ?? null
+}
+
+function getUnifiedDiffChunkVisualBounds(view: EditorView, chunk: Chunk | null, chunkElement: HTMLElement) {
+  const chunkRect = chunkElement.getBoundingClientRect()
+  if (!chunk) {
+    return chunkRect
+  }
+
+  const docLength = view.state.doc.length
+  const from = clampNumber(chunk.fromB, 0, docLength)
+  const to = clampNumber(chunk.endB, from, docLength)
+  const fromBlock = view.lineBlockAt(from)
+  const toBlock = view.lineBlockAt(to)
+  const docTop = view.documentTop
+
+  return {
+    bottom: Math.max(chunkRect.bottom, docTop + toBlock.bottom),
+    height: chunkRect.height,
+    left: chunkRect.left,
+    right: chunkRect.right,
+    top: Math.min(chunkRect.top, docTop + fromBlock.top),
+    width: chunkRect.width,
+  }
+}
+
+export function syncUnifiedDiffChunkToolbarStickState(
+  view: EditorView,
+  options: UnifiedDiffChunkToolbarStickOptions = {},
+) {
+  const root = options.root ?? view.dom
+  const viewport = options.viewport ?? view.scrollDOM
+  const viewportRect = viewport.getBoundingClientRect()
+  const viewportTop = Math.max(0, viewportRect.top)
+  const chunks = (getChunks(view.state)?.chunks ?? []) as readonly Chunk[]
+  for (const chunk of root.querySelectorAll<HTMLElement>('.cm-deletedChunk')) {
+    const buttons = getDirectChunkButtons(chunk)
+    if (!buttons) {
+      chunk.classList.remove(DIFF_CHUNK_TOOLBAR_STUCK_CLASS)
+      chunk.style.removeProperty('--meo-diff-chunk-toolbar-left')
+      chunk.style.removeProperty('--meo-diff-chunk-toolbar-top')
+      continue
+    }
+
+    const styleHost = chunk.closest('.meo-live-inline-diff') ?? root
+    const stickyInset = readCssPixelValue(
+      styleHost,
+      '--meo-live-inline-diff-sticky-inset',
+      DIFF_CHUNK_TOOLBAR_DEFAULT_STICKY_INSET,
+    )
+    const floatingLift = readCssPixelValue(
+      styleHost,
+      '--meo-live-inline-diff-floating-lift',
+      DIFF_CHUNK_TOOLBAR_DEFAULT_LIFT,
+    )
+    const toolbarHeight = buttons.getBoundingClientRect().height || readCssPixelValue(
+      styleHost,
+      '--meo-live-inline-diff-floating-height',
+      DIFF_CHUNK_TOOLBAR_DEFAULT_HEIGHT,
+    )
+    const diffChunk = findUnifiedDiffChunkForWidget(view, chunks, chunk)
+    const chunkRect = getUnifiedDiffChunkVisualBounds(view, diffChunk, chunk)
+    const stickyTop = viewportTop + stickyInset
+    const shouldStickInside = (
+      chunkRect.top - floatingLift < stickyTop
+      && chunkRect.bottom > stickyTop + toolbarHeight
+    )
+
+    if (!shouldStickInside) {
+      chunk.classList.remove(DIFF_CHUNK_TOOLBAR_STUCK_CLASS)
+      chunk.style.removeProperty('--meo-diff-chunk-toolbar-left')
+      chunk.style.removeProperty('--meo-diff-chunk-toolbar-top')
+      continue
+    }
+
+    const rightInset = readCssPixelValue(buttons, 'right', DIFF_CHUNK_TOOLBAR_DEFAULT_RIGHT)
+    const boundedRight = Math.min(chunkRect.right, viewportRect.right)
+    const boundedLeft = Math.max(chunkRect.left, viewportRect.left)
+    const left = Math.max(
+      boundedLeft,
+      Math.floor(boundedRight - buttons.offsetWidth - rightInset),
+    )
+    chunk.style.setProperty('--meo-diff-chunk-toolbar-left', `${left}px`)
+    chunk.style.setProperty('--meo-diff-chunk-toolbar-top', `${stickyTop}px`)
+    chunk.classList.add(DIFF_CHUNK_TOOLBAR_STUCK_CLASS)
+  }
+}
+
+const diffChunkToolbarStickPlugin = ViewPlugin.fromClass(class {
+  private pendingFrame = 0
+
+  constructor(private readonly view: EditorView) {
+    this.view.scrollDOM.addEventListener('scroll', this.handleViewportChange, { passive: true })
+    window.addEventListener('resize', this.handleViewportChange)
+    this.scheduleSync()
+  }
+
+  update() {
+    this.scheduleSync()
+  }
+
+  destroy() {
+    this.view.scrollDOM.removeEventListener('scroll', this.handleViewportChange)
+    window.removeEventListener('resize', this.handleViewportChange)
+    this.cancelSync()
+    for (const chunk of this.view.dom.querySelectorAll<HTMLElement>('.cm-deletedChunk')) {
+      chunk.classList.remove(DIFF_CHUNK_TOOLBAR_STUCK_CLASS)
+      chunk.style.removeProperty('--meo-diff-chunk-toolbar-left')
+      chunk.style.removeProperty('--meo-diff-chunk-toolbar-top')
+    }
+  }
+
+  private readonly handleViewportChange = () => {
+    this.scheduleSync()
+  }
+
+  private cancelSync() {
+    if (!this.pendingFrame) {
+      return
+    }
+    window.cancelAnimationFrame(this.pendingFrame)
+    this.pendingFrame = 0
+  }
+
+  private scheduleSync() {
+    if (this.pendingFrame) {
+      return
+    }
+
+    this.pendingFrame = window.requestAnimationFrame(() => {
+      this.pendingFrame = 0
+      this.sync()
+    })
+  }
+
+  private sync() {
+    syncUnifiedDiffChunkToolbarStickState(this.view)
+  }
+})
 
 function isPlainPrimaryPointerEvent(event: PointerEvent) {
   return event.button === 0
@@ -2242,6 +2413,7 @@ export function createDiffExtensions({
     activeLineGutterCompartment.of(createActiveLineGutterExtensions(lineNumbersVisible)),
     activeLineHighlightCompartment.of(createActiveLineHighlightExtensions(focusedLineHighlightVisible)),
     diffSplitNavigationHighlightField,
+    diffChunkToolbarStickPlugin,
     EditorState.tabSize.of(4),
     indentUnit.of('  '),
     EditorView.lineWrapping,

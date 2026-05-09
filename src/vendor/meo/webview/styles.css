@@ -874,7 +874,9 @@
 }
 
 .meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedChunk {
+  box-sizing: border-box;
   position: relative;
+  width: 100%;
   margin: 0;
   padding: 0;
 }
@@ -883,7 +885,15 @@
   position: absolute;
   top: calc(-1 * var(--meo-live-inline-diff-floating-lift, 26px));
   right: 10px;
+  width: max-content;
   z-index: 12;
+}
+
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedChunk.is-toolbar-stuck .cm-chunkButtons {
+  position: fixed;
+  top: var(--meo-diff-chunk-toolbar-top, var(--meo-live-inline-diff-sticky-inset, 8px));
+  right: auto;
+  left: var(--meo-diff-chunk-toolbar-left, 0px);
 }
 
 .meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedLine {
@@ -1050,6 +1060,7 @@
   --meo-live-inline-outer-gutter-width: 0px;
   --meo-live-inline-diff-floating-height: 24px;
   --meo-live-inline-diff-floating-lift: 26px;
+  --meo-live-inline-diff-sticky-inset: 8px;
   position: relative;
   display: block;
   width: calc(100% + var(--meo-live-inline-outer-gutter-width));
@@ -1070,8 +1081,10 @@
 }
 
 .meo-native-theme .meo-live-inline-diff-header {
-  position: absolute;
-  inset: 0 0 auto 0;
+  position: sticky;
+  top: var(--meo-live-inline-diff-sticky-inset);
+  right: 0;
+  left: 0;
   z-index: 12;
   height: 0;
   min-width: 0;
@@ -1083,7 +1096,6 @@
 
 .meo-native-theme .meo-diff-floating-hunk-toolbar,
 .meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedChunk .cm-chunkButtons {
-  position: absolute;
   right: 10px;
   display: inline-flex;
   align-items: center;
@@ -1100,7 +1112,12 @@
 }
 
 .meo-native-theme .meo-live-inline-diff-controls {
+  position: absolute;
   top: calc(-1 * var(--meo-live-inline-diff-floating-lift));
+}
+
+.meo-native-theme .meo-live-inline-diff.is-toolbar-stuck .meo-live-inline-diff-controls {
+  top: 4px;
 }
 
 .meo-native-theme .meo-live-inline-diff-nav {
@@ -1150,7 +1167,6 @@
 .meo-native-theme .meo-live-inline-diff-body .cm-mergeView {
   width: 100%;
   height: auto;
-  max-height: min(52vh, 520px);
   min-height: 0;
   overflow: auto;
   scrollbar-gutter: stable;
@@ -1158,13 +1174,8 @@
 }
 
 .meo-native-theme .meo-live-inline-diff-body.meo-diff-view-unified>.cm-editor {
-  max-height: min(52vh, 520px);
   overflow: hidden;
   background: var(--editor-background);
-}
-
-.meo-native-theme .meo-live-inline-diff-body.meo-diff-view-unified>.cm-editor .cm-scroller {
-  max-height: min(52vh, 520px);
 }
 
 .meo-native-theme .meo-live-inline-diff-body.meo-diff-view-unified .cm-gutter.meo-diff-unified-lineNumbers-single {
