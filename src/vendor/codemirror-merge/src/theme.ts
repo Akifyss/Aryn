@@ -121,6 +121,14 @@ export const baseTheme = EditorView.baseTheme({
     verticalAlign: "-0.12em",
   },
 
+  ".cm-changedTextFullLineEmpty": {
+    display: "inline-block",
+    width: "1px",
+    height: "1lh",
+    verticalAlign: "top",
+    background: "transparent",
+  },
+
   ".cm-changedTextEmpty::after": {
     content: '""',
     position: "absolute",

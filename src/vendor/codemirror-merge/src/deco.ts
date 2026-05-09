@@ -193,8 +193,24 @@ class ChangedTextEmpty extends WidgetType {
   ignoreEvent() { return true }
 }
 
+class ChangedTextFullLineEmpty extends WidgetType {
+  readonly className = "cm-changedText cm-changedTextFullLine cm-changedTextFullLineEmpty"
+
+  eq(other: ChangedTextFullLineEmpty) { return other instanceof ChangedTextFullLineEmpty }
+
+  toDOM() {
+    let elt = document.createElement("span")
+    elt.className = this.className
+    elt.setAttribute("aria-hidden", "true")
+    return elt
+  }
+
+  ignoreEvent() { return true }
+}
+
 const placeEmptyTextMarkersAfterTextMarks = 500000000
 const changedTextEmpty = Decoration.widget({widget: new ChangedTextEmpty(), side: placeEmptyTextMarkersAfterTextMarks})
+export const changedTextFullLineEmpty = Decoration.widget({widget: new ChangedTextFullLineEmpty(), side: placeEmptyTextMarkersAfterTextMarks})
 
 const changedLineGutterMarker = new class extends GutterMarker {
   elementClass = "cm-changedLineGutter"
@@ -516,18 +532,21 @@ function addFullLineDiffTextDeco(
   builder: RangeSetBuilder<Decoration> | PendingDecoration[],
   lineFrom: number,
   lineTo: number,
-  emptyLineFull: Decoration,
+  emptyLineFull: Decoration | null,
   fullLineChangedText: Decoration | null | undefined,
+  fullLineChangedTextEmpty: Decoration | null | undefined,
 ) {
   // Match VS Code's layering: every changed line keeps the line background, and
   // a whole inserted/deleted line also receives the regular text-level mark.
-  // Empty lines have no text range, so they still need the line-only fallback.
+  // Empty lines have no text range, so a tiny widget feeds the same measured
+  // inline layer instead of replacing the line background with a one-layer fill.
   if (lineFrom < lineTo) {
     if (fullLineChangedText) addPendingDecoration(builder, lineFrom, lineTo, fullLineChangedText)
     return
   }
 
-  addPendingDecoration(builder, lineFrom, lineFrom, emptyLineFull)
+  if (fullLineChangedTextEmpty) addPendingDecoration(builder, lineFrom, lineFrom, fullLineChangedTextEmpty)
+  else if (emptyLineFull) addPendingDecoration(builder, lineFrom, lineFrom, emptyLineFull)
 }
 
 function addInlineChangeDeco(
@@ -583,6 +602,8 @@ export type ChunkDecorationOptions = {
   changedText?: Decoration | null
   changedTextEmpty?: Decoration | null
   changedTextFullLine?: Decoration | null
+  changedTextFullLineEmpty?: Decoration | null
+  emptyLineFull?: Decoration | null
   gutter?: boolean
 }
 
@@ -603,19 +624,21 @@ export function addChunkDecorations(
     let inlineChangedTextFullLine = options.changedTextFullLine === undefined
       ? options.changedText === null ? null : changedTextFullLine
       : options.changedTextFullLine
+    let inlineChangedTextFullLineEmpty = options.changedTextFullLineEmpty === undefined
+      ? inlineChangedTextFullLine ? changedTextFullLineEmpty : null
+      : options.changedTextFullLineEmpty
     let wholeLineChange = isWholeLineChange(chunk, isA)
-    let emptyLineFull = isA ? deletedLineFull : insertedLineFull
+    let emptyLineFull = options.emptyLineFull === undefined ? isA ? deletedLineFull : insertedLineFull : options.emptyLineFull
     let pendingDecorations: PendingDecoration[] = []
-    let lineFullDeco = (lineFrom: number, lineTo: number) =>
-      wholeLineChange || isLineFullyInsertedOrDeleted(chunk, from, lineFrom, lineTo, isA) ? emptyLineFull : null
+    let lineIsFullChange = (lineFrom: number, lineTo: number) =>
+      wholeLineChange || isLineFullyInsertedOrDeleted(chunk, from, lineFrom, lineTo, isA)
     let addLine = (pos: number) => {
       addChangedLineDeco(pendingDecorations, pos)
     }
     let firstLine = doc.lineAt(Math.min(from, doc.length))
     addLine(from)
-    let firstLineFullDeco = lineFullDeco(firstLine.from, firstLine.to)
-    if (firstLineFullDeco) {
-      addFullLineDiffTextDeco(pendingDecorations, firstLine.from, firstLine.to, firstLineFullDeco, inlineChangedTextFullLine)
+    if (lineIsFullChange(firstLine.from, firstLine.to)) {
+      addFullLineDiffTextDeco(pendingDecorations, firstLine.from, firstLine.to, emptyLineFull, inlineChangedTextFullLine, inlineChangedTextFullLineEmpty)
     }
     let markTo = Math.min(to, doc.length)
     if (from < markTo) addPendingDecoration(pendingDecorations, from, markTo, isA ? deleted : inserted)
@@ -623,8 +646,8 @@ export function addChunkDecorations(
     for (let iter = doc.iterRange(from, to - 1), pos = from; !iter.next().done;) {
       if (iter.lineBreak) {
         let line = doc.lineAt(Math.min(pos, doc.length))
-        let lineIsFullChange = !!lineFullDeco(line.from, line.to)
-        let shouldSkipChange = lineIsFullChange
+        let isFullChangeLine = lineIsFullChange(line.from, line.to)
+        let shouldSkipChange = isFullChangeLine
           ? (change: Change) => changeFullyInsertsOrDeletesLine(change, from, line.from, line.to, isA) ? "full" : null
           : null
         if (highlight) changeI = addInlineChangeDeco(
@@ -644,23 +667,22 @@ export function addChunkDecorations(
         pos++
         let nextLine = doc.lineAt(Math.min(pos, doc.length))
         addLine(pos)
-        let nextLineFullDeco = lineFullDeco(nextLine.from, nextLine.to)
-        if (nextLineFullDeco) {
-          addFullLineDiffTextDeco(pendingDecorations, nextLine.from, nextLine.to, nextLineFullDeco, inlineChangedTextFullLine)
+        if (lineIsFullChange(nextLine.from, nextLine.to)) {
+          addFullLineDiffTextDeco(pendingDecorations, nextLine.from, nextLine.to, emptyLineFull, inlineChangedTextFullLine, inlineChangedTextFullLineEmpty)
         }
         if (options.gutter !== false && gutterBuilder) gutterBuilder.add(pos, pos, changedLineGutterMarker)
         continue
       }
       let lineEnd = pos + iter.value.length
       let line = doc.lineAt(Math.min(pos, doc.length))
-      let lineIsFullChange = !!lineFullDeco(line.from, line.to)
+      let isFullChangeLine = lineIsFullChange(line.from, line.to)
       let shouldSkipChange = (change: Change) => {
         let changeFrom = from + (isA ? change.fromA : change.fromB)
         let changeTo = from + (isA ? change.toA : change.toB)
         let otherFrom = isA ? change.fromB : change.fromA
         let otherTo = isA ? change.toB : change.toA
         if (otherFrom != otherTo || changeTo <= changeFrom) return null
-        if (lineIsFullChange && changeFullyInsertsOrDeletesLine(change, from, line.from, line.to, isA)) return "full"
+        if (isFullChangeLine && changeFullyInsertsOrDeletesLine(change, from, line.from, line.to, isA)) return "full"
         return changeFrom <= line.from && changeTo > line.to && changeFrom == lineEnd ? "empty" : null
       }
       if (highlight) changeI = addInlineChangeDeco(

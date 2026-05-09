@@ -1088,7 +1088,7 @@ function chunkHasInlineChangeOnLine(chunk: CodeMirrorDiffChunk, line: { from: nu
     isWholeLineChangeForSide(chunk, side)
     || isLineFullyInsertedOrDeleted(chunk as Chunk, range.from, line.from, line.to, side === 'a')
   ) {
-    return line.from < line.to
+    return true
   }
 
   for (const change of chunk.changes) {
@@ -1371,6 +1371,8 @@ function buildSplitDiffFallbackDecorationsFromInputs(
         changedText: visibleTextFallback ? splitFallbackChangedTextDeco : null,
         changedTextEmpty: visibleTextFallback ? undefined : null,
         changedTextFullLine: visibleTextFallback ? splitFallbackChangedTextFullLineDeco : undefined,
+        changedTextFullLineEmpty: visibleTextFallback ? null : undefined,
+        emptyLineFull: visibleTextFallback ? undefined : null,
         gutter: false,
       })
 

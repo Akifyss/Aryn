@@ -779,6 +779,14 @@
   background: transparent;
 }
 
+.meo-native-theme .meo-diff-split-body .cm-changedTextFullLineEmpty {
+  display: inline-block;
+  width: 1px;
+  height: 1lh;
+  vertical-align: top;
+  background: transparent;
+}
+
 .meo-native-theme .meo-diff-split-body .meo-diff-split-fallback-changedText {
   background: var(--meo-diff-split-changed-text-background);
   -webkit-box-decoration-break: clone;

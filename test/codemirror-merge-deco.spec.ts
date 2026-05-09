@@ -15,6 +15,9 @@ const {
 } = __meoDiffSplitUnifiedLineNumberTestHooks
 
 describe('CodeMirror merge decorations', () => {
+  const decorationClass = (value: Decoration) =>
+    value.spec?.class ?? (value.spec as any)?.widget?.className ?? ''
+
   it('builds reusable chunk decorations with the canonical merge classes', () => {
     const originalDoc = Text.of(['one', 'two', 'three'])
     const modifiedDoc = Text.of(['one', 'TWO', 'three'])
@@ -29,7 +32,7 @@ describe('CodeMirror merge decorations', () => {
 
     const ranges: Array<{ from: number, to: number, classes: string }> = []
     builder.finish().between(0, originalDoc.length, (from, to, value) => {
-      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+      ranges.push({ from, to, classes: decorationClass(value) })
     })
 
     expect(ranges).toEqual(expect.arrayContaining([
@@ -79,7 +82,7 @@ describe('CodeMirror merge decorations', () => {
 
     const ranges: Array<{ from: number, to: number, classes: string }> = []
     builder.finish().between(0, originalDoc.length, (from, to, value) => {
-      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+      ranges.push({ from, to, classes: decorationClass(value) })
     })
 
     expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromA, originalDoc.line(2).from, originalDoc.line(2).to, true)).toBe(false)
@@ -99,7 +102,7 @@ describe('CodeMirror merge decorations', () => {
 
     const ranges: Array<{ from: number, to: number, classes: string }> = []
     builder.finish().between(0, originalDoc.length, (from, to, value) => {
-      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+      ranges.push({ from, to, classes: decorationClass(value) })
     })
 
     expect(ranges.some((range) => range.classes.includes('cm-changedTextFullLine'))).toBe(false)
@@ -129,7 +132,7 @@ describe('CodeMirror merge decorations', () => {
     const collectClasses = (doc: Text, builder: RangeSetBuilder<Decoration>) => {
       const ranges: Array<{ from: number, to: number, classes: string }> = []
       builder.finish().between(0, doc.length, (from, to, value) => {
-        ranges.push({ from, to, classes: value.spec?.class ?? '' })
+        ranges.push({ from, to, classes: decorationClass(value) })
       })
       return ranges
     }
@@ -155,7 +158,7 @@ describe('CodeMirror merge decorations', () => {
 
     const ranges: Array<{ from: number, to: number, classes: string }> = []
     builder.finish().between(0, modifiedDoc.length, (from, to, value) => {
-      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+      ranges.push({ from, to, classes: decorationClass(value) })
     })
 
     expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromB, modifiedDoc.line(2).from, modifiedDoc.line(2).to, false)).toBe(false)
@@ -175,7 +178,7 @@ describe('CodeMirror merge decorations', () => {
 
     const ranges: Array<{ from: number, to: number, classes: string }> = []
     builder.finish().between(0, originalDoc.length, (from, to, value) => {
-      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+      ranges.push({ from, to, classes: decorationClass(value) })
     })
 
     expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromA, originalDoc.line(2).from, originalDoc.line(2).to, true)).toBe(false)
@@ -195,12 +198,13 @@ describe('CodeMirror merge decorations', () => {
 
     const ranges: Array<{ from: number, to: number, classes: string }> = []
     builder.finish().between(0, modifiedDoc.length, (from, to, value) => {
-      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+      ranges.push({ from, to, classes: decorationClass(value) })
     })
 
     expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromB, modifiedDoc.line(2).from, modifiedDoc.line(2).to, false)).toBe(true)
+    expect(ranges.some((range) => range.classes.includes('cm-insertedLineFull'))).toBe(false)
     expect(ranges).toEqual(expect.arrayContaining([
-      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-insertedLineFull' },
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedText cm-changedTextFullLine cm-changedTextFullLineEmpty' },
     ]))
   })
 

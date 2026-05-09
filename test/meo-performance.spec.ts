@@ -787,7 +787,7 @@ describe('meo performance guards', () => {
     ]))
   })
 
-  it('treats non-empty full-line changes as text render health requirements', () => {
+  it('treats full-line changes, including empty lines, as text render health requirements', () => {
     const originalDoc = Text.of(['same', 'shared original', 'tail'])
     const modifiedDoc = Text.of(['same', 'inserted standalone', 'shared modified', 'tail', 'same'])
     const [chunk] = Chunk.build(originalDoc, modifiedDoc, {
@@ -805,7 +805,7 @@ describe('meo performance guards', () => {
       chunk,
       Text.of(['same', '', 'shared modified', 'tail']).line(2),
       'b',
-    )).toBe(false)
+    )).toBe(true)
   })
 
   it('can make split diff fallback text decorations visible after render health retries fail', () => {
