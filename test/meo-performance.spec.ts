@@ -2,6 +2,7 @@ import { performance } from 'node:perf_hooks'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { ensureSyntaxTree } from '@codemirror/language'
 import { ChangeSet, EditorState, Text, Transaction } from '@codemirror/state'
+import { Decoration } from '@codemirror/view'
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
@@ -34,7 +35,11 @@ import {
   setGitBaselineEffect,
 } from '../src/vendor/meo/webview/helpers/gitDiffGutter'
 import {
+  __meoLiveModeTestHooks,
+  filterDecorationsForLiveSourceLikeLines,
   liveModeExtensions,
+  refreshLiveDecorationsEffect,
+  setLiveCompositionActiveEffect,
   shouldRefreshLiveMarkerLayoutForTransaction,
   shouldRefreshLiveDecorationsForTransaction,
   shouldRefreshLiveDecorationsForViewportChange,
@@ -118,6 +123,96 @@ describe('meo performance guards', () => {
     expect(state.doc.sliceString(state.doc.length - 1)).toBe('咚')
     expect(shouldRefreshLiveDecorationsForTransaction(transaction)).toBe(false)
     expect(shouldRefreshLiveMarkerLayoutForTransaction(transaction)).toBe(false)
+  })
+
+  it('keeps live markdown marker decorations stable throughout IME composition', () => {
+    let state = EditorState.create({
+      doc: '- _此操作对于未应用自动布局的容器是手动触发的_',
+      extensions: liveModeExtensions(),
+    })
+
+    state = state.update({
+      effects: setLiveCompositionActiveEffect.of(true),
+      annotations: Transaction.addToHistory.of(false),
+    }).state
+
+    const selectionTransaction = state.update({
+      selection: { anchor: state.doc.length },
+    })
+
+    expect(shouldRefreshLiveDecorationsForTransaction(selectionTransaction)).toBe(false)
+    expect(shouldRefreshLiveMarkerLayoutForTransaction(selectionTransaction)).toBe(false)
+
+    const forcedRefreshTransaction = state.update({
+      effects: refreshLiveDecorationsEffect.of(null),
+      annotations: Transaction.addToHistory.of(false),
+    })
+
+    expect(shouldRefreshLiveDecorationsForTransaction(forcedRefreshTransaction)).toBe(false)
+    expect(shouldRefreshLiveMarkerLayoutForTransaction(forcedRefreshTransaction)).toBe(false)
+
+    const finishTransaction = selectionTransaction.state.update({
+      effects: [
+        setLiveCompositionActiveEffect.of(false),
+        refreshLiveDecorationsEffect.of(null),
+      ],
+      annotations: Transaction.addToHistory.of(false),
+    })
+
+    expect(shouldRefreshLiveDecorationsForTransaction(finishTransaction)).toBe(true)
+    expect(shouldRefreshLiveMarkerLayoutForTransaction(finishTransaction)).toBe(true)
+  })
+
+  it('keeps the active live line source-like for IME-safe editing', () => {
+    const doc = [
+      '- _inactive emphasis_',
+      '- _active emphasis_',
+    ].join('\n')
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: doc.length },
+      extensions: liveModeExtensions(),
+    })
+    const activeLine = state.doc.line(2)
+    const inactiveLine = state.doc.line(1)
+    const touchesLine = (range: { from: number; to: number }, line: { from: number; to: number }) =>
+      range.to > line.from && range.from < line.to
+    const isInlineDecoration = (range: { isLine: boolean }) => !range.isLine
+
+    const liveDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(state)
+    const liveSyntaxDecorations = __meoLiveModeTestHooks.collectLiveSyntaxHighlightDebugRanges(state)
+
+    expect(liveDecorations.some((range) => isInlineDecoration(range) && touchesLine(range, inactiveLine))).toBe(true)
+    expect(liveDecorations.some((range) => isInlineDecoration(range) && touchesLine(range, activeLine))).toBe(false)
+    expect(liveSyntaxDecorations.some((range) => touchesLine(range, inactiveLine))).toBe(true)
+    expect(liveSyntaxDecorations.some((range) => touchesLine(range, activeLine))).toBe(false)
+  })
+
+  it('filters external inline decorations from the live source-like active line', () => {
+    const doc = [
+      '- _inactive emphasis_',
+      '- _active emphasis_',
+    ].join('\n')
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: doc.length },
+      extensions: liveModeExtensions(),
+    })
+    const inactiveLine = state.doc.line(1)
+    const activeLine = state.doc.line(2)
+    const externalMark = Decoration.mark({ class: 'external-inline-mark' })
+    const externalDecorations = Decoration.set([
+      externalMark.range(inactiveLine.from + 2, inactiveLine.to),
+      externalMark.range(activeLine.from + 2, activeLine.to),
+    ], true)
+
+    const filtered = filterDecorationsForLiveSourceLikeLines(state, externalDecorations)
+    const ranges: Array<{ from: number; to: number }> = []
+    filtered.between(0, state.doc.length, (from, to) => {
+      ranges.push({ from, to })
+    })
+
+    expect(ranges).toEqual([{ from: inactiveLine.from + 2, to: inactiveLine.to }])
   })
 
   it('keeps split typing updates off the full live decoration rebuild path', () => {
@@ -244,6 +339,42 @@ describe('meo performance guards', () => {
     } finally {
       docPrototype.toString = originalToString
     }
+  })
+
+  it('keeps split search highlights off the live source-like active line when selection moves', () => {
+    const doc = [
+      'plain search target',
+      'plain search target',
+    ].join('\n')
+    let state = EditorState.create({
+      doc,
+      selection: { anchor: 0 },
+      extensions: [
+        liveModeExtensions(),
+        __meoDiffSplitSearchTestHooks.searchQueryField,
+        __meoDiffSplitSearchTestHooks.searchMatchField,
+      ],
+    })
+    state = state.update({
+      effects: __meoDiffSplitSearchTestHooks.setSearchQueryEffect.of(
+        __meoDiffSplitSearchTestHooks.createSearchQueryState('search'),
+      ),
+    }).state
+
+    const collectSearchRanges = () => {
+      const ranges: Array<{ from: number; to: number }> = []
+      state.field(__meoDiffSplitSearchTestHooks.searchMatchField).between(0, state.doc.length, (from, to) => {
+        ranges.push({ from, to })
+      })
+      return ranges
+    }
+
+    const firstLine = state.doc.line(1)
+    const secondLine = state.doc.line(2)
+    expect(collectSearchRanges()).toEqual([{ from: secondLine.from + 6, to: secondLine.from + 12 }])
+
+    state = state.update({ selection: { anchor: state.doc.length } }).state
+    expect(collectSearchRanges()).toEqual([{ from: firstLine.from + 6, to: firstLine.from + 12 }])
   })
 
   it('keeps split IME composition updates off the git diff line recompute path', () => {

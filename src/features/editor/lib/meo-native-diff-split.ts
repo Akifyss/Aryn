@@ -64,7 +64,14 @@ import {
 } from '@/vendor/meo/webview/helpers/listMarkers'
 import { extractHeadings, extractHeadingSections } from '@/vendor/meo/webview/helpers/markdownSyntax'
 import { insertTable } from '@/vendor/meo/webview/helpers/tables'
-import { liveModeExtensions, refreshLiveDecorationsEffect, shouldRefreshLiveMarkerLayoutForTransaction } from '@/vendor/meo/webview/liveMode'
+import {
+  filterDecorationsForLiveSourceLikeLines,
+  liveSourceLikeActiveLinesChanged,
+  liveModeExtensions,
+  refreshLiveDecorationsEffect,
+  setLiveCompositionActiveEffect,
+  shouldRefreshLiveMarkerLayoutForTransaction,
+} from '@/vendor/meo/webview/liveMode'
 import { expandAllCollapsibleSections } from '@/vendor/meo/webview/helpers/headingCollapse'
 import { isRegularInlineSelection } from '@/vendor/meo/webview/helpers/selectionMenu'
 import {
@@ -360,18 +367,19 @@ function findSearchMatchRanges(text: string, query: string, options: SearchOptio
   return matches
 }
 
-function buildSearchDecorations(doc: EditorState['doc'], searchQuery: SearchQueryState) {
+function buildSearchDecorations(state: EditorState, searchQuery: SearchQueryState) {
   if (!searchQuery.text) {
     return Decoration.none
   }
 
   const builder = new RangeSetBuilder<Decoration>()
+  const { doc } = state
   const textValue = doc.toString()
   const matches = findSearchMatchRanges(textValue, searchQuery.text, searchQuery)
   for (const match of matches) {
     builder.add(match.start, match.end, searchMatchMark)
   }
-  return builder.finish()
+  return filterDecorationsForLiveSourceLikeLines(state, builder.finish())
 }
 
 export function shouldDeferSplitSearchMatchUpdate(transaction: Transaction, searchQueryText: string): boolean {
@@ -399,21 +407,30 @@ const searchMatchField = StateField.define({
   update(value, transaction) {
     for (const effect of transaction.effects) {
       if (effect.is(setSearchQueryEffect)) {
-        return buildSearchDecorations(transaction.state.doc, effect.value)
+        return buildSearchDecorations(transaction.state, effect.value)
       }
     }
 
     const refreshSearchMatches = transaction.effects.some((effect) => effect.is(refreshSearchMatchesEffect))
     if (transaction.docChanged) {
       const searchQuery = transaction.state.field(searchQueryField)
-      if (!refreshSearchMatches && shouldDeferSplitSearchMatchUpdate(transaction, searchQuery.text)) {
+      const sourceLikeLinesChanged = liveSourceLikeActiveLinesChanged(transaction.startState, transaction.state)
+      if (
+        !sourceLikeLinesChanged
+        && !refreshSearchMatches
+        && shouldDeferSplitSearchMatchUpdate(transaction, searchQuery.text)
+      ) {
         return value.map(transaction.changes)
       }
-      return buildSearchDecorations(transaction.state.doc, searchQuery)
+      return buildSearchDecorations(transaction.state, searchQuery)
     }
 
     if (refreshSearchMatches) {
-      return buildSearchDecorations(transaction.state.doc, transaction.state.field(searchQueryField))
+      return buildSearchDecorations(transaction.state, transaction.state.field(searchQueryField))
+    }
+
+    if (liveSourceLikeActiveLinesChanged(transaction.startState, transaction.state)) {
+      return buildSearchDecorations(transaction.state, transaction.state.field(searchQueryField))
     }
 
     return value
@@ -1304,6 +1321,7 @@ const splitDiffFallbackDecorationField = StateField.define({
       ))
       || transaction.startState.field(gitDiffLineFlagsField, false) !== transaction.state.field(gitDiffLineFlagsField, false)
       || getChunks(transaction.startState)?.chunks !== getChunks(transaction.state)?.chunks
+      || liveSourceLikeActiveLinesChanged(transaction.startState, transaction.state)
     ) {
       return buildSplitDiffFallbackDecorations(transaction.state)
     }
@@ -1316,12 +1334,15 @@ const splitDiffFallbackDecorationField = StateField.define({
 function buildSplitDiffFallbackDecorations(state: EditorState) {
   const flags = state.field(gitDiffLineFlagsField, false)
   const chunkInfo = getChunks(state)
-  return buildSplitDiffFallbackDecorationsFromInputs(
-    state.doc,
-    flags,
-    (chunkInfo?.chunks ?? []) as readonly CodeMirrorDiffChunk[],
-    chunkInfo?.side ?? undefined,
-    state.field(splitVisibleTextFallbackState, false),
+  return filterDecorationsForLiveSourceLikeLines(
+    state,
+    buildSplitDiffFallbackDecorationsFromInputs(
+      state.doc,
+      flags,
+      (chunkInfo?.chunks ?? []) as readonly CodeMirrorDiffChunk[],
+      chunkInfo?.side ?? undefined,
+      state.field(splitVisibleTextFallbackState, false),
+    ),
   )
 }
 
@@ -2198,6 +2219,15 @@ export function createDiffExtensions({
 
     compositionActive = nextValue
     view.dom.classList.toggle('meo-ime-composing', nextValue)
+    view.dispatch({
+      effects: nextValue
+        ? setLiveCompositionActiveEffect.of(true)
+        : [
+            setLiveCompositionActiveEffect.of(false),
+            refreshLiveDecorationsEffect.of(null),
+          ],
+      annotations: Transaction.addToHistory.of(false),
+    })
   }
 
   const extensions: Extension[] = [

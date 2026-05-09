@@ -6,7 +6,13 @@ import { markdown, markdownKeymap, markdownLanguage } from '@codemirror/lang-mar
 import { indentUnit, syntaxHighlighting, syntaxTree, forceParsing } from '@codemirror/language';
 import { vim } from '@replit/codemirror-vim';
 import { highlightStyle } from './theme';
-import { liveModeExtensions, refreshLiveDecorationsEffect } from './liveMode';
+import {
+  filterDecorationsForLiveSourceLikeLines,
+  liveSourceLikeActiveLinesChanged,
+  liveModeExtensions,
+  refreshLiveDecorationsEffect,
+  setLiveCompositionActiveEffect
+} from './liveMode';
 import { headingCollapseSharedExtensions, headingCollapseSourceSpacerExtensions } from './helpers/headingCollapse';
 import { resolveCodeLanguage, insertCodeBlock, sourceCodeBlockField } from './helpers/codeBlocks';
 import { sourceStrikeMarkerField } from './helpers/strikeMarkers';
@@ -92,18 +98,19 @@ const existingTaskMarkerRegex = /^[-+*]\s+\[[ xX~\-]\]/;
 const blockquoteLinePrefixRegex = /^[ \t]{0,3}(?:>[ \t]?)+/;
 const quotedCodeBlockAncestorNames = new Set(['FencedCode', 'CodeBlock']);
 
-const buildSearchDecorations = (doc, searchQuery: SearchQueryState) => {
+const buildSearchDecorations = (state: EditorState, searchQuery: SearchQueryState) => {
   if (!searchQuery.text) {
     return Decoration.none;
   }
 
   const builder = new RangeSetBuilder();
+  const { doc } = state;
   const textValue = doc.toString();
   const matches = findSearchMatchRanges(textValue, searchQuery.text, searchQuery);
   for (const match of matches) {
     builder.add(match.start, match.end, searchMatchMark);
   }
-  return builder.finish();
+  return filterDecorationsForLiveSourceLikeLines(state, builder.finish());
 };
 
 const searchQueryField = StateField.define({
@@ -127,13 +134,17 @@ const searchMatchField = StateField.define<any>({
   update(value: any, tr: Transaction) {
     if (tr.docChanged) {
       const searchQuery = tr.state.field(searchQueryField);
-      return buildSearchDecorations(tr.state.doc, searchQuery);
+      return buildSearchDecorations(tr.state, searchQuery);
     }
 
     for (const effect of tr.effects) {
       if (effect.is(setSearchQueryEffect)) {
-        return buildSearchDecorations(tr.state.doc, effect.value);
+        return buildSearchDecorations(tr.state, effect.value);
       }
+    }
+
+    if (liveSourceLikeActiveLinesChanged(tr.startState, tr.state)) {
+      return buildSearchDecorations(tr.state, tr.state.field(searchQueryField));
     }
 
     return value;
@@ -978,6 +989,7 @@ export function createEditor({
       }
       view.dispatch({
         effects: [
+          setLiveCompositionActiveEffect.of(false),
           refreshLiveDecorationsEffect.of(null),
           refreshGitDiffLineFlagsEffect.of(null)
         ],
@@ -1255,6 +1267,16 @@ export function createEditor({
       EditorView.lineWrapping,
       scrollPastEnd(),
       EditorView.domEventHandlers({
+        compositionstart(_event, view) {
+          cancelPendingLiveDecorationRefresh();
+          if (currentMode === 'live') {
+            view.dispatch({
+              effects: setLiveCompositionActiveEffect.of(true),
+              annotations: Transaction.addToHistory.of(false)
+            });
+          }
+          return false;
+        },
         compositionend(_event, view) {
           schedulePendingCompositionFlush();
           schedulePostCompositionLiveRefresh(view);
@@ -2461,4 +2483,3 @@ function sourceMode() {
     ...mergeConflictSourceExtensions()
   ];
 }
-

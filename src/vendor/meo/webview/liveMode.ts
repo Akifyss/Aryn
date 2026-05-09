@@ -1,8 +1,9 @@
 // @ts-nocheck
 import { Facet, RangeSetBuilder, StateEffect, StateField, EditorState, Transaction } from '@codemirror/state';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { ensureSyntaxTree, syntaxHighlighting, syntaxTree } from '@codemirror/language';
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { Decoration, EditorView, GutterMarker, WidgetType, gutterLineClass, ViewPlugin } from '@codemirror/view';
+import { highlightTree } from '@lezer/highlight';
 import { createElement, AlertCircle, Delete } from 'lucide';
 import {
   resolveCodeLanguage,
@@ -166,6 +167,27 @@ const listIndentWidgetCache = new Map();
 const frontmatterArrayPillWidgetCache = new Map();
 
 export const refreshLiveDecorationsEffect = StateEffect.define();
+export const setLiveCompositionActiveEffect = StateEffect.define<boolean>();
+export const liveSourceLikeActiveLineFacet = Facet.define<boolean, boolean>({
+  combine(values) {
+    return values.some(Boolean);
+  }
+});
+
+const liveCompositionActiveField = StateField.define<boolean>({
+  create() {
+    return false;
+  },
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setLiveCompositionActiveEffect)) {
+        return effect.value === true;
+      }
+    }
+    return value;
+  }
+});
+
 const deferLiveDecorationDocChangesFacet = Facet.define({
   combine(values) {
     return values.some(Boolean);
@@ -185,6 +207,29 @@ function shouldDeferLiveDecorationDocChange(transaction): boolean {
   return transaction.docChanged && transaction.state.facet(deferLiveDecorationDocChangesFacet);
 }
 
+function liveCompositionActiveInState(state): boolean {
+  return state.field(liveCompositionActiveField, false) === true;
+}
+
+function liveCompositionActiveInTransaction(transaction): boolean {
+  return liveCompositionActiveInState(transaction.startState)
+    || liveCompositionActiveInState(transaction.state);
+}
+
+function transactionEndsLiveComposition(transaction): boolean {
+  return transaction.effects.some((effect) => (
+    effect.is(setLiveCompositionActiveEffect) && effect.value !== true
+  ));
+}
+
+function shouldHoldLiveDecorationRefresh(transaction): boolean {
+  if (liveCompositionActiveInTransaction(transaction) && !transactionEndsLiveComposition(transaction)) {
+    return true;
+  }
+
+  return isCompositionInputTransaction(transaction) || shouldDeferLiveDecorationDocChange(transaction);
+}
+
 function syntaxTreeChanged(transaction): boolean {
   return syntaxTree(transaction.startState) !== syntaxTree(transaction.state);
 }
@@ -195,13 +240,27 @@ function syntaxTreeOnlyChanged(transaction): boolean {
     && syntaxTreeChanged(transaction);
 }
 
+function emphasisMarkerLength(state: EditorState, node): number {
+  const prefix = state.doc.sliceString(node.from, Math.min(node.to, node.from + 2));
+  return prefix === '**' || prefix === '__' ? 2 : 1;
+}
+
+function addInlineStyleInsideMarkdownMarkers(builder, state: EditorState, node, deco): void {
+  const markerLength = emphasisMarkerLength(state, node);
+  const from = node.from + markerLength;
+  const to = node.to - markerLength;
+  if (from < to) {
+    addRange(builder, from, to, deco);
+  }
+}
+
 export function shouldRefreshLiveDecorationsForTransaction(transaction, forceRefresh = hasRefreshLiveDecorationsEffect(transaction)): boolean {
-  if (forceRefresh) {
-    return true;
+  if (shouldHoldLiveDecorationRefresh(transaction)) {
+    return false;
   }
 
-  if (isCompositionInputTransaction(transaction) || shouldDeferLiveDecorationDocChange(transaction)) {
-    return false;
+  if (forceRefresh) {
+    return true;
   }
 
   return transaction.docChanged
@@ -210,12 +269,12 @@ export function shouldRefreshLiveDecorationsForTransaction(transaction, forceRef
 }
 
 export function shouldRefreshLiveMarkerLayoutForTransaction(transaction, forceRefresh = hasRefreshLiveDecorationsEffect(transaction)): boolean {
-  if (forceRefresh) {
-    return true;
+  if (shouldHoldLiveDecorationRefresh(transaction)) {
+    return false;
   }
 
-  if (isCompositionInputTransaction(transaction) || shouldDeferLiveDecorationDocChange(transaction)) {
-    return false;
+  if (forceRefresh) {
+    return true;
   }
 
   return !transaction.startState.selection.eq(transaction.state.selection)
@@ -1069,6 +1128,26 @@ function collectActiveLines(state: EditorState): Set<number> {
   return lines;
 }
 
+function collectLiveSourceLikeLines(state: EditorState): Set<number> {
+  return state.facet(liveSourceLikeActiveLineFacet) ? collectActiveLines(state) : new Set();
+}
+
+function sameLineSet(left: Set<number>, right: Set<number>): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const lineNo of left) {
+    if (!right.has(lineNo)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function liveSourceLikeActiveLinesChanged(startState: EditorState, state: EditorState): boolean {
+  return !sameLineSet(collectLiveSourceLikeLines(startState), collectLiveSourceLikeLines(state));
+}
+
 function collectIndentSelectedLines(state: EditorState): Set<number> {
   const lines = new Set<number>();
   for (const range of state.selection.ranges) {
@@ -1112,6 +1191,124 @@ function rangeTouchesActiveLine(state: EditorState, from: number, to: number, ac
   }
   return false;
 }
+
+function pointTouchesActiveLine(state: EditorState, pos: number, activeLines: Set<number>): boolean {
+  if (!activeLines.size) {
+    return false;
+  }
+  const clamped = Math.max(0, Math.min(pos, state.doc.length));
+  return activeLines.has(state.doc.lineAt(clamped).number);
+}
+
+// CodeMirror does not expose a public discriminator for line decorations.
+// Keep line-level classes while removing marks/widgets/replacements from the editable source line.
+function isLineDecoration(value): boolean {
+  return value.widget == null
+    && value.point === true
+    && value.isReplace !== true
+    && value.startSide === value.endSide;
+}
+
+function decorationTouchesSourceLikeLine(state: EditorState, from: number, to: number, value, sourceLikeLines: Set<number>): boolean {
+  if (!sourceLikeLines.size || isLineDecoration(value)) {
+    return false;
+  }
+  return to > from
+    ? rangeTouchesActiveLine(state, from, to, sourceLikeLines)
+    : pointTouchesActiveLine(state, from, sourceLikeLines);
+}
+
+function filterDecorationsForSourceLikeLines(state: EditorState, decorations, sourceLikeLines: Set<number>) {
+  if (!sourceLikeLines.size || isEmptyDecorationSet(decorations)) {
+    return decorations;
+  }
+
+  const filtered = [];
+  decorations.between(0, state.doc.length, (from, to, value) => {
+    if (!decorationTouchesSourceLikeLine(state, from, to, value, sourceLikeLines)) {
+      filtered.push(value.range(from, to));
+    }
+  });
+  return Decoration.set(filtered, true);
+}
+
+export function filterDecorationsForLiveSourceLikeLines(state: EditorState, decorations) {
+  return filterDecorationsForSourceLikeLines(state, decorations, collectLiveSourceLikeLines(state));
+}
+
+function buildLiveSyntaxHighlightDecorations(state: EditorState, tree, visibleRanges) {
+  if (!tree.length) {
+    return Decoration.none;
+  }
+
+  const sourceLikeLines = collectLiveSourceLikeLines(state);
+  const builder = new RangeSetBuilder();
+  const markCache = Object.create(null);
+
+  for (const { from, to } of visibleRanges) {
+    highlightTree(tree, [highlightStyle], (rangeFrom, rangeTo, style) => {
+      if (rangeTouchesActiveLine(state, rangeFrom, rangeTo, sourceLikeLines)) {
+        return;
+      }
+      builder.add(
+        rangeFrom,
+        rangeTo,
+        markCache[style] || (markCache[style] = Decoration.mark({ class: style }))
+      );
+    }, from, to);
+  }
+
+  return builder.finish();
+}
+
+class LiveSyntaxHighlighter {
+  tree;
+  decorations;
+  decoratedTo = 0;
+
+  constructor(view) {
+    this.tree = syntaxTree(view.state);
+    this.decorations = buildLiveSyntaxHighlightDecorations(view.state, this.tree, view.visibleRanges);
+    this.decoratedTo = view.viewport.to;
+  }
+
+  update(update) {
+    const tree = syntaxTree(update.state);
+    const decoratedToMapped = update.changes.mapPos(this.decoratedTo, 1);
+    const sourceLikeLinesChanged = liveSourceLikeActiveLinesChanged(update.startState, update.state);
+    const holdRefresh = update.transactions.some((transaction) => shouldHoldLiveDecorationRefresh(transaction));
+
+    if (holdRefresh && !sourceLikeLinesChanged) {
+      this.decorations = this.decorations.map(update.changes);
+      this.decoratedTo = decoratedToMapped;
+      return;
+    }
+
+    if (
+      !sourceLikeLinesChanged &&
+      tree.length < update.view.viewport.to &&
+      tree.type === this.tree.type &&
+      decoratedToMapped >= update.view.viewport.to
+    ) {
+      this.decorations = this.decorations.map(update.changes);
+      this.decoratedTo = decoratedToMapped;
+      return;
+    }
+
+    if (tree !== this.tree || update.viewportChanged || sourceLikeLinesChanged || update.docChanged) {
+      this.tree = tree;
+      this.decorations = buildLiveSyntaxHighlightDecorations(update.state, this.tree, update.view.visibleRanges);
+      this.decoratedTo = update.view.viewport.to;
+    }
+  }
+}
+
+const liveSyntaxHighlightingExtension = [
+  ...(highlightStyle.module ? [EditorView.styleModule.of(highlightStyle.module)] : []),
+  ViewPlugin.fromClass(LiveSyntaxHighlighter, {
+    decorations: (plugin) => plugin.decorations
+  })
+];
 
 function addDetailsBlockDecorations(builder, state, detailsBlocks, activeLines) {
   for (const detailsBlock of detailsBlocks) {
@@ -1384,9 +1581,9 @@ function buildDecorations(state) {
       }
 
       if (node.name === 'Emphasis') {
-        addRange(ranges, node.from, node.to, inlineStyleDecos.em);
+        addInlineStyleInsideMarkdownMarkers(ranges, state, node, inlineStyleDecos.em);
       } else if (node.name === 'StrongEmphasis') {
-        addRange(ranges, node.from, node.to, inlineStyleDecos.strong);
+        addInlineStyleInsideMarkdownMarkers(ranges, state, node, inlineStyleDecos.strong);
       } else if (node.name === 'Strikethrough') {
         addRange(ranges, node.from, node.to, inlineStyleDecos.strike);
       } else if (node.name === 'InlineCode' || node.name === 'CodeText') {
@@ -1594,7 +1791,11 @@ function buildDecorations(state) {
     addRange(ranges, section.collapseFrom, section.collapseTo, collapsedHeadingBodyDeco);
   }
 
-  const result = Decoration.set(ranges, true);
+  const result = filterDecorationsForSourceLikeLines(
+    state,
+    Decoration.set(ranges, true),
+    collectLiveSourceLikeLines(state)
+  );
   return filterDecorationsOutsideMergeConflicts(state, result);
 }
 
@@ -2222,7 +2423,7 @@ const liveDecorationField = StateField.define({
   },
   update(decorations, transaction) {
     const forceRefresh = hasRefreshLiveDecorationsEffect(transaction);
-    if (!forceRefresh && (isCompositionInputTransaction(transaction) || shouldDeferLiveDecorationDocChange(transaction))) {
+    if (!forceRefresh && shouldHoldLiveDecorationRefresh(transaction)) {
       return transaction.docChanged ? decorations.map(transaction.changes) : decorations;
     }
 
@@ -2386,7 +2587,7 @@ const liveLineNumberMarkerField = StateField.define({
   },
   update(markers, transaction) {
     const forceRefresh = hasRefreshLiveDecorationsEffect(transaction);
-    if (!forceRefresh && (isCompositionInputTransaction(transaction) || shouldDeferLiveDecorationDocChange(transaction))) {
+    if (!forceRefresh && shouldHoldLiveDecorationRefresh(transaction)) {
       return transaction.docChanged ? markers.map(transaction.changes) : markers;
     }
 
@@ -2402,7 +2603,9 @@ export function liveModeExtensions(options = {}) {
   const includeHeadingCollapse = options.headingCollapse !== false;
   const extensions = [
     createLiveMarkdownLanguageExtension(),
-    syntaxHighlighting(highlightStyle),
+    ...liveSyntaxHighlightingExtension,
+    liveSourceLikeActiveLineFacet.of(true),
+    liveCompositionActiveField,
     liveDecorationField,
     liveViewportDecorationRefreshPlugin,
     liveLineNumberMarkerField,
@@ -2424,3 +2627,30 @@ function isEmptyDecorationSet(set) {
   const cursor = set.iter();
   return cursor.value === null;
 }
+
+function collectDecorationDebugRanges(state, decorations) {
+  const ranges = [];
+  decorations.between(0, state.doc.length, (from, to, value) => {
+    ranges.push({
+      from,
+      to,
+      className: value.spec?.class ?? '',
+      isLine: isLineDecoration(value),
+      hasWidget: Boolean(value.widget),
+      isReplace: Boolean(value.isReplace)
+    });
+  });
+  return ranges;
+}
+
+export const __meoLiveModeTestHooks = {
+  collectLiveDecorationDebugRanges(state) {
+    return collectDecorationDebugRanges(state, buildDecorations(state));
+  },
+  collectLiveSyntaxHighlightDebugRanges(state) {
+    return collectDecorationDebugRanges(
+      state,
+      buildLiveSyntaxHighlightDecorations(state, syntaxTree(state), [{ from: 0, to: state.doc.length }])
+    );
+  }
+};
