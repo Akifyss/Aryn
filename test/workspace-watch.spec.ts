@@ -79,7 +79,7 @@ describe('workspace watcher lifecycle', () => {
       interval: 500,
       usePolling: process.platform === 'darwin' || process.platform === 'win32',
     }))
-    expect(chokidarWatchMock).toHaveBeenNthCalledWith(2, '/tmp/workspace-a/.git', expect.objectContaining({
+    expect(chokidarWatchMock).toHaveBeenNthCalledWith(2, path.join('/tmp/workspace-a', '.git'), expect.objectContaining({
       depth: 0,
       ignoreInitial: true,
       interval: 500,
@@ -90,7 +90,7 @@ describe('workspace watcher lifecycle', () => {
       interval: 500,
       usePolling: process.platform === 'darwin' || process.platform === 'win32',
     }))
-    expect(chokidarWatchMock).toHaveBeenNthCalledWith(4, '/tmp/workspace-b/.git', expect.objectContaining({
+    expect(chokidarWatchMock).toHaveBeenNthCalledWith(4, path.join('/tmp/workspace-b', '.git'), expect.objectContaining({
       depth: 0,
       ignoreInitial: true,
       interval: 500,
@@ -131,7 +131,7 @@ describe('workspace watcher lifecycle', () => {
       type: 'change',
     })
     expect(onChange).toHaveBeenNthCalledWith(2, {
-      path: '/tmp/workspace-b/.git/index',
+      path: path.join('/tmp/workspace-b', '.git', 'index'),
       rootPath: '/tmp/workspace-b',
       type: 'change',
     })

@@ -87,6 +87,9 @@ contextBridge.exposeInMainWorld('appApi', {
   selectAgentModel: (modelKey: string) => ipcRenderer.invoke('agent:select-model', modelKey) as Promise<AgentWorkspaceState>,
   updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => ipcRenderer.invoke('agent:update-provider-auth', rootPath, provider, apiKey) as Promise<AgentWorkspaceState>,
   abortAgentPrompt: () => ipcRenderer.invoke('agent:abort') as Promise<AgentWorkspaceState>,
+  notifyRendererReady: () => {
+    ipcRenderer.send('app:renderer-ready')
+  },
   openExternalLink: (href: string) => ipcRenderer.invoke('shell:open-external', href) as Promise<{ ok: boolean }>,
   setWindowBackgroundTheme: (theme: 'light' | 'dark') => ipcRenderer.invoke('window:set-background-theme', theme) as Promise<{ ok: boolean }>,
   minimizeWindow: () => ipcRenderer.invoke('window:minimize') as Promise<void>,

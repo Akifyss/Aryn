@@ -22,6 +22,7 @@ const bundledElectronPackageExternals = [
   '@mariozechner/pi-coding-agent',
   '@mariozechner/pi-tui',
   '@silvia-odwyer/photon-node',
+  ...Object.keys(pkg.dependencies ?? {}),
 ]
 
 function isBundledElectronRuntimeExternal(id: string) {
@@ -60,6 +61,15 @@ export default defineConfig(({ command }) => {
   const isServe = command === 'serve'
   const isBuild = command === 'build'
   const sourcemap = isServe || !!process.env.VSCODE_DEBUG
+  const devServerOptions = process.env.VSCODE_DEBUG
+    ? (() => {
+        const url = new URL(pkg.debug.env.VITE_DEV_SERVER_URL)
+        return {
+          host: url.hostname,
+          port: +url.port,
+        }
+      })()
+    : {}
 
   return {
     resolve: {
@@ -122,13 +132,19 @@ export default defineConfig(({ command }) => {
         renderer: {},
       }),
     ],
-    server: process.env.VSCODE_DEBUG && (() => {
-      const url = new URL(pkg.debug.env.VITE_DEV_SERVER_URL)
-      return {
-        host: url.hostname,
-        port: +url.port,
-      }
-    })(),
+    server: {
+      ...devServerOptions,
+      watch: {
+        ignored: [
+          '**/.git/**',
+          '**/.tmp/**',
+          '**/dist/**',
+          '**/dist-electron/**',
+          '**/release/**',
+          '**/tmp/**',
+        ],
+      },
+    },
     clearScreen: false,
     build: {
       cssMinify: false,

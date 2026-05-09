@@ -14,3 +14,6 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 )
 
 postMessage({ payload: 'removeLoading' }, '*')
+requestAnimationFrame(() => {
+  window.appApi.notifyRendererReady()
+})

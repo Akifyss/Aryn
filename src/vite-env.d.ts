@@ -87,6 +87,7 @@ declare global {
       selectAgentModel: (modelKey: string) => Promise<AgentWorkspaceState>
       updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => Promise<AgentWorkspaceState>
       abortAgentPrompt: () => Promise<AgentWorkspaceState>
+      notifyRendererReady: () => void
       openExternalLink: (href: string) => Promise<{ ok: boolean }>
       setWindowBackgroundTheme: (theme: 'light' | 'dark') => Promise<{ ok: boolean }>
       minimizeWindow: () => Promise<void>

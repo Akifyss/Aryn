@@ -202,6 +202,7 @@ async function createWindow() {
     icon: appIconPath,
     backgroundColor: getInitialWindowBackgroundColor(),
     autoHideMenuBar: true,
+    show: false,
     width: appState.window.width,
     height: appState.window.height,
     minWidth: MIN_WINDOW_WIDTH,
@@ -219,6 +220,39 @@ async function createWindow() {
   })
 
   bindWindowStatePersistence(win)
+
+  const targetWindow = win
+  let hasShownInitialWindow = false
+  let initialWindowFallbackTimer: ReturnType<typeof setTimeout> | null = null
+  const showInitialWindow = () => {
+    if (hasShownInitialWindow || targetWindow.isDestroyed()) {
+      return
+    }
+
+    if (initialWindowFallbackTimer) {
+      clearTimeout(initialWindowFallbackTimer)
+      initialWindowFallbackTimer = null
+    }
+
+    hasShownInitialWindow = true
+    targetWindow.show()
+  }
+  const handleRendererReady = (event: Electron.IpcMainEvent) => {
+    if (event.sender === targetWindow.webContents) {
+      showInitialWindow()
+    }
+  }
+
+  ipcMain.on('app:renderer-ready', handleRendererReady)
+  targetWindow.webContents.once('did-fail-load', showInitialWindow)
+  targetWindow.once('closed', () => {
+    ipcMain.off('app:renderer-ready', handleRendererReady)
+    if (initialWindowFallbackTimer) {
+      clearTimeout(initialWindowFallbackTimer)
+      initialWindowFallbackTimer = null
+    }
+  })
+  initialWindowFallbackTimer = setTimeout(showInitialWindow, VITE_DEV_SERVER_URL ? 15000 : 8000)
 
   win.on('close', (event) => {
     if (allowWindowClose) {
