@@ -88,11 +88,23 @@ contextBridge.exposeInMainWorld('appApi', {
   updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => ipcRenderer.invoke('agent:update-provider-auth', rootPath, provider, apiKey) as Promise<AgentWorkspaceState>,
   abortAgentPrompt: () => ipcRenderer.invoke('agent:abort') as Promise<AgentWorkspaceState>,
   openExternalLink: (href: string) => ipcRenderer.invoke('shell:open-external', href) as Promise<{ ok: boolean }>,
+  setWindowBackgroundTheme: (theme: 'light' | 'dark') => ipcRenderer.invoke('window:set-background-theme', theme) as Promise<{ ok: boolean }>,
   minimizeWindow: () => ipcRenderer.invoke('window:minimize') as Promise<void>,
-  toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize') as Promise<{ isMaximized: boolean }>,
+  toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize') as Promise<{ isFullScreen: boolean, isMaximized: boolean }>,
   closeWindow: () => ipcRenderer.invoke('window:close') as Promise<void>,
-  isWindowMaximized: () => ipcRenderer.invoke('window:is-maximized') as Promise<{ isMaximized: boolean }>,
+  isWindowMaximized: () => ipcRenderer.invoke('window:is-maximized') as Promise<{ isFullScreen: boolean, isMaximized: boolean }>,
   refreshWindowInteractionRegions: (mode?: 'soft' | 'hard') => ipcRenderer.invoke('window:refresh-interaction-regions', mode) as Promise<{ ok: boolean }>,
+  onWindowStateChanged: (listener: (state: { isFullScreen: boolean, isMaximized: boolean }) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, state: { isFullScreen: boolean, isMaximized: boolean }) => {
+      listener(state)
+    }
+
+    ipcRenderer.on('window:state-changed', wrappedListener)
+
+    return () => {
+      ipcRenderer.off('window:state-changed', wrappedListener)
+    }
+  },
   onWindowCloseRequested: (listener: () => void) => {
     const wrappedListener = () => {
       listener()

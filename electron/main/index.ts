@@ -1,4 +1,4 @@
-import { Menu, app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from 'electron'
+import { Menu, app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -100,6 +100,22 @@ const bundledWorkspaceIconThemePath = path.join(
 )
 const legacyWorkspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
 const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPath)
+
+type WindowBackgroundTheme = 'light' | 'dark'
+
+const WINDOW_BACKGROUND_COLORS = {
+  dark: '#1f1f1f',
+  light: '#f5f6f8',
+} as const satisfies Record<WindowBackgroundTheme, string>
+
+function getInitialWindowBackgroundColor() {
+  return WINDOW_BACKGROUND_COLORS[nativeTheme.shouldUseDarkColors ? 'dark' : 'light']
+}
+
+function normalizeWindowBackgroundTheme(theme: unknown): WindowBackgroundTheme | null {
+  return theme === 'dark' || theme === 'light' ? theme : null
+}
+
 const agentManager = new PiAgentManager(
   (event: AgentClientEvent) => {
     if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
@@ -110,6 +126,21 @@ const agentManager = new PiAgentManager(
   },
   { agentDir },
 )
+
+function getWindowChromeState(targetWindow: BrowserWindow | null = win) {
+  return {
+    isFullScreen: targetWindow?.isFullScreen() ?? false,
+    isMaximized: targetWindow?.isMaximized() ?? false,
+  }
+}
+
+function emitWindowChromeState(targetWindow: BrowserWindow) {
+  if (targetWindow.isDestroyed() || targetWindow.webContents.isDestroyed()) {
+    return
+  }
+
+  targetWindow.webContents.send('window:state-changed', getWindowChromeState(targetWindow))
+}
 
 async function persistWindowState(targetWindow: BrowserWindow) {
   const bounds = targetWindow.isMaximized()
@@ -135,10 +166,18 @@ function bindWindowStatePersistence(targetWindow: BrowserWindow) {
   targetWindow.on('maximize', () => {
     persistBounds.cancel()
     void persistWindowState(targetWindow)
+    emitWindowChromeState(targetWindow)
   })
   targetWindow.on('unmaximize', () => {
     persistBounds.cancel()
     void persistWindowState(targetWindow)
+    emitWindowChromeState(targetWindow)
+  })
+  targetWindow.on('enter-full-screen', () => {
+    emitWindowChromeState(targetWindow)
+  })
+  targetWindow.on('leave-full-screen', () => {
+    emitWindowChromeState(targetWindow)
   })
   targetWindow.on('close', () => {
     persistBounds.cancel()
@@ -149,17 +188,25 @@ function bindWindowStatePersistence(targetWindow: BrowserWindow) {
 async function createWindow() {
   const appState = await appStateStore.read()
   const appIconPath = getAppIconAssetPath(process.env.VITE_PUBLIC, appState.ui.appIconId)
+  const titlebarOptions = process.platform === 'darwin'
+    ? {
+        titleBarStyle: 'hidden' as const,
+        trafficLightPosition: { x: 16, y: 14 },
+      }
+    : {
+        frame: false,
+      }
 
   win = new BrowserWindow({
     title: 'Aryn',
     icon: appIconPath,
-    backgroundColor: '#ffffff',
-    frame: false,
+    backgroundColor: getInitialWindowBackgroundColor(),
     autoHideMenuBar: true,
     width: appState.window.width,
     height: appState.window.height,
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
+    ...titlebarOptions,
     webPreferences: {
       preload,
       // Warning: Enable nodeIntegration and disable contextIsolation is not secure in production
@@ -455,6 +502,16 @@ ipcMain.handle('ui:update-state', async (_, patch: { agentComposerHeight?: numbe
     },
   }))
 
+  return { ok: true }
+})
+
+ipcMain.handle('window:set-background-theme', (_event, theme: unknown) => {
+  const normalizedTheme = normalizeWindowBackgroundTheme(theme)
+  if (!normalizedTheme || !win || win.isDestroyed()) {
+    return { ok: false }
+  }
+
+  win.setBackgroundColor(WINDOW_BACKGROUND_COLORS[normalizedTheme])
   return { ok: true }
 })
 
@@ -791,7 +848,7 @@ ipcMain.handle('shell:open-external', async (_event, href: string) => {
 
 ipcMain.handle('window:toggle-maximize', () => {
   if (!win) {
-    return { isMaximized: false }
+    return getWindowChromeState(null)
   }
 
   if (win.isMaximized()) {
@@ -800,7 +857,7 @@ ipcMain.handle('window:toggle-maximize', () => {
     win.maximize()
   }
 
-  return { isMaximized: win.isMaximized() }
+  return getWindowChromeState(win)
 })
 
 ipcMain.handle('window:close', () => {
@@ -813,7 +870,7 @@ ipcMain.handle('window:close', () => {
 })
 
 ipcMain.handle('window:is-maximized', () => {
-  return { isMaximized: win?.isMaximized() ?? false }
+  return getWindowChromeState()
 })
 
 ipcMain.handle('window:refresh-interaction-regions', async (_event, mode: 'soft' | 'hard' = 'hard') => {

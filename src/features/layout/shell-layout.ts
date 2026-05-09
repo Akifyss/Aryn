@@ -28,6 +28,11 @@ const SHELL_CHROME_VARS = {
   },
 } as const satisfies Record<ShellPlatform, Record<string, string>>
 
+const MACOS_FULLSCREEN_CHROME_VARS = {
+  '--left-panel-toggle-anchor': '12px',
+  '--left-panel-content-inset': '52px',
+} as const
+
 export function deriveShellPlatform(platform: string): ShellPlatform {
   return platform === 'darwin' ? 'macos' : 'windows'
 }
@@ -44,6 +49,16 @@ export function deriveLayoutMode(shellWidth: number): LayoutMode {
   return 'focus'
 }
 
-export function getShellChromeVars(shellPlatform: ShellPlatform) {
+export function getShellChromeVars(
+  shellPlatform: ShellPlatform,
+  options: { isFullScreen?: boolean } = {},
+) {
+  if (shellPlatform === 'macos' && options.isFullScreen) {
+    return {
+      ...SHELL_CHROME_VARS.macos,
+      ...MACOS_FULLSCREEN_CHROME_VARS,
+    }
+  }
+
   return SHELL_CHROME_VARS[shellPlatform]
 }

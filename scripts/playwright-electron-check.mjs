@@ -2,12 +2,28 @@ import fs from 'node:fs/promises'
 import { _electron as electron } from 'playwright'
 
 const app = await electron.launch({
-  args: ['dist-electron/main/index.js'],
+  args: ['.'],
+  env: {
+    ...process.env,
+    ARYN_ELECTRON_DEBUG: '1',
+  },
 })
 
 try {
   const page = await app.firstWindow()
   await page.waitForTimeout(1500)
+
+  const nativeWindowControls = await app.evaluate(({ BrowserWindow }) => {
+    const targetWindow = BrowserWindow.getAllWindows()[0]
+    const platform = process.platform
+
+    return {
+      platform,
+      windowButtonPosition: platform === 'darwin'
+        ? targetWindow?.getWindowButtonPosition?.() ?? null
+        : null,
+    }
+  })
 
   const before = await page.evaluate(() => {
     const shell = document.querySelector('.app-shell')
@@ -45,7 +61,7 @@ try {
         : null,
       leftToggle: readHit('.panel-toggle-button-overlay-left'),
       rightToggle: readHit('.panel-toggle-button-overlay-right'),
-      trafficClose: readHit('.traffic-close'),
+      windowClose: readHit('.window-button-close'),
     }
   })
 
@@ -53,7 +69,6 @@ try {
 
   let leftError = null
   let rightError = null
-  let closeError = null
 
   try {
     await page.click('.panel-toggle-button-overlay-left', { timeout: 1500 })
@@ -73,23 +88,33 @@ try {
   await page.waitForTimeout(250)
   const afterRight = await page.locator('.app-shell').getAttribute('data-right-collapsed')
 
-  try {
-    await page.click('.traffic-close', { timeout: 1500 })
-  } catch (error) {
-    closeError = error instanceof Error ? error.message : String(error)
-  }
-
   const report = {
     afterLeft,
     afterRight,
     before,
-    closeError,
     leftError,
+    nativeWindowControls,
     rightError,
   }
 
   await fs.writeFile('/tmp/awa-playwright.json', JSON.stringify(report, null, 2))
   console.log(JSON.stringify(report, null, 2))
 } finally {
-  await app.close().catch(() => {})
+  const processHandle = app.process()
+
+  let closed = false
+  await Promise.race([
+    app.close()
+      .then(() => {
+        closed = true
+      })
+      .catch(() => {
+        closed = true
+      }),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ])
+
+  if (!closed && processHandle && !processHandle.killed) {
+    processHandle.kill()
+  }
 }

@@ -619,6 +619,8 @@ function App() {
       body.classList.remove('light', 'dark')
       body.classList.add(t)
 
+      void window.appApi.setWindowBackgroundTheme(t)
+
       // Also set the theme-color meta tag for better UI integration
       const meta = window.document.querySelector('meta[name="theme-color"]')
       if (meta) {
@@ -726,8 +728,15 @@ function App() {
   const [shellWidth, setShellWidth] = useState(() => (
     typeof window !== 'undefined' ? window.innerWidth : FULL_LAYOUT_BREAKPOINT + 1
   ))
+  const [isWindowFullScreen, setIsWindowFullScreen] = useState(false)
   const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false)
   const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false)
+  const [rightDrawerDragRegion, setRightDrawerDragRegion] = useState<{
+    height: number
+    left: number
+    top: number
+    width: number
+  } | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
   const leftDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
@@ -867,7 +876,7 @@ function App() {
     ? getBaseName(currentPath)
     : 'Current workspace'
   const shellPlatform: ShellPlatform = deriveShellPlatform(platform)
-  const shellChromeVars = getShellChromeVars(shellPlatform) as CSSProperties
+  const shellChromeVars = getShellChromeVars(shellPlatform, { isFullScreen: isWindowFullScreen }) as CSSProperties
   const layoutMode: LayoutMode = deriveLayoutMode(shellWidth)
   const isLeftSidebarDrawer = layoutMode !== 'full'
   const isRightSidebarDrawer = layoutMode === 'focus'
@@ -3050,6 +3059,25 @@ function App() {
   }, [handleRequestWindowClose])
 
   useEffect(() => {
+    let mounted = true
+
+    void window.appApi.isWindowMaximized().then(({ isFullScreen }) => {
+      if (mounted) {
+        setIsWindowFullScreen(isFullScreen)
+      }
+    })
+
+    const unsubscribe = window.appApi.onWindowStateChanged(({ isFullScreen }) => {
+      setIsWindowFullScreen(isFullScreen)
+    })
+
+    return () => {
+      mounted = false
+      unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
     return () => {
       void window.appApi.stopWorkspaceWatch()
     }
@@ -3405,6 +3433,105 @@ function App() {
       window.cancelAnimationFrame(rafId)
     }
   }, [isLeftDrawerOpen, isRightDrawerOpen])
+
+  useEffect(() => {
+    if (!isRightDrawerOpen || !isRightSidebarDrawer) {
+      setRightDrawerDragRegion(null)
+      return
+    }
+
+    let cancelled = false
+    let rafId = 0
+    let frameCount = 0
+    let stableFrameCount = 0
+    let previousRectSignature = ''
+
+    const publishDragRegion = (rect: DOMRect) => {
+      setRightDrawerDragRegion((currentRegion) => {
+        const nextRegion = {
+          height: Math.round(rect.height),
+          left: Math.round(rect.left),
+          top: Math.round(rect.top),
+          width: Math.round(rect.width),
+        }
+
+        if (
+          currentRegion
+          && currentRegion.height === nextRegion.height
+          && currentRegion.left === nextRegion.left
+          && currentRegion.top === nextRegion.top
+          && currentRegion.width === nextRegion.width
+        ) {
+          return currentRegion
+        }
+
+        return nextRegion
+      })
+    }
+
+    const tick = () => {
+      if (cancelled) {
+        return
+      }
+
+      frameCount += 1
+
+      const dragSpacer = rightDrawerSurfaceRef.current?.querySelector<HTMLElement>('.agent-threadbar-drag-spacer')
+      if (!dragSpacer) {
+        if (frameCount < DRAWER_INTERACTION_REFRESH_MAX_FRAMES) {
+          rafId = window.requestAnimationFrame(tick)
+        }
+        return
+      }
+
+      const rect = dragSpacer.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) {
+        if (frameCount < DRAWER_INTERACTION_REFRESH_MAX_FRAMES) {
+          rafId = window.requestAnimationFrame(tick)
+        }
+        return
+      }
+
+      publishDragRegion(rect)
+
+      const rectSignature = [
+        Math.round(rect.x * 10) / 10,
+        Math.round(rect.y * 10) / 10,
+        Math.round(rect.width * 10) / 10,
+        Math.round(rect.height * 10) / 10,
+      ].join(':')
+
+      stableFrameCount = rectSignature === previousRectSignature ? stableFrameCount + 1 : 0
+      previousRectSignature = rectSignature
+
+      if (
+        stableFrameCount >= DRAWER_INTERACTION_REFRESH_STABLE_FRAMES
+        || frameCount >= DRAWER_INTERACTION_REFRESH_MAX_FRAMES
+      ) {
+        return
+      }
+
+      rafId = window.requestAnimationFrame(tick)
+    }
+
+    rafId = window.requestAnimationFrame(tick)
+
+    const dragSpacer = rightDrawerSurfaceRef.current?.querySelector<HTMLElement>('.agent-threadbar-drag-spacer')
+    const resizeObserver = typeof ResizeObserver !== 'undefined' && dragSpacer
+      ? new ResizeObserver(() => {
+          publishDragRegion(dragSpacer.getBoundingClientRect())
+        })
+      : null
+
+    resizeObserver?.observe(dragSpacer as Element)
+
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(rafId)
+      resizeObserver?.disconnect()
+    }
+  }, [isRightDrawerOpen, isRightSidebarDrawer, shellWidth])
+
   useEffect(() => {
     if (!isLeftDrawerOpen && !isRightDrawerOpen) {
       return
@@ -3724,6 +3851,7 @@ function App() {
       data-resizing={activeResizePanel || isGitPanelResizing ? 'true' : 'false'}
       data-right-collapsed={isRightSidebarDrawer || !isRightSidebarVisible ? 'true' : 'false'}
       data-right-drawer-open={isRightDrawerOpen ? 'true' : 'false'}
+      data-window-fullscreen={isWindowFullScreen ? 'true' : 'false'}
       style={
         {
           '--git-panel-height': `${gitPanelHeight}px`,
@@ -4313,6 +4441,20 @@ function App() {
         </Drawer>
       ) : null}
 
+      {rightDrawerDragRegion ? (
+        <div
+          aria-hidden='true'
+          className='right-drawer-window-drag-region'
+          data-react-aria-top-layer='true'
+          style={{
+            height: `${rightDrawerDragRegion.height}px`,
+            left: `${rightDrawerDragRegion.left}px`,
+            top: `${rightDrawerDragRegion.top}px`,
+            width: `${rightDrawerDragRegion.width}px`,
+          }}
+        />
+      ) : null}
+
       <Toast.Provider placement='bottom end' />
 
       <Modal>
@@ -4399,7 +4541,6 @@ function App() {
       <AppTitlebar onRequestClose={() => {
         void handleRequestWindowClose()
       }}
-        drawerSide={isLeftDrawerOpen ? 'left' : isRightDrawerOpen ? 'right' : null}
         isDrawerOpen={isLeftDrawerOpen || isRightDrawerOpen}
       />
     </div>

@@ -88,11 +88,13 @@ declare global {
       updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => Promise<AgentWorkspaceState>
       abortAgentPrompt: () => Promise<AgentWorkspaceState>
       openExternalLink: (href: string) => Promise<{ ok: boolean }>
+      setWindowBackgroundTheme: (theme: 'light' | 'dark') => Promise<{ ok: boolean }>
       minimizeWindow: () => Promise<void>
-      toggleMaximizeWindow: () => Promise<{ isMaximized: boolean }>
+      toggleMaximizeWindow: () => Promise<{ isFullScreen: boolean, isMaximized: boolean }>
       closeWindow: () => Promise<void>
-      isWindowMaximized: () => Promise<{ isMaximized: boolean }>
+      isWindowMaximized: () => Promise<{ isFullScreen: boolean, isMaximized: boolean }>
       refreshWindowInteractionRegions: (mode?: 'soft' | 'hard') => Promise<{ ok: boolean }>
+      onWindowStateChanged: (listener: (state: { isFullScreen: boolean, isMaximized: boolean }) => void) => () => void
       onWindowCloseRequested: (listener: () => void) => () => void
       onWorkspaceChanged: (listener: (event: WorkspaceChangeEvent) => void) => () => void
       onAgentEvent: (listener: (event: AgentClientEvent) => void) => () => void

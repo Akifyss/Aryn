@@ -90,6 +90,15 @@
   justify-content: flex-start;
 }
 
+.titlebar.is-macos .titlebar-side-left {
+  width: 68px;
+}
+
+.app-shell[data-window-fullscreen='true'] .titlebar.is-macos .titlebar-side-left {
+  width: 0;
+  pointer-events: none;
+}
+
 .titlebar-side-right {
   right: 0;
   justify-content: flex-end;
@@ -106,28 +115,10 @@
   -webkit-app-region: drag;
 }
 
-.titlebar.is-macos.is-controls-only {
-  inset: 0 auto auto 0;
-  width: max-content;
-  justify-content: flex-start;
-}
-
 .titlebar-controls {
   display: flex;
   align-items: center;
   height: 100%;
-}
-
-.titlebar-controls-macos {
-  gap: 8px;
-}
-
-.titlebar-macos-left {
-  display: flex;
-  align-items: center;
-  height: 100%;
-  margin-left: 16px;
-  gap: 6px;
 }
 
 .panel-toggle-button {
@@ -178,6 +169,14 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   right: var(--right-panel-toggle-anchor);
 }
 
+.right-drawer-window-drag-region {
+  position: fixed;
+  z-index: calc(var(--app-z-panel-toggle) + 1);
+  pointer-events: auto;
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
 .panel-toggle-icon {
   display: inline-flex;
   align-items: center;
@@ -191,7 +190,6 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   transform-origin: center;
 }
 
-.traffic-button,
 .window-button {
   appearance: none;
   border: 0;
@@ -202,8 +200,6 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   cursor: pointer;
 }
 
-.traffic-button:focus,
-.traffic-button:focus-visible,
 .window-button:focus,
 .window-button:focus-visible {
   outline: none;
@@ -235,87 +231,6 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
 .window-button-close:hover {
   background: var(--danger);
   color: var(--danger-foreground);
-}
-
-.traffic-button {
-  position: relative;
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  margin-top: 1px;
-  cursor: default;
-}
-
-.traffic-button::before,
-.traffic-button::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  transition: opacity 140ms ease;
-}
-
-.titlebar-controls-macos:hover .traffic-button::before,
-.titlebar-controls-macos:hover .traffic-button::after,
-.titlebar-macos-left:hover .traffic-button::before,
-.titlebar-macos-left:hover .traffic-button::after,
-.traffic-button:focus-visible::before,
-.traffic-button:focus-visible::after {
-  opacity: 1;
-}
-
-.traffic-close {
-  background: var(--danger);
-}
-
-.traffic-close::before,
-.traffic-close::after {
-  inset: 50% auto auto 50%;
-  width: 6px;
-  height: 1px;
-  background: var(--danger-foreground);
-  transform-origin: center;
-}
-
-.traffic-close::before {
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.traffic-close::after {
-  transform: translate(-50%, -50%) rotate(-45deg);
-}
-
-.traffic-minimize {
-  background: var(--warning);
-}
-
-.traffic-minimize::before {
-  inset: 50% auto auto 50%;
-  width: 6px;
-  height: 1px;
-  background: var(--warning-foreground);
-  transform: translate(-50%, -50%);
-}
-
-.traffic-maximize {
-  background: var(--success);
-}
-
-.traffic-maximize::before,
-.traffic-maximize::after {
-  inset: 50% auto auto 50%;
-  background: var(--success-foreground);
-  transform: translate(-50%, -50%);
-}
-
-.traffic-maximize::before {
-  width: 6px;
-  height: 1px;
-}
-
-.traffic-maximize::after {
-  width: 1px;
-  height: 6px;
 }
 
 .panel {
@@ -436,20 +351,17 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   min-width: 0;
 }
 
-.panel-drawer-dialog,
-.panel-drawer-dialog *,
-.panel-drawer-body,
-.panel-drawer-body *,
-.workspace-sidebar-surface.is-drawer,
-.workspace-sidebar-surface.is-drawer *,
-.panel-agent-drawer,
-.panel-agent-drawer * {
+.panel-agent-drawer .agent-threadbar {
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.workspace-sidebar-surface.is-drawer .section-title {
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
-.workspace-sidebar-surface.is-drawer .section-title-drag-spacer,
-.panel-agent-drawer .agent-threadbar-drag-spacer {
+.workspace-sidebar-surface.is-drawer .section-title-drag-spacer {
   app-region: drag;
   -webkit-app-region: drag;
 }
@@ -578,7 +490,7 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
 }
 
 .workspace-sidebar-surface.is-drawer[data-platform='macos'] .section-title {
-  padding-left: var(--left-panel-content-inset, 52px);
+  padding-left: calc(var(--left-panel-toggle-anchor, 12px) + var(--panel-toggle-size, 32px));
 }
 
 .section-title.is-drawer-surface .section-title-text {
@@ -4584,8 +4496,6 @@ body.workspace-tree-dragging .workspace-tree-row {
   .tree-item,
   .tree-item::before,
   .tree-item-actions,
-  .traffic-button::before,
-  .traffic-button::after,
   .window-button,
   .tree-file {
     transition: none;
