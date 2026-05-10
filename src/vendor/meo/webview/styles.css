@@ -1106,8 +1106,9 @@
   padding: 1px 4px;
   border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--editorWidget-background, var(--sideBar-background)) 96%, transparent);
+  background: var(--editorWidget-background, var(--sideBar-background));
   box-shadow: 0 6px 16px color-mix(in srgb, var(--shadow, #000) 16%, transparent);
+  opacity: 1;
   pointer-events: auto;
 }
 

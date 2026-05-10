@@ -829,6 +829,15 @@ function hasResolvedViewFrameChanged(
     || getActionChangeKey(previous.actionChange) !== getActionChangeKey(next.actionChange)
 }
 
+function hasResolvedHunkActionFrameChanged(
+  previous: DiffSplitResolvedState,
+  next: DiffSplitResolvedState,
+): boolean {
+  return previous.actionScope !== next.actionScope
+    || previous.modifiedReadOnly !== next.modifiedReadOnly
+    || getActionChangeKey(previous.actionChange) !== getActionChangeKey(next.actionChange)
+}
+
 function canUseTextOnlyResolvedUpdate(
   previous: DiffSplitResolvedState,
   gitChangeContext: MeoDiffSplitGitChangeContext,
@@ -4014,6 +4023,7 @@ export function createMeoDiffSplitController({
         } else if (scheduledUnifiedView) {
           forceParsing(scheduledUnifiedView, visibleRenderParseTarget(scheduledUnifiedView), 50)
           expandAllCollapsibleSections(scheduledUnifiedView)
+          syncUnifiedDiffChunkToolbarStickState(scheduledUnifiedView)
         } else if (scheduledPreviewView) {
           if (scheduledPreviewOriginalView) {
             forceParsing(scheduledPreviewOriginalView, visibleRenderParseTarget(scheduledPreviewOriginalView), 50)
@@ -5211,8 +5221,13 @@ export function createMeoDiffSplitController({
       unifiedView
       && previousState
       && hasResolvedViewFrameChanged(previousState, originalState)
-      && previousState.text === originalState.text
-      && previousState.modifiedText === originalState.modifiedText
+      && (
+        hasResolvedHunkActionFrameChanged(previousState, originalState)
+        || (
+          previousState.text === originalState.text
+          && previousState.modifiedText === originalState.modifiedText
+        )
+      )
     ) {
       const topPosition = getTopVisiblePosition(unifiedView, unifiedView.scrollDOM)
       render()
