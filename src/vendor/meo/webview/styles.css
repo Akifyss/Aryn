@@ -11,6 +11,7 @@
   --editorWidget-background: var(--surface);
   --editorHoverWidget-background: var(--surface);
   --meo-floating-toolbar-background: var(--surface);
+  --meo-floating-toolbar-z-index: 220;
   --editorHoverWidget-foreground: var(--foreground);
   --editor-findMatchBackground: color-mix(in oklch, var(--warning) 28%, transparent);
   --editor-findMatchBorder: color-mix(in oklch, var(--warning) 62%, transparent);
@@ -1086,7 +1087,7 @@
   top: var(--meo-live-inline-diff-sticky-inset);
   right: 0;
   left: 0;
-  z-index: 12;
+  z-index: var(--meo-floating-toolbar-z-index);
   height: 0;
   min-width: 0;
   padding: 0;
@@ -1109,14 +1110,15 @@
       var(--panel-border) 78%,
       var(--meo-floating-toolbar-background) 22%);
   border-radius: 6px;
-  background: var(--meo-floating-toolbar-background);
-  background-clip: padding-box;
-  box-shadow:
-    0 0 0 2px var(--meo-floating-toolbar-background),
-    0 6px 16px color-mix(in srgb, var(--shadow, #000) 16%, transparent);
+  background: var(--meo-floating-toolbar-background) !important;
+  background-color: var(--meo-floating-toolbar-background) !important;
+  background-image: none !important;
+  background-clip: border-box;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--shadow, #000) 16%, transparent);
   isolation: isolate;
-  opacity: 1;
+  opacity: 1 !important;
   pointer-events: auto;
+  z-index: var(--meo-floating-toolbar-z-index);
 }
 
 .meo-native-theme .meo-live-inline-diff-controls {
