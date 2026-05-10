@@ -148,13 +148,27 @@ const setInlineHunksEffect = StateEffect.define<InlineHunkDescriptor[]>()
 const INLINE_DIFF_SYNC_DELAY_MS = 120
 const INLINE_DIFF_SYNC_AFTER_COMPOSITION_MS = 80
 const INLINE_DIFF_TOOLBAR_STUCK_CLASS = 'is-toolbar-stuck'
-const INLINE_DIFF_TOOLBAR_DEFAULT_HEIGHT = 24
 const INLINE_DIFF_TOOLBAR_DEFAULT_LIFT = 26
 const INLINE_DIFF_TOOLBAR_DEFAULT_STICKY_INSET = 8
+
+type VerticalBounds = {
+  bottom: number
+  top: number
+}
 
 function readCssPixelValue(element: Element, propertyName: string, fallback: number) {
   const value = Number.parseFloat(getComputedStyle(element).getPropertyValue(propertyName))
   return Number.isFinite(value) ? value : fallback
+}
+
+function getViewportVerticalBounds(viewportRect: DOMRect): VerticalBounds {
+  const windowBottom = Number.isFinite(window.innerHeight) && window.innerHeight > 0
+    ? window.innerHeight
+    : viewportRect.bottom
+  return {
+    bottom: Math.min(windowBottom, viewportRect.bottom),
+    top: Math.max(0, viewportRect.top),
+  }
 }
 
 function normalizeLineEndings(text: string) {
@@ -915,13 +929,57 @@ class InlineDiffWidgetView {
     })
   }
 
+  private getVisualBounds(): VerticalBounds {
+    const elements = [
+      this.componentRoot,
+      this.body,
+      this.mergeView?.a.dom,
+      this.mergeView?.b.dom,
+      this.unifiedView?.dom,
+      this.unifiedView?.scrollDOM,
+    ]
+    let bounds: VerticalBounds | null = null
+
+    for (const element of elements) {
+      if (!element) {
+        continue
+      }
+
+      const rect = element.getBoundingClientRect()
+      if (rect.bottom <= rect.top) {
+        continue
+      }
+
+      bounds = bounds
+        ? {
+            bottom: Math.max(bounds.bottom, rect.bottom),
+            top: Math.min(bounds.top, rect.top),
+          }
+        : {
+            bottom: rect.bottom,
+            top: rect.top,
+          }
+    }
+
+    if (bounds) {
+      return bounds
+    }
+
+    const rootRect = this.componentRoot.getBoundingClientRect()
+    return {
+      bottom: rootRect.bottom,
+      top: rootRect.top,
+    }
+  }
+
   private syncToolbarStickState() {
     if (!this.componentRoot.isConnected) {
       return
     }
 
-    const rootRect = this.componentRoot.getBoundingClientRect()
+    const visualBounds = this.getVisualBounds()
     const scrollRect = this.controller.view.scrollDOM.getBoundingClientRect()
+    const viewportBounds = getViewportVerticalBounds(scrollRect)
     const stickyInset = readCssPixelValue(
       this.componentRoot,
       '--meo-live-inline-diff-sticky-inset',
@@ -932,15 +990,14 @@ class InlineDiffWidgetView {
       '--meo-live-inline-diff-floating-lift',
       INLINE_DIFF_TOOLBAR_DEFAULT_LIFT,
     )
-    const toolbarHeight = readCssPixelValue(
-      this.componentRoot,
-      '--meo-live-inline-diff-floating-height',
-      INLINE_DIFF_TOOLBAR_DEFAULT_HEIGHT,
+    const stickyTop = viewportBounds.top + stickyInset
+    const isHunkVisible = (
+      visualBounds.bottom > viewportBounds.top
+      && visualBounds.top < viewportBounds.bottom
     )
-    const stickyTop = Math.max(0, scrollRect.top) + stickyInset
     const shouldStickInside = (
-      rootRect.top - floatingLift < stickyTop
-      && rootRect.bottom > stickyTop + toolbarHeight
+      isHunkVisible
+      && visualBounds.top - floatingLift < stickyTop
     )
 
     this.componentRoot.classList.toggle(INLINE_DIFF_TOOLBAR_STUCK_CLASS, shouldStickInside)

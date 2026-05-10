@@ -850,10 +850,19 @@ function canUseTextOnlyResolvedUpdate(
 const SPLIT_DIFF_REFRESH_IDLE_DELAY_MS = 200
 const SPLIT_DIFF_REFRESH_AFTER_COMPOSITION_MS = 80
 const DIFF_CHUNK_TOOLBAR_STUCK_CLASS = 'is-toolbar-stuck'
-const DIFF_CHUNK_TOOLBAR_DEFAULT_HEIGHT = 24
 const DIFF_CHUNK_TOOLBAR_DEFAULT_LIFT = 26
 const DIFF_CHUNK_TOOLBAR_DEFAULT_RIGHT = 10
 const DIFF_CHUNK_TOOLBAR_DEFAULT_STICKY_INSET = 8
+
+function getViewportVerticalBounds(viewportRect: DOMRect) {
+  const windowBottom = Number.isFinite(window.innerHeight) && window.innerHeight > 0
+    ? window.innerHeight
+    : viewportRect.bottom
+  return {
+    bottom: Math.min(windowBottom, viewportRect.bottom),
+    top: Math.max(0, viewportRect.top),
+  }
+}
 
 export function getDiffConfig(editable: boolean) {
   return {
@@ -923,7 +932,7 @@ export function syncUnifiedDiffChunkToolbarStickState(
   const root = options.root ?? view.dom
   const viewport = options.viewport ?? view.scrollDOM
   const viewportRect = viewport.getBoundingClientRect()
-  const viewportTop = Math.max(0, viewportRect.top)
+  const viewportBounds = getViewportVerticalBounds(viewportRect)
   const chunks = (getChunks(view.state)?.chunks ?? []) as readonly Chunk[]
   for (const chunk of root.querySelectorAll<HTMLElement>('.cm-deletedChunk')) {
     const buttons = getDirectChunkButtons(chunk)
@@ -945,17 +954,16 @@ export function syncUnifiedDiffChunkToolbarStickState(
       '--meo-live-inline-diff-floating-lift',
       DIFF_CHUNK_TOOLBAR_DEFAULT_LIFT,
     )
-    const toolbarHeight = buttons.getBoundingClientRect().height || readCssPixelValue(
-      styleHost,
-      '--meo-live-inline-diff-floating-height',
-      DIFF_CHUNK_TOOLBAR_DEFAULT_HEIGHT,
-    )
     const diffChunk = findUnifiedDiffChunkForWidget(view, chunks, chunk)
     const chunkRect = getUnifiedDiffChunkVisualBounds(view, diffChunk, chunk)
-    const stickyTop = viewportTop + stickyInset
+    const stickyTop = viewportBounds.top + stickyInset
+    const isChunkVisible = (
+      chunkRect.bottom > viewportBounds.top
+      && chunkRect.top < viewportBounds.bottom
+    )
     const shouldStickInside = (
-      chunkRect.top - floatingLift < stickyTop
-      && chunkRect.bottom > stickyTop + toolbarHeight
+      isChunkVisible
+      && chunkRect.top - floatingLift < stickyTop
     )
 
     if (!shouldStickInside) {
