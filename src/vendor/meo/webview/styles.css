@@ -10,6 +10,7 @@
   --editorLineNumber-foreground: var(--muted);
   --editorWidget-background: var(--surface);
   --editorHoverWidget-background: var(--surface);
+  --meo-floating-toolbar-background: var(--surface);
   --editorHoverWidget-foreground: var(--foreground);
   --editor-findMatchBackground: color-mix(in oklch, var(--warning) 28%, transparent);
   --editor-findMatchBorder: color-mix(in oklch, var(--warning) 62%, transparent);
@@ -1104,10 +1105,16 @@
   max-width: min(54%, 420px);
   height: var(--meo-live-inline-diff-floating-height, 24px);
   padding: 1px 4px;
-  border: 1px solid color-mix(in srgb, var(--panel-border) 72%, transparent);
+  border: 1px solid color-mix(in srgb,
+      var(--panel-border) 78%,
+      var(--meo-floating-toolbar-background) 22%);
   border-radius: 6px;
-  background: var(--editorWidget-background, var(--sideBar-background));
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--shadow, #000) 16%, transparent);
+  background: var(--meo-floating-toolbar-background);
+  background-clip: padding-box;
+  box-shadow:
+    0 0 0 2px var(--meo-floating-toolbar-background),
+    0 6px 16px color-mix(in srgb, var(--shadow, #000) 16%, transparent);
+  isolation: isolate;
   opacity: 1;
   pointer-events: auto;
 }
