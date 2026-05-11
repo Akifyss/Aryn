@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
+import { Change } from '../src/vendor/codemirror-merge/src/diff'
 import { addChunkDecorations, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldReadInlineChangeLayerDom, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { RangeSetBuilder, Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
@@ -205,6 +206,106 @@ describe('CodeMirror merge decorations', () => {
     expect(ranges.some((range) => range.classes.includes('cm-insertedLineFull'))).toBe(false)
     expect(ranges).toEqual(expect.arrayContaining([
       { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedText cm-changedTextFullLine cm-changedTextFullLineEmpty' },
+    ]))
+  })
+
+  it('keeps empty lines inside whole replacement chunks on full-line text decorations', () => {
+    const originalDoc = Text.of([
+      'old heading',
+      'old intro',
+      'test',
+    ])
+    const modifiedDoc = Text.of([
+      '# Title',
+      'intro',
+      '',
+      '## Section',
+      '',
+      '- detail',
+      '',
+      '- tail',
+    ])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const originalBuilder = new RangeSetBuilder<Decoration>()
+    const modifiedBuilder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, originalDoc, true, true, originalBuilder, null, { gutter: false })
+    addChunkDecorations(chunk, modifiedDoc, false, true, modifiedBuilder, null, { gutter: false })
+
+    const collectClasses = (doc: Text, builder: RangeSetBuilder<Decoration>) => {
+      const ranges: Array<{ from: number, to: number, classes: string }> = []
+      builder.finish().between(0, doc.length, (from, to, value) => {
+        ranges.push({ from, to, classes: decorationClass(value) })
+      })
+      return ranges
+    }
+    const originalRanges = collectClasses(originalDoc, originalBuilder)
+    const modifiedRanges = collectClasses(modifiedDoc, modifiedBuilder)
+
+    expect(originalRanges).toEqual(expect.arrayContaining([
+      { from: originalDoc.line(1).from, to: originalDoc.line(1).to, classes: 'cm-changedText cm-changedTextFullLine' },
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText cm-changedTextFullLine' },
+      { from: originalDoc.line(3).from, to: originalDoc.line(3).to, classes: 'cm-changedText cm-changedTextFullLine' },
+    ]))
+    expect(modifiedRanges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(1).from, to: modifiedDoc.line(1).to, classes: 'cm-changedText cm-changedTextFullLine' },
+      { from: modifiedDoc.line(3).from, to: modifiedDoc.line(3).from, classes: 'cm-changedText cm-changedTextFullLine cm-changedTextFullLineEmpty' },
+      { from: modifiedDoc.line(5).from, to: modifiedDoc.line(5).from, classes: 'cm-changedText cm-changedTextFullLine cm-changedTextFullLineEmpty' },
+      { from: modifiedDoc.line(7).from, to: modifiedDoc.line(7).from, classes: 'cm-changedText cm-changedTextFullLine cm-changedTextFullLineEmpty' },
+      { from: modifiedDoc.line(8).from, to: modifiedDoc.line(8).to, classes: 'cm-changedText cm-changedTextFullLine' },
+    ]))
+    expect(modifiedRanges.filter((range) => range.classes === 'cm-changedText cm-changedTextFullLine' && range.from === modifiedDoc.line(1).from)).toHaveLength(1)
+  })
+
+  it('keeps empty lines on both sides of replacement chunks on full-line text decorations', () => {
+    const originalDoc = Text.of([
+      '',
+      '',
+      'test',
+      'tail',
+    ])
+    const modifiedDoc = Text.of([
+      '# Title',
+      '',
+      'body',
+      '',
+      'tail',
+    ])
+    const originalChunkTo = originalDoc.line(4).from
+    const modifiedChunkTo = modifiedDoc.line(5).from
+    const chunk = new Chunk(
+      [new Change(0, originalChunkTo, 0, modifiedChunkTo)],
+      0,
+      originalChunkTo,
+      0,
+      modifiedChunkTo,
+    )
+    const originalBuilder = new RangeSetBuilder<Decoration>()
+    const modifiedBuilder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, originalDoc, true, true, originalBuilder, null, { gutter: false })
+    addChunkDecorations(chunk, modifiedDoc, false, true, modifiedBuilder, null, { gutter: false })
+
+    const collectClasses = (doc: Text, builder: RangeSetBuilder<Decoration>) => {
+      const ranges: Array<{ from: number, to: number, classes: string }> = []
+      builder.finish().between(0, doc.length, (from, to, value) => {
+        ranges.push({ from, to, classes: decorationClass(value) })
+      })
+      return ranges
+    }
+    const originalRanges = collectClasses(originalDoc, originalBuilder)
+    const modifiedRanges = collectClasses(modifiedDoc, modifiedBuilder)
+
+    expect(originalRanges).toEqual(expect.arrayContaining([
+      { from: originalDoc.line(1).from, to: originalDoc.line(1).from, classes: 'cm-changedText cm-changedTextFullLine cm-changedTextFullLineEmpty' },
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).from, classes: 'cm-changedText cm-changedTextFullLine cm-changedTextFullLineEmpty' },
+      { from: originalDoc.line(3).from, to: originalDoc.line(3).to, classes: 'cm-changedText cm-changedTextFullLine' },
+    ]))
+    expect(modifiedRanges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(1).from, to: modifiedDoc.line(1).to, classes: 'cm-changedText cm-changedTextFullLine' },
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedText cm-changedTextFullLine cm-changedTextFullLineEmpty' },
+      { from: modifiedDoc.line(3).from, to: modifiedDoc.line(3).to, classes: 'cm-changedText cm-changedTextFullLine' },
+      { from: modifiedDoc.line(4).from, to: modifiedDoc.line(4).from, classes: 'cm-changedText cm-changedTextFullLine cm-changedTextFullLineEmpty' },
     ]))
   })
 

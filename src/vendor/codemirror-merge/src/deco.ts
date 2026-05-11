@@ -520,6 +520,46 @@ function changeFullyInsertsOrDeletesLine(
   return otherFrom == otherTo && changeFrom <= lineFrom && changeTo > lineTo && changeFrom < changeTo
 }
 
+function changeFullyReplacesEmptyLine(
+  change: Change,
+  from: number,
+  lineFrom: number,
+  lineTo: number,
+  isA: boolean,
+) {
+  if (lineFrom < lineTo) return false
+  let changeFrom = from + (isA ? change.fromA : change.fromB)
+  let changeTo = from + (isA ? change.toA : change.toB)
+  let otherFrom = isA ? change.fromB : change.fromA
+  let otherTo = isA ? change.toB : change.toA
+  if (otherFrom >= otherTo || changeFrom > lineFrom || changeTo < lineTo) return false
+  return changeFrom < lineFrom || changeTo > lineTo
+}
+
+function changeNeedsStandaloneFullLineTextDeco(
+  change: Change,
+  from: number,
+  lineFrom: number,
+  lineTo: number,
+  isA: boolean,
+) {
+  return changeFullyInsertsOrDeletesLine(change, from, lineFrom, lineTo, isA) ||
+    changeFullyReplacesEmptyLine(change, from, lineFrom, lineTo, isA)
+}
+
+function lineNeedsStandaloneFullLineTextDeco(
+  chunk: Chunk,
+  from: number,
+  lineFrom: number,
+  lineTo: number,
+  isA: boolean,
+) {
+  for (let change of chunk.changes) {
+    if (changeNeedsStandaloneFullLineTextDeco(change, from, lineFrom, lineTo, isA)) return true
+  }
+  return false
+}
+
 function addChangedLineDeco(builder: RangeSetBuilder<Decoration> | PendingDecoration[], pos: number) {
   addPendingDecoration(builder, pos, pos, changedLine)
 }
@@ -537,9 +577,9 @@ function addFullLineDiffTextDeco(
   fullLineChangedTextEmpty: Decoration | null | undefined,
 ) {
   // Match VS Code's layering: every changed line keeps the line background, and
-  // a whole inserted/deleted line also receives the regular text-level mark.
-  // Empty lines have no text range, so a tiny widget feeds the same measured
-  // inline layer instead of replacing the line background with a one-layer fill.
+  // whole-line text changes also receive the text-level mark. Empty full-line
+  // changes have no text range, so a tiny widget feeds the same measured inline
+  // layer instead of replacing the line background with a one-layer fill.
   if (lineFrom < lineTo) {
     if (fullLineChangedText) addPendingDecoration(builder, lineFrom, lineTo, fullLineChangedText)
     return
@@ -631,7 +671,7 @@ export function addChunkDecorations(
     let emptyLineFull = options.emptyLineFull === undefined ? isA ? deletedLineFull : insertedLineFull : options.emptyLineFull
     let pendingDecorations: PendingDecoration[] = []
     let lineIsFullChange = (lineFrom: number, lineTo: number) =>
-      wholeLineChange || isLineFullyInsertedOrDeleted(chunk, from, lineFrom, lineTo, isA)
+      wholeLineChange || lineNeedsStandaloneFullLineTextDeco(chunk, from, lineFrom, lineTo, isA)
     let addLine = (pos: number) => {
       addChangedLineDeco(pendingDecorations, pos)
     }
@@ -648,7 +688,7 @@ export function addChunkDecorations(
         let line = doc.lineAt(Math.min(pos, doc.length))
         let isFullChangeLine = lineIsFullChange(line.from, line.to)
         let shouldSkipChange = isFullChangeLine
-          ? (change: Change) => changeFullyInsertsOrDeletesLine(change, from, line.from, line.to, isA) ? "full" : null
+          ? (change: Change) => changeNeedsStandaloneFullLineTextDeco(change, from, line.from, line.to, isA) ? "full" : null
           : null
         if (highlight) changeI = addInlineChangeDeco(
           chunk,
@@ -682,7 +722,7 @@ export function addChunkDecorations(
         let otherFrom = isA ? change.fromB : change.fromA
         let otherTo = isA ? change.toB : change.toA
         if (otherFrom != otherTo || changeTo <= changeFrom) return null
-        if (isFullChangeLine && changeFullyInsertsOrDeletesLine(change, from, line.from, line.to, isA)) return "full"
+        if (isFullChangeLine && changeNeedsStandaloneFullLineTextDeco(change, from, line.from, line.to, isA)) return "full"
         return changeFrom <= line.from && changeTo > line.to && changeFrom == lineEnd ? "empty" : null
       }
       if (highlight) changeI = addInlineChangeDeco(
