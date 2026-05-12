@@ -441,11 +441,7 @@ export function isLineFullyInsertedOrDeleted(
   isA: boolean,
 ) {
   for (let change of chunk.changes) {
-    let changeFrom = from + (isA ? change.fromA : change.fromB)
-    let changeTo = from + (isA ? change.toA : change.toB)
-    let otherFrom = isA ? change.fromB : change.fromA
-    let otherTo = isA ? change.toB : change.toA
-    if (otherFrom == otherTo && changeFrom <= lineFrom && changeTo >= lineTo && changeFrom < changeTo) return true
+    if (changeFullyInsertsOrDeletesLine(change, from, lineFrom, lineTo, isA)) return true
   }
   return false
 }
@@ -461,7 +457,7 @@ function changeFullyInsertsOrDeletesLine(
   let changeTo = from + (isA ? change.toA : change.toB)
   let otherFrom = isA ? change.fromB : change.fromA
   let otherTo = isA ? change.toB : change.toA
-  return otherFrom == otherTo && changeFrom <= lineFrom && changeTo >= lineTo && changeFrom < changeTo
+  return otherFrom == otherTo && changeFrom <= lineFrom && changeTo > lineTo && changeFrom < changeTo
 }
 
 function addChangedLineDeco(builder: RangeSetBuilder<Decoration> | PendingDecoration[], pos: number, fullLine: Decoration | null) {

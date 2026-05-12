@@ -129,6 +129,46 @@ describe('CodeMirror merge decorations', () => {
     ))).toBe(false)
   })
 
+  it('does not promote same-line empty/non-empty edits to full-line decorations', () => {
+    const originalDoc = Text.of(['same', '', 'tail'])
+    const modifiedDoc = Text.of(['same', 'abc', 'tail'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const builder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, modifiedDoc, false, true, builder, null, { gutter: false })
+
+    const ranges: Array<{ from: number, to: number, classes: string }> = []
+    builder.finish().between(0, modifiedDoc.length, (from, to, value) => {
+      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+    })
+
+    expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromB, modifiedDoc.line(2).from, modifiedDoc.line(2).to, false)).toBe(false)
+    expect(ranges.some((range) => range.classes.includes('cm-insertedLineFull'))).toBe(false)
+    expect(ranges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-changedText' },
+    ]))
+  })
+
+  it('does not promote same-line non-empty/empty edits to full-line decorations', () => {
+    const originalDoc = Text.of(['same', 'abc', 'tail'])
+    const modifiedDoc = Text.of(['same', '', 'tail'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const builder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, originalDoc, true, true, builder, null, { gutter: false })
+
+    const ranges: Array<{ from: number, to: number, classes: string }> = []
+    builder.finish().between(0, originalDoc.length, (from, to, value) => {
+      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+    })
+
+    expect(isLineFullyInsertedOrDeleted(chunk, chunk.fromA, originalDoc.line(2).from, originalDoc.line(2).to, true)).toBe(false)
+    expect(ranges.some((range) => range.classes.includes('cm-deletedLineFull'))).toBe(false)
+    expect(ranges).toEqual(expect.arrayContaining([
+      { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText' },
+    ]))
+  })
+
   it('places EOF fake-line spacers after the final content line', () => {
     const originalDoc = Text.of(['line 580', 'line 581'])
     const modifiedDoc = Text.of(['line 580', 'line 581', 'added'])
