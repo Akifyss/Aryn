@@ -29,14 +29,25 @@ interface BaselineSnapshot {
   reason?: 'not-file' | 'git-unavailable' | 'not-repo' | 'ignored' | 'too-large' | 'binary' | 'error';
 }
 
+type GitGutterChangeKind = 'added' | 'deleted' | 'modified';
+
+type GitGutterHunkMetadata = {
+  diffHunkId?: string;
+  hunkEndLine?: number;
+  hunkId: string;
+  hunkStartLine?: number;
+};
+
 export interface MarkerFlags {
   added: boolean;
   deleted: boolean;
+  diffHunkId?: string;
   modified: boolean;
   removed?: boolean;
   hunkEndLine?: number;
   hunkId?: string;
   hunkStartLine?: number;
+  hunks?: Partial<Record<GitGutterChangeKind, GitGutterHunkMetadata>>;
   liveBlockStartLine?: number;
   liveBlockEndLine?: number;
   scope?: 'staged' | 'unstaged';
@@ -116,8 +127,17 @@ class GitGutterMarker extends GutterMarker {
   toDOM(): HTMLElement {
     const el = document.createElement('span');
     el.className = 'meo-git-gutter-marker';
+    if (typeof this.flags.diffHunkId === 'string' && this.flags.diffHunkId) {
+      el.dataset.meoGitDiffHunkId = this.flags.diffHunkId;
+    }
     if (typeof this.flags.hunkId === 'string' && this.flags.hunkId) {
       el.dataset.meoGitHunkId = this.flags.hunkId;
+    }
+    for (const kind of markerFlagChangeKinds(this.flags)) {
+      const encoded = encodeMarkerHunkMetadata(getMarkerKindHunkMetadata(this.flags, kind));
+      if (encoded) {
+        el.dataset[`meoGitHunk${kind[0].toUpperCase()}${kind.slice(1)}`] = encoded;
+      }
     }
     if (Number.isInteger(this.flags.hunkStartLine)) {
       el.dataset.meoGitHunkStartLine = String(this.flags.hunkStartLine);
@@ -209,26 +229,93 @@ function createGitHunkId(scopeKey: string, startLine: number, endLine: number): 
   return `${scopeKey}:${startLine}:${endLine}`;
 }
 
-function addGitHunkMetadata(flags: MarkerFlags, startLine: number, endLine: number, scopeKey = markerFlagsScopeKey(flags)): MarkerFlags {
+function getMarkerKindHunkMetadata(flags: MarkerFlags, kind: GitGutterChangeKind | null | undefined): GitGutterHunkMetadata | null {
   if (
-    flags.hunkId === createGitHunkId(scopeKey, startLine, endLine) &&
-    flags.hunkStartLine === startLine &&
-    flags.hunkEndLine === endLine
+    kind &&
+    flags.hunks?.[kind] &&
+    typeof flags.hunks[kind]?.hunkId === 'string' &&
+    flags.hunks[kind]?.hunkId
   ) {
-    return flags;
+    return flags.hunks[kind] as GitGutterHunkMetadata;
   }
+  return null;
+}
 
+function markerFlagChangeKinds(flags: MarkerFlags): GitGutterChangeKind[] {
+  const kinds: GitGutterChangeKind[] = [];
+  if (flags.added) {
+    kinds.push('added');
+  }
+  if (flags.modified) {
+    kinds.push('modified');
+  }
+  if (flags.deleted) {
+    kinds.push('deleted');
+  }
+  return kinds;
+}
+
+function createMarkerHunkMetadata(startLine: number, endLine: number, scopeKey = 'unscoped'): GitGutterHunkMetadata {
   return {
-    ...flags,
     hunkEndLine: endLine,
     hunkId: createGitHunkId(scopeKey, startLine, endLine),
     hunkStartLine: startLine
   };
 }
 
+function addGitHunkMetadata(flags: MarkerFlags, startLine: number, endLine: number, scopeKey = markerFlagsScopeKey(flags)): MarkerFlags {
+  const metadata = createMarkerHunkMetadata(startLine, endLine, scopeKey);
+  if (
+    flags.hunkId === metadata.hunkId &&
+    flags.hunkStartLine === startLine &&
+    flags.hunkEndLine === endLine &&
+    markerFlagChangeKinds(flags).every((kind) => flags.hunks?.[kind]?.hunkId === metadata.hunkId)
+  ) {
+    return flags;
+  }
+
+  const hunks = {
+    ...(flags.hunks ?? {})
+  };
+  for (const kind of markerFlagChangeKinds(flags)) {
+    hunks[kind] = hunks[kind] ?? metadata;
+  }
+
+  return {
+    ...flags,
+    ...metadata,
+    hunks
+  };
+}
+
+function normalizeExplicitMarkerHunks(flags: MarkerFlags, fallbackStartLine: number, fallbackEndLine: number): MarkerFlags {
+  if (typeof flags.hunkId !== 'string' || !flags.hunkId) {
+    return flags;
+  }
+
+  const fallbackMetadata = {
+    diffHunkId: flags.diffHunkId,
+    hunkEndLine: Number.isInteger(flags.hunkEndLine) ? flags.hunkEndLine : fallbackEndLine,
+    hunkId: flags.hunkId,
+    hunkStartLine: Number.isInteger(flags.hunkStartLine) ? flags.hunkStartLine : fallbackStartLine
+  };
+  const hunks = {
+    ...(flags.hunks ?? {})
+  };
+  for (const kind of markerFlagChangeKinds(flags)) {
+    hunks[kind] = hunks[kind] ?? fallbackMetadata;
+  }
+
+  return {
+    ...flags,
+    ...fallbackMetadata,
+    hunks
+  };
+}
+
 function addFallbackGitHunkMetadata(flags: MarkerFlags, lineNumber: number): MarkerFlags {
   if (typeof flags.hunkId === 'string' && flags.hunkId) {
-    return flags;
+    return normalizeExplicitMarkerHunks(flags, lineNumber, lineNumber);
   }
   const normalizedLineNumber = Math.max(1, Math.floor(lineNumber));
   return addGitHunkMetadata(flags, normalizedLineNumber, normalizedLineNumber);
@@ -239,14 +326,44 @@ function inheritGitHunkMetadata(flags: MarkerFlags, source: MarkerFlags | undefi
     return flags;
   }
   if (typeof source?.hunkId === 'string' && source.hunkId) {
-    return {
-      ...flags,
+    const fallbackMetadata = {
+      diffHunkId: source.diffHunkId,
       hunkEndLine: source.hunkEndLine,
       hunkId: source.hunkId,
       hunkStartLine: source.hunkStartLine
     };
+    const inheritedKinds = markerFlagChangeKinds(flags);
+    const inheritedHunks = {
+      ...(source.hunks ?? {})
+    };
+    for (const kind of inheritedKinds) {
+      inheritedHunks[kind] = getMarkerKindHunkMetadata(source, kind) ?? fallbackMetadata;
+    }
+    return {
+      ...flags,
+      diffHunkId: source.diffHunkId,
+      hunkEndLine: source.hunkEndLine,
+      hunkId: source.hunkId,
+      hunkStartLine: source.hunkStartLine,
+      hunks: inheritedHunks
+    };
   }
   return addFallbackGitHunkMetadata(flags, fallbackLineNumber);
+}
+
+function markerHunkIdentityForKind(flags: MarkerFlags, kind: GitGutterChangeKind | null | undefined): string | null {
+  return getMarkerKindHunkMetadata(flags, kind)?.hunkId ?? flags.hunkId ?? null;
+}
+
+function markerFlagsPrimaryHunkIdentity(flags: MarkerFlags): string | null {
+  const parts = markerFlagChangeKinds(flags)
+    .map((kind) => markerHunkIdentityForKind(flags, kind))
+    .filter(Boolean);
+  return parts.length
+    ? parts.join('|')
+    : typeof flags.hunkId === 'string' && flags.hunkId
+      ? flags.hunkId
+      : null;
 }
 
 function addGitHunkMetadataToLineFlags(lineFlags: (MarkerFlags | undefined)[] | null): (MarkerFlags | undefined)[] | null {
@@ -256,6 +373,7 @@ function addGitHunkMetadataToLineFlags(lineFlags: (MarkerFlags | undefined)[] | 
 
   const result = lineFlags.slice();
   let activeStartLine = 0;
+  let activeExplicitHunkId: string | null = null;
   let activeScopeKey = '';
 
   const flush = (endLineExclusive: number) => {
@@ -267,10 +385,13 @@ function addGitHunkMetadataToLineFlags(lineFlags: (MarkerFlags | undefined)[] | 
     for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
       const flags = result[lineNo - 1];
       if (flags && markerFlagsHaveChange(flags)) {
-        result[lineNo - 1] = addGitHunkMetadata(flags, startLine, endLine, activeScopeKey);
+        result[lineNo - 1] = typeof flags.hunkId === 'string' && flags.hunkId
+          ? normalizeExplicitMarkerHunks(flags, startLine, endLine)
+          : addGitHunkMetadata(flags, startLine, endLine, activeScopeKey);
       }
     }
     activeStartLine = 0;
+    activeExplicitHunkId = null;
     activeScopeKey = '';
   };
 
@@ -282,15 +403,21 @@ function addGitHunkMetadataToLineFlags(lineFlags: (MarkerFlags | undefined)[] | 
     }
 
     const scopeKey = markerFlagsScopeKey(flags);
+    const explicitHunkId = markerFlagsPrimaryHunkIdentity(flags);
     if (!activeStartLine) {
       activeStartLine = lineNo;
+      activeExplicitHunkId = explicitHunkId;
       activeScopeKey = scopeKey;
       continue;
     }
 
-    if (scopeKey !== activeScopeKey) {
+    if (
+      scopeKey !== activeScopeKey ||
+      explicitHunkId !== activeExplicitHunkId
+    ) {
       flush(lineNo);
       activeStartLine = lineNo;
+      activeExplicitHunkId = explicitHunkId;
       activeScopeKey = scopeKey;
     }
   }
@@ -449,8 +576,9 @@ function mapLineFlags(
 function getSingleHunkMetadataForLineRange(
   lineFlags: (MarkerFlags | undefined)[] | null | undefined,
   startLine: number,
-  endLine: number
-): Pick<MarkerFlags, 'hunkEndLine' | 'hunkId' | 'hunkStartLine'> | null {
+  endLine: number,
+  kind: GitGutterChangeKind | null = null
+): Pick<MarkerFlags, 'diffHunkId' | 'hunkEndLine' | 'hunkId' | 'hunkStartLine'> | null {
   if (!Array.isArray(lineFlags)) {
     return null;
   }
@@ -458,21 +586,31 @@ function getSingleHunkMetadataForLineRange(
   let hunkId: string | null = null;
   let hunkStartLine: number | undefined;
   let hunkEndLine: number | undefined;
+  let diffHunkId: string | undefined;
   for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
     const flags = lineFlags[lineNo - 1];
-    if (!markerFlagsHaveChange(flags) || typeof flags?.hunkId !== 'string' || !flags.hunkId) {
+    if (!markerFlagsHaveChange(flags)) {
       continue;
     }
-    if (hunkId && hunkId !== flags.hunkId) {
+    const metadata = kind
+      ? getMarkerKindHunkMetadata(flags, kind)
+      : null;
+    const nextHunkId = metadata?.hunkId ?? (!kind && typeof flags?.hunkId === 'string' && flags.hunkId ? flags.hunkId : null);
+    if (!nextHunkId) {
+      continue;
+    }
+    if (hunkId && hunkId !== nextHunkId) {
       return null;
     }
-    hunkId = flags.hunkId;
-    hunkStartLine = flags.hunkStartLine;
-    hunkEndLine = flags.hunkEndLine;
+    hunkId = nextHunkId;
+    hunkStartLine = metadata?.hunkStartLine ?? flags?.hunkStartLine;
+    hunkEndLine = metadata?.hunkEndLine ?? flags?.hunkEndLine;
+    diffHunkId = metadata?.diffHunkId ?? flags?.diffHunkId;
   }
 
   return hunkId
     ? {
+        diffHunkId,
         hunkEndLine,
         hunkId,
         hunkStartLine
@@ -485,7 +623,12 @@ function liveCollapsedBlockMarkerFlags(
   lineFlags: (MarkerFlags | undefined)[] | null = null
 ): MarkerFlags {
   const hunkMetadata = (
-    getSingleHunkMetadataForLineRange(lineFlags, block.startLine, block.endLine) ??
+    getSingleHunkMetadataForLineRange(
+      lineFlags,
+      block.startLine,
+      block.endLine,
+      block.aggregateChangeKind === 'removed' ? null : block.aggregateChangeKind
+    ) ??
     {
       hunkEndLine: block.endLine,
       hunkId: createGitHunkId(block.aggregateChangeScope ?? 'unscoped', block.startLine, block.endLine),
@@ -497,6 +640,7 @@ function liveCollapsedBlockMarkerFlags(
     return {
       ...emptyMarkerFlags(),
       ...hunkMetadata,
+      hunks: { modified: hunkMetadata },
       modified: true,
       scope: block.aggregateChangeScope,
       liveBlockStartLine: block.startLine,
@@ -508,6 +652,7 @@ function liveCollapsedBlockMarkerFlags(
     return {
       ...emptyMarkerFlags(),
       ...hunkMetadata,
+      hunks: { deleted: hunkMetadata },
       deleted: true,
       scope: block.aggregateChangeScope,
       liveBlockStartLine: block.startLine,
@@ -530,6 +675,7 @@ function liveCollapsedBlockMarkerFlags(
     ...emptyMarkerFlags(),
     ...hunkMetadata,
     added: true,
+    hunks: { added: hunkMetadata },
     scope: block.aggregateChangeScope,
     liveBlockStartLine: block.startLine,
     liveBlockEndLine: block.endLine
@@ -840,6 +986,46 @@ function cssAttributeString(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+function encodeMarkerHunkMetadata(value: GitGutterHunkMetadata | null): string | null {
+  if (!value?.hunkId) {
+    return null;
+  }
+  return JSON.stringify({
+    d: value.diffHunkId,
+    e: value.hunkEndLine,
+    i: value.hunkId,
+    s: value.hunkStartLine
+  });
+}
+
+function decodeMarkerHunkMetadata(value: string | null | undefined): GitGutterHunkMetadata | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed.i !== 'string' || !parsed.i) {
+      return null;
+    }
+    return {
+      diffHunkId: typeof parsed.d === 'string' && parsed.d ? parsed.d : undefined,
+      hunkEndLine: Number.isInteger(parsed.e) ? parsed.e : undefined,
+      hunkId: parsed.i,
+      hunkStartLine: Number.isInteger(parsed.s) ? parsed.s : undefined
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseIntegerDatasetValue(value: string | null | undefined): number | undefined {
+  if (typeof value !== 'string' || !value) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) ? parsed : undefined;
+}
+
 function uniqueMarkers(markers: Iterable<HTMLElement>): HTMLElement[] {
   const result: HTMLElement[] = [];
   const seen = new Set<HTMLElement>();
@@ -853,7 +1039,53 @@ function uniqueMarkers(markers: Iterable<HTMLElement>): HTMLElement[] {
   return result;
 }
 
-export function getGitGutterHunkMarkers(marker: HTMLElement | null | undefined): HTMLElement[] {
+function gitGutterKindDatasetKey(kind: GitGutterChangeKind): 'meoGitHunkAdded' | 'meoGitHunkDeleted' | 'meoGitHunkModified' {
+  if (kind === 'deleted') {
+    return 'meoGitHunkDeleted';
+  }
+  if (kind === 'modified') {
+    return 'meoGitHunkModified';
+  }
+  return 'meoGitHunkAdded';
+}
+
+export function getGitGutterMarkerHunkMetadata(
+  marker: HTMLElement | null | undefined,
+  kind: GitGutterChangeKind | null = null
+): GitGutterHunkMetadata | null {
+  if (!isGitGutterChangedMarkerElement(marker)) {
+    return null;
+  }
+  if (kind) {
+    const metadata = decodeMarkerHunkMetadata(marker.dataset[gitGutterKindDatasetKey(kind)]);
+    if (metadata) {
+      return metadata;
+    }
+    if (
+      (kind === 'added' && !marker.classList.contains('is-added')) ||
+      (kind === 'modified' && !marker.classList.contains('is-modified')) ||
+      (kind === 'deleted' && !marker.classList.contains('is-deleted'))
+    ) {
+      return null;
+    }
+  }
+  const hunkId = marker.dataset.meoGitHunkId;
+  return typeof hunkId === 'string' && hunkId
+    ? {
+        diffHunkId: typeof marker.dataset.meoGitDiffHunkId === 'string' && marker.dataset.meoGitDiffHunkId
+          ? marker.dataset.meoGitDiffHunkId
+          : undefined,
+        hunkEndLine: parseIntegerDatasetValue(marker.dataset.meoGitHunkEndLine),
+        hunkId,
+        hunkStartLine: parseIntegerDatasetValue(marker.dataset.meoGitHunkStartLine)
+      }
+    : null;
+}
+
+export function getGitGutterHunkMarkers(
+  marker: HTMLElement | null | undefined,
+  kind: GitGutterChangeKind | null = null
+): HTMLElement[] {
   if (!isGitGutterChangedMarkerElement(marker)) {
     return [];
   }
@@ -863,10 +1095,22 @@ export function getGitGutterHunkMarkers(marker: HTMLElement | null | undefined):
     return [marker];
   }
 
-  const hunkId = marker.dataset.meoGitHunkId;
+  const hunkId = getGitGutterMarkerHunkMetadata(marker, kind)?.hunkId ?? marker.dataset.meoGitHunkId;
   if (typeof hunkId === 'string' && hunkId) {
-    const selector = `.meo-git-gutter-marker[data-meo-git-hunk-id="${cssAttributeString(hunkId)}"]`;
-    const markers = uniqueMarkers(gutter.querySelectorAll<HTMLElement>(selector));
+    const markerCandidates = new Set<HTMLElement>();
+    if (!kind) {
+      const legacySelector = `.meo-git-gutter-marker[data-meo-git-hunk-id="${cssAttributeString(hunkId)}"]`;
+      for (const candidate of gutter.querySelectorAll<HTMLElement>(legacySelector)) {
+        markerCandidates.add(candidate);
+      }
+    } else {
+      for (const candidate of gutter.querySelectorAll<HTMLElement>('.meo-git-gutter-marker')) {
+        if (getGitGutterMarkerHunkMetadata(candidate, kind)?.hunkId === hunkId) {
+          markerCandidates.add(candidate);
+        }
+      }
+    }
+    const markers = uniqueMarkers(markerCandidates);
     return markers.length ? markers : [marker];
   }
 
@@ -884,7 +1128,10 @@ export function getGitGutterHunkMarkers(marker: HTMLElement | null | undefined):
   return [marker];
 }
 
-function getMarkerHoverKind(marker: HTMLElement): 'added' | 'deleted' | 'modified' | null {
+export function getGitGutterMarkerChangeKind(marker: unknown): 'added' | 'deleted' | 'modified' | null {
+  if (!(marker instanceof HTMLElement)) {
+    return null;
+  }
   if (marker.classList.contains('is-deleted') && !marker.classList.contains('is-added') && !marker.classList.contains('is-modified')) {
     return 'deleted';
   }
@@ -900,9 +1147,41 @@ function getMarkerHoverKind(marker: HTMLElement): 'added' | 'deleted' | 'modifie
   return null;
 }
 
-function addGitHunkHoverClasses(marker: HTMLElement): void {
+function markerHasDeletedChange(marker: HTMLElement | null | undefined): boolean {
+  return marker instanceof HTMLElement && marker.classList.contains('is-deleted');
+}
+
+function markerHasLineChange(marker: HTMLElement | null | undefined): boolean {
+  return marker instanceof HTMLElement && (
+    marker.classList.contains('is-added') ||
+    marker.classList.contains('is-modified')
+  );
+}
+
+function isDeletedBoundaryHit(marker: HTMLElement | null | undefined, clientY: number | null = null): boolean {
+  if (!markerHasDeletedChange(marker)) {
+    return false;
+  }
+  if (!markerHasLineChange(marker)) {
+    return true;
+  }
+  if (!Number.isFinite(clientY)) {
+    return false;
+  }
+  const rect = marker.getBoundingClientRect();
+  return clientY >= rect.bottom - 8 && clientY <= rect.bottom + 8;
+}
+
+export function getGitGutterMarkerChangeKindAt(marker: unknown, clientY: number | null = null): 'added' | 'deleted' | 'modified' | null {
+  if (isDeletedBoundaryHit(marker, clientY)) {
+    return 'deleted';
+  }
+  return getGitGutterMarkerChangeKind(marker);
+}
+
+function addGitHunkHoverClasses(marker: HTMLElement, hoverKind: 'added' | 'deleted' | 'modified' | null = null): void {
   marker.classList.add('is-hunk-hover');
-  const kind = getMarkerHoverKind(marker);
+  const kind = hoverKind ?? getGitGutterMarkerChangeKind(marker);
   if (kind) {
     marker.classList.add(`is-hunk-hover-${kind}`);
   }
@@ -943,6 +1222,7 @@ function getHoveredGitGutterMarker(event: MouseEvent): HTMLElement | null {
 
 const gitDiffGutterHunkHoverExtension = ViewPlugin.fromClass(class {
   activeMarkers: HTMLElement[] = [];
+  activeHoverKind: 'added' | 'deleted' | 'modified' | null = null;
   view: EditorView;
 
   constructor(view: EditorView) {
@@ -963,11 +1243,13 @@ const gitDiffGutterHunkHoverExtension = ViewPlugin.fromClass(class {
       removeGitHunkHoverClasses(marker);
     }
     this.activeMarkers = [];
+    this.activeHoverKind = null;
   }
 
-  syncFromMarker(marker: HTMLElement | null) {
-    const nextMarkers = marker ? getGitGutterHunkMarkers(marker) : [];
+  syncFromMarker(marker: HTMLElement | null, hoverKind: 'added' | 'deleted' | 'modified' | null = null) {
+    const nextMarkers = marker ? getGitGutterHunkMarkers(marker, hoverKind) : [];
     if (
+      hoverKind === this.activeHoverKind &&
       nextMarkers.length === this.activeMarkers.length &&
       nextMarkers.every((nextMarker, index) => nextMarker === this.activeMarkers[index])
     ) {
@@ -976,8 +1258,9 @@ const gitDiffGutterHunkHoverExtension = ViewPlugin.fromClass(class {
 
     this.clear();
     this.activeMarkers = nextMarkers;
+    this.activeHoverKind = hoverKind;
     for (const nextMarker of this.activeMarkers) {
-      addGitHunkHoverClasses(nextMarker);
+      addGitHunkHoverClasses(nextMarker, hoverKind);
     }
   }
 
@@ -988,7 +1271,9 @@ const gitDiffGutterHunkHoverExtension = ViewPlugin.fromClass(class {
   eventHandlers: {
     mousemove(event, view) {
       const plugin = view.plugin(gitDiffGutterHunkHoverExtension);
-      plugin?.syncFromMarker(getHoveredGitGutterMarker(event));
+      const marker = getHoveredGitGutterMarker(event);
+      const hoverKind = marker ? getGitGutterMarkerChangeKindAt(marker, event.clientY) : null;
+      plugin?.syncFromMarker(marker, hoverKind);
     },
     mouseleave(_event, view) {
       view.plugin(gitDiffGutterHunkHoverExtension)?.clear();
@@ -1012,9 +1297,14 @@ export function gitDiffGutterLiveRenderExtensions(options: GitDiffGutterRenderOp
 }
 
 export const __gitDiffGutterTestHooks = {
+  addGitHunkHoverClasses,
   addGitHunkMetadataToLineFlags,
   deferGitDiffLineFlagsRefreshEffect,
+  getGitGutterHunkMarkers,
+  getGitGutterMarkerChangeKindAt,
+  getGitGutterMarkerHunkMetadata,
   liveCollapsedBlockMarkerAtPos,
   liveWidgetMarkerAtPos,
+  removeGitHunkHoverClasses,
   setGitDiffLineFlagsEffect
 };

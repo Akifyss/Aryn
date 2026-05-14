@@ -164,7 +164,7 @@ export type MeoEditorCreateOptions = {
   initialVimMode: boolean
   onApplyChanges: (nextText: string) => void
   onOpenGitRevisionForLine: (options: { lineNumber?: number }) => void
-  onToggleGitInlineSplitForLine?: (request: { lineNumber?: number, scope: 'staged' | 'unstaged' }) => boolean | void
+  onToggleGitInlineSplitForLine?: (request: { hunkId?: string, lineNumber?: number, scope: 'staged' | 'unstaged' }) => boolean | void
   onOpenGitWorktreeForLine: (options: { lineNumber?: number }) => void
   onOpenLink: (href: string) => void
   onRequestGitBlame: (request: { lineNumber?: number }) => Promise<GitBlameResult>

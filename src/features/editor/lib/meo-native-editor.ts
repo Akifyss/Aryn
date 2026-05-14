@@ -757,7 +757,7 @@ export function mountNativeMeoEditor({
       onOpenGitWorktreeForLine: (options: { lineNumber?: number }) => {
         openGitMarkerInDiffSplit('unstaged', options)
       },
-      onToggleGitInlineSplitForLine: (request: { lineNumber?: number, scope: 'staged' | 'unstaged' }) => (
+      onToggleGitInlineSplitForLine: (request: { hunkId?: string, lineNumber?: number, scope: 'staged' | 'unstaged' }) => (
         liveInlineDiffController?.toggleHunkForLine(request) ?? false
       ),
       onOpenLink: (href: string) => {

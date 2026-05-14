@@ -20,6 +20,7 @@ import {
 } from '../src/vendor/meo/webview/helpers/listMarkers'
 import {
   __meoDiffSplitRenderHealthTestHooks,
+  __meoDiffSplitGutterTestHooks,
   __meoDiffSplitSearchTestHooks,
   applyCodeMirrorChangesToText,
   buildDiffSplitGutterFlagsFromChunks,
@@ -898,6 +899,8 @@ describe('meo performance guards', () => {
     expect(originalFlags).toHaveLength(originalDoc.lines)
     expect(modifiedFlags).toHaveLength(modifiedDoc.lines)
     expect(originalFlags[1]).toMatchObject({
+      hunkEndLine: 2,
+      hunkStartLine: 2,
       added: false,
       modified: false,
       removed: true,
@@ -905,14 +908,26 @@ describe('meo performance guards', () => {
     })
     expect(modifiedFlags[1]).toMatchObject({
       added: true,
+      hunkEndLine: 2,
+      hunkStartLine: 2,
       modified: false,
       removed: false,
       scope: 'unstaged',
     })
     expect(modifiedFlags[4]).toMatchObject({
       added: true,
+      hunkEndLine: 5,
+      hunkStartLine: 5,
       scope: 'unstaged',
     })
+    expect(modifiedFlags[1]?.hunkId).toEqual(expect.any(String))
+    expect(modifiedFlags[4]?.hunkId).toEqual(expect.any(String))
+    expect(modifiedFlags[1]?.hunkId).not.toBe(modifiedFlags[4]?.hunkId)
+    expect(modifiedFlags[1]?.diffHunkId).toBe(modifiedFlags[1]?.hunkId)
+    expect(modifiedFlags[4]?.diffHunkId).toBe(modifiedFlags[4]?.hunkId)
+    expect(originalFlags[1]?.hunkId).toEqual(expect.any(String))
+    expect(originalFlags[1]?.hunkId).toBe(modifiedFlags[1]?.hunkId)
+    expect(originalFlags[1]?.diffHunkId).toBe(modifiedFlags[1]?.diffHunkId)
 
     const deletionDoc = Text.of(['one', 'three', 'four'])
     const deletionChunks = Chunk.build(originalDoc, deletionDoc, {
@@ -928,6 +943,30 @@ describe('meo performance guards', () => {
       scope: 'unstaged',
     })
     expect(deletionModifiedFlags.some(Boolean)).toBe(false)
+  })
+
+  it('preserves split gutter hunk metadata for unified deleted widgets', () => {
+    const sourceFlags = __meoDiffSplitGutterTestHooks.createDiffSplitGutterFlags({
+      hunkEndLine: 19,
+      diffHunkId: 'git-diff:18:19:18:19',
+      hunkId: 'diff-split:modified:3',
+      hunkStartLine: 19,
+      scope: 'unstaged',
+    })
+
+    const mapped = __meoDiffSplitGutterTestHooks.mapUnifiedDiffWidgetGutterFlag(
+      sourceFlags,
+      { widget: { marksDeletedLines: true } },
+    )
+
+    expect(mapped).toMatchObject({
+      hunkEndLine: 19,
+      diffHunkId: 'git-diff:18:19:18:19',
+      hunkId: 'diff-split:modified:3',
+      hunkStartLine: 19,
+      removed: true,
+      scope: 'unstaged',
+    })
   })
 
   it('applies split text snapshots from CodeMirror changes without flattening the document', () => {

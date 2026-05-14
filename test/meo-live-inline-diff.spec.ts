@@ -84,7 +84,7 @@ describe('meo live inline diff', () => {
     })
   })
 
-  it('keeps adjacent refreshed chunks in one inline split widget', () => {
+  it('keeps adjacent refreshed chunks in separate inline split widgets', () => {
     const { modifiedDoc, originalDoc } = createScenarioDocs()
     const originalHeading = originalDoc.line(58)
     const originalParagraph = originalDoc.line(59)
@@ -114,6 +114,57 @@ describe('meo live inline diff', () => {
         toB: modifiedParagraph.to,
         vscodeModifiedEndLineExclusive: 60,
         vscodeModifiedStartLine: 59,
+        vscodeOriginalEndLineExclusive: 60,
+        vscodeOriginalStartLine: 59,
+      },
+    ]
+
+    const match = __meoLiveInlineDiffTestHooks.findInlineChunkMatch(
+      originalDoc,
+      modifiedDoc,
+      chunks,
+      59,
+    )
+
+    expect(match?.selection).toEqual({
+      modifiedLineCount: 1,
+      modifiedStartLine: 59,
+      originalLineCount: 1,
+      originalStartLine: 59,
+    })
+    expect(match?.displaySelection).toEqual(match?.selection)
+  })
+
+  it('keeps overlapping refreshed chunks in one inline split widget', () => {
+    const { modifiedDoc, originalDoc } = createScenarioDocs()
+    const originalHeading = originalDoc.line(58)
+    const originalParagraph = originalDoc.line(59)
+    const modifiedHeading = modifiedDoc.line(58)
+    const modifiedParagraph = modifiedDoc.line(59)
+    const chunks: CodeMirrorDiffChunk[] = [
+      {
+        changes: [],
+        endA: originalParagraph.to,
+        endB: modifiedHeading.to,
+        fromA: originalHeading.from,
+        fromB: modifiedHeading.from,
+        toA: originalParagraph.to,
+        toB: modifiedHeading.to,
+        vscodeModifiedEndLineExclusive: 59,
+        vscodeModifiedStartLine: 58,
+        vscodeOriginalEndLineExclusive: 60,
+        vscodeOriginalStartLine: 58,
+      },
+      {
+        changes: [],
+        endA: originalParagraph.to,
+        endB: modifiedParagraph.to,
+        fromA: originalParagraph.from,
+        fromB: modifiedHeading.from,
+        toA: originalParagraph.to,
+        toB: modifiedParagraph.to,
+        vscodeModifiedEndLineExclusive: 60,
+        vscodeModifiedStartLine: 58,
         vscodeOriginalEndLineExclusive: 60,
         vscodeOriginalStartLine: 59,
       },

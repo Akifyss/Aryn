@@ -31,7 +31,147 @@ function scopedFlagSummary(flags: ReturnType<typeof buildScopedLineFlagsFromVsCo
   })
 }
 
+function hunkIdsByKind(flags: ReturnType<typeof buildLineFlagsFromVsCodeDiff>) {
+  return Array.from(flags, (flag) => ({
+    added: flag?.hunks?.added?.hunkId,
+    deleted: flag?.hunks?.deleted?.hunkId,
+    modified: flag?.hunks?.modified?.hunkId,
+  }))
+}
+
 describe('meo git diff gutter', () => {
+  it('tracks the hit segment kind and hunk when a marker has both addition and deletion visuals', () => {
+    const originalHTMLElement = globalThis.HTMLElement
+    const originalElement = globalThis.Element
+    class FakeHTMLElement {
+      private readonly classes = new Set<string>(['meo-git-gutter-marker', 'is-added', 'is-deleted'])
+      children: FakeHTMLElement[] = []
+      dataset: Record<string, string> = {}
+      parent: FakeHTMLElement | null = null
+
+      classList = {
+        add: (...tokens: string[]) => {
+          for (const token of tokens) this.classes.add(token)
+        },
+        contains: (token: string) => this.classes.has(token),
+        remove: (...tokens: string[]) => {
+          for (const token of tokens) this.classes.delete(token)
+        },
+      }
+
+      append(child: FakeHTMLElement) {
+        child.parent = this
+        this.children.push(child)
+      }
+
+      closest(selector: string) {
+        if (selector === '.cm-gutter.meo-git-gutter') {
+          return this.classes.has('cm-gutter') && this.classes.has('meo-git-gutter')
+            ? this
+            : this.parent?.closest(selector) ?? null
+        }
+        if (selector === '.meo-git-gutter-marker') {
+          return this.classes.has('meo-git-gutter-marker')
+            ? this
+            : this.parent?.closest(selector) ?? null
+        }
+        return null
+      }
+
+      getBoundingClientRect() {
+        return {
+          bottom: 24,
+          height: 20,
+          left: 0,
+          right: 3,
+          top: 4,
+          width: 3,
+          x: 0,
+          y: 4,
+          toJSON: () => ({}),
+        } as DOMRect
+      }
+
+      querySelectorAll(selector: string) {
+        const matches: FakeHTMLElement[] = []
+        const visit = (node: FakeHTMLElement) => {
+          if (
+            selector === '.meo-git-gutter-marker' &&
+            node.classList.contains('meo-git-gutter-marker')
+          ) {
+            matches.push(node)
+          }
+          for (const child of node.children) visit(child)
+        }
+        visit(this)
+        return matches
+      }
+    }
+
+    Object.defineProperty(globalThis, 'Element', {
+      configurable: true,
+      writable: true,
+      value: FakeHTMLElement,
+    })
+    Object.defineProperty(globalThis, 'HTMLElement', {
+      configurable: true,
+      writable: true,
+      value: FakeHTMLElement,
+    })
+
+    try {
+      const gutter = new FakeHTMLElement()
+      gutter.classList.add('cm-gutter', 'meo-git-gutter')
+      const marker = new FakeHTMLElement()
+      marker.dataset.meoGitHunkAdded = JSON.stringify({ d: 'diff-add-hunk', i: 'add-hunk', s: 19, e: 19 })
+      marker.dataset.meoGitHunkDeleted = JSON.stringify({ d: 'diff-delete-hunk', i: 'delete-hunk', s: 20, e: 20 })
+      const sameDeleteHunk = new FakeHTMLElement()
+      sameDeleteHunk.classList.remove('is-added')
+      sameDeleteHunk.dataset.meoGitHunkDeleted = JSON.stringify({ i: 'delete-hunk', s: 20, e: 20 })
+      const otherAddHunk = new FakeHTMLElement()
+      otherAddHunk.classList.remove('is-deleted')
+      otherAddHunk.dataset.meoGitHunkAdded = JSON.stringify({ i: 'add-hunk', s: 19, e: 19 })
+      gutter.append(marker)
+      gutter.append(sameDeleteHunk)
+      gutter.append(otherAddHunk)
+
+      expect(__gitDiffGutterTestHooks.getGitGutterMarkerChangeKindAt(marker as unknown as HTMLElement, 10)).toBe('added')
+      expect(__gitDiffGutterTestHooks.getGitGutterMarkerChangeKindAt(marker as unknown as HTMLElement, 23)).toBe('deleted')
+      expect(__gitDiffGutterTestHooks.getGitGutterMarkerHunkMetadata(marker as unknown as HTMLElement, 'added')?.hunkId).toBe('add-hunk')
+      expect(__gitDiffGutterTestHooks.getGitGutterMarkerHunkMetadata(marker as unknown as HTMLElement, 'deleted')?.hunkId).toBe('delete-hunk')
+      expect(__gitDiffGutterTestHooks.getGitGutterMarkerHunkMetadata(marker as unknown as HTMLElement, 'added')?.diffHunkId).toBe('diff-add-hunk')
+      expect(__gitDiffGutterTestHooks.getGitGutterMarkerHunkMetadata(marker as unknown as HTMLElement, 'deleted')?.diffHunkId).toBe('diff-delete-hunk')
+      const deletedMarkers = __gitDiffGutterTestHooks.getGitGutterHunkMarkers(marker as unknown as HTMLElement, 'deleted')
+      const addedMarkers = __gitDiffGutterTestHooks.getGitGutterHunkMarkers(marker as unknown as HTMLElement, 'added')
+      expect(deletedMarkers).toHaveLength(2)
+      expect(deletedMarkers.includes(marker as unknown as HTMLElement)).toBe(true)
+      expect(deletedMarkers.includes(sameDeleteHunk as unknown as HTMLElement)).toBe(true)
+      expect(addedMarkers).toHaveLength(2)
+      expect(addedMarkers.includes(marker as unknown as HTMLElement)).toBe(true)
+      expect(addedMarkers.includes(otherAddHunk as unknown as HTMLElement)).toBe(true)
+
+      __gitDiffGutterTestHooks.addGitHunkHoverClasses(marker as unknown as HTMLElement, 'deleted')
+
+      expect(marker.classList.contains('is-hunk-hover')).toBe(true)
+      expect(marker.classList.contains('is-hunk-hover-deleted')).toBe(true)
+      expect(marker.classList.contains('is-hunk-hover-added')).toBe(false)
+
+      __gitDiffGutterTestHooks.removeGitHunkHoverClasses(marker as unknown as HTMLElement)
+      expect(marker.classList.contains('is-hunk-hover')).toBe(false)
+    } finally {
+      Object.defineProperty(globalThis, 'Element', {
+        configurable: true,
+        writable: true,
+        value: originalElement,
+      })
+      Object.defineProperty(globalThis, 'HTMLElement', {
+        configurable: true,
+        writable: true,
+        value: originalHTMLElement,
+      })
+    }
+  })
+
   it('assigns one hover hunk id to adjacent changed gutter lines regardless of change kind', () => {
     const withHunks = __gitDiffGutterTestHooks.addGitHunkMetadataToLineFlags([
       { added: true, deleted: false, modified: false, scope: 'unstaged' },
@@ -60,6 +200,76 @@ describe('meo git diff gutter', () => {
     expect(withHunks?.[0]?.hunkEndLine).toBe(1)
     expect(withHunks?.[1]?.hunkStartLine).toBe(2)
     expect(withHunks?.[1]?.hunkEndLine).toBe(2)
+  })
+
+  it('keeps adjacent explicit gutter hunk ids separate', () => {
+    const withHunks = __gitDiffGutterTestHooks.addGitHunkMetadataToLineFlags([
+      { added: true, deleted: false, hunkEndLine: 1, hunkId: 'chunk-a', hunkStartLine: 1, modified: false, scope: 'unstaged' },
+      { added: true, deleted: false, hunkEndLine: 2, hunkId: 'chunk-b', hunkStartLine: 2, modified: false, scope: 'unstaged' },
+    ])
+
+    expect(withHunks?.[0]?.hunkId).toBe('chunk-a')
+    expect(withHunks?.[1]?.hunkId).toBe('chunk-b')
+    expect(withHunks?.[0]?.hunkId).not.toBe(withHunks?.[1]?.hunkId)
+  })
+
+  it('keeps adjacent explicit per-kind gutter hunk ids separate', () => {
+    const withHunks = __gitDiffGutterTestHooks.addGitHunkMetadataToLineFlags([
+      {
+        added: true,
+        deleted: true,
+        hunkEndLine: 1,
+        hunkId: 'add-hunk',
+        hunkStartLine: 1,
+        hunks: {
+          added: { diffHunkId: 'diff-add-hunk', hunkEndLine: 1, hunkId: 'add-hunk', hunkStartLine: 1 },
+          deleted: { diffHunkId: 'diff-delete-hunk', hunkEndLine: 1, hunkId: 'delete-hunk', hunkStartLine: 1 },
+        },
+        modified: false,
+        scope: 'unstaged',
+      },
+      {
+        added: false,
+        deleted: true,
+        hunkEndLine: 2,
+        hunkId: 'delete-hunk',
+        hunkStartLine: 2,
+        hunks: {
+          deleted: { hunkEndLine: 2, hunkId: 'delete-hunk', hunkStartLine: 2 },
+        },
+        modified: false,
+        scope: 'unstaged',
+      },
+    ])
+
+    expect(withHunks?.[0]?.hunks?.added?.hunkId).toBe('add-hunk')
+    expect(withHunks?.[0]?.hunks?.deleted?.hunkId).toBe('delete-hunk')
+    expect(withHunks?.[0]?.hunks?.added?.diffHunkId).toBe('diff-add-hunk')
+    expect(withHunks?.[0]?.hunks?.deleted?.diffHunkId).toBe('diff-delete-hunk')
+    expect(withHunks?.[1]?.hunks?.deleted?.hunkId).toBe('delete-hunk')
+    expect(withHunks?.[1]?.hunks?.added).toBeUndefined()
+  })
+
+  it('keeps insertion and deletion hunk metadata separate when they share one current line marker', () => {
+    const flags = buildLineFlagsFromVsCodeDiff(
+      splitDiffLines('A\nB\nC\nD\n'),
+      Text.of('A\nX\nB\nD\n'.split('\n')),
+    )
+
+    expect(flagSummary(flags)).toEqual([
+      null,
+      'added',
+      'deleted',
+      null,
+      null,
+    ])
+    expect(flags[1]?.hunks?.added?.hunkId).toEqual(expect.any(String))
+    expect(flags[1]?.hunks?.added?.diffHunkId).toBe(flags[1]?.hunks?.added?.hunkId)
+    expect(flags[1]?.hunks?.deleted).toBeUndefined()
+    expect(flags[2]?.hunks?.deleted?.hunkId).toEqual(expect.any(String))
+    expect(flags[2]?.hunks?.deleted?.diffHunkId).toBe(flags[2]?.hunks?.deleted?.hunkId)
+    expect(flags[1]?.hunks?.added?.hunkId).not.toBe(flags[2]?.hunks?.deleted?.hunkId)
+    expect(hunkIdsByKind(flags)[1]?.added).toBe(flags[1]?.hunks?.added?.hunkId)
   })
 
   it('matches VS Code-style line ranges for blank lines inserted before the EOF visual line', () => {
@@ -261,6 +471,44 @@ describe('meo git diff gutter', () => {
 
     expect(marker?.flags?.removed).toBe(true)
     expect(marker?.flags?.hunkId).toBe(flags?.[1]?.hunkId)
+  })
+
+  it('uses the collapsed block aggregate kind when selecting live hunk metadata', () => {
+    let state = EditorState.create({
+      doc: '| A |\n| - |\n| B |\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    state = state.update({
+      effects: __gitDiffGutterTestHooks.setGitDiffLineFlagsEffect.of([
+        {
+          added: true,
+          deleted: true,
+          hunkEndLine: 1,
+          hunkId: 'added-hunk',
+          hunkStartLine: 1,
+          hunks: {
+            added: { diffHunkId: 'diff-added-hunk', hunkEndLine: 1, hunkId: 'added-hunk', hunkStartLine: 1 },
+            deleted: { diffHunkId: 'diff-deleted-hunk', hunkEndLine: 1, hunkId: 'deleted-hunk', hunkStartLine: 1 },
+          },
+          modified: false,
+          scope: 'unstaged',
+        },
+        undefined,
+        undefined,
+        undefined,
+      ]),
+    }).state
+
+    const line = state.doc.line(1)
+    const marker = __gitDiffGutterTestHooks.liveCollapsedBlockMarkerAtPos(
+      state,
+      state.field(gitDiffLineFlagsField),
+      line.from,
+    ) as { flags?: { hunks?: { deleted?: { diffHunkId?: string, hunkId?: string } }, hunkId?: string } } | null
+
+    expect(marker?.flags?.hunkId).toBe('deleted-hunk')
+    expect(marker?.flags?.hunks?.deleted?.hunkId).toBe('deleted-hunk')
+    expect(marker?.flags?.hunks?.deleted?.diffHunkId).toBe('diff-deleted-hunk')
   })
 
   it('lets unified pure deletion widgets render a red marker without a modified line flag', () => {

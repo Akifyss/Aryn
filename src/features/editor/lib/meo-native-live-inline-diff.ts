@@ -38,6 +38,7 @@ import {
 import {
   buildCodeMirrorChunksFromVsCodeDiff,
   buildSourceToTargetLineMap,
+  createGitDiffLineHunkId,
 } from '@/vendor/meo/shared/gitDiffLineFlags'
 import {
   setGitBaseline,
@@ -46,7 +47,9 @@ import {
 
 type InlineHunkRequest = {
   anchor: number
+  hunkId?: string
   id: string
+  lineNumber?: number
   scope: GitChangeScope
 }
 
@@ -80,6 +83,7 @@ type InlineLineRange = {
 
 type InlineChunkEntry = {
   chunk: CodeMirrorDiffChunk
+  hunkId: string
   selection: GitDiffSelection
 }
 
@@ -141,7 +145,7 @@ export type MeoLiveInlineDiffController = {
   setFocusedLineHighlightVisible: (visible: boolean) => void
   setLineNumbersVisible: (visible: boolean) => void
   setText: (text: string) => void
-  toggleHunkForLine: (request: { lineNumber?: number, scope: GitChangeScope }) => boolean
+  toggleHunkForLine: (request: { hunkId?: string, lineNumber?: number, scope: GitChangeScope }) => boolean
 }
 
 const setInlineHunksEffect = StateEffect.define<InlineHunkDescriptor[]>()
@@ -276,13 +280,13 @@ function mergeDiffSelections(selections: readonly [GitDiffSelection, ...GitDiffS
   return selectionFromLineRanges(originalRange, modifiedRange)
 }
 
-function lineRangesTouchOrOverlap(left: InlineLineRange, right: InlineLineRange) {
-  return left.startLine <= right.endLineExclusive && right.startLine <= left.endLineExclusive
+function lineRangesOverlap(left: InlineLineRange, right: InlineLineRange) {
+  return left.startLine < right.endLineExclusive && right.startLine < left.endLineExclusive
 }
 
-function selectionsTouchOrOverlap(left: GitDiffSelection, right: GitDiffSelection) {
-  return lineRangesTouchOrOverlap(selectionLineRange(left, 'modified'), selectionLineRange(right, 'modified'))
-    || lineRangesTouchOrOverlap(selectionLineRange(left, 'original'), selectionLineRange(right, 'original'))
+function selectionsOverlap(left: GitDiffSelection, right: GitDiffSelection) {
+  return lineRangesOverlap(selectionLineRange(left, 'modified'), selectionLineRange(right, 'modified'))
+    || lineRangesOverlap(selectionLineRange(left, 'original'), selectionLineRange(right, 'original'))
 }
 
 function lineRangeContainsLine(range: InlineLineRange, lineNumber: number) {
@@ -428,6 +432,12 @@ function createInlineChunkEntries(
     const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
     return {
       chunk,
+      hunkId: createGitDiffLineHunkId(
+        selection.originalStartLine,
+        selection.originalStartLine + selection.originalLineCount,
+        selection.modifiedStartLine,
+        selection.modifiedStartLine + selection.modifiedLineCount,
+      ),
       selection,
     }
   })
@@ -479,9 +489,12 @@ function findInlineChunkMatch(
   modifiedDoc: Text,
   chunks: readonly CodeMirrorDiffChunk[],
   requestedLineNumber: number,
+  requestedHunkId: string | null = null,
 ): InlineChunkMatch | null {
   const entries = createInlineChunkEntries(originalDoc, modifiedDoc, chunks)
-  const seed = findSeedInlineChunkEntry(originalDoc, modifiedDoc, entries, requestedLineNumber)
+  const seed = requestedHunkId
+    ? entries.find((entry) => entry.hunkId === requestedHunkId) ?? null
+    : findSeedInlineChunkEntry(originalDoc, modifiedDoc, entries, requestedLineNumber)
   if (!seed) {
     return null
   }
@@ -497,7 +510,7 @@ function findInlineChunkMatch(
         continue
       }
       if (
-        !selectionsTouchOrOverlap(selection, entry.selection)
+        !selectionsOverlap(selection, entry.selection)
       ) {
         continue
       }
@@ -1737,7 +1750,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     this.syncIfActive()
   }
 
-  toggleHunkForLine(request: { lineNumber?: number, scope: GitChangeScope }) {
+  toggleHunkForLine(request: { hunkId?: string, lineNumber?: number, scope: GitChangeScope }) {
     if (this.destroyed || typeof request.lineNumber !== 'number' || !Number.isFinite(request.lineNumber)) {
       return false
     }
@@ -1747,7 +1760,9 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     const line = this.view.state.doc.line(lineNumber)
     const probeRequest: InlineHunkRequest = {
       anchor: line.from,
+      hunkId: request.hunkId,
       id: `probe:${this.nextRequestId}`,
+      lineNumber,
       scope: request.scope,
     }
     const descriptor = this.createDescriptorForRequest(probeRequest)
@@ -1765,7 +1780,9 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     } else {
       this.requests.push({
         anchor: line.from,
+        hunkId: request.hunkId,
         id: `inline-hunk-${this.nextRequestId++}`,
+        lineNumber,
         scope: request.scope,
       })
     }
@@ -1856,6 +1873,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     const request = this.requests.find((candidate) => candidate.id === requestId)
     if (request) {
       request.anchor = from
+      request.lineNumber = this.view.state.doc.lineAt(from).number
     }
     this.scheduleSync(INLINE_DIFF_SYNC_DELAY_MS)
   }
@@ -1935,6 +1953,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       }
       for (const request of this.requests) {
         request.anchor = transaction.changes.mapPos(request.anchor, 1)
+        request.lineNumber = undefined
       }
       if (this.pendingActiveOuterSelection) {
         this.pendingActiveOuterSelection = mapOuterSelectionTarget(this.pendingActiveOuterSelection, transaction.changes)
@@ -2171,6 +2190,9 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       }
       usedKeys.add(descriptor.key)
       request.anchor = descriptor.replaceFrom
+      request.lineNumber = descriptor.replaceFrom <= this.view.state.doc.length
+        ? this.view.state.doc.lineAt(descriptor.replaceFrom).number
+        : descriptor.modifiedLineStart
       nextRequests.push(request)
       descriptors.push(descriptor)
       nextDescriptorsByRequestId.set(request.id, descriptor)
@@ -2211,7 +2233,10 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       this.currentText = currentDoc.toString()
     }
 
-    const currentLine = currentDoc.lineAt(Math.max(0, Math.min(currentDoc.length, request.anchor))).number
+    const currentLine = Number.isInteger(request.lineNumber) && request.lineNumber
+      ? Math.max(1, Math.min(currentDoc.lines, Math.floor(request.lineNumber)))
+      : currentDoc.lineAt(Math.max(0, Math.min(currentDoc.length, request.anchor))).number
+    request.lineNumber = currentLine
     const resolvedState = resolveOriginalText(
       this.currentBaseline,
       this.currentFallbackOriginal,
@@ -2227,7 +2252,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     const modifiedDoc = createTextDocFromContent(resolvedState.modifiedText)
     const requestedLineNumber = this.getRequestedLineForScope(request.scope, currentLine)
     const chunks = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc) as readonly CodeMirrorDiffChunk[]
-    const found = findInlineChunkMatch(originalDoc, modifiedDoc, chunks, requestedLineNumber)
+    const found = findInlineChunkMatch(originalDoc, modifiedDoc, chunks, requestedLineNumber, request.hunkId ?? null)
     if (!found) {
       return null
     }

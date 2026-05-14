@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { getGitGutterHunkMarkers, gitDiffLineFlagsField } from './gitDiffGutter';
+import { getGitGutterHunkMarkers, getGitGutterMarkerChangeKind, getGitGutterMarkerChangeKindAt, getGitGutterMarkerHunkMetadata, gitDiffLineFlagsField } from './gitDiffGutter';
 import { getLiveGitCollapsedBlockAtLine, getLiveRenderedBlockAtLine } from './liveRenderedBlocks';
 import { mountMeoScopedPortal } from './themeScope';
 
@@ -317,57 +317,6 @@ function isTrailingEofVisualLine(doc, lineNumber) {
   return lastLine.from === lastLine.to;
 }
 
-function getMarkerChangeKind(marker) {
-  if (!(marker instanceof HTMLElement)) {
-    return null;
-  }
-  if (marker.classList.contains('is-added')) {
-    return 'added';
-  }
-  if (marker.classList.contains('is-modified')) {
-    return 'modified';
-  }
-  if (marker.classList.contains('is-deleted')) {
-    return 'deleted';
-  }
-  return null;
-}
-
-function markerHasDeletedChange(marker) {
-  return marker instanceof HTMLElement && marker.classList.contains('is-deleted');
-}
-
-function markerHasLineChange(marker) {
-  return marker instanceof HTMLElement && (
-    marker.classList.contains('is-added') ||
-    marker.classList.contains('is-modified')
-  );
-}
-
-function isDeletedBoundaryHit(marker, clientY = null) {
-  if (!markerHasDeletedChange(marker)) {
-    return false;
-  }
-  if (!markerHasLineChange(marker)) {
-    return true;
-  }
-  if (!Number.isFinite(clientY)) {
-    return false;
-  }
-  const rect = marker.getBoundingClientRect();
-  return clientY >= rect.bottom - 8 && clientY <= rect.bottom + 8;
-}
-
-function getMarkerChangeKindAt(marker, clientY = null) {
-  if (!(marker instanceof HTMLElement)) {
-    return null;
-  }
-  if (isDeletedBoundaryHit(marker, clientY)) {
-    return 'deleted';
-  }
-  return getMarkerChangeKind(marker);
-}
-
 function getMarkerChangeScope(marker) {
   if (!(marker instanceof HTMLElement)) {
     return null;
@@ -377,7 +326,7 @@ function getMarkerChangeScope(marker) {
 }
 
 function isChangedMarker(marker) {
-  return getMarkerChangeKind(marker) !== null;
+  return getGitGutterMarkerChangeKind(marker) !== null;
 }
 
 function getMarkerGutterRowElement(marker) {
@@ -488,7 +437,7 @@ export function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElem
       lineNumber,
       requestLineNumber: lineNumber,
       proxiedFromTrailingEof: false,
-      effectiveChangeKind: getMarkerChangeKindAt(ownChangedMarker, clientY),
+      effectiveChangeKind: getGitGutterMarkerChangeKindAt(ownChangedMarker, clientY),
       effectiveChangeScope: getMarkerChangeScope(ownChangedMarker)
     };
   }
@@ -497,7 +446,7 @@ export function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElem
       lineNumber,
       requestLineNumber: lineNumber,
       proxiedFromTrailingEof: false,
-      effectiveChangeKind: getMarkerChangeKindAt(ownChangedMarker, clientY),
+      effectiveChangeKind: getGitGutterMarkerChangeKindAt(ownChangedMarker, clientY),
       effectiveChangeScope: getMarkerChangeScope(ownChangedMarker)
     };
   }
@@ -522,7 +471,7 @@ export function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElem
     lineNumber: proxiedLineNumber,
     requestLineNumber: proxiedLineNumber,
     proxiedFromTrailingEof: true,
-    effectiveChangeKind: getMarkerChangeKindAt(changedMarker, clientY),
+    effectiveChangeKind: getGitGutterMarkerChangeKindAt(changedMarker, clientY),
     effectiveChangeScope: getMarkerChangeScope(changedMarker)
   };
 }
@@ -717,11 +666,12 @@ export function createGitBlameHoverController({
     )
   );
 
-  const expandMarkersToGitHunk = (markers) => {
+  const expandMarkersToGitHunk = (markers, hoverKind = null) => {
     const expandedMarkers = [];
     const seen = new Set();
     for (const marker of markers) {
-      const hunkMarkers = getGitGutterHunkMarkers(marker);
+      const markerKind = hoverKind ?? getGitGutterMarkerChangeKind(marker);
+      const hunkMarkers = getGitGutterHunkMarkers(marker, markerKind);
       const candidates = hunkMarkers.length ? hunkMarkers : [marker];
       for (const candidate of candidates) {
         if (!(candidate instanceof HTMLElement) || seen.has(candidate)) {
@@ -875,7 +825,7 @@ export function createGitBlameHoverController({
     const changedMarker = getChangedMarkerForRow(gutterRowElement, hit, y);
     if (changedMarker) {
       nextMarkers = [changedMarker];
-      nextMarkerHoverKind = getMarkerChangeKindAt(changedMarker, y);
+      nextMarkerHoverKind = getGitGutterMarkerChangeKindAt(changedMarker, y);
       if (nextMarkerHoverKind === 'deleted') {
         activeGutterRowElement = getMarkerGutterRowElement(changedMarker) ?? gutterRowElement;
       }
@@ -943,7 +893,7 @@ export function createGitBlameHoverController({
     }
 
     if (nextMarkers.length) {
-      nextMarkers = expandMarkersToGitHunk(nextMarkers);
+      nextMarkers = expandMarkersToGitHunk(nextMarkers, nextMarkerHoverKind);
     }
 
     if (
@@ -965,7 +915,7 @@ export function createGitBlameHoverController({
     activeMarkerHoverKind = nextMarkerHoverKind;
     for (const marker of activeMarkerElements) {
       marker.classList.add('is-hit-hover');
-      const markerHoverKind = getMarkerChangeKind(marker) ?? activeMarkerHoverKind;
+      const markerHoverKind = activeMarkerHoverKind ?? getGitGutterMarkerChangeKind(marker);
       if (markerHoverKind === 'added' || markerHoverKind === 'deleted' || markerHoverKind === 'modified') {
         marker.classList.add(`is-hit-hover-${markerHoverKind}`);
       }
@@ -1040,7 +990,7 @@ export function createGitBlameHoverController({
 
   const lineNumberAtClientY = (layout, clientY, gutterRowElement = null, markerElement = null) => {
     const markerRowElement = (
-      getMarkerChangeKindAt(markerElement, clientY) === 'deleted'
+      getGitGutterMarkerChangeKindAt(markerElement, clientY) === 'deleted'
         ? getMarkerGutterRowElement(markerElement)
         : null
     );
@@ -1362,7 +1312,7 @@ export function createGitBlameHoverController({
     );
     const effectiveChangeKind = (
       hit.effectiveChangeKind ??
-      getMarkerChangeKindAt(hoveredMarkerElement, event.clientY) ??
+      getGitGutterMarkerChangeKindAt(hoveredMarkerElement, event.clientY) ??
       (activeGutterRowHoverKind === 'added' || activeGutterRowHoverKind === 'deleted' || activeGutterRowHoverKind === 'modified'
         ? activeGutterRowHoverKind
         : null)
@@ -1499,7 +1449,7 @@ export function createGitBlameHoverController({
     }
     const effectiveChangeKind = (
       hit.effectiveChangeKind ??
-      getMarkerChangeKindAt(marker, event.clientY)
+      getGitGutterMarkerChangeKindAt(marker, event.clientY)
     );
     const effectiveChangeScope = (
       hit.effectiveChangeScope ??
@@ -1521,7 +1471,12 @@ export function createGitBlameHoverController({
 
     const scope = effectiveChangeScope === 'staged' ? 'staged' : 'unstaged';
     if (clickIntent === 'inline' && typeof toggleInlineSplitForLine === 'function') {
-      const handled = toggleInlineSplitForLine({ lineNumber: targetLineNumber, scope });
+      const hunkMetadata = getGitGutterMarkerHunkMetadata(marker, effectiveChangeKind);
+      const handled = toggleInlineSplitForLine({
+        hunkId: hunkMetadata?.diffHunkId,
+        lineNumber: targetLineNumber,
+        scope
+      });
       if (handled !== false) {
         return;
       }

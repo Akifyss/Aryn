@@ -3,9 +3,23 @@ import { Change, Chunk } from '@aryn/codemirror-merge'
 // @ts-expect-error Monaco exposes the VS Code diff implementation as ESM JS without declarations.
 import { DefaultLinesDiffComputer } from 'monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/defaultLinesDiffComputer.js'
 
+export type GitLineChangeKind = 'added' | 'deleted' | 'modified'
+
+export type GitLineHunkMetadata = {
+  diffHunkId?: string
+  hunkEndLine: number
+  hunkId: string
+  hunkStartLine: number
+}
+
 export type GitLineChangeFlags = {
   added: boolean
   deleted: boolean
+  diffHunkId?: string
+  hunkEndLine?: number
+  hunkId?: string
+  hunkStartLine?: number
+  hunks?: Partial<Record<GitLineChangeKind, GitLineHunkMetadata>>
   modified: boolean
   scope?: 'staged' | 'unstaged'
 }
@@ -20,6 +34,21 @@ function emptyLineChangeFlags(): GitLineChangeFlags {
 
 const GIT_LINE_DIFF_TIMEOUT_MS = 200
 const vsCodeLineDiffComputer = new DefaultLinesDiffComputer()
+
+export function createGitDiffLineHunkId(
+  originalStartLine: number,
+  originalEndLineExclusive: number,
+  modifiedStartLine: number,
+  modifiedEndLineExclusive: number,
+) {
+  return [
+    'git-diff',
+    Math.max(0, Math.floor(originalStartLine)),
+    Math.max(0, Math.floor(originalEndLineExclusive)),
+    Math.max(0, Math.floor(modifiedStartLine)),
+    Math.max(0, Math.floor(modifiedEndLineExclusive)),
+  ].join(':')
+}
 
 type VsCodePosition = {
   column: number
@@ -229,6 +258,62 @@ function hasLineChange(flags: GitLineChangeFlags | undefined) {
   return !!(flags?.added || flags?.deleted || flags?.modified)
 }
 
+function copyGitLineChangeHunks(flags: GitLineChangeFlags | undefined) {
+  return flags?.hunks ? { ...flags.hunks } : undefined
+}
+
+function cloneGitLineChangeFlags(flags: GitLineChangeFlags): GitLineChangeFlags {
+  return {
+    added: !!flags.added,
+    deleted: !!flags.deleted,
+    diffHunkId: flags.diffHunkId,
+    hunkEndLine: flags.hunkEndLine,
+    hunkId: flags.hunkId,
+    hunkStartLine: flags.hunkStartLine,
+    hunks: copyGitLineChangeHunks(flags),
+    modified: !!flags.modified,
+    scope: flags.scope,
+  }
+}
+
+function createGitLineHunkMetadata(
+  originalStartLine: number,
+  originalEndLineExclusive: number,
+  modifiedStartLine: number,
+  modifiedEndLineExclusive: number,
+  startLine: number,
+  endLine: number,
+): GitLineHunkMetadata {
+  const hunkId = createGitDiffLineHunkId(
+    originalStartLine,
+    originalEndLineExclusive,
+    modifiedStartLine,
+    modifiedEndLineExclusive,
+  )
+  return {
+    diffHunkId: hunkId,
+    hunkEndLine: endLine,
+    hunkId,
+    hunkStartLine: startLine,
+  }
+}
+
+function setGitLineChangeKind(
+  flags: GitLineChangeFlags,
+  kind: GitLineChangeKind,
+  metadata: GitLineHunkMetadata,
+) {
+  flags[kind] = true
+  flags.diffHunkId = metadata.diffHunkId
+  flags.hunkEndLine = metadata.hunkEndLine
+  flags.hunkId = metadata.hunkId
+  flags.hunkStartLine = metadata.hunkStartLine
+  flags.hunks = {
+    ...(flags.hunks ?? {}),
+    [kind]: metadata,
+  }
+}
+
 function clampDeletedAnchorLine(modifiedStartLine: number, currentLineCount: number) {
   if (currentLineCount <= 1) {
     return 1
@@ -347,22 +432,41 @@ export function buildLineFlagsFromVsCodeDiff(
       if (originalLineCount > 0) {
         const anchorLine = clampDeletedAnchorLine(modifiedStartLine, currentDoc.lines)
         const flags = lineFlags[anchorLine - 1] ?? (lineFlags[anchorLine - 1] = emptyLineChangeFlags())
-        flags.deleted = true
+        setGitLineChangeKind(
+          flags,
+          'deleted',
+          createGitLineHunkMetadata(
+            change.original.startLineNumber,
+            change.original.endLineNumberExclusive,
+            change.modified.startLineNumber,
+            change.modified.endLineNumberExclusive,
+            anchorLine,
+            anchorLine,
+          ),
+        )
       }
       continue
     }
     const isPureInsert = originalLineCount === 0 || baseDoc.length === 0
     const startLine = Math.max(1, modifiedStartLine)
     const endLine = Math.min(currentDoc.lines + 1, modifiedEndLineExclusive)
+    const metadata = createGitLineHunkMetadata(
+      change.original.startLineNumber,
+      change.original.endLineNumberExclusive,
+      change.modified.startLineNumber,
+      change.modified.endLineNumberExclusive,
+      startLine,
+      Math.max(startLine, endLine - 1),
+    )
     for (let lineNo = startLine; lineNo < endLine; lineNo += 1) {
       if (lineNo > currentDoc.lines) {
         continue
       }
       const flags = lineFlags[lineNo - 1] ?? (lineFlags[lineNo - 1] = emptyLineChangeFlags())
       if (isPureInsert) {
-        flags.added = true
+        setGitLineChangeKind(flags, 'added', metadata)
       } else {
-        flags.modified = true
+        setGitLineChangeKind(flags, 'modified', metadata)
       }
     }
   }
@@ -387,6 +491,11 @@ export function buildScopedLineFlagsFromVsCodeDiff(
       lineFlags[lineNo - 1] = {
         added: !!unstaged.added,
         deleted: !!unstaged.deleted,
+        diffHunkId: unstaged.diffHunkId,
+        hunkEndLine: unstaged.hunkEndLine,
+        hunkId: unstaged.hunkId,
+        hunkStartLine: unstaged.hunkStartLine,
+        hunks: copyGitLineChangeHunks(unstaged),
         modified: !!unstaged.modified,
         scope: 'unstaged',
       }
@@ -410,9 +519,7 @@ export function buildScopedLineFlagsFromVsCodeDiff(
 
     const currentLineNo = mappedCurrentLineNo
     lineFlags[currentLineNo - 1] = {
-      added: !!staged.added,
-      deleted: !!staged.deleted,
-      modified: !!staged.modified,
+      ...cloneGitLineChangeFlags(staged),
       scope: 'staged',
     }
   }

@@ -45,7 +45,7 @@ import {
   type CodeMirrorDiffChunk,
   type DiffNavigationSide,
 } from '@/features/editor/lib/git-diff-navigation'
-import { buildCodeMirrorChunksFromVsCodeDiff, buildSourceToTargetLineMap } from '@/vendor/meo/shared/gitDiffLineFlags'
+import { buildCodeMirrorChunksFromVsCodeDiff, buildSourceToTargetLineMap, createGitDiffLineHunkId } from '@/vendor/meo/shared/gitDiffLineFlags'
 import { insertCodeBlock } from '@/vendor/meo/webview/helpers/codeBlocks'
 import { getLinkHrefAtPointer, isPrimaryModifierPointerClick } from '@/vendor/meo/webview/helpers/linkNavigation'
 import {
@@ -2087,6 +2087,16 @@ function createReadOnlyExtension(editable: boolean, readOnly: boolean) {
 type DiffSplitGutterFlags = {
   added: boolean
   deleted: boolean
+  diffHunkId?: string
+  hunkEndLine?: number
+  hunkId?: string
+  hunkStartLine?: number
+  hunks?: Partial<Record<'added' | 'deleted' | 'modified', {
+    diffHunkId?: string
+    hunkEndLine?: number
+    hunkId: string
+    hunkStartLine?: number
+  }>>
   modified: boolean
   removed?: boolean
   liveBlockEndLine?: number
@@ -2098,12 +2108,26 @@ function createDiffSplitGutterFlags(flags: Partial<DiffSplitGutterFlags>): DiffS
   return {
     added: flags.added === true,
     deleted: flags.deleted === true,
+    diffHunkId: flags.diffHunkId,
+    hunkEndLine: flags.hunkEndLine,
+    hunkId: flags.hunkId,
+    hunkStartLine: flags.hunkStartLine,
+    hunks: flags.hunks ? { ...flags.hunks } : undefined,
     liveBlockEndLine: flags.liveBlockEndLine,
     liveBlockStartLine: flags.liveBlockStartLine,
     modified: flags.modified === true,
     removed: flags.removed === true,
     scope: flags.scope,
   }
+}
+
+function createDiffSplitGutterHunkId(selection: GitDiffSelection) {
+  return createGitDiffLineHunkId(
+    selection.originalStartLine,
+    selection.originalStartLine + selection.originalLineCount,
+    selection.modifiedStartLine,
+    selection.modifiedStartLine + selection.modifiedLineCount,
+  )
 }
 
 export function buildDiffSplitGutterFlagsFromChunks(
@@ -2117,6 +2141,7 @@ export function buildDiffSplitGutterFlagsFromChunks(
 
   for (const chunk of chunks) {
     const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
+    const hunkId = createDiffSplitGutterHunkId(selection)
     if (side === 'original') {
       const lineCount = Math.max(0, selection.originalLineCount)
       if (!lineCount) {
@@ -2125,8 +2150,14 @@ export function buildDiffSplitGutterFlagsFromChunks(
 
       const startLine = clampNumber(selection.originalStartLine, 1, doc.lines)
       const endLine = clampNumber(startLine + lineCount - 1, startLine, doc.lines)
+      const metadata = { diffHunkId: hunkId, hunkEndLine: endLine, hunkId, hunkStartLine: startLine }
       for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
         lineFlags[lineNo - 1] = createDiffSplitGutterFlags({
+          diffHunkId: hunkId,
+          hunkEndLine: endLine,
+          hunkId,
+          hunkStartLine: startLine,
+          hunks: { deleted: metadata },
           removed: true,
           scope: 'unstaged',
         })
@@ -2141,9 +2172,15 @@ export function buildDiffSplitGutterFlagsFromChunks(
 
     const startLine = clampNumber(selection.modifiedStartLine, 1, doc.lines)
     const endLine = clampNumber(startLine + lineCount - 1, startLine, doc.lines)
+    const metadata = { diffHunkId: hunkId, hunkEndLine: endLine, hunkId, hunkStartLine: startLine }
     for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
       lineFlags[lineNo - 1] = createDiffSplitGutterFlags({
         added: true,
+        diffHunkId: hunkId,
+        hunkEndLine: endLine,
+        hunkId,
+        hunkStartLine: startLine,
+        hunks: { added: metadata },
         scope: 'unstaged',
       })
     }
@@ -2153,9 +2190,17 @@ export function buildDiffSplitGutterFlagsFromChunks(
 }
 
 function mapDiffSplitOriginalGutterFlag(flags: DiffSplitGutterFlags) {
+  const deletedHunk = flags.hunks?.deleted ?? (
+    flags.hunkId ? { diffHunkId: flags.diffHunkId, hunkEndLine: flags.hunkEndLine, hunkId: flags.hunkId, hunkStartLine: flags.hunkStartLine } : undefined
+  )
   return {
     added: false,
     deleted: false,
+    diffHunkId: deletedHunk?.diffHunkId,
+    hunkEndLine: deletedHunk?.hunkEndLine,
+    hunkId: deletedHunk?.hunkId,
+    hunkStartLine: deletedHunk?.hunkStartLine,
+    hunks: deletedHunk ? { deleted: deletedHunk } : undefined,
     liveBlockEndLine: flags.liveBlockEndLine,
     liveBlockStartLine: flags.liveBlockStartLine,
     modified: false,
@@ -2165,9 +2210,17 @@ function mapDiffSplitOriginalGutterFlag(flags: DiffSplitGutterFlags) {
 }
 
 function mapDiffSplitModifiedGutterFlag(flags: DiffSplitGutterFlags) {
+  const addedHunk = flags.hunks?.added ?? (
+    flags.hunkId ? { diffHunkId: flags.diffHunkId, hunkEndLine: flags.hunkEndLine, hunkId: flags.hunkId, hunkStartLine: flags.hunkStartLine } : undefined
+  )
   return {
     added: flags.added || flags.modified || !!flags.removed,
     deleted: false,
+    diffHunkId: addedHunk?.diffHunkId,
+    hunkEndLine: addedHunk?.hunkEndLine,
+    hunkId: addedHunk?.hunkId,
+    hunkStartLine: addedHunk?.hunkStartLine,
+    hunks: addedHunk ? { added: addedHunk } : undefined,
     liveBlockEndLine: flags.liveBlockEndLine,
     liveBlockStartLine: flags.liveBlockStartLine,
     modified: false,
@@ -2185,10 +2238,24 @@ export function mapUnifiedDiffWidgetGutterFlag(
   }
 
   return createDiffSplitGutterFlags({
+    diffHunkId: flags?.diffHunkId,
+    hunkEndLine: flags?.hunkEndLine,
+    hunkId: flags?.hunkId,
+    hunkStartLine: flags?.hunkStartLine,
+    hunks: flags?.hunks?.deleted
+      ? { deleted: flags.hunks.deleted }
+      : flags?.hunkId
+        ? { deleted: { diffHunkId: flags.diffHunkId, hunkEndLine: flags.hunkEndLine, hunkId: flags.hunkId, hunkStartLine: flags.hunkStartLine } }
+        : undefined,
     removed: true,
     scope: flags?.scope ?? 'unstaged',
   })
 }
+
+export const __meoDiffSplitGutterTestHooks = {
+  createDiffSplitGutterFlags,
+  mapUnifiedDiffWidgetGutterFlag,
+} as const
 
 export type MeoDiffPaneExtensionOptions = {
   activeLineHighlightCompartment: Compartment
@@ -3611,6 +3678,7 @@ export function createMeoDiffSplitController({
   parent.appendChild(host)
 
   const getModifiedView = () => mergeView?.b ?? unifiedView ?? previewView
+  const getOriginalView = () => mergeView?.a ?? previewOriginalView
 
   const getOriginalDiffDoc = () => {
     if (mergeView) {
@@ -3763,6 +3831,7 @@ export function createMeoDiffSplitController({
     const originalDoc = getOriginalDiffDoc()
     const modifiedDoc = getModifiedDiffDoc()
     const modifiedView = getModifiedView()
+    const originalView = getOriginalView()
     if (!originalDoc || !modifiedDoc || !modifiedView) {
       return
     }
@@ -3785,6 +3854,12 @@ export function createMeoDiffSplitController({
         buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'modified'),
       )
     } else {
+      if (originalView) {
+        setGitDiffLineFlags(
+          originalView,
+          buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'original'),
+        )
+      }
       setGitDiffLineFlags(
         modifiedView,
         buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'modified'),
