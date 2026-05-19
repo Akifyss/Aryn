@@ -45,6 +45,7 @@ describe('app state persistence', () => {
         appIconId: DEFAULT_APP_ICON_ID,
         workspaceIconTheme: {
           activeThemeId: null,
+          sourceKind: 'bundled',
           sourceVsixPath: null,
         },
       },
@@ -94,6 +95,7 @@ describe('app state persistence', () => {
         appIconId: DEFAULT_APP_ICON_ID,
         workspaceIconTheme: {
           activeThemeId: null,
+          sourceKind: 'bundled',
           sourceVsixPath: null,
         },
       },
@@ -120,6 +122,60 @@ describe('app state persistence', () => {
     expect(getWorkspaceEntry(state, 'C:/workspace')).toEqual({
       lastAgentSessionPath: null,
       lastFilePath: null,
+    })
+  })
+
+  it('preserves external workspace icon theme paths', () => {
+    const state = normalizePersistedAppState({
+      ui: {
+        workspaceIconTheme: {
+          activeThemeId: 'flow-you',
+          sourceKind: 'external',
+          sourceVsixPath: '/Users/me/theme.vsix',
+        },
+      },
+    })
+
+    expect(state.ui.workspaceIconTheme).toEqual({
+      activeThemeId: 'flow-you',
+      sourceKind: 'external',
+      sourceVsixPath: '/Users/me/theme.vsix',
+    })
+  })
+
+  it('stores bundled workspace icon theme selections without a VSIX path', () => {
+    const state = normalizePersistedAppState({
+      ui: {
+        workspaceIconTheme: {
+          activeThemeId: 'flow-dawn',
+          sourceKind: 'bundled',
+          sourceVsixPath: '/old/app/public/icon-themes/thang-nm.flow-icons-1.3.2.vsix',
+        },
+      },
+    })
+
+    expect(state.ui.workspaceIconTheme).toEqual({
+      activeThemeId: 'flow-dawn',
+      sourceKind: 'bundled',
+      sourceVsixPath: null,
+    })
+  })
+
+  it('normalizes invalid external workspace icon theme selections to bundled', () => {
+    const state = normalizePersistedAppState({
+      ui: {
+        workspaceIconTheme: {
+          activeThemeId: 'flow-deep',
+          sourceKind: 'external',
+          sourceVsixPath: null,
+        },
+      },
+    })
+
+    expect(state.ui.workspaceIconTheme).toEqual({
+      activeThemeId: 'flow-deep',
+      sourceKind: 'bundled',
+      sourceVsixPath: null,
     })
   })
 })

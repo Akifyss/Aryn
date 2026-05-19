@@ -9,6 +9,7 @@ export const DEFAULT_AGENT_COMPOSER_HEIGHT = 172
 
 export type PersistedWorkspaceIconThemeSelection = {
   activeThemeId: string | null
+  sourceKind: 'bundled' | 'external' | null
   sourceVsixPath: string | null
 }
 
@@ -46,6 +47,7 @@ const DEFAULT_APP_STATE: PersistedAppState = {
     appIconId: DEFAULT_APP_ICON_ID,
     workspaceIconTheme: {
       activeThemeId: null,
+      sourceKind: 'bundled',
       sourceVsixPath: null,
     },
   },
@@ -95,10 +97,18 @@ function readWorkspaceIconThemeSelection(value: unknown): PersistedWorkspaceIcon
   const candidate = value && typeof value === 'object'
     ? value as Record<string, unknown>
     : {}
+  const sourceKind = candidate.sourceKind === 'bundled' || candidate.sourceKind === 'external'
+    ? candidate.sourceKind
+    : null
+  const sourceVsixPath = readNullableString(candidate.sourceVsixPath)
+  const normalizedSourceKind = sourceKind === 'external' && !sourceVsixPath
+    ? 'bundled'
+    : sourceKind ?? (sourceVsixPath ? null : 'bundled')
 
   return {
     activeThemeId: readNullableString(candidate.activeThemeId),
-    sourceVsixPath: readNullableString(candidate.sourceVsixPath),
+    sourceKind: normalizedSourceKind,
+    sourceVsixPath: normalizedSourceKind === 'bundled' ? null : sourceVsixPath,
   }
 }
 

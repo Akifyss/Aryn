@@ -7,7 +7,11 @@ import type {
   WorkspaceIconThemeOption,
   WorkspaceIconThemeSourceKind,
 } from '../../src/features/workspace/types'
-import type { PersistedWorkspaceIconThemeSelection } from './app-state'
+
+export type WorkspaceIconThemeCatalog = Pick<
+  WorkspaceIconTheme,
+  'extensionLabel' | 'sourceKind' | 'sourceVsixPath' | 'themes'
+>
 
 type ThemeContribution = {
   id: string
@@ -297,6 +301,10 @@ async function hasFile(filePath: string) {
   }
 }
 
+function getExtensionLabel(manifest: ExtensionPackageManifest) {
+  return manifest.displayName?.trim() || manifest.name?.trim() || 'VS Code Icon Theme'
+}
+
 async function loadExtensionManifest(extensionRootPath: string) {
   const manifestPath = path.join(extensionRootPath, packageFileName)
   const rawManifest = await readFile(manifestPath, 'utf8')
@@ -310,6 +318,23 @@ async function loadExtensionManifest(extensionRootPath: string) {
   return {
     iconThemes,
     manifest,
+  }
+}
+
+export async function loadWorkspaceIconThemeCatalogFromVsix(
+  vsixPath: string,
+  cacheRootPath: string,
+  sourceKind: WorkspaceIconThemeSourceKind = 'external',
+): Promise<WorkspaceIconThemeCatalog> {
+  const resolvedVsixPath = path.resolve(vsixPath)
+  const extensionRootPath = await ensureExtractedVsix(resolvedVsixPath, cacheRootPath)
+  const { iconThemes, manifest } = await loadExtensionManifest(extensionRootPath)
+
+  return {
+    extensionLabel: getExtensionLabel(manifest),
+    sourceKind,
+    sourceVsixPath: resolvedVsixPath,
+    themes: toThemeOptions(iconThemes),
   }
 }
 
@@ -342,7 +367,7 @@ export async function importWorkspaceIconThemeFromVsix(
     defaultFolderIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.folder),
     defaultRootFolderExpandedIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.rootFolderExpanded),
     defaultRootFolderIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.rootFolder),
-    extensionLabel: manifest.displayName?.trim() || manifest.name?.trim() || 'VS Code Icon Theme',
+    extensionLabel: getExtensionLabel(manifest),
     fileExtensions: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.fileExtensions),
     fileNames: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.fileNames),
     folderNames: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.folderNames),
@@ -351,15 +376,4 @@ export async function importWorkspaceIconThemeFromVsix(
     sourceVsixPath: resolvedVsixPath,
     themes: toThemeOptions(iconThemes),
   }
-}
-
-export async function loadPersistedWorkspaceIconTheme(
-  selection: PersistedWorkspaceIconThemeSelection,
-  cacheRootPath: string,
-) {
-  if (!selection.sourceVsixPath) {
-    return null
-  }
-
-  return importWorkspaceIconThemeFromVsix(selection.sourceVsixPath, cacheRootPath, selection.activeThemeId)
 }

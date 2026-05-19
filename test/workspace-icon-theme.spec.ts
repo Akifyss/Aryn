@@ -4,7 +4,13 @@ import os from 'node:os'
 import path from 'node:path'
 import archiver from 'archiver'
 import { afterEach, describe, expect, it } from 'vitest'
-import { importWorkspaceIconThemeFromVsix } from '../electron/main/workspace-icon-theme'
+import {
+  importWorkspaceIconThemeFromVsix,
+  loadWorkspaceIconThemeCatalogFromVsix,
+} from '../electron/main/workspace-icon-theme'
+import {
+  resolveBundledWorkspaceIconThemePath,
+} from '../electron/main/bundled-workspace-icon-theme'
 import {
   resolveWorkspaceDirectoryIconUrl,
   resolveWorkspaceFileIconUrl,
@@ -37,6 +43,11 @@ async function createFixtureVsix() {
         {
           id: 'fixture-dark',
           label: 'Fixture Dark',
+          path: 'theme.json',
+        },
+        {
+          id: 'fixture-you',
+          label: 'Fixture You',
           path: 'theme.json',
         },
       ],
@@ -123,6 +134,34 @@ describe('workspace icon theme import', () => {
     expectDataUrl(theme.fileExtensions['spec.ts'])
     expectDataUrl(theme.folderNames.docs)
     expectDataUrl(theme.folderNamesExpanded.docs)
+  })
+
+  it('exposes every icon theme variant contributed by a VSIX package', async () => {
+    const fixture = await createFixtureVsix()
+
+    const theme = await loadWorkspaceIconThemeCatalogFromVsix(fixture.vsixPath, fixture.cacheRootPath)
+
+    expect(theme.themes).toEqual([
+      {
+        id: 'fixture-dark',
+        label: 'Fixture Dark',
+      },
+      {
+        id: 'fixture-you',
+        label: 'Fixture You',
+      },
+    ])
+  })
+
+  it('exposes the Flow You variant from the bundled Flow Icons package', async () => {
+    const bundledThemeDirectoryPath = path.join(process.cwd(), 'public', 'icon-themes')
+    const bundledThemePath = await resolveBundledWorkspaceIconThemePath(bundledThemeDirectoryPath)
+    const cacheRootPath = await createTempDir('workspace-icon-theme-cache-')
+
+    const theme = await loadWorkspaceIconThemeCatalogFromVsix(bundledThemePath, cacheRootPath, 'bundled')
+
+    expect(theme.sourceKind).toBe('bundled')
+    expect(theme.themes.map((themeOption) => themeOption.label)).toContain('Flow You')
   })
 
   it('matches exact file names, multi-part extensions, and expanded folder icons', async () => {
