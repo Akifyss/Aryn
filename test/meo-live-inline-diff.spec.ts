@@ -2,7 +2,10 @@ import { Text } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import type { CodeMirrorDiffChunk } from '../src/features/editor/lib/git-diff-navigation'
 import { __meoLiveInlineDiffTestHooks } from '../src/features/editor/lib/meo-native-live-inline-diff'
-import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
+import {
+  buildCodeMirrorChunksFromVsCodeDiff,
+  createGitDiffLineHunkId,
+} from '../src/vendor/meo/shared/gitDiffLineFlags'
 
 function createScenarioDocs() {
   const originalLines = Array.from({ length: 62 }, (_, index) => `line ${index + 1}`)
@@ -222,6 +225,116 @@ describe('meo live inline diff', () => {
       originalLineCount: 2,
       originalStartLine: 58,
     })
+  })
+
+  it('matches pure insertion gutter hunk ids to inline split chunks', () => {
+    const originalDoc = Text.of('A\nC\n'.split('\n'))
+    const modifiedDoc = Text.of('A\nB\nC\n'.split('\n'))
+    const chunks = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc) as readonly CodeMirrorDiffChunk[]
+    const requestedHunkId = createGitDiffLineHunkId(2, 2, 2, 3)
+
+    const match = __meoLiveInlineDiffTestHooks.findInlineChunkMatch(
+      originalDoc,
+      modifiedDoc,
+      chunks,
+      2,
+      requestedHunkId,
+    )
+
+    expect(match?.selection).toEqual({
+      modifiedLineCount: 1,
+      modifiedStartLine: 2,
+      originalLineCount: 0,
+      originalStartLine: 1,
+    })
+    expect(match?.displaySelection).toEqual({
+      modifiedLineCount: 1,
+      modifiedStartLine: 2,
+      originalLineCount: 0,
+      originalStartLine: 1,
+    })
+  })
+
+  it('projects pure insertion split chunks without pulling the next line into inline split', () => {
+    const originalDoc = Text.of([
+      'line 18',
+      'line 20',
+    ])
+    const modifiedDoc = Text.of([
+      'line 18',
+      'line 19 inserted',
+      'line 20',
+    ])
+    const chunks = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc) as readonly CodeMirrorDiffChunk[]
+    const match = __meoLiveInlineDiffTestHooks.findInlineChunkMatch(
+      originalDoc,
+      modifiedDoc,
+      chunks,
+      2,
+      createGitDiffLineHunkId(2, 2, 2, 3),
+    )
+
+    expect(match?.displaySelection).toEqual({
+      modifiedLineCount: 1,
+      modifiedStartLine: 2,
+      originalLineCount: 0,
+      originalStartLine: 1,
+    })
+    expect(modifiedDoc.sliceString(modifiedDoc.line(2).from, modifiedDoc.line(2).to)).toBe('line 19 inserted')
+
+    const [inlineChunk] = __meoLiveInlineDiffTestHooks.translateInlineDiffChunks(
+      originalDoc,
+      modifiedDoc,
+      match?.chunks ?? [],
+      match!.displaySelection,
+    )
+    expect(inlineChunk).toMatchObject({
+      fromA: 0,
+      fromB: 0,
+      toA: 0,
+      toB: 'line 19 inserted\n'.length,
+    })
+  })
+
+  it('matches pure deletion gutter hunk ids to inline split chunks', () => {
+    const originalDoc = Text.of('A\nB\nC\n'.split('\n'))
+    const modifiedDoc = Text.of('A\nC\n'.split('\n'))
+    const chunks = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc) as readonly CodeMirrorDiffChunk[]
+    const requestedHunkId = createGitDiffLineHunkId(2, 3, 2, 2)
+
+    const match = __meoLiveInlineDiffTestHooks.findInlineChunkMatch(
+      originalDoc,
+      modifiedDoc,
+      chunks,
+      1,
+      requestedHunkId,
+    )
+
+    expect(match?.selection).toEqual({
+      modifiedLineCount: 0,
+      modifiedStartLine: 1,
+      originalLineCount: 1,
+      originalStartLine: 2,
+    })
+    expect(match?.displaySelection).toEqual({
+      modifiedLineCount: 0,
+      modifiedStartLine: 1,
+      originalLineCount: 1,
+      originalStartLine: 2,
+    })
+  })
+
+  it('places zero-width inline deletion widgets before the next line', () => {
+    const doc = Text.of([
+      'A',
+      'C',
+    ])
+
+    expect(__meoLiveInlineDiffTestHooks.getInlineWidgetSide(
+      doc,
+      doc.line(2).from,
+      doc.line(2).from,
+    )).toBe(-1)
   })
 
   it('maps an outer live caret inside a refreshed hunk to the inline modified editor', () => {

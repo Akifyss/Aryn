@@ -18,6 +18,10 @@ export type CodeMirrorDiffChunk = {
   vscodeModifiedStartLine?: number
   vscodeOriginalEndLineExclusive?: number
   vscodeOriginalStartLine?: number
+  actualFromA?: number
+  actualFromB?: number
+  actualToA?: number
+  actualToB?: number
   changes: readonly {
     fromA: number
     toA: number

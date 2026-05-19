@@ -758,8 +758,10 @@ function getChunkDeco(view: EditorView) {
   let gutterBuilder = markGutter ? new RangeSetBuilder<GutterMarker>() : null
   let {from, to} = view.viewport
   for (let chunk of chunks) {
-    if ((isA ? chunk.fromA : chunk.fromB) > to) break
-    if ((isA ? chunk.toA : chunk.toB) > from) {
+    let chunkFrom = isA ? chunk.fromA : chunk.fromB
+    let chunkTo = isA ? chunk.toA : chunk.toB
+    if (chunkFrom > to) break
+    if (chunkFrom == chunkTo ? chunkFrom >= from && chunkFrom <= to : chunkTo > from) {
       if (!overrideChunk || !overrideChunk(view.state, chunk, builder, gutterBuilder))
         buildChunkDeco(chunk, view.state.doc, isA, highlightChanges, builder, gutterBuilder)
     }
@@ -812,7 +814,12 @@ export const Spacers = StateField.define<DecorationSet>({
 
 const epsilon = .01
 
+function documentIsEmptySide(view: EditorView) {
+  return view.state.facet(mergeConfig).emptySide === true
+}
+
 function documentBottom(view: EditorView) {
+  if (documentIsEmptySide(view)) return 0
   return view.lineBlockAt(view.state.doc.length).bottom
 }
 
@@ -900,6 +907,7 @@ export function updateSpacers(
   let spacersA = a.state.field(Spacers).iter(), spacersB = b.state.field(Spacers).iter()
   let posA = 0, posB = 0, offA = 0, offB = 0, vpA = a.viewport, vpB = b.viewport
   let nextSpacerIsViewportAlignment = false
+  let emptySideA = documentIsEmptySide(a), emptySideB = documentIsEmptySide(b)
   chunks: for (let chunkI = 0;; chunkI++) {
     let chunk = chunkI < chunks.length ? chunks[chunkI] : null
     let endA = chunk ? chunk.fromA : a.state.doc.length, endB = chunk ? chunk.fromB : b.state.doc.length
@@ -908,8 +916,8 @@ export function updateSpacers(
       let previousChunk = chunkI > 0 ? chunks[chunkI - 1] : null
       let viewportAlignment = nextSpacerIsViewportAlignment
       nextSpacerIsViewportAlignment = false
-      let heightA = a.lineBlockAt(posA).top + offA
-      let heightB = b.lineBlockAt(posB).top + offB
+      let heightA = emptySideA ? offA : a.lineBlockAt(posA).top + offA
+      let heightB = emptySideB ? offB : b.lineBlockAt(posB).top + offB
       let diff = heightA - heightB
       if (diff < -epsilon) {
         offA -= diff
@@ -933,7 +941,7 @@ export function updateSpacers(
     // sides), add another sync at the top of the viewport. That way,
     // big unchanged chunks with possibly inaccurate estimated heights
     // won't cause the content to misalign (#1408)
-    if (endA > posA + 1000 && posA < vpA.from && endA > vpA.from && posB < vpB.from && endB > vpB.from) {
+    if (!emptySideA && !emptySideB && endA > posA + 1000 && posA < vpA.from && endA > vpA.from && posB < vpB.from && endB > vpB.from) {
       let off = Math.min(vpA.from - posA, vpB.from - posB)
       posA += off; posB += off
       nextSpacerIsViewportAlignment = true
@@ -944,20 +952,20 @@ export function updateSpacers(
       posA = chunk.toA; posB = chunk.toB
     }
     while (spacersA.value && spacersA.from < posA) {
-      offA -= (spacersA.value.spec.widget as Spacer).height
+      if (!emptySideA) offA -= (spacersA.value.spec.widget as Spacer).height
       spacersA.next()
     }
     while (spacersB.value && spacersB.from < posB) {
-      offB -= (spacersB.value.spec.widget as Spacer).height
+      if (!emptySideB) offB -= (spacersB.value.spec.widget as Spacer).height
       spacersB.next()
     }
   }
   while (spacersA.value) {
-    offA -= (spacersA.value.spec.widget as any).height
+    if (!emptySideA) offA -= (spacersA.value.spec.widget as any).height
     spacersA.next()
   }
   while (spacersB.value) {
-    offB -= (spacersB.value.spec.widget as any).height
+    if (!emptySideB) offB -= (spacersB.value.spec.widget as any).height
     spacersB.next()
   }
   let docDiff = (documentBottom(a) + offA) - (documentBottom(b) + offB)

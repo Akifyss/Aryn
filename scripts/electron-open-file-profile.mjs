@@ -29,6 +29,8 @@ const timeoutMs = readNumberEnv('ARYN_ELECTRON_PROFILE_TIMEOUT_MS', 120_000)
 const mode = process.env.ARYN_ELECTRON_PROFILE_MODE === 'restore' ? 'restore' : 'click'
 const settleMs = readNumberEnv('ARYN_ELECTRON_PROFILE_SETTLE_MS', 1_000)
 const meoMode = readMeoMode(process.env.ARYN_ELECTRON_PROFILE_MEO_MODE)
+const inlineHunkLine = readOptionalNumberEnv('ARYN_ELECTRON_PROFILE_INLINE_HUNK_LINE')
+const inlineHunkKind = readInlineHunkKind(process.env.ARYN_ELECTRON_PROFILE_INLINE_HUNK_KIND)
 
 const scriptStart = performance.now()
 const nodeEvents = []
@@ -38,8 +40,17 @@ function readNumberEnv(name, fallback) {
   return Number.isFinite(value) && value > 0 ? value : fallback
 }
 
+function readOptionalNumberEnv(name) {
+  const value = Number.parseInt(process.env[name] ?? '', 10)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
 function readMeoMode(value) {
   return ['diff-split', 'diff-unified', 'live', 'source'].includes(value) ? value : null
+}
+
+function readInlineHunkKind(value) {
+  return ['added', 'deleted', 'modified'].includes(value ?? '') ? value : null
 }
 
 function nowMs() {
@@ -425,6 +436,238 @@ async function waitForEditorReady(page, label = 'editor') {
   mark(`${label}:text-visible`)
 }
 
+async function clickInlineHunkMarker(page, lineNumber, kind) {
+  mark('inline-hunk:click:start', { kind, lineNumber })
+  const markerInfo = await page.evaluate(
+    ({ kind: targetKind, lineNumber: targetLineNumber }) => {
+      const parseMetadata = (value) => {
+        if (typeof value !== 'string' || !value) {
+          return null
+        }
+        try {
+          const parsed = JSON.parse(value)
+          return parsed && typeof parsed === 'object' ? parsed : null
+        } catch {
+          return null
+        }
+      }
+      const metadataForKind = (marker, nextKind) => {
+        if (!nextKind) {
+          return null
+        }
+        const suffix = nextKind[0].toUpperCase() + nextKind.slice(1)
+        return parseMetadata(marker.dataset[`meoGitHunk${suffix}`])
+      }
+      const markerKinds = (marker) => {
+        const result = []
+        if (marker.classList.contains('is-added')) result.push('added')
+        if (marker.classList.contains('is-deleted')) result.push('deleted')
+        if (marker.classList.contains('is-modified')) result.push('modified')
+        return result
+      }
+      const markerContainsLine = (marker, nextKind) => {
+        const metadata = metadataForKind(marker, nextKind)
+        const start = Number.parseInt(
+          String(metadata?.s ?? metadata?.hunkStartLine ?? marker.dataset.meoGitHunkStartLine ?? ''),
+          10,
+        )
+        const end = Number.parseInt(
+          String(metadata?.e ?? metadata?.hunkEndLine ?? marker.dataset.meoGitHunkEndLine ?? ''),
+          10,
+        )
+        if (!Number.isInteger(start) || !Number.isInteger(end)) {
+          return false
+        }
+        return targetLineNumber >= Math.min(start, end) && targetLineNumber <= Math.max(start, end)
+      }
+      const markers = Array.from(document.querySelectorAll('.meo-git-gutter-marker'))
+        .filter((marker) => !marker.closest('.meo-live-inline-diff'))
+      const marker = markers.find((candidate) => {
+        const kinds = targetKind ? [targetKind] : markerKinds(candidate)
+        return kinds.some((nextKind) => markerContainsLine(candidate, nextKind))
+      }) ?? null
+
+      if (!(marker instanceof HTMLElement)) {
+        return {
+          found: false,
+          markers: markers.map((candidate) => ({
+            className: candidate.className,
+            dataset: { ...candidate.dataset },
+          })),
+        }
+      }
+
+      const rect = marker.getBoundingClientRect()
+      const x = rect.left + Math.max(2, Math.min(rect.width - 2, rect.width / 2))
+      const y = rect.top + Math.max(2, Math.min(rect.height - 2, rect.height / 2))
+      marker.dispatchEvent(new MouseEvent('mousedown', {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+      }))
+      marker.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+      }))
+
+      return {
+        dataset: { ...marker.dataset },
+        found: true,
+        rect: {
+          height: Math.round(rect.height),
+          left: Math.round(rect.left),
+          top: Math.round(rect.top),
+          width: Math.round(rect.width),
+        },
+      }
+    },
+    { kind, lineNumber },
+  )
+  mark('inline-hunk:click:end', { found: markerInfo.found, lineNumber })
+  return markerInfo
+}
+
+async function waitForInlineHunkMarker(page, lineNumber, kind) {
+  mark('inline-hunk:marker:wait', { kind, lineNumber })
+  await page.waitForFunction(
+    ({ kind: targetKind, lineNumber: targetLineNumber }) => {
+      const parseMetadata = (value) => {
+        if (typeof value !== 'string' || !value) {
+          return null
+        }
+        try {
+          const parsed = JSON.parse(value)
+          return parsed && typeof parsed === 'object' ? parsed : null
+        } catch {
+          return null
+        }
+      }
+      const kinds = targetKind ? [targetKind] : ['added', 'deleted', 'modified']
+      const metadataForKind = (marker, nextKind) => {
+        const suffix = nextKind[0].toUpperCase() + nextKind.slice(1)
+        return parseMetadata(marker.dataset[`meoGitHunk${suffix}`])
+      }
+      const markerContainsLine = (marker, nextKind) => {
+        if (
+          (nextKind === 'added' && !marker.classList.contains('is-added')) ||
+          (nextKind === 'deleted' && !marker.classList.contains('is-deleted')) ||
+          (nextKind === 'modified' && !marker.classList.contains('is-modified'))
+        ) {
+          return false
+        }
+        const metadata = metadataForKind(marker, nextKind)
+        const start = Number.parseInt(
+          String(metadata?.s ?? metadata?.hunkStartLine ?? marker.dataset.meoGitHunkStartLine ?? ''),
+          10,
+        )
+        const end = Number.parseInt(
+          String(metadata?.e ?? metadata?.hunkEndLine ?? marker.dataset.meoGitHunkEndLine ?? ''),
+          10,
+        )
+        return Number.isInteger(start)
+          && Number.isInteger(end)
+          && targetLineNumber >= Math.min(start, end)
+          && targetLineNumber <= Math.max(start, end)
+      }
+      return Array.from(document.querySelectorAll('.meo-git-gutter-marker'))
+        .filter((marker) => !marker.closest('.meo-live-inline-diff'))
+        .some((marker) => kinds.some((nextKind) => markerContainsLine(marker, nextKind)))
+    },
+    { kind, lineNumber },
+    { timeout: timeoutMs },
+  )
+  mark('inline-hunk:marker:ready', { kind, lineNumber })
+}
+
+async function waitForInlineHunk(page) {
+  await page.waitForSelector('.meo-live-inline-diff', { timeout: timeoutMs })
+  await page.waitForTimeout(500)
+  mark('inline-hunk:visible')
+}
+
+async function snapshotInlineHunk(page) {
+  return page.evaluate(() => {
+    const readRect = (element) => {
+      if (!(element instanceof HTMLElement)) {
+        return null
+      }
+      const rect = element.getBoundingClientRect()
+      return {
+        height: Math.round(rect.height),
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+      }
+    }
+    const inline = document.querySelector('.meo-live-inline-diff')
+    const root = document.querySelector('.meo-native-root')
+    const mode = root?.getAttribute('data-mode') ?? null
+    const editors = inline
+      ? Array.from(inline.querySelectorAll('.cm-editor')).map((editor, index) => ({
+          changedLineCount: editor.querySelectorAll('.cm-changedLine').length,
+          changedTextFullLineCount: editor.querySelectorAll('.cm-changedTextFullLine').length,
+          className: editor.className,
+          contentRect: readRect(editor.querySelector('.cm-content')),
+          firstLineRect: readRect(editor.querySelector('.cm-line')),
+          firstLineText: editor.querySelector('.cm-line')?.textContent ?? null,
+          gutterRects: Array.from(editor.querySelectorAll('.cm-gutterElement')).slice(0, 4).map(readRect),
+          index,
+          markerCount: editor.querySelectorAll('.meo-git-gutter-marker').length,
+          rect: readRect(editor),
+          scrollerRect: readRect(editor.querySelector('.cm-scroller')),
+          spacerRects: Array.from(editor.querySelectorAll('.cm-mergeSpacerFakeLines')).map(readRect),
+          spacerCount: editor.querySelectorAll('.cm-mergeSpacerFakeLines').length,
+          text: editor.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        }))
+      : []
+
+    return {
+      exists: inline instanceof HTMLElement,
+      inlineText: inline?.textContent?.replace(/\s+/g, ' ').trim() ?? null,
+      mainMode: mode,
+      mergeViewCount: inline?.querySelectorAll('.cm-mergeView').length ?? 0,
+      rect: readRect(inline),
+      rootClassName: root?.className ?? null,
+      viewMode: inline instanceof HTMLElement ? inline.dataset.viewMode ?? null : null,
+      editors,
+    }
+  })
+}
+
+async function snapshotGitDiagnostics(page, targetWorkspacePath, targetFilePath) {
+  return page.evaluate(
+    async ({ targetFilePath: nextFilePath, targetWorkspacePath: nextWorkspacePath }) => {
+      const baseline = await window.appApi?.getGitBaseline?.(nextWorkspacePath, nextFilePath)
+        .catch((error) => ({
+          error: error instanceof Error ? error.message : String(error),
+        }))
+      const repositoryState = await window.appApi?.getGitRepositoryState?.(nextWorkspacePath)
+        .catch((error) => ({
+          error: error instanceof Error ? error.message : String(error),
+        }))
+      const markers = Array.from(document.querySelectorAll('.meo-git-gutter-marker'))
+        .filter((marker) => !marker.closest('.meo-live-inline-diff'))
+        .map((marker) => ({
+          className: marker.className,
+          dataset: { ...marker.dataset },
+        }))
+
+      return {
+        baseline,
+        markerCount: markers.length,
+        markers,
+        repositoryState,
+      }
+    },
+    { targetFilePath, targetWorkspacePath },
+  )
+}
+
 async function restoreWorkspaceState(page, targetWorkspacePath, targetFilePath) {
   const shouldOpenFile = mode === 'restore'
   mark('workspace-state:prepare', { meoMode, mode, shouldOpenFile })
@@ -659,22 +902,26 @@ function summarizeClickStages(rendererEvents, targetFilePath) {
 }
 
 function printSummary(report) {
+  const summary = report.summary ?? {
+    clickStages: [],
+    slowestApiCalls: [],
+  }
   console.log('')
   console.log('Slowest appApi calls:')
-  if (report.summary.slowestApiCalls.length === 0) {
+  if (summary.slowestApiCalls.length === 0) {
     console.log('- unavailable: Electron contextBridge exposes frozen appApi functions, so this script uses DOM milestones.')
   } else {
-    for (const item of report.summary.slowestApiCalls.slice(0, 12)) {
+    for (const item of summary.slowestApiCalls.slice(0, 12)) {
       console.log(`- ${String(item.durationMs).padStart(7)} ms  ${item.name}${item.ok ? '' : ' (failed)'}`)
     }
   }
 
   console.log('')
   console.log('Click-to-visible stages:')
-  if (report.summary.clickStages.length === 0) {
+  if (summary.clickStages.length === 0) {
     console.log('- unavailable')
   } else {
-    for (const stage of report.summary.clickStages) {
+    for (const stage of summary.clickStages) {
       const detailBits = []
       if (typeof stage.details?.durationMs === 'number') {
         detailBits.push(`duration=${stage.details.durationMs}ms`)
@@ -728,17 +975,20 @@ async function main() {
     events: nodeEvents,
     mode,
     meoMode,
+    inlineHunkLine,
     ok: false,
     process: {
       stderr: [],
       stdout: [],
     },
+    gitDiagnostics: null,
     renderer: {
       console: [],
       pageErrors: [],
       requestFailures: [],
     },
     snapshot: null,
+    inlineHunk: null,
     summary: null,
     target: {
       filePath,
@@ -777,6 +1027,7 @@ async function main() {
 
     page = await app.firstWindow()
     mark('electron:first-window:ready')
+    await page.addInitScript(installBrowserProfiler)
 
     page.on('console', (message) => {
       report.renderer.console.push({
@@ -802,7 +1053,6 @@ async function main() {
 
     await waitForAppShell(page, 'initial')
     await restoreWorkspaceState(page, workspacePath, filePath)
-    await page.addInitScript(installBrowserProfiler)
 
     mark('reload:start')
     await page.reload({ waitUntil: 'domcontentloaded', timeout: timeoutMs })
@@ -829,6 +1079,29 @@ async function main() {
     await waitForEditorReady(page)
     await page.waitForTimeout(settleMs)
     mark('settle:done', { settleMs })
+    report.gitDiagnostics = await snapshotGitDiagnostics(page, workspacePath, filePath)
+    mark('git-diagnostics:snapshot', {
+      baselineAvailable: report.gitDiagnostics?.baseline?.available ?? null,
+      markerCount: report.gitDiagnostics?.markerCount ?? null,
+      tracked: report.gitDiagnostics?.baseline?.tracked ?? null,
+    })
+
+    if (inlineHunkLine !== null) {
+      await waitForInlineHunkMarker(page, inlineHunkLine, inlineHunkKind)
+      report.inlineHunk = {
+        click: await clickInlineHunkMarker(page, inlineHunkLine, inlineHunkKind),
+        snapshot: null,
+      }
+      if (report.inlineHunk.click.found) {
+        await waitForInlineHunk(page)
+        report.inlineHunk.snapshot = await snapshotInlineHunk(page)
+        mark('inline-hunk:snapshot', {
+          editorCount: report.inlineHunk.snapshot?.editors?.length ?? 0,
+          mainMode: report.inlineHunk.snapshot?.mainMode ?? null,
+          viewMode: report.inlineHunk.snapshot?.viewMode ?? null,
+        })
+      }
+    }
 
     const rendererEvents = await page.evaluate(() => window.__ARYN_OPEN_FILE_PROFILE__?.events ?? [])
     const appApiWrapFailures = rendererEvents

@@ -16,6 +16,7 @@ export type DeletedContentRenderer = (context: {
 }) => DeletedContentRenderResult | null | undefined
 
 type Config = {
+  emptySide?: boolean,
   sibling?: () => EditorView,
   highlightChanges: boolean,
   markGutter: boolean,

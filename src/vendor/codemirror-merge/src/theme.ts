@@ -39,6 +39,38 @@ export const baseTheme = EditorView.baseTheme({
     overflowY: "visible !important"
   },
 
+  "&.cm-merge-emptySide": {
+    minHeight: "0 !important",
+  },
+  "&.cm-merge-emptySide .cm-scroller": {
+    minHeight: "0 !important",
+  },
+  "&.cm-merge-emptySide .cm-content": {
+    lineHeight: "0 !important",
+    minHeight: "0 !important",
+    paddingTop: "0 !important",
+    paddingBottom: "0 !important",
+  },
+  "&.cm-merge-emptySide .cm-line": {
+    height: "0 !important",
+    minHeight: "0 !important",
+    padding: "0 !important",
+    overflow: "hidden",
+    lineHeight: "0 !important",
+  },
+  "&.cm-merge-emptySide .cm-line::selection": {
+    background: "transparent",
+  },
+  "&.cm-merge-emptySide .cm-lineNumbers .cm-gutterElement, &.cm-merge-emptySide .cm-gutterElement.cm-activeLineGutter": {
+    height: "0 !important",
+    minHeight: "0 !important",
+    paddingTop: "0 !important",
+    paddingBottom: "0 !important",
+    overflow: "hidden",
+    color: "transparent !important",
+    lineHeight: "0 !important",
+  },
+
   "&.cm-merge-a .cm-changedLine, .cm-deletedChunk": {
     backgroundColor: "rgba(160, 128, 100, .08)"
   },

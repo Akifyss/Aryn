@@ -50,6 +50,10 @@ export interface MergeConfig {
   /// `"fakeLines"` to keep semantic inserted/deleted empty rows while
   /// suppressing plain end padding.
   trailingSpacer?: TrailingSpacerMode
+  /// Marks document sides that are semantically empty in a sliced merge
+  /// view. This lets MergeView keep zero-width chunk/spacer behavior
+  /// without exposing CodeMirror's unavoidable one-line empty document.
+  emptySides?: Partial<Record<"a" | "b", boolean>>
 }
 
 /// Configuration options given to the [`MergeView`](#merge.MergeView)
@@ -131,6 +135,7 @@ export class MergeView {
   private outerScrollViewportRetention = 1000
   private deferChunkUpdates: MergeConfig["deferChunkUpdates"]
   private trailingSpacer: TrailingSpacerMode = "all"
+  private emptySides: Partial<Record<"a" | "b", boolean>> = {}
   private chunksStale = false
 
   /// The current set of changed chunks.
@@ -151,6 +156,7 @@ export class MergeView {
       config.outerScrollViewportRetention ?? this.outerScrollViewportMargin,
     )
     this.trailingSpacer = config.trailingSpacer ?? "all"
+    this.emptySides = config.emptySides ?? {}
 
     let sharedExtensions = [
       Prec.low(decorateChunks),
@@ -167,6 +173,7 @@ export class MergeView {
 
     let configA = [mergeConfig.of({
       side: "a",
+      emptySide: this.emptySides.a === true,
       sibling: () => this.b,
       highlightChanges: config.highlightChanges !== false,
       markGutter: config.gutter !== false
@@ -185,6 +192,7 @@ export class MergeView {
 
     let configB = [mergeConfig.of({
       side: "b",
+      emptySide: this.emptySides.b === true,
       sibling: () => this.a,
       highlightChanges: config.highlightChanges !== false,
       markGutter: config.gutter !== false
@@ -231,12 +239,18 @@ export class MergeView {
       root: config.root,
       dispatchTransactions: trs => this.dispatch(trs, this.b)
     })
+    this.syncEmptySideClasses()
     this.ensureEditorViewportPolicy(this.a)
     this.ensureEditorViewportPolicy(this.b)
     this.setupRevertControls(!!config.revertControls, config.revertControls == "b-to-a", config.renderRevertControl)
     if (config.parent) config.parent.appendChild(this.dom)
     this.syncOuterScrollListener()
     this.scheduleMeasure()
+  }
+
+  private syncEmptySideClasses() {
+    this.a?.dom.classList.toggle("cm-merge-emptySide", this.emptySides.a === true)
+    this.b?.dom.classList.toggle("cm-merge-emptySide", this.emptySides.b === true)
   }
 
   private dispatch(trs: readonly Transaction[], target: EditorView) {
@@ -301,6 +315,10 @@ export class MergeView {
     if ("trailingSpacer" in config) {
       this.trailingSpacer = config.trailingSpacer ?? "all"
     }
+    if ("emptySides" in config) {
+      this.emptySides = config.emptySides ?? {}
+      this.syncEmptySideClasses()
+    }
     if ("orientation" in config) {
       let aB = config.orientation != "b-a"
       if (aB != (this.editorDOM.firstChild == this.a.dom.parentNode)) {
@@ -322,19 +340,31 @@ export class MergeView {
       if ("renderRevertControl" in config) render = config.renderRevertControl
       this.setupRevertControls(controls, toA, render)
     }
-    let highlight = "highlightChanges" in config, gutter = "gutter" in config, collapse = "collapseUnchanged" in config
-    if (highlight || gutter || collapse) {
+    let highlight = "highlightChanges" in config, gutter = "gutter" in config, collapse = "collapseUnchanged" in config, emptySides = "emptySides" in config
+    if (highlight || gutter || collapse || emptySides) {
       let effectsA: StateEffect<unknown>[] = [], effectsB: StateEffect<unknown>[] = []
-      if (highlight || gutter) {
+      if (highlight || gutter || emptySides) {
         let currentConfig = this.a.state.facet(mergeConfig)
         let markGutter = gutter ? config.gutter !== false : currentConfig.markGutter
         let highlightChanges = highlight ? config.highlightChanges !== false : currentConfig.highlightChanges
         effectsA.push(configCompartment.reconfigure([
-          mergeConfig.of({side: "a", sibling: () => this.b, highlightChanges, markGutter}),
+          mergeConfig.of({
+            side: "a",
+            emptySide: this.emptySides.a === true,
+            sibling: () => this.b,
+            highlightChanges,
+            markGutter
+          }),
           markGutter ? changeGutter : []
         ]))
         effectsB.push(configCompartment.reconfigure([
-          mergeConfig.of({side: "b", sibling: () => this.a, highlightChanges, markGutter}),
+          mergeConfig.of({
+            side: "b",
+            emptySide: this.emptySides.b === true,
+            sibling: () => this.a,
+            highlightChanges,
+            markGutter
+          }),
           markGutter ? changeGutter : []
         ]))
       }

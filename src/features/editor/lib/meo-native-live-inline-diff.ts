@@ -1,11 +1,13 @@
-import { getChunks, getOriginalDoc, type MergeView } from '@aryn/codemirror-merge'
-import { Compartment, EditorSelection, EditorState, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
+import { Chunk, getChunks, getOriginalDoc, type MergeView } from '@aryn/codemirror-merge'
+import { Compartment, EditorSelection, EditorState, RangeSet, RangeSetBuilder, StateEffect, StateField, Text, Transaction } from '@codemirror/state'
 import {
   Decoration,
   EditorView,
   WidgetType,
   type DecorationSet,
   type ViewUpdate,
+  gutterLineClass,
+  GutterMarker,
 } from '@codemirror/view'
 import { Columns2, Rows2, createElement } from 'lucide'
 import type { GitBaselinePayload, GitChangeItem, GitChangeKind, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
@@ -62,10 +64,13 @@ type InlineHunkDescriptor = {
   changeKind: GitChangeKind
   key: string
   lineNumbersVisible: boolean
+  diffChunks: readonly InlineDiffChunk[]
+  modifiedSideEmpty: boolean
   modifiedLabel: string
   modifiedLineStart: number
   modifiedReadOnly: boolean
   modifiedText: string
+  originalSideEmpty: boolean
   originalLabel: string
   originalLineStart: number
   originalText: string
@@ -75,6 +80,12 @@ type InlineHunkDescriptor = {
   scope: GitChangeScope
   selection: GitDiffSelection
 }
+
+class InlineDiffHiddenLineNumberMarker extends GutterMarker {
+  elementClass = 'meo-md-hide-line-number'
+}
+
+const inlineDiffHiddenLineNumberMarker = new InlineDiffHiddenLineNumberMarker()
 
 type InlineLineRange = {
   endLineExclusive: number
@@ -89,9 +100,12 @@ type InlineChunkEntry = {
 
 type InlineChunkMatch = {
   chunk: CodeMirrorDiffChunk
+  chunks: readonly CodeMirrorDiffChunk[]
   displaySelection: GitDiffSelection
   selection: GitDiffSelection
 }
+
+type InlineDiffChunk = Chunk & CodeMirrorDiffChunk
 
 type InlineModifiedSelectionPoint = {
   column: number
@@ -353,6 +367,127 @@ function createInlineDisplaySelection(
   )
 }
 
+function translateInlineChunkPosition(
+  position: number,
+  baseOffset: number,
+  hasSideContent: boolean,
+) {
+  return hasSideContent
+    ? Math.max(0, position - baseOffset)
+    : 0
+}
+
+function translateInlineChunkActualPosition(
+  chunk: CodeMirrorDiffChunk,
+  key: 'actualFromA' | 'actualFromB' | 'actualToA' | 'actualToB',
+  baseOffset: number,
+  hasSideContent: boolean,
+) {
+  if (!hasSideContent) {
+    return 0
+  }
+  const value = chunk[key]
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, value - baseOffset)
+    : undefined
+}
+
+function translateInlineChunkLineNumber(
+  lineNumber: number | undefined,
+  baseLine: number,
+  hasSideContent: boolean,
+) {
+  if (!hasSideContent) {
+    return 1
+  }
+  return typeof lineNumber === 'number' && Number.isInteger(lineNumber)
+    ? Math.max(1, lineNumber - baseLine + 1)
+    : undefined
+}
+
+function translateInlineDiffChunk(
+  chunk: CodeMirrorDiffChunk,
+  originalBaseOffset: number,
+  modifiedBaseOffset: number,
+  displaySelection: GitDiffSelection,
+): InlineDiffChunk {
+  const hasOriginalContent = displaySelection.originalLineCount > 0
+  const hasModifiedContent = displaySelection.modifiedLineCount > 0
+  const translated = new Chunk(
+    chunk.changes as ConstructorParameters<typeof Chunk>[0],
+    translateInlineChunkPosition(chunk.fromA, originalBaseOffset, hasOriginalContent),
+    translateInlineChunkPosition(chunk.toA, originalBaseOffset, hasOriginalContent),
+    translateInlineChunkPosition(chunk.fromB, modifiedBaseOffset, hasModifiedContent),
+    translateInlineChunkPosition(chunk.toB, modifiedBaseOffset, hasModifiedContent),
+  ) as InlineDiffChunk
+  const actualFromA = translateInlineChunkActualPosition(chunk, 'actualFromA', originalBaseOffset, hasOriginalContent)
+  const actualToA = translateInlineChunkActualPosition(chunk, 'actualToA', originalBaseOffset, hasOriginalContent)
+  const actualFromB = translateInlineChunkActualPosition(chunk, 'actualFromB', modifiedBaseOffset, hasModifiedContent)
+  const actualToB = translateInlineChunkActualPosition(chunk, 'actualToB', modifiedBaseOffset, hasModifiedContent)
+  const vscodeOriginalStartLine = translateInlineChunkLineNumber(
+    chunk.vscodeOriginalStartLine,
+    displaySelection.originalStartLine,
+    hasOriginalContent,
+  )
+  const vscodeOriginalEndLineExclusive = translateInlineChunkLineNumber(
+    chunk.vscodeOriginalEndLineExclusive,
+    displaySelection.originalStartLine,
+    hasOriginalContent,
+  )
+  const vscodeModifiedStartLine = translateInlineChunkLineNumber(
+    chunk.vscodeModifiedStartLine,
+    displaySelection.modifiedStartLine,
+    hasModifiedContent,
+  )
+  const vscodeModifiedEndLineExclusive = translateInlineChunkLineNumber(
+    chunk.vscodeModifiedEndLineExclusive,
+    displaySelection.modifiedStartLine,
+    hasModifiedContent,
+  )
+
+  return Object.assign(translated, {
+    ...(actualFromA === undefined ? {} : { actualFromA }),
+    ...(actualToA === undefined ? {} : { actualToA }),
+    ...(actualFromB === undefined ? {} : { actualFromB }),
+    ...(actualToB === undefined ? {} : { actualToB }),
+    ...(vscodeOriginalStartLine === undefined ? {} : { vscodeOriginalStartLine }),
+    ...(vscodeOriginalEndLineExclusive === undefined ? {} : { vscodeOriginalEndLineExclusive }),
+    ...(vscodeModifiedStartLine === undefined ? {} : { vscodeModifiedStartLine }),
+    ...(vscodeModifiedEndLineExclusive === undefined ? {} : { vscodeModifiedEndLineExclusive }),
+  })
+}
+
+function translateInlineDiffChunks(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  chunks: readonly CodeMirrorDiffChunk[],
+  displaySelection: GitDiffSelection,
+): readonly InlineDiffChunk[] {
+  const originalBaseOffset = displaySelection.originalLineCount > 0
+    ? lineRangeOffsets(
+        originalDoc,
+        Math.max(1, displaySelection.originalStartLine),
+        displaySelection.originalLineCount,
+        chunks[0]?.fromA ?? 0,
+      ).from
+    : (chunks[0]?.fromA ?? 0)
+  const modifiedBaseOffset = displaySelection.modifiedLineCount > 0
+    ? lineRangeOffsets(
+        modifiedDoc,
+        Math.max(1, displaySelection.modifiedStartLine),
+        displaySelection.modifiedLineCount,
+        chunks[0]?.fromB ?? 0,
+      ).from
+    : (chunks[0]?.fromB ?? 0)
+
+  return chunks.map((chunk) => translateInlineDiffChunk(
+    chunk,
+    originalBaseOffset,
+    modifiedBaseOffset,
+    displaySelection,
+  ))
+}
+
 function getDistanceToLineRange(lineNumber: number, range: InlineLineRange) {
   const startLine = Math.max(1, range.startLine)
   const endLine = Math.max(startLine, range.endLineExclusive - 1)
@@ -381,6 +516,9 @@ function getDescriptorRenderKey(descriptor: InlineHunkDescriptor) {
     descriptor.actionBusy ? 'busy' : 'idle',
     descriptor.actionScope ?? '',
     descriptor.actionChange ? `${descriptor.actionChange.scope}:${descriptor.actionChange.path}:${descriptor.actionChange.statusCode}` : '',
+    descriptor.diffChunks.map((chunk) => `${chunk.fromA}:${chunk.toA}:${chunk.fromB}:${chunk.toB}`).join('|'),
+    descriptor.originalSideEmpty ? 'a-empty' : 'a-content',
+    descriptor.modifiedSideEmpty ? 'b-empty' : 'b-content',
     descriptor.selection.originalStartLine,
     descriptor.selection.originalLineCount,
     descriptor.selection.modifiedStartLine,
@@ -430,14 +568,35 @@ function createInlineChunkEntries(
 ): InlineChunkEntry[] {
   return chunks.map((chunk) => {
     const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
+    const vscodeOriginalStartLine = chunk.vscodeOriginalStartLine
+    const vscodeOriginalEndLineExclusive = chunk.vscodeOriginalEndLineExclusive
+    const vscodeModifiedStartLine = chunk.vscodeModifiedStartLine
+    const vscodeModifiedEndLineExclusive = chunk.vscodeModifiedEndLineExclusive
+    const hunkId = (
+      typeof vscodeOriginalStartLine === 'number'
+      && typeof vscodeOriginalEndLineExclusive === 'number'
+      && typeof vscodeModifiedStartLine === 'number'
+      && typeof vscodeModifiedEndLineExclusive === 'number'
+      && Number.isInteger(vscodeOriginalStartLine)
+      && Number.isInteger(vscodeOriginalEndLineExclusive)
+      && Number.isInteger(vscodeModifiedStartLine)
+      && Number.isInteger(vscodeModifiedEndLineExclusive)
+    )
+      ? createGitDiffLineHunkId(
+          vscodeOriginalStartLine,
+          vscodeOriginalEndLineExclusive,
+          vscodeModifiedStartLine,
+          vscodeModifiedEndLineExclusive,
+        )
+      : createGitDiffLineHunkId(
+          selection.originalStartLine,
+          selection.originalStartLine + selection.originalLineCount,
+          selection.modifiedStartLine,
+          selection.modifiedStartLine + selection.modifiedLineCount,
+        )
     return {
       chunk,
-      hunkId: createGitDiffLineHunkId(
-        selection.originalStartLine,
-        selection.originalStartLine + selection.originalLineCount,
-        selection.modifiedStartLine,
-        selection.modifiedStartLine + selection.modifiedLineCount,
-      ),
+      hunkId,
       selection,
     }
   })
@@ -523,6 +682,7 @@ function findInlineChunkMatch(
 
   return {
     chunk: seed.chunk,
+    chunks: entries.filter((entry) => selectedEntries.has(entry)).map((entry) => entry.chunk),
     displaySelection: createInlineDisplaySelection(originalDoc, modifiedDoc, selection),
     selection,
   }
@@ -540,6 +700,13 @@ function buildDescriptorKey(scope: GitChangeScope, selection: GitDiffSelection) 
 
 function getInlineMergeDiffConfig() {
   return getDiffConfig(false)
+}
+
+function getInlineMergeDiffConfigForChunks(chunks: readonly InlineDiffChunk[]) {
+  return {
+    ...getInlineMergeDiffConfig(),
+    overrideChunks: () => chunks,
+  }
 }
 
 function mapIndexLineToCurrentLine(indexText: string, currentText: string, indexLineNumber: number) {
@@ -668,12 +835,23 @@ function resolveOuterEditorSelection(doc: Text, target: InlineOuterSelectionTarg
   return EditorSelection.single(clampPosition(target.anchor), clampPosition(target.head))
 }
 
+function getInlineWidgetSide(doc: Text, from: number, to: number) {
+  if (from !== to || doc.length <= 0) {
+    return 1
+  }
+
+  const position = Math.max(0, Math.min(doc.length, Math.floor(from)))
+  const line = doc.lineAt(position)
+  return position === line.from && position < doc.length ? -1 : 1
+}
+
 function buildInlineDecorations(
   state: EditorState,
   descriptors: readonly InlineHunkDescriptor[],
   controller: MeoLiveInlineDiffControllerImpl,
-): DecorationSet {
+): { decorations: DecorationSet, hiddenLineNumbers: RangeSet<GutterMarker> } {
   const builder = new RangeSetBuilder<Decoration>()
+  const lineNumberBuilder = new RangeSetBuilder<GutterMarker>()
   const sorted = [...descriptors].sort((left, right) => left.replaceFrom - right.replaceFrom || left.replaceTo - right.replaceTo)
   let lastTo = -1
 
@@ -686,14 +864,18 @@ function buildInlineDecorations(
 
     const widget = new InlineDiffWidget(descriptor, controller)
     if (from === to) {
-      builder.add(from, from, Decoration.widget({ block: true, side: 1, widget }))
+      builder.add(from, from, Decoration.widget({ block: true, side: getInlineWidgetSide(state.doc, from, to), widget }))
     } else {
       builder.add(from, to, Decoration.replace({ block: true, widget }))
     }
+    lineNumberBuilder.add(from, from, inlineDiffHiddenLineNumberMarker)
     lastTo = to
   }
 
-  return builder.finish()
+  return {
+    decorations: builder.finish(),
+    hiddenLineNumbers: lineNumberBuilder.finish(),
+  }
 }
 
 class InlineDiffWidget extends WidgetType {
@@ -893,13 +1075,18 @@ class InlineDiffWidgetView {
       return
     }
 
+    this.mergeView?.reconfigure({
+      diffConfig: getInlineMergeDiffConfigForChunks(nextDescriptor.diffChunks),
+      emptySides: {
+        a: nextDescriptor.originalSideEmpty,
+        b: nextDescriptor.modifiedSideEmpty,
+      },
+      revertControls: undefined,
+    })
+
     if (chromeChanged) {
       this.syncLineNumberOffsets()
       this.syncModifiedEditability()
-      this.mergeView?.reconfigure({
-        diffConfig: getInlineMergeDiffConfig(),
-        revertControls: undefined,
-      })
     }
 
     this.syncDiffArtifacts()
@@ -1189,7 +1376,7 @@ class InlineDiffWidgetView {
   }
 
   private createSplitView() {
-    return createMeoDiffSplitMergeView({
+    const mergeView = createMeoDiffSplitMergeView({
       a: {
         doc: this.descriptor.originalText,
         activeLineHighlightCompartment: this.originalActiveLineHighlightCompartment,
@@ -1243,14 +1430,19 @@ class InlineDiffWidgetView {
         side: 'modified',
         textSnapshot: this.modifiedTextSnapshot,
       },
-      diffConfig: getInlineMergeDiffConfig(),
+      diffConfig: getInlineMergeDiffConfigForChunks(this.descriptor.diffChunks),
       deferChunkUpdates: shouldDeferSplitMergeChunkUpdate,
+      emptySides: {
+        a: this.descriptor.originalSideEmpty,
+        b: this.descriptor.modifiedSideEmpty,
+      },
       gutter: false,
       highlightChanges: true,
       parent: this.body,
       revertControls: undefined,
       trailingSpacer: 'fakeLines',
     })
+    return mergeView
   }
 
   private createUnifiedView() {
@@ -1978,9 +2170,12 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
 
     this.extensionInstalled = true
     const controller = this
-    const inlineField = StateField.define<DecorationSet>({
+    const inlineField = StateField.define<{ decorations: DecorationSet, hiddenLineNumbers: RangeSet<GutterMarker> }>({
       create() {
-        return Decoration.none
+        return {
+          decorations: Decoration.none,
+          hiddenLineNumbers: RangeSet.empty,
+        }
       },
       update(value, transaction) {
         for (const effect of transaction.effects) {
@@ -1988,10 +2183,16 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
             return buildInlineDecorations(transaction.state, effect.value, controller)
           }
         }
-        return value.map(transaction.changes)
+        return {
+          decorations: value.decorations.map(transaction.changes),
+          hiddenLineNumbers: value.hiddenLineNumbers.map(transaction.changes),
+        }
       },
       provide(field) {
-        return EditorView.decorations.from(field)
+        return [
+          EditorView.decorations.from(field, (value) => value.decorations),
+          gutterLineClass.from(field, (value) => value.hiddenLineNumbers),
+        ]
       },
     })
 
@@ -2263,6 +2464,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     const modifiedLineStart = Math.max(1, displaySelection.modifiedStartLine)
     const originalText = lineRangeText(originalDoc, originalLineStart, displaySelection.originalLineCount)
     const modifiedText = lineRangeText(modifiedDoc, modifiedLineStart, displaySelection.modifiedLineCount)
+    const diffChunks = translateInlineDiffChunks(originalDoc, modifiedDoc, found.chunks, displaySelection)
     const replaceLineStart = this.resolveCurrentReplaceStartLine(resolvedState, displaySelection, currentLine)
     const fallbackOffset = resolvedState.modifiedText === this.currentText
       ? found.chunk.fromB
@@ -2279,14 +2481,17 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       actionBusy: this.isApplyingHunkAction,
       actionScope: resolvedState.actionScope,
       changeKind: inferInlineHunkChangeKind(resolvedState.actionChange, selection),
+      diffChunks,
       key: buildDescriptorKey(request.scope, displaySelection),
       lineNumbersVisible: this.lineNumbersVisible,
       modifiedLabel: resolvedState.modifiedLabel,
       modifiedLineStart,
+      modifiedSideEmpty: displaySelection.modifiedLineCount === 0,
       modifiedReadOnly: resolvedState.modifiedReadOnly,
       modifiedText,
       originalLabel: resolvedState.label,
       originalLineStart,
+      originalSideEmpty: displaySelection.originalLineCount === 0,
       originalText,
       replaceFrom: replaceOffsets.from,
       replaceTo: replaceOffsets.to,
@@ -2389,8 +2594,10 @@ export function createMeoLiveInlineDiffController(options: InlineDiffControllerO
 export const __meoLiveInlineDiffTestHooks = {
   createOuterSelectionTargetFromInlineSelection,
   createInlineDisplaySelection,
+  translateInlineDiffChunks,
   createModifiedSelectionTarget,
   findInlineChunkMatch,
+  getInlineWidgetSide,
   getInlineDiffViewModeToggleIconName,
   getInlineDiffViewModeToggleLabel,
   getNextInlineDiffViewMode,

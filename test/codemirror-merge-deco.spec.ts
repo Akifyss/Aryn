@@ -14,7 +14,6 @@ const {
   getUnifiedDiffChunkLineRange,
   normalizeUnifiedLineNumberOptions,
 } = __meoDiffSplitUnifiedLineNumberTestHooks
-
 describe('CodeMirror merge decorations', () => {
   const decorationClass = (value: Decoration) =>
     value.spec?.class ?? (value.spec as any)?.widget?.className ?? ''
@@ -41,6 +40,35 @@ describe('CodeMirror merge decorations', () => {
       { from: originalDoc.line(2).from, to: originalDoc.line(3).from, classes: 'cm-deletedLine' },
       { from: originalDoc.line(2).from, to: originalDoc.line(2).to, classes: 'cm-changedText cm-changedTextFullLine' },
     ]))
+  })
+
+  it('classifies single-sided inline empty sides as fake-line spacers', () => {
+    const originalDoc = Text.of([''])
+    const modifiedDoc = Text.of(['inserted'])
+    const chunk = new Chunk([new Change(0, 0, 0, modifiedDoc.length)], 0, 0, 0, modifiedDoc.length)
+    const modifiedBuilder = new RangeSetBuilder<Decoration>()
+
+    expect(spacerKindAfterChunk(chunk, 'a', false, originalDoc, modifiedDoc)).toBe('fakeLines')
+    expect(spacerKindAfterChunk(chunk, 'b', false, originalDoc, modifiedDoc)).toBe('alignment')
+
+    addChunkDecorations(chunk, modifiedDoc, false, true, modifiedBuilder, null, { gutter: false })
+    const modifiedRanges: Array<{ from: number, to: number, classes: string }> = []
+    modifiedBuilder.finish().between(0, modifiedDoc.length, (from, to, value) => {
+      modifiedRanges.push({ from, to, classes: decorationClass(value) })
+    })
+    expect(modifiedRanges).toEqual(expect.arrayContaining([
+      { from: 0, to: 0, classes: 'cm-changedLine' },
+      { from: 0, to: modifiedDoc.length, classes: 'cm-insertedLine' },
+      { from: 0, to: modifiedDoc.length, classes: 'cm-changedText cm-changedTextFullLine' },
+    ]))
+  })
+
+  it('classifies empty inserted lines as fake-line spacers', () => {
+    const originalDoc = Text.of([''])
+    const modifiedDoc = Text.of([''])
+    const chunk = new Chunk([new Change(0, 0, 0, 1)], 0, 0, 0, 1)
+
+    expect(spacerKindAfterChunk(chunk, 'a', false, originalDoc, modifiedDoc)).toBe('fakeLines')
   })
 
   it('snaps inline change layer rectangles to device pixels', () => {
