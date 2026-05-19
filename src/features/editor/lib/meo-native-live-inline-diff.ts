@@ -87,6 +87,12 @@ class InlineDiffHiddenLineNumberMarker extends GutterMarker {
 
 const inlineDiffHiddenLineNumberMarker = new InlineDiffHiddenLineNumberMarker()
 
+class InlineDiffHiddenGitMarker extends GutterMarker {
+  elementClass = 'meo-live-inline-active-hunk-line'
+}
+
+const inlineDiffHiddenGitMarker = new InlineDiffHiddenGitMarker()
+
 type InlineLineRange = {
   endLineExclusive: number
   startLine: number
@@ -849,8 +855,9 @@ function buildInlineDecorations(
   state: EditorState,
   descriptors: readonly InlineHunkDescriptor[],
   controller: MeoLiveInlineDiffControllerImpl,
-): { decorations: DecorationSet, hiddenLineNumbers: RangeSet<GutterMarker> } {
+): { decorations: DecorationSet, hiddenGitMarkers: RangeSet<GutterMarker>, hiddenLineNumbers: RangeSet<GutterMarker> } {
   const builder = new RangeSetBuilder<Decoration>()
+  const gitMarkerBuilder = new RangeSetBuilder<GutterMarker>()
   const lineNumberBuilder = new RangeSetBuilder<GutterMarker>()
   const sorted = [...descriptors].sort((left, right) => left.replaceFrom - right.replaceFrom || left.replaceTo - right.replaceTo)
   let lastTo = -1
@@ -868,12 +875,14 @@ function buildInlineDecorations(
     } else {
       builder.add(from, to, Decoration.replace({ block: true, widget }))
     }
+    gitMarkerBuilder.add(from, from, inlineDiffHiddenGitMarker)
     lineNumberBuilder.add(from, from, inlineDiffHiddenLineNumberMarker)
     lastTo = to
   }
 
   return {
     decorations: builder.finish(),
+    hiddenGitMarkers: gitMarkerBuilder.finish(),
     hiddenLineNumbers: lineNumberBuilder.finish(),
   }
 }
@@ -2170,10 +2179,11 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
 
     this.extensionInstalled = true
     const controller = this
-    const inlineField = StateField.define<{ decorations: DecorationSet, hiddenLineNumbers: RangeSet<GutterMarker> }>({
+    const inlineField = StateField.define<{ decorations: DecorationSet, hiddenGitMarkers: RangeSet<GutterMarker>, hiddenLineNumbers: RangeSet<GutterMarker> }>({
       create() {
         return {
           decorations: Decoration.none,
+          hiddenGitMarkers: RangeSet.empty,
           hiddenLineNumbers: RangeSet.empty,
         }
       },
@@ -2185,12 +2195,14 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
         }
         return {
           decorations: value.decorations.map(transaction.changes),
+          hiddenGitMarkers: value.hiddenGitMarkers.map(transaction.changes),
           hiddenLineNumbers: value.hiddenLineNumbers.map(transaction.changes),
         }
       },
       provide(field) {
         return [
           EditorView.decorations.from(field, (value) => value.decorations),
+          gutterLineClass.from(field, (value) => value.hiddenGitMarkers),
           gutterLineClass.from(field, (value) => value.hiddenLineNumbers),
         ]
       },

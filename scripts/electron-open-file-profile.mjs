@@ -499,7 +499,9 @@ async function clickInlineHunkMarker(page, lineNumber, kind) {
 
       const rect = marker.getBoundingClientRect()
       const x = rect.left + Math.max(2, Math.min(rect.width - 2, rect.width / 2))
-      const y = rect.top + Math.max(2, Math.min(rect.height - 2, rect.height / 2))
+      const y = targetKind === 'deleted'
+        ? rect.bottom - 2
+        : rect.top + Math.max(2, Math.min(rect.height - 2, rect.height / 2))
       marker.dispatchEvent(new MouseEvent('mousedown', {
         bubbles: true,
         button: 0,

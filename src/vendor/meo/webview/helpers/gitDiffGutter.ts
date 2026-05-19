@@ -1162,11 +1162,8 @@ function isDeletedBoundaryHit(marker: HTMLElement | null | undefined, clientY: n
   if (!markerHasDeletedChange(marker)) {
     return false;
   }
-  if (!markerHasLineChange(marker)) {
-    return true;
-  }
   if (!Number.isFinite(clientY)) {
-    return false;
+    return !markerHasLineChange(marker);
   }
   const rect = marker.getBoundingClientRect();
   return clientY >= rect.bottom - 8 && clientY <= rect.bottom + 8;
@@ -1175,6 +1172,14 @@ function isDeletedBoundaryHit(marker: HTMLElement | null | undefined, clientY: n
 export function getGitGutterMarkerChangeKindAt(marker: unknown, clientY: number | null = null): 'added' | 'deleted' | 'modified' | null {
   if (isDeletedBoundaryHit(marker, clientY)) {
     return 'deleted';
+  }
+  if (
+    marker instanceof HTMLElement &&
+    Number.isFinite(clientY) &&
+    markerHasDeletedChange(marker) &&
+    !markerHasLineChange(marker)
+  ) {
+    return null;
   }
   return getGitGutterMarkerChangeKind(marker);
 }

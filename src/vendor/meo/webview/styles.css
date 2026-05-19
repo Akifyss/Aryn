@@ -3089,6 +3089,15 @@
   background: transparent;
 }
 
+.meo-native-root .cm-editor .cm-gutterElement.meo-live-inline-active-hunk-line .meo-git-gutter-marker {
+  pointer-events: none;
+}
+
+.meo-native-root .cm-editor .cm-gutterElement.meo-live-inline-active-hunk-line .meo-git-gutter-stripe,
+.meo-native-root .cm-editor .cm-gutterElement.meo-live-inline-active-hunk-line .meo-git-gutter-deleted-triangle {
+  opacity: 0;
+}
+
 .meo-native-root .cm-editor .meo-git-gutter-marker.is-deleted::before {
   top: -4px;
   height: calc(100% + 8px);

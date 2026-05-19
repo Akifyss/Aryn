@@ -329,6 +329,21 @@ function isChangedMarker(marker) {
   return getGitGutterMarkerChangeKind(marker) !== null;
 }
 
+function isChangedMarkerAtClientY(marker, clientY) {
+  return getGitGutterMarkerChangeKindAt(marker, clientY) !== null;
+}
+
+export function gitGutterMarkerOwnsClientY(marker, clientY) {
+  if (!(marker instanceof HTMLElement) || !Number.isFinite(clientY)) {
+    return false;
+  }
+  const row = getMarkerGutterRowElement(marker);
+  const rect = row instanceof HTMLElement
+    ? row.getBoundingClientRect()
+    : marker.getBoundingClientRect();
+  return clientY >= Math.min(rect.top, rect.bottom) && clientY <= Math.max(rect.top, rect.bottom);
+}
+
 function getMarkerGutterRowElement(marker) {
   if (!(marker instanceof HTMLElement)) {
     return null;
@@ -426,9 +441,9 @@ export function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElem
   const rowMarker = gutterRowElement?.querySelector?.('.meo-git-gutter-marker') ?? null;
   const hitMarker = markerElement instanceof HTMLElement ? markerElement : null;
   const ownChangedMarker = (
-    isChangedMarker(rowMarker)
+    isChangedMarkerAtClientY(rowMarker, clientY)
       ? rowMarker
-      : isChangedMarker(hitMarker)
+      : isChangedMarkerAtClientY(hitMarker, clientY)
         ? hitMarker
         : null
   );
@@ -456,11 +471,11 @@ export function normalizeTrailingEofVisualLineHit(doc, lineNumber, gutterRowElem
       : null
   );
   const changedMarker = (
-    isChangedMarker(rowMarker)
+    isChangedMarkerAtClientY(rowMarker, clientY)
       ? rowMarker
-      : isChangedMarker(hitMarker)
+      : isChangedMarkerAtClientY(hitMarker, clientY)
         ? hitMarker
-      : isChangedMarker(previousRowMarker)
+      : isChangedMarkerAtClientY(previousRowMarker, clientY)
         ? previousRowMarker
         : null
   );
@@ -687,17 +702,18 @@ export function createGitBlameHoverController({
   const getChangedMarkerForRow = (gutterRowElement, markerElement = null, clientY = null) => {
     const rowMarker = gutterRowElement?.querySelector?.('.meo-git-gutter-marker') ?? null;
     const marker = markerElement instanceof Element ? markerElement.closest('.meo-git-gutter-marker') : null;
-    let changedMarker = isChangedMarker(rowMarker)
+    const markerOwnsHit = gitGutterMarkerOwnsClientY(marker, clientY);
+    let changedMarker = isChangedMarkerAtClientY(rowMarker, clientY)
       ? rowMarker
-      : isChangedMarker(marker)
+      : markerOwnsHit && isChangedMarkerAtClientY(marker, clientY)
         ? marker
         : null;
 
-    if (!changedMarker && gutterRowElement instanceof HTMLElement && Number.isFinite(clientY)) {
+    if (!changedMarker && !markerOwnsHit && gutterRowElement instanceof HTMLElement && Number.isFinite(clientY)) {
       const previousRowMarker = gutterRowElement.previousElementSibling?.querySelector?.('.meo-git-gutter-marker') ?? null;
       const rowRect = gutterRowElement.getBoundingClientRect();
       const nearPreviousLineBoundary = clientY <= rowRect.top + 8;
-      if (nearPreviousLineBoundary && markerHasDeletedChange(previousRowMarker)) {
+      if (nearPreviousLineBoundary && isChangedMarkerAtClientY(previousRowMarker, clientY)) {
         changedMarker = previousRowMarker;
       }
     }
@@ -706,7 +722,7 @@ export function createGitBlameHoverController({
       const rawLineNumber = getRawLineNumberAtGutterRow(gutterRowElement);
       if (rawLineNumber !== null && isTrailingEofVisualLine(view.state.doc, rawLineNumber)) {
         const previousRowMarker = gutterRowElement.previousElementSibling?.querySelector?.('.meo-git-gutter-marker') ?? null;
-        if (isChangedMarker(previousRowMarker)) {
+        if (isChangedMarkerAtClientY(previousRowMarker, clientY)) {
           changedMarker = previousRowMarker;
         }
       }

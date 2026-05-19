@@ -1,6 +1,7 @@
 import { Text } from '@codemirror/state'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  gitGutterMarkerOwnsClientY,
   getGitGutterClickIntent,
   isInsideLiveInlineDiff,
   normalizeTrailingEofVisualLineHit,
@@ -117,5 +118,55 @@ describe('meo git blame hover', () => {
     expect(isInsideLiveInlineDiff(new FakeElement(true))).toBe(true)
     expect(isInsideLiveInlineDiff(new FakeElement(false))).toBe(false)
     expect(isInsideLiveInlineDiff(null)).toBe(false)
+  })
+
+  it('distinguishes a marker own row from adjacent delete-triangle hit area', () => {
+    class FakeElement {
+      parent: FakeElement | null = null
+
+      constructor(private readonly rect: { bottom: number, top: number }) {}
+
+      closest(selector: string) {
+        if (selector === '.cm-gutterElement') {
+          return this.parent ?? this
+        }
+        if (selector === '.cm-gutter.meo-git-gutter') {
+          return this
+        }
+        return null
+      }
+
+      getBoundingClientRect() {
+        return {
+          bottom: this.rect.bottom,
+          height: this.rect.bottom - this.rect.top,
+          left: 0,
+          right: 3,
+          top: this.rect.top,
+          width: 3,
+          x: 0,
+          y: this.rect.top,
+          toJSON: () => ({}),
+        } as DOMRect
+      }
+    }
+
+    Object.defineProperty(globalThis, 'Element', {
+      configurable: true,
+      writable: true,
+      value: FakeElement,
+    })
+    Object.defineProperty(globalThis, 'HTMLElement', {
+      configurable: true,
+      writable: true,
+      value: FakeElement,
+    })
+
+    const row = new FakeElement({ bottom: 48, top: 24 })
+    const marker = new FakeElement({ bottom: 24, top: 0 })
+    marker.parent = row
+
+    expect(gitGutterMarkerOwnsClientY(marker, 30)).toBe(true)
+    expect(gitGutterMarkerOwnsClientY(marker, 20)).toBe(false)
   })
 })

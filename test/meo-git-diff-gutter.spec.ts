@@ -137,6 +137,19 @@ describe('meo git diff gutter', () => {
 
       expect(__gitDiffGutterTestHooks.getGitGutterMarkerChangeKindAt(marker as unknown as HTMLElement, 10)).toBe('added')
       expect(__gitDiffGutterTestHooks.getGitGutterMarkerChangeKindAt(marker as unknown as HTMLElement, 23)).toBe('deleted')
+      sameDeleteHunk.getBoundingClientRect = () => ({
+        bottom: 48,
+        height: 20,
+        left: 0,
+        right: 3,
+        top: 28,
+        width: 3,
+        x: 0,
+        y: 28,
+        toJSON: () => ({}),
+      }) as DOMRect
+      expect(__gitDiffGutterTestHooks.getGitGutterMarkerChangeKindAt(sameDeleteHunk as unknown as HTMLElement, 30)).toBe(null)
+      expect(__gitDiffGutterTestHooks.getGitGutterMarkerChangeKindAt(sameDeleteHunk as unknown as HTMLElement, 47)).toBe('deleted')
       expect(__gitDiffGutterTestHooks.getGitGutterMarkerHunkMetadata(marker as unknown as HTMLElement, 'added')?.hunkId).toBe('add-hunk')
       expect(__gitDiffGutterTestHooks.getGitGutterMarkerHunkMetadata(marker as unknown as HTMLElement, 'deleted')?.hunkId).toBe('delete-hunk')
       expect(__gitDiffGutterTestHooks.getGitGutterMarkerHunkMetadata(marker as unknown as HTMLElement, 'added')?.diffHunkId).toBe('diff-add-hunk')
