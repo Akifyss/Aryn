@@ -57,9 +57,8 @@ function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab,
 
   const viewModeLabel = (
     tab.viewMode === 'code' ? 'Code'
-      : tab.viewMode === 'preview' ? 'Preview'
-        : tab.viewMode === 'meo' ? null
-          : null
+      : tab.viewMode === 'meo' ? null
+        : null
   )
 
   if (!workspacePath || !hasDuplicateName) {
@@ -418,7 +417,7 @@ export function FileTabs({
                 draggable={tab.kind !== 'settings'}
                 role='tab'
                 aria-selected={isActive}
-                aria-controls='writing-editor-panel'
+                aria-controls='editor-content-panel'
                 aria-grabbed={draggingTabId === tab.id}
                 className='file-tab-trigger'
                 title={title}

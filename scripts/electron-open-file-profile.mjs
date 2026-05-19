@@ -251,7 +251,7 @@ function installBrowserProfiler() {
     }
 
     function getEditorElement() {
-      return Array.from(document.querySelectorAll('.cm-content, .ProseMirror, .monaco-editor'))
+      return Array.from(document.querySelectorAll('.cm-content, .monaco-editor'))
         .find(isVisibleEditorElement) ?? null
     }
 
@@ -264,7 +264,7 @@ function installBrowserProfiler() {
       if (!editorMountedRecorded) {
         editorMountedRecorded = true
         record('editor:mounted:mutation', {
-          selector: ['.cm-content', '.ProseMirror', '.monaco-editor']
+          selector: ['.cm-content', '.monaco-editor']
             .find((selector) => editor.matches(selector)) ?? editor.tagName.toLowerCase(),
         })
       }
@@ -377,7 +377,7 @@ async function waitForActiveTab(page, targetFilePath, label = 'file-tab') {
 
 async function waitForEditorReady(page, label = 'editor') {
   await page.waitForFunction(() => {
-    return Array.from(document.querySelectorAll('.cm-content, .ProseMirror, .monaco-editor'))
+    return Array.from(document.querySelectorAll('.cm-content, .monaco-editor'))
       .some((element) => {
         const rect = element.getBoundingClientRect()
         const style = window.getComputedStyle(element)
@@ -388,7 +388,7 @@ async function waitForEditorReady(page, label = 'editor') {
       })
   }, null, { timeout: timeoutMs })
   await page.evaluate((markerLabel) => {
-    const editor = Array.from(document.querySelectorAll('.cm-content, .ProseMirror, .monaco-editor'))
+    const editor = Array.from(document.querySelectorAll('.cm-content, .monaco-editor'))
       .find((element) => {
         const rect = element.getBoundingClientRect()
         const style = window.getComputedStyle(element)
@@ -399,7 +399,7 @@ async function waitForEditorReady(page, label = 'editor') {
       }) ?? null
     window.__ARYN_OPEN_FILE_PROFILE__?.record?.(`${markerLabel}:mounted:observed`, {
       selector: editor
-        ? ['.cm-content', '.ProseMirror', '.monaco-editor']
+        ? ['.cm-content', '.monaco-editor']
             .find((selector) => editor.matches(selector)) ?? editor.tagName.toLowerCase()
         : null,
     })
@@ -407,7 +407,7 @@ async function waitForEditorReady(page, label = 'editor') {
   mark(`${label}:mounted`)
 
   await page.waitForFunction(() => {
-    return Array.from(document.querySelectorAll('.cm-content, .ProseMirror, .monaco-editor'))
+    return Array.from(document.querySelectorAll('.cm-content, .monaco-editor'))
       .some((element) => {
         const rect = element.getBoundingClientRect()
         const style = window.getComputedStyle(element)
@@ -419,7 +419,7 @@ async function waitForEditorReady(page, label = 'editor') {
       })
   }, null, { timeout: timeoutMs })
   await page.evaluate((markerLabel) => {
-    const editor = Array.from(document.querySelectorAll('.cm-content, .ProseMirror, .monaco-editor'))
+    const editor = Array.from(document.querySelectorAll('.cm-content, .monaco-editor'))
       .find((element) => {
         const rect = element.getBoundingClientRect()
         const style = window.getComputedStyle(element)
@@ -723,7 +723,7 @@ async function restoreWorkspaceState(page, targetWorkspacePath, targetFilePath) 
 
 async function snapshot(page) {
   return page.evaluate(() => {
-    const editor = document.querySelector('.meo-native-root, .cm-content, .ProseMirror, .monaco-editor')
+    const editor = document.querySelector('.meo-native-root, .cm-content, .monaco-editor')
     const activeTab = document.querySelector('.file-tab[data-active="true"], [data-active="true"].file-tab')
 
     return {
@@ -734,7 +734,7 @@ async function snapshot(page) {
       deletedTextCount: document.querySelectorAll('.cm-deletedText').length,
       inlineChangeLayerCount: document.querySelectorAll('.cm-changedTextLayerRanges, .cm-deletedTextLayerRanges').length,
       editorSelector: editor
-        ? ['.meo-native-root', '.cm-content', '.ProseMirror', '.monaco-editor']
+        ? ['.meo-native-root', '.cm-content', '.monaco-editor']
             .find((selector) => editor.matches(selector)) ?? editor.tagName.toLowerCase()
         : null,
       editorTextLength: editor?.textContent?.length ?? null,

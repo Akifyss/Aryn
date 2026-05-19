@@ -13,7 +13,7 @@ import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import { pickDominantGitDisplayChange } from '@/features/git/lib/display-change'
 import {
   getSupportedWorkspaceEditorKind,
-  supportsCodeEditorToggle,
+  supportsAlternateCodeEditorView,
 } from '@/features/workspace/lib/file-types'
 import {
   areSameWorkspacePaths,
@@ -33,9 +33,7 @@ type WorkspaceTreeProps = {
   setExpandedPaths: Dispatch<SetStateAction<Set<string>>>
   workspacePath: string | null
   onSelectFile: (path: string) => void
-  onOpenInWritingEditor: (path: string) => void
   onOpenInCodeEditor: (path: string) => void
-  onOpenInMeoEditor: (path: string) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onDeleteNode: (node: WorkspaceNode) => Promise<void>
   onMoveNode: (node: WorkspaceNode, targetDirectoryPath: string) => Promise<void>
@@ -72,18 +70,14 @@ function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | un
 }
 
 function FileRowActions({
-  canOpenInWritingEditor,
   canOpenInCodeEditor,
-  onOpenInWritingEditor,
   onOpenInCodeEditor,
   onRename,
   onDelete,
   isSubmitting,
   gitChange,
 }: {
-  canOpenInWritingEditor: boolean
   canOpenInCodeEditor: boolean
-  onOpenInWritingEditor: () => void
   onOpenInCodeEditor: () => void
   onRename: () => void
   onDelete: () => void
@@ -122,20 +116,11 @@ function FileRowActions({
             <Dropdown.Menu
               aria-label='File actions'
               onAction={(key) => {
-                if (key === 'open-writing') onOpenInWritingEditor()
                 if (key === 'open-code') onOpenInCodeEditor()
                 if (key === 'rename') onRename()
                 if (key === 'delete') onDelete()
               }}
             >
-              {canOpenInWritingEditor ? (
-                <Dropdown.Item id='open-writing' textValue='Open in Tiptap'>
-                  <div className='workspace-tree-menu-item'>
-                    <Edit2Line size={16} className='workspace-tree-menu-icon' />
-                    <span>在 Tiptap 中打开</span>
-                  </div>
-                </Dropdown.Item>
-              ) : null}
               {canOpenInCodeEditor ? (
                 <Dropdown.Item id='open-code' textValue='Open in code editor'>
                   <div className='workspace-tree-menu-item'>
@@ -182,9 +167,7 @@ function FileTreeItem({
   onDragOverNode,
   onDragStartNode,
   onDropOnNode,
-  onOpenInWritingEditor,
   onOpenInCodeEditor,
-  onOpenInMeoEditor,
   onRenameNode,
   onSelectFile,
   onToggleDirectory,
@@ -203,9 +186,7 @@ function FileTreeItem({
   onDragOverNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
   onDragStartNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
   onDropOnNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => Promise<void>
-  onOpenInWritingEditor: (path: string) => void
   onOpenInCodeEditor: (path: string) => void
-  onOpenInMeoEditor: (path: string) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onSelectFile: (path: string) => void
   onToggleDirectory: (path: string) => void
@@ -220,8 +201,7 @@ function FileTreeItem({
 
   const isFolder = node.kind === 'directory'
   const editorKind = node.kind === 'file' ? getSupportedWorkspaceEditorKind(node.path) : null
-  const canOpenInWritingEditor = node.kind === 'file' && editorKind === 'rich-text'
-  const canOpenInCodeEditor = node.kind === 'file' && editorKind !== null && supportsCodeEditorToggle(node.path, editorKind)
+  const canOpenInCodeEditor = node.kind === 'file' && editorKind !== null && supportsAlternateCodeEditorView(node.path, editorKind)
   const isExpanded = expandedPaths.has(node.path)
   const isActive = activeFilePath === node.path
   const gitChange = findGitChangeByFilePath(gitRepositoryState, node)
@@ -390,11 +370,9 @@ function FileTreeItem({
 
         {!isEditing && (
           <FileRowActions
-            canOpenInWritingEditor={canOpenInWritingEditor}
             canOpenInCodeEditor={canOpenInCodeEditor}
             isSubmitting={isSubmitting}
             gitChange={gitChange}
-            onOpenInWritingEditor={() => onOpenInWritingEditor(node.path)}
             onOpenInCodeEditor={() => onOpenInCodeEditor(node.path)}
             onRename={() => {
               setDraftName(node.name)
@@ -471,9 +449,7 @@ function FileTreeItem({
                 onDragOverNode={onDragOverNode}
                 onDragStartNode={onDragStartNode}
                 onDropOnNode={onDropOnNode}
-                onOpenInWritingEditor={onOpenInWritingEditor}
                 onOpenInCodeEditor={onOpenInCodeEditor}
-                onOpenInMeoEditor={onOpenInMeoEditor}
                 onRenameNode={onRenameNode}
                 onSelectFile={onSelectFile}
                 onToggleDirectory={onToggleDirectory}
@@ -495,9 +471,7 @@ export function WorkspaceTree({
   setExpandedPaths,
   workspacePath,
   onSelectFile,
-  onOpenInWritingEditor,
   onOpenInCodeEditor,
-  onOpenInMeoEditor,
   onRenameNode,
   onDeleteNode,
   onMoveNode,
@@ -745,9 +719,7 @@ export function WorkspaceTree({
           onDragOverNode={handleDragOverNode}
           onDragStartNode={handleDragStartNode}
           onDropOnNode={handleDropOnNode}
-          onOpenInWritingEditor={onOpenInWritingEditor}
           onOpenInCodeEditor={onOpenInCodeEditor}
-          onOpenInMeoEditor={onOpenInMeoEditor}
           onRenameNode={onRenameNode}
           onSelectFile={onSelectFile}
           onToggleDirectory={handleToggle}

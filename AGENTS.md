@@ -8,7 +8,7 @@
 - 本地工作区模式：直接打开本地文件夹作为活动工作区。
 - 一等公民能力：支持外部文件更改检测和本地优先的文件访问。
 - Git 辅助创作：为选定的 Git 工作流提供 GUI 界面，辅助版本管理。
-- MVP 范围（已实现）：包括文件树渲染、Tiptap 富文本编辑、AI 对话面板、工作区状态持久化及 Agent 任务反馈。
+- MVP 范围（已实现）：包括文件树渲染、MEO/CodeMirror 编辑、AI 对话面板、工作区状态持久化及 Agent 任务反馈。
 
 ## 技术栈
 
@@ -21,7 +21,7 @@
   - React + TypeScript：前端逻辑开发。
   - Vite / electron-vite：构建与热更新工具链。
 - 编辑器与 AI：
-  - Tiptap：核心富文本编辑器。
+  - MEO / CodeMirror：核心 Markdown 与文本编辑器。
   - PI Agent (`@mariozechner/pi-coding-agent`)：集成 AI 后端能力。
 - UI 与 状态管理：
   - 样式 (CSS)：优先使用 [Tailwind CSS v4](https://tailwindcss.com/docs)。

@@ -1,8 +1,9 @@
-export type WorkspaceEditorKind = 'rich-text' | 'code' | 'unsupported'
+export type WorkspaceEditorKind = 'prose' | 'code' | 'unsupported'
 export type SupportedWorkspaceEditorKind = Exclude<WorkspaceEditorKind, 'unsupported'>
-export type WorkspaceFileViewMode = 'default' | 'code' | 'preview' | 'meo'
+export type WorkspaceFileViewMode = 'code' | 'meo'
+export type LegacyWorkspaceFileViewMode = WorkspaceFileViewMode | 'default' | 'preview'
 
-const RICH_TEXT_EXTENSIONS = new Set([
+const PROSE_EXTENSIONS = new Set([
   '.md',
   '.markdown',
   '.mdc',
@@ -11,7 +12,7 @@ const RICH_TEXT_EXTENSIONS = new Set([
   '.text',
 ])
 
-const RICH_TEXT_FILE_NAMES = new Set([
+const PROSE_FILE_NAMES = new Set([
   'readme',
   'changelog',
   'license',
@@ -123,8 +124,8 @@ export function getWorkspaceEditorKind(filePath: string): WorkspaceEditorKind {
   const baseName = getBaseName(filePath)
   const extension = getFileExtension(filePath)
 
-  if (RICH_TEXT_FILE_NAMES.has(baseName) || RICH_TEXT_EXTENSIONS.has(extension)) {
-    return 'rich-text'
+  if (PROSE_FILE_NAMES.has(baseName) || PROSE_EXTENSIONS.has(extension)) {
+    return 'prose'
   }
 
   if (CODE_FILE_NAMES.has(baseName) || CODE_EXTENSIONS.has(extension)) {
@@ -139,21 +140,15 @@ export function getSupportedWorkspaceEditorKind(filePath: string): SupportedWork
   return editorKind === 'unsupported' ? null : editorKind
 }
 
-export function supportsHtmlPreview(filePath: string) {
-  const extension = getFileExtension(filePath)
-
-  return extension === '.html' || extension === '.htm'
-}
-
-export function supportsCodeEditorToggle(
+export function supportsAlternateCodeEditorView(
   filePath: string,
   editorKind: SupportedWorkspaceEditorKind,
 ) {
-  return editorKind === 'rich-text' || supportsHtmlPreview(filePath)
+  return supportsMeoEditor(filePath, editorKind)
 }
 
 export function supportsMeoEditor(filePath: string, editorKind: SupportedWorkspaceEditorKind) {
-  return editorKind === 'rich-text' && MEO_EXTENSIONS.has(getFileExtension(filePath))
+  return editorKind === 'prose' && MEO_EXTENSIONS.has(getFileExtension(filePath))
 }
 
 export function getDefaultWorkspaceFileViewMode(
@@ -164,11 +159,7 @@ export function getDefaultWorkspaceFileViewMode(
     return 'meo'
   }
 
-  if (editorKind === 'code' && supportsHtmlPreview(filePath)) {
-    return 'preview'
-  }
-
-  return 'default'
+  return 'code'
 }
 
 export function getCodeLanguage(filePath: string) {

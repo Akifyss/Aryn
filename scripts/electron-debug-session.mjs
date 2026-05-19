@@ -30,7 +30,7 @@ function readNumberEnv(name, fallback) {
 }
 
 function readViewMode(value) {
-  return ['default', 'code', 'preview', 'meo'].includes(value ?? '') ? value : 'meo'
+  return ['code', 'meo'].includes(value ?? '') ? value : 'meo'
 }
 
 function compactText(value, maxLength = 1200) {
@@ -271,7 +271,7 @@ async function restoreWorkspace(page, fixture) {
   await page.reload({ waitUntil: 'domcontentloaded', timeout: timeoutMs })
   await waitForAppShell(page)
   await page.waitForFunction(() => {
-    return !!document.querySelector('.meo-native-root, .cm-content, .ProseMirror, .monaco-editor')
+    return !!document.querySelector('.meo-native-root, .cm-content, .monaco-editor')
   }, null, { timeout: timeoutMs })
   await page.waitForTimeout(500)
 }
@@ -296,18 +296,17 @@ async function snapshotPage(page) {
 
     const shell = document.querySelector('.app-shell')
     const activeTab = document.querySelector('.file-tab[data-active="true"], [data-active="true"].file-tab')
-    const editor = document.querySelector('.meo-native-root, .cm-content, .ProseMirror, .monaco-editor')
+    const editor = document.querySelector('.meo-native-root, .cm-content, .monaco-editor')
 
     return {
       appApiAvailable: !!window.appApi,
       bodyTextSample: document.body.textContent?.slice(0, 500) ?? '',
       editor: {
-        rect: readRect('.meo-native-root, .cm-content, .ProseMirror, .monaco-editor'),
+        rect: readRect('.meo-native-root, .cm-content, .monaco-editor'),
         selectorMatched: editor
           ? [
               '.meo-native-root',
               '.cm-content',
-              '.ProseMirror',
               '.monaco-editor',
             ].find((selector) => editor.matches(selector)) ?? editor.tagName.toLowerCase()
           : null,

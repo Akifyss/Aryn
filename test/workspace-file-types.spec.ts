@@ -3,17 +3,16 @@ import {
   getCodeLanguage,
   getDefaultWorkspaceFileViewMode,
   getWorkspaceEditorKind,
-  supportsCodeEditorToggle,
-  supportsHtmlPreview,
+  supportsAlternateCodeEditorView,
   supportsMeoEditor,
 } from '../src/features/workspace/lib/file-types'
 
 describe('workspace file types', () => {
-  it('routes markdown and plain text files to the rich text editor', () => {
-    expect(getWorkspaceEditorKind('C:/workspace/draft.md')).toBe('rich-text')
-    expect(getWorkspaceEditorKind('C:/workspace/snippet.mdc')).toBe('rich-text')
-    expect(getWorkspaceEditorKind('C:/workspace/README')).toBe('rich-text')
-    expect(getWorkspaceEditorKind('C:/workspace/notes.txt')).toBe('rich-text')
+  it('routes markdown and plain text files to the prose editor', () => {
+    expect(getWorkspaceEditorKind('C:/workspace/draft.md')).toBe('prose')
+    expect(getWorkspaceEditorKind('C:/workspace/snippet.mdc')).toBe('prose')
+    expect(getWorkspaceEditorKind('C:/workspace/README')).toBe('prose')
+    expect(getWorkspaceEditorKind('C:/workspace/notes.txt')).toBe('prose')
   })
 
   it('routes code and config files to the code editor', () => {
@@ -37,31 +36,28 @@ describe('workspace file types', () => {
     expect(getCodeLanguage('C:/workspace/.env')).toBe('plaintext')
   })
 
-  it('defaults html files to preview and markdown-rich text files to MEO', () => {
-    expect(supportsHtmlPreview('C:/workspace/index.html')).toBe(true)
-    expect(supportsHtmlPreview('C:/workspace/partial.htm')).toBe(true)
-    expect(supportsHtmlPreview('C:/workspace/main.ts')).toBe(false)
-
-    expect(getDefaultWorkspaceFileViewMode('C:/workspace/index.html', 'code')).toBe('preview')
-    expect(getDefaultWorkspaceFileViewMode('C:/workspace/main.ts', 'code')).toBe('default')
-    expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.md', 'rich-text')).toBe('meo')
-    expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.txt', 'rich-text')).toBe('default')
+  it('defaults MEO-capable files to MEO and other editable text to Monaco code view', () => {
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/index.html', 'code')).toBe('code')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/partial.htm', 'code')).toBe('code')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/main.ts', 'code')).toBe('code')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.md', 'prose')).toBe('meo')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.txt', 'prose')).toBe('code')
   })
 
-  it('only exposes alternate code-view entry points for html and rich-text files', () => {
-    expect(supportsCodeEditorToggle('C:/workspace/index.html', 'code')).toBe(true)
-    expect(supportsCodeEditorToggle('C:/workspace/notes.md', 'rich-text')).toBe(true)
-    expect(supportsCodeEditorToggle('C:/workspace/notes.txt', 'rich-text')).toBe(true)
-    expect(supportsCodeEditorToggle('C:/workspace/main.ts', 'code')).toBe(false)
-    expect(supportsCodeEditorToggle('C:/workspace/config.json', 'code')).toBe(false)
+  it('only exposes alternate Monaco entry points for files that default to MEO', () => {
+    expect(supportsAlternateCodeEditorView('C:/workspace/index.html', 'code')).toBe(false)
+    expect(supportsAlternateCodeEditorView('C:/workspace/notes.md', 'prose')).toBe(true)
+    expect(supportsAlternateCodeEditorView('C:/workspace/notes.txt', 'prose')).toBe(false)
+    expect(supportsAlternateCodeEditorView('C:/workspace/main.ts', 'code')).toBe(false)
+    expect(supportsAlternateCodeEditorView('C:/workspace/config.json', 'code')).toBe(false)
   })
 
-  it('only exposes MEO for markdown-native rich-text files', () => {
-    expect(supportsMeoEditor('C:/workspace/notes.md', 'rich-text')).toBe(true)
-    expect(supportsMeoEditor('C:/workspace/notes.markdown', 'rich-text')).toBe(true)
-    expect(supportsMeoEditor('C:/workspace/notes.mdc', 'rich-text')).toBe(true)
-    expect(supportsMeoEditor('C:/workspace/notes.mdx', 'rich-text')).toBe(true)
-    expect(supportsMeoEditor('C:/workspace/notes.txt', 'rich-text')).toBe(false)
+  it('only exposes MEO for markdown-native prose files', () => {
+    expect(supportsMeoEditor('C:/workspace/notes.md', 'prose')).toBe(true)
+    expect(supportsMeoEditor('C:/workspace/notes.markdown', 'prose')).toBe(true)
+    expect(supportsMeoEditor('C:/workspace/notes.mdc', 'prose')).toBe(true)
+    expect(supportsMeoEditor('C:/workspace/notes.mdx', 'prose')).toBe(true)
+    expect(supportsMeoEditor('C:/workspace/notes.txt', 'prose')).toBe(false)
     expect(supportsMeoEditor('C:/workspace/index.html', 'code')).toBe(false)
   })
 })

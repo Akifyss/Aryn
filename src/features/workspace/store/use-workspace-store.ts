@@ -4,8 +4,8 @@ import type { WorkspaceNode } from '@/features/workspace/types'
 import {
   getDefaultWorkspaceFileViewMode,
   getSupportedWorkspaceEditorKind,
-  supportsHtmlPreview,
   supportsMeoEditor,
+  type LegacyWorkspaceFileViewMode,
   type SupportedWorkspaceEditorKind,
   type WorkspaceFileViewMode,
 } from '@/features/workspace/lib/file-types'
@@ -53,7 +53,7 @@ export type WorkspaceTab = WorkspaceFileTab | WorkspaceDiffTab
 
 export type WorkspaceSettingsTab = {
   content: ''
-  editorKind: 'rich-text'
+  editorKind: 'prose'
   exists: true
   filePath: 'app://settings'
   id: 'app://settings'
@@ -85,7 +85,7 @@ type WorkspaceState = {
     exists?: boolean
     filePath: string
     gitDiffRequest?: WorkspaceFileGitDiffRequest | null
-    viewMode?: WorkspaceFileViewMode
+    viewMode?: LegacyWorkspaceFileViewMode
   }) => void
   renameTab: (currentPath: string, nextPath: string) => void
   replaceTabs: (tabs: WorkspaceTab[], activeTabId: string | null) => void
@@ -101,28 +101,16 @@ export function createWorkspaceFileTabId(filePath: string, viewMode: WorkspaceFi
   return `file://${viewMode}/${encodeURIComponent(filePath)}`
 }
 
-function isPreviewModeSupported(filePath: string, editorKind: SupportedWorkspaceEditorKind) {
-  return editorKind === 'code' && supportsHtmlPreview(filePath)
-}
-
 function normalizeViewMode(
   filePath: string,
   editorKind: SupportedWorkspaceEditorKind,
-  viewMode?: WorkspaceFileViewMode,
+  viewMode?: LegacyWorkspaceFileViewMode,
 ) {
-  if (viewMode === 'default' && editorKind === 'rich-text') {
-    return 'default'
-  }
-
   if (viewMode === 'meo' && supportsMeoEditor(filePath, editorKind)) {
     return viewMode
   }
 
-  if (viewMode === 'preview' && isPreviewModeSupported(filePath, editorKind)) {
-    return viewMode
-  }
-
-  if (viewMode === 'code' && (editorKind === 'rich-text' || isPreviewModeSupported(filePath, editorKind))) {
+  if (viewMode === 'code') {
     return viewMode
   }
 
@@ -154,7 +142,7 @@ function mergeDuplicateWorkspaceFileTabs(existingTab: WorkspaceFileTab, nextTab:
   }
 }
 
-function dedupeWorkspaceTabs(tabs: WorkspaceTab[]) {
+export function dedupeWorkspaceTabs(tabs: WorkspaceTab[]) {
   const dedupedTabs: WorkspaceTab[] = []
 
   for (const tab of tabs) {

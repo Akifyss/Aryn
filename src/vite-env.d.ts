@@ -28,7 +28,7 @@ declare global {
       getWorkspaceState: (workspacePath: string) => Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>
       updateWorkspaceState: (workspacePath: string, patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean }) => Promise<{ ok: boolean }>
       loadWorkspaceTree: (rootPath: string) => Promise<WorkspaceNode[]>
-      resolveWorkspaceEditorKind: (filePath: string) => Promise<'rich-text' | 'code' | null>
+      resolveWorkspaceEditorKind: (filePath: string) => Promise<'prose' | 'code' | null>
       readWorkspaceFile: (filePath: string) => Promise<string>
       saveWorkspaceFile: (filePath: string, content: string) => Promise<{ ok: boolean }>
       workspaceFileExists: (rootPath: string, filePath: string) => Promise<{ exists: boolean }>

@@ -36,6 +36,7 @@ import { FileTabs } from '@/features/workspace/components/file-tabs'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
 import {
   createWorkspaceFileTabId,
+  dedupeWorkspaceTabs,
   useWorkspaceStore,
   type WorkspaceDiffTab,
   type WorkspaceDiffNavigationRequest,
@@ -47,7 +48,7 @@ import {
 import {
   getDefaultWorkspaceFileViewMode,
   supportsMeoEditor,
-  supportsHtmlPreview,
+  type LegacyWorkspaceFileViewMode,
   type WorkspaceFileViewMode,
 } from '@/features/workspace/lib/file-types'
 import {
@@ -62,7 +63,6 @@ import type {
 } from '@/features/workspace/types'
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
 import { useSettingsStore, type AppTheme } from '@/hooks/use-settings-store'
-import { HtmlPreview } from '@/features/editor/components/html-preview'
 import {
   COMPACT_LAYOUT_BREAKPOINT,
   deriveLayoutMode,
@@ -121,13 +121,6 @@ const MeoEditorHost = lazy(async () => {
   const module = await loadMeoEditorHostModule('lazy')
   recordOpenFileProfile('lazy:meo-editor-host:lazy-resolved', { durationMs: getOpenFileProfileDuration(startedAt) })
   return { default: module.MeoEditorHost }
-})
-const WritingEditor = lazy(async () => {
-  const startedAt = performance.now()
-  recordOpenFileProfile('lazy:writing-editor:start')
-  const module = await import('@/features/editor/components/writing-editor')
-  recordOpenFileProfile('lazy:writing-editor:end', { durationMs: getOpenFileProfileDuration(startedAt) })
-  return { default: module.WritingEditor }
 })
 
 function getBaseName(filePath: string) {
@@ -234,7 +227,7 @@ function isWorkspaceDiffTab(tab: WorkspaceDisplayTab | null | undefined): tab is
 }
 
 function isWorkspaceAutosaveTab(tab: WorkspaceDisplayTab | WorkspaceFileTab | null | undefined): tab is WorkspaceFileTab {
-  return tab?.kind === 'file' && tab.viewMode !== 'preview'
+  return tab?.kind === 'file'
 }
 
 function createDiffTabId(filePath: string, scope: GitChangeScope) {
@@ -309,7 +302,7 @@ type StoredTabState = {
   activePath: string | null
   entries?: Array<{
     path: string
-    viewMode?: WorkspaceFileViewMode
+    viewMode?: LegacyWorkspaceFileViewMode
   }>
   paths: string[]
 }
@@ -484,7 +477,7 @@ function readStoredTabState(workspacePath: string): StoredTabState {
     const parsedValue = JSON.parse(rawValue) as Partial<StoredTabState>
     const entries = Array.isArray(parsedValue.entries)
       ? parsedValue.entries.filter(
-        (entry): entry is { path: string, viewMode?: WorkspaceFileViewMode } => (
+        (entry): entry is { path: string, viewMode?: LegacyWorkspaceFileViewMode } => (
           typeof entry === 'object'
           && entry !== null
           && typeof entry.path === 'string'
@@ -519,7 +512,7 @@ function readStoredTabState(workspacePath: string): StoredTabState {
   }
 }
 
-function dedupeStoredEntries(entries: Array<{ path: string, viewMode?: WorkspaceFileViewMode }>) {
+function dedupeStoredEntries(entries: Array<{ path: string, viewMode?: LegacyWorkspaceFileViewMode }>) {
   const seen = new Set<string>()
 
   return entries.filter((entry) => {
@@ -537,21 +530,13 @@ function dedupeStoredEntries(entries: Array<{ path: string, viewMode?: Workspace
 function resolveWorkspaceFileViewMode(
   filePath: string,
   editorKind: WorkspaceFileTab['editorKind'],
-  preferredViewMode?: WorkspaceFileViewMode,
+  preferredViewMode?: LegacyWorkspaceFileViewMode,
 ) {
-  if (preferredViewMode === 'default' && editorKind === 'rich-text') {
-    return 'default'
-  }
-
   if (preferredViewMode === 'meo' && supportsMeoEditor(filePath, editorKind)) {
     return preferredViewMode
   }
 
-  if (preferredViewMode === 'preview' && editorKind === 'code' && supportsHtmlPreview(filePath)) {
-    return preferredViewMode
-  }
-
-  if (preferredViewMode === 'code' && (editorKind === 'rich-text' || supportsHtmlPreview(filePath))) {
+  if (preferredViewMode === 'code') {
     return preferredViewMode
   }
 
@@ -796,7 +781,7 @@ function App() {
         ...openTabs,
         {
           content: '',
-          editorKind: 'rich-text',
+          editorKind: 'prose',
           exists: true,
           filePath: SETTINGS_TAB_PATH,
           id: SETTINGS_TAB_ID,
@@ -814,7 +799,7 @@ function App() {
   const currentFileViewMode = activeFileTab?.viewMode ?? null
   const currentFilePath = activeFileTab?.filePath ?? null
   const isActiveMeoEditorMountedRef = useRef(false)
-  isActiveMeoEditorMountedRef.current = currentEditorKind === 'rich-text' && currentFileViewMode === 'meo'
+  isActiveMeoEditorMountedRef.current = currentEditorKind === 'prose' && currentFileViewMode === 'meo'
   useEffect(() => {
     if (!activeFileTab) {
       return
@@ -1722,7 +1707,7 @@ function App() {
   const openFile = useCallback(async (
     filePath: string,
     workspacePath: string | null = currentPath,
-    preferredViewMode?: WorkspaceFileViewMode,
+    preferredViewMode?: LegacyWorkspaceFileViewMode,
   ) => {
     const openStartedAt = performance.now()
     recordOpenFileProfile('app:open-file:start', {
@@ -2057,7 +2042,7 @@ function App() {
         return null
       }
     }))
-    const nextTabs = settledTabs.filter((tab): tab is WorkspaceFileTab => tab !== null)
+    const nextTabs = dedupeWorkspaceTabs(settledTabs.filter((tab): tab is WorkspaceFileTab => tab !== null))
     const requestedActiveId = storedState.activePath ?? fallbackPath ?? null
     const nextActiveId = nextTabs.some((tab) => tab.id === requestedActiveId || tab.filePath === requestedActiveId)
       ? nextTabs.find((tab) => tab.id === requestedActiveId || tab.filePath === requestedActiveId)?.id ?? null
@@ -3723,14 +3708,8 @@ function App() {
                   onSelectFile={(filePath) => {
                     void openFile(filePath)
                   }}
-                  onOpenInWritingEditor={(filePath) => {
-                    void openFile(filePath, currentPath, 'default')
-                  }}
                   onOpenInCodeEditor={(filePath) => {
                     void openFile(filePath, currentPath, 'code')
-                  }}
-                  onOpenInMeoEditor={(filePath) => {
-                    void openFile(filePath, currentPath, 'meo')
                   }}
                   onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
                   onDeleteNode={(node) => handleDeleteNode(node)}
@@ -4045,14 +4024,8 @@ function App() {
                   onSelectFile={(filePath) => {
                     void openFile(filePath)
                   }}
-                  onOpenInWritingEditor={(filePath) => {
-                    void openFile(filePath, currentPath, 'default')
-                  }}
                   onOpenInCodeEditor={(filePath) => {
                     void openFile(filePath, currentPath, 'code')
-                  }}
-                  onOpenInMeoEditor={(filePath) => {
-                    void openFile(filePath, currentPath, 'meo')
                   }}
                   onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
                   onDeleteNode={(node) => handleDeleteNode(node)}
@@ -4173,7 +4146,7 @@ function App() {
             getHasDiff={(filePath) => Boolean(findGitChangeByFilePath(gitRepositoryState, filePath))}
           />
 
-          <div className='editor-content-shell' id='writing-editor-panel'>
+          <div className='editor-content-shell' id='editor-content-panel'>
             {isSettingsTabActive ? (
               <SettingsDialog
                 activeSection={settingsSection}
@@ -4246,26 +4219,7 @@ function App() {
               </Suspense>
             ) : null}
 
-            {activeFileTab && currentEditorKind === 'rich-text' && currentFileViewMode === 'default' ? (
-              <Suspense fallback={<EditorLoadingState />}>
-                <WritingEditor
-                  key={activeFileTab.id}
-                  disabled={!currentFilePath}
-                  onChange={(nextValue) => {
-                    if (!currentFilePath) {
-                      return
-                    }
-
-                    updateFileTabsContent(currentFilePath, nextValue)
-                  }}
-                  onCompositionChange={setIsActiveEditorComposing}
-                  value={currentFileContent}
-                  theme={theme}
-                />
-              </Suspense>
-            ) : null}
-
-            {activeFileTab && currentEditorKind === 'rich-text' && currentFileViewMode === 'meo' ? (
+            {activeFileTab && currentEditorKind === 'prose' && currentFileViewMode === 'meo' ? (
               <Suspense fallback={<EditorLoadingState />}>
                 <MeoEditorHost
                   key={activeFileTab.id}
@@ -4314,16 +4268,9 @@ function App() {
               </Suspense>
             ) : null}
 
-            {activeFileTab && currentEditorKind === 'code' && currentFileViewMode === 'preview' ? (
-              <HtmlPreview
-                content={currentFileContent}
-                filePath={activeFileTab.filePath}
-              />
-            ) : null}
-
             {activeFileTab && (
-              (currentEditorKind === 'code' && currentFileViewMode !== 'preview')
-              || (currentEditorKind === 'rich-text' && currentFileViewMode === 'code')
+              (currentEditorKind === 'code' && currentFileViewMode === 'code')
+              || (currentEditorKind === 'prose' && currentFileViewMode === 'code')
             ) ? (
               <Suspense fallback={<EditorLoadingState />}>
                 <CodeEditor

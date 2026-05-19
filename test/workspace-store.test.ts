@@ -19,22 +19,22 @@ describe('useWorkspaceStore', () => {
     })
   })
 
-  it('opens default rich-text tabs without duplicating them and activates the requested file', () => {
+  it('opens default prose tabs without duplicating them and activates the requested file', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({
       content: 'alpha',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/a.md',
     })
     store.openTab({
       content: 'beta',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/b.md',
     })
     store.openTab({
       content: 'ignored',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/a.md',
     })
 
@@ -53,7 +53,7 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({
       content: '# Draft',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
       gitDiffRequest: {
         lineNumber: 8,
@@ -66,7 +66,7 @@ describe('useWorkspaceStore', () => {
     store.updateFileTabsContent('C:/workspace/draft.md', '# Draft edited')
     store.openTab({
       content: '# Ignored',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
     })
 
@@ -85,7 +85,7 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({
       content: '# Still ignored',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
       gitDiffRequest: {
         lineNumber: 3,
@@ -110,7 +110,7 @@ describe('useWorkspaceStore', () => {
     })
   })
 
-  it('keeps html preview and code tabs as separate tabs', () => {
+  it('opens html in Monaco and migrates legacy preview requests to code view', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({
@@ -122,13 +122,12 @@ describe('useWorkspaceStore', () => {
       content: '<h1>Hello</h1>',
       editorKind: 'code',
       filePath: 'C:/workspace/index.html',
-      viewMode: 'code',
+      viewMode: 'preview',
     })
 
     const nextState = useWorkspaceStore.getState()
-    expect(nextState.openTabs).toHaveLength(2)
+    expect(nextState.openTabs).toHaveLength(1)
     expect(nextState.openTabs.map((tab) => tab.id)).toEqual([
-      createWorkspaceFileTabId('C:/workspace/index.html', 'preview'),
       createWorkspaceFileTabId('C:/workspace/index.html', 'code'),
     ])
     expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/index.html', 'code'))
@@ -139,12 +138,12 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({
       content: '# Draft',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
     })
     store.openTab({
       content: '# Draft',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
       viewMode: 'code',
     })
@@ -158,45 +157,50 @@ describe('useWorkspaceStore', () => {
     expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/draft.md', 'code'))
   })
 
-  it('allows markdown tabs to open in both writing and MEO views', () => {
+  it('normalizes legacy markdown writing tabs to MEO', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({
       content: '# Draft',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
       viewMode: 'default',
     })
     store.openTab({
       content: '# Draft',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
       viewMode: 'meo',
     })
 
     const nextState = useWorkspaceStore.getState()
-    expect(nextState.openTabs).toHaveLength(2)
+    expect(nextState.openTabs).toHaveLength(1)
     expect(nextState.openTabs.map((tab) => tab.id)).toEqual([
-      createWorkspaceFileTabId('C:/workspace/draft.md', 'default'),
       createWorkspaceFileTabId('C:/workspace/draft.md', 'meo'),
     ])
     expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/draft.md', 'meo'))
   })
 
-  it('falls back to default mode when a preview tab is renamed to a non-html file', () => {
+  it('normalizes legacy preview tabs to Monaco code mode when renaming', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({
       content: '<h1>Hello</h1>',
       editorKind: 'code',
       filePath: 'C:/workspace/index.html',
+      viewMode: 'preview',
     })
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      filePath: 'C:/workspace/index.html',
+      viewMode: 'code',
+    })
+
     store.renameTab('C:/workspace/index.html', 'C:/workspace/index.ts')
 
     expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
       editorKind: 'code',
       filePath: 'C:/workspace/index.ts',
-      viewMode: 'default',
+      viewMode: 'code',
     })
   })
 
@@ -205,12 +209,12 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({
       content: '# Draft',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
     })
     store.openTab({
       content: '# Draft',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
       viewMode: 'code',
     })
@@ -221,9 +225,9 @@ describe('useWorkspaceStore', () => {
     expect(nextState.openTabs[0]).toMatchObject({
       editorKind: 'code',
       filePath: 'C:/workspace/draft.ts',
-      viewMode: 'default',
+      viewMode: 'code',
     })
-    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/draft.ts', 'default'))
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/draft.ts', 'code'))
   })
 
   it('marks tabs dirty only when their content diverges from the saved content', () => {
@@ -231,7 +235,7 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({
       content: 'draft',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
     })
     store.updateFileTabsContent('C:/workspace/draft.md', 'draft updated')
@@ -258,20 +262,20 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({
       content: '# Draft',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
       viewMode: 'default',
     })
     store.openTab({
       content: '# Draft',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/draft.md',
       viewMode: 'code',
     })
     store.updateFileTabsContent('C:/workspace/draft.md', '# Draft updated')
 
     expect(useWorkspaceStore.getState().openTabs).toMatchObject([
-      { content: '# Draft updated', isDirty: true, viewMode: 'default' },
+      { content: '# Draft updated', isDirty: true, viewMode: 'meo' },
       { content: '# Draft updated', isDirty: true, viewMode: 'code' },
     ])
   })
@@ -279,9 +283,9 @@ describe('useWorkspaceStore', () => {
   it('closes the active tab and falls back to the nearest tab on the right first', () => {
     const store = useWorkspaceStore.getState()
 
-    store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
-    store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
-    store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
+    store.openTab({ content: 'a', editorKind: 'prose', filePath: 'C:/workspace/a.md' })
+    store.openTab({ content: 'b', editorKind: 'prose', filePath: 'C:/workspace/b.md' })
+    store.openTab({ content: 'c', editorKind: 'prose', filePath: 'C:/workspace/c.md' })
     store.activateTab(createWorkspaceFileTabId('C:/workspace/b.md', 'meo'))
     store.closeTab(createWorkspaceFileTabId('C:/workspace/b.md', 'meo'))
 
@@ -298,7 +302,7 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({
       content: 'content',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/old-name.md',
     })
     store.updateFileTabsContent('C:/workspace/old-name.md', 'content updated')
@@ -320,7 +324,7 @@ describe('useWorkspaceStore', () => {
 
     store.openTab({
       content: 'content',
-      editorKind: 'rich-text',
+      editorKind: 'prose',
       filePath: 'C:/workspace/file.md',
     })
 
@@ -335,7 +339,7 @@ describe('useWorkspaceStore', () => {
           scope: 'unstaged',
           statusCode: 'M',
         },
-        editorKind: 'rich-text',
+        editorKind: 'prose',
         modifiedContent: 'new',
         modifiedExists: true,
         modifiedLabel: 'Working tree',
@@ -365,9 +369,9 @@ describe('useWorkspaceStore', () => {
   it('reorders tabs before and after the hovered target without disturbing the active tab', () => {
     const store = useWorkspaceStore.getState()
 
-    store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
-    store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
-    store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
+    store.openTab({ content: 'a', editorKind: 'prose', filePath: 'C:/workspace/a.md' })
+    store.openTab({ content: 'b', editorKind: 'prose', filePath: 'C:/workspace/b.md' })
+    store.openTab({ content: 'c', editorKind: 'prose', filePath: 'C:/workspace/c.md' })
     store.activateTab(createWorkspaceFileTabId('C:/workspace/b.md', 'meo'))
 
     store.moveTab(
@@ -398,9 +402,9 @@ describe('useWorkspaceStore', () => {
   it('treats self-drops and adjacent no-op drops as stable reorder operations', () => {
     const store = useWorkspaceStore.getState()
 
-    store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
-    store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
-    store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
+    store.openTab({ content: 'a', editorKind: 'prose', filePath: 'C:/workspace/a.md' })
+    store.openTab({ content: 'b', editorKind: 'prose', filePath: 'C:/workspace/b.md' })
+    store.openTab({ content: 'c', editorKind: 'prose', filePath: 'C:/workspace/c.md' })
 
     const currentTabs = useWorkspaceStore.getState().openTabs
 
@@ -441,9 +445,9 @@ describe('useWorkspaceStore', () => {
   it('moves a leading tab to the very end when dropped after the last tab', () => {
     const store = useWorkspaceStore.getState()
 
-    store.openTab({ content: 'a', editorKind: 'rich-text', filePath: 'C:/workspace/a.md' })
-    store.openTab({ content: 'b', editorKind: 'rich-text', filePath: 'C:/workspace/b.md' })
-    store.openTab({ content: 'c', editorKind: 'rich-text', filePath: 'C:/workspace/c.md' })
+    store.openTab({ content: 'a', editorKind: 'prose', filePath: 'C:/workspace/a.md' })
+    store.openTab({ content: 'b', editorKind: 'prose', filePath: 'C:/workspace/b.md' })
+    store.openTab({ content: 'c', editorKind: 'prose', filePath: 'C:/workspace/c.md' })
 
     store.moveTab(
       createWorkspaceFileTabId('C:/workspace/a.md', 'meo'),
@@ -462,7 +466,7 @@ describe('useWorkspaceStore', () => {
     const store = useWorkspaceStore.getState()
     const diffTabId = createDiffTabId('C:/workspace/draft.md', 'unstaged')
 
-    store.openTab({ content: 'draft', editorKind: 'rich-text', filePath: 'C:/workspace/draft.md' })
+    store.openTab({ content: 'draft', editorKind: 'prose', filePath: 'C:/workspace/draft.md' })
     store.openDiffTab({
       draftContent: null,
       diff: {
@@ -474,7 +478,7 @@ describe('useWorkspaceStore', () => {
           scope: 'unstaged',
           statusCode: 'M',
         },
-        editorKind: 'rich-text',
+        editorKind: 'prose',
         modifiedContent: 'new',
         modifiedExists: true,
         modifiedLabel: 'Working tree',
@@ -490,7 +494,7 @@ describe('useWorkspaceStore', () => {
       kind: 'diff',
       title: 'draft.md',
     })
-    store.openTab({ content: 'notes', editorKind: 'rich-text', filePath: 'C:/workspace/notes.md' })
+    store.openTab({ content: 'notes', editorKind: 'prose', filePath: 'C:/workspace/notes.md' })
 
     store.moveTab(
       diffTabId,
@@ -527,7 +531,7 @@ describe('useWorkspaceStore', () => {
           scope: 'unstaged',
           statusCode: 'M',
         },
-        editorKind: 'rich-text',
+        editorKind: 'prose',
         modifiedContent: 'saved',
         modifiedExists: true,
         modifiedLabel: 'Working tree',
@@ -574,7 +578,7 @@ describe('useWorkspaceStore', () => {
           scope: 'unstaged',
           statusCode: 'M',
         },
-        editorKind: 'rich-text',
+        editorKind: 'prose',
         modifiedContent: 'saved',
         modifiedExists: true,
         modifiedLabel: 'Working tree',
@@ -621,7 +625,7 @@ describe('useWorkspaceStore', () => {
           scope: 'unstaged',
           statusCode: 'M',
         },
-        editorKind: 'rich-text',
+        editorKind: 'prose',
         modifiedContent: 'saved',
         modifiedExists: true,
         modifiedLabel: 'Working tree',
@@ -650,7 +654,7 @@ describe('useWorkspaceStore', () => {
           scope: 'unstaged',
           statusCode: 'M',
         },
-        editorKind: 'rich-text',
+        editorKind: 'prose',
         modifiedContent: 'saved from disk',
         modifiedExists: true,
         modifiedLabel: 'Working tree',
@@ -694,7 +698,7 @@ describe('useWorkspaceStore', () => {
           scope: 'unstaged',
           statusCode: 'M',
         },
-        editorKind: 'rich-text',
+        editorKind: 'prose',
         modifiedContent: 'saved',
         modifiedExists: true,
         modifiedLabel: 'Working tree',
@@ -727,7 +731,7 @@ describe('useWorkspaceStore', () => {
           scope: 'unstaged',
           statusCode: 'M',
         },
-        editorKind: 'rich-text',
+        editorKind: 'prose',
         modifiedContent: 'saved from disk',
         modifiedExists: true,
         modifiedLabel: 'Working tree',
