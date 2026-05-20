@@ -49,11 +49,7 @@ import {
   importWorkspaceIconThemeFromVsix,
   loadWorkspaceIconThemeCatalogFromVsix,
 } from './workspace-icon-theme'
-import {
-  getAppIconAssetPath,
-  getAppIconCatalog,
-  resolveAppIconId,
-} from './app-icons'
+import { getDefaultAppIconAssetPath } from './app-icon'
 import {
   isFlowIconsVsixPath,
   isBundledWorkspaceIconThemePath,
@@ -193,7 +189,7 @@ function bindWindowStatePersistence(targetWindow: BrowserWindow) {
 
 async function createWindow() {
   const appState = await appStateStore.read()
-  const appIconPath = getAppIconAssetPath(process.env.VITE_PUBLIC, appState.ui.appIconId)
+  const appIconPath = getDefaultAppIconAssetPath(process.env.VITE_PUBLIC)
   const titlebarOptions = process.platform === 'darwin'
     ? {
         titleBarStyle: 'hidden' as const,
@@ -298,12 +294,11 @@ async function createWindow() {
     })
   }
 
-  applyAppIconSelection(appState.ui.appIconId)
+  applyDefaultAppIcon()
 }
 
-function applyAppIconSelection(appIconId?: string | null) {
-  const resolvedAppIconId = resolveAppIconId(appIconId)
-  const iconPath = getAppIconAssetPath(process.env.VITE_PUBLIC, resolvedAppIconId)
+function applyDefaultAppIcon() {
+  const iconPath = getDefaultAppIconAssetPath(process.env.VITE_PUBLIC)
   const icon = nativeImage.createFromPath(iconPath)
 
   if (!icon.isEmpty()) {
@@ -316,7 +311,7 @@ function applyAppIconSelection(appIconId?: string | null) {
     }
   }
 
-  return resolvedAppIconId
+  return iconPath
 }
 
 function isBundledWorkspaceIconTheme(vsixPath: string) {
@@ -473,7 +468,7 @@ async function getWorkspaceIconThemeCatalog() {
 
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
-  applyAppIconSelection((await appStateStore.read()).ui.appIconId)
+  applyDefaultAppIcon()
 
   void createWindow()
 })
@@ -641,30 +636,6 @@ ipcMain.handle('window:set-background-theme', (_event, theme: unknown) => {
 
   win.setBackgroundColor(WINDOW_BACKGROUND_COLORS[normalizedTheme])
   return { ok: true }
-})
-
-ipcMain.handle('app-icons:catalog', async () => {
-  return getAppIconCatalog(process.env.VITE_PUBLIC)
-})
-
-ipcMain.handle('app-icons:get-selection', async () => {
-  const state = await appStateStore.read()
-  return resolveAppIconId(state.ui.appIconId)
-})
-
-ipcMain.handle('app-icons:select', async (_, appIconId: string) => {
-  const nextAppIconId = resolveAppIconId(appIconId)
-
-  await appStateStore.update((currentState) => ({
-    ...currentState,
-    ui: {
-      ...currentState.ui,
-      appIconId: nextAppIconId,
-    },
-  }))
-
-  applyAppIconSelection(nextAppIconId)
-  return nextAppIconId
 })
 
 ipcMain.handle('workspace:read-file', async (_, filePath: string) => {

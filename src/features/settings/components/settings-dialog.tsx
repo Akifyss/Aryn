@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, ListBox, Select, Switch, Tabs } from '@heroui/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import type { AgentProviderAuthState, AgentWorkspaceState } from '@/features/agent/types'
-import type { AppIconCatalogOption } from '@/features/settings/types'
 import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '@/features/workspace/types'
 import { useSettingsStore } from '@/hooks/use-settings-store'
 
@@ -10,17 +9,13 @@ export type SettingsSectionId = 'appearance' | 'editor' | 'providers'
 
 type SettingsViewProps = {
   activeSection: SettingsSectionId
-  appIconId: string | null
-  appIconOptions: AppIconCatalogOption[]
   agentState: AgentWorkspaceState | null
   iconTheme: WorkspaceIconTheme | null
   iconThemeOptions: WorkspaceIconThemeCatalogOption[]
-  isAppIconBusy: boolean
   isIconThemeBusy: boolean
   onAgentStateChange: (state: AgentWorkspaceState) => void
   onImportIconTheme: () => Promise<void>
   onSectionChange: (section: SettingsSectionId) => void
-  onSelectAppIcon: (appIconId: string) => Promise<void>
   onSelectIconTheme: (selection: { sourceVsixPath: string, themeId: string }) => Promise<void>
   onStatusMessage: (message: string) => void
   resolvedTheme: 'light' | 'dark'
@@ -84,17 +79,13 @@ function getProviderMeta(state: AgentProviderAuthState) {
 
 export function SettingsDialog({
   activeSection,
-  appIconId,
-  appIconOptions,
   agentState,
   iconTheme,
   iconThemeOptions,
-  isAppIconBusy,
   isIconThemeBusy,
   onAgentStateChange,
   onImportIconTheme,
   onSectionChange,
-  onSelectAppIcon,
   onSelectIconTheme,
   onStatusMessage,
   resolvedTheme,
@@ -153,7 +144,6 @@ export function SettingsDialog({
   const activeIconThemeKey = iconTheme
     ? `${iconTheme.sourceVsixPath}::${iconTheme.activeThemeId}`
     : ''
-  const selectedAppIcon = appIconOptions.find((option) => option.id === appIconId) ?? appIconOptions[0] ?? null
 
   async function handleSaveProviderAuth(provider: AuthProviderKey, apiKey: string | null) {
     if (!workspacePath) {
@@ -268,59 +258,6 @@ export function SettingsDialog({
             )}
           </div>
 
-          <div className='settings-field' style={{ marginTop: '24px' }}>
-            <div className='settings-copy-block'>
-              <h4>应用图标</h4>
-              <p>选择桌面应用窗口和任务栏使用的图标。</p>
-            </div>
-            <Select
-              className='settings-field-grow heroui-select-fix'
-              selectedKey={selectedAppIcon?.id ?? ''}
-              onSelectionChange={(value) => {
-                if (value == null) {
-                  return
-                }
-
-                const nextAppIconId = String(value)
-                if (nextAppIconId) {
-                  void onSelectAppIcon(nextAppIconId)
-                }
-              }}
-              placeholder='选择应用图标'
-              isDisabled={isAppIconBusy || appIconOptions.length === 0}
-            >
-              <Select.Trigger className='settings-select-trigger settings-app-icon-select-trigger'>
-                {selectedAppIcon ? (
-                  <>
-                    <span className='settings-app-icon-preview is-compact'>
-                      <img src={selectedAppIcon.previewSrc} alt={`${selectedAppIcon.label} app icon`} />
-                    </span>
-                    <span className='settings-app-icon-name'>{selectedAppIcon.label}</span>
-                    <Select.Indicator />
-                  </>
-                ) : (
-                  <>
-                    <span className='settings-app-icon-placeholder'>选择应用图标</span>
-                    <Select.Indicator />
-                  </>
-                )}
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  {appIconOptions.map((option) => (
-                    <ListBox.Item key={option.id} id={option.id} textValue={option.label}>
-                      <span className='settings-app-icon-item'>
-                        <span className='settings-app-icon-preview is-compact'>
-                          <img src={option.previewSrc} alt={`${option.label} app icon`} />
-                        </span>
-                        <span className='settings-app-icon-name'>{option.label}</span>
-                      </span>
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
-            </Select>
-          </div>
         </div>
       </div>
     )

@@ -1,5 +1,4 @@
 import { readFile, writeFile } from 'node:fs/promises'
-import { DEFAULT_APP_ICON_ID } from './app-icons'
 
 export const DEFAULT_WINDOW_WIDTH = 1440
 export const DEFAULT_WINDOW_HEIGHT = 900
@@ -31,7 +30,6 @@ export type PersistedWindowState = {
 
 export type PersistedUiState = {
   agentComposerHeight: number
-  appIconId: string
   workspaceIconTheme: PersistedWorkspaceIconThemeSelection
 }
 
@@ -44,7 +42,6 @@ export type PersistedAppState = {
 const DEFAULT_APP_STATE: PersistedAppState = {
   ui: {
     agentComposerHeight: DEFAULT_AGENT_COMPOSER_HEIGHT,
-    appIconId: DEFAULT_APP_ICON_ID,
     workspaceIconTheme: {
       activeThemeId: null,
       sourceKind: 'bundled',
@@ -148,7 +145,6 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
   return {
     ui: {
       agentComposerHeight: readAgentComposerHeight(uiCandidate.agentComposerHeight),
-      appIconId: readNullableString(uiCandidate.appIconId) ?? DEFAULT_APP_ICON_ID,
       workspaceIconTheme: readWorkspaceIconThemeSelection(uiCandidate.workspaceIconTheme),
     },
     workspace: {

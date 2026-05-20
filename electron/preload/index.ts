@@ -16,7 +16,6 @@ import type {
   WorkspaceIconThemeCatalogOption,
   WorkspaceNode,
 } from '../../src/features/workspace/types'
-import type { AppIconCatalogOption } from '../../src/features/settings/types'
 
 contextBridge.exposeInMainWorld('appApi', {
   platform: process.platform,
@@ -71,9 +70,6 @@ contextBridge.exposeInMainWorld('appApi', {
   getWorkspaceIconThemeCatalog: () => ipcRenderer.invoke('workspace-icons:catalog') as Promise<WorkspaceIconThemeCatalogOption[]>,
   pickWorkspaceIconTheme: () => ipcRenderer.invoke('workspace-icons:pick-theme') as Promise<WorkspaceIconTheme | null>,
   setWorkspaceIconTheme: (selection: { sourceVsixPath: string, themeId: string }) => ipcRenderer.invoke('workspace-icons:select-theme', selection) as Promise<WorkspaceIconTheme | null>,
-  getAppIconCatalog: () => ipcRenderer.invoke('app-icons:catalog') as Promise<AppIconCatalogOption[]>,
-  getAppIconSelection: () => ipcRenderer.invoke('app-icons:get-selection') as Promise<string>,
-  setAppIconSelection: (appIconId: string) => ipcRenderer.invoke('app-icons:select', appIconId) as Promise<string>,
   getUiState: () => ipcRenderer.invoke('ui:get-state') as Promise<{ agentComposerHeight: number }>,
   updateUiState: (patch: { agentComposerHeight?: number }) => ipcRenderer.invoke('ui:update-state', patch) as Promise<{ ok: boolean }>,
   startWorkspaceWatch: (rootPath: string) => ipcRenderer.invoke('workspace:start-watch', rootPath) as Promise<{ ok: boolean }>,

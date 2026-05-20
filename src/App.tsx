@@ -31,7 +31,6 @@ import {
   SettingsDialog,
   type SettingsSectionId,
 } from '@/features/settings/components/settings-dialog'
-import type { AppIconCatalogOption } from '@/features/settings/types'
 import { FileTabs } from '@/features/workspace/components/file-tabs'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
 import {
@@ -673,9 +672,6 @@ function App() {
   const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
   const [iconTheme, setIconTheme] = useState<WorkspaceIconTheme | null>(null)
   const [iconThemeOptions, setIconThemeOptions] = useState<WorkspaceIconThemeCatalogOption[]>([])
-  const [appIconId, setAppIconId] = useState<string | null>(null)
-  const [appIconOptions, setAppIconOptions] = useState<AppIconCatalogOption[]>([])
-  const [isApplyingAppIcon, setIsApplyingAppIcon] = useState(false)
   const lastIconThemeLinkedThemeRef = useRef<ResolvedAppTheme>(resolvedTheme)
   const iconThemeLinkRequestRef = useRef(0)
   const [, setStatusMessage] = useState('Open a folder to start.')
@@ -2190,27 +2186,6 @@ function App() {
     }
   }
 
-  async function handleSelectAppIcon(nextAppIconId: string) {
-    if (appIconId === nextAppIconId) {
-      return
-    }
-
-    try {
-      setIsApplyingAppIcon(true)
-      const appliedAppIconId = await window.appApi.setAppIconSelection(nextAppIconId)
-      setAppIconId(appliedAppIconId)
-      const selectedOption = appIconOptions.find((option) => option.id === appliedAppIconId)
-      setStatusMessage(selectedOption
-        ? `应用图标已切换为 ${selectedOption.label}`
-        : '应用图标已更新')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to switch the app icon.'
-      setStatusMessage(message)
-    } finally {
-      setIsApplyingAppIcon(false)
-    }
-  }
-
   function openSettings(section: SettingsSectionId) {
     setSettingsSection(section)
     setIsSettingsTabOpen(true)
@@ -2702,26 +2677,18 @@ function App() {
         const [
           persistedIconTheme,
           persistedIconThemeOptions,
-          persistedAppIconId,
-          persistedAppIconOptions,
         ] = await Promise.all([
           window.appApi.getWorkspaceIconTheme(),
           window.appApi.getWorkspaceIconThemeCatalog(),
-          window.appApi.getAppIconSelection(),
-          window.appApi.getAppIconCatalog(),
         ])
         if (!cancelled) {
           setIconTheme(persistedIconTheme)
           setIconThemeOptions(persistedIconThemeOptions)
-          setAppIconId(persistedAppIconId)
-          setAppIconOptions(persistedAppIconOptions)
         }
       } catch {
         if (!cancelled) {
           setIconTheme(null)
           setIconThemeOptions([])
-          setAppIconId(null)
-          setAppIconOptions([])
         }
       }
 
@@ -2838,24 +2805,6 @@ function App() {
   useEffect(() => {
     setIsActiveEditorComposing(false)
   }, [currentEditorKind, currentFilePath, currentFileViewMode])
-
-  useEffect(() => {
-    if (!appIconId) {
-      return
-    }
-
-    const selectedOption = appIconOptions.find((option) => option.id === appIconId)
-
-    if (!selectedOption) {
-      return
-    }
-
-    const iconLink = document.querySelector<HTMLLinkElement>("link[rel='icon']")
-
-    if (iconLink) {
-      iconLink.href = selectedOption.previewSrc
-    }
-  }, [appIconId, appIconOptions])
 
   useEffect(() => {
     const previousPath = previousWorkspaceAutosavePathRef.current
@@ -4150,19 +4099,15 @@ function App() {
             {isSettingsTabActive ? (
               <SettingsDialog
                 activeSection={settingsSection}
-                appIconId={appIconId}
-                appIconOptions={appIconOptions}
                 agentState={agentWorkspaceState}
                 iconTheme={iconTheme}
                 iconThemeOptions={iconThemeOptions}
-                isAppIconBusy={isApplyingAppIcon}
                 isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
                 resolvedTheme={resolvedTheme}
                 workspacePath={currentPath}
                 onAgentStateChange={setAgentWorkspaceState}
                 onImportIconTheme={handlePickWorkspaceIconTheme}
                 onSectionChange={setSettingsSection}
-                onSelectAppIcon={handleSelectAppIcon}
                 onSelectIconTheme={handleSelectWorkspaceIconTheme}
                 onStatusMessage={setStatusMessage}
               />
@@ -4421,19 +4366,15 @@ function App() {
               <Modal.Body className='p-0 m-0'>
                 <SettingsDialog
                   activeSection={settingsSection}
-                  appIconId={appIconId}
-                  appIconOptions={appIconOptions}
                   agentState={agentWorkspaceState}
                   iconTheme={iconTheme}
                   iconThemeOptions={iconThemeOptions}
-                  isAppIconBusy={isApplyingAppIcon}
                   isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
                   resolvedTheme={resolvedTheme}
                   workspacePath={currentPath}
                   onAgentStateChange={setAgentWorkspaceState}
                   onImportIconTheme={handlePickWorkspaceIconTheme}
                   onSectionChange={setSettingsSection}
-                  onSelectAppIcon={handleSelectAppIcon}
                   onSelectIconTheme={handleSelectWorkspaceIconTheme}
                   onStatusMessage={setStatusMessage}
                 />

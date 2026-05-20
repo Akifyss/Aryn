@@ -12,7 +12,6 @@ import {
   MIN_WINDOW_WIDTH,
   normalizePersistedAppState,
 } from '../electron/main/app-state'
-import { DEFAULT_APP_ICON_ID } from '../electron/main/app-icons'
 
 const tempRoots: string[] = []
 
@@ -42,7 +41,6 @@ describe('app state persistence', () => {
     expect(state).toEqual({
       ui: {
         agentComposerHeight: DEFAULT_AGENT_COMPOSER_HEIGHT,
-        appIconId: DEFAULT_APP_ICON_ID,
         workspaceIconTheme: {
           activeThemeId: null,
           sourceKind: 'bundled',
@@ -92,7 +90,6 @@ describe('app state persistence', () => {
     expect(nextState).toEqual({
       ui: {
         agentComposerHeight: 132,
-        appIconId: DEFAULT_APP_ICON_ID,
         workspaceIconTheme: {
           activeThemeId: null,
           sourceKind: 'bundled',
@@ -122,6 +119,23 @@ describe('app state persistence', () => {
     expect(getWorkspaceEntry(state, 'C:/workspace')).toEqual({
       lastAgentSessionPath: null,
       lastFilePath: null,
+    })
+  })
+
+  it('drops legacy app icon selections from normalized app state', () => {
+    const state = normalizePersistedAppState({
+      ui: {
+        appIconId: 'alt4',
+      },
+    })
+
+    expect(state.ui).toEqual({
+      agentComposerHeight: DEFAULT_AGENT_COMPOSER_HEIGHT,
+      workspaceIconTheme: {
+        activeThemeId: null,
+        sourceKind: 'bundled',
+        sourceVsixPath: null,
+      },
     })
   })
 

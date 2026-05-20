@@ -146,8 +146,6 @@ function installBrowserProfiler() {
     'getGitBaseline',
     'getWorkspaceIconTheme',
     'getWorkspaceIconThemeCatalog',
-    'getAppIconSelection',
-    'getAppIconCatalog',
     'startWorkspaceWatch',
   ]
 
