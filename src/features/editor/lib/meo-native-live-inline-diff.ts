@@ -43,6 +43,7 @@ import {
   createGitDiffLineHunkId,
 } from '@/vendor/meo/shared/gitDiffLineFlags'
 import {
+  getGitGutterMarkerHunkMetadata,
   setGitBaseline,
   setGitDiffLineFlags,
 } from '@/vendor/meo/webview/helpers/gitDiffGutter'
@@ -888,44 +889,24 @@ function buildInlineDecorations(
   }
 }
 
-function cssString(value: string) {
-  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
-    return CSS.escape(value)
+function markerMetadataMatchesHunkId(marker: HTMLElement, hunkId: string) {
+  const markerMetadata = getGitGutterMarkerHunkMetadata(marker)
+  if (markerMetadata?.hunkId === hunkId || markerMetadata?.diffHunkId === hunkId) {
+    return true
   }
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-}
 
-function markerDatasetContainsHunkId(marker: HTMLElement, hunkId: string) {
-  return marker.dataset.meoGitDiffHunkId === hunkId
-    || marker.dataset.meoGitHunkId === hunkId
-    || marker.dataset.meoGitHunkAdded?.includes(hunkId) === true
-    || marker.dataset.meoGitHunkDeleted?.includes(hunkId) === true
-    || marker.dataset.meoGitHunkModified?.includes(hunkId) === true
+  return (['added', 'deleted', 'modified'] as const).some((kind) => {
+    const metadata = getGitGutterMarkerHunkMetadata(marker, kind)
+    return metadata?.hunkId === hunkId || metadata?.diffHunkId === hunkId
+  })
 }
 
 function setActiveInlineHunkIds(root: HTMLElement, descriptors: readonly InlineHunkDescriptor[]) {
   const hunkIds = new Set(descriptors.map((descriptor) => descriptor.hunkId).filter(Boolean))
-  for (const marker of Array.from(root.querySelectorAll<HTMLElement>('.meo-git-gutter-marker.is-live-inline-active-hunk'))) {
-    const stillActive = Array.from(hunkIds).some((hunkId) => markerDatasetContainsHunkId(marker, hunkId))
-    if (!stillActive) {
-      marker.classList.remove('is-live-inline-active-hunk')
-    }
-  }
-
-  for (const hunkId of hunkIds) {
-    const escaped = cssString(hunkId)
-    const selector = [
-      `.meo-git-gutter-marker[data-meo-git-diff-hunk-id="${escaped}"]`,
-      `.meo-git-gutter-marker[data-meo-git-hunk-id="${escaped}"]`,
-      `.meo-git-gutter-marker[data-meo-git-hunk-added*="${escaped}"]`,
-      `.meo-git-gutter-marker[data-meo-git-hunk-deleted*="${escaped}"]`,
-      `.meo-git-gutter-marker[data-meo-git-hunk-modified*="${escaped}"]`,
-    ].join(',')
-    for (const marker of Array.from(root.querySelectorAll<HTMLElement>(selector))) {
-      if (!marker.closest('.meo-live-inline-diff')) {
-        marker.classList.add('is-live-inline-active-hunk')
-      }
-    }
+  for (const marker of Array.from(root.querySelectorAll<HTMLElement>('.meo-git-gutter-marker'))) {
+    const isOuterMarker = !marker.closest('.meo-live-inline-diff')
+    const isActive = isOuterMarker && Array.from(hunkIds).some((hunkId) => markerMetadataMatchesHunkId(marker, hunkId))
+    marker.classList.toggle('is-live-inline-active-hunk', isActive)
   }
 }
 
@@ -2669,4 +2650,5 @@ export const __meoLiveInlineDiffTestHooks = {
   mergeDiffSelections,
   resolveModifiedSelectionTargetOffsets,
   resolveOuterEditorSelection,
+  setActiveInlineHunkIds,
 } as const

@@ -337,6 +337,131 @@ describe('meo live inline diff', () => {
     )).toBe(-1)
   })
 
+  it('hides only the outer git marker for the active inline hunk id', () => {
+    const originalHTMLElement = globalThis.HTMLElement
+
+    class FakeHTMLElement {
+      private readonly classes = new Set<string>()
+      children: FakeHTMLElement[] = []
+      dataset: Record<string, string> = {}
+      parent: FakeHTMLElement | null = null
+
+      constructor(className = '') {
+        this.className = className
+      }
+
+      get className() {
+        return Array.from(this.classes).join(' ')
+      }
+
+      set className(value: string) {
+        this.classes.clear()
+        for (const token of value.split(/\s+/)) {
+          if (token) this.classes.add(token)
+        }
+      }
+
+      classList = {
+        add: (...tokens: string[]) => {
+          for (const token of tokens) this.classes.add(token)
+        },
+        contains: (token: string) => this.classes.has(token),
+        remove: (...tokens: string[]) => {
+          for (const token of tokens) this.classes.delete(token)
+        },
+        toggle: (token: string, force?: boolean) => {
+          const shouldAdd = force ?? !this.classes.has(token)
+          if (shouldAdd) {
+            this.classes.add(token)
+          } else {
+            this.classes.delete(token)
+          }
+          return shouldAdd
+        },
+      }
+
+      append(...children: FakeHTMLElement[]) {
+        for (const child of children) {
+          child.parent = this
+          this.children.push(child)
+        }
+      }
+
+      closest(selector: string) {
+        if (selector === '.meo-live-inline-diff') {
+          return this.classes.has('meo-live-inline-diff')
+            ? this
+            : this.parent?.closest(selector) ?? null
+        }
+        if (selector === '.meo-git-gutter-marker') {
+          return this.classes.has('meo-git-gutter-marker')
+            ? this
+            : this.parent?.closest(selector) ?? null
+        }
+        return null
+      }
+
+      querySelectorAll(selector: string) {
+        const matches: FakeHTMLElement[] = []
+        const visit = (node: FakeHTMLElement) => {
+          if (selector === '.meo-git-gutter-marker' && node.classList.contains('meo-git-gutter-marker')) {
+            matches.push(node)
+          }
+          for (const child of node.children) visit(child)
+        }
+        visit(this)
+        return matches
+      }
+    }
+
+    Object.defineProperty(globalThis, 'HTMLElement', {
+      configurable: true,
+      writable: true,
+      value: FakeHTMLElement,
+    })
+
+    try {
+      const root = new FakeHTMLElement()
+      const activeMarker = new FakeHTMLElement('meo-git-gutter-marker is-deleted')
+      activeMarker.dataset.meoGitHunkDeleted = JSON.stringify({
+        d: 'git-diff:21:22:21:21',
+        e: 20,
+        i: 'git-diff:21:22:21:21',
+        s: 20,
+      })
+      const similarMarker = new FakeHTMLElement('meo-git-gutter-marker is-deleted')
+      similarMarker.dataset.meoGitHunkDeleted = JSON.stringify({
+        d: 'git-diff:21:22:21:210',
+        e: 200,
+        i: 'git-diff:21:22:21:210',
+        s: 200,
+      })
+      const inlineContainer = new FakeHTMLElement('meo-live-inline-diff')
+      const inlineMarker = new FakeHTMLElement('meo-git-gutter-marker is-deleted')
+      inlineMarker.dataset.meoGitHunkDeleted = activeMarker.dataset.meoGitHunkDeleted
+      inlineContainer.append(inlineMarker)
+      root.append(activeMarker, similarMarker, inlineContainer)
+
+      __meoLiveInlineDiffTestHooks.setActiveInlineHunkIds(root as unknown as HTMLElement, [{
+        hunkId: 'git-diff:21:22:21:21',
+      } as never])
+
+      expect(activeMarker.classList.contains('is-live-inline-active-hunk')).toBe(true)
+      expect(similarMarker.classList.contains('is-live-inline-active-hunk')).toBe(false)
+      expect(inlineMarker.classList.contains('is-live-inline-active-hunk')).toBe(false)
+
+      __meoLiveInlineDiffTestHooks.setActiveInlineHunkIds(root as unknown as HTMLElement, [])
+
+      expect(activeMarker.classList.contains('is-live-inline-active-hunk')).toBe(false)
+    } finally {
+      Object.defineProperty(globalThis, 'HTMLElement', {
+        configurable: true,
+        writable: true,
+        value: originalHTMLElement,
+      })
+    }
+  })
+
   it('maps an outer live caret inside a refreshed hunk to the inline modified editor', () => {
     const lines = Array.from({ length: 62 }, (_, index) => `line ${index + 1}`)
     lines[57] = '## 9. Math formulasaa'

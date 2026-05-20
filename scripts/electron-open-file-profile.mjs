@@ -614,6 +614,7 @@ async function snapshotInlineHunk(page) {
       .map((marker) => ({
         className: marker.className,
         dataset: { ...marker.dataset },
+        pointerEvents: window.getComputedStyle(marker).pointerEvents,
         rect: readRect(marker),
         triangleRect: readRect(marker.querySelector('.meo-git-gutter-deleted-triangle')),
         triangleVisible: (() => {
