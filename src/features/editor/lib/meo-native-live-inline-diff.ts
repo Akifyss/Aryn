@@ -1050,6 +1050,7 @@ class InlineDiffWidgetView {
       if (
         !this.componentRoot.isConnected
         || this.descriptor.modifiedReadOnly
+        || this.descriptor.modifiedSideEmpty
         || !this.controller.editable
       ) {
         return
@@ -1087,6 +1088,8 @@ class InlineDiffWidgetView {
       || previousDescriptor.modifiedLineStart !== nextDescriptor.modifiedLineStart
       || previousDescriptor.lineNumbersVisible !== nextDescriptor.lineNumbersVisible
       || previousDescriptor.modifiedReadOnly !== nextDescriptor.modifiedReadOnly
+      || previousDescriptor.modifiedSideEmpty !== nextDescriptor.modifiedSideEmpty
+      || previousDescriptor.originalSideEmpty !== nextDescriptor.originalSideEmpty
       || previousDescriptor.changeKind !== nextDescriptor.changeKind
       || previousDescriptor.actionBusy !== nextDescriptor.actionBusy
       || previousDescriptor.actionScope !== nextDescriptor.actionScope
@@ -1408,6 +1411,7 @@ class InlineDiffWidgetView {
   }
 
   private createSplitView() {
+    const modifiedSideReadOnly = () => this.descriptor.modifiedReadOnly || this.descriptor.modifiedSideEmpty
     const mergeView = createMeoDiffSplitMergeView({
       a: {
         doc: this.descriptor.originalText,
@@ -1430,14 +1434,14 @@ class InlineDiffWidgetView {
         doc: this.descriptor.modifiedText,
         activeLineHighlightCompartment: this.modifiedActiveLineHighlightCompartment,
         activeLineGutterCompartment: this.modifiedActiveLineGutterCompartment,
-        editable: this.controller.editable,
+        editable: this.controller.editable && !this.descriptor.modifiedSideEmpty,
         editableCompartment: this.modifiedEditableCompartment,
         focusedLineHighlightVisible: this.controller.focusedLineHighlightVisible,
         lineNumberStart: this.descriptor.modifiedLineStart,
         lineNumbersCompartment: this.modifiedLineNumbersCompartment,
         lineNumbersVisible: this.descriptor.lineNumbersVisible,
         onChange: (nextValue) => {
-          if (this.applyingExternal) {
+          if (this.applyingExternal || modifiedSideReadOnly()) {
             return
           }
           this.modifiedTextSnapshot.value = nextValue
@@ -1447,7 +1451,7 @@ class InlineDiffWidgetView {
         onCompositionChange: this.controller.onCompositionChange,
         onOpenLink: this.controller.onOpenLink,
         onSave: (nextValue) => {
-          if (!this.descriptor.modifiedReadOnly) {
+          if (!modifiedSideReadOnly()) {
             this.modifiedTextSnapshot.value = nextValue
             const selection = this.mergeView?.b.state.selection.main
             this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue, selection)
@@ -1456,7 +1460,7 @@ class InlineDiffWidgetView {
         },
         onSelectionChange: this.controller.onSelectionChange,
         onViewportChange: this.controller.onViewportChange,
-        readOnly: () => this.descriptor.modifiedReadOnly,
+        readOnly: modifiedSideReadOnly,
         readOnlyCompartment: this.modifiedReadOnlyCompartment,
         reportViewportChanges: false,
         side: 'modified',
@@ -1478,19 +1482,20 @@ class InlineDiffWidgetView {
   }
 
   private createUnifiedView() {
+    const modifiedSideReadOnly = () => this.descriptor.modifiedReadOnly || this.descriptor.modifiedSideEmpty
     return createMeoDiffUnifiedEditorView({
       doc: this.descriptor.modifiedText,
       pane: {
         activeLineHighlightCompartment: this.unifiedActiveLineHighlightCompartment,
         activeLineGutterCompartment: this.unifiedActiveLineGutterCompartment,
         diffGutterWidgetLineFlagMapper: mapUnifiedDiffWidgetGutterFlag,
-        editable: this.controller.editable,
+        editable: this.controller.editable && !this.descriptor.modifiedSideEmpty,
         editableCompartment: this.unifiedEditableCompartment,
         focusedLineHighlightVisible: this.controller.focusedLineHighlightVisible,
         lineNumbersCompartment: this.unifiedLineNumbersCompartment,
         lineNumbersVisible: this.descriptor.lineNumbersVisible,
         onChange: (nextValue) => {
-          if (this.applyingExternal) {
+          if (this.applyingExternal || modifiedSideReadOnly()) {
             return
           }
           this.modifiedTextSnapshot.value = nextValue
@@ -1500,7 +1505,7 @@ class InlineDiffWidgetView {
         onCompositionChange: this.controller.onCompositionChange,
         onOpenLink: this.controller.onOpenLink,
         onSave: (nextValue) => {
-          if (!this.descriptor.modifiedReadOnly) {
+          if (!modifiedSideReadOnly()) {
             this.modifiedTextSnapshot.value = nextValue
             const selection = this.unifiedView?.state.selection.main
             this.controller.applyInlineModifiedText(this.descriptor.requestId, nextValue, selection)
@@ -1509,7 +1514,7 @@ class InlineDiffWidgetView {
         },
         onSelectionChange: this.controller.onSelectionChange,
         onViewportChange: this.controller.onViewportChange,
-        readOnly: () => this.descriptor.modifiedReadOnly,
+        readOnly: modifiedSideReadOnly,
         readOnlyCompartment: this.unifiedReadOnlyCompartment,
         reportViewportChanges: false,
         side: 'modified',
@@ -1574,6 +1579,7 @@ class InlineDiffWidgetView {
 
   private syncModifiedEditability() {
     const modifiedView = this.getModifiedView()
+    const modifiedSideReadOnly = this.descriptor.modifiedReadOnly || this.descriptor.modifiedSideEmpty
     const editableCompartment = this.mergeView
       ? this.modifiedEditableCompartment
       : this.unifiedEditableCompartment
@@ -1583,10 +1589,10 @@ class InlineDiffWidgetView {
     modifiedView?.dispatch({
       effects: [
         editableCompartment.reconfigure(EditorView.editable.of(
-          this.controller.editable && !this.descriptor.modifiedReadOnly,
+          this.controller.editable && !modifiedSideReadOnly,
         )),
         readOnlyCompartment.reconfigure(EditorState.readOnly.of(
-          this.descriptor.modifiedReadOnly || !this.controller.editable,
+          modifiedSideReadOnly || !this.controller.editable,
         )),
       ],
     })

@@ -149,6 +149,11 @@ describe('meo git diff gutter', () => {
         toJSON: () => ({}),
       }) as DOMRect
       expect(__gitDiffGutterTestHooks.getGitGutterMarkerChangeKindAt(sameDeleteHunk as unknown as HTMLElement, 30)).toBe(null)
+      sameDeleteHunk.classList.add('is-hit-hover-deleted')
+      expect(__gitDiffGutterTestHooks.getGitGutterMarkerChangeKindAt(sameDeleteHunk as unknown as HTMLElement, 30)).toBe('deleted')
+      sameDeleteHunk.classList.remove('is-hit-hover-deleted')
+      sameDeleteHunk.classList.add('is-hunk-hover-deleted')
+      expect(__gitDiffGutterTestHooks.getGitGutterMarkerChangeKindAt(sameDeleteHunk as unknown as HTMLElement, 30)).toBe('deleted')
       expect(__gitDiffGutterTestHooks.getGitGutterMarkerChangeKindAt(sameDeleteHunk as unknown as HTMLElement, 47)).toBe('deleted')
       expect(__gitDiffGutterTestHooks.getGitGutterMarkerHunkMetadata(marker as unknown as HTMLElement, 'added')?.hunkId).toBe('add-hunk')
       expect(__gitDiffGutterTestHooks.getGitGutterMarkerHunkMetadata(marker as unknown as HTMLElement, 'deleted')?.hunkId).toBe('delete-hunk')

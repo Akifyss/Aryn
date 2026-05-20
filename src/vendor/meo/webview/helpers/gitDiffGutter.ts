@@ -1162,6 +1162,12 @@ function isDeletedBoundaryHit(marker: HTMLElement | null | undefined, clientY: n
   if (!markerHasDeletedChange(marker)) {
     return false;
   }
+  if (
+    marker.classList.contains('is-hit-hover-deleted') ||
+    marker.classList.contains('is-hunk-hover-deleted')
+  ) {
+    return true;
+  }
   if (!Number.isFinite(clientY)) {
     return !markerHasLineChange(marker);
   }
