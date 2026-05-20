@@ -770,6 +770,20 @@ export function createGitBlameHoverController({
     };
   };
 
+  const canUsePointerDownGitHitForClick = (clickHit, clientY) => (
+    pointerDownChangeKind !== null &&
+    pointerDownMarkerElement instanceof HTMLElement &&
+    pointerDownMarkerElement.isConnected &&
+    (
+      gitGutterMarkerOwnsClientY(pointerDownMarkerElement, clientY) ||
+      (
+        pointerDownGutterRowElement instanceof HTMLElement &&
+        pointerDownGutterRowElement.isConnected &&
+        clickHit.gutterRowElement === pointerDownGutterRowElement
+      )
+    )
+  );
+
   const getGutterRowsInLineRange = (startLine, endLine) => {
     const gutter = view.dom.querySelector('.cm-gutter.meo-git-gutter');
     if (!(gutter instanceof HTMLElement)) {
@@ -1506,7 +1520,7 @@ export function createGitBlameHoverController({
     }
 
     const clickHit = resolveGutterGitHit(layout, event.clientX, event.clientY);
-    const usePointerDownHit = !clickHit.changeKind && pointerDownChangeKind;
+    const usePointerDownHit = !clickHit.changeKind && canUsePointerDownGitHitForClick(clickHit, event.clientY);
     const marker = usePointerDownHit
       ? pointerDownMarkerElement ?? clickHit.marker
       : clickHit.marker ?? pointerDownMarkerElement;
