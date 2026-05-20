@@ -145,6 +145,7 @@ function EditorLoadingState({ label = 'Loading editor...' }: { label?: string })
 }
 
 type ResolvedAppTheme = 'light' | 'dark'
+type WindowAppearanceTheme = ResolvedAppTheme | 'system'
 
 function resolveAppTheme(theme: AppTheme): ResolvedAppTheme {
   if (theme !== 'auto') {
@@ -583,7 +584,7 @@ function App() {
 
   // Apply theme to document root
   useEffect(() => {
-    const applyTheme = (t: 'light' | 'dark') => {
+    const applyDocumentTheme = (t: ResolvedAppTheme) => {
       const body = window.document.body
       const root = window.document.documentElement
       setResolvedTheme(t)
@@ -596,8 +597,6 @@ function App() {
       body.classList.remove('light', 'dark')
       body.classList.add(t)
 
-      void window.appApi.setWindowBackgroundTheme(t)
-
       // Also set the theme-color meta tag for better UI integration
       const meta = window.document.querySelector('meta[name="theme-color"]')
       if (meta) {
@@ -606,16 +605,48 @@ function App() {
       }
     }
 
-    if (theme === 'auto') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-      applyTheme(systemTheme)
+    const applyTheme = (t: ResolvedAppTheme, appearanceTheme: WindowAppearanceTheme = t) => {
+      applyDocumentTheme(t)
+      void window.appApi.setWindowTheme({
+        appearanceTheme,
+        backgroundTheme: t,
+      })
+    }
 
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-      const handleChange = (e: MediaQueryListEvent) => {
-        applyTheme(e.matches ? 'dark' : 'light')
+    if (theme === 'auto') {
+      if (platform !== 'darwin') {
+        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        applyTheme(systemTheme, 'system')
+
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+        const handleChange = (e: MediaQueryListEvent) => {
+          applyTheme(e.matches ? 'dark' : 'light', 'system')
+        }
+        mediaQuery.addEventListener('change', handleChange)
+        return () => mediaQuery.removeEventListener('change', handleChange)
       }
-      mediaQuery.addEventListener('change', handleChange)
-      return () => mediaQuery.removeEventListener('change', handleChange)
+
+      let disposed = false
+      const unsubscribeWindowTheme = window.appApi.onWindowThemeChanged(({ resolvedTheme }) => {
+        applyDocumentTheme(resolvedTheme)
+      })
+
+      void window.appApi.setWindowTheme({ appearanceTheme: 'system' }).then(
+        ({ resolvedTheme }) => {
+          if (!disposed) {
+            applyDocumentTheme(resolvedTheme ?? resolveAppTheme('auto'))
+          }
+        },
+        () => {
+          if (!disposed) {
+            applyDocumentTheme(resolveAppTheme('auto'))
+          }
+        }
+      )
+      return () => {
+        disposed = true
+        unsubscribeWindowTheme()
+      }
     }
 
     applyTheme(theme)

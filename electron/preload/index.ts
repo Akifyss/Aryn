@@ -87,7 +87,14 @@ contextBridge.exposeInMainWorld('appApi', {
     ipcRenderer.send('app:renderer-ready')
   },
   openExternalLink: (href: string) => ipcRenderer.invoke('shell:open-external', href) as Promise<{ ok: boolean }>,
-  setWindowBackgroundTheme: (theme: 'light' | 'dark') => ipcRenderer.invoke('window:set-background-theme', theme) as Promise<{ ok: boolean }>,
+  setWindowTheme: (
+    theme: { appearanceTheme: 'light' | 'dark' | 'system'; backgroundTheme?: 'light' | 'dark' },
+  ) => ipcRenderer.invoke('window:set-theme', theme) as Promise<{ ok: boolean; resolvedTheme?: 'light' | 'dark' }>,
+  onWindowThemeChanged: (listener: (state: { resolvedTheme: 'light' | 'dark' }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: { resolvedTheme: 'light' | 'dark' }) => listener(state)
+    ipcRenderer.on('window:theme-changed', handler)
+    return () => ipcRenderer.removeListener('window:theme-changed', handler)
+  },
   minimizeWindow: () => ipcRenderer.invoke('window:minimize') as Promise<void>,
   toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize') as Promise<{ isFullScreen: boolean, isMaximized: boolean }>,
   closeWindow: () => ipcRenderer.invoke('window:close') as Promise<void>,

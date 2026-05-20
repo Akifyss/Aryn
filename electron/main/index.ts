@@ -104,11 +104,15 @@ const legacyWorkspaceSettingsPath = path.join(app.getPath('userData'), 'workspac
 const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPath)
 
 type WindowBackgroundTheme = 'light' | 'dark'
+type WindowAppearanceTheme = WindowBackgroundTheme | 'system'
+type WindowThemeState = { resolvedTheme: WindowBackgroundTheme }
 
 const WINDOW_BACKGROUND_COLORS = {
   dark: '#1f1f1f',
   light: '#f5f6f8',
 } as const satisfies Record<WindowBackgroundTheme, string>
+
+let windowAppearanceTheme: WindowAppearanceTheme = 'system'
 
 function getInitialWindowBackgroundColor() {
   return WINDOW_BACKGROUND_COLORS[nativeTheme.shouldUseDarkColors ? 'dark' : 'light']
@@ -116,6 +120,34 @@ function getInitialWindowBackgroundColor() {
 
 function normalizeWindowBackgroundTheme(theme: unknown): WindowBackgroundTheme | null {
   return theme === 'dark' || theme === 'light' ? theme : null
+}
+
+function normalizeWindowAppearanceTheme(theme: unknown): WindowAppearanceTheme | null {
+  return theme === 'dark' || theme === 'light' || theme === 'system' ? theme : null
+}
+
+function resolveWindowBackgroundTheme(appearanceTheme: WindowAppearanceTheme): WindowBackgroundTheme {
+  if (appearanceTheme === 'dark' || appearanceTheme === 'light') {
+    return appearanceTheme
+  }
+
+  return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+}
+
+function applyWindowBackgroundTheme(theme: WindowBackgroundTheme) {
+  if (!win || win.isDestroyed()) {
+    return
+  }
+
+  win.setBackgroundColor(WINDOW_BACKGROUND_COLORS[theme])
+}
+
+function emitWindowThemeState(state: WindowThemeState) {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
+    return
+  }
+
+  win.webContents.send('window:theme-changed', state)
 }
 
 const agentManager = new PiAgentManager(
@@ -128,6 +160,16 @@ const agentManager = new PiAgentManager(
   },
   { agentDir },
 )
+
+nativeTheme.on('updated', () => {
+  if (process.platform !== 'darwin' || windowAppearanceTheme !== 'system') {
+    return
+  }
+
+  const resolvedTheme = resolveWindowBackgroundTheme(windowAppearanceTheme)
+  applyWindowBackgroundTheme(resolvedTheme)
+  emitWindowThemeState({ resolvedTheme })
+})
 
 function getWindowChromeState(targetWindow: BrowserWindow | null = win) {
   return {
@@ -628,14 +670,29 @@ ipcMain.handle('ui:update-state', async (_, patch: { agentComposerHeight?: numbe
   return { ok: true }
 })
 
-ipcMain.handle('window:set-background-theme', (_event, theme: unknown) => {
-  const normalizedTheme = normalizeWindowBackgroundTheme(theme)
-  if (!normalizedTheme || !win || win.isDestroyed()) {
+ipcMain.handle('window:set-theme', (_event, theme: unknown) => {
+  const themePayload = theme && typeof theme === 'object'
+    ? theme as { appearanceTheme?: unknown; backgroundTheme?: unknown }
+    : null
+  const appearanceTheme = normalizeWindowAppearanceTheme(themePayload?.appearanceTheme)
+  const hasBackgroundTheme = Boolean(
+    themePayload && Object.prototype.hasOwnProperty.call(themePayload, 'backgroundTheme'),
+  )
+  const backgroundTheme = normalizeWindowBackgroundTheme(themePayload?.backgroundTheme)
+
+  if (!appearanceTheme || (hasBackgroundTheme && !backgroundTheme) || !win || win.isDestroyed()) {
     return { ok: false }
   }
 
-  win.setBackgroundColor(WINDOW_BACKGROUND_COLORS[normalizedTheme])
-  return { ok: true }
+  windowAppearanceTheme = appearanceTheme
+
+  if (process.platform === 'darwin') {
+    nativeTheme.themeSource = appearanceTheme
+  }
+
+  const resolvedBackgroundTheme = backgroundTheme ?? resolveWindowBackgroundTheme(appearanceTheme)
+  applyWindowBackgroundTheme(resolvedBackgroundTheme)
+  return { ok: true, resolvedTheme: resolvedBackgroundTheme }
 })
 
 ipcMain.handle('workspace:read-file', async (_, filePath: string) => {

@@ -85,7 +85,10 @@ declare global {
       abortAgentPrompt: () => Promise<AgentWorkspaceState>
       notifyRendererReady: () => void
       openExternalLink: (href: string) => Promise<{ ok: boolean }>
-      setWindowBackgroundTheme: (theme: 'light' | 'dark') => Promise<{ ok: boolean }>
+      setWindowTheme: (
+        theme: { appearanceTheme: 'light' | 'dark' | 'system'; backgroundTheme?: 'light' | 'dark' },
+      ) => Promise<{ ok: boolean; resolvedTheme?: 'light' | 'dark' }>
+      onWindowThemeChanged: (listener: (state: { resolvedTheme: 'light' | 'dark' }) => void) => () => void
       minimizeWindow: () => Promise<void>
       toggleMaximizeWindow: () => Promise<{ isFullScreen: boolean, isMaximized: boolean }>
       closeWindow: () => Promise<void>
