@@ -62,6 +62,7 @@ type InlineHunkDescriptor = {
   actionBusy: boolean
   actionScope: GitChangeScope | null
   changeKind: GitChangeKind
+  hunkId: string
   key: string
   lineNumbersVisible: boolean
   diffChunks: readonly InlineDiffChunk[]
@@ -884,6 +885,47 @@ function buildInlineDecorations(
     decorations: builder.finish(),
     hiddenGitMarkers: gitMarkerBuilder.finish(),
     hiddenLineNumbers: lineNumberBuilder.finish(),
+  }
+}
+
+function cssString(value: string) {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(value)
+  }
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function markerDatasetContainsHunkId(marker: HTMLElement, hunkId: string) {
+  return marker.dataset.meoGitDiffHunkId === hunkId
+    || marker.dataset.meoGitHunkId === hunkId
+    || marker.dataset.meoGitHunkAdded?.includes(hunkId) === true
+    || marker.dataset.meoGitHunkDeleted?.includes(hunkId) === true
+    || marker.dataset.meoGitHunkModified?.includes(hunkId) === true
+}
+
+function setActiveInlineHunkIds(root: HTMLElement, descriptors: readonly InlineHunkDescriptor[]) {
+  const hunkIds = new Set(descriptors.map((descriptor) => descriptor.hunkId).filter(Boolean))
+  for (const marker of Array.from(root.querySelectorAll<HTMLElement>('.meo-git-gutter-marker.is-live-inline-active-hunk'))) {
+    const stillActive = Array.from(hunkIds).some((hunkId) => markerDatasetContainsHunkId(marker, hunkId))
+    if (!stillActive) {
+      marker.classList.remove('is-live-inline-active-hunk')
+    }
+  }
+
+  for (const hunkId of hunkIds) {
+    const escaped = cssString(hunkId)
+    const selector = [
+      `.meo-git-gutter-marker[data-meo-git-diff-hunk-id="${escaped}"]`,
+      `.meo-git-gutter-marker[data-meo-git-hunk-id="${escaped}"]`,
+      `.meo-git-gutter-marker[data-meo-git-hunk-added*="${escaped}"]`,
+      `.meo-git-gutter-marker[data-meo-git-hunk-deleted*="${escaped}"]`,
+      `.meo-git-gutter-marker[data-meo-git-hunk-modified*="${escaped}"]`,
+    ].join(',')
+    for (const marker of Array.from(root.querySelectorAll<HTMLElement>(selector))) {
+      if (!marker.closest('.meo-live-inline-diff')) {
+        marker.classList.add('is-live-inline-active-hunk')
+      }
+    }
   }
 }
 
@@ -2144,6 +2186,9 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     }
 
     if (!update.docChanged) {
+      if (this.descriptorsByRequestId.size > 0) {
+        setActiveInlineHunkIds(this.view.dom, Array.from(this.descriptorsByRequestId.values()))
+      }
       return
     }
 
@@ -2167,6 +2212,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       }
     }
     if (!this.hasActiveInlineHunks()) {
+      setActiveInlineHunkIds(this.view.dom, [])
       return
     }
     this.scheduleSync(INLINE_DIFF_SYNC_DELAY_MS)
@@ -2233,6 +2279,7 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
     this.view.dispatch({
       effects: setInlineHunksEffect.of(descriptors),
     })
+    setActiveInlineHunkIds(this.view.dom, descriptors)
   }
 
   private capturePendingModifiedSelectionTargets(descriptors: readonly InlineHunkDescriptor[]) {
@@ -2494,6 +2541,12 @@ class MeoLiveInlineDiffControllerImpl implements MeoLiveInlineDiffController {
       actionScope: resolvedState.actionScope,
       changeKind: inferInlineHunkChangeKind(resolvedState.actionChange, selection),
       diffChunks,
+      hunkId: request.hunkId ?? createGitDiffLineHunkId(
+        selection.originalStartLine,
+        selection.originalStartLine + selection.originalLineCount,
+        selection.modifiedStartLine,
+        selection.modifiedStartLine + selection.modifiedLineCount,
+      ),
       key: buildDescriptorKey(request.scope, displaySelection),
       lineNumbersVisible: this.lineNumbersVisible,
       modifiedLabel: resolvedState.modifiedLabel,

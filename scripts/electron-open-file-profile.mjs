@@ -609,6 +609,27 @@ async function snapshotInlineHunk(page) {
     const inline = document.querySelector('.meo-live-inline-diff')
     const root = document.querySelector('.meo-native-root')
     const mode = root?.getAttribute('data-mode') ?? null
+    const outerGitMarkers = Array.from(document.querySelectorAll('.meo-git-gutter-marker'))
+      .filter((marker) => !marker.closest('.meo-live-inline-diff'))
+      .map((marker) => ({
+        className: marker.className,
+        dataset: { ...marker.dataset },
+        rect: readRect(marker),
+        triangleRect: readRect(marker.querySelector('.meo-git-gutter-deleted-triangle')),
+        triangleVisible: (() => {
+          const triangle = marker.querySelector('.meo-git-gutter-deleted-triangle')
+          if (!(triangle instanceof HTMLElement)) {
+            return false
+          }
+          const style = window.getComputedStyle(triangle)
+          const rect = triangle.getBoundingClientRect()
+          return style.visibility !== 'hidden'
+            && style.display !== 'none'
+            && Number.parseFloat(style.opacity || '1') > 0
+            && rect.width > 0
+            && rect.height > 0
+        })(),
+      }))
     const editors = inline
       ? Array.from(inline.querySelectorAll('.cm-editor')).map((editor, index) => ({
           changedLineCount: editor.querySelectorAll('.cm-changedLine').length,
@@ -636,6 +657,7 @@ async function snapshotInlineHunk(page) {
       rect: readRect(inline),
       rootClassName: root?.className ?? null,
       viewMode: inline instanceof HTMLElement ? inline.dataset.viewMode ?? null : null,
+      outerGitMarkers,
       editors,
     }
   })

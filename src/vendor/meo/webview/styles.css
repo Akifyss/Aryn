@@ -3098,6 +3098,11 @@
   opacity: 0;
 }
 
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-live-inline-active-hunk .meo-git-gutter-stripe,
+.meo-native-root .cm-editor .meo-git-gutter-marker.is-live-inline-active-hunk .meo-git-gutter-deleted-triangle {
+  opacity: 0;
+}
+
 .meo-native-root .cm-editor .meo-git-gutter-marker.is-deleted::before {
   top: -4px;
   height: calc(100% + 8px);
