@@ -520,6 +520,10 @@ export function createGitBlameHoverController({
   let pointerDownWasLeftButton = false;
   let pointerDownClientX = 0;
   let pointerDownClientY = 0;
+  let pointerDownMarkerElement = null;
+  let pointerDownGutterRowElement = null;
+  let pointerDownChangeKind = null;
+  let pointerDownChangeScope = null;
 
   const pointerMoveDistanceSquaredFromDown = (event) => {
     const deltaX = event.clientX - pointerDownClientX;
@@ -530,6 +534,13 @@ export function createGitBlameHoverController({
   const hasPointerMovedPastDragThreshold = (event) => (
     pointerMoveDistanceSquaredFromDown(event) > gutterClickDragThresholdSquared
   );
+
+  const clearPointerDownGitHit = () => {
+    pointerDownMarkerElement = null;
+    pointerDownGutterRowElement = null;
+    pointerDownChangeKind = null;
+    pointerDownChangeScope = null;
+  };
 
   const getGutterBandLayout = () => {
     const gutter = view.dom.querySelector('.cm-gutter.meo-git-gutter');
@@ -729,6 +740,34 @@ export function createGitBlameHoverController({
     }
 
     return changedMarker instanceof HTMLElement ? changedMarker : null;
+  };
+
+  const getActiveChangedMarkerAtY = (clientY) => (
+    activeMarkerElements.find((marker) => (
+      gitGutterMarkerOwnsClientY(marker, clientY) &&
+      getGitGutterMarkerChangeKindAt(marker, clientY) !== null
+    )) ?? null
+  );
+
+  const resolveGutterGitHit = (layout, clientX, clientY) => {
+    const hitMarker = getMarkerAtY(layout, clientX, clientY);
+    const gutterRowElement = getGutterRowAtY(layout, clientX, clientY);
+    const changedMarker = (
+      getChangedMarkerForRow(gutterRowElement, hitMarker, clientY) ??
+      getActiveChangedMarkerAtY(clientY) ??
+      hitMarker
+    );
+    const changeKind = getGitGutterMarkerChangeKindAt(changedMarker, clientY);
+    const effectiveGutterRowElement = changeKind === 'deleted'
+      ? getMarkerGutterRowElement(changedMarker) ?? gutterRowElement
+      : gutterRowElement;
+
+    return {
+      changeKind,
+      changeScope: getMarkerChangeScope(changedMarker),
+      gutterRowElement: effectiveGutterRowElement,
+      marker: changedMarker
+    };
   };
 
   const getGutterRowsInLineRange = (startLine, endLine) => {
@@ -1398,14 +1437,15 @@ export function createGitBlameHoverController({
     return { platform, userAgentDataPlatform };
   };
   const onPointerDown = (event) => {
-    hide();
     pointerDownWasLeftButton = event.button === 0;
     pointerDownClientX = event.clientX;
     pointerDownClientY = event.clientY;
     pointerDownInBand = false;
+    clearPointerDownGitHit();
 
     const target = event.target instanceof Element ? event.target : null;
     if (isInsideLiveInlineDiff(target)) {
+      hide();
       return;
     }
 
@@ -1415,15 +1455,25 @@ export function createGitBlameHoverController({
       !isSupportedMode(getMode?.()) ||
       view.dom.classList.contains('meo-git-gutter-hidden')
     ) {
+      hide();
       return;
     }
 
     const layout = getGutterBandLayout();
     if (!layout) {
+      hide();
       return;
     }
 
     pointerDownInBand = isWithinBand(layout, event.clientX, event.clientY);
+    if (pointerDownInBand) {
+      const gitHit = resolveGutterGitHit(layout, event.clientX, event.clientY);
+      pointerDownMarkerElement = gitHit.marker;
+      pointerDownGutterRowElement = gitHit.gutterRowElement;
+      pointerDownChangeKind = gitHit.changeKind;
+      pointerDownChangeScope = gitHit.changeScope;
+    }
+    hide();
   };
   const pointerDownCapture = true;
   const onClick = (event) => {
@@ -1455,9 +1505,14 @@ export function createGitBlameHoverController({
       return;
     }
 
-    const marker = getMarkerAtY(layout, event.clientX, event.clientY);
-
-    const hoveredGutterRowElement = getGutterRowAtY(layout, event.clientX, event.clientY);
+    const clickHit = resolveGutterGitHit(layout, event.clientX, event.clientY);
+    const usePointerDownHit = !clickHit.changeKind && pointerDownChangeKind;
+    const marker = usePointerDownHit
+      ? pointerDownMarkerElement ?? clickHit.marker
+      : clickHit.marker ?? pointerDownMarkerElement;
+    const hoveredGutterRowElement = usePointerDownHit
+      ? pointerDownGutterRowElement ?? clickHit.gutterRowElement
+      : clickHit.gutterRowElement ?? pointerDownGutterRowElement;
     const hit = lineNumberAtClientY(layout, event.clientY, hoveredGutterRowElement, marker);
     const lineNumber = hit.lineNumber;
     if (lineNumber === null) {
@@ -1465,10 +1520,14 @@ export function createGitBlameHoverController({
     }
     const effectiveChangeKind = (
       hit.effectiveChangeKind ??
+      clickHit.changeKind ??
+      pointerDownChangeKind ??
       getGitGutterMarkerChangeKindAt(marker, event.clientY)
     );
     const effectiveChangeScope = (
       hit.effectiveChangeScope ??
+      clickHit.changeScope ??
+      pointerDownChangeScope ??
       getMarkerChangeScope(marker)
     );
     if (effectiveChangeKind !== 'added' && effectiveChangeKind !== 'deleted' && effectiveChangeKind !== 'modified') {
