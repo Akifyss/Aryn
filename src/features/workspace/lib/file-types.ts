@@ -1,7 +1,7 @@
 export type WorkspaceEditorKind = 'prose' | 'code' | 'unsupported'
 export type SupportedWorkspaceEditorKind = Exclude<WorkspaceEditorKind, 'unsupported'>
-export type WorkspaceFileViewMode = 'code' | 'meo'
-export type LegacyWorkspaceFileViewMode = WorkspaceFileViewMode | 'default' | 'preview'
+export type WorkspaceFileViewMode = 'code' | 'meo' | 'preview'
+export type LegacyWorkspaceFileViewMode = WorkspaceFileViewMode | 'default'
 
 const PROSE_EXTENSIONS = new Set([
   '.md',
@@ -140,11 +140,17 @@ export function getSupportedWorkspaceEditorKind(filePath: string): SupportedWork
   return editorKind === 'unsupported' ? null : editorKind
 }
 
+export function supportsHtmlPreview(filePath: string) {
+  const extension = getFileExtension(filePath)
+
+  return extension === '.html' || extension === '.htm'
+}
+
 export function supportsAlternateCodeEditorView(
   filePath: string,
   editorKind: SupportedWorkspaceEditorKind,
 ) {
-  return supportsMeoEditor(filePath, editorKind)
+  return supportsMeoEditor(filePath, editorKind) || (editorKind === 'code' && supportsHtmlPreview(filePath))
 }
 
 export function supportsMeoEditor(filePath: string, editorKind: SupportedWorkspaceEditorKind) {
@@ -159,7 +165,31 @@ export function getDefaultWorkspaceFileViewMode(
     return 'meo'
   }
 
+  if (editorKind === 'code' && supportsHtmlPreview(filePath)) {
+    return 'preview'
+  }
+
   return 'code'
+}
+
+export function normalizeWorkspaceFileViewMode(
+  filePath: string,
+  editorKind: SupportedWorkspaceEditorKind,
+  viewMode?: LegacyWorkspaceFileViewMode,
+): WorkspaceFileViewMode {
+  if (viewMode === 'meo' && supportsMeoEditor(filePath, editorKind)) {
+    return viewMode
+  }
+
+  if (viewMode === 'code') {
+    return viewMode
+  }
+
+  if (viewMode === 'preview' && editorKind === 'code' && supportsHtmlPreview(filePath)) {
+    return viewMode
+  }
+
+  return getDefaultWorkspaceFileViewMode(filePath, editorKind)
 }
 
 export function getCodeLanguage(filePath: string) {

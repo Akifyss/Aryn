@@ -110,7 +110,7 @@ describe('useWorkspaceStore', () => {
     })
   })
 
-  it('opens html in Monaco and migrates legacy preview requests to code view', () => {
+  it('keeps HTML preview and Monaco tabs as separate views', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({
@@ -122,12 +122,13 @@ describe('useWorkspaceStore', () => {
       content: '<h1>Hello</h1>',
       editorKind: 'code',
       filePath: 'C:/workspace/index.html',
-      viewMode: 'preview',
+      viewMode: 'code',
     })
 
     const nextState = useWorkspaceStore.getState()
-    expect(nextState.openTabs).toHaveLength(1)
+    expect(nextState.openTabs).toHaveLength(2)
     expect(nextState.openTabs.map((tab) => tab.id)).toEqual([
+      createWorkspaceFileTabId('C:/workspace/index.html', 'preview'),
       createWorkspaceFileTabId('C:/workspace/index.html', 'code'),
     ])
     expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/index.html', 'code'))
@@ -181,7 +182,7 @@ describe('useWorkspaceStore', () => {
     expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/draft.md', 'meo'))
   })
 
-  it('normalizes legacy preview tabs to Monaco code mode when renaming', () => {
+  it('falls back from HTML preview to Monaco when renaming to a non-HTML code file', () => {
     const store = useWorkspaceStore.getState()
 
     store.openTab({
@@ -192,7 +193,7 @@ describe('useWorkspaceStore', () => {
     })
     expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
       filePath: 'C:/workspace/index.html',
-      viewMode: 'code',
+      viewMode: 'preview',
     })
 
     store.renameTab('C:/workspace/index.html', 'C:/workspace/index.ts')

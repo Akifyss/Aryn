@@ -30,7 +30,7 @@ function readNumberEnv(name, fallback) {
 }
 
 function readViewMode(value) {
-  return ['code', 'meo'].includes(value ?? '') ? value : 'meo'
+  return ['code', 'meo', 'preview'].includes(value ?? '') ? value : 'meo'
 }
 
 function compactText(value, maxLength = 1200) {

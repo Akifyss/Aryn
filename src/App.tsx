@@ -45,7 +45,7 @@ import {
   type WorkspaceTab,
 } from '@/features/workspace/store/use-workspace-store'
 import {
-  getDefaultWorkspaceFileViewMode,
+  normalizeWorkspaceFileViewMode,
   supportsMeoEditor,
   type LegacyWorkspaceFileViewMode,
   type WorkspaceFileViewMode,
@@ -62,6 +62,7 @@ import type {
 } from '@/features/workspace/types'
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
 import { useSettingsStore, type AppTheme } from '@/hooks/use-settings-store'
+import { HtmlPreview } from '@/features/editor/components/html-preview'
 import {
   COMPACT_LAYOUT_BREAKPOINT,
   deriveLayoutMode,
@@ -226,7 +227,7 @@ function isWorkspaceDiffTab(tab: WorkspaceDisplayTab | null | undefined): tab is
 }
 
 function isWorkspaceAutosaveTab(tab: WorkspaceDisplayTab | WorkspaceFileTab | null | undefined): tab is WorkspaceFileTab {
-  return tab?.kind === 'file'
+  return tab?.kind === 'file' && tab.viewMode !== 'preview'
 }
 
 function createDiffTabId(filePath: string, scope: GitChangeScope) {
@@ -531,15 +532,7 @@ function resolveWorkspaceFileViewMode(
   editorKind: WorkspaceFileTab['editorKind'],
   preferredViewMode?: LegacyWorkspaceFileViewMode,
 ) {
-  if (preferredViewMode === 'meo' && supportsMeoEditor(filePath, editorKind)) {
-    return preferredViewMode
-  }
-
-  if (preferredViewMode === 'code') {
-    return preferredViewMode
-  }
-
-  return getDefaultWorkspaceFileViewMode(filePath, editorKind)
+  return normalizeWorkspaceFileViewMode(filePath, editorKind, preferredViewMode)
 }
 
 function toStoredWorkspaceTab(
@@ -4236,6 +4229,13 @@ function App() {
                   theme={theme}
                 />
               </Suspense>
+            ) : null}
+
+            {activeFileTab && currentEditorKind === 'code' && currentFileViewMode === 'preview' ? (
+              <HtmlPreview
+                content={currentFileContent}
+                filePath={activeFileTab.filePath}
+              />
             ) : null}
           </div>
         </div>

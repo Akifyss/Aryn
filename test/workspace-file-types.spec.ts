@@ -4,6 +4,7 @@ import {
   getDefaultWorkspaceFileViewMode,
   getWorkspaceEditorKind,
   supportsAlternateCodeEditorView,
+  supportsHtmlPreview,
   supportsMeoEditor,
 } from '../src/features/workspace/lib/file-types'
 
@@ -36,20 +37,27 @@ describe('workspace file types', () => {
     expect(getCodeLanguage('C:/workspace/.env')).toBe('plaintext')
   })
 
-  it('defaults MEO-capable files to MEO and other editable text to Monaco code view', () => {
-    expect(getDefaultWorkspaceFileViewMode('C:/workspace/index.html', 'code')).toBe('code')
-    expect(getDefaultWorkspaceFileViewMode('C:/workspace/partial.htm', 'code')).toBe('code')
+  it('defaults MEO-capable files to MEO, HTML to preview, and other editable text to Monaco code view', () => {
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/index.html', 'code')).toBe('preview')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/partial.htm', 'code')).toBe('preview')
     expect(getDefaultWorkspaceFileViewMode('C:/workspace/main.ts', 'code')).toBe('code')
     expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.md', 'prose')).toBe('meo')
     expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.txt', 'prose')).toBe('code')
   })
 
-  it('only exposes alternate Monaco entry points for files that default to MEO', () => {
-    expect(supportsAlternateCodeEditorView('C:/workspace/index.html', 'code')).toBe(false)
+  it('exposes alternate Monaco entry points for MEO and HTML preview files', () => {
+    expect(supportsAlternateCodeEditorView('C:/workspace/index.html', 'code')).toBe(true)
     expect(supportsAlternateCodeEditorView('C:/workspace/notes.md', 'prose')).toBe(true)
     expect(supportsAlternateCodeEditorView('C:/workspace/notes.txt', 'prose')).toBe(false)
     expect(supportsAlternateCodeEditorView('C:/workspace/main.ts', 'code')).toBe(false)
     expect(supportsAlternateCodeEditorView('C:/workspace/config.json', 'code')).toBe(false)
+  })
+
+  it('only exposes HTML preview for .html and .htm files', () => {
+    expect(supportsHtmlPreview('C:/workspace/index.html')).toBe(true)
+    expect(supportsHtmlPreview('C:/workspace/partial.htm')).toBe(true)
+    expect(supportsHtmlPreview('C:/workspace/main.ts')).toBe(false)
+    expect(supportsHtmlPreview('C:/workspace/template.svg')).toBe(false)
   })
 
   it('only exposes MEO for markdown-native prose files', () => {
