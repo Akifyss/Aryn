@@ -1,17 +1,31 @@
 import { useMemo } from 'react'
 
+const HTML_PREVIEW_IFRAME_SANDBOX = ''
+
 function escapeHtmlAttribute(value: string) {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+}
+
+function encodeFileUrlPathSegment(segment: string, index: number, segments: string[]) {
+  if (index === 1 && segments[0] === '' && /^[A-Za-z]:$/.test(segment)) {
+    return segment
+  }
+
+  return encodeURIComponent(segment)
 }
 
 function getFileDirectoryHref(filePath: string) {
   const normalizedPath = filePath.replace(/\\/g, '/')
   const directoryPath = normalizedPath.slice(0, normalizedPath.lastIndexOf('/') + 1)
-  const fileUrlPath = /^[A-Za-z]:\//.test(directoryPath)
+  const prefixedPath = /^[A-Za-z]:\//.test(directoryPath)
     ? `/${directoryPath}`
     : directoryPath
+  const fileUrlPath = prefixedPath
+    .split('/')
+    .map(encodeFileUrlPathSegment)
+    .join('/')
 
-  return encodeURI(`file://${fileUrlPath}`)
+  return `file://${fileUrlPath}`
 }
 
 function injectBaseHref(html: string, baseHref: string) {
@@ -49,10 +63,16 @@ export function HtmlPreview({
       <iframe
         className='html-preview-frame'
         referrerPolicy='no-referrer'
-        sandbox=''
+        sandbox={HTML_PREVIEW_IFRAME_SANDBOX}
         srcDoc={srcDoc}
         title={`${filePath} preview`}
       />
     </div>
   )
+}
+
+export const __htmlPreviewTestHooks = {
+  HTML_PREVIEW_IFRAME_SANDBOX,
+  getFileDirectoryHref,
+  injectBaseHref,
 }

@@ -755,7 +755,7 @@ function App() {
     const diffPath = normalizeFilePath(activeDiffTab.diff.change.path)
 
     return openTabs.some((tab: WorkspaceTab) => (
-      tab.kind === 'file'
+      isWorkspaceAutosaveTab(tab)
       && tab.isDirty
       && normalizeFilePath(tab.filePath) === diffPath
     ))
@@ -906,7 +906,7 @@ function App() {
 
   function getDirtyWorkspaceTabsSnapshot() {
     return useWorkspaceStore.getState().openTabs.filter(
-      (tab) => tab.isDirty,
+      (tab) => tab.kind === 'diff' ? tab.isDirty : isWorkspaceAutosaveTab(tab) && tab.isDirty,
     )
   }
 
@@ -930,7 +930,7 @@ function App() {
     const normalizedPath = normalizeFilePath(filePath)
 
     return useWorkspaceStore.getState().openTabs.some((tab) => (
-      tab.kind === 'file'
+      isWorkspaceAutosaveTab(tab)
       && tab.isDirty
       && normalizeFilePath(tab.filePath) === normalizedPath
     ))

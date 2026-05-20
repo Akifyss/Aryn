@@ -100,6 +100,10 @@ export function createWorkspaceFileTabId(filePath: string, viewMode: WorkspaceFi
   return `file://${viewMode}/${encodeURIComponent(filePath)}`
 }
 
+function isEditableWorkspaceFileViewMode(viewMode: WorkspaceFileViewMode) {
+  return viewMode !== 'preview'
+}
+
 function getNextActiveTabId(openTabs: WorkspaceTab[], activeTabId: string | null, closingId: string) {
   if (activeTabId !== closingId) {
     return activeTabId
@@ -450,7 +454,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   }),
   updateFileTabsContent: (path, content) => set((state) => {
     const { didChange, nextTabs } = mapWorkspaceFileTabsByPath(state.openTabs, path, (tab) => {
-      const nextIsDirty = content !== tab.savedContent
+      const nextIsDirty = isEditableWorkspaceFileViewMode(tab.viewMode) && content !== tab.savedContent
 
       if (tab.content === content && tab.isDirty === nextIsDirty) {
         return tab

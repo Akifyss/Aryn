@@ -281,6 +281,29 @@ describe('useWorkspaceStore', () => {
     ])
   })
 
+  it('updates HTML preview content without treating the preview tab as an editable dirty draft', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({
+      content: '<h1>Hello</h1>',
+      editorKind: 'code',
+      filePath: 'C:/workspace/index.html',
+      viewMode: 'preview',
+    })
+    store.openTab({
+      content: '<h1>Hello</h1>',
+      editorKind: 'code',
+      filePath: 'C:/workspace/index.html',
+      viewMode: 'code',
+    })
+    store.updateFileTabsContent('C:/workspace/index.html', '<h1>Updated</h1>')
+
+    expect(useWorkspaceStore.getState().openTabs).toMatchObject([
+      { content: '<h1>Updated</h1>', isDirty: false, viewMode: 'preview' },
+      { content: '<h1>Updated</h1>', isDirty: true, viewMode: 'code' },
+    ])
+  })
+
   it('closes the active tab and falls back to the nearest tab on the right first', () => {
     const store = useWorkspaceStore.getState()
 
