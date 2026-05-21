@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 
 export type AppTheme = 'light' | 'dark' | 'auto'
+export type AppLayoutPreference = 'agent' | 'editor'
 export type MeoOutlinePosition = 'left' | 'right'
 
 export type MeoSettings = {
@@ -12,8 +13,10 @@ export type MeoSettings = {
 }
 
 interface SettingsState {
+  layoutPreference: AppLayoutPreference
   meo: MeoSettings
   theme: AppTheme
+  setLayoutPreference: (layoutPreference: AppLayoutPreference) => void
   updateMeoSettings: (patch: Partial<MeoSettings>) => void
   setTheme: (theme: AppTheme) => void
 }
@@ -107,11 +110,17 @@ function sanitizeMeoSettings(value: Partial<MeoSettings> | undefined): MeoSettin
   }
 }
 
+function sanitizeLayoutPreference(value: unknown): AppLayoutPreference {
+  return value === 'agent' ? 'agent' : 'editor'
+}
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
+      layoutPreference: 'editor',
       meo: DEFAULT_MEO_SETTINGS,
       theme: 'auto',
+      setLayoutPreference: (layoutPreference) => set({ layoutPreference: sanitizeLayoutPreference(layoutPreference) }),
       setTheme: (theme) => set({ theme }),
       updateMeoSettings: (patch) => set((state) => ({
         meo: sanitizeMeoSettings({
@@ -131,6 +140,7 @@ export const useSettingsStore = create<SettingsState>()(
         return {
           ...currentState,
           ...candidate,
+          layoutPreference: sanitizeLayoutPreference(candidate.layoutPreference),
           meo: sanitizeMeoSettings(candidate.meo),
         }
       },

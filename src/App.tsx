@@ -3,17 +3,20 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
 import {
   FileLine,
-  FolderOpenFill,
   GitCompareLine,
   LayoutLeftLine,
   LayoutRightLine,
-  SelectorVerticalLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import type { WorkspaceNode } from '@/features/workspace/types'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTitlebar } from '@/components/app-titlebar'
-import { AgentSidebar } from '@/features/agent/components/agent-sidebar'
+import {
+  AgentChatSurface,
+  AgentProvider,
+  AgentSessionTree,
+  AgentSidebar,
+} from '@/features/agent/components/agent-sidebar'
 import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
 import { isLineWithinVisualDiff } from '@/features/editor/lib/git-diff-navigation'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host'
@@ -37,6 +40,7 @@ import {
   createWorkspaceFileTabId,
   dedupeWorkspaceTabs,
   useWorkspaceStore,
+  type WorkspaceFixedPanelTab,
   type WorkspaceDiffTab,
   type WorkspaceDiffNavigationRequest,
   type WorkspaceDisplayTab,
@@ -61,7 +65,7 @@ import type {
   WorkspaceIconThemeCatalogOption,
 } from '@/features/workspace/types'
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
-import { useSettingsStore, type AppTheme } from '@/hooks/use-settings-store'
+import { useSettingsStore, type AppLayoutPreference, type AppTheme } from '@/hooks/use-settings-store'
 import { HtmlPreview } from '@/features/editor/components/html-preview'
 import {
   COMPACT_LAYOUT_BREAKPOINT,
@@ -227,6 +231,10 @@ function isWorkspaceDiffTab(tab: WorkspaceDisplayTab | null | undefined): tab is
   return tab?.kind === 'diff'
 }
 
+function isWorkspaceFixedPanelTab(tab: WorkspaceDisplayTab | null | undefined): tab is WorkspaceFixedPanelTab {
+  return tab?.kind === 'fixed-panel'
+}
+
 function isWorkspaceAutosaveTab(tab: WorkspaceDisplayTab | WorkspaceFileTab | null | undefined): tab is WorkspaceFileTab {
   return tab?.kind === 'file' && tab.viewMode !== 'preview'
 }
@@ -314,6 +322,9 @@ const LEFT_SIDEBAR_MIN_WIDTH = 240
 const LEFT_SIDEBAR_MAX_WIDTH = 520
 const RIGHT_SIDEBAR_MIN_WIDTH = 300
 const RIGHT_SIDEBAR_MAX_WIDTH = 560
+const AGENT_LAYOUT_CHAT_MIN_WIDTH = 420
+const AGENT_LAYOUT_RIGHT_SIDEBAR_MIN_WIDTH = 520
+const AGENT_LAYOUT_DEFAULT_RIGHT_SIDEBAR_WIDTH = 640
 const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
 const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
 const DEFAULT_GIT_PANEL_HEIGHT = 292
@@ -367,6 +378,8 @@ const LEGACY_LAYOUT_STORAGE_KEYS: Record<keyof typeof LAYOUT_STORAGE_KEYS, strin
 }
 const SETTINGS_TAB_ID = 'app://settings'
 const SETTINGS_TAB_PATH = 'app://settings'
+const FIXED_FILE_TAB_ID = 'app://fixed/files'
+const FIXED_GIT_TAB_ID = 'app://fixed/git'
 const WORKSPACE_AUTO_SAVE_DELAY_MS = 1000
 const INTERNAL_SAVE_EVENT_TTL_MS = 2500
 const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
@@ -374,6 +387,7 @@ const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
 type ResizePanel = 'left' | 'right'
 type PanelSurfaceMode = 'docked' | 'drawer'
 type LeftSidebarTab = 'file' | 'git'
+type AgentLayoutFixedTab = 'file' | 'git'
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
@@ -448,6 +462,34 @@ function readStoredLeftSidebarTab() {
   const value = storage ? readStoredLocalStorageValue(storage, 'activeLeftSidebarTab') : null
 
   return value === 'git' ? value : 'file'
+}
+
+function getFixedPanelTab(tab: AgentLayoutFixedTab): WorkspaceFixedPanelTab {
+  if (tab === 'git') {
+    return {
+      content: '',
+      editorKind: 'prose',
+      exists: true,
+      filePath: FIXED_GIT_TAB_ID,
+      fixedTabKind: 'git-panel',
+      id: FIXED_GIT_TAB_ID,
+      isDirty: false,
+      kind: 'fixed-panel',
+      savedContent: '',
+    }
+  }
+
+  return {
+    content: '',
+    editorKind: 'prose',
+    exists: true,
+    filePath: FIXED_FILE_TAB_ID,
+    fixedTabKind: 'file-panel',
+    id: FIXED_FILE_TAB_ID,
+    isDirty: false,
+    kind: 'fixed-panel',
+    savedContent: '',
+  }
 }
 
 function readStoredTabState(workspacePath: string): StoredTabState {
@@ -579,7 +621,7 @@ function createDiffTab(
 
 function App() {
   const platform = window.appApi.platform
-  const { meo, theme } = useSettingsStore()
+  const { layoutPreference, meo, theme } = useSettingsStore()
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedAppTheme>(() => resolveAppTheme(theme))
 
   // Apply theme to document root
@@ -704,7 +746,8 @@ function App() {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'file-icons' | 'agent'>('general')
+  const [activeAgentLayoutFixedTab, setActiveAgentLayoutFixedTab] = useState<AgentLayoutFixedTab>('file')
+  const [isAgentLayoutFixedTabActive, setIsAgentLayoutFixedTabActive] = useState(false)
 
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(
     () => readStoredLayoutNumber('leftSidebarWidth', DEFAULT_LEFT_SIDEBAR_WIDTH),
@@ -791,14 +834,24 @@ function App() {
       && normalizeFilePath(tab.filePath) === diffPath
     ))
   }, [activeDiffTab?.diff.change.path, openTabs])
+  const appLayoutPreference: AppLayoutPreference = layoutPreference
+  const isAgentLayout = appLayoutPreference === 'agent'
   const displayTabs = useMemo<WorkspaceDisplayTab[]>(
     () => {
+      const fixedTabs = isAgentLayout
+        ? [getFixedPanelTab('file'), getFixedPanelTab('git')]
+        : []
+      const workspaceTabs = [
+        ...fixedTabs,
+        ...openTabs,
+      ]
+
       if (!isSettingsTabOpen) {
-        return openTabs
+        return workspaceTabs
       }
 
       return [
-        ...openTabs,
+        ...workspaceTabs,
         {
           content: '',
           editorKind: 'prose',
@@ -811,9 +864,19 @@ function App() {
         },
       ]
     },
-    [isSettingsTabOpen, openTabs],
+    [isAgentLayout, isSettingsTabOpen, openTabs],
   )
-  const displayActiveTabId = isSettingsTabActive ? SETTINGS_TAB_ID : activeTabId
+  const displayActiveTabId = isSettingsTabActive
+    ? SETTINGS_TAB_ID
+    : isAgentLayout && (isAgentLayoutFixedTabActive || !activeTabId)
+      ? (activeAgentLayoutFixedTab === 'git' ? FIXED_GIT_TAB_ID : FIXED_FILE_TAB_ID)
+      : activeTabId
+  const displayActiveTab = useMemo(
+    () => displayTabs.find((tab) => tab.id === displayActiveTabId) ?? null,
+    [displayActiveTabId, displayTabs],
+  )
+  const activeFixedPanelTab = isWorkspaceFixedPanelTab(displayActiveTab) ? displayActiveTab : null
+  const shouldRenderWorkspaceEditor = !activeFixedPanelTab && !isSettingsTabActive
   const currentFileContent = activeFileTab?.content ?? ''
   const currentEditorKind = activeFileTab?.editorKind ?? null
   const currentFileViewMode = activeFileTab?.viewMode ?? null
@@ -881,7 +944,16 @@ function App() {
     ? getBaseName(currentPath)
     : 'Current workspace'
   const shellPlatform: ShellPlatform = deriveShellPlatform(platform)
-  const shellChromeVars = getShellChromeVars(shellPlatform, { isFullScreen: isWindowFullScreen }) as CSSProperties
+  const baseShellChromeVars = getShellChromeVars(shellPlatform, { isFullScreen: isWindowFullScreen })
+  const shellChromeVars = {
+    ...baseShellChromeVars,
+    ...(isAgentLayout
+      ? {
+          '--right-panel-content-inset':
+            'calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap))',
+        }
+      : null),
+  } as CSSProperties
   const layoutMode: LayoutMode = deriveLayoutMode(shellWidth)
   const isLeftSidebarDrawer = layoutMode !== 'full'
   const isRightSidebarDrawer = layoutMode === 'focus'
@@ -972,6 +1044,10 @@ function App() {
   }
 
   function getGitPanelMaxHeight() {
+    if (isAgentLayout) {
+      return 520
+    }
+
     const containerHeight = leftSidebarBodyRef.current?.clientHeight ?? 0
     return clamp(containerHeight - 180, MIN_GIT_PANEL_HEIGHT, 520)
   }
@@ -981,17 +1057,23 @@ function App() {
   }
 
   function clampLeftWidth(nextWidth: number, shellWidth: number, currentRightWidth: number) {
-    const reservedWidth = MIN_EDITOR_WIDTH + RESIZE_HANDLE_WIDTH + (currentRightWidth > 0 ? currentRightWidth + RESIZE_HANDLE_WIDTH : 0)
+    const centerMinWidth = isAgentLayout ? AGENT_LAYOUT_CHAT_MIN_WIDTH : MIN_EDITOR_WIDTH
+    const reservedWidth = centerMinWidth + RESIZE_HANDLE_WIDTH + (currentRightWidth > 0 ? currentRightWidth + RESIZE_HANDLE_WIDTH : 0)
     const maxWidth = Math.min(LEFT_SIDEBAR_MAX_WIDTH, Math.max(LEFT_SIDEBAR_MIN_WIDTH, shellWidth - reservedWidth))
 
     return clamp(nextWidth, LEFT_SIDEBAR_MIN_WIDTH, maxWidth)
   }
 
   function clampRightWidth(nextWidth: number, shellWidth: number, currentLeftWidth: number) {
-    const reservedWidth = MIN_EDITOR_WIDTH + currentLeftWidth + RESIZE_HANDLE_WIDTH * 2
-    const maxWidth = Math.min(RIGHT_SIDEBAR_MAX_WIDTH, Math.max(RIGHT_SIDEBAR_MIN_WIDTH, shellWidth - reservedWidth))
+    const centerMinWidth = isAgentLayout ? AGENT_LAYOUT_CHAT_MIN_WIDTH : MIN_EDITOR_WIDTH
+    const reservedWidth = centerMinWidth + currentLeftWidth + RESIZE_HANDLE_WIDTH * 2
+    const minWidth = isAgentLayout ? AGENT_LAYOUT_RIGHT_SIDEBAR_MIN_WIDTH : RIGHT_SIDEBAR_MIN_WIDTH
+    const availableWidth = Math.max(minWidth, shellWidth - reservedWidth)
+    const maxWidth = isAgentLayout
+      ? availableWidth
+      : Math.min(RIGHT_SIDEBAR_MAX_WIDTH, availableWidth)
 
-    return clamp(nextWidth, RIGHT_SIDEBAR_MIN_WIDTH, maxWidth)
+    return clamp(nextWidth, minWidth, maxWidth)
   }
 
   function resizeSidebar(panel: ResizePanel, pointerClientX: number) {
@@ -1627,9 +1709,14 @@ function App() {
       captureActiveMeoViewPosition()
     }
 
+    if (tabId === FIXED_FILE_TAB_ID || tabId === FIXED_GIT_TAB_ID) {
+      return false
+    }
+
     if (tabId === SETTINGS_TAB_ID) {
       setIsSettingsTabOpen(false)
       setIsSettingsTabActive(false)
+      setIsAgentLayoutFixedTabActive(false)
 
       if (!options.silent) {
         setStatusMessage('Settings closed')
@@ -1699,6 +1786,7 @@ function App() {
     resetOpenTabs()
     setIsSettingsTabOpen(false)
     setIsSettingsTabActive(false)
+    setIsAgentLayoutFixedTabActive(false)
     setGitCommitMessage('')
     setGitErrorMessage(null)
     await refreshGitState(nextPath, { silent: true })
@@ -1740,6 +1828,7 @@ function App() {
       elapsedMs: getOpenFileProfileDuration(openStartedAt),
     })
     setIsSettingsTabActive(false)
+    setIsAgentLayoutFixedTabActive(false)
 
     const editorKindStartedAt = performance.now()
     recordOpenFileProfile('app:open-file:resolve-editor-kind:start', { filePath })
@@ -1868,6 +1957,7 @@ function App() {
     if (existingFileTab) {
       captureActiveMeoViewPosition()
       setIsSettingsTabActive(false)
+      setIsAgentLayoutFixedTabActive(false)
       activateTab(existingFileTab.id)
 
       if (isRightSidebarDrawer) {
@@ -1931,6 +2021,7 @@ function App() {
       viewMode: targetViewMode,
     })
     setIsSettingsTabActive(false)
+    setIsAgentLayoutFixedTabActive(false)
 
     if (currentPath) {
       await updateWorkspaceState(currentPath, { lastFilePath: change.path })
@@ -1988,6 +2079,7 @@ function App() {
         : null
       openDiffTab(createDiffTab(change, change.scope, diff, navigationRequest))
       setIsSettingsTabActive(false)
+      setIsAgentLayoutFixedTabActive(false)
 
       if (isLeftSidebarDrawer) {
         setIsLeftDrawerOpen(false)
@@ -2040,6 +2132,7 @@ function App() {
     if (candidateEntries.length === 0) {
       replaceTabs([], null)
       setIsSettingsTabActive(false)
+      setIsAgentLayoutFixedTabActive(false)
       return
     }
 
@@ -2070,6 +2163,7 @@ function App() {
 
     replaceTabs(nextTabs, nextActiveId)
     setIsSettingsTabActive(false)
+    setIsAgentLayoutFixedTabActive(false)
     const nextActiveFileTab = nextTabs.find((tab) => tab.id === nextActiveId && tab.kind === 'file')
     await updateWorkspaceState(workspacePath, { lastFilePath: nextActiveFileTab?.filePath ?? null })
   }
@@ -2163,6 +2257,149 @@ function App() {
     }
   }
 
+  function renderWorkspaceTreePanel() {
+    return (
+      <div className='sidebar-stack-pane sidebar-tree-pane'>
+        <div className='file-panel-header'>
+          <span className='file-panel-title'>文件树</span>
+          <div className='file-panel-actions'>
+            <Tooltip closeDelay={0}>
+              <Tooltip.Trigger>
+                <button
+                  type='button'
+                  className='file-panel-action'
+                  onClick={() => void handleCreateFile()}
+                  disabled={!currentPath || isCreatingFile}
+                  aria-label='Create File'
+                >
+                  <Icon icon='lucide:file-plus' width={16} height={16} />
+                </button>
+              </Tooltip.Trigger>
+              <Tooltip.Content>Create File</Tooltip.Content>
+            </Tooltip>
+            <Tooltip closeDelay={0}>
+              <Tooltip.Trigger>
+                <button
+                  type='button'
+                  className='file-panel-action'
+                  onClick={() => void handleCreateDirectory()}
+                  disabled={!currentPath || isCreatingDirectory}
+                  aria-label='Create Folder'
+                >
+                  <Icon icon='lucide:folder-plus' width={16} height={16} />
+                </button>
+              </Tooltip.Trigger>
+              <Tooltip.Content>Create Folder</Tooltip.Content>
+            </Tooltip>
+            <Tooltip closeDelay={0}>
+              <Tooltip.Trigger>
+                <button
+                  type='button'
+                  className='file-panel-action'
+                  onClick={handleToggleFileTreeExpansion}
+                  disabled={!currentPath || tree.length === 0}
+                  aria-label='Toggle Expansion'
+                >
+                  <Icon
+                    icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'}
+                    width={16}
+                    height={16}
+                  />
+                </button>
+              </Tooltip.Trigger>
+              <Tooltip.Content>{expandedPaths.size > 0 ? 'Collapse All' : 'Expand All'}</Tooltip.Content>
+            </Tooltip>
+          </div>
+        </div>
+
+        <AppScrollArea
+          className='tree-scroll'
+          contentClassName='tree-scroll-content'
+        >
+          <WorkspaceTree
+            activeFilePath={activeTreePath}
+            iconTheme={iconTheme}
+            nodes={tree}
+            expandedPaths={expandedPaths}
+            setExpandedPaths={setExpandedPaths}
+            workspacePath={currentPath}
+            gitRepositoryState={gitRepositoryState}
+            onSelectFile={(filePath) => {
+              void openFile(filePath)
+            }}
+            onOpenInCodeEditor={(filePath) => {
+              void openFile(filePath, currentPath, 'code')
+            }}
+            onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
+            onDeleteNode={(node) => handleDeleteNode(node)}
+            onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
+          />
+        </AppScrollArea>
+      </div>
+    )
+  }
+
+  function renderGitPanel() {
+    return (
+      <div className='sidebar-stack-pane sidebar-git-pane' id='git-panel'>
+        <GitPanel
+          busyLabel={gitBusyLabel}
+          commitMessage={gitCommitMessage}
+          isLoading={isGitLoading}
+          layout={gitPanelLayout}
+          onCommit={() => {
+            void handleCommitGitChanges()
+          }}
+          onCommitAndSync={() => {
+            void handleCommitAndSyncGitChanges()
+          }}
+          onCommitMessageChange={setGitCommitMessage}
+          onDiscardAll={() => {
+            void handleDiscardAllGitChanges()
+          }}
+          onDiscardMany={(changes) => {
+            void handleDiscardGitChanges(changes)
+          }}
+          onInitialize={() => {
+            void handleInitializeGit()
+          }}
+          onLayoutChange={setGitPanelLayout}
+          onOpenFile={(filePath) => {
+            void openFile(filePath)
+          }}
+          onOpenDiff={(change) => {
+            void openGitDiff(change)
+          }}
+          onPull={() => {
+            void handlePullGitChanges()
+          }}
+          onPush={() => {
+            void handlePushGitChanges()
+          }}
+          onRefresh={() => {
+            if (!currentPath) {
+              return
+            }
+
+            void performWorkspaceRefresh(currentPath, {
+              gitSilent: false,
+              refreshGit: true,
+            })
+          }}
+          onStage={(filePaths) => {
+            void handleStageGitPaths(filePaths)
+          }}
+          onUnstage={(filePaths) => {
+            void handleUnstageGitPaths(filePaths)
+          }}
+          repositoryState={gitRepositoryState}
+          workspacePath={currentPath}
+          iconTheme={iconTheme}
+        />
+      </div>
+    )
+  }
+
   async function handlePickWorkspaceIconTheme() {
     try {
       setIsImportingIconTheme(true)
@@ -2214,6 +2451,7 @@ function App() {
     setSettingsSection(section)
     setIsSettingsTabOpen(true)
     setIsSettingsTabActive(true)
+    setIsAgentLayoutFixedTabActive(false)
   }
 
   async function handleMoveWorkspaceNode(node: WorkspaceNode, nextRelativePath: string, successMessage: string) {
@@ -2440,13 +2678,22 @@ function App() {
       captureActiveMeoViewPosition()
     }
 
+    if (tabId === FIXED_FILE_TAB_ID || tabId === FIXED_GIT_TAB_ID) {
+      setIsSettingsTabActive(false)
+      setActiveAgentLayoutFixedTab(tabId === FIXED_GIT_TAB_ID ? 'git' : 'file')
+      setIsAgentLayoutFixedTabActive(true)
+      return
+    }
+
     if (tabId === SETTINGS_TAB_ID) {
       setIsSettingsTabOpen(true)
       setIsSettingsTabActive(true)
+      setIsAgentLayoutFixedTabActive(false)
       return
     }
 
     setIsSettingsTabActive(false)
+    setIsAgentLayoutFixedTabActive(false)
     activateTab(tabId)
 
     const targetTab = displayTabs.find((tab) => tab.id === tabId)
@@ -2471,6 +2718,15 @@ function App() {
 
     activateFileTab(nextTab.id)
   }
+
+  useEffect(() => {
+    if (isAgentLayout || displayActiveTabId !== FIXED_FILE_TAB_ID && displayActiveTabId !== FIXED_GIT_TAB_ID) {
+      return
+    }
+
+    setIsAgentLayoutFixedTabActive(false)
+    setActiveAgentLayoutFixedTab('file')
+  }, [displayActiveTabId, isAgentLayout])
 
   async function handleInitializeGit() {
     if (!currentPath) {
@@ -3212,6 +3468,14 @@ function App() {
   }, [leftSidebarWidth, isLeftSidebarVisible])
 
   useEffect(() => {
+    if (!isAgentLayout || rightSidebarWidth >= AGENT_LAYOUT_RIGHT_SIDEBAR_MIN_WIDTH) {
+      return
+    }
+
+    setRightSidebarWidth(AGENT_LAYOUT_DEFAULT_RIGHT_SIDEBAR_WIDTH)
+  }, [isAgentLayout, rightSidebarWidth])
+
+  useEffect(() => {
     if (!isLeftSidebarDrawer && isLeftDrawerOpen) {
       setIsLeftDrawerOpen(false)
     }
@@ -3234,12 +3498,12 @@ function App() {
       if ((event.ctrlKey || event.metaKey) && key === 'w') {
         event.preventDefault()
         if (isSettingsTabActive) {
-          closeEditorTab(SETTINGS_TAB_ID)
+          void closeEditorTab(SETTINGS_TAB_ID)
           return
         }
 
         if (displayActiveTabId) {
-          closeEditorTab(displayActiveTabId)
+          void closeEditorTab(displayActiveTabId)
         }
         return
       }
@@ -3434,7 +3698,7 @@ function App() {
 
       frameCount += 1
 
-      const dragSpacer = rightDrawerSurfaceRef.current?.querySelector<HTMLElement>('.agent-threadbar-drag-spacer')
+      const dragSpacer = rightDrawerSurfaceRef.current?.querySelector<HTMLElement>('.agent-threadbar-drag-spacer, .file-tabs-drag-spacer')
       if (!dragSpacer) {
         if (frameCount < DRAWER_INTERACTION_REFRESH_MAX_FRAMES) {
           rafId = window.requestAnimationFrame(tick)
@@ -3474,7 +3738,7 @@ function App() {
 
     rafId = window.requestAnimationFrame(tick)
 
-    const dragSpacer = rightDrawerSurfaceRef.current?.querySelector<HTMLElement>('.agent-threadbar-drag-spacer')
+    const dragSpacer = rightDrawerSurfaceRef.current?.querySelector<HTMLElement>('.agent-threadbar-drag-spacer, .file-tabs-drag-spacer')
     const resizeObserver = typeof ResizeObserver !== 'undefined' && dragSpacer
       ? new ResizeObserver(() => {
           publishDragRegion(dragSpacer.getBoundingClientRect())
@@ -3575,178 +3839,51 @@ function App() {
         </div>
 
         <div ref={isDrawerSurface ? undefined : leftSidebarBodyRef} className='sidebar-stack'>
-          <div className='sidebar-vertical-tabs'>
-            <button
-              type='button'
-              className={`sidebar-vertical-tab${activeLeftSidebarTab === 'file' ? ' is-active' : ''}`}
-              onClick={() => {
-                setActiveLeftSidebarTab('file')
-              }}
-            >
-              <FileLine size={16} className='sidebar-vertical-tab-icon' />
-              <span className='sidebar-vertical-tab-label'>文件</span>
-            </button>
-            <button
-              type='button'
-              className={`sidebar-vertical-tab${activeLeftSidebarTab === 'git' ? ' is-active' : ''}`}
-              onClick={() => {
-                setActiveLeftSidebarTab('git')
-              }}
-            >
-              <GitCompareLine size={16} className='sidebar-vertical-tab-icon' />
-              <span className='sidebar-vertical-tab-label'>Git</span>
-            </button>
-            <button
-              type='button'
-              className='sidebar-vertical-tab'
-              onClick={() => {
-                setIsCommandPaletteOpen(true)
+          {isAgentLayout ? (
+            <AgentSessionTree
+              onRequestClose={isDrawerSurface ? () => setIsLeftDrawerOpen(false) : undefined}
+            />
+          ) : (
+            <>
+              <div className='sidebar-vertical-tabs'>
+                <button
+                  type='button'
+                  className={`sidebar-vertical-tab${activeLeftSidebarTab === 'file' ? ' is-active' : ''}`}
+                  onClick={() => {
+                    setActiveLeftSidebarTab('file')
+                  }}
+                >
+                  <FileLine size={16} className='sidebar-vertical-tab-icon' />
+                  <span className='sidebar-vertical-tab-label'>文件</span>
+                </button>
+                <button
+                  type='button'
+                  className={`sidebar-vertical-tab${activeLeftSidebarTab === 'git' ? ' is-active' : ''}`}
+                  onClick={() => {
+                    setActiveLeftSidebarTab('git')
+                  }}
+                >
+                  <GitCompareLine size={16} className='sidebar-vertical-tab-icon' />
+                  <span className='sidebar-vertical-tab-label'>Git</span>
+                </button>
+                <button
+                  type='button'
+                  className='sidebar-vertical-tab'
+                  onClick={() => {
+                    setIsCommandPaletteOpen(true)
 
-                if (isDrawerSurface) {
-                  setIsLeftDrawerOpen(false)
-                }
-              }}
-            >
-              <Icon icon='lucide:search' width={16} height={16} className='sidebar-vertical-tab-icon' />
-              <span className='sidebar-vertical-tab-label'>搜索</span>
-            </button>
-          </div>
-
-          {activeLeftSidebarTab === 'file' ? (
-            <div className='sidebar-stack-pane sidebar-tree-pane'>
-              <div className='file-panel-header'>
-                <span className='file-panel-title'>文件树</span>
-                <div className='file-panel-actions'>
-                  <Tooltip closeDelay={0}>
-                    <Tooltip.Trigger>
-                      <button
-                        type='button'
-                        className='file-panel-action'
-                        onClick={() => void handleCreateFile()}
-                        disabled={!currentPath || isCreatingFile}
-                        aria-label='Create File'
-                      >
-                        <Icon icon='lucide:file-plus' width={16} height={16} />
-                      </button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>Create File</Tooltip.Content>
-                  </Tooltip>
-                  <Tooltip closeDelay={0}>
-                    <Tooltip.Trigger>
-                      <button
-                        type='button'
-                        className='file-panel-action'
-                        onClick={() => void handleCreateDirectory()}
-                        disabled={!currentPath || isCreatingDirectory}
-                        aria-label='Create Folder'
-                      >
-                        <Icon icon='lucide:folder-plus' width={16} height={16} />
-                      </button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>Create Folder</Tooltip.Content>
-                  </Tooltip>
-                  <Tooltip closeDelay={0}>
-                    <Tooltip.Trigger>
-                      <button
-                        type='button'
-                        className='file-panel-action'
-                        onClick={handleToggleFileTreeExpansion}
-                        disabled={!currentPath || tree.length === 0}
-                        aria-label='Toggle Expansion'
-                      >
-                        <Icon
-                          icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'}
-                          width={16}
-                          height={16}
-                        />
-                      </button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>{expandedPaths.size > 0 ? 'Collapse All' : 'Expand All'}</Tooltip.Content>
-                  </Tooltip>
-                </div>
+                    if (isDrawerSurface) {
+                      setIsLeftDrawerOpen(false)
+                    }
+                  }}
+                >
+                  <Icon icon='lucide:search' width={16} height={16} className='sidebar-vertical-tab-icon' />
+                  <span className='sidebar-vertical-tab-label'>搜索</span>
+                </button>
               </div>
 
-              <AppScrollArea
-                className='tree-scroll'
-                contentClassName='tree-scroll-content'
-              >
-                <WorkspaceTree
-                  activeFilePath={activeTreePath}
-                  iconTheme={iconTheme}
-                  nodes={tree}
-                  expandedPaths={expandedPaths}
-                  setExpandedPaths={setExpandedPaths}
-                  workspacePath={currentPath}
-                  gitRepositoryState={gitRepositoryState}
-                  onSelectFile={(filePath) => {
-                    void openFile(filePath)
-                  }}
-                  onOpenInCodeEditor={(filePath) => {
-                    void openFile(filePath, currentPath, 'code')
-                  }}
-                  onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
-                  onDeleteNode={(node) => handleDeleteNode(node)}
-                  onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
-                />
-              </AppScrollArea>
-            </div>
-          ) : (
-            <div className='sidebar-stack-pane sidebar-git-pane' id='git-panel'>
-              <GitPanel
-                busyLabel={gitBusyLabel}
-                commitMessage={gitCommitMessage}
-                isLoading={isGitLoading}
-                layout={gitPanelLayout}
-                onCommit={() => {
-                  void handleCommitGitChanges()
-                }}
-                onCommitAndSync={() => {
-                  void handleCommitAndSyncGitChanges()
-                }}
-                onCommitMessageChange={setGitCommitMessage}
-                onDiscardAll={() => {
-                  void handleDiscardAllGitChanges()
-                }}
-                onDiscardMany={(changes) => {
-                  void handleDiscardGitChanges(changes)
-                }}
-                onInitialize={() => {
-                  void handleInitializeGit()
-                }}
-                onLayoutChange={setGitPanelLayout}
-                onOpenFile={(filePath) => {
-                  void openFile(filePath)
-                }}
-                onOpenDiff={(change) => {
-                  void openGitDiff(change)
-                }}
-                onPull={() => {
-                  void handlePullGitChanges()
-                }}
-                onPush={() => {
-                  void handlePushGitChanges()
-                }}
-                onRefresh={() => {
-                  if (!currentPath) {
-                    return
-                  }
-
-                  void performWorkspaceRefresh(currentPath, {
-                    gitSilent: false,
-                    refreshGit: true,
-                  })
-                }}
-                onStage={(filePaths) => {
-                  void handleStageGitPaths(filePaths)
-                }}
-                onUnstage={(filePaths) => {
-                  void handleUnstageGitPaths(filePaths)
-                }}
-                repositoryState={gitRepositoryState}
-                workspacePath={currentPath}
-                iconTheme={iconTheme}
-              />
-            </div>
+              {activeLeftSidebarTab === 'file' ? renderWorkspaceTreePanel() : renderGitPanel()}
+            </>
           )}
         </div>
 
@@ -3773,6 +3910,10 @@ function App() {
   function renderAgentPanel(surfaceMode: PanelSurfaceMode = 'docked') {
     const isDrawerSurface = surfaceMode === 'drawer'
 
+    if (isAgentLayout) {
+      return <AgentChatSurface />
+    }
+
     return (
       <AgentSidebar
         iconTheme={iconTheme}
@@ -3791,10 +3932,191 @@ function App() {
     )
   }
 
-  return (
+  function renderEditorSurface() {
+    return (
+      <div className='editor-frame'>
+        <FileTabs
+          activeTabId={displayActiveTabId}
+          tabs={displayTabs}
+          workspacePath={currentPath}
+          onActivate={activateFileTab}
+          onClose={(tabId) => {
+            void closeEditorTab(tabId)
+          }}
+          onMoveTab={(movingId, targetId, position) => {
+            moveTab(movingId, targetId, position)
+          }}
+          onOpenDiff={async (filePath) => {
+            const latestGitState = await refreshGitState(currentPath, { silent: true })
+            const nextChange = findGitChangeByFilePath(latestGitState, filePath)
+            if (nextChange) {
+              void openGitDiff(nextChange)
+            }
+          }}
+          getHasDiff={(filePath) => Boolean(findGitChangeByFilePath(gitRepositoryState, filePath))}
+        />
+
+        <div className='editor-content-shell' id='editor-content-panel'>
+          {activeFixedPanelTab?.fixedTabKind === 'file-panel' ? renderWorkspaceTreePanel() : null}
+          {activeFixedPanelTab?.fixedTabKind === 'git-panel' ? renderGitPanel() : null}
+          {isSettingsTabActive ? (
+            <SettingsDialog
+              activeSection={settingsSection}
+              agentState={agentWorkspaceState}
+              iconTheme={iconTheme}
+              iconThemeOptions={iconThemeOptions}
+              isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
+              resolvedTheme={resolvedTheme}
+              workspacePath={currentPath}
+              onAgentStateChange={setAgentWorkspaceState}
+              onImportIconTheme={handlePickWorkspaceIconTheme}
+              onSectionChange={setSettingsSection}
+              onSelectIconTheme={handleSelectWorkspaceIconTheme}
+              onStatusMessage={setStatusMessage}
+            />
+          ) : !activeFixedPanelTab && !activeFileTab && !activeDiffTab ? (
+            <div className='editor-empty-state'>
+              <div className='editor-empty-content'>
+                <div className='editor-empty-logo-shell' aria-hidden='true'>
+                  <img className='editor-empty-logo' src='/branding/logo.svg' alt='' />
+                </div>
+                <div className='editor-empty-actions'>
+                  <Button variant='outline' onPress={() => setIsCommandPaletteOpen(true)}>
+                    <Icon icon='lucide:search' width={16} height={16} className='mr-2' />
+                    搜索
+                  </Button>
+                  <Button
+                    variant='outline'
+                    onPress={() => {
+                      void handleCreateFile()
+                    }}
+                    isDisabled={!currentPath || isCreatingFile}
+                  >
+                    <FileLine className='mr-2' size={16} />
+                    新建文件
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {shouldRenderWorkspaceEditor && activeDiffTab ? (
+            <Suspense fallback={<EditorLoadingState label='Loading diff editor...' />}>
+              <GitDiffEditor
+                key={activeDiffTab.id}
+                diff={activeDiffTab.diff}
+                draftContent={activeDiffDraftContent}
+                navigationRequest={activeDiffTab.navigationRequest ?? null}
+                hasDirtyRelatedFileTab={activeDiffHasDirtyRelatedFileTab}
+                theme={theme}
+                onApplyBlockAction={handleApplyGitDiffSelection}
+                onDiscardChange={(change) => {
+                  void handleDiscardGitChange(change)
+                }}
+                onDraftChange={(nextValue) => {
+                  updateDiffTabDraft(activeDiffTab.id, nextValue)
+                }}
+                onSaveEditedFile={handleSaveDiffFile}
+                onStageChange={(change) => {
+                  void handleStageGitPaths([change.path])
+                }}
+                onUnstageChange={(change) => {
+                  void handleUnstageGitPaths([change.path])
+                }}
+              />
+            </Suspense>
+          ) : null}
+
+          {shouldRenderWorkspaceEditor && activeFileTab && currentEditorKind === 'prose' && currentFileViewMode === 'meo' ? (
+            <Suspense fallback={<EditorLoadingState />}>
+              <MeoEditorHost
+                key={activeFileTab.id}
+                ref={meoEditorHostRef}
+                filePath={activeFileTab.filePath}
+                gitDiffRequest={activeFileTab.gitDiffRequest ?? null}
+                onChange={(nextValue) => {
+                  updateFileTabsContent(activeFileTab.filePath, nextValue)
+                }}
+                onCompositionChange={setIsActiveEditorComposing}
+                onOpenFile={(targetFilePath) => {
+                  void openFile(targetFilePath, currentPath, 'meo')
+                }}
+                onOpenGitDiff={(targetFilePath, gitAction) => {
+                  void (async () => {
+                    if (!currentPath) {
+                      return
+                    }
+
+                    const latestGitState = await refreshGitState(currentPath, { silent: true })
+                    const nextChange = findGitChangeByFilePath(
+                      latestGitState,
+                      targetFilePath,
+                      gitAction?.source === 'revision' ? ['staged', 'unstaged'] : ['unstaged', 'staged'],
+                    )
+
+                    if (nextChange) {
+                      await openGitDiff(nextChange, gitAction)
+                    }
+                  })()
+                }}
+                onApplyGitDiffSelection={handleApplyGitDiffSelection}
+                onSave={(content) => {
+                  void handleSave({
+                    content,
+                    filePath: activeFileTab.filePath,
+                  })
+                }}
+                value={currentFileContent}
+                savedValue={activeFileTab.savedContent}
+                theme={theme}
+                gitRepositoryState={gitRepositoryState}
+                meoSettings={meo}
+                workspacePath={currentPath}
+              />
+            </Suspense>
+          ) : null}
+
+          {shouldRenderWorkspaceEditor && activeFileTab && (
+            (currentEditorKind === 'code' && currentFileViewMode === 'code')
+            || (currentEditorKind === 'prose' && currentFileViewMode === 'code')
+          ) ? (
+            <Suspense fallback={<EditorLoadingState />}>
+              <CodeEditor
+                key={activeFileTab.id}
+                disabled={false}
+                filePath={activeFileTab.filePath}
+                onChange={(nextValue) => {
+                  updateFileTabsContent(activeFileTab.filePath, nextValue)
+                }}
+                onCompositionChange={setIsActiveEditorComposing}
+                onSave={(content) => {
+                  void handleSave({
+                    content,
+                    filePath: activeFileTab.filePath,
+                  })
+                }}
+                value={currentFileContent}
+                theme={theme}
+              />
+            </Suspense>
+          ) : null}
+
+          {shouldRenderWorkspaceEditor && activeFileTab && currentEditorKind === 'code' && currentFileViewMode === 'preview' ? (
+            <HtmlPreview
+              content={currentFileContent}
+              filePath={activeFileTab.filePath}
+            />
+          ) : null}
+        </div>
+      </div>
+    )
+  }
+
+  const appShell = (
     <div
       ref={appShellRef}
       className="app-shell text-foreground bg-background"
+      data-app-layout={appLayoutPreference}
       data-layout={layoutMode}
       data-platform={shellPlatform}
       data-left-collapsed={isLeftSidebarDrawer || !isLeftSidebarVisible ? 'true' : 'false'}
@@ -3828,7 +4150,7 @@ function App() {
               return
             }
 
-            setIsLeftSidebarCollapsed((currentValue) => !currentValue)
+            setIsLeftSidebarCollapsed(false)
           }}
         >
           <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
@@ -3861,223 +4183,6 @@ function App() {
         </aside>
       ) : null}
 
-      {false && (
-      <aside className={`panel panel-sidebar${isLeftSidebarVisible ? '' : ' is-collapsed'}`}>
-        <div className='section-title workspace-section-title'>
-          <button
-            type='button'
-            className='panel-toggle-button workspace-section-toggle workspace-toggle-brand-button'
-            aria-label='Collapse workspace sidebar'
-            onClick={() => {
-              setIsLeftSidebarCollapsed(true)
-            }}
-          >
-            <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
-              <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
-              <span className='workspace-toggle-brand-glyph'>
-                <LayoutLeftLine size={16} />
-              </span>
-            </span>
-          </button>
-          <button
-            type='button'
-            onClick={() => {
-              void handlePickWorkspace()
-            }}
-            disabled={isPickingWorkspace}
-            className='section-title-text'
-            aria-label={isPickingWorkspace ? 'Opening workspace' : 'Open workspace'}
-          >
-            <span className='section-title-label'>{workspaceLabel}</span>
-          </button>
-
-          <div className='section-title-drag-spacer' aria-hidden='true' />
-
-        </div>
-
-        <div ref={leftSidebarBodyRef} className='sidebar-stack'>
-          <div className='sidebar-vertical-tabs'>
-            <button
-              type='button'
-              className={`sidebar-vertical-tab${activeLeftSidebarTab === 'file' ? ' is-active' : ''}`}
-              onClick={() => {
-                setActiveLeftSidebarTab('file')
-              }}
-            >
-              <FileLine size={16} className='sidebar-vertical-tab-icon' />
-              <span className='sidebar-vertical-tab-label'>文件</span>
-            </button>
-            <button
-              type='button'
-              className={`sidebar-vertical-tab${activeLeftSidebarTab === 'git' ? ' is-active' : ''}`}
-              onClick={() => {
-                setActiveLeftSidebarTab('git')
-              }}
-            >
-              <GitCompareLine size={16} className='sidebar-vertical-tab-icon' />
-              <span className='sidebar-vertical-tab-label'>Git</span>
-            </button>
-            <button
-              type='button'
-              className='sidebar-vertical-tab'
-              onClick={() => {
-                setIsCommandPaletteOpen(true)
-              }}
-            >
-              <Icon icon='lucide:search' width={16} height={16} className='sidebar-vertical-tab-icon' />
-              <span className='sidebar-vertical-tab-label'>搜索</span>
-            </button>
-          </div>
-
-          {activeLeftSidebarTab === 'file' ? (
-            <div className='sidebar-stack-pane sidebar-tree-pane'>
-              <div className='file-panel-header'>
-                <span className='file-panel-title'>文件树</span>
-                <div className='file-panel-actions'>
-                  <Tooltip closeDelay={0}>
-                    <Tooltip.Trigger>
-                      <button
-                        type='button'
-                        className='file-panel-action'
-                        onClick={() => void handleCreateFile()}
-                        disabled={!currentPath || isCreatingFile}
-                        aria-label='Create File'
-                      >
-                        <Icon icon='lucide:file-plus' width={16} height={16} />
-                      </button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>Create File</Tooltip.Content>
-                  </Tooltip>
-                  <Tooltip closeDelay={0}>
-                    <Tooltip.Trigger>
-                      <button
-                        type='button'
-                        className='file-panel-action'
-                        onClick={() => void handleCreateDirectory()}
-                        disabled={!currentPath || isCreatingDirectory}
-                        aria-label='Create Folder'
-                      >
-                        <Icon icon='lucide:folder-plus' width={16} height={16} />
-                      </button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>Create Folder</Tooltip.Content>
-                  </Tooltip>
-                  <Tooltip closeDelay={0}>
-                    <Tooltip.Trigger>
-                      <button
-                        type='button'
-                        className='file-panel-action'
-                        onClick={handleToggleFileTreeExpansion}
-                        disabled={!currentPath || tree.length === 0}
-                        aria-label='Toggle Expansion'
-                      >
-                        <Icon 
-                          icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'} 
-                          width={16} height={16} 
-                        />
-                      </button>
-                    </Tooltip.Trigger>
-                    <Tooltip.Content>{expandedPaths.size > 0 ? 'Collapse All' : 'Expand All'}</Tooltip.Content>
-                  </Tooltip>
-                </div>
-              </div>
-
-              <AppScrollArea
-                className='tree-scroll'
-                contentClassName='tree-scroll-content'
-              >
-                <WorkspaceTree
-                  activeFilePath={activeTreePath}
-                  iconTheme={iconTheme}
-                  nodes={tree}
-                  expandedPaths={expandedPaths}
-                  setExpandedPaths={setExpandedPaths}
-                  workspacePath={currentPath}
-                  gitRepositoryState={gitRepositoryState}
-                  onSelectFile={(filePath) => {
-                    void openFile(filePath)
-                  }}
-                  onOpenInCodeEditor={(filePath) => {
-                    void openFile(filePath, currentPath, 'code')
-                  }}
-                  onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
-                  onDeleteNode={(node) => handleDeleteNode(node)}
-                  onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
-                />
-              </AppScrollArea>
-            </div>
-          ) : (
-            <div className='sidebar-stack-pane sidebar-git-pane' id='git-panel'>
-              <GitPanel
-                busyLabel={gitBusyLabel}
-                commitMessage={gitCommitMessage}
-                isLoading={isGitLoading}
-                layout={gitPanelLayout}
-                onCommit={() => {
-                  void handleCommitGitChanges()
-                }}
-                onCommitAndSync={() => {
-                  void handleCommitAndSyncGitChanges()
-                }}
-                onCommitMessageChange={setGitCommitMessage}
-                onDiscardAll={() => {
-                  void handleDiscardAllGitChanges()
-                }}
-                onDiscardMany={(changes) => {
-                  void handleDiscardGitChanges(changes)
-                }}
-                onInitialize={() => {
-                  void handleInitializeGit()
-                }}
-                onLayoutChange={setGitPanelLayout}
-                onOpenFile={(filePath) => {
-                  void openFile(filePath)
-                }}
-                onOpenDiff={(change) => {
-                  void openGitDiff(change)
-                }}
-                onPull={() => {
-                  void handlePullGitChanges()
-                }}
-                onPush={() => {
-                  void handlePushGitChanges()
-                }}
-                onRefresh={() => {
-                  if (!currentPath) {
-                    return
-                  }
-
-                  void performWorkspaceRefresh(currentPath, {
-                    gitSilent: false,
-                    refreshGit: true,
-                  })
-                }}
-                onStage={(filePaths) => {
-                  void handleStageGitPaths(filePaths)
-                }}
-                onUnstage={(filePaths) => {
-                  void handleUnstageGitPaths(filePaths)
-                }}
-                repositoryState={gitRepositoryState}
-                workspacePath={currentPath}
-                iconTheme={iconTheme}
-              />
-            </div>
-          )}
-        </div>
-
-        <div className='sidebar-footer'>
-          <button 
-            type='button' 
-            className='sidebar-footer-item'
-            onClick={() => setIsSettingsOpen(true)}
-          >
-            <Icon icon='lucide:settings' width={16} height={16} />
-            <span>设置</span>
-          </button>
-        </div>
-      </aside>
-      )}
 
       <div className={`panel-resize-slot panel-resize-slot-left${isLeftSidebarVisible ? '' : ' is-hidden'}`}>
         <div
@@ -4097,179 +4202,7 @@ function App() {
       </div>
 
       <main className='panel panel-editor' id='editor-main'>
-        <div className='editor-frame'>
-          <FileTabs
-            activeTabId={displayActiveTabId}
-            tabs={displayTabs}
-            workspacePath={currentPath}
-            onActivate={activateFileTab}
-            onClose={(tabId) => {
-              closeEditorTab(tabId)
-            }}
-            onMoveTab={(movingId, targetId, position) => {
-              moveTab(movingId, targetId, position)
-            }}
-            onOpenDiff={async (filePath) => {
-              const latestGitState = await refreshGitState(currentPath, { silent: true })
-              const nextChange = findGitChangeByFilePath(latestGitState, filePath)
-              if (nextChange) {
-                void openGitDiff(nextChange)
-              }
-            }}
-            getHasDiff={(filePath) => Boolean(findGitChangeByFilePath(gitRepositoryState, filePath))}
-          />
-
-          <div className='editor-content-shell' id='editor-content-panel'>
-            {isSettingsTabActive ? (
-              <SettingsDialog
-                activeSection={settingsSection}
-                agentState={agentWorkspaceState}
-                iconTheme={iconTheme}
-                iconThemeOptions={iconThemeOptions}
-                isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
-                resolvedTheme={resolvedTheme}
-                workspacePath={currentPath}
-                onAgentStateChange={setAgentWorkspaceState}
-                onImportIconTheme={handlePickWorkspaceIconTheme}
-                onSectionChange={setSettingsSection}
-                onSelectIconTheme={handleSelectWorkspaceIconTheme}
-                onStatusMessage={setStatusMessage}
-              />
-            ) : !activeFileTab && !activeDiffTab ? (
-              <div className='editor-empty-state'>
-                <div className='editor-empty-content'>
-                  <div className='editor-empty-logo-shell' aria-hidden='true'>
-                    <img className='editor-empty-logo' src='/branding/logo.svg' alt='' />
-                  </div>
-                  <div className='editor-empty-actions'>
-                    <Button variant='outline' onPress={() => setIsCommandPaletteOpen(true)}>
-                      <Icon icon='lucide:search' width={16} height={16} className='mr-2' />
-                      搜索
-                    </Button>
-                    <Button
-                      variant='outline'
-                      onPress={() => {
-                        void handleCreateFile()
-                      }}
-                      isDisabled={!currentPath || isCreatingFile}
-                    >
-                      <FileLine className='mr-2' size={16} />
-                      新建文件
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {activeDiffTab ? (
-              <Suspense fallback={<EditorLoadingState label='Loading diff editor...' />}>
-                <GitDiffEditor
-                  key={activeDiffTab.id}
-                  diff={activeDiffTab.diff}
-                  draftContent={activeDiffDraftContent}
-                  navigationRequest={activeDiffTab.navigationRequest ?? null}
-                  hasDirtyRelatedFileTab={activeDiffHasDirtyRelatedFileTab}
-                  theme={theme}
-                  onApplyBlockAction={handleApplyGitDiffSelection}
-                  onDiscardChange={(change) => {
-                    void handleDiscardGitChange(change)
-                  }}
-                  onDraftChange={(nextValue) => {
-                    updateDiffTabDraft(activeDiffTab.id, nextValue)
-                  }}
-                  onSaveEditedFile={handleSaveDiffFile}
-                  onStageChange={(change) => {
-                    void handleStageGitPaths([change.path])
-                  }}
-                  onUnstageChange={(change) => {
-                    void handleUnstageGitPaths([change.path])
-                  }}
-                />
-              </Suspense>
-            ) : null}
-
-            {activeFileTab && currentEditorKind === 'prose' && currentFileViewMode === 'meo' ? (
-              <Suspense fallback={<EditorLoadingState />}>
-                <MeoEditorHost
-                  key={activeFileTab.id}
-                  ref={meoEditorHostRef}
-                  filePath={activeFileTab.filePath}
-                  gitDiffRequest={activeFileTab.gitDiffRequest ?? null}
-                  onChange={(nextValue) => {
-                    updateFileTabsContent(activeFileTab.filePath, nextValue)
-                  }}
-                  onCompositionChange={setIsActiveEditorComposing}
-                  onOpenFile={(targetFilePath) => {
-                    void openFile(targetFilePath, currentPath, 'meo')
-                  }}
-                  onOpenGitDiff={(targetFilePath, gitAction) => {
-                    void (async () => {
-                      if (!currentPath) {
-                        return
-                      }
-
-                      const latestGitState = await refreshGitState(currentPath, { silent: true })
-                      const nextChange = findGitChangeByFilePath(
-                        latestGitState,
-                        targetFilePath,
-                        gitAction?.source === 'revision' ? ['staged', 'unstaged'] : ['unstaged', 'staged'],
-                      )
-
-                      if (nextChange) {
-                        await openGitDiff(nextChange, gitAction)
-                      }
-                    })()
-                  }}
-                  onApplyGitDiffSelection={handleApplyGitDiffSelection}
-                  onSave={(content) => {
-                    void handleSave({
-                      content,
-                      filePath: activeFileTab.filePath,
-                    })
-                  }}
-                  value={currentFileContent}
-                  savedValue={activeFileTab.savedContent}
-                  theme={theme}
-                  gitRepositoryState={gitRepositoryState}
-                  meoSettings={meo}
-                  workspacePath={currentPath}
-                />
-              </Suspense>
-            ) : null}
-
-            {activeFileTab && (
-              (currentEditorKind === 'code' && currentFileViewMode === 'code')
-              || (currentEditorKind === 'prose' && currentFileViewMode === 'code')
-            ) ? (
-              <Suspense fallback={<EditorLoadingState />}>
-                <CodeEditor
-                  key={activeFileTab.id}
-                  disabled={false}
-                  filePath={activeFileTab.filePath}
-                  onChange={(nextValue) => {
-                    updateFileTabsContent(activeFileTab.filePath, nextValue)
-                  }}
-                  onCompositionChange={setIsActiveEditorComposing}
-                  onSave={(content) => {
-                    void handleSave({
-                      content,
-                      filePath: activeFileTab.filePath,
-                    })
-                  }}
-                  value={currentFileContent}
-                  theme={theme}
-                />
-              </Suspense>
-            ) : null}
-
-            {activeFileTab && currentEditorKind === 'code' && currentFileViewMode === 'preview' ? (
-              <HtmlPreview
-                content={currentFileContent}
-                filePath={activeFileTab.filePath}
-              />
-            ) : null}
-          </div>
-        </div>
+        {isAgentLayout ? renderAgentPanel('docked') : renderEditorSurface()}
       </main>
 
       <div className={`panel-resize-slot panel-resize-slot-right${isRightSidebarVisible ? '' : ' is-hidden'}`}>
@@ -4291,24 +4224,10 @@ function App() {
 
       {isRightSidebarVisible ? (
         <aside className='panel panel-agent'>
-          {renderAgentPanel('docked')}
+          {isAgentLayout ? renderEditorSurface() : renderAgentPanel('docked')}
         </aside>
       ) : null}
 
-      {false && (
-      <aside className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}>
-        <AgentSidebar
-          iconTheme={iconTheme}
-          onOpenMessageFile={openAgentMessageFile}
-          onOpenProviderSettings={() => {
-            setSettingsSection('providers')
-            setIsSettingsOpen(true)
-          }}
-          workspacePath={currentPath}
-          onWorkspaceStateChange={setAgentWorkspaceState}
-        />
-      </aside>
-      )}
 
       {isLeftSidebarDrawer ? (
         <Drawer
@@ -4351,11 +4270,12 @@ function App() {
                   <div
                     ref={rightDrawerSurfaceRef}
                     className='panel panel-agent panel-agent-drawer'
+                    data-agent-editor-surface={isAgentLayout ? 'true' : 'false'}
                     data-full-width={isRightDrawerFullWidth ? 'true' : 'false'}
                     data-platform={shellPlatform}
                     style={shellChromeVars}
                   >
-                    {renderAgentPanel('drawer')}
+                    {isAgentLayout ? renderEditorSurface() : renderAgentPanel('drawer')}
                   </div>
                 </Drawer.Body>
               </Drawer.Dialog>
@@ -4464,6 +4384,29 @@ function App() {
       />
     </div>
   )
+
+  if (isAgentLayout) {
+    return (
+      <AgentProvider
+        iconTheme={iconTheme}
+        onOpenMessageFile={openAgentMessageFile}
+        onOpenProviderSettings={() => {
+          if (isRightSidebarDrawer) {
+            setIsRightDrawerOpen(false)
+          }
+
+          setSettingsSection('providers')
+          setIsSettingsOpen(true)
+        }}
+        workspacePath={currentPath}
+        onWorkspaceStateChange={setAgentWorkspaceState}
+      >
+        {appShell}
+      </AgentProvider>
+    )
+  }
+
+  return appShell
 }
 
 export default App

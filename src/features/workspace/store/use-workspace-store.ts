@@ -61,7 +61,19 @@ export type WorkspaceSettingsTab = {
   savedContent: ''
 }
 
-export type WorkspaceDisplayTab = WorkspaceTab | WorkspaceSettingsTab
+export type WorkspaceFixedPanelTab = {
+  content: ''
+  editorKind: 'prose'
+  exists: true
+  filePath: 'app://fixed/files' | 'app://fixed/git'
+  fixedTabKind: 'file-panel' | 'git-panel'
+  id: 'app://fixed/files' | 'app://fixed/git'
+  isDirty: false
+  kind: 'fixed-panel'
+  savedContent: ''
+}
+
+export type WorkspaceDisplayTab = WorkspaceTab | WorkspaceSettingsTab | WorkspaceFixedPanelTab
 export type TabDropPosition = 'before' | 'after'
 
 type WorkspaceState = {

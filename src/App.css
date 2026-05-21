@@ -51,6 +51,82 @@
   grid-column: 2;
 }
 
+.app-shell[data-app-layout='agent'] {
+  --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
+}
+
+.app-shell[data-app-layout='agent'] .panel-editor {
+  background: var(--surface);
+  border-left: 0;
+}
+
+.app-shell[data-app-layout='agent'] .panel-editor .agent-shell {
+  background: var(--surface);
+}
+
+.app-shell[data-app-layout='agent'] .panel-editor .agent-floating-panel,
+.app-shell[data-app-layout='agent'] .panel-editor .agent-session-option,
+.app-shell[data-app-layout='agent'] .panel-editor .agent-messages-scroll,
+.app-shell[data-app-layout='agent'] .panel-editor .agent-messages-scroll .app-scroll-area-viewport,
+.app-shell[data-app-layout='agent'] .panel-editor .agent-messages-scroll .app-scroll-area-content {
+  background: var(--surface);
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent {
+  background: var(--background);
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent .editor-frame {
+  background: var(--surface);
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-shell {
+  padding-right: var(--right-panel-content-inset);
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-shell::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: var(--right-panel-content-inset);
+  border-bottom: 1px solid var(--separator);
+  z-index: 1;
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-drag-spacer {
+  min-width: 64px;
+}
+
+.app-shell[data-app-layout='agent'][data-window-fullscreen='true'] .panel-toggle-button-overlay-left {
+  left: var(--left-panel-toggle-anchor);
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent-drawer .file-tabs-shell {
+  padding-right: var(--right-panel-content-inset);
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent-drawer .editor-frame {
+  width: 100%;
+}
+
+.app-shell[data-app-layout='agent'] .panel-editor .agent-threadbar {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.app-shell[data-app-layout='agent'][data-right-collapsed='true'] .panel-editor .agent-threadbar {
+  padding-right: var(--right-panel-content-inset);
+}
+
+.app-shell[data-app-layout='agent'][data-platform='macos'][data-left-collapsed='true'] .panel-editor .agent-threadbar {
+  padding-left: var(--left-panel-content-inset);
+}
+
+.app-shell[data-app-layout='agent'][data-platform='macos'][data-left-collapsed='true'][data-window-fullscreen='true'] .panel-editor .agent-threadbar {
+  padding-left: 16px;
+}
+
 .app-shell::before {
   content: "";
   position: absolute;
@@ -336,6 +412,10 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   border-left: 1px solid var(--separator);
 }
 
+.app-shell[data-app-layout='agent'] .panel-drawer-right .panel-drawer-dialog {
+  width: min(760px, 100vw);
+}
+
 .panel-drawer-body {
   display: flex;
   flex: 1;
@@ -385,6 +465,10 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
 
 .panel-agent-drawer .agent-shell {
   width: 100%;
+}
+
+.panel-agent-drawer[data-agent-editor-surface='true'] {
+  background: var(--surface);
 }
 
 /* When the right drawer expands to the full viewport width on narrow shells,
@@ -1063,6 +1147,14 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   padding-left: var(--left-panel-content-inset);
 }
 
+.app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-agent .file-tabs-shell {
+  padding-left: 0;
+}
+
+.app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-agent .file-tabs-shell::before {
+  display: none;
+}
+
 .app-shell[data-right-collapsed='true'] .file-tabs-shell {
   padding-right: var(--right-panel-content-inset);
 }
@@ -1140,6 +1232,19 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   transition: background-color 140ms ease, color 140ms ease;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+.file-tab.is-pinned {
+  max-width: min(288px, 42vw);
+}
+
+.file-tab.is-pinned .file-tab-trigger {
+  padding-right: 12px;
+}
+
+.file-tab-leading-icon {
+  flex: 0 0 auto;
+  color: currentColor;
 }
 
 .file-tab.is-drag-source {
@@ -3240,6 +3345,99 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-session-delete-button:hover {
   color: var(--danger-foreground);
   background: var(--danger);
+}
+
+.agent-session-tree-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--background);
+}
+
+.agent-session-tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.agent-session-tree-title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.agent-session-tree-eyebrow {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.agent-session-tree-current {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-session-tree-create {
+  flex: 0 0 auto;
+}
+
+.agent-session-tree {
+  display: block;
+  flex: 1;
+  min-height: 120px;
+  min-width: 0;
+}
+
+.agent-session-tree-menu {
+  transform: translateX(-100%);
+  z-index: 5;
+  min-width: 168px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+}
+
+.agent-session-tree-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.agent-session-tree-menu-item:hover,
+.agent-session-tree-menu-item:focus-visible {
+  outline: none;
+  background: var(--danger);
+  color: var(--danger-foreground);
+}
+
+.agent-session-tree-menu-item:disabled {
+  opacity: 0.55;
 }
 
 .agent-messages-scroll {

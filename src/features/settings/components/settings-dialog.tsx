@@ -91,7 +91,7 @@ export function SettingsDialog({
   resolvedTheme,
   workspacePath,
 }: SettingsViewProps) {
-  const { meo, theme, setTheme, updateMeoSettings } = useSettingsStore()
+  const { layoutPreference, meo, theme, setLayoutPreference, setTheme, updateMeoSettings } = useSettingsStore()
   const [authDrafts, setAuthDrafts] = useState<Record<AuthProviderKey, string>>(EMPTY_AUTH_DRAFTS)
   const [isSavingAuth, setIsSavingAuth] = useState(false)
   const [meoImageFolderDraft, setMeoImageFolderDraft] = useState(meo.imageFolder)
@@ -198,6 +198,34 @@ export function SettingsDialog({
                     </Tabs.Tab>
                     <Tabs.Tab id='auto' className='flex-1'>
                       跟随系统
+                      <Tabs.Indicator />
+                    </Tabs.Tab>
+                  </Tabs.List>
+                </Tabs.ListContainer>
+              </Tabs>
+            </div>
+          </div>
+
+          <div className='settings-field' style={{ marginTop: '24px' }}>
+            <div className='settings-copy-block'>
+              <h4>布局模式</h4>
+              <p>选择主界面以编辑器为中心，或以 Agent 会话为中心。</p>
+            </div>
+            <div className='settings-tabs-wrapper heroui-tabs-fix' style={{ marginTop: '12px' }}>
+              <Tabs
+                selectedKey={layoutPreference}
+                onSelectionChange={(key) => setLayoutPreference(key as 'editor' | 'agent')}
+                variant='primary'
+                className='w-full'
+              >
+                <Tabs.ListContainer className='w-full'>
+                  <Tabs.List aria-label='布局模式' className='w-full'>
+                    <Tabs.Tab id='editor' className='flex-1'>
+                      Editor
+                      <Tabs.Indicator />
+                    </Tabs.Tab>
+                    <Tabs.Tab id='agent' className='flex-1'>
+                      Agent
                       <Tabs.Indicator />
                     </Tabs.Tab>
                   </Tabs.List>

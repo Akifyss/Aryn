@@ -1,4 +1,19 @@
-import { type CSSProperties, FormEvent, KeyboardEvent, type ReactNode, type Ref, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  createContext,
+  FormEvent,
+  KeyboardEvent,
+  type ReactNode,
+  type Ref,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { FileTree, useFileTree } from '@pierre/trees/react'
 import { Button, Chip, Disclosure, Input } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import {
@@ -8,7 +23,6 @@ import {
   CodeLine,
   Delete2Line,
   EyeglassLine,
-  FileSearchLine,
   Pencil2Line,
   RightLine,
   SearchLine,
@@ -32,6 +46,7 @@ import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-ch
 import type {
   AgentClientEvent,
   AgentMessageFileChange,
+  AgentSessionListItem,
   AgentSessionAnnotations,
   AgentSidebarMessage,
   AgentSidebarMessageStatus,
@@ -45,6 +60,23 @@ type AgentSidebarProps = {
   onOpenProviderSettings?: () => void
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
   workspacePath: string | null
+}
+
+type AgentSurfaceProps = {
+  iconTheme?: WorkspaceIconTheme | null
+  onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
+  onOpenProviderSettings?: () => void
+  workspacePath: string | null
+}
+
+type AgentSessionTreeProps = {
+  className?: string
+  onRequestClose?: () => void
+}
+
+type AgentProviderProps = AgentSurfaceProps & {
+  children: ReactNode
+  onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
 }
 
 type LiveToolState = {
@@ -120,6 +152,139 @@ const emptyComposerState: ComposerState = {
   value: '',
 }
 
+const AGENT_SESSION_TREE_EMPTY_PATH = 'No sessions'
+
+const AGENT_SESSION_TREE_CSS = `
+  :host {
+    --trees-fg-override: var(--muted);
+    --trees-fg-muted-override: var(--muted);
+    --trees-bg-override: var(--background);
+    --trees-bg-muted-override: var(--surface-tertiary);
+    --trees-accent-override: var(--accent);
+    --trees-border-color-override: var(--separator);
+    --trees-selected-fg-override: var(--foreground);
+    --trees-selected-bg-override: var(--surface-tertiary);
+    --trees-selected-focused-border-color-override: transparent;
+    --trees-focus-ring-color-override: var(--focus);
+    --trees-font-family-override: inherit;
+    --trees-font-size-override: 13px;
+    --trees-font-weight-regular-override: 500;
+    --trees-font-weight-semibold-override: 600;
+    --trees-padding-inline-override: 8px;
+    --trees-item-padding-x-override: 10px;
+    --trees-item-margin-x-override: 0px;
+    --trees-level-gap-override: 0px;
+    --trees-icon-width-override: 14px;
+    --trees-action-lane-width-override: 28px;
+    --trees-context-menu-trigger-inline-offset: 22px;
+    --trees-scrollbar-gutter-override: 8px;
+    background: var(--background);
+  }
+
+  [data-item-section='spacing'] {
+    display: none;
+  }
+
+  [data-item-section='icon'] {
+    display: none;
+  }
+
+  button[data-type='item'] {
+    border-radius: 8px;
+    color: var(--muted);
+    transition: background-color 140ms ease, color 140ms ease;
+  }
+
+  button[data-type='item']:hover,
+  button[data-type='item'][data-item-selected] {
+    color: var(--foreground);
+    background: var(--surface-tertiary);
+  }
+
+  button[data-type='item'][data-item-selected] [data-item-section='content'] {
+    font-weight: 600;
+  }
+
+  button[data-type='item'][data-item-path='${AGENT_SESSION_TREE_EMPTY_PATH}'] {
+    opacity: 0.65;
+    pointer-events: none;
+  }
+
+`
+
+type AgentContextValue = {
+  activeComposerMenu: 'model' | 'provider' | null
+  activeOverlayPanel: 'sessions' | null
+  activeSession: AgentWorkspaceState['sessions'][number] | null
+  activeSessionPath: string | null
+  agentState: AgentWorkspaceState
+  canChooseProvider: boolean
+  canSend: boolean
+  composerHeight: number
+  composerResizeStateRef: React.MutableRefObject<{ pointerId: number, startHeight: number, startY: number } | null>
+  composerState: ComposerState
+  configuredProviders: AuthProviderKey[]
+  deletingSessionPath: string | null
+  handleComposerKeyDown: (event: KeyboardEvent<HTMLElement>) => void
+  handleCreateSession: () => Promise<void>
+  handleDeleteSession: (sessionPath: string) => Promise<void>
+  handleModelInputCommit: () => Promise<void>
+  handleOpenSession: (sessionPath: string) => Promise<void>
+  handleProviderSelectionChange: (nextProvider: string) => Promise<void>
+  handleSelectModel: (modelKey: string) => Promise<void>
+  handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
+  hasConfiguredProviders: boolean
+  iconTheme?: WorkspaceIconTheme | null
+  isCreatingSession: boolean
+  isLoading: boolean
+  isModelInputFullySelected: boolean
+  isResizingComposer: boolean
+  isSwitchingModel: boolean
+  liveTools: LiveToolState[]
+  messagesScrollRef: React.RefObject<HTMLDivElement | null>
+  modelFieldRef: React.RefObject<HTMLDivElement | null>
+  modelInputRef: React.RefObject<HTMLInputElement | null>
+  modelInputValue: string
+  modelMenuHeight: number
+  modelPlaceholder: string
+  modelSuggestions: string[]
+  onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
+  onOpenProviderSettings?: () => void
+  overlayPanelRef: React.RefObject<HTMLDivElement | null>
+  panelError: string | null
+  providerMenuHeight: number
+  renderedMessages: AgentSidebarMessage[]
+  resolvedSelectedProviderValue: string
+  roundFileChangesByMessageId: Map<string, AgentMessageFileChange[]>
+  sessionButtonRef: React.RefObject<HTMLButtonElement | null>
+  sessionStatus: AgentSessionStatus | null
+  setActiveComposerMenu: React.Dispatch<React.SetStateAction<'model' | 'provider' | null>>
+  setActiveOverlayPanel: React.Dispatch<React.SetStateAction<'sessions' | null>>
+  setComposerState: React.Dispatch<React.SetStateAction<ComposerState>>
+  setIsModelInputFullySelected: React.Dispatch<React.SetStateAction<boolean>>
+  setIsResizingComposer: React.Dispatch<React.SetStateAction<boolean>>
+  setModelDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  setModelInputValue: React.Dispatch<React.SetStateAction<string>>
+  setPanelError: React.Dispatch<React.SetStateAction<string | null>>
+  syncModelInputSelectionState: (input: HTMLInputElement) => void
+  syncModelInputSelectionStateNextFrame: (input: HTMLInputElement) => void
+  statusMessage: string | null
+  workspacePath: string | null
+  workspaceTree: ReturnType<typeof useWorkspaceStore.getState>['tree']
+}
+
+const AgentContext = createContext<AgentContextValue | null>(null)
+
+function useAgentContext() {
+  const context = useContext(AgentContext)
+
+  if (!context) {
+    throw new Error('Agent surfaces must be rendered inside AgentProvider.')
+  }
+
+  return context
+}
+
 function formatSessionTime(value: string) {
   return new Intl.DateTimeFormat('en', {
     month: 'short',
@@ -131,6 +296,39 @@ function formatSessionTime(value: string) {
 
 function formatSessionLabel(name: string | null) {
   return name ?? 'Untitled session'
+}
+
+function sanitizeFlatAgentSessionPath(value: string) {
+  return value
+    .replace(/[\\/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function buildFlatAgentSessionTreeEntries(sessions: AgentSessionListItem[]) {
+  const seenLabels = new Map<string, number>()
+  const usedTreePaths = new Set<string>()
+
+  return sessions.map((session) => {
+    const baseLabel = sanitizeFlatAgentSessionPath(session.name ?? session.preview) || 'Untitled session'
+    const nextCount = (seenLabels.get(baseLabel) ?? 0) + 1
+    seenLabels.set(baseLabel, nextCount)
+
+    let treePath = nextCount === 1 ? baseLabel : `${baseLabel} ${nextCount}`
+    let suffix = nextCount + 1
+
+    while (usedTreePaths.has(treePath)) {
+      treePath = `${baseLabel} ${suffix}`
+      suffix += 1
+    }
+
+    usedTreePaths.add(treePath)
+
+    return {
+      session,
+      treePath,
+    }
+  })
 }
 
 function formatModelLabel(modelKey: string | null) {
@@ -1103,13 +1301,14 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
   )
 }
 
-export function AgentSidebar({
+function AgentProvider({
+  children,
   iconTheme,
   onOpenMessageFile,
   onOpenProviderSettings,
   onWorkspaceStateChange,
   workspacePath,
-}: AgentSidebarProps) {
+}: AgentProviderProps) {
   const workspaceTree = useWorkspaceStore((state) => state.tree)
   const defaultModelSelection = parseModelSelection(null)
   const [composerHeight, setComposerHeight] = useState(172)
@@ -1916,6 +2115,347 @@ export function AgentSidebar({
     void onOpenMessageFile?.(latestAutoOpenFileChange.change.filePath, latestAutoOpenFileChange.change.kind)
   }, [activeSessionPath, latestAutoOpenFileChange, onOpenMessageFile])
 
+  const contextValue = useMemo<AgentContextValue>(() => ({
+    activeComposerMenu,
+    activeOverlayPanel,
+    activeSession,
+    activeSessionPath,
+    agentState,
+    canChooseProvider,
+    canSend,
+    composerHeight,
+    composerResizeStateRef,
+    composerState,
+    configuredProviders,
+    deletingSessionPath,
+    handleComposerKeyDown,
+    handleCreateSession,
+    handleDeleteSession,
+    handleModelInputCommit,
+    handleOpenSession,
+    handleProviderSelectionChange,
+    handleSelectModel,
+    handleSubmit,
+    hasConfiguredProviders,
+    iconTheme,
+    isCreatingSession,
+    isLoading,
+    isModelInputFullySelected,
+    isResizingComposer,
+    isSwitchingModel,
+    liveTools,
+    messagesScrollRef,
+    modelFieldRef,
+    modelInputRef,
+    modelInputValue,
+    modelMenuHeight,
+    modelPlaceholder,
+    modelSuggestions,
+    onOpenMessageFile,
+    onOpenProviderSettings,
+    overlayPanelRef,
+    panelError,
+    providerMenuHeight,
+    renderedMessages,
+    resolvedSelectedProviderValue,
+    roundFileChangesByMessageId,
+    sessionButtonRef,
+    sessionStatus,
+    setActiveComposerMenu,
+    setActiveOverlayPanel,
+    setComposerState,
+    setIsModelInputFullySelected,
+    setIsResizingComposer,
+    setModelDrafts,
+    setModelInputValue,
+    setPanelError,
+    syncModelInputSelectionState,
+    syncModelInputSelectionStateNextFrame,
+    statusMessage,
+    workspacePath,
+    workspaceTree,
+  }), [
+    activeComposerMenu,
+    activeOverlayPanel,
+    activeSession,
+    activeSessionPath,
+    agentState,
+    canChooseProvider,
+    canSend,
+    composerHeight,
+    composerState,
+    configuredProviders,
+    deletingSessionPath,
+    handleComposerKeyDown,
+    handleCreateSession,
+    handleDeleteSession,
+    handleModelInputCommit,
+    handleOpenSession,
+    handleProviderSelectionChange,
+    handleSelectModel,
+    handleSubmit,
+    hasConfiguredProviders,
+    iconTheme,
+    isCreatingSession,
+    isLoading,
+    isModelInputFullySelected,
+    isResizingComposer,
+    isSwitchingModel,
+    liveTools,
+    modelInputValue,
+    modelMenuHeight,
+    modelPlaceholder,
+    modelSuggestions,
+    onOpenMessageFile,
+    onOpenProviderSettings,
+    panelError,
+    providerMenuHeight,
+    renderedMessages,
+    resolvedSelectedProviderValue,
+    roundFileChangesByMessageId,
+    sessionStatus,
+    statusMessage,
+    workspacePath,
+    workspaceTree,
+  ])
+
+  return (
+    <AgentContext.Provider value={contextValue}>
+      {children}
+    </AgentContext.Provider>
+  )
+}
+
+function AgentSessionTree({
+  className,
+  onRequestClose,
+}: AgentSessionTreeProps) {
+  const {
+    activeSessionPath,
+    agentState,
+    deletingSessionPath,
+    handleCreateSession,
+    handleDeleteSession,
+    handleOpenSession,
+    isCreatingSession,
+    workspacePath,
+  } = useAgentContext()
+  const treeEntries = useMemo(() => buildFlatAgentSessionTreeEntries(agentState.sessions), [agentState.sessions])
+  const sessionPathByTreePath = useMemo(() => {
+    const nextMap = new Map<string, string>()
+    treeEntries.forEach(({ session, treePath }) => {
+      nextMap.set(treePath, session.path)
+    })
+    return nextMap
+  }, [treeEntries])
+  const treeSelectionStateRef = useRef({
+    activeSessionPath,
+    handleOpenSession,
+    onRequestClose,
+    sessionPathByTreePath,
+  })
+  const treePaths = useMemo(() => {
+    if (sessionPathByTreePath.size === 0) {
+      return [AGENT_SESSION_TREE_EMPTY_PATH]
+    }
+
+    return [...sessionPathByTreePath.keys()]
+  }, [sessionPathByTreePath])
+  const activeTreePath = useMemo(() => {
+    if (!activeSessionPath) {
+      return null
+    }
+
+    for (const [treePath, sessionPath] of sessionPathByTreePath.entries()) {
+      if (sessionPath === activeSessionPath) {
+        return treePath
+      }
+    }
+
+    return null
+  }, [activeSessionPath, sessionPathByTreePath])
+
+  useEffect(() => {
+    treeSelectionStateRef.current = {
+      activeSessionPath,
+      handleOpenSession,
+      onRequestClose,
+      sessionPathByTreePath,
+    }
+  }, [activeSessionPath, handleOpenSession, onRequestClose, sessionPathByTreePath])
+
+  const { model } = useFileTree({
+    composition: {
+      contextMenu: {
+        buttonVisibility: 'when-needed',
+        enabled: true,
+        triggerMode: 'both',
+      },
+    },
+    id: 'agent-session-tree',
+    initialExpansion: 'open',
+    initialSelectedPaths: activeTreePath ? [activeTreePath] : [],
+    itemHeight: 34,
+    onSelectionChange: (selectedPaths) => {
+      const {
+        activeSessionPath: latestActiveSessionPath,
+        handleOpenSession: latestHandleOpenSession,
+        onRequestClose: latestOnRequestClose,
+        sessionPathByTreePath: latestSessionPathByTreePath,
+      } = treeSelectionStateRef.current
+      const selectedPath = selectedPaths[0]
+      if (!selectedPath || selectedPath === AGENT_SESSION_TREE_EMPTY_PATH) {
+        return
+      }
+
+      const sessionPath = latestSessionPathByTreePath.get(selectedPath)
+      if (!sessionPath || sessionPath === latestActiveSessionPath) {
+        return
+      }
+
+      void latestHandleOpenSession(sessionPath).then(() => {
+        latestOnRequestClose?.()
+      })
+    },
+    paths: treePaths,
+    search: true,
+    unsafeCSS: AGENT_SESSION_TREE_CSS,
+  })
+
+  useEffect(() => {
+    model.resetPaths(treePaths)
+  }, [model, treePaths])
+
+  useEffect(() => {
+    if (!activeTreePath) {
+      return
+    }
+
+    model.getItem(activeTreePath)?.select()
+    model.focusPath(activeTreePath)
+    model.scrollToPath(activeTreePath, { offset: 'nearest' })
+  }, [activeTreePath, model])
+
+  const activeSession = activeSessionPath
+    ? agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
+    : null
+
+  return (
+    <div className={`agent-session-tree-shell${className ? ` ${className}` : ''}`}>
+      <div className='agent-session-tree-header'>
+        <div className='agent-session-tree-title'>
+          <span className='agent-session-tree-eyebrow'>Agent</span>
+          <span className='agent-session-tree-current'>
+            {activeSession ? formatSessionLabel(activeSession.name) : 'Sessions'}
+          </span>
+        </div>
+        <button
+          type='button'
+          disabled={!workspacePath || isCreatingSession}
+          className='agent-toolbar-button agent-session-tree-create'
+          aria-label='Create session'
+          onClick={() => {
+            void handleCreateSession()
+          }}
+        >
+          <AddLine size={16} />
+        </button>
+      </div>
+
+      <FileTree
+        className='agent-session-tree'
+        model={model}
+        aria-label='Agent sessions'
+        renderContextMenu={(item, context) => {
+          const sessionPath = sessionPathByTreePath.get(item.path)
+          if (!sessionPath) {
+            return null
+          }
+
+          const isDeleting = deletingSessionPath === sessionPath
+
+          return (
+            <div className='agent-session-tree-menu'>
+              <button
+                type='button'
+                className='agent-session-tree-menu-item'
+                disabled={isDeleting}
+                onClick={() => {
+                  context.close({ restoreFocus: false })
+                  void handleDeleteSession(sessionPath)
+                }}
+              >
+                <span>删除</span>
+              </button>
+            </div>
+          )
+        }}
+      />
+    </div>
+  )
+}
+
+function AgentChatSurface() {
+  const {
+    activeComposerMenu,
+    activeOverlayPanel,
+    activeSession,
+    activeSessionPath,
+    agentState,
+    canChooseProvider,
+    canSend,
+    composerHeight,
+    composerResizeStateRef,
+    composerState,
+    configuredProviders,
+    handleComposerKeyDown,
+    handleCreateSession,
+    handleDeleteSession,
+    handleModelInputCommit,
+    handleOpenSession,
+    handleProviderSelectionChange,
+    handleSelectModel,
+    handleSubmit,
+    hasConfiguredProviders,
+    iconTheme,
+    isCreatingSession,
+    deletingSessionPath,
+    isLoading,
+    isModelInputFullySelected,
+    isResizingComposer,
+    isSwitchingModel,
+    messagesScrollRef,
+    modelFieldRef,
+    modelInputRef,
+    modelInputValue,
+    modelMenuHeight,
+    modelPlaceholder,
+    modelSuggestions,
+    onOpenMessageFile,
+    onOpenProviderSettings,
+    overlayPanelRef,
+    panelError,
+    providerMenuHeight,
+    renderedMessages,
+    resolvedSelectedProviderValue,
+    roundFileChangesByMessageId,
+    sessionButtonRef,
+    sessionStatus,
+    setActiveComposerMenu,
+    setActiveOverlayPanel,
+    setComposerState,
+    setIsModelInputFullySelected,
+    setIsResizingComposer,
+    setModelDrafts,
+    setModelInputValue,
+    setPanelError,
+    syncModelInputSelectionState,
+    syncModelInputSelectionStateNextFrame,
+    statusMessage,
+    workspacePath,
+    workspaceTree,
+  } = useAgentContext()
+
   return (
     <div className='agent-shell'>
       <div className='agent-threadbar'>
@@ -1995,7 +2535,6 @@ export function AgentSidebar({
                             <span className='agent-select-item-meta'>{formatSessionTime(session.modifiedAt)}</span>
                           </div>
                         </button>
-
                         <Button
                           aria-label='Delete session'
                           isIconOnly
@@ -2279,4 +2818,19 @@ export function AgentSidebar({
       </form>
     </div>
   )
+}
+
+function AgentSidebar(props: AgentSidebarProps) {
+  return (
+    <AgentProvider {...props}>
+      <AgentChatSurface />
+    </AgentProvider>
+  )
+}
+
+export {
+  AgentChatSurface,
+  AgentProvider,
+  AgentSessionTree,
+  AgentSidebar,
 }

@@ -1,5 +1,6 @@
 import { type DragEvent as ReactDragEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { CloseLine, GitCompareLine } from '@mingcute/react'
+import { Icon } from '@iconify/react'
 import {
   reorderWorkspaceTabs,
   type TabDropPosition,
@@ -25,6 +26,10 @@ type DragTarget = {
 }
 
 function getBaseName(tab: WorkspaceDisplayTab) {
+  if (tab.kind === 'fixed-panel') {
+    return tab.fixedTabKind === 'file-panel' ? '文件' : 'Git'
+  }
+
   if (tab.kind === 'settings') {
     return '设置'
   }
@@ -47,6 +52,10 @@ function getRelativePath(rootPath: string, filePath: string) {
 }
 
 function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab, hasDuplicateName: boolean) {
+  if (tab.kind === 'fixed-panel') {
+    return null
+  }
+
   if (tab.kind === 'settings') {
     return 'Application'
   }
@@ -76,7 +85,21 @@ function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab,
 }
 
 function isReorderableTab(tab: WorkspaceDisplayTab): tab is WorkspaceTab {
-  return tab.kind !== 'settings'
+  return tab.kind !== 'settings' && tab.kind !== 'fixed-panel'
+}
+
+function getTabTitle(tab: WorkspaceDisplayTab) {
+  if (tab.kind === 'fixed-panel') {
+    return tab.fixedTabKind === 'file-panel' ? '文件' : 'Git'
+  }
+
+  const titleParts = [
+    tab.kind === 'diff' ? tab.diff.change.path : tab.filePath,
+    !tab.exists ? 'Missing from workspace. Save to recreate it.' : null,
+    tab.isDirty ? 'Unsaved changes' : null,
+  ]
+
+  return titleParts.filter(Boolean).join('\n')
 }
 
 function resolveDropPosition(event: ReactDragEvent<HTMLElement>, element: HTMLElement): TabDropPosition {
@@ -391,13 +414,8 @@ export function FileTabs({
           const baseName = getBaseName(tab)
           const metaLabel = getTabMetaLabel(workspacePath, tab, duplicateNameSet.has(baseName))
           const isActive = activeTabId === tab.id
-          const title = [
-            tab.kind === 'diff' ? tab.diff.change.path : tab.filePath,
-            !tab.exists ? 'Missing from workspace. Save to recreate it.' : null,
-            tab.isDirty ? 'Unsaved changes' : null,
-          ]
-            .filter(Boolean)
-            .join('\n')
+          const isPinned = tab.kind === 'fixed-panel' || tab.kind === 'settings'
+          const title = getTabTitle(tab)
 
           return (
             <div
@@ -405,9 +423,9 @@ export function FileTabs({
               ref={(element) => {
                 tabContainerRefs.current[tab.id] = element
               }}
-              className={`file-tab${isActive ? ' is-active' : ''}${tab.isDirty ? ' is-dirty' : ''}${tab.exists ? '' : ' is-missing'}${draggingTabId === tab.id ? ' is-drag-source' : ''}`}
+              className={`file-tab${isActive ? ' is-active' : ''}${tab.isDirty ? ' is-dirty' : ''}${tab.exists ? '' : ' is-missing'}${draggingTabId === tab.id ? ' is-drag-source' : ''}${isPinned ? ' is-pinned' : ''}`}
               data-active={isActive ? 'true' : 'false'}
-              data-reorderable={tab.kind === 'settings' ? 'false' : 'true'}
+              data-reorderable={isReorderableTab(tab) ? 'true' : 'false'}
               data-tab-id={tab.id}
             >
               <button
@@ -415,7 +433,7 @@ export function FileTabs({
                   tabRefs.current[tab.id] = element
                 }}
                 type='button'
-                draggable={tab.kind !== 'settings'}
+                draggable={isReorderableTab(tab)}
                 role='tab'
                 aria-selected={isActive}
                 aria-controls='editor-content-panel'
@@ -426,7 +444,7 @@ export function FileTabs({
                   onActivate(tab.id)
                 }}
                 onDragStart={(event) => {
-                  if (tab.kind === 'settings') {
+                  if (!isReorderableTab(tab)) {
                     event.preventDefault()
                     return
                   }
@@ -446,6 +464,10 @@ export function FileTabs({
                   cleanupDragPreview()
                 }}
                 onAuxClick={(event) => {
+                  if (isPinned) {
+                    return
+                  }
+
                   if (event.button !== 1) {
                     return
                   }
@@ -478,24 +500,34 @@ export function FileTabs({
                   }
                 }}
               >
+                {tab.kind === 'fixed-panel' ? (
+                  <Icon
+                    icon={tab.fixedTabKind === 'file-panel' ? 'lucide:files' : 'lucide:git-branch'}
+                    width={16}
+                    height={16}
+                    className='file-tab-leading-icon'
+                  />
+                ) : null}
                 <span className='file-tab-label'>{baseName}</span>
                 {metaLabel ? <span className='file-tab-meta'>{metaLabel}</span> : null}
               </button>
 
-              <div className='file-tab-actions'>
-                <button
-                  type='button'
-                  className='file-tab-close'
-                  aria-label={`Close ${baseName}`}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onClose(tab.id)
-                  }}
-                >
-                  <span className='file-tab-dirty-indicator' aria-hidden='true' />
-                  <CloseLine size={16} />
-                </button>
-              </div>
+              {!isPinned ? (
+                <div className='file-tab-actions'>
+                  <button
+                    type='button'
+                    className='file-tab-close'
+                    aria-label={`Close ${baseName}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onClose(tab.id)
+                    }}
+                  >
+                    <span className='file-tab-dirty-indicator' aria-hidden='true' />
+                    <CloseLine size={16} />
+                  </button>
+                </div>
+              ) : null}
             </div>
           )
         })}
