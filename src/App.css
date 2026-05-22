@@ -78,8 +78,6 @@
   background: var(--surface);
 }
 
-.app-shell[data-app-layout='agent'] .panel-editor .agent-floating-panel,
-.app-shell[data-app-layout='agent'] .panel-editor .agent-session-option,
 .app-shell[data-app-layout='agent'] .panel-editor .agent-messages-scroll,
 .app-shell[data-app-layout='agent'] .panel-editor .agent-messages-scroll .app-scroll-area-viewport,
 .app-shell[data-app-layout='agent'] .panel-editor .agent-messages-scroll .app-scroll-area-content {
@@ -121,7 +119,7 @@
 }
 
 .app-shell[data-app-layout='agent'] .panel-editor .agent-threadbar {
-  padding-left: 16px;
+  padding-left: 6px;
   padding-right: 16px;
 }
 
@@ -130,7 +128,7 @@
 }
 
 .app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-editor .agent-threadbar {
-  padding-left: var(--left-panel-content-inset);
+  padding-left: calc(var(--left-panel-content-inset) - 10px);
 }
 
 .app-shell::before {
@@ -500,7 +498,7 @@ body:has([data-slot='alert-dialog-backdrop']) .left-chrome-actions {
 /* When the right drawer expands to the full viewport width on narrow shells,
    the threadbar still needs to clear the macOS traffic lights on the left. */
 .panel-agent-drawer[data-platform='macos'][data-full-width='true'] .agent-threadbar {
-  padding-left: var(--left-panel-content-inset);
+  padding-left: calc(var(--left-panel-content-inset) - 10px);
 }
 
 .panel-resize-slot {
@@ -3090,7 +3088,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   gap: 4px;
   flex-shrink: 0;
   min-height: var(--chrome-height);
-  padding: 0 var(--right-panel-content-inset) 0 16px;
+  padding: 0 var(--right-panel-content-inset) 0 6px;
 }
 
 .agent-session-select {
@@ -3151,54 +3149,49 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-session-trigger {
   display: flex;
   align-items: center;
-  width: 100%;
-  min-height: 37px;
-  justify-content: space-between;
-  padding: 0;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 100%;
+  overflow: hidden;
+  align-self: center;
+  margin-left: 0;
+  padding: 4px 10px;
   border: 0;
-  border-radius: 0;
+  border-radius: 6px;
   background: transparent;
-  transition: background-color 140ms ease, color 140ms ease;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-align: left;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 120ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
-.agent-session-trigger:hover,
+.agent-session-trigger:hover:not(:disabled),
 .agent-session-trigger.is-open {
-  background: transparent;
+  background: var(--surface-tertiary);
+  color: var(--foreground);
 }
 
 .agent-session-trigger:disabled {
-  opacity: 0.55;
+  cursor: default;
+  opacity: 0.65;
 }
 
 .agent-select-current {
   display: block;
   overflow: hidden;
-  color: var(--foreground);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-select-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.agent-select-item-title {
-  overflow: hidden;
-  color: var(--foreground);
+  color: inherit;
   font-size: 13px;
   font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-select-item-meta {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
+  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3223,23 +3216,28 @@ body.workspace-tree-dragging .workspace-tree-row {
   top: var(--chrome-height);
   left: 0;
   right: 0;
+  bottom: 0;
   z-index: 12;
   pointer-events: none;
 }
 
 .agent-floating-panel {
   pointer-events: auto;
-  width: 100%;
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: auto;
+  width: min(360px, calc(100% - 24px));
+  height: min(320px, calc(100% - 32px));
   max-height: min(416px, calc(100% - 128px));
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  border-top: 1px solid var(--separator);
-  border-bottom: 1px solid var(--separator);
-  border-left: 0;
-  border-right: 0;
-  border-radius: 0;
-  background: var(--background);
-  box-shadow: none;
-  backdrop-filter: none;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--overlay);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(22px);
 }
 
 .agent-auth-form {
@@ -3317,93 +3315,17 @@ body.workspace-tree-dragging .workspace-tree-row {
   color: var(--muted);
 }
 
-.agent-overlay-scroll {
-  display: block;
-  min-height: 0;
-  max-height: min(320px, calc(100vh - 240px));
-}
-
-.agent-overlay-scroll-viewport {
-  height: auto;
-  max-height: min(320px, calc(100vh - 240px));
-  overflow-y: auto;
-}
-
-.agent-session-list {
-  display: grid;
-  gap: 0;
-  padding: 0;
-}
-
-.agent-session-option {
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: var(--background);
-  transition: background-color 140ms ease;
-}
-
-.agent-session-option+.agent-session-option {
-  border-top: 1px solid var(--separator);
-}
-
-.agent-session-option:hover,
-.agent-session-option:focus-within {
-  background: var(--surface-tertiary);
-}
-
-.agent-session-option.is-active {
-  background: var(--surface-tertiary);
-}
-
-.agent-session-select-button {
-  flex: 1;
-  min-width: 0;
-  padding: 13px 0 13px 16px;
-  border: 0;
-  background: transparent;
-  text-align: left;
-}
-
-.agent-session-select-button:disabled {
-  opacity: 0.55;
-}
-
-.agent-session-delete-button {
-  align-self: center;
-  flex-shrink: 0;
-  min-width: 32px;
-  width: 32px;
-  height: 32px;
-  margin-right: 8px;
-  border-radius: 11px;
-  color: var(--muted);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 140ms ease, color 140ms ease, background-color 140ms ease;
-}
-
-.agent-session-option:hover .agent-session-delete-button,
-.agent-session-option:focus-within .agent-session-delete-button {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.agent-session-delete-button:hover {
-  color: var(--danger-foreground);
-  background: var(--danger);
-}
-
 .agent-session-tree-shell {
   display: flex;
   flex: 1;
   min-height: 0;
   flex-direction: column;
   padding: 8px 10px;
-  background: var(--background);
+  background: transparent;
+}
+
+.agent-session-tree-floating {
+  height: 100%;
 }
 
 .agent-session-new-button {
@@ -4433,7 +4355,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: color-mix(in srgb, var(--background) 94%, var(--surface-secondary));
+  background: var(--overlay);
   box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
   backdrop-filter: blur(22px);
 }
@@ -5119,4 +5041,19 @@ body.workspace-tree-dragging .workspace-tree-row {
   min-height: 0;
   overflow: hidden;
   background: var(--surface);
+}
+
+/* Unified dropdown menu popover styles */
+.workspace-tree-popover [data-slot="content"],
+.settings-select-popover [data-slot="content"] {
+  background: var(--overlay) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18) !important;
+  backdrop-filter: blur(22px) !important;
+}
+
+.workspace-tree-popover [role="menuitem"][data-hover="true"]:not([data-color="danger"]),
+.settings-select-popover [role="option"][data-hover="true"]:not([data-color="danger"]) {
+  background: color-mix(in srgb, var(--surface-tertiary) 86%, var(--accent) 14%) !important;
 }

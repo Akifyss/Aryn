@@ -112,7 +112,7 @@ function FileRowActions({
               <More1Line size={16} />
             </button>
           </Dropdown.Trigger>
-          <Dropdown.Popover placement='bottom end'>
+          <Dropdown.Popover placement='bottom end' className='workspace-tree-popover'>
             <Dropdown.Menu
               aria-label='File actions'
               onAction={(key) => {

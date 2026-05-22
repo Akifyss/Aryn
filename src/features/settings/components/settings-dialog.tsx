@@ -260,7 +260,7 @@ export function SettingsDialog({
                   <Select.Value />
                   <Select.Indicator />
                 </Select.Trigger>
-                <Select.Popover>
+                <Select.Popover className='settings-select-popover'>
                   <ListBox>
                     {iconThemeOptions.map((option) => (
                       <ListBox.Item key={option.key} id={option.key} textValue={option.label}>
@@ -317,7 +317,7 @@ export function SettingsDialog({
                   <Select.Value />
                   <Select.Indicator />
                 </Select.Trigger>
-                <Select.Popover>
+                <Select.Popover className='settings-select-popover'>
                   <ListBox>
                     <ListBox.Item key='right' id='right' textValue='右侧'>
                       右侧

@@ -79,6 +79,7 @@ type AgentSurfaceProps = {
 type AgentSessionTreeProps = {
   className?: string
   onRequestClose?: () => void
+  id?: string
 }
 
 type AgentProviderProps = AgentSurfaceProps & {
@@ -166,7 +167,7 @@ const AGENT_SESSION_TREE_CSS = `
   :host {
     --trees-fg-override: var(--muted);
     --trees-fg-muted-override: var(--muted);
-    --trees-bg-override: var(--background);
+    --trees-bg-override: transparent;
     --trees-bg-muted-override: var(--surface-tertiary);
     --trees-accent-override: var(--accent);
     --trees-border-color-override: var(--separator);
@@ -186,7 +187,7 @@ const AGENT_SESSION_TREE_CSS = `
     --trees-action-lane-width-override: 28px;
     --trees-context-menu-trigger-inline-offset: 12px;
     --trees-scrollbar-gutter-override: 0px;
-    background: var(--background);
+    background: transparent;
   }
 
   [data-item-section='spacing'] {
@@ -342,15 +343,6 @@ function useAgentContext() {
   }
 
   return context
-}
-
-function formatSessionTime(value: string) {
-  return new Intl.DateTimeFormat('en', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
 }
 
 function formatSessionLabel(name: string | null) {
@@ -2323,6 +2315,7 @@ function AgentProvider({
 function AgentSessionTree({
   className,
   onRequestClose,
+  id = 'agent-session-tree',
 }: AgentSessionTreeProps) {
   const {
     activeSessionSelection,
@@ -2390,7 +2383,7 @@ function AgentSessionTree({
         triggerMode: 'both',
       },
     },
-    id: 'agent-session-tree',
+    id,
     initialExpansion: 'open',
     initialSelectedPaths: activeTreePath ? [activeTreePath] : [],
     itemHeight: 32,
@@ -2645,68 +2638,16 @@ function AgentChatSurface() {
         </div>
       </div>
 
-      {activeOverlayPanel ? (
+      {activeOverlayPanel === 'sessions' ? (
         <div className='agent-overlay-layer'>
           <div ref={overlayPanelRef} className='agent-floating-panel'>
-            {activeOverlayPanel === 'sessions' ? (
-              <AppScrollArea
-                className='agent-overlay-scroll'
-                viewportClassName='agent-overlay-scroll-viewport'
-              >
-                <div className='agent-session-list'>
-                  <div className='agent-session-option'>
-                    <button
-                      type='button'
-                      className='agent-session-select-button'
-                      disabled={!workspacePath || isCreatingSession}
-                      onClick={() => {
-                        void handleCreateSession()
-                      }}
-                    >
-                      <div className='agent-select-item'>
-                        <span className='agent-select-item-title'>New Session</span>
-                      </div>
-                    </button>
-                  </div>
-
-                  {agentState.sessions.map((session) => {
-                    const isActive = session.path === activeSessionPath
-                    const isDeleting = deletingSessionPath === session.path
-
-                    return (
-                      <div key={session.path} className={`agent-session-option ${isActive ? 'is-active' : ''}`}>
-                        <button
-                          type='button'
-                          className='agent-session-select-button'
-                          disabled={isDeleting}
-                          onClick={() => {
-                            void handleOpenSession(session.path)
-                          }}
-                        >
-                          <div className='agent-select-item'>
-                            <span className='agent-select-item-title'>{session.name ?? 'Untitled session'}</span>
-                            <span className='agent-select-item-meta'>{formatSessionTime(session.modifiedAt)}</span>
-                          </div>
-                        </button>
-                        <Button
-                          aria-label='Delete session'
-                          isIconOnly
-                          isDisabled={isDeleting}
-                          size='sm'
-                          variant='ghost'
-                          className='agent-session-delete-button'
-                          onPress={() => {
-                            void handleDeleteSession(session.path)
-                          }}
-                        >
-                          <Delete2Line size={14} />
-                        </Button>
-                      </div>
-                    )
-                  })}
-                </div>
-              </AppScrollArea>
-            ) : null}
+            <AgentSessionTree
+              className='agent-session-tree-floating'
+              id='agent-session-tree-floating'
+              onRequestClose={() => {
+                setActiveOverlayPanel(null)
+              }}
+            />
           </div>
         </div>
       ) : null}
