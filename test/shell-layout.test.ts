@@ -24,9 +24,9 @@ describe('shell layout helpers', () => {
 
   it('returns stable chrome safe-area variables for each supported platform', () => {
     expect(getShellChromeVars('macos')).toMatchObject({
-      '--left-panel-toggle-anchor': '76px',
+      '--left-panel-toggle-anchor': '84px',
       '--right-panel-toggle-anchor': '12px',
-      '--left-panel-content-inset': '116px',
+      '--left-panel-content-inset': '124px',
       '--right-panel-content-inset': '52px',
     })
 
@@ -35,6 +35,13 @@ describe('shell layout helpers', () => {
       '--right-panel-toggle-anchor': '156px',
       '--left-panel-content-inset': '52px',
       '--right-panel-content-inset': '196px',
+    })
+  })
+
+  it('keeps macOS fullscreen chrome aligned with the screen edge', () => {
+    expect(getShellChromeVars('macos', { isFullScreen: true })).toMatchObject({
+      '--left-panel-toggle-anchor': '12px',
+      '--left-panel-content-inset': '52px',
     })
   })
 })
