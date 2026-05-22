@@ -93,6 +93,7 @@ type ComposerState = {
 }
 
 type AuthProviderKey = 'google' | 'openai' | 'openrouter'
+type AgentSessionSelection = { kind: 'new' } | { kind: 'session', sessionPath: string }
 
 const KNOWN_AGENT_PROVIDERS = ['google', 'openai', 'openrouter'] as const
 const MARKDOWN_PLUGINS = [remarkGfm]
@@ -170,14 +171,14 @@ const AGENT_SESSION_TREE_CSS = `
     --trees-font-size-override: 13px;
     --trees-font-weight-regular-override: 500;
     --trees-font-weight-semibold-override: 600;
-    --trees-padding-inline-override: 8px;
+    --trees-padding-inline-override: 0px;
     --trees-item-padding-x-override: 10px;
     --trees-item-margin-x-override: 0px;
     --trees-level-gap-override: 0px;
     --trees-icon-width-override: 14px;
     --trees-action-lane-width-override: 28px;
-    --trees-context-menu-trigger-inline-offset: 22px;
-    --trees-scrollbar-gutter-override: 8px;
+    --trees-context-menu-trigger-inline-offset: 12px;
+    --trees-scrollbar-gutter-override: 0px;
     background: var(--background);
   }
 
@@ -216,6 +217,7 @@ type AgentContextValue = {
   activeComposerMenu: 'model' | 'provider' | null
   activeOverlayPanel: 'sessions' | null
   activeSession: AgentWorkspaceState['sessions'][number] | null
+  activeSessionSelection: AgentSessionSelection
   activeSessionPath: string | null
   agentState: AgentWorkspaceState
   canChooseProvider: boolean
@@ -232,6 +234,7 @@ type AgentContextValue = {
   handleOpenSession: (sessionPath: string) => Promise<void>
   handleProviderSelectionChange: (nextProvider: string) => Promise<void>
   handleSelectModel: (modelKey: string) => Promise<void>
+  handleStartNewSession: () => void
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
   hasConfiguredProviders: boolean
   iconTheme?: WorkspaceIconTheme | null
@@ -1326,6 +1329,7 @@ function AgentProvider({
   const [isThinkingStreaming, setIsThinkingStreaming] = useState(false)
   const [liveTools, setLiveTools] = useState<LiveToolState[]>([])
   const [activeOverlayPanel, setActiveOverlayPanel] = useState<'sessions' | null>(null)
+  const [activeSessionSelection, setActiveSessionSelection] = useState<AgentSessionSelection>({ kind: 'new' })
   const [isLoading, setIsLoading] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [deletingSessionPath, setDeletingSessionPath] = useState<string | null>(null)
@@ -1577,6 +1581,7 @@ function AgentProvider({
       setLiveTools([])
       setPanelError(null)
       setHasLoadedWorkspaceState(false)
+      setActiveSessionSelection({ kind: 'new' })
       return
     }
 
@@ -1588,6 +1593,9 @@ function AgentProvider({
       .then((workspaceState) => window.appApi.loadAgentWorkspace(workspacePath, workspaceState.lastAgentSessionPath))
       .then((nextState) => {
         setAgentState(nextState)
+        setActiveSessionSelection(nextState.activeSession?.sessionPath
+          ? { kind: 'session', sessionPath: nextState.activeSession.sessionPath }
+          : { kind: 'new' })
         const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
         syncModelSelection(nextModelSelection)
         setHasLoadedWorkspaceState(true)
@@ -1683,7 +1691,7 @@ function AgentProvider({
   }, [activeComposerMenu])
 
   const renderedMessages = useMemo(() => {
-    const persistedMessages = agentState.activeSession?.messages ?? []
+    const persistedMessages = activeSessionSelection.kind === 'session' ? agentState.activeSession?.messages ?? [] : []
     const nextMessages = [...persistedMessages]
     const toolMessageIndices = new Map<string, number>()
 
@@ -1730,12 +1738,25 @@ function AgentProvider({
     }
 
     return nextMessages
-  }, [agentState.activeSession?.messages, draftAssistant, draftThinking, isThinkingStreaming, liveTools])
+  }, [activeSessionSelection.kind, agentState.activeSession?.messages, draftAssistant, draftThinking, isThinkingStreaming, liveTools])
+
+  function handleStartNewSession() {
+    setActiveSessionSelection({ kind: 'new' })
+    setComposerState(emptyComposerState)
+    setDraftAssistant('')
+    setDraftThinking('')
+    setIsThinkingStreaming(false)
+    setLiveTools([])
+    setPanelError(null)
+    setActiveOverlayPanel(null)
+  }
 
   async function handleCreateSession() {
     if (!workspacePath) {
       return
     }
+
+    setActiveSessionSelection({ kind: 'new' })
 
     try {
       setIsCreatingSession(true)
@@ -1756,6 +1777,8 @@ function AgentProvider({
     if (!workspacePath) {
       return
     }
+
+    setActiveSessionSelection({ kind: 'session', sessionPath })
 
     try {
       setPanelError(null)
@@ -1795,9 +1818,12 @@ function AgentProvider({
       setIsSwitchingModel(true)
       setPanelError(null)
 
-      if (!agentState.activeSession) {
+      if (activeSessionSelection.kind === 'new' || !agentState.activeSession) {
         const nextState = await window.appApi.createAgentSession(workspacePath)
         setAgentState(nextState)
+        if (nextState.activeSession?.sessionPath) {
+          setActiveSessionSelection({ kind: 'session', sessionPath: nextState.activeSession.sessionPath })
+        }
       }
 
       const nextState = await window.appApi.selectAgentModel(modelKey)
@@ -1848,9 +1874,12 @@ function AgentProvider({
     try {
       setPanelError(null)
 
-      if (!agentState.activeSession) {
+      if (activeSessionSelection.kind === 'new' || !agentState.activeSession) {
         const nextState = await window.appApi.createAgentSession(workspacePath)
         setAgentState(nextState)
+        if (nextState.activeSession?.sessionPath) {
+          setActiveSessionSelection({ kind: 'session', sessionPath: nextState.activeSession.sessionPath })
+        }
       }
 
       await window.appApi.sendAgentPrompt(trimmedPrompt, streamingBehavior)
@@ -1922,7 +1951,7 @@ function AgentProvider({
   const resolvedSelectedProviderValue = configuredProviders.includes(selectedProviderValue as AuthProviderKey)
     ? selectedProviderValue
     : configuredProviders[0] ?? selectedProviderValue
-  const activeSessionPath = agentState.activeSession?.sessionPath ?? null
+  const activeSessionPath = activeSessionSelection.kind === 'session' ? activeSessionSelection.sessionPath : null
   const activeSession = agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
   const providerModelIds = Array.from(new Set(
     agentState.runtime.availableModels
@@ -2119,6 +2148,7 @@ function AgentProvider({
     activeComposerMenu,
     activeOverlayPanel,
     activeSession,
+    activeSessionSelection,
     activeSessionPath,
     agentState,
     canChooseProvider,
@@ -2135,6 +2165,7 @@ function AgentProvider({
     handleOpenSession,
     handleProviderSelectionChange,
     handleSelectModel,
+    handleStartNewSession,
     handleSubmit,
     hasConfiguredProviders,
     iconTheme,
@@ -2178,6 +2209,7 @@ function AgentProvider({
     activeComposerMenu,
     activeOverlayPanel,
     activeSession,
+    activeSessionSelection,
     activeSessionPath,
     agentState,
     canChooseProvider,
@@ -2193,6 +2225,7 @@ function AgentProvider({
     handleOpenSession,
     handleProviderSelectionChange,
     handleSelectModel,
+    handleStartNewSession,
     handleSubmit,
     hasConfiguredProviders,
     iconTheme,
@@ -2231,13 +2264,13 @@ function AgentSessionTree({
   onRequestClose,
 }: AgentSessionTreeProps) {
   const {
+    activeSessionSelection,
     activeSessionPath,
     agentState,
     deletingSessionPath,
-    handleCreateSession,
     handleDeleteSession,
     handleOpenSession,
-    isCreatingSession,
+    handleStartNewSession,
     workspacePath,
   } = useAgentContext()
   const treeEntries = useMemo(() => buildFlatAgentSessionTreeEntries(agentState.sessions), [agentState.sessions])
@@ -2250,7 +2283,9 @@ function AgentSessionTree({
   }, [treeEntries])
   const treeSelectionStateRef = useRef({
     activeSessionPath,
+    activeSessionSelection,
     handleOpenSession,
+    isSyncingSelection: false,
     onRequestClose,
     sessionPathByTreePath,
   })
@@ -2278,11 +2313,13 @@ function AgentSessionTree({
   useEffect(() => {
     treeSelectionStateRef.current = {
       activeSessionPath,
+      activeSessionSelection,
       handleOpenSession,
+      isSyncingSelection: treeSelectionStateRef.current.isSyncingSelection,
       onRequestClose,
       sessionPathByTreePath,
     }
-  }, [activeSessionPath, handleOpenSession, onRequestClose, sessionPathByTreePath])
+  }, [activeSessionSelection, activeSessionPath, handleOpenSession, onRequestClose, sessionPathByTreePath])
 
   const { model } = useFileTree({
     composition: {
@@ -2295,21 +2332,31 @@ function AgentSessionTree({
     id: 'agent-session-tree',
     initialExpansion: 'open',
     initialSelectedPaths: activeTreePath ? [activeTreePath] : [],
-    itemHeight: 34,
+    itemHeight: 32,
     onSelectionChange: (selectedPaths) => {
       const {
         activeSessionPath: latestActiveSessionPath,
+        activeSessionSelection: latestActiveSessionSelection,
         handleOpenSession: latestHandleOpenSession,
+        isSyncingSelection,
         onRequestClose: latestOnRequestClose,
         sessionPathByTreePath: latestSessionPathByTreePath,
       } = treeSelectionStateRef.current
-      const selectedPath = selectedPaths[0]
+      if (isSyncingSelection) {
+        return
+      }
+
+      const selectedPath = selectedPaths.find((path) => (
+        path !== AGENT_SESSION_TREE_EMPTY_PATH
+        && (latestActiveSessionSelection.kind !== 'session'
+          || latestSessionPathByTreePath.get(path) !== latestActiveSessionPath)
+      )) ?? selectedPaths.find((path) => path !== AGENT_SESSION_TREE_EMPTY_PATH)
       if (!selectedPath || selectedPath === AGENT_SESSION_TREE_EMPTY_PATH) {
         return
       }
 
       const sessionPath = latestSessionPathByTreePath.get(selectedPath)
-      if (!sessionPath || sessionPath === latestActiveSessionPath) {
+      if (!sessionPath || latestActiveSessionSelection.kind === 'session' && sessionPath === latestActiveSessionPath) {
         return
       }
 
@@ -2318,7 +2365,6 @@ function AgentSessionTree({
       })
     },
     paths: treePaths,
-    search: true,
     unsafeCSS: AGENT_SESSION_TREE_CSS,
   })
 
@@ -2327,70 +2373,78 @@ function AgentSessionTree({
   }, [model, treePaths])
 
   useEffect(() => {
+    treeSelectionStateRef.current.isSyncingSelection = true
+    model.getSelectedPaths().forEach((selectedPath) => {
+      model.getItem(selectedPath)?.deselect()
+    })
+
+    if (activeSessionSelection.kind === 'new') {
+      treeSelectionStateRef.current.isSyncingSelection = false
+      return
+    }
+
     if (!activeTreePath) {
+      treeSelectionStateRef.current.isSyncingSelection = false
       return
     }
 
     model.getItem(activeTreePath)?.select()
     model.focusPath(activeTreePath)
     model.scrollToPath(activeTreePath, { offset: 'nearest' })
-  }, [activeTreePath, model])
-
-  const activeSession = activeSessionPath
-    ? agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
-    : null
+    treeSelectionStateRef.current.isSyncingSelection = false
+  }, [activeSessionSelection.kind, activeTreePath, model])
 
   return (
     <div className={`agent-session-tree-shell${className ? ` ${className}` : ''}`}>
-      <div className='agent-session-tree-header'>
-        <div className='agent-session-tree-title'>
-          <span className='agent-session-tree-eyebrow'>Agent</span>
-          <span className='agent-session-tree-current'>
-            {activeSession ? formatSessionLabel(activeSession.name) : 'Sessions'}
-          </span>
-        </div>
-        <button
-          type='button'
-          disabled={!workspacePath || isCreatingSession}
-          className='agent-toolbar-button agent-session-tree-create'
-          aria-label='Create session'
-          onClick={() => {
-            void handleCreateSession()
-          }}
-        >
-          <AddLine size={16} />
-        </button>
-      </div>
-
-      <FileTree
-        className='agent-session-tree'
-        model={model}
-        aria-label='Agent sessions'
-        renderContextMenu={(item, context) => {
-          const sessionPath = sessionPathByTreePath.get(item.path)
-          if (!sessionPath) {
-            return null
-          }
-
-          const isDeleting = deletingSessionPath === sessionPath
-
-          return (
-            <div className='agent-session-tree-menu'>
-              <button
-                type='button'
-                className='agent-session-tree-menu-item'
-                disabled={isDeleting}
-                onClick={() => {
-                  context.close({ restoreFocus: false })
-                  void handleDeleteSession(sessionPath)
-                }}
-              >
-                <span>删除</span>
-              </button>
-            </div>
-          )
+      <button
+        type='button'
+        disabled={!workspacePath}
+        className={`agent-session-new-button${activeSessionSelection.kind === 'new' ? ' is-active' : ''}`}
+        aria-label='Start new conversation'
+        onClick={() => {
+          handleStartNewSession()
+          onRequestClose?.()
         }}
-      />
+      >
+        <AddLine size={18} />
+        <span>新对话</span>
+      </button>
+
+      <AppScrollArea
+        className='agent-session-tree-scroll'
+        contentClassName='agent-session-tree-scroll-content'
+        viewportClassName='agent-session-tree-scroll-viewport'
+      >
+        <FileTree
+          className='agent-session-tree'
+          model={model}
+          aria-label='Agent sessions'
+          renderContextMenu={(item, context) => {
+            const sessionPath = sessionPathByTreePath.get(item.path)
+            if (!sessionPath) {
+              return null
+            }
+
+            const isDeleting = deletingSessionPath === sessionPath
+
+            return (
+              <div className='agent-session-tree-menu'>
+                <button
+                  type='button'
+                  className='agent-session-tree-menu-item'
+                  disabled={isDeleting}
+                  onClick={() => {
+                    context.close({ restoreFocus: false })
+                    void handleDeleteSession(sessionPath)
+                  }}
+                >
+                  <span>删除</span>
+                </button>
+              </div>
+            )
+          }}
+        />
+      </AppScrollArea>
     </div>
   )
 }

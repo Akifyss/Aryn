@@ -1183,6 +1183,10 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   padding-left: 1px;
 }
 
+.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroller {
+  padding-left: 0;
+}
+
 .file-tabs-drag-spacer {
   flex: 1 1 auto;
   min-width: 0;
@@ -1286,6 +1290,11 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
 
 /* When sidebar is visible, the very first tab shouldn't have a left border or negative margin (to avoid redundant line with sidebar) */
 .app-shell[data-left-collapsed='false'] .file-tab:first-child {
+  border-left-width: 0;
+  margin-left: 0;
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent .file-tab:first-child {
   border-left-width: 0;
   margin-left: 0;
 }
@@ -3352,54 +3361,70 @@ body.workspace-tree-dragging .workspace-tree-row {
   flex: 1;
   min-height: 0;
   flex-direction: column;
+  padding: 8px 10px;
   background: var(--background);
 }
 
-.agent-session-tree-header {
+.agent-session-new-button {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
-  min-height: 44px;
-  padding: 0 8px 0 16px;
-  border-bottom: 1px solid var(--separator);
-}
-
-.agent-session-tree-title {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.agent-session-tree-eyebrow {
+  width: 100%;
+  min-height: 32px;
+  margin: 0 0 4px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
-
-.agent-session-tree-current {
-  overflow: hidden;
-  color: var(--foreground);
+  cursor: pointer;
+  font: inherit;
   font-size: 13px;
-  font-weight: 600;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 500;
+  box-sizing: border-box;
+  text-align: left;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
 }
 
-.agent-session-tree-create {
-  flex: 0 0 auto;
+.agent-session-new-button:hover,
+.agent-session-new-button:focus-visible {
+  outline: none;
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+}
+
+.agent-session-new-button.is-active {
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.agent-session-new-button:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .agent-session-tree {
   display: block;
-  flex: 1;
+  height: 100%;
   min-height: 120px;
   min-width: 0;
+  margin: 0;
+}
+
+.agent-session-tree-scroll {
+  flex: 1;
+  min-height: 0;
+  --app-scroll-area-scrollbar-gap: 0px;
+}
+
+.agent-session-tree-scroll-viewport {
+  height: 100%;
+}
+
+.agent-session-tree-scroll-content {
+  height: 100%;
+  min-width: 100%;
 }
 
 .agent-session-tree-menu {
@@ -3449,8 +3474,12 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: min(100%, 800px);
+  max-width: 800px;
   min-height: 100%;
+  margin: 0 auto;
   padding: 16px 16px 32px;
+  box-sizing: border-box;
 }
 
 .agent-empty-chat {
@@ -3808,7 +3837,6 @@ body.workspace-tree-dragging .workspace-tree-row {
   padding: 0;
   border-left: 0;
   border: 1px solid color-mix(in oklab, var(--outline) 50%, transparent);
-  border-radius: 14px;
   background: var(--surface);
   color: var(--muted);
   overflow: hidden;
