@@ -1209,11 +1209,17 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
 .file-tabs-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   padding: 0 10px 0 0;
   border-bottom: 1px solid var(--separator);
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+.app-shell[data-right-collapsed='true'] .file-tabs-actions,
+.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-actions,
+.app-shell[data-app-layout='agent'] .panel-agent-drawer .file-tabs-actions {
+  padding-right: 0;
 }
 
 .file-tabs-scroller::-webkit-scrollbar {
@@ -1422,8 +1428,7 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   color: var(--danger);
 }
 
-.file-tab-close,
-.file-tabs-toolbar-button {
+.file-tab-close {
   position: relative;
   display: flex;
   align-items: center;
@@ -1433,6 +1438,24 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   padding: 0;
   border: 0;
   border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.file-tabs-toolbar-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
