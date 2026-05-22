@@ -129,7 +129,7 @@
   padding-right: var(--right-panel-content-inset);
 }
 
-.app-shell[data-app-layout='agent'][data-platform='macos'][data-left-collapsed='true'] .panel-editor .agent-threadbar {
+.app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-editor .agent-threadbar {
   padding-left: var(--left-panel-content-inset);
 }
 
