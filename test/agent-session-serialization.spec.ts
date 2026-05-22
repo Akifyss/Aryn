@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionEntry } from '@mariozechner/pi-coding-agent'
+import type { SessionEntry } from '@earendil-works/pi-coding-agent'
 import { serializeSessionEntries } from '../electron/main/agent'
 
 describe('agent session serialization', () => {

@@ -1,18 +1,17 @@
 import { lstat, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
-import type { AgentMessage } from '@mariozechner/pi-agent-core'
-import type { AgentSessionEvent } from '@mariozechner/pi-coding-agent'
+import type { AgentMessage } from '@earendil-works/pi-agent-core'
+import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent'
 import {
   AuthStorage,
   createAgentSession,
-  createCodingTools,
   ModelRegistry,
   SessionManager,
   SettingsManager,
   type SessionEntry,
   type AgentSession,
-} from '@mariozechner/pi-coding-agent'
-import { complete, type Api, type AssistantMessage, type Model, type TextContent, type ToolResultMessage, type UserMessage } from '@mariozechner/pi-ai'
+} from '@earendil-works/pi-coding-agent'
+import { complete, type Api, type AssistantMessage, type Model, type TextContent, type ToolResultMessage, type UserMessage } from '@earendil-works/pi-ai'
 import type {
   AgentMessageFileChange,
   AgentClientEvent,
@@ -611,7 +610,7 @@ export class PiAgentManager {
     private readonly options: PiAgentManagerOptions,
   ) {
     this.authStorage = AuthStorage.create(path.join(options.agentDir, 'auth.json'))
-    this.modelRegistry = new ModelRegistry(this.authStorage, path.join(options.agentDir, 'models.json'))
+    this.modelRegistry = ModelRegistry.create(this.authStorage, path.join(options.agentDir, 'models.json'))
   }
 
   async loadWorkspaceState(cwd: string, preferredSessionPath: string | null = null): Promise<AgentWorkspaceState> {
@@ -807,7 +806,7 @@ export class PiAgentManager {
       modelRegistry: this.modelRegistry,
       sessionManager,
       settingsManager,
-      tools: createCodingTools(cwd),
+      tools: ['read', 'bash', 'edit', 'write'],
     })
 
     await this.ensureModelSelected(session)

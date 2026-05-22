@@ -17,10 +17,10 @@ const bundledElectronRuntimeExternals = new Set([
 ])
 
 const bundledElectronPackageExternals = [
-  '@mariozechner/pi-agent-core',
-  '@mariozechner/pi-ai',
-  '@mariozechner/pi-coding-agent',
-  '@mariozechner/pi-tui',
+  '@earendil-works/pi-agent-core',
+  '@earendil-works/pi-ai',
+  '@earendil-works/pi-coding-agent',
+  '@earendil-works/pi-tui',
   '@silvia-odwyer/photon-node',
   ...Object.keys(pkg.dependencies ?? {}),
 ]

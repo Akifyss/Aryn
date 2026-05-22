@@ -344,7 +344,7 @@ function applyDefaultAppIcon() {
   const icon = nativeImage.createFromPath(iconPath)
 
   if (!icon.isEmpty()) {
-    if (process.platform === 'darwin') {
+    if (process.platform === 'darwin' && app.dock) {
       app.dock.setIcon(icon)
     }
 

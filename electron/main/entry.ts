@@ -2,6 +2,7 @@ import { app, dialog } from 'electron'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { assertPiAgentRuntimeCompatible } from './runtime-requirements'
 
 function toErrorText(error: unknown) {
   if (error instanceof Error) {
@@ -44,6 +45,8 @@ function reportStartupError(error: unknown) {
 }
 
 writeStartupMarker('bootstrap-loaded')
+
+assertPiAgentRuntimeCompatible()
 
 if (app.isPackaged) {
   process.env.PI_FORCE_VIRTUAL_MODULES = '1'

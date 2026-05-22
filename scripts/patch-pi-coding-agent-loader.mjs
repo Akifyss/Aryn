@@ -4,7 +4,7 @@ import path from 'node:path'
 const targetPath = path.resolve(
   process.cwd(),
   'node_modules',
-  '@mariozechner',
+  '@earendil-works',
   'pi-coding-agent',
   'dist',
   'core',

@@ -22,7 +22,7 @@
   - Vite / electron-vite：构建与热更新工具链。
 - 编辑器与 AI：
   - MEO / CodeMirror：核心 Markdown 与文本编辑器。
-  - PI Agent (`@mariozechner/pi-coding-agent`)：集成 AI 后端能力。
+  - PI Agent (`@earendil-works/pi-coding-agent`)：集成 AI 后端能力。
 - UI 与 状态管理：
   - 样式 (CSS)：优先使用 [Tailwind CSS v4](https://tailwindcss.com/docs)。
   - 组件库：使用 [HeroUI V3](https://heroui.com/docs/react/getting-started)。
