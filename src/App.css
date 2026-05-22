@@ -128,7 +128,7 @@
 }
 
 .app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-editor .agent-threadbar {
-  padding-left: calc(var(--left-panel-content-inset) - 10px);
+  padding-left: var(--left-panel-content-inset);
 }
 
 .app-shell::before {
@@ -498,7 +498,7 @@ body:has([data-slot='alert-dialog-backdrop']) .left-chrome-actions {
 /* When the right drawer expands to the full viewport width on narrow shells,
    the threadbar still needs to clear the macOS traffic lights on the left. */
 .panel-agent-drawer[data-platform='macos'][data-full-width='true'] .agent-threadbar {
-  padding-left: calc(var(--left-panel-content-inset) - 10px);
+  padding-left: var(--left-panel-content-inset);
 }
 
 .panel-resize-slot {
