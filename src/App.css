@@ -3071,6 +3071,9 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-shell {
+  --agent-messages-block-padding: 16px;
+  --agent-messages-inline-padding: 16px;
+  --agent-messages-bottom-padding: clamp(56px, 6vh, 80px);
   position: relative;
   display: flex;
   flex: 1;
@@ -3508,6 +3511,13 @@ body.workspace-tree-dragging .workspace-tree-row {
   min-height: 0;
 }
 
+.agent-messages-scroll .app-scroll-area-content {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  min-height: 100%;
+}
+
 .agent-messages {
   display: flex;
   flex-direction: column;
@@ -3516,19 +3526,133 @@ body.workspace-tree-dragging .workspace-tree-row {
   max-width: 800px;
   min-height: 100%;
   margin: 0 auto;
-  padding: 16px 16px 32px;
+  padding: var(--agent-messages-block-padding) var(--agent-messages-inline-padding) var(--agent-messages-bottom-padding);
   box-sizing: border-box;
 }
 
-.agent-empty-chat {
-  padding-top: 2px;
+.agent-messages-empty {
+  justify-content: center;
+  padding-top: var(--agent-messages-block-padding);
+  padding-bottom: var(--agent-messages-block-padding);
 }
 
-.agent-empty-chat p {
-  margin: 0;
+.agent-empty-chat {
+  display: grid;
+  justify-items: center;
+  gap: 24px;
+  width: min(100%, 440px);
+  margin: 0 auto;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.65;
+  text-align: center;
+}
+
+.agent-empty-illustration {
+  position: relative;
+  width: 156px;
+  height: 128px;
+}
+
+.agent-empty-sheet {
+  position: absolute;
+  border: 1px solid color-mix(in oklab, var(--separator) 82%, var(--foreground) 18%);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--surface) 94%, var(--accent) 6%), var(--surface));
+  box-shadow: 0 12px 34px color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
+.agent-empty-sheet-back {
+  inset: 16px 26px 12px 34px;
+  transform: rotate(-5deg);
+  background: color-mix(in oklab, var(--surface-secondary) 72%, var(--surface) 28%);
+}
+
+.agent-empty-sheet-front {
+  inset: 8px 18px 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 18px;
+  transform: rotate(2deg);
+}
+
+.agent-empty-sheet-line {
+  display: block;
+  width: 78%;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--muted) 24%, transparent);
+}
+
+.agent-empty-sheet-line-strong {
+  width: 54%;
+  background: color-mix(in oklab, var(--foreground) 28%, transparent);
+}
+
+.agent-empty-sheet-line-short {
+  width: 42%;
+}
+
+.agent-empty-agent-mark {
+  position: absolute;
+  top: 0;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--separator));
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--surface) 88%, var(--accent) 12%);
+  color: var(--accent);
+  box-shadow: 0 10px 26px color-mix(in oklab, var(--accent) 12%, transparent);
+}
+
+.agent-empty-pencil {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  width: 86px;
+  height: 14px;
+  transform: rotate(-28deg);
+  transform-origin: center;
+}
+
+.agent-empty-pencil-tip {
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-right: 12px solid color-mix(in oklab, var(--foreground) 48%, var(--surface));
+}
+
+.agent-empty-pencil-body {
+  flex: 1;
+  height: 12px;
+  border: 1px solid color-mix(in oklab, var(--accent) 32%, var(--separator));
+  border-left: 0;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 32%, var(--surface)), var(--surface-secondary));
+}
+
+.agent-empty-pencil-cap {
+  width: 12px;
+  height: 12px;
+  border: 1px solid color-mix(in oklab, var(--muted) 28%, var(--separator));
+  border-left: 0;
+  border-radius: 0 5px 5px 0;
+  background: var(--surface-tertiary);
+}
+
+.agent-empty-chat h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.45;
 }
 
 .agent-session-status {

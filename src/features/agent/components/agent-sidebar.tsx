@@ -2449,11 +2449,42 @@ function AgentSessionTree({
   )
 }
 
+function AgentNewSessionIllustration() {
+  return (
+    <div className='agent-empty-illustration' aria-hidden='true'>
+      <div className='agent-empty-sheet agent-empty-sheet-back' />
+      <div className='agent-empty-sheet agent-empty-sheet-front'>
+        <span className='agent-empty-sheet-line agent-empty-sheet-line-strong' />
+        <span className='agent-empty-sheet-line' />
+        <span className='agent-empty-sheet-line agent-empty-sheet-line-short' />
+      </div>
+      <div className='agent-empty-agent-mark'>
+        <AiLine size={16} />
+      </div>
+      <div className='agent-empty-pencil'>
+        <span className='agent-empty-pencil-tip' />
+        <span className='agent-empty-pencil-body' />
+        <span className='agent-empty-pencil-cap' />
+      </div>
+    </div>
+  )
+}
+
+function AgentEmptyChat({ isNewConversation }: { isNewConversation: boolean }) {
+  return (
+    <div className='agent-empty-chat'>
+      <AgentNewSessionIllustration />
+      <h2>{isNewConversation ? '新对话已就绪' : '这个 Session 还没有消息'}</h2>
+    </div>
+  )
+}
+
 function AgentChatSurface() {
   const {
     activeComposerMenu,
     activeOverlayPanel,
     activeSession,
+    activeSessionSelection,
     activeSessionPath,
     agentState,
     canChooseProvider,
@@ -2469,6 +2500,7 @@ function AgentChatSurface() {
     handleOpenSession,
     handleProviderSelectionChange,
     handleSelectModel,
+    handleStartNewSession,
     handleSubmit,
     hasConfiguredProviders,
     iconTheme,
@@ -2509,6 +2541,8 @@ function AgentChatSurface() {
     workspacePath,
     workspaceTree,
   } = useAgentContext()
+  const isNewConversation = activeSessionSelection.kind === 'new'
+  const hasEmptyChat = Boolean(workspacePath && renderedMessages.length === 0)
 
   return (
     <div className='agent-shell'>
@@ -2524,7 +2558,7 @@ function AgentChatSurface() {
             }}
           >
             <span className='agent-select-current'>
-              {activeSession ? formatSessionLabel(activeSession.name) : 'Session'}
+              {isNewConversation ? '新对话' : activeSession ? formatSessionLabel(activeSession.name) : 'Session'}
             </span>
           </button>
         </div>
@@ -2532,17 +2566,19 @@ function AgentChatSurface() {
         <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
 
         <div className='agent-threadbar-actions'>
-          <button
-            type='button'
-            disabled={!workspacePath || isCreatingSession}
-            className='agent-toolbar-button'
-            aria-label='Create session'
-            onClick={() => {
-              void handleCreateSession()
-            }}
-          >
-            <AddLine size={16} />
-          </button>
+          {!isNewConversation ? (
+            <button
+              type='button'
+              disabled={!workspacePath || isCreatingSession}
+              className='agent-toolbar-button'
+              aria-label='Start new conversation'
+              onClick={() => {
+                handleStartNewSession()
+              }}
+            >
+              <AddLine size={16} />
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -2622,11 +2658,9 @@ function AgentChatSurface() {
         className='agent-messages-scroll'
         viewportRef={messagesScrollRef}
       >
-        <div className='agent-messages'>
-          {workspacePath && renderedMessages.length === 0 ? (
-            <div className='agent-empty-chat'>
-              <p>Start a session to inspect, edit, or create files in this workspace.</p>
-            </div>
+        <div className={`agent-messages${hasEmptyChat ? ' agent-messages-empty' : ''}`}>
+          {hasEmptyChat ? (
+            <AgentEmptyChat isNewConversation={isNewConversation} />
           ) : renderedMessages.map((message) => {
             const fileChanges = roundFileChangesByMessageId.get(message.id) ?? []
 
