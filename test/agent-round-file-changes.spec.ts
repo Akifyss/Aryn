@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import {
+  findLatestOpenableAgentFileChange,
+  initialAgentFileAutoOpenState,
+  resolveNextAgentFileAutoOpen,
+} from '../src/features/agent/auto-open-file'
 import { buildRoundFileChangesByMessageId } from '../src/features/agent/round-file-changes'
 
 describe('agent round file changes', () => {
@@ -118,5 +123,84 @@ describe('agent round file changes', () => {
     })
 
     expect([...roundFileChanges.entries()]).toEqual([])
+  })
+
+  it('does not auto-open historical file chips while a selected session is loading', () => {
+    const historicalChange = {
+      filePath: 'C:/workspace/calculator.html',
+      kind: 'created' as const,
+    }
+    const latestFileChange = {
+      change: historicalChange,
+      key: `assistant-1:${historicalChange.kind}:${historicalChange.filePath}`,
+    }
+
+    const selectingSession = resolveNextAgentFileAutoOpen(initialAgentFileAutoOpenState, {
+      activeSessionPath: 'C:/workspace/.pi/sessions/session-a.json',
+      isViewingActiveRuntime: false,
+      latestFileChange: null,
+    })
+    expect(selectingSession.fileChange).toBeNull()
+
+    const loadedSession = resolveNextAgentFileAutoOpen(selectingSession.state, {
+      activeSessionPath: 'C:/workspace/.pi/sessions/session-a.json',
+      isViewingActiveRuntime: true,
+      latestFileChange,
+    })
+    expect(loadedSession.fileChange).toBeNull()
+
+    const temporarilyHiddenFiles = resolveNextAgentFileAutoOpen(loadedSession.state, {
+      activeSessionPath: 'C:/workspace/.pi/sessions/session-a.json',
+      isViewingActiveRuntime: true,
+      latestFileChange: null,
+    })
+    expect(temporarilyHiddenFiles.fileChange).toBeNull()
+
+    const restoredHistoricalFiles = resolveNextAgentFileAutoOpen(temporarilyHiddenFiles.state, {
+      activeSessionPath: 'C:/workspace/.pi/sessions/session-a.json',
+      isViewingActiveRuntime: true,
+      latestFileChange,
+    })
+    expect(restoredHistoricalFiles.fileChange).toBeNull()
+
+    const newChange = {
+      filePath: 'C:/workspace/story.md',
+      kind: 'updated' as const,
+    }
+    const nextChange = resolveNextAgentFileAutoOpen(restoredHistoricalFiles.state, {
+      activeSessionPath: 'C:/workspace/.pi/sessions/session-a.json',
+      isViewingActiveRuntime: true,
+      latestFileChange: {
+        change: newChange,
+        key: `assistant-2:${newChange.kind}:${newChange.filePath}`,
+      },
+    })
+    expect(nextChange.fileChange).toEqual(newChange)
+  })
+
+  it('finds the latest non-deleted file change from rendered rounds', () => {
+    expect(findLatestOpenableAgentFileChange([
+      {
+        id: 'assistant-1',
+        kind: 'assistant',
+        text: 'Deleted temp.',
+        timestamp: 1,
+      },
+      {
+        id: 'assistant-2',
+        kind: 'assistant',
+        text: 'Updated story.',
+        timestamp: 2,
+      },
+    ], new Map([
+      ['assistant-1', [{ filePath: 'C:/workspace/temp.md', kind: 'deleted' }]],
+      ['assistant-2', [{ filePath: 'C:/workspace/story.md', kind: 'updated' }]],
+    ]))).toEqual({
+      change: {
+        filePath: 'C:/workspace/story.md',
+        kind: 'updated',
+      },
+      key: 'assistant-2:updated:C:/workspace/story.md',
+    })
   })
 })

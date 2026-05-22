@@ -644,7 +644,16 @@ export class PiAgentManager {
   }
 
   async openSession(cwd: string, sessionPath: string): Promise<AgentWorkspaceState> {
-    await this.activateSession(cwd, SessionManager.open(sessionPath))
+    const resolvedSessionPath = this.resolveSessionPath(cwd, sessionPath)
+
+    if (
+      this.activeRuntime?.cwd === cwd
+      && this.activeRuntime.session.sessionFile === resolvedSessionPath
+    ) {
+      return this.buildWorkspaceState(cwd)
+    }
+
+    await this.activateSession(cwd, SessionManager.open(resolvedSessionPath))
     return this.broadcastWorkspaceState(cwd)
   }
 

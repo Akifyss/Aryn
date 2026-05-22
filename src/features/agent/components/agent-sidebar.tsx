@@ -42,6 +42,12 @@ import type { ComposerMentionToken } from '@/features/agent/lib/composer-mention
 import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
 import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
+import {
+  findLatestOpenableAgentFileChange,
+  initialAgentFileAutoOpenState,
+  resolveNextAgentFileAutoOpen,
+  type AgentFileAutoOpenState,
+} from '@/features/agent/auto-open-file'
 import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-changes'
 import type {
   AgentClientEvent,
@@ -1344,10 +1350,11 @@ function AgentProvider({
   const overlayPanelRef = useRef<HTMLDivElement | null>(null)
   const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
   const previousSessionPathRef = useRef<string | null>(null)
-  const previousAutoOpenSessionPathRef = useRef<string | null>(null)
-  const hasInitializedAutoOpenRef = useRef(false)
-  const lastAutoOpenedFileChangeKeyRef = useRef('')
-  const restorableSessionPath = agentState.activeSession?.sessionPath ?? null
+  const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
+  const restorableSessionPath = agentState.activeSession?.sessionPath
+    && agentState.sessions.some((session) => session.path === agentState.activeSession?.sessionPath)
+    ? agentState.activeSession.sessionPath
+    : null
   const [isModelInputFullySelected, setIsModelInputFullySelected] = useState(false)
 
   function syncModelInputSelectionState(input: HTMLInputElement) {
@@ -1558,13 +1565,17 @@ function AgentProvider({
         return
       }
 
-      if (event.type === 'error') {
+      if (
+        event.type === 'error'
+        && activeSessionSelection.kind === 'session'
+        && (!event.sessionId || event.sessionId === agentState.activeSession?.sessionId)
+      ) {
         setPanelError(event.message)
       }
     })
 
     return unsubscribe
-  }, [agentState.activeSession?.sessionId])
+  }, [activeSessionSelection.kind, agentState.activeSession?.sessionId])
 
   useEffect(() => {
     if (!workspacePath) {
@@ -1593,8 +1604,14 @@ function AgentProvider({
       .then((workspaceState) => window.appApi.loadAgentWorkspace(workspacePath, workspaceState.lastAgentSessionPath))
       .then((nextState) => {
         setAgentState(nextState)
-        setActiveSessionSelection(nextState.activeSession?.sessionPath
-          ? { kind: 'session', sessionPath: nextState.activeSession.sessionPath }
+        const nextActiveSessionPath = nextState.activeSession?.sessionPath
+        const hasRestoredSession = Boolean(
+          nextActiveSessionPath
+          && nextState.sessions.some((session) => session.path === nextActiveSessionPath),
+        )
+        const restoredSessionPath = hasRestoredSession ? nextActiveSessionPath : null
+        setActiveSessionSelection(restoredSessionPath
+          ? { kind: 'session', sessionPath: restoredSessionPath }
           : { kind: 'new' })
         const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
         syncModelSelection(nextModelSelection)
@@ -1690,8 +1707,31 @@ function AgentProvider({
     }
   }, [activeComposerMenu])
 
+  const activeSessionPath = activeSessionSelection.kind === 'session' ? activeSessionSelection.sessionPath : null
+  const activeSession = activeSessionPath
+    ? agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
+    : null
+  const isViewingActiveRuntime = Boolean(
+    activeSessionPath
+    && agentState.activeSession?.sessionPath === activeSessionPath,
+  )
+  const visibleRuntime = useMemo(() => (
+    isViewingActiveRuntime
+      ? agentState.runtime
+      : {
+          ...agentState.runtime,
+          compactionReason: null,
+          isCompacting: false,
+          isStreaming: false,
+          pendingMessageCount: 0,
+          retryAttempt: 0,
+          retryMaxAttempts: null,
+        }
+  ), [agentState.runtime, isViewingActiveRuntime])
+  const visiblePersistedMessages = isViewingActiveRuntime ? agentState.activeSession?.messages ?? [] : []
+
   const renderedMessages = useMemo(() => {
-    const persistedMessages = activeSessionSelection.kind === 'session' ? agentState.activeSession?.messages ?? [] : []
+    const persistedMessages = visiblePersistedMessages
     const nextMessages = [...persistedMessages]
     const toolMessageIndices = new Map<string, number>()
 
@@ -1700,6 +1740,10 @@ function AgentProvider({
         toolMessageIndices.set(message.id, index)
       }
     })
+
+    if (!isViewingActiveRuntime) {
+      return nextMessages
+    }
 
     liveTools.forEach((tool) => {
       const liveToolMessage: AgentSidebarMessage = {
@@ -1738,15 +1782,11 @@ function AgentProvider({
     }
 
     return nextMessages
-  }, [activeSessionSelection.kind, agentState.activeSession?.messages, draftAssistant, draftThinking, isThinkingStreaming, liveTools])
+  }, [draftAssistant, draftThinking, isThinkingStreaming, isViewingActiveRuntime, liveTools, visiblePersistedMessages])
 
   function handleStartNewSession() {
     setActiveSessionSelection({ kind: 'new' })
     setComposerState(emptyComposerState)
-    setDraftAssistant('')
-    setDraftThinking('')
-    setIsThinkingStreaming(false)
-    setLiveTools([])
     setPanelError(null)
     setActiveOverlayPanel(null)
   }
@@ -1779,6 +1819,12 @@ function AgentProvider({
     }
 
     setActiveSessionSelection({ kind: 'session', sessionPath })
+
+    if (agentState.activeSession?.sessionPath === sessionPath) {
+      setPanelError(null)
+      setActiveOverlayPanel(null)
+      return
+    }
 
     try {
       setPanelError(null)
@@ -1893,13 +1939,13 @@ function AgentProvider({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    await submitComposerPrompt(agentState.runtime.isStreaming ? 'steer' : undefined)
+    await submitComposerPrompt(isViewingActiveRuntime && agentState.runtime.isStreaming ? 'steer' : undefined)
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
-      void submitComposerPrompt(event.altKey ? 'followUp' : agentState.runtime.isStreaming ? 'steer' : undefined)
+      void submitComposerPrompt(event.altKey ? 'followUp' : isViewingActiveRuntime && agentState.runtime.isStreaming ? 'steer' : undefined)
     }
   }
 
@@ -1951,8 +1997,6 @@ function AgentProvider({
   const resolvedSelectedProviderValue = configuredProviders.includes(selectedProviderValue as AuthProviderKey)
     ? selectedProviderValue
     : configuredProviders[0] ?? selectedProviderValue
-  const activeSessionPath = activeSessionSelection.kind === 'session' ? activeSessionSelection.sessionPath : null
-  const activeSession = agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
   const providerModelIds = Array.from(new Set(
     agentState.runtime.availableModels
       .filter((model) => model.startsWith(`${resolvedSelectedProviderValue}/`))
@@ -1986,13 +2030,13 @@ function AgentProvider({
   const runningTools = liveTools.filter((tool) => tool.status === 'running')
   const sessionPhase = useMemo(() => deriveAgentSessionPhase({
     draftAssistant,
-    isStreaming: agentState.runtime.isStreaming,
+    isStreaming: visibleRuntime.isStreaming,
     isThinkingStreaming,
     panelError,
-    pendingMessageCount: agentState.runtime.pendingMessageCount,
-    retryAttempt: agentState.runtime.retryAttempt,
-    runningTools,
-    runtime: agentState.runtime,
+    pendingMessageCount: visibleRuntime.pendingMessageCount,
+    retryAttempt: visibleRuntime.retryAttempt,
+    runningTools: isViewingActiveRuntime ? runningTools : [],
+    runtime: visibleRuntime,
     workspacePath,
   }), [
     agentState.runtime.compactionReason,
@@ -2004,24 +2048,25 @@ function AgentProvider({
     draftAssistant,
     draftThinking,
     isThinkingStreaming,
+    isViewingActiveRuntime,
     panelError,
     runningTools,
+    visibleRuntime,
     workspacePath,
   ])
   const sessionStatus = useMemo(
-    () => sessionPhase ? formatAgentSessionStatus(sessionPhase, agentState.runtime.pendingMessageCount) : null,
-    [agentState.runtime.pendingMessageCount, sessionPhase],
+    () => sessionPhase ? formatAgentSessionStatus(sessionPhase, visibleRuntime.pendingMessageCount) : null,
+    [sessionPhase, visibleRuntime.pendingMessageCount],
   )
-  const persistedMessages = agentState.activeSession?.messages ?? []
   const roundFileChangesByMessageId = useMemo(() => {
-    const hasInFlightRound = liveTools.length > 0
+    const hasInFlightRound = isViewingActiveRuntime && (liveTools.length > 0
       || Boolean(draftAssistant.trim() || draftThinking.trim())
       || agentState.runtime.isStreaming
-      || agentState.runtime.pendingMessageCount > 0
+      || agentState.runtime.pendingMessageCount > 0)
     return buildRoundFileChangesByMessageId({
       annotations: agentState.activeSession?.annotations ?? { fileChangesByEntryId: {} },
       hasInFlightRound,
-      messages: persistedMessages,
+      messages: visiblePersistedMessages,
     })
   }, [
     agentState.activeSession?.annotations,
@@ -2029,8 +2074,9 @@ function AgentProvider({
     agentState.runtime.pendingMessageCount,
     draftAssistant,
     draftThinking,
+    isViewingActiveRuntime,
     liveTools.length,
-    persistedMessages,
+    visiblePersistedMessages,
   ])
   const sessionStatusKey = sessionStatus
     ? `${sessionStatus.label}:${sessionStatus.badge?.label ?? ''}`
@@ -2039,26 +2085,9 @@ function AgentProvider({
     .flatMap(([messageId, changes]) => changes.map((change) => `${messageId}:${change.kind}:${change.filePath}`))
     .join('|')
   const renderedMessageCount = renderedMessages.length
-  const latestAutoOpenFileChange = useMemo(() => {
-    for (let index = persistedMessages.length - 1; index >= 0; index -= 1) {
-      const message = persistedMessages[index]
-      const fileChanges = roundFileChangesByMessageId.get(message.id)
-
-      if (!fileChanges || fileChanges.length === 0) {
-        continue
-      }
-
-      const nextChange = fileChanges.find((change) => change.kind !== 'deleted')
-      if (nextChange) {
-        return {
-          change: nextChange,
-          key: `${message.id}:${nextChange.kind}:${nextChange.filePath}`,
-        }
-      }
-    }
-
-    return null
-  }, [persistedMessages, roundFileChangesByMessageId])
+  const latestAutoOpenFileChange = useMemo(() => (
+    findLatestOpenableAgentFileChange(visiblePersistedMessages, roundFileChangesByMessageId)
+  ), [visiblePersistedMessages, roundFileChangesByMessageId])
 
   useEffect(() => {
     if (!canChooseProvider && activeComposerMenu === 'provider') {
@@ -2114,35 +2143,17 @@ function AgentProvider({
   }, [activeSessionPath, draftAssistant, draftThinking, fileChangesKey, liveTools, renderedMessageCount, sessionStatusKey])
 
   useEffect(() => {
-    if (!activeSessionPath) {
-      previousAutoOpenSessionPathRef.current = null
-      hasInitializedAutoOpenRef.current = false
-      lastAutoOpenedFileChangeKeyRef.current = ''
-      return
+    const result = resolveNextAgentFileAutoOpen(fileAutoOpenStateRef.current, {
+      activeSessionPath,
+      isViewingActiveRuntime,
+      latestFileChange: latestAutoOpenFileChange,
+    })
+    fileAutoOpenStateRef.current = result.state
+
+    if (result.fileChange) {
+      void onOpenMessageFile?.(result.fileChange.filePath, result.fileChange.kind)
     }
-
-    const isSessionChanged = previousAutoOpenSessionPathRef.current !== activeSessionPath
-    previousAutoOpenSessionPathRef.current = activeSessionPath
-
-    if (isSessionChanged) {
-      hasInitializedAutoOpenRef.current = true
-      lastAutoOpenedFileChangeKeyRef.current = latestAutoOpenFileChange?.key ?? ''
-      return
-    }
-
-    if (!hasInitializedAutoOpenRef.current) {
-      hasInitializedAutoOpenRef.current = true
-      lastAutoOpenedFileChangeKeyRef.current = latestAutoOpenFileChange?.key ?? ''
-      return
-    }
-
-    if (!latestAutoOpenFileChange || latestAutoOpenFileChange.key === lastAutoOpenedFileChangeKeyRef.current) {
-      return
-    }
-
-    lastAutoOpenedFileChangeKeyRef.current = latestAutoOpenFileChange.key
-    void onOpenMessageFile?.(latestAutoOpenFileChange.change.filePath, latestAutoOpenFileChange.change.kind)
-  }, [activeSessionPath, latestAutoOpenFileChange, onOpenMessageFile])
+  }, [activeSessionPath, isViewingActiveRuntime, latestAutoOpenFileChange, onOpenMessageFile])
 
   const contextValue = useMemo<AgentContextValue>(() => ({
     activeComposerMenu,
