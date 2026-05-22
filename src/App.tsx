@@ -364,6 +364,7 @@ const LAYOUT_STORAGE_KEYS = {
   leftSidebarCollapsed: `${APP_STORAGE_PREFIX}:left-sidebar-collapsed`,
   leftSidebarWidth: `${APP_STORAGE_PREFIX}:left-sidebar-width`,
   agentRightSidebarCollapsed: `${APP_STORAGE_PREFIX}:agent-right-sidebar-collapsed`,
+  agentRightSidebarWidthMode: `${APP_STORAGE_PREFIX}:agent-right-sidebar-width-mode`,
   agentRightSidebarWidth: `${APP_STORAGE_PREFIX}:agent-right-sidebar-width`,
   editorRightSidebarCollapsed: `${APP_STORAGE_PREFIX}:editor-right-sidebar-collapsed`,
   editorRightSidebarWidth: `${APP_STORAGE_PREFIX}:editor-right-sidebar-width`,
@@ -371,6 +372,7 @@ const LAYOUT_STORAGE_KEYS = {
 const LEGACY_LAYOUT_STORAGE_KEYS: Record<keyof typeof LAYOUT_STORAGE_KEYS, string[]> = {
   activeLeftSidebarTab: [],
   agentRightSidebarCollapsed: [],
+  agentRightSidebarWidthMode: [],
   agentRightSidebarWidth: [],
   editorRightSidebarCollapsed: [`${APP_STORAGE_PREFIX}:right-sidebar-collapsed`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-collapsed`],
   editorRightSidebarWidth: [`${APP_STORAGE_PREFIX}:right-sidebar-width`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-width`],
@@ -391,6 +393,7 @@ type ResizePanel = 'left' | 'right'
 type PanelSurfaceMode = 'docked' | 'drawer'
 type LeftSidebarTab = 'file' | 'git'
 type AgentLayoutFixedTab = 'file' | 'git'
+type AgentRightSidebarWidthMode = 'max' | 'fixed'
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
@@ -443,14 +446,6 @@ function readStoredLayoutNumber(
   return Number.isFinite(parsedValue) ? parsedValue : fallback
 }
 
-function hasStoredFiniteCurrentLayoutNumber(key: keyof typeof LAYOUT_STORAGE_KEYS) {
-  const storage = getLocalStorage()
-  const value = storage?.getItem(LAYOUT_STORAGE_KEYS[key]) ?? null
-  const parsedValue = value === null ? NaN : Number(value)
-
-  return Number.isFinite(parsedValue)
-}
-
 function readStoredLayoutBoolean(
   key: keyof typeof LAYOUT_STORAGE_KEYS,
   fallback: boolean,
@@ -466,6 +461,13 @@ function readStoredGitPanelLayout() {
   const value = storage ? readStoredLocalStorageValue(storage, 'gitPanelLayout') : null
 
   return value === 'list' || value === 'tree' ? value : DEFAULT_GIT_PANEL_LAYOUT
+}
+
+function readStoredAgentRightSidebarWidthMode(): AgentRightSidebarWidthMode {
+  const storage = getLocalStorage()
+  const value = storage ? readStoredLocalStorageValue(storage, 'agentRightSidebarWidthMode') : null
+
+  return value === 'fixed' ? 'fixed' : 'max'
 }
 
 function readStoredLeftSidebarTab() {
@@ -769,7 +771,9 @@ function App() {
   const [agentRightSidebarWidth, setAgentRightSidebarWidth] = useState(
     () => readStoredLayoutNumber('agentRightSidebarWidth', AGENT_LAYOUT_RIGHT_SIDEBAR_MIN_WIDTH),
   )
-  const shouldInitializeAgentRightSidebarWidthRef = useRef(!hasStoredFiniteCurrentLayoutNumber('agentRightSidebarWidth'))
+  const [agentRightSidebarWidthMode, setAgentRightSidebarWidthMode] = useState<AgentRightSidebarWidthMode>(
+    () => readStoredAgentRightSidebarWidthMode(),
+  )
   const [gitPanelHeight, setGitPanelHeight] = useState(
     () => readStoredLayoutNumber('gitPanelHeight', DEFAULT_GIT_PANEL_HEIGHT),
   )
@@ -989,6 +993,9 @@ function App() {
   const isRightPanelOverlayTopLayer = !isAppModalLayerOpen && isRightDrawerOpen
   const effectiveLeftSidebarWidth = isLeftSidebarVisible ? leftSidebarWidth : 0
   const effectiveRightSidebarWidth = isRightSidebarVisible ? rightSidebarWidth : 0
+  const rightSidebarWidthReservedForLeftClamp = isAgentLayout && agentRightSidebarWidthMode === 'max'
+    ? (isRightSidebarVisible ? AGENT_LAYOUT_RIGHT_SIDEBAR_MIN_WIDTH : 0)
+    : effectiveRightSidebarWidth
   const activeTreePath = activeFileTab?.filePath ?? activeDiffTab?.diff.change.path ?? null
   const canAttemptOpenCurrentDiff = Boolean(
     activeFileTab
@@ -1102,6 +1109,10 @@ function App() {
     return clampRightWidth(Number.POSITIVE_INFINITY, getShellWidth(), nextLeftWidth)
   }
 
+  function isAgentRightSidebarMaxWidth(nextWidth: number, shellWidth: number, nextLeftWidth: number) {
+    return nextWidth >= clampRightWidth(Number.POSITIVE_INFINITY, shellWidth, nextLeftWidth) - 0.5
+  }
+
   function resizeSidebar(panel: ResizePanel, pointerClientX: number) {
     if (
       (panel === 'left' && !isLeftSidebarVisible)
@@ -1121,12 +1132,19 @@ function App() {
 
     if (panel === 'left') {
       const nextWidth = pointerClientX - shellRect.left
-      setLeftSidebarWidth(clampLeftWidth(nextWidth, shellWidth, effectiveRightSidebarWidth))
+      setLeftSidebarWidth(clampLeftWidth(nextWidth, shellWidth, rightSidebarWidthReservedForLeftClamp))
       return
     }
 
     const nextWidth = shellRect.right - pointerClientX
-    setRightSidebarWidth(clampRightWidth(nextWidth, shellWidth, effectiveLeftSidebarWidth))
+    const nextRightWidth = clampRightWidth(nextWidth, shellWidth, effectiveLeftSidebarWidth)
+    setRightSidebarWidth(nextRightWidth)
+
+    if (isAgentLayout) {
+      setAgentRightSidebarWidthMode(
+        isAgentRightSidebarMaxWidth(nextRightWidth, shellWidth, effectiveLeftSidebarWidth) ? 'max' : 'fixed',
+      )
+    }
   }
 
   function handleResizeStart(panel: ResizePanel) {
@@ -3386,7 +3404,14 @@ function App() {
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [activeResizePanel, isLeftSidebarVisible, isRightSidebarVisible, leftSidebarWidth, rightSidebarWidth])
+  }, [
+    activeResizePanel,
+    isLeftSidebarVisible,
+    isRightSidebarVisible,
+    leftSidebarWidth,
+    rightSidebarWidth,
+    rightSidebarWidthReservedForLeftClamp,
+  ])
 
   useEffect(() => {
     if (!isGitPanelResizing) {
@@ -3455,12 +3480,12 @@ function App() {
   }, [editorRightSidebarWidth])
 
   useEffect(() => {
-    if (shouldInitializeAgentRightSidebarWidthRef.current) {
-      return
-    }
-
     window.localStorage.setItem(LAYOUT_STORAGE_KEYS.agentRightSidebarWidth, String(agentRightSidebarWidth))
   }, [agentRightSidebarWidth])
+
+  useEffect(() => {
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.agentRightSidebarWidthMode, agentRightSidebarWidthMode)
+  }, [agentRightSidebarWidthMode])
 
   useEffect(() => {
     window.localStorage.setItem(LAYOUT_STORAGE_KEYS.gitPanelHeight, String(gitPanelHeight))
@@ -3487,7 +3512,7 @@ function App() {
   }, [isAgentRightSidebarCollapsed])
 
   useEffect(() => {
-    const nextLeftWidth = clampLeftWidth(leftSidebarWidth, shellWidth, effectiveRightSidebarWidth)
+    const nextLeftWidth = clampLeftWidth(leftSidebarWidth, shellWidth, rightSidebarWidthReservedForLeftClamp)
     const nextRightWidth = isRightSidebarVisible
       ? clampRightWidth(rightSidebarWidth, shellWidth, isLeftSidebarVisible ? nextLeftWidth : 0)
       : rightSidebarWidth
@@ -3499,7 +3524,14 @@ function App() {
     if (nextRightWidth !== rightSidebarWidth) {
       setRightSidebarWidth(nextRightWidth)
     }
-  }, [effectiveRightSidebarWidth, isLeftSidebarVisible, isRightSidebarVisible, leftSidebarWidth, rightSidebarWidth, shellWidth])
+  }, [
+    isLeftSidebarVisible,
+    isRightSidebarVisible,
+    leftSidebarWidth,
+    rightSidebarWidth,
+    rightSidebarWidthReservedForLeftClamp,
+    shellWidth,
+  ])
 
   useEffect(() => {
     setGitPanelHeight((currentValue) => clampGitHeight(currentValue))
@@ -3510,16 +3542,15 @@ function App() {
       return
     }
 
-    if (!shouldInitializeAgentRightSidebarWidthRef.current) {
+    if (agentRightSidebarWidthMode !== 'max') {
       return
     }
 
-    shouldInitializeAgentRightSidebarWidthRef.current = false
     const nextWidth = getAgentRightSidebarMaxWidth(effectiveLeftSidebarWidth)
     if (nextWidth !== rightSidebarWidth) {
       setRightSidebarWidth(nextWidth)
     }
-  }, [effectiveLeftSidebarWidth, isAgentLayout, isRightSidebarDrawer, isRightSidebarVisible, rightSidebarWidth, shellWidth])
+  }, [agentRightSidebarWidthMode, effectiveLeftSidebarWidth, isAgentLayout, isRightSidebarDrawer, isRightSidebarVisible, rightSidebarWidth, shellWidth])
 
   useEffect(() => {
     if (!isLeftSidebarDrawer && isLeftDrawerOpen) {
@@ -3839,13 +3870,24 @@ function App() {
 
     setIsRightSidebarCollapsed((currentValue) => {
       if (currentValue && isAgentLayout) {
-        shouldInitializeAgentRightSidebarWidthRef.current = false
-        setAgentRightSidebarWidth(getAgentRightSidebarMaxWidth())
+        setAgentRightSidebarWidth(
+          agentRightSidebarWidthMode === 'max'
+            ? getAgentRightSidebarMaxWidth()
+            : clampRightWidth(agentRightSidebarWidth, getShellWidth(), effectiveLeftSidebarWidth),
+        )
       }
 
       return !currentValue
     })
-  }, [handleRightDrawerOpenChange, isAgentLayout, isRightDrawerOpen, isRightSidebarDrawer])
+  }, [
+    agentRightSidebarWidth,
+    agentRightSidebarWidthMode,
+    effectiveLeftSidebarWidth,
+    handleRightDrawerOpenChange,
+    isAgentLayout,
+    isRightDrawerOpen,
+    isRightSidebarDrawer,
+  ])
 
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
     const isDrawerSurface = surfaceMode === 'drawer'
