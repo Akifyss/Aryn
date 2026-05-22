@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import type { FileTreeRowDecorationRenderer } from '@pierre/trees'
 import { FileTree, useFileTree } from '@pierre/trees/react'
 import { Button, Chip, Disclosure, Input } from '@heroui/react'
 import { Icon } from '@iconify/react'
@@ -212,12 +213,61 @@ const AGENT_SESSION_TREE_CSS = `
     font-weight: 600;
   }
 
+  /* Agent sessions are conversation titles, not paths: render them through the public decoration lane. */
+  [data-item-section='content'] {
+    display: none;
+  }
+
+  [data-item-section='decoration'] {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+    color: inherit;
+    text-align: start;
+  }
+
+  [data-item-section='decoration'] > span {
+    display: block;
+    width: 100%;
+    justify-content: flex-start;
+    color: inherit;
+    text-align: start;
+  }
+
+  button[data-type='item'] > [data-item-section='action'] {
+    width: 0;
+    overflow: hidden;
+  }
+
+  button[data-type='item'][data-item-context-hover='true'] > [data-item-section='action'] {
+    width: var(--trees-action-lane-width);
+  }
+
+  button[data-type='item'][data-item-selected] [data-item-section='decoration'] {
+    font-weight: 600;
+  }
+
+  /* "when-needed" includes focus in @pierre/trees; this surface wants hover/open only. */
+  [data-type='context-menu-anchor'][data-visible='true'] {
+    display: none;
+  }
+
+  [data-file-tree-virtualized-root='true']:has(button[data-type='item'][data-item-context-hover='true'])
+    > [data-type='context-menu-anchor'][data-visible='true'],
+  [data-type='context-menu-anchor'][data-visible='true']:has([data-type='context-menu-trigger'][aria-expanded='true']) {
+    display: flex;
+  }
+
   button[data-type='item'][data-item-path='${AGENT_SESSION_TREE_EMPTY_PATH}'] {
     opacity: 0.65;
     pointer-events: none;
   }
 
 `
+
+const renderAgentSessionTreeRowDecoration: FileTreeRowDecorationRenderer = ({ row }) => ({
+  text: row.name,
+  title: row.name,
+})
 
 type AgentContextValue = {
   activeComposerMenu: 'model' | 'provider' | null
@@ -2376,6 +2426,7 @@ function AgentSessionTree({
       })
     },
     paths: treePaths,
+    renderRowDecoration: renderAgentSessionTreeRowDecoration,
     unsafeCSS: AGENT_SESSION_TREE_CSS,
   })
 
