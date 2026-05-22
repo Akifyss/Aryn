@@ -619,14 +619,14 @@ export class PiAgentManager {
     }
 
     if (!this.activeRuntime) {
-      const nextSessionManager = preferredSessionPath
-        ? SessionManager.open(preferredSessionPath)
-        : SessionManager.continueRecent(cwd, this.getSessionDir(cwd))
+      const restorableSessionPath = await this.resolveRestorableSessionPath(cwd, preferredSessionPath)
 
-      try {
-        await this.activateSession(cwd, nextSessionManager)
-      } catch {
-        return this.buildWorkspaceState(cwd)
+      if (restorableSessionPath) {
+        try {
+          await this.activateSession(cwd, SessionManager.open(restorableSessionPath))
+        } catch {
+          return this.buildWorkspaceState(cwd)
+        }
       }
     }
 
@@ -1250,6 +1250,7 @@ export class PiAgentManager {
 
     return sessions
       .slice()
+      .filter((session) => session.messageCount > 0)
       .sort((left, right) => right.modified.getTime() - left.modified.getTime())
       .map((session) => ({
         createdAt: session.created.toISOString(),
@@ -1260,6 +1261,20 @@ export class PiAgentManager {
         path: session.path,
         preview: clampText(session.name || session.firstMessage || 'New session', 72),
       }))
+  }
+
+  private async resolveRestorableSessionPath(cwd: string, preferredSessionPath: string | null) {
+    if (preferredSessionPath) {
+      try {
+        const resolvedSessionPath = this.resolveSessionPath(cwd, preferredSessionPath)
+        return await pathExists(resolvedSessionPath) ? resolvedSessionPath : null
+      } catch {
+        return null
+      }
+    }
+
+    const sessions = await this.listSessions(cwd)
+    return sessions[0]?.path ?? null
   }
 
   private getSessionDir(cwd: string) {

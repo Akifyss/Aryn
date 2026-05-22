@@ -2481,11 +2481,11 @@ function AgentNewSessionIllustration() {
   )
 }
 
-function AgentEmptyChat({ isNewConversation }: { isNewConversation: boolean }) {
+function AgentEmptyChat() {
   return (
     <div className='agent-empty-chat'>
       <AgentNewSessionIllustration />
-      <h2>{isNewConversation ? '新对话已就绪' : '这个 Session 还没有消息'}</h2>
+      <h2>新对话已就绪</h2>
     </div>
   )
 }
@@ -2552,8 +2552,9 @@ function AgentChatSurface() {
     workspacePath,
     workspaceTree,
   } = useAgentContext()
-  const isNewConversation = activeSessionSelection.kind === 'new'
   const hasEmptyChat = Boolean(workspacePath && renderedMessages.length === 0)
+  const isNewConversation = activeSessionSelection.kind === 'new'
+    || (hasEmptyChat && !activeSession)
 
   return (
     <div className='agent-shell'>
@@ -2671,7 +2672,7 @@ function AgentChatSurface() {
       >
         <div className={`agent-messages${hasEmptyChat ? ' agent-messages-empty' : ''}`}>
           {hasEmptyChat ? (
-            <AgentEmptyChat isNewConversation={isNewConversation} />
+            <AgentEmptyChat />
           ) : renderedMessages.map((message) => {
             const fileChanges = roundFileChangesByMessageId.get(message.id) ?? []
 
