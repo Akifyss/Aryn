@@ -17,10 +17,10 @@
   --chrome-height: 44px;
   --tabs-chrome-height: calc(var(--chrome-height) - 1px);
   --panel-toggle-size: 32px;
-  --panel-toggle-gap: 8px;
+  --panel-toggle-gap: 2px;
   --left-panel-toggle-anchor: 84px;
   --right-panel-toggle-anchor: 12px;
-  --left-panel-content-inset: 124px;
+  --left-panel-content-inset: 154px;
   --right-panel-content-inset: 52px;
   --sidebar-icon-x: 20px;
 
@@ -112,10 +112,6 @@
   min-width: 64px;
 }
 
-.app-shell[data-app-layout='agent'][data-window-fullscreen='true'] .panel-toggle-button-overlay-left {
-  left: var(--left-panel-toggle-anchor);
-}
-
 .app-shell[data-app-layout='agent'] .panel-agent-drawer .file-tabs-shell {
   padding-right: var(--right-panel-content-inset);
 }
@@ -135,10 +131,6 @@
 
 .app-shell[data-app-layout='agent'][data-platform='macos'][data-left-collapsed='true'] .panel-editor .agent-threadbar {
   padding-left: var(--left-panel-content-inset);
-}
-
-.app-shell[data-app-layout='agent'][data-platform='macos'][data-left-collapsed='true'][data-window-fullscreen='true'] .panel-editor .agent-threadbar {
-  padding-left: 16px;
 }
 
 .app-shell::before {
@@ -245,14 +237,34 @@
 .panel-toggle-button-overlay[data-overlay-elevated='false'],
 .app-shell[data-modal-layer-open='true'] .panel-toggle-button-overlay,
 .app-shell[data-left-drawer-open='true'] .panel-toggle-button-overlay-right,
-.app-shell[data-right-drawer-open='true'] .panel-toggle-button-overlay-left,
 body:has([data-slot='modal-backdrop']) .panel-toggle-button-overlay,
 body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   z-index: var(--app-z-panel-toggle-underlay);
 }
 
-.panel-toggle-button-overlay-left {
+.left-chrome-actions {
   left: var(--left-panel-toggle-anchor);
+}
+
+.left-chrome-actions {
+  position: fixed;
+  top: calc((var(--chrome-height) - var(--panel-toggle-size)) / 2);
+  z-index: calc(var(--app-z-window-controls) + 1);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--panel-toggle-gap);
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.left-chrome-actions[data-overlay-elevated='false'],
+.titlebar:has(+ .app-shell[data-modal-layer-open='true']) .left-chrome-actions,
+.titlebar:has(+ .app-shell[data-right-drawer-open='true']) .left-chrome-actions,
+body:has([data-slot='modal-backdrop']) .left-chrome-actions,
+body:has([data-slot='alert-dialog-backdrop']) .left-chrome-actions {
+  z-index: var(--app-z-panel-toggle-underlay);
+  pointer-events: none;
 }
 
 .panel-toggle-button-overlay-right {
@@ -572,7 +584,7 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   gap: 4px;
   flex-shrink: 0;
   min-height: 44px;
-  padding: 0 0 0 var(--left-panel-toggle-anchor, 12px);
+  padding: 0 0 0 var(--left-panel-content-inset, 92px);
   border-bottom: 0;
   app-region: drag;
   -webkit-app-region: drag;
@@ -587,23 +599,8 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   padding-left: var(--left-panel-content-inset, 52px);
 }
 
-.workspace-sidebar-surface.is-drawer[data-platform='macos'] .section-title {
-  padding-left: calc(var(--left-panel-toggle-anchor, 12px) + var(--panel-toggle-size, 32px));
-}
-
 .section-title.is-drawer-surface .section-title-text {
   margin-left: 0;
-}
-
-.workspace-section-toggle {
-  flex-shrink: 0;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.workspace-section-toggle .panel-toggle-icon {
-  width: 16px;
-  height: 16px;
 }
 
 .workspace-toggle-brand-icon {
@@ -641,6 +638,10 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   opacity: 1;
 }
 
+.left-chrome-search-button {
+  color: var(--muted);
+}
+
 .section-title-text {
   display: flex;
   align-items: center;
@@ -650,7 +651,7 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   max-width: 100%;
   overflow: hidden;
   align-self: center;
-  margin-left: -4px;
+  margin-left: 0;
   padding: 4px 10px;
   border: 0;
   border-radius: 6px;

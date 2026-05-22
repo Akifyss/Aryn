@@ -9,10 +9,10 @@ const SHELL_CHROME_VARS = {
   macos: {
     '--chrome-height': '44px',
     '--panel-toggle-size': '32px',
-    '--panel-toggle-gap': '8px',
+    '--panel-toggle-gap': '2px',
     '--left-panel-toggle-anchor': '84px',
     '--right-panel-toggle-anchor': '12px',
-    '--left-panel-content-inset': '124px',
+    '--left-panel-content-inset': '154px',
     '--right-panel-content-inset': '52px',
     '--sidebar-icon-x': '20px',
   },
@@ -22,7 +22,7 @@ const SHELL_CHROME_VARS = {
     '--panel-toggle-gap': '8px',
     '--left-panel-toggle-anchor': '12px',
     '--right-panel-toggle-anchor': '156px',
-    '--left-panel-content-inset': '52px',
+    '--left-panel-content-inset': '92px',
     '--right-panel-content-inset': '196px',
     '--sidebar-icon-x': '20px',
   },
@@ -30,7 +30,7 @@ const SHELL_CHROME_VARS = {
 
 const MACOS_FULLSCREEN_CHROME_VARS = {
   '--left-panel-toggle-anchor': '12px',
-  '--left-panel-content-inset': '52px',
+  '--left-panel-content-inset': '78px',
 } as const
 
 export function deriveShellPlatform(platform: string): ShellPlatform {

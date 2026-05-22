@@ -3616,6 +3616,11 @@ function App() {
   }, [currentPath])
 
   const handleCloseCommandPalette = useCallback(() => setIsCommandPaletteOpen(false), [])
+  const handleOpenCommandPaletteFromChrome = useCallback(() => {
+    setIsLeftDrawerOpen(false)
+    setIsRightDrawerOpen(false)
+    setIsCommandPaletteOpen(true)
+  }, [])
   const handleLeftDrawerOpenChange = useCallback((isOpen: boolean) => {
     if (isOpen) {
       setIsRightDrawerOpen(false)
@@ -3844,14 +3849,6 @@ function App() {
 
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
     const isDrawerSurface = surfaceMode === 'drawer'
-    const closeWorkspaceSurface = () => {
-      if (isDrawerSurface) {
-        setIsLeftDrawerOpen(false)
-        return
-      }
-
-      setIsLeftSidebarCollapsed(true)
-    }
 
     return (
       <div
@@ -3861,21 +3858,6 @@ function App() {
         style={isDrawerSurface ? shellChromeVars : undefined}
       >
         <div className={`section-title workspace-section-title${isDrawerSurface ? ' is-drawer-surface' : ''}`}>
-          {!isDrawerSurface ? (
-            <button
-              type='button'
-              className='panel-toggle-button workspace-section-toggle workspace-toggle-brand-button'
-              aria-label='Collapse workspace sidebar'
-              onClick={closeWorkspaceSurface}
-            >
-              <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
-                <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
-                <span className='workspace-toggle-brand-glyph'>
-                  <LayoutLeftLine size={16} />
-                </span>
-              </span>
-            </button>
-          ) : null}
           <button
             type='button'
             onClick={() => {
@@ -3918,20 +3900,6 @@ function App() {
                 >
                   <GitCompareLine size={16} className='sidebar-vertical-tab-icon' />
                   <span className='sidebar-vertical-tab-label'>Git</span>
-                </button>
-                <button
-                  type='button'
-                  className='sidebar-vertical-tab'
-                  onClick={() => {
-                    setIsCommandPaletteOpen(true)
-
-                    if (isDrawerSurface) {
-                      setIsLeftDrawerOpen(false)
-                    }
-                  }}
-                >
-                  <Icon icon='lucide:search' width={16} height={16} className='sidebar-vertical-tab-icon' />
-                  <span className='sidebar-vertical-tab-label'>搜索</span>
                 </button>
               </div>
 
@@ -4165,6 +4133,50 @@ function App() {
     )
   }
 
+  const leftChromeControls = (
+      <div
+        className='left-chrome-actions'
+        data-overlay-elevated={isLeftPanelOverlayElevated ? 'true' : 'false'}
+        data-react-aria-top-layer={isLeftPanelOverlayTopLayer ? 'true' : undefined}
+      >
+        <button
+          type='button'
+          className='panel-toggle-button workspace-toggle-brand-button'
+          aria-label={isLeftSidebarDrawer
+            ? (isLeftDrawerOpen ? 'Close workspace panel' : 'Open workspace panel')
+            : (isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar')}
+          onClick={() => {
+            if (isLeftSidebarDrawer) {
+              handleLeftDrawerOpenChange(!isLeftDrawerOpen)
+              return
+            }
+
+            if (isLeftSidebarVisible) {
+              setIsLeftSidebarCollapsed(true)
+              return
+            }
+
+            setIsLeftSidebarCollapsed(false)
+          }}
+        >
+          <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
+            <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
+            <span className='workspace-toggle-brand-glyph'>
+              <LayoutLeftLine size={16} />
+            </span>
+          </span>
+        </button>
+        <button
+          type='button'
+          className='panel-toggle-button left-chrome-search-button'
+          aria-label='Open search'
+          onClick={handleOpenCommandPaletteFromChrome}
+        >
+          <Icon icon='lucide:search' width={17} height={17} aria-hidden='true' />
+        </button>
+      </div>
+  )
+
   const appShell = (
     <div
       ref={appShellRef}
@@ -4188,32 +4200,6 @@ function App() {
         } as CSSProperties
       }
     >
-      {isLeftSidebarDrawer || !isLeftSidebarVisible ? (
-        <button
-          type='button'
-          className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-left workspace-toggle-brand-button'
-          data-overlay-elevated={isLeftPanelOverlayElevated ? 'true' : 'false'}
-          data-react-aria-top-layer={isLeftPanelOverlayTopLayer ? 'true' : undefined}
-          aria-label={isLeftSidebarDrawer
-            ? (isLeftDrawerOpen ? 'Close workspace panel' : 'Open workspace panel')
-            : (isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar')}
-          onClick={() => {
-            if (isLeftSidebarDrawer) {
-              handleLeftDrawerOpenChange(!isLeftDrawerOpen)
-              return
-            }
-
-            setIsLeftSidebarCollapsed(false)
-          }}
-        >
-          <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
-            <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
-            <span className='workspace-toggle-brand-glyph'>
-              <LayoutLeftLine size={16} />
-            </span>
-          </span>
-        </button>
-      ) : null}
 
       <button
         type='button'
@@ -4434,6 +4420,7 @@ function App() {
         void handleRequestWindowClose()
       }}
         isDrawerOpen={isLeftDrawerOpen || isRightDrawerOpen}
+        leftControls={leftChromeControls}
       />
     </div>
   )

@@ -1,11 +1,14 @@
+import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { Icon } from '@iconify/react'
 
 export function AppTitlebar({
   isDrawerOpen = false,
+  leftControls,
   onRequestClose,
 }: {
   isDrawerOpen?: boolean
+  leftControls?: ReactNode
   onRequestClose?: () => void
 }) {
   const platform = window.appApi.platform
@@ -36,6 +39,7 @@ export function AppTitlebar({
       data-drawer-open={isDrawerOpen ? 'true' : 'false'}
       data-react-aria-top-layer='true'
     >
+      {leftControls}
       <div className='titlebar-side titlebar-side-left' />
       <div className='titlebar-spacer' />
 
