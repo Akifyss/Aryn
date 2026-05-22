@@ -9,7 +9,8 @@ export const refreshInlineChangeLayerEffect = StateEffect.define<null>()
 export const refreshChunkDecorationsEffect = StateEffect.define<null>()
 
 // MergeView can defer chunk recomputation during live edits/IME. While chunks
-// are stale, the DOM-backed inline layer must not measure old change marks.
+// are stale, chunk decorations must be mapped instead of rebuilt from stale
+// ranges; the DOM-backed inline layer still needs to remeasure layout changes.
 const chunksDeferredField = StateField.define<boolean>({
   create() {
     return false
@@ -81,15 +82,14 @@ export const changeGutter = Prec.low(gutter({
   markers: view => view.plugin(decorateChunks)?.gutter || RangeSet.empty
 }))
 
-const cachedInlineChangeLayerMarkers = new WeakMap<EditorView, readonly LayerMarker[]>()
-
 const inlineChangeLayerExtension = layer({
   above: true,
   class: "cm-inlineChangeLayer",
-  // update() already covers viewport/doc/chunk changes; avoid a second layout read.
-  updateOnDocViewUpdate: false,
+  // Text wrapping and Markdown live rendering can change line geometry after a
+  // transaction update. Remeasure after doc-view updates so highlight overlays
+  // stay clipped to their owning logical line.
+  updateOnDocViewUpdate: true,
   update(update) {
-    if (isDeferredChunkUpdate(update)) return false
     return shouldMeasureInlineChangeLayer({
       chunksChanged: chunksChanged(update.startState, update.state),
       configChanged: configChanged(update.startState, update.state),
@@ -101,11 +101,7 @@ const inlineChangeLayerExtension = layer({
     })
   },
   markers(view) {
-    if (!shouldReadInlineChangeLayerDom(view.state.field(chunksDeferredField, false)))
-      return cachedInlineChangeLayerMarkers.get(view) ?? []
-    let markers = getInlineChangeLayerMarkers(view)
-    cachedInlineChangeLayerMarkers.set(view, markers)
-    return markers
+    return getInlineChangeLayerMarkers(view)
   }
 })
 
@@ -123,7 +119,6 @@ export function shouldMeasureInlineChangeLayer(update: {
   refreshRequested?: boolean,
   viewportChanged?: boolean,
 }) {
-  if (!shouldReadInlineChangeLayerDom(update.deferredChunkUpdate)) return false
   return !!(
     update.docChanged ||
     update.viewportChanged ||
@@ -132,10 +127,6 @@ export function shouldMeasureInlineChangeLayer(update: {
     update.chunksChanged ||
     update.configChanged
   )
-}
-
-export function shouldReadInlineChangeLayerDom(chunksDeferred?: boolean) {
-  return chunksDeferred !== true
 }
 
 export function shouldRefreshChunkDecorationsForUpdate(update: {
@@ -261,6 +252,9 @@ export type InlineChangeRect = {
   width: number
   height: number
   lineHeight?: number
+  lineKey?: unknown
+  lineTop?: number
+  lineBottom?: number
   rowTop?: number
   rowBottom?: number
 }
@@ -368,7 +362,10 @@ function getInlineChangeRects(view: EditorView, selector: string) {
           left: box ? box.left : rect.left - baseLeft,
           top,
           width: box ? box.width : rect.width,
-          height})
+          height,
+          lineKey: line,
+          lineTop: metrics?.top,
+          lineBottom: metrics?.bottom})
       }
     }
   }
@@ -425,9 +422,24 @@ function getInlineChangeRectLineBox(top: number, height: number, metrics: LineMe
 export function normalizeInlineChangeRects(rects: readonly InlineChangeRect[], lineHeight: number): InlineChangeRect[] {
   if (!rects.length) return []
 
+  let groupsByLine = new Map<unknown, InlineChangeRect[]>()
+  for (let rect of rects.slice().sort((a, b) => a.top - b.top || a.left - b.left)) {
+    let key = rect.lineKey ?? null
+    let group = groupsByLine.get(key)
+    if (!group) groupsByLine.set(key, group = [])
+    group.push(rect)
+  }
+
+  let normalized: InlineChangeRect[] = []
+  for (let group of groupsByLine.values())
+    normalized.push(...normalizeInlineChangeRectsForLine(group, lineHeight))
+  return normalized
+}
+
+function normalizeInlineChangeRectsForLine(rects: readonly InlineChangeRect[], lineHeight: number): InlineChangeRect[] {
   let groups: InlineChangeRectGroup[] = []
   let threshold = Math.max(1, lineHeight * 0.25)
-  for (let rect of rects.slice().sort((a, b) => a.top - b.top || a.left - b.left)) {
+  for (let rect of rects) {
     let top = rect.top, bottom = rect.top + rect.height, center = (top + bottom) / 2
     let group = groups[groups.length - 1]
     if (group && center >= group.top - threshold && center <= group.bottom + threshold) {
@@ -478,8 +490,20 @@ export function normalizeInlineChangeRects(rects: readonly InlineChangeRect[], l
   for (let i = 0; i < groups.length; i++) {
     let slot = slots[i]
     if (slot.bottom <= slot.top) continue
-    for (let rect of groups[i].rects)
-      result.push({left: rect.left, top: slot.top, width: rect.width, height: slot.bottom - slot.top})
+    for (let rect of groups[i].rects) {
+      let top = slot.top, bottom = slot.bottom
+      if (rect.lineTop != null) top = Math.max(top, rect.lineTop)
+      if (rect.lineBottom != null) bottom = Math.min(bottom, rect.lineBottom)
+      if (bottom > top) result.push({
+        left: rect.left,
+        top,
+        width: rect.width,
+        height: bottom - top,
+        lineKey: rect.lineKey,
+        lineTop: rect.lineTop,
+        lineBottom: rect.lineBottom,
+      })
+    }
   }
   return result
 }

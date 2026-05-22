@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
 import { Change } from '../src/vendor/codemirror-merge/src/diff'
-import { addChunkDecorations, chunkHasChangedLineOnLine, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldReadInlineChangeLayerDom, shouldRebuildFrozenChunkDecorationsForUpdate, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { addChunkDecorations, chunkHasChangedLineOnLine, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRebuildFrozenChunkDecorationsForUpdate, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { RangeSetBuilder, Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor/lib/meo-native-diff-split'
@@ -631,22 +631,37 @@ describe('CodeMirror merge decorations', () => {
     expect(next.height).toBeGreaterThan(24)
   })
 
+  it('does not merge inline highlight rects across logical lines', () => {
+    const lineA = {}
+    const lineB = {}
+    const [first, second] = normalizeInlineChangeRects([
+      { left: 0, top: 0, width: 12, height: 24, lineKey: lineA, lineTop: 0, lineBottom: 24 },
+      { left: 0, top: 28, width: 12, height: 24, lineKey: lineB, lineTop: 28, lineBottom: 52 },
+    ], 24)
+
+    expect(first).toEqual({ left: 0, top: 0, width: 12, height: 24, lineKey: lineA, lineTop: 0, lineBottom: 24 })
+    expect(second).toEqual({ left: 0, top: 28, width: 12, height: 24, lineKey: lineB, lineTop: 28, lineBottom: 52 })
+  })
+
+  it('clamps inline highlight rects to their logical line bounds', () => {
+    const line = {}
+    const [rect] = normalizeInlineChangeRects([
+      { left: 0, top: 18, width: 12, height: 30, lineKey: line, lineTop: 0, lineBottom: 24 },
+    ], 24)
+
+    expect(rect).toEqual({ left: 0, top: 18, width: 12, height: 6, lineKey: line, lineTop: 0, lineBottom: 24 })
+  })
+
   it('remeasures inline highlights for focus and explicit live-layout refreshes', () => {
     expect(shouldMeasureInlineChangeLayer({ focusChanged: true })).toBe(true)
     expect(shouldMeasureInlineChangeLayer({ refreshRequested: true })).toBe(true)
     expect(shouldMeasureInlineChangeLayer({})).toBe(false)
   })
 
-  it('does not remeasure inline highlights while merge chunks are deferred', () => {
-    expect(shouldMeasureInlineChangeLayer({ deferredChunkUpdate: true, docChanged: true })).toBe(false)
-    expect(shouldMeasureInlineChangeLayer({ deferredChunkUpdate: true, viewportChanged: true })).toBe(false)
-    expect(shouldMeasureInlineChangeLayer({ deferredChunkUpdate: true, refreshRequested: true })).toBe(false)
-  })
-
-  it('does not read inline highlight DOM while merge chunks are deferred', () => {
-    expect(shouldReadInlineChangeLayerDom(true)).toBe(false)
-    expect(shouldReadInlineChangeLayerDom(false)).toBe(true)
-    expect(shouldReadInlineChangeLayerDom()).toBe(true)
+  it('remeasures inline highlights while merge chunks are deferred', () => {
+    expect(shouldMeasureInlineChangeLayer({ deferredChunkUpdate: true, docChanged: true })).toBe(true)
+    expect(shouldMeasureInlineChangeLayer({ deferredChunkUpdate: true, viewportChanged: true })).toBe(true)
+    expect(shouldMeasureInlineChangeLayer({ deferredChunkUpdate: true, refreshRequested: true })).toBe(true)
   })
 
   it('keeps frozen chunk decorations responsive to viewport changes', () => {

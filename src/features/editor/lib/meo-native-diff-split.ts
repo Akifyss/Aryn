@@ -1099,6 +1099,7 @@ type SplitRenderRefreshReason = 'split-render-health' | 'split-scroll-refresh' |
 
 const splitRenderRefreshReason = Annotation.define<SplitRenderRefreshReason>()
 const setSplitVisibleTextFallbackEffect = StateEffect.define<boolean>()
+const setDiffSplitChunksFreshEffect = StateEffect.define<boolean>()
 const splitVisibleTextFallbackState = StateField.define({
   create() {
     return false
@@ -1114,6 +1115,19 @@ const splitVisibleTextFallbackState = StateField.define({
   provide: (field) => EditorView.editorAttributes.from(field, (enabled) => ({
     class: enabled ? 'meo-diff-split-visible-text-fallback' : '',
   })),
+})
+const diffSplitChunksFreshState = StateField.define({
+  create() {
+    return true
+  },
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setDiffSplitChunksFreshEffect)) {
+        value = effect.value
+      }
+    }
+    return value
+  },
 })
 const splitFallbackChangedTextDeco = Decoration.mark({ class: 'cm-changedText meo-diff-split-fallback-changedText' })
 const splitFallbackChangedTextFullLineDeco = Decoration.mark({
@@ -1529,6 +1543,10 @@ const splitDiffFallbackDecorationField = StateField.define({
     return buildSplitDiffFallbackDecorations(state)
   },
   update(value, transaction) {
+    if (!transaction.state.field(diffSplitChunksFreshState, false)) {
+      return value.map(transaction.changes)
+    }
+
     if (
       transaction.effects.some((effect) => (
         effect.is(refreshChunkDecorationsEffect)
@@ -2539,6 +2557,10 @@ export function createDiffExtensions({
     )),
     EditorState.transactionExtender.of((transaction) => {
       const effects: StateEffect<unknown>[] = []
+      const chunksWereDeferred = shouldDeferSplitMergeChunkUpdate([transaction], side === 'original' ? 'a' : 'b')
+      if (chunksWereDeferred) {
+        effects.push(setDiffSplitChunksFreshEffect.of(false))
+      }
       const refreshLiveDecorations = shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange(transaction)
       if (refreshLiveDecorations) {
         effects.push(refreshLiveDecorationsEffect.of(null))
@@ -2558,6 +2580,7 @@ export function createDiffExtensions({
     }),
     ...liveModeExtensions({ deferDocChanges: true }),
     splitVisibleTextFallbackState,
+    diffSplitChunksFreshState,
     splitDiffFallbackDecorationField,
   ]
 
@@ -3919,7 +3942,18 @@ export function createMeoDiffSplitController({
       })
     }
     unifiedView?.dispatch({
-      effects: refreshInlineChangeLayerEffect.of(null),
+      effects: [
+        setDiffSplitChunksFreshEffect.of(true),
+        refreshInlineChangeLayerEffect.of(null),
+      ],
+    })
+    mergeView?.a.dispatch({
+      annotations: Transaction.addToHistory.of(false),
+      effects: setDiffSplitChunksFreshEffect.of(true),
+    })
+    mergeView?.b.dispatch({
+      annotations: Transaction.addToHistory.of(false),
+      effects: setDiffSplitChunksFreshEffect.of(true),
     })
     syncSplitGutterLineFlagsFromChunks()
     invalidateDiffOverviewSegments()
