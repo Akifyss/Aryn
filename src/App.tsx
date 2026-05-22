@@ -324,7 +324,6 @@ const RIGHT_SIDEBAR_MIN_WIDTH = 300
 const RIGHT_SIDEBAR_MAX_WIDTH = 560
 const AGENT_LAYOUT_CHAT_MIN_WIDTH = 420
 const AGENT_LAYOUT_RIGHT_SIDEBAR_MIN_WIDTH = 520
-const AGENT_LAYOUT_DEFAULT_RIGHT_SIDEBAR_WIDTH = 640
 const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
 const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
 const DEFAULT_GIT_PANEL_HEIGHT = 292
@@ -364,17 +363,21 @@ const LAYOUT_STORAGE_KEYS = {
   gitPanelLayout: `${APP_STORAGE_PREFIX}:git-panel-layout`,
   leftSidebarCollapsed: `${APP_STORAGE_PREFIX}:left-sidebar-collapsed`,
   leftSidebarWidth: `${APP_STORAGE_PREFIX}:left-sidebar-width`,
-  rightSidebarCollapsed: `${APP_STORAGE_PREFIX}:right-sidebar-collapsed`,
-  rightSidebarWidth: `${APP_STORAGE_PREFIX}:right-sidebar-width`,
+  agentRightSidebarCollapsed: `${APP_STORAGE_PREFIX}:agent-right-sidebar-collapsed`,
+  agentRightSidebarWidth: `${APP_STORAGE_PREFIX}:agent-right-sidebar-width`,
+  editorRightSidebarCollapsed: `${APP_STORAGE_PREFIX}:editor-right-sidebar-collapsed`,
+  editorRightSidebarWidth: `${APP_STORAGE_PREFIX}:editor-right-sidebar-width`,
 } as const
 const LEGACY_LAYOUT_STORAGE_KEYS: Record<keyof typeof LAYOUT_STORAGE_KEYS, string[]> = {
   activeLeftSidebarTab: [],
+  agentRightSidebarCollapsed: [],
+  agentRightSidebarWidth: [],
+  editorRightSidebarCollapsed: [`${APP_STORAGE_PREFIX}:right-sidebar-collapsed`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-collapsed`],
+  editorRightSidebarWidth: [`${APP_STORAGE_PREFIX}:right-sidebar-width`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-width`],
   gitPanelHeight: [`${LEGACY_APP_STORAGE_PREFIX}:git-panel-height`],
   gitPanelLayout: [`${LEGACY_APP_STORAGE_PREFIX}:git-panel-layout`],
   leftSidebarCollapsed: [`${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-collapsed`],
   leftSidebarWidth: [`${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-width`],
-  rightSidebarCollapsed: [`${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-collapsed`],
-  rightSidebarWidth: [`${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-width`],
 }
 const SETTINGS_TAB_ID = 'app://settings'
 const SETTINGS_TAB_PATH = 'app://settings'
@@ -438,6 +441,14 @@ function readStoredLayoutNumber(
   const parsedValue = value === null ? NaN : Number(value)
 
   return Number.isFinite(parsedValue) ? parsedValue : fallback
+}
+
+function hasStoredFiniteCurrentLayoutNumber(key: keyof typeof LAYOUT_STORAGE_KEYS) {
+  const storage = getLocalStorage()
+  const value = storage?.getItem(LAYOUT_STORAGE_KEYS[key]) ?? null
+  const parsedValue = value === null ? NaN : Number(value)
+
+  return Number.isFinite(parsedValue)
 }
 
 function readStoredLayoutBoolean(
@@ -752,17 +763,24 @@ function App() {
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(
     () => readStoredLayoutNumber('leftSidebarWidth', DEFAULT_LEFT_SIDEBAR_WIDTH),
   )
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(
-    () => readStoredLayoutNumber('rightSidebarWidth', DEFAULT_RIGHT_SIDEBAR_WIDTH),
+  const [editorRightSidebarWidth, setEditorRightSidebarWidth] = useState(
+    () => readStoredLayoutNumber('editorRightSidebarWidth', DEFAULT_RIGHT_SIDEBAR_WIDTH),
   )
+  const [agentRightSidebarWidth, setAgentRightSidebarWidth] = useState(
+    () => readStoredLayoutNumber('agentRightSidebarWidth', AGENT_LAYOUT_RIGHT_SIDEBAR_MIN_WIDTH),
+  )
+  const shouldInitializeAgentRightSidebarWidthRef = useRef(!hasStoredFiniteCurrentLayoutNumber('agentRightSidebarWidth'))
   const [gitPanelHeight, setGitPanelHeight] = useState(
     () => readStoredLayoutNumber('gitPanelHeight', DEFAULT_GIT_PANEL_HEIGHT),
   )
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(
     () => readStoredLayoutBoolean('leftSidebarCollapsed', false),
   )
-  const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = useState(
-    () => readStoredLayoutBoolean('rightSidebarCollapsed', false),
+  const [isEditorRightSidebarCollapsed, setIsEditorRightSidebarCollapsed] = useState(
+    () => readStoredLayoutBoolean('editorRightSidebarCollapsed', false),
+  )
+  const [isAgentRightSidebarCollapsed, setIsAgentRightSidebarCollapsed] = useState(
+    () => readStoredLayoutBoolean('agentRightSidebarCollapsed', false),
   )
   const [activeResizePanel, setActiveResizePanel] = useState<ResizePanel | null>(null)
   const [isGitPanelResizing, setIsGitPanelResizing] = useState(false)
@@ -836,6 +854,10 @@ function App() {
   }, [activeDiffTab?.diff.change.path, openTabs])
   const appLayoutPreference: AppLayoutPreference = layoutPreference
   const isAgentLayout = appLayoutPreference === 'agent'
+  const rightSidebarWidth = isAgentLayout ? agentRightSidebarWidth : editorRightSidebarWidth
+  const setRightSidebarWidth = isAgentLayout ? setAgentRightSidebarWidth : setEditorRightSidebarWidth
+  const isRightSidebarCollapsed = isAgentLayout ? isAgentRightSidebarCollapsed : isEditorRightSidebarCollapsed
+  const setIsRightSidebarCollapsed = isAgentLayout ? setIsAgentRightSidebarCollapsed : setIsEditorRightSidebarCollapsed
   const displayTabs = useMemo<WorkspaceDisplayTab[]>(
     () => {
       const fixedTabs = isAgentLayout
@@ -956,7 +978,7 @@ function App() {
   } as CSSProperties
   const layoutMode: LayoutMode = deriveLayoutMode(shellWidth)
   const isLeftSidebarDrawer = layoutMode !== 'full'
-  const isRightSidebarDrawer = layoutMode === 'focus'
+  const isRightSidebarDrawer = !isAgentLayout && layoutMode === 'focus'
   const isRightDrawerFullWidth = shellWidth <= RIGHT_DRAWER_MAX_WIDTH
   const isLeftSidebarVisible = !isLeftSidebarDrawer && !isLeftSidebarCollapsed
   const isRightSidebarVisible = !isRightSidebarDrawer && !isRightSidebarCollapsed
@@ -1074,6 +1096,10 @@ function App() {
       : Math.min(RIGHT_SIDEBAR_MAX_WIDTH, availableWidth)
 
     return clamp(nextWidth, minWidth, maxWidth)
+  }
+
+  function getAgentRightSidebarMaxWidth(nextLeftWidth = effectiveLeftSidebarWidth) {
+    return clampRightWidth(Number.POSITIVE_INFINITY, getShellWidth(), nextLeftWidth)
   }
 
   function resizeSidebar(panel: ResizePanel, pointerClientX: number) {
@@ -3425,8 +3451,16 @@ function App() {
   }, [leftSidebarWidth])
 
   useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.rightSidebarWidth, String(rightSidebarWidth))
-  }, [rightSidebarWidth])
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.editorRightSidebarWidth, String(editorRightSidebarWidth))
+  }, [editorRightSidebarWidth])
+
+  useEffect(() => {
+    if (shouldInitializeAgentRightSidebarWidthRef.current) {
+      return
+    }
+
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.agentRightSidebarWidth, String(agentRightSidebarWidth))
+  }, [agentRightSidebarWidth])
 
   useEffect(() => {
     window.localStorage.setItem(LAYOUT_STORAGE_KEYS.gitPanelHeight, String(gitPanelHeight))
@@ -3445,8 +3479,12 @@ function App() {
   }, [isLeftSidebarCollapsed])
 
   useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.rightSidebarCollapsed, String(isRightSidebarCollapsed))
-  }, [isRightSidebarCollapsed])
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.editorRightSidebarCollapsed, String(isEditorRightSidebarCollapsed))
+  }, [isEditorRightSidebarCollapsed])
+
+  useEffect(() => {
+    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.agentRightSidebarCollapsed, String(isAgentRightSidebarCollapsed))
+  }, [isAgentRightSidebarCollapsed])
 
   useEffect(() => {
     const nextLeftWidth = clampLeftWidth(leftSidebarWidth, shellWidth, effectiveRightSidebarWidth)
@@ -3468,12 +3506,20 @@ function App() {
   }, [leftSidebarWidth, isLeftSidebarVisible])
 
   useEffect(() => {
-    if (!isAgentLayout || rightSidebarWidth >= AGENT_LAYOUT_RIGHT_SIDEBAR_MIN_WIDTH) {
+    if (!isAgentLayout || isRightSidebarDrawer || !isRightSidebarVisible) {
       return
     }
 
-    setRightSidebarWidth(AGENT_LAYOUT_DEFAULT_RIGHT_SIDEBAR_WIDTH)
-  }, [isAgentLayout, rightSidebarWidth])
+    if (!shouldInitializeAgentRightSidebarWidthRef.current) {
+      return
+    }
+
+    shouldInitializeAgentRightSidebarWidthRef.current = false
+    const nextWidth = getAgentRightSidebarMaxWidth(effectiveLeftSidebarWidth)
+    if (nextWidth !== rightSidebarWidth) {
+      setRightSidebarWidth(nextWidth)
+    }
+  }, [effectiveLeftSidebarWidth, isAgentLayout, isRightSidebarDrawer, isRightSidebarVisible, rightSidebarWidth, shellWidth])
 
   useEffect(() => {
     if (!isLeftSidebarDrawer && isLeftDrawerOpen) {
@@ -3786,8 +3832,15 @@ function App() {
       return
     }
 
-    setIsRightSidebarCollapsed((currentValue) => !currentValue)
-  }, [handleRightDrawerOpenChange, isRightDrawerOpen, isRightSidebarDrawer])
+    setIsRightSidebarCollapsed((currentValue) => {
+      if (currentValue && isAgentLayout) {
+        shouldInitializeAgentRightSidebarWidthRef.current = false
+        setAgentRightSidebarWidth(getAgentRightSidebarMaxWidth())
+      }
+
+      return !currentValue
+    })
+  }, [handleRightDrawerOpenChange, isAgentLayout, isRightDrawerOpen, isRightSidebarDrawer])
 
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
     const isDrawerSurface = surfaceMode === 'drawer'

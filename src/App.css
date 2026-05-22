@@ -52,7 +52,21 @@
 }
 
 .app-shell[data-app-layout='agent'] {
+  --agent-chat-min-width: 420px;
   --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
+}
+
+.app-shell[data-app-layout='agent'][data-layout='full'] {
+  grid-template-columns: var(--left-sidebar-width) minmax(var(--agent-chat-min-width), 1fr) var(--right-sidebar-width);
+}
+
+.app-shell[data-app-layout='agent'][data-layout='compact'],
+.app-shell[data-app-layout='agent'][data-layout='focus'] {
+  grid-template-columns: minmax(var(--agent-chat-min-width), 1fr) var(--right-sidebar-width);
+}
+
+.app-shell[data-app-layout='agent'][data-layout='focus'] .panel-agent {
+  grid-column: 2;
 }
 
 .app-shell[data-app-layout='agent'] .panel-editor {
