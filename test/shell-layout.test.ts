@@ -26,14 +26,14 @@ describe('shell layout helpers', () => {
     expect(getShellChromeVars('macos')).toMatchObject({
       '--left-panel-toggle-anchor': '84px',
       '--right-panel-toggle-anchor': '12px',
-      '--left-panel-content-inset': '124px',
+      '--left-panel-content-inset': '154px',
       '--right-panel-content-inset': '52px',
     })
 
     expect(getShellChromeVars('windows')).toMatchObject({
       '--left-panel-toggle-anchor': '12px',
       '--right-panel-toggle-anchor': '156px',
-      '--left-panel-content-inset': '52px',
+      '--left-panel-content-inset': '92px',
       '--right-panel-content-inset': '196px',
     })
   })
@@ -41,7 +41,7 @@ describe('shell layout helpers', () => {
   it('keeps macOS fullscreen chrome aligned with the screen edge', () => {
     expect(getShellChromeVars('macos', { isFullScreen: true })).toMatchObject({
       '--left-panel-toggle-anchor': '12px',
-      '--left-panel-content-inset': '52px',
+      '--left-panel-content-inset': '78px',
     })
   })
 })
