@@ -4,6 +4,7 @@ import { bracketMatching, forceParsing, indentOnInput, indentUnit, syntaxTree } 
 import {
   addChangedLineDecoration,
   addChunkDecorations,
+  chunkHasChangedLineOnLine,
   getChunks,
   getOriginalDoc,
   goToNextChunk,
@@ -451,6 +452,7 @@ export const __meoDiffSplitSearchTestHooks = {
 export const __meoDiffSplitRenderHealthTestHooks = {
   buildSplitDiffFallbackDecorations,
   buildSplitDiffFallbackDecorationsFromInputs,
+  chunkHasChangedLineOnSideLine,
   chunkHasInlineChangeOnLine,
   findSplitPaneRenderHealthIssue,
   markdownLineLooksUnrendered,
@@ -1266,6 +1268,29 @@ function lineOverlapsChunkRange(line: { from: number, to: number }, chunk: CodeM
   return range.from !== range.to && line.from < range.to && line.to >= range.from
 }
 
+function chunkHasChangedLineOnSideLine(chunk: CodeMirrorDiffChunk, line: { from: number, to: number }, side: 'a' | 'b') {
+  const range = chunkLineRange(chunk, side)
+  return chunkHasChangedLineOnLine(chunk as Chunk, range.from, line.from, line.to, side === 'a')
+}
+
+function getChunkChangedLineNumbers(doc: Text, chunk: CodeMirrorDiffChunk, side: 'a' | 'b') {
+  const range = chunkLineRange(chunk, side)
+  if (range.from === range.to) {
+    return []
+  }
+
+  const startLine = doc.lineAt(Math.min(range.from, doc.length)).number
+  const endLine = doc.lineAt(Math.max(range.from, Math.min(doc.length, range.to - 1))).number
+  const lineNumbers: number[] = []
+  for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
+    const line = doc.line(lineNo)
+    if (chunkHasChangedLineOnSideLine(chunk, line, side)) {
+      lineNumbers.push(lineNo)
+    }
+  }
+  return lineNumbers
+}
+
 function chunkHasInlineChangeOnLine(chunk: CodeMirrorDiffChunk, line: { from: number, to: number }, side: 'a' | 'b') {
   const range = chunkLineRange(chunk, side)
   if (range.from === range.to) {
@@ -1356,7 +1381,10 @@ export function findSplitPaneRenderHealthIssue(view: EditorView): SplitRenderHea
       continue
     }
 
-    if (!lineElement.classList.contains('cm-changedLine')) {
+    const lineNeedsChangedLine = lineHasDiffFlag || (
+      match ? chunkHasChangedLineOnSideLine(match.chunk, line, match.side) : false
+    )
+    if (lineNeedsChangedLine && !lineElement.classList.contains('cm-changedLine')) {
       return 'diff-line'
     }
 
@@ -1564,9 +1592,7 @@ function buildSplitDiffFallbackDecorationsFromInputs(
         gutter: false,
       })
 
-      const startLineNo = doc.lineAt(range.from).number
-      const endLineNo = doc.lineAt(Math.max(range.from, Math.min(doc.length, range.to - 1))).number
-      for (let lineNo = startLineNo; lineNo <= endLineNo; lineNo += 1) {
+      for (const lineNo of getChunkChangedLineNumbers(doc, chunk, side)) {
         chunkLines.add(lineNo)
       }
     }
@@ -2143,15 +2169,15 @@ export function buildDiffSplitGutterFlagsFromChunks(
     const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
     const hunkId = createDiffSplitGutterHunkId(selection)
     if (side === 'original') {
-      const lineCount = Math.max(0, selection.originalLineCount)
-      if (!lineCount) {
+      const lineNumbers = getChunkChangedLineNumbers(doc, chunk, 'a')
+      if (!lineNumbers.length) {
         continue
       }
 
-      const startLine = clampNumber(selection.originalStartLine, 1, doc.lines)
-      const endLine = clampNumber(startLine + lineCount - 1, startLine, doc.lines)
+      const startLine = lineNumbers[0]
+      const endLine = lineNumbers[lineNumbers.length - 1]
       const metadata = { diffHunkId: hunkId, hunkEndLine: endLine, hunkId, hunkStartLine: startLine }
-      for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
+      for (const lineNo of lineNumbers) {
         lineFlags[lineNo - 1] = createDiffSplitGutterFlags({
           diffHunkId: hunkId,
           hunkEndLine: endLine,
@@ -2165,15 +2191,15 @@ export function buildDiffSplitGutterFlagsFromChunks(
       continue
     }
 
-    const lineCount = Math.max(0, selection.modifiedLineCount)
-    if (!lineCount) {
+    const lineNumbers = getChunkChangedLineNumbers(doc, chunk, 'b')
+    if (!lineNumbers.length) {
       continue
     }
 
-    const startLine = clampNumber(selection.modifiedStartLine, 1, doc.lines)
-    const endLine = clampNumber(startLine + lineCount - 1, startLine, doc.lines)
+    const startLine = lineNumbers[0]
+    const endLine = lineNumbers[lineNumbers.length - 1]
     const metadata = { diffHunkId: hunkId, hunkEndLine: endLine, hunkId, hunkStartLine: startLine }
-    for (let lineNo = startLine; lineNo <= endLine; lineNo += 1) {
+    for (const lineNo of lineNumbers) {
       lineFlags[lineNo - 1] = createDiffSplitGutterFlags({
         added: true,
         diffHunkId: hunkId,

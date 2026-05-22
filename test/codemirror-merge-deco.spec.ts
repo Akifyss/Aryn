@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
 import { Change } from '../src/vendor/codemirror-merge/src/diff'
-import { addChunkDecorations, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldReadInlineChangeLayerDom, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { addChunkDecorations, chunkHasChangedLineOnLine, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldReadInlineChangeLayerDom, shouldRebuildFrozenChunkDecorationsForUpdate, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { RangeSetBuilder, Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor/lib/meo-native-diff-split'
@@ -136,6 +136,73 @@ describe('CodeMirror merge decorations', () => {
 
     expect(ranges.some((range) => range.classes.includes('cm-changedTextFullLine'))).toBe(false)
     expect(ranges.some((range) => range.classes === 'cm-changedText')).toBe(true)
+  })
+
+  it('does not mark the following unchanged line as changed when a chunk ends at its start', () => {
+    const originalDoc = Text.of(['same', 'old text', 'unchanged tail'])
+    const modifiedDoc = Text.of(['same', 'new text', 'unchanged tail'])
+    const chunk = new Chunk(
+      [new Change(0, originalDoc.line(2).length, 0, modifiedDoc.line(2).length)],
+      originalDoc.line(2).from,
+      originalDoc.line(3).from,
+      modifiedDoc.line(2).from,
+      modifiedDoc.line(3).from,
+    )
+    const builder = new RangeSetBuilder<Decoration>()
+
+    addChunkDecorations(chunk, modifiedDoc, false, true, builder, null, { gutter: false })
+
+    const ranges: Array<{ from: number, to: number, classes: string }> = []
+    builder.finish().between(0, modifiedDoc.length, (from, to, value) => {
+      ranges.push({ from, to, classes: decorationClass(value) })
+    })
+
+    expect(chunkHasChangedLineOnLine(chunk, chunk.fromB, modifiedDoc.line(2).from, modifiedDoc.line(2).to, false)).toBe(true)
+    expect(chunkHasChangedLineOnLine(chunk, chunk.fromB, modifiedDoc.line(3).from, modifiedDoc.line(3).to, false)).toBe(false)
+    expect(ranges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedLine' },
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).to, classes: 'cm-changedText cm-changedTextFullLine' },
+    ]))
+    expect(ranges).not.toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(3).from, to: modifiedDoc.line(3).from, classes: 'cm-changedLine' },
+    ]))
+  })
+
+  it('marks both adjacent source lines when a newline is deleted', () => {
+    const originalDoc = Text.of(['same', 'left', 'right', 'tail'])
+    const modifiedDoc = Text.of(['same', 'leftright', 'tail'])
+    const chunk = new Chunk(
+      [new Change(originalDoc.line(2).length, originalDoc.line(2).length + 1, modifiedDoc.line(2).length, modifiedDoc.line(2).length)],
+      originalDoc.line(2).from,
+      originalDoc.line(4).from,
+      modifiedDoc.line(2).from,
+      modifiedDoc.line(3).from,
+    )
+
+    expect(chunkHasChangedLineOnLine(chunk, chunk.fromA, originalDoc.line(2).from, originalDoc.line(2).to, true)).toBe(true)
+    expect(chunkHasChangedLineOnLine(chunk, chunk.fromA, originalDoc.line(3).from, originalDoc.line(3).to, true)).toBe(true)
+    expect(chunkHasChangedLineOnLine(chunk, chunk.fromA, originalDoc.line(4).from, originalDoc.line(4).to, true)).toBe(false)
+    expect(chunkHasChangedLineOnLine(chunk, chunk.fromB, modifiedDoc.line(2).from, modifiedDoc.line(2).to, false)).toBe(true)
+    expect(chunkHasChangedLineOnLine(chunk, chunk.fromB, modifiedDoc.line(3).from, modifiedDoc.line(3).to, false)).toBe(false)
+  })
+
+  it('does not rebuild frozen chunk decorations while chunks are deferred', () => {
+    expect(shouldRebuildFrozenChunkDecorationsForUpdate({
+      chunksDeferred: true,
+      refreshRequested: true,
+    })).toBe(false)
+    expect(shouldRebuildFrozenChunkDecorationsForUpdate({
+      chunksDeferred: true,
+      configChanged: true,
+    })).toBe(false)
+    expect(shouldRebuildFrozenChunkDecorationsForUpdate({
+      chunksDeferred: false,
+      refreshRequested: true,
+    })).toBe(true)
+    expect(shouldRebuildFrozenChunkDecorationsForUpdate({
+      chunksDeferred: false,
+      viewportChanged: true,
+    })).toBe(true)
   })
 
   it('promotes single-sided ranges inside replacement chunks to full-line decorations', () => {

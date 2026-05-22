@@ -5,6 +5,7 @@ import { ChangeSet, EditorState, Text, Transaction } from '@codemirror/state'
 import { Decoration } from '@codemirror/view'
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
+import { Change } from '../src/vendor/codemirror-merge/src/diff'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import { textIncludes } from '../src/vendor/meo/webview/helpers/docText'
 import { parseFootnotes } from '../src/vendor/meo/webview/helpers/footnotes'
@@ -786,6 +787,60 @@ describe('meo performance guards', () => {
         classes: 'cm-changedText cm-changedTextFullLine meo-diff-split-fallback-changedText',
       },
     ]))
+  })
+
+  it('keeps split fallback and gutter line highlights off following unchanged lines', () => {
+    const originalDoc = Text.of(['same', 'old text', 'unchanged tail'])
+    const modifiedDoc = Text.of(['same', 'new text', 'unchanged tail'])
+    const chunk = new Chunk(
+      [new Change(0, originalDoc.line(2).length, 0, modifiedDoc.line(2).length)],
+      originalDoc.line(2).from,
+      originalDoc.line(3).from,
+      modifiedDoc.line(2).from,
+      modifiedDoc.line(3).from,
+    )
+
+    const decorations = __meoDiffSplitRenderHealthTestHooks.buildSplitDiffFallbackDecorationsFromInputs(
+      modifiedDoc,
+      [
+        undefined,
+        { added: true, deleted: false, modified: false, removed: false, scope: 'unstaged' },
+        undefined,
+      ],
+      [chunk],
+      'b',
+      true,
+    )
+    const ranges: Array<{ from: number, to: number, classes: string }> = []
+    decorations.between(0, modifiedDoc.length, (from: number, to: number, value: any) => {
+      ranges.push({ from, to, classes: value.spec?.class ?? '' })
+    })
+
+    expect(__meoDiffSplitRenderHealthTestHooks.chunkHasChangedLineOnSideLine(
+      chunk,
+      modifiedDoc.line(2),
+      'b',
+    )).toBe(true)
+    expect(__meoDiffSplitRenderHealthTestHooks.chunkHasChangedLineOnSideLine(
+      chunk,
+      modifiedDoc.line(3),
+      'b',
+    )).toBe(false)
+    expect(ranges).toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(2).from, to: modifiedDoc.line(2).from, classes: 'cm-changedLine' },
+      {
+        from: modifiedDoc.line(2).from,
+        to: modifiedDoc.line(2).to,
+        classes: 'cm-changedText cm-changedTextFullLine meo-diff-split-fallback-changedText',
+      },
+    ]))
+    expect(ranges).not.toEqual(expect.arrayContaining([
+      { from: modifiedDoc.line(3).from, to: modifiedDoc.line(3).from, classes: 'cm-changedLine' },
+    ]))
+
+    const modifiedFlags = buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, [chunk], 'modified')
+    expect(modifiedFlags[1]).toMatchObject({ added: true, scope: 'unstaged' })
+    expect(modifiedFlags[2]).toBeUndefined()
   })
 
   it('treats full-line changes, including empty lines, as text render health requirements', () => {

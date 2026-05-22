@@ -39,18 +39,27 @@ export const decorateChunks = ViewPlugin.fromClass(class {
 
     let refreshRequested = hasRefreshChunkDecorationsEffect(update)
     if (isDeferredChunkUpdate(update)) this.frozen = true
+    let chunksDeferred = update.state.field(chunksDeferredField, false) === true
     if (this.frozen) {
-      if (refreshRequested) {
+      if (chunksDeferred) {
+        // Chunks still describe the pre-edit document. Until MergeView commits a
+        // fresh setChunks effect, rebuilding decorations would apply stale chunk
+        // ranges to the new document and briefly mark unrelated following lines.
+        if (update.docChanged) {
+          this.deco = this.deco.map(update.changes)
+          if (this.gutter) this.gutter = this.gutter.map(update.changes)
+        }
+      } else if (shouldRebuildFrozenChunkDecorationsForUpdate({
+        chunksDeferred,
+        configChanged: configChanged(update.startState, update.state),
+        docChanged: update.docChanged,
+        refreshRequested,
+        viewportChanged: update.viewportChanged,
+      })) {
         ({deco: this.deco, gutter: this.gutter} = getChunkDeco(update.view))
       } else if (update.docChanged) {
         this.deco = this.deco.map(update.changes)
         if (this.gutter) this.gutter = this.gutter.map(update.changes)
-      } else if (shouldRefreshFrozenChunkDecorationsForUpdate({
-        configChanged: configChanged(update.startState, update.state),
-        docChanged: update.docChanged,
-        viewportChanged: update.viewportChanged,
-      })) {
-        ({deco: this.deco, gutter: this.gutter} = getChunkDeco(update.view))
       }
       return
     }
@@ -171,6 +180,20 @@ export function shouldRefreshFrozenChunkDecorationsForUpdate(update: {
   viewportChanged?: boolean,
 }) {
   return !!(!update.docChanged && (update.viewportChanged || update.configChanged))
+}
+
+export function shouldRebuildFrozenChunkDecorationsForUpdate(update: {
+  chunksDeferred?: boolean,
+  configChanged?: boolean,
+  docChanged?: boolean,
+  refreshRequested?: boolean,
+  viewportChanged?: boolean,
+}) {
+  if (update.chunksDeferred) return false
+  return !!(
+    update.refreshRequested ||
+    shouldRefreshFrozenChunkDecorationsForUpdate(update)
+  )
 }
 
 const changedLine = Decoration.line({class: "cm-changedLine"})
@@ -493,6 +516,44 @@ export function isWholeLineChange(chunk: Chunk, isA: boolean) {
   return isA ? chunk.fromB == chunk.toB : chunk.fromA == chunk.toA
 }
 
+function lineOverlapsChangedRange(rangeFrom: number, rangeTo: number, lineFrom: number, lineTo: number) {
+  if (rangeFrom == rangeTo) return false
+  return lineFrom == lineTo
+    ? lineFrom >= rangeFrom && lineFrom < rangeTo
+    : lineFrom < rangeTo && lineTo >= rangeFrom
+}
+
+function changeTouchesLine(change: Change, from: number, lineFrom: number, lineTo: number, isA: boolean) {
+  let changeFrom = from + (isA ? change.fromA : change.fromB)
+  let changeTo = from + (isA ? change.toA : change.toB)
+  if (changeFrom < changeTo) {
+    return lineFrom == lineTo
+      ? changeFrom <= lineFrom && changeTo >= lineFrom
+      : changeFrom <= lineTo && changeTo >= lineFrom
+  }
+
+  let otherFrom = isA ? change.fromB : change.fromA
+  let otherTo = isA ? change.toB : change.toA
+  return otherFrom < otherTo && changeFrom >= lineFrom && changeFrom <= lineTo
+}
+
+export function chunkHasChangedLineOnLine(
+  chunk: Chunk,
+  from: number,
+  lineFrom: number,
+  lineTo: number,
+  isA: boolean,
+) {
+  let to = isA ? chunk.toA : chunk.toB
+  if (!lineOverlapsChangedRange(from, to, lineFrom, lineTo)) return false
+  if (isWholeLineChange(chunk, isA)) return true
+  if (lineNeedsStandaloneFullLineTextDeco(chunk, from, lineFrom, lineTo, isA)) return true
+  for (let change of chunk.changes) {
+    if (changeTouchesLine(change, from, lineFrom, lineTo, isA)) return true
+  }
+  return false
+}
+
 export function isLineFullyInsertedOrDeleted(
   chunk: Chunk,
   from: number,
@@ -672,17 +733,21 @@ export function addChunkDecorations(
     let pendingDecorations: PendingDecoration[] = []
     let lineIsFullChange = (lineFrom: number, lineTo: number) =>
       wholeLineChange || lineNeedsStandaloneFullLineTextDeco(chunk, from, lineFrom, lineTo, isA)
-    let addLine = (pos: number) => {
-      addChangedLineDeco(pendingDecorations, pos)
+    let lineHasChangedLine = (lineFrom: number, lineTo: number) =>
+      chunkHasChangedLineOnLine(chunk, from, lineFrom, lineTo, isA)
+    let addLine = (pos: number, lineFrom: number, lineTo: number) => {
+      if (lineHasChangedLine(lineFrom, lineTo)) addChangedLineDeco(pendingDecorations, pos)
     }
     let firstLine = doc.lineAt(Math.min(from, doc.length))
-    addLine(from)
+    addLine(from, firstLine.from, firstLine.to)
     if (lineIsFullChange(firstLine.from, firstLine.to)) {
       addFullLineDiffTextDeco(pendingDecorations, firstLine.from, firstLine.to, emptyLineFull, inlineChangedTextFullLine, inlineChangedTextFullLineEmpty)
     }
     let markTo = Math.min(to, doc.length)
     if (from < markTo) addPendingDecoration(pendingDecorations, from, markTo, isA ? deleted : inserted)
-    if (options.gutter !== false && gutterBuilder) gutterBuilder.add(from, from, changedLineGutterMarker)
+    if (options.gutter !== false && gutterBuilder && lineHasChangedLine(firstLine.from, firstLine.to)) {
+      gutterBuilder.add(from, from, changedLineGutterMarker)
+    }
     for (let iter = doc.iterRange(from, to - 1), pos = from; !iter.next().done;) {
       if (iter.lineBreak) {
         let line = doc.lineAt(Math.min(pos, doc.length))
@@ -706,11 +771,13 @@ export function addChunkDecorations(
         )
         pos++
         let nextLine = doc.lineAt(Math.min(pos, doc.length))
-        addLine(pos)
+        addLine(pos, nextLine.from, nextLine.to)
         if (lineIsFullChange(nextLine.from, nextLine.to)) {
           addFullLineDiffTextDeco(pendingDecorations, nextLine.from, nextLine.to, emptyLineFull, inlineChangedTextFullLine, inlineChangedTextFullLineEmpty)
         }
-        if (options.gutter !== false && gutterBuilder) gutterBuilder.add(pos, pos, changedLineGutterMarker)
+        if (options.gutter !== false && gutterBuilder && lineHasChangedLine(nextLine.from, nextLine.to)) {
+          gutterBuilder.add(pos, pos, changedLineGutterMarker)
+        }
         continue
       }
       let lineEnd = pos + iter.value.length
