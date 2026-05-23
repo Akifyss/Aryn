@@ -20,6 +20,7 @@ import { Icon } from '@iconify/react'
 import {
   AiLine,
   AddLine,
+  ArrowUpLine,
   BrainLine,
   CodeLine,
   Delete2Line,
@@ -2599,6 +2600,178 @@ function AgentChatSurface() {
   const composerMenuRootStyle = {
     '--agent-composer-menu-height': `${activeComposerMenu === 'provider' ? providerMenuHeight : modelMenuHeight}px`,
   } as CSSProperties
+  const composerFooter = (
+    <div ref={modelFieldRef} className='agent-composer-meta'>
+      <div className='agent-composer-toolbar'>
+        <div className='agent-composer-actions'>
+          <div className='agent-model-field'>
+            {hasConfiguredProviders ? (
+              <div className='agent-model-composite'>
+                <button
+                  type='button'
+                  aria-expanded={canChooseProvider ? activeComposerMenu === 'provider' : undefined}
+                  aria-haspopup={canChooseProvider ? 'listbox' : undefined}
+                  aria-label='Provider'
+                  className={`agent-provider-trigger${canChooseProvider ? '' : ' is-static'}`}
+                  disabled={!workspacePath || isSwitchingModel}
+                  onClick={() => {
+                    if (!canChooseProvider) {
+                      return
+                    }
+                    setActiveComposerMenu((currentValue) => currentValue === 'provider' ? null : 'provider')
+                  }}
+                >
+                  <span className='agent-provider-trigger-label'>{resolvedSelectedProviderValue}</span>
+                </button>
+
+                <span className='agent-model-separator'>/</span>
+
+                <Input
+                  aria-label='Model'
+                  className='agent-model-input'
+                  disabled={!workspacePath || !agentState.runtime.hasConfiguredModels || isSwitchingModel}
+                  ref={modelInputRef}
+                  onBlur={() => {
+                    setIsModelInputFullySelected(false)
+                    setActiveComposerMenu((currentValue) => currentValue === 'model' ? null : currentValue)
+                    void handleModelInputCommit()
+                  }}
+                  onChange={(event) => {
+                    if (panelError) {
+                      setPanelError(null)
+                    }
+                    setIsModelInputFullySelected(false)
+                    setActiveComposerMenu('model')
+                    setModelInputValue(event.target.value)
+                    setModelDrafts((currentValue) => ({
+                      ...currentValue,
+                      [resolvedSelectedProviderValue]: event.target.value,
+                    }))
+                  }}
+                  onFocus={(event) => {
+                    setActiveComposerMenu('model')
+                    const input = event.currentTarget
+                    requestAnimationFrame(() => {
+                      input.select()
+                      syncModelInputSelectionState(input)
+                    })
+                  }}
+                  onSelect={(event) => {
+                    syncModelInputSelectionState(event.currentTarget)
+                  }}
+                  onPointerUp={(event) => {
+                    syncModelInputSelectionStateNextFrame(event.currentTarget)
+                  }}
+                  onKeyUp={(event) => {
+                    syncModelInputSelectionStateNextFrame(event.currentTarget)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      setActiveComposerMenu(null)
+                      void handleModelInputCommit()
+                    }
+
+                    if (event.key === 'Escape') {
+                      setActiveComposerMenu(null)
+                    }
+                  }}
+                  placeholder={modelPlaceholder}
+                  value={modelInputValue}
+                  variant='secondary'
+                />
+              </div>
+            ) : (
+              <Button
+                className='agent-provider-setup-button'
+                isDisabled={!workspacePath}
+                size='sm'
+                variant='ghost'
+                onPress={() => {
+                  setActiveComposerMenu(null)
+                  onOpenProviderSettings?.()
+                }}
+              >
+                配置提供商
+              </Button>
+            )}
+          </div>
+
+          <Button
+            isIconOnly
+            isDisabled={!canSend}
+            size='sm'
+            type='submit'
+            variant='ghost'
+            className='agent-send-button'
+          >
+            <ArrowUpLine size={16} />
+          </Button>
+        </div>
+      </div>
+
+      {activeComposerMenu === 'provider' && canChooseProvider ? (
+        <AppScrollArea
+          className='agent-composer-menu'
+          contentClassName='agent-composer-menu-content'
+          rootStyle={composerMenuRootStyle}
+        >
+          <div className='agent-composer-menu-list' role='listbox' aria-label='Available providers'>
+            {configuredProviders.map((provider) => (
+              <button
+                key={provider}
+                type='button'
+                className={`agent-composer-option${provider === resolvedSelectedProviderValue ? ' is-active' : ''}`}
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                }}
+                onClick={() => {
+                  void handleProviderSelectionChange(provider)
+                }}
+              >
+                <span className='agent-composer-option-label'>{provider}</span>
+              </button>
+            ))}
+          </div>
+        </AppScrollArea>
+      ) : null}
+
+      {activeComposerMenu === 'model' && modelSuggestions.length > 0 ? (
+        <AppScrollArea
+          className='agent-composer-menu'
+          contentClassName='agent-composer-menu-content'
+          rootStyle={composerMenuRootStyle}
+        >
+          <div className='agent-composer-menu-list' role='listbox' aria-label='Available models'>
+            {modelSuggestions.map((modelId) => (
+              <button
+                key={`${resolvedSelectedProviderValue}/${modelId}`}
+                type='button'
+                className={`agent-composer-option${modelId === modelInputValue ? ' is-active' : ''}`}
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                }}
+                onClick={() => {
+                  if (panelError) {
+                    setPanelError(null)
+                  }
+                  setModelInputValue(modelId)
+                  setModelDrafts((currentValue) => ({
+                    ...currentValue,
+                    [resolvedSelectedProviderValue]: modelId,
+                  }))
+                  setActiveComposerMenu(null)
+                  void handleSelectModel(`${resolvedSelectedProviderValue}/${modelId}`)
+                }}
+              >
+                <span className='agent-composer-option-label'>{modelId}</span>
+              </button>
+            ))}
+          </div>
+        </AppScrollArea>
+      ) : null}
+    </div>
+  )
 
   return (
     <div className='agent-shell'>
@@ -2734,179 +2907,8 @@ function AgentChatSurface() {
             value={composerState.value}
             workspaceNodes={workspaceTree}
             workspacePath={workspacePath}
+            footer={composerFooter}
           />
-
-          <div ref={modelFieldRef} className='agent-composer-meta'>
-            <div className='agent-composer-toolbar'>
-              <div className='agent-composer-actions'>
-                <div className='agent-model-field'>
-                  {hasConfiguredProviders ? (
-                    <div className='agent-model-composite'>
-                      <button
-                        type='button'
-                        aria-expanded={canChooseProvider ? activeComposerMenu === 'provider' : undefined}
-                        aria-haspopup={canChooseProvider ? 'listbox' : undefined}
-                        aria-label='Provider'
-                        className={`agent-provider-trigger${canChooseProvider ? '' : ' is-static'}`}
-                        disabled={!workspacePath || isSwitchingModel}
-                        onClick={() => {
-                          if (!canChooseProvider) {
-                            return
-                          }
-                          setActiveComposerMenu((currentValue) => currentValue === 'provider' ? null : 'provider')
-                        }}
-                      >
-                        <span className='agent-provider-trigger-label'>{resolvedSelectedProviderValue}</span>
-                      </button>
-
-                      <span className='agent-model-separator'>/</span>
-
-                      <Input
-                        aria-label='Model'
-                        className='agent-model-input'
-                        disabled={!workspacePath || !agentState.runtime.hasConfiguredModels || isSwitchingModel}
-                        ref={modelInputRef}
-                        onBlur={() => {
-                          setIsModelInputFullySelected(false)
-                          setActiveComposerMenu((currentValue) => currentValue === 'model' ? null : currentValue)
-                          void handleModelInputCommit()
-                        }}
-                        onChange={(event) => {
-                          if (panelError) {
-                            setPanelError(null)
-                          }
-                          setIsModelInputFullySelected(false)
-                          setActiveComposerMenu('model')
-                          setModelInputValue(event.target.value)
-                          setModelDrafts((currentValue) => ({
-                            ...currentValue,
-                            [resolvedSelectedProviderValue]: event.target.value,
-                          }))
-                        }}
-                        onFocus={(event) => {
-                          setActiveComposerMenu('model')
-                          const input = event.currentTarget
-                          requestAnimationFrame(() => {
-                            input.select()
-                            syncModelInputSelectionState(input)
-                          })
-                        }}
-                        onSelect={(event) => {
-                          syncModelInputSelectionState(event.currentTarget)
-                        }}
-                        onPointerUp={(event) => {
-                          syncModelInputSelectionStateNextFrame(event.currentTarget)
-                        }}
-                        onKeyUp={(event) => {
-                          syncModelInputSelectionStateNextFrame(event.currentTarget)
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            setActiveComposerMenu(null)
-                            void handleModelInputCommit()
-                          }
-
-                          if (event.key === 'Escape') {
-                            setActiveComposerMenu(null)
-                          }
-                        }}
-                        placeholder={modelPlaceholder}
-                        value={modelInputValue}
-                        variant='secondary'
-                      />
-                    </div>
-                  ) : (
-                    <Button
-                      className='agent-provider-setup-button'
-                      isDisabled={!workspacePath}
-                      size='sm'
-                      variant='ghost'
-                      onPress={() => {
-                        setActiveComposerMenu(null)
-                        onOpenProviderSettings?.()
-                      }}
-                    >
-                      配置提供商
-                    </Button>
-                  )}
-
-                </div>
-
-                <Button
-                  isIconOnly
-                  isDisabled={!canSend}
-                  size='sm'
-                  type='submit'
-                  variant='ghost'
-                  className='agent-send-button'
-                >
-                  <Icon icon='ic:round-arrow-upward' width={16} height={16} />
-                </Button>
-              </div>
-            </div>
-
-            {activeComposerMenu === 'provider' && canChooseProvider ? (
-              <AppScrollArea
-                className='agent-composer-menu'
-                contentClassName='agent-composer-menu-content'
-                rootStyle={composerMenuRootStyle}
-              >
-                <div className='agent-composer-menu-list' role='listbox' aria-label='Available providers'>
-                  {configuredProviders.map((provider) => (
-                    <button
-                      key={provider}
-                      type='button'
-                      className={`agent-composer-option${provider === resolvedSelectedProviderValue ? ' is-active' : ''}`}
-                      onPointerDown={(event) => {
-                        event.preventDefault()
-                      }}
-                      onClick={() => {
-                        void handleProviderSelectionChange(provider)
-                      }}
-                    >
-                      <span className='agent-composer-option-label'>{provider}</span>
-                    </button>
-                  ))}
-                </div>
-              </AppScrollArea>
-            ) : null}
-
-            {activeComposerMenu === 'model' && modelSuggestions.length > 0 ? (
-              <AppScrollArea
-                className='agent-composer-menu'
-                contentClassName='agent-composer-menu-content'
-                rootStyle={composerMenuRootStyle}
-              >
-                <div className='agent-composer-menu-list' role='listbox' aria-label='Available models'>
-                  {modelSuggestions.map((modelId) => (
-                    <button
-                      key={`${resolvedSelectedProviderValue}/${modelId}`}
-                      type='button'
-                      className={`agent-composer-option${modelId === modelInputValue ? ' is-active' : ''}`}
-                      onPointerDown={(event) => {
-                        event.preventDefault()
-                      }}
-                      onClick={() => {
-                        if (panelError) {
-                          setPanelError(null)
-                        }
-                        setModelInputValue(modelId)
-                        setModelDrafts((currentValue) => ({
-                          ...currentValue,
-                          [resolvedSelectedProviderValue]: modelId,
-                        }))
-                        setActiveComposerMenu(null)
-                        void handleSelectModel(`${resolvedSelectedProviderValue}/${modelId}`)
-                      }}
-                    >
-                      <span className='agent-composer-option-label'>{modelId}</span>
-                    </button>
-                  ))}
-                </div>
-              </AppScrollArea>
-            ) : null}
-          </div>
         </div>
       </form>
     </div>

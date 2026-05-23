@@ -3074,6 +3074,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-shell {
+  --agent-content-max-width: 800px;
   --agent-messages-block-padding: 16px;
   --agent-messages-inline-padding: 16px;
   --agent-messages-bottom-padding: 104px;
@@ -3462,8 +3463,8 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: min(100%, 800px);
-  max-width: 800px;
+  width: min(100%, var(--agent-content-max-width));
+  max-width: var(--agent-content-max-width);
   min-height: 100%;
   margin: 0 auto;
   padding: var(--agent-messages-block-padding) var(--agent-messages-inline-padding);
@@ -4121,7 +4122,6 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-composer {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--separator);
 }
 
 .agent-composer-shell {
@@ -4135,7 +4135,9 @@ body.workspace-tree-dragging .workspace-tree-row {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--agent-composer-control-gap);
+  width: 100%;
+  max-width: var(--agent-content-max-width);
+  margin: 0 auto;
   padding: var(--agent-composer-padding-block-start) var(--agent-composer-padding-inline) var(--agent-composer-padding-block-end);
 }
 
@@ -4156,33 +4158,6 @@ body.workspace-tree-dragging .workspace-tree-row {
   cursor: default;
 }
 
-.agent-composer-resize-handle::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: var(--resize-handle-line-width);
-  transform: translateY(-50%);
-  border-radius: 999px;
-  background: var(--separator);
-  opacity: 0;
-  transition:
-    opacity 140ms ease,
-    background-color 140ms ease,
-    box-shadow 140ms ease;
-}
-
-.agent-composer-resize-handle:hover::before,
-.agent-composer-resize-handle.is-active::before {
-  opacity: 1;
-}
-
-.agent-composer-resize-handle.is-active::before {
-  background: var(--accent);
-  box-shadow: 0 0 0 4px var(--color-accent-soft);
-}
-
 .agent-composer-input.textarea,
 .agent-composer-input.textarea:hover,
 .agent-composer-input.textarea:focus,
@@ -4190,109 +4165,50 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-composer-input.textarea[data-focus="true"],
 .agent-composer-input.textarea[data-focus-visible="true"],
 .agent-composer-input.textarea[data-hovered="true"] {
+  display: block;
   width: 100%;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  outline: none !important;
+  box-sizing: border-box;
+  border-width: 1px !important;
+  border-color: var(--color-field-border) !important;
+  background-color: var(--color-field) !important;
+  box-shadow:
+    0 2px 4px rgb(0 0 0 / 0.04),
+    0 1px 2px rgb(0 0 0 / 0.06),
+    0 0 1px rgb(0 0 0 / 0.06) !important;
   resize: none !important;
-  padding: 0 !important;
   min-height: var(--agent-composer-height);
   height: var(--agent-composer-height);
+  padding-bottom: calc(var(--agent-composer-toolbar-height) + 18px) !important;
   overflow: auto !important;
 }
 
-.agent-composer-input.textarea [data-slot="input-wrapper"],
-.agent-composer-input.textarea [data-slot="inner-wrapper"] {
-  padding: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.agent-composer-input.textarea textarea,
-.agent-composer-input.textarea [data-slot="input"] {
-  min-height: var(--agent-composer-height);
-  height: var(--agent-composer-height);
-  resize: none !important;
-  overflow: auto !important;
-  padding: 0 !important;
-  color: var(--foreground);
+.agent-composer-input.textarea {
+  --color-field-border: var(--border);
+  --color-field-border-hover: var(--separator);
+  --color-field-border-focus: var(--focus);
   font-size: 13px;
   line-height: 1.65;
 }
 
-.agent-composer-input.textarea::placeholder,
-.agent-composer-input.textarea textarea::placeholder {
-  color: var(--field-placeholder);
+.agent-composer-input.textarea:hover:not(:focus):not(:focus-visible),
+.agent-composer-input.textarea[data-hovered="true"]:not([data-focused="true"]):not([data-focus-visible="true"]) {
+  border-top-color: var(--color-field-border-hover) !important;
+}
+
+.agent-composer-input.textarea:focus,
+.agent-composer-input.textarea:focus-visible,
+.agent-composer-input.textarea[data-focused="true"],
+.agent-composer-input.textarea[data-focus-visible="true"] {
+  border-top-color: var(--color-field-border-hover) !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
 }
 
 .agent-composer-input-shell {
   position: relative;
-  min-height: var(--agent-composer-height);
-  height: var(--agent-composer-height);
-}
-
-.agent-composer-editor {
-  position: absolute;
-  inset: 0;
   width: 100%;
   min-height: var(--agent-composer-height);
   height: var(--agent-composer-height);
-  padding: 0;
-  margin: 0;
-  overflow: auto;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.65;
-  letter-spacing: inherit;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  tab-size: 2;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--foreground);
-  caret-color: var(--foreground);
-}
-
-.agent-composer-placeholder {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-  color: var(--field-placeholder);
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.agent-composer-editor[contenteditable='false'] {
-  cursor: default;
-}
-
-.agent-composer-editor::selection {
-  background: var(--color-accent-soft);
-}
-
-.agent-composer-editor::-moz-selection {
-  background: var(--color-accent-soft);
-}
-
-.agent-composer-mention-token {
-  display: inline-block;
-  box-sizing: border-box;
-  padding: 0 4px;
-  line-height: calc(1.65em - 2px);
-  vertical-align: baseline;
-  white-space: nowrap;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-secondary) 88%, var(--accent) 12%);
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
-  color: var(--foreground);
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
 }
 
 .agent-composer-mention-menu,
@@ -4441,8 +4357,11 @@ body.workspace-tree-dragging .workspace-tree-row {
   --agent-composer-action-gap: 6px;
   --agent-send-button-size: 36px;
   /* The menu is absolute, so anchoring it here does not move the provider/model triggers. */
-  position: relative;
-  flex: 0 0 var(--agent-composer-toolbar-height);
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  z-index: 50;
   height: var(--agent-composer-toolbar-height);
   min-height: var(--agent-composer-toolbar-height);
 }
