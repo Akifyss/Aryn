@@ -4287,11 +4287,9 @@ body.workspace-tree-dragging .workspace-tree-row {
   -webkit-box-decoration-break: clone;
 }
 
-.agent-composer-mention-menu {
+.agent-composer-mention-menu,
+.agent-composer-meta>.agent-composer-menu {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(100% + 10px);
   z-index: 48;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -4301,23 +4299,46 @@ body.workspace-tree-dragging .workspace-tree-row {
   backdrop-filter: blur(22px);
 }
 
+.agent-composer-mention-menu {
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 10px);
+}
+
+.agent-composer-meta>.agent-composer-menu {
+  left: 0;
+  right: calc(var(--agent-send-button-size) + var(--agent-composer-action-gap));
+  bottom: calc(100% + 10px);
+  height: var(--agent-composer-menu-height);
+  width: auto;
+  min-height: 0;
+  max-height: 264px;
+}
+
 .agent-composer-mention-menu-scroll {
   width: 100%;
+}
+
+.agent-composer-mention-menu-scroll,
+.agent-composer-meta>.agent-composer-menu {
   --app-scroll-area-scrollbar-gap: 4px;
   --app-scroll-area-scrollbar-thickness: 8px;
 }
 
-.agent-composer-mention-menu-scroll-content {
+.agent-composer-mention-menu-scroll-content,
+.agent-composer-menu-content {
   min-width: 100%;
 }
 
-.agent-composer-mention-menu-list {
+.agent-composer-mention-menu-list,
+.agent-composer-menu-list {
   display: flex;
   flex-direction: column;
   padding: 5px;
 }
 
-.agent-composer-mention-option {
+.agent-composer-mention-option,
+.agent-composer-option {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -4336,7 +4357,10 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-composer-mention-option:hover,
 .agent-composer-mention-option:focus-visible,
-.agent-composer-mention-option.is-active {
+.agent-composer-mention-option.is-active,
+.agent-composer-option:hover,
+.agent-composer-option:focus-visible,
+.agent-composer-option.is-active {
   outline: none;
   background: color-mix(in srgb, var(--surface-tertiary) 86%, var(--accent) 14%);
 }
@@ -4394,11 +4418,13 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-composer-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--agent-composer-action-gap);
   width: 100%;
 }
 
 .agent-composer-meta {
+  --agent-composer-action-gap: 6px;
+  --agent-send-button-size: 36px;
   position: relative;
   flex: 0 0 36px;
   height: 36px;
@@ -4534,54 +4560,17 @@ body.workspace-tree-dragging .workspace-tree-row {
   color: var(--field-placeholder);
 }
 
-.agent-composer-meta>.agent-composer-menu {
-  position: absolute !important;
-  left: -16px;
-  right: -16px;
-  bottom: calc(100% + 1px);
-  z-index: 8;
-  display: flex;
-  min-height: 0;
-  max-height: 224px;
-  border-top: 1px solid var(--separator);
-  border-bottom: 1px solid var(--separator);
-  background: var(--background);
-}
-
-.agent-composer-menu-content {
-  min-width: 100%;
-}
-
 .agent-composer-option {
-  display: block;
-  width: 100%;
-  min-height: 43px;
   box-sizing: border-box;
-  padding: 12px 0;
-  border: 0;
-  border-top: 1px solid var(--separator);
-  background: transparent;
-  text-align: left;
-  transition: background-color 140ms ease;
-}
-
-.agent-composer-option:first-child {
-  border-top: 0;
-}
-
-.agent-composer-option:hover,
-.agent-composer-option:focus-visible,
-.agent-composer-option.is-active {
-  background: var(--surface-tertiary);
-  outline: none;
 }
 
 .agent-composer-option-label {
   display: block;
+  min-width: 0;
   overflow: hidden;
-  padding: 0 16px;
   color: var(--foreground);
   font-size: 13px;
+  font-weight: 500;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4591,8 +4580,8 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 36px;
-  height: 36px;
+  min-width: var(--agent-send-button-size);
+  height: var(--agent-send-button-size);
   padding: 0;
   border: 0;
   border-radius: 13px;

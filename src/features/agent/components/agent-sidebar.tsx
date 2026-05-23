@@ -105,9 +105,9 @@ type AgentSessionSelection = { kind: 'new' } | { kind: 'session', sessionPath: s
 
 const KNOWN_AGENT_PROVIDERS = ['google', 'openai', 'openrouter'] as const
 const MARKDOWN_PLUGINS = [remarkGfm]
-const AGENT_COMPOSER_MENU_MAX_HEIGHT = 224
-const AGENT_COMPOSER_MENU_ROW_HEIGHT = 43
-const AGENT_COMPOSER_MENU_HEIGHT_BUFFER = 2
+const AGENT_COMPOSER_MENU_MAX_HEIGHT = 264
+const AGENT_COMPOSER_MENU_ROW_HEIGHT = 30
+const AGENT_COMPOSER_MENU_PADDING = 10
 const AGENT_THINKING_AUTO_EXPAND_DELAY_MS = 520
 const AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS = 140
 const AGENT_THINKING_MIN_EXPANDED_MS = 360
@@ -1961,6 +1961,7 @@ function AgentProvider({
     }
 
     try {
+      setActiveComposerMenu(null)
       setPanelError(null)
 
       if (activeSessionSelection.kind === 'new' || !agentState.activeSession) {
@@ -2053,11 +2054,11 @@ function AgentProvider({
     })
   const providerMenuHeight = Math.min(
     AGENT_COMPOSER_MENU_MAX_HEIGHT,
-    configuredProviders.length * AGENT_COMPOSER_MENU_ROW_HEIGHT + AGENT_COMPOSER_MENU_HEIGHT_BUFFER,
+    configuredProviders.length * AGENT_COMPOSER_MENU_ROW_HEIGHT + AGENT_COMPOSER_MENU_PADDING,
   )
   const modelMenuHeight = Math.min(
     AGENT_COMPOSER_MENU_MAX_HEIGHT,
-    modelSuggestions.length * AGENT_COMPOSER_MENU_ROW_HEIGHT + AGENT_COMPOSER_MENU_HEIGHT_BUFFER,
+    modelSuggestions.length * AGENT_COMPOSER_MENU_ROW_HEIGHT + AGENT_COMPOSER_MENU_PADDING,
   )
   const modelPlaceholder = 'model'
   const canSend = Boolean(
@@ -2594,6 +2595,9 @@ function AgentChatSurface() {
   const hasEmptyChat = Boolean(workspacePath && renderedMessages.length === 0)
   const isNewConversation = activeSessionSelection.kind === 'new'
     || (hasEmptyChat && !activeSession)
+  const composerMenuRootStyle = {
+    '--agent-composer-menu-height': `${activeComposerMenu === 'provider' ? providerMenuHeight : modelMenuHeight}px`,
+  } as CSSProperties
 
   return (
     <div className='agent-shell'>
@@ -2844,14 +2848,14 @@ function AgentChatSurface() {
               <AppScrollArea
                 className='agent-composer-menu'
                 contentClassName='agent-composer-menu-content'
-                rootStyle={{ height: `${providerMenuHeight}px` }}
+                rootStyle={composerMenuRootStyle}
               >
-                <div role='listbox' aria-label='Available providers'>
+                <div className='agent-composer-menu-list' role='listbox' aria-label='Available providers'>
                   {configuredProviders.map((provider) => (
                     <button
                       key={provider}
                       type='button'
-                      className={`agent-composer-option ${provider === resolvedSelectedProviderValue ? 'is-active' : ''}`}
+                      className={`agent-composer-option${provider === resolvedSelectedProviderValue ? ' is-active' : ''}`}
                       onPointerDown={(event) => {
                         event.preventDefault()
                       }}
@@ -2870,14 +2874,14 @@ function AgentChatSurface() {
               <AppScrollArea
                 className='agent-composer-menu'
                 contentClassName='agent-composer-menu-content'
-                rootStyle={{ height: `${modelMenuHeight}px` }}
+                rootStyle={composerMenuRootStyle}
               >
-                <div role='listbox' aria-label='Available models'>
+                <div className='agent-composer-menu-list' role='listbox' aria-label='Available models'>
                   {modelSuggestions.map((modelId) => (
                     <button
                       key={`${resolvedSelectedProviderValue}/${modelId}`}
                       type='button'
-                      className='agent-composer-option'
+                      className={`agent-composer-option${modelId === modelInputValue ? ' is-active' : ''}`}
                       onPointerDown={(event) => {
                         event.preventDefault()
                       }}
