@@ -30,12 +30,17 @@ export const AppScrollArea = forwardRef<HTMLDivElement, AppScrollAreaProps>(func
   },
   forwardedRef,
 ) {
+  const resolvedRootStyle = {
+    position: 'var(--app-scroll-area-position, relative)',
+    ...rootStyle,
+  } as CSSProperties
+
   return (
     <ScrollArea.Root
       ref={forwardedRef}
       className={joinClasses('app-scroll-area', className)}
       overflowEdgeThreshold={overflowEdgeThreshold}
-      style={rootStyle}
+      style={resolvedRootStyle}
     >
       <ScrollArea.Viewport
         ref={viewportRef}
