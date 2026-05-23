@@ -1,5 +1,6 @@
 import { lstat, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent'
 import {
@@ -106,6 +107,86 @@ const AUTO_SESSION_NAME_MODEL: Model<Api> = {
   name: 'OpenRouter Free Router',
   provider: OPENROUTER_PROVIDER,
   reasoning: false,
+}
+
+let piDefaultModelPerProviderPromise: Promise<Record<string, string>> | null = null
+
+function loadPiDefaultModelPerProvider() {
+  piDefaultModelPerProviderPromise ??= (async () => {
+    try {
+      const piEntryPath = fileURLToPath(import.meta.resolve('@earendil-works/pi-coding-agent'))
+      const resolverPath = path.join(path.dirname(piEntryPath), 'core', 'model-resolver.js')
+      const resolverModule = await import(pathToFileURL(resolverPath).href) as {
+        defaultModelPerProvider?: Record<string, string>
+      }
+
+      return resolverModule.defaultModelPerProvider ?? {}
+    } catch {
+      return {}
+    }
+  })()
+
+  return piDefaultModelPerProviderPromise
+}
+
+function selectProviderPreferredModel(
+  availableModels: Model<Api>[],
+  defaultModelPerProvider: Record<string, string>,
+  provider: string,
+) {
+  const providerModels = availableModels.filter((model) => model.provider === provider)
+
+  if (providerModels.length === 0) {
+    return null
+  }
+
+  const defaultModelId = defaultModelPerProvider[provider]
+  return providerModels.find((model) => model.id === defaultModelId) ?? providerModels[0]
+}
+
+function selectPiPreferredModel(
+  availableModels: Model<Api>[],
+  settingsManager: SettingsManager,
+  defaultModelPerProvider: Record<string, string>,
+) {
+  const preferredProvider = settingsManager.getDefaultProvider()
+  const preferredModel = settingsManager.getDefaultModel()
+
+  if (preferredProvider && preferredModel) {
+    const preferredSelection = availableModels.find((model) => model.provider === preferredProvider && model.id === preferredModel)
+
+    if (preferredSelection) {
+      return preferredSelection
+    }
+  }
+
+  for (const [provider, modelId] of Object.entries(defaultModelPerProvider)) {
+    const defaultSelection = availableModels.find((model) => model.provider === provider && model.id === modelId)
+
+    if (defaultSelection) {
+      return defaultSelection
+    }
+  }
+
+  return availableModels[0] ?? null
+}
+
+function getProviderPreferredModelKeys(
+  availableModels: Model<Api>[],
+  defaultModelPerProvider: Record<string, string>,
+) {
+  const modelKeys: Record<string, string> = {}
+  const providers = Array.from(new Set(availableModels.map((model) => model.provider)))
+
+  for (const provider of providers) {
+    const selectedModel = selectProviderPreferredModel(availableModels, defaultModelPerProvider, provider)
+
+    if (selectedModel) {
+      modelKeys[provider] = `${selectedModel.provider}/${selectedModel.id}`
+    }
+  }
+
+  return modelKeys
 }
 
 function asText(value: string | Array<TextContent | { type: 'image' }>) {
@@ -936,13 +1017,18 @@ export class PiAgentManager {
       return
     }
 
-    const preferredProvider = session.settingsManager.getDefaultProvider()
-    const preferredModel = session.settingsManager.getDefaultModel()
-    const preferredSelection = preferredProvider && preferredModel
-      ? availableModels.find((model) => model.provider === preferredProvider && model.id === preferredModel)
-      : null
+    const defaultModelPerProvider = await loadPiDefaultModelPerProvider()
+    const preferredSelection = selectPiPreferredModel(
+      availableModels,
+      session.settingsManager,
+      defaultModelPerProvider,
+    )
 
-    await session.setModel(preferredSelection ?? availableModels[0])
+    if (!preferredSelection) {
+      return
+    }
+
+    await session.setModel(preferredSelection)
   }
 
   private getAutoNamingModels(session: AgentSession) {
@@ -1264,14 +1350,20 @@ export class PiAgentManager {
   ): Promise<AgentWorkspaceState> {
     return {
       activeSession: session ? await this.serializeSession(session) : null,
-      runtime: this.serializeRuntime(cwd, session),
+      runtime: await this.serializeRuntime(cwd, session),
       sessions,
     }
   }
 
-  private serializeRuntime(cwd: string, session: AgentSession | null): AgentRuntimeState {
-    const availableModels = (session?.modelRegistry ?? this.modelRegistry).getAvailable()
-    const selectedModel = session?.model ? `${session.model.provider}/${session.model.id}` : null
+  private async serializeRuntime(cwd: string, session: AgentSession | null): Promise<AgentRuntimeState> {
+    const modelRegistry = session?.modelRegistry ?? this.modelRegistry
+    const availableModels = modelRegistry.getAvailable()
+    const defaultModelPerProvider = await loadPiDefaultModelPerProvider()
+    const selectedModelValue = session?.model
+      ?? (!session
+        ? selectPiPreferredModel(availableModels, this.createSettingsManager(cwd), defaultModelPerProvider)
+        : null)
+    const selectedModel = selectedModelValue ? `${selectedModelValue.provider}/${selectedModelValue.id}` : null
     const steeringMessageCount = session?.getSteeringMessages().length ?? 0
     const followUpMessageCount = session?.getFollowUpMessages().length ?? 0
 
@@ -1285,6 +1377,7 @@ export class PiAgentManager {
       isCompacting: session?.isCompacting ?? false,
       isStreaming: session?.isStreaming ?? false,
       pendingMessageCount: session?.pendingMessageCount ?? 0,
+      preferredModelByProvider: getProviderPreferredModelKeys(availableModels, defaultModelPerProvider),
       retryAttempt: session?.retryAttempt ?? 0,
       retryMaxAttempts: this.activeRuntime?.cwd === cwd ? this.activeRuntime.status.retryMaxAttempts : null,
       selectedModel,

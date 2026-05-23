@@ -127,6 +127,7 @@ const emptyAgentState: AgentWorkspaceState = {
     isCompacting: false,
     isStreaming: false,
     pendingMessageCount: 0,
+    preferredModelByProvider: {},
     retryAttempt: 0,
     retryMaxAttempts: null,
     selectedModel: null,
@@ -1404,6 +1405,13 @@ function AgentProvider({
     }))
   }
 
+  function getRuntimePreferredModelId(provider: string) {
+    const preferredModelKey = agentState.runtime.preferredModelByProvider[provider]
+    const preferredSelection = parseModelSelection(preferredModelKey ?? null)
+
+    return preferredSelection.provider === provider ? preferredSelection.modelId : null
+  }
+
   useEffect(() => {
     let mounted = true
 
@@ -1929,7 +1937,7 @@ function AgentProvider({
         .filter((model) => model.startsWith(`${nextProvider}/`))
         .map((model) => model.split('/').slice(1).join('/')),
     ))
-    setModelInputValue(modelDrafts[nextProvider] ?? nextProviderModels[0] ?? '')
+    setModelInputValue(modelDrafts[nextProvider] ?? getRuntimePreferredModelId(nextProvider) ?? nextProviderModels[0] ?? '')
     setActiveComposerMenu(null)
   }
 
@@ -2129,9 +2137,15 @@ function AgentProvider({
     }
 
     setSelectedProviderValue(resolvedSelectedProviderValue)
-    setModelInputValue(modelDrafts[resolvedSelectedProviderValue] ?? providerModelIds[0] ?? '')
+    setModelInputValue(
+      modelDrafts[resolvedSelectedProviderValue]
+        ?? getRuntimePreferredModelId(resolvedSelectedProviderValue)
+        ?? providerModelIds[0]
+        ?? '',
+    )
   }, [
     activeComposerMenu,
+    agentState.runtime.preferredModelByProvider,
     canChooseProvider,
     hasConfiguredProviders,
     modelDrafts,

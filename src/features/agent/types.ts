@@ -45,6 +45,7 @@ export type AgentRuntimeState = {
   followUpMessageCount: number
   followUpMode: 'all' | 'one-at-a-time'
   isCompacting: boolean
+  preferredModelByProvider: Record<string, string>
   selectedModel: string | null
   isStreaming: boolean
   pendingMessageCount: number
