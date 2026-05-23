@@ -11,7 +11,7 @@ import {
   type SessionEntry,
   type AgentSession,
 } from '@earendil-works/pi-coding-agent'
-import { complete, type Api, type AssistantMessage, type Model, type TextContent, type ToolResultMessage, type UserMessage } from '@earendil-works/pi-ai'
+import { complete, getEnvApiKey, type Api, type AssistantMessage, type Model, type TextContent, type ToolResultMessage, type UserMessage } from '@earendil-works/pi-ai'
 import type {
   AgentMessageFileChange,
   AgentClientEvent,
@@ -22,6 +22,12 @@ import type {
   AgentSidebarMessage,
   AgentWorkspaceState,
 } from '../../src/features/agent/types'
+import {
+  AGENT_PROVIDER_AUTH_CONFIGS,
+  getAgentProviderAuthConfig,
+  getAgentProviderOrder,
+  type AgentProviderAuthConfig,
+} from '../../src/features/agent/provider-auth'
 import { AgentSessionAnnotationStore } from './agent-session-annotations'
 import {
   collectDirectToolPathsByEntryId,
@@ -56,16 +62,27 @@ type PiAgentManagerOptions = {
 }
 
 type StreamingBehavior = 'steer' | 'followUp'
+type AgentProviderAuthPrompt = {
+  allowEmpty?: boolean
+  message: string
+  placeholder?: string
+}
+type AgentProviderAuthLoginCallbacks = {
+  emitAuth: (provider: string, info: { instructions?: string, url: string }) => void
+  emitComplete: (provider: string, ok: boolean, message?: string) => void
+  emitProgress: (provider: string, message: string) => void
+  openExternal: (url: string) => Promise<void>
+  requestInput: (provider: string, prompt: AgentProviderAuthPrompt) => Promise<string>
+  signal?: AbortSignal
+}
 
 const OPENROUTER_ENV_KEY = 'OPENROUTER_API_KEY'
 const OPENROUTER_PROVIDER = 'openrouter'
 const OPENAI_ENV_KEY = 'OPENAI_API_KEY'
-const OPENAI_PROVIDER = 'openai'
 const GOOGLE_ENV_KEY = 'GEMINI_API_KEY'
-const GOOGLE_PROVIDER = 'google'
 const AUTO_SESSION_NAME_MODEL_ID = 'openrouter/free'
 const AUTO_SESSION_NAME_MAX_TOKENS = 48
-const AUTH_SETUP_HINT = `No authenticated models are available. Add an API key in Agent Auth or set ${OPENROUTER_ENV_KEY}, ${OPENAI_ENV_KEY}, or ${GOOGLE_ENV_KEY}.`
+const AUTH_SETUP_HINT = `No authenticated models are available. Add a provider credential in Settings > Providers, log in to a subscription provider, or set a supported Pi provider environment variable such as ${OPENROUTER_ENV_KEY}, ${OPENAI_ENV_KEY}, or ${GOOGLE_ENV_KEY}.`
 const AUTO_SESSION_NAME_SYSTEM_PROMPT = [
   'You generate short chat session titles.',
   'Reply with title text only.',
@@ -733,6 +750,11 @@ export class PiAgentManager {
 
   async updateProviderAuth(cwd: string, provider: string, apiKey: string | null) {
     this.authStorage.reload()
+    const config = getAgentProviderAuthConfig(provider)
+
+    if (!config.supportsApiKey && apiKey?.trim()) {
+      throw new Error(`${config.label} does not support API key authentication.`)
+    }
 
     const trimmedApiKey = apiKey?.trim()
     if (trimmedApiKey) {
@@ -744,6 +766,59 @@ export class PiAgentManager {
       this.authStorage.remove(provider)
     }
 
+    return this.completeProviderAuthChange(cwd)
+  }
+
+  async loginProviderAuth(cwd: string, provider: string, callbacks: AgentProviderAuthLoginCallbacks) {
+    const oauthProvider = this.authStorage.getOAuthProviders().find((candidate) => candidate.id === provider)
+    const config = getAgentProviderAuthConfig(provider)
+
+    if (!oauthProvider || !config.supportsOAuth) {
+      throw new Error(`${config.label} does not support subscription login.`)
+    }
+
+    const manualCodePrompt = {
+      message: '如果浏览器登录没有自动完成，请粘贴最终 redirect URL 或授权码。',
+      placeholder: 'Redirect URL 或授权码',
+    }
+
+    try {
+      this.authStorage.reload()
+      callbacks.emitProgress(provider, `正在启动 ${config.label} 登录...`)
+
+      await this.authStorage.login(provider, {
+        onAuth: (info) => {
+          callbacks.emitAuth(provider, info)
+          callbacks.openExternal(info.url).catch((error) => {
+            callbacks.emitProgress(
+              provider,
+              `无法自动打开浏览器：${error instanceof Error ? error.message : String(error)}`,
+            )
+          })
+        },
+        onManualCodeInput: oauthProvider.usesCallbackServer
+          ? () => callbacks.requestInput(provider, manualCodePrompt)
+          : undefined,
+        onProgress: (message) => callbacks.emitProgress(provider, message),
+        onPrompt: (prompt) => callbacks.requestInput(provider, prompt),
+        signal: callbacks.signal,
+      })
+
+      callbacks.emitComplete(provider, true)
+      return this.completeProviderAuthChange(cwd)
+    } catch (error) {
+      callbacks.emitComplete(provider, false, error instanceof Error ? error.message : String(error))
+      throw error
+    }
+  }
+
+  async logoutProviderAuth(cwd: string, provider: string) {
+    this.authStorage.reload()
+    this.authStorage.logout(provider)
+    return this.completeProviderAuthChange(cwd)
+  }
+
+  private async completeProviderAuthChange(cwd: string) {
     this.modelRegistry.refresh()
 
     if (this.activeRuntime?.cwd === cwd) {
@@ -1201,11 +1276,7 @@ export class PiAgentManager {
     const followUpMessageCount = session?.getFollowUpMessages().length ?? 0
 
     return {
-      auth: {
-        google: this.getProviderAuthState(GOOGLE_PROVIDER, GOOGLE_ENV_KEY),
-        openai: this.getProviderAuthState(OPENAI_PROVIDER, OPENAI_ENV_KEY),
-        openrouter: this.getOpenRouterAuthState(),
-      },
+      auth: this.getProviderAuthStates(availableModels.map((model) => model.provider)),
       availableModels: availableModels.map((model) => `${model.provider}/${model.id}`),
       compactionReason: this.activeRuntime?.cwd === cwd ? this.activeRuntime.status.compactionReason : null,
       followUpMessageCount,
@@ -1333,13 +1404,28 @@ export class PiAgentManager {
     return null
   }
 
-  private getOpenRouterAuthState(): AgentProviderAuthState {
-    return this.getProviderAuthState(OPENROUTER_PROVIDER, OPENROUTER_ENV_KEY)
+  private getProviderAuthStates(modelProviders: string[]): Record<string, AgentProviderAuthState> {
+    const providers = new Set([
+      ...AGENT_PROVIDER_AUTH_CONFIGS.map((config) => config.provider),
+      ...this.authStorage.list(),
+      ...modelProviders,
+    ])
+
+    return Object.fromEntries(
+      Array.from(providers)
+        .sort((left, right) => {
+          const orderDelta = getAgentProviderOrder(left) - getAgentProviderOrder(right)
+          return orderDelta !== 0 ? orderDelta : left.localeCompare(right)
+        })
+        .map((provider) => [provider, this.getProviderAuthState(getAgentProviderAuthConfig(provider))]),
+    )
   }
 
-  private getProviderAuthState(provider: string, envVarName: string): AgentProviderAuthState {
-    const hasEnvironmentCredential = Boolean(process.env[envVarName]?.trim())
-    const hasStoredCredential = this.authStorage.has(provider)
+  private getProviderAuthState(config: AgentProviderAuthConfig): AgentProviderAuthState {
+    const credential = this.authStorage.get(config.provider)
+    const environmentCredentialLabel = this.getEnvironmentCredentialLabel(config)
+    const hasEnvironmentCredential = Boolean(environmentCredentialLabel)
+    const hasStoredCredential = Boolean(credential)
     const source = hasStoredCredential
       ? 'stored'
       : hasEnvironmentCredential
@@ -1347,11 +1433,44 @@ export class PiAgentManager {
         : 'none'
 
     return {
-      envVarName,
+      category: config.category,
+      environmentCredentialLabel,
+      envVarName: config.envVarNames[0] ?? '',
+      envVarNames: config.envVarNames,
       hasStoredCredential,
+      label: config.label,
       source,
+      storedCredentialType: credential?.type ?? null,
+      supportsApiKey: config.supportsApiKey,
+      supportsOAuth: config.supportsOAuth,
       usesEnvironmentCredential: source === 'env',
     }
+  }
+
+  private getEnvironmentCredentialLabel(config: AgentProviderAuthConfig) {
+    const envCredential = getEnvApiKey(config.provider)
+
+    if (!envCredential?.trim()) {
+      return null
+    }
+
+    const foundEnvVarNames = config.envVarNames.filter((envVarName) => Boolean(process.env[envVarName]?.trim()))
+
+    if (config.provider === 'google-vertex' && envCredential === '<authenticated>') {
+      return foundEnvVarNames.length > 0
+        ? `Google ADC (${foundEnvVarNames.join(', ')})`
+        : 'Google ADC'
+    }
+
+    if (config.provider === 'amazon-bedrock' && envCredential === '<authenticated>') {
+      return foundEnvVarNames.join(', ') || 'AWS credentials'
+    }
+
+    if (foundEnvVarNames.length > 0) {
+      return foundEnvVarNames.join(', ')
+    }
+
+    return config.envVarNames.join(', ') || 'environment'
   }
 
   private emitSetupDiagnostics(

@@ -1,4 +1,4 @@
-import type { AgentClientEvent, AgentWorkspaceState } from '@/features/agent/types'
+import type { AgentClientEvent, AgentProviderAuthUiEvent, AgentWorkspaceState } from '@/features/agent/types'
 import type {
   GitBaselinePayload,
   GitBlameResult,
@@ -82,6 +82,10 @@ declare global {
       sendAgentPrompt: (prompt: string, streamingBehavior?: 'steer' | 'followUp') => Promise<{ ok: boolean }>
       selectAgentModel: (modelKey: string) => Promise<AgentWorkspaceState>
       updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => Promise<AgentWorkspaceState>
+      loginAgentProviderAuth: (rootPath: string, provider: string) => Promise<AgentWorkspaceState>
+      logoutAgentProviderAuth: (rootPath: string, provider: string) => Promise<AgentWorkspaceState>
+      cancelAgentProviderAuth: (provider: string) => Promise<{ ok: boolean }>
+      respondAgentProviderAuthPrompt: (requestId: string, value: string | null) => Promise<{ ok: boolean }>
       abortAgentPrompt: () => Promise<AgentWorkspaceState>
       notifyRendererReady: () => void
       openExternalLink: (href: string) => Promise<{ ok: boolean }>
@@ -98,6 +102,7 @@ declare global {
       onWindowCloseRequested: (listener: () => void) => () => void
       onWorkspaceChanged: (listener: (event: WorkspaceChangeEvent) => void) => () => void
       onAgentEvent: (listener: (event: AgentClientEvent) => void) => () => void
+      onAgentProviderAuthUiEvent: (listener: (event: AgentProviderAuthUiEvent) => void) => () => void
     }
   }
 }

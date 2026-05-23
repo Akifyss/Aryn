@@ -3044,6 +3044,60 @@ body.workspace-tree-dragging .workspace-tree-row {
   gap: 28px;
 }
 
+.settings-provider-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+.settings-provider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.settings-provider-group-header {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.settings-provider-group-label {
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-provider-group .settings-provider-list {
+  gap: 22px;
+}
+
+.settings-provider-auth-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-secondary);
+}
+
+.settings-provider-prompt-form {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-provider-progress {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .settings-provider-card {
   display: flex;
   flex-direction: column;
@@ -3061,6 +3115,16 @@ body.workspace-tree-dragging .workspace-tree-row {
   color: var(--muted);
   margin-top: 2px;
   display: block;
+}
+
+.settings-provider-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-provider-input {
+  min-width: 0;
 }
 
 .settings-action-button {

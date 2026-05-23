@@ -35,6 +35,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import spinners, { type BrailleSpinnerName } from 'unicode-animations'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import { getAgentProviderOrder } from '@/features/agent/provider-auth'
 import {
   FileChangeStatusBadge,
   WorkspaceFileIcon,
@@ -101,10 +102,8 @@ type ComposerState = {
   value: string
 }
 
-type AuthProviderKey = 'google' | 'openai' | 'openrouter'
 type AgentSessionSelection = { kind: 'new' } | { kind: 'session', sessionPath: string }
 
-const KNOWN_AGENT_PROVIDERS = ['google', 'openai', 'openrouter'] as const
 const MARKDOWN_PLUGINS = [remarkGfm]
 const AGENT_COMPOSER_MENU_MAX_HEIGHT = 264
 const AGENT_COMPOSER_MENU_ROW_HEIGHT = 30
@@ -119,26 +118,7 @@ const MAX_VISIBLE_MESSAGE_FILE_CHIPS = 6
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
   runtime: {
-    auth: {
-      google: {
-        envVarName: 'GEMINI_API_KEY',
-        hasStoredCredential: false,
-        source: 'none',
-        usesEnvironmentCredential: false,
-      },
-      openai: {
-        envVarName: 'OPENAI_API_KEY',
-        hasStoredCredential: false,
-        source: 'none',
-        usesEnvironmentCredential: false,
-      },
-      openrouter: {
-        envVarName: 'OPENROUTER_API_KEY',
-        hasStoredCredential: false,
-        source: 'none',
-        usesEnvironmentCredential: false,
-      },
-    },
+    auth: {},
     availableModels: [],
     compactionReason: null,
     followUpMessageCount: 0,
@@ -291,7 +271,7 @@ type AgentContextValue = {
   composerHeight: number
   composerResizeStateRef: React.MutableRefObject<{ pointerId: number, startHeight: number, startY: number } | null>
   composerState: ComposerState
-  configuredProviders: AuthProviderKey[]
+  configuredProviders: string[]
   deletingSessionPath: string | null
   handleComposerKeyDown: (event: KeyboardEvent<HTMLElement>) => void
   handleCreateSession: () => Promise<void>
@@ -409,13 +389,10 @@ function parseModelSelection(modelKey: string | null): { modelId: string, provid
   }
 
   const [providerCandidate, ...modelIdParts] = modelKey.split('/')
-  const provider = KNOWN_AGENT_PROVIDERS.includes(providerCandidate as AuthProviderKey)
-    ? providerCandidate as AuthProviderKey
-    : ''
 
   return {
     modelId: modelIdParts.length > 0 ? modelIdParts.join('/') : formatModelLabel(modelKey),
-    provider,
+    provider: modelIdParts.length > 0 ? providerCandidate : '',
   }
 }
 
@@ -485,10 +462,6 @@ function mergeSessionAnnotationsState(
       annotations,
     },
   }
-}
-
-function isProviderConfigured(state: AgentWorkspaceState['runtime']['auth'][AuthProviderKey]) {
-  return state.source !== 'none'
 }
 
 function getMessageStatus(message: AgentSidebarMessage): AgentSidebarMessageStatus {
@@ -2043,10 +2016,17 @@ function AgentProvider({
     }
   }, [isResizingComposer])
 
-  const configuredProviders = KNOWN_AGENT_PROVIDERS.filter((provider) => isProviderConfigured(agentState.runtime.auth[provider]))
+  const configuredProviders = Array.from(new Set(
+    agentState.runtime.availableModels
+      .map((model) => model.split('/')[0])
+      .filter(Boolean),
+  )).sort((left, right) => {
+    const orderDelta = getAgentProviderOrder(left) - getAgentProviderOrder(right)
+    return orderDelta !== 0 ? orderDelta : left.localeCompare(right)
+  })
   const hasConfiguredProviders = configuredProviders.length > 0
   const canChooseProvider = configuredProviders.length > 1
-  const resolvedSelectedProviderValue = configuredProviders.includes(selectedProviderValue as AuthProviderKey)
+  const resolvedSelectedProviderValue = configuredProviders.includes(selectedProviderValue)
     ? selectedProviderValue
     : configuredProviders[0] ?? selectedProviderValue
   const providerModelIds = Array.from(new Set(

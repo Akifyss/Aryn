@@ -37,11 +37,7 @@ export type AgentSessionListItem = {
 }
 
 export type AgentRuntimeState = {
-  auth: {
-    google: AgentProviderAuthState
-    openai: AgentProviderAuthState
-    openrouter: AgentProviderAuthState
-  }
+  auth: Record<string, AgentProviderAuthState>
   workspacePath: string | null
   hasConfiguredModels: boolean
   availableModels: string[]
@@ -60,11 +56,45 @@ export type AgentRuntimeState = {
 }
 
 export type AgentProviderAuthState = {
+  category: 'api_key' | 'cloud' | 'subscription'
+  environmentCredentialLabel: string | null
+  envVarNames: string[]
   envVarName: string
   hasStoredCredential: boolean
+  label: string
   source: 'env' | 'none' | 'stored'
+  storedCredentialType: 'api_key' | 'oauth' | null
+  supportsApiKey: boolean
+  supportsOAuth: boolean
   usesEnvironmentCredential: boolean
 }
+
+export type AgentProviderAuthUiEvent =
+  | {
+      type: 'auth'
+      provider: string
+      url: string
+      instructions?: string
+    }
+  | {
+      type: 'progress'
+      provider: string
+      message: string
+    }
+  | {
+      type: 'prompt'
+      requestId: string
+      provider: string
+      message: string
+      placeholder?: string
+      allowEmpty?: boolean
+    }
+  | {
+      type: 'complete'
+      provider: string
+      ok: boolean
+      message?: string
+    }
 
 export type AgentSessionSnapshot = {
   annotations: AgentSessionAnnotations

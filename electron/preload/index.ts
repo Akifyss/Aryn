@@ -1,5 +1,5 @@
 import { ipcRenderer, contextBridge } from 'electron'
-import type { AgentClientEvent, AgentWorkspaceState } from '../../src/features/agent/types'
+import type { AgentClientEvent, AgentProviderAuthUiEvent, AgentWorkspaceState } from '../../src/features/agent/types'
 import type {
   GitBaselinePayload,
   GitBlameResult,
@@ -82,6 +82,10 @@ contextBridge.exposeInMainWorld('appApi', {
   sendAgentPrompt: (prompt: string, streamingBehavior?: 'steer' | 'followUp') => ipcRenderer.invoke('agent:send-prompt', prompt, streamingBehavior) as Promise<{ ok: boolean }>,
   selectAgentModel: (modelKey: string) => ipcRenderer.invoke('agent:select-model', modelKey) as Promise<AgentWorkspaceState>,
   updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => ipcRenderer.invoke('agent:update-provider-auth', rootPath, provider, apiKey) as Promise<AgentWorkspaceState>,
+  loginAgentProviderAuth: (rootPath: string, provider: string) => ipcRenderer.invoke('agent:login-provider-auth', rootPath, provider) as Promise<AgentWorkspaceState>,
+  logoutAgentProviderAuth: (rootPath: string, provider: string) => ipcRenderer.invoke('agent:logout-provider-auth', rootPath, provider) as Promise<AgentWorkspaceState>,
+  cancelAgentProviderAuth: (provider: string) => ipcRenderer.invoke('agent:cancel-provider-auth', provider) as Promise<{ ok: boolean }>,
+  respondAgentProviderAuthPrompt: (requestId: string, value: string | null) => ipcRenderer.invoke('agent:respond-provider-auth-prompt', requestId, value) as Promise<{ ok: boolean }>,
   abortAgentPrompt: () => ipcRenderer.invoke('agent:abort') as Promise<AgentWorkspaceState>,
   notifyRendererReady: () => {
     ipcRenderer.send('app:renderer-ready')
@@ -142,6 +146,17 @@ contextBridge.exposeInMainWorld('appApi', {
 
     return () => {
       ipcRenderer.off('agent:event', wrappedListener)
+    }
+  },
+  onAgentProviderAuthUiEvent: (listener: (event: AgentProviderAuthUiEvent) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, payload: AgentProviderAuthUiEvent) => {
+      listener(payload)
+    }
+
+    ipcRenderer.on('agent:provider-auth-ui-event', wrappedListener)
+
+    return () => {
+      ipcRenderer.off('agent:provider-auth-ui-event', wrappedListener)
     }
   },
 })

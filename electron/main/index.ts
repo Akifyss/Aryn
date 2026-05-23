@@ -1,4 +1,5 @@
 import { Menu, app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -42,7 +43,7 @@ import {
   MIN_WINDOW_WIDTH,
 } from './app-state'
 import type { PersistedWorkspaceIconThemeSelection } from './app-state'
-import type { AgentClientEvent } from '../../src/features/agent/types'
+import type { AgentClientEvent, AgentProviderAuthUiEvent } from '../../src/features/agent/types'
 import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
 import type { WorkspaceIconThemeCatalogOption } from '../../src/features/workspace/types'
 import {
@@ -160,6 +161,92 @@ const agentManager = new PiAgentManager(
   },
   { agentDir },
 )
+
+type PendingProviderAuthPrompt = {
+  flowId: string
+  provider: string
+  reject: (error: Error) => void
+  resolve: (value: string) => void
+}
+type ActiveProviderAuthFlow = {
+  controller: AbortController
+  flowId: string
+}
+
+const activeProviderAuthFlows = new Map<string, ActiveProviderAuthFlow>()
+const pendingProviderAuthPrompts = new Map<string, PendingProviderAuthPrompt>()
+
+function emitProviderAuthUiEvent(event: AgentProviderAuthUiEvent) {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
+    return
+  }
+
+  win.webContents.send('agent:provider-auth-ui-event', event)
+}
+
+function requestProviderAuthInput(
+  provider: string,
+  flowId: string,
+  prompt: { allowEmpty?: boolean, message: string, placeholder?: string },
+) {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
+    throw new Error('No renderer window is available for provider login.')
+  }
+
+  const requestId = randomUUID()
+  emitProviderAuthUiEvent({
+    type: 'prompt',
+    allowEmpty: prompt.allowEmpty,
+    message: prompt.message,
+    placeholder: prompt.placeholder,
+    provider,
+    requestId,
+  })
+
+  return new Promise<string>((resolve, reject) => {
+    pendingProviderAuthPrompts.set(requestId, {
+      flowId,
+      provider,
+      reject,
+      resolve,
+    })
+  })
+}
+
+function rejectProviderAuthPrompts(provider: string, flowId?: string, message = 'Login cancelled.') {
+  for (const [requestId, pendingPrompt] of pendingProviderAuthPrompts.entries()) {
+    if (pendingPrompt.provider !== provider || (flowId && pendingPrompt.flowId !== flowId)) {
+      continue
+    }
+
+    pendingProviderAuthPrompts.delete(requestId)
+    pendingPrompt.reject(new Error(message))
+  }
+}
+
+function cancelProviderAuthFlow(provider: string, message = 'Login cancelled.') {
+  const activeFlow = activeProviderAuthFlows.get(provider)
+
+  if (!activeFlow) {
+    rejectProviderAuthPrompts(provider, undefined, message)
+    return false
+  }
+
+  activeProviderAuthFlows.delete(provider)
+  rejectProviderAuthPrompts(provider, activeFlow.flowId, message)
+
+  if (!activeFlow.controller.signal.aborted) {
+    activeFlow.controller.abort(new Error(message))
+  }
+
+  return true
+}
+
+function cancelAllProviderAuthFlows(message = 'Login cancelled.') {
+  for (const provider of Array.from(activeProviderAuthFlows.keys())) {
+    cancelProviderAuthFlow(provider, message)
+  }
+}
 
 nativeTheme.on('updated', () => {
   if (process.platform !== 'darwin' || windowAppearanceTheme !== 'system') {
@@ -517,6 +604,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   win = null
+  cancelAllProviderAuthFlows()
   agentManager.dispose()
   void unwatchWorkspace()
   if (process.platform !== 'darwin') app.quit()
@@ -977,6 +1065,78 @@ ipcMain.handle('agent:select-model', async (_event, modelKey: string) => {
 
 ipcMain.handle('agent:update-provider-auth', async (_event, rootPath: string, provider: string, apiKey: string | null) => {
   return agentManager.updateProviderAuth(rootPath, provider, apiKey)
+})
+
+ipcMain.handle('agent:login-provider-auth', async (_event, rootPath: string, provider: string) => {
+  cancelProviderAuthFlow(provider, 'A new login was started.')
+  const controller = new AbortController()
+  const flowId = randomUUID()
+  activeProviderAuthFlows.set(provider, { controller, flowId })
+
+  try {
+    return await agentManager.loginProviderAuth(rootPath, provider, {
+      emitAuth: (providerId, info) => {
+        emitProviderAuthUiEvent({
+          type: 'auth',
+          instructions: info.instructions,
+          provider: providerId,
+          url: info.url,
+        })
+      },
+      emitComplete: (providerId, ok, message) => {
+        emitProviderAuthUiEvent({
+          type: 'complete',
+          message,
+          ok,
+          provider: providerId,
+        })
+      },
+      emitProgress: (providerId, message) => {
+        emitProviderAuthUiEvent({
+          type: 'progress',
+          message,
+          provider: providerId,
+        })
+      },
+      openExternal: async (url) => {
+        await shell.openExternal(url)
+      },
+      requestInput: (providerId, prompt) => requestProviderAuthInput(providerId, flowId, prompt),
+      signal: controller.signal,
+    })
+  } finally {
+    const activeFlow = activeProviderAuthFlows.get(provider)
+    if (activeFlow?.flowId === flowId) {
+      activeProviderAuthFlows.delete(provider)
+    }
+    rejectProviderAuthPrompts(provider, flowId)
+  }
+})
+
+ipcMain.handle('agent:logout-provider-auth', async (_event, rootPath: string, provider: string) => {
+  cancelProviderAuthFlow(provider)
+  return agentManager.logoutProviderAuth(rootPath, provider)
+})
+
+ipcMain.handle('agent:cancel-provider-auth', async (_event, provider: string) => {
+  return { ok: cancelProviderAuthFlow(provider) }
+})
+
+ipcMain.handle('agent:respond-provider-auth-prompt', async (_event, requestId: string, value: string | null) => {
+  const pendingPrompt = pendingProviderAuthPrompts.get(requestId)
+  if (!pendingPrompt) {
+    return { ok: false }
+  }
+
+  pendingProviderAuthPrompts.delete(requestId)
+
+  if (value === null) {
+    pendingPrompt.reject(new Error('Login cancelled.'))
+    return { ok: true }
+  }
+
+  pendingPrompt.resolve(value)
+  return { ok: true }
 })
 
 ipcMain.handle('agent:abort', async () => {
