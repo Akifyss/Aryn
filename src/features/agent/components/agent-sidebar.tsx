@@ -2507,30 +2507,24 @@ function AgentSessionTree({
 
 function AgentNewSessionIllustration() {
   return (
-    <div className='agent-empty-illustration' aria-hidden='true'>
-      <div className='agent-empty-sheet agent-empty-sheet-back' />
-      <div className='agent-empty-sheet agent-empty-sheet-front'>
-        <span className='agent-empty-sheet-line agent-empty-sheet-line-strong' />
-        <span className='agent-empty-sheet-line' />
-        <span className='agent-empty-sheet-line agent-empty-sheet-line-short' />
-      </div>
-      <div className='agent-empty-agent-mark'>
-        <AiLine size={16} />
-      </div>
-      <div className='agent-empty-pencil'>
-        <span className='agent-empty-pencil-tip' />
-        <span className='agent-empty-pencil-body' />
-        <span className='agent-empty-pencil-cap' />
-      </div>
+    <div className='agent-empty-icon-container' aria-hidden='true'>
+      <AiLine size={24} />
     </div>
   )
 }
 
 function AgentEmptyChat() {
+  const { workspacePath } = useAgentContext()
+
   return (
     <div className='agent-empty-chat'>
       <AgentNewSessionIllustration />
-      <h2>新对话已就绪</h2>
+      <h2>新对话</h2>
+      <p className='agent-empty-subtitle'>
+        {workspacePath
+          ? '在下方消息框中输入您的请求以开始对话'
+          : '打开一个文件夹即可开始协同开发'}
+      </p>
     </div>
   )
 }
