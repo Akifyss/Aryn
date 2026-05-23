@@ -55,6 +55,7 @@
 
 .app-shell[data-app-layout='agent'] {
   --agent-chat-min-width: 320px;
+  --agent-collapsed-tab-actions-width: calc((var(--panel-toggle-size) * 2) + var(--panel-toggle-gap));
   --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
 }
 
@@ -126,7 +127,7 @@
 }
 
 .app-shell[data-app-layout='agent'][data-right-collapsed='true'] .panel-editor .agent-threadbar {
-  padding-right: var(--right-panel-content-inset);
+  padding-right: calc(var(--right-panel-content-inset) + var(--agent-collapsed-tab-actions-width) + var(--panel-toggle-gap));
 }
 
 .app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-editor .agent-threadbar {
@@ -269,6 +270,57 @@ body:has([data-slot='alert-dialog-backdrop']) .left-chrome-actions {
 
 .panel-toggle-button-overlay-right {
   right: var(--right-panel-toggle-anchor);
+}
+
+.agent-collapsed-tab-actions {
+  position: absolute;
+  top: calc((var(--chrome-height) - var(--panel-toggle-size)) / 2);
+  right: var(--right-panel-content-inset);
+  z-index: var(--app-z-panel-toggle);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--panel-toggle-gap);
+  width: var(--agent-collapsed-tab-actions-width);
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-collapsed-tab-actions[data-overlay-elevated='false'],
+.app-shell[data-modal-layer-open='true'] .agent-collapsed-tab-actions,
+.app-shell[data-left-drawer-open='true'] .agent-collapsed-tab-actions,
+body:has([data-slot='modal-backdrop']) .agent-collapsed-tab-actions,
+body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
+  z-index: var(--app-z-panel-toggle-underlay);
+  pointer-events: none;
+}
+
+.agent-collapsed-tab-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--panel-toggle-size);
+  height: var(--panel-toggle-size);
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-collapsed-tab-button:hover,
+.agent-collapsed-tab-button:focus-visible {
+  color: var(--foreground);
+  background: var(--surface-tertiary);
+  outline: none;
+}
+
+.agent-collapsed-tab-button svg {
+  flex-shrink: 0;
 }
 
 .right-drawer-window-drag-region {

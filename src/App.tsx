@@ -3,7 +3,6 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
 import {
   FileLine,
-  GitCompareLine,
   LayoutLeftLine,
   LayoutRightLine,
 } from '@mingcute/react'
@@ -3889,6 +3888,40 @@ function App() {
     isRightSidebarDrawer,
   ])
 
+  function expandCollapsedAssistantSurface() {
+    if (isRightSidebarDrawer) {
+      handleRightDrawerOpenChange(true)
+      return
+    }
+
+    setIsRightSidebarCollapsed((currentValue) => {
+      if (!currentValue) {
+        return currentValue
+      }
+
+      if (isAgentLayout) {
+        setAgentRightSidebarWidth(
+          agentRightSidebarWidthMode === 'max'
+            ? getAgentRightSidebarMaxWidth()
+            : clampRightWidth(agentRightSidebarWidth, getShellWidth(), effectiveLeftSidebarWidth),
+        )
+      }
+
+      return false
+    })
+  }
+
+  function handleCollapsedAgentFixedTabClick(tab: AgentLayoutFixedTab) {
+    expandCollapsedAssistantSurface()
+
+    if (tab === 'git') {
+      activateFileTab(FIXED_GIT_TAB_ID)
+      return
+    }
+
+    activateFileTab(displayActiveTab?.kind === 'file' ? displayActiveTab.id : FIXED_FILE_TAB_ID)
+  }
+
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
     const isDrawerSurface = surfaceMode === 'drawer'
 
@@ -3940,7 +3973,7 @@ function App() {
                     setActiveLeftSidebarTab('git')
                   }}
                 >
-                  <GitCompareLine size={16} className='sidebar-vertical-tab-icon' />
+                  <Icon icon='lucide:git-branch' width={16} height={16} className='sidebar-vertical-tab-icon' />
                   <span className='sidebar-vertical-tab-label'>Git</span>
                 </button>
               </div>
@@ -4239,6 +4272,36 @@ function App() {
         } as CSSProperties
       }
     >
+      {isAgentLayout && !isRightSidebarVisible ? (
+        <div
+          className='agent-collapsed-tab-actions'
+          data-overlay-elevated={isRightPanelOverlayElevated ? 'true' : 'false'}
+          data-react-aria-top-layer={isRightPanelOverlayTopLayer ? 'true' : undefined}
+        >
+          <button
+            type='button'
+            className='agent-collapsed-tab-button'
+            aria-label='Expand right sidebar and open Git'
+            title='Git'
+            onClick={() => {
+              handleCollapsedAgentFixedTabClick('git')
+            }}
+          >
+            <Icon icon='lucide:git-branch' width={16} height={16} />
+          </button>
+          <button
+            type='button'
+            className='agent-collapsed-tab-button'
+            aria-label='Expand right sidebar and open files'
+            title='Files'
+            onClick={() => {
+              handleCollapsedAgentFixedTabClick('file')
+            }}
+          >
+            <FileLine size={16} />
+          </button>
+        </div>
+      ) : null}
 
       <button
         type='button'
