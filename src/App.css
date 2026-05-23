@@ -4130,7 +4130,6 @@ body.workspace-tree-dragging .workspace-tree-row {
   --agent-composer-padding-block-start: 14px;
   --agent-composer-padding-inline: 16px;
   --agent-composer-toolbar-height: 36px;
-  --agent-composer-menu-bottom: calc(var(--agent-composer-padding-block-end) + var(--agent-composer-toolbar-height) + var(--agent-composer-menu-gap));
   position: relative;
   display: flex;
   flex-direction: column;
@@ -4314,9 +4313,9 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-composer-meta>.agent-composer-menu {
-  left: var(--agent-composer-padding-inline);
-  right: calc(var(--agent-composer-padding-inline) + var(--agent-send-button-size) + var(--agent-composer-action-gap));
-  bottom: var(--agent-composer-menu-bottom);
+  left: 0;
+  right: calc(var(--agent-send-button-size) + var(--agent-composer-action-gap));
+  bottom: calc(100% + var(--agent-composer-menu-gap));
   height: var(--agent-composer-menu-height);
   width: auto;
   min-height: 0;
@@ -4434,8 +4433,8 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-composer-meta {
   --agent-composer-action-gap: 6px;
   --agent-send-button-size: 36px;
-  /* Keep this static so the menu can sit above this toolbar without moving its triggers. */
-  position: static;
+  /* The menu is absolute, so anchoring it here does not move the provider/model triggers. */
+  position: relative;
   flex: 0 0 var(--agent-composer-toolbar-height);
   height: var(--agent-composer-toolbar-height);
   min-height: var(--agent-composer-toolbar-height);
