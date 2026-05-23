@@ -121,6 +121,24 @@ function getRepositoryMeta(repositoryState: GitRepositoryState, workspacePath: s
   return parts.join(' / ')
 }
 
+function getCleanStateSubtext(repositoryState: GitRepositoryState) {
+  const syncParts: string[] = []
+
+  if (repositoryState.unpushedCommits > 0) {
+    syncParts.push(
+      `${repositoryState.unpushedCommits} commit${repositoryState.unpushedCommits === 1 ? '' : 's'} ready to push`,
+    )
+  }
+
+  if (repositoryState.behind > 0) {
+    syncParts.push(
+      `${repositoryState.behind} remote commit${repositoryState.behind === 1 ? '' : 's'} ready to pull`,
+    )
+  }
+
+  return syncParts.length > 0 ? syncParts.join(' / ') : 'All changes are committed'
+}
+
 function buildGitTree(changes: GitDisplayChange[]) {
   const root = new Map<string, GitTreeNodeDraft>()
 
@@ -575,9 +593,7 @@ export function GitPanel({
     [repositoryState?.unstagedChanges],
   )
   const canSubmitCommit = repositoryState
-    ? repositoryState.hasChanges
-      ? commitMessage.trim().length > 0
-      : true
+    ? repositoryState.hasChanges && commitMessage.trim().length > 0
     : false
 
   if (!workspacePath) {
@@ -618,129 +634,140 @@ export function GitPanel({
   const pushAccessibleLabel = hasUnpushedCommits
     ? `Push ${unpushedCommitCount} unpushed commit${unpushedCommitCount === 1 ? '' : 's'}`
     : 'Push'
+  const hasVisibleChanges = repositoryState.hasChanges
+  const shouldShowCommitWorkflow = repositoryState.hasChanges
+  const cleanStateSubtext = getCleanStateSubtext(repositoryState)
 
   return (
     <div className='git-panel'>
-      <header className='git-panel-header'>
-        <div className='git-panel-toolbar'>
-            <button
-              type='button'
-              className='git-toolbar-action git-toolbar-icon-button'
-              aria-label='Commit and sync'
-              title={syncDisabledReason ?? 'Commit and sync'}
-              disabled={!canSubmitCommit || Boolean(syncDisabledReason)}
-              onClick={onCommitAndSync}
-            >
-              <ArrowUpCircleLine size={16} />
-            </button>
-            <button
-              type='button'
-              className='git-toolbar-action git-toolbar-icon-button'
-              aria-label='Commit'
-              title='Commit'
-              disabled={!repositoryState.hasChanges || commitMessage.trim().length === 0 || Boolean(busyLabel)}
-              onClick={onCommit}
-            >
-              <CheckLine size={16} />
-            </button>
-            <button
-              type='button'
-              className='git-toolbar-action git-toolbar-icon-button'
-              aria-label='Stage all'
-              title='Stage all'
-              disabled={unstagedPaths.length === 0 || Boolean(busyLabel)}
-              onClick={() => {
-                onStage(unstagedPaths)
-              }}
-            >
-              <AddLine size={16} />
-            </button>
-            <button
-              type='button'
-              className='git-toolbar-action git-toolbar-icon-button'
-              aria-label='Unstage all'
-              title='Unstage all'
-              disabled={stagedPaths.length === 0 || Boolean(busyLabel)}
-              onClick={() => {
-                onUnstage(stagedPaths)
-              }}
-            >
-              <Icon icon='mdi:minus' width={16} height={16} />
-            </button>
-          <button
-            type='button'
-            className={`git-toolbar-action git-toolbar-icon-button${hasUnpushedCommits ? ' git-toolbar-action-with-badge' : ''}`}
-            aria-label={pushAccessibleLabel}
-            title={syncDisabledReason ?? pushAccessibleLabel}
-            disabled={Boolean(syncDisabledReason)}
-            onClick={onPush}
-          >
-            <UploadLine size={16} />
-            {hasUnpushedCommits ? <span className='git-toolbar-action-badge'>{pushBadgeLabel}</span> : null}
-          </button>
-          <button
-            type='button'
-            className='git-toolbar-action git-toolbar-icon-button'
-            aria-label='Pull'
-            title={syncDisabledReason ?? 'Pull'}
-            disabled={Boolean(syncDisabledReason)}
-            onClick={onPull}
-          >
-            <DownloadLine size={16} />
-          </button>
-          <button
-            type='button'
-            className='git-toolbar-action git-toolbar-icon-button'
-            aria-label={layout === 'tree' ? 'Switch to list layout' : 'Switch to tree layout'}
-            title={layout === 'tree' ? 'List layout' : 'Tree layout'}
-            disabled={Boolean(busyLabel)}
-            onClick={() => {
-              onLayoutChange(layout === 'tree' ? 'list' : 'tree')
-            }}
-          >
-            {layout === 'tree' ? <ListCheckLine size={16} /> : <FolderLine size={16} />}
-          </button>
-          <button
-            type='button'
-            className='git-toolbar-action git-toolbar-icon-button'
-            aria-label='Refresh Git status'
-            title='Refresh'
-            disabled={Boolean(busyLabel)}
-            onClick={onRefresh}
-          >
-            <Refresh2Line size={16} />
-          </button>
-        </div>
-
-        <div className='git-panel-commit-row'>
-          <div className='git-panel-commit-field'>
-            <textarea
-              value={commitMessage}
-              aria-label='Commit message'
-              className='git-commit-textarea'
-              disabled={Boolean(busyLabel)}
-              placeholder='Commit Message'
-              rows={1}
-              onChange={(event) => {
-                onCommitMessageChange(event.target.value)
-              }}
-            />
-            {commitMessage ? (
-              <button
-                type='button'
-                className='git-panel-commit-clear'
-                aria-label='Clear commit message'
-                title='Clear'
-                onClick={() => {
-                  onCommitMessageChange('')
-                }}
-              >
-                <CloseCircleLine size={16} />
-              </button>
+      {hasVisibleChanges ? (
+        <header className='git-panel-header'>
+          <div className='git-panel-toolbar'>
+            {shouldShowCommitWorkflow ? (
+              <>
+                <button
+                  type='button'
+                  className='git-toolbar-action git-toolbar-icon-button'
+                  aria-label='Commit and sync'
+                  title={syncDisabledReason ?? 'Commit and sync'}
+                  disabled={!canSubmitCommit || Boolean(syncDisabledReason)}
+                  onClick={onCommitAndSync}
+                >
+                  <ArrowUpCircleLine size={16} />
+                </button>
+                <button
+                  type='button'
+                  className='git-toolbar-action git-toolbar-icon-button'
+                  aria-label='Commit'
+                  title='Commit'
+                  disabled={!canSubmitCommit || Boolean(busyLabel)}
+                  onClick={onCommit}
+                >
+                  <CheckLine size={16} />
+                </button>
+                <button
+                  type='button'
+                  className='git-toolbar-action git-toolbar-icon-button'
+                  aria-label='Stage all'
+                  title='Stage all'
+                  disabled={unstagedPaths.length === 0 || Boolean(busyLabel)}
+                  onClick={() => {
+                    onStage(unstagedPaths)
+                  }}
+                >
+                  <AddLine size={16} />
+                </button>
+                <button
+                  type='button'
+                  className='git-toolbar-action git-toolbar-icon-button'
+                  aria-label='Unstage all'
+                  title='Unstage all'
+                  disabled={stagedPaths.length === 0 || Boolean(busyLabel)}
+                  onClick={() => {
+                    onUnstage(stagedPaths)
+                  }}
+                >
+                  <Icon icon='mdi:minus' width={16} height={16} />
+                </button>
+              </>
             ) : null}
+            <button
+              type='button'
+              className={`git-toolbar-action git-toolbar-icon-button${hasUnpushedCommits ? ' git-toolbar-action-with-badge' : ''}`}
+              aria-label={pushAccessibleLabel}
+              title={syncDisabledReason ?? pushAccessibleLabel}
+              disabled={Boolean(syncDisabledReason)}
+              onClick={onPush}
+            >
+              <UploadLine size={16} />
+              {hasUnpushedCommits ? <span className='git-toolbar-action-badge'>{pushBadgeLabel}</span> : null}
+            </button>
+            <button
+              type='button'
+              className='git-toolbar-action git-toolbar-icon-button'
+              aria-label='Pull'
+              title={syncDisabledReason ?? 'Pull'}
+              disabled={Boolean(syncDisabledReason)}
+              onClick={onPull}
+            >
+              <DownloadLine size={16} />
+            </button>
+            <button
+              type='button'
+              className='git-toolbar-action git-toolbar-icon-button'
+              aria-label={layout === 'tree' ? 'Switch to list layout' : 'Switch to tree layout'}
+              title={layout === 'tree' ? 'List layout' : 'Tree layout'}
+              disabled={Boolean(busyLabel)}
+              onClick={() => {
+                onLayoutChange(layout === 'tree' ? 'list' : 'tree')
+              }}
+            >
+              {layout === 'tree' ? <ListCheckLine size={16} /> : <FolderLine size={16} />}
+            </button>
+            <button
+              type='button'
+              className='git-toolbar-action git-toolbar-icon-button'
+              aria-label='Refresh Git status'
+              title='Refresh'
+              disabled={Boolean(busyLabel)}
+              onClick={onRefresh}
+            >
+              <Refresh2Line size={16} />
+            </button>
           </div>
-        </div>
-      </header>
+
+          {shouldShowCommitWorkflow ? (
+            <div className='git-panel-commit-row'>
+              <div className='git-panel-commit-field'>
+                <textarea
+                  value={commitMessage}
+                  aria-label='Commit message'
+                  className='git-commit-textarea'
+                  disabled={Boolean(busyLabel)}
+                  placeholder='Commit Message'
+                  rows={1}
+                  onChange={(event) => {
+                    onCommitMessageChange(event.target.value)
+                  }}
+                />
+                {commitMessage ? (
+                  <button
+                    type='button'
+                    className='git-panel-commit-clear'
+                    aria-label='Clear commit message'
+                    title='Clear'
+                    onClick={() => {
+                      onCommitMessageChange('')
+                    }}
+                  >
+                    <CloseCircleLine size={16} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </header>
+      ) : null}
 
       {busyLabel ? <p className='git-panel-status'>{busyLabel}</p> : null}
 
@@ -748,13 +775,49 @@ export function GitPanel({
         className='git-panel-sections'
         contentClassName='git-panel-sections-content'
       >
-        {!repositoryState.hasChanges && repositoryState.recentlyPulledChanges.length === 0 ? (
+        {!repositoryState.hasChanges ? (
           <div className='git-panel-empty-state git-panel-clean-state'>
             <div className='git-empty-illustration'>
               <CheckLine size={28} />
             </div>
             <p>Working tree clean</p>
-            <span className='git-empty-subtext'>All changes are committed</span>
+            <span className='git-empty-subtext'>{cleanStateSubtext}</span>
+            <div className='git-clean-actions'>
+              {hasUnpushedCommits ? (
+                <button
+                  type='button'
+                  className='git-clean-action'
+                  title={syncDisabledReason ?? pushAccessibleLabel}
+                  disabled={Boolean(syncDisabledReason)}
+                  onClick={onPush}
+                >
+                  <UploadLine size={15} />
+                  <span>Push</span>
+                </button>
+              ) : null}
+              {repositoryState.behind > 0 ? (
+                <button
+                  type='button'
+                  className='git-clean-action'
+                  title={syncDisabledReason ?? 'Pull'}
+                  disabled={Boolean(syncDisabledReason)}
+                  onClick={onPull}
+                >
+                  <DownloadLine size={15} />
+                  <span>Pull</span>
+                </button>
+              ) : null}
+              <button
+                type='button'
+                className='git-clean-action'
+                title='Refresh'
+                disabled={Boolean(busyLabel)}
+                onClick={onRefresh}
+              >
+                <Refresh2Line size={15} />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
         ) : (
           <>
@@ -814,20 +877,6 @@ export function GitPanel({
               }
             />
 
-            {repositoryState.recentlyPulledChanges.length > 0 && (
-              <GitSection
-                title='Recently Pulled'
-                changes={repositoryState.recentlyPulledChanges}
-                kind='pulled'
-                layout={layout}
-                iconTheme={iconTheme}
-                onDiscardMany={onDiscardMany}
-                onOpenDiff={onOpenDiff}
-                onOpenFile={onOpenFile}
-                onStage={onStage}
-                onUnstage={onUnstage}
-              />
-            )}
           </>
         )}
       </AppScrollArea>

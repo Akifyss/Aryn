@@ -1872,6 +1872,44 @@ body:has([data-slot='alert-dialog-backdrop']) .left-chrome-actions {
   font-weight: 500;
 }
 
+.git-clean-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.git-clean-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--separator);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.git-clean-action:hover:not(:disabled) {
+  border-color: var(--surface-tertiary);
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+}
+
+.git-clean-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .git-panel-status,
 .git-panel-error {
   padding: 6px 12px 0;
