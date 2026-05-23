@@ -4289,7 +4289,6 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-composer-mention-menu,
 .agent-composer-meta>.agent-composer-menu {
-  position: absolute;
   z-index: 48;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -4300,17 +4299,17 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-composer-mention-menu {
+  position: absolute;
   left: 0;
   right: 0;
   bottom: calc(100% + 10px);
 }
 
 .agent-composer-meta>.agent-composer-menu {
-  left: 0;
-  right: calc(var(--agent-send-button-size) + var(--agent-composer-action-gap));
-  bottom: calc(100% + 10px);
+  position: relative;
+  flex: 0 0 auto;
   height: var(--agent-composer-menu-height);
-  width: auto;
+  width: 100%;
   min-height: 0;
   max-height: 264px;
 }
@@ -4411,6 +4410,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex: 0 0 36px;
   min-height: 36px;
   height: 36px;
 }
@@ -4426,9 +4426,13 @@ body.workspace-tree-dragging .workspace-tree-row {
   --agent-composer-action-gap: 6px;
   --agent-send-button-size: 36px;
   position: relative;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
   flex: 0 0 36px;
   height: 36px;
   min-height: 36px;
+  overflow: visible;
 }
 
 .agent-model-field {
