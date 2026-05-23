@@ -5,6 +5,8 @@
   --app-z-window-chrome: 30;
   --app-z-panel-toggle: 60;
   --app-z-window-controls: 70;
+  --app-menu-item-hover-background: var(--surface-secondary);
+  --app-menu-item-active-background: var(--surface-tertiary);
 }
 
 .app-shell {
@@ -4364,13 +4366,17 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-composer-mention-option:hover,
+.agent-composer-option:hover {
+  outline: none;
+  background: var(--app-menu-item-hover-background);
+}
+
 .agent-composer-mention-option:focus-visible,
 .agent-composer-mention-option.is-active,
-.agent-composer-option:hover,
 .agent-composer-option:focus-visible,
 .agent-composer-option.is-active {
   outline: none;
-  background: color-mix(in srgb, var(--surface-tertiary) 86%, var(--accent) 14%);
+  background: var(--app-menu-item-active-background);
 }
 
 .agent-composer-mention-option-icon {
@@ -4995,5 +5001,10 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .workspace-tree-popover [role="menuitem"][data-hover="true"]:not([data-color="danger"]),
 .settings-select-popover [role="option"][data-hover="true"]:not([data-color="danger"]) {
-  background: color-mix(in srgb, var(--surface-tertiary) 86%, var(--accent) 14%) !important;
+  background: var(--app-menu-item-hover-background) !important;
+}
+
+.settings-select-popover [role="option"][aria-selected="true"]:not([data-color="danger"]),
+.settings-select-popover [role="option"][data-selected="true"]:not([data-color="danger"]) {
+  background: var(--app-menu-item-active-background) !important;
 }
