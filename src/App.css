@@ -52,7 +52,7 @@
 }
 
 .app-shell[data-app-layout='agent'] {
-  --agent-chat-min-width: 420px;
+  --agent-chat-min-width: 320px;
   --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
 }
 
