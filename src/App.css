@@ -4146,6 +4146,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   max-width: var(--agent-content-max-width);
   margin: 0 auto;
   padding: var(--agent-composer-padding-block-start) var(--agent-composer-padding-inline) var(--agent-composer-padding-block-end);
+  isolation: isolate;
 }
 
 .agent-composer-resize-handle {
@@ -4185,7 +4186,9 @@ body.workspace-tree-dragging .workspace-tree-row {
   resize: none !important;
   min-height: var(--agent-composer-height);
   height: var(--agent-composer-height);
-  padding-bottom: calc(var(--agent-composer-toolbar-height) + 18px) !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  padding-bottom: calc(var(--agent-composer-toolbar-height) + 8px) !important;
   overflow: auto !important;
 }
 
@@ -4365,9 +4368,9 @@ body.workspace-tree-dragging .workspace-tree-row {
   --agent-send-button-size: 36px;
   /* The menu is absolute, so anchoring it here does not move the provider/model triggers. */
   position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 10px;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
   z-index: 50;
   height: var(--agent-composer-toolbar-height);
   min-height: var(--agent-composer-toolbar-height);
