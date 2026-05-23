@@ -601,41 +601,6 @@ body:has([data-slot='alert-dialog-backdrop']) .left-chrome-actions {
   margin-left: 0;
 }
 
-.workspace-toggle-brand-icon {
-  position: relative;
-}
-
-.workspace-toggle-brand-logo,
-.workspace-toggle-brand-glyph {
-  position: absolute;
-  inset: 50% auto auto 50%;
-  transform: translate(-50%, -50%);
-  transition: opacity 140ms ease;
-}
-
-.workspace-toggle-brand-logo {
-  width: 18px;
-  height: 18px;
-  opacity: 1;
-}
-
-.workspace-toggle-brand-glyph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-}
-
-.workspace-toggle-brand-button:hover .workspace-toggle-brand-logo,
-.workspace-toggle-brand-button:focus-visible .workspace-toggle-brand-logo {
-  opacity: 0;
-}
-
-.workspace-toggle-brand-button:hover .workspace-toggle-brand-glyph,
-.workspace-toggle-brand-button:focus-visible .workspace-toggle-brand-glyph {
-  opacity: 1;
-}
-
 .left-chrome-search-button {
   color: var(--muted);
 }
@@ -3091,6 +3056,17 @@ body.workspace-tree-dragging .workspace-tree-row {
   padding: 0 var(--right-panel-content-inset) 0 6px;
 }
 
+.agent-threadbar-leading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 100%;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
 .agent-session-select {
   min-width: 0;
   flex: 0 1 auto;
@@ -3129,6 +3105,8 @@ body.workspace-tree-dragging .workspace-tree-row {
   color: var(--muted);
   cursor: pointer;
   transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
 .agent-toolbar-button:hover {

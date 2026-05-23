@@ -865,7 +865,7 @@ function App() {
   const displayTabs = useMemo<WorkspaceDisplayTab[]>(
     () => {
       const fixedTabs = isAgentLayout
-        ? [getFixedPanelTab('file'), getFixedPanelTab('git')]
+        ? [getFixedPanelTab('git'), getFixedPanelTab('file')]
         : []
       const workspaceTabs = [
         ...fixedTabs,
@@ -4183,7 +4183,7 @@ function App() {
       >
         <button
           type='button'
-          className='panel-toggle-button workspace-toggle-brand-button'
+          className='panel-toggle-button'
           aria-label={isLeftSidebarDrawer
             ? (isLeftDrawerOpen ? 'Close workspace panel' : 'Open workspace panel')
             : (isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar')}
@@ -4201,11 +4201,8 @@ function App() {
             setIsLeftSidebarCollapsed(false)
           }}
         >
-          <span className='panel-toggle-icon workspace-toggle-brand-icon' aria-hidden='true'>
-            <img className='workspace-toggle-brand-logo' src='/branding/logo_xl.svg' alt='' draggable='false' />
-            <span className='workspace-toggle-brand-glyph'>
-              <LayoutLeftLine size={16} />
-            </span>
+          <span className='panel-toggle-icon' aria-hidden='true'>
+            <LayoutLeftLine size={16} />
           </span>
         </button>
         <button

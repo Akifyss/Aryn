@@ -2598,25 +2598,23 @@ function AgentChatSurface() {
   return (
     <div className='agent-shell'>
       <div className='agent-threadbar'>
-        <div className='agent-session-select'>
-          <button
-            ref={sessionButtonRef}
-            type='button'
-            disabled={!workspacePath}
-            className={`agent-session-trigger ${activeOverlayPanel === 'sessions' ? 'is-open' : ''}`}
-            onClick={() => {
-              setActiveOverlayPanel((currentValue) => currentValue === 'sessions' ? null : 'sessions')
-            }}
-          >
-            <span className='agent-select-current'>
-              {isNewConversation ? '新对话' : activeSession ? formatSessionLabel(activeSession.name) : 'Session'}
-            </span>
-          </button>
-        </div>
+        <div className='agent-threadbar-leading'>
+          <div className='agent-session-select'>
+            <button
+              ref={sessionButtonRef}
+              type='button'
+              disabled={!workspacePath}
+              className={`agent-session-trigger ${activeOverlayPanel === 'sessions' ? 'is-open' : ''}`}
+              onClick={() => {
+                setActiveOverlayPanel((currentValue) => currentValue === 'sessions' ? null : 'sessions')
+              }}
+            >
+              <span className='agent-select-current'>
+                {isNewConversation ? '新对话' : activeSession ? formatSessionLabel(activeSession.name) : 'Session'}
+              </span>
+            </button>
+          </div>
 
-        <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
-
-        <div className='agent-threadbar-actions'>
           {!isNewConversation ? (
             <button
               type='button'
@@ -2631,6 +2629,8 @@ function AgentChatSurface() {
             </button>
           ) : null}
         </div>
+
+        <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
       </div>
 
       {activeOverlayPanel === 'sessions' ? (
