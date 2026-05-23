@@ -36,11 +36,16 @@
   border-radius: 999px;
 }
 
-.app-scroll-area:hover .app-scroll-area-scrollbar,
-.app-scroll-area:focus-within .app-scroll-area-scrollbar,
-.app-scroll-area[data-scrolling] .app-scroll-area-scrollbar,
-.app-scroll-area-scrollbar[data-hovering],
-.app-scroll-area-scrollbar[data-scrolling] {
+.app-scroll-area[data-has-overflow-y]:hover .app-scroll-area-scrollbar[data-orientation='vertical'],
+.app-scroll-area[data-has-overflow-y]:focus-within .app-scroll-area-scrollbar[data-orientation='vertical'],
+.app-scroll-area[data-has-overflow-y][data-scrolling] .app-scroll-area-scrollbar[data-orientation='vertical'],
+.app-scroll-area-scrollbar[data-orientation='vertical'][data-hovering],
+.app-scroll-area-scrollbar[data-orientation='vertical'][data-scrolling],
+.app-scroll-area[data-has-overflow-x]:hover .app-scroll-area-scrollbar[data-orientation='horizontal'],
+.app-scroll-area[data-has-overflow-x]:focus-within .app-scroll-area-scrollbar[data-orientation='horizontal'],
+.app-scroll-area[data-has-overflow-x][data-scrolling] .app-scroll-area-scrollbar[data-orientation='horizontal'],
+.app-scroll-area-scrollbar[data-orientation='horizontal'][data-hovering],
+.app-scroll-area-scrollbar[data-orientation='horizontal'][data-scrolling] {
   opacity: 1;
   pointer-events: auto;
 }

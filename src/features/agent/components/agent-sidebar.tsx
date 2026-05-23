@@ -108,6 +108,7 @@ const MARKDOWN_PLUGINS = [remarkGfm]
 const AGENT_COMPOSER_MENU_MAX_HEIGHT = 264
 const AGENT_COMPOSER_MENU_ROW_HEIGHT = 30
 const AGENT_COMPOSER_MENU_PADDING = 10
+const AGENT_COMPOSER_MENU_BORDER_SIZE = 2
 const AGENT_THINKING_AUTO_EXPAND_DELAY_MS = 520
 const AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS = 140
 const AGENT_THINKING_MIN_EXPANDED_MS = 360
@@ -154,6 +155,12 @@ const emptyAgentState: AgentWorkspaceState = {
     workspacePath: null,
   },
   sessions: [],
+}
+
+function getAgentComposerMenuHeight(itemCount: number) {
+  const contentHeight = itemCount * AGENT_COMPOSER_MENU_ROW_HEIGHT + AGENT_COMPOSER_MENU_PADDING
+
+  return Math.min(AGENT_COMPOSER_MENU_MAX_HEIGHT, contentHeight + AGENT_COMPOSER_MENU_BORDER_SIZE)
 }
 
 const emptyComposerState: ComposerState = {
@@ -2052,14 +2059,8 @@ function AgentProvider({
       const query = modelInputValue.trim().toLowerCase()
       return !query || modelId.toLowerCase().includes(query)
     })
-  const providerMenuHeight = Math.min(
-    AGENT_COMPOSER_MENU_MAX_HEIGHT,
-    configuredProviders.length * AGENT_COMPOSER_MENU_ROW_HEIGHT + AGENT_COMPOSER_MENU_PADDING,
-  )
-  const modelMenuHeight = Math.min(
-    AGENT_COMPOSER_MENU_MAX_HEIGHT,
-    modelSuggestions.length * AGENT_COMPOSER_MENU_ROW_HEIGHT + AGENT_COMPOSER_MENU_PADDING,
-  )
+  const providerMenuHeight = getAgentComposerMenuHeight(configuredProviders.length)
+  const modelMenuHeight = getAgentComposerMenuHeight(modelSuggestions.length)
   const modelPlaceholder = 'model'
   const canSend = Boolean(
     workspacePath
