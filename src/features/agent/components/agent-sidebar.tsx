@@ -2596,6 +2596,7 @@ function AgentChatSurface() {
   const isNewConversation = activeSessionSelection.kind === 'new'
     || (hasEmptyChat && !activeSession)
   const composerMenuRootStyle = {
+    position: 'absolute',
     '--agent-composer-menu-height': `${activeComposerMenu === 'provider' ? providerMenuHeight : modelMenuHeight}px`,
   } as CSSProperties
 
