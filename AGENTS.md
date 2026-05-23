@@ -19,4 +19,7 @@
   - Design Token / CSS 变量：优先使用 HeroUI V3 提供的系统 ([Colors](https://heroui.com/docs/react/getting-started/colors) 、 [Theming](https://heroui.com/docs/react/getting-started/theming) 、 [Styling](https://heroui.com/docs/react/getting-started/styling))。
   - 图标：优先使用 [mingcute](https://www.mingcute.com/) ([GitHub](https://github.com/mingcute-design/mingcute-icons))；若无合适图标则使用 [iconify](https://iconify.design/) ([Docs](https://iconify.design/docs/) 、 [GitHub](https://github.com/iconify/iconify))。
   - 状态管理：使用 Zustand 管理渲染器全局状态；UI 状态需标注明确。
-- 数据策略：保持本地文件系统优先，仅在需要复杂元数据（如会话历史、模板）时引入 `better-sqlite3`。
+
+# electron 调试流程
+
+- 项目中自带 electron 调试流程。小改动、能让用户快速查看确认的内容，不用进入 electron 调试流程。

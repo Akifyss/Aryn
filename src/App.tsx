@@ -1,8 +1,9 @@
 import type { CSSProperties } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
+import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer, Tabs } from '@heroui/react'
 import {
   FileLine,
+  GitBranchLine,
   LayoutLeftLine,
   LayoutRightLine,
 } from '@mingcute/react'
@@ -3955,30 +3956,39 @@ function App() {
             />
           ) : (
             <>
-              <div className='sidebar-vertical-tabs'>
-                <button
-                  type='button'
-                  className={`sidebar-vertical-tab${activeLeftSidebarTab === 'file' ? ' is-active' : ''}`}
-                  onClick={() => {
-                    setActiveLeftSidebarTab('file')
-                  }}
-                >
-                  <FileLine size={16} className='sidebar-vertical-tab-icon' />
-                  <span className='sidebar-vertical-tab-label'>文件</span>
-                </button>
-                <button
-                  type='button'
-                  className={`sidebar-vertical-tab${activeLeftSidebarTab === 'git' ? ' is-active' : ''}`}
-                  onClick={() => {
-                    setActiveLeftSidebarTab('git')
-                  }}
-                >
-                  <Icon icon='lucide:git-branch' width={16} height={16} className='sidebar-vertical-tab-icon' />
-                  <span className='sidebar-vertical-tab-label'>Git</span>
-                </button>
-              </div>
+              <Tabs
+                aria-label='工作区面板'
+                className='sidebar-vertical-tabs'
+                orientation='vertical'
+                selectedKey={activeLeftSidebarTab}
+                onSelectionChange={(key) => {
+                  if (key === 'file' || key === 'git') {
+                    setActiveLeftSidebarTab(key)
+                  }
+                }}
+              >
+                <Tabs.ListContainer className='sidebar-vertical-tabs-list-container'>
+                  <Tabs.List aria-label='工作区面板' className='sidebar-vertical-tabs-list'>
+                    <Tabs.Tab id='file' className='sidebar-vertical-tab'>
+                      <FileLine size={16} className='sidebar-vertical-tab-icon' />
+                      <span className='sidebar-vertical-tab-label'>文件</span>
+                      <Tabs.Indicator className='sidebar-vertical-tab-indicator' />
+                    </Tabs.Tab>
+                    <Tabs.Tab id='git' className='sidebar-vertical-tab'>
+                      <GitBranchLine size={16} className='sidebar-vertical-tab-icon' />
+                      <span className='sidebar-vertical-tab-label'>Git</span>
+                      <Tabs.Indicator className='sidebar-vertical-tab-indicator' />
+                    </Tabs.Tab>
+                  </Tabs.List>
+                </Tabs.ListContainer>
 
-              {activeLeftSidebarTab === 'file' ? renderWorkspaceTreePanel() : renderGitPanel()}
+                <Tabs.Panel id='file' className='sidebar-vertical-tab-panel'>
+                  {renderWorkspaceTreePanel()}
+                </Tabs.Panel>
+                <Tabs.Panel id='git' className='sidebar-vertical-tab-panel'>
+                  {renderGitPanel()}
+                </Tabs.Panel>
+              </Tabs>
             </>
           )}
         </div>

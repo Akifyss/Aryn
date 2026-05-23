@@ -785,19 +785,40 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   overflow: hidden;
 }
 
-.sidebar-vertical-tabs {
+.workspace-sidebar-surface .sidebar-stack .sidebar-vertical-tabs {
   display: flex;
+  flex: 1;
+  min-height: 0;
   flex-direction: column;
-  padding: 0 8px 8px;
-  padding-left: calc(var(--sidebar-icon-x, 20px) - 12px);
-  gap: 2px;
+  gap: 0;
+  overflow: hidden;
 }
 
-.sidebar-vertical-tab {
+.workspace-sidebar-surface .sidebar-vertical-tabs-list-container {
+  flex: none;
+  padding: 0 8px 8px;
+  padding-left: calc(var(--sidebar-icon-x, 20px) - 12px);
+}
+
+.workspace-sidebar-surface .sidebar-vertical-tabs-list {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.workspace-sidebar-surface .sidebar-vertical-tab {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
+  width: 100%;
+  height: auto;
+  min-width: 0;
   padding: 8px 12px;
   border-radius: 8px;
   border: none;
@@ -805,33 +826,37 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   color: var(--muted);
   font-size: 13px;
   font-weight: 500;
-  cursor: pointer;
-  transition: all 140ms ease;
-  width: 100%;
   text-align: left;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    opacity 140ms ease;
 }
 
-.sidebar-vertical-tab:hover {
+.workspace-sidebar-surface .sidebar-vertical-tab:hover,
+.workspace-sidebar-surface .sidebar-vertical-tab[data-hovered="true"] {
   background: var(--surface-tertiary);
   color: var(--foreground);
+  opacity: 1;
 }
 
-.sidebar-vertical-tab.is-active {
+.workspace-sidebar-surface .sidebar-vertical-tab[data-selected="true"] {
   background: var(--surface-tertiary);
   color: var(--foreground);
   font-weight: 600;
 }
 
-.sidebar-vertical-tab.is-active::before {
-  content: "";
-  position: absolute;
+.workspace-sidebar-surface .sidebar-vertical-tab-indicator {
   left: 0;
   top: 10px;
   bottom: 10px;
   width: 4px;
+  height: auto;
   background: var(--accent);
   border-radius: 999px;
   box-shadow: none;
+  z-index: 0;
 }
 
 .sidebar-vertical-tab-icon {
@@ -841,9 +866,11 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   flex-shrink: 0;
   color: inherit;
   transition: transform 140ms ease;
+  z-index: 1;
 }
 
-.sidebar-vertical-tab:active .sidebar-vertical-tab-icon {
+.workspace-sidebar-surface .sidebar-vertical-tab:active .sidebar-vertical-tab-icon,
+.workspace-sidebar-surface .sidebar-vertical-tab[data-pressed="true"] .sidebar-vertical-tab-icon {
   transform: scale(0.92);
 }
 
@@ -853,6 +880,16 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  z-index: 1;
+}
+
+.workspace-sidebar-surface .sidebar-vertical-tab-panel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin-left: 0;
+  padding: 0;
 }
 
 .sidebar-tree-pane {
