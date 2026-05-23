@@ -3075,8 +3075,8 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-shell {
   --agent-content-max-width: 800px;
-  --agent-messages-block-padding: 16px;
-  --agent-messages-inline-padding: 16px;
+  --agent-messages-block-padding: 8px;
+  --agent-messages-inline-padding: 8px;
   --agent-messages-bottom-padding: 104px;
   position: relative;
   display: flex;
@@ -4128,9 +4128,9 @@ body.workspace-tree-dragging .workspace-tree-row {
   --agent-composer-height: 172px;
   --agent-composer-control-gap: 11px;
   --agent-composer-menu-gap: 10px;
-  --agent-composer-padding-block-end: 16px;
-  --agent-composer-padding-block-start: 14px;
-  --agent-composer-padding-inline: 16px;
+  --agent-composer-padding-block-end: 8px;
+  --agent-composer-padding-block-start: 8px;
+  --agent-composer-padding-inline: 8px;
   --agent-composer-toolbar-height: 36px;
   position: relative;
   display: flex;
