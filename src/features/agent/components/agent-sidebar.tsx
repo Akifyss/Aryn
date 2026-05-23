@@ -210,8 +210,13 @@ const AGENT_SESSION_TREE_CSS = `
     background: var(--surface-tertiary);
   }
 
-  button[data-type='item'][data-item-selected] [data-item-section='content'] {
-    font-weight: 600;
+  /* @pierre/trees marks clicked rows as focused; keep pointer focus quiet while preserving keyboard focus. */
+  button[data-type='item'][data-item-focused='true']::before {
+    outline-color: transparent;
+  }
+
+  button[data-type='item']:focus-visible::before {
+    outline-color: var(--trees-focus-ring-color);
   }
 
   /* Agent sessions are conversation titles, not paths: render them through the public decoration lane. */
@@ -241,10 +246,6 @@ const AGENT_SESSION_TREE_CSS = `
 
   button[data-type='item'][data-item-context-hover='true'] > [data-item-section='action'] {
     width: var(--trees-action-lane-width);
-  }
-
-  button[data-type='item'][data-item-selected] [data-item-section='decoration'] {
-    font-weight: 600;
   }
 
   /* "when-needed" includes focus in @pierre/trees; this surface wants hover/open only. */
