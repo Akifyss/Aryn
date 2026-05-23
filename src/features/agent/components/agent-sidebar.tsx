@@ -2830,66 +2830,6 @@ function AgentChatSurface() {
                     </Button>
                   )}
 
-                  {activeComposerMenu === 'provider' && canChooseProvider ? (
-                    <AppScrollArea
-                      className='agent-composer-menu'
-                      contentClassName='agent-composer-menu-content'
-                      rootStyle={composerMenuRootStyle}
-                    >
-                      <div className='agent-composer-menu-list' role='listbox' aria-label='Available providers'>
-                        {configuredProviders.map((provider) => (
-                          <button
-                            key={provider}
-                            type='button'
-                            className={`agent-composer-option${provider === resolvedSelectedProviderValue ? ' is-active' : ''}`}
-                            onPointerDown={(event) => {
-                              event.preventDefault()
-                            }}
-                            onClick={() => {
-                              void handleProviderSelectionChange(provider)
-                            }}
-                          >
-                            <span className='agent-composer-option-label'>{provider}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </AppScrollArea>
-                  ) : null}
-
-                  {activeComposerMenu === 'model' && modelSuggestions.length > 0 ? (
-                    <AppScrollArea
-                      className='agent-composer-menu'
-                      contentClassName='agent-composer-menu-content'
-                      rootStyle={composerMenuRootStyle}
-                    >
-                      <div className='agent-composer-menu-list' role='listbox' aria-label='Available models'>
-                        {modelSuggestions.map((modelId) => (
-                          <button
-                            key={`${resolvedSelectedProviderValue}/${modelId}`}
-                            type='button'
-                            className={`agent-composer-option${modelId === modelInputValue ? ' is-active' : ''}`}
-                            onPointerDown={(event) => {
-                              event.preventDefault()
-                            }}
-                            onClick={() => {
-                              if (panelError) {
-                                setPanelError(null)
-                              }
-                              setModelInputValue(modelId)
-                              setModelDrafts((currentValue) => ({
-                                ...currentValue,
-                                [resolvedSelectedProviderValue]: modelId,
-                              }))
-                              setActiveComposerMenu(null)
-                              void handleSelectModel(`${resolvedSelectedProviderValue}/${modelId}`)
-                            }}
-                          >
-                            <span className='agent-composer-option-label'>{modelId}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </AppScrollArea>
-                  ) : null}
                 </div>
 
                 <Button
@@ -2905,6 +2845,66 @@ function AgentChatSurface() {
               </div>
             </div>
 
+            {activeComposerMenu === 'provider' && canChooseProvider ? (
+              <AppScrollArea
+                className='agent-composer-menu'
+                contentClassName='agent-composer-menu-content'
+                rootStyle={composerMenuRootStyle}
+              >
+                <div className='agent-composer-menu-list' role='listbox' aria-label='Available providers'>
+                  {configuredProviders.map((provider) => (
+                    <button
+                      key={provider}
+                      type='button'
+                      className={`agent-composer-option${provider === resolvedSelectedProviderValue ? ' is-active' : ''}`}
+                      onPointerDown={(event) => {
+                        event.preventDefault()
+                      }}
+                      onClick={() => {
+                        void handleProviderSelectionChange(provider)
+                      }}
+                    >
+                      <span className='agent-composer-option-label'>{provider}</span>
+                    </button>
+                  ))}
+                </div>
+              </AppScrollArea>
+            ) : null}
+
+            {activeComposerMenu === 'model' && modelSuggestions.length > 0 ? (
+              <AppScrollArea
+                className='agent-composer-menu'
+                contentClassName='agent-composer-menu-content'
+                rootStyle={composerMenuRootStyle}
+              >
+                <div className='agent-composer-menu-list' role='listbox' aria-label='Available models'>
+                  {modelSuggestions.map((modelId) => (
+                    <button
+                      key={`${resolvedSelectedProviderValue}/${modelId}`}
+                      type='button'
+                      className={`agent-composer-option${modelId === modelInputValue ? ' is-active' : ''}`}
+                      onPointerDown={(event) => {
+                        event.preventDefault()
+                      }}
+                      onClick={() => {
+                        if (panelError) {
+                          setPanelError(null)
+                        }
+                        setModelInputValue(modelId)
+                        setModelDrafts((currentValue) => ({
+                          ...currentValue,
+                          [resolvedSelectedProviderValue]: modelId,
+                        }))
+                        setActiveComposerMenu(null)
+                        void handleSelectModel(`${resolvedSelectedProviderValue}/${modelId}`)
+                      }}
+                    >
+                      <span className='agent-composer-option-label'>{modelId}</span>
+                    </button>
+                  ))}
+                </div>
+              </AppScrollArea>
+            ) : null}
           </div>
         </div>
       </form>
