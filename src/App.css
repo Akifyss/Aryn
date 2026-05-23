@@ -4288,7 +4288,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-composer-mention-menu,
-.agent-composer-meta>.agent-composer-menu {
+.agent-model-field>.agent-composer-menu {
   position: absolute;
   z-index: 48;
   overflow: hidden;
@@ -4305,9 +4305,9 @@ body.workspace-tree-dragging .workspace-tree-row {
   bottom: calc(100% + 10px);
 }
 
-.agent-composer-meta>.agent-composer-menu {
+.agent-model-field>.agent-composer-menu {
   left: 0;
-  right: calc(var(--agent-send-button-size) + var(--agent-composer-action-gap));
+  right: 0;
   bottom: calc(100% + 10px);
   height: var(--agent-composer-menu-height);
   width: auto;
@@ -4320,7 +4320,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-composer-mention-menu-scroll,
-.agent-composer-meta>.agent-composer-menu {
+.agent-model-field>.agent-composer-menu {
   --app-scroll-area-scrollbar-gap: 4px;
   --app-scroll-area-scrollbar-thickness: 8px;
 }
@@ -4432,6 +4432,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-model-field {
+  position: relative;
   flex: 1;
   min-width: 0;
 }
