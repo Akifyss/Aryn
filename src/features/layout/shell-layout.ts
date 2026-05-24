@@ -10,9 +10,11 @@ const SHELL_CHROME_VARS = {
     '--chrome-height': '44px',
     '--panel-toggle-size': '32px',
     '--panel-toggle-gap': '2px',
+    '--left-chrome-action-gap': '2px',
+    '--left-chrome-content-gap': '2px',
     '--left-panel-toggle-anchor': '84px',
     '--right-panel-toggle-anchor': '12px',
-    '--left-panel-content-inset': '154px',
+    '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
     '--right-panel-content-inset': '52px',
     '--sidebar-icon-x': '20px',
   },
@@ -20,9 +22,11 @@ const SHELL_CHROME_VARS = {
     '--chrome-height': '44px',
     '--panel-toggle-size': '32px',
     '--panel-toggle-gap': '8px',
+    '--left-chrome-action-gap': '2px',
+    '--left-chrome-content-gap': '2px',
     '--left-panel-toggle-anchor': '12px',
     '--right-panel-toggle-anchor': '156px',
-    '--left-panel-content-inset': '92px',
+    '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
     '--right-panel-content-inset': '196px',
     '--sidebar-icon-x': '20px',
   },
@@ -30,7 +34,6 @@ const SHELL_CHROME_VARS = {
 
 const MACOS_FULLSCREEN_CHROME_VARS = {
   '--left-panel-toggle-anchor': '12px',
-  '--left-panel-content-inset': '78px',
 } as const
 
 export function deriveShellPlatform(platform: string): ShellPlatform {

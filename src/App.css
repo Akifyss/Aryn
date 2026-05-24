@@ -20,9 +20,11 @@
   --tabs-chrome-height: calc(var(--chrome-height) - 1px);
   --panel-toggle-size: 32px;
   --panel-toggle-gap: 2px;
+  --left-chrome-action-gap: 2px;
+  --left-chrome-content-gap: 2px;
   --left-panel-toggle-anchor: 84px;
   --right-panel-toggle-anchor: 12px;
-  --left-panel-content-inset: 154px;
+  --left-panel-content-inset: calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap));
   --right-panel-content-inset: 52px;
   --sidebar-icon-x: 20px;
 
@@ -253,7 +255,7 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   z-index: calc(var(--app-z-window-controls) + 1);
   display: inline-flex;
   align-items: center;
-  gap: var(--panel-toggle-gap);
+  gap: var(--left-chrome-action-gap);
   pointer-events: auto;
   app-region: no-drag;
   -webkit-app-region: no-drag;
