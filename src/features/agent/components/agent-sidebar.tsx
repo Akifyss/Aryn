@@ -2805,9 +2805,6 @@ function AgentChatSurface() {
         : []
     )
   const showModelPickerThinkingColumn = hasConfigurableAgentThinkingLevel(activeModelThinkingLevels)
-  const reserveModelPickerThinkingWidth = (
-    isModelPickerSearching ? modelPickerSearchResults : modelPickerProviderModels
-  ).some((option) => hasConfigurableAgentThinkingLevel(option.thinkingLevels))
   const modelCascaderLayoutMetrics = useMemo<AgentModelCascaderLayoutMetrics>(() => {
     const providerColumnWidth = clampNumber(
       modelPickerProviderOptions.reduce((maxWidth, provider) => Math.max(
@@ -2832,7 +2829,7 @@ function AgentChatSurface() {
       AGENT_MODEL_CASCADER_MODEL_MIN_WIDTH_PX,
       AGENT_MODEL_CASCADER_MODEL_MAX_WIDTH_PX,
     )
-    const thinkingColumnWidth = reserveModelPickerThinkingWidth ? AGENT_MODEL_CASCADER_THINKING_WIDTH_PX : 0
+    const thinkingColumnWidth = showModelPickerThinkingColumn ? AGENT_MODEL_CASCADER_THINKING_WIDTH_PX : 0
     const rawPanelWidth = isModelPickerSearching
       ? modelColumnWidth + thinkingColumnWidth
       : providerColumnWidth + modelColumnWidth + thinkingColumnWidth
@@ -2851,7 +2848,7 @@ function AgentChatSurface() {
     modelPickerProviderModels,
     modelPickerProviderOptions,
     modelPickerSearchResults,
-    reserveModelPickerThinkingWidth,
+    showModelPickerThinkingColumn,
   ])
   const showTriggerThinkingLevel = thinkingLevel !== 'off'
     && hasConfigurableAgentThinkingLevel(selectedModelThinkingLevels)
