@@ -36,11 +36,14 @@ export type AgentSessionListItem = {
   modifiedAt: string
 }
 
+export type AgentThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+
 export type AgentRuntimeState = {
   auth: Record<string, AgentProviderAuthState>
   workspacePath: string | null
   hasConfiguredModels: boolean
   availableModels: string[]
+  availableThinkingLevels: AgentThinkingLevel[]
   compactionReason: 'manual' | 'overflow' | 'threshold' | null
   followUpMessageCount: number
   followUpMode: 'all' | 'one-at-a-time'
@@ -52,8 +55,10 @@ export type AgentRuntimeState = {
   retryAttempt: number
   retryMaxAttempts: number | null
   setupHint: string | null
+  supportsThinking: boolean
   steeringMessageCount: number
   steeringMode: 'all' | 'one-at-a-time'
+  thinkingLevel: AgentThinkingLevel
 }
 
 export type AgentProviderAuthState = {

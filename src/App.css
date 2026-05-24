@@ -4630,7 +4630,9 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-model-input.input[data-focus="true"],
 .agent-model-input.input[data-focus-visible="true"],
 .agent-model-input.input[data-hovered="true"] {
+  flex: 1 1 auto;
   width: 100%;
+  min-width: 72px;
   min-height: 36px;
   border-radius: 0 !important;
   border: 0 !important;
@@ -4656,6 +4658,52 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-model-input.input input::placeholder {
   color: var(--field-placeholder);
+}
+
+.agent-thinking-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 0;
+  height: 26px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--foreground) 82%, var(--muted));
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.agent-thinking-trigger:hover,
+.agent-thinking-trigger:focus-visible {
+  outline: none;
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+}
+
+.agent-thinking-trigger:disabled {
+  opacity: 0.54;
+  cursor: default;
+}
+
+.agent-thinking-trigger.is-static {
+  pointer-events: none;
+}
+
+.agent-thinking-trigger-label {
+  display: block;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-composer-option {

@@ -1,7 +1,7 @@
 import { lstat, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import type { AgentMessage } from '@earendil-works/pi-agent-core'
+import type { AgentMessage, ThinkingLevel } from '@earendil-works/pi-agent-core'
 import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent'
 import {
   AuthStorage,
@@ -12,7 +12,7 @@ import {
   type SessionEntry,
   type AgentSession,
 } from '@earendil-works/pi-coding-agent'
-import { complete, getEnvApiKey, type Api, type AssistantMessage, type Model, type TextContent, type ToolResultMessage, type UserMessage } from '@earendil-works/pi-ai'
+import { clampThinkingLevel, complete, getEnvApiKey, getSupportedThinkingLevels, type Api, type AssistantMessage, type Model, type TextContent, type ToolResultMessage, type UserMessage } from '@earendil-works/pi-ai'
 import type {
   AgentMessageFileChange,
   AgentClientEvent,
@@ -81,6 +81,7 @@ const OPENROUTER_ENV_KEY = 'OPENROUTER_API_KEY'
 const OPENROUTER_PROVIDER = 'openrouter'
 const OPENAI_ENV_KEY = 'OPENAI_API_KEY'
 const GOOGLE_ENV_KEY = 'GEMINI_API_KEY'
+const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] satisfies ThinkingLevel[]
 const AUTO_SESSION_NAME_MODEL_ID = 'openrouter/free'
 const AUTO_SESSION_NAME_MAX_TOKENS = 48
 const AUTH_SETUP_HINT = `No authenticated models are available. Add a provider credential in Settings > Providers, log in to a subscription provider, or set a supported Pi provider environment variable such as ${OPENROUTER_ENV_KEY}, ${OPENAI_ENV_KEY}, or ${GOOGLE_ENV_KEY}.`
@@ -187,6 +188,10 @@ function getProviderPreferredModelKeys(
   }
 
   return modelKeys
+}
+
+function isThinkingLevel(value: string): value is ThinkingLevel {
+  return THINKING_LEVELS.includes(value as ThinkingLevel)
 }
 
 function asText(value: string | Array<TextContent | { type: 'image' }>) {
@@ -829,6 +834,17 @@ export class PiAgentManager {
     return this.broadcastWorkspaceState(runtime.cwd)
   }
 
+  async selectThinkingLevel(level: string) {
+    const runtime = this.requireActiveSession()
+
+    if (!isThinkingLevel(level)) {
+      throw new Error(`Thinking level "${level}" is not supported.`)
+    }
+
+    runtime.session.setThinkingLevel(level)
+    return this.broadcastWorkspaceState(runtime.cwd)
+  }
+
   async updateProviderAuth(cwd: string, provider: string, apiKey: string | null) {
     this.authStorage.reload()
     const config = getAgentProviderAuthConfig(provider)
@@ -1314,6 +1330,7 @@ export class PiAgentManager {
       || event.type === 'agent_start'
       || event.type === 'turn_start'
       || event.type === 'turn_end'
+      || event.type === 'thinking_level_changed'
     ) {
       await this.broadcastWorkspaceState(runtime.cwd)
 
@@ -1359,17 +1376,26 @@ export class PiAgentManager {
     const modelRegistry = session?.modelRegistry ?? this.modelRegistry
     const availableModels = modelRegistry.getAvailable()
     const defaultModelPerProvider = await loadPiDefaultModelPerProvider()
+    const settingsManager = session?.settingsManager ?? this.createSettingsManager(cwd)
     const selectedModelValue = session?.model
       ?? (!session
-        ? selectPiPreferredModel(availableModels, this.createSettingsManager(cwd), defaultModelPerProvider)
+        ? selectPiPreferredModel(availableModels, settingsManager, defaultModelPerProvider)
         : null)
     const selectedModel = selectedModelValue ? `${selectedModelValue.provider}/${selectedModelValue.id}` : null
+    const configuredThinkingLevel = session?.thinkingLevel ?? settingsManager.getDefaultThinkingLevel() ?? 'medium'
+    const availableThinkingLevels = selectedModelValue
+      ? getSupportedThinkingLevels(selectedModelValue)
+      : THINKING_LEVELS
+    const thinkingLevel = selectedModelValue
+      ? clampThinkingLevel(selectedModelValue, configuredThinkingLevel)
+      : configuredThinkingLevel
     const steeringMessageCount = session?.getSteeringMessages().length ?? 0
     const followUpMessageCount = session?.getFollowUpMessages().length ?? 0
 
     return {
       auth: this.getProviderAuthStates(availableModels.map((model) => model.provider)),
       availableModels: availableModels.map((model) => `${model.provider}/${model.id}`),
+      availableThinkingLevels,
       compactionReason: this.activeRuntime?.cwd === cwd ? this.activeRuntime.status.compactionReason : null,
       followUpMessageCount,
       followUpMode: session?.followUpMode ?? 'one-at-a-time',
@@ -1382,8 +1408,10 @@ export class PiAgentManager {
       retryMaxAttempts: this.activeRuntime?.cwd === cwd ? this.activeRuntime.status.retryMaxAttempts : null,
       selectedModel,
       setupHint: availableModels.length > 0 ? null : AUTH_SETUP_HINT,
+      supportsThinking: Boolean(selectedModelValue?.reasoning),
       steeringMessageCount,
       steeringMode: session?.steeringMode ?? 'one-at-a-time',
+      thinkingLevel,
       workspacePath: cwd,
     }
   }

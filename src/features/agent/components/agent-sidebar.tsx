@@ -59,6 +59,7 @@ import type {
   AgentSessionAnnotations,
   AgentSidebarMessage,
   AgentSidebarMessageStatus,
+  AgentThinkingLevel,
   AgentWorkspaceState,
 } from '@/features/agent/types'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
@@ -102,6 +103,8 @@ type ComposerState = {
   value: string
 }
 
+type AgentComposerMenu = 'model' | 'provider' | 'thinking' | null
+
 type AgentSessionSelection = { kind: 'new' } | { kind: 'session', sessionPath: string }
 
 const MARKDOWN_PLUGINS = [remarkGfm]
@@ -120,6 +123,7 @@ const emptyAgentState: AgentWorkspaceState = {
   runtime: {
     auth: {},
     availableModels: [],
+    availableThinkingLevels: ['off'],
     compactionReason: null,
     followUpMessageCount: 0,
     followUpMode: 'one-at-a-time',
@@ -132,8 +136,10 @@ const emptyAgentState: AgentWorkspaceState = {
     retryMaxAttempts: null,
     selectedModel: null,
     setupHint: null,
+    supportsThinking: false,
     steeringMessageCount: 0,
     steeringMode: 'one-at-a-time',
+    thinkingLevel: 'off',
     workspacePath: null,
   },
   sessions: [],
@@ -261,13 +267,14 @@ const renderAgentSessionTreeRowDecoration: FileTreeRowDecorationRenderer = ({ ro
 })
 
 type AgentContextValue = {
-  activeComposerMenu: 'model' | 'provider' | null
+  activeComposerMenu: AgentComposerMenu
   activeOverlayPanel: 'sessions' | null
   activeSession: AgentWorkspaceState['sessions'][number] | null
   activeSessionSelection: AgentSessionSelection
   activeSessionPath: string | null
   agentState: AgentWorkspaceState
   canChooseProvider: boolean
+  canChooseThinkingLevel: boolean
   canSend: boolean
   composerHeight: number
   composerResizeStateRef: React.MutableRefObject<{ pointerId: number, startHeight: number, startY: number } | null>
@@ -281,6 +288,7 @@ type AgentContextValue = {
   handleOpenSession: (sessionPath: string) => Promise<void>
   handleProviderSelectionChange: (nextProvider: string) => Promise<void>
   handleSelectModel: (modelKey: string) => Promise<void>
+  handleThinkingLevelSelection: (level: AgentThinkingLevel) => Promise<void>
   handleStartNewSession: () => void
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
   hasConfiguredProviders: boolean
@@ -290,6 +298,7 @@ type AgentContextValue = {
   isModelInputFullySelected: boolean
   isResizingComposer: boolean
   isSwitchingModel: boolean
+  isSwitchingThinkingLevel: boolean
   liveTools: LiveToolState[]
   messagesScrollRef: React.RefObject<HTMLDivElement | null>
   modelFieldRef: React.RefObject<HTMLDivElement | null>
@@ -308,7 +317,7 @@ type AgentContextValue = {
   roundFileChangesByMessageId: Map<string, AgentMessageFileChange[]>
   sessionButtonRef: React.RefObject<HTMLButtonElement | null>
   sessionStatus: AgentSessionStatus | null
-  setActiveComposerMenu: React.Dispatch<React.SetStateAction<'model' | 'provider' | null>>
+  setActiveComposerMenu: React.Dispatch<React.SetStateAction<AgentComposerMenu>>
   setActiveOverlayPanel: React.Dispatch<React.SetStateAction<'sessions' | null>>
   setComposerState: React.Dispatch<React.SetStateAction<ComposerState>>
   setIsModelInputFullySelected: React.Dispatch<React.SetStateAction<boolean>>
@@ -319,6 +328,8 @@ type AgentContextValue = {
   syncModelInputSelectionState: (input: HTMLInputElement) => void
   syncModelInputSelectionStateNextFrame: (input: HTMLInputElement) => void
   statusMessage: string | null
+  thinkingLevelLabel: string
+  thinkingMenuHeight: number
   workspacePath: string | null
   workspaceTree: ReturnType<typeof useWorkspaceStore.getState>['tree']
 }
@@ -395,6 +406,19 @@ function parseModelSelection(modelKey: string | null): { modelId: string, provid
     modelId: modelIdParts.length > 0 ? modelIdParts.join('/') : formatModelLabel(modelKey),
     provider: modelIdParts.length > 0 ? providerCandidate : '',
   }
+}
+
+const THINKING_LEVEL_LABELS: Record<AgentThinkingLevel, string> = {
+  off: 'Off',
+  minimal: 'Minimal',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'XHigh',
+}
+
+function formatThinkingLevelLabel(level: AgentThinkingLevel) {
+  return THINKING_LEVEL_LABELS[level] ?? level
 }
 
 function getAgentRelativePath(rootPath: string | null, filePath: string) {
@@ -1354,7 +1378,7 @@ function AgentProvider({
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({
     [defaultModelSelection.provider]: defaultModelSelection.modelId,
   })
-  const [activeComposerMenu, setActiveComposerMenu] = useState<'model' | 'provider' | null>(null)
+  const [activeComposerMenu, setActiveComposerMenu] = useState<AgentComposerMenu>(null)
   const [draftAssistant, setDraftAssistant] = useState('')
   const [draftThinking, setDraftThinking] = useState('')
   const [isThinkingStreaming, setIsThinkingStreaming] = useState(false)
@@ -1365,6 +1389,7 @@ function AgentProvider({
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [deletingSessionPath, setDeletingSessionPath] = useState<string | null>(null)
   const [isSwitchingModel, setIsSwitchingModel] = useState(false)
+  const [isSwitchingThinkingLevel, setIsSwitchingThinkingLevel] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
   const [isResizingComposer, setIsResizingComposer] = useState(false)
@@ -1916,6 +1941,33 @@ function AgentProvider({
     }
   }
 
+  async function handleThinkingLevelSelection(level: AgentThinkingLevel) {
+    if (!workspacePath) {
+      return
+    }
+
+    try {
+      setIsSwitchingThinkingLevel(true)
+      setPanelError(null)
+
+      if (activeSessionSelection.kind === 'new' || !agentState.activeSession) {
+        const nextState = await window.appApi.createAgentSession(workspacePath)
+        setAgentState(nextState)
+        if (nextState.activeSession?.sessionPath) {
+          setActiveSessionSelection({ kind: 'session', sessionPath: nextState.activeSession.sessionPath })
+        }
+      }
+
+      const nextState = await window.appApi.selectAgentThinkingLevel(level)
+      setAgentState(nextState)
+      setActiveComposerMenu(null)
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'Unable to switch the thinking level.')
+    } finally {
+      setIsSwitchingThinkingLevel(false)
+    }
+  }
+
   async function handleModelInputCommit() {
     const nextModel = modelInputValue.trim()
     const nextModelKey = `${resolvedSelectedProviderValue}/${nextModel}`
@@ -2048,8 +2100,12 @@ function AgentProvider({
       const query = modelInputValue.trim().toLowerCase()
       return !query || modelId.toLowerCase().includes(query)
     })
+  const canChooseThinkingLevel = agentState.runtime.availableThinkingLevels.length > 1
+    && agentState.runtime.hasConfiguredModels
+  const thinkingLevelLabel = formatThinkingLevelLabel(agentState.runtime.thinkingLevel)
   const providerMenuHeight = getAgentComposerMenuHeight(configuredProviders.length)
   const modelMenuHeight = getAgentComposerMenuHeight(modelSuggestions.length)
+  const thinkingMenuHeight = getAgentComposerMenuHeight(agentState.runtime.availableThinkingLevels.length)
   const modelPlaceholder = 'model'
   const canSend = Boolean(
     workspacePath
@@ -2128,6 +2184,10 @@ function AgentProvider({
       setActiveComposerMenu(null)
     }
 
+    if (!canChooseThinkingLevel && activeComposerMenu === 'thinking') {
+      setActiveComposerMenu(null)
+    }
+
     if (!hasConfiguredProviders) {
       return
     }
@@ -2147,6 +2207,7 @@ function AgentProvider({
     activeComposerMenu,
     agentState.runtime.preferredModelByProvider,
     canChooseProvider,
+    canChooseThinkingLevel,
     hasConfiguredProviders,
     modelDrafts,
     providerModelIds,
@@ -2203,6 +2264,7 @@ function AgentProvider({
     activeSessionPath,
     agentState,
     canChooseProvider,
+    canChooseThinkingLevel,
     canSend,
     composerHeight,
     composerResizeStateRef,
@@ -2216,6 +2278,7 @@ function AgentProvider({
     handleOpenSession,
     handleProviderSelectionChange,
     handleSelectModel,
+    handleThinkingLevelSelection,
     handleStartNewSession,
     handleSubmit,
     hasConfiguredProviders,
@@ -2225,6 +2288,7 @@ function AgentProvider({
     isModelInputFullySelected,
     isResizingComposer,
     isSwitchingModel,
+    isSwitchingThinkingLevel,
     liveTools,
     messagesScrollRef,
     modelFieldRef,
@@ -2254,6 +2318,8 @@ function AgentProvider({
     syncModelInputSelectionState,
     syncModelInputSelectionStateNextFrame,
     statusMessage,
+    thinkingLevelLabel,
+    thinkingMenuHeight,
     workspacePath,
     workspaceTree,
   }), [
@@ -2264,6 +2330,7 @@ function AgentProvider({
     activeSessionPath,
     agentState,
     canChooseProvider,
+    canChooseThinkingLevel,
     canSend,
     composerHeight,
     composerState,
@@ -2276,6 +2343,7 @@ function AgentProvider({
     handleOpenSession,
     handleProviderSelectionChange,
     handleSelectModel,
+    handleThinkingLevelSelection,
     handleStartNewSession,
     handleSubmit,
     hasConfiguredProviders,
@@ -2285,6 +2353,7 @@ function AgentProvider({
     isModelInputFullySelected,
     isResizingComposer,
     isSwitchingModel,
+    isSwitchingThinkingLevel,
     liveTools,
     modelInputValue,
     modelMenuHeight,
@@ -2299,6 +2368,8 @@ function AgentProvider({
     roundFileChangesByMessageId,
     sessionStatus,
     statusMessage,
+    thinkingLevelLabel,
+    thinkingMenuHeight,
     workspacePath,
     workspaceTree,
   ])
@@ -2535,6 +2606,7 @@ function AgentChatSurface() {
     activeSessionPath,
     agentState,
     canChooseProvider,
+    canChooseThinkingLevel,
     canSend,
     composerHeight,
     composerResizeStateRef,
@@ -2547,6 +2619,7 @@ function AgentChatSurface() {
     handleOpenSession,
     handleProviderSelectionChange,
     handleSelectModel,
+    handleThinkingLevelSelection,
     handleStartNewSession,
     handleSubmit,
     hasConfiguredProviders,
@@ -2557,6 +2630,7 @@ function AgentChatSurface() {
     isModelInputFullySelected,
     isResizingComposer,
     isSwitchingModel,
+    isSwitchingThinkingLevel,
     messagesScrollRef,
     modelFieldRef,
     modelInputRef,
@@ -2585,6 +2659,8 @@ function AgentChatSurface() {
     syncModelInputSelectionState,
     syncModelInputSelectionStateNextFrame,
     statusMessage,
+    thinkingLevelLabel,
+    thinkingMenuHeight,
     workspacePath,
     workspaceTree,
   } = useAgentContext()
@@ -2592,7 +2668,13 @@ function AgentChatSurface() {
   const isNewConversation = activeSessionSelection.kind === 'new'
     || (hasEmptyChat && !activeSession)
   const composerMenuRootStyle = {
-    '--agent-composer-menu-height': `${activeComposerMenu === 'provider' ? providerMenuHeight : modelMenuHeight}px`,
+    '--agent-composer-menu-height': `${
+      activeComposerMenu === 'provider'
+        ? providerMenuHeight
+        : activeComposerMenu === 'thinking'
+          ? thinkingMenuHeight
+          : modelMenuHeight
+    }px`,
   } as CSSProperties
   const composerFooter = (
     <div ref={modelFieldRef} className='agent-composer-meta'>
@@ -2674,6 +2756,31 @@ function AgentChatSurface() {
                   value={modelInputValue}
                   variant='secondary'
                 />
+
+                <button
+                  type='button'
+                  aria-expanded={canChooseThinkingLevel ? activeComposerMenu === 'thinking' : undefined}
+                  aria-haspopup={canChooseThinkingLevel ? 'listbox' : undefined}
+                  aria-label={`Thinking level: ${thinkingLevelLabel}`}
+                  className={`agent-thinking-trigger${canChooseThinkingLevel ? '' : ' is-static'}`}
+                  disabled={
+                    !workspacePath
+                    || !agentState.runtime.hasConfiguredModels
+                    || isSwitchingModel
+                    || isSwitchingThinkingLevel
+                    || !canChooseThinkingLevel
+                  }
+                  title={`Thinking: ${thinkingLevelLabel}`}
+                  onClick={() => {
+                    if (!canChooseThinkingLevel) {
+                      return
+                    }
+                    setActiveComposerMenu((currentValue) => currentValue === 'thinking' ? null : 'thinking')
+                  }}
+                >
+                  <BrainLine size={14} />
+                  <span className='agent-thinking-trigger-label'>{thinkingLevelLabel}</span>
+                </button>
               </div>
             ) : (
               <Button
@@ -2759,6 +2866,33 @@ function AgentChatSurface() {
                 }}
               >
                 <span className='agent-composer-option-label'>{modelId}</span>
+              </button>
+            ))}
+          </div>
+        </AppScrollArea>
+      ) : null}
+
+      {activeComposerMenu === 'thinking' && canChooseThinkingLevel ? (
+        <AppScrollArea
+          className='agent-composer-menu'
+          contentClassName='agent-composer-menu-content'
+          rootStyle={composerMenuRootStyle}
+        >
+          <div className='agent-composer-menu-list' role='listbox' aria-label='Available thinking levels'>
+            {agentState.runtime.availableThinkingLevels.map((level) => (
+              <button
+                key={level}
+                type='button'
+                className={`agent-composer-option${level === agentState.runtime.thinkingLevel ? ' is-active' : ''}`}
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                }}
+                onClick={() => {
+                  void handleThinkingLevelSelection(level)
+                }}
+              >
+                <BrainLine size={14} />
+                <span className='agent-composer-option-label'>{formatThinkingLevelLabel(level)}</span>
               </button>
             ))}
           </div>

@@ -1,4 +1,4 @@
-import type { AgentClientEvent, AgentProviderAuthUiEvent, AgentWorkspaceState } from '@/features/agent/types'
+import type { AgentClientEvent, AgentProviderAuthUiEvent, AgentThinkingLevel, AgentWorkspaceState } from '@/features/agent/types'
 import type {
   GitBaselinePayload,
   GitBlameResult,
@@ -81,6 +81,7 @@ declare global {
       renameAgentSession: (name: string) => Promise<AgentWorkspaceState>
       sendAgentPrompt: (prompt: string, streamingBehavior?: 'steer' | 'followUp') => Promise<{ ok: boolean }>
       selectAgentModel: (modelKey: string) => Promise<AgentWorkspaceState>
+      selectAgentThinkingLevel: (level: AgentThinkingLevel) => Promise<AgentWorkspaceState>
       updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => Promise<AgentWorkspaceState>
       loginAgentProviderAuth: (rootPath: string, provider: string) => Promise<AgentWorkspaceState>
       logoutAgentProviderAuth: (rootPath: string, provider: string) => Promise<AgentWorkspaceState>

@@ -1063,6 +1063,10 @@ ipcMain.handle('agent:select-model', async (_event, modelKey: string) => {
   return agentManager.selectModel(modelKey)
 })
 
+ipcMain.handle('agent:select-thinking-level', async (_event, level: string) => {
+  return agentManager.selectThinkingLevel(level)
+})
+
 ipcMain.handle('agent:update-provider-auth', async (_event, rootPath: string, provider: string, apiKey: string | null) => {
   return agentManager.updateProviderAuth(rootPath, provider, apiKey)
 })
