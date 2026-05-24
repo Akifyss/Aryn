@@ -4583,7 +4583,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   z-index: 1200;
   overflow: hidden;
   width: min(680px, calc(100vw - 24px));
-  min-width: min(560px, calc(100vw - 24px));
+  min-width: min(340px, calc(100vw - 24px));
   max-height: min(390px, calc(100vh - 24px));
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -4619,17 +4619,20 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-model-cascader-grid {
   display: grid;
-  grid-template-columns: minmax(138px, 0.8fr) minmax(280px, 1.45fr) minmax(128px, 0.75fr);
+  grid-template-columns:
+    minmax(112px, var(--agent-model-cascader-provider-width, 138px))
+    minmax(0, 1fr)
+    minmax(112px, var(--agent-model-cascader-thinking-width, 128px));
   height: var(--agent-model-cascader-grid-height, min(286px, calc(100vh - 180px)));
   min-height: 172px;
 }
 
 .agent-model-cascader-grid.is-searching {
-  grid-template-columns: minmax(0, 1.75fr) minmax(128px, 0.75fr);
+  grid-template-columns: minmax(0, 1fr) minmax(112px, var(--agent-model-cascader-thinking-width, 128px));
 }
 
 .agent-model-cascader-grid.has-no-thinking {
-  grid-template-columns: minmax(138px, 0.8fr) minmax(280px, 1.45fr);
+  grid-template-columns: minmax(112px, var(--agent-model-cascader-provider-width, 138px)) minmax(0, 1fr);
 }
 
 .agent-model-cascader-grid.is-searching.has-no-thinking {
@@ -4660,7 +4663,15 @@ body.workspace-tree-dragging .workspace-tree-row {
   --app-scroll-area-scrollbar-gap: 4px;
   --app-scroll-area-scrollbar-thickness: 8px;
   flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
+}
+
+.agent-model-cascader-scroll .app-scroll-area-viewport {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .agent-model-cascader-scroll-content {
@@ -4751,15 +4762,18 @@ body.workspace-tree-dragging .workspace-tree-row {
   }
 
   .agent-model-cascader-grid {
-    grid-template-columns: minmax(82px, 0.75fr) minmax(112px, 1.2fr) minmax(86px, 0.8fr);
+    grid-template-columns:
+      minmax(82px, var(--agent-model-cascader-provider-width, 118px))
+      minmax(0, 1fr)
+      minmax(86px, var(--agent-model-cascader-thinking-width, 112px));
   }
 
   .agent-model-cascader-grid.is-searching {
-    grid-template-columns: minmax(0, 1.55fr) minmax(86px, 0.8fr);
+    grid-template-columns: minmax(0, 1fr) minmax(86px, var(--agent-model-cascader-thinking-width, 112px));
   }
 
   .agent-model-cascader-grid.has-no-thinking {
-    grid-template-columns: minmax(82px, 0.75fr) minmax(112px, 1.2fr);
+    grid-template-columns: minmax(82px, var(--agent-model-cascader-provider-width, 118px)) minmax(0, 1fr);
   }
 
   .agent-model-cascader-grid.is-searching.has-no-thinking {

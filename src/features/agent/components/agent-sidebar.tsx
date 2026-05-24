@@ -115,6 +115,14 @@ type AgentModelPickerOption = {
 
 type AgentModelCascaderStyle = CSSProperties & {
   '--agent-model-cascader-grid-height'?: string
+  '--agent-model-cascader-provider-width'?: string
+  '--agent-model-cascader-thinking-width'?: string
+}
+
+type AgentModelCascaderLayoutMetrics = {
+  panelWidth: number
+  providerColumnWidth: number
+  thinkingColumnWidth: number
 }
 
 type AgentSessionSelection = { kind: 'new' } | { kind: 'session', sessionPath: string }
@@ -128,12 +136,17 @@ const MAX_VISIBLE_MESSAGE_FILE_CHIPS = 6
 const AGENT_MODEL_CASCADER_MARGIN_PX = 12
 const AGENT_MODEL_CASCADER_GAP_PX = 10
 const AGENT_MODEL_CASCADER_MAX_WIDTH_PX = 680
-const AGENT_MODEL_CASCADER_COMPACT_WIDTH_PX = 560
 const AGENT_MODEL_CASCADER_MAX_HEIGHT_PX = 390
 const AGENT_MODEL_CASCADER_MIN_PANEL_HEIGHT_PX = 220
 const AGENT_MODEL_CASCADER_MIN_GRID_HEIGHT_PX = 172
 const AGENT_MODEL_CASCADER_MAX_GRID_HEIGHT_PX = 286
 const AGENT_MODEL_CASCADER_SEARCH_HEIGHT_PX = 39
+const AGENT_MODEL_CASCADER_MIN_WIDTH_PX = 340
+const AGENT_MODEL_CASCADER_PROVIDER_MIN_WIDTH_PX = 132
+const AGENT_MODEL_CASCADER_PROVIDER_MAX_WIDTH_PX = 190
+const AGENT_MODEL_CASCADER_MODEL_MIN_WIDTH_PX = 176
+const AGENT_MODEL_CASCADER_MODEL_MAX_WIDTH_PX = 430
+const AGENT_MODEL_CASCADER_THINKING_WIDTH_PX = 128
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -461,15 +474,23 @@ function hasConfigurableAgentThinkingLevel(availableLevels: AgentThinkingLevel[]
   return availableLevels.some((level) => level !== 'off')
 }
 
-function resolveAgentModelCascaderStyle(anchorRect: DOMRect, showThinkingColumn: boolean): AgentModelCascaderStyle {
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function estimateAgentCascaderTextWidth(value: string, averageGlyphWidth: number, extraWidth: number) {
+  return Math.ceil(value.length * averageGlyphWidth) + extraWidth
+}
+
+function resolveAgentModelCascaderStyle(
+  anchorRect: DOMRect,
+  layoutMetrics: AgentModelCascaderLayoutMetrics,
+): AgentModelCascaderStyle {
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
   const margin = Math.min(AGENT_MODEL_CASCADER_MARGIN_PX, Math.max(8, viewportWidth / 32))
   const maxWidth = Math.max(280, viewportWidth - (margin * 2))
-  const preferredWidth = showThinkingColumn
-    ? AGENT_MODEL_CASCADER_MAX_WIDTH_PX
-    : AGENT_MODEL_CASCADER_COMPACT_WIDTH_PX
-  const width = Math.min(preferredWidth, maxWidth)
+  const width = Math.min(layoutMetrics.panelWidth, maxWidth)
   const left = Math.max(margin, Math.min(anchorRect.left, viewportWidth - width - margin))
   const availableAbove = Math.max(0, anchorRect.top - margin - AGENT_MODEL_CASCADER_GAP_PX)
   const availableBelow = Math.max(0, viewportHeight - anchorRect.bottom - margin - AGENT_MODEL_CASCADER_GAP_PX)
@@ -500,6 +521,8 @@ function resolveAgentModelCascaderStyle(anchorRect: DOMRect, showThinkingColumn:
     top: `${Math.max(margin, top)}px`,
     width: `${width}px`,
     '--agent-model-cascader-grid-height': `${gridHeight}px`,
+    '--agent-model-cascader-provider-width': `${layoutMetrics.providerColumnWidth}px`,
+    '--agent-model-cascader-thinking-width': `${layoutMetrics.thinkingColumnWidth}px`,
   }
 }
 
@@ -2768,6 +2791,54 @@ function AgentChatSurface() {
         : []
     )
   const showModelPickerThinkingColumn = hasConfigurableAgentThinkingLevel(activeModelThinkingLevels)
+  const reserveModelPickerThinkingWidth = (
+    isModelPickerSearching ? modelPickerSearchResults : modelPickerProviderModels
+  ).some((option) => hasConfigurableAgentThinkingLevel(option.thinkingLevels))
+  const modelCascaderLayoutMetrics = useMemo<AgentModelCascaderLayoutMetrics>(() => {
+    const providerColumnWidth = clampNumber(
+      modelPickerProviderOptions.reduce((maxWidth, provider) => Math.max(
+        maxWidth,
+        estimateAgentCascaderTextWidth(provider, 8, 44),
+      ), AGENT_MODEL_CASCADER_PROVIDER_MIN_WIDTH_PX),
+      AGENT_MODEL_CASCADER_PROVIDER_MIN_WIDTH_PX,
+      AGENT_MODEL_CASCADER_PROVIDER_MAX_WIDTH_PX,
+    )
+    const listedModelOptions = isModelPickerSearching
+      ? modelPickerSearchResults
+      : modelPickerProviderModels
+    const fallbackModelOptions = listedModelOptions.length > 0 ? listedModelOptions : modelPickerProviderModels
+    const modelColumnWidth = clampNumber(
+      fallbackModelOptions.reduce((maxWidth, option) => {
+        const estimatedWidth = isModelPickerSearching
+          ? estimateAgentCascaderTextWidth(`${option.modelId} ${option.provider}`, 8, 42)
+          : estimateAgentCascaderTextWidth(option.modelId, 8.2, 34)
+
+        return Math.max(maxWidth, estimatedWidth)
+      }, AGENT_MODEL_CASCADER_MODEL_MIN_WIDTH_PX),
+      AGENT_MODEL_CASCADER_MODEL_MIN_WIDTH_PX,
+      AGENT_MODEL_CASCADER_MODEL_MAX_WIDTH_PX,
+    )
+    const thinkingColumnWidth = reserveModelPickerThinkingWidth ? AGENT_MODEL_CASCADER_THINKING_WIDTH_PX : 0
+    const rawPanelWidth = isModelPickerSearching
+      ? modelColumnWidth + thinkingColumnWidth
+      : providerColumnWidth + modelColumnWidth + thinkingColumnWidth
+
+    return {
+      panelWidth: clampNumber(
+        rawPanelWidth,
+        AGENT_MODEL_CASCADER_MIN_WIDTH_PX,
+        AGENT_MODEL_CASCADER_MAX_WIDTH_PX,
+      ),
+      providerColumnWidth,
+      thinkingColumnWidth: AGENT_MODEL_CASCADER_THINKING_WIDTH_PX,
+    }
+  }, [
+    isModelPickerSearching,
+    modelPickerProviderModels,
+    modelPickerProviderOptions,
+    modelPickerSearchResults,
+    reserveModelPickerThinkingWidth,
+  ])
   const showTriggerThinkingLevel = thinkingLevel !== 'off'
     && hasConfigurableAgentThinkingLevel(selectedModelThinkingLevels)
   const modelPickerTriggerLabel = trimmedModelValue || 'model'
@@ -2785,9 +2856,9 @@ function AgentChatSurface() {
 
     setModelCascaderStyle(resolveAgentModelCascaderStyle(
       triggerElement.getBoundingClientRect(),
-      showModelPickerThinkingColumn,
+      modelCascaderLayoutMetrics,
     ))
-  }, [showModelPickerThinkingColumn])
+  }, [modelCascaderLayoutMetrics])
 
   function openModelCascader() {
     if (!hasConfiguredProviders || !workspacePath || isSwitchingModel || isSwitchingThinkingLevel) {
