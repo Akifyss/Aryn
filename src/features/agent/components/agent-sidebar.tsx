@@ -134,6 +134,8 @@ type AgentModelPickerPoint = {
   y: number
 }
 
+type AgentSessionMenuStyle = CSSProperties
+
 type AgentModelPickerPointerPoint = AgentModelPickerPoint & {
   time: number
 }
@@ -178,6 +180,12 @@ const AGENT_MODEL_CASCADER_PROVIDER_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SE
 const AGENT_MODEL_CASCADER_MODEL_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-model`
 const AGENT_MODEL_CASCADER_RESULTS_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-results`
 const AGENT_MODEL_CASCADER_THINKING_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-thinking`
+const AGENT_SESSION_MENU_MARGIN_PX = 8
+const AGENT_SESSION_MENU_GAP_PX = 8
+const AGENT_SESSION_MENU_WIDTH_PX = 320
+const AGENT_SESSION_MENU_HEIGHT_PX = 320
+const AGENT_SESSION_MENU_MIN_HEIGHT_PX = 180
+const AGENT_SESSION_MENU_MAX_HEIGHT_PX = 416
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -622,6 +630,17 @@ function areAgentModelCascaderStylesEqual(
     && left['--agent-model-cascader-thinking-width'] === right['--agent-model-cascader-thinking-width']
 }
 
+function areAgentSessionMenuStylesEqual(
+  left: AgentSessionMenuStyle,
+  right: AgentSessionMenuStyle,
+) {
+  return left.height === right.height
+    && left.left === right.left
+    && left.maxHeight === right.maxHeight
+    && left.top === right.top
+    && left.width === right.width
+}
+
 function scrollAgentModelCascaderActiveItemsIntoView() {
   if (typeof document === 'undefined') {
     return
@@ -722,6 +741,43 @@ function resolveAgentModelCascaderStyle(
     '--agent-model-cascader-grid-height': `${gridHeight}px`,
     '--agent-model-cascader-provider-width': `${layoutMetrics.providerColumnWidth}px`,
     '--agent-model-cascader-thinking-width': `${layoutMetrics.thinkingColumnWidth}px`,
+  }
+}
+
+function resolveAgentSessionMenuStyle(anchorRect: DOMRect): AgentSessionMenuStyle {
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const margin = Math.min(AGENT_SESSION_MENU_MARGIN_PX, Math.max(8, viewportWidth / 32))
+  const maxWidth = Math.max(240, viewportWidth - (margin * 2))
+  const width = Math.min(AGENT_SESSION_MENU_WIDTH_PX, maxWidth)
+  const left = Math.max(margin, Math.min(anchorRect.left, viewportWidth - width - margin))
+  const maxViewportHeight = Math.max(AGENT_SESSION_MENU_MIN_HEIGHT_PX, viewportHeight - (margin * 2))
+  const availableBelow = Math.max(0, viewportHeight - anchorRect.bottom - margin - AGENT_SESSION_MENU_GAP_PX)
+  const availableAbove = Math.max(0, anchorRect.top - margin - AGENT_SESSION_MENU_GAP_PX)
+  const targetHeight = Math.min(
+    AGENT_SESSION_MENU_HEIGHT_PX,
+    AGENT_SESSION_MENU_MAX_HEIGHT_PX,
+    maxViewportHeight,
+  )
+  const opensBelow = availableBelow >= targetHeight || availableBelow >= availableAbove
+  const availableHeight = opensBelow ? availableBelow : availableAbove
+  const height = Math.min(
+    targetHeight,
+    Math.max(
+      AGENT_SESSION_MENU_MIN_HEIGHT_PX,
+      Math.min(availableHeight || maxViewportHeight, maxViewportHeight),
+    ),
+  )
+  const top = opensBelow
+    ? Math.min(anchorRect.bottom + AGENT_SESSION_MENU_GAP_PX, viewportHeight - height - margin)
+    : Math.max(margin, anchorRect.top - AGENT_SESSION_MENU_GAP_PX - height)
+
+  return {
+    height: `${height}px`,
+    left: `${left}px`,
+    maxHeight: `${Math.min(AGENT_SESSION_MENU_MAX_HEIGHT_PX, maxViewportHeight)}px`,
+    top: `${Math.max(margin, top)}px`,
+    width: `${width}px`,
   }
 }
 
@@ -2916,6 +2972,7 @@ function AgentChatSurface() {
   const modelPickerPointerTrailRef = useRef<AgentModelPickerPointerPoint[]>([])
   const modelPickerPendingActivationRef = useRef<AgentModelPickerPendingActivation | null>(null)
   const [modelCascaderStyle, setModelCascaderStyle] = useState<AgentModelCascaderStyle>({})
+  const [sessionMenuStyle, setSessionMenuStyle] = useState<AgentSessionMenuStyle>({})
   const trimmedModelValue = modelInputValue.trim()
   const composerModelKey = trimmedModelValue
     ? getAgentModelKey(resolvedSelectedProviderValue, trimmedModelValue)
@@ -3052,6 +3109,18 @@ function AgentChatSurface() {
   const modelPickerListedModels = isModelPickerSearching
     ? modelPickerSearchResults
     : modelPickerProviderModels
+
+  const updateSessionMenuPosition = useCallback(() => {
+    const triggerElement = sessionButtonRef.current
+    if (!triggerElement) {
+      return
+    }
+
+    const nextStyle = resolveAgentSessionMenuStyle(triggerElement.getBoundingClientRect())
+    setSessionMenuStyle((currentStyle) => (
+      areAgentSessionMenuStylesEqual(currentStyle, nextStyle) ? currentStyle : nextStyle
+    ))
+  }, [sessionButtonRef])
 
   const updateModelCascaderPosition = useCallback(() => {
     const triggerElement = modelPickerTriggerRef.current
@@ -3321,6 +3390,16 @@ function AgentChatSurface() {
     setActiveComposerMenu((currentValue) => currentValue === 'model-cascader' ? null : 'model-cascader')
   }
 
+  function toggleSessionMenu() {
+    if (activeOverlayPanel === 'sessions') {
+      setActiveOverlayPanel(null)
+      return
+    }
+
+    updateSessionMenuPosition()
+    setActiveOverlayPanel('sessions')
+  }
+
   function handleModelPickerProviderFocus(provider: string) {
     clearModelPickerPointerIntent()
     setModelPickerProvider(provider)
@@ -3492,6 +3571,24 @@ function AgentChatSurface() {
       clearModelPickerPointerIntent()
     }
   }, [activeComposerMenu])
+
+  useLayoutEffect(() => {
+    if (activeOverlayPanel !== 'sessions') {
+      return
+    }
+
+    updateSessionMenuPosition()
+
+    const frameId = window.requestAnimationFrame(updateSessionMenuPosition)
+    window.addEventListener('resize', updateSessionMenuPosition)
+    window.addEventListener('scroll', updateSessionMenuPosition, true)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.removeEventListener('resize', updateSessionMenuPosition)
+      window.removeEventListener('scroll', updateSessionMenuPosition, true)
+    }
+  }, [activeOverlayPanel, updateSessionMenuPosition])
 
   useLayoutEffect(() => {
     if (activeComposerMenu !== 'model-cascader') {
@@ -3814,11 +3911,12 @@ function AgentChatSurface() {
             <button
               ref={sessionButtonRef}
               type='button'
+              aria-controls='agent-session-tree-floating-panel'
+              aria-expanded={activeOverlayPanel === 'sessions'}
+              aria-haspopup='dialog'
               disabled={!workspacePath}
               className={`agent-session-trigger ${activeOverlayPanel === 'sessions' ? 'is-open' : ''}`}
-              onClick={() => {
-                setActiveOverlayPanel((currentValue) => currentValue === 'sessions' ? null : 'sessions')
-              }}
+              onClick={toggleSessionMenu}
             >
               <span className='agent-select-current'>
                 {isNewConversation ? '新对话' : activeSession ? formatSessionLabel(activeSession.name) : 'Session'}
@@ -3844,18 +3942,24 @@ function AgentChatSurface() {
         <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
       </div>
 
-      {activeOverlayPanel === 'sessions' ? (
-        <div className='agent-overlay-layer'>
-          <div ref={overlayPanelRef} className='agent-floating-panel'>
-            <AgentSessionTree
-              className='agent-session-tree-floating'
-              id='agent-session-tree-floating'
-              onRequestClose={() => {
-                setActiveOverlayPanel(null)
-              }}
-            />
-          </div>
-        </div>
+      {activeOverlayPanel === 'sessions' && typeof document !== 'undefined' ? createPortal(
+        <div
+          ref={overlayPanelRef}
+          id='agent-session-tree-floating-panel'
+          className='agent-floating-panel'
+          role='dialog'
+          aria-label='Select conversation'
+          style={sessionMenuStyle}
+        >
+          <AgentSessionTree
+            className='agent-session-tree-floating'
+            id='agent-session-tree-floating'
+            onRequestClose={() => {
+              setActiveOverlayPanel(null)
+            }}
+          />
+        </div>,
+        document.body,
       ) : null}
 
       {statusMessage ? (
