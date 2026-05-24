@@ -3846,6 +3846,7 @@ function AgentChatSurface() {
 
       <AppScrollArea
         className='agent-messages-scroll'
+        contentClassName='agent-messages-scroll-content'
         viewportRef={messagesScrollRef}
       >
         <div className={`agent-messages${hasEmptyChat ? ' agent-messages-empty' : ''}`}>

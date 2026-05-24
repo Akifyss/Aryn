@@ -83,7 +83,7 @@
 
 .app-shell[data-app-layout='agent'] .panel-editor .agent-messages-scroll,
 .app-shell[data-app-layout='agent'] .panel-editor .agent-messages-scroll .app-scroll-area-viewport,
-.app-shell[data-app-layout='agent'] .panel-editor .agent-messages-scroll .app-scroll-area-content {
+.app-shell[data-app-layout='agent'] .panel-editor .agent-messages-scroll-content {
   background: var(--surface);
 }
 
@@ -3612,7 +3612,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   min-height: 0;
 }
 
-.agent-messages-scroll .app-scroll-area-content {
+.agent-messages-scroll-content {
   display: flex;
   align-items: stretch;
   min-height: 100%;
