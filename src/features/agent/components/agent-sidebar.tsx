@@ -476,14 +476,15 @@ function resolveAgentModelCascaderStyle(anchorRect: DOMRect): AgentModelCascader
       Math.min(availableHeight || fallbackHeight, fallbackHeight),
     ),
   )
-  const top = opensBelow
-    ? Math.min(anchorRect.bottom + AGENT_MODEL_CASCADER_GAP_PX, viewportHeight - panelHeight - margin)
-    : Math.max(margin, anchorRect.top - AGENT_MODEL_CASCADER_GAP_PX - panelHeight)
   const availableGridHeight = Math.max(96, panelHeight - AGENT_MODEL_CASCADER_SEARCH_HEIGHT_PX)
   const gridHeight = Math.min(
     AGENT_MODEL_CASCADER_MAX_GRID_HEIGHT_PX,
     Math.max(Math.min(AGENT_MODEL_CASCADER_MIN_GRID_HEIGHT_PX, availableGridHeight), availableGridHeight),
   )
+  const renderedHeight = Math.min(panelHeight, gridHeight + AGENT_MODEL_CASCADER_SEARCH_HEIGHT_PX)
+  const top = opensBelow
+    ? Math.min(anchorRect.bottom + AGENT_MODEL_CASCADER_GAP_PX, viewportHeight - renderedHeight - margin)
+    : Math.max(margin, anchorRect.top - AGENT_MODEL_CASCADER_GAP_PX - renderedHeight)
 
   return {
     left: `${left}px`,
