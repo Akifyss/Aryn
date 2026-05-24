@@ -3,6 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer, Tabs } from '@heroui/react'
 import {
   FileLine,
+  FolderLine,
   GitBranchLine,
   LayoutLeftLine,
   LayoutRightLine,
@@ -3974,7 +3975,7 @@ function App() {
                 <Tabs.ListContainer className='sidebar-vertical-tabs-list-container'>
                   <Tabs.List aria-label='工作区面板' className='sidebar-vertical-tabs-list'>
                     <Tabs.Tab id='file' className='sidebar-vertical-tab'>
-                      <FileLine size={16} className='sidebar-vertical-tab-icon' />
+                      <FolderLine size={16} className='sidebar-vertical-tab-icon' />
                       <span className='sidebar-vertical-tab-label'>文件</span>
                       <Tabs.Indicator className='sidebar-vertical-tab-indicator' />
                     </Tabs.Tab>
@@ -4301,7 +4302,7 @@ function App() {
               handleCollapsedAgentFixedTabClick('git')
             }}
           >
-            <Icon icon='lucide:git-branch' width={16} height={16} />
+            <GitBranchLine size={16} />
           </button>
           <button
             type='button'
@@ -4312,7 +4313,7 @@ function App() {
               handleCollapsedAgentFixedTabClick('file')
             }}
           >
-            <FileLine size={16} />
+            <FolderLine size={16} />
           </button>
         </div>
       ) : null}

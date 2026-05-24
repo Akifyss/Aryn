@@ -1,6 +1,5 @@
 import { type DragEvent as ReactDragEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import { CloseLine, FileLine, GitCompareLine } from '@mingcute/react'
-import { Icon } from '@iconify/react'
+import { CloseLine, FolderLine, GitBranchLine, GitCompareLine } from '@mingcute/react'
 import {
   reorderWorkspaceTabs,
   type TabDropPosition,
@@ -502,8 +501,8 @@ export function FileTabs({
               >
                 {tab.kind === 'fixed-panel' ? (
                   tab.fixedTabKind === 'file-panel'
-                    ? <FileLine size={16} className='file-tab-leading-icon' />
-                    : <Icon icon='lucide:git-branch' width={16} height={16} className='file-tab-leading-icon' />
+                    ? <FolderLine size={16} className='file-tab-leading-icon' />
+                    : <GitBranchLine size={16} className='file-tab-leading-icon' />
                 ) : null}
                 <span className='file-tab-label'>{baseName}</span>
                 {metaLabel ? <span className='file-tab-meta'>{metaLabel}</span> : null}
