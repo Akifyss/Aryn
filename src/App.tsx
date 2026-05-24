@@ -4088,7 +4088,7 @@ function App() {
             <div className='editor-empty-state'>
               <div className='editor-empty-content'>
                 <div className='editor-empty-logo-shell' aria-hidden='true'>
-                  <img className='editor-empty-logo' src='/branding/logo.svg' alt='' />
+                  <img className='editor-empty-logo' src='./branding/logo.svg' alt='' />
                 </div>
                 <div className='editor-empty-actions'>
                   <Button variant='outline' onPress={() => setIsCommandPaletteOpen(true)}>
