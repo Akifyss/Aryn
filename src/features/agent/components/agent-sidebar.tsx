@@ -128,6 +128,16 @@ type AgentModelCascaderLayoutMetrics = {
   thinkingColumnWidth: number
 }
 
+type AgentModelPickerPointerPoint = {
+  x: number
+  y: number
+}
+
+type AgentModelPickerSafeTriangle = {
+  modelKey: string
+  origin: AgentModelPickerPointerPoint
+}
+
 type AgentSessionSelection = { kind: 'new' } | { kind: 'session', sessionPath: string }
 
 const MARKDOWN_PLUGINS = [remarkGfm]
@@ -616,6 +626,30 @@ function scrollAgentModelCascaderActiveItemsIntoView() {
 
     viewportElement.scrollTop += itemCenterOffset - viewportCenterOffset
   })
+}
+
+function getAgentModelCascaderTriangleSign(
+  firstPoint: AgentModelPickerPointerPoint,
+  secondPoint: AgentModelPickerPointerPoint,
+  thirdPoint: AgentModelPickerPointerPoint,
+) {
+  return (firstPoint.x - thirdPoint.x) * (secondPoint.y - thirdPoint.y)
+    - (secondPoint.x - thirdPoint.x) * (firstPoint.y - thirdPoint.y)
+}
+
+function isPointInsideAgentModelCascaderTriangle(
+  point: AgentModelPickerPointerPoint,
+  firstVertex: AgentModelPickerPointerPoint,
+  secondVertex: AgentModelPickerPointerPoint,
+  thirdVertex: AgentModelPickerPointerPoint,
+) {
+  const firstSign = getAgentModelCascaderTriangleSign(point, firstVertex, secondVertex)
+  const secondSign = getAgentModelCascaderTriangleSign(point, secondVertex, thirdVertex)
+  const thirdSign = getAgentModelCascaderTriangleSign(point, thirdVertex, firstVertex)
+  const hasNegative = firstSign < 0 || secondSign < 0 || thirdSign < 0
+  const hasPositive = firstSign > 0 || secondSign > 0 || thirdSign > 0
+
+  return !(hasNegative && hasPositive)
 }
 
 function resolveAgentModelCascaderStyle(
@@ -2850,7 +2884,7 @@ function AgentChatSurface() {
   const [modelPickerKeyboardColumn, setModelPickerKeyboardColumn] = useState<AgentModelPickerKeyboardColumn>('model')
   const modelPickerSearchRef = useRef<HTMLInputElement | null>(null)
   const modelPickerTriggerRef = useRef<HTMLButtonElement | null>(null)
-  const modelPickerPointerPositionRef = useRef<{ x: number, y: number } | null>(null)
+  const modelPickerSafeTriangleRef = useRef<AgentModelPickerSafeTriangle | null>(null)
   const [modelCascaderStyle, setModelCascaderStyle] = useState<AgentModelCascaderStyle>({})
   const trimmedModelValue = modelInputValue.trim()
   const composerModelKey = trimmedModelValue
@@ -3008,91 +3042,107 @@ function AgentChatSurface() {
     window.requestAnimationFrame(scrollAgentModelCascaderActiveItemsIntoView)
   }
 
-  function activateModelPickerModelPreview(modelKey: string) {
+  function setModelPickerSafeTriangleOrigin(modelKey: string, event: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>) {
+    modelPickerSafeTriangleRef.current = {
+      modelKey,
+      origin: {
+        x: event.clientX,
+        y: event.clientY,
+      },
+    }
+  }
+
+  function setModelPickerTriggerSafeTriangleOrigin(modelKey: string, event: ReactMouseEvent<HTMLElement>) {
+    const triggerRect = modelPickerTriggerRef.current?.getBoundingClientRect()
+
+    modelPickerSafeTriangleRef.current = {
+      modelKey,
+      origin: {
+        x: triggerRect ? Math.min(event.clientX, triggerRect.left + 8) : event.clientX,
+        y: event.clientY,
+      },
+    }
+  }
+
+  function activateModelPickerModelPreview(
+    modelKey: string,
+    event?: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>,
+  ) {
     setModelPickerActiveModelKey(modelKey)
     setModelPickerActiveThinkingLevel(null)
-  }
 
-  function updateModelPickerPointerPosition(event: ReactPointerEvent<HTMLElement>) {
-    modelPickerPointerPositionRef.current = {
-      x: event.clientX,
-      y: event.clientY,
+    if (event) {
+      setModelPickerSafeTriangleOrigin(modelKey, event)
+    } else {
+      modelPickerSafeTriangleRef.current = null
     }
   }
 
-  function getModelPickerPreviousPointerPosition(event: ReactPointerEvent<HTMLElement>) {
-    if (modelPickerPointerPositionRef.current) {
-      return modelPickerPointerPositionRef.current
-    }
-
-    const movementX = event.nativeEvent.movementX
-    const movementY = event.nativeEvent.movementY
-
-    if (!movementX && !movementY) {
-      return null
-    }
-
-    return {
-      x: event.clientX - movementX,
-      y: event.clientY - movementY,
-    }
-  }
-
-  function isPointerAimingAtModelPickerThinkingColumn(event: ReactPointerEvent<HTMLElement>) {
-    if (!showModelPickerThinkingColumn) {
+  // Preserve the active model while the pointer crosses sibling rows toward the Thinking submenu.
+  function isPointerInsideModelPickerThinkingSafeTriangle(event: ReactPointerEvent<HTMLElement>) {
+    const safeTriangle = modelPickerSafeTriangleRef.current
+    if (!showModelPickerThinkingColumn || !safeTriangle) {
       return false
     }
 
-    const previousPointerPosition = getModelPickerPreviousPointerPosition(event)
-    if (!previousPointerPosition) {
+    if (safeTriangle.modelKey !== activeModelOption?.key) {
       return false
     }
 
-    const currentPointerPosition = {
-      x: event.clientX,
-      y: event.clientY,
-    }
-    const movementX = currentPointerPosition.x - previousPointerPosition.x
-    const movementY = currentPointerPosition.y - previousPointerPosition.y
-
-    if (movementX <= 1) {
-      return false
-    }
-
-    const modelColumnElement = event.currentTarget.closest('.agent-model-cascader-column')
     const thinkingColumnElement = document
       .querySelector<HTMLElement>('[data-agent-model-cascader="true"] .agent-model-cascader-column-thinking')
 
-    if (!modelColumnElement || !thinkingColumnElement) {
+    if (!thinkingColumnElement) {
       return false
     }
 
-    const modelColumnRect = modelColumnElement.getBoundingClientRect()
+    const currentPoint = {
+      x: event.clientX,
+      y: event.clientY,
+    }
     const thinkingColumnRect = thinkingColumnElement.getBoundingClientRect()
 
-    if (currentPointerPosition.x >= thinkingColumnRect.left - 2) {
+    if (safeTriangle.origin.x >= thinkingColumnRect.left || currentPoint.x <= safeTriangle.origin.x + 1) {
       return false
     }
 
-    const modelColumnAimStartX = modelColumnRect.left + (modelColumnRect.width * 0.12)
-    if (currentPointerPosition.x < modelColumnAimStartX) {
-      return false
+    if (currentPoint.x >= thinkingColumnRect.left - 1) {
+      return true
     }
 
-    const projectedThinkingY = previousPointerPosition.y
-      + (movementY * ((thinkingColumnRect.left - previousPointerPosition.x) / movementX))
-    const aimPadding = 20
-
-    return projectedThinkingY >= thinkingColumnRect.top - aimPadding
-      && projectedThinkingY <= thinkingColumnRect.bottom + aimPadding
+    const verticalPadding = 18
+    return isPointInsideAgentModelCascaderTriangle(
+      currentPoint,
+      safeTriangle.origin,
+      {
+        x: thinkingColumnRect.left,
+        y: thinkingColumnRect.top - verticalPadding,
+      },
+      {
+        x: thinkingColumnRect.left,
+        y: thinkingColumnRect.bottom + verticalPadding,
+      },
+    )
   }
 
   function handleModelPickerModelPointerPreview(modelKey: string, event: ReactPointerEvent<HTMLElement>) {
-    if (!isPointerAimingAtModelPickerThinkingColumn(event)) {
-      activateModelPickerModelPreview(modelKey)
+    if (
+      modelKey !== modelPickerSafeTriangleRef.current?.modelKey
+      && isPointerInsideModelPickerThinkingSafeTriangle(event)
+    ) {
+      return
     }
 
-    updateModelPickerPointerPosition(event)
+    activateModelPickerModelPreview(modelKey, event)
+  }
+
+  function handleModelPickerProviderPointerFocus(provider: string, event: ReactPointerEvent<HTMLElement>) {
+    if (isPointerInsideModelPickerThinkingSafeTriangle(event)) {
+      return
+    }
+
+    setModelPickerKeyboardColumn('provider')
+    handleModelPickerProviderFocus(provider)
   }
 
   function openModelCascader(event?: ReactMouseEvent<HTMLButtonElement>) {
@@ -3100,23 +3150,26 @@ function AgentChatSurface() {
       return
     }
 
-    modelPickerPointerPositionRef.current = event
-      ? {
-          x: event.clientX,
-          y: event.clientY,
-        }
-      : null
+    const initialModelKey = selectedModelOption?.key ?? fallbackModelOption?.key ?? null
     setPanelError(null)
     setModelPickerQuery('')
     setModelPickerProvider(resolvedSelectedProviderValue)
-    setModelPickerActiveModelKey(selectedModelOption?.key ?? fallbackModelOption?.key ?? null)
+    setModelPickerActiveModelKey(initialModelKey)
     setModelPickerActiveThinkingLevel(null)
     setModelPickerKeyboardColumn('model')
+
+    if (event && initialModelKey) {
+      setModelPickerTriggerSafeTriangleOrigin(initialModelKey, event)
+    } else {
+      modelPickerSafeTriangleRef.current = null
+    }
+
     updateModelCascaderPosition()
     setActiveComposerMenu((currentValue) => currentValue === 'model-cascader' ? null : 'model-cascader')
   }
 
   function handleModelPickerProviderFocus(provider: string) {
+    modelPickerSafeTriangleRef.current = null
     setModelPickerProvider(provider)
     setModelPickerActiveModelKey(
       modelPickerOptions.find((option) => option.provider === provider)?.key ?? null,
@@ -3125,6 +3178,7 @@ function AgentChatSurface() {
   }
 
   function handleModelPickerQueryChange(value: string) {
+    modelPickerSafeTriangleRef.current = null
     setModelPickerQuery(value)
     setModelPickerKeyboardColumn('model')
     setModelPickerActiveThinkingLevel(null)
@@ -3280,7 +3334,7 @@ function AgentChatSurface() {
 
   useEffect(() => {
     if (activeComposerMenu !== 'model-cascader') {
-      modelPickerPointerPositionRef.current = null
+      modelPickerSafeTriangleRef.current = null
     }
   }, [activeComposerMenu])
 
@@ -3464,9 +3518,7 @@ function AgentChatSurface() {
                             handleModelPickerProviderFocus(provider)
                           }}
                           onPointerEnter={(event) => {
-                            updateModelPickerPointerPosition(event)
-                            setModelPickerKeyboardColumn('provider')
-                            handleModelPickerProviderFocus(provider)
+                            handleModelPickerProviderPointerFocus(provider, event)
                           }}
                           onClick={() => {
                             setModelPickerKeyboardColumn('provider')
@@ -3523,7 +3575,7 @@ function AgentChatSurface() {
               <section
                 className='agent-model-cascader-column agent-model-cascader-column-thinking'
                 onPointerEnter={() => {
-                  modelPickerPointerPositionRef.current = null
+                  modelPickerSafeTriangleRef.current = null
                 }}
               >
                 <div className='agent-model-cascader-column-title'>Thinking</div>
@@ -3544,7 +3596,7 @@ function AgentChatSurface() {
                           setModelPickerKeyboardColumn('thinking')
                         }}
                         onPointerEnter={() => {
-                          modelPickerPointerPositionRef.current = null
+                          modelPickerSafeTriangleRef.current = null
                           setModelPickerActiveThinkingLevel(level)
                           setModelPickerKeyboardColumn('thinking')
                         }}
