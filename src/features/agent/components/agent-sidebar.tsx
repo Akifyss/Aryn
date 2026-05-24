@@ -15,7 +15,7 @@ import {
 } from 'react'
 import type { FileTreeRowDecorationRenderer } from '@pierre/trees'
 import { FileTree, useFileTree } from '@pierre/trees/react'
-import { Button, Chip, Disclosure, Input } from '@heroui/react'
+import { Button, Chip, Disclosure } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import {
   AiLine,
@@ -103,15 +103,18 @@ type ComposerState = {
   value: string
 }
 
-type AgentComposerMenu = 'model' | 'provider' | 'thinking' | null
+type AgentComposerMenu = 'model-cascader' | null
+
+type AgentModelPickerOption = {
+  key: string
+  modelId: string
+  provider: string
+  thinkingLevels: AgentThinkingLevel[]
+}
 
 type AgentSessionSelection = { kind: 'new' } | { kind: 'session', sessionPath: string }
 
 const MARKDOWN_PLUGINS = [remarkGfm]
-const AGENT_COMPOSER_MENU_MAX_HEIGHT = 264
-const AGENT_COMPOSER_MENU_ROW_HEIGHT = 30
-const AGENT_COMPOSER_MENU_PADDING = 10
-const AGENT_COMPOSER_MENU_BORDER_SIZE = 2
 const AGENT_THINKING_AUTO_EXPAND_DELAY_MS = 520
 const AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS = 140
 const AGENT_THINKING_MIN_EXPANDED_MS = 360
@@ -144,12 +147,6 @@ const emptyAgentState: AgentWorkspaceState = {
     workspacePath: null,
   },
   sessions: [],
-}
-
-function getAgentComposerMenuHeight(itemCount: number) {
-  const contentHeight = itemCount * AGENT_COMPOSER_MENU_ROW_HEIGHT + AGENT_COMPOSER_MENU_PADDING
-
-  return Math.min(AGENT_COMPOSER_MENU_MAX_HEIGHT, contentHeight + AGENT_COMPOSER_MENU_BORDER_SIZE)
 }
 
 const emptyComposerState: ComposerState = {
@@ -274,46 +271,35 @@ type AgentContextValue = {
   activeSessionSelection: AgentSessionSelection
   activeSessionPath: string | null
   agentState: AgentWorkspaceState
-  canChooseProvider: boolean
-  canChooseThinkingLevel: boolean
   canSend: boolean
   composerHeight: number
   composerResizeStateRef: React.MutableRefObject<{ pointerId: number, startHeight: number, startY: number } | null>
   composerState: ComposerState
-  composerThinkingLevels: AgentThinkingLevel[]
   configuredProviders: string[]
   deletingSessionPath: string | null
   handleComposerKeyDown: (event: KeyboardEvent<HTMLElement>) => void
   handleCreateSession: () => Promise<void>
   handleDeleteSession: (sessionPath: string) => Promise<void>
-  handleModelInputCommit: () => Promise<void>
   handleOpenSession: (sessionPath: string) => Promise<void>
-  handleProviderSelectionChange: (nextProvider: string) => Promise<void>
   handleSelectModel: (modelKey: string) => Promise<void>
-  handleThinkingLevelSelection: (level: AgentThinkingLevel) => Promise<void>
+  handleThinkingLevelSelection: (level: AgentThinkingLevel, modelKey?: string) => Promise<void>
   handleStartNewSession: () => void
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
   hasConfiguredProviders: boolean
   iconTheme?: WorkspaceIconTheme | null
   isCreatingSession: boolean
   isLoading: boolean
-  isModelInputFullySelected: boolean
   isResizingComposer: boolean
   isSwitchingModel: boolean
   isSwitchingThinkingLevel: boolean
   liveTools: LiveToolState[]
   messagesScrollRef: React.RefObject<HTMLDivElement | null>
   modelFieldRef: React.RefObject<HTMLDivElement | null>
-  modelInputRef: React.RefObject<HTMLInputElement | null>
   modelInputValue: string
-  modelMenuHeight: number
-  modelPlaceholder: string
-  modelSuggestions: string[]
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenProviderSettings?: () => void
   overlayPanelRef: React.RefObject<HTMLDivElement | null>
   panelError: string | null
-  providerMenuHeight: number
   renderedMessages: AgentSidebarMessage[]
   resolvedSelectedProviderValue: string
   roundFileChangesByMessageId: Map<string, AgentMessageFileChange[]>
@@ -322,17 +308,11 @@ type AgentContextValue = {
   setActiveComposerMenu: React.Dispatch<React.SetStateAction<AgentComposerMenu>>
   setActiveOverlayPanel: React.Dispatch<React.SetStateAction<'sessions' | null>>
   setComposerState: React.Dispatch<React.SetStateAction<ComposerState>>
-  setIsModelInputFullySelected: React.Dispatch<React.SetStateAction<boolean>>
   setIsResizingComposer: React.Dispatch<React.SetStateAction<boolean>>
-  setModelDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>
-  setModelInputValue: React.Dispatch<React.SetStateAction<string>>
   setPanelError: React.Dispatch<React.SetStateAction<string | null>>
-  syncModelInputSelectionState: (input: HTMLInputElement) => void
-  syncModelInputSelectionStateNextFrame: (input: HTMLInputElement) => void
   statusMessage: string | null
   thinkingLevel: AgentThinkingLevel
   thinkingLevelLabel: string
-  thinkingMenuHeight: number
   workspacePath: string | null
   workspaceTree: ReturnType<typeof useWorkspaceStore.getState>['tree']
 }
@@ -409,6 +389,10 @@ function parseModelSelection(modelKey: string | null): { modelId: string, provid
     modelId: modelIdParts.length > 0 ? modelIdParts.join('/') : formatModelLabel(modelKey),
     provider: modelIdParts.length > 0 ? providerCandidate : '',
   }
+}
+
+function getAgentModelKey(provider: string, modelId: string) {
+  return `${provider}/${modelId}`
 }
 
 const THINKING_LEVEL_LABELS: Record<AgentThinkingLevel, string> = {
@@ -1434,7 +1418,6 @@ function AgentProvider({
   const composerResizeStateRef = useRef<{ pointerId: number, startHeight: number, startY: number } | null>(null)
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
-  const modelInputRef = useRef<HTMLInputElement | null>(null)
   const overlayPanelRef = useRef<HTMLDivElement | null>(null)
   const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
   const previousSessionPathRef = useRef<string | null>(null)
@@ -1443,21 +1426,6 @@ function AgentProvider({
     && agentState.sessions.some((session) => session.path === agentState.activeSession?.sessionPath)
     ? agentState.activeSession.sessionPath
     : null
-  const [isModelInputFullySelected, setIsModelInputFullySelected] = useState(false)
-
-  function syncModelInputSelectionState(input: HTMLInputElement) {
-    const hasFullSelection = input.value.length > 0
-      && input.selectionStart === 0
-      && input.selectionEnd === input.value.length
-
-    setIsModelInputFullySelected(hasFullSelection)
-  }
-
-  function syncModelInputSelectionStateNextFrame(input: HTMLInputElement) {
-    requestAnimationFrame(() => {
-      syncModelInputSelectionState(input)
-    })
-  }
 
   function syncModelSelection(selection: { modelId: string, provider: string }) {
     setSelectedProviderValue(selection.provider)
@@ -1979,15 +1947,15 @@ function AgentProvider({
     }
   }
 
-  async function handleThinkingLevelSelection(level: AgentThinkingLevel) {
+  async function handleThinkingLevelSelection(level: AgentThinkingLevel, modelKey?: string) {
     if (!workspacePath) {
       return
     }
 
-    const nextModel = modelInputValue.trim()
-    const nextModelKey = `${resolvedSelectedProviderValue}/${nextModel}`
+    const nextModelKey = modelKey?.trim()
+      ?? getAgentModelKey(resolvedSelectedProviderValue, modelInputValue.trim())
 
-    if (!nextModel || !agentState.runtime.availableModels.includes(nextModelKey)) {
+    if (!nextModelKey || !agentState.runtime.availableModels.includes(nextModelKey)) {
       setPanelError('Select an available model before changing the thinking level.')
       setActiveComposerMenu(null)
       return
@@ -2015,31 +1983,6 @@ function AgentProvider({
     } finally {
       setIsSwitchingThinkingLevel(false)
     }
-  }
-
-  async function handleModelInputCommit() {
-    const nextModel = modelInputValue.trim()
-    const nextModelKey = `${resolvedSelectedProviderValue}/${nextModel}`
-
-    if (!nextModel || nextModelKey === agentState.runtime.selectedModel) {
-      return
-    }
-
-    await handleSelectModel(nextModelKey)
-  }
-
-  async function handleProviderSelectionChange(nextProvider: string) {
-    if (panelError) {
-      setPanelError(null)
-    }
-    setSelectedProviderValue(nextProvider)
-    const nextProviderModels = Array.from(new Set(
-      agentState.runtime.availableModels
-        .filter((model) => model.startsWith(`${nextProvider}/`))
-        .map((model) => model.split('/').slice(1).join('/')),
-    ))
-    setModelInputValue(modelDrafts[nextProvider] ?? getRuntimePreferredModelId(nextProvider) ?? nextProviderModels[0] ?? '')
-    setActiveComposerMenu(null)
   }
 
   async function submitComposerPrompt(streamingBehavior?: 'steer' | 'followUp') {
@@ -2134,7 +2077,6 @@ function AgentProvider({
     return orderDelta !== 0 ? orderDelta : left.localeCompare(right)
   })
   const hasConfiguredProviders = configuredProviders.length > 0
-  const canChooseProvider = configuredProviders.length > 1
   const resolvedSelectedProviderValue = configuredProviders.includes(selectedProviderValue)
     ? selectedProviderValue
     : configuredProviders[0] ?? selectedProviderValue
@@ -2144,7 +2086,9 @@ function AgentProvider({
       .map((model) => model.split('/').slice(1).join('/')),
   ))
   const trimmedModelInputValue = modelInputValue.trim()
-  const composerModelKey = trimmedModelInputValue ? `${resolvedSelectedProviderValue}/${trimmedModelInputValue}` : null
+  const composerModelKey = trimmedModelInputValue
+    ? getAgentModelKey(resolvedSelectedProviderValue, trimmedModelInputValue)
+    : null
   const hasAvailableComposerModel = composerModelKey
     ? agentState.runtime.availableModels.includes(composerModelKey)
     : false
@@ -2152,20 +2096,7 @@ function AgentProvider({
     ? (agentState.runtime.availableThinkingLevelsByModel[composerModelKey] ?? agentState.runtime.availableThinkingLevels)
     : []
   const thinkingLevel = clampAgentThinkingLevel(agentState.runtime.thinkingLevel, composerThinkingLevels)
-  const modelSuggestions = isModelInputFullySelected
-    ? providerModelIds
-    : providerModelIds.filter((modelId) => {
-      const query = modelInputValue.trim().toLowerCase()
-      return !query || modelId.toLowerCase().includes(query)
-    })
-  const canChooseThinkingLevel = composerThinkingLevels.length > 1
-    && hasAvailableComposerModel
-    && agentState.runtime.hasConfiguredModels
   const thinkingLevelLabel = formatThinkingLevelLabel(thinkingLevel)
-  const providerMenuHeight = getAgentComposerMenuHeight(configuredProviders.length)
-  const modelMenuHeight = getAgentComposerMenuHeight(modelSuggestions.length)
-  const thinkingMenuHeight = getAgentComposerMenuHeight(composerThinkingLevels.length)
-  const modelPlaceholder = 'model'
   const canSend = Boolean(
     workspacePath
     && serializeComposerText(composerState.value, composerState.mentions).trim()
@@ -2239,11 +2170,7 @@ function AgentProvider({
   ), [visiblePersistedMessages, roundFileChangesByMessageId])
 
   useEffect(() => {
-    if (!canChooseProvider && activeComposerMenu === 'provider') {
-      setActiveComposerMenu(null)
-    }
-
-    if (!canChooseThinkingLevel && activeComposerMenu === 'thinking') {
+    if (!hasConfiguredProviders && activeComposerMenu === 'model-cascader') {
       setActiveComposerMenu(null)
     }
 
@@ -2265,8 +2192,6 @@ function AgentProvider({
   }, [
     activeComposerMenu,
     agentState.runtime.preferredModelByProvider,
-    canChooseProvider,
-    canChooseThinkingLevel,
     hasConfiguredProviders,
     modelDrafts,
     providerModelIds,
@@ -2322,21 +2247,16 @@ function AgentProvider({
     activeSessionSelection,
     activeSessionPath,
     agentState,
-    canChooseProvider,
-    canChooseThinkingLevel,
     canSend,
     composerHeight,
     composerResizeStateRef,
     composerState,
-    composerThinkingLevels,
     configuredProviders,
     deletingSessionPath,
     handleComposerKeyDown,
     handleCreateSession,
     handleDeleteSession,
-    handleModelInputCommit,
     handleOpenSession,
-    handleProviderSelectionChange,
     handleSelectModel,
     handleThinkingLevelSelection,
     handleStartNewSession,
@@ -2345,23 +2265,17 @@ function AgentProvider({
     iconTheme,
     isCreatingSession,
     isLoading,
-    isModelInputFullySelected,
     isResizingComposer,
     isSwitchingModel,
     isSwitchingThinkingLevel,
     liveTools,
     messagesScrollRef,
     modelFieldRef,
-    modelInputRef,
     modelInputValue,
-    modelMenuHeight,
-    modelPlaceholder,
-    modelSuggestions,
     onOpenMessageFile,
     onOpenProviderSettings,
     overlayPanelRef,
     panelError,
-    providerMenuHeight,
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
@@ -2370,17 +2284,11 @@ function AgentProvider({
     setActiveComposerMenu,
     setActiveOverlayPanel,
     setComposerState,
-    setIsModelInputFullySelected,
     setIsResizingComposer,
-    setModelDrafts,
-    setModelInputValue,
     setPanelError,
-    syncModelInputSelectionState,
-    syncModelInputSelectionStateNextFrame,
     statusMessage,
     thinkingLevel,
     thinkingLevelLabel,
-    thinkingMenuHeight,
     workspacePath,
     workspaceTree,
   }), [
@@ -2390,20 +2298,15 @@ function AgentProvider({
     activeSessionSelection,
     activeSessionPath,
     agentState,
-    canChooseProvider,
-    canChooseThinkingLevel,
     canSend,
     composerHeight,
     composerState,
-    composerThinkingLevels,
     configuredProviders,
     deletingSessionPath,
     handleComposerKeyDown,
     handleCreateSession,
     handleDeleteSession,
-    handleModelInputCommit,
     handleOpenSession,
-    handleProviderSelectionChange,
     handleSelectModel,
     handleThinkingLevelSelection,
     handleStartNewSession,
@@ -2412,19 +2315,14 @@ function AgentProvider({
     iconTheme,
     isCreatingSession,
     isLoading,
-    isModelInputFullySelected,
     isResizingComposer,
     isSwitchingModel,
     isSwitchingThinkingLevel,
     liveTools,
     modelInputValue,
-    modelMenuHeight,
-    modelPlaceholder,
-    modelSuggestions,
     onOpenMessageFile,
     onOpenProviderSettings,
     panelError,
-    providerMenuHeight,
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
@@ -2432,7 +2330,6 @@ function AgentProvider({
     statusMessage,
     thinkingLevel,
     thinkingLevelLabel,
-    thinkingMenuHeight,
     workspacePath,
     workspaceTree,
   ])
@@ -2668,20 +2565,15 @@ function AgentChatSurface() {
     activeSessionSelection,
     activeSessionPath,
     agentState,
-    canChooseProvider,
-    canChooseThinkingLevel,
     canSend,
     composerHeight,
-    composerThinkingLevels,
     composerResizeStateRef,
     composerState,
     configuredProviders,
     handleComposerKeyDown,
     handleCreateSession,
     handleDeleteSession,
-    handleModelInputCommit,
     handleOpenSession,
-    handleProviderSelectionChange,
     handleSelectModel,
     handleThinkingLevelSelection,
     handleStartNewSession,
@@ -2691,22 +2583,16 @@ function AgentChatSurface() {
     isCreatingSession,
     deletingSessionPath,
     isLoading,
-    isModelInputFullySelected,
     isResizingComposer,
     isSwitchingModel,
     isSwitchingThinkingLevel,
     messagesScrollRef,
     modelFieldRef,
-    modelInputRef,
     modelInputValue,
-    modelMenuHeight,
-    modelPlaceholder,
-    modelSuggestions,
     onOpenMessageFile,
     onOpenProviderSettings,
     overlayPanelRef,
     panelError,
-    providerMenuHeight,
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
@@ -2715,138 +2601,191 @@ function AgentChatSurface() {
     setActiveComposerMenu,
     setActiveOverlayPanel,
     setComposerState,
-    setIsModelInputFullySelected,
     setIsResizingComposer,
-    setModelDrafts,
-    setModelInputValue,
     setPanelError,
-    syncModelInputSelectionState,
-    syncModelInputSelectionStateNextFrame,
     statusMessage,
     thinkingLevel,
     thinkingLevelLabel,
-    thinkingMenuHeight,
     workspacePath,
     workspaceTree,
   } = useAgentContext()
   const hasEmptyChat = Boolean(workspacePath && renderedMessages.length === 0)
   const isNewConversation = activeSessionSelection.kind === 'new'
     || (hasEmptyChat && !activeSession)
-  const composerMenuRootStyle = {
-    '--agent-composer-menu-height': `${
-      activeComposerMenu === 'provider'
-        ? providerMenuHeight
-        : activeComposerMenu === 'thinking'
-          ? thinkingMenuHeight
-          : modelMenuHeight
-    }px`,
-  } as CSSProperties
+  const [modelPickerQuery, setModelPickerQuery] = useState('')
+  const [modelPickerProvider, setModelPickerProvider] = useState(resolvedSelectedProviderValue)
+  const [modelPickerActiveModelKey, setModelPickerActiveModelKey] = useState<string | null>(null)
+  const modelPickerSearchRef = useRef<HTMLInputElement | null>(null)
+  const trimmedModelValue = modelInputValue.trim()
+  const composerModelKey = trimmedModelValue
+    ? getAgentModelKey(resolvedSelectedProviderValue, trimmedModelValue)
+    : null
+  const modelPickerOptions = useMemo<AgentModelPickerOption[]>(() => (
+    agentState.runtime.availableModels
+      .map((modelKey) => {
+        const selection = parseModelSelection(modelKey)
+
+        if (!selection.provider || !selection.modelId) {
+          return null
+        }
+
+        return {
+          key: modelKey,
+          modelId: selection.modelId,
+          provider: selection.provider,
+          thinkingLevels: agentState.runtime.availableThinkingLevelsByModel[modelKey]
+            ?? agentState.runtime.availableThinkingLevels,
+        }
+      })
+      .filter((option): option is AgentModelPickerOption => Boolean(option))
+  ), [
+    agentState.runtime.availableModels,
+    agentState.runtime.availableThinkingLevels,
+    agentState.runtime.availableThinkingLevelsByModel,
+  ])
+  const modelPickerOptionByKey = useMemo(() => new Map(
+    modelPickerOptions.map((option) => [option.key, option]),
+  ), [modelPickerOptions])
+  const resolvedModelPickerProvider = configuredProviders.includes(modelPickerProvider)
+    ? modelPickerProvider
+    : resolvedSelectedProviderValue
+  const modelPickerProviderOptions = configuredProviders
+  const modelPickerProviderModels = modelPickerOptions.filter((option) => (
+    option.provider === resolvedModelPickerProvider
+  ))
+  const normalizedModelPickerQuery = modelPickerQuery.trim().toLowerCase()
+  const isModelPickerSearching = normalizedModelPickerQuery.length > 0
+  const modelPickerSearchResults = isModelPickerSearching
+    ? modelPickerOptions.filter((option) => (
+      option.modelId.toLowerCase().includes(normalizedModelPickerQuery)
+      || option.provider.toLowerCase().includes(normalizedModelPickerQuery)
+      || option.key.toLowerCase().includes(normalizedModelPickerQuery)
+    ))
+    : []
+  const activeModelCandidate = modelPickerActiveModelKey
+    ? modelPickerOptionByKey.get(modelPickerActiveModelKey) ?? null
+    : null
+  const selectedModelOption = composerModelKey
+    ? modelPickerOptionByKey.get(composerModelKey) ?? null
+    : null
+  const fallbackModelOption = modelPickerProviderModels[0] ?? modelPickerOptions[0] ?? null
+  const activeModelOption = isModelPickerSearching
+    ? (
+        activeModelCandidate && modelPickerSearchResults.some((option) => option.key === activeModelCandidate.key)
+          ? activeModelCandidate
+          : modelPickerSearchResults[0] ?? null
+      )
+    : (
+        activeModelCandidate?.provider === resolvedModelPickerProvider
+          ? activeModelCandidate
+          : selectedModelOption?.provider === resolvedModelPickerProvider
+            ? selectedModelOption
+            : fallbackModelOption
+      )
+  const activeModelThinkingLevels = activeModelOption?.thinkingLevels ?? []
+  const activeModelThinkingLevel = clampAgentThinkingLevel(
+    agentState.runtime.thinkingLevel,
+    activeModelThinkingLevels,
+  )
+  const modelPickerTriggerLabel = trimmedModelValue || 'model'
+  const modelPickerTriggerTitle = composerModelKey
+    ? `${composerModelKey}, thinking ${thinkingLevelLabel}`
+    : `Model, thinking ${thinkingLevelLabel}`
+
+  function openModelCascader() {
+    if (!hasConfiguredProviders || !workspacePath || isSwitchingModel || isSwitchingThinkingLevel) {
+      return
+    }
+
+    setPanelError(null)
+    setModelPickerQuery('')
+    setModelPickerProvider(resolvedSelectedProviderValue)
+    setModelPickerActiveModelKey(selectedModelOption?.key ?? fallbackModelOption?.key ?? null)
+    setActiveComposerMenu((currentValue) => currentValue === 'model-cascader' ? null : 'model-cascader')
+  }
+
+  function handleModelPickerProviderFocus(provider: string) {
+    setModelPickerProvider(provider)
+    setModelPickerActiveModelKey(
+      modelPickerOptions.find((option) => option.provider === provider)?.key ?? null,
+    )
+  }
+
+  function handleModelPickerQueryChange(value: string) {
+    setModelPickerQuery(value)
+
+    const nextQuery = value.trim().toLowerCase()
+    if (!nextQuery) {
+      setModelPickerActiveModelKey(selectedModelOption?.key ?? fallbackModelOption?.key ?? null)
+      return
+    }
+
+    setModelPickerActiveModelKey(
+      modelPickerOptions.find((option) => (
+        option.modelId.toLowerCase().includes(nextQuery)
+        || option.provider.toLowerCase().includes(nextQuery)
+        || option.key.toLowerCase().includes(nextQuery)
+      ))?.key ?? null,
+    )
+  }
+
+  async function handleModelPickerModelSelect(option: AgentModelPickerOption) {
+    setModelPickerActiveModelKey(option.key)
+    setActiveComposerMenu(null)
+    await handleSelectModel(option.key)
+  }
+
+  async function handleModelPickerThinkingSelect(level: AgentThinkingLevel) {
+    if (!activeModelOption) {
+      return
+    }
+
+    setActiveComposerMenu(null)
+    await handleThinkingLevelSelection(level, activeModelOption.key)
+  }
+
+  useEffect(() => {
+    if (activeComposerMenu !== 'model-cascader') {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      modelPickerSearchRef.current?.focus()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [activeComposerMenu])
+
   const composerFooter = (
     <div ref={modelFieldRef} className='agent-composer-meta'>
       <div className='agent-composer-toolbar'>
         <div className='agent-composer-actions'>
           <div className='agent-model-field'>
             {hasConfiguredProviders ? (
-              <div className='agent-model-composite'>
-                <button
-                  type='button'
-                  aria-expanded={canChooseProvider ? activeComposerMenu === 'provider' : undefined}
-                  aria-haspopup={canChooseProvider ? 'listbox' : undefined}
-                  aria-label='Provider'
-                  className={`agent-provider-trigger${canChooseProvider ? '' : ' is-static'}`}
-                  disabled={!workspacePath || isSwitchingModel}
-                  onClick={() => {
-                    if (!canChooseProvider) {
-                      return
-                    }
-                    setActiveComposerMenu((currentValue) => currentValue === 'provider' ? null : 'provider')
-                  }}
-                >
-                  <span className='agent-provider-trigger-label'>{resolvedSelectedProviderValue}</span>
-                </button>
-
-                <span className='agent-model-separator'>/</span>
-
-                <Input
-                  aria-label='Model'
-                  className='agent-model-input'
-                  disabled={!workspacePath || !agentState.runtime.hasConfiguredModels || isSwitchingModel}
-                  ref={modelInputRef}
-                  onBlur={() => {
-                    setIsModelInputFullySelected(false)
-                    setActiveComposerMenu((currentValue) => currentValue === 'model' ? null : currentValue)
-                    void handleModelInputCommit()
-                  }}
-                  onChange={(event) => {
-                    if (panelError) {
-                      setPanelError(null)
-                    }
-                    setIsModelInputFullySelected(false)
-                    setActiveComposerMenu('model')
-                    setModelInputValue(event.target.value)
-                    setModelDrafts((currentValue) => ({
-                      ...currentValue,
-                      [resolvedSelectedProviderValue]: event.target.value,
-                    }))
-                  }}
-                  onFocus={(event) => {
-                    setActiveComposerMenu('model')
-                    const input = event.currentTarget
-                    requestAnimationFrame(() => {
-                      input.select()
-                      syncModelInputSelectionState(input)
-                    })
-                  }}
-                  onSelect={(event) => {
-                    syncModelInputSelectionState(event.currentTarget)
-                  }}
-                  onPointerUp={(event) => {
-                    syncModelInputSelectionStateNextFrame(event.currentTarget)
-                  }}
-                  onKeyUp={(event) => {
-                    syncModelInputSelectionStateNextFrame(event.currentTarget)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      setActiveComposerMenu(null)
-                      void handleModelInputCommit()
-                    }
-
-                    if (event.key === 'Escape') {
-                      setActiveComposerMenu(null)
-                    }
-                  }}
-                  placeholder={modelPlaceholder}
-                  value={modelInputValue}
-                  variant='secondary'
-                />
-
-                <button
-                  type='button'
-                  aria-expanded={canChooseThinkingLevel ? activeComposerMenu === 'thinking' : undefined}
-                  aria-haspopup={canChooseThinkingLevel ? 'listbox' : undefined}
-                  aria-label={`Thinking level: ${thinkingLevelLabel}`}
-                  className={`agent-thinking-trigger${canChooseThinkingLevel ? '' : ' is-static'}`}
-                  disabled={
-                    !workspacePath
-                    || !agentState.runtime.hasConfiguredModels
-                    || isSwitchingModel
-                    || isSwitchingThinkingLevel
-                    || !canChooseThinkingLevel
-                  }
-                  title={`Thinking: ${thinkingLevelLabel}`}
-                  onClick={() => {
-                    if (!canChooseThinkingLevel) {
-                      return
-                    }
-                    setActiveComposerMenu((currentValue) => currentValue === 'thinking' ? null : 'thinking')
-                  }}
-                >
+              <button
+                type='button'
+                aria-expanded={activeComposerMenu === 'model-cascader'}
+                aria-haspopup='dialog'
+                aria-label={modelPickerTriggerTitle}
+                className='agent-model-cascader-trigger'
+                disabled={
+                  !workspacePath
+                  || !agentState.runtime.hasConfiguredModels
+                  || isSwitchingModel
+                  || isSwitchingThinkingLevel
+                }
+                title={modelPickerTriggerTitle}
+                onClick={openModelCascader}
+              >
+                <span className='agent-model-cascader-trigger-model'>{modelPickerTriggerLabel}</span>
+                <span className='agent-model-cascader-trigger-thinking'>
                   <BrainLine size={14} />
-                  <span className='agent-thinking-trigger-label'>{thinkingLevelLabel}</span>
-                </button>
-              </div>
+                  <span>{thinkingLevelLabel}</span>
+                </span>
+                <RightLine aria-hidden='true' className='agent-model-cascader-trigger-chevron' size={14} />
+              </button>
             ) : (
               <Button
                 className='agent-provider-setup-button'
@@ -2876,92 +2815,165 @@ function AgentChatSurface() {
         </div>
       </div>
 
-      {activeComposerMenu === 'provider' && canChooseProvider ? (
-        <AppScrollArea
-          className='agent-composer-menu'
-          contentClassName='agent-composer-menu-content'
-          rootStyle={composerMenuRootStyle}
-        >
-          <div className='agent-composer-menu-list' role='listbox' aria-label='Available providers'>
-            {configuredProviders.map((provider) => (
-              <button
-                key={provider}
-                type='button'
-                className={`agent-composer-option${provider === resolvedSelectedProviderValue ? ' is-active' : ''}`}
-                onPointerDown={(event) => {
+      {activeComposerMenu === 'model-cascader' && hasConfiguredProviders ? (
+        <div className='agent-model-cascader' role='dialog' aria-label='Select model and thinking level'>
+          <label className='agent-model-cascader-search'>
+            <SearchLine aria-hidden='true' size={14} />
+            <input
+              ref={modelPickerSearchRef}
+              type='search'
+              aria-label='Search models'
+              placeholder='Search models'
+              value={modelPickerQuery}
+              onChange={(event) => {
+                handleModelPickerQueryChange(event.target.value)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
                   event.preventDefault()
-                }}
-                onClick={() => {
-                  void handleProviderSelectionChange(provider)
-                }}
-              >
-                <span className='agent-composer-option-label'>{provider}</span>
-              </button>
-            ))}
-          </div>
-        </AppScrollArea>
-      ) : null}
-
-      {activeComposerMenu === 'model' && modelSuggestions.length > 0 ? (
-        <AppScrollArea
-          className='agent-composer-menu'
-          contentClassName='agent-composer-menu-content'
-          rootStyle={composerMenuRootStyle}
-        >
-          <div className='agent-composer-menu-list' role='listbox' aria-label='Available models'>
-            {modelSuggestions.map((modelId) => (
-              <button
-                key={`${resolvedSelectedProviderValue}/${modelId}`}
-                type='button'
-                className={`agent-composer-option${modelId === modelInputValue ? ' is-active' : ''}`}
-                onPointerDown={(event) => {
-                  event.preventDefault()
-                }}
-                onClick={() => {
-                  if (panelError) {
-                    setPanelError(null)
-                  }
-                  setModelInputValue(modelId)
-                  setModelDrafts((currentValue) => ({
-                    ...currentValue,
-                    [resolvedSelectedProviderValue]: modelId,
-                  }))
                   setActiveComposerMenu(null)
-                  void handleSelectModel(`${resolvedSelectedProviderValue}/${modelId}`)
-                }}
-              >
-                <span className='agent-composer-option-label'>{modelId}</span>
-              </button>
-            ))}
-          </div>
-        </AppScrollArea>
-      ) : null}
+                  return
+                }
 
-      {activeComposerMenu === 'thinking' && canChooseThinkingLevel ? (
-        <AppScrollArea
-          className='agent-composer-menu'
-          contentClassName='agent-composer-menu-content'
-          rootStyle={composerMenuRootStyle}
-        >
-          <div className='agent-composer-menu-list' role='listbox' aria-label='Available thinking levels'>
-            {composerThinkingLevels.map((level) => (
-              <button
-                key={level}
-                type='button'
-                className={`agent-composer-option${level === thinkingLevel ? ' is-active' : ''}`}
-                onPointerDown={(event) => {
+                if (event.key === 'Enter' && activeModelOption) {
                   event.preventDefault()
-                }}
-                onClick={() => {
-                  void handleThinkingLevelSelection(level)
-                }}
+                  void handleModelPickerModelSelect(activeModelOption)
+                }
+              }}
+            />
+          </label>
+
+          <div className={`agent-model-cascader-grid${isModelPickerSearching ? ' is-searching' : ''}`}>
+            {isModelPickerSearching ? (
+              <section className='agent-model-cascader-column agent-model-cascader-column-results'>
+                <div className='agent-model-cascader-column-title'>Models</div>
+                <AppScrollArea
+                  className='agent-model-cascader-scroll'
+                  contentClassName='agent-model-cascader-scroll-content'
+                >
+                  <div className='agent-model-cascader-list' role='listbox' aria-label='Matching models'>
+                    {modelPickerSearchResults.length > 0 ? modelPickerSearchResults.map((option) => (
+                      <button
+                        key={option.key}
+                        type='button'
+                        role='option'
+                        aria-selected={option.key === composerModelKey}
+                        className={`agent-model-cascader-option agent-model-cascader-model-option${option.key === activeModelOption?.key ? ' is-active' : ''}${option.key === composerModelKey ? ' is-selected' : ''}`}
+                        onFocus={() => {
+                          setModelPickerActiveModelKey(option.key)
+                        }}
+                        onPointerEnter={() => {
+                          setModelPickerActiveModelKey(option.key)
+                        }}
+                        onClick={() => {
+                          void handleModelPickerModelSelect(option)
+                        }}
+                      >
+                        <span className='agent-model-cascader-option-main'>{option.modelId}</span>
+                        <span className='agent-model-cascader-option-sub'>{option.provider}</span>
+                      </button>
+                    )) : (
+                      <div className='agent-model-cascader-empty'>No matching models</div>
+                    )}
+                  </div>
+                </AppScrollArea>
+              </section>
+            ) : (
+              <>
+                <section className='agent-model-cascader-column'>
+                  <div className='agent-model-cascader-column-title'>Provider</div>
+                  <AppScrollArea
+                    className='agent-model-cascader-scroll'
+                    contentClassName='agent-model-cascader-scroll-content'
+                  >
+                    <div className='agent-model-cascader-list' role='listbox' aria-label='Available providers'>
+                      {modelPickerProviderOptions.map((provider) => (
+                        <button
+                          key={provider}
+                          type='button'
+                          role='option'
+                          aria-selected={provider === resolvedModelPickerProvider}
+                          className={`agent-model-cascader-option${provider === resolvedModelPickerProvider ? ' is-active' : ''}${provider === resolvedSelectedProviderValue ? ' is-selected' : ''}`}
+                          onFocus={() => {
+                            handleModelPickerProviderFocus(provider)
+                          }}
+                          onPointerEnter={() => {
+                            handleModelPickerProviderFocus(provider)
+                          }}
+                          onClick={() => {
+                            handleModelPickerProviderFocus(provider)
+                          }}
+                        >
+                          <span className='agent-model-cascader-option-main'>{provider}</span>
+                          <RightLine aria-hidden='true' className='agent-model-cascader-option-arrow' size={13} />
+                        </button>
+                      ))}
+                    </div>
+                  </AppScrollArea>
+                </section>
+
+                <section className='agent-model-cascader-column'>
+                  <div className='agent-model-cascader-column-title'>Model</div>
+                  <AppScrollArea
+                    className='agent-model-cascader-scroll'
+                    contentClassName='agent-model-cascader-scroll-content'
+                  >
+                    <div className='agent-model-cascader-list' role='listbox' aria-label='Available models'>
+                      {modelPickerProviderModels.map((option) => (
+                        <button
+                          key={option.key}
+                          type='button'
+                          role='option'
+                          aria-selected={option.key === composerModelKey}
+                          className={`agent-model-cascader-option agent-model-cascader-model-option${option.key === activeModelOption?.key ? ' is-active' : ''}${option.key === composerModelKey ? ' is-selected' : ''}`}
+                          onFocus={() => {
+                            setModelPickerActiveModelKey(option.key)
+                          }}
+                          onPointerEnter={() => {
+                            setModelPickerActiveModelKey(option.key)
+                          }}
+                          onClick={() => {
+                            void handleModelPickerModelSelect(option)
+                          }}
+                        >
+                          <span className='agent-model-cascader-option-main'>{option.modelId}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </AppScrollArea>
+                </section>
+              </>
+            )}
+
+            <section className='agent-model-cascader-column agent-model-cascader-column-thinking'>
+              <div className='agent-model-cascader-column-title'>Thinking</div>
+              <AppScrollArea
+                className='agent-model-cascader-scroll'
+                contentClassName='agent-model-cascader-scroll-content'
               >
-                <BrainLine size={14} />
-                <span className='agent-composer-option-label'>{formatThinkingLevelLabel(level)}</span>
-              </button>
-            ))}
+                <div className='agent-model-cascader-list' role='listbox' aria-label='Available thinking levels'>
+                  {activeModelThinkingLevels.length > 0 ? activeModelThinkingLevels.map((level) => (
+                    <button
+                      key={level}
+                      type='button'
+                      role='option'
+                      aria-selected={level === activeModelThinkingLevel}
+                      className={`agent-model-cascader-option${level === activeModelThinkingLevel ? ' is-active is-selected' : ''}`}
+                      onClick={() => {
+                        void handleModelPickerThinkingSelect(level)
+                      }}
+                    >
+                      <BrainLine aria-hidden='true' size={14} />
+                      <span className='agent-model-cascader-option-main'>{formatThinkingLevelLabel(level)}</span>
+                    </button>
+                  )) : (
+                    <div className='agent-model-cascader-empty'>No model selected</div>
+                  )}
+                </div>
+              </AppScrollArea>
+            </section>
           </div>
-        </AppScrollArea>
+        </div>
       ) : null}
     </div>
   )
