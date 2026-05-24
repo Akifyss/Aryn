@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { createPortal } from 'react-dom'
 import type { FileTreeRowDecorationRenderer } from '@pierre/trees'
 import { FileTree, useFileTree } from '@pierre/trees/react'
 import { Button, Chip, Disclosure } from '@heroui/react'
@@ -112,6 +113,10 @@ type AgentModelPickerOption = {
   thinkingLevels: AgentThinkingLevel[]
 }
 
+type AgentModelCascaderStyle = CSSProperties & {
+  '--agent-model-cascader-grid-height'?: string
+}
+
 type AgentSessionSelection = { kind: 'new' } | { kind: 'session', sessionPath: string }
 
 const MARKDOWN_PLUGINS = [remarkGfm]
@@ -120,6 +125,14 @@ const AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS = 140
 const AGENT_THINKING_MIN_EXPANDED_MS = 360
 const AGENT_THINKING_SCROLL_STICKY_THRESHOLD_PX = 24
 const MAX_VISIBLE_MESSAGE_FILE_CHIPS = 6
+const AGENT_MODEL_CASCADER_MARGIN_PX = 12
+const AGENT_MODEL_CASCADER_GAP_PX = 10
+const AGENT_MODEL_CASCADER_MAX_WIDTH_PX = 680
+const AGENT_MODEL_CASCADER_MAX_HEIGHT_PX = 390
+const AGENT_MODEL_CASCADER_MIN_PANEL_HEIGHT_PX = 220
+const AGENT_MODEL_CASCADER_MIN_GRID_HEIGHT_PX = 172
+const AGENT_MODEL_CASCADER_MAX_GRID_HEIGHT_PX = 286
+const AGENT_MODEL_CASCADER_SEARCH_HEIGHT_PX = 39
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -441,6 +454,44 @@ function clampAgentThinkingLevel(level: AgentThinkingLevel, availableLevels: Age
   }
 
   return availableLevels[0]
+}
+
+function resolveAgentModelCascaderStyle(anchorRect: DOMRect): AgentModelCascaderStyle {
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const margin = Math.min(AGENT_MODEL_CASCADER_MARGIN_PX, Math.max(8, viewportWidth / 32))
+  const maxWidth = Math.max(280, viewportWidth - (margin * 2))
+  const width = Math.min(AGENT_MODEL_CASCADER_MAX_WIDTH_PX, maxWidth)
+  const left = Math.max(margin, Math.min(anchorRect.left, viewportWidth - width - margin))
+  const availableAbove = Math.max(0, anchorRect.top - margin - AGENT_MODEL_CASCADER_GAP_PX)
+  const availableBelow = Math.max(0, viewportHeight - anchorRect.bottom - margin - AGENT_MODEL_CASCADER_GAP_PX)
+  const opensBelow = availableAbove < AGENT_MODEL_CASCADER_MIN_PANEL_HEIGHT_PX && availableBelow > availableAbove
+  const availableHeight = opensBelow ? availableBelow : availableAbove
+  const fallbackHeight = Math.max(160, viewportHeight - (margin * 2))
+  const minimumHeight = Math.min(AGENT_MODEL_CASCADER_MIN_PANEL_HEIGHT_PX, fallbackHeight)
+  const panelHeight = Math.min(
+    AGENT_MODEL_CASCADER_MAX_HEIGHT_PX,
+    Math.max(
+      minimumHeight,
+      Math.min(availableHeight || fallbackHeight, fallbackHeight),
+    ),
+  )
+  const top = opensBelow
+    ? Math.min(anchorRect.bottom + AGENT_MODEL_CASCADER_GAP_PX, viewportHeight - panelHeight - margin)
+    : Math.max(margin, anchorRect.top - AGENT_MODEL_CASCADER_GAP_PX - panelHeight)
+  const availableGridHeight = Math.max(96, panelHeight - AGENT_MODEL_CASCADER_SEARCH_HEIGHT_PX)
+  const gridHeight = Math.min(
+    AGENT_MODEL_CASCADER_MAX_GRID_HEIGHT_PX,
+    Math.max(Math.min(AGENT_MODEL_CASCADER_MIN_GRID_HEIGHT_PX, availableGridHeight), availableGridHeight),
+  )
+
+  return {
+    left: `${left}px`,
+    maxHeight: `${panelHeight}px`,
+    top: `${Math.max(margin, top)}px`,
+    width: `${width}px`,
+    '--agent-model-cascader-grid-height': `${gridHeight}px`,
+  }
 }
 
 function getAgentRelativePath(rootPath: string | null, filePath: string) {
@@ -1760,13 +1811,25 @@ function AgentProvider({
         return
       }
 
+      if (target instanceof Element && target.closest('[data-agent-model-cascader="true"]')) {
+        return
+      }
+
       setActiveComposerMenu(null)
     }
 
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setActiveComposerMenu(null)
+      }
+    }
+
     document.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
 
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
     }
   }, [activeComposerMenu])
 
@@ -2616,6 +2679,8 @@ function AgentChatSurface() {
   const [modelPickerProvider, setModelPickerProvider] = useState(resolvedSelectedProviderValue)
   const [modelPickerActiveModelKey, setModelPickerActiveModelKey] = useState<string | null>(null)
   const modelPickerSearchRef = useRef<HTMLInputElement | null>(null)
+  const modelPickerTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [modelCascaderStyle, setModelCascaderStyle] = useState<AgentModelCascaderStyle>({})
   const trimmedModelValue = modelInputValue.trim()
   const composerModelKey = trimmedModelValue
     ? getAgentModelKey(resolvedSelectedProviderValue, trimmedModelValue)
@@ -2692,6 +2757,15 @@ function AgentChatSurface() {
     ? `${composerModelKey}, thinking ${thinkingLevelLabel}`
     : `Model, thinking ${thinkingLevelLabel}`
 
+  const updateModelCascaderPosition = useCallback(() => {
+    const triggerElement = modelPickerTriggerRef.current
+    if (!triggerElement) {
+      return
+    }
+
+    setModelCascaderStyle(resolveAgentModelCascaderStyle(triggerElement.getBoundingClientRect()))
+  }, [])
+
   function openModelCascader() {
     if (!hasConfiguredProviders || !workspacePath || isSwitchingModel || isSwitchingThinkingLevel) {
       return
@@ -2701,6 +2775,7 @@ function AgentChatSurface() {
     setModelPickerQuery('')
     setModelPickerProvider(resolvedSelectedProviderValue)
     setModelPickerActiveModelKey(selectedModelOption?.key ?? fallbackModelOption?.key ?? null)
+    updateModelCascaderPosition()
     setActiveComposerMenu((currentValue) => currentValue === 'model-cascader' ? null : 'model-cascader')
   }
 
@@ -2744,6 +2819,24 @@ function AgentChatSurface() {
     await handleThinkingLevelSelection(level, activeModelOption.key)
   }
 
+  useLayoutEffect(() => {
+    if (activeComposerMenu !== 'model-cascader') {
+      return
+    }
+
+    updateModelCascaderPosition()
+
+    const frameId = window.requestAnimationFrame(updateModelCascaderPosition)
+    window.addEventListener('resize', updateModelCascaderPosition)
+    window.addEventListener('scroll', updateModelCascaderPosition, true)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.removeEventListener('resize', updateModelCascaderPosition)
+      window.removeEventListener('scroll', updateModelCascaderPosition, true)
+    }
+  }, [activeComposerMenu, updateModelCascaderPosition])
+
   useEffect(() => {
     if (activeComposerMenu !== 'model-cascader') {
       return
@@ -2765,8 +2858,10 @@ function AgentChatSurface() {
           <div className='agent-model-field'>
             {hasConfiguredProviders ? (
               <button
+                ref={modelPickerTriggerRef}
                 type='button'
                 aria-expanded={activeComposerMenu === 'model-cascader'}
+                aria-controls='agent-model-cascader'
                 aria-haspopup='dialog'
                 aria-label={modelPickerTriggerTitle}
                 className='agent-model-cascader-trigger'
@@ -2815,8 +2910,15 @@ function AgentChatSurface() {
         </div>
       </div>
 
-      {activeComposerMenu === 'model-cascader' && hasConfiguredProviders ? (
-        <div className='agent-model-cascader' role='dialog' aria-label='Select model and thinking level'>
+      {activeComposerMenu === 'model-cascader' && hasConfiguredProviders && typeof document !== 'undefined' ? createPortal(
+        <div
+          id='agent-model-cascader'
+          className='agent-model-cascader'
+          data-agent-model-cascader='true'
+          role='dialog'
+          aria-label='Select model and thinking level'
+          style={modelCascaderStyle}
+        >
           <label className='agent-model-cascader-search'>
             <SearchLine aria-hidden='true' size={14} />
             <input
@@ -2973,7 +3075,8 @@ function AgentChatSurface() {
               </AppScrollArea>
             </section>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   )

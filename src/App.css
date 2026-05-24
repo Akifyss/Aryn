@@ -4586,15 +4586,12 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-model-cascader {
-  position: absolute;
-  left: 0;
-  right: auto;
-  bottom: calc(100% + var(--agent-composer-menu-gap));
-  z-index: 48;
+  position: fixed;
+  z-index: 1200;
   overflow: hidden;
-  width: min(680px, calc(100vw - 48px));
-  min-width: min(560px, calc(100vw - 48px));
-  max-height: min(390px, calc(100vh - 140px));
+  width: min(680px, calc(100vw - 24px));
+  min-width: min(560px, calc(100vw - 24px));
+  max-height: min(390px, calc(100vh - 24px));
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--overlay);
@@ -4630,7 +4627,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-model-cascader-grid {
   display: grid;
   grid-template-columns: minmax(138px, 0.8fr) minmax(280px, 1.45fr) minmax(128px, 0.75fr);
-  height: min(286px, calc(100vh - 180px));
+  height: var(--agent-model-cascader-grid-height, min(286px, calc(100vh - 180px)));
   min-height: 172px;
 }
 
@@ -4749,9 +4746,6 @@ body.workspace-tree-dragging .workspace-tree-row {
   }
 
   .agent-model-cascader {
-    left: 0;
-    right: 0;
-    width: auto;
     min-width: 0;
   }
 
