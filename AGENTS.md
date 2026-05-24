@@ -14,7 +14,7 @@
   - PI Agent (`@earendil-works/pi-coding-agent`)：集成 AI 后端能力。
 - UI 与 状态管理：
   - 样式 (CSS)：优先使用 [Tailwind CSS v4](https://tailwindcss.com/docs)。
-  - 组件库：使用 [HeroUI V3](https://heroui.com/docs/react/getting-started)。
+  - 组件库：使用 [HeroUI V3](https://heroui.com/docs/react/getting-started) 和 [base-ui](https://base-ui.com/react/components)。
     - 只要是可滚动容器，使用 [base-ui Scroll Area](https://base-ui.com/react/components/scroll-area)。
   - Design Token / CSS 变量：优先使用 HeroUI V3 提供的系统 ([Colors](https://heroui.com/docs/react/getting-started/colors) 、 [Theming](https://heroui.com/docs/react/getting-started/theming) 、 [Styling](https://heroui.com/docs/react/getting-started/styling))。
   - 图标：优先使用 [mingcute](https://www.mingcute.com/) ([GitHub](https://github.com/mingcute-design/mingcute-icons))；若无合适图标则使用 [iconify](https://iconify.design/) ([Docs](https://iconify.design/docs/) 、 [GitHub](https://github.com/iconify/iconify))。
