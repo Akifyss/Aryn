@@ -3272,7 +3272,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-session-select {
   min-width: 0;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   max-width: 100%;
   app-region: no-drag;
   -webkit-app-region: no-drag;
@@ -3299,8 +3299,11 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 32px;
   width: 32px;
+  min-width: 32px;
   height: 32px;
+  min-height: 32px;
   padding: 0;
   border: 0;
   border-radius: 10px;
@@ -3310,6 +3313,10 @@ body.workspace-tree-dragging .workspace-tree-row {
   transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+.agent-toolbar-button svg {
+  flex: 0 0 auto;
 }
 
 .agent-toolbar-button:hover {
@@ -3331,6 +3338,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   min-width: 0;
   flex: 0 1 auto;
   max-width: 100%;
@@ -3368,6 +3376,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-select-current {
   display: block;
+  min-width: 0;
   overflow: hidden;
   color: inherit;
   font-size: 13px;
