@@ -148,6 +148,7 @@ const AGENT_MODEL_CASCADER_PROVIDER_MAX_WIDTH_PX = 190
 const AGENT_MODEL_CASCADER_MODEL_MIN_WIDTH_PX = 176
 const AGENT_MODEL_CASCADER_MODEL_MAX_WIDTH_PX = 400
 const AGENT_MODEL_CASCADER_THINKING_WIDTH_PX = 128
+const AGENT_MODEL_CASCADER_MODEL_HOVER_INTENT_DELAY_MS = 180
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -2848,6 +2849,7 @@ function AgentChatSurface() {
   const [modelPickerKeyboardColumn, setModelPickerKeyboardColumn] = useState<AgentModelPickerKeyboardColumn>('model')
   const modelPickerSearchRef = useRef<HTMLInputElement | null>(null)
   const modelPickerTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const modelPickerModelHoverPreviewTimerRef = useRef<number | null>(null)
   const [modelCascaderStyle, setModelCascaderStyle] = useState<AgentModelCascaderStyle>({})
   const trimmedModelValue = modelInputValue.trim()
   const composerModelKey = trimmedModelValue
@@ -3005,11 +3007,36 @@ function AgentChatSurface() {
     window.requestAnimationFrame(scrollAgentModelCascaderActiveItemsIntoView)
   }
 
+  function clearModelPickerModelHoverPreview() {
+    if (modelPickerModelHoverPreviewTimerRef.current === null) {
+      return
+    }
+
+    window.clearTimeout(modelPickerModelHoverPreviewTimerRef.current)
+    modelPickerModelHoverPreviewTimerRef.current = null
+  }
+
+  function activateModelPickerModelPreview(modelKey: string) {
+    clearModelPickerModelHoverPreview()
+    setModelPickerActiveModelKey(modelKey)
+    setModelPickerActiveThinkingLevel(null)
+  }
+
+  function scheduleModelPickerModelHoverPreview(modelKey: string) {
+    clearModelPickerModelHoverPreview()
+    modelPickerModelHoverPreviewTimerRef.current = window.setTimeout(() => {
+      modelPickerModelHoverPreviewTimerRef.current = null
+      setModelPickerActiveModelKey(modelKey)
+      setModelPickerActiveThinkingLevel(null)
+    }, AGENT_MODEL_CASCADER_MODEL_HOVER_INTENT_DELAY_MS)
+  }
+
   function openModelCascader() {
     if (!hasConfiguredProviders || !workspacePath || isSwitchingModel || isSwitchingThinkingLevel) {
       return
     }
 
+    clearModelPickerModelHoverPreview()
     setPanelError(null)
     setModelPickerQuery('')
     setModelPickerProvider(resolvedSelectedProviderValue)
@@ -3021,6 +3048,7 @@ function AgentChatSurface() {
   }
 
   function handleModelPickerProviderFocus(provider: string) {
+    clearModelPickerModelHoverPreview()
     setModelPickerProvider(provider)
     setModelPickerActiveModelKey(
       modelPickerOptions.find((option) => option.provider === provider)?.key ?? null,
@@ -3029,6 +3057,7 @@ function AgentChatSurface() {
   }
 
   function handleModelPickerQueryChange(value: string) {
+    clearModelPickerModelHoverPreview()
     setModelPickerQuery(value)
     setModelPickerKeyboardColumn('model')
     setModelPickerActiveThinkingLevel(null)
@@ -3073,8 +3102,7 @@ function AgentChatSurface() {
     const nextModel = modelPickerListedModels[getLoopedIndex(modelPickerListedModels.length, currentIndex, offset)]
 
     if (nextModel) {
-      setModelPickerActiveModelKey(nextModel.key)
-      setModelPickerActiveThinkingLevel(null)
+      activateModelPickerModelPreview(nextModel.key)
       scrollModelCascaderActiveItemsOnNextFrame()
     }
   }
@@ -3169,12 +3197,14 @@ function AgentChatSurface() {
   }
 
   async function handleModelPickerModelSelect(option: AgentModelPickerOption) {
+    clearModelPickerModelHoverPreview()
     setModelPickerActiveModelKey(option.key)
     setActiveComposerMenu(null)
     await handleSelectModel(option.key)
   }
 
   async function handleModelPickerThinkingSelect(level: AgentThinkingLevel) {
+    clearModelPickerModelHoverPreview()
     if (!activeModelOption) {
       return
     }
@@ -3182,6 +3212,16 @@ function AgentChatSurface() {
     setActiveComposerMenu(null)
     await handleThinkingLevelSelection(level, activeModelOption.key)
   }
+
+  useEffect(() => () => {
+    clearModelPickerModelHoverPreview()
+  }, [])
+
+  useEffect(() => {
+    if (activeComposerMenu !== 'model-cascader') {
+      clearModelPickerModelHoverPreview()
+    }
+  }, [activeComposerMenu])
 
   useLayoutEffect(() => {
     if (activeComposerMenu !== 'model-cascader') {
@@ -3319,14 +3359,18 @@ function AgentChatSurface() {
                         aria-selected={option.key === composerModelKey}
                         className={`agent-model-cascader-option agent-model-cascader-model-option${option.key === activeModelOption?.key ? ' is-active' : ''}${option.key === composerModelKey ? ' is-selected' : ''}`}
                         onFocus={() => {
-                          setModelPickerActiveModelKey(option.key)
-                          setModelPickerActiveThinkingLevel(null)
+                          activateModelPickerModelPreview(option.key)
                           setModelPickerKeyboardColumn('model')
                         }}
                         onPointerEnter={() => {
-                          setModelPickerActiveModelKey(option.key)
-                          setModelPickerActiveThinkingLevel(null)
                           setModelPickerKeyboardColumn('model')
+                          scheduleModelPickerModelHoverPreview(option.key)
+                        }}
+                        onPointerMove={() => {
+                          scheduleModelPickerModelHoverPreview(option.key)
+                        }}
+                        onPointerLeave={() => {
+                          clearModelPickerModelHoverPreview()
                         }}
                         onClick={() => {
                           void handleModelPickerModelSelect(option)
@@ -3393,14 +3437,18 @@ function AgentChatSurface() {
                           aria-selected={option.key === composerModelKey}
                           className={`agent-model-cascader-option agent-model-cascader-model-option${option.key === activeModelOption?.key ? ' is-active' : ''}${option.key === composerModelKey ? ' is-selected' : ''}`}
                           onFocus={() => {
-                            setModelPickerActiveModelKey(option.key)
-                            setModelPickerActiveThinkingLevel(null)
+                            activateModelPickerModelPreview(option.key)
                             setModelPickerKeyboardColumn('model')
                           }}
                           onPointerEnter={() => {
-                            setModelPickerActiveModelKey(option.key)
-                            setModelPickerActiveThinkingLevel(null)
                             setModelPickerKeyboardColumn('model')
+                            scheduleModelPickerModelHoverPreview(option.key)
+                          }}
+                          onPointerMove={() => {
+                            scheduleModelPickerModelHoverPreview(option.key)
+                          }}
+                          onPointerLeave={() => {
+                            clearModelPickerModelHoverPreview()
                           }}
                           onClick={() => {
                             void handleModelPickerModelSelect(option)
@@ -3416,7 +3464,12 @@ function AgentChatSurface() {
             )}
 
             {showModelPickerThinkingColumn ? (
-              <section className='agent-model-cascader-column agent-model-cascader-column-thinking'>
+              <section
+                className='agent-model-cascader-column agent-model-cascader-column-thinking'
+                onPointerEnter={() => {
+                  clearModelPickerModelHoverPreview()
+                }}
+              >
                 <div className='agent-model-cascader-column-title'>Thinking</div>
                 <AppScrollArea
                   className='agent-model-cascader-scroll'
@@ -3431,10 +3484,12 @@ function AgentChatSurface() {
                         aria-selected={level === activeModelThinkingLevel}
                         className={`agent-model-cascader-option${level === activeModelPickerThinkingLevel ? ' is-active' : ''}${level === activeModelThinkingLevel ? ' is-selected' : ''}`}
                         onFocus={() => {
+                          clearModelPickerModelHoverPreview()
                           setModelPickerActiveThinkingLevel(level)
                           setModelPickerKeyboardColumn('thinking')
                         }}
                         onPointerEnter={() => {
+                          clearModelPickerModelHoverPreview()
                           setModelPickerActiveThinkingLevel(level)
                           setModelPickerKeyboardColumn('thinking')
                         }}
