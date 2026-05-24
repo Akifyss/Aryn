@@ -137,8 +137,11 @@ type AgentModelPickerPointerPoint = AgentModelPickerPoint & {
   time: number
 }
 
+type AgentModelPickerSafeTriangleTarget = 'model' | 'thinking'
+
 type AgentModelPickerPendingActivation = {
   run: () => void
+  target: AgentModelPickerSafeTriangleTarget
   timeoutId: number
 }
 
@@ -3122,27 +3125,24 @@ function AgentChatSurface() {
     setModelPickerActiveThinkingLevel(null)
   }
 
-  // Preserve the active model while the pointer crosses sibling rows toward the Thinking submenu.
-  function isPointerInsideModelPickerThinkingSafeTriangle(currentPoint: AgentModelPickerPointerPoint) {
-    if (!showModelPickerThinkingColumn || !activeModelOption) {
+  function isPointerInsideModelPickerColumnSafeTriangle(
+    currentPoint: AgentModelPickerPointerPoint,
+    selector: string,
+  ) {
+    const targetColumnElement = document.querySelector<HTMLElement>(selector)
+
+    if (!targetColumnElement) {
       return false
     }
 
-    const thinkingColumnElement = document
-      .querySelector<HTMLElement>('[data-agent-model-cascader="true"] .agent-model-cascader-column-thinking')
-
-    if (!thinkingColumnElement) {
-      return false
-    }
-
-    const thinkingColumnRect = thinkingColumnElement.getBoundingClientRect()
+    const targetColumnRect = targetColumnElement.getBoundingClientRect()
     const originPoint = getModelPickerPointerTriangleOrigin(currentPoint)
 
-    if (!originPoint || originPoint.x >= thinkingColumnRect.left || currentPoint.x <= originPoint.x + 1) {
+    if (!originPoint || originPoint.x >= targetColumnRect.left || currentPoint.x <= originPoint.x + 1) {
       return false
     }
 
-    if (currentPoint.x >= thinkingColumnRect.left - 1) {
+    if (currentPoint.x >= targetColumnRect.left - 1) {
       return true
     }
 
@@ -3150,17 +3150,50 @@ function AgentChatSurface() {
       currentPoint,
       originPoint,
       {
-        x: thinkingColumnRect.left,
-        y: thinkingColumnRect.top - AGENT_MODEL_CASCADER_SAFE_TRIANGLE_PADDING_PX,
+        x: targetColumnRect.left,
+        y: targetColumnRect.top - AGENT_MODEL_CASCADER_SAFE_TRIANGLE_PADDING_PX,
       },
       {
-        x: thinkingColumnRect.left,
-        y: thinkingColumnRect.bottom + AGENT_MODEL_CASCADER_SAFE_TRIANGLE_PADDING_PX,
+        x: targetColumnRect.left,
+        y: targetColumnRect.bottom + AGENT_MODEL_CASCADER_SAFE_TRIANGLE_PADDING_PX,
       },
     )
   }
 
-  function scheduleModelPickerDelayedActivation(run: () => void) {
+  // Preserve the active provider while the pointer crosses sibling rows toward the Model submenu.
+  function isPointerInsideModelPickerModelSafeTriangle(currentPoint: AgentModelPickerPointerPoint) {
+    if (isModelPickerSearching || modelPickerProviderOptions.length <= 1) {
+      return false
+    }
+
+    return isPointerInsideModelPickerColumnSafeTriangle(
+      currentPoint,
+      '[data-agent-model-cascader="true"] .agent-model-cascader-column-model',
+    )
+  }
+
+  // Preserve the active model while the pointer crosses sibling rows toward the Thinking submenu.
+  function isPointerInsideModelPickerThinkingSafeTriangle(currentPoint: AgentModelPickerPointerPoint) {
+    if (!showModelPickerThinkingColumn || !activeModelOption) {
+      return false
+    }
+
+    return isPointerInsideModelPickerColumnSafeTriangle(
+      currentPoint,
+      '[data-agent-model-cascader="true"] .agent-model-cascader-column-thinking',
+    )
+  }
+
+  function isPointerInsideModelPickerSafeTriangle(
+    currentPoint: AgentModelPickerPointerPoint,
+    target: AgentModelPickerSafeTriangleTarget,
+  ) {
+    return target === 'model'
+      ? isPointerInsideModelPickerModelSafeTriangle(currentPoint)
+      : isPointerInsideModelPickerThinkingSafeTriangle(currentPoint)
+  }
+
+  function scheduleModelPickerDelayedActivation(run: () => void, target: AgentModelPickerSafeTriangleTarget) {
     clearModelPickerPendingActivation()
 
     const timeoutId = window.setTimeout(() => {
@@ -3174,13 +3207,14 @@ function AgentChatSurface() {
 
     modelPickerPendingActivationRef.current = {
       run,
+      target,
       timeoutId,
     }
   }
 
   function flushModelPickerPendingActivationIfOutsideSafeTriangle(currentPoint: AgentModelPickerPointerPoint) {
     const pendingActivation = modelPickerPendingActivationRef.current
-    if (!pendingActivation || isPointerInsideModelPickerThinkingSafeTriangle(currentPoint)) {
+    if (!pendingActivation || isPointerInsideModelPickerSafeTriangle(currentPoint, pendingActivation.target)) {
       return
     }
 
@@ -3194,11 +3228,15 @@ function AgentChatSurface() {
     flushModelPickerPendingActivationIfOutsideSafeTriangle(currentPoint)
   }
 
-  function runOrDelayModelPickerPointerActivation(event: ReactPointerEvent<HTMLElement>, run: () => void) {
+  function runOrDelayModelPickerPointerActivation(
+    event: ReactPointerEvent<HTMLElement>,
+    target: AgentModelPickerSafeTriangleTarget,
+    run: () => void,
+  ) {
     const currentPoint = recordModelPickerPointerPoint(event)
 
-    if (isPointerInsideModelPickerThinkingSafeTriangle(currentPoint)) {
-      scheduleModelPickerDelayedActivation(run)
+    if (isPointerInsideModelPickerSafeTriangle(currentPoint, target)) {
+      scheduleModelPickerDelayedActivation(run, target)
       return
     }
 
@@ -3213,13 +3251,13 @@ function AgentChatSurface() {
       return
     }
 
-    runOrDelayModelPickerPointerActivation(event, () => {
+    runOrDelayModelPickerPointerActivation(event, 'thinking', () => {
       activateModelPickerModelPreview(modelKey)
     })
   }
 
   function handleModelPickerProviderPointerFocus(provider: string, event: ReactPointerEvent<HTMLElement>) {
-    runOrDelayModelPickerPointerActivation(event, () => {
+    runOrDelayModelPickerPointerActivation(event, 'model', () => {
       setModelPickerKeyboardColumn('provider')
       handleModelPickerProviderFocus(provider)
     })
@@ -3623,7 +3661,14 @@ function AgentChatSurface() {
                   </AppScrollArea>
                 </section>
 
-                <section className='agent-model-cascader-column'>
+                <section
+                  className='agent-model-cascader-column agent-model-cascader-column-model'
+                  onPointerEnter={() => {
+                    if (modelPickerPendingActivationRef.current?.target === 'model') {
+                      clearModelPickerPendingActivation()
+                    }
+                  }}
+                >
                   <div className='agent-model-cascader-column-title'>Model</div>
                   <AppScrollArea
                     className='agent-model-cascader-scroll'
