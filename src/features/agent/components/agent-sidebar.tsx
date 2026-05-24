@@ -495,6 +495,33 @@ function estimateAgentCascaderTextWidth(value: string, averageGlyphWidth: number
   return Math.ceil(value.length * averageGlyphWidth) + extraWidth
 }
 
+let agentCascaderTextMeasureCanvas: HTMLCanvasElement | null = null
+
+function measureAgentCascaderTextWidth(value: string, averageGlyphWidth: number, extraWidth: number) {
+  if (typeof document === 'undefined') {
+    return estimateAgentCascaderTextWidth(value, averageGlyphWidth, extraWidth)
+  }
+
+  agentCascaderTextMeasureCanvas ??= document.createElement('canvas')
+  const context = agentCascaderTextMeasureCanvas.getContext('2d')
+
+  if (!context) {
+    return estimateAgentCascaderTextWidth(value, averageGlyphWidth, extraWidth)
+  }
+
+  const bodyElement = document.body as HTMLElement | null
+  const computedFontFamily = bodyElement ? window.getComputedStyle(bodyElement).fontFamily : ''
+  const fontFamily = computedFontFamily || 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+  context.font = `13px ${fontFamily}`
+
+  const measuredWidth = context.measureText(value).width
+  if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) {
+    return estimateAgentCascaderTextWidth(value, averageGlyphWidth, extraWidth)
+  }
+
+  return Math.ceil(measuredWidth) + extraWidth
+}
+
 function scoreAgentModelSearchOption(
   option: AgentModelPickerOption,
   normalizedQuery: string,
@@ -2918,8 +2945,8 @@ function AgentChatSurface() {
     const modelColumnWidth = clampNumber(
       fallbackModelOptions.reduce((maxWidth, option) => {
         const estimatedWidth = isModelPickerSearching
-          ? estimateAgentCascaderTextWidth(`${option.modelId} ${option.provider}`, 8, 42)
-          : estimateAgentCascaderTextWidth(option.modelId, 8.2, 34)
+          ? measureAgentCascaderTextWidth(`${option.modelId} ${option.provider}`, 8, 42)
+          : measureAgentCascaderTextWidth(option.modelId, 8.2, 34)
 
         return Math.max(maxWidth, estimatedWidth)
       }, AGENT_MODEL_CASCADER_MODEL_MIN_WIDTH_PX),
