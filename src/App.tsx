@@ -2084,6 +2084,7 @@ function App() {
       lineNumber?: number
       mode?: WorkspaceFileGitDiffRequest['mode']
       source?: 'revision' | 'worktree'
+      view?: 'meo' | 'monaco'
     },
   ) {
     if (!currentPath) {
@@ -2100,7 +2101,7 @@ function App() {
         return
       }
 
-      if (supportsMeoEditor(change.path, diff.editorKind)) {
+      if (options?.view === 'meo' && supportsMeoEditor(change.path, diff.editorKind)) {
         await openMeoGitDiff(
           change,
           diff,
@@ -2413,6 +2414,9 @@ function App() {
           }}
           onOpenDiff={(change) => {
             void openGitDiff(change)
+          }}
+          onOpenMeoDiff={(change) => {
+            void openGitDiff(change, { mode: 'split', view: 'meo' })
           }}
           onPull={() => {
             void handlePullGitChanges()
@@ -4161,7 +4165,7 @@ function App() {
                     )
 
                     if (nextChange) {
-                      await openGitDiff(nextChange, gitAction)
+                      await openGitDiff(nextChange, { ...gitAction, view: 'meo' })
                     }
                   })()
                 }}

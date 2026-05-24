@@ -11,6 +11,7 @@ import {
   ExternalLinkLine,
   FolderLine,
   GitBranchLine,
+  MarkdownLine,
   Refresh2Line,
   Refresh3Line,
   Back2Line,
@@ -32,6 +33,10 @@ import type {
   GitRepositoryState,
 } from '@/features/git/types'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
+import {
+  getSupportedWorkspaceEditorKind,
+  supportsMeoEditor,
+} from '@/features/workspace/lib/file-types'
 
 type GitPanelProps = {
   busyLabel: string | null
@@ -47,6 +52,7 @@ type GitPanelProps = {
   onLayoutChange: (layout: GitPanelLayout) => void
   onOpenDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
+  onOpenMeoDiff: (change: GitChangeItem) => void
   onPull: () => void
   onPush: () => void
   onRefresh: () => void
@@ -75,6 +81,15 @@ type GitTreeNodeDraft = GitTreeNode & {
 
 function isScopedGitChange(change: GitDisplayChange): change is GitChangeItem {
   return 'scope' in change
+}
+
+function supportsMeoDiff(change: GitDisplayChange) {
+  if (!isScopedGitChange(change)) {
+    return false
+  }
+
+  const editorKind = getSupportedWorkspaceEditorKind(change.path)
+  return editorKind ? supportsMeoEditor(change.path, editorKind) : false
 }
 
 function getBaseName(filePath: string) {
@@ -198,6 +213,7 @@ function GitRowActions({
   onStage,
   onDiscard,
   onOpenDiff,
+  onOpenMeoDiff,
   isFolder,
   change,
   changesCount,
@@ -207,16 +223,17 @@ function GitRowActions({
   onStage?: () => void
   onDiscard?: () => void
   onOpenDiff?: () => void
+  onOpenMeoDiff?: () => void
   isFolder?: boolean
   change?: GitDisplayChange
   changesCount?: number
 }) {
   const isChange = change && isScopedGitChange(change)
+  const hasMeoDiff = change ? supportsMeoDiff(change) : false
 
   return (
     <div className='git-change-tools'>
       <div className='git-change-actions'>
-        {/* Open Actions */}
         {!isFolder && isChange && (
           <button
             type='button'
@@ -231,8 +248,21 @@ function GitRowActions({
             <ExternalLinkLine size={16} />
           </button>
         )}
+        {!isFolder && isChange && hasMeoDiff && (
+          <button
+            type='button'
+            className='git-change-action git-change-icon-button'
+            aria-label='Open MEO split diff'
+            title='Open MEO split diff'
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenMeoDiff?.()
+            }}
+          >
+            <MarkdownLine size={16} />
+          </button>
+        )}
 
-        {/* Git State Actions */}
         {kind === 'staged' && (
           <button
             type='button'
@@ -294,6 +324,7 @@ function GitTreeFolder({
   node,
   onDiscardMany,
   onOpenDiff,
+  onOpenMeoDiff,
   onOpenFile,
   onStage,
   onUnstage,
@@ -306,6 +337,7 @@ function GitTreeFolder({
   node: GitTreeNode
   onDiscardMany: (changes: GitChangeItem[]) => void
   onOpenDiff: (change: GitChangeItem) => void
+  onOpenMeoDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   onStage: (filePaths: string[]) => void
   onUnstage: (filePaths: string[]) => void
@@ -355,6 +387,7 @@ function GitTreeFolder({
                   node={child}
                   onDiscardMany={onDiscardMany}
                   onOpenDiff={onOpenDiff}
+                  onOpenMeoDiff={onOpenMeoDiff}
                   onOpenFile={onOpenFile}
                   onStage={onStage}
                   onUnstage={onUnstage}
@@ -371,6 +404,7 @@ function GitTreeFolder({
             kind={kind}
             onDiscardMany={onDiscardMany}
             onOpenDiff={onOpenDiff}
+            onOpenMeoDiff={onOpenMeoDiff}
             onOpenFile={onOpenFile}
             onStage={onStage}
             onUnstage={onUnstage}
@@ -387,6 +421,7 @@ function GitChangeList({
   changes,
   onDiscardMany,
   onOpenDiff,
+  onOpenMeoDiff,
   onOpenFile,
   onStage,
   onUnstage,
@@ -397,6 +432,7 @@ function GitChangeList({
   changes: GitDisplayChange[]
   onDiscardMany: (changes: GitChangeItem[]) => void
   onOpenDiff: (change: GitChangeItem) => void
+  onOpenMeoDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   onStage: (filePaths: string[]) => void
   onUnstage: (filePaths: string[]) => void
@@ -440,6 +476,7 @@ function GitChangeList({
               onUnstage={() => onUnstage([change.path])}
               onDiscard={() => onDiscardMany([change as GitChangeItem])}
               onOpenDiff={() => isChange && onOpenDiff(change)}
+              onOpenMeoDiff={() => isChange && onOpenMeoDiff(change)}
             />
           </li>
         )
@@ -458,6 +495,7 @@ function GitSection({
   onUnstage,
   onDiscardMany,
   onOpenDiff,
+  onOpenMeoDiff,
   onOpenFile,
   iconTheme,
 }: {
@@ -470,6 +508,7 @@ function GitSection({
   onUnstage: (filePaths: string[]) => void
   onDiscardMany: (changes: GitChangeItem[]) => void
   onOpenDiff: (change: GitChangeItem) => void
+  onOpenMeoDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   iconTheme: WorkspaceIconTheme | null
 }) {
@@ -521,6 +560,7 @@ function GitSection({
                   toggleNode={toggleNode}
                   onDiscardMany={onDiscardMany}
                   onOpenDiff={onOpenDiff}
+                  onOpenMeoDiff={onOpenMeoDiff}
                   onOpenFile={onOpenFile}
                   onStage={onStage}
                   onUnstage={onUnstage}
@@ -534,6 +574,7 @@ function GitSection({
                   kind={kind}
                   onDiscardMany={onDiscardMany}
                   onOpenDiff={onOpenDiff}
+                  onOpenMeoDiff={onOpenMeoDiff}
                   onOpenFile={onOpenFile}
                   onStage={onStage}
                   onUnstage={onUnstage}
@@ -548,6 +589,7 @@ function GitSection({
               kind={kind}
               onDiscardMany={onDiscardMany}
               onOpenDiff={onOpenDiff}
+              onOpenMeoDiff={onOpenMeoDiff}
               onOpenFile={onOpenFile}
               onStage={onStage}
               onUnstage={onUnstage}
@@ -575,6 +617,7 @@ export function GitPanel({
   onLayoutChange,
   onOpenDiff,
   onOpenFile,
+  onOpenMeoDiff,
   onPull,
   onPush,
   onRefresh,
@@ -829,6 +872,7 @@ export function GitPanel({
               iconTheme={iconTheme}
               onDiscardMany={onDiscardMany}
               onOpenDiff={onOpenDiff}
+              onOpenMeoDiff={onOpenMeoDiff}
               onOpenFile={onOpenFile}
               onStage={onStage}
               onUnstage={onUnstage}
@@ -852,6 +896,7 @@ export function GitPanel({
               iconTheme={iconTheme}
               onDiscardMany={onDiscardMany}
               onOpenDiff={onOpenDiff}
+              onOpenMeoDiff={onOpenMeoDiff}
               onOpenFile={onOpenFile}
               onStage={onStage}
               onUnstage={onUnstage}
