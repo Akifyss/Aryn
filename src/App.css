@@ -4720,16 +4720,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-model-cascader-option.is-selected {
-  background: color-mix(in srgb, var(--accent) 7%, var(--app-menu-item-active-background));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-
-.agent-model-cascader-option.is-selected .agent-model-cascader-option-main {
-  font-weight: 560;
-}
-
-.agent-model-cascader-option.is-active.is-selected {
-  background: color-mix(in srgb, var(--accent) 11%, var(--app-menu-item-hover-background));
+  background: var(--app-menu-item-active-background);
 }
 
 .agent-model-cascader-option-main,
