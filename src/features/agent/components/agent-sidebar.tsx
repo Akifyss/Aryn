@@ -124,6 +124,7 @@ const emptyAgentState: AgentWorkspaceState = {
     auth: {},
     availableModels: [],
     availableThinkingLevels: ['off'],
+    availableThinkingLevelsByModel: {},
     compactionReason: null,
     followUpMessageCount: 0,
     followUpMode: 'one-at-a-time',
@@ -279,6 +280,7 @@ type AgentContextValue = {
   composerHeight: number
   composerResizeStateRef: React.MutableRefObject<{ pointerId: number, startHeight: number, startY: number } | null>
   composerState: ComposerState
+  composerThinkingLevels: AgentThinkingLevel[]
   configuredProviders: string[]
   deletingSessionPath: string | null
   handleComposerKeyDown: (event: KeyboardEvent<HTMLElement>) => void
@@ -328,6 +330,7 @@ type AgentContextValue = {
   syncModelInputSelectionState: (input: HTMLInputElement) => void
   syncModelInputSelectionStateNextFrame: (input: HTMLInputElement) => void
   statusMessage: string | null
+  thinkingLevel: AgentThinkingLevel
   thinkingLevelLabel: string
   thinkingMenuHeight: number
   workspacePath: string | null
@@ -416,9 +419,44 @@ const THINKING_LEVEL_LABELS: Record<AgentThinkingLevel, string> = {
   high: 'High',
   xhigh: 'XHigh',
 }
+const THINKING_LEVEL_ORDER: AgentThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
 
 function formatThinkingLevelLabel(level: AgentThinkingLevel) {
   return THINKING_LEVEL_LABELS[level] ?? level
+}
+
+function clampAgentThinkingLevel(level: AgentThinkingLevel, availableLevels: AgentThinkingLevel[]) {
+  if (availableLevels.includes(level)) {
+    return level
+  }
+
+  if (availableLevels.length === 0) {
+    return level
+  }
+
+  const requestedIndex = THINKING_LEVEL_ORDER.indexOf(level)
+
+  if (requestedIndex === -1) {
+    return availableLevels[0]
+  }
+
+  for (let index = requestedIndex; index < THINKING_LEVEL_ORDER.length; index += 1) {
+    const candidate = THINKING_LEVEL_ORDER[index]
+
+    if (availableLevels.includes(candidate)) {
+      return candidate
+    }
+  }
+
+  for (let index = requestedIndex - 1; index >= 0; index -= 1) {
+    const candidate = THINKING_LEVEL_ORDER[index]
+
+    if (availableLevels.includes(candidate)) {
+      return candidate
+    }
+  }
+
+  return availableLevels[0]
 }
 
 function getAgentRelativePath(rootPath: string | null, filePath: string) {
@@ -1946,6 +1984,15 @@ function AgentProvider({
       return
     }
 
+    const nextModel = modelInputValue.trim()
+    const nextModelKey = `${resolvedSelectedProviderValue}/${nextModel}`
+
+    if (!nextModel || !agentState.runtime.availableModels.includes(nextModelKey)) {
+      setPanelError('Select an available model before changing the thinking level.')
+      setActiveComposerMenu(null)
+      return
+    }
+
     try {
       setIsSwitchingThinkingLevel(true)
       setPanelError(null)
@@ -1958,8 +2005,10 @@ function AgentProvider({
         }
       }
 
-      const nextState = await window.appApi.selectAgentThinkingLevel(level)
+      const nextState = await window.appApi.selectAgentThinkingLevel(level, nextModelKey)
       setAgentState(nextState)
+      const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
+      syncModelSelection(nextModelSelection)
       setActiveComposerMenu(null)
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to switch the thinking level.')
@@ -2094,18 +2143,28 @@ function AgentProvider({
       .filter((model) => model.startsWith(`${resolvedSelectedProviderValue}/`))
       .map((model) => model.split('/').slice(1).join('/')),
   ))
+  const trimmedModelInputValue = modelInputValue.trim()
+  const composerModelKey = trimmedModelInputValue ? `${resolvedSelectedProviderValue}/${trimmedModelInputValue}` : null
+  const hasAvailableComposerModel = composerModelKey
+    ? agentState.runtime.availableModels.includes(composerModelKey)
+    : false
+  const composerThinkingLevels = composerModelKey && hasAvailableComposerModel
+    ? (agentState.runtime.availableThinkingLevelsByModel[composerModelKey] ?? agentState.runtime.availableThinkingLevels)
+    : []
+  const thinkingLevel = clampAgentThinkingLevel(agentState.runtime.thinkingLevel, composerThinkingLevels)
   const modelSuggestions = isModelInputFullySelected
     ? providerModelIds
     : providerModelIds.filter((modelId) => {
       const query = modelInputValue.trim().toLowerCase()
       return !query || modelId.toLowerCase().includes(query)
     })
-  const canChooseThinkingLevel = agentState.runtime.availableThinkingLevels.length > 1
+  const canChooseThinkingLevel = composerThinkingLevels.length > 1
+    && hasAvailableComposerModel
     && agentState.runtime.hasConfiguredModels
-  const thinkingLevelLabel = formatThinkingLevelLabel(agentState.runtime.thinkingLevel)
+  const thinkingLevelLabel = formatThinkingLevelLabel(thinkingLevel)
   const providerMenuHeight = getAgentComposerMenuHeight(configuredProviders.length)
   const modelMenuHeight = getAgentComposerMenuHeight(modelSuggestions.length)
-  const thinkingMenuHeight = getAgentComposerMenuHeight(agentState.runtime.availableThinkingLevels.length)
+  const thinkingMenuHeight = getAgentComposerMenuHeight(composerThinkingLevels.length)
   const modelPlaceholder = 'model'
   const canSend = Boolean(
     workspacePath
@@ -2269,6 +2328,7 @@ function AgentProvider({
     composerHeight,
     composerResizeStateRef,
     composerState,
+    composerThinkingLevels,
     configuredProviders,
     deletingSessionPath,
     handleComposerKeyDown,
@@ -2318,6 +2378,7 @@ function AgentProvider({
     syncModelInputSelectionState,
     syncModelInputSelectionStateNextFrame,
     statusMessage,
+    thinkingLevel,
     thinkingLevelLabel,
     thinkingMenuHeight,
     workspacePath,
@@ -2334,6 +2395,7 @@ function AgentProvider({
     canSend,
     composerHeight,
     composerState,
+    composerThinkingLevels,
     configuredProviders,
     deletingSessionPath,
     handleComposerKeyDown,
@@ -2368,6 +2430,7 @@ function AgentProvider({
     roundFileChangesByMessageId,
     sessionStatus,
     statusMessage,
+    thinkingLevel,
     thinkingLevelLabel,
     thinkingMenuHeight,
     workspacePath,
@@ -2609,6 +2672,7 @@ function AgentChatSurface() {
     canChooseThinkingLevel,
     canSend,
     composerHeight,
+    composerThinkingLevels,
     composerResizeStateRef,
     composerState,
     configuredProviders,
@@ -2659,6 +2723,7 @@ function AgentChatSurface() {
     syncModelInputSelectionState,
     syncModelInputSelectionStateNextFrame,
     statusMessage,
+    thinkingLevel,
     thinkingLevelLabel,
     thinkingMenuHeight,
     workspacePath,
@@ -2879,11 +2944,11 @@ function AgentChatSurface() {
           rootStyle={composerMenuRootStyle}
         >
           <div className='agent-composer-menu-list' role='listbox' aria-label='Available thinking levels'>
-            {agentState.runtime.availableThinkingLevels.map((level) => (
+            {composerThinkingLevels.map((level) => (
               <button
                 key={level}
                 type='button'
-                className={`agent-composer-option${level === agentState.runtime.thinkingLevel ? ' is-active' : ''}`}
+                className={`agent-composer-option${level === thinkingLevel ? ' is-active' : ''}`}
                 onPointerDown={(event) => {
                   event.preventDefault()
                 }}

@@ -190,6 +190,16 @@ function getProviderPreferredModelKeys(
   return modelKeys
 }
 
+function getThinkingLevelsByModel(availableModels: Model<Api>[]) {
+  const levelsByModel: Record<string, ThinkingLevel[]> = {}
+
+  for (const model of availableModels) {
+    levelsByModel[`${model.provider}/${model.id}`] = getSupportedThinkingLevels(model)
+  }
+
+  return levelsByModel
+}
+
 function isThinkingLevel(value: string): value is ThinkingLevel {
   return THINKING_LEVELS.includes(value as ThinkingLevel)
 }
@@ -813,9 +823,7 @@ export class PiAgentManager {
 
     const trimmedModelKey = modelKey.trim()
     const availableModels = runtime.session.modelRegistry.getAvailable()
-    const selectedModel = availableModels.find((model) => `${model.provider}/${model.id}` === trimmedModelKey)
-      ?? availableModels.find((model) => `${model.provider}/${model.id}` === `${OPENROUTER_PROVIDER}/${trimmedModelKey}`)
-      ?? availableModels.find((model) => model.provider === OPENROUTER_PROVIDER && model.id === trimmedModelKey)
+    const selectedModel = this.resolveAvailableModel(availableModels, trimmedModelKey)
 
     if (!selectedModel) {
       throw new Error(`Model "${modelKey}" is not available.`)
@@ -834,11 +842,30 @@ export class PiAgentManager {
     return this.broadcastWorkspaceState(runtime.cwd)
   }
 
-  async selectThinkingLevel(level: string) {
+  async selectThinkingLevel(level: string, modelKey?: string) {
     const runtime = this.requireActiveSession()
 
     if (!isThinkingLevel(level)) {
       throw new Error(`Thinking level "${level}" is not supported.`)
+    }
+
+    const trimmedModelKey = modelKey?.trim()
+
+    if (trimmedModelKey) {
+      this.authStorage.reload()
+      runtime.session.modelRegistry.refresh()
+      const selectedModel = this.resolveAvailableModel(runtime.session.modelRegistry.getAvailable(), trimmedModelKey)
+
+      if (!selectedModel) {
+        throw new Error(`Model "${modelKey}" is not available.`)
+      }
+
+      if (
+        runtime.session.model?.provider !== selectedModel.provider
+        || runtime.session.model?.id !== selectedModel.id
+      ) {
+        await runtime.session.setModel(selectedModel)
+      }
     }
 
     runtime.session.setThinkingLevel(level)
@@ -1020,6 +1047,12 @@ export class PiAgentManager {
       sessionDir: this.getSessionDir(cwd),
     })
     return settingsManager
+  }
+
+  private resolveAvailableModel(availableModels: Model<Api>[], modelKey: string) {
+    return availableModels.find((model) => `${model.provider}/${model.id}` === modelKey)
+      ?? availableModels.find((model) => `${model.provider}/${model.id}` === `${OPENROUTER_PROVIDER}/${modelKey}`)
+      ?? availableModels.find((model) => model.provider === OPENROUTER_PROVIDER && model.id === modelKey)
   }
 
   private async ensureModelSelected(session: AgentSession) {
@@ -1396,6 +1429,7 @@ export class PiAgentManager {
       auth: this.getProviderAuthStates(availableModels.map((model) => model.provider)),
       availableModels: availableModels.map((model) => `${model.provider}/${model.id}`),
       availableThinkingLevels,
+      availableThinkingLevelsByModel: getThinkingLevelsByModel(availableModels),
       compactionReason: this.activeRuntime?.cwd === cwd ? this.activeRuntime.status.compactionReason : null,
       followUpMessageCount,
       followUpMode: session?.followUpMode ?? 'one-at-a-time',

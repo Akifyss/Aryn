@@ -44,6 +44,7 @@ export type AgentRuntimeState = {
   hasConfiguredModels: boolean
   availableModels: string[]
   availableThinkingLevels: AgentThinkingLevel[]
+  availableThinkingLevelsByModel: Record<string, AgentThinkingLevel[]>
   compactionReason: 'manual' | 'overflow' | 'threshold' | null
   followUpMessageCount: number
   followUpMode: 'all' | 'one-at-a-time'
