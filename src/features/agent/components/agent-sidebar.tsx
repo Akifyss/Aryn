@@ -3772,7 +3772,6 @@ function AgentChatSurface() {
                           void handleModelPickerThinkingSelect(level)
                         }}
                       >
-                        <BrainLine aria-hidden='true' size={14} />
                         <span className='agent-model-cascader-option-main'>{formatThinkingLevelLabel(level)}</span>
                       </button>
                     ))}
