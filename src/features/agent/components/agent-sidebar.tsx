@@ -125,6 +125,7 @@ type AgentModelCascaderStyle = CSSProperties & {
 
 type AgentModelCascaderLayoutMetrics = {
   panelWidth: number
+  positioningWidth: number
   providerColumnWidth: number
   thinkingColumnWidth: number
 }
@@ -709,7 +710,8 @@ function resolveAgentModelCascaderStyle(
   const margin = Math.min(AGENT_MODEL_CASCADER_MARGIN_PX, Math.max(8, viewportWidth / 32))
   const maxWidth = Math.max(280, viewportWidth - (margin * 2))
   const width = Math.min(layoutMetrics.panelWidth, maxWidth)
-  const left = Math.max(margin, Math.min(anchorRect.left, viewportWidth - width - margin))
+  const positioningWidth = Math.min(layoutMetrics.positioningWidth, maxWidth)
+  const left = Math.max(margin, Math.min(anchorRect.left, viewportWidth - positioningWidth - margin))
   const availableAbove = Math.max(0, anchorRect.top - margin - AGENT_MODEL_CASCADER_GAP_PX)
   const availableBelow = Math.max(0, viewportHeight - anchorRect.bottom - margin - AGENT_MODEL_CASCADER_GAP_PX)
   const opensBelow = availableAbove < AGENT_MODEL_CASCADER_MIN_PANEL_HEIGHT_PX && availableBelow > availableAbove
@@ -3066,6 +3068,9 @@ function AgentChatSurface() {
       ? modelPickerSearchResults
       : modelPickerProviderModels
     const fallbackModelOptions = listedModelOptions.length > 0 ? listedModelOptions : modelPickerProviderModels
+    const hasAnyListedThinkingColumn = listedModelOptions.some((option) => (
+      hasConfigurableAgentThinkingLevel(option.thinkingLevels)
+    ))
     const modelColumnWidth = clampNumber(
       fallbackModelOptions.reduce((maxWidth, option) => {
         const estimatedWidth = isModelPickerSearching
@@ -3085,6 +3090,11 @@ function AgentChatSurface() {
     return {
       panelWidth: clampNumber(
         rawPanelWidth,
+        AGENT_MODEL_CASCADER_MIN_WIDTH_PX,
+        AGENT_MODEL_CASCADER_MAX_WIDTH_PX,
+      ),
+      positioningWidth: clampNumber(
+        rawPanelWidth + (hasAnyListedThinkingColumn ? AGENT_MODEL_CASCADER_THINKING_WIDTH_PX - thinkingColumnWidth : 0),
         AGENT_MODEL_CASCADER_MIN_WIDTH_PX,
         AGENT_MODEL_CASCADER_MAX_WIDTH_PX,
       ),
