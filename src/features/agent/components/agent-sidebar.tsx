@@ -172,6 +172,11 @@ const AGENT_MODEL_CASCADER_PROVIDER_MAX_WIDTH_PX = 190
 const AGENT_MODEL_CASCADER_MODEL_MIN_WIDTH_PX = 176
 const AGENT_MODEL_CASCADER_MODEL_MAX_WIDTH_PX = 400
 const AGENT_MODEL_CASCADER_THINKING_WIDTH_PX = 128
+const AGENT_MODEL_CASCADER_SELECTOR = '[data-agent-model-cascader="true"]'
+const AGENT_MODEL_CASCADER_PROVIDER_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-provider`
+const AGENT_MODEL_CASCADER_MODEL_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-model`
+const AGENT_MODEL_CASCADER_RESULTS_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-results`
+const AGENT_MODEL_CASCADER_THINKING_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-thinking`
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -638,6 +643,17 @@ function scrollAgentModelCascaderActiveItemsIntoView() {
 
     viewportElement.scrollTop += itemCenterOffset - viewportCenterOffset
   })
+}
+
+function isAgentModelCascaderPointInsideRect(
+  point: AgentModelPickerPoint,
+  rect: DOMRect,
+  padding = 0,
+) {
+  return point.x >= rect.left - padding
+    && point.x <= rect.right + padding
+    && point.y >= rect.top - padding
+    && point.y <= rect.bottom + padding
 }
 
 function getAgentModelCascaderTriangleSign(
@@ -3109,11 +3125,19 @@ function AgentChatSurface() {
     return nextPoint
   }
 
-  function getModelPickerPointerTriangleOrigin(currentPoint: AgentModelPickerPointerPoint) {
+  function getModelPickerPointerTriangleOrigin(
+    currentPoint: AgentModelPickerPointerPoint,
+    sourceColumnRect: DOMRect,
+  ) {
     const trail = modelPickerPointerTrailRef.current
     return trail.find((point) => (
       point.time < currentPoint.time
       && (Math.abs(point.x - currentPoint.x) >= 0.5 || Math.abs(point.y - currentPoint.y) >= 0.5)
+      && isAgentModelCascaderPointInsideRect(
+        point,
+        sourceColumnRect,
+        AGENT_MODEL_CASCADER_SAFE_TRIANGLE_PADDING_PX,
+      )
     )) ?? null
   }
 
@@ -3127,16 +3151,19 @@ function AgentChatSurface() {
 
   function isPointerInsideModelPickerColumnSafeTriangle(
     currentPoint: AgentModelPickerPointerPoint,
-    selector: string,
+    sourceSelector: string,
+    targetSelector: string,
   ) {
-    const targetColumnElement = document.querySelector<HTMLElement>(selector)
+    const sourceColumnElement = document.querySelector<HTMLElement>(sourceSelector)
+    const targetColumnElement = document.querySelector<HTMLElement>(targetSelector)
 
-    if (!targetColumnElement) {
+    if (!sourceColumnElement || !targetColumnElement) {
       return false
     }
 
+    const sourceColumnRect = sourceColumnElement.getBoundingClientRect()
     const targetColumnRect = targetColumnElement.getBoundingClientRect()
-    const originPoint = getModelPickerPointerTriangleOrigin(currentPoint)
+    const originPoint = getModelPickerPointerTriangleOrigin(currentPoint, sourceColumnRect)
 
     if (!originPoint || originPoint.x >= targetColumnRect.left || currentPoint.x <= originPoint.x + 1) {
       return false
@@ -3168,7 +3195,8 @@ function AgentChatSurface() {
 
     return isPointerInsideModelPickerColumnSafeTriangle(
       currentPoint,
-      '[data-agent-model-cascader="true"] .agent-model-cascader-column-model',
+      AGENT_MODEL_CASCADER_PROVIDER_COLUMN_SELECTOR,
+      AGENT_MODEL_CASCADER_MODEL_COLUMN_SELECTOR,
     )
   }
 
@@ -3178,9 +3206,14 @@ function AgentChatSurface() {
       return false
     }
 
+    const sourceSelector = isModelPickerSearching
+      ? AGENT_MODEL_CASCADER_RESULTS_COLUMN_SELECTOR
+      : AGENT_MODEL_CASCADER_MODEL_COLUMN_SELECTOR
+
     return isPointerInsideModelPickerColumnSafeTriangle(
       currentPoint,
-      '[data-agent-model-cascader="true"] .agent-model-cascader-column-thinking',
+      sourceSelector,
+      AGENT_MODEL_CASCADER_THINKING_COLUMN_SELECTOR,
     )
   }
 
@@ -3627,7 +3660,7 @@ function AgentChatSurface() {
               </section>
             ) : (
               <>
-                <section className='agent-model-cascader-column'>
+                <section className='agent-model-cascader-column agent-model-cascader-column-provider'>
                   <div className='agent-model-cascader-column-title'>Provider</div>
                   <AppScrollArea
                     className='agent-model-cascader-scroll'
