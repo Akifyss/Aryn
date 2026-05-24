@@ -4625,6 +4625,7 @@ body.workspace-tree-dragging .workspace-tree-row {
     minmax(112px, var(--agent-model-cascader-thinking-width, 128px));
   height: var(--agent-model-cascader-grid-height, min(286px, calc(100vh - 180px)));
   min-height: 172px;
+  overflow: hidden;
 }
 
 .agent-model-cascader-grid.is-searching {
@@ -4643,6 +4644,9 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
   border-right: 1px solid var(--separator);
 }
 
@@ -4665,6 +4669,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   flex: 1 1 auto;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .agent-model-cascader-scroll .app-scroll-area-viewport {

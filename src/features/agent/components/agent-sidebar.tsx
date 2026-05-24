@@ -482,6 +482,18 @@ function estimateAgentCascaderTextWidth(value: string, averageGlyphWidth: number
   return Math.ceil(value.length * averageGlyphWidth) + extraWidth
 }
 
+function areAgentModelCascaderStylesEqual(
+  left: AgentModelCascaderStyle,
+  right: AgentModelCascaderStyle,
+) {
+  return left.left === right.left
+    && left.top === right.top
+    && left.width === right.width
+    && left['--agent-model-cascader-grid-height'] === right['--agent-model-cascader-grid-height']
+    && left['--agent-model-cascader-provider-width'] === right['--agent-model-cascader-provider-width']
+    && left['--agent-model-cascader-thinking-width'] === right['--agent-model-cascader-thinking-width']
+}
+
 function resolveAgentModelCascaderStyle(
   anchorRect: DOMRect,
   layoutMetrics: AgentModelCascaderLayoutMetrics,
@@ -2747,18 +2759,20 @@ function AgentChatSurface() {
     ? modelPickerProvider
     : resolvedSelectedProviderValue
   const modelPickerProviderOptions = configuredProviders
-  const modelPickerProviderModels = modelPickerOptions.filter((option) => (
-    option.provider === resolvedModelPickerProvider
-  ))
+  const modelPickerProviderModels = useMemo(() => (
+    modelPickerOptions.filter((option) => option.provider === resolvedModelPickerProvider)
+  ), [modelPickerOptions, resolvedModelPickerProvider])
   const normalizedModelPickerQuery = modelPickerQuery.trim().toLowerCase()
   const isModelPickerSearching = normalizedModelPickerQuery.length > 0
-  const modelPickerSearchResults = isModelPickerSearching
-    ? modelPickerOptions.filter((option) => (
-      option.modelId.toLowerCase().includes(normalizedModelPickerQuery)
-      || option.provider.toLowerCase().includes(normalizedModelPickerQuery)
-      || option.key.toLowerCase().includes(normalizedModelPickerQuery)
-    ))
-    : []
+  const modelPickerSearchResults = useMemo(() => (
+    isModelPickerSearching
+      ? modelPickerOptions.filter((option) => (
+        option.modelId.toLowerCase().includes(normalizedModelPickerQuery)
+        || option.provider.toLowerCase().includes(normalizedModelPickerQuery)
+        || option.key.toLowerCase().includes(normalizedModelPickerQuery)
+      ))
+      : []
+  ), [isModelPickerSearching, modelPickerOptions, normalizedModelPickerQuery])
   const activeModelCandidate = modelPickerActiveModelKey
     ? modelPickerOptionByKey.get(modelPickerActiveModelKey) ?? null
     : null
@@ -2854,9 +2868,12 @@ function AgentChatSurface() {
       return
     }
 
-    setModelCascaderStyle(resolveAgentModelCascaderStyle(
+    const nextStyle = resolveAgentModelCascaderStyle(
       triggerElement.getBoundingClientRect(),
       modelCascaderLayoutMetrics,
+    )
+    setModelCascaderStyle((currentStyle) => (
+      areAgentModelCascaderStylesEqual(currentStyle, nextStyle) ? currentStyle : nextStyle
     ))
   }, [modelCascaderLayoutMetrics])
 
