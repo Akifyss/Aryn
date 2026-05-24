@@ -230,7 +230,7 @@ const AGENT_SESSION_TREE_CSS = `
     --trees-font-weight-regular-override: 500;
     --trees-font-weight-semibold-override: 600;
     --trees-padding-inline-override: 0px;
-    --trees-item-padding-x-override: 10px;
+    --trees-item-padding-x-override: 12px;
     --trees-item-margin-x-override: 0px;
     --trees-level-gap-override: 0px;
     --trees-icon-width-override: 14px;
@@ -2783,7 +2783,7 @@ function AgentSessionTree({
           onRequestClose?.()
         }}
       >
-        <AddLine size={18} />
+        <AddLine size={16} />
         <span>新对话</span>
       </button>
 
