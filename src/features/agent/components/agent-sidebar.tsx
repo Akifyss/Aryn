@@ -494,6 +494,30 @@ function areAgentModelCascaderStylesEqual(
     && left['--agent-model-cascader-thinking-width'] === right['--agent-model-cascader-thinking-width']
 }
 
+function scrollAgentModelCascaderActiveItemsIntoView() {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  const cascaderElement = document.getElementById('agent-model-cascader')
+  const activeItems = cascaderElement?.querySelectorAll<HTMLElement>('.agent-model-cascader-option.is-active')
+
+  activeItems?.forEach((activeItem) => {
+    const viewportElement = activeItem.closest<HTMLElement>('.app-scroll-area-viewport')
+
+    if (!viewportElement) {
+      return
+    }
+
+    const viewportRect = viewportElement.getBoundingClientRect()
+    const itemRect = activeItem.getBoundingClientRect()
+    const itemCenterOffset = itemRect.top - viewportRect.top + (itemRect.height / 2)
+    const viewportCenterOffset = viewportRect.height / 2
+
+    viewportElement.scrollTop += itemCenterOffset - viewportCenterOffset
+  })
+}
+
 function resolveAgentModelCascaderStyle(
   anchorRect: DOMRect,
   layoutMetrics: AgentModelCascaderLayoutMetrics,
@@ -2952,6 +2976,7 @@ function AgentChatSurface() {
 
     const frameId = window.requestAnimationFrame(() => {
       modelPickerSearchRef.current?.focus()
+      scrollAgentModelCascaderActiveItemsIntoView()
     })
 
     return () => {
