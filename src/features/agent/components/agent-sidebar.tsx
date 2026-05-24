@@ -25,6 +25,7 @@ import {
   AddLine,
   ArrowUpLine,
   BrainLine,
+  CloseLine,
   CodeLine,
   Delete2Line,
   EyeglassLine,
@@ -3603,8 +3604,8 @@ function AgentChatSurface() {
           onPointerMove={handleModelPickerPointerMove}
           onPointerLeave={clearModelPickerPointerIntent}
         >
-          <label className='agent-model-cascader-search'>
-            <SearchLine aria-hidden='true' size={14} />
+          <div className='agent-model-cascader-search'>
+            <SearchLine aria-hidden='true' size={16} />
             <input
               ref={modelPickerSearchRef}
               type='search'
@@ -3616,7 +3617,26 @@ function AgentChatSurface() {
               }}
               onKeyDown={handleModelPickerSearchKeyDown}
             />
-          </label>
+            {modelPickerQuery ? (
+              <button
+                type='button'
+                className='agent-model-cascader-search-clear'
+                aria-label='Clear model search'
+                title='Clear search'
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                }}
+                onClick={() => {
+                  handleModelPickerQueryChange('')
+                  window.requestAnimationFrame(() => {
+                    modelPickerSearchRef.current?.focus()
+                  })
+                }}
+              >
+                <CloseLine aria-hidden='true' size={14} />
+              </button>
+            ) : null}
+          </div>
 
           <div className={`agent-model-cascader-grid${isModelPickerSearching ? ' is-searching' : ''}${showModelPickerThinkingColumn ? '' : ' has-no-thinking'}`}>
             {isModelPickerSearching ? (

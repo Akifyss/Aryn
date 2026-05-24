@@ -4655,6 +4655,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-model-cascader-search input {
+  flex: 1 1 auto;
   width: 100%;
   min-width: 0;
   border: 0;
@@ -4668,6 +4669,47 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-model-cascader-search input::placeholder {
   color: var(--field-placeholder);
+}
+
+.agent-model-cascader-search input::-webkit-search-cancel-button,
+.agent-model-cascader-search input::-webkit-search-decoration {
+  display: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.agent-model-cascader-search-clear {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: -4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.agent-model-cascader-search-clear:hover {
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+}
+
+.agent-model-cascader-search-clear:focus-visible {
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.agent-model-cascader-search-clear:active {
+  background: color-mix(in srgb, var(--foreground) 12%, transparent);
 }
 
 .agent-model-cascader-grid {
