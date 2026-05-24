@@ -112,6 +112,7 @@ type AgentModelPickerOption = {
   provider: string
   thinkingLevels: AgentThinkingLevel[]
 }
+type AgentModelPickerKeyboardColumn = 'provider' | 'model' | 'thinking'
 
 type AgentModelCascaderStyle = CSSProperties & {
   '--agent-model-cascader-grid-height'?: string
@@ -474,12 +475,82 @@ function hasConfigurableAgentThinkingLevel(availableLevels: AgentThinkingLevel[]
   return availableLevels.some((level) => level !== 'off')
 }
 
+function getLoopedIndex(length: number, currentIndex: number, offset: number) {
+  if (length <= 0) {
+    return -1
+  }
+
+  if (currentIndex < 0) {
+    return offset >= 0 ? 0 : length - 1
+  }
+
+  return (currentIndex + offset + length) % length
+}
+
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
 function estimateAgentCascaderTextWidth(value: string, averageGlyphWidth: number, extraWidth: number) {
   return Math.ceil(value.length * averageGlyphWidth) + extraWidth
+}
+
+function scoreAgentModelSearchOption(
+  option: AgentModelPickerOption,
+  normalizedQuery: string,
+  preferredProvider: string,
+) {
+  const modelId = option.modelId.toLowerCase()
+  const provider = option.provider.toLowerCase()
+  const key = option.key.toLowerCase()
+  const tokens = normalizedQuery.split(/\s+/).filter(Boolean)
+  const matches = tokens.every((token) => (
+    modelId.includes(token) || provider.includes(token) || key.includes(token)
+  ))
+
+  if (!matches) {
+    return null
+  }
+
+  let score = option.provider === preferredProvider ? 0 : 2
+
+  if (modelId === normalizedQuery) {
+    score += 0
+  } else if (key === normalizedQuery) {
+    score += 4
+  } else if (modelId.startsWith(normalizedQuery)) {
+    score += 8
+  } else if (key.startsWith(normalizedQuery)) {
+    score += 12
+  } else if (modelId.includes(normalizedQuery)) {
+    score += 20
+  } else if (tokens.every((token) => modelId.includes(token))) {
+    score += 24
+  } else if (provider === normalizedQuery) {
+    score += 30
+  } else if (provider.startsWith(normalizedQuery)) {
+    score += 34
+  } else {
+    score += 40
+  }
+
+  return score + (option.modelId.length / 1000)
+}
+
+function rankAgentModelSearchOptions(
+  options: AgentModelPickerOption[],
+  normalizedQuery: string,
+  preferredProvider: string,
+) {
+  return options
+    .map((option, index) => ({
+      index,
+      option,
+      score: scoreAgentModelSearchOption(option, normalizedQuery, preferredProvider),
+    }))
+    .filter((entry): entry is { index: number, option: AgentModelPickerOption, score: number } => entry.score !== null)
+    .sort((left, right) => left.score - right.score || left.index - right.index)
+    .map((entry) => entry.option)
 }
 
 function areAgentModelCascaderStylesEqual(
@@ -2746,6 +2817,8 @@ function AgentChatSurface() {
   const [modelPickerQuery, setModelPickerQuery] = useState('')
   const [modelPickerProvider, setModelPickerProvider] = useState(resolvedSelectedProviderValue)
   const [modelPickerActiveModelKey, setModelPickerActiveModelKey] = useState<string | null>(null)
+  const [modelPickerActiveThinkingLevel, setModelPickerActiveThinkingLevel] = useState<AgentThinkingLevel | null>(null)
+  const [modelPickerKeyboardColumn, setModelPickerKeyboardColumn] = useState<AgentModelPickerKeyboardColumn>('model')
   const modelPickerSearchRef = useRef<HTMLInputElement | null>(null)
   const modelPickerTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [modelCascaderStyle, setModelCascaderStyle] = useState<AgentModelCascaderStyle>({})
@@ -2790,13 +2863,9 @@ function AgentChatSurface() {
   const isModelPickerSearching = normalizedModelPickerQuery.length > 0
   const modelPickerSearchResults = useMemo(() => (
     isModelPickerSearching
-      ? modelPickerOptions.filter((option) => (
-        option.modelId.toLowerCase().includes(normalizedModelPickerQuery)
-        || option.provider.toLowerCase().includes(normalizedModelPickerQuery)
-        || option.key.toLowerCase().includes(normalizedModelPickerQuery)
-      ))
+      ? rankAgentModelSearchOptions(modelPickerOptions, normalizedModelPickerQuery, resolvedSelectedProviderValue)
       : []
-  ), [isModelPickerSearching, modelPickerOptions, normalizedModelPickerQuery])
+  ), [isModelPickerSearching, modelPickerOptions, normalizedModelPickerQuery, resolvedSelectedProviderValue])
   const activeModelCandidate = modelPickerActiveModelKey
     ? modelPickerOptionByKey.get(modelPickerActiveModelKey) ?? null
     : null
@@ -2822,6 +2891,10 @@ function AgentChatSurface() {
     agentState.runtime.thinkingLevel,
     activeModelThinkingLevels,
   )
+  const activeModelPickerThinkingLevel = modelPickerActiveThinkingLevel
+    && activeModelThinkingLevels.includes(modelPickerActiveThinkingLevel)
+    ? modelPickerActiveThinkingLevel
+    : activeModelThinkingLevel
   const selectedModelThinkingLevels = selectedModelOption?.thinkingLevels
     ?? (
       composerModelKey
@@ -2882,6 +2955,9 @@ function AgentChatSurface() {
       ? `${composerModelKey}, thinking ${thinkingLevelLabel}`
       : composerModelKey
     : 'Model'
+  const modelPickerListedModels = isModelPickerSearching
+    ? modelPickerSearchResults
+    : modelPickerProviderModels
 
   const updateModelCascaderPosition = useCallback(() => {
     const triggerElement = modelPickerTriggerRef.current
@@ -2898,6 +2974,10 @@ function AgentChatSurface() {
     ))
   }, [modelCascaderLayoutMetrics])
 
+  function scrollModelCascaderActiveItemsOnNextFrame() {
+    window.requestAnimationFrame(scrollAgentModelCascaderActiveItemsIntoView)
+  }
+
   function openModelCascader() {
     if (!hasConfiguredProviders || !workspacePath || isSwitchingModel || isSwitchingThinkingLevel) {
       return
@@ -2907,6 +2987,8 @@ function AgentChatSurface() {
     setModelPickerQuery('')
     setModelPickerProvider(resolvedSelectedProviderValue)
     setModelPickerActiveModelKey(selectedModelOption?.key ?? fallbackModelOption?.key ?? null)
+    setModelPickerActiveThinkingLevel(null)
+    setModelPickerKeyboardColumn('model')
     updateModelCascaderPosition()
     setActiveComposerMenu((currentValue) => currentValue === 'model-cascader' ? null : 'model-cascader')
   }
@@ -2916,10 +2998,13 @@ function AgentChatSurface() {
     setModelPickerActiveModelKey(
       modelPickerOptions.find((option) => option.provider === provider)?.key ?? null,
     )
+    setModelPickerActiveThinkingLevel(null)
   }
 
   function handleModelPickerQueryChange(value: string) {
     setModelPickerQuery(value)
+    setModelPickerKeyboardColumn('model')
+    setModelPickerActiveThinkingLevel(null)
 
     const nextQuery = value.trim().toLowerCase()
     if (!nextQuery) {
@@ -2928,12 +3013,132 @@ function AgentChatSurface() {
     }
 
     setModelPickerActiveModelKey(
-      modelPickerOptions.find((option) => (
-        option.modelId.toLowerCase().includes(nextQuery)
-        || option.provider.toLowerCase().includes(nextQuery)
-        || option.key.toLowerCase().includes(nextQuery)
-      ))?.key ?? null,
+      rankAgentModelSearchOptions(modelPickerOptions, nextQuery, resolvedSelectedProviderValue)[0]?.key ?? null,
     )
+  }
+
+  function handleModelPickerKeyboardMove(offset: number) {
+    if (modelPickerKeyboardColumn === 'provider' && !isModelPickerSearching) {
+      const currentIndex = modelPickerProviderOptions.indexOf(resolvedModelPickerProvider)
+      const nextProvider = modelPickerProviderOptions[getLoopedIndex(modelPickerProviderOptions.length, currentIndex, offset)]
+
+      if (nextProvider) {
+        handleModelPickerProviderFocus(nextProvider)
+        scrollModelCascaderActiveItemsOnNextFrame()
+      }
+
+      return
+    }
+
+    if (modelPickerKeyboardColumn === 'thinking' && showModelPickerThinkingColumn) {
+      const currentIndex = activeModelThinkingLevels.indexOf(activeModelPickerThinkingLevel)
+      const nextThinkingLevel = activeModelThinkingLevels[getLoopedIndex(activeModelThinkingLevels.length, currentIndex, offset)]
+
+      if (nextThinkingLevel) {
+        setModelPickerActiveThinkingLevel(nextThinkingLevel)
+        scrollModelCascaderActiveItemsOnNextFrame()
+      }
+
+      return
+    }
+
+    const currentIndex = modelPickerListedModels.findIndex((option) => option.key === activeModelOption?.key)
+    const nextModel = modelPickerListedModels[getLoopedIndex(modelPickerListedModels.length, currentIndex, offset)]
+
+    if (nextModel) {
+      setModelPickerActiveModelKey(nextModel.key)
+      setModelPickerActiveThinkingLevel(null)
+      scrollModelCascaderActiveItemsOnNextFrame()
+    }
+  }
+
+  function handleModelPickerKeyboardLeft() {
+    if (modelPickerKeyboardColumn === 'thinking') {
+      setModelPickerKeyboardColumn('model')
+      scrollModelCascaderActiveItemsOnNextFrame()
+      return
+    }
+
+    if (modelPickerKeyboardColumn === 'model' && !isModelPickerSearching) {
+      setModelPickerKeyboardColumn('provider')
+      scrollModelCascaderActiveItemsOnNextFrame()
+    }
+  }
+
+  function handleModelPickerKeyboardRight() {
+    if (modelPickerKeyboardColumn === 'provider') {
+      setModelPickerKeyboardColumn('model')
+      scrollModelCascaderActiveItemsOnNextFrame()
+      return
+    }
+
+    if (modelPickerKeyboardColumn === 'model' && showModelPickerThinkingColumn) {
+      setModelPickerKeyboardColumn('thinking')
+      setModelPickerActiveThinkingLevel(activeModelThinkingLevel)
+      scrollModelCascaderActiveItemsOnNextFrame()
+    }
+  }
+
+  function handleModelPickerKeyboardEnter() {
+    if (modelPickerKeyboardColumn === 'provider') {
+      setModelPickerKeyboardColumn('model')
+      scrollModelCascaderActiveItemsOnNextFrame()
+      return
+    }
+
+    if (modelPickerKeyboardColumn === 'thinking' && showModelPickerThinkingColumn) {
+      void handleModelPickerThinkingSelect(activeModelPickerThinkingLevel)
+      return
+    }
+
+    if (activeModelOption) {
+      void handleModelPickerModelSelect(activeModelOption)
+    }
+  }
+
+  function handleModelPickerSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setActiveComposerMenu(null)
+      return
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      handleModelPickerKeyboardMove(1)
+      return
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      handleModelPickerKeyboardMove(-1)
+      return
+    }
+
+    if (event.key === 'ArrowLeft') {
+      if (isModelPickerSearching) {
+        return
+      }
+
+      event.preventDefault()
+      handleModelPickerKeyboardLeft()
+      return
+    }
+
+    if (event.key === 'ArrowRight') {
+      if (isModelPickerSearching) {
+        return
+      }
+
+      event.preventDefault()
+      handleModelPickerKeyboardRight()
+      return
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      handleModelPickerKeyboardEnter()
+    }
   }
 
   async function handleModelPickerModelSelect(option: AgentModelPickerOption) {
@@ -3066,18 +3271,7 @@ function AgentChatSurface() {
               onChange={(event) => {
                 handleModelPickerQueryChange(event.target.value)
               }}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.preventDefault()
-                  setActiveComposerMenu(null)
-                  return
-                }
-
-                if (event.key === 'Enter' && activeModelOption) {
-                  event.preventDefault()
-                  void handleModelPickerModelSelect(activeModelOption)
-                }
-              }}
+              onKeyDown={handleModelPickerSearchKeyDown}
             />
           </label>
 
@@ -3099,9 +3293,13 @@ function AgentChatSurface() {
                         className={`agent-model-cascader-option agent-model-cascader-model-option${option.key === activeModelOption?.key ? ' is-active' : ''}${option.key === composerModelKey ? ' is-selected' : ''}`}
                         onFocus={() => {
                           setModelPickerActiveModelKey(option.key)
+                          setModelPickerActiveThinkingLevel(null)
+                          setModelPickerKeyboardColumn('model')
                         }}
                         onPointerEnter={() => {
                           setModelPickerActiveModelKey(option.key)
+                          setModelPickerActiveThinkingLevel(null)
+                          setModelPickerKeyboardColumn('model')
                         }}
                         onClick={() => {
                           void handleModelPickerModelSelect(option)
@@ -3133,12 +3331,15 @@ function AgentChatSurface() {
                           aria-selected={provider === resolvedModelPickerProvider}
                           className={`agent-model-cascader-option${provider === resolvedModelPickerProvider ? ' is-active' : ''}${provider === resolvedSelectedProviderValue ? ' is-selected' : ''}`}
                           onFocus={() => {
+                            setModelPickerKeyboardColumn('provider')
                             handleModelPickerProviderFocus(provider)
                           }}
                           onPointerEnter={() => {
+                            setModelPickerKeyboardColumn('provider')
                             handleModelPickerProviderFocus(provider)
                           }}
                           onClick={() => {
+                            setModelPickerKeyboardColumn('provider')
                             handleModelPickerProviderFocus(provider)
                           }}
                         >
@@ -3166,9 +3367,13 @@ function AgentChatSurface() {
                           className={`agent-model-cascader-option agent-model-cascader-model-option${option.key === activeModelOption?.key ? ' is-active' : ''}${option.key === composerModelKey ? ' is-selected' : ''}`}
                           onFocus={() => {
                             setModelPickerActiveModelKey(option.key)
+                            setModelPickerActiveThinkingLevel(null)
+                            setModelPickerKeyboardColumn('model')
                           }}
                           onPointerEnter={() => {
                             setModelPickerActiveModelKey(option.key)
+                            setModelPickerActiveThinkingLevel(null)
+                            setModelPickerKeyboardColumn('model')
                           }}
                           onClick={() => {
                             void handleModelPickerModelSelect(option)
@@ -3197,7 +3402,15 @@ function AgentChatSurface() {
                         type='button'
                         role='option'
                         aria-selected={level === activeModelThinkingLevel}
-                        className={`agent-model-cascader-option${level === activeModelThinkingLevel ? ' is-active is-selected' : ''}`}
+                        className={`agent-model-cascader-option${level === activeModelPickerThinkingLevel ? ' is-active' : ''}${level === activeModelThinkingLevel ? ' is-selected' : ''}`}
+                        onFocus={() => {
+                          setModelPickerActiveThinkingLevel(level)
+                          setModelPickerKeyboardColumn('thinking')
+                        }}
+                        onPointerEnter={() => {
+                          setModelPickerActiveThinkingLevel(level)
+                          setModelPickerKeyboardColumn('thinking')
+                        }}
                         onClick={() => {
                           void handleModelPickerThinkingSelect(level)
                         }}
