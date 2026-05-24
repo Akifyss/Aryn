@@ -3414,7 +3414,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-floating-panel {
   pointer-events: auto;
   position: absolute;
-  top: 10px;
+  top: 2px;
   left: 12px;
   right: auto;
   width: min(320px, calc(100% - 24px));
