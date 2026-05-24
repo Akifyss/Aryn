@@ -2876,11 +2876,10 @@ function AgentChatSurface() {
                 onClick={openModelCascader}
               >
                 <span className='agent-model-cascader-trigger-model'>{modelPickerTriggerLabel}</span>
+                <span className='agent-model-cascader-trigger-separator'>/</span>
                 <span className='agent-model-cascader-trigger-thinking'>
-                  <BrainLine size={14} />
-                  <span>{thinkingLevelLabel}</span>
+                  {thinkingLevelLabel}
                 </span>
-                <RightLine aria-hidden='true' className='agent-model-cascader-trigger-chevron' size={14} />
               </button>
             ) : (
               <Button

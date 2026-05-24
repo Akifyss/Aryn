@@ -4521,12 +4521,12 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-model-cascader-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: fit-content;
   min-width: 0;
   max-width: 100%;
   height: 34px;
-  padding: 0 8px 0 0;
+  padding: 0 10px 0 12px;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -4561,28 +4561,21 @@ body.workspace-tree-dragging .workspace-tree-row {
   white-space: nowrap;
 }
 
+.agent-model-cascader-trigger-separator {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
 .agent-model-cascader-trigger-thinking {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  display: block;
   flex: 0 0 auto;
   max-width: 92px;
   color: color-mix(in srgb, var(--foreground) 82%, var(--muted));
-  font-size: 12px;
-  line-height: 1;
-}
-
-.agent-model-cascader-trigger-thinking span {
-  min-width: 0;
+  font-size: 13px;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.agent-model-cascader-trigger-chevron {
-  flex: 0 0 auto;
-  color: var(--muted);
-  transform: rotate(90deg);
 }
 
 .agent-model-cascader {
