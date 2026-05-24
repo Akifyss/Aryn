@@ -3,6 +3,7 @@ import {
   createContext,
   FormEvent,
   KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type Ref,
@@ -3094,12 +3095,17 @@ function AgentChatSurface() {
     updateModelPickerPointerPosition(event)
   }
 
-  function openModelCascader() {
+  function openModelCascader(event?: ReactMouseEvent<HTMLButtonElement>) {
     if (!hasConfiguredProviders || !workspacePath || isSwitchingModel || isSwitchingThinkingLevel) {
       return
     }
 
-    modelPickerPointerPositionRef.current = null
+    modelPickerPointerPositionRef.current = event
+      ? {
+          x: event.clientX,
+          y: event.clientY,
+        }
+      : null
     setPanelError(null)
     setModelPickerQuery('')
     setModelPickerProvider(resolvedSelectedProviderValue)
