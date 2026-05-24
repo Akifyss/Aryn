@@ -22,6 +22,7 @@ interface SettingsState {
 }
 
 const SETTINGS_STORAGE_KEY = 'aryn:settings'
+export const DEFAULT_APP_LAYOUT_PREFERENCE: AppLayoutPreference = 'agent'
 const LEGACY_SETTINGS_STORAGE_KEY = `${String.fromCharCode(
   119,
   114,
@@ -111,13 +112,13 @@ function sanitizeMeoSettings(value: Partial<MeoSettings> | undefined): MeoSettin
 }
 
 function sanitizeLayoutPreference(value: unknown): AppLayoutPreference {
-  return value === 'agent' ? 'agent' : 'editor'
+  return value === 'editor' || value === 'agent' ? value : DEFAULT_APP_LAYOUT_PREFERENCE
 }
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      layoutPreference: 'editor',
+      layoutPreference: DEFAULT_APP_LAYOUT_PREFERENCE,
       meo: DEFAULT_MEO_SETTINGS,
       theme: 'auto',
       setLayoutPreference: (layoutPreference) => set({ layoutPreference: sanitizeLayoutPreference(layoutPreference) }),
