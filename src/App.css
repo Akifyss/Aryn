@@ -4521,12 +4521,12 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-model-cascader-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   width: fit-content;
   min-width: 0;
   max-width: 100%;
-  height: 34px;
-  padding: 0 10px 0 12px;
+  height: 30px;
+  padding: 0 8px;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -4626,6 +4626,14 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-model-cascader-grid.is-searching {
   grid-template-columns: minmax(0, 1.75fr) minmax(128px, 0.75fr);
+}
+
+.agent-model-cascader-grid.has-no-thinking {
+  grid-template-columns: minmax(138px, 0.8fr) minmax(280px, 1.45fr);
+}
+
+.agent-model-cascader-grid.is-searching.has-no-thinking {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .agent-model-cascader-column {
@@ -4748,6 +4756,14 @@ body.workspace-tree-dragging .workspace-tree-row {
 
   .agent-model-cascader-grid.is-searching {
     grid-template-columns: minmax(0, 1.55fr) minmax(86px, 0.8fr);
+  }
+
+  .agent-model-cascader-grid.has-no-thinking {
+    grid-template-columns: minmax(82px, 0.75fr) minmax(112px, 1.2fr);
+  }
+
+  .agent-model-cascader-grid.is-searching.has-no-thinking {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

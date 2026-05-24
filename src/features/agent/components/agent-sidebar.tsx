@@ -128,6 +128,7 @@ const MAX_VISIBLE_MESSAGE_FILE_CHIPS = 6
 const AGENT_MODEL_CASCADER_MARGIN_PX = 12
 const AGENT_MODEL_CASCADER_GAP_PX = 10
 const AGENT_MODEL_CASCADER_MAX_WIDTH_PX = 680
+const AGENT_MODEL_CASCADER_COMPACT_WIDTH_PX = 560
 const AGENT_MODEL_CASCADER_MAX_HEIGHT_PX = 390
 const AGENT_MODEL_CASCADER_MIN_PANEL_HEIGHT_PX = 220
 const AGENT_MODEL_CASCADER_MIN_GRID_HEIGHT_PX = 172
@@ -456,12 +457,19 @@ function clampAgentThinkingLevel(level: AgentThinkingLevel, availableLevels: Age
   return availableLevels[0]
 }
 
-function resolveAgentModelCascaderStyle(anchorRect: DOMRect): AgentModelCascaderStyle {
+function hasConfigurableAgentThinkingLevel(availableLevels: AgentThinkingLevel[]) {
+  return availableLevels.some((level) => level !== 'off')
+}
+
+function resolveAgentModelCascaderStyle(anchorRect: DOMRect, showThinkingColumn: boolean): AgentModelCascaderStyle {
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
   const margin = Math.min(AGENT_MODEL_CASCADER_MARGIN_PX, Math.max(8, viewportWidth / 32))
   const maxWidth = Math.max(280, viewportWidth - (margin * 2))
-  const width = Math.min(AGENT_MODEL_CASCADER_MAX_WIDTH_PX, maxWidth)
+  const preferredWidth = showThinkingColumn
+    ? AGENT_MODEL_CASCADER_MAX_WIDTH_PX
+    : AGENT_MODEL_CASCADER_COMPACT_WIDTH_PX
+  const width = Math.min(preferredWidth, maxWidth)
   const left = Math.max(margin, Math.min(anchorRect.left, viewportWidth - width - margin))
   const availableAbove = Math.max(0, anchorRect.top - margin - AGENT_MODEL_CASCADER_GAP_PX)
   const availableBelow = Math.max(0, viewportHeight - anchorRect.bottom - margin - AGENT_MODEL_CASCADER_GAP_PX)
@@ -2753,10 +2761,21 @@ function AgentChatSurface() {
     agentState.runtime.thinkingLevel,
     activeModelThinkingLevels,
   )
+  const selectedModelThinkingLevels = selectedModelOption?.thinkingLevels
+    ?? (
+      composerModelKey
+        ? agentState.runtime.availableThinkingLevelsByModel[composerModelKey] ?? agentState.runtime.availableThinkingLevels
+        : []
+    )
+  const showModelPickerThinkingColumn = hasConfigurableAgentThinkingLevel(activeModelThinkingLevels)
+  const showTriggerThinkingLevel = thinkingLevel !== 'off'
+    && hasConfigurableAgentThinkingLevel(selectedModelThinkingLevels)
   const modelPickerTriggerLabel = trimmedModelValue || 'model'
   const modelPickerTriggerTitle = composerModelKey
-    ? `${composerModelKey}, thinking ${thinkingLevelLabel}`
-    : `Model, thinking ${thinkingLevelLabel}`
+    ? showTriggerThinkingLevel
+      ? `${composerModelKey}, thinking ${thinkingLevelLabel}`
+      : composerModelKey
+    : 'Model'
 
   const updateModelCascaderPosition = useCallback(() => {
     const triggerElement = modelPickerTriggerRef.current
@@ -2764,8 +2783,11 @@ function AgentChatSurface() {
       return
     }
 
-    setModelCascaderStyle(resolveAgentModelCascaderStyle(triggerElement.getBoundingClientRect()))
-  }, [])
+    setModelCascaderStyle(resolveAgentModelCascaderStyle(
+      triggerElement.getBoundingClientRect(),
+      showModelPickerThinkingColumn,
+    ))
+  }, [showModelPickerThinkingColumn])
 
   function openModelCascader() {
     if (!hasConfiguredProviders || !workspacePath || isSwitchingModel || isSwitchingThinkingLevel) {
@@ -2876,10 +2898,14 @@ function AgentChatSurface() {
                 onClick={openModelCascader}
               >
                 <span className='agent-model-cascader-trigger-model'>{modelPickerTriggerLabel}</span>
-                <span className='agent-model-cascader-trigger-separator'>/</span>
-                <span className='agent-model-cascader-trigger-thinking'>
-                  {thinkingLevelLabel}
-                </span>
+                {showTriggerThinkingLevel ? (
+                  <>
+                    <span className='agent-model-cascader-trigger-separator'>/</span>
+                    <span className='agent-model-cascader-trigger-thinking'>
+                      {thinkingLevelLabel}
+                    </span>
+                  </>
+                ) : null}
               </button>
             ) : (
               <Button
@@ -2945,7 +2971,7 @@ function AgentChatSurface() {
             />
           </label>
 
-          <div className={`agent-model-cascader-grid${isModelPickerSearching ? ' is-searching' : ''}`}>
+          <div className={`agent-model-cascader-grid${isModelPickerSearching ? ' is-searching' : ''}${showModelPickerThinkingColumn ? '' : ' has-no-thinking'}`}>
             {isModelPickerSearching ? (
               <section className='agent-model-cascader-column agent-model-cascader-column-results'>
                 <div className='agent-model-cascader-column-title'>Models</div>
@@ -3047,33 +3073,33 @@ function AgentChatSurface() {
               </>
             )}
 
-            <section className='agent-model-cascader-column agent-model-cascader-column-thinking'>
-              <div className='agent-model-cascader-column-title'>Thinking</div>
-              <AppScrollArea
-                className='agent-model-cascader-scroll'
-                contentClassName='agent-model-cascader-scroll-content'
-              >
-                <div className='agent-model-cascader-list' role='listbox' aria-label='Available thinking levels'>
-                  {activeModelThinkingLevels.length > 0 ? activeModelThinkingLevels.map((level) => (
-                    <button
-                      key={level}
-                      type='button'
-                      role='option'
-                      aria-selected={level === activeModelThinkingLevel}
-                      className={`agent-model-cascader-option${level === activeModelThinkingLevel ? ' is-active is-selected' : ''}`}
-                      onClick={() => {
-                        void handleModelPickerThinkingSelect(level)
-                      }}
-                    >
-                      <BrainLine aria-hidden='true' size={14} />
-                      <span className='agent-model-cascader-option-main'>{formatThinkingLevelLabel(level)}</span>
-                    </button>
-                  )) : (
-                    <div className='agent-model-cascader-empty'>No model selected</div>
-                  )}
-                </div>
-              </AppScrollArea>
-            </section>
+            {showModelPickerThinkingColumn ? (
+              <section className='agent-model-cascader-column agent-model-cascader-column-thinking'>
+                <div className='agent-model-cascader-column-title'>Thinking</div>
+                <AppScrollArea
+                  className='agent-model-cascader-scroll'
+                  contentClassName='agent-model-cascader-scroll-content'
+                >
+                  <div className='agent-model-cascader-list' role='listbox' aria-label='Available thinking levels'>
+                    {activeModelThinkingLevels.map((level) => (
+                      <button
+                        key={level}
+                        type='button'
+                        role='option'
+                        aria-selected={level === activeModelThinkingLevel}
+                        className={`agent-model-cascader-option${level === activeModelThinkingLevel ? ' is-active is-selected' : ''}`}
+                        onClick={() => {
+                          void handleModelPickerThinkingSelect(level)
+                        }}
+                      >
+                        <BrainLine aria-hidden='true' size={14} />
+                        <span className='agent-model-cascader-option-main'>{formatThinkingLevelLabel(level)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </AppScrollArea>
+              </section>
+            ) : null}
           </div>
         </div>,
         document.body,
