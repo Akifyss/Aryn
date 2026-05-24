@@ -3873,7 +3873,7 @@ function AgentChatSurface() {
                   clearModelPickerPendingActivation()
                 }}
               >
-                <div className='agent-model-cascader-column-title'>Thinking</div>
+                <div className='agent-model-cascader-column-title'>Thinking level</div>
                 <AppScrollArea
                   className='agent-model-cascader-scroll'
                   contentClassName='agent-model-cascader-scroll-content'
