@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 
-const HTML_PREVIEW_IFRAME_SANDBOX = ''
+const HTML_PREVIEW_IFRAME_SANDBOX = 'allow-scripts'
 
 function escapeHtmlAttribute(value: string) {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;')

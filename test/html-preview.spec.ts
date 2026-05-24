@@ -23,7 +23,7 @@ describe('HTML preview', () => {
     expect(__htmlPreviewTestHooks.injectBaseHref(withBase, 'file:///workspace/site/')).toBe(withBase)
   })
 
-  it('keeps default previews sandboxed without script execution privileges', () => {
-    expect(__htmlPreviewTestHooks.HTML_PREVIEW_IFRAME_SANDBOX).toBe('')
+  it('allows preview scripts to run while keeping the iframe sandboxed', () => {
+    expect(__htmlPreviewTestHooks.HTML_PREVIEW_IFRAME_SANDBOX).toBe('allow-scripts')
   })
 })
