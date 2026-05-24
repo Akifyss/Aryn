@@ -1,5 +1,7 @@
 import {
   type ClipboardEvent,
+  type DragEvent,
+  type HTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useEffect,
@@ -8,8 +10,6 @@ import {
   useRef,
   useState,
 } from 'react'
-import { TextArea } from '@heroui/react'
-import type { TextAreaProps } from '@heroui/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import type {
@@ -19,9 +19,11 @@ import type {
 } from '@/features/agent/lib/composer-mentions'
 import {
   applyComposerTextEdit,
+  expandComposerSelectionToMentionBoundaries,
   findActiveComposerMentionQuery,
   flattenWorkspaceNodesForMentions,
   getComposerDeleteRange,
+  normalizeComposerSelection,
   parseComposerMentionRanges,
   replaceComposerMentionQuery,
   searchComposerMentionItems,
@@ -36,24 +38,33 @@ type ComposerModel = {
 
 type AgentComposerMentionInputProps = {
   disabled?: boolean
+  footer?: ReactNode
   iconTheme?: WorkspaceIconTheme | null
   mentions: ComposerMentionToken[]
   onChange: (nextModel: ComposerModel) => void
-  onSubmitShortcut?: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void
+  onSubmitShortcut?: (event: ReactKeyboardEvent<HTMLDivElement>) => void
   placeholder?: string
   value: string
   workspaceNodes: WorkspaceNode[]
   workspacePath: string | null
-  className?: string
-  footer?: ReactNode
-} & Omit<TextAreaProps, 'children' | 'className' | 'onChange' | 'placeholder' | 'value'>
+} & Omit<HTMLAttributes<HTMLDivElement>, 'children' | 'onChange' | 'placeholder' | 'value'>
 
-type TextValueChange = {
-  insertedText: string
-  nextEnd: number
-  start: number
-  previousEnd: number
+type EditorPoint = {
+  node: Node
+  offset: number
 }
+
+type EditorLeaf =
+  | {
+      length: number
+      node: Text
+      type: 'text'
+    }
+  | {
+      element: HTMLElement
+      length: number
+      type: 'mention'
+    }
 
 const MENTION_MENU_MAX_HEIGHT = 264
 const MENTION_MENU_ROW_HEIGHT = 30
@@ -68,64 +79,295 @@ function buildActiveMentionKey(activeMention: ActiveComposerMentionQuery | null)
   return `${activeMention.start}:${activeMention.end}:${activeMention.query}`
 }
 
-function clampSelectionOffset(offset: number, value: string) {
-  return Math.max(0, Math.min(value.length, offset))
+function isMentionElement(node: Node | null): node is HTMLElement {
+  return node instanceof HTMLElement && node.dataset.composerMention === 'true'
 }
 
-function readTextAreaSelection(textarea: HTMLTextAreaElement): ComposerSelectionRange {
-  const start = textarea.selectionStart ?? 0
-  const end = textarea.selectionEnd ?? start
+function getNodeIndex(node: Node) {
+  let index = 0
+  let sibling = node.previousSibling
 
-  return start <= end
-    ? { end, start }
-    : { end: start, start: end }
+  while (sibling) {
+    index += 1
+    sibling = sibling.previousSibling
+  }
+
+  return index
 }
 
-function writeTextAreaSelection(
-  textarea: HTMLTextAreaElement,
-  value: string,
-  selection: ComposerSelectionRange,
-) {
-  const start = clampSelectionOffset(selection.start, value)
-  const end = clampSelectionOffset(selection.end, value)
-  textarea.setSelectionRange(start, end)
+function collectEditorLeaves(root: Node): EditorLeaf[] {
+  const leaves: EditorLeaf[] = []
+
+  function visit(node: Node) {
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        const text = child.textContent ?? ''
+        if (text.length > 0) {
+          leaves.push({
+            length: text.length,
+            node: child as Text,
+            type: 'text',
+          })
+        }
+        continue
+      }
+
+      if (isMentionElement(child)) {
+        const length = Number.parseInt(child.dataset.mentionLength ?? '', 10)
+        leaves.push({
+          element: child,
+          length: Number.isFinite(length) ? length : (child.textContent?.length ?? 0),
+          type: 'mention',
+        })
+        continue
+      }
+
+      if (child.nodeName === 'BR') {
+        continue
+      }
+
+      visit(child)
+    }
+  }
+
+  visit(root)
+  return leaves
 }
 
-function getTextValueChange(previousValue: string, nextValue: string): TextValueChange | null {
-  if (previousValue === nextValue) {
+function getSelectionOffsetFromPoint(root: HTMLElement, node: Node, offset: number) {
+  const range = document.createRange()
+  range.selectNodeContents(root)
+  range.setEnd(node, offset)
+  const textLength = range.toString().length
+  range.detach()
+  return textLength
+}
+
+function getSelectionFromEditor(editor: HTMLElement): ComposerSelectionRange | null {
+  const selection = window.getSelection()
+
+  if (!selection || selection.rangeCount === 0) {
     return null
   }
 
-  let start = 0
-  while (
-    start < previousValue.length
-    && start < nextValue.length
-    && previousValue[start] === nextValue[start]
-  ) {
-    start += 1
-  }
+  const range = selection.getRangeAt(0)
 
-  let previousEnd = previousValue.length
-  let nextEnd = nextValue.length
-  while (
-    previousEnd > start
-    && nextEnd > start
-    && previousValue[previousEnd - 1] === nextValue[nextEnd - 1]
-  ) {
-    previousEnd -= 1
-    nextEnd -= 1
+  if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) {
+    return null
   }
 
   return {
-    insertedText: nextValue.slice(start, nextEnd),
-    nextEnd,
-    previousEnd,
-    start,
+    end: getSelectionOffsetFromPoint(editor, range.endContainer, range.endOffset),
+    start: getSelectionOffsetFromPoint(editor, range.startContainer, range.startOffset),
   }
 }
 
-function composeClassName(...classNames: Array<string | undefined>) {
-  return classNames.filter(Boolean).join(' ')
+type DocumentWithCaretFromPoint = Document & {
+  caretPositionFromPoint?: (x: number, y: number) => { offset: number, offsetNode: Node } | null
+  caretRangeFromPoint?: (x: number, y: number) => Range | null
+}
+
+function getSelectionFromClientPoint(editor: HTMLElement, clientX: number, clientY: number): ComposerSelectionRange | null {
+  const ownerDocument = editor.ownerDocument as DocumentWithCaretFromPoint
+  let range: Range | null = null
+
+  const caretPosition = ownerDocument.caretPositionFromPoint?.(clientX, clientY)
+  if (caretPosition) {
+    range = ownerDocument.createRange()
+    range.setStart(caretPosition.offsetNode, caretPosition.offset)
+    range.collapse(true)
+  } else {
+    range = ownerDocument.caretRangeFromPoint?.(clientX, clientY) ?? null
+  }
+
+  if (!range || !editor.contains(range.startContainer)) {
+    return null
+  }
+
+  const offset = getSelectionOffsetFromPoint(editor, range.startContainer, range.startOffset)
+  return {
+    end: offset,
+    start: offset,
+  }
+}
+
+function getEditorPointForOffset(editor: HTMLElement, targetOffset: number): EditorPoint {
+  const leaves = collectEditorLeaves(editor)
+
+  if (leaves.length === 0) {
+    return {
+      node: editor,
+      offset: 0,
+    }
+  }
+
+  let cursor = 0
+
+  for (const leaf of leaves) {
+    const nextCursor = cursor + leaf.length
+
+    if (leaf.type === 'text') {
+      if (targetOffset <= nextCursor) {
+        return {
+          node: leaf.node,
+          offset: Math.max(0, targetOffset - cursor),
+        }
+      }
+
+      cursor = nextCursor
+      continue
+    }
+
+    const parentNode = leaf.element.parentNode ?? editor
+    const nodeIndex = getNodeIndex(leaf.element)
+
+    if (targetOffset <= cursor) {
+      return {
+        node: parentNode,
+        offset: nodeIndex,
+      }
+    }
+
+    if (targetOffset < nextCursor) {
+      const distanceToStart = targetOffset - cursor
+      const distanceToEnd = nextCursor - targetOffset
+
+      return {
+        node: parentNode,
+        offset: distanceToStart <= distanceToEnd ? nodeIndex : nodeIndex + 1,
+      }
+    }
+
+    if (targetOffset === nextCursor) {
+      return {
+        node: parentNode,
+        offset: nodeIndex + 1,
+      }
+    }
+
+    cursor = nextCursor
+  }
+
+  return {
+    node: editor,
+    offset: editor.childNodes.length,
+  }
+}
+
+function restoreSelection(editor: HTMLElement, selectionRange: ComposerSelectionRange) {
+  const domSelection = window.getSelection()
+
+  if (!domSelection) {
+    return
+  }
+
+  const nextRange = document.createRange()
+  const startPoint = getEditorPointForOffset(editor, selectionRange.start)
+  const endPoint = getEditorPointForOffset(editor, selectionRange.end)
+
+  nextRange.setStart(startPoint.node, startPoint.offset)
+  nextRange.setEnd(endPoint.node, endPoint.offset)
+
+  domSelection.removeAllRanges()
+  domSelection.addRange(nextRange)
+}
+
+function renderEditorContent(editor: HTMLElement, value: string, mentions: ComposerMentionToken[]) {
+  const fragment = document.createDocumentFragment()
+  let cursor = 0
+
+  for (const mention of mentions) {
+    if (mention.start > cursor) {
+      fragment.append(document.createTextNode(value.slice(cursor, mention.start)))
+    }
+
+    const mentionElement = document.createElement('span')
+    mentionElement.className = 'agent-composer-mention-token'
+    mentionElement.dataset.composerMention = 'true'
+    mentionElement.dataset.mentionId = mention.id
+    mentionElement.dataset.mentionKind = mention.kind
+    mentionElement.dataset.mentionLabel = mention.label
+    mentionElement.dataset.mentionLength = String(mention.text.length)
+    mentionElement.dataset.mentionPath = mention.path
+    mentionElement.contentEditable = 'false'
+    mentionElement.spellcheck = false
+    mentionElement.textContent = mention.label
+    fragment.append(mentionElement)
+    cursor = mention.end
+  }
+
+  if (cursor < value.length) {
+    fragment.append(document.createTextNode(value.slice(cursor)))
+  }
+
+  editor.replaceChildren(fragment)
+}
+
+function parseEditorContent(editor: HTMLElement): ComposerModel {
+  const mentions: ComposerMentionToken[] = []
+  let value = ''
+
+  function visit(node: Node) {
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        value += child.textContent ?? ''
+        continue
+      }
+
+      if (isMentionElement(child)) {
+        const label = child.dataset.mentionLabel ?? child.textContent ?? ''
+        const text = label
+        const start = value.length
+        value += text
+        mentions.push({
+          end: start + text.length,
+          id: child.dataset.mentionId ?? `mention:${label}:${start}`,
+          kind: (child.dataset.mentionKind as WorkspaceNode['kind']) ?? 'file',
+          label,
+          path: child.dataset.mentionPath ?? label,
+          start,
+          text,
+        })
+        continue
+      }
+
+      if (child.nodeName === 'BR') {
+        continue
+      }
+
+      visit(child)
+    }
+  }
+
+  visit(editor)
+
+  return {
+    mentions,
+    value,
+  }
+}
+
+function modelsEqual(left: ComposerModel, right: ComposerModel) {
+  if (left.value !== right.value || left.mentions.length !== right.mentions.length) {
+    return false
+  }
+
+  return left.mentions.every((mention, index) => {
+    const otherMention = right.mentions[index]
+
+    return Boolean(otherMention)
+      && mention.start === otherMention.start
+      && mention.end === otherMention.end
+      && mention.id === otherMention.id
+      && mention.kind === otherMention.kind
+      && mention.label === otherMention.label
+      && mention.path === otherMention.path
+      && mention.text === otherMention.text
+  })
+}
+
+function editorContentMatchesModel(editor: HTMLElement, value: string, mentions: ComposerMentionToken[]) {
+  return modelsEqual(parseEditorContent(editor), { mentions, value })
 }
 
 export function AgentComposerMentionInput({
@@ -141,19 +383,17 @@ export function AgentComposerMentionInput({
   workspacePath,
   className,
   onBlur,
-  onFocus,
-  onKeyDown,
-  onKeyUp,
-  onClick,
-  onSelect,
   onCompositionEnd,
   onCompositionStart,
   onCopy,
   onCut,
+  onDrop,
+  onFocus,
+  onKeyDown,
   onPaste,
-  ...textAreaProps
+  ...editorProps
 }: AgentComposerMentionInputProps) {
-  const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
+  const editorRef = useRef<HTMLDivElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const pendingSelectionRef = useRef<ComposerSelectionRange | null>(null)
   const [selection, setSelection] = useState<ComposerSelectionRange>({ end: 0, start: 0 })
@@ -181,6 +421,7 @@ export function AgentComposerMentionInput({
     && activeMention
     && activeMentionKey !== dismissedMentionKey,
   )
+  const shouldShowPlaceholder = !value && !isComposing
   const mentionMenuHeight = useMemo(
     () => mentionResults.length > 0
       ? Math.min((mentionResults.length * MENTION_MENU_ROW_HEIGHT) + MENTION_MENU_PADDING, MENTION_MENU_MAX_HEIGHT)
@@ -189,20 +430,28 @@ export function AgentComposerMentionInput({
   )
 
   useLayoutEffect(() => {
-    const textarea = textAreaRef.current
-    const nextSelection = pendingSelectionRef.current
+    const editor = editorRef.current
 
-    if (!textarea || !nextSelection) {
+    if (!editor || isComposing) {
       return
     }
 
-    pendingSelectionRef.current = null
-    if (isFocused && document.activeElement !== textarea) {
-      textarea.focus()
+    if (!editorContentMatchesModel(editor, value, normalizedMentions)) {
+      renderEditorContent(editor, value, normalizedMentions)
     }
-    writeTextAreaSelection(textarea, value, nextSelection)
+
+    if (!pendingSelectionRef.current) {
+      return
+    }
+
+    const nextSelection = pendingSelectionRef.current
+    pendingSelectionRef.current = null
+    if (isFocused && document.activeElement !== editor) {
+      editor.focus()
+    }
+    restoreSelection(editor, nextSelection)
     setSelection(nextSelection)
-  }, [isFocused, value])
+  }, [isComposing, isFocused, normalizedMentions, value])
 
   useEffect(() => {
     setSelectedIndex(0)
@@ -235,6 +484,42 @@ export function AgentComposerMentionInput({
     activeElement?.scrollIntoView({ block: 'nearest' })
   }, [selectedIndex, shouldShowMentionMenu])
 
+  useEffect(() => {
+    if (!isFocused || isComposing) {
+      return
+    }
+
+    function handleSelectionChange() {
+      const editor = editorRef.current
+
+      if (!editor) {
+        return
+      }
+
+      const rawSelection = getSelectionFromEditor(editor)
+      const nextSelection = rawSelection && normalizedMentions.length > 0
+        ? normalizeComposerSelection(rawSelection, normalizedMentions)
+        : rawSelection
+
+      if (!nextSelection) {
+        return
+      }
+
+      if (
+        rawSelection
+        && (nextSelection.start !== rawSelection.start || nextSelection.end !== rawSelection.end)
+      ) {
+        restoreSelection(editor, nextSelection)
+      }
+      setSelection(nextSelection)
+    }
+
+    document.addEventListener('selectionchange', handleSelectionChange)
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange)
+    }
+  }, [isComposing, isFocused, normalizedMentions])
+
   function queueSelection(nextSelection: ComposerSelectionRange) {
     pendingSelectionRef.current = nextSelection
   }
@@ -247,47 +532,29 @@ export function AgentComposerMentionInput({
     onChange(nextModel)
   }
 
-  function syncSelectionFromTextArea() {
-    const textarea = textAreaRef.current
+  function syncSelectionFromEditor() {
+    const editor = editorRef.current
 
-    if (!textarea) {
+    if (!editor) {
       return null
     }
 
-    const rawSelection = readTextAreaSelection(textarea)
-    const nextSelection = normalizedMentions.length > 0
-      ? normalizeSelectionToMentionBoundary(rawSelection)
+    const rawSelection = getSelectionFromEditor(editor)
+    const nextSelection = rawSelection && normalizedMentions.length > 0
+      ? normalizeComposerSelection(rawSelection, normalizedMentions)
       : rawSelection
 
-    if (nextSelection.start !== rawSelection.start || nextSelection.end !== rawSelection.end) {
-      writeTextAreaSelection(textarea, value, nextSelection)
+    if (nextSelection) {
+      if (
+        rawSelection
+        && (nextSelection.start !== rawSelection.start || nextSelection.end !== rawSelection.end)
+      ) {
+        restoreSelection(editor, nextSelection)
+      }
+      setSelection(nextSelection)
     }
 
-    setSelection(nextSelection)
     return nextSelection
-  }
-
-  function normalizeSelectionToMentionBoundary(nextSelection: ComposerSelectionRange) {
-    if (nextSelection.start !== nextSelection.end) {
-      return nextSelection
-    }
-
-    const matchingMention = normalizedMentions.find((mention) => (
-      nextSelection.start > mention.start && nextSelection.start < mention.end
-    ))
-
-    if (!matchingMention) {
-      return nextSelection
-    }
-
-    const distanceToStart = nextSelection.start - matchingMention.start
-    const distanceToEnd = matchingMention.end - nextSelection.start
-    const nextOffset = distanceToStart <= distanceToEnd ? matchingMention.start : matchingMention.end
-
-    return {
-      end: nextOffset,
-      start: nextOffset,
-    }
   }
 
   function applyMentionSelection(resultIndex: number) {
@@ -320,27 +587,29 @@ export function AgentComposerMentionInput({
   }
 
   function applyTextEdit(insertText: string, editSelection: ComposerSelectionRange) {
+    const normalizedEditSelection = normalizedMentions.length > 0
+      ? normalizeComposerSelection(editSelection, normalizedMentions)
+      : editSelection
     const nextModel = applyComposerTextEdit({
       insertText,
       mentions: normalizedMentions,
-      selection: editSelection,
+      selection: normalizedEditSelection,
       value,
     })
-    const nextSelection = {
-      end: nextModel.nextSelectionEnd,
-      start: nextModel.nextSelectionStart,
-    }
 
     emitModel(
       {
         mentions: nextModel.mentions,
         value: nextModel.value,
       },
-      nextSelection,
+      {
+        end: nextModel.nextSelectionEnd,
+        start: nextModel.nextSelectionStart,
+      },
     )
   }
 
-  function handleMentionNavigation(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+  function handleMentionNavigation(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (!shouldShowMentionMenu) {
       return false
     }
@@ -389,8 +658,11 @@ export function AgentComposerMentionInput({
     }
   }
 
-  function handleCopyLikeEvent(event: ClipboardEvent<HTMLTextAreaElement>, shouldDelete: boolean) {
-    const currentSelection = syncSelectionFromTextArea() ?? selection
+  function handleCopyLikeEvent(event: ClipboardEvent<HTMLDivElement>, shouldDelete: boolean) {
+    const currentSelection = expandComposerSelectionToMentionBoundaries(
+      syncSelectionFromEditor() ?? selection,
+      normalizedMentions,
+    )
 
     if (currentSelection.start === currentSelection.end) {
       return
@@ -411,6 +683,51 @@ export function AgentComposerMentionInput({
     if (shouldDelete) {
       applyTextEdit('', currentSelection)
     }
+  }
+
+  function handleDropEvent(event: DragEvent<HTMLDivElement>) {
+    onDrop?.(event)
+    if (event.defaultPrevented) {
+      return
+    }
+
+    const droppedText = event.dataTransfer.getData('text/plain')
+    event.preventDefault()
+
+    if (disabled || isComposing || !droppedText) {
+      return
+    }
+
+    const editor = editorRef.current
+    const dropSelection = editor
+      ? getSelectionFromClientPoint(editor, event.clientX, event.clientY)
+      : null
+    const currentSelection = dropSelection ?? syncSelectionFromEditor() ?? selection
+    applyTextEdit(droppedText, currentSelection)
+  }
+
+  function commitEditorDomToModel() {
+    const editor = editorRef.current
+
+    if (!editor) {
+      return
+    }
+
+    const nextModel = parseEditorContent(editor)
+    const rawSelection = getSelectionFromEditor(editor) ?? selection
+    const nextSelection = nextModel.mentions.length > 0
+      ? normalizeComposerSelection(rawSelection, nextModel.mentions)
+      : rawSelection
+
+    if (modelsEqual(nextModel, { mentions: normalizedMentions, value })) {
+      if (nextSelection.start !== rawSelection.start || nextSelection.end !== rawSelection.end) {
+        restoreSelection(editor, nextSelection)
+      }
+      setSelection(nextSelection)
+      return
+    }
+
+    emitModel(nextModel, nextSelection)
   }
 
   return (
@@ -470,60 +787,29 @@ export function AgentComposerMentionInput({
         </div>
       ) : null}
 
-      <TextArea
-        {...textAreaProps}
-        ref={textAreaRef}
-        className={composeClassName('agent-composer-input', className)}
-        disabled={disabled}
-        fullWidth
-        placeholder={placeholder}
-        rows={1}
+      {shouldShowPlaceholder ? (
+        <div className='agent-composer-placeholder' aria-hidden='true'>
+          {placeholder}
+        </div>
+      ) : null}
+
+      <div
+        {...editorProps}
+        ref={editorRef}
+        aria-disabled={disabled || undefined}
+        aria-multiline='true'
+        className={`agent-composer-editor${className ? ` ${className}` : ''}`}
+        contentEditable={disabled ? 'false' : 'true'}
+        role='textbox'
         spellCheck={false}
-        value={value}
+        suppressContentEditableWarning
         onBlur={(event) => {
           setIsFocused(false)
           onBlur?.(event)
         }}
-        onChange={(event) => {
-          const change = getTextValueChange(value, event.currentTarget.value)
-          const rawSelection = readTextAreaSelection(event.currentTarget)
-
-          if (!change) {
-            setSelection(rawSelection)
-            return
-          }
-
-          const nextModel = applyComposerTextEdit({
-            insertText: change.insertedText,
-            mentions: normalizedMentions,
-            selection: {
-              end: change.previousEnd,
-              start: change.start,
-            },
-            value,
-          })
-          const nextSelection = nextModel.value === event.currentTarget.value
-            ? rawSelection
-            : {
-                end: nextModel.nextSelectionEnd,
-                start: nextModel.nextSelectionStart,
-              }
-
-          emitModel(
-            {
-              mentions: nextModel.mentions,
-              value: nextModel.value,
-            },
-            nextSelection,
-          )
-        }}
-        onClick={(event) => {
-          syncSelectionFromTextArea()
-          onClick?.(event)
-        }}
         onCompositionEnd={(event) => {
           setIsComposing(false)
-          syncSelectionFromTextArea()
+          commitEditorDomToModel()
           onCompositionEnd?.(event)
         }}
         onCompositionStart={(event) => {
@@ -544,10 +830,18 @@ export function AgentComposerMentionInput({
           }
           handleCopyLikeEvent(event, true)
         }}
+        onDrop={handleDropEvent}
         onFocus={(event) => {
           setIsFocused(true)
-          setSelection(readTextAreaSelection(event.currentTarget))
+          syncSelectionFromEditor()
           onFocus?.(event)
+        }}
+        onInput={() => {
+          if (isComposing) {
+            return
+          }
+
+          commitEditorDomToModel()
         }}
         onKeyDown={(event) => {
           onKeyDown?.(event)
@@ -560,7 +854,7 @@ export function AgentComposerMentionInput({
             return
           }
 
-          const currentSelection = syncSelectionFromTextArea() ?? selection
+          const currentSelection = syncSelectionFromEditor() ?? selection
 
           if (event.key === 'Backspace' || event.key === 'Delete') {
             const direction = event.key === 'Backspace' ? 'backward' : 'forward'
@@ -573,14 +867,16 @@ export function AgentComposerMentionInput({
             return
           }
 
-          if (event.key === 'Enter' && !event.shiftKey) {
+          if (event.key === 'Enter') {
             event.preventDefault()
+
+            if (event.shiftKey) {
+              applyTextEdit('\n', currentSelection)
+              return
+            }
+
             onSubmitShortcut?.(event)
           }
-        }}
-        onKeyUp={(event) => {
-          syncSelectionFromTextArea()
-          onKeyUp?.(event)
         }}
         onPaste={(event) => {
           onPaste?.(event)
@@ -594,12 +890,8 @@ export function AgentComposerMentionInput({
 
           event.preventDefault()
           const pastedText = event.clipboardData.getData('text/plain')
-          const currentSelection = syncSelectionFromTextArea() ?? selection
+          const currentSelection = syncSelectionFromEditor() ?? selection
           applyTextEdit(pastedText, currentSelection)
-        }}
-        onSelect={(event) => {
-          setSelection(readTextAreaSelection(event.currentTarget))
-          onSelect?.(event)
         }}
       />
       {footer}

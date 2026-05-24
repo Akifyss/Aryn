@@ -4319,49 +4319,51 @@ body.workspace-tree-dragging .workspace-tree-row {
   cursor: default;
 }
 
-.agent-composer-input.textarea,
-.agent-composer-input.textarea:hover,
-.agent-composer-input.textarea:focus,
-.agent-composer-input.textarea:focus-visible,
-.agent-composer-input.textarea[data-focus="true"],
-.agent-composer-input.textarea[data-focus-visible="true"],
-.agent-composer-input.textarea[data-hovered="true"] {
+.agent-composer-editor,
+.agent-composer-editor:hover,
+.agent-composer-editor:focus,
+.agent-composer-editor:focus-visible {
+  --color-field-border: var(--border);
+  --color-field-border-hover: var(--separator);
+  --color-field-border-focus: var(--focus);
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   box-sizing: border-box;
-  border-width: 1px !important;
+  border: 1px solid var(--color-field-border) !important;
+  border-radius: 14px;
   border-color: var(--color-field-border) !important;
   background-color: var(--color-field) !important;
   box-shadow:
     0 2px 4px rgb(0 0 0 / 0.04),
     0 1px 2px rgb(0 0 0 / 0.06),
     0 0 1px rgb(0 0 0 / 0.06) !important;
-  resize: none !important;
   min-height: var(--agent-composer-height);
   height: var(--agent-composer-height);
-  padding-left: 8px !important;
-  padding-right: 8px !important;
-  padding-bottom: calc(var(--agent-composer-toolbar-height) + 8px) !important;
+  padding: 8px 8px calc(var(--agent-composer-toolbar-height) + 8px) !important;
+  margin: 0;
   overflow: auto !important;
-}
-
-.agent-composer-input.textarea {
-  --color-field-border: var(--border);
-  --color-field-border-hover: var(--separator);
-  --color-field-border-focus: var(--focus);
+  outline: none;
+  color: var(--foreground);
+  caret-color: var(--foreground);
+  font: inherit;
   font-size: 13px;
   line-height: 1.65;
+  letter-spacing: inherit;
+  overflow-wrap: anywhere;
+  resize: none !important;
+  tab-size: 2;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.agent-composer-input.textarea:hover:not(:focus):not(:focus-visible),
-.agent-composer-input.textarea[data-hovered="true"]:not([data-focused="true"]):not([data-focus-visible="true"]) {
+.agent-composer-editor:hover:not(:focus):not(:focus-visible) {
   border-top-color: var(--color-field-border-hover) !important;
 }
 
-.agent-composer-input.textarea:focus,
-.agent-composer-input.textarea:focus-visible,
-.agent-composer-input.textarea[data-focused="true"],
-.agent-composer-input.textarea[data-focus-visible="true"] {
+.agent-composer-editor:focus,
+.agent-composer-editor:focus-visible {
   border-top-color: var(--color-field-border-hover) !important;
   --tw-ring-shadow: 0 0 #0000 !important;
   --tw-ring-offset-shadow: 0 0 #0000 !important;
@@ -4372,6 +4374,46 @@ body.workspace-tree-dragging .workspace-tree-row {
   width: 100%;
   min-height: var(--agent-composer-height);
   height: var(--agent-composer-height);
+}
+
+.agent-composer-placeholder {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 1;
+  pointer-events: none;
+  color: var(--field-placeholder);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.agent-composer-editor[contenteditable='false'] {
+  cursor: default;
+}
+
+.agent-composer-editor::selection {
+  background: var(--color-accent-soft);
+}
+
+.agent-composer-editor::-moz-selection {
+  background: var(--color-accent-soft);
+}
+
+.agent-composer-mention-token {
+  display: inline-block;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 0 5px;
+  line-height: calc(1.65em - 2px);
+  vertical-align: baseline;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-secondary);
+  color: var(--foreground);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .agent-composer-mention-menu {
