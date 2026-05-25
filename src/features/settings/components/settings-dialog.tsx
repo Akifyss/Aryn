@@ -19,7 +19,6 @@ type SettingsViewProps = {
   iconThemeOptions: WorkspaceIconThemeCatalogOption[]
   isIconThemeBusy: boolean
   onAgentStateChange: (state: AgentWorkspaceState) => void
-  onImportIconTheme: () => Promise<void>
   onSectionChange: (section: SettingsSectionId) => void
   onSelectIconTheme: (selection: { sourceVsixPath: string, themeId: string }) => Promise<void>
   onStatusMessage: (message: string) => void
@@ -189,7 +188,6 @@ export function SettingsDialog({
   iconThemeOptions,
   isIconThemeBusy,
   onAgentStateChange,
-  onImportIconTheme,
   onSectionChange,
   onSelectIconTheme,
   onStatusMessage,
@@ -500,7 +498,7 @@ export function SettingsDialog({
               <h4>文件图标主题</h4>
               <p>控制文件树与工作区中的图标显示样式。</p>
             </div>
-            <div className='settings-inline-form' style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div className='settings-inline-form' style={{ display: 'flex', alignItems: 'center' }}>
               <Select
                 className='flex-1 heroui-select-fix'
                 selectedKey={activeIconThemeKey}
@@ -531,14 +529,6 @@ export function SettingsDialog({
                   </ListBox>
                 </Select.Popover>
               </Select>
-              <Button
-                isDisabled={isIconThemeBusy}
-                variant='primary'
-                className='settings-action-button h-10'
-                onPress={() => void onImportIconTheme()}
-              >
-                导入 VSIX
-              </Button>
             </div>
             {iconTheme && (
               <p className='settings-inline-hint' style={{ marginTop: '8px' }}>

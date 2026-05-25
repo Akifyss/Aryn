@@ -4122,7 +4122,6 @@ function App() {
               resolvedTheme={resolvedTheme}
               workspacePath={currentPath}
               onAgentStateChange={setAgentWorkspaceState}
-              onImportIconTheme={handlePickWorkspaceIconTheme}
               onSectionChange={setSettingsSection}
               onSelectIconTheme={handleSelectWorkspaceIconTheme}
               onStatusMessage={setStatusMessage}
@@ -4522,7 +4521,6 @@ function App() {
                   resolvedTheme={resolvedTheme}
                   workspacePath={currentPath}
                   onAgentStateChange={setAgentWorkspaceState}
-                  onImportIconTheme={handlePickWorkspaceIconTheme}
                   onSectionChange={setSettingsSection}
                   onSelectIconTheme={handleSelectWorkspaceIconTheme}
                   onStatusMessage={setStatusMessage}
