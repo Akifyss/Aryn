@@ -481,12 +481,12 @@ export function SettingsDialog({
               >
                 <Tabs.ListContainer className='w-full'>
                   <Tabs.List aria-label='布局模式' className='w-full'>
-                    <Tabs.Tab id='editor' className='flex-1'>
-                      Editor
-                      <Tabs.Indicator />
-                    </Tabs.Tab>
                     <Tabs.Tab id='agent' className='flex-1'>
                       Agent
+                      <Tabs.Indicator />
+                    </Tabs.Tab>
+                    <Tabs.Tab id='editor' className='flex-1'>
+                      Editor
                       <Tabs.Indicator />
                     </Tabs.Tab>
                   </Tabs.List>
