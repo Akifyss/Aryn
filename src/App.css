@@ -4051,9 +4051,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-message-disclosure-body-tool {
   margin-left: 0;
   padding: 0;
-  border-left: 0;
-  border: 1px solid color-mix(in oklab, var(--outline) 50%, transparent);
-  background: var(--surface);
+  border: 0;
   color: var(--muted);
   overflow: hidden;
 }
