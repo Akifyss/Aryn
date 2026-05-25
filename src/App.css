@@ -22,6 +22,7 @@
   --panel-toggle-gap: 2px;
   --left-chrome-action-gap: 2px;
   --left-chrome-content-gap: 2px;
+  --file-tabs-collapsed-left-extra-gap: 0px;
   --left-panel-toggle-anchor: 84px;
   --right-panel-toggle-anchor: 12px;
   --left-panel-content-inset: calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap));
@@ -36,6 +37,10 @@
   background: var(--background);
   color: var(--foreground);
   overflow: hidden;
+}
+
+.app-shell[data-app-layout='editor'] {
+  --file-tabs-collapsed-left-extra-gap: 4px;
 }
 
 .app-shell[data-layout='compact'] {
@@ -1205,7 +1210,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   position: absolute;
   left: 0;
   bottom: 0;
-  width: var(--left-panel-content-inset);
+  width: calc(var(--left-panel-content-inset) + var(--file-tabs-collapsed-left-extra-gap));
   border-bottom: 1px solid var(--separator);
   z-index: 1;
 }
@@ -1222,7 +1227,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .app-shell[data-left-collapsed='true'] .file-tabs-shell {
-  padding-left: var(--left-panel-content-inset);
+  padding-left: calc(var(--left-panel-content-inset) + var(--file-tabs-collapsed-left-extra-gap));
 }
 
 .app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-agent .file-tabs-shell {
