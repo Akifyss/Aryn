@@ -1441,8 +1441,8 @@ function App() {
     filePaths?: string[]
   }) {
     if (isActiveEditorComposing) {
-      const message = 'Finish the current IME composition before running this Git action.'
-      toast.warning('Finish editing first', {
+      const message = '请先结束当前输入法组合，再执行此 Git 操作。'
+      toast.warning('请先完成编辑', {
         description: message,
       })
       setStatusMessage(message)
@@ -1490,10 +1490,10 @@ function App() {
       .map((tab) => getBaseName(getWorkspaceTabSourcePath(tab)))
       .join(', ')
     const remainingCount = remainingDirtyTabs.length - Math.min(remainingDirtyTabs.length, 4)
-    const extraLabel = remainingCount > 0 ? ` and ${remainingCount} more` : ''
-    const message = `Save the unsaved tab${remainingDirtyTabs.length > 1 ? 's' : ''} (${dirtyNames}${extraLabel}) before ${options.actionLabel.toLowerCase()}.`
+    const extraLabel = remainingCount > 0 ? ` 等 ${remainingCount} 个` : ''
+    const message = `请先保存未保存的标签页（${dirtyNames}${extraLabel}），再${options.actionLabel}。`
 
-    toast.warning('Unsaved changes need attention', {
+    toast.warning('存在未保存的更改', {
       description: message,
     })
     setStatusMessage(message)
@@ -2724,25 +2724,25 @@ function App() {
 
     if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
       actionLabel: action === 'stage'
-        ? 'staging this diff block'
+        ? '暂存这个差异块'
         : action === 'unstage'
-          ? 'unstaging this diff block'
-          : 'discarding this diff block',
+          ? '取消暂存这个差异块'
+          : '放弃这个差异块',
       filePaths: [change.path],
     }))) {
       return
     }
 
     const statusMessage = action === 'stage'
-      ? 'Git block staged'
+      ? 'Git 差异块已暂存'
       : action === 'unstage'
-        ? 'Git block unstaged'
-        : 'Git block reverted'
+        ? 'Git 差异块已取消暂存'
+        : 'Git 差异块已还原'
     const busyLabel = action === 'stage'
-      ? 'Staging diff block...'
+      ? '正在暂存差异块...'
       : action === 'unstage'
-        ? 'Unstaging diff block...'
-        : 'Reverting diff block...'
+        ? '正在取消暂存差异块...'
+        : '正在还原差异块...'
 
     await runGitAction(busyLabel, async () => {
       const nextState = await window.appApi.applyGitDiffSelection(currentPath, change.path, change.scope, selection, action)
@@ -2824,10 +2824,10 @@ function App() {
       return
     }
 
-    await runGitAction('Initializing repository...', async () => {
+    await runGitAction('正在初始化仓库...', async () => {
       const nextState = await window.appApi.initializeGitRepository(currentPath)
       setGitRepositoryState(nextState)
-      setStatusMessage('Git repository initialized')
+      setStatusMessage('Git 仓库已初始化')
     })
   }
 
@@ -2837,17 +2837,17 @@ function App() {
     }
 
     if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: 'staging changes',
+      actionLabel: '暂存更改',
       filePaths,
     }))) {
       return
     }
 
-    await runGitAction('Staging changes...', async () => {
+    await runGitAction('正在暂存更改...', async () => {
       const nextState = await window.appApi.stageGitPaths(currentPath, filePaths)
       setGitRepositoryState(nextState)
       await syncOpenDiffTabs(currentPath)
-      setStatusMessage('Git changes staged')
+      setStatusMessage('Git 更改已暂存')
     })
   }
 
@@ -2856,11 +2856,11 @@ function App() {
       return
     }
 
-    await runGitAction('Unstaging changes...', async () => {
+    await runGitAction('正在取消暂存...', async () => {
       const nextState = await window.appApi.unstageGitPaths(currentPath, filePaths)
       setGitRepositoryState(nextState)
       await syncOpenDiffTabs(currentPath)
-      setStatusMessage('Git changes unstaged')
+      setStatusMessage('Git 更改已取消暂存')
     })
   }
 
@@ -2870,16 +2870,16 @@ function App() {
     }
 
     if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: 'discarding Git changes',
+      actionLabel: '放弃 Git 更改',
       filePaths: [change.path],
     }))) {
       return
     }
 
     const confirmed = await requestConfirm({
-      title: 'Discard Change',
-      message: `Discard the current ${change.scope} change for "${change.relativePath}"?`,
-      confirmLabel: 'Discard',
+      title: '放弃更改',
+      message: `要放弃 "${change.relativePath}" 当前的${change.scope === 'staged' ? '已暂存' : '未暂存'}更改吗？`,
+      confirmLabel: '放弃',
       isDanger: true,
     })
 
@@ -2887,12 +2887,12 @@ function App() {
       return
     }
 
-    await runGitAction('Discarding change...', async () => {
+    await runGitAction('正在放弃更改...', async () => {
       const nextState = await window.appApi.discardGitChange(currentPath, change)
       setGitRepositoryState(nextState)
       await loadTree(currentPath)
       await syncOpenDiffTabs(currentPath)
-      setStatusMessage(`${change.relativePath} reverted`)
+      setStatusMessage(`${change.relativePath} 已还原`)
     })
   }
 
@@ -2907,16 +2907,16 @@ function App() {
     }
 
     if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: 'discarding Git changes',
+      actionLabel: '放弃 Git 更改',
       filePaths: changes.map((change) => change.path),
     }))) {
       return
     }
 
     const confirmed = await requestConfirm({
-      title: 'Discard Changes',
-      message: `Discard ${changes.length} working tree changes?`,
-      confirmLabel: 'Discard All',
+      title: '放弃更改',
+      message: `要放弃 ${changes.length} 个工作区更改吗？`,
+      confirmLabel: '全部放弃',
       isDanger: true,
     })
 
@@ -2924,7 +2924,7 @@ function App() {
       return
     }
 
-    await runGitAction('Discarding changes...', async () => {
+    await runGitAction('正在放弃更改...', async () => {
       await Promise.all(changes.map(async (change) => {
         await window.appApi.discardGitChange(currentPath, change)
       }))
@@ -2932,7 +2932,7 @@ function App() {
         refreshGit: true,
         refreshTree: true,
       })
-      setStatusMessage(`${changes.length} changes discarded`)
+      setStatusMessage(`${changes.length} 个更改已放弃`)
     })
   }
 
@@ -2942,17 +2942,17 @@ function App() {
     }
 
     if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: 'creating a commit',
+      actionLabel: '创建提交',
     }))) {
       return
     }
 
-    await runGitAction('Creating commit...', async () => {
+    await runGitAction('正在创建提交...', async () => {
       const nextState = await window.appApi.commitGitChanges(currentPath, gitCommitMessage)
       setGitRepositoryState(nextState)
       setGitCommitMessage('')
       await syncOpenDiffTabs(currentPath)
-      setStatusMessage('Commit created')
+      setStatusMessage('提交已创建')
     })
   }
 
@@ -2962,17 +2962,17 @@ function App() {
     }
 
     if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: 'committing and syncing',
+      actionLabel: '提交并同步',
     }))) {
       return
     }
 
-    await runGitAction('Committing and syncing...', async () => {
+    await runGitAction('正在提交并同步...', async () => {
       const nextState = await window.appApi.commitAndSyncGitChanges(currentPath, gitCommitMessage)
       setGitRepositoryState(nextState)
       setGitCommitMessage('')
       await syncOpenDiffTabs(currentPath)
-      setStatusMessage('Commit and sync completed')
+      setStatusMessage('提交并同步已完成')
     })
   }
 
@@ -2981,10 +2981,10 @@ function App() {
       return
     }
 
-    await runGitAction('Pushing changes...', async () => {
+    await runGitAction('正在推送更改...', async () => {
       const nextState = await window.appApi.pushGitChanges(currentPath)
       setGitRepositoryState(nextState)
-      setStatusMessage('Git changes pushed')
+      setStatusMessage('Git 更改已推送')
     })
   }
 
@@ -2994,17 +2994,17 @@ function App() {
     }
 
     if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: 'pulling Git changes',
+      actionLabel: '拉取 Git 更改',
     }))) {
       return
     }
 
-    await runGitAction('Pulling changes...', async () => {
+    await runGitAction('正在拉取更改...', async () => {
       const nextState = await window.appApi.pullGitChanges(currentPath)
       setGitRepositoryState(nextState)
       await loadTree(currentPath)
       await syncOpenDiffTabs(currentPath)
-      setStatusMessage('Git changes pulled')
+      setStatusMessage('Git 更改已拉取')
     })
   }
 
@@ -3014,16 +3014,16 @@ function App() {
     }
 
     if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: 'discarding all Git changes',
+      actionLabel: '放弃所有 Git 更改',
       filePaths: gitRepositoryState.unstagedChanges.map((change) => change.path),
     }))) {
       return
     }
 
     const confirmed = await requestConfirm({
-      title: 'Discard All Changes',
-      message: 'Discard all working tree changes?\n\nThis will revert tracked files and delete untracked files.',
-      confirmLabel: 'Discard All',
+      title: '放弃所有更改',
+      message: '要放弃所有工作区更改吗？\n\n这会还原已跟踪文件，并删除未跟踪文件。',
+      confirmLabel: '全部放弃',
       isDanger: true,
     })
 
@@ -3031,12 +3031,12 @@ function App() {
       return
     }
 
-    await runGitAction('Discarding all working tree changes...', async () => {
+    await runGitAction('正在放弃所有工作区更改...', async () => {
       const nextState = await window.appApi.discardAllGitChanges(currentPath)
       setGitRepositoryState(nextState)
       await loadTree(currentPath)
       await syncOpenDiffTabs(currentPath)
-      setStatusMessage('Working tree changes discarded')
+      setStatusMessage('工作区更改已放弃')
     })
   }
 
@@ -4023,7 +4023,7 @@ function App() {
                     </Tabs.Tab>
                     <Tabs.Tab id='git' className='sidebar-vertical-tab'>
                       <GitBranchLine size={16} className='sidebar-vertical-tab-icon' />
-                      <span className='sidebar-vertical-tab-label'>变更</span>
+                      <span className='sidebar-vertical-tab-label'>更改</span>
                       <Tabs.Indicator className='sidebar-vertical-tab-indicator' />
                     </Tabs.Tab>
                   </Tabs.List>

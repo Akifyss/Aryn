@@ -103,34 +103,34 @@ function getDirectoryLabel(relativePath: string) {
 }
 
 function getRepositoryHeading(repositoryState: GitRepositoryState) {
-  const branchLabel = repositoryState.branch ?? 'current branch'
+  const branchLabel = repositoryState.branch ?? '当前分支'
 
   if (!repositoryState.hasCommits) {
-    return `No commits yet on ${branchLabel}`
+    return `${branchLabel} 尚无提交`
   }
 
-  return repositoryState.branch ?? 'Detached HEAD'
+  return repositoryState.branch ?? '分离 HEAD'
 }
 
 function getRepositoryMeta(repositoryState: GitRepositoryState, workspacePath: string) {
   const parts = [
-    repositoryState.repositoryRootPath === workspacePath ? 'Workspace root repository' : 'Nested repository',
+    repositoryState.repositoryRootPath === workspacePath ? '工作区根 Git 仓库' : '嵌套 Git 仓库',
   ]
 
   if (repositoryState.ahead > 0) {
-    parts.push(`ahead ${repositoryState.ahead}`)
+    parts.push(`领先 ${repositoryState.ahead}`)
   }
 
   if (repositoryState.behind > 0) {
-    parts.push(`behind ${repositoryState.behind}`)
+    parts.push(`落后 ${repositoryState.behind}`)
   }
 
   if (repositoryState.unpushedCommits > 0) {
-    parts.push(`${repositoryState.unpushedCommits} unpushed`)
+    parts.push(`${repositoryState.unpushedCommits} 个待推送`)
   }
 
   if (repositoryState.hasChanges) {
-    parts.push(`${repositoryState.stagedChanges.length + repositoryState.unstagedChanges.length} changes`)
+    parts.push(`${repositoryState.stagedChanges.length + repositoryState.unstagedChanges.length} 个更改`)
   }
 
   return parts.join(' / ')
@@ -141,17 +141,38 @@ function getCleanStateSubtext(repositoryState: GitRepositoryState) {
 
   if (repositoryState.unpushedCommits > 0) {
     syncParts.push(
-      `${repositoryState.unpushedCommits} commit${repositoryState.unpushedCommits === 1 ? '' : 's'} ready to push`,
+      `${repositoryState.unpushedCommits} 个提交待推送`,
     )
   }
 
   if (repositoryState.behind > 0) {
     syncParts.push(
-      `${repositoryState.behind} remote commit${repositoryState.behind === 1 ? '' : 's'} ready to pull`,
+      `${repositoryState.behind} 个远程提交待拉取`,
     )
   }
 
-  return syncParts.length > 0 ? syncParts.join(' / ') : 'All changes are committed'
+  return syncParts.length > 0 ? syncParts.join(' / ') : '所有更改已提交'
+}
+
+function getGitChangeKindLabel(kind: GitDisplayChange['kind']) {
+  switch (kind) {
+    case 'added':
+      return '新增'
+    case 'copied':
+      return '复制'
+    case 'conflicted':
+      return '冲突'
+    case 'deleted':
+      return '删除'
+    case 'modified':
+      return '修改'
+    case 'renamed':
+      return '重命名'
+    case 'type-changed':
+      return '类型变更'
+    case 'untracked':
+      return '未跟踪'
+  }
 }
 
 function buildGitTree(changes: GitDisplayChange[]) {
@@ -238,8 +259,8 @@ function GitRowActions({
           <button
             type='button'
             className='git-change-action git-change-icon-button'
-            aria-label='Open diff'
-            title={isChange ? 'Open diff' : 'Open file'}
+            aria-label='打开差异'
+            title={isChange ? '打开差异' : '打开文件'}
             onClick={(e) => {
               e.stopPropagation()
               onOpenDiff?.()
@@ -252,8 +273,8 @@ function GitRowActions({
           <button
             type='button'
             className='git-change-action git-change-icon-button'
-            aria-label='Open MEO split diff'
-            title='Open MEO split diff'
+            aria-label='打开 MEO 分屏差异'
+            title='打开 MEO 分屏差异'
             onClick={(e) => {
               e.stopPropagation()
               onOpenMeoDiff?.()
@@ -267,8 +288,8 @@ function GitRowActions({
           <button
             type='button'
             className='git-change-action git-change-icon-button'
-            aria-label='Unstage'
-            title='Unstage'
+            aria-label='取消暂存'
+            title='取消暂存'
             onClick={(e) => {
               e.stopPropagation()
               onUnstage?.()
@@ -283,8 +304,8 @@ function GitRowActions({
             <button
               type='button'
               className='git-change-action git-change-icon-button'
-              aria-label='Discard'
-              title='Discard'
+              aria-label='放弃更改'
+              title='放弃更改'
               onClick={(e) => {
                 e.stopPropagation()
                 onDiscard?.()
@@ -295,8 +316,8 @@ function GitRowActions({
             <button
               type='button'
               className='git-change-action git-change-icon-button'
-              aria-label='Stage'
-              title='Stage'
+              aria-label='暂存'
+              title='暂存'
               onClick={(e) => {
                 e.stopPropagation()
                 onStage?.()
@@ -311,7 +332,7 @@ function GitRowActions({
       {isChange && (
         <FileChangeStatusBadge
           kind={change.kind}
-          title={change.kind.charAt(0).toUpperCase() + change.kind.slice(1)}
+          title={getGitChangeKindLabel(change.kind)}
         />
       )}
       {isFolder && <span className='git-panel-section-count'>{changesCount ?? 0}</span>}
@@ -440,6 +461,10 @@ function GitChangeList({
   kind: GitPanelSectionKind
   layout: GitPanelLayout
 }) {
+  if (changes.length === 0) {
+    return null
+  }
+
   return (
     <ul className='git-change-list'>
       {changes.map((change) => {
@@ -523,6 +548,10 @@ function GitSection({
 
   const toggleNode = (id: string) => {
     setClosedMap((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  if (changes.length === 0) {
+    return null
   }
 
   return (
@@ -642,7 +671,7 @@ export function GitPanel({
   if (!workspacePath) {
     return (
       <div className='git-panel-empty-state'>
-        <p>Select a workspace to inspect Git status.</p>
+        <p>选择一个工作区以查看 Git 状态。</p>
       </div>
     )
   }
@@ -650,7 +679,7 @@ export function GitPanel({
   if (isLoading) {
     return (
       <div className='git-panel-empty-state'>
-        <p>Loading Git status...</p>
+        <p>正在加载 Git 状态...</p>
       </div>
     )
   }
@@ -658,16 +687,16 @@ export function GitPanel({
   if (!repositoryState?.isRepository) {
     return (
       <div className='git-panel-empty-state git-panel-init-state'>
-        <p>This workspace is not a Git repository yet.</p>
+        <p>这个工作区还不是 Git 仓库。</p>
         <Button variant='primary' onPress={onInitialize}>
-          Initialize Git
+          初始化 Git
         </Button>
       </div>
     )
   }
 
   const syncDisabledReason = !repositoryState.hasRemote
-    ? 'Configure a remote repository to sync'
+    ? '配置远程仓库后才能同步'
     : Boolean(busyLabel)
       ? busyLabel
       : null
@@ -675,8 +704,8 @@ export function GitPanel({
   const hasUnpushedCommits = unpushedCommitCount > 0
   const pushBadgeLabel = unpushedCommitCount > 99 ? '99+' : String(unpushedCommitCount)
   const pushAccessibleLabel = hasUnpushedCommits
-    ? `Push ${unpushedCommitCount} unpushed commit${unpushedCommitCount === 1 ? '' : 's'}`
-    : 'Push'
+    ? `推送 ${unpushedCommitCount} 个待推送提交`
+    : '推送'
   const hasVisibleChanges = repositoryState.hasChanges
   const shouldShowCommitWorkflow = repositoryState.hasChanges
   const cleanStateSubtext = getCleanStateSubtext(repositoryState)
@@ -691,8 +720,8 @@ export function GitPanel({
                 <button
                   type='button'
                   className='git-toolbar-action git-toolbar-icon-button'
-                  aria-label='Commit and sync'
-                  title={syncDisabledReason ?? 'Commit and sync'}
+                  aria-label='提交并同步'
+                  title={syncDisabledReason ?? '提交并同步'}
                   disabled={!canSubmitCommit || Boolean(syncDisabledReason)}
                   onClick={onCommitAndSync}
                 >
@@ -701,8 +730,8 @@ export function GitPanel({
                 <button
                   type='button'
                   className='git-toolbar-action git-toolbar-icon-button'
-                  aria-label='Commit'
-                  title='Commit'
+                  aria-label='提交'
+                  title='提交'
                   disabled={!canSubmitCommit || Boolean(busyLabel)}
                   onClick={onCommit}
                 >
@@ -711,8 +740,8 @@ export function GitPanel({
                 <button
                   type='button'
                   className='git-toolbar-action git-toolbar-icon-button'
-                  aria-label='Stage all'
-                  title='Stage all'
+                  aria-label='全部暂存'
+                  title='全部暂存'
                   disabled={unstagedPaths.length === 0 || Boolean(busyLabel)}
                   onClick={() => {
                     onStage(unstagedPaths)
@@ -723,8 +752,8 @@ export function GitPanel({
                 <button
                   type='button'
                   className='git-toolbar-action git-toolbar-icon-button'
-                  aria-label='Unstage all'
-                  title='Unstage all'
+                  aria-label='全部取消暂存'
+                  title='全部取消暂存'
                   disabled={stagedPaths.length === 0 || Boolean(busyLabel)}
                   onClick={() => {
                     onUnstage(stagedPaths)
@@ -748,8 +777,8 @@ export function GitPanel({
             <button
               type='button'
               className='git-toolbar-action git-toolbar-icon-button'
-              aria-label='Pull'
-              title={syncDisabledReason ?? 'Pull'}
+              aria-label='拉取'
+              title={syncDisabledReason ?? '拉取'}
               disabled={Boolean(syncDisabledReason)}
               onClick={onPull}
             >
@@ -758,8 +787,8 @@ export function GitPanel({
             <button
               type='button'
               className='git-toolbar-action git-toolbar-icon-button'
-              aria-label={layout === 'tree' ? 'Switch to list layout' : 'Switch to tree layout'}
-              title={layout === 'tree' ? 'List layout' : 'Tree layout'}
+              aria-label={layout === 'tree' ? '切换到列表视图' : '切换到树状视图'}
+              title={layout === 'tree' ? '列表视图' : '树状视图'}
               disabled={Boolean(busyLabel)}
               onClick={() => {
                 onLayoutChange(layout === 'tree' ? 'list' : 'tree')
@@ -770,8 +799,8 @@ export function GitPanel({
             <button
               type='button'
               className='git-toolbar-action git-toolbar-icon-button'
-              aria-label='Refresh Git status'
-              title='Refresh'
+              aria-label='刷新 Git 状态'
+              title='刷新'
               disabled={Boolean(busyLabel)}
               onClick={onRefresh}
             >
@@ -784,10 +813,10 @@ export function GitPanel({
               <div className='git-panel-commit-field'>
                 <textarea
                   value={commitMessage}
-                  aria-label='Commit message'
+                  aria-label='提交信息'
                   className='git-commit-textarea'
                   disabled={Boolean(busyLabel)}
-                  placeholder='Commit Message'
+                  placeholder='提交信息'
                   rows={1}
                   onChange={(event) => {
                     onCommitMessageChange(event.target.value)
@@ -797,8 +826,8 @@ export function GitPanel({
                   <button
                     type='button'
                     className='git-panel-commit-clear'
-                    aria-label='Clear commit message'
-                    title='Clear'
+                    aria-label='清空提交信息'
+                    title='清空'
                     onClick={() => {
                       onCommitMessageChange('')
                     }}
@@ -823,7 +852,7 @@ export function GitPanel({
             <div className='git-empty-illustration'>
               <CheckLine size={28} />
             </div>
-            <p>Working tree clean</p>
+            <p>工作区干净</p>
             <span className='git-empty-subtext'>{cleanStateSubtext}</span>
             <div className='git-clean-actions'>
               {hasUnpushedCommits ? (
@@ -835,37 +864,37 @@ export function GitPanel({
                   onClick={onPush}
                 >
                   <UploadLine size={15} />
-                  <span>Push</span>
+                  <span>推送</span>
                 </button>
               ) : null}
               {repositoryState.behind > 0 ? (
                 <button
                   type='button'
                   className='git-clean-action'
-                  title={syncDisabledReason ?? 'Pull'}
+                  title={syncDisabledReason ?? '拉取'}
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPull}
                 >
                   <DownloadLine size={15} />
-                  <span>Pull</span>
+                  <span>拉取</span>
                 </button>
               ) : null}
               <button
                 type='button'
                 className='git-clean-action'
-                title='Refresh'
+                title='刷新'
                 disabled={Boolean(busyLabel)}
                 onClick={onRefresh}
               >
                 <Refresh2Line size={15} />
-                <span>Refresh</span>
+                <span>刷新</span>
               </button>
             </div>
           </div>
         ) : (
           <>
             <GitSection
-              title='Staged Changes'
+              title='已暂存更改'
               changes={repositoryState.stagedChanges}
               kind='staged'
               layout={layout}
@@ -880,7 +909,8 @@ export function GitPanel({
                 <button
                   type='button'
                   className='git-change-action git-change-icon-button'
-                  aria-label='Unstage all'
+                  aria-label='全部取消暂存'
+                  title='全部取消暂存'
                   onClick={() => onUnstage(stagedPaths)}
                 >
                   <Icon icon='mdi:minus' width={14} height={14} />
@@ -889,7 +919,7 @@ export function GitPanel({
             />
 
             <GitSection
-              title='Changes'
+              title='更改'
               changes={repositoryState.unstagedChanges}
               kind='unstaged'
               layout={layout}
@@ -905,7 +935,8 @@ export function GitPanel({
                   <button
                     type='button'
                     className='git-change-action git-change-icon-button'
-                    title='Discard all'
+                    aria-label='全部放弃'
+                    title='全部放弃'
                     onClick={onDiscardAll}
                   >
                     <Back2Line size={14} />
@@ -913,7 +944,8 @@ export function GitPanel({
                   <button
                     type='button'
                     className='git-change-action git-change-icon-button'
-                    title='Stage all'
+                    aria-label='全部暂存'
+                    title='全部暂存'
                     onClick={() => onStage(unstagedPaths)}
                   >
                     <AddLine size={14} />

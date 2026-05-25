@@ -26,7 +26,7 @@ type DragTarget = {
 
 function getBaseName(tab: WorkspaceDisplayTab) {
   if (tab.kind === 'fixed-panel') {
-    return tab.fixedTabKind === 'file-panel' ? '文件' : '变更'
+    return tab.fixedTabKind === 'file-panel' ? '文件' : '更改'
   }
 
   if (tab.kind === 'settings') {
@@ -89,7 +89,7 @@ function isReorderableTab(tab: WorkspaceDisplayTab): tab is WorkspaceTab {
 
 function getTabTitle(tab: WorkspaceDisplayTab) {
   if (tab.kind === 'fixed-panel') {
-    return tab.fixedTabKind === 'file-panel' ? '文件' : '变更'
+    return tab.fixedTabKind === 'file-panel' ? '文件' : '更改'
   }
 
   const titleParts = [
