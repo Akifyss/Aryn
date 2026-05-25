@@ -3503,8 +3503,12 @@ body.workspace-tree-dragging .workspace-tree-row {
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  padding: 0 8px 8px;
+  padding: 8px;
   background: transparent;
+}
+
+.workspace-sidebar-surface .agent-session-tree-shell {
+  padding-top: 0;
 }
 
 .agent-session-tree-floating {

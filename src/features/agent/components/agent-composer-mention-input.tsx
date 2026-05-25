@@ -508,7 +508,8 @@ export function AgentComposerMentionInput({
 
     setMentionMenuStyle((currentStyle) => {
       if (
-        currentStyle?.left === nextStyle.left
+        currentStyle
+        && currentStyle.left === nextStyle.left
         && currentStyle.top === nextStyle.top
         && currentStyle.width === nextStyle.width
         && currentStyle['--agent-composer-mention-menu-height'] === nextStyle['--agent-composer-mention-menu-height']

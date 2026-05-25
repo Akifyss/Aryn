@@ -1857,6 +1857,31 @@ function App() {
     }
   }
 
+  const expandAgentEditorSurface = useCallback(() => {
+    if (!isAgentLayout) {
+      return
+    }
+
+    setIsAgentRightSidebarCollapsed((currentValue) => {
+      if (!currentValue) {
+        return currentValue
+      }
+
+      setAgentRightSidebarWidth(
+        agentRightSidebarWidthMode === 'max'
+          ? getAgentRightSidebarMaxWidth()
+          : clampRightWidth(agentRightSidebarWidth, getShellWidth(), effectiveLeftSidebarWidth),
+      )
+
+      return false
+    })
+  }, [
+    agentRightSidebarWidth,
+    agentRightSidebarWidthMode,
+    effectiveLeftSidebarWidth,
+    isAgentLayout,
+  ])
+
   const openFile = useCallback(async (
     filePath: string,
     workspacePath: string | null = currentPath,
@@ -1893,6 +1918,8 @@ function App() {
       })
       return
     }
+
+    expandAgentEditorSurface()
 
     try {
       const targetViewMode = resolveWorkspaceFileViewMode(filePath, editorKind, preferredViewMode)
@@ -1989,7 +2016,14 @@ function App() {
     recordOpenFileProfile('app:open-file:end', {
       elapsedMs: getOpenFileProfileDuration(openStartedAt),
     })
-  }, [currentPath, activateTab, captureActiveMeoViewPosition, isLeftSidebarDrawer, openTab])
+  }, [
+    activateTab,
+    captureActiveMeoViewPosition,
+    currentPath,
+    expandAgentEditorSurface,
+    isLeftSidebarDrawer,
+    openTab,
+  ])
 
   const openAgentMessageFile = useCallback(async (
     filePath: string,
@@ -2003,6 +2037,7 @@ function App() {
       captureActiveMeoViewPosition()
       setIsSettingsTabActive(false)
       setIsAgentLayoutFixedTabActive(false)
+      expandAgentEditorSurface()
       activateTab(existingFileTab.id)
 
       if (isRightSidebarDrawer) {
@@ -2030,7 +2065,14 @@ function App() {
     if (isRightSidebarDrawer) {
       setIsRightDrawerOpen(false)
     }
-  }, [activateTab, captureActiveMeoViewPosition, currentPath, isRightSidebarDrawer, openFile])
+  }, [
+    activateTab,
+    captureActiveMeoViewPosition,
+    currentPath,
+    expandAgentEditorSurface,
+    isRightSidebarDrawer,
+    openFile,
+  ])
 
   async function openMeoGitDiff(
     change: GitChangeItem,
