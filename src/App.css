@@ -3503,7 +3503,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  padding: 8px;
+  padding: 0 8px 8px;
   background: transparent;
 }
 
