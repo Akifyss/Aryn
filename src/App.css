@@ -2617,7 +2617,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 6px;
+  gap: 2px;
   opacity: 0;
   max-width: 0;
   /* No space when hidden */
@@ -2634,7 +2634,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 .git-tree-folder-row:hover .git-change-actions,
 .workspace-tree-row:hover .git-change-actions {
   opacity: 1;
-  max-width: 128px;
+  max-width: 136px;
   /* Expand to show icons */
   transform: translateX(0);
 }
