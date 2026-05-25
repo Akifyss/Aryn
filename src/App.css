@@ -4801,7 +4801,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-model-cascader-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
   width: fit-content;
   min-width: 0;
   max-width: 100%;
