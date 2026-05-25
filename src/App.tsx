@@ -4023,7 +4023,7 @@ function App() {
                     </Tabs.Tab>
                     <Tabs.Tab id='git' className='sidebar-vertical-tab'>
                       <GitBranchLine size={16} className='sidebar-vertical-tab-icon' />
-                      <span className='sidebar-vertical-tab-label'>Git</span>
+                      <span className='sidebar-vertical-tab-label'>变更</span>
                       <Tabs.Indicator className='sidebar-vertical-tab-indicator' />
                     </Tabs.Tab>
                   </Tabs.List>
