@@ -1,5 +1,6 @@
 import {
   type ClipboardEvent,
+  type CSSProperties,
   type DragEvent,
   type HTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -10,6 +11,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import type {
@@ -39,8 +41,10 @@ type ComposerModel = {
 type AgentComposerMentionInputProps = {
   disabled?: boolean
   footer?: ReactNode
+  header?: ReactNode
   iconTheme?: WorkspaceIconTheme | null
   mentions: ComposerMentionToken[]
+  onFilesPastedOrDropped?: (files: File[]) => void
   onChange: (nextModel: ComposerModel) => void
   onSubmitShortcut?: (event: ReactKeyboardEvent<HTMLDivElement>) => void
   placeholder?: string
@@ -70,6 +74,14 @@ const MENTION_MENU_MAX_HEIGHT = 264
 const MENTION_MENU_ROW_HEIGHT = 30
 const MENTION_MENU_PADDING = 10
 const MENTION_MENU_EMPTY_HEIGHT = 42
+const MENTION_MENU_GAP = 8
+const MENTION_MENU_MARGIN = 12
+const MENTION_MENU_MIN_WIDTH = 260
+const MENTION_MENU_MAX_WIDTH = 420
+
+type MentionMenuStyle = CSSProperties & {
+  '--agent-composer-mention-menu-height'?: string
+}
 
 function buildActiveMentionKey(activeMention: ActiveComposerMentionQuery | null) {
   if (!activeMention) {
@@ -272,6 +284,36 @@ function restoreSelection(editor: HTMLElement, selectionRange: ComposerSelection
   domSelection.addRange(nextRange)
 }
 
+function getEditorRangeForSelection(editor: HTMLElement, selectionRange: ComposerSelectionRange) {
+  const range = document.createRange()
+  const startPoint = getEditorPointForOffset(editor, selectionRange.start)
+  const endPoint = getEditorPointForOffset(editor, selectionRange.end)
+
+  range.setStart(startPoint.node, startPoint.offset)
+  range.setEnd(endPoint.node, endPoint.offset)
+  return range
+}
+
+function getEditorCaretRect(editor: HTMLElement, offset: number) {
+  const range = getEditorRangeForSelection(editor, { end: offset, start: offset })
+  let rect = range.getBoundingClientRect()
+
+  if (rect.width === 0 && rect.height === 0) {
+    const firstClientRect = range.getClientRects()[0]
+    if (firstClientRect) {
+      rect = firstClientRect
+    }
+  }
+
+  range.detach()
+
+  if (rect.width === 0 && rect.height === 0) {
+    return editor.getBoundingClientRect()
+  }
+
+  return rect
+}
+
 function renderEditorContent(editor: HTMLElement, value: string, mentions: ComposerMentionToken[]) {
   const fragment = document.createDocumentFragment()
   let cursor = 0
@@ -373,8 +415,10 @@ function editorContentMatchesModel(editor: HTMLElement, value: string, mentions:
 export function AgentComposerMentionInput({
   disabled = false,
   footer,
+  header,
   iconTheme,
   mentions,
+  onFilesPastedOrDropped,
   onChange,
   onSubmitShortcut,
   placeholder = 'Message',
@@ -401,6 +445,7 @@ export function AgentComposerMentionInput({
   const [isFocused, setIsFocused] = useState(false)
   const [dismissedMentionKey, setDismissedMentionKey] = useState<string | null>(null)
   const [isComposing, setIsComposing] = useState(false)
+  const [mentionMenuStyle, setMentionMenuStyle] = useState<MentionMenuStyle | null>(null)
 
   const normalizedMentions = useMemo(() => parseComposerMentionRanges(value, mentions), [mentions, value])
   const mentionItems = useMemo(
@@ -429,6 +474,52 @@ export function AgentComposerMentionInput({
     [mentionResults.length],
   )
 
+  function updateMentionMenuPosition() {
+    const editor = editorRef.current
+
+    if (!editor || !activeMention) {
+      setMentionMenuStyle(null)
+      return
+    }
+
+    const editorRect = editor.getBoundingClientRect()
+    const anchorRect = getEditorCaretRect(editor, activeMention.end)
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const maxWidth = Math.max(MENTION_MENU_MIN_WIDTH, viewportWidth - (MENTION_MENU_MARGIN * 2))
+    const width = Math.min(Math.max(editorRect.width, MENTION_MENU_MIN_WIDTH), MENTION_MENU_MAX_WIDTH, maxWidth)
+    const left = Math.max(MENTION_MENU_MARGIN, Math.min(anchorRect.left, viewportWidth - width - MENTION_MENU_MARGIN))
+    const availableBelow = viewportHeight - anchorRect.bottom - MENTION_MENU_GAP - MENTION_MENU_MARGIN
+    const availableAbove = anchorRect.top - MENTION_MENU_GAP - MENTION_MENU_MARGIN
+    const opensBelow = availableBelow >= Math.min(mentionMenuHeight, MENTION_MENU_MAX_HEIGHT) || availableBelow >= availableAbove
+    const maxHeight = Math.max(
+      MENTION_MENU_EMPTY_HEIGHT,
+      Math.min(mentionMenuHeight, opensBelow ? availableBelow : availableAbove, MENTION_MENU_MAX_HEIGHT),
+    )
+    const top = opensBelow
+      ? Math.min(anchorRect.bottom + MENTION_MENU_GAP, viewportHeight - maxHeight - MENTION_MENU_MARGIN)
+      : Math.max(MENTION_MENU_MARGIN, anchorRect.top - MENTION_MENU_GAP - maxHeight)
+    const nextStyle: MentionMenuStyle = {
+      left: `${left}px`,
+      top: `${Math.max(MENTION_MENU_MARGIN, top)}px`,
+      width: `${width}px`,
+      '--agent-composer-mention-menu-height': `${maxHeight}px`,
+    }
+
+    setMentionMenuStyle((currentStyle) => {
+      if (
+        currentStyle?.left === nextStyle.left
+        && currentStyle.top === nextStyle.top
+        && currentStyle.width === nextStyle.width
+        && currentStyle['--agent-composer-mention-menu-height'] === nextStyle['--agent-composer-mention-menu-height']
+      ) {
+        return currentStyle
+      }
+
+      return nextStyle
+    })
+  }
+
   useLayoutEffect(() => {
     const editor = editorRef.current
 
@@ -452,6 +543,31 @@ export function AgentComposerMentionInput({
     restoreSelection(editor, nextSelection)
     setSelection(nextSelection)
   }, [isComposing, isFocused, normalizedMentions, value])
+
+  useLayoutEffect(() => {
+    if (!shouldShowMentionMenu) {
+      setMentionMenuStyle(null)
+      return
+    }
+
+    updateMentionMenuPosition()
+  }, [activeMention?.end, activeMentionKey, mentionMenuHeight, shouldShowMentionMenu, value])
+
+  useEffect(() => {
+    if (!shouldShowMentionMenu) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(updateMentionMenuPosition)
+    window.addEventListener('resize', updateMentionMenuPosition)
+    window.addEventListener('scroll', updateMentionMenuPosition, true)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.removeEventListener('resize', updateMentionMenuPosition)
+      window.removeEventListener('scroll', updateMentionMenuPosition, true)
+    }
+  }, [activeMention?.end, mentionMenuHeight, shouldShowMentionMenu, value])
 
   useEffect(() => {
     setSelectedIndex(0)
@@ -691,6 +807,15 @@ export function AgentComposerMentionInput({
       return
     }
 
+    const droppedFiles = Array.from(event.dataTransfer.files ?? [])
+    if (droppedFiles.length > 0) {
+      event.preventDefault()
+      if (!disabled) {
+        onFilesPastedOrDropped?.(droppedFiles)
+      }
+      return
+    }
+
     const droppedText = event.dataTransfer.getData('text/plain')
     event.preventDefault()
 
@@ -730,171 +855,191 @@ export function AgentComposerMentionInput({
     emitModel(nextModel, nextSelection)
   }
 
+  const mentionMenu = shouldShowMentionMenu && mentionMenuStyle && typeof document !== 'undefined'
+    ? createPortal(
+      <div className='agent-composer-mention-menu' style={mentionMenuStyle}>
+        <AppScrollArea
+          ref={menuRef}
+          className='agent-composer-mention-menu-scroll'
+          contentClassName='agent-composer-mention-menu-scroll-content'
+          rootStyle={{ height: 'var(--agent-composer-mention-menu-height)' }}
+        >
+          <div className='agent-composer-mention-menu-list' role='listbox' aria-label='Project files'>
+            {mentionResults.length > 0 ? mentionResults.map((item, index) => {
+              const isActive = index === selectedIndex
+
+              return (
+                <button
+                  key={item.id}
+                  type='button'
+                  role='option'
+                  aria-selected={isActive}
+                  data-active={isActive ? 'true' : 'false'}
+                  className={`agent-composer-mention-option${isActive ? ' is-active' : ''}`}
+                  title={item.relativePath}
+                  onMouseDown={(mouseEvent) => {
+                    mouseEvent.preventDefault()
+                    applyMentionSelection(index)
+                  }}
+                  onMouseEnter={() => {
+                    setSelectedIndex(index)
+                  }}
+                >
+                  <span className='git-row-icon'>
+                    <WorkspaceFileIcon
+                      fileName={item.name}
+                      iconTheme={iconTheme ?? null}
+                      isClosed={item.kind === 'directory'}
+                      isFolder={item.kind === 'directory'}
+                      nodeLabel={item.name}
+                    />
+                  </span>
+
+                  <span className='agent-composer-mention-option-inline'>
+                    <span className='panel-tree-label'>{item.displayName}</span>
+                    {item.displayPath ? (
+                      <span className='git-change-meta'>{item.displayPath}</span>
+                    ) : null}
+                  </span>
+                </button>
+              )
+            }) : (
+              <div className='agent-composer-mention-empty'>No matching files or folders</div>
+            )}
+          </div>
+        </AppScrollArea>
+      </div>,
+      document.body,
+    )
+    : null
+
   return (
-    <div className='agent-composer-input-shell'>
-      {shouldShowMentionMenu ? (
-        <div className='agent-composer-mention-menu'>
-          <AppScrollArea
-            ref={menuRef}
-            className='agent-composer-mention-menu-scroll'
-            contentClassName='agent-composer-mention-menu-scroll-content'
-            rootStyle={{ height: `${mentionMenuHeight}px` }}
-          >
-            <div className='agent-composer-mention-menu-list' role='listbox' aria-label='Project files'>
-              {mentionResults.length > 0 ? mentionResults.map((item, index) => {
-                const isActive = index === selectedIndex
+    <>
+      <div className='agent-composer-input-shell'>
+        <div className='agent-composer-field'>
+          {header ? <div className='agent-composer-header'>{header}</div> : null}
 
-                return (
-                  <button
-                    key={item.id}
-                    type='button'
-                    role='option'
-                    aria-selected={isActive}
-                    data-active={isActive ? 'true' : 'false'}
-                    className={`agent-composer-mention-option${isActive ? ' is-active' : ''}`}
-                    title={item.relativePath}
-                    onMouseDown={(mouseEvent) => {
-                      mouseEvent.preventDefault()
-                      applyMentionSelection(index)
-                    }}
-                    onMouseEnter={() => {
-                      setSelectedIndex(index)
-                    }}
-                  >
-                    <span className='git-row-icon'>
-                      <WorkspaceFileIcon
-                        fileName={item.name}
-                        iconTheme={iconTheme ?? null}
-                        isClosed={item.kind === 'directory'}
-                        isFolder={item.kind === 'directory'}
-                        nodeLabel={item.name}
-                      />
-                    </span>
+          <div className='agent-composer-text-shell'>
+            {shouldShowPlaceholder ? (
+              <div className='agent-composer-placeholder' aria-hidden='true'>
+                {placeholder}
+              </div>
+            ) : null}
 
-                    <span className='agent-composer-mention-option-inline'>
-                      <span className='panel-tree-label'>{item.displayName}</span>
-                      {item.displayPath ? (
-                        <span className='git-change-meta'>{item.displayPath}</span>
-                      ) : null}
-                    </span>
-                  </button>
-                )
-              }) : (
-                <div className='agent-composer-mention-empty'>No matching files or folders</div>
-              )}
-            </div>
-          </AppScrollArea>
+            <div
+              {...editorProps}
+              ref={editorRef}
+              aria-disabled={disabled || undefined}
+              aria-multiline='true'
+              className={`agent-composer-editor${className ? ` ${className}` : ''}`}
+              contentEditable={disabled ? 'false' : 'true'}
+              role='textbox'
+              spellCheck={false}
+              suppressContentEditableWarning
+              onBlur={(event) => {
+                setIsFocused(false)
+                onBlur?.(event)
+              }}
+              onCompositionEnd={(event) => {
+                setIsComposing(false)
+                commitEditorDomToModel()
+                onCompositionEnd?.(event)
+              }}
+              onCompositionStart={(event) => {
+                setIsComposing(true)
+                onCompositionStart?.(event)
+              }}
+              onCopy={(event) => {
+                onCopy?.(event)
+                if (event.defaultPrevented) {
+                  return
+                }
+                handleCopyLikeEvent(event, false)
+              }}
+              onCut={(event) => {
+                onCut?.(event)
+                if (event.defaultPrevented) {
+                  return
+                }
+                handleCopyLikeEvent(event, true)
+              }}
+              onDrop={handleDropEvent}
+              onFocus={(event) => {
+                setIsFocused(true)
+                syncSelectionFromEditor()
+                onFocus?.(event)
+              }}
+              onInput={() => {
+                if (isComposing) {
+                  return
+                }
+
+                commitEditorDomToModel()
+              }}
+              onKeyDown={(event) => {
+                onKeyDown?.(event)
+
+                if (event.defaultPrevented || disabled || isComposing || event.nativeEvent.isComposing) {
+                  return
+                }
+
+                if (handleMentionNavigation(event)) {
+                  return
+                }
+
+                const currentSelection = syncSelectionFromEditor() ?? selection
+
+                if (event.key === 'Backspace' || event.key === 'Delete') {
+                  const direction = event.key === 'Backspace' ? 'backward' : 'forward'
+                  const deleteRange = getComposerDeleteRange(currentSelection, normalizedMentions, direction)
+
+                  if (deleteRange) {
+                    event.preventDefault()
+                    applyTextEdit('', deleteRange)
+                  }
+                  return
+                }
+
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+
+                  if (event.shiftKey) {
+                    applyTextEdit('\n', currentSelection)
+                    return
+                  }
+
+                  onSubmitShortcut?.(event)
+                }
+              }}
+              onPaste={(event) => {
+                onPaste?.(event)
+                if (event.defaultPrevented) {
+                  return
+                }
+
+                if (disabled || isComposing) {
+                  return
+                }
+
+                const pastedFiles = Array.from(event.clipboardData.files ?? [])
+                if (pastedFiles.length > 0) {
+                  event.preventDefault()
+                  onFilesPastedOrDropped?.(pastedFiles)
+                  return
+                }
+
+                event.preventDefault()
+                const pastedText = event.clipboardData.getData('text/plain')
+                const currentSelection = syncSelectionFromEditor() ?? selection
+                applyTextEdit(pastedText, currentSelection)
+              }}
+            />
+          </div>
+
+          {footer}
         </div>
-      ) : null}
-
-      {shouldShowPlaceholder ? (
-        <div className='agent-composer-placeholder' aria-hidden='true'>
-          {placeholder}
-        </div>
-      ) : null}
-
-      <div
-        {...editorProps}
-        ref={editorRef}
-        aria-disabled={disabled || undefined}
-        aria-multiline='true'
-        className={`agent-composer-editor${className ? ` ${className}` : ''}`}
-        contentEditable={disabled ? 'false' : 'true'}
-        role='textbox'
-        spellCheck={false}
-        suppressContentEditableWarning
-        onBlur={(event) => {
-          setIsFocused(false)
-          onBlur?.(event)
-        }}
-        onCompositionEnd={(event) => {
-          setIsComposing(false)
-          commitEditorDomToModel()
-          onCompositionEnd?.(event)
-        }}
-        onCompositionStart={(event) => {
-          setIsComposing(true)
-          onCompositionStart?.(event)
-        }}
-        onCopy={(event) => {
-          onCopy?.(event)
-          if (event.defaultPrevented) {
-            return
-          }
-          handleCopyLikeEvent(event, false)
-        }}
-        onCut={(event) => {
-          onCut?.(event)
-          if (event.defaultPrevented) {
-            return
-          }
-          handleCopyLikeEvent(event, true)
-        }}
-        onDrop={handleDropEvent}
-        onFocus={(event) => {
-          setIsFocused(true)
-          syncSelectionFromEditor()
-          onFocus?.(event)
-        }}
-        onInput={() => {
-          if (isComposing) {
-            return
-          }
-
-          commitEditorDomToModel()
-        }}
-        onKeyDown={(event) => {
-          onKeyDown?.(event)
-
-          if (event.defaultPrevented || disabled || isComposing || event.nativeEvent.isComposing) {
-            return
-          }
-
-          if (handleMentionNavigation(event)) {
-            return
-          }
-
-          const currentSelection = syncSelectionFromEditor() ?? selection
-
-          if (event.key === 'Backspace' || event.key === 'Delete') {
-            const direction = event.key === 'Backspace' ? 'backward' : 'forward'
-            const deleteRange = getComposerDeleteRange(currentSelection, normalizedMentions, direction)
-
-            if (deleteRange) {
-              event.preventDefault()
-              applyTextEdit('', deleteRange)
-            }
-            return
-          }
-
-          if (event.key === 'Enter') {
-            event.preventDefault()
-
-            if (event.shiftKey) {
-              applyTextEdit('\n', currentSelection)
-              return
-            }
-
-            onSubmitShortcut?.(event)
-          }
-        }}
-        onPaste={(event) => {
-          onPaste?.(event)
-          if (event.defaultPrevented) {
-            return
-          }
-
-          if (disabled || isComposing) {
-            return
-          }
-
-          event.preventDefault()
-          const pastedText = event.clipboardData.getData('text/plain')
-          const currentSelection = syncSelectionFromEditor() ?? selection
-          applyTextEdit(pastedText, currentSelection)
-        }}
-      />
-      {footer}
-    </div>
+      </div>
+      {mentionMenu}
+    </>
   )
 }

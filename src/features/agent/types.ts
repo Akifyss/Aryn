@@ -3,6 +3,27 @@ export type AgentSidebarMessageStatus = 'done' | 'error' | 'running'
 
 export type AgentMessageFileChangeKind = 'created' | 'deleted' | 'updated'
 
+export type AgentAttachmentKind = 'file' | 'image'
+
+export type AgentPromptAttachment = {
+  data?: string
+  fileName: string
+  kind: AgentAttachmentKind
+  mimeType?: string
+  path?: string
+  size?: number
+}
+
+export type AgentMessageAttachment = {
+  data?: string
+  fileName: string
+  kind: AgentAttachmentKind
+  mimeType?: string
+  path?: string
+  size?: number
+  status?: 'omitted' | 'sent' | 'referenced'
+}
+
 export type AgentMessageFileChange = {
   filePath: string
   kind: AgentMessageFileChangeKind
@@ -19,6 +40,7 @@ export type AgentSidebarMessage = {
   label?: string
   sessionEntryId?: string
   status?: AgentSidebarMessageStatus
+  attachments?: AgentMessageAttachment[]
   text: string
   thinkingText?: string
   timestamp: number
@@ -43,6 +65,7 @@ export type AgentRuntimeState = {
   workspacePath: string | null
   hasConfiguredModels: boolean
   availableModels: string[]
+  availableModelInputs: Record<string, Array<'text' | 'image'>>
   availableThinkingLevels: AgentThinkingLevel[]
   availableThinkingLevelsByModel: Record<string, AgentThinkingLevel[]>
   compactionReason: 'manual' | 'overflow' | 'threshold' | null

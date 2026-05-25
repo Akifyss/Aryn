@@ -6,16 +6,20 @@ import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent'
 import {
   AuthStorage,
   createAgentSession,
+  formatDimensionNote,
   ModelRegistry,
+  resizeImage,
   SessionManager,
   SettingsManager,
   type SessionEntry,
   type AgentSession,
 } from '@earendil-works/pi-coding-agent'
-import { clampThinkingLevel, complete, getEnvApiKey, getSupportedThinkingLevels, type Api, type AssistantMessage, type Model, type TextContent, type ToolResultMessage, type UserMessage } from '@earendil-works/pi-ai'
+import { clampThinkingLevel, complete, getEnvApiKey, getSupportedThinkingLevels, type Api, type AssistantMessage, type ImageContent, type Model, type TextContent, type ToolResultMessage, type UserMessage } from '@earendil-works/pi-ai'
 import type {
+  AgentMessageAttachment,
   AgentMessageFileChange,
   AgentClientEvent,
+  AgentPromptAttachment,
   AgentProviderAuthState,
   AgentRuntimeState,
   AgentSessionListItem,
@@ -63,6 +67,10 @@ type PiAgentManagerOptions = {
 }
 
 type StreamingBehavior = 'steer' | 'followUp'
+type PreparedPromptAttachments = {
+  images: ImageContent[]
+  text: string
+}
 type AgentProviderAuthPrompt = {
   allowEmpty?: boolean
   message: string
@@ -84,6 +92,9 @@ const GOOGLE_ENV_KEY = 'GEMINI_API_KEY'
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] satisfies ThinkingLevel[]
 const AUTO_SESSION_NAME_MODEL_ID = 'openrouter/free'
 const AUTO_SESSION_NAME_MAX_TOKENS = 48
+const AGENT_PROMPT_ATTACHMENT_PREFIX = 'Attachments:'
+const MAX_PROMPT_ATTACHMENTS = 12
+const MAX_IMAGE_ATTACHMENT_BYTES = 12 * 1024 * 1024
 const AUTH_SETUP_HINT = `No authenticated models are available. Add a provider credential in Settings > Providers, log in to a subscription provider, or set a supported Pi provider environment variable such as ${OPENROUTER_ENV_KEY}, ${OPENAI_ENV_KEY}, or ${GOOGLE_ENV_KEY}.`
 const AUTO_SESSION_NAME_SYSTEM_PROMPT = [
   'You generate short chat session titles.',
@@ -200,11 +211,21 @@ function getThinkingLevelsByModel(availableModels: Model<Api>[]) {
   return levelsByModel
 }
 
+function getInputsByModel(availableModels: Model<Api>[]) {
+  const inputsByModel: Record<string, Array<'text' | 'image'>> = {}
+
+  for (const model of availableModels) {
+    inputsByModel[`${model.provider}/${model.id}`] = [...model.input]
+  }
+
+  return inputsByModel
+}
+
 function isThinkingLevel(value: string): value is ThinkingLevel {
   return THINKING_LEVELS.includes(value as ThinkingLevel)
 }
 
-function asText(value: string | Array<TextContent | { type: 'image' }>) {
+function asText(value: string | Array<TextContent | ImageContent>) {
   if (typeof value === 'string') {
     return value.trim()
   }
@@ -219,6 +240,301 @@ function asText(value: string | Array<TextContent | { type: 'image' }>) {
     })
     .join('\n')
     .trim()
+}
+
+function stripDataUrlPrefix(value: string) {
+  const trimmedValue = value.trim()
+  const dataUrlMatch = trimmedValue.match(/^data:([^;,]+)?(?:;charset=[^;,]+)?;base64,(.*)$/is)
+
+  if (!dataUrlMatch) {
+    return trimmedValue
+  }
+
+  return dataUrlMatch[2]?.trim() ?? ''
+}
+
+function getDataUrlMimeType(value: string) {
+  return value.trim().match(/^data:([^;,]+)?(?:;charset=[^;,]+)?;base64,/i)?.[1]?.toLowerCase() ?? null
+}
+
+function normalizePromptAttachment(value: unknown): AgentPromptAttachment | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const attachment = value as Partial<AgentPromptAttachment>
+  const fileName = typeof attachment.fileName === 'string' ? attachment.fileName.trim() : ''
+  const pathValue = typeof attachment.path === 'string' ? attachment.path.trim() : undefined
+  const dataValue = typeof attachment.data === 'string' ? attachment.data.trim() : undefined
+
+  if (!fileName && !pathValue) {
+    return null
+  }
+
+  const mimeType = typeof attachment.mimeType === 'string' && attachment.mimeType.trim()
+    ? attachment.mimeType.trim().toLowerCase()
+    : dataValue
+      ? getDataUrlMimeType(dataValue) ?? undefined
+      : undefined
+  const kind = attachment.kind === 'image' || mimeType?.startsWith('image/')
+    ? 'image'
+    : 'file'
+  const normalizedSize = typeof attachment.size === 'number' && Number.isFinite(attachment.size) && attachment.size >= 0
+    ? attachment.size
+    : undefined
+
+  return {
+    ...(dataValue ? { data: dataValue } : {}),
+    fileName: fileName || path.basename(pathValue ?? 'attachment'),
+    kind,
+    ...(mimeType ? { mimeType } : {}),
+    ...(pathValue ? { path: pathValue } : {}),
+    ...(normalizedSize !== undefined ? { size: normalizedSize } : {}),
+  }
+}
+
+function normalizePromptAttachments(attachments: unknown): AgentPromptAttachment[] {
+  if (!Array.isArray(attachments)) {
+    return []
+  }
+
+  return attachments
+    .map(normalizePromptAttachment)
+    .filter((attachment): attachment is AgentPromptAttachment => Boolean(attachment))
+    .slice(0, MAX_PROMPT_ATTACHMENTS)
+}
+
+function serializeAttachmentReference(attachment: AgentMessageAttachment) {
+  const reference = {
+    fileName: attachment.fileName,
+    kind: attachment.kind,
+    ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
+    ...(attachment.path ? { path: attachment.path } : {}),
+    ...(attachment.size !== undefined ? { size: attachment.size } : {}),
+    ...(attachment.status ? { status: attachment.status } : {}),
+  }
+
+  return `- ${JSON.stringify(reference)}`
+}
+
+function isJsonAttachmentReferenceLine(line: string) {
+  return line.trim().slice(2).trim().startsWith('{')
+}
+
+function parseAttachmentReferenceLine(line: string): AgentMessageAttachment | null {
+  const trimmedLine = line.trim()
+
+  if (!trimmedLine.startsWith('- ')) {
+    return null
+  }
+
+  const payload = trimmedLine.slice(2).trim()
+
+  if (payload.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(payload) as Partial<AgentMessageAttachment>
+      const fileName = typeof parsed.fileName === 'string' ? parsed.fileName.trim() : ''
+      const kind = parsed.kind === 'image' ? 'image' : 'file'
+      const mimeType = typeof parsed.mimeType === 'string' ? parsed.mimeType.trim() : ''
+      const pathValue = typeof parsed.path === 'string' ? parsed.path.trim() : ''
+      const size = typeof parsed.size === 'number' && Number.isFinite(parsed.size) && parsed.size >= 0
+        ? parsed.size
+        : undefined
+      const status = parsed.status === 'sent' || parsed.status === 'omitted' || parsed.status === 'referenced'
+        ? parsed.status
+        : 'referenced'
+
+      if (!fileName) {
+        return null
+      }
+
+      return {
+        fileName,
+        kind,
+        ...(mimeType ? { mimeType } : {}),
+        ...(pathValue ? { path: pathValue } : {}),
+        ...(size !== undefined ? { size } : {}),
+        status,
+      }
+    } catch {
+      // Fall back to the legacy human-readable format below.
+    }
+  }
+
+  const label = payload.split(' (')[0]?.trim()
+  const pathMatch = line.match(/path:\s*([^,)]+)/)
+  const isImage = /\bimage\b/i.test(line)
+  const status = /not sent as image|too large/i.test(line)
+    ? 'omitted'
+    : 'referenced'
+
+  return label
+    ? {
+        fileName: label,
+        kind: isImage ? 'image' : 'file',
+        ...(pathMatch?.[1] ? { path: pathMatch[1].trim() } : {}),
+        status,
+      }
+    : null
+}
+
+function appendAttachmentText(prompt: string, attachmentText: string) {
+  const trimmedAttachmentText = attachmentText.trim()
+
+  if (!trimmedAttachmentText) {
+    return prompt.trim()
+  }
+
+  return `${prompt.trim()}\n\n${AGENT_PROMPT_ATTACHMENT_PREFIX}\n${trimmedAttachmentText}`.trim()
+}
+
+async function preparePromptAttachments(
+  attachments: AgentPromptAttachment[],
+  model: Model<Api>,
+): Promise<PreparedPromptAttachments> {
+  const images: ImageContent[] = []
+  const textLines: string[] = []
+  const supportsImages = model.input.includes('image')
+
+  for (const attachment of attachments) {
+    if (attachment.kind !== 'image' && !attachment.path) {
+      throw new Error(`Attachment "${attachment.fileName}" does not have a readable file path.`)
+    }
+
+    if (attachment.path && !(await pathExists(attachment.path))) {
+      throw new Error(`Attachment "${attachment.fileName}" does not exist at ${attachment.path}.`)
+    }
+
+    const baseMetadata: AgentMessageAttachment = {
+      fileName: attachment.fileName,
+      kind: attachment.kind,
+      ...(attachment.data ? { data: attachment.data } : {}),
+      ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
+      ...(attachment.path ? { path: attachment.path } : {}),
+      ...(attachment.size !== undefined ? { size: attachment.size } : {}),
+    }
+
+    if (attachment.kind === 'image' && attachment.data) {
+      const imageData = stripDataUrlPrefix(attachment.data)
+      const mimeType = attachment.mimeType ?? getDataUrlMimeType(attachment.data) ?? 'image/png'
+      const encodedSize = Buffer.byteLength(imageData, 'utf-8')
+
+      if (!supportsImages) {
+        const omittedMetadata: AgentMessageAttachment = {
+          ...baseMetadata,
+          mimeType,
+          status: 'omitted',
+        }
+        textLines.push(serializeAttachmentReference(omittedMetadata))
+        continue
+      }
+
+      if (encodedSize > MAX_IMAGE_ATTACHMENT_BYTES) {
+        const omittedMetadata: AgentMessageAttachment = {
+          ...baseMetadata,
+          mimeType,
+          status: 'omitted',
+        }
+        textLines.push(serializeAttachmentReference(omittedMetadata))
+        continue
+      }
+
+      const resizedImage = await resizeImage({ type: 'image', data: imageData, mimeType })
+      const image = resizedImage
+        ? { type: 'image' as const, data: resizedImage.data, mimeType: resizedImage.mimeType }
+        : { type: 'image' as const, data: imageData, mimeType }
+      const sentMetadata: AgentMessageAttachment = {
+        ...baseMetadata,
+        mimeType: image.mimeType,
+        status: 'sent',
+      }
+
+      images.push(image)
+
+      const dimensionNote = resizedImage ? formatDimensionNote(resizedImage) : undefined
+      textLines.push(serializeAttachmentReference(sentMetadata))
+      if (dimensionNote) {
+        textLines.push(`  ${dimensionNote}`)
+      }
+      continue
+    }
+
+    const referencedMetadata: AgentMessageAttachment = {
+      ...baseMetadata,
+      status: 'referenced',
+    }
+    textLines.push(serializeAttachmentReference(referencedMetadata))
+  }
+
+  return {
+    images,
+    text: textLines.join('\n'),
+  }
+}
+
+function extractPromptAttachmentsFromMessage(message: UserMessage): AgentMessageAttachment[] {
+  const text = asText(message.content)
+  const attachmentStart = text.indexOf(`\n\n${AGENT_PROMPT_ATTACHMENT_PREFIX}\n`)
+  const attachmentSection = attachmentStart >= 0
+    ? text.slice(attachmentStart + AGENT_PROMPT_ATTACHMENT_PREFIX.length + 3)
+    : text.startsWith(`${AGENT_PROMPT_ATTACHMENT_PREFIX}\n`)
+      ? text.slice(AGENT_PROMPT_ATTACHMENT_PREFIX.length + 1)
+      : ''
+  const contentImages = typeof message.content === 'string'
+    ? []
+    : message.content.filter((block): block is ImageContent => block.type === 'image')
+  let parsedImageIndex = 0
+  const textAttachments: AgentMessageAttachment[] = []
+
+  for (const line of attachmentSection.split('\n')) {
+    if (!line.trim().startsWith('- ')) {
+      continue
+    }
+
+    const isJsonReference = isJsonAttachmentReferenceLine(line)
+    const attachment = parseAttachmentReferenceLine(line)
+
+    if (!attachment) {
+      continue
+    }
+
+    const shouldConsumeImageBlock = attachment.kind === 'image'
+      && (
+        attachment.status === 'sent'
+        || (!isJsonReference && attachment.status !== 'omitted')
+      )
+      && Boolean(contentImages[parsedImageIndex])
+
+    if (shouldConsumeImageBlock) {
+      const matchedImage = contentImages[parsedImageIndex]
+      parsedImageIndex += 1
+      textAttachments.push({
+        ...attachment,
+        data: `data:${matchedImage.mimeType};base64,${matchedImage.data}`,
+        mimeType: attachment.mimeType ?? matchedImage.mimeType,
+        status: 'sent',
+      })
+      continue
+    }
+
+    textAttachments.push(attachment)
+  }
+
+  if (typeof message.content === 'string') {
+    return textAttachments
+  }
+
+  const imageAttachments = contentImages
+    .slice(parsedImageIndex)
+    .map((block, index): AgentMessageAttachment => ({
+      data: `data:${block.mimeType};base64,${block.data}`,
+      fileName: `Image ${parsedImageIndex + index + 1}`,
+      kind: 'image',
+      mimeType: block.mimeType,
+      status: 'sent',
+    }))
+
+  return [...textAttachments, ...imageAttachments]
 }
 
 function clampText(value: string, maxLength: number) {
@@ -443,10 +759,13 @@ async function pathExists(targetPath: string) {
 }
 
 function serializeUserMessage(message: UserMessage, index: number): AgentSidebarMessage {
+  const attachments = extractPromptAttachmentsFromMessage(message)
+
   return {
     id: `user-${message.timestamp}-${index}`,
     kind: 'user',
-    text: asText(message.content) || 'User message',
+    ...(attachments.length > 0 ? { attachments } : {}),
+    text: asText(message.content).split(`\n\n${AGENT_PROMPT_ATTACHMENT_PREFIX}\n`)[0]?.trim() || 'User message',
     timestamp: message.timestamp,
   }
 }
@@ -959,11 +1278,12 @@ export class PiAgentManager {
     return this.buildWorkspaceState(cwd)
   }
 
-  async sendPrompt(prompt: string, streamingBehavior?: StreamingBehavior) {
+  async sendPrompt(prompt: string, streamingBehavior?: StreamingBehavior, rawAttachments?: unknown) {
     const runtime = this.requireActiveSession()
     const message = prompt.trim()
+    const attachments = normalizePromptAttachments(rawAttachments)
 
-    if (!message) {
+    if (!message && attachments.length === 0) {
       throw new Error('Prompt cannot be empty.')
     }
 
@@ -971,11 +1291,21 @@ export class PiAgentManager {
       throw new Error(AUTH_SETUP_HINT)
     }
 
+    const preparedAttachments = attachments.length > 0
+      ? await preparePromptAttachments(attachments, runtime.session.model)
+      : { images: [], text: '' }
+    const messageWithAttachments = appendAttachmentText(
+      message || 'Please inspect the attached file(s).',
+      preparedAttachments.text,
+    )
+
     const pendingPrompt = streamingBehavior === 'steer'
-      ? runtime.session.steer(message)
+      ? runtime.session.steer(messageWithAttachments, preparedAttachments.images)
       : streamingBehavior === 'followUp'
-        ? runtime.session.followUp(message)
-        : runtime.session.prompt(message)
+        ? runtime.session.followUp(messageWithAttachments, preparedAttachments.images)
+        : runtime.session.prompt(messageWithAttachments, {
+            images: preparedAttachments.images,
+          })
     this.emitEvent({
       type: 'workspace_state',
       state: await this.serializeWorkspaceState(
@@ -1428,6 +1758,7 @@ export class PiAgentManager {
     return {
       auth: this.getProviderAuthStates(availableModels.map((model) => model.provider)),
       availableModels: availableModels.map((model) => `${model.provider}/${model.id}`),
+      availableModelInputs: getInputsByModel(availableModels),
       availableThinkingLevels,
       availableThinkingLevelsByModel: getThinkingLevelsByModel(availableModels),
       compactionReason: this.activeRuntime?.cwd === cwd ? this.activeRuntime.status.compactionReason : null,

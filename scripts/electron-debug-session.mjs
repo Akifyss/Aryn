@@ -23,6 +23,7 @@ const timeoutMs = readNumberEnv('ARYN_ELECTRON_DEBUG_TIMEOUT_MS', 30_000)
 const keepOpen = process.env.ARYN_ELECTRON_DEBUG_KEEP_OPEN === '1'
 const keepOpenMs = readNumberEnv('ARYN_ELECTRON_DEBUG_KEEP_OPEN_MS', 10 * 60_000)
 const viewMode = readViewMode(process.env.ARYN_ELECTRON_DEBUG_VIEW_MODE)
+const debugScenario = readDebugScenario(process.env.ARYN_ELECTRON_DEBUG_SCENARIO)
 
 function readNumberEnv(name, fallback) {
   const value = Number.parseInt(process.env[name] ?? '', 10)
@@ -31,6 +32,10 @@ function readNumberEnv(name, fallback) {
 
 function readViewMode(value) {
   return ['code', 'meo', 'preview'].includes(value ?? '') ? value : 'meo'
+}
+
+function readDebugScenario(value) {
+  return ['agent-attachments', 'agent-mention-menu'].includes(value ?? '') ? value : null
 }
 
 function compactText(value, maxLength = 1200) {
@@ -135,6 +140,21 @@ async function resolveWorkspaceFixture() {
   await fs.rm(defaultWorkspacePath, { force: true, recursive: true })
   await fs.mkdir(defaultWorkspacePath, { recursive: true })
   await fs.writeFile(defaultFilePath, createFixtureMarkdown(), 'utf8')
+
+  if (debugScenario === 'agent-mention-menu') {
+    await fs.mkdir(path.join(defaultWorkspacePath, 'docs'), { recursive: true })
+    await fs.mkdir(path.join(defaultWorkspacePath, 'src', 'components'), { recursive: true })
+    await fs.mkdir(path.join(defaultWorkspacePath, 'proto'), { recursive: true })
+    await Promise.all([
+      fs.writeFile(path.join(defaultWorkspacePath, 'AGENTS.md'), '# Agents\n', 'utf8'),
+      fs.writeFile(path.join(defaultWorkspacePath, 'README.md'), '# Debug workspace\n', 'utf8'),
+      fs.writeFile(path.join(defaultWorkspacePath, 'docs', 'uxspecs_agent.md'), '# UX Specs Agent\n', 'utf8'),
+      fs.writeFile(path.join(defaultWorkspacePath, 'docs', 'feature-notes.md'), '# Feature notes\n', 'utf8'),
+      fs.writeFile(path.join(defaultWorkspacePath, 'proto', 'pomodoro.html'), '<!doctype html>\n', 'utf8'),
+      fs.writeFile(path.join(defaultWorkspacePath, 'src', 'components', 'agent-composer.tsx'), 'export {}\n', 'utf8'),
+      fs.writeFile(path.join(defaultWorkspacePath, 'src', 'components', 'attachment-card.tsx'), 'export {}\n', 'utf8'),
+    ])
+  }
 
   return {
     created: true,
@@ -246,14 +266,34 @@ async function restoreWorkspace(page, fixture) {
   })
 
   await page.evaluate(
-    ({ filePath, storageKey, viewMode, workspacePath }) => {
+    ({ debugScenario, filePath, storageKey, viewMode, workspacePath }) => {
       window.localStorage.setItem(storageKey, JSON.stringify({
         activePath: filePath,
         entries: [{ path: filePath, viewMode }],
         paths: [filePath],
       }))
-      window.localStorage.setItem('aryn:left-sidebar-collapsed', 'false')
-      window.localStorage.setItem('aryn:right-sidebar-collapsed', 'false')
+
+      if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu') {
+        window.localStorage.setItem('aryn:settings', JSON.stringify({
+          state: {
+            layoutPreference: 'agent',
+            meo: {
+              focusedLineHighlight: false,
+              gitDiffLineHighlights: true,
+              imageFolder: 'assets',
+              outlinePosition: 'right',
+            },
+            theme: 'auto',
+          },
+          version: 0,
+        }))
+        window.localStorage.setItem('aryn:left-sidebar-collapsed', 'true')
+        window.localStorage.setItem('aryn:agent-right-sidebar-collapsed', 'true')
+        window.localStorage.setItem('aryn:agent-right-sidebar-width-mode', 'max')
+      } else {
+        window.localStorage.setItem('aryn:left-sidebar-collapsed', 'false')
+        window.localStorage.setItem('aryn:right-sidebar-collapsed', 'false')
+      }
 
       return window.appApi.updateWorkspaceState(workspacePath, {
         lastFilePath: filePath,
@@ -261,6 +301,7 @@ async function restoreWorkspace(page, fixture) {
       })
     },
     {
+      debugScenario,
       filePath: fixture.filePath,
       storageKey: tabStorageKey(fixture.workspacePath),
       viewMode,
@@ -270,10 +311,203 @@ async function restoreWorkspace(page, fixture) {
 
   await page.reload({ waitUntil: 'domcontentloaded', timeout: timeoutMs })
   await waitForAppShell(page)
-  await page.waitForFunction(() => {
-    return !!document.querySelector('.meo-native-root, .cm-content, .monaco-editor')
-  }, null, { timeout: timeoutMs })
+  if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu') {
+    await page.waitForSelector('.agent-composer-editor', { timeout: timeoutMs })
+  } else {
+    await page.waitForFunction(() => {
+      return !!document.querySelector('.meo-native-root, .cm-content, .monaco-editor')
+    }, null, { timeout: timeoutMs })
+  }
   await page.waitForTimeout(500)
+}
+
+async function applyDebugScenario(page) {
+  if (debugScenario !== 'agent-attachments' && debugScenario !== 'agent-mention-menu') {
+    return null
+  }
+
+  log('applying debug scenario', { debugScenario })
+  await page.waitForSelector('.agent-composer-editor', { timeout: timeoutMs })
+
+  if (debugScenario === 'agent-mention-menu') {
+    await page.click('.agent-composer-editor')
+    await page.keyboard.type('@')
+    await page.waitForSelector('.agent-composer-mention-menu', { timeout: timeoutMs })
+    await page.waitForTimeout(500)
+
+    return page.evaluate(() => {
+      const readRect = (selector) => {
+        const element = document.querySelector(selector)
+
+        if (!element) {
+          return null
+        }
+
+        const rect = element.getBoundingClientRect()
+        return {
+          bottom: Math.round(rect.bottom),
+          height: Math.round(rect.height),
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          top: Math.round(rect.top),
+          width: Math.round(rect.width),
+        }
+      }
+
+      const menu = document.querySelector('.agent-composer-mention-menu')
+      const field = document.querySelector('.agent-composer-field')
+
+      return {
+        editorText: document.querySelector('.agent-composer-editor')?.textContent ?? '',
+        field: {
+          rect: readRect('.agent-composer-field'),
+        },
+        menu: {
+          isInField: !!(menu && field?.contains(menu)),
+          itemCount: document.querySelectorAll('.agent-composer-mention-option').length,
+          rect: readRect('.agent-composer-mention-menu'),
+        },
+        textShell: {
+          rect: readRect('.agent-composer-text-shell'),
+        },
+      }
+    })
+  }
+
+  await page.evaluate(async () => {
+    const editor = document.querySelector('.agent-composer-editor')
+    if (!editor) {
+      throw new Error('Agent composer editor not found.')
+    }
+
+    const createImageFile = async (name, accent) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 160
+      canvas.height = 96
+      const context = canvas.getContext('2d')
+      if (!context) {
+        throw new Error('Unable to create image attachment fixture.')
+      }
+      context.fillStyle = '#fafafa'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.fillStyle = '#e5e7eb'
+      context.fillRect(10, 12, 140, 14)
+      context.fillRect(10, 36, 90, 8)
+      context.fillRect(10, 52, 124, 8)
+      context.strokeStyle = accent
+      context.lineWidth = 2
+      context.beginPath()
+      for (let x = 12; x < 150; x += 8) {
+        const y = 82 - Math.sin(x / 9) * 14
+        if (x === 12) {
+          context.moveTo(x, y)
+        } else {
+          context.lineTo(x, y)
+        }
+      }
+      context.stroke()
+      const imageBlob = await new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob)
+            return
+          }
+
+          reject(new Error('Unable to create image attachment fixture.'))
+        }, 'image/png')
+      })
+
+      return new File([imageBlob], name, { type: 'image/png' })
+    }
+
+    const imageFile = await createImageFile('Snipaste_2025-12-10_20-13-32.png', '#9ca3af')
+    const secondImageFile = await createImageFile('light-dashboard-reference.png', '#cbd5e1')
+
+    const dataTransfer = new DataTransfer()
+    dataTransfer.items.add(imageFile)
+    dataTransfer.items.add(secondImageFile)
+    editor.dispatchEvent(new DragEvent('drop', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer,
+    }))
+  })
+
+  await page.waitForFunction(() => {
+    return document.querySelectorAll('.agent-composer-attachments .agent-attachment-item').length >= 2
+  }, null, { timeout: timeoutMs })
+  await page.click('.agent-composer-editor')
+  await page.keyboard.type('Myprompt')
+  await page.waitForTimeout(500)
+
+  return page.evaluate(() => {
+    const readRect = (selector) => {
+      const element = document.querySelector(selector)
+
+      if (!element) {
+        return null
+      }
+
+      const rect = element.getBoundingClientRect()
+      return {
+        bottom: Math.round(rect.bottom),
+        height: Math.round(rect.height),
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+      }
+    }
+
+    const field = document.querySelector('.agent-composer-field')
+    const fieldStyle = field ? getComputedStyle(field) : null
+
+    return {
+      attachments: {
+        count: document.querySelectorAll('.agent-composer-attachments .agent-attachment-item').length,
+        imagePreviewCount: document.querySelectorAll('.agent-composer-attachments .agent-attachment-preview.has-image img').length,
+        imageItemStyle: (() => {
+          const item = document.querySelector('.agent-composer-attachments .agent-attachment-item.is-image')
+          const style = item ? getComputedStyle(item) : null
+          return style
+            ? {
+                borderBottomColor: style.borderBottomColor,
+                borderBottomStyle: style.borderBottomStyle,
+                borderBottomWidth: style.borderBottomWidth,
+                boxShadow: style.boxShadow,
+              }
+            : null
+        })(),
+        rect: readRect('.agent-composer-attachments'),
+      },
+      editorText: document.querySelector('.agent-composer-editor')?.textContent ?? '',
+      field: {
+        rect: readRect('.agent-composer-field'),
+        style: fieldStyle
+          ? {
+              display: fieldStyle.display,
+              flexDirection: fieldStyle.flexDirection,
+              gridTemplateRows: fieldStyle.gridTemplateRows,
+            }
+          : null,
+      },
+      footer: {
+        rect: readRect('.agent-composer-meta'),
+      },
+      placeholder: {
+        rect: readRect('.agent-composer-placeholder'),
+      },
+      shell: {
+        appLayout: document.querySelector('.app-shell')?.getAttribute('data-app-layout') ?? null,
+        leftCollapsed: document.querySelector('.app-shell')?.getAttribute('data-left-collapsed') ?? null,
+        rightCollapsed: document.querySelector('.app-shell')?.getAttribute('data-right-collapsed') ?? null,
+        rect: readRect('.app-shell'),
+      },
+      textShell: {
+        rect: readRect('.agent-composer-text-shell'),
+      },
+    }
+  })
 }
 
 async function snapshotPage(page) {
@@ -411,6 +645,7 @@ async function main() {
     },
     workspace: {
       ...fixture,
+      debugScenario,
       viewMode,
     },
   }
@@ -441,6 +676,7 @@ async function main() {
     report.snapshot.beforeRestore = await snapshotPage(page)
     await restoreWorkspace(page, fixture)
     report.snapshot.afterRestore = await snapshotPage(page)
+    report.snapshot.afterScenario = await applyDebugScenario(page)
     await page.screenshot({ path: screenshotPath, fullPage: false })
 
     report.ok = true

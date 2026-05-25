@@ -96,6 +96,13 @@ $env:ARYN_ELECTRON_DEBUG_ARTIFACT_ROOT="C:\tmp\aryn-electron-debug"
 npm.cmd run debug:electron
 ```
 
+Run the Agent composer attachment scenario:
+
+```powershell
+$env:ARYN_ELECTRON_DEBUG_SCENARIO="agent-attachments"
+npm.cmd run debug:electron
+```
+
 ## AI Debugging Checklist
 
 1. Run `npm.cmd run debug:electron:build` once to verify the app can launch and

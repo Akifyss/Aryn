@@ -18,11 +18,12 @@ import {
 import { createPortal } from 'react-dom'
 import type { FileTreeRowDecorationRenderer } from '@pierre/trees'
 import { FileTree, useFileTree } from '@pierre/trees/react'
-import { Button, Chip, Disclosure } from '@heroui/react'
+import { Button, Chip, Disclosure, ScrollShadow } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import {
   AiLine,
   AddLine,
+  AttachmentLine,
   ArrowUpLine,
   BrainLine,
   CloseLine,
@@ -30,6 +31,7 @@ import {
   Delete2Line,
   EyeglassLine,
   Pencil2Line,
+  PicLine,
   RightLine,
   SearchLine,
   TerminalLine,
@@ -58,7 +60,9 @@ import {
 import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-changes'
 import type {
   AgentClientEvent,
+  AgentMessageAttachment,
   AgentMessageFileChange,
+  AgentPromptAttachment,
   AgentSessionListItem,
   AgentSessionAnnotations,
   AgentSidebarMessage,
@@ -105,6 +109,15 @@ type LiveToolState = {
 type ComposerState = {
   mentions: ComposerMentionToken[]
   value: string
+}
+
+type ComposerAttachment = AgentPromptAttachment & {
+  id: string
+}
+
+type AgentAttachmentItemData = (AgentPromptAttachment | AgentMessageAttachment) & {
+  id?: string
+  status?: AgentMessageAttachment['status']
 }
 
 type AgentComposerMenu = 'model-cascader' | null
@@ -192,6 +205,7 @@ const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
   runtime: {
     auth: {},
+    availableModelInputs: {},
     availableModels: [],
     availableThinkingLevels: ['off'],
     availableThinkingLevelsByModel: {},
@@ -220,6 +234,10 @@ const emptyComposerState: ComposerState = {
   mentions: [],
   value: '',
 }
+
+const IMAGE_ATTACHMENT_EXTENSIONS = /\.(?:png|jpe?g|webp|gif)$/i
+const IMAGE_ATTACHMENT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+const MAX_COMPOSER_ATTACHMENTS = 12
 
 const AGENT_SESSION_TREE_EMPTY_PATH = 'No sessions'
 
@@ -338,9 +356,10 @@ type AgentContextValue = {
   activeSessionSelection: AgentSessionSelection
   activeSessionPath: string | null
   agentState: AgentWorkspaceState
+  addComposerFiles: (files: File[]) => Promise<void>
+  attachmentCapabilityMessage: string | null
   canSend: boolean
-  composerHeight: number
-  composerResizeStateRef: React.MutableRefObject<{ pointerId: number, startHeight: number, startY: number } | null>
+  composerAttachments: ComposerAttachment[]
   composerState: ComposerState
   configuredProviders: string[]
   deletingSessionPath: string | null
@@ -350,13 +369,13 @@ type AgentContextValue = {
   handleOpenSession: (sessionPath: string) => Promise<void>
   handleSelectModel: (modelKey: string) => Promise<void>
   handleThinkingLevelSelection: (level: AgentThinkingLevel, modelKey?: string) => Promise<void>
+  handlePickComposerAttachments: () => Promise<void>
   handleStartNewSession: () => void
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
   hasConfiguredProviders: boolean
   iconTheme?: WorkspaceIconTheme | null
   isCreatingSession: boolean
   isLoading: boolean
-  isResizingComposer: boolean
   isSwitchingModel: boolean
   isSwitchingThinkingLevel: boolean
   liveTools: LiveToolState[]
@@ -370,12 +389,12 @@ type AgentContextValue = {
   renderedMessages: AgentSidebarMessage[]
   resolvedSelectedProviderValue: string
   roundFileChangesByMessageId: Map<string, AgentMessageFileChange[]>
+  removeComposerAttachment: (attachmentId: string) => void
   sessionButtonRef: React.RefObject<HTMLButtonElement | null>
   sessionStatus: AgentSessionStatus | null
   setActiveComposerMenu: React.Dispatch<React.SetStateAction<AgentComposerMenu>>
   setActiveOverlayPanel: React.Dispatch<React.SetStateAction<'sessions' | null>>
   setComposerState: React.Dispatch<React.SetStateAction<ComposerState>>
-  setIsResizingComposer: React.Dispatch<React.SetStateAction<boolean>>
   setPanelError: React.Dispatch<React.SetStateAction<string | null>>
   statusMessage: string | null
   thinkingLevel: AgentThinkingLevel
@@ -833,6 +852,49 @@ function getMessageFileSectionTitle(fileChanges: AgentMessageFileChange[]) {
 
   return 'Files Changed'
 }
+
+function formatAttachmentSize(size: number | undefined) {
+  if (size === undefined) {
+    return ''
+  }
+
+  if (size < 1024) {
+    return `${size} B`
+  }
+
+  const units = ['KB', 'MB', 'GB']
+  let amount = size / 1024
+  let unitIndex = 0
+
+  while (amount >= 1024 && unitIndex < units.length - 1) {
+    amount /= 1024
+    unitIndex += 1
+  }
+
+  return `${amount >= 10 ? amount.toFixed(1) : amount.toFixed(2)} ${units[unitIndex]}`
+}
+
+function isImageAttachment(fileName: string, mimeType?: string) {
+  return Boolean(
+    mimeType
+      ? IMAGE_ATTACHMENT_MIME_TYPES.has(mimeType.toLowerCase())
+      : IMAGE_ATTACHMENT_EXTENSIONS.test(fileName),
+  )
+}
+
+function getAttachmentStatusLabel(status: AgentMessageAttachment['status']) {
+  switch (status) {
+    case 'sent':
+      return 'sent'
+    case 'omitted':
+      return 'text only'
+    case 'referenced':
+      return 'referenced'
+    default:
+      return null
+  }
+}
+
 function mergeSessionAnnotationsState(
   state: AgentWorkspaceState,
   sessionId: string,
@@ -1256,11 +1318,90 @@ function AgentMessageFileChips({
   )
 }
 
+function AgentAttachmentItem({
+  attachment,
+  iconTheme,
+  iconSize = 18,
+  onRemove,
+}: {
+  attachment: AgentAttachmentItemData
+  iconTheme?: WorkspaceIconTheme | null
+  iconSize?: number
+  onRemove?: () => void
+}) {
+  const isImage = attachment.kind === 'image'
+  const previewSrc = isImage ? attachment.data : undefined
+  const statusLabel = getAttachmentStatusLabel(attachment.status)
+  const sizeLabel = formatAttachmentSize(attachment.size)
+  const meta = [
+    isImage ? 'Image' : 'File',
+    isImage ? null : sizeLabel,
+    statusLabel,
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <div className={`agent-attachment-item${isImage ? ' is-image' : ''}${attachment.status === 'omitted' ? ' is-omitted' : ''}`} title={attachment.path ?? attachment.fileName}>
+      <span className={`agent-attachment-preview${previewSrc ? ' has-image' : ''}`}>
+        {previewSrc ? (
+          <img alt='' draggable='false' src={previewSrc} />
+        ) : isImage ? (
+          <PicLine aria-hidden='true' size={iconSize} />
+        ) : (
+          <WorkspaceFileIcon fileName={attachment.fileName} iconTheme={iconTheme ?? null} />
+        )}
+      </span>
+      {isImage ? null : (
+        <span className='agent-attachment-text'>
+          <span className='agent-attachment-name'>{attachment.fileName}</span>
+          {meta ? <span className='agent-attachment-meta'>{meta}</span> : null}
+        </span>
+      )}
+      {onRemove ? (
+        <button
+          type='button'
+          className='agent-attachment-remove'
+          aria-label={`移除 ${attachment.fileName}`}
+          title='移除附件'
+          onClick={onRemove}
+        >
+          <CloseLine aria-hidden='true' size={10} />
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+function AgentMessageAttachments({
+  attachments,
+  iconTheme,
+}: {
+  attachments: AgentMessageAttachment[]
+  iconTheme?: WorkspaceIconTheme | null
+}) {
+  if (attachments.length === 0) {
+    return null
+  }
+
+  return (
+    <div className='agent-message-attachments' aria-label='Attachments'>
+      {attachments.map((attachment, index) => (
+        <AgentAttachmentItem
+          key={`${attachment.fileName}-${index}`}
+          attachment={attachment}
+          iconTheme={iconTheme}
+        />
+      ))}
+    </div>
+  )
+}
+
 function AgentMessageBubble({
+  iconTheme,
   message,
   onOpenWorkspaceFile,
   workspacePath,
 }: {
+  iconTheme?: WorkspaceIconTheme | null
   message: AgentSidebarMessage
   onOpenWorkspaceFile?: (filePath: string) => void
   workspacePath: string | null
@@ -1368,6 +1509,7 @@ function AgentMessageBubble({
     ? (message.title ?? message.kind)
     : null
   const showMeta = Boolean(roleLabel || message.label)
+  const messageAttachments = message.attachments ?? []
 
   return (
     <article className={`agent-message agent-message-${message.kind} ${message.isError ? 'is-error' : ''}`}>
@@ -1391,8 +1533,13 @@ function AgentMessageBubble({
             <AgentMarkdown onOpenWorkspaceFile={onOpenWorkspaceFile} text={message.thinkingText} workspacePath={workspacePath} />
           </AgentMessageDisclosure>
         ) : null}
+        {messageAttachments.length > 0 ? (
+          <AgentMessageAttachments attachments={messageAttachments} iconTheme={iconTheme} />
+        ) : null}
         {message.text.trim() ? (
-          <AgentMarkdown onOpenWorkspaceFile={onOpenWorkspaceFile} text={message.text} workspacePath={workspacePath} />
+          <div className='agent-message-bubble'>
+            <AgentMarkdown onOpenWorkspaceFile={onOpenWorkspaceFile} text={message.text} workspacePath={workspacePath} />
+          </div>
         ) : null}
       </div>
     </article>
@@ -1731,10 +1878,9 @@ function AgentProvider({
 }: AgentProviderProps) {
   const workspaceTree = useWorkspaceStore((state) => state.tree)
   const defaultModelSelection = parseModelSelection(null)
-  const [composerHeight, setComposerHeight] = useState(172)
-  const [hasLoadedComposerHeight, setHasLoadedComposerHeight] = useState(false)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
   const [composerState, setComposerState] = useState<ComposerState>(emptyComposerState)
+  const [composerAttachments, setComposerAttachments] = useState<ComposerAttachment[]>([])
   const [modelInputValue, setModelInputValue] = useState(defaultModelSelection.modelId)
   const [selectedProviderValue, setSelectedProviderValue] = useState(defaultModelSelection.provider)
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({
@@ -1754,8 +1900,6 @@ function AgentProvider({
   const [isSwitchingThinkingLevel, setIsSwitchingThinkingLevel] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
-  const [isResizingComposer, setIsResizingComposer] = useState(false)
-  const composerResizeStateRef = useRef<{ pointerId: number, startHeight: number, startY: number } | null>(null)
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
   const overlayPanelRef = useRef<HTMLDivElement | null>(null)
@@ -1783,42 +1927,90 @@ function AgentProvider({
     return preferredSelection.provider === provider ? preferredSelection.modelId : null
   }
 
-  useEffect(() => {
-    let mounted = true
-
-    void window.appApi.getUiState()
-      .then((uiState) => {
-        if (!mounted) {
+  function readFileAsDataUrl(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onerror = () => {
+        reject(new Error(`Unable to read ${file.name}.`))
+      }
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve(reader.result)
           return
         }
 
-        setComposerHeight(uiState.agentComposerHeight)
-        setHasLoadedComposerHeight(true)
-      })
-      .catch(() => {
-        if (mounted) {
-          setHasLoadedComposerHeight(true)
-        }
-      })
+        reject(new Error(`Unable to read ${file.name}.`))
+      }
+      reader.readAsDataURL(file)
+    })
+  }
 
-    return () => {
-      mounted = false
+  async function buildComposerAttachmentFromFile(file: File): Promise<ComposerAttachment> {
+    const kind = isImageAttachment(file.name, file.type) ? 'image' : 'file'
+    const data = kind === 'image' ? await readFileAsDataUrl(file) : undefined
+    const filePath = window.appApi.getFilePath(file).trim()
+
+    if (kind !== 'image' && !filePath) {
+      throw new Error('普通文件需要来自本地磁盘路径。请使用附件按钮选择文件，或从 Finder 拖入文件。')
     }
-  }, [])
 
-  useEffect(() => {
-    if (!hasLoadedComposerHeight) {
+    return {
+      id: `${Date.now()}-${crypto.randomUUID()}`,
+      ...(data ? { data } : {}),
+      fileName: file.name,
+      kind,
+      ...(file.type ? { mimeType: file.type } : {}),
+      ...(filePath ? { path: filePath } : {}),
+      size: file.size,
+    }
+  }
+
+  function appendComposerAttachments(nextAttachments: ComposerAttachment[]) {
+    if (nextAttachments.length === 0) {
       return
     }
 
-    const timeoutId = window.setTimeout(() => {
-      void window.appApi.updateUiState({ agentComposerHeight: composerHeight })
-    }, 120)
+    setComposerAttachments((currentAttachments) => {
+      const uniqueAttachments = nextAttachments.filter((attachment) => !currentAttachments.some((currentAttachment) => (
+        currentAttachment.fileName === attachment.fileName
+        && currentAttachment.size === attachment.size
+        && currentAttachment.path === attachment.path
+      )))
 
-    return () => {
-      window.clearTimeout(timeoutId)
+      return [...currentAttachments, ...uniqueAttachments].slice(0, MAX_COMPOSER_ATTACHMENTS)
+    })
+  }
+
+  async function addComposerFiles(files: File[]) {
+    if (files.length === 0) {
+      return
     }
-  }, [composerHeight, hasLoadedComposerHeight])
+
+    try {
+      setPanelError(null)
+      const nextAttachments = await Promise.all(files.slice(0, MAX_COMPOSER_ATTACHMENTS).map(buildComposerAttachmentFromFile))
+      appendComposerAttachments(nextAttachments)
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'Unable to attach the selected file.')
+    }
+  }
+
+  async function handlePickComposerAttachments() {
+    try {
+      setPanelError(null)
+      const pickedAttachments = await window.appApi.pickAgentAttachments()
+      appendComposerAttachments(pickedAttachments.map((attachment) => ({
+        ...attachment,
+        id: `${Date.now()}-${crypto.randomUUID()}`,
+      })))
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'Unable to attach files.')
+    }
+  }
+
+  function removeComposerAttachment(attachmentId: string) {
+    setComposerAttachments((currentAttachments) => currentAttachments.filter((attachment) => attachment.id !== attachmentId))
+  }
 
   useEffect(() => {
     const unsubscribe = window.appApi.onAgentEvent((event: AgentClientEvent) => {
@@ -2341,7 +2533,7 @@ function AgentProvider({
     const serializedPrompt = serializeComposerText(composerState.value, composerState.mentions)
     const trimmedPrompt = serializedPrompt.trim()
 
-    if (!workspacePath || !trimmedPrompt) {
+    if (!workspacePath || (!trimmedPrompt && composerAttachments.length === 0)) {
       return
     }
 
@@ -2357,8 +2549,10 @@ function AgentProvider({
         }
       }
 
-      await window.appApi.sendAgentPrompt(trimmedPrompt, streamingBehavior)
+      const promptAttachments = composerAttachments.map(({ id: _id, ...attachment }) => attachment)
+      await window.appApi.sendAgentPrompt(trimmedPrompt, streamingBehavior, promptAttachments)
       setComposerState(emptyComposerState)
+      setComposerAttachments([])
       setDraftAssistant('')
       setLiveTools([])
     } catch (error) {
@@ -2377,48 +2571,6 @@ function AgentProvider({
       void submitComposerPrompt(event.altKey ? 'followUp' : isViewingActiveRuntime && agentState.runtime.isStreaming ? 'steer' : undefined)
     }
   }
-
-  useEffect(() => {
-    if (!isResizingComposer) {
-      return
-    }
-
-    function handlePointerMove(event: PointerEvent) {
-      const resizeState = composerResizeStateRef.current
-
-      if (!resizeState || event.pointerId !== resizeState.pointerId) {
-        return
-      }
-
-      const nextHeight = Math.min(
-        360,
-        Math.max(132, resizeState.startHeight + (resizeState.startY - event.clientY)),
-      )
-
-      setComposerHeight(nextHeight)
-    }
-
-    function handlePointerUp(event: PointerEvent) {
-      if (composerResizeStateRef.current?.pointerId === event.pointerId) {
-        setIsResizingComposer(false)
-        composerResizeStateRef.current = null
-        document.body.style.userSelect = ''
-      }
-    }
-
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-    window.addEventListener('pointercancel', handlePointerUp)
-
-    document.body.style.userSelect = 'none'
-
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
-      window.removeEventListener('pointercancel', handlePointerUp)
-      document.body.style.userSelect = ''
-    }
-  }, [isResizingComposer])
 
   const configuredProviders = Array.from(new Set(
     agentState.runtime.availableModels
@@ -2451,9 +2603,20 @@ function AgentProvider({
   const thinkingLevelLabel = formatThinkingLevelLabel(thinkingLevel)
   const canSend = Boolean(
     workspacePath
-    && serializeComposerText(composerState.value, composerState.mentions).trim()
+    && (
+      serializeComposerText(composerState.value, composerState.mentions).trim()
+      || composerAttachments.length > 0
+    )
     && agentState.runtime.hasConfiguredModels,
   )
+  const selectedModelInputs = composerModelKey && hasAvailableComposerModel
+    ? agentState.runtime.availableModelInputs[composerModelKey] ?? ['text']
+    : []
+  const selectedModelSupportsImages = selectedModelInputs.includes('image')
+  const hasImageComposerAttachments = composerAttachments.some((attachment) => attachment.kind === 'image')
+  const attachmentCapabilityMessage = hasImageComposerAttachments && !selectedModelSupportsImages
+    ? '当前模型不支持图片输入，图片不会作为视觉内容发送。'
+    : null
   const statusMessage = !workspacePath
     ? 'Open a workspace to start.'
     : !agentState.runtime.hasConfiguredModels
@@ -2599,9 +2762,10 @@ function AgentProvider({
     activeSessionSelection,
     activeSessionPath,
     agentState,
+    addComposerFiles,
+    attachmentCapabilityMessage,
     canSend,
-    composerHeight,
-    composerResizeStateRef,
+    composerAttachments,
     composerState,
     configuredProviders,
     deletingSessionPath,
@@ -2611,13 +2775,13 @@ function AgentProvider({
     handleOpenSession,
     handleSelectModel,
     handleThinkingLevelSelection,
+    handlePickComposerAttachments,
     handleStartNewSession,
     handleSubmit,
     hasConfiguredProviders,
     iconTheme,
     isCreatingSession,
     isLoading,
-    isResizingComposer,
     isSwitchingModel,
     isSwitchingThinkingLevel,
     liveTools,
@@ -2631,12 +2795,12 @@ function AgentProvider({
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
+    removeComposerAttachment,
     sessionButtonRef,
     sessionStatus,
     setActiveComposerMenu,
     setActiveOverlayPanel,
     setComposerState,
-    setIsResizingComposer,
     setPanelError,
     statusMessage,
     thinkingLevel,
@@ -2650,8 +2814,10 @@ function AgentProvider({
     activeSessionSelection,
     activeSessionPath,
     agentState,
+    addComposerFiles,
+    attachmentCapabilityMessage,
     canSend,
-    composerHeight,
+    composerAttachments,
     composerState,
     configuredProviders,
     deletingSessionPath,
@@ -2661,13 +2827,13 @@ function AgentProvider({
     handleOpenSession,
     handleSelectModel,
     handleThinkingLevelSelection,
+    handlePickComposerAttachments,
     handleStartNewSession,
     handleSubmit,
     hasConfiguredProviders,
     iconTheme,
     isCreatingSession,
     isLoading,
-    isResizingComposer,
     isSwitchingModel,
     isSwitchingThinkingLevel,
     liveTools,
@@ -2678,6 +2844,7 @@ function AgentProvider({
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
+    removeComposerAttachment,
     sessionStatus,
     statusMessage,
     thinkingLevel,
@@ -2917,9 +3084,10 @@ function AgentChatSurface() {
     activeSessionSelection,
     activeSessionPath,
     agentState,
+    addComposerFiles,
+    attachmentCapabilityMessage,
     canSend,
-    composerHeight,
-    composerResizeStateRef,
+    composerAttachments,
     composerState,
     configuredProviders,
     handleComposerKeyDown,
@@ -2928,6 +3096,7 @@ function AgentChatSurface() {
     handleOpenSession,
     handleSelectModel,
     handleThinkingLevelSelection,
+    handlePickComposerAttachments,
     handleStartNewSession,
     handleSubmit,
     hasConfiguredProviders,
@@ -2935,7 +3104,6 @@ function AgentChatSurface() {
     isCreatingSession,
     deletingSessionPath,
     isLoading,
-    isResizingComposer,
     isSwitchingModel,
     isSwitchingThinkingLevel,
     messagesScrollRef,
@@ -2948,12 +3116,12 @@ function AgentChatSurface() {
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
+    removeComposerAttachment,
     sessionButtonRef,
     sessionStatus,
     setActiveComposerMenu,
     setActiveOverlayPanel,
     setComposerState,
-    setIsResizingComposer,
     setPanelError,
     statusMessage,
     thinkingLevel,
@@ -3633,59 +3801,119 @@ function AgentChatSurface() {
     }
   }, [activeComposerMenu])
 
+  const composerHeader = composerAttachments.length > 0 || attachmentCapabilityMessage ? (
+    <ScrollShadow
+      hideScrollBar
+      className='agent-composer-attachments'
+      orientation='horizontal'
+      size={28}
+      onWheel={(event) => {
+        const element = event.currentTarget
+        const horizontalDelta = Math.abs(event.deltaX) >= Math.abs(event.deltaY)
+          ? event.deltaX
+          : event.deltaY
+
+        if (!horizontalDelta || element.scrollWidth <= element.clientWidth) {
+          return
+        }
+
+        const maxScrollLeft = element.scrollWidth - element.clientWidth
+        const nextScrollLeft = Math.min(Math.max(element.scrollLeft + horizontalDelta, 0), maxScrollLeft)
+
+        if (nextScrollLeft === element.scrollLeft) {
+          return
+        }
+
+        event.preventDefault()
+        element.scrollLeft = nextScrollLeft
+      }}
+    >
+      <div className='agent-composer-attachments-content'>
+        {composerAttachments.map((attachment) => (
+          <AgentAttachmentItem
+            key={attachment.id}
+            attachment={attachment}
+            iconTheme={iconTheme}
+            onRemove={() => {
+              removeComposerAttachment(attachment.id)
+            }}
+          />
+        ))}
+        {attachmentCapabilityMessage ? (
+          <div className='agent-composer-attachment-warning'>
+            {attachmentCapabilityMessage}
+          </div>
+        ) : null}
+      </div>
+    </ScrollShadow>
+  ) : null
+
   const composerFooter = (
     <div ref={modelFieldRef} className='agent-composer-meta'>
-      <div className='agent-composer-toolbar'>
-        <div className='agent-composer-actions'>
-          <div className='agent-model-field'>
-            {hasConfiguredProviders ? (
-              <button
-                ref={modelPickerTriggerRef}
-                type='button'
-                aria-expanded={activeComposerMenu === 'model-cascader'}
-                aria-controls='agent-model-cascader'
-                aria-haspopup='dialog'
-                aria-label={modelPickerTriggerTitle}
-                className='agent-model-cascader-trigger'
-                disabled={
-                  !workspacePath
-                  || !agentState.runtime.hasConfiguredModels
-                  || isSwitchingModel
-                  || isSwitchingThinkingLevel
+      <div className='agent-composer-actions'>
+        <div className='agent-model-field'>
+          {hasConfiguredProviders ? (
+            <button
+              ref={modelPickerTriggerRef}
+              type='button'
+              aria-expanded={activeComposerMenu === 'model-cascader'}
+              aria-controls='agent-model-cascader'
+              aria-haspopup='dialog'
+              aria-label={modelPickerTriggerTitle}
+              className='agent-model-cascader-trigger'
+              disabled={
+                !workspacePath
+                || !agentState.runtime.hasConfiguredModels
+                || isSwitchingModel
+                || isSwitchingThinkingLevel
+              }
+              title={modelPickerTriggerTitle}
+              onClick={openModelCascader}
+              onPointerMove={(event) => {
+                if (activeComposerMenu === 'model-cascader') {
+                  recordModelPickerPointerPoint(event)
                 }
-                title={modelPickerTriggerTitle}
-                onClick={openModelCascader}
-                onPointerMove={(event) => {
-                  if (activeComposerMenu === 'model-cascader') {
-                    recordModelPickerPointerPoint(event)
-                  }
-                }}
-              >
-                <span className='agent-model-cascader-trigger-model'>{modelPickerTriggerLabel}</span>
-                {showTriggerThinkingLevel ? (
-                  <>
-                    <span className='agent-model-cascader-trigger-separator'>/</span>
-                    <span className='agent-model-cascader-trigger-thinking'>
-                      {thinkingLevelLabel}
-                    </span>
-                  </>
-                ) : null}
-              </button>
-            ) : (
-              <Button
-                className='agent-provider-setup-button'
-                isDisabled={!workspacePath}
-                size='sm'
-                variant='ghost'
-                onPress={() => {
-                  setActiveComposerMenu(null)
-                  onOpenProviderSettings?.()
-                }}
-              >
-                配置提供商
-              </Button>
-            )}
-          </div>
+              }}
+            >
+              <span className='agent-model-cascader-trigger-model'>{modelPickerTriggerLabel}</span>
+              {showTriggerThinkingLevel ? (
+                <>
+                  <span className='agent-model-cascader-trigger-separator'>/</span>
+                  <span className='agent-model-cascader-trigger-thinking'>
+                    {thinkingLevelLabel}
+                  </span>
+                </>
+              ) : null}
+            </button>
+          ) : (
+            <Button
+              className='agent-provider-setup-button'
+              isDisabled={!workspacePath}
+              size='sm'
+              variant='ghost'
+              onPress={() => {
+                setActiveComposerMenu(null)
+                onOpenProviderSettings?.()
+              }}
+            >
+              配置提供商
+            </Button>
+          )}
+        </div>
+
+        <div className='agent-composer-right-actions'>
+          <button
+            type='button'
+            aria-label='附加文件'
+            className='agent-composer-attach-button'
+            disabled={!workspacePath || isLoading}
+            title='附加文件'
+            onClick={() => {
+              void handlePickComposerAttachments()
+            }}
+          >
+            <AttachmentLine aria-hidden='true' size={16} />
+          </button>
 
           <Button
             isIconOnly
@@ -3992,6 +4220,7 @@ function AgentChatSurface() {
             return (
               <div key={message.id} className='agent-message-stack'>
                 <AgentMessageBubble
+                  iconTheme={iconTheme}
                   message={message}
                   onOpenWorkspaceFile={(filePath) => {
                     void onOpenMessageFile?.(filePath, 'updated')
@@ -4021,40 +4250,22 @@ function AgentChatSurface() {
           void handleSubmit(event)
         }}
       >
-        <div className='agent-composer-shell' style={{ '--agent-composer-height': `${composerHeight}px` } as CSSProperties}>
-          <div
-            aria-hidden='true'
-            className={`agent-composer-resize-handle${isResizingComposer ? ' is-active' : ''}${activeComposerMenu ? ' is-blocked' : ''}`}
-            onPointerDown={(event) => {
-              if (activeComposerMenu) {
-                return
-              }
-
-              if (event.button !== 0) {
-                return
-              }
-
-              event.preventDefault()
-              composerResizeStateRef.current = {
-                pointerId: event.pointerId,
-                startHeight: composerHeight,
-                startY: event.clientY,
-              }
-              setIsResizingComposer(true)
-            }}
-          />
-
+        <div className='agent-composer-shell'>
           <AgentComposerMentionInput
             aria-label='Prompt Pi Agent'
             disabled={!workspacePath || isLoading}
             iconTheme={iconTheme}
             mentions={composerState.mentions}
             onChange={setComposerState}
+            onFilesPastedOrDropped={(files) => {
+              void addComposerFiles(files)
+            }}
             onSubmitShortcut={handleComposerKeyDown}
             placeholder={workspacePath ? 'Message' : 'Open a folder first.'}
             value={composerState.value}
             workspaceNodes={workspaceTree}
             workspacePath={workspacePath}
+            header={composerHeader}
             footer={composerFooter}
           />
         </div>

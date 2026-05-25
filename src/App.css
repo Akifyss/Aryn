@@ -3776,10 +3776,6 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-message-user {
   align-self: flex-end;
   max-width: 88%;
-  padding: 13px 15px;
-  border: 1px solid var(--separator);
-  border-radius: 15px;
-  background: var(--surface-tertiary);
 }
 
 .agent-message-assistant {
@@ -4007,7 +4003,35 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-message-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   min-width: 0;
+}
+
+.agent-message-user .agent-message-body {
+  align-items: flex-end;
+}
+
+.agent-message-bubble {
+  min-width: 0;
+}
+
+.agent-message-user .agent-message-bubble {
+  padding: 13px 15px;
+  border: 1px solid var(--separator);
+  border-radius: 15px;
+  background: var(--surface-tertiary);
+}
+
+.agent-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-message-user .agent-message-attachments {
+  justify-content: flex-end;
 }
 
 .agent-message-disclosure-body {
@@ -4289,13 +4313,13 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-composer-shell {
-  --agent-composer-height: 172px;
   --agent-composer-control-gap: 11px;
   --agent-composer-menu-gap: 10px;
   --agent-composer-padding-block-end: 8px;
   --agent-composer-padding-block-start: 8px;
   --agent-composer-padding-inline: 8px;
-  --agent-composer-toolbar-height: 36px;
+  --agent-composer-text-min-height: 120px;
+  --agent-composer-text-max-height: 240px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -4306,48 +4330,25 @@ body.workspace-tree-dragging .workspace-tree-row {
   isolation: isolate;
 }
 
-.agent-composer-resize-handle {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 14px;
-  cursor: ns-resize;
-  touch-action: none;
-  user-select: none;
-  z-index: 40;
-}
-
-.agent-composer-resize-handle.is-blocked {
-  pointer-events: none;
-  cursor: default;
-}
-
 .agent-composer-editor,
 .agent-composer-editor:hover,
 .agent-composer-editor:focus,
 .agent-composer-editor:focus-visible {
-  --color-field-border: var(--border);
-  --color-field-border-hover: var(--separator);
-  --color-field-border-focus: var(--focus);
-  position: absolute;
-  inset: 0;
+  position: relative;
   display: block;
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid var(--color-field-border) !important;
-  border-radius: 14px;
-  border-color: var(--color-field-border) !important;
-  background-color: var(--color-field) !important;
-  box-shadow:
-    0 2px 4px rgb(0 0 0 / 0.04),
-    0 1px 2px rgb(0 0 0 / 0.06),
-    0 0 1px rgb(0 0 0 / 0.06) !important;
-  min-height: var(--agent-composer-height);
-  height: var(--agent-composer-height);
-  padding: 8px 8px calc(var(--agent-composer-toolbar-height) + 8px) !important;
+  border: 0 !important;
+  border-radius: 0;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  min-height: calc(var(--agent-composer-text-min-height) - 16px);
+  max-height: none;
+  height: auto;
+  padding: 0 !important;
   margin: 0;
-  overflow: auto !important;
+  overflow-y: visible !important;
+  overflow-x: hidden !important;
   outline: none;
   color: var(--foreground);
   caret-color: var(--foreground);
@@ -4363,12 +4364,12 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-composer-editor:hover:not(:focus):not(:focus-visible) {
-  border-top-color: var(--color-field-border-hover) !important;
+  border-top-color: transparent !important;
 }
 
 .agent-composer-editor:focus,
 .agent-composer-editor:focus-visible {
-  border-top-color: var(--color-field-border-hover) !important;
+  border-top-color: transparent !important;
   --tw-ring-shadow: 0 0 #0000 !important;
   --tw-ring-offset-shadow: 0 0 #0000 !important;
 }
@@ -4376,8 +4377,22 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-composer-input-shell {
   position: relative;
   width: 100%;
-  min-height: var(--agent-composer-height);
-  height: var(--agent-composer-height);
+}
+
+.agent-composer-field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--color-field);
+  box-shadow:
+    0 2px 4px rgb(0 0 0 / 0.04),
+    0 1px 2px rgb(0 0 0 / 0.06),
+    0 0 1px rgb(0 0 0 / 0.06);
 }
 
 .agent-composer-placeholder {
@@ -4390,6 +4405,27 @@ body.workspace-tree-dragging .workspace-tree-row {
   color: var(--field-placeholder);
   font-size: 13px;
   line-height: 1.65;
+}
+
+.agent-composer-header {
+  position: relative;
+  z-index: 45;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 0;
+  pointer-events: auto;
+}
+
+.agent-composer-text-shell {
+  position: relative;
+  flex: 0 1 auto;
+  min-height: var(--agent-composer-text-min-height);
+  max-height: var(--agent-composer-text-max-height);
+  padding: 8px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .agent-composer-editor[contenteditable='false'] {
@@ -4421,21 +4457,14 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-composer-mention-menu {
-  position: absolute;
-  z-index: 48;
+  position: fixed;
+  z-index: 1000;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--overlay);
   box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
   backdrop-filter: blur(22px);
-}
-
-.agent-composer-mention-menu {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(100% + 10px);
 }
 
 .agent-composer-mention-menu-scroll {
@@ -4527,15 +4556,6 @@ body.workspace-tree-dragging .workspace-tree-row {
   line-height: 1.5;
 }
 
-.agent-composer-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex: 0 0 var(--agent-composer-toolbar-height);
-  min-height: var(--agent-composer-toolbar-height);
-  height: var(--agent-composer-toolbar-height);
-}
-
 .agent-composer-actions {
   display: flex;
   align-items: center;
@@ -4544,17 +4564,229 @@ body.workspace-tree-dragging .workspace-tree-row {
   width: 100%;
 }
 
+.agent-composer-right-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--agent-composer-action-gap);
+  flex: 0 0 auto;
+}
+
 .agent-composer-meta {
   --agent-composer-action-gap: 6px;
-  --agent-send-button-size: 36px;
-  /* The menu is absolute, so anchoring it here does not move the provider/model triggers. */
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
+  --agent-send-button-size: 32px;
+  position: relative;
   z-index: 50;
-  height: var(--agent-composer-toolbar-height);
-  min-height: var(--agent-composer-toolbar-height);
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  padding: 0 8px 8px;
+}
+
+.agent-composer-attachments {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: contain;
+  pointer-events: auto;
+}
+
+.agent-composer-attachments::-webkit-scrollbar {
+  height: 0;
+}
+
+.agent-composer-attachments-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: max-content;
+}
+
+.agent-attachment-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  width: min(220px, calc(100vw - 120px));
+  min-width: 0;
+  height: 52px;
+  min-height: 52px;
+  padding: 6px 10px 6px 6px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  box-sizing: border-box;
+  background: color-mix(in oklab, var(--surface-secondary) 88%, var(--color-field));
+  box-shadow: none;
+  color: var(--foreground);
+}
+
+.agent-attachment-item.is-image {
+  width: 52px;
+  height: 52px;
+  min-height: 52px;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: visible;
+  gap: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.agent-attachment-preview {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--outline) 50%, transparent);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.agent-attachment-preview.has-image {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  background: var(--surface-secondary);
+}
+
+.agent-attachment-preview .git-row-icon,
+.agent-attachment-preview .git-row-icon img {
+  width: 24px;
+  height: 24px;
+}
+
+.agent-attachment-item.is-image .agent-attachment-preview {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  background: var(--surface-secondary);
+  box-shadow: none;
+}
+
+.agent-attachment-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: cover;
+}
+
+.agent-attachment-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.agent-attachment-name,
+.agent-attachment-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-attachment-name {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.agent-attachment-meta {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.agent-attachment-item.is-omitted {
+  color: var(--muted);
+}
+
+.agent-attachment-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  z-index: 2;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 54%, var(--surface));
+  color: var(--surface);
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.88);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    background-color 120ms ease;
+}
+
+.agent-attachment-item:hover .agent-attachment-remove,
+.agent-attachment-remove:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.agent-attachment-remove:hover,
+.agent-attachment-remove:focus-visible {
+  outline: none;
+  background: color-mix(in oklab, var(--foreground) 62%, var(--surface));
+  color: var(--surface);
+}
+
+.agent-composer-attachment-warning {
+  flex: 0 0 auto;
+  max-width: 280px;
+  align-self: center;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.agent-composer-attach-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.agent-composer-attach-button:hover,
+.agent-composer-attach-button:focus-visible {
+  outline: none;
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+}
+
+.agent-composer-attach-button:disabled {
+  opacity: 0.48;
+  cursor: default;
 }
 
 .agent-model-field {
@@ -4917,7 +5149,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   height: var(--agent-send-button-size);
   padding: 0;
   border: 0;
-  border-radius: 13px;
+  border-radius: 10px;
   background: transparent;
   cursor: pointer;
   transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
@@ -4936,7 +5168,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-send-button {
   color: var(--accent-foreground);
   background: var(--accent);
-  border: 1px solid var(--border);
+  border: 0;
 }
 
 .agent-send-button:hover {

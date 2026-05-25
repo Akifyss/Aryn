@@ -1,5 +1,6 @@
 import { Menu, app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -43,7 +44,7 @@ import {
   MIN_WINDOW_WIDTH,
 } from './app-state'
 import type { PersistedWorkspaceIconThemeSelection } from './app-state'
-import type { AgentClientEvent, AgentProviderAuthUiEvent } from '../../src/features/agent/types'
+import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent } from '../../src/features/agent/types'
 import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
 import type { WorkspaceIconThemeCatalogOption } from '../../src/features/workspace/types'
 import {
@@ -107,6 +108,25 @@ const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPat
 type WindowBackgroundTheme = 'light' | 'dark'
 type WindowAppearanceTheme = WindowBackgroundTheme | 'system'
 type WindowThemeState = { resolvedTheme: WindowBackgroundTheme }
+const MAX_PICKED_IMAGE_ATTACHMENT_BYTES = 12 * 1024 * 1024
+
+function getAgentAttachmentMimeType(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase()
+
+  switch (extension) {
+    case '.png':
+      return 'image/png'
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg'
+    case '.webp':
+      return 'image/webp'
+    case '.gif':
+      return 'image/gif'
+    default:
+      return undefined
+  }
+}
 
 const WINDOW_BACKGROUND_COLORS = {
   dark: '#1f1f1f',
@@ -1055,8 +1075,52 @@ ipcMain.handle('agent:rename-session', async (_event, name: string) => {
   return agentManager.renameActiveSession(name)
 })
 
-ipcMain.handle('agent:send-prompt', async (_event, prompt: string, streamingBehavior?: 'steer' | 'followUp') => {
-  return agentManager.sendPrompt(prompt, streamingBehavior)
+ipcMain.handle('agent:pick-attachments', async () => {
+  if (!win) {
+    return []
+  }
+
+  const result = await dialog.showOpenDialog(win, {
+    filters: [
+      {
+        name: 'Supported attachments',
+        extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'md', 'markdown', 'json', 'csv', 'tsv', 'yaml', 'yml', 'xml', 'html', 'css', 'js', 'jsx', 'ts', 'tsx', 'py', 'go', 'rs', 'java', 'cpp', 'c', 'h', 'hpp', 'sql', 'docx', 'pdf'],
+      },
+      {
+        name: 'All files',
+        extensions: ['*'],
+      },
+    ],
+    properties: ['openFile', 'multiSelections'],
+    title: 'Attach Files',
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return []
+  }
+
+  return Promise.all(result.filePaths.map(async (filePath): Promise<AgentPromptAttachment> => {
+    const mimeType = getAgentAttachmentMimeType(filePath)
+    const fileStats = await stat(filePath).catch(() => null)
+    const isImage = Boolean(mimeType)
+    const shouldInlineImage = isImage && (!fileStats || fileStats.size <= MAX_PICKED_IMAGE_ATTACHMENT_BYTES)
+    const data = shouldInlineImage
+      ? `data:${mimeType};base64,${(await readFile(filePath)).toString('base64')}`
+      : undefined
+
+    return {
+      ...(data ? { data } : {}),
+      fileName: path.basename(filePath),
+      kind: isImage ? 'image' : 'file',
+      ...(mimeType ? { mimeType } : {}),
+      path: filePath,
+      ...(fileStats ? { size: fileStats.size } : {}),
+    }
+  }))
+})
+
+ipcMain.handle('agent:send-prompt', async (_event, prompt: string, streamingBehavior?: 'steer' | 'followUp', attachments?: AgentPromptAttachment[]) => {
+  return agentManager.sendPrompt(prompt, streamingBehavior, attachments)
 })
 
 ipcMain.handle('agent:select-model', async (_event, modelKey: string) => {
