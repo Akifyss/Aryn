@@ -78,6 +78,7 @@ type AgentSidebarProps = {
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenProviderSettings?: () => void
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
+  workspaceState?: AgentWorkspaceState | null
   workspacePath: string | null
 }
 
@@ -85,6 +86,7 @@ type AgentSurfaceProps = {
   iconTheme?: WorkspaceIconTheme | null
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenProviderSettings?: () => void
+  workspaceState?: AgentWorkspaceState | null
   workspacePath: string | null
 }
 
@@ -1875,6 +1877,7 @@ function AgentProvider({
   onOpenMessageFile,
   onOpenProviderSettings,
   onWorkspaceStateChange,
+  workspaceState,
   workspacePath,
 }: AgentProviderProps) {
   const workspaceTree = useWorkspaceStore((state) => state.tree)
@@ -1906,6 +1909,7 @@ function AgentProvider({
   const overlayPanelRef = useRef<HTMLDivElement | null>(null)
   const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
   const previousSessionPathRef = useRef<string | null>(null)
+  const pendingExternalWorkspaceStateRef = useRef<AgentWorkspaceState | null>(null)
   const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
   const restorableSessionPath = agentState.activeSession?.sessionPath
     && agentState.sessions.some((session) => session.path === agentState.activeSession?.sessionPath)
@@ -2174,6 +2178,23 @@ function AgentProvider({
   }, [activeSessionSelection.kind, agentState.activeSession?.sessionId])
 
   useEffect(() => {
+    if (!workspacePath || !workspaceState || workspaceState.runtime.workspacePath !== workspacePath) {
+      return
+    }
+
+    setAgentState((currentState) => {
+      if (currentState === workspaceState) {
+        return currentState
+      }
+
+      pendingExternalWorkspaceStateRef.current = workspaceState
+      return workspaceState
+    })
+    syncModelSelection(parseModelSelection(workspaceState.runtime.selectedModel))
+    setHasLoadedWorkspaceState(true)
+  }, [workspacePath, workspaceState])
+
+  useEffect(() => {
     if (!workspacePath) {
       setAgentState(emptyAgentState)
       setComposerState(emptyComposerState)
@@ -2275,6 +2296,15 @@ function AgentProvider({
   }, [activeOverlayPanel])
 
   useEffect(() => {
+    const pendingExternalState = pendingExternalWorkspaceStateRef.current
+    if (pendingExternalState && agentState !== pendingExternalState) {
+      return
+    }
+
+    if (pendingExternalState === agentState) {
+      pendingExternalWorkspaceStateRef.current = null
+    }
+
     onWorkspaceStateChange?.(agentState)
   }, [agentState, onWorkspaceStateChange])
 

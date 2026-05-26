@@ -4080,6 +4080,7 @@ function App() {
           setIsSettingsOpen(true)
         }}
         workspacePath={currentPath}
+        workspaceState={agentWorkspaceState}
         onWorkspaceStateChange={setAgentWorkspaceState}
       />
     )
@@ -4596,6 +4597,7 @@ function App() {
           setIsSettingsOpen(true)
         }}
         workspacePath={currentPath}
+        workspaceState={agentWorkspaceState}
         onWorkspaceStateChange={setAgentWorkspaceState}
       >
         {appShell}
