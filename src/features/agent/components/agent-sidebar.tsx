@@ -29,6 +29,7 @@ import {
   CloseLine,
   CodeLine,
   Delete2Line,
+  DownLine,
   EyeglassLine,
   Pencil2Line,
   PicLine,
@@ -4159,6 +4160,7 @@ function AgentChatSurface() {
               <span className='agent-select-current'>
                 {isNewConversation ? '新对话' : activeSession ? formatSessionLabel(activeSession.name) : 'Session'}
               </span>
+              <DownLine aria-hidden='true' className='agent-session-trigger-arrow' size={14} />
             </button>
           </div>
 

@@ -3342,7 +3342,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-session-trigger {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   width: 100%;
   min-width: 0;
   flex: 0 1 auto;
@@ -3368,10 +3368,29 @@ body.workspace-tree-dragging .workspace-tree-row {
   -webkit-app-region: no-drag;
 }
 
+.agent-session-trigger-arrow {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  opacity: 0.75;
+  transition: color 120ms ease, opacity 120ms ease, transform 120ms ease;
+}
+
 .agent-session-trigger:hover:not(:disabled),
 .agent-session-trigger.is-open {
   background: var(--surface-tertiary);
   color: var(--foreground);
+}
+
+.agent-session-trigger:hover:not(:disabled) .agent-session-trigger-arrow,
+.agent-session-trigger.is-open .agent-session-trigger-arrow {
+  color: var(--foreground);
+  opacity: 0.85;
+}
+
+.agent-session-trigger.is-open .agent-session-trigger-arrow {
+  transform: rotate(180deg);
 }
 
 .agent-session-trigger:disabled {
