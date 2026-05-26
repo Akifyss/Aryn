@@ -23,6 +23,7 @@ import type {
   AgentProviderAuthState,
   AgentQueuedMessageUpdate,
   AgentRunningPromptBehavior,
+  AgentSessionCreateOptions,
   AgentRuntimeState,
   AgentSessionListItem,
   AgentSessionSnapshot,
@@ -76,6 +77,11 @@ type AgentQueuedMessageKind = AgentRunningPromptBehavior
 type AgentQueueSnapshot = {
   followUp: string[]
   steering: string[]
+}
+type NormalizedCreateSessionOptions = {
+  modelKey: string | null
+  name: string | null
+  thinkingLevel: ThinkingLevel | null
 }
 type AgentProviderAuthPrompt = {
   allowEmpty?: boolean
@@ -1133,11 +1139,20 @@ export class PiAgentManager {
     return this.buildWorkspaceState(cwd)
   }
 
-  async createSession(cwd: string, name?: string): Promise<AgentWorkspaceState> {
+  async createSession(cwd: string, options?: string | AgentSessionCreateOptions): Promise<AgentWorkspaceState> {
+    const createOptions = this.normalizeCreateSessionOptions(options)
     const session = await this.activateSession(cwd, SessionManager.create(cwd, this.getSessionDir(cwd)))
 
-    if (name?.trim()) {
-      session.setSessionName(name.trim())
+    if (createOptions.name) {
+      session.setSessionName(createOptions.name)
+    }
+
+    if (createOptions.modelKey) {
+      await this.applySessionModel(session, createOptions.modelKey)
+    }
+
+    if (createOptions.thinkingLevel) {
+      session.setThinkingLevel(createOptions.thinkingLevel)
     }
 
     return this.broadcastWorkspaceState(cwd)
@@ -1212,20 +1227,52 @@ export class PiAgentManager {
     return this.broadcastWorkspaceState(runtime.cwd)
   }
 
-  async selectModel(modelKey: string) {
-    const runtime = this.requireActiveSession()
-    this.authStorage.reload()
-    runtime.session.modelRegistry.refresh()
+  private normalizeCreateSessionOptions(options?: string | AgentSessionCreateOptions): NormalizedCreateSessionOptions {
+    if (typeof options === 'string') {
+      return {
+        modelKey: null,
+        name: options.trim() || null,
+        thinkingLevel: null,
+      }
+    }
 
-    const trimmedModelKey = modelKey.trim()
-    const availableModels = runtime.session.modelRegistry.getAvailable()
-    const selectedModel = this.resolveAvailableModel(availableModels, trimmedModelKey)
+    const thinkingLevel = options?.thinkingLevel
+    if (thinkingLevel && !isThinkingLevel(thinkingLevel)) {
+      throw new Error(`Thinking level "${thinkingLevel}" is not supported.`)
+    }
+
+    return {
+      modelKey: options?.modelKey?.trim() || null,
+      name: options?.name?.trim() || null,
+      thinkingLevel: thinkingLevel ?? null,
+    }
+  }
+
+  private async applySessionModel(session: AgentSession, modelKey: string) {
+    this.authStorage.reload()
+    session.modelRegistry.refresh()
+
+    const selectedModel = this.resolveAvailableModel(session.modelRegistry.getAvailable(), modelKey)
 
     if (!selectedModel) {
       throw new Error(`Model "${modelKey}" is not available.`)
     }
 
-    await runtime.session.setModel(selectedModel)
+    if (
+      session.model?.provider !== selectedModel.provider
+      || session.model?.id !== selectedModel.id
+    ) {
+      await session.setModel(selectedModel)
+    }
+
+    return selectedModel
+  }
+
+  async selectModel(modelKey: string) {
+    const runtime = this.requireActiveSession()
+
+    const trimmedModelKey = modelKey.trim()
+    const selectedModel = await this.applySessionModel(runtime.session, trimmedModelKey)
     runtime.session.settingsManager.setDefaultModelAndProvider(selectedModel.provider, selectedModel.id)
     await runtime.session.settingsManager.flush()
 
@@ -1248,20 +1295,7 @@ export class PiAgentManager {
     const trimmedModelKey = modelKey?.trim()
 
     if (trimmedModelKey) {
-      this.authStorage.reload()
-      runtime.session.modelRegistry.refresh()
-      const selectedModel = this.resolveAvailableModel(runtime.session.modelRegistry.getAvailable(), trimmedModelKey)
-
-      if (!selectedModel) {
-        throw new Error(`Model "${modelKey}" is not available.`)
-      }
-
-      if (
-        runtime.session.model?.provider !== selectedModel.provider
-        || runtime.session.model?.id !== selectedModel.id
-      ) {
-        await runtime.session.setModel(selectedModel)
-      }
+      await this.applySessionModel(runtime.session, trimmedModelKey)
     }
 
     runtime.session.setThinkingLevel(level)
@@ -1838,10 +1872,67 @@ export class PiAgentManager {
     sessions: AgentSessionListItem[],
     session: AgentSession | null,
   ): Promise<AgentWorkspaceState> {
+    const resolvedSessions = session ? this.mergeActiveSessionListItem(sessions, session) : sessions
+
     return {
       activeSession: session ? await this.serializeSession(session) : null,
       runtime: await this.serializeRuntime(cwd, session),
-      sessions,
+      sessions: resolvedSessions,
+    }
+  }
+
+  private mergeActiveSessionListItem(sessions: AgentSessionListItem[], session: AgentSession) {
+    const activeSessionItem = this.serializeActiveSessionListItem(session)
+
+    if (!activeSessionItem) {
+      return sessions
+    }
+
+    const existingIndex = sessions.findIndex((candidate) => candidate.path === activeSessionItem.path)
+    const nextSessions = existingIndex >= 0
+      ? sessions.map((candidate, index) => index === existingIndex ? activeSessionItem : candidate)
+      : [activeSessionItem, ...sessions]
+
+    return nextSessions.sort((left, right) => Date.parse(right.modifiedAt) - Date.parse(left.modifiedAt))
+  }
+
+  private serializeActiveSessionListItem(session: AgentSession): AgentSessionListItem | null {
+    const sessionPath = session.sessionFile
+
+    if (!sessionPath) {
+      return null
+    }
+
+    const header = session.sessionManager.getHeader()
+    const branchEntries = session.sessionManager.getBranch()
+    const messages = serializeSessionEntries(branchEntries)
+    const runtimeMessages = session.messages
+      .map((message, index) => serializeMessage(message, index))
+      .filter((message): message is AgentSidebarMessage => Boolean(message))
+    const visibleMessages = runtimeMessages.length > messages.length ? runtimeMessages : messages
+    const firstUserMessage = messages.find((message) => message.kind === 'user')
+      ?? runtimeMessages.find((message) => message.kind === 'user')
+    const name = session.sessionName ?? null
+
+    if (!name && !firstUserMessage) {
+      return null
+    }
+
+    const createdTimestamp = header ? parseEntryTimestamp(header.timestamp) : Date.now()
+    const modifiedAt = visibleMessages.reduce(
+      (latestTimestamp, message) => Math.max(latestTimestamp, message.timestamp),
+      createdTimestamp,
+    )
+    const preview = clampText(name || firstUserMessage?.text || 'New session', 72)
+
+    return {
+      createdAt: new Date(createdTimestamp).toISOString(),
+      id: session.sessionId,
+      messageCount: branchEntries.filter((entry) => entry.type === 'message').length,
+      modifiedAt: new Date(modifiedAt).toISOString(),
+      name,
+      path: sessionPath,
+      preview,
     }
   }
 
@@ -1850,12 +1941,13 @@ export class PiAgentManager {
     const availableModels = modelRegistry.getAvailable()
     const defaultModelPerProvider = await loadPiDefaultModelPerProvider()
     const settingsManager = session?.settingsManager ?? this.createSettingsManager(cwd)
+    const defaultModelValue = selectPiPreferredModel(availableModels, settingsManager, defaultModelPerProvider)
+    const defaultModel = defaultModelValue ? `${defaultModelValue.provider}/${defaultModelValue.id}` : null
+    const defaultThinkingLevel = settingsManager.getDefaultThinkingLevel() ?? 'medium'
     const selectedModelValue = session?.model
-      ?? (!session
-        ? selectPiPreferredModel(availableModels, settingsManager, defaultModelPerProvider)
-        : null)
+      ?? (!session ? defaultModelValue : null)
     const selectedModel = selectedModelValue ? `${selectedModelValue.provider}/${selectedModelValue.id}` : null
-    const configuredThinkingLevel = session?.thinkingLevel ?? settingsManager.getDefaultThinkingLevel() ?? 'medium'
+    const configuredThinkingLevel = session?.thinkingLevel ?? defaultThinkingLevel
     const availableThinkingLevels = selectedModelValue
       ? getSupportedThinkingLevels(selectedModelValue)
       : THINKING_LEVELS
@@ -1880,6 +1972,8 @@ export class PiAgentManager {
       hasConfiguredModels: availableModels.length > 0,
       isCompacting: session?.isCompacting ?? false,
       isStreaming: session?.isStreaming ?? false,
+      defaultModel,
+      defaultThinkingLevel,
       pendingMessageCount: session?.pendingMessageCount ?? 0,
       preferredModelByProvider: getProviderPreferredModelKeys(availableModels, defaultModelPerProvider),
       retryAttempt: session?.retryAttempt ?? 0,

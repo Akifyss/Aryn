@@ -16,7 +16,7 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
-import type { FileTreeRowDecorationRenderer } from '@pierre/trees'
+import type { FileTreeRowDecorationRenderer, FileTreeSortComparator } from '@pierre/trees'
 import { FileTree, useFileTree } from '@pierre/trees/react'
 import { Button, Chip, Disclosure, ScrollShadow } from '@heroui/react'
 import { Icon } from '@iconify/react'
@@ -152,6 +152,11 @@ type AgentModelPickerOption = {
   provider: string
   thinkingLevels: AgentThinkingLevel[]
 }
+type AgentModelDraft = {
+  modelId: string
+  provider: string
+  thinkingLevel: AgentThinkingLevel
+}
 type AgentModelPickerKeyboardColumn = 'provider' | 'model' | 'thinking'
 
 type AgentModelCascaderStyle = CSSProperties & {
@@ -239,6 +244,8 @@ const emptyAgentState: AgentWorkspaceState = {
     followUpMode: 'one-at-a-time',
     hasConfiguredModels: false,
     isCompacting: false,
+    defaultModel: null,
+    defaultThinkingLevel: 'medium',
     isStreaming: false,
     pendingMessageCount: 0,
     preferredModelByProvider: {},
@@ -402,6 +409,14 @@ const renderAgentSessionTreeRowDecoration: FileTreeRowDecorationRenderer = ({ ro
   title: row.name,
 })
 
+function areStringArraysEqual(left: readonly string[], right: readonly string[]) {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  return left.every((value, index) => value === right[index])
+}
+
 type AgentContextValue = {
   activeComposerMenu: AgentComposerMenu
   activeOverlayPanel: 'sessions' | null
@@ -418,7 +433,6 @@ type AgentContextValue = {
   configuredProviders: string[]
   deletingSessionPath: string | null
   handleComposerKeyDown: (event: KeyboardEvent<HTMLElement>) => void
-  handleCreateSession: () => Promise<void>
   handleDeleteSession: (sessionPath: string) => Promise<void>
   handleOpenSession: (sessionPath: string) => Promise<void>
   handleSelectModel: (modelKey: string) => Promise<void>
@@ -430,7 +444,6 @@ type AgentContextValue = {
   hasComposerPayload: boolean
   hasConfiguredProviders: boolean
   iconTheme?: WorkspaceIconTheme | null
-  isCreatingSession: boolean
   isLoading: boolean
   isSwitchingModel: boolean
   isSwitchingThinkingLevel: boolean
@@ -472,15 +485,15 @@ function useAgentContext() {
   return context
 }
 
-function formatSessionLabel(name: string | null) {
-  return name ?? 'Untitled session'
-}
-
 function sanitizeFlatAgentSessionPath(value: string) {
   return value
     .replace(/[\\/]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function formatSessionLabel(session: AgentSessionListItem | null) {
+  return session ? sanitizeFlatAgentSessionPath(session.name ?? session.preview) || 'Untitled session' : 'Session'
 }
 
 function buildFlatAgentSessionTreeEntries(sessions: AgentSessionListItem[]) {
@@ -509,6 +522,10 @@ function buildFlatAgentSessionTreeEntries(sessions: AgentSessionListItem[]) {
   })
 }
 
+function buildAgentSessionTreePathOrder(paths: readonly string[]) {
+  return new Map(paths.map((path, index) => [path, index]))
+}
+
 function formatModelLabel(modelKey: string | null) {
   if (!modelKey) {
     return ''
@@ -534,8 +551,67 @@ function parseModelSelection(modelKey: string | null): { modelId: string, provid
   }
 }
 
+function createAgentModelDraft(modelKey: string | null, thinkingLevel: AgentThinkingLevel): AgentModelDraft {
+  return {
+    ...parseModelSelection(modelKey),
+    thinkingLevel,
+  }
+}
+
+function getRuntimeSelectedModelDraft(runtime: AgentWorkspaceState['runtime']) {
+  return createAgentModelDraft(runtime.selectedModel, runtime.thinkingLevel)
+}
+
+function getRuntimeDefaultModelDraft(runtime: AgentWorkspaceState['runtime']) {
+  return createAgentModelDraft(runtime.defaultModel ?? runtime.selectedModel, runtime.defaultThinkingLevel)
+}
+
 function getAgentModelKey(provider: string, modelId: string) {
   return `${provider}/${modelId}`
+}
+
+function getAgentModelDraftKey(draft: AgentModelDraft) {
+  return draft.provider && draft.modelId ? getAgentModelKey(draft.provider, draft.modelId) : null
+}
+
+function normalizeAgentModelDraft(
+  draft: AgentModelDraft,
+  runtime: AgentWorkspaceState['runtime'],
+  fallbackDraft: AgentModelDraft,
+) {
+  const configuredProviders = Array.from(new Set(
+    runtime.availableModels
+      .map((model) => model.split('/')[0])
+      .filter(Boolean),
+  )).sort((left, right) => {
+    const orderDelta = getAgentProviderOrder(left) - getAgentProviderOrder(right)
+    return orderDelta !== 0 ? orderDelta : left.localeCompare(right)
+  })
+  const fallbackProvider = fallbackDraft.provider || configuredProviders[0] || draft.provider
+  const provider = configuredProviders.includes(draft.provider) ? draft.provider : fallbackProvider
+  const modelIds = Array.from(new Set(
+    runtime.availableModels
+      .filter((model) => model.startsWith(`${provider}/`))
+      .map((model) => model.split('/').slice(1).join('/')),
+  ))
+  const preferredModelKey = runtime.preferredModelByProvider[provider]
+  const preferredModel = parseModelSelection(preferredModelKey ?? null)
+  const fallbackModelId = fallbackDraft.provider === provider && fallbackDraft.modelId
+    ? fallbackDraft.modelId
+    : preferredModel.provider === provider
+      ? preferredModel.modelId
+      : modelIds[0] ?? draft.modelId
+  const modelId = modelIds.includes(draft.modelId) ? draft.modelId : fallbackModelId
+  const modelKey = provider && modelId ? getAgentModelKey(provider, modelId) : null
+  const availableThinkingLevels = modelKey
+    ? runtime.availableThinkingLevelsByModel[modelKey] ?? runtime.availableThinkingLevels
+    : runtime.availableThinkingLevels
+
+  return {
+    modelId,
+    provider,
+    thinkingLevel: clampAgentThinkingLevel(draft.thinkingLevel, availableThinkingLevels),
+  }
 }
 
 const THINKING_LEVEL_LABELS: Record<AgentThinkingLevel, string> = {
@@ -2335,6 +2411,7 @@ function AgentProvider({
   const [composerAttachments, setComposerAttachments] = useState<ComposerAttachment[]>([])
   const [modelInputValue, setModelInputValue] = useState(defaultModelSelection.modelId)
   const [selectedProviderValue, setSelectedProviderValue] = useState(defaultModelSelection.provider)
+  const [selectedThinkingLevel, setSelectedThinkingLevel] = useState<AgentThinkingLevel>(emptyAgentState.runtime.defaultThinkingLevel)
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({
     [defaultModelSelection.provider]: defaultModelSelection.modelId,
   })
@@ -2346,7 +2423,6 @@ function AgentProvider({
   const [activeOverlayPanel, setActiveOverlayPanel] = useState<'sessions' | null>(null)
   const [activeSessionSelection, setActiveSessionSelection] = useState<AgentSessionSelection>({ kind: 'new' })
   const [isLoading, setIsLoading] = useState(false)
-  const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [deletingSessionPath, setDeletingSessionPath] = useState<string | null>(null)
   const [isSwitchingModel, setIsSwitchingModel] = useState(false)
   const [isSwitchingThinkingLevel, setIsSwitchingThinkingLevel] = useState(false)
@@ -2356,21 +2432,59 @@ function AgentProvider({
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
   const overlayPanelRef = useRef<HTMLDivElement | null>(null)
   const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
+  const openSessionRequestIdRef = useRef(0)
   const previousSessionPathRef = useRef<string | null>(null)
   const pendingExternalWorkspaceStateRef = useRef<AgentWorkspaceState | null>(null)
+  const activeSessionSelectionRef = useRef(activeSessionSelection)
+  const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
   const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
   const restorableSessionPath = agentState.activeSession?.sessionPath
     && agentState.sessions.some((session) => session.path === agentState.activeSession?.sessionPath)
     ? agentState.activeSession.sessionPath
     : null
 
-  function syncModelSelection(selection: { modelId: string, provider: string }) {
-    setSelectedProviderValue(selection.provider)
-    setModelInputValue(selection.modelId)
+  function syncModelDraft(draft: AgentModelDraft) {
+    setSelectedProviderValue(draft.provider)
+    setModelInputValue(draft.modelId)
+    setSelectedThinkingLevel(draft.thinkingLevel)
     setModelDrafts((currentValue) => ({
       ...currentValue,
-      [selection.provider]: selection.modelId,
+      [draft.provider]: draft.modelId,
     }))
+  }
+
+  function syncNewSessionModelDraft(draft: AgentModelDraft) {
+    newSessionModelDraftRef.current = draft
+  }
+
+  function syncActiveSessionSelection(selection: AgentSessionSelection) {
+    activeSessionSelectionRef.current = selection
+    setActiveSessionSelection(selection)
+  }
+
+  async function ensureSelectedAgentSessionActive(selection = activeSessionSelectionRef.current) {
+    if (!workspacePath || selection.kind !== 'session') {
+      return null
+    }
+
+    if (agentState.activeSession?.sessionPath === selection.sessionPath) {
+      return agentState
+    }
+
+    const requestId = openSessionRequestIdRef.current
+    const nextState = await window.appApi.openAgentSession(workspacePath, selection.sessionPath)
+
+    if (
+      requestId !== openSessionRequestIdRef.current
+      || activeSessionSelectionRef.current.kind !== 'session'
+      || activeSessionSelectionRef.current.sessionPath !== selection.sessionPath
+    ) {
+      return null
+    }
+
+    setAgentState(nextState)
+    syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
+    return nextState
   }
 
   function getRuntimePreferredModelId(provider: string) {
@@ -2466,11 +2580,29 @@ function AgentProvider({
   }
 
   useEffect(() => {
+    activeSessionSelectionRef.current = activeSessionSelection
+  }, [activeSessionSelection])
+
+  useEffect(() => {
     const unsubscribe = window.appApi.onAgentEvent((event: AgentClientEvent) => {
       if (event.type === 'workspace_state') {
         setAgentState(event.state)
-        const nextModelSelection = parseModelSelection(event.state.runtime.selectedModel)
-        syncModelSelection(nextModelSelection)
+        const nextSessionPath = event.state.activeSession?.sessionPath ?? null
+        const currentSelection = activeSessionSelectionRef.current
+        if (
+          currentSelection.kind === 'session'
+          && currentSelection.sessionPath === nextSessionPath
+        ) {
+          syncModelDraft(getRuntimeSelectedModelDraft(event.state.runtime))
+        } else if (currentSelection.kind === 'new') {
+          const currentDraft = newSessionModelDraftRef.current
+          const defaultDraft = getRuntimeDefaultModelDraft(event.state.runtime)
+          const nextDraft = normalizeAgentModelDraft(currentDraft.provider || currentDraft.modelId
+            ? currentDraft
+            : defaultDraft, event.state.runtime, defaultDraft)
+          syncNewSessionModelDraft(nextDraft)
+          syncModelDraft(nextDraft)
+        }
         setDraftAssistant('')
         setDraftThinking('')
         setIsThinkingStreaming(false)
@@ -2615,7 +2747,7 @@ function AgentProvider({
 
       if (
         event.type === 'error'
-        && activeSessionSelection.kind === 'session'
+        && activeSessionSelectionRef.current.kind === 'session'
         && (!event.sessionId || event.sessionId === agentState.activeSession?.sessionId)
       ) {
         setPanelError(event.message)
@@ -2623,7 +2755,7 @@ function AgentProvider({
     })
 
     return unsubscribe
-  }, [activeSessionSelection.kind, agentState.activeSession?.sessionId])
+  }, [agentState.activeSession?.sessionId, agentState.activeSession?.sessionPath])
 
   useEffect(() => {
     if (!workspacePath || !workspaceState || workspaceState.runtime.workspacePath !== workspacePath) {
@@ -2638,7 +2770,17 @@ function AgentProvider({
       pendingExternalWorkspaceStateRef.current = workspaceState
       return workspaceState
     })
-    syncModelSelection(parseModelSelection(workspaceState.runtime.selectedModel))
+    const defaultDraft = getRuntimeDefaultModelDraft(workspaceState.runtime)
+    const nextDraft = normalizeAgentModelDraft(newSessionModelDraftRef.current.provider || newSessionModelDraftRef.current.modelId
+      ? newSessionModelDraftRef.current
+      : defaultDraft, workspaceState.runtime, defaultDraft)
+    syncNewSessionModelDraft(nextDraft)
+    const currentSelection = activeSessionSelectionRef.current
+    if (currentSelection.kind === 'session' && currentSelection.sessionPath === workspaceState.activeSession?.sessionPath) {
+      syncModelDraft(getRuntimeSelectedModelDraft(workspaceState.runtime))
+    } else if (currentSelection.kind === 'new') {
+      syncModelDraft(nextDraft)
+    }
     setHasLoadedWorkspaceState(true)
   }, [workspacePath, workspaceState])
 
@@ -2646,8 +2788,8 @@ function AgentProvider({
     if (!workspacePath) {
       setAgentState(emptyAgentState)
       setComposerState(emptyComposerState)
-      setSelectedProviderValue(defaultModelSelection.provider)
-      setModelInputValue(defaultModelSelection.modelId)
+      syncNewSessionModelDraft(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
+      syncModelDraft(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
       setModelDrafts({
         [defaultModelSelection.provider]: defaultModelSelection.modelId,
       })
@@ -2657,7 +2799,7 @@ function AgentProvider({
       setLiveTools([])
       setPanelError(null)
       setHasLoadedWorkspaceState(false)
-      setActiveSessionSelection({ kind: 'new' })
+      syncActiveSessionSelection({ kind: 'new' })
       return
     }
 
@@ -2675,11 +2817,15 @@ function AgentProvider({
           && nextState.sessions.some((session) => session.path === nextActiveSessionPath),
         )
         const restoredSessionPath = hasRestoredSession ? nextActiveSessionPath : null
-        setActiveSessionSelection(restoredSessionPath
+        syncActiveSessionSelection(restoredSessionPath
           ? { kind: 'session', sessionPath: restoredSessionPath }
           : { kind: 'new' })
-        const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
-        syncModelSelection(nextModelSelection)
+        const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
+        const nextNewSessionDraft = normalizeAgentModelDraft(defaultDraft, nextState.runtime, defaultDraft)
+        syncNewSessionModelDraft(nextNewSessionDraft)
+        syncModelDraft(restoredSessionPath
+          ? getRuntimeSelectedModelDraft(nextState.runtime)
+          : nextNewSessionDraft)
         setHasLoadedWorkspaceState(true)
       })
       .catch((error) => {
@@ -2875,32 +3021,18 @@ function AgentProvider({
   }, [draftAssistant, draftThinking, isThinkingStreaming, isViewingActiveRuntime, liveTools, visiblePersistedMessages])
 
   function handleStartNewSession() {
-    setActiveSessionSelection({ kind: 'new' })
+    openSessionRequestIdRef.current += 1
+    const nextDraft = normalizeAgentModelDraft(
+      newSessionModelDraftRef.current,
+      agentState.runtime,
+      getRuntimeDefaultModelDraft(agentState.runtime),
+    )
+    syncNewSessionModelDraft(nextDraft)
+    syncActiveSessionSelection({ kind: 'new' })
+    syncModelDraft(nextDraft)
     setComposerState(emptyComposerState)
     setPanelError(null)
     setActiveOverlayPanel(null)
-  }
-
-  async function handleCreateSession() {
-    if (!workspacePath) {
-      return
-    }
-
-    setActiveSessionSelection({ kind: 'new' })
-
-    try {
-      setIsCreatingSession(true)
-      setPanelError(null)
-      const nextState = await window.appApi.createAgentSession(workspacePath)
-      setAgentState(nextState)
-      const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
-      syncModelSelection(nextModelSelection)
-      setActiveOverlayPanel(null)
-    } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to create a session.')
-    } finally {
-      setIsCreatingSession(false)
-    }
   }
 
   async function handleOpenSession(sessionPath: string) {
@@ -2908,9 +3040,12 @@ function AgentProvider({
       return
     }
 
-    setActiveSessionSelection({ kind: 'session', sessionPath })
+    syncActiveSessionSelection({ kind: 'session', sessionPath })
+    const requestId = openSessionRequestIdRef.current + 1
+    openSessionRequestIdRef.current = requestId
 
     if (agentState.activeSession?.sessionPath === sessionPath) {
+      syncModelDraft(getRuntimeSelectedModelDraft(agentState.runtime))
       setPanelError(null)
       setActiveOverlayPanel(null)
       return
@@ -2919,11 +3054,26 @@ function AgentProvider({
     try {
       setPanelError(null)
       const nextState = await window.appApi.openAgentSession(workspacePath, sessionPath)
+      if (
+        requestId !== openSessionRequestIdRef.current
+        || activeSessionSelectionRef.current.kind !== 'session'
+        || activeSessionSelectionRef.current.sessionPath !== sessionPath
+      ) {
+        return
+      }
+
       setAgentState(nextState)
-      const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
-      syncModelSelection(nextModelSelection)
+      syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
       setActiveOverlayPanel(null)
     } catch (error) {
+      if (
+        requestId !== openSessionRequestIdRef.current
+        || activeSessionSelectionRef.current.kind !== 'session'
+        || activeSessionSelectionRef.current.sessionPath !== sessionPath
+      ) {
+        return
+      }
+
       setPanelError(error instanceof Error ? error.message : 'Unable to open that session.')
     }
   }
@@ -2938,6 +3088,18 @@ function AgentProvider({
       setPanelError(null)
       const nextState = await window.appApi.deleteAgentSession(workspacePath, sessionPath)
       setAgentState(nextState)
+      const currentSelection = activeSessionSelectionRef.current
+      if (currentSelection.kind === 'session' && currentSelection.sessionPath === sessionPath) {
+        const nextActiveSessionPath = nextState.activeSession?.sessionPath
+        const nextSelection = nextActiveSessionPath
+          && nextState.sessions.some((session) => session.path === nextActiveSessionPath)
+          ? { kind: 'session' as const, sessionPath: nextActiveSessionPath }
+          : { kind: 'new' as const }
+        syncActiveSessionSelection(nextSelection)
+        syncModelDraft(nextSelection.kind === 'session'
+          ? getRuntimeSelectedModelDraft(nextState.runtime)
+          : newSessionModelDraftRef.current)
+      }
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to delete that session.')
     } finally {
@@ -2953,19 +3115,36 @@ function AgentProvider({
     try {
       setIsSwitchingModel(true)
       setPanelError(null)
+      const isNewSelection = activeSessionSelection.kind === 'new'
+      const nextDraft = normalizeAgentModelDraft(
+        createAgentModelDraft(modelKey, selectedThinkingLevel),
+        agentState.runtime,
+        getRuntimeDefaultModelDraft(agentState.runtime),
+      )
+      if (isNewSelection) {
+        syncNewSessionModelDraft(nextDraft)
+        syncModelDraft(nextDraft)
+        setActiveComposerMenu(null)
+        return
+      }
 
-      if (activeSessionSelection.kind === 'new' || !agentState.activeSession) {
-        const nextState = await window.appApi.createAgentSession(workspacePath)
-        setAgentState(nextState)
-        if (nextState.activeSession?.sessionPath) {
-          setActiveSessionSelection({ kind: 'session', sessionPath: nextState.activeSession.sessionPath })
-        }
+      const activeState = await ensureSelectedAgentSessionActive()
+      if (!activeState?.activeSession) {
+        setPanelError('Open a session before switching the model.')
+        setActiveComposerMenu(null)
+        return
       }
 
       const nextState = await window.appApi.selectAgentModel(modelKey)
+      if (
+        activeSessionSelectionRef.current.kind !== 'session'
+        || activeSessionSelectionRef.current.sessionPath !== nextState.activeSession?.sessionPath
+      ) {
+        return
+      }
+
       setAgentState(nextState)
-      const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
-      syncModelSelection(nextModelSelection)
+      syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
       setActiveComposerMenu(null)
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to switch the model.')
@@ -2991,19 +3170,36 @@ function AgentProvider({
     try {
       setIsSwitchingThinkingLevel(true)
       setPanelError(null)
+      const isNewSelection = activeSessionSelection.kind === 'new'
+      const nextDraft = normalizeAgentModelDraft(
+        createAgentModelDraft(nextModelKey, level),
+        agentState.runtime,
+        getRuntimeDefaultModelDraft(agentState.runtime),
+      )
+      if (isNewSelection) {
+        syncNewSessionModelDraft(nextDraft)
+        syncModelDraft(nextDraft)
+        setActiveComposerMenu(null)
+        return
+      }
 
-      if (activeSessionSelection.kind === 'new' || !agentState.activeSession) {
-        const nextState = await window.appApi.createAgentSession(workspacePath)
-        setAgentState(nextState)
-        if (nextState.activeSession?.sessionPath) {
-          setActiveSessionSelection({ kind: 'session', sessionPath: nextState.activeSession.sessionPath })
-        }
+      const activeState = await ensureSelectedAgentSessionActive()
+      if (!activeState?.activeSession) {
+        setPanelError('Open a session before changing the thinking level.')
+        setActiveComposerMenu(null)
+        return
       }
 
       const nextState = await window.appApi.selectAgentThinkingLevel(level, nextModelKey)
+      if (
+        activeSessionSelectionRef.current.kind !== 'session'
+        || activeSessionSelectionRef.current.sessionPath !== nextState.activeSession?.sessionPath
+      ) {
+        return
+      }
+
       setAgentState(nextState)
-      const nextModelSelection = parseModelSelection(nextState.runtime.selectedModel)
-      syncModelSelection(nextModelSelection)
+      syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
       setActiveComposerMenu(null)
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to switch the thinking level.')
@@ -3023,17 +3219,38 @@ function AgentProvider({
     try {
       setActiveComposerMenu(null)
       setPanelError(null)
+      let nextSessionPath = agentState.activeSession?.sessionPath ?? null
 
-      if (activeSessionSelection.kind === 'new' || !agentState.activeSession) {
-        const nextState = await window.appApi.createAgentSession(workspacePath)
+      if (activeSessionSelection.kind === 'new') {
+        openSessionRequestIdRef.current += 1
+        const nextDraft = normalizeAgentModelDraft(
+          newSessionModelDraftRef.current,
+          agentState.runtime,
+          getRuntimeDefaultModelDraft(agentState.runtime),
+        )
+        syncNewSessionModelDraft(nextDraft)
+        const draftModelKey = getAgentModelDraftKey(nextDraft)
+        const nextState = await window.appApi.createAgentSession(workspacePath, {
+          ...(draftModelKey && agentState.runtime.availableModels.includes(draftModelKey) ? { modelKey: draftModelKey } : {}),
+          thinkingLevel: nextDraft.thinkingLevel,
+        })
         setAgentState(nextState)
-        if (nextState.activeSession?.sessionPath) {
-          setActiveSessionSelection({ kind: 'session', sessionPath: nextState.activeSession.sessionPath })
+        nextSessionPath = nextState.activeSession?.sessionPath ?? null
+        syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
+      } else {
+        const activeState = await ensureSelectedAgentSessionActive()
+        if (!activeState?.activeSession) {
+          setPanelError('Open a session before sending your prompt.')
+          return
         }
+        nextSessionPath = activeState.activeSession.sessionPath
       }
 
       const promptAttachments = composerAttachments.map(({ id: _id, ...attachment }) => attachment)
       await window.appApi.sendAgentPrompt(trimmedPrompt, streamingBehavior, promptAttachments)
+      if (nextSessionPath) {
+        syncActiveSessionSelection({ kind: 'session', sessionPath: nextSessionPath })
+      }
       setComposerState(emptyComposerState)
       setComposerAttachments([])
       if (!streamingBehavior) {
@@ -3143,7 +3360,7 @@ function AgentProvider({
   const composerThinkingLevels = composerModelKey && hasAvailableComposerModel
     ? (agentState.runtime.availableThinkingLevelsByModel[composerModelKey] ?? agentState.runtime.availableThinkingLevels)
     : []
-  const thinkingLevel = clampAgentThinkingLevel(agentState.runtime.thinkingLevel, composerThinkingLevels)
+  const thinkingLevel = clampAgentThinkingLevel(selectedThinkingLevel, composerThinkingLevels)
   const thinkingLevelLabel = formatThinkingLevelLabel(thinkingLevel)
   const hasComposerPayload = getHasComposerPayload(composerState, composerAttachments)
   const canSend = Boolean(
@@ -3335,7 +3552,6 @@ function AgentProvider({
     configuredProviders,
     deletingSessionPath,
     handleComposerKeyDown,
-    handleCreateSession,
     handleDeleteSession,
     handleOpenSession,
     handleSelectModel,
@@ -3347,7 +3563,6 @@ function AgentProvider({
     hasComposerPayload,
     hasConfiguredProviders,
     iconTheme,
-    isCreatingSession,
     isLoading,
     isSwitchingModel,
     isSwitchingThinkingLevel,
@@ -3391,7 +3606,6 @@ function AgentProvider({
     configuredProviders,
     deletingSessionPath,
     handleComposerKeyDown,
-    handleCreateSession,
     handleDeleteSession,
     handleOpenSession,
     handleSelectModel,
@@ -3403,7 +3617,6 @@ function AgentProvider({
     hasComposerPayload,
     hasConfiguredProviders,
     iconTheme,
-    isCreatingSession,
     isLoading,
     isSwitchingModel,
     isSwitchingThinkingLevel,
@@ -3470,6 +3683,16 @@ function AgentSessionTree({
 
     return [...sessionPathByTreePath.keys()]
   }, [sessionPathByTreePath])
+  const treePathOrderRef = useRef(buildAgentSessionTreePathOrder(treePaths))
+  const treePathsRef = useRef(treePaths)
+  const lastSyncedActiveTreePathRef = useRef<string | null>(null)
+  const treePathSortComparatorRef = useRef<FileTreeSortComparator>((left, right) => {
+    const leftOrder = treePathOrderRef.current.get(left.path) ?? Number.MAX_SAFE_INTEGER
+    const rightOrder = treePathOrderRef.current.get(right.path) ?? Number.MAX_SAFE_INTEGER
+    const orderDelta = leftOrder - rightOrder
+
+    return orderDelta !== 0 ? orderDelta : left.path.localeCompare(right.path)
+  })
   const activeTreePath = useMemo(() => {
     if (!activeSessionPath) {
       return null
@@ -3540,25 +3763,38 @@ function AgentSessionTree({
     },
     paths: treePaths,
     renderRowDecoration: renderAgentSessionTreeRowDecoration,
+    sort: treePathSortComparatorRef.current,
     unsafeCSS: AGENT_SESSION_TREE_CSS,
   })
 
   useEffect(() => {
+    treePathOrderRef.current = buildAgentSessionTreePathOrder(treePaths)
+    if (areStringArraysEqual(treePathsRef.current, treePaths)) {
+      return
+    }
+
+    treePathsRef.current = treePaths
     model.resetPaths(treePaths)
   }, [model, treePaths])
 
   useEffect(() => {
+    if (activeSessionSelection.kind === 'session' && activeTreePath === lastSyncedActiveTreePathRef.current) {
+      return
+    }
+
     treeSelectionStateRef.current.isSyncingSelection = true
     model.getSelectedPaths().forEach((selectedPath) => {
       model.getItem(selectedPath)?.deselect()
     })
 
     if (activeSessionSelection.kind === 'new') {
+      lastSyncedActiveTreePathRef.current = null
       treeSelectionStateRef.current.isSyncingSelection = false
       return
     }
 
     if (!activeTreePath) {
+      lastSyncedActiveTreePathRef.current = null
       treeSelectionStateRef.current.isSyncingSelection = false
       return
     }
@@ -3566,6 +3802,7 @@ function AgentSessionTree({
     model.getItem(activeTreePath)?.select()
     model.focusPath(activeTreePath)
     model.scrollToPath(activeTreePath, { offset: 'nearest' })
+    lastSyncedActiveTreePathRef.current = activeTreePath
     treeSelectionStateRef.current.isSyncingSelection = false
   }, [activeSessionSelection.kind, activeTreePath, model])
 
@@ -3665,7 +3902,6 @@ function AgentChatSurface() {
     composerState,
     configuredProviders,
     handleComposerKeyDown,
-    handleCreateSession,
     handleDeleteSession,
     handleOpenSession,
     handleSelectModel,
@@ -3677,7 +3913,6 @@ function AgentChatSurface() {
     hasComposerPayload,
     hasConfiguredProviders,
     iconTheme,
-    isCreatingSession,
     deletingSessionPath,
     isLoading,
     isSwitchingModel,
@@ -3794,7 +4029,7 @@ function AgentChatSurface() {
       )
   const activeModelThinkingLevels = activeModelOption?.thinkingLevels ?? []
   const activeModelThinkingLevel = clampAgentThinkingLevel(
-    agentState.runtime.thinkingLevel,
+    thinkingLevel,
     activeModelThinkingLevels,
   )
   const activeModelPickerThinkingLevel = modelPickerActiveThinkingLevel
@@ -4771,7 +5006,7 @@ function AgentChatSurface() {
               onClick={toggleSessionMenu}
             >
               <span className='agent-select-current'>
-                {isNewConversation ? '新对话' : activeSession ? formatSessionLabel(activeSession.name) : 'Session'}
+                {isNewConversation ? '新对话' : formatSessionLabel(activeSession)}
               </span>
               <DownLine aria-hidden='true' className='agent-session-trigger-arrow' size={14} />
             </button>
@@ -4780,7 +5015,7 @@ function AgentChatSurface() {
           {!isNewConversation ? (
             <button
               type='button'
-              disabled={!workspacePath || isCreatingSession}
+              disabled={!workspacePath}
               className='agent-toolbar-button'
               aria-label='Start new conversation'
               onClick={() => {

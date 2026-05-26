@@ -63,6 +63,12 @@ export type AgentRunningPromptBehavior = 'steer' | 'followUp'
 
 export type AgentQueuedMessageKind = AgentRunningPromptBehavior
 
+export type AgentSessionCreateOptions = {
+  modelKey?: string | null
+  name?: string
+  thinkingLevel?: AgentThinkingLevel
+}
+
 export type AgentQueuedMessageUpdate =
   | {
       action: 'delete'
@@ -98,6 +104,8 @@ export type AgentRuntimeState = {
   followUpMessages: string[]
   followUpMode: 'all' | 'one-at-a-time'
   isCompacting: boolean
+  defaultModel: string | null
+  defaultThinkingLevel: AgentThinkingLevel
   preferredModelByProvider: Record<string, string>
   selectedModel: string | null
   isStreaming: boolean

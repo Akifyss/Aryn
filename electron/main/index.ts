@@ -44,7 +44,7 @@ import {
   MIN_WINDOW_WIDTH,
 } from './app-state'
 import type { PersistedWorkspaceIconThemeSelection } from './app-state'
-import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior } from '../../src/features/agent/types'
+import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions } from '../../src/features/agent/types'
 import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
 import type { WorkspaceIconThemeCatalogOption } from '../../src/features/workspace/types'
 import {
@@ -1059,8 +1059,8 @@ ipcMain.handle('agent:load-workspace', async (_event, rootPath: string, preferre
   return agentManager.loadWorkspaceState(rootPath, preferredSessionPath ?? null)
 })
 
-ipcMain.handle('agent:create-session', async (_event, rootPath: string, name?: string) => {
-  return agentManager.createSession(rootPath, name)
+ipcMain.handle('agent:create-session', async (_event, rootPath: string, options?: string | AgentSessionCreateOptions) => {
+  return agentManager.createSession(rootPath, options)
 })
 
 ipcMain.handle('agent:open-session', async (_event, rootPath: string, sessionPath: string) => {

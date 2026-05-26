@@ -696,7 +696,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   text-transform: none;
   white-space: nowrap;
   cursor: pointer;
-  transition: all 120ms ease;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }

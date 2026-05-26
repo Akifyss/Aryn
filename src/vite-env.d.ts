@@ -1,4 +1,4 @@
-import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentThinkingLevel, AgentWorkspaceState } from '@/features/agent/types'
+import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentThinkingLevel, AgentWorkspaceState } from '@/features/agent/types'
 import type {
   GitBaselinePayload,
   GitBlameResult,
@@ -75,7 +75,7 @@ declare global {
       startWorkspaceWatch: (rootPath: string) => Promise<{ ok: boolean }>
       stopWorkspaceWatch: () => Promise<{ ok: boolean }>
       loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null) => Promise<AgentWorkspaceState>
-      createAgentSession: (rootPath: string, name?: string) => Promise<AgentWorkspaceState>
+      createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => Promise<AgentWorkspaceState>
       openAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
       deleteAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
       renameAgentSession: (name: string) => Promise<AgentWorkspaceState>
