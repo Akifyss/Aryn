@@ -76,6 +76,7 @@ Agent 布局下，左侧栏不再使用顶部 `.section-title-text` 展示单个
   - 新建空白项目
   - 使用现有文件夹
 - 每个项目显示文件夹图标和项目名。
+- 项目列表继续使用目前 session 树的 `https://trees.software/` 实现，不替换树组件；只是把当前 session 树向上增加一层项目节点，形成“项目名 - session 名”的树结构。
 - 点击项目行：将该项目设为 active 项目。
 - 当前 active 项目需要高亮。
 
