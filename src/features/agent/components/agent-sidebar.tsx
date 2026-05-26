@@ -52,6 +52,7 @@ import {
   WorkspaceFileIcon,
 } from '@/components/file-change-visuals'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
+import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
 import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
 import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
 import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
@@ -4267,6 +4268,10 @@ function AgentChatSurface() {
   }
 
   function handleModelPickerSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (isAgentKeyboardCompositionEvent(event)) {
+      return
+    }
+
     if (event.key === 'Escape') {
       event.preventDefault()
       setActiveComposerMenu(null)
