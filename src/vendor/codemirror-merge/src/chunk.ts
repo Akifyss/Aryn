@@ -66,6 +66,27 @@ export class Chunk {
   }
 }
 
+export type ChunkSide = "a" | "b"
+
+export type ChunkActualRange = {
+  from: number,
+  hasActualRange: boolean,
+  to: number,
+}
+
+export function chunkActualRange(chunk: Chunk, side: ChunkSide): ChunkActualRange {
+  let fromKey = side == "a" ? "actualFromA" : "actualFromB"
+  let toKey = side == "a" ? "actualToA" : "actualToB"
+  let chunkWithActualRange = chunk as Chunk & Record<string, unknown>
+  let from = chunkWithActualRange[fromKey]
+  let to = chunkWithActualRange[toKey]
+  return typeof from == "number" && typeof to == "number"
+    ? {from, to, hasActualRange: true}
+    : side == "a"
+      ? {from: chunk.fromA, to: chunk.toA, hasActualRange: false}
+      : {from: chunk.fromB, to: chunk.toB, hasActualRange: false}
+}
+
 function fromLine(fromA: number, fromB: number, a: Text, b: Text) {
   let lineA = a.lineAt(fromA), lineB = b.lineAt(fromB)
   return lineA.to == fromA && lineB.to == fromB && fromA < a.length && fromB < b.length

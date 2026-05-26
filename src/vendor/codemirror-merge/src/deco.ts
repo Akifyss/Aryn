@@ -1,7 +1,7 @@
 import {EditorView, Decoration, DecorationSet, ViewPlugin, ViewUpdate, Direction,
         WidgetType, GutterMarker, gutter, layer, type LayerMarker} from "@codemirror/view"
 import {EditorState, RangeSetBuilder, Text, StateField, StateEffect, RangeSet, Prec, type Extension} from "@codemirror/state"
-import {Chunk} from "./chunk"
+import {Chunk, chunkActualRange} from "./chunk"
 import type {Change} from "./diff"
 import {ChunkField, deferredChunkUpdate, mergeConfig, setChunks} from "./merge"
 
@@ -988,15 +988,39 @@ function compareSpacers(a: DecorationSet, b: DecorationSet) {
   return true
 }
 
+function rangeTouchesViewport(from: number, to: number, viewport: {from: number, to: number}) {
+  return from == to
+    ? from >= viewport.from && from <= viewport.to
+    : from < viewport.to && to > viewport.from
+}
+
+function chunkSideRange(chunk: Chunk, side: "a" | "b") {
+  let {from, to} = chunkActualRange(chunk, side)
+  return {from, to}
+}
+
+export function chunkTouchesViewport(chunk: Chunk, vpA: {from: number, to: number}, vpB: {from: number, to: number}) {
+  let rangeA = chunkSideRange(chunk, "a"), rangeB = chunkSideRange(chunk, "b")
+  return rangeTouchesViewport(rangeA.from, rangeA.to, vpA) ||
+    rangeTouchesViewport(rangeB.from, rangeB.to, vpB)
+}
+
+export type SpacerViewportOverride = {
+  a?: {from: number, to: number},
+  b?: {from: number, to: number},
+}
+
 export function updateSpacers(
   a: EditorView,
   b: EditorView,
   chunks: readonly Chunk[],
-  trailingSpacer: TrailingSpacerMode = "all"
+  trailingSpacer: TrailingSpacerMode = "all",
+  viewportOverride?: SpacerViewportOverride,
 ) {
   let buildA = new RangeSetBuilder<Decoration>(), buildB = new RangeSetBuilder<Decoration>()
   let spacersA = a.state.field(Spacers).iter(), spacersB = b.state.field(Spacers).iter()
-  let posA = 0, posB = 0, offA = 0, offB = 0, vpA = a.viewport, vpB = b.viewport
+  let posA = 0, posB = 0, offA = 0, offB = 0
+  let vpA = viewportOverride?.a ?? a.viewport, vpB = viewportOverride?.b ?? b.viewport
   let nextSpacerIsViewportAlignment = false
   let emptySideA = documentIsEmptySide(a), emptySideB = documentIsEmptySide(b)
   chunks: for (let chunkI = 0;; chunkI++) {

@@ -3,7 +3,7 @@ import {EditorState, Text, Prec, RangeSetBuilder, StateField, StateEffect,
         Range, RangeSet, ChangeSet} from "@codemirror/state"
 import {language, highlightingFor} from "@codemirror/language"
 import {highlightTree} from "@lezer/highlight"
-import {Chunk, defaultDiffConfig} from "./chunk"
+import {Chunk, chunkActualRange, defaultDiffConfig} from "./chunk"
 import {computeChunks, ChunkField, mergeConfig} from "./merge"
 import type {DeletedContentRenderResult} from "./merge"
 import {Change, DiffConfig} from "./diff"
@@ -253,15 +253,6 @@ function deletionWidget(state: EditorState, chunk: Chunk, hideContent: boolean) 
   return deco
 }
 
-function chunkActualRange(chunk: Chunk, side: "a" | "b"): [number, number, boolean] {
-  let fromKey = side == "a" ? "actualFromA" : "actualFromB"
-  let toKey = side == "a" ? "actualToA" : "actualToB"
-  let chunkWithActualRange = chunk as Chunk & Record<string, unknown>
-  return typeof chunkWithActualRange[fromKey] == "number" && typeof chunkWithActualRange[toKey] == "number"
-    ? [chunkWithActualRange[fromKey] as number, chunkWithActualRange[toKey] as number, true]
-    : side == "a" ? [chunk.fromA, chunk.toA, false] : [chunk.fromB, chunk.toB, false]
-}
-
 /// In a [unified](#merge.unifiedMergeView) merge view, accept the
 /// chunk under the given position or the cursor. This chunk will no
 /// longer be highlighted unless it is edited again.
@@ -269,14 +260,14 @@ export function acceptChunk(view: EditorView, pos?: number) {
   let {state} = view, at = pos ?? state.selection.main.head
   let chunk = view.state.field(ChunkField).find(ch => ch.fromB <= at && ch.endB >= at)
   if (!chunk) return false
-  let [fromB, toB, hasActualRange] = chunkActualRange(chunk, "b")
-  let [fromA, toA] = chunkActualRange(chunk, "a")
-  let insert = hasActualRange
-    ? view.state.sliceDoc(fromB, toB)
+  let rangeB = chunkActualRange(chunk, "b")
+  let rangeA = chunkActualRange(chunk, "a")
+  let insert = rangeB.hasActualRange
+    ? view.state.sliceDoc(rangeB.from, rangeB.to)
     : view.state.sliceDoc(chunk.fromB, Math.max(chunk.fromB, chunk.toB - 1))
   let orig = view.state.field(originalDoc)
-  if (!hasActualRange && chunk.fromB != chunk.toB && chunk.toA <= orig.length) insert += view.state.lineBreak
-  let changes = ChangeSet.of({from: fromA, to: Math.min(orig.length, toA), insert}, orig.length)
+  if (!rangeB.hasActualRange && chunk.fromB != chunk.toB && chunk.toA <= orig.length) insert += view.state.lineBreak
+  let changes = ChangeSet.of({from: rangeA.from, to: Math.min(orig.length, rangeA.to), insert}, orig.length)
   view.dispatch({
     effects: updateOriginalDoc.of({doc: changes.apply(orig), changes}),
     userEvent: "accept"
@@ -291,15 +282,15 @@ export function rejectChunk(view: EditorView, pos?: number) {
   let {state} = view, at = pos ?? state.selection.main.head
   let chunk = state.field(ChunkField).find(ch => ch.fromB <= at && ch.endB >= at)
   if (!chunk) return false
-  let [fromB, toB, hasActualRange] = chunkActualRange(chunk, "b")
-  let [fromA, toA] = chunkActualRange(chunk, "a")
+  let rangeB = chunkActualRange(chunk, "b")
+  let rangeA = chunkActualRange(chunk, "a")
   let orig = state.field(originalDoc)
-  let insert = hasActualRange
-    ? orig.sliceString(fromA, toA)
+  let insert = rangeB.hasActualRange
+    ? orig.sliceString(rangeA.from, rangeA.to)
     : orig.sliceString(chunk.fromA, Math.max(chunk.fromA, chunk.toA - 1))
-  if (!hasActualRange && chunk.fromA != chunk.toA && chunk.toB <= state.doc.length) insert += state.lineBreak
+  if (!rangeB.hasActualRange && chunk.fromA != chunk.toA && chunk.toB <= state.doc.length) insert += state.lineBreak
   view.dispatch({
-    changes: {from: fromB, to: Math.min(state.doc.length, toB), insert},
+    changes: {from: rangeB.from, to: Math.min(state.doc.length, rangeB.to), insert},
     userEvent: "revert"
   })
   return true

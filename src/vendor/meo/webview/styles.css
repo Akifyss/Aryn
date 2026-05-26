@@ -2186,6 +2186,14 @@
   line-height: inherit;
 }
 
+.meo-native-root .cm-editor .meo-md-structural-height-hint {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .meo-native-root .cm-editor.meo-mode-live.meo-table-interaction-active .meo-md-marker-active {
   display: none !important;
 }

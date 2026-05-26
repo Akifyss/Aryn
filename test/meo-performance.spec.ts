@@ -304,6 +304,108 @@ describe('meo performance guards', () => {
     expect(shouldRefreshLiveDecorationsForViewportChange(update, ensureSyntaxTree(syncedState, syncedState.doc.length, 1000))).toBe(false)
   })
 
+  it('adds markdown structural line classes without waiting for a complete syntax tree', () => {
+    const doc = [
+      createPlainLongDocument(5_000),
+      '## Late heading',
+      '```ts',
+      'const value = 1',
+      '```',
+      '> [!WARNING] Late alert',
+      '> quoted body',
+      '- [ ] late task',
+      '---',
+    ].join('\n')
+    const state = EditorState.create({
+      doc,
+      extensions: liveModeExtensions(),
+    })
+
+    const ranges = __meoLiveModeTestHooks.collectStructuralMarkdownLineDecorationDebugRanges(state)
+    const lineClassNames = (lineNumber: number) => {
+      const line = state.doc.line(lineNumber)
+      return ranges
+        .filter((range) => range.isLine && range.from === line.from)
+        .map((range) => range.className)
+    }
+    const last = state.doc.lines
+
+    expect(lineClassNames(last - 7)).toContain('meo-md-h2')
+    expect(lineClassNames(last - 6)).toContain('meo-md-code-block')
+    expect(lineClassNames(last - 5)).toContain('meo-md-code-block')
+    expect(lineClassNames(last - 4)).toContain('meo-md-code-block')
+    expect(lineClassNames(last - 3)).toContain('meo-md-alert meo-md-alert-warning')
+    expect(lineClassNames(last - 2)).toContain('meo-md-alert meo-md-alert-warning')
+    expect(lineClassNames(last - 1)).toContain('meo-md-list-line')
+    expect(lineClassNames(last)).toContain('meo-md-hr')
+  })
+
+  it('adds estimated height hints for long wrapping markdown paragraphs', () => {
+    const longParagraph = 'Paragraph with enough content to wrap in split mode. '.repeat(5).trim()
+    const doc = [
+      'short paragraph',
+      longParagraph,
+      '- list item should use list structural height',
+    ].join('\n')
+    const state = EditorState.create({
+      doc,
+      extensions: liveModeExtensions(),
+    })
+
+    const ranges = __meoLiveModeTestHooks.collectStructuralMarkdownLineDecorationDebugRanges(state)
+    const longLine = state.doc.line(2)
+    const listLine = state.doc.line(3)
+    const longLineHints = ranges.filter((range) => (
+      range.from === longLine.from
+      && range.hasWidget
+      && typeof range.estimatedHeight === 'number'
+    ))
+    const listLineHints = ranges.filter((range) => (
+      range.from === listLine.from
+      && range.hasWidget
+      && typeof range.estimatedHeight === 'number'
+    ))
+
+    expect(longLineHints.some((range) => Number(range.estimatedHeight) >= 48)).toBe(true)
+    expect(listLineHints.some((range) => range.estimatedHeight === 24)).toBe(true)
+  })
+
+  it('keeps structural markdown height hints stable on selection-only transactions', () => {
+    const doc = [
+      '## Heading',
+      'Paragraph with enough content to wrap in split mode. '.repeat(5).trim(),
+      '- [ ] task item',
+    ].join('\n')
+    let state = EditorState.create({
+      doc,
+      extensions: liveModeExtensions(),
+    })
+
+    const initialDecorations = __meoLiveModeTestHooks.structuralMarkdownLineDecorationSet(state)
+    state = state.update({ selection: { anchor: state.doc.length } }).state
+    const afterSelectionDecorations = __meoLiveModeTestHooks.structuralMarkdownLineDecorationSet(state)
+
+    expect(afterSelectionDecorations).toBe(initialDecorations)
+  })
+
+  it('cancels split restore anchors only for direct user input events', () => {
+    const shouldCancel = __meoDiffSplitRenderHealthTestHooks.shouldCancelRestoreAnchorForEvent
+
+    expect(shouldCancel(new Event('wheel'))).toBe(true)
+    expect(shouldCancel(new Event('touchstart'))).toBe(true)
+    expect(shouldCancel(new Event('pointerdown'))).toBe(true)
+    expect(shouldCancel(new Event('keydown'))).toBe(true)
+    expect(shouldCancel(new Event('scroll'))).toBe(false)
+    expect(shouldCancel(new Event('resize'))).toBe(false)
+  })
+
+  it('cancels pending split restore anchors before programmatic navigation scrolls', () => {
+    const shouldCancel = __meoDiffSplitRenderHealthTestHooks.shouldCancelRestoreAnchorForProgrammaticScroll
+
+    expect(shouldCancel(true)).toBe(true)
+    expect(shouldCancel(false)).toBe(false)
+  })
+
   it('keeps split search highlights off the full document scan path during live typing and IME composition', () => {
     let state = EditorState.create({
       doc: createPlainLongDocument(12_000),

@@ -113,6 +113,12 @@ const tableDelimiterGutterLineClassMarker = new (class extends GutterMarker {
 })();
 const isTableContentLine = (lineText: string): boolean => lineText.includes('|');
 const atxHeadingPrefixRegex = /^(\s*)(#{1,6})([ \t]+)/;
+const structuralFenceMarkerRegex = /^[ \t]{0,3}(?:>[ \t]?)*[ \t]{0,3}(`{3,}|~{3,})/;
+const structuralBlockquoteRegex = /^[ \t]{0,3}(?:>[ \t]?)+/;
+const structuralAlertRegex = /^[ \t]{0,3}>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/;
+const structuralParagraphSkipRegex = /^[ \t]*(?:$|#{1,6}(?:\s|$)|[-*_](?:[ \t]*[-*_]){2,}[ \t]*$|`{3,}|~{3,}|(?:>[ \t]?)+|(?:[-+*]|\d+[.)])\s+)/;
+const structuralParagraphWrapColumn = 84;
+const structuralLineHeightPx = 24;
 
 const lineStyleDecos = {
   h1: Decoration.line({ class: 'meo-md-h1' }),
@@ -132,6 +138,7 @@ const lineStyleDecos = {
   hrActive: Decoration.line({ class: 'meo-md-hr-active' }),
   hr: Decoration.line({ class: 'meo-md-hr' })
 };
+const structuralListLineDeco = Decoration.line({ class: 'meo-md-list-line' });
 
 const alertLineDecos: Record<AlertType, ReturnType<typeof Decoration.line>> = {
   NOTE: Decoration.line({ class: 'meo-md-alert meo-md-alert-note' }),
@@ -164,6 +171,7 @@ const rawFileUrlBlockedAncestorNames = new Set([
 
 const listLineDecoCache = new Map();
 const listIndentWidgetCache = new Map();
+const structuralHeightHintWidgetCache = new Map();
 const frontmatterArrayPillWidgetCache = new Map();
 
 export const refreshLiveDecorationsEffect = StateEffect.define();
@@ -406,6 +414,57 @@ class ListIndentWidget extends WidgetType {
   }
 }
 
+class StructuralHeightHintWidget extends WidgetType {
+  height: number;
+
+  constructor(height: number) {
+    super();
+    this.height = height;
+  }
+
+  eq(other: WidgetType): boolean {
+    return other instanceof StructuralHeightHintWidget && other.height === this.height;
+  }
+
+  get estimatedHeight(): number {
+    return this.height;
+  }
+
+  toDOM(): HTMLElement {
+    const marker = document.createElement('span');
+    marker.className = 'meo-md-structural-height-hint';
+    marker.setAttribute('aria-hidden', 'true');
+    return marker;
+  }
+}
+
+function structuralHeightHintWidget(height: number) {
+  const normalized = Math.max(5, Math.round(height));
+  let widget = structuralHeightHintWidgetCache.get(normalized);
+  if (widget) {
+    return widget;
+  }
+  widget = new StructuralHeightHintWidget(normalized);
+  structuralHeightHintWidgetCache.set(normalized, widget);
+  return widget;
+}
+
+function structuralHeightHintDeco(height: number) {
+  return Decoration.widget({
+    widget: structuralHeightHintWidget(height),
+    side: -1
+  });
+}
+
+function estimatedStructuralParagraphHeight(lineText: string): number | null {
+  const trimmedLength = lineText.trim().length;
+  if (trimmedLength <= structuralParagraphWrapColumn || structuralParagraphSkipRegex.test(lineText)) {
+    return null;
+  }
+  const visualLineCount = Math.min(6, Math.ceil(trimmedLength / structuralParagraphWrapColumn));
+  return visualLineCount > 1 ? visualLineCount * structuralLineHeightPx : null;
+}
+
 function listIndentWidget(indentColumns) {
   const normalized = Math.max(0, Math.round(indentColumns));
   let widget = listIndentWidgetCache.get(normalized);
@@ -472,6 +531,15 @@ function getAtxHeadingPrefixLength(text: string): number | null {
   return headingPrefix
     ? headingPrefix[1].length + headingPrefix[2].length + headingPrefix[3].length
     : null;
+}
+
+function atxHeadingLevelFromText(text: string): number | null {
+  const headingPrefix = atxHeadingPrefixRegex.exec(text);
+  if (!headingPrefix) {
+    return null;
+  }
+  const level = headingPrefix[2]?.length ?? 0;
+  return level >= 1 && level <= 6 ? level : null;
 }
 
 function listLineDeco(
@@ -1476,6 +1544,89 @@ function addListLineDecorations(builder, state, indentSelectedLines, frontmatter
   }
 }
 
+function addStructuralListLineDecoration(builder, line) {
+  builder.push(structuralHeightHintDeco(24).range(line.from));
+  builder.push(structuralListLineDeco.range(line.from));
+}
+
+function addStructuralMarkdownLineDecorations(builder, state, frontmatter = null) {
+  const stylesByLine = detectListIndentStylesByLine(state);
+  let fenceMarker: string | null = null;
+  let currentAlertType: AlertType | null = null;
+
+  for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
+    const line = state.doc.line(lineNo);
+    const lineText = state.doc.sliceString(line.from, line.to);
+    const trimmed = lineText.trim();
+    const inFrontmatter = isInsideFrontmatter(frontmatter, line.from);
+    const inFrontmatterContent = isInsideFrontmatterContent(frontmatter, line.from);
+    const fenceMatch = !inFrontmatterContent ? structuralFenceMarkerRegex.exec(lineText) : null;
+
+    if (fenceMarker) {
+      builder.push(structuralHeightHintDeco(24).range(line.from));
+      builder.push(lineStyleDecos.codeBlock.range(line.from));
+      if (fenceMatch && fenceMatch[1]?.startsWith(fenceMarker[0])) {
+        fenceMarker = null;
+      }
+      continue;
+    }
+
+    if (fenceMatch) {
+      builder.push(structuralHeightHintDeco(24).range(line.from));
+      builder.push(lineStyleDecos.codeBlock.range(line.from));
+      fenceMarker = fenceMatch[1];
+      continue;
+    }
+
+    if (inFrontmatter) {
+      currentAlertType = null;
+      continue;
+    }
+
+    if (trimmed && isThematicBreakLine(lineText)) {
+      builder.push(structuralHeightHintDeco(24).range(line.from));
+      builder.push(lineStyleDecos.hr.range(line.from));
+      currentAlertType = null;
+      continue;
+    }
+
+    const headingLevel = atxHeadingLevelFromText(lineText);
+    if (headingLevel !== null) {
+      builder.push(structuralHeightHintDeco(headingLevel === 1 ? 39 : headingLevel === 2 ? 32 : 27).range(line.from));
+      builder.push(lineStyleDecos[`h${headingLevel}`].range(line.from));
+      currentAlertType = null;
+      continue;
+    }
+
+    const alertMatch = structuralAlertRegex.exec(lineText);
+    if (alertMatch) {
+      currentAlertType = alertMatch[1] as AlertType;
+      builder.push(structuralHeightHintDeco(24).range(line.from));
+      builder.push(alertLineDecos[currentAlertType].range(line.from));
+      continue;
+    }
+
+    if (structuralBlockquoteRegex.test(lineText)) {
+      builder.push(structuralHeightHintDeco(24).range(line.from));
+      builder.push((currentAlertType ? alertLineDecos[currentAlertType] : lineStyleDecos.quote).range(line.from));
+      continue;
+    }
+    currentAlertType = null;
+
+    const style = stylesByLine.get(lineNo);
+    const marker = listMarkerData(lineText, null, style);
+    if (marker) {
+      addStructuralListLineDecoration(builder, line);
+      continue;
+    }
+
+    const paragraphHeight = estimatedStructuralParagraphHeight(lineText);
+    if (paragraphHeight !== null) {
+      builder.push(structuralHeightHintDeco(paragraphHeight).range(line.from));
+    }
+  }
+}
+
 function buildDecorations(state) {
   const ranges = [];
   const activeLines = collectActiveLines(state);
@@ -1839,6 +1990,36 @@ function safeBuildDecorations(state, fallback, context, extra = {}) {
     return buildDecorations(state);
   } catch (error) {
     console.error('[MEO liveMode] decoration build failed', {
+      context,
+      docLength: state.doc.length,
+      ...extra,
+      error
+    });
+    return fallback;
+  }
+}
+
+function buildStructuralMarkdownLineDecorations(state) {
+  const ranges = [];
+  let frontmatter = null;
+  try {
+    frontmatter = parseFrontmatter(state);
+  } catch {
+    frontmatter = null;
+  }
+  addStructuralMarkdownLineDecorations(
+    ranges,
+    state,
+    frontmatter
+  );
+  return Decoration.set(ranges, true);
+}
+
+function safeBuildStructuralMarkdownLineDecorations(state, fallback, context, extra = {}) {
+  try {
+    return buildStructuralMarkdownLineDecorations(state);
+  } catch (error) {
+    console.error('[MEO liveMode] structural decoration build failed', {
       context,
       docLength: state.doc.length,
       ...extra,
@@ -2448,6 +2629,28 @@ const liveDecorationField = StateField.define({
   provide: (field) => EditorView.decorations.from(field)
 });
 
+const structuralMarkdownLineDecorationField = StateField.define({
+  create(state) {
+    return safeBuildStructuralMarkdownLineDecorations(state, Decoration.none, 'create');
+  },
+  update(decorations, transaction) {
+    const forceRefresh = hasRefreshLiveDecorationsEffect(transaction);
+    if (!forceRefresh && shouldHoldLiveDecorationRefresh(transaction)) {
+      return transaction.docChanged ? decorations.map(transaction.changes) : decorations;
+    }
+
+    if (!forceRefresh && !transaction.docChanged) {
+      return decorations;
+    }
+
+    return safeBuildStructuralMarkdownLineDecorations(transaction.state, decorations, 'update', {
+      docChanged: transaction.docChanged,
+      selection: transaction.selection
+    });
+  },
+  provide: (field) => EditorView.decorations.from(field)
+});
+
 function buildLiveLineNumberMarkers(state) {
   const builder = new RangeSetBuilder();
   const conflictLineNumbers = new Set();
@@ -2606,6 +2809,7 @@ export function liveModeExtensions(options = {}) {
     ...liveSyntaxHighlightingExtension,
     liveSourceLikeActiveLineFacet.of(true),
     liveCompositionActiveField,
+    structuralMarkdownLineDecorationField,
     liveDecorationField,
     liveViewportDecorationRefreshPlugin,
     liveLineNumberMarkerField,
@@ -2637,6 +2841,7 @@ function collectDecorationDebugRanges(state, decorations) {
       className: value.spec?.class ?? '',
       isLine: isLineDecoration(value),
       hasWidget: Boolean(value.widget),
+      estimatedHeight: value.widget?.estimatedHeight ?? null,
       isReplace: Boolean(value.isReplace)
     });
   });
@@ -2646,6 +2851,12 @@ function collectDecorationDebugRanges(state, decorations) {
 export const __meoLiveModeTestHooks = {
   collectLiveDecorationDebugRanges(state) {
     return collectDecorationDebugRanges(state, buildDecorations(state));
+  },
+  collectStructuralMarkdownLineDecorationDebugRanges(state) {
+    return collectDecorationDebugRanges(state, buildStructuralMarkdownLineDecorations(state));
+  },
+  structuralMarkdownLineDecorationSet(state) {
+    return state.field(structuralMarkdownLineDecorationField);
   },
   collectLiveSyntaxHighlightDebugRanges(state) {
     return collectDecorationDebugRanges(

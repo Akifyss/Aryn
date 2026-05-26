@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
 import { Change } from '../src/vendor/codemirror-merge/src/diff'
-import { addChunkDecorations, chunkHasChangedLineOnLine, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRebuildFrozenChunkDecorationsForUpdate, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { addChunkDecorations, chunkHasChangedLineOnLine, chunkTouchesViewport, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRebuildFrozenChunkDecorationsForUpdate, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { mapRangeBetweenMergeSides, sharedViewportIsAppropriate } from '../src/vendor/codemirror-merge/src/mergeview'
 import { RangeSetBuilder, Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor/lib/meo-native-diff-split'
@@ -677,5 +678,109 @@ describe('CodeMirror merge decorations', () => {
     expect(shouldRefreshChunkDecorationsForUpdate({ docChanged: true })).toBe(true)
     expect(shouldRefreshChunkDecorationsForUpdate({ configChanged: true })).toBe(true)
     expect(shouldRefreshChunkDecorationsForUpdate({})).toBe(false)
+  })
+
+  it('maps a primary modified viewport through changed chunks for split virtualization', () => {
+    const originalDoc = Text.of(['same 1', 'same 2', 'old 1', 'same 3', 'same 4'])
+    const modifiedDoc = Text.of(['same 1', 'same 2', 'new 1', 'new 2', 'same 3', 'same 4'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const mapped = mapRangeBetweenMergeSides(
+      [chunk],
+      { from: modifiedDoc.line(3).from, to: modifiedDoc.line(5).from },
+      'b',
+      originalDoc.length,
+    )
+
+    expect(mapped.from).toBe(originalDoc.line(3).from)
+    expect(mapped.to).toBe(originalDoc.line(4).from)
+  })
+
+  it('keeps viewport hunk alignment scoped to rendered chunks', () => {
+    const chunk = new Chunk([], 100, 120, 200, 240)
+
+    expect(chunkTouchesViewport(chunk, { from: 90, to: 110 }, { from: 0, to: 10 })).toBe(true)
+    expect(chunkTouchesViewport(chunk, { from: 0, to: 10 }, { from: 230, to: 260 })).toBe(true)
+    expect(chunkTouchesViewport(chunk, { from: 0, to: 10 }, { from: 20, to: 30 })).toBe(false)
+  })
+
+  it('expands mapped viewports to complete changed chunks', () => {
+    const originalDoc = Text.of(['same 1', 'same 2', 'old 1', 'old 2', 'same 3'])
+    const modifiedDoc = Text.of(['same 1', 'same 2', 'new 1', 'new 2', 'new 3', 'same 3'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const mapped = mapRangeBetweenMergeSides(
+      [chunk],
+      { from: modifiedDoc.line(4).from, to: modifiedDoc.line(4).to },
+      'b',
+      originalDoc.length,
+    )
+
+    expect(mapped.from).toBe(chunk.fromA)
+    expect(mapped.to).toBe(chunk.toA)
+  })
+
+  it('maps pure insertion viewports back to the original insertion point', () => {
+    const originalDoc = Text.of(['same 1', 'same 2', 'same 3'])
+    const modifiedDoc = Text.of(['same 1', 'same 2', 'inserted 1', 'inserted 2', 'same 3'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const mapped = mapRangeBetweenMergeSides(
+      [chunk],
+      { from: chunk.fromB, to: chunk.toB },
+      'b',
+      originalDoc.length,
+    )
+
+    expect(mapped.from).toBe(chunk.fromA)
+    expect(mapped.to).toBe(chunk.toA)
+  })
+
+  it('maps deleted original ranges to the modified deletion point', () => {
+    const originalDoc = Text.of(['same 1', 'same 2', 'deleted 1', 'deleted 2', 'same 3'])
+    const modifiedDoc = Text.of(['same 1', 'same 2', 'same 3'])
+    const [chunk] = buildCodeMirrorChunksFromVsCodeDiff(originalDoc, modifiedDoc)
+    const mapped = mapRangeBetweenMergeSides(
+      [chunk],
+      { from: chunk.fromA, to: chunk.toA },
+      'a',
+      modifiedDoc.length,
+    )
+
+    expect(mapped.from).toBe(chunk.fromB)
+    expect(mapped.to).toBe(chunk.toB)
+  })
+
+  it('keeps mapped viewports narrow inside large wrapper chunks', () => {
+    const chunk = Object.assign(new Chunk([], 100, 1100, 200, 1200), {
+      actualFromA: 500,
+      actualFromB: 600,
+      actualToA: 540,
+      actualToB: 640,
+    })
+    const mapped = mapRangeBetweenMergeSides(
+      [chunk],
+      { from: 900, to: 950 },
+      'b',
+      2000,
+    )
+
+    expect(mapped.from).toBeGreaterThan(chunk.fromA)
+    expect(mapped.to).toBeLessThan(chunk.toA)
+    expect(mapped.from).not.toBe(chunk.actualFromA)
+    expect(mapped.to).not.toBe(chunk.actualToA)
+  })
+
+  it('rejects stale secondary viewports that only contain the shared logical range', () => {
+    const shared = { from: 1000, to: 1100 }
+    const current = { from: 0, to: 5000 }
+    const sharedHeight = { top: 100000, bottom: 101000 }
+    const staleHeight = { top: 0, bottom: 500000 }
+
+    expect(sharedViewportIsAppropriate(current, shared, staleHeight, sharedHeight, 1000)).toBe(false)
+    expect(sharedViewportIsAppropriate(
+      { from: 900, to: 1200 },
+      shared,
+      { top: 99500, bottom: 101500 },
+      sharedHeight,
+      1000,
+    )).toBe(true)
   })
 })

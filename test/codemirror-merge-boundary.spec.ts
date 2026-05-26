@@ -57,4 +57,10 @@ describe('CodeMirror merge fork boundaries', () => {
     expect(directOfficialImports).toEqual([])
     expect(unexpectedForkImports).toEqual([])
   })
+
+  it('pins Meo diff split to the modified side for shared outer scroll viewport', async () => {
+    const source = await readFile(path.join(sourceRoot, 'features/editor/lib/meo-native-diff-split.ts'), 'utf8')
+
+    expect(source).toContain("outerScrollPrimarySide: config.outerScrollPrimarySide ?? 'b'")
+  })
 })

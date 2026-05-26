@@ -1,9 +1,9 @@
 import {EditorView} from "@codemirror/view"
 import {EditorStateConfig, Transaction, EditorState, StateEffect, Prec, Compartment, ChangeSet} from "@codemirror/state"
-import {Chunk, defaultDiffConfig} from "./chunk"
+import {Chunk, chunkActualRange, defaultDiffConfig, type ChunkSide} from "./chunk"
 import {DiffConfig} from "./diff"
 import {deferredChunkUpdate, setChunks, ChunkField, mergeConfig} from "./merge"
-import {decorateChunks, inlineChangeLayer, updateSpacers, Spacers, adjustSpacers, collapseUnchanged, changeGutter, type TrailingSpacerMode} from "./deco"
+import {chunkTouchesViewport, decorateChunks, inlineChangeLayer, updateSpacers, Spacers, adjustSpacers, collapseUnchanged, changeGutter, type SpacerViewportOverride, type TrailingSpacerMode} from "./deco"
 import {baseTheme, externalTheme} from "./theme"
 
 /// Configuration options to `MergeView` that can be provided both
@@ -45,6 +45,10 @@ export interface MergeConfig {
   /// Maximum vertical pixel span retained around recently visited merge
   /// view content. Higher values reduce redraw flashes at the cost of DOM.
   outerScrollViewportRetention?: number
+  /// When set, this side is treated as the source of truth for the outer
+  /// scroll viewport. The other side derives its logical viewport by mapping
+  /// this side's visible range through the diff chunks.
+  outerScrollPrimarySide?: "a" | "b"
   /// Controls whether the merge view may add a spacer at the document
   /// end to equalize editor heights. Defaults to `"all"`. Use
   /// `"fakeLines"` to keep semantic inserted/deleted empty rows while
@@ -109,6 +113,161 @@ type OuterScrollViewportPolicy = {
   viewState: MergeEditorViewState,
 }
 
+type DocumentRange = { from: number, to: number }
+type HeightRange = { bottom: number, top: number }
+type MergeSide = ChunkSide
+
+function chunkSideRange(chunk: Chunk, side: MergeSide): DocumentRange {
+  let {from, to} = chunkActualRange(chunk, side)
+  return {from, to}
+}
+
+function rangeTouches(from: number, to: number, rangeFrom: number, rangeTo: number) {
+  return from == to
+    ? rangeFrom <= from && from <= rangeTo
+    : rangeFrom == rangeTo
+      ? from <= rangeFrom && rangeFrom <= to
+      : from < rangeTo && to > rangeFrom
+}
+
+function addRange(target: { from: number, to: number, touched: boolean }, from: number, to: number, max: number) {
+  let rangeFrom = Math.max(0, Math.min(max, Math.min(from, to)))
+  let rangeTo = Math.max(0, Math.min(max, Math.max(from, to)))
+  if (!target.touched) {
+    target.from = rangeFrom
+    target.to = rangeTo
+    target.touched = true
+  } else {
+    target.from = Math.min(target.from, rangeFrom)
+    target.to = Math.max(target.to, rangeTo)
+  }
+}
+
+function addExpandedChunkSideRange(
+  target: { from: number, to: number, touched: boolean },
+  chunk: Chunk,
+  side: MergeSide,
+  docLength: number,
+) {
+  let range = chunkSideRange(chunk, side)
+  addRange(target, range.from, range.to, docLength)
+}
+
+function mapPointInsideChunk(
+  chunk: Chunk,
+  pos: number,
+  sourceSide: MergeSide,
+  targetDocLength: number,
+) {
+  let chunkFromSource = sourceSide == "a" ? chunk.fromA : chunk.fromB
+  let chunkToSource = sourceSide == "a" ? chunk.toA : chunk.toB
+  let chunkFromTarget = sourceSide == "a" ? chunk.fromB : chunk.fromA
+  let chunkToTarget = sourceSide == "a" ? chunk.toB : chunk.toA
+  let sourceSize = chunkToSource - chunkFromSource
+  if (sourceSize <= 0) return Math.max(0, Math.min(targetDocLength, chunkFromTarget))
+  let ratio = Math.max(0, Math.min(1, (pos - chunkFromSource) / sourceSize))
+  return Math.max(0, Math.min(targetDocLength, chunkFromTarget + Math.round((chunkToTarget - chunkFromTarget) * ratio)))
+}
+
+function mapMergePoint(
+  chunks: readonly Chunk[],
+  pos: number,
+  sourceSide: MergeSide,
+  targetDocLength: number,
+) {
+  let sourcePos = 0, targetPos = 0
+  for (let chunk of chunks) {
+    let chunkFromSource = sourceSide == "a" ? chunk.fromA : chunk.fromB
+    let chunkToSource = sourceSide == "a" ? chunk.toA : chunk.toB
+    let chunkFromTarget = sourceSide == "a" ? chunk.fromB : chunk.fromA
+    let chunkToTarget = sourceSide == "a" ? chunk.toB : chunk.toA
+    if (pos < chunkFromSource)
+      return Math.max(0, Math.min(targetDocLength, targetPos + pos - sourcePos))
+    if (pos <= chunkToSource) {
+      let sourceSize = chunkToSource - chunkFromSource
+      if (sourceSize <= 0) return Math.max(0, Math.min(targetDocLength, chunkFromTarget))
+      let ratio = Math.max(0, Math.min(1, (pos - chunkFromSource) / sourceSize))
+      return Math.max(0, Math.min(targetDocLength, chunkFromTarget + Math.round((chunkToTarget - chunkFromTarget) * ratio)))
+    }
+    sourcePos = chunkToSource
+    targetPos = chunkToTarget
+  }
+  return Math.max(0, Math.min(targetDocLength, targetPos + pos - sourcePos))
+}
+
+export function mapRangeBetweenMergeSides(
+  chunks: readonly Chunk[],
+  range: DocumentRange,
+  sourceSide: MergeSide,
+  targetDocLength: number,
+): DocumentRange {
+  let result = {from: targetDocLength, to: 0, touched: false}
+  let sourcePos = 0, targetPos = 0
+  for (let chunk of chunks) {
+    let chunkFromSource = sourceSide == "a" ? chunk.fromA : chunk.fromB
+    let chunkToSource = sourceSide == "a" ? chunk.toA : chunk.toB
+    let chunkFromTarget = sourceSide == "a" ? chunk.fromB : chunk.fromA
+    let chunkToTarget = sourceSide == "a" ? chunk.toB : chunk.toA
+
+    let unchangedFrom = Math.max(range.from, sourcePos)
+    let unchangedTo = Math.min(range.to, chunkFromSource)
+    if (rangeTouches(unchangedFrom, unchangedTo, sourcePos, chunkFromSource))
+      addRange(result, targetPos + unchangedFrom - sourcePos, targetPos + unchangedTo - sourcePos, targetDocLength)
+
+    if (rangeTouches(chunkFromSource, chunkToSource, range.from, range.to)) {
+      let chunkRangeFrom = Math.max(range.from, chunkFromSource)
+      let chunkRangeTo = Math.min(range.to, chunkToSource)
+      addRange(
+        result,
+        mapPointInsideChunk(chunk, chunkRangeFrom, sourceSide, targetDocLength),
+        mapPointInsideChunk(chunk, chunkRangeTo, sourceSide, targetDocLength),
+        targetDocLength,
+      )
+      let sourceActualRange = chunkSideRange(chunk, sourceSide)
+      if (rangeTouches(sourceActualRange.from, sourceActualRange.to, range.from, range.to))
+        addExpandedChunkSideRange(result, chunk, sourceSide == "a" ? "b" : "a", targetDocLength)
+    }
+
+    sourcePos = chunkToSource
+    targetPos = chunkToTarget
+  }
+
+  let unchangedFrom = Math.max(range.from, sourcePos)
+  let unchangedTo = Math.min(range.to, Number.MAX_SAFE_INTEGER)
+  if (unchangedTo >= unchangedFrom)
+    addRange(result, targetPos + unchangedFrom - sourcePos, targetPos + unchangedTo - sourcePos, targetDocLength)
+
+  if (!result.touched) {
+    let from = mapMergePoint(chunks, range.from, sourceSide, targetDocLength)
+    let to = mapMergePoint(chunks, range.to, sourceSide, targetDocLength)
+    return {from: Math.min(from, to), to: Math.max(from, to)}
+  }
+  return {from: result.from, to: result.to}
+}
+
+function heightRangeForDocumentRange(viewState: MergeEditorViewState, range: DocumentRange): HeightRange {
+  let map = viewState.heightMap, oracle = viewState.heightOracle
+  let fromBlock = map.lineAt(range.from, QueryTypeByPos, oracle, 0, 0)
+  let toBlock = map.lineAt(range.to, QueryTypeByPos, oracle, 0, 0)
+  return {
+    bottom: Math.max(fromBlock.bottom, toBlock.bottom),
+    top: Math.min(fromBlock.top, toBlock.top),
+  }
+}
+
+export function sharedViewportIsAppropriate(
+  current: DocumentRange,
+  expected: DocumentRange,
+  currentHeight: HeightRange,
+  expectedHeight: HeightRange,
+  margin: number,
+) {
+  return current.from <= expected.from &&
+    current.to >= expected.to &&
+    currentHeight.top >= expectedHeight.top - margin &&
+    currentHeight.bottom <= expectedHeight.bottom + margin
+}
+
 /// A merge view manages two editors side-by-side, highlighting the
 /// difference between them and vertically aligning unchanged lines.
 /// If you want one of the editors to be read-only, you have to
@@ -133,6 +292,7 @@ export class MergeView {
   private outerScrollViewportSync = true
   private outerScrollViewportMargin = 1000
   private outerScrollViewportRetention = 1000
+  private outerScrollPrimarySide: MergeSide | null = null
   private deferChunkUpdates: MergeConfig["deferChunkUpdates"]
   private trailingSpacer: TrailingSpacerMode = "all"
   private emptySides: Partial<Record<"a" | "b", boolean>> = {}
@@ -155,6 +315,7 @@ export class MergeView {
       this.outerScrollViewportMargin,
       config.outerScrollViewportRetention ?? this.outerScrollViewportMargin,
     )
+    this.outerScrollPrimarySide = config.outerScrollPrimarySide ?? null
     this.trailingSpacer = config.trailingSpacer ?? "all"
     this.emptySides = config.emptySides ?? {}
 
@@ -312,6 +473,9 @@ export class MergeView {
         config.outerScrollViewportRetention ?? this.outerScrollViewportMargin,
       )
     }
+    if ("outerScrollPrimarySide" in config) {
+      this.outerScrollPrimarySide = config.outerScrollPrimarySide ?? null
+    }
     if ("trailingSpacer" in config) {
       this.trailingSpacer = config.trailingSpacer ?? "all"
     }
@@ -402,9 +566,14 @@ export class MergeView {
 
   private ensureOuterScrollViewport(view: EditorView) {
     let retained = this.updateRetainedOuterScrollViewport(view)
+    let policy = this.ensureEditorViewportPolicy(view)
     let blocks = view.viewportLineBlocks
     let visibleTop = this.dom.scrollTop, visibleBottom = visibleTop + this.dom.clientHeight
     let first = blocks[0], last = blocks[blocks.length - 1]
+    if (policy && !policy.viewState.viewportIsAppropriate(view.viewport, 0)) {
+      this.measureEditorViewport(view)
+      return
+    }
     if (!first || !last || first.top > visibleTop || last.bottom < visibleBottom) {
       this.measureEditorViewport(view)
       return
@@ -446,36 +615,7 @@ export class MergeView {
       if (!mergeView.outerScrollViewportSync)
         return nextPolicy.originalGetViewport.call(this, bias, scrollTarget)
 
-      let margin = mergeView.resolveOuterScrollViewportMargin()
-      let marginTop = 0.5 - Math.max(-0.5, Math.min(0.5, bias / margin / 2))
-      let map = this.heightMap, oracle = this.heightOracle
-      let retained = mergeView.updateRetainedOuterScrollViewport(view)
-      let topPx = Math.min(this.visibleTop - marginTop * margin, retained?.top ?? this.visibleTop)
-      let bottomPx = Math.max(this.visibleBottom + (1 - marginTop) * margin, retained?.bottom ?? this.visibleBottom)
-      let viewport = {
-        from: map.lineAt(topPx, QueryTypeByHeight, oracle, 0, 0).from,
-        to: map.lineAt(bottomPx, QueryTypeByHeight, oracle, 0, 0).to,
-      }
-
-      if (scrollTarget) {
-        let {head} = scrollTarget.range
-        if (head < viewport.from || head > viewport.to) {
-          let viewHeight = Math.min(this.editorHeight, this.pixelViewport.bottom - this.pixelViewport.top)
-          let block = map.lineAt(head, QueryTypeByPos, oracle, 0, 0), topPos
-          if (scrollTarget.y == "center")
-            topPos = (block.top + block.bottom) / 2 - viewHeight / 2
-          else if (scrollTarget.y == "start" || scrollTarget.y == "nearest" && head < viewport.from)
-            topPos = block.top
-          else
-            topPos = block.bottom - viewHeight
-          viewport = {
-            from: map.lineAt(topPos - margin / 2, QueryTypeByHeight, oracle, 0, 0).from,
-            to: map.lineAt(topPos + viewHeight + margin / 2, QueryTypeByHeight, oracle, 0, 0).to,
-          }
-        }
-      }
-
-      return viewport
+      return mergeView.resolveOuterScrollViewport(view, nextPolicy, bias, scrollTarget)
     }
 
     viewState.viewportIsAppropriate = function({from, to}: {from: number, to: number}, bias = 0) {
@@ -483,6 +623,16 @@ export class MergeView {
         return nextPolicy.originalViewportIsAppropriate.call(this, {from, to}, bias)
 
       if (!this.inView) return true
+      let sharedViewport = mergeView.mappedPrimaryOuterScrollViewport(view, bias)
+      if (sharedViewport)
+        return sharedViewportIsAppropriate(
+          {from, to},
+          sharedViewport,
+          heightRangeForDocumentRange(this, {from, to}),
+          heightRangeForDocumentRange(this, sharedViewport),
+          mergeView.resolveOuterScrollViewportMargin(),
+        )
+
       let margin = mergeView.resolveOuterScrollViewportMargin()
       let retained = mergeView.updateRetainedOuterScrollViewport(view)
       let {top} = this.heightMap.lineAt(from, QueryTypeByPos, this.heightOracle, 0, 0)
@@ -497,6 +647,101 @@ export class MergeView {
     }
 
     return nextPolicy
+  }
+
+  private resolveOuterScrollViewport(
+    view: EditorView,
+    policy: OuterScrollViewportPolicy,
+    bias: number,
+    scrollTarget: MergeScrollTarget | null,
+  ) {
+    let viewport = this.mappedPrimaryOuterScrollViewport(view, bias) ??
+      this.computeOuterScrollViewport(view, policy, bias, null)
+    return scrollTarget
+      ? this.includeScrollTargetInOuterViewport(policy.viewState, viewport, scrollTarget)
+      : viewport
+  }
+
+  private mappedPrimaryOuterScrollViewport(view: EditorView, bias: number): DocumentRange | null {
+    if (!this.outerScrollPrimarySide || this.sideForView(view) == this.outerScrollPrimarySide)
+      return null
+    let primaryView = this.outerScrollPrimarySide == "a" ? this.a : this.b
+    let primaryPolicy = this.ensureEditorViewportPolicy(primaryView)
+    if (!primaryPolicy) return null
+    let primaryViewport = this.computeOuterScrollViewport(primaryView, primaryPolicy, bias, null)
+    return mapRangeBetweenMergeSides(
+      this.chunks,
+      primaryViewport,
+      this.outerScrollPrimarySide,
+      view.state.doc.length,
+    )
+  }
+
+  private sharedOuterScrollViewportOverride(bias = 0): SpacerViewportOverride | undefined {
+    if (!this.outerScrollPrimarySide) return undefined
+    let primaryView = this.outerScrollPrimarySide == "a" ? this.a : this.b
+    let secondaryView = this.outerScrollPrimarySide == "a" ? this.b : this.a
+    let primaryPolicy = this.ensureEditorViewportPolicy(primaryView)
+    if (!primaryPolicy) return undefined
+    let primaryViewport = this.computeOuterScrollViewport(primaryView, primaryPolicy, bias, null)
+    let secondaryViewport = mapRangeBetweenMergeSides(
+      this.chunks,
+      primaryViewport,
+      this.outerScrollPrimarySide,
+      secondaryView.state.doc.length,
+    )
+    return this.outerScrollPrimarySide == "a"
+      ? {a: primaryViewport, b: secondaryViewport}
+      : {a: secondaryViewport, b: primaryViewport}
+  }
+
+  private computeOuterScrollViewport(
+    view: EditorView,
+    policy: OuterScrollViewportPolicy,
+    bias: number,
+    scrollTarget: MergeScrollTarget | null,
+  ) {
+    let viewState = policy.viewState
+    let margin = this.resolveOuterScrollViewportMargin()
+    let marginTop = 0.5 - Math.max(-0.5, Math.min(0.5, bias / margin / 2))
+    let map = viewState.heightMap, oracle = viewState.heightOracle
+    let retained = this.updateRetainedOuterScrollViewport(view)
+    let outerTop = Math.max(0, this.dom.scrollTop)
+    let outerBottom = outerTop + Math.max(1, this.dom.clientHeight)
+    let topPx = Math.min(outerTop - marginTop * margin, retained?.top ?? outerTop)
+    let bottomPx = Math.max(outerBottom + (1 - marginTop) * margin, retained?.bottom ?? outerBottom)
+    let viewport = {
+      from: map.lineAt(topPx, QueryTypeByHeight, oracle, 0, 0).from,
+      to: map.lineAt(bottomPx, QueryTypeByHeight, oracle, 0, 0).to,
+    }
+    return scrollTarget ? this.includeScrollTargetInOuterViewport(viewState, viewport, scrollTarget) : viewport
+  }
+
+  private includeScrollTargetInOuterViewport(
+    viewState: MergeEditorViewState,
+    viewport: DocumentRange,
+    scrollTarget: MergeScrollTarget,
+  ) {
+    let {head} = scrollTarget.range
+    if (head >= viewport.from && head <= viewport.to) return viewport
+    let margin = this.resolveOuterScrollViewportMargin()
+    let map = viewState.heightMap, oracle = viewState.heightOracle
+    let viewHeight = Math.min(viewState.editorHeight, viewState.pixelViewport.bottom - viewState.pixelViewport.top)
+    let block = map.lineAt(head, QueryTypeByPos, oracle, 0, 0), topPos
+    if (scrollTarget.y == "center")
+      topPos = (block.top + block.bottom) / 2 - viewHeight / 2
+    else if (scrollTarget.y == "start" || scrollTarget.y == "nearest" && head < viewport.from)
+      topPos = block.top
+    else
+      topPos = block.bottom - viewHeight
+    return {
+      from: map.lineAt(topPos - margin / 2, QueryTypeByHeight, oracle, 0, 0).from,
+      to: map.lineAt(topPos + viewHeight + margin / 2, QueryTypeByHeight, oracle, 0, 0).to,
+    }
+  }
+
+  private sideForView(view: EditorView): MergeSide {
+    return view == this.a ? "a" : "b"
   }
 
   private updateRetainedOuterScrollViewport(view: EditorView) {
@@ -584,18 +829,20 @@ export class MergeView {
   }
 
   private measure() {
-    updateSpacers(this.a, this.b, this.chunks, this.trailingSpacer)
+    updateSpacers(this.a, this.b, this.chunks, this.trailingSpacer, this.sharedOuterScrollViewportOverride())
     if (this.revertDOM) this.updateRevertButtons()
   }
 
   private updateRevertButtons() {
     let dom = this.revertDOM!, next = dom.firstChild as HTMLElement | null
-    let vpA = this.a.viewport, vpB = this.b.viewport
+    let viewportOverride = this.sharedOuterScrollViewportOverride()
+    let vpA = viewportOverride?.a ?? this.a.viewport, vpB = viewportOverride?.b ?? this.b.viewport
     for (let i = 0; i < this.chunks.length; i++) {
       let chunk = this.chunks[i]
-      if (chunk.fromA > vpA.to || chunk.fromB > vpB.to) break
-      if (chunk.fromA < vpA.from || chunk.fromB < vpB.from) continue
-      let top = this.a.lineBlockAt(chunk.fromA).top + "px"
+      let rangeA = chunkSideRange(chunk, "a"), rangeB = chunkSideRange(chunk, "b")
+      if (rangeA.from > vpA.to && rangeB.from > vpB.to) break
+      if (!chunkTouchesViewport(chunk, vpA, vpB)) continue
+      let top = this.a.lineBlockAt(chunkActualRange(chunk, "a").from).top + "px"
       while (next && +(next.dataset.chunk!) < i) next = rm(next)
       if (next && next.dataset.chunk! == String(i)) {
         if (next.style.top != top) next.style.top = top
@@ -623,15 +870,6 @@ export class MergeView {
     return elt
   }
 
-  private chunkActualRange(chunk: Chunk, side: "a" | "b"): [number, number, boolean] {
-    let fromKey = side == "a" ? "actualFromA" : "actualFromB"
-    let toKey = side == "a" ? "actualToA" : "actualToB"
-    let chunkWithActualRange = chunk as Chunk & Record<string, unknown>
-    return typeof chunkWithActualRange[fromKey] == "number" && typeof chunkWithActualRange[toKey] == "number"
-      ? [chunkWithActualRange[fromKey] as number, chunkWithActualRange[toKey] as number, true]
-      : side == "a" ? [chunk.fromA, chunk.toA, false] : [chunk.fromB, chunk.toB, false]
-  }
-
   private revertClicked(e: MouseEvent) {
     let target = e.target as HTMLElement | null, chunk
     while (target && target.parentNode != this.revertDOM) target = target.parentNode as HTMLElement | null
@@ -640,14 +878,14 @@ export class MergeView {
       let destSide: "a" | "b" = this.revertToA ? "a" : "b"
       let source = this.revertToA ? this.b : this.a
       let dest = this.revertToA ? this.a : this.b
-      let [srcFrom, srcTo, hasActualSourceRange] = this.chunkActualRange(chunk, sourceSide)
-      let [destFrom, destTo] = this.chunkActualRange(chunk, destSide)
-      let insert = hasActualSourceRange
-        ? source.state.sliceDoc(srcFrom, srcTo)
-        : source.state.sliceDoc(srcFrom, Math.max(srcFrom, srcTo - 1))
-      if (!hasActualSourceRange && srcFrom != srcTo && destTo <= dest.state.doc.length) insert += source.state.lineBreak
+      let sourceRange = chunkActualRange(chunk, sourceSide)
+      let destRange = chunkActualRange(chunk, destSide)
+      let insert = sourceRange.hasActualRange
+        ? source.state.sliceDoc(sourceRange.from, sourceRange.to)
+        : source.state.sliceDoc(sourceRange.from, Math.max(sourceRange.from, sourceRange.to - 1))
+      if (!sourceRange.hasActualRange && sourceRange.from != sourceRange.to && destRange.to <= dest.state.doc.length) insert += source.state.lineBreak
       dest.dispatch({
-        changes: {from: destFrom, to: Math.min(dest.state.doc.length, destTo), insert},
+        changes: {from: destRange.from, to: Math.min(dest.state.doc.length, destRange.to), insert},
         userEvent: "revert"
       })
       e.preventDefault()
