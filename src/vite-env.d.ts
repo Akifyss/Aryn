@@ -1,4 +1,4 @@
-import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentRunningPromptBehavior, AgentThinkingLevel, AgentWorkspaceState } from '@/features/agent/types'
+import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentThinkingLevel, AgentWorkspaceState } from '@/features/agent/types'
 import type {
   GitBaselinePayload,
   GitBlameResult,
@@ -82,6 +82,7 @@ declare global {
       pickAgentAttachments: () => Promise<AgentPromptAttachment[]>
       getFilePath: (file: File) => string
       sendAgentPrompt: (prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments?: AgentPromptAttachment[]) => Promise<{ ok: boolean }>
+      updateAgentQueuedMessage: (update: AgentQueuedMessageUpdate) => Promise<AgentWorkspaceState>
       selectAgentModel: (modelKey: string) => Promise<AgentWorkspaceState>
       selectAgentThinkingLevel: (level: AgentThinkingLevel, modelKey?: string) => Promise<AgentWorkspaceState>
       updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => Promise<AgentWorkspaceState>

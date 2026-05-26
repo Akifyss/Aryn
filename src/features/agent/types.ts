@@ -61,6 +61,30 @@ export type AgentSessionListItem = {
 export type AgentThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 export type AgentRunningPromptBehavior = 'steer' | 'followUp'
 
+export type AgentQueuedMessageKind = AgentRunningPromptBehavior
+
+export type AgentQueuedMessageUpdate =
+  | {
+      action: 'delete'
+      expectedText: string
+      index: number
+      kind: AgentQueuedMessageKind
+    }
+  | {
+      action: 'edit'
+      expectedText: string
+      index: number
+      kind: AgentQueuedMessageKind
+      text: string
+    }
+  | {
+      action: 'move'
+      expectedText: string
+      index: number
+      kind: AgentQueuedMessageKind
+      targetKind: AgentQueuedMessageKind
+    }
+
 export type AgentRuntimeState = {
   auth: Record<string, AgentProviderAuthState>
   workspacePath: string | null
@@ -71,6 +95,7 @@ export type AgentRuntimeState = {
   availableThinkingLevelsByModel: Record<string, AgentThinkingLevel[]>
   compactionReason: 'manual' | 'overflow' | 'threshold' | null
   followUpMessageCount: number
+  followUpMessages: string[]
   followUpMode: 'all' | 'one-at-a-time'
   isCompacting: boolean
   preferredModelByProvider: Record<string, string>
@@ -82,6 +107,7 @@ export type AgentRuntimeState = {
   setupHint: string | null
   supportsThinking: boolean
   steeringMessageCount: number
+  steeringMessages: string[]
   steeringMode: 'all' | 'one-at-a-time'
   thinkingLevel: AgentThinkingLevel
 }

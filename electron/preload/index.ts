@@ -1,5 +1,5 @@
 import { ipcRenderer, contextBridge, webUtils } from 'electron'
-import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentRunningPromptBehavior, AgentThinkingLevel, AgentWorkspaceState } from '../../src/features/agent/types'
+import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentThinkingLevel, AgentWorkspaceState } from '../../src/features/agent/types'
 import type {
   GitBaselinePayload,
   GitBlameResult,
@@ -82,6 +82,7 @@ contextBridge.exposeInMainWorld('appApi', {
   pickAgentAttachments: () => ipcRenderer.invoke('agent:pick-attachments') as Promise<AgentPromptAttachment[]>,
   getFilePath: (file: File) => webUtils.getPathForFile(file),
   sendAgentPrompt: (prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments?: AgentPromptAttachment[]) => ipcRenderer.invoke('agent:send-prompt', prompt, streamingBehavior, attachments) as Promise<{ ok: boolean }>,
+  updateAgentQueuedMessage: (update: AgentQueuedMessageUpdate) => ipcRenderer.invoke('agent:update-queued-message', update) as Promise<AgentWorkspaceState>,
   selectAgentModel: (modelKey: string) => ipcRenderer.invoke('agent:select-model', modelKey) as Promise<AgentWorkspaceState>,
   selectAgentThinkingLevel: (level: AgentThinkingLevel, modelKey?: string) => ipcRenderer.invoke('agent:select-thinking-level', level, modelKey) as Promise<AgentWorkspaceState>,
   updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => ipcRenderer.invoke('agent:update-provider-auth', rootPath, provider, apiKey) as Promise<AgentWorkspaceState>,

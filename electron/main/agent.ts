@@ -21,6 +21,7 @@ import type {
   AgentClientEvent,
   AgentPromptAttachment,
   AgentProviderAuthState,
+  AgentQueuedMessageUpdate,
   AgentRunningPromptBehavior,
   AgentRuntimeState,
   AgentSessionListItem,
@@ -71,6 +72,11 @@ type PreparedPromptAttachments = {
   images: ImageContent[]
   text: string
 }
+type AgentQueuedMessageKind = AgentRunningPromptBehavior
+type AgentQueueSnapshot = {
+  followUp: string[]
+  steering: string[]
+}
 type AgentProviderAuthPrompt = {
   allowEmpty?: boolean
   message: string
@@ -83,6 +89,68 @@ type AgentProviderAuthLoginCallbacks = {
   openExternal: (url: string) => Promise<void>
   requestInput: (provider: string, prompt: AgentProviderAuthPrompt) => Promise<string>
   signal?: AbortSignal
+}
+
+export function applyAgentQueuedMessageUpdate(
+  queue: AgentQueueSnapshot,
+  update: AgentQueuedMessageUpdate,
+): AgentQueueSnapshot {
+  validateAgentQueuedMessageUpdate(update, queue)
+
+  const nextQueue: AgentQueueSnapshot = {
+    followUp: [...queue.followUp],
+    steering: [...queue.steering],
+  }
+  const sourceQueue = getAgentQueueMessages(nextQueue, update.kind)
+  const [message] = sourceQueue.splice(update.index, 1)
+
+  if (!message) {
+    throw new Error('Queued message has already been processed.')
+  }
+
+  if (update.action === 'edit') {
+    sourceQueue.splice(update.index, 0, update.text.trim())
+  } else if (update.action === 'move') {
+    getAgentQueueMessages(nextQueue, update.targetKind).push(message)
+  }
+
+  return nextQueue
+}
+
+function getAgentQueueMessages(queue: AgentQueueSnapshot, kind: AgentQueuedMessageKind) {
+  return kind === 'steer' ? queue.steering : queue.followUp
+}
+
+function validateAgentQueuedMessageUpdate(update: AgentQueuedMessageUpdate, queue: AgentQueueSnapshot) {
+  if (update.kind !== 'steer' && update.kind !== 'followUp') {
+    throw new Error('Unknown queued message type.')
+  }
+
+  if (update.action !== 'delete' && update.action !== 'edit' && update.action !== 'move') {
+    throw new Error('Unknown queued message action.')
+  }
+
+  if (!Number.isInteger(update.index) || update.index < 0) {
+    throw new Error('Queued message index is invalid.')
+  }
+
+  if (!update.expectedText.trim()) {
+    throw new Error('Queued message text is empty.')
+  }
+
+  if (update.action === 'edit' && !update.text.trim()) {
+    throw new Error('Queued message cannot be empty.')
+  }
+
+  if (update.action === 'move' && update.targetKind !== 'steer' && update.targetKind !== 'followUp') {
+    throw new Error('Unknown queued message target.')
+  }
+
+  const messages = getAgentQueueMessages(queue, update.kind)
+
+  if (messages[update.index] !== update.expectedText) {
+    throw new Error('Queued message changed before this action completed. Please try again.')
+  }
 }
 
 const OPENROUTER_ENV_KEY = 'OPENROUTER_API_KEY'
@@ -1135,6 +1203,15 @@ export class PiAgentManager {
     return this.broadcastWorkspaceState(runtime.cwd)
   }
 
+  async updateQueuedMessage(update: AgentQueuedMessageUpdate) {
+    const runtime = this.requireActiveSession()
+    const queue = this.readQueueSnapshot(runtime.session)
+    const nextQueue = applyAgentQueuedMessageUpdate(queue, update)
+
+    await this.rebuildQueue(runtime.session, nextQueue)
+    return this.broadcastWorkspaceState(runtime.cwd)
+  }
+
   async selectModel(modelKey: string) {
     const runtime = this.requireActiveSession()
     this.authStorage.reload()
@@ -1321,6 +1398,39 @@ export class PiAgentManager {
     })
 
     return { ok: true }
+  }
+
+  private readQueueSnapshot(session: AgentSession): AgentQueueSnapshot {
+    return {
+      followUp: [...session.getFollowUpMessages()],
+      steering: [...session.getSteeringMessages()],
+    }
+  }
+
+  private async rebuildQueue(session: AgentSession, queue: AgentQueueSnapshot) {
+    const previousQueue = session.clearQueue()
+
+    try {
+      for (const message of queue.steering) {
+        await session.steer(message)
+      }
+
+      for (const message of queue.followUp) {
+        await session.followUp(message)
+      }
+    } catch (error) {
+      session.clearQueue()
+
+      for (const message of previousQueue.steering) {
+        await session.steer(message)
+      }
+
+      for (const message of previousQueue.followUp) {
+        await session.followUp(message)
+      }
+
+      throw error
+    }
   }
 
   dispose() {
@@ -1752,8 +1862,10 @@ export class PiAgentManager {
     const thinkingLevel = selectedModelValue
       ? clampThinkingLevel(selectedModelValue, configuredThinkingLevel)
       : configuredThinkingLevel
-    const steeringMessageCount = session?.getSteeringMessages().length ?? 0
-    const followUpMessageCount = session?.getFollowUpMessages().length ?? 0
+    const steeringMessages = session ? [...session.getSteeringMessages()] : []
+    const followUpMessages = session ? [...session.getFollowUpMessages()] : []
+    const steeringMessageCount = steeringMessages.length
+    const followUpMessageCount = followUpMessages.length
 
     return {
       auth: this.getProviderAuthStates(availableModels.map((model) => model.provider)),
@@ -1763,6 +1875,7 @@ export class PiAgentManager {
       availableThinkingLevelsByModel: getThinkingLevelsByModel(availableModels),
       compactionReason: this.activeRuntime?.cwd === cwd ? this.activeRuntime.status.compactionReason : null,
       followUpMessageCount,
+      followUpMessages,
       followUpMode: session?.followUpMode ?? 'one-at-a-time',
       hasConfiguredModels: availableModels.length > 0,
       isCompacting: session?.isCompacting ?? false,
@@ -1775,6 +1888,7 @@ export class PiAgentManager {
       setupHint: availableModels.length > 0 ? null : AUTH_SETUP_HINT,
       supportsThinking: Boolean(selectedModelValue?.reasoning),
       steeringMessageCount,
+      steeringMessages,
       steeringMode: session?.steeringMode ?? 'one-at-a-time',
       thinkingLevel,
       workspacePath: cwd,

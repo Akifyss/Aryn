@@ -28,9 +28,12 @@ import {
   BrainLine,
   CloseLine,
   CodeLine,
+  CornerUpLeftLine,
   Delete2Line,
   DownLine,
   EyeglassLine,
+  EditLine,
+  More1Line,
   Pencil2Line,
   PicLine,
   RightLine,
@@ -71,6 +74,8 @@ import type {
   AgentMessageAttachment,
   AgentMessageFileChange,
   AgentPromptAttachment,
+  AgentQueuedMessageKind,
+  AgentQueuedMessageUpdate,
   AgentSessionListItem,
   AgentSessionAnnotations,
   AgentSidebarMessage,
@@ -126,6 +131,12 @@ type ComposerAttachment = AgentPromptAttachment & {
 }
 
 type AgentComposerAction = 'send' | 'stop'
+type AgentQueuedComposerMessage = {
+  id: string
+  index: number
+  kind: AgentQueuedMessageKind
+  text: string
+}
 
 type AgentAttachmentItemData = (AgentPromptAttachment | AgentMessageAttachment) & {
   id?: string
@@ -223,6 +234,7 @@ const emptyAgentState: AgentWorkspaceState = {
     availableThinkingLevelsByModel: {},
     compactionReason: null,
     followUpMessageCount: 0,
+    followUpMessages: [],
     followUpMode: 'one-at-a-time',
     hasConfiguredModels: false,
     isCompacting: false,
@@ -235,6 +247,7 @@ const emptyAgentState: AgentWorkspaceState = {
     setupHint: null,
     supportsThinking: false,
     steeringMessageCount: 0,
+    steeringMessages: [],
     steeringMode: 'one-at-a-time',
     thinkingLevel: 'off',
     workspacePath: null,
@@ -255,6 +268,23 @@ function getHasComposerPayload(
     serializeComposerText(composerState.value, composerState.mentions).trim()
     || composerAttachments.length > 0
   )
+}
+
+function buildQueuedComposerMessages(runtime: AgentWorkspaceState['runtime']): AgentQueuedComposerMessage[] {
+  return [
+    ...runtime.steeringMessages.map((text, index) => ({
+      id: `steer:${index}:${text}`,
+      index,
+      kind: 'steer' as const,
+      text,
+    })),
+    ...runtime.followUpMessages.map((text, index) => ({
+      id: `followUp:${index}:${text}`,
+      index,
+      kind: 'followUp' as const,
+      text,
+    })),
+  ]
 }
 
 const IMAGE_ATTACHMENT_EXTENSIONS = /\.(?:png|jpe?g|webp|gif)$/i
@@ -393,6 +423,7 @@ type AgentContextValue = {
   handleSelectModel: (modelKey: string) => Promise<void>
   handleThinkingLevelSelection: (level: AgentThinkingLevel, modelKey?: string) => Promise<void>
   handlePickComposerAttachments: () => Promise<void>
+  handleQueuedMessageUpdate: (update: AgentQueuedMessageUpdate) => Promise<void>
   handleStartNewSession: () => void
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
   hasComposerPayload: boolean
@@ -1997,6 +2028,295 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
   )
 }
 
+function AgentQueuedComposerTray({
+  messages,
+  onUpdate,
+}: {
+  messages: AgentQueuedComposerMessage[]
+  onUpdate: (update: AgentQueuedMessageUpdate) => Promise<void>
+}) {
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editingText, setEditingText] = useState('')
+  const [openMenuMessageId, setOpenMenuMessageId] = useState<string | null>(null)
+  const [updatingMessageId, setUpdatingMessageId] = useState<string | null>(null)
+  const editingInputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (!editingMessageId || messages.some((message) => message.id === editingMessageId)) {
+      return
+    }
+
+    setEditingMessageId(null)
+    setEditingText('')
+  }, [editingMessageId, messages])
+
+  useEffect(() => {
+    if (!openMenuMessageId || messages.some((message) => message.id === openMenuMessageId)) {
+      return
+    }
+
+    setOpenMenuMessageId(null)
+  }, [messages, openMenuMessageId])
+
+  useEffect(() => {
+    if (!editingMessageId) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      editingInputRef.current?.focus()
+      editingInputRef.current?.select()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [editingMessageId])
+
+  useEffect(() => {
+    if (!openMenuMessageId) {
+      return
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target
+
+      if (target instanceof Element && target.closest('[data-agent-queued-menu="true"]')) {
+        return
+      }
+
+      setOpenMenuMessageId(null)
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpenMenuMessageId(null)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [openMenuMessageId])
+
+  if (messages.length === 0) {
+    return null
+  }
+
+  function beginEdit(message: AgentQueuedComposerMessage) {
+    setOpenMenuMessageId(null)
+    setEditingMessageId(message.id)
+    setEditingText(message.text)
+  }
+
+  function cancelEdit() {
+    setEditingMessageId(null)
+    setEditingText('')
+  }
+
+  async function runUpdate(message: AgentQueuedComposerMessage, update: AgentQueuedMessageUpdate) {
+    try {
+      setUpdatingMessageId(message.id)
+      await onUpdate(update)
+      if (update.action === 'edit') {
+        cancelEdit()
+      }
+      setOpenMenuMessageId(null)
+    } catch {
+      // Parent state owns the visible error; keep the row open so the user can retry.
+    } finally {
+      setUpdatingMessageId(null)
+    }
+  }
+
+  async function saveEdit(message: AgentQueuedComposerMessage) {
+    const nextText = editingText.trim()
+
+    if (!nextText || nextText === message.text) {
+      cancelEdit()
+      return
+    }
+
+    await runUpdate(message, {
+      action: 'edit',
+      expectedText: message.text,
+      index: message.index,
+      kind: message.kind,
+      text: nextText,
+    })
+  }
+
+  return (
+    <div className='agent-queued-tray' aria-label='待处理的 Agent 消息'>
+      {messages.map((message) => {
+        const isEditing = editingMessageId === message.id
+        const isUpdating = updatingMessageId === message.id
+        const isMenuOpen = openMenuMessageId === message.id
+        const isFollowUp = message.kind === 'followUp'
+        const targetKind = isFollowUp ? 'steer' : 'followUp'
+
+        return (
+          <div
+            key={message.id}
+            className={`agent-queued-row agent-queued-row-${message.kind}${isEditing ? ' is-editing' : ''}`}
+          >
+            <div className='agent-queued-row-leading' aria-hidden='true'>
+              <span className='agent-queued-row-grip'>::</span>
+              <CornerUpLeftLine size={15} />
+            </div>
+
+            <div className='agent-queued-row-main'>
+              <span className={`agent-queued-kind agent-queued-kind-${message.kind}`}>
+                {isFollowUp ? '排队' : '引导'}
+              </span>
+              {isEditing ? (
+                <input
+                  ref={editingInputRef}
+                  className='agent-queued-edit-input'
+                  value={editingText}
+                  disabled={isUpdating}
+                  aria-label='编辑待处理消息'
+                  onChange={(event) => {
+                    setEditingText(event.target.value)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      event.preventDefault()
+                      cancelEdit()
+                    }
+
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void saveEdit(message)
+                    }
+                  }}
+                />
+              ) : (
+                <span className='agent-queued-text' title={message.text}>
+                  {message.text}
+                </span>
+              )}
+            </div>
+
+            <div className='agent-queued-actions'>
+              {isEditing ? (
+                <>
+                  <button
+                    type='button'
+                    className='agent-queued-action is-text'
+                    disabled={isUpdating || !editingText.trim()}
+                    onClick={() => {
+                      void saveEdit(message)
+                    }}
+                  >
+                    保存
+                  </button>
+                  <button
+                    type='button'
+                    className='agent-queued-action is-text'
+                    disabled={isUpdating}
+                    onClick={cancelEdit}
+                  >
+                    取消
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type='button'
+                    className='agent-queued-action is-text'
+                    disabled={isUpdating}
+                    title={isFollowUp ? '改为引导当前运行' : '改为当前运行结束后执行'}
+                    onClick={() => {
+                      void runUpdate(message, {
+                        action: 'move',
+                        expectedText: message.text,
+                        index: message.index,
+                        kind: message.kind,
+                        targetKind,
+                      })
+                    }}
+                  >
+                    {isFollowUp ? '引导' : '排队'}
+                  </button>
+                  <button
+                    type='button'
+                    className='agent-queued-action'
+                    disabled={isUpdating}
+                    aria-label='删除待处理消息'
+                    title='删除'
+                    onClick={() => {
+                      void runUpdate(message, {
+                        action: 'delete',
+                        expectedText: message.text,
+                        index: message.index,
+                        kind: message.kind,
+                      })
+                    }}
+                  >
+                    <Delete2Line size={15} />
+                  </button>
+                  <div className='agent-queued-menu-anchor' data-agent-queued-menu='true'>
+                    <button
+                      type='button'
+                      className='agent-queued-action'
+                      disabled={isUpdating}
+                      aria-expanded={isMenuOpen}
+                      aria-haspopup='menu'
+                      aria-label='更多待处理消息操作'
+                      title='更多'
+                      onClick={() => {
+                        setOpenMenuMessageId((currentValue) => currentValue === message.id ? null : message.id)
+                      }}
+                    >
+                      <More1Line size={16} />
+                    </button>
+                    {isMenuOpen ? (
+                      <div className='agent-queued-menu' role='menu'>
+                        <button
+                          type='button'
+                          role='menuitem'
+                          className='agent-queued-menu-item'
+                          onClick={() => {
+                            beginEdit(message)
+                          }}
+                        >
+                          <EditLine size={16} />
+                          <span>编辑消息</span>
+                        </button>
+                        <button
+                          type='button'
+                          role='menuitem'
+                          className='agent-queued-menu-item'
+                          onClick={() => {
+                            void runUpdate(message, {
+                              action: 'delete',
+                              expectedText: message.text,
+                              index: message.index,
+                              kind: message.kind,
+                            })
+                          }}
+                        >
+                          <CornerUpLeftLine size={16} />
+                          <span>关闭{isFollowUp ? '排队' : '引导'}</span>
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function AgentProvider({
   children,
   iconTheme,
@@ -2487,12 +2807,14 @@ function AgentProvider({
           ...agentState.runtime,
           compactionReason: null,
           followUpMessageCount: 0,
+          followUpMessages: [],
           isCompacting: false,
           isStreaming: false,
           pendingMessageCount: 0,
           retryAttempt: 0,
           retryMaxAttempts: null,
           steeringMessageCount: 0,
+          steeringMessages: [],
         }
   ), [agentState.runtime, isViewingActiveRuntime])
   const visiblePersistedMessages = isViewingActiveRuntime ? agentState.activeSession?.messages ?? [] : []
@@ -2719,6 +3041,18 @@ function AgentProvider({
       }
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to send your prompt.')
+    }
+  }
+
+  async function handleQueuedMessageUpdate(update: AgentQueuedMessageUpdate) {
+    try {
+      setActiveComposerMenu(null)
+      setPanelError(null)
+      const nextState = await window.appApi.updateAgentQueuedMessage(update)
+      setAgentState(nextState)
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'Unable to update queued message.')
+      throw error
     }
   }
 
@@ -3006,6 +3340,7 @@ function AgentProvider({
     handleSelectModel,
     handleThinkingLevelSelection,
     handlePickComposerAttachments,
+    handleQueuedMessageUpdate,
     handleStartNewSession,
     handleSubmit,
     hasComposerPayload,
@@ -3061,6 +3396,7 @@ function AgentProvider({
     handleSelectModel,
     handleThinkingLevelSelection,
     handlePickComposerAttachments,
+    handleQueuedMessageUpdate,
     handleStartNewSession,
     handleSubmit,
     hasComposerPayload,
@@ -3334,6 +3670,7 @@ function AgentChatSurface() {
     handleSelectModel,
     handleThinkingLevelSelection,
     handlePickComposerAttachments,
+    handleQueuedMessageUpdate,
     handleStartNewSession,
     handleSubmit,
     hasComposerPayload,
@@ -3371,6 +3708,10 @@ function AgentChatSurface() {
   const hasEmptyChat = Boolean(workspacePath && renderedMessages.length === 0)
   const isNewConversation = activeSessionSelection.kind === 'new'
     || (hasEmptyChat && !activeSession)
+  const isViewingActiveRuntime = Boolean(
+    activeSessionPath
+    && agentState.activeSession?.sessionPath === activeSessionPath,
+  )
   const [modelPickerQuery, setModelPickerQuery] = useState('')
   const [modelPickerProvider, setModelPickerProvider] = useState(resolvedSelectedProviderValue)
   const [modelPickerActiveModelKey, setModelPickerActiveModelKey] = useState<string | null>(null)
@@ -3382,6 +3723,10 @@ function AgentChatSurface() {
   const modelPickerPendingActivationRef = useRef<AgentModelPickerPendingActivation | null>(null)
   const [modelCascaderStyle, setModelCascaderStyle] = useState<AgentModelCascaderStyle>({})
   const [sessionMenuStyle, setSessionMenuStyle] = useState<AgentSessionMenuStyle>({})
+  const queuedComposerMessages = useMemo(
+    () => isViewingActiveRuntime ? buildQueuedComposerMessages(agentState.runtime) : [],
+    [agentState.runtime, isViewingActiveRuntime],
+  )
   const trimmedModelValue = modelInputValue.trim()
   const composerModelKey = trimmedModelValue
     ? getAgentModelKey(resolvedSelectedProviderValue, trimmedModelValue)
@@ -4092,6 +4437,18 @@ function AgentChatSurface() {
       </div>
     </ScrollShadow>
   ) : null
+  const composerQueuedTray = queuedComposerMessages.length > 0 ? (
+    <AgentQueuedComposerTray
+      messages={queuedComposerMessages}
+      onUpdate={handleQueuedMessageUpdate}
+    />
+  ) : null
+  const composerHeaderContent = composerQueuedTray || composerHeader ? (
+    <>
+      {composerQueuedTray}
+      {composerHeader}
+    </>
+  ) : null
 
   const composerFooter = (
     <div ref={modelFieldRef} className='agent-composer-meta'>
@@ -4518,7 +4875,7 @@ function AgentChatSurface() {
             value={composerState.value}
             workspaceNodes={workspaceTree}
             workspacePath={workspacePath}
-            header={composerHeader}
+            header={composerHeaderContent}
             footer={composerFooter}
           />
         </div>
