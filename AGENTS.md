@@ -7,7 +7,7 @@
 - 目标可验证：非平凡改动先给简短计划，并说明如何验证；修 bug 优先补充或运行能复现问题的检查，改完后尽量执行相关测试或说明未执行原因。
 - 取舍：这些原则偏向稳健而非速度；纯文案、小样式或低风险改动保持轻量流程。
 
-# 长期修复与 worktree 流程
+# worktree 相关流程
 - 在 worktree 中提交前，先确认只包含本任务文件；提交前尽量跑相关测试、类型检查或能复现问题的脚本，并记录未执行项。
 - 合回 `main` 前必须分别检查修复 worktree 和主工作区状态；如果主工作区有用户或其他任务的未提交改动，不要在主工作区执行普通 merge/cherry-pick。
 - 当主工作区 dirty 但需要把已验证提交合入本地 `main` 时，先将修复分支 rebase 到最新 `main` 并验证；确认可快进后，可以只更新 `main` 引用并仅同步本次提交涉及的文件，严禁覆盖无关未提交改动。
@@ -36,3 +36,9 @@
 
 - 项目已内置 electron 调试流程：说明文档见 `docs/electron-debug-workflow.md`，执行脚本见 `scripts/electron-debug-session.mjs`，命令入口见 `package.json` 中的 `debug:electron` / `debug:electron:build`。
 - 仅在需要进入真实 Electron 应用收集 `main` / `preload` / `renderer` 诊断时使用该流程；小改动、用户能快速查看确认的 UI 或文案调整，不用进入 electron 调试流程。
+
+## Codex Computer Use 调试
+
+- 用于观察和操作当前真实桌面窗口，适合快速确认 UI 状态或复查交互结果。
+- 基本流程：先用 `mcp__computer_use__list_apps` 找到当前运行的开发窗口，通常是 `Electron`（打包版本可能是 `Aryn`）；再用 `mcp__computer_use__get_app_state` 读取截图和 accessibility tree；需要交互时优先用 element index 点击，操作后再次读取状态确认。
+- 注意确认当前窗口对应的是最新代码/HMR 状态；不要只凭截图判断，尽量同时核对 accessibility tree。
