@@ -7,6 +7,7 @@ import {
   type AgentProviderAuthConfig,
 } from '@/features/agent/provider-auth'
 import type { AgentProviderAuthState, AgentProviderAuthUiEvent, AgentWorkspaceState } from '@/features/agent/types'
+import { resolveActiveWorkspaceIconThemeKey } from '@/features/settings/lib/icon-theme-selection'
 import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '@/features/workspace/types'
 import { useSettingsStore } from '@/hooks/use-settings-store'
 
@@ -232,9 +233,10 @@ export function SettingsDialog({
       .filter((group) => group.providers.length > 0)
   ), [authProviders])
 
-  const activeIconThemeKey = iconTheme
-    ? `${iconTheme.sourceVsixPath}::${iconTheme.activeThemeId}`
-    : ''
+  const activeIconThemeKey = useMemo(
+    () => resolveActiveWorkspaceIconThemeKey(iconTheme, iconThemeOptions),
+    [iconTheme, iconThemeOptions],
+  )
 
   useEffect(() => {
     activeAuthProviderRef.current = authFlow?.provider ?? null
@@ -500,9 +502,14 @@ export function SettingsDialog({
             </div>
             <div className='settings-inline-form' style={{ display: 'flex', alignItems: 'center' }}>
               <Select
+                aria-label='文件图标主题'
                 className='flex-1 heroui-select-fix'
-                selectedKey={activeIconThemeKey}
-                onSelectionChange={(value) => {
+                value={activeIconThemeKey}
+                onChange={(value) => {
+                  if (value === null) {
+                    return
+                  }
+
                   const selectedOption = iconThemeOptions.find((option) => option.key === String(value))
 
                   if (selectedOption) {
@@ -524,6 +531,7 @@ export function SettingsDialog({
                     {iconThemeOptions.map((option) => (
                       <ListBox.Item key={option.key} id={option.key} textValue={option.label}>
                         {option.label}
+                        <ListBox.ItemIndicator />
                       </ListBox.Item>
                     ))}
                   </ListBox>
