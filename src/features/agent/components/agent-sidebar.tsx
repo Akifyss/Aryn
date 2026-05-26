@@ -35,6 +35,7 @@ import {
   PicLine,
   RightLine,
   SearchLine,
+  StopFill,
   TerminalLine,
   ToolLine,
 } from '@mingcute/react'
@@ -59,6 +60,12 @@ import {
   type AgentFileAutoOpenState,
 } from '@/features/agent/auto-open-file'
 import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-changes'
+import {
+  AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS,
+  getAlternateRunningPromptBehavior,
+  useSettingsStore,
+  type AgentRunningPromptEnterBehavior,
+} from '@/hooks/use-settings-store'
 import type {
   AgentClientEvent,
   AgentMessageAttachment,
@@ -117,6 +124,8 @@ type ComposerState = {
 type ComposerAttachment = AgentPromptAttachment & {
   id: string
 }
+
+type AgentComposerAction = 'send' | 'stop'
 
 type AgentAttachmentItemData = (AgentPromptAttachment | AgentMessageAttachment) & {
   id?: string
@@ -236,6 +245,16 @@ const emptyAgentState: AgentWorkspaceState = {
 const emptyComposerState: ComposerState = {
   mentions: [],
   value: '',
+}
+
+function getHasComposerPayload(
+  composerState: ComposerState,
+  composerAttachments: ComposerAttachment[],
+) {
+  return Boolean(
+    serializeComposerText(composerState.value, composerState.mentions).trim()
+    || composerAttachments.length > 0
+  )
 }
 
 const IMAGE_ATTACHMENT_EXTENSIONS = /\.(?:png|jpe?g|webp|gif)$/i
@@ -361,7 +380,8 @@ type AgentContextValue = {
   agentState: AgentWorkspaceState
   addComposerFiles: (files: File[]) => Promise<void>
   attachmentCapabilityMessage: string | null
-  canSend: boolean
+  canPerformComposerAction: boolean
+  composerAction: AgentComposerAction
   composerAttachments: ComposerAttachment[]
   composerState: ComposerState
   configuredProviders: string[]
@@ -375,6 +395,7 @@ type AgentContextValue = {
   handlePickComposerAttachments: () => Promise<void>
   handleStartNewSession: () => void
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
+  hasComposerPayload: boolean
   hasConfiguredProviders: boolean
   iconTheme?: WorkspaceIconTheme | null
   isCreatingSession: boolean
@@ -400,6 +421,7 @@ type AgentContextValue = {
   setComposerState: React.Dispatch<React.SetStateAction<ComposerState>>
   setPanelError: React.Dispatch<React.SetStateAction<string | null>>
   statusMessage: string | null
+  streamingShortcutModifierLabel: string
   thinkingLevel: AgentThinkingLevel
   thinkingLevelLabel: string
   workspacePath: string | null
@@ -1561,13 +1583,17 @@ type AgentSessionStatusIndicator =
       value: string
     }
 
+type AgentSessionStatusBadgeKind = 'follow-up' | 'pending' | 'steer'
+
 type AgentSessionStatusBadge = {
+  kind: AgentSessionStatusBadgeKind
   indicator: Extract<AgentSessionStatusIndicator, { kind: 'spinner' }>
   label: string
+  title: string
 }
 
 type AgentSessionStatus = {
-  badge?: AgentSessionStatusBadge
+  badges?: AgentSessionStatusBadge[]
   indicator: AgentSessionStatusIndicator
   label: string
   tone: AgentSessionStatusTone
@@ -1614,6 +1640,11 @@ const AGENT_SESSION_STATUS_ANIMATIONS: Record<AnimatedAgentSessionStatusType, Br
   tool_execution: 'scan',
   working: 'braille',
 }
+
+type AgentSessionQueueCounts = Pick<
+  AgentWorkspaceState['runtime'],
+  'followUpMessageCount' | 'pendingMessageCount' | 'steeringMessageCount'
+>
 
 function deriveAgentSessionPhase({
   draftAssistant,
@@ -1698,18 +1729,93 @@ function deriveAgentSessionPhase({
   }
 }
 
+function formatQueueCountLabel(label: string, count: number) {
+  return `${label} ${count}`
+}
+
+function getPositiveQueueCount(value: number) {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+}
+
+function getAgentSessionStatusBadges({
+  followUpMessageCount,
+  pendingMessageCount,
+  steeringMessageCount,
+}: AgentSessionQueueCounts): AgentSessionStatusBadge[] {
+  const steerCount = getPositiveQueueCount(steeringMessageCount)
+  const followUpCount = getPositiveQueueCount(followUpMessageCount)
+  const pendingCount = getPositiveQueueCount(pendingMessageCount)
+  const unresolvedCount = Math.max(0, pendingCount - steerCount - followUpCount)
+  const badges: AgentSessionStatusBadge[] = []
+
+  if (steerCount > 0) {
+    badges.push({
+      kind: 'steer',
+      indicator: {
+        kind: 'spinner',
+        name: 'scan',
+      },
+      label: formatQueueCountLabel('引导', steerCount),
+      title: 'steer：插入当前运行的下一轮之前，用于修正或引导正在进行的任务。',
+    })
+  }
+
+  if (followUpCount > 0) {
+    badges.push({
+      kind: 'follow-up',
+      indicator: {
+        kind: 'spinner',
+        name: AGENT_SESSION_STATUS_ANIMATIONS.queued,
+      },
+      label: formatQueueCountLabel('排队', followUpCount),
+      title: 'followUp：当前 agent 停止后再执行，适合追加后续任务。',
+    })
+  }
+
+  if (unresolvedCount > 0) {
+    badges.push({
+      kind: 'pending',
+      indicator: {
+        kind: 'spinner',
+        name: AGENT_SESSION_STATUS_ANIMATIONS.queued,
+      },
+      label: formatQueueCountLabel('等待', unresolvedCount),
+      title: '等待处理的消息，当前运行时没有返回更细的 steer/followUp 分类。',
+    })
+  }
+
+  return badges
+}
+
+function getQueuedStatusLabel({
+  followUpMessageCount,
+  pendingMessageCount,
+  steeringMessageCount,
+}: AgentSessionQueueCounts) {
+  const steerCount = getPositiveQueueCount(steeringMessageCount)
+  const followUpCount = getPositiveQueueCount(followUpMessageCount)
+  const pendingCount = getPositiveQueueCount(pendingMessageCount)
+
+  if (steerCount > 0 && followUpCount === 0 && steerCount === pendingCount) {
+    return '引导等待中'
+  }
+
+  if (followUpCount > 0 && steerCount === 0 && followUpCount === pendingCount) {
+    return '排队等待中'
+  }
+
+  return pendingCount > 0 ? '等待处理' : '等待中'
+}
+
 function formatAgentSessionStatus(
   phase: AgentSessionPhase,
-  pendingMessageCount: number,
+  queueCounts: AgentSessionQueueCounts,
 ): AgentSessionStatus | null {
-  const queuedBadge = pendingMessageCount > 0 && phase.type !== 'error' && phase.type !== 'queued'
-    ? {
-        indicator: {
-          kind: 'spinner' as const,
-          name: AGENT_SESSION_STATUS_ANIMATIONS.queued,
-        },
-        label: pendingMessageCount === 1 ? 'Queued 1' : `Queued ${pendingMessageCount}`,
-      }
+  const queueBadges = phase.type !== 'error'
+    ? getAgentSessionStatusBadges(queueCounts)
+    : undefined
+  const badges = queueBadges && queueBadges.length > 0
+    ? queueBadges
     : undefined
 
   switch (phase.type) {
@@ -1721,10 +1827,10 @@ function formatAgentSessionStatus(
         },
         label: 'Error',
         tone: 'error',
-      }
+    }
     case 'tool_execution': {
       return {
-        badge: queuedBadge,
+        badges,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.tool_execution,
@@ -1735,7 +1841,7 @@ function formatAgentSessionStatus(
     }
     case 'compaction': {
       return {
-        badge: queuedBadge,
+        badges,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.compaction,
@@ -1746,7 +1852,7 @@ function formatAgentSessionStatus(
     }
     case 'auto_retry': {
       return {
-        badge: queuedBadge,
+        badges,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.auto_retry,
@@ -1757,7 +1863,7 @@ function formatAgentSessionStatus(
     }
     case 'thinking': {
       return {
-        badge: queuedBadge,
+        badges,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.thinking,
@@ -1768,7 +1874,7 @@ function formatAgentSessionStatus(
     }
     case 'streaming': {
       return {
-        badge: queuedBadge,
+        badges,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.streaming,
@@ -1779,7 +1885,7 @@ function formatAgentSessionStatus(
     }
     case 'working': {
       return {
-        badge: queuedBadge,
+        badges,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.working,
@@ -1790,16 +1896,31 @@ function formatAgentSessionStatus(
     }
     case 'queued':
       return {
+        badges,
         indicator: {
           kind: 'spinner',
           name: AGENT_SESSION_STATUS_ANIMATIONS.queued,
         },
-        label: pendingMessageCount === 1 ? 'Queued 1' : `Queued ${pendingMessageCount}`,
+        label: getQueuedStatusLabel(queueCounts),
         tone: 'running',
       }
     case 'idle':
       return null
   }
+}
+
+function getStreamingPromptBehaviorForShortcut(
+  event: Pick<KeyboardEvent<HTMLElement>, 'ctrlKey' | 'metaKey'>,
+  platform: NodeJS.Platform,
+  defaultBehavior: AgentRunningPromptEnterBehavior,
+): AgentRunningPromptEnterBehavior {
+  const shouldUseAlternateBehavior = platform === 'darwin'
+    ? event.metaKey
+    : event.ctrlKey
+
+  return shouldUseAlternateBehavior
+    ? getAlternateRunningPromptBehavior(defaultBehavior)
+    : defaultBehavior
 }
 
 function UnicodeSpinner({
@@ -1858,15 +1979,20 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
       <span className={`agent-session-status-label agent-session-status-label-${status.tone}`}>
         {status.label}
       </span>
-      {status.badge ? (
-        <span className='agent-session-status-badge'>
+      {status.badges?.map((badge) => (
+        <span
+          key={`${badge.kind}:${badge.label}`}
+          className={`agent-session-status-badge agent-session-status-badge-${badge.kind}`}
+          aria-label={badge.title}
+          title={badge.title}
+        >
           <UnicodeSpinner
             className='agent-session-status-badge-indicator'
-            name={status.badge.indicator.name}
+            name={badge.indicator.name}
           />
-          <span className='agent-session-status-badge-label'>{status.badge.label}</span>
+          <span className='agent-session-status-badge-label'>{badge.label}</span>
         </span>
-      ) : null}
+      ))}
     </article>
   )
 }
@@ -1880,6 +2006,7 @@ function AgentProvider({
   workspaceState,
   workspacePath,
 }: AgentProviderProps) {
+  const runningPromptEnterBehavior = useSettingsStore((state) => state.agent.runningPromptEnterBehavior)
   const workspaceTree = useWorkspaceStore((state) => state.tree)
   const defaultModelSelection = parseModelSelection(null)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
@@ -2359,11 +2486,13 @@ function AgentProvider({
       : {
           ...agentState.runtime,
           compactionReason: null,
+          followUpMessageCount: 0,
           isCompacting: false,
           isStreaming: false,
           pendingMessageCount: 0,
           retryAttempt: 0,
           retryMaxAttempts: null,
+          steeringMessageCount: 0,
         }
   ), [agentState.runtime, isViewingActiveRuntime])
   const visiblePersistedMessages = isViewingActiveRuntime ? agentState.activeSession?.messages ?? [] : []
@@ -2560,7 +2689,7 @@ function AgentProvider({
     }
   }
 
-  async function submitComposerPrompt(streamingBehavior?: 'steer' | 'followUp') {
+  async function submitComposerPrompt(streamingBehavior?: AgentRunningPromptEnterBehavior) {
     const serializedPrompt = serializeComposerText(composerState.value, composerState.mentions)
     const trimmedPrompt = serializedPrompt.trim()
 
@@ -2584,22 +2713,71 @@ function AgentProvider({
       await window.appApi.sendAgentPrompt(trimmedPrompt, streamingBehavior, promptAttachments)
       setComposerState(emptyComposerState)
       setComposerAttachments([])
-      setDraftAssistant('')
-      setLiveTools([])
+      if (!streamingBehavior) {
+        setDraftAssistant('')
+        setLiveTools([])
+      }
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to send your prompt.')
     }
   }
 
+  async function stopActivePrompt() {
+    if (!workspacePath || !isViewingActiveRuntime || !agentState.runtime.isStreaming) {
+      return
+    }
+
+    try {
+      setActiveComposerMenu(null)
+      setPanelError(null)
+      const nextState = await window.appApi.abortAgentPrompt()
+      setAgentState(nextState)
+      setDraftAssistant('')
+      setDraftThinking('')
+      setIsThinkingStreaming(false)
+      setLiveTools([])
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'Unable to stop the current run.')
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    await submitComposerPrompt(isViewingActiveRuntime && agentState.runtime.isStreaming ? 'steer' : undefined)
+
+    const hasPayload = getHasComposerPayload(composerState, composerAttachments)
+
+    if (isViewingActiveRuntime && agentState.runtime.isStreaming) {
+      if (!hasPayload) {
+        await stopActivePrompt()
+        return
+      }
+
+      await submitComposerPrompt(runningPromptEnterBehavior)
+      return
+    }
+
+    await submitComposerPrompt()
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
-      void submitComposerPrompt(event.altKey ? 'followUp' : isViewingActiveRuntime && agentState.runtime.isStreaming ? 'steer' : undefined)
+
+      if (!getHasComposerPayload(composerState, composerAttachments)) {
+        return
+      }
+
+      if (isViewingActiveRuntime && agentState.runtime.isStreaming) {
+        const streamingBehavior = getStreamingPromptBehaviorForShortcut(
+          event,
+          window.appApi.platform,
+          runningPromptEnterBehavior,
+        )
+        void submitComposerPrompt(streamingBehavior)
+        return
+      }
+
+      void submitComposerPrompt()
     }
   }
 
@@ -2632,14 +2810,25 @@ function AgentProvider({
     : []
   const thinkingLevel = clampAgentThinkingLevel(agentState.runtime.thinkingLevel, composerThinkingLevels)
   const thinkingLevelLabel = formatThinkingLevelLabel(thinkingLevel)
+  const hasComposerPayload = getHasComposerPayload(composerState, composerAttachments)
   const canSend = Boolean(
     workspacePath
-    && (
-      serializeComposerText(composerState.value, composerState.mentions).trim()
-      || composerAttachments.length > 0
-    )
+    && hasComposerPayload
     && agentState.runtime.hasConfiguredModels,
   )
+  const canStopActivePrompt = Boolean(
+    workspacePath
+    && isViewingActiveRuntime
+    && agentState.runtime.isStreaming
+    && !isLoading
+  )
+  const composerAction: AgentComposerAction = canStopActivePrompt && !hasComposerPayload
+    ? 'stop'
+    : 'send'
+  const canPerformComposerAction = composerAction === 'stop'
+    ? canStopActivePrompt
+    : canSend
+  const streamingShortcutModifierLabel = window.appApi.platform === 'darwin' ? '⌘↵' : 'Ctrl+Enter'
   const selectedModelInputs = composerModelKey && hasAvailableComposerModel
     ? agentState.runtime.availableModelInputs[composerModelKey] ?? ['text']
     : []
@@ -2681,8 +2870,17 @@ function AgentProvider({
     workspacePath,
   ])
   const sessionStatus = useMemo(
-    () => sessionPhase ? formatAgentSessionStatus(sessionPhase, visibleRuntime.pendingMessageCount) : null,
-    [sessionPhase, visibleRuntime.pendingMessageCount],
+    () => sessionPhase ? formatAgentSessionStatus(sessionPhase, {
+      followUpMessageCount: visibleRuntime.followUpMessageCount,
+      pendingMessageCount: visibleRuntime.pendingMessageCount,
+      steeringMessageCount: visibleRuntime.steeringMessageCount,
+    }) : null,
+    [
+      sessionPhase,
+      visibleRuntime.followUpMessageCount,
+      visibleRuntime.pendingMessageCount,
+      visibleRuntime.steeringMessageCount,
+    ],
   )
   const roundFileChangesByMessageId = useMemo(() => {
     const hasInFlightRound = isViewingActiveRuntime && (liveTools.length > 0
@@ -2705,7 +2903,7 @@ function AgentProvider({
     visiblePersistedMessages,
   ])
   const sessionStatusKey = sessionStatus
-    ? `${sessionStatus.label}:${sessionStatus.badge?.label ?? ''}`
+    ? `${sessionStatus.label}:${sessionStatus.badges?.map((badge) => `${badge.kind}:${badge.label}`).join('|') ?? ''}`
     : 'none'
   const fileChangesKey = [...roundFileChangesByMessageId.entries()]
     .flatMap(([messageId, changes]) => changes.map((change) => `${messageId}:${change.kind}:${change.filePath}`))
@@ -2795,7 +2993,8 @@ function AgentProvider({
     agentState,
     addComposerFiles,
     attachmentCapabilityMessage,
-    canSend,
+    canPerformComposerAction,
+    composerAction,
     composerAttachments,
     composerState,
     configuredProviders,
@@ -2809,6 +3008,7 @@ function AgentProvider({
     handlePickComposerAttachments,
     handleStartNewSession,
     handleSubmit,
+    hasComposerPayload,
     hasConfiguredProviders,
     iconTheme,
     isCreatingSession,
@@ -2834,6 +3034,7 @@ function AgentProvider({
     setComposerState,
     setPanelError,
     statusMessage,
+    streamingShortcutModifierLabel,
     thinkingLevel,
     thinkingLevelLabel,
     workspacePath,
@@ -2847,7 +3048,8 @@ function AgentProvider({
     agentState,
     addComposerFiles,
     attachmentCapabilityMessage,
-    canSend,
+    canPerformComposerAction,
+    composerAction,
     composerAttachments,
     composerState,
     configuredProviders,
@@ -2861,6 +3063,7 @@ function AgentProvider({
     handlePickComposerAttachments,
     handleStartNewSession,
     handleSubmit,
+    hasComposerPayload,
     hasConfiguredProviders,
     iconTheme,
     isCreatingSession,
@@ -2878,6 +3081,7 @@ function AgentProvider({
     removeComposerAttachment,
     sessionStatus,
     statusMessage,
+    streamingShortcutModifierLabel,
     thinkingLevel,
     thinkingLevelLabel,
     workspacePath,
@@ -3108,6 +3312,7 @@ function AgentEmptyChat() {
 }
 
 function AgentChatSurface() {
+  const runningPromptEnterBehavior = useSettingsStore((state) => state.agent.runningPromptEnterBehavior)
   const {
     activeComposerMenu,
     activeOverlayPanel,
@@ -3117,7 +3322,8 @@ function AgentChatSurface() {
     agentState,
     addComposerFiles,
     attachmentCapabilityMessage,
-    canSend,
+    canPerformComposerAction,
+    composerAction,
     composerAttachments,
     composerState,
     configuredProviders,
@@ -3130,6 +3336,7 @@ function AgentChatSurface() {
     handlePickComposerAttachments,
     handleStartNewSession,
     handleSubmit,
+    hasComposerPayload,
     hasConfiguredProviders,
     iconTheme,
     isCreatingSession,
@@ -3155,6 +3362,7 @@ function AgentChatSurface() {
     setComposerState,
     setPanelError,
     statusMessage,
+    streamingShortcutModifierLabel,
     thinkingLevel,
     thinkingLevelLabel,
     workspacePath,
@@ -3832,6 +4040,12 @@ function AgentChatSurface() {
     }
   }, [activeComposerMenu])
 
+  const composerActionTitle = composerAction === 'stop'
+    ? '停止当前运行'
+    : agentState.runtime.isStreaming && hasComposerPayload
+      ? `Enter ${AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[runningPromptEnterBehavior]}，${streamingShortcutModifierLabel} ${AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[getAlternateRunningPromptBehavior(runningPromptEnterBehavior)]}`
+      : '发送消息'
+
   const composerHeader = composerAttachments.length > 0 || attachmentCapabilityMessage ? (
     <ScrollShadow
       hideScrollBar
@@ -3946,16 +4160,23 @@ function AgentChatSurface() {
             <AttachmentLine aria-hidden='true' size={16} />
           </button>
 
-          <Button
-            isIconOnly
-            isDisabled={!canSend}
-            size='sm'
-            type='submit'
-            variant='ghost'
-            className='agent-send-button'
-          >
-            <ArrowUpLine size={16} />
-          </Button>
+          <span title={composerActionTitle}>
+            <Button
+              isIconOnly
+              aria-label={composerAction === 'stop' ? '停止当前运行' : '发送消息'}
+              isDisabled={!canPerformComposerAction}
+              size='sm'
+              type='submit'
+              variant='ghost'
+              className={`agent-send-button${composerAction === 'stop' ? ' is-stop' : ''}`}
+            >
+              {composerAction === 'stop' ? (
+                <StopFill size={15} />
+              ) : (
+                <ArrowUpLine size={16} />
+              )}
+            </Button>
+          </span>
         </div>
       </div>
 

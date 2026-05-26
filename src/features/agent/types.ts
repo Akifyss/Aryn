@@ -59,6 +59,7 @@ export type AgentSessionListItem = {
 }
 
 export type AgentThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+export type AgentRunningPromptBehavior = 'steer' | 'followUp'
 
 export type AgentRuntimeState = {
   auth: Record<string, AgentProviderAuthState>

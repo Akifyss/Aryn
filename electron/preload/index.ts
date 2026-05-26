@@ -1,5 +1,5 @@
 import { ipcRenderer, contextBridge, webUtils } from 'electron'
-import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentThinkingLevel, AgentWorkspaceState } from '../../src/features/agent/types'
+import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentRunningPromptBehavior, AgentThinkingLevel, AgentWorkspaceState } from '../../src/features/agent/types'
 import type {
   GitBaselinePayload,
   GitBlameResult,
@@ -81,7 +81,7 @@ contextBridge.exposeInMainWorld('appApi', {
   renameAgentSession: (name: string) => ipcRenderer.invoke('agent:rename-session', name) as Promise<AgentWorkspaceState>,
   pickAgentAttachments: () => ipcRenderer.invoke('agent:pick-attachments') as Promise<AgentPromptAttachment[]>,
   getFilePath: (file: File) => webUtils.getPathForFile(file),
-  sendAgentPrompt: (prompt: string, streamingBehavior?: 'steer' | 'followUp', attachments?: AgentPromptAttachment[]) => ipcRenderer.invoke('agent:send-prompt', prompt, streamingBehavior, attachments) as Promise<{ ok: boolean }>,
+  sendAgentPrompt: (prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments?: AgentPromptAttachment[]) => ipcRenderer.invoke('agent:send-prompt', prompt, streamingBehavior, attachments) as Promise<{ ok: boolean }>,
   selectAgentModel: (modelKey: string) => ipcRenderer.invoke('agent:select-model', modelKey) as Promise<AgentWorkspaceState>,
   selectAgentThinkingLevel: (level: AgentThinkingLevel, modelKey?: string) => ipcRenderer.invoke('agent:select-thinking-level', level, modelKey) as Promise<AgentWorkspaceState>,
   updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => ipcRenderer.invoke('agent:update-provider-auth', rootPath, provider, apiKey) as Promise<AgentWorkspaceState>,

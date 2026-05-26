@@ -21,6 +21,7 @@ import type {
   AgentClientEvent,
   AgentPromptAttachment,
   AgentProviderAuthState,
+  AgentRunningPromptBehavior,
   AgentRuntimeState,
   AgentSessionListItem,
   AgentSessionSnapshot,
@@ -66,7 +67,6 @@ type PiAgentManagerOptions = {
   agentDir: string
 }
 
-type StreamingBehavior = 'steer' | 'followUp'
 type PreparedPromptAttachments = {
   images: ImageContent[]
   text: string
@@ -1278,7 +1278,7 @@ export class PiAgentManager {
     return this.buildWorkspaceState(cwd)
   }
 
-  async sendPrompt(prompt: string, streamingBehavior?: StreamingBehavior, rawAttachments?: unknown) {
+  async sendPrompt(prompt: string, streamingBehavior?: AgentRunningPromptBehavior, rawAttachments?: unknown) {
     const runtime = this.requireActiveSession()
     const message = prompt.trim()
     const attachments = normalizePromptAttachments(rawAttachments)

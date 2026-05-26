@@ -1,9 +1,20 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
+import type { AgentRunningPromptBehavior } from '@/features/agent/types'
 
 export type AppTheme = 'light' | 'dark' | 'auto'
 export type AppLayoutPreference = 'agent' | 'editor'
+export type AgentRunningPromptEnterBehavior = AgentRunningPromptBehavior
 export type MeoOutlinePosition = 'left' | 'right'
+
+export type AgentSettings = {
+  runningPromptEnterBehavior: AgentRunningPromptEnterBehavior
+}
+
+export const AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS: Record<AgentRunningPromptEnterBehavior, string> = {
+  followUp: '排队',
+  steer: '引导',
+}
 
 export type MeoSettings = {
   focusedLineHighlight: boolean
@@ -13,10 +24,12 @@ export type MeoSettings = {
 }
 
 interface SettingsState {
+  agent: AgentSettings
   layoutPreference: AppLayoutPreference
   meo: MeoSettings
   theme: AppTheme
   setLayoutPreference: (layoutPreference: AppLayoutPreference) => void
+  updateAgentSettings: (patch: Partial<AgentSettings>) => void
   updateMeoSettings: (patch: Partial<MeoSettings>) => void
   setTheme: (theme: AppTheme) => void
 }
@@ -88,6 +101,32 @@ const DEFAULT_MEO_SETTINGS: MeoSettings = {
   outlinePosition: 'right',
 }
 
+export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
+  runningPromptEnterBehavior: 'followUp',
+}
+
+export function isAgentRunningPromptEnterBehavior(value: unknown): value is AgentRunningPromptEnterBehavior {
+  return value === 'followUp' || value === 'steer'
+}
+
+export function getAlternateRunningPromptBehavior(
+  behavior: AgentRunningPromptEnterBehavior,
+): AgentRunningPromptEnterBehavior {
+  return behavior === 'steer' ? 'followUp' : 'steer'
+}
+
+function sanitizeRunningPromptEnterBehavior(value: unknown): AgentRunningPromptEnterBehavior {
+  return isAgentRunningPromptEnterBehavior(value)
+    ? value
+    : DEFAULT_AGENT_SETTINGS.runningPromptEnterBehavior
+}
+
+function sanitizeAgentSettings(value: Partial<AgentSettings> | undefined): AgentSettings {
+  return {
+    runningPromptEnterBehavior: sanitizeRunningPromptEnterBehavior(value?.runningPromptEnterBehavior),
+  }
+}
+
 function sanitizeMeoImageFolder(imageFolder: string) {
   const segments = imageFolder
     .replace(/[\\/]+/g, '/')
@@ -118,11 +157,18 @@ function sanitizeLayoutPreference(value: unknown): AppLayoutPreference {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
+      agent: DEFAULT_AGENT_SETTINGS,
       layoutPreference: DEFAULT_APP_LAYOUT_PREFERENCE,
       meo: DEFAULT_MEO_SETTINGS,
       theme: 'auto',
       setLayoutPreference: (layoutPreference) => set({ layoutPreference: sanitizeLayoutPreference(layoutPreference) }),
       setTheme: (theme) => set({ theme }),
+      updateAgentSettings: (patch) => set((state) => ({
+        agent: sanitizeAgentSettings({
+          ...state.agent,
+          ...patch,
+        }),
+      })),
       updateMeoSettings: (patch) => set((state) => ({
         meo: sanitizeMeoSettings({
           ...state.meo,
@@ -141,6 +187,7 @@ export const useSettingsStore = create<SettingsState>()(
         return {
           ...currentState,
           ...candidate,
+          agent: sanitizeAgentSettings(candidate.agent),
           layoutPreference: sanitizeLayoutPreference(candidate.layoutPreference),
           meo: sanitizeMeoSettings(candidate.meo),
         }

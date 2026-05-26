@@ -9,9 +9,14 @@ import {
 import type { AgentProviderAuthState, AgentProviderAuthUiEvent, AgentWorkspaceState } from '@/features/agent/types'
 import { resolveActiveWorkspaceIconThemeKey } from '@/features/settings/lib/icon-theme-selection'
 import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '@/features/workspace/types'
-import { useSettingsStore } from '@/hooks/use-settings-store'
+import {
+  AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS,
+  getAlternateRunningPromptBehavior,
+  isAgentRunningPromptEnterBehavior,
+  useSettingsStore,
+} from '@/hooks/use-settings-store'
 
-export type SettingsSectionId = 'appearance' | 'editor' | 'providers'
+export type SettingsSectionId = 'appearance' | 'conversation' | 'editor' | 'providers'
 
 type SettingsViewProps = {
   activeSection: SettingsSectionId
@@ -32,6 +37,11 @@ const SETTINGS_SECTIONS: Array<{ description: string, id: SettingsSectionId, lab
     description: '主题、图标与界面外观设置。',
     id: 'appearance',
     label: '外观',
+  },
+  {
+    description: '配置 Agent 对话输入与运行中快捷键行为。',
+    id: 'conversation',
+    label: '对话',
   },
   {
     description: '编辑器行为与 Markdown 工作流设置。',
@@ -101,6 +111,8 @@ function getSectionTitle(section: SettingsSectionId) {
   switch (section) {
     case 'appearance':
       return '外观'
+    case 'conversation':
+      return '对话'
     case 'editor':
       return '编辑器'
     case 'providers':
@@ -195,7 +207,7 @@ export function SettingsDialog({
   resolvedTheme,
   workspacePath,
 }: SettingsViewProps) {
-  const { layoutPreference, meo, theme, setLayoutPreference, setTheme, updateMeoSettings } = useSettingsStore()
+  const { agent, layoutPreference, meo, theme, setLayoutPreference, setTheme, updateAgentSettings, updateMeoSettings } = useSettingsStore()
   const [authDrafts, setAuthDrafts] = useState<Record<string, string>>({})
   const [authFlow, setAuthFlow] = useState<ProviderAuthFlowState | null>(null)
   const [isSavingAuth, setIsSavingAuth] = useState(false)
@@ -652,6 +664,56 @@ export function SettingsDialog({
     )
   }
 
+  function renderConversationSection() {
+    const defaultBehavior = agent.runningPromptEnterBehavior
+    const alternateBehavior = getAlternateRunningPromptBehavior(defaultBehavior)
+    const modifierKey = window.appApi.platform === 'darwin' ? '⌘↵' : 'Ctrl+Enter'
+
+    return (
+      <div className='settings-card'>
+        <div className='settings-field'>
+          <div className='settings-copy-block'>
+            <h4>跟进行为</h4>
+            <p>
+              Agent 运行中发送后续消息时，可以加入队列，或引导当前运行。{modifierKey} 会执行与 Enter 相反的操作。
+            </p>
+          </div>
+
+          <div className='settings-tabs-wrapper heroui-tabs-fix settings-running-behavior-tabs'>
+            <Tabs
+              selectedKey={defaultBehavior}
+              onSelectionChange={(key) => {
+                const nextBehavior = String(key)
+                if (isAgentRunningPromptEnterBehavior(nextBehavior)) {
+                  updateAgentSettings({ runningPromptEnterBehavior: nextBehavior })
+                }
+              }}
+              variant='primary'
+              className='w-full'
+            >
+              <Tabs.ListContainer className='w-full'>
+                <Tabs.List aria-label='运行中 Enter 默认行为' className='w-full'>
+                  <Tabs.Tab id='followUp' className='flex-1'>
+                    排队
+                    <Tabs.Indicator />
+                  </Tabs.Tab>
+                  <Tabs.Tab id='steer' className='flex-1'>
+                    引导
+                    <Tabs.Indicator />
+                  </Tabs.Tab>
+                </Tabs.List>
+              </Tabs.ListContainer>
+            </Tabs>
+          </div>
+
+          <p className='settings-inline-hint'>
+            运行中按 Enter 将执行{AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[defaultBehavior]}，按 {modifierKey} 将执行{AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[alternateBehavior]}。输入框为空时发送按钮会变为停止按钮。
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   function renderProvidersSection() {
     const activeAuthProviderLabel = authFlow ? getProviderLabel(authFlow.provider) : ''
 
@@ -860,6 +922,7 @@ export function SettingsDialog({
           {panelError && <div className='settings-alert settings-alert-error'>{panelError}</div>}
 
           {activeSection === 'appearance' ? renderAppearanceSection() : null}
+          {activeSection === 'conversation' ? renderConversationSection() : null}
           {activeSection === 'editor' ? renderEditorSection() : null}
           {activeSection === 'providers' ? renderProvidersSection() : null}
         </AppScrollArea>

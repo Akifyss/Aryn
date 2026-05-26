@@ -44,7 +44,7 @@ import {
   MIN_WINDOW_WIDTH,
 } from './app-state'
 import type { PersistedWorkspaceIconThemeSelection } from './app-state'
-import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent } from '../../src/features/agent/types'
+import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentRunningPromptBehavior } from '../../src/features/agent/types'
 import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
 import type { WorkspaceIconThemeCatalogOption } from '../../src/features/workspace/types'
 import {
@@ -1119,7 +1119,7 @@ ipcMain.handle('agent:pick-attachments', async () => {
   }))
 })
 
-ipcMain.handle('agent:send-prompt', async (_event, prompt: string, streamingBehavior?: 'steer' | 'followUp', attachments?: AgentPromptAttachment[]) => {
+ipcMain.handle('agent:send-prompt', async (_event, prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments?: AgentPromptAttachment[]) => {
   return agentManager.sendPrompt(prompt, streamingBehavior, attachments)
 })
 

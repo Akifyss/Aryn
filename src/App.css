@@ -3197,6 +3197,10 @@ body.workspace-tree-dragging .workspace-tree-row {
   line-height: 1.5;
 }
 
+.settings-running-behavior-tabs {
+  margin-top: 12px;
+}
+
 .settings-switch-row {
   width: 100%;
   min-height: 32px;
@@ -3711,6 +3715,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-session-status {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 2px;
   padding: 3px 0;
@@ -3740,12 +3745,29 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: 4px;
-  padding: 1px 8px;
-  border: 1px solid var(--separator);
+  min-height: 23px;
+  padding: 1px 9px;
+  border: 1px solid color-mix(in oklab, var(--separator) 78%, var(--foreground));
   border-radius: 999px;
-  background: var(--surface-secondary);
+  background: color-mix(in oklab, var(--surface-secondary) 92%, var(--foreground));
   color: var(--muted);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--foreground) 5%, transparent);
+}
+
+.agent-session-status-badge-steer {
+  border-color: color-mix(in oklab, var(--accent) 46%, var(--separator));
+  background: color-mix(in oklab, var(--accent) 10%, var(--surface-secondary));
+  color: color-mix(in oklab, var(--accent) 68%, var(--foreground));
+}
+
+.agent-session-status-badge-follow-up {
+  border-color: color-mix(in oklab, var(--warning) 38%, var(--separator));
+  background: color-mix(in oklab, var(--warning) 8%, var(--surface-secondary));
+  color: color-mix(in oklab, var(--warning) 58%, var(--foreground));
+}
+
+.agent-session-status-badge-pending {
+  border-style: dashed;
 }
 
 .agent-session-status-badge-indicator {
@@ -5195,6 +5217,17 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-send-button:hover {
   background: var(--accent);
   opacity: 0.9;
+}
+
+.agent-send-button.is-stop {
+  color: var(--foreground);
+  background: var(--surface-tertiary);
+}
+
+.agent-send-button.is-stop:hover {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--surface-tertiary) 82%, var(--foreground));
+  opacity: 1;
 }
 
 @media (max-width: 1160px) {
