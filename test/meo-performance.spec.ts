@@ -406,6 +406,15 @@ describe('meo performance guards', () => {
     expect(shouldCancel(false)).toBe(false)
   })
 
+  it('invalidates in-flight split restore scroll loops when users take over scrolling', () => {
+    const isActive = __meoDiffSplitRenderHealthTestHooks.isRestoreAnchorGenerationActiveState
+    const initialGeneration = 4
+
+    expect(isActive(true, initialGeneration, initialGeneration)).toBe(true)
+    expect(isActive(false, initialGeneration + 1, initialGeneration)).toBe(false)
+    expect(isActive(true, initialGeneration + 1, initialGeneration)).toBe(false)
+  })
+
   it('keeps split search highlights off the full document scan path during live typing and IME composition', () => {
     let state = EditorState.create({
       doc: createPlainLongDocument(12_000),

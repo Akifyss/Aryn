@@ -455,6 +455,7 @@ export const __meoDiffSplitRenderHealthTestHooks = {
   chunkHasChangedLineOnSideLine,
   chunkHasInlineChangeOnLine,
   findSplitPaneRenderHealthIssue,
+  isRestoreAnchorGenerationActiveState,
   markdownLineLooksUnrendered,
   shouldCancelRestoreAnchorForEvent,
   shouldCancelRestoreAnchorForProgrammaticScroll,
@@ -3107,12 +3108,24 @@ function shouldCancelRestoreAnchorForProgrammaticScroll(hasPendingAnchor: boolea
   return hasPendingAnchor
 }
 
+function isRestoreAnchorGenerationActiveState(
+  hasPendingAnchor: boolean,
+  activeGeneration: number,
+  candidateGeneration: number,
+): boolean {
+  return hasPendingAnchor && activeGeneration === candidateGeneration
+}
+
 type TopLineRestoreResult = {
   anchorMeasured: boolean
   delta: number
   lineNumber: number
   scrollTop: number
   targetTop: number
+}
+
+type RestoreTopLineOptions = {
+  shouldContinue?: () => boolean
 }
 
 function measureTopLineAnchorDelta(
@@ -3182,15 +3195,22 @@ function applyTopLineScroll(
   }
 }
 
-function restoreTopLine(view: EditorView, lineNumber: number, lineOffset = 0, scrollContainer?: HTMLElement | null) {
+function restoreTopLine(
+  view: EditorView,
+  lineNumber: number,
+  lineOffset = 0,
+  scrollContainer?: HTMLElement | null,
+  options: RestoreTopLineOptions = {},
+) {
   const requestedLine = Math.max(1, Math.floor(lineNumber || 1))
   const normalizedOffset = Number.isFinite(lineOffset) ? Math.max(0, Number(lineOffset)) : 0
   let attempts = 0
   let didSyncSelection = false
   let stableFrames = 0
+  const shouldContinue = () => options.shouldContinue?.() !== false
 
   const syncSelection = () => {
-    if (didSyncSelection || !view.dom.isConnected) {
+    if (didSyncSelection || !view.dom.isConnected || !shouldContinue()) {
       return
     }
     didSyncSelection = true
@@ -3202,6 +3222,10 @@ function restoreTopLine(view: EditorView, lineNumber: number, lineOffset = 0, sc
   }
 
   const restoreScroll = () => {
+    if (!shouldContinue()) {
+      return
+    }
+
     if (!view.dom.isConnected || ++attempts > DIFF_SCROLL_RESTORE_MAX_ATTEMPTS) {
       syncSelection()
       return
@@ -3758,6 +3782,8 @@ export function createMeoDiffSplitController({
   let pendingInitialRenderWorkTimer = 0
   let pendingRestoreAnchorFrame = 0
   let pendingRestoreAnchorTimer = 0
+  let restoreAnchorGeneration = 0
+  let restoreAnchorInputTargets: EventTarget[] = []
   let pendingRestoreAnchor: {
     attempts: number
     lineNumber: number
@@ -3978,23 +4004,44 @@ export function createMeoDiffSplitController({
     }
   }
 
-  function detachRestoreAnchorInputListeners() {
-    for (const eventName of RESTORE_ANCHOR_CANCEL_EVENTS) {
-      host.removeEventListener(eventName, handleRestoreAnchorUserInput, true)
+  // A restore session is automatic scroll correction. Once the user interacts,
+  // both the initial scroll loop and later anchor correction must stop.
+  function collectRestoreAnchorInputTargets() {
+    const targets = new Set<EventTarget>()
+    targets.add(window)
+    targets.add(document)
+    targets.add(host)
+    const scrollElement = getActiveScrollElement()
+    if (scrollElement) {
+      targets.add(scrollElement)
     }
+    return Array.from(targets)
+  }
+
+  function detachRestoreAnchorInputListeners() {
+    for (const target of restoreAnchorInputTargets) {
+      for (const eventName of RESTORE_ANCHOR_CANCEL_EVENTS) {
+        target.removeEventListener(eventName, handleRestoreAnchorUserInput, true)
+      }
+    }
+    restoreAnchorInputTargets = []
   }
 
   function attachRestoreAnchorInputListeners() {
     detachRestoreAnchorInputListeners()
-    for (const eventName of RESTORE_ANCHOR_CANCEL_EVENTS) {
-      host.addEventListener(eventName, handleRestoreAnchorUserInput, {
-        capture: true,
-        passive: true,
-      })
+    restoreAnchorInputTargets = collectRestoreAnchorInputTargets()
+    for (const target of restoreAnchorInputTargets) {
+      for (const eventName of RESTORE_ANCHOR_CANCEL_EVENTS) {
+        target.addEventListener(eventName, handleRestoreAnchorUserInput, {
+          capture: true,
+          passive: true,
+        })
+      }
     }
   }
 
   function cancelPendingRestoreAnchor() {
+    restoreAnchorGeneration += 1
     detachRestoreAnchorInputListeners()
     if (pendingRestoreAnchorFrame) {
       window.cancelAnimationFrame(pendingRestoreAnchorFrame)
@@ -4077,6 +4124,7 @@ export function createMeoDiffSplitController({
   }
 
   const startRestoreAnchor = (lineNumber: number, lineOffset = 0) => {
+    restoreAnchorGeneration += 1
     pendingRestoreAnchor = {
       attempts: 0,
       lineNumber: Math.max(1, Math.floor(lineNumber || 1)),
@@ -4085,6 +4133,27 @@ export function createMeoDiffSplitController({
     }
     attachRestoreAnchorInputListeners()
     schedulePendingRestoreAnchor()
+    return restoreAnchorGeneration
+  }
+
+  const isRestoreAnchorGenerationActive = (generation: number) => (
+    isRestoreAnchorGenerationActiveState(
+      pendingRestoreAnchor !== null,
+      restoreAnchorGeneration,
+      generation,
+    )
+  )
+
+  const restoreTopLineWithAnchor = (
+    view: EditorView,
+    lineNumber: number,
+    lineOffset = 0,
+    scrollContainer?: HTMLElement | null,
+  ) => {
+    const restoreGeneration = startRestoreAnchor(lineNumber, lineOffset)
+    restoreTopLine(view, lineNumber, lineOffset, scrollContainer, {
+      shouldContinue: () => isRestoreAnchorGenerationActive(restoreGeneration),
+    })
   }
 
   const cancelRestoreAnchorForProgrammaticScroll = () => {
@@ -5546,8 +5615,7 @@ export function createMeoDiffSplitController({
         render()
         const nextView = getModifiedView()
         if (topPosition && nextView) {
-          restoreTopLine(nextView, topPosition.line, topPosition.lineOffset, getActiveScrollElement())
-          schedulePendingRestoreAnchor()
+          restoreTopLineWithAnchor(nextView, topPosition.line, topPosition.lineOffset, getActiveScrollElement())
         }
         recordOpenFileProfile('diff-split:sync-resolved-documents:end', {
           durationMs: getOpenFileProfileDuration(startedAt),
@@ -5604,8 +5672,7 @@ export function createMeoDiffSplitController({
       const topPosition = getTopVisiblePosition(unifiedView, unifiedView.scrollDOM)
       render()
       if (topPosition && unifiedView) {
-        restoreTopLine(unifiedView, topPosition.line, topPosition.lineOffset, unifiedView.scrollDOM)
-        schedulePendingRestoreAnchor()
+        restoreTopLineWithAnchor(unifiedView, topPosition.line, topPosition.lineOffset, unifiedView.scrollDOM)
       }
       recordOpenFileProfile('diff-split:sync-resolved-documents:end', {
         durationMs: getOpenFileProfileDuration(startedAt),
@@ -5958,8 +6025,7 @@ export function createMeoDiffSplitController({
         : { current: 0, found: false, replaced: true, total: countSearchMatches(getEditableTextValue(), query, options) }
     },
     restoreTopLine(lineNumber, lineOffset = 0) {
-      startRestoreAnchor(lineNumber, lineOffset)
-      restoreTopLine(getEditableView(), lineNumber, lineOffset, getActiveScrollElement())
+      restoreTopLineWithAnchor(getEditableView(), lineNumber, lineOffset, getActiveScrollElement())
       refreshAfterLayoutSettles()
     },
     scrollToLine(lineNumber, align = 'center') {
@@ -6168,8 +6234,7 @@ export function createMeoDiffSplitController({
       currentViewMode = nextMode
       render()
       if (topPosition) {
-        startRestoreAnchor(topPosition.line, topPosition.lineOffset)
-        restoreTopLine(getEditableView(), topPosition.line, topPosition.lineOffset, getActiveScrollElement())
+        restoreTopLineWithAnchor(getEditableView(), topPosition.line, topPosition.lineOffset, getActiveScrollElement())
       }
     },
     undo() {
