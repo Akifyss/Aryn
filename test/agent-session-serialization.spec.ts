@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest'
+import { getModel } from '@earendil-works/pi-ai'
 import type { SessionEntry } from '@earendil-works/pi-coding-agent'
-import { serializeSessionEntries } from '../electron/main/agent'
+import { getThinkingLevelsByModel, serializeSessionEntries } from '../electron/main/agent'
 
 describe('agent session serialization', () => {
+  it('serializes model-specific thinking levels from Pi metadata', () => {
+    const deepseekV4Pro = getModel('openrouter', 'deepseek/deepseek-v4-pro')
+    const deepseekV32 = getModel('openrouter', 'deepseek/deepseek-v3.2')
+
+    expect(getThinkingLevelsByModel([deepseekV4Pro, deepseekV32])).toMatchObject({
+      'openrouter/deepseek/deepseek-v4-pro': ['off', 'high', 'xhigh'],
+      'openrouter/deepseek/deepseek-v3.2': ['off', 'minimal', 'low', 'medium', 'high'],
+    })
+  })
+
   it('keeps thinking-only assistant messages without placeholder text', () => {
     const entries: SessionEntry[] = [
       {

@@ -275,7 +275,7 @@ function getProviderPreferredModelKeys(
   return modelKeys
 }
 
-function getThinkingLevelsByModel(availableModels: Model<Api>[]) {
+export function getThinkingLevelsByModel(availableModels: Model<Api>[]) {
   const levelsByModel: Record<string, ThinkingLevel[]> = {}
 
   for (const model of availableModels) {

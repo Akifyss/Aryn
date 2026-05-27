@@ -189,6 +189,7 @@ type AgentModelPickerPendingActivation = {
   run: () => void
   target: AgentModelPickerSafeTriangleTarget
   timeoutId: number
+  version: number
 }
 
 type AgentSessionSelection = { kind: 'new' } | { kind: 'session', sessionPath: string }
@@ -776,6 +777,7 @@ function areAgentModelCascaderStylesEqual(
   right: AgentModelCascaderStyle,
 ) {
   return left.left === right.left
+    && left.maxHeight === right.maxHeight
     && left.top === right.top
     && left.width === right.width
     && left['--agent-model-cascader-grid-height'] === right['--agent-model-cascader-grid-height']
@@ -3333,23 +3335,27 @@ function AgentProvider({
     }
   }
 
-  const configuredProviders = Array.from(new Set(
-    agentState.runtime.availableModels
-      .map((model) => model.split('/')[0])
-      .filter(Boolean),
-  )).sort((left, right) => {
-    const orderDelta = getAgentProviderOrder(left) - getAgentProviderOrder(right)
-    return orderDelta !== 0 ? orderDelta : left.localeCompare(right)
-  })
+  const configuredProviders = useMemo(() => (
+    Array.from(new Set(
+      agentState.runtime.availableModels
+        .map((model) => model.split('/')[0])
+        .filter(Boolean),
+    )).sort((left, right) => {
+      const orderDelta = getAgentProviderOrder(left) - getAgentProviderOrder(right)
+      return orderDelta !== 0 ? orderDelta : left.localeCompare(right)
+    })
+  ), [agentState.runtime.availableModels])
   const hasConfiguredProviders = configuredProviders.length > 0
   const resolvedSelectedProviderValue = configuredProviders.includes(selectedProviderValue)
     ? selectedProviderValue
     : configuredProviders[0] ?? selectedProviderValue
-  const providerModelIds = Array.from(new Set(
-    agentState.runtime.availableModels
-      .filter((model) => model.startsWith(`${resolvedSelectedProviderValue}/`))
-      .map((model) => model.split('/').slice(1).join('/')),
-  ))
+  const providerModelIds = useMemo(() => (
+    Array.from(new Set(
+      agentState.runtime.availableModels
+        .filter((model) => model.startsWith(`${resolvedSelectedProviderValue}/`))
+        .map((model) => model.split('/').slice(1).join('/')),
+    ))
+  ), [agentState.runtime.availableModels, resolvedSelectedProviderValue])
   const trimmedModelInputValue = modelInputValue.trim()
   const composerModelKey = trimmedModelInputValue
     ? getAgentModelKey(resolvedSelectedProviderValue, trimmedModelInputValue)
@@ -3957,6 +3963,7 @@ function AgentChatSurface() {
   const modelPickerTriggerRef = useRef<HTMLButtonElement | null>(null)
   const modelPickerPointerTrailRef = useRef<AgentModelPickerPointerPoint[]>([])
   const modelPickerPendingActivationRef = useRef<AgentModelPickerPendingActivation | null>(null)
+  const modelPickerActivationVersionRef = useRef(0)
   const [modelCascaderStyle, setModelCascaderStyle] = useState<AgentModelCascaderStyle>({})
   const [sessionMenuStyle, setSessionMenuStyle] = useState<AgentSessionMenuStyle>({})
   const queuedComposerMessages = useMemo(
@@ -4133,7 +4140,12 @@ function AgentChatSurface() {
     setModelCascaderStyle((currentStyle) => (
       areAgentModelCascaderStylesEqual(currentStyle, nextStyle) ? currentStyle : nextStyle
     ))
-  }, [modelCascaderLayoutMetrics])
+  }, [
+    modelCascaderLayoutMetrics.panelWidth,
+    modelCascaderLayoutMetrics.positioningWidth,
+    modelCascaderLayoutMetrics.providerColumnWidth,
+    modelCascaderLayoutMetrics.thinkingColumnWidth,
+  ])
 
   function scrollModelCascaderActiveItemsOnNextFrame() {
     window.requestAnimationFrame(scrollAgentModelCascaderActiveItemsIntoView)
@@ -4152,6 +4164,11 @@ function AgentChatSurface() {
   function clearModelPickerPointerIntent() {
     clearModelPickerPendingActivation()
     modelPickerPointerTrailRef.current = []
+  }
+
+  function invalidateModelPickerPointerIntent() {
+    modelPickerActivationVersionRef.current += 1
+    clearModelPickerPointerIntent()
   }
 
   function createModelPickerPointerPoint(event: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>) {
@@ -4297,8 +4314,13 @@ function AgentChatSurface() {
   function scheduleModelPickerDelayedActivation(run: () => void, target: AgentModelPickerSafeTriangleTarget) {
     clearModelPickerPendingActivation()
 
+    const version = modelPickerActivationVersionRef.current
     const timeoutId = window.setTimeout(() => {
-      if (modelPickerPendingActivationRef.current?.timeoutId !== timeoutId) {
+      if (
+        modelPickerPendingActivationRef.current?.timeoutId !== timeoutId
+        || modelPickerPendingActivationRef.current.version !== version
+        || modelPickerActivationVersionRef.current !== version
+      ) {
         return
       }
 
@@ -4310,6 +4332,7 @@ function AgentChatSurface() {
       run,
       target,
       timeoutId,
+      version,
     }
   }
 
@@ -4369,6 +4392,13 @@ function AgentChatSurface() {
       return
     }
 
+    invalidateModelPickerPointerIntent()
+
+    if (activeComposerMenu === 'model-cascader') {
+      setActiveComposerMenu(null)
+      return
+    }
+
     const initialModelKey = selectedModelOption?.key ?? fallbackModelOption?.key ?? null
     setPanelError(null)
     setModelPickerQuery('')
@@ -4376,8 +4406,6 @@ function AgentChatSurface() {
     setModelPickerActiveModelKey(initialModelKey)
     setModelPickerActiveThinkingLevel(null)
     setModelPickerKeyboardColumn('model')
-
-    clearModelPickerPendingActivation()
     if (event && initialModelKey) {
       seedModelPickerPointerTrailFromTrigger(event)
     } else {
@@ -4385,7 +4413,7 @@ function AgentChatSurface() {
     }
 
     updateModelCascaderPosition()
-    setActiveComposerMenu((currentValue) => currentValue === 'model-cascader' ? null : 'model-cascader')
+    setActiveComposerMenu('model-cascader')
   }
 
   function toggleSessionMenu() {
@@ -4492,8 +4520,8 @@ function AgentChatSurface() {
       return
     }
 
-    if (modelPickerKeyboardColumn === 'thinking' && showModelPickerThinkingColumn) {
-      void handleModelPickerThinkingSelect(activeModelPickerThinkingLevel)
+    if (modelPickerKeyboardColumn === 'thinking' && showModelPickerThinkingColumn && activeModelOption) {
+      void handleModelPickerThinkingSelect(activeModelPickerThinkingLevel, activeModelOption.key)
       return
     }
 
@@ -4558,21 +4586,28 @@ function AgentChatSurface() {
     await handleSelectModel(option.key)
   }
 
-  async function handleModelPickerThinkingSelect(level: AgentThinkingLevel) {
-    if (!activeModelOption) {
+  async function handleModelPickerThinkingSelect(level: AgentThinkingLevel, modelKey: string) {
+    const option = modelPickerOptionByKey.get(modelKey)
+
+    if (!option || !option.thinkingLevels.includes(level)) {
       return
     }
 
     clearModelPickerPointerIntent()
+    setModelPickerActiveModelKey(modelKey)
     setActiveComposerMenu(null)
-    await handleThinkingLevelSelection(level, activeModelOption.key)
+    await handleThinkingLevelSelection(level, modelKey)
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (activeComposerMenu !== 'model-cascader') {
-      clearModelPickerPointerIntent()
+      invalidateModelPickerPointerIntent()
     }
   }, [activeComposerMenu])
+
+  useEffect(() => () => {
+    invalidateModelPickerPointerIntent()
+  }, [])
 
   useLayoutEffect(() => {
     if (activeOverlayPanel !== 'sessions') {
@@ -4608,7 +4643,14 @@ function AgentChatSurface() {
       window.removeEventListener('resize', updateModelCascaderPosition)
       window.removeEventListener('scroll', updateModelCascaderPosition, true)
     }
-  }, [activeComposerMenu, updateModelCascaderPosition])
+  }, [
+    activeComposerMenu,
+    modelCascaderLayoutMetrics.panelWidth,
+    modelCascaderLayoutMetrics.positioningWidth,
+    modelCascaderLayoutMetrics.providerColumnWidth,
+    modelCascaderLayoutMetrics.thinkingColumnWidth,
+    updateModelCascaderPosition,
+  ])
 
   useEffect(() => {
     if (activeComposerMenu !== 'model-cascader') {
@@ -4943,8 +4985,9 @@ function AgentChatSurface() {
               </>
             )}
 
-            {showModelPickerThinkingColumn ? (
+            {showModelPickerThinkingColumn && activeModelOption ? (
               <section
+                key={activeModelOption.key}
                 className='agent-model-cascader-column agent-model-cascader-column-thinking'
                 onPointerEnter={() => {
                   clearModelPickerPendingActivation()
@@ -4973,7 +5016,7 @@ function AgentChatSurface() {
                           setModelPickerKeyboardColumn('thinking')
                         }}
                         onClick={() => {
-                          void handleModelPickerThinkingSelect(level)
+                          void handleModelPickerThinkingSelect(level, activeModelOption.key)
                         }}
                       >
                         <span className='agent-model-cascader-option-main'>{formatThinkingLevelLabel(level)}</span>
