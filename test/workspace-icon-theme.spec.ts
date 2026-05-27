@@ -153,6 +153,25 @@ describe('workspace icon theme import', () => {
     ])
   })
 
+  it('shares one complete VSIX extraction between concurrent catalog and theme imports', async () => {
+    const fixture = await createFixtureVsix()
+
+    const [
+      catalog,
+      theme,
+    ] = await Promise.all([
+      loadWorkspaceIconThemeCatalogFromVsix(fixture.vsixPath, fixture.cacheRootPath),
+      importWorkspaceIconThemeFromVsix(fixture.vsixPath, fixture.cacheRootPath),
+    ])
+
+    const cacheEntries = await readdir(fixture.cacheRootPath)
+
+    expect(cacheEntries).toHaveLength(1)
+    expect(catalog.themes.map((themeOption) => themeOption.id)).toEqual(['fixture-dark', 'fixture-you'])
+    expect(theme.activeThemeLabel).toBe('Fixture Dark')
+    expectDataUrl(theme.defaultFileIcon)
+  })
+
   it('re-extracts stale cache entries that only contain a manifest', async () => {
     const fixture = await createFixtureVsix()
 
@@ -165,6 +184,23 @@ describe('workspace icon theme import', () => {
     const staleExtensionRootPath = path.join(staleCacheRootPath, 'extension')
     await rm(path.join(staleCacheRootPath, '.aryn-extraction-complete'), { force: true })
     await rm(path.join(staleExtensionRootPath, 'theme.json'), { force: true })
+    await rm(path.join(staleExtensionRootPath, 'icons'), { recursive: true, force: true })
+
+    const theme = await importWorkspaceIconThemeFromVsix(fixture.vsixPath, fixture.cacheRootPath)
+
+    expect(theme.activeThemeLabel).toBe('Fixture Dark')
+    expectDataUrl(theme.defaultFileIcon)
+  })
+
+  it('re-extracts stale cache entries when icon files are missing after catalog load', async () => {
+    const fixture = await createFixtureVsix()
+
+    await loadWorkspaceIconThemeCatalogFromVsix(fixture.vsixPath, fixture.cacheRootPath)
+
+    const cacheEntries = await readdir(fixture.cacheRootPath)
+    expect(cacheEntries).toHaveLength(1)
+
+    const staleExtensionRootPath = path.join(fixture.cacheRootPath, cacheEntries[0], 'extension')
     await rm(path.join(staleExtensionRootPath, 'icons'), { recursive: true, force: true })
 
     const theme = await importWorkspaceIconThemeFromVsix(fixture.vsixPath, fixture.cacheRootPath)

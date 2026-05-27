@@ -961,6 +961,14 @@ ipcMain.handle('workspace-icons:get-theme', async () => {
     persistedSelection.activeThemeId,
   )
     .catch(async (error) => {
+      if (state.ui.workspaceIconTheme.sourceKind === 'bundled') {
+        try {
+          return await loadBundledWorkspaceIconTheme()
+        } catch {
+          throw error
+        }
+      }
+
       if (
         state.ui.workspaceIconTheme.sourceKind !== 'external'
         && state.ui.workspaceIconTheme.sourceKind !== null

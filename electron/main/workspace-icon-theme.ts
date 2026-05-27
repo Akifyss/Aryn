@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto'
-import { access, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import extractZip from 'extract-zip'
 import type {
@@ -48,6 +48,7 @@ const preferredDarkThemePattern = /\b(dark|deep|dim|night|midnight)\b/i
 const extractionCompleteFileName = '.aryn-extraction-complete'
 const packageFileName = 'package.json'
 const iconDataUrlCache = new Map<string, Promise<string>>()
+const vsixExtractionLocks = new Map<string, Promise<string>>()
 
 function stripJsonComments(source: string) {
   let result = ''
@@ -187,13 +188,30 @@ async function readIconAsDataUrl(filePath: string) {
     return cachedValue
   }
 
-  const pendingValue = readFile(filePath).then((buffer) => {
-    const mimeType = getMimeTypeForIcon(filePath)
-    return `data:${mimeType};base64,${buffer.toString('base64')}`
-  })
+  const pendingValue = readFile(filePath)
+    .then((buffer) => {
+      const mimeType = getMimeTypeForIcon(filePath)
+      return `data:${mimeType};base64,${buffer.toString('base64')}`
+    })
+    .catch((error) => {
+      iconDataUrlCache.delete(filePath)
+      throw error
+    })
 
   iconDataUrlCache.set(filePath, pendingValue)
   return pendingValue
+}
+
+function clearIconDataUrlCacheForRoot(rootPath: string) {
+  const normalizedRootPath = path.resolve(rootPath)
+  const normalizedRootPathPrefix = `${normalizedRootPath}${path.sep}`
+
+  for (const filePath of iconDataUrlCache.keys()) {
+    const normalizedFilePath = path.resolve(filePath)
+    if (normalizedFilePath === normalizedRootPath || normalizedFilePath.startsWith(normalizedRootPathPrefix)) {
+      iconDataUrlCache.delete(filePath)
+    }
+  }
 }
 
 async function resolveIconDefinitionUrl(
@@ -252,23 +270,75 @@ async function resolveExtractedExtensionRoot(extractRootPath: string) {
   throw new Error('The VSIX package does not contain a resolvable extension manifest.')
 }
 
-async function ensureExtractedVsix(vsixPath: string, cacheRootPath: string) {
+async function resolveVsixCachePaths(vsixPath: string, cacheRootPath: string) {
   const cacheKey = await resolveVsixCacheKey(vsixPath)
   const extractRootPath = path.join(cacheRootPath, cacheKey)
+
+  return {
+    cacheKey,
+    extractRootPath,
+  }
+}
+
+async function rebuildExtractedVsix(vsixPath: string, extractRootPath: string) {
+  const tempExtractRootPath = `${extractRootPath}.tmp-${process.pid}-${randomUUID()}`
+
+  await rm(tempExtractRootPath, { recursive: true, force: true })
+
+  try {
+    await mkdir(tempExtractRootPath, { recursive: true })
+    await extractZip(vsixPath, { dir: tempExtractRootPath })
+    await resolveExtractedExtensionRoot(tempExtractRootPath)
+    await writeFile(path.join(tempExtractRootPath, extractionCompleteFileName), '', 'utf8')
+    clearIconDataUrlCacheForRoot(extractRootPath)
+    await rm(extractRootPath, { recursive: true, force: true })
+    await rename(tempExtractRootPath, extractRootPath)
+    return resolveExtractedExtensionRoot(extractRootPath)
+  } catch (error) {
+    await rm(tempExtractRootPath, { recursive: true, force: true })
+    throw error
+  }
+}
+
+async function ensureExtractedVsix(
+  vsixPath: string,
+  cacheRootPath: string,
+  options: { force?: boolean } = {},
+) {
+  const { cacheKey, extractRootPath } = await resolveVsixCachePaths(vsixPath, cacheRootPath)
   const extractionCompletePath = path.join(extractRootPath, extractionCompleteFileName)
+  const lockKey = `${path.resolve(cacheRootPath)}:${cacheKey}`
 
   await mkdir(cacheRootPath, { recursive: true })
 
-  if (await hasFile(extractionCompletePath)) {
-    return resolveExtractedExtensionRoot(extractRootPath)
+  const activeExtraction = vsixExtractionLocks.get(lockKey)
+  if (activeExtraction) {
+    try {
+      return await activeExtraction
+    } catch (error) {
+      if (!options.force) {
+        throw error
+      }
+    }
   }
 
-  await rm(extractRootPath, { recursive: true, force: true })
-  await mkdir(extractRootPath, { recursive: true })
-  await extractZip(vsixPath, { dir: extractRootPath })
-  await writeFile(extractionCompletePath, '', 'utf8')
+  if (!options.force && await hasFile(extractionCompletePath)) {
+    try {
+      return await resolveExtractedExtensionRoot(extractRootPath)
+    } catch {
+      return ensureExtractedVsix(vsixPath, cacheRootPath, { force: true })
+    }
+  }
 
-  return resolveExtractedExtensionRoot(extractRootPath)
+  const pendingExtraction = rebuildExtractedVsix(vsixPath, extractRootPath)
+    .finally(() => {
+      if (vsixExtractionLocks.get(lockKey) === pendingExtraction) {
+        vsixExtractionLocks.delete(lockKey)
+      }
+    })
+
+  vsixExtractionLocks.set(lockKey, pendingExtraction)
+  return pendingExtraction
 }
 
 function pickThemeContribution(
@@ -328,14 +398,26 @@ export async function loadWorkspaceIconThemeCatalogFromVsix(
   sourceKind: WorkspaceIconThemeSourceKind = 'external',
 ): Promise<WorkspaceIconThemeCatalog> {
   const resolvedVsixPath = path.resolve(vsixPath)
-  const extensionRootPath = await ensureExtractedVsix(resolvedVsixPath, cacheRootPath)
-  const { iconThemes, manifest } = await loadExtensionManifest(extensionRootPath)
+  const loadCatalog = async (forceExtract = false) => {
+    const extensionRootPath = await ensureExtractedVsix(
+      resolvedVsixPath,
+      cacheRootPath,
+      { force: forceExtract },
+    )
+    const { iconThemes, manifest } = await loadExtensionManifest(extensionRootPath)
 
-  return {
-    extensionLabel: getExtensionLabel(manifest),
-    sourceKind,
-    sourceVsixPath: resolvedVsixPath,
-    themes: toThemeOptions(iconThemes),
+    return {
+      extensionLabel: getExtensionLabel(manifest),
+      sourceKind,
+      sourceVsixPath: resolvedVsixPath,
+      themes: toThemeOptions(iconThemes),
+    }
+  }
+
+  try {
+    return await loadCatalog()
+  } catch {
+    return loadCatalog(true)
   }
 }
 
@@ -346,35 +428,47 @@ export async function importWorkspaceIconThemeFromVsix(
   sourceKind: WorkspaceIconThemeSourceKind = 'external',
 ): Promise<WorkspaceIconTheme> {
   const resolvedVsixPath = path.resolve(vsixPath)
-  const extensionRootPath = await ensureExtractedVsix(resolvedVsixPath, cacheRootPath)
-  const { iconThemes, manifest } = await loadExtensionManifest(extensionRootPath)
-  const selectedTheme = pickThemeContribution(iconThemes, preferredThemeId)
+  const importTheme = async (forceExtract = false) => {
+    const extensionRootPath = await ensureExtractedVsix(
+      resolvedVsixPath,
+      cacheRootPath,
+      { force: forceExtract },
+    )
+    const { iconThemes, manifest } = await loadExtensionManifest(extensionRootPath)
+    const selectedTheme = pickThemeContribution(iconThemes, preferredThemeId)
 
-  if (!selectedTheme) {
-    throw new Error('The selected VSIX package does not contain a usable icon theme.')
+    if (!selectedTheme) {
+      throw new Error('The selected VSIX package does not contain a usable icon theme.')
+    }
+
+    const themeFilePath = path.resolve(extensionRootPath, selectedTheme.path)
+    const themeFileDirectoryPath = path.dirname(themeFilePath)
+    const rawTheme = await readFile(themeFilePath, 'utf8')
+    const theme = parseJsonFile<RawWorkspaceIconTheme>(rawTheme, themeFilePath)
+    const iconDefinitions = theme.iconDefinitions ?? {}
+
+    return {
+      activeThemeId: selectedTheme.id,
+      activeThemeLabel: selectedTheme.label?.trim() || selectedTheme.id,
+      defaultFileIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.file),
+      defaultFolderExpandedIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.folderExpanded),
+      defaultFolderIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.folder),
+      defaultRootFolderExpandedIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.rootFolderExpanded),
+      defaultRootFolderIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.rootFolder),
+      extensionLabel: getExtensionLabel(manifest),
+      fileExtensions: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.fileExtensions),
+      fileNames: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.fileNames),
+      folderNames: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.folderNames),
+      folderNamesExpanded: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.folderNamesExpanded),
+      sourceKind,
+      sourceVsixPath: resolvedVsixPath,
+      themes: toThemeOptions(iconThemes),
+    }
   }
 
-  const themeFilePath = path.resolve(extensionRootPath, selectedTheme.path)
-  const themeFileDirectoryPath = path.dirname(themeFilePath)
-  const rawTheme = await readFile(themeFilePath, 'utf8')
-  const theme = parseJsonFile<RawWorkspaceIconTheme>(rawTheme, themeFilePath)
-  const iconDefinitions = theme.iconDefinitions ?? {}
-
-  return {
-    activeThemeId: selectedTheme.id,
-    activeThemeLabel: selectedTheme.label?.trim() || selectedTheme.id,
-    defaultFileIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.file),
-    defaultFolderExpandedIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.folderExpanded),
-    defaultFolderIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.folder),
-    defaultRootFolderExpandedIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.rootFolderExpanded),
-    defaultRootFolderIcon: await resolveIconDefinitionUrl(themeFileDirectoryPath, iconDefinitions, theme.rootFolder),
-    extensionLabel: getExtensionLabel(manifest),
-    fileExtensions: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.fileExtensions),
-    fileNames: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.fileNames),
-    folderNames: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.folderNames),
-    folderNamesExpanded: await normalizeIconMap(themeFileDirectoryPath, iconDefinitions, theme.folderNamesExpanded),
-    sourceKind,
-    sourceVsixPath: resolvedVsixPath,
-    themes: toThemeOptions(iconThemes),
+  try {
+    return await importTheme()
+  } catch {
+    return importTheme(true)
   }
 }

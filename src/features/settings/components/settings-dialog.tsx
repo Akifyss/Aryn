@@ -516,8 +516,8 @@ export function SettingsDialog({
               <Select
                 aria-label='文件图标主题'
                 className='flex-1 heroui-select-fix'
-                value={activeIconThemeKey}
-                onChange={(value) => {
+                selectedKey={activeIconThemeKey}
+                onSelectionChange={(value) => {
                   if (value === null) {
                     return
                   }

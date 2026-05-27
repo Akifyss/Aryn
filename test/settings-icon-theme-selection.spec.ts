@@ -41,6 +41,10 @@ const options: WorkspaceIconThemeCatalogOption[] = [
 ]
 
 describe('workspace icon theme selection display', () => {
+  it('does not synthesize a selected key before the active icon theme is loaded', () => {
+    expect(resolveActiveWorkspaceIconThemeKey(null, options)).toBeNull()
+  })
+
   it('matches bundled icon themes by theme id when the VSIX path changes across machines', () => {
     const iconTheme = createIconTheme({
       sourceVsixPath: '/Users/old-machine/Aryn/icon-themes/thang-nm.flow-icons-2.0.2.vsix',
