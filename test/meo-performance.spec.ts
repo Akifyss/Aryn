@@ -7,6 +7,10 @@ import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
 import { Change } from '../src/vendor/codemirror-merge/src/diff'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
+import {
+  createSelectionFromCodeMirrorChunk,
+  type CodeMirrorDiffChunk,
+} from '../src/features/editor/lib/git-diff-navigation'
 import { textIncludes } from '../src/vendor/meo/webview/helpers/docText'
 import { parseFootnotes } from '../src/vendor/meo/webview/helpers/footnotes'
 import { getMermaidColonBlocks } from '../src/vendor/meo/webview/helpers/mermaidColonBlocks'
@@ -23,6 +27,7 @@ import {
   __meoDiffSplitRenderHealthTestHooks,
   __meoDiffSplitGutterTestHooks,
   __meoDiffSplitSearchTestHooks,
+  buildDiffOverviewSegmentsFromFullHunkLayoutSnapshot,
   applyCodeMirrorChangesToText,
   buildDiffSplitHunkLayoutSnapshot,
   buildDiffSplitGutterFlagsFromChunks,
@@ -85,6 +90,36 @@ function dispatchCommandSpec(state: EditorState, command: (view: any) => boolean
   expect(handled).toBe(true)
   expect(dispatchedSpec).not.toBeNull()
   return state.update(dispatchedSpec)
+}
+
+function buildLegacyDiffOverviewSegments(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  chunks: readonly CodeMirrorDiffChunk[],
+) {
+  const totalLines = Math.max(1, modifiedDoc.lines)
+
+  return chunks.map((chunk) => {
+    const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
+    const modifiedLineCount = Math.max(0, selection.modifiedLineCount)
+    const originalLineCount = Math.max(0, selection.originalLineCount)
+    const fromLine = Math.min(
+      totalLines,
+      Math.max(1, modifiedLineCount === 0 ? Math.max(1, selection.modifiedStartLine) : selection.modifiedStartLine),
+    )
+    const toLine = Math.min(
+      totalLines,
+      Math.max(fromLine, modifiedLineCount === 0 ? fromLine : fromLine + modifiedLineCount - 1),
+    )
+
+    return {
+      added: originalLineCount === 0 && modifiedLineCount > 0,
+      deleted: modifiedLineCount === 0 && originalLineCount > 0,
+      fromLine,
+      modified: originalLineCount > 0 && modifiedLineCount > 0,
+      toLine,
+    }
+  })
 }
 
 describe('meo performance guards', () => {
@@ -1210,6 +1245,9 @@ describe('meo performance guards', () => {
     expect(snapshotOriginalFlags?.changedLineNumbers).toEqual(originalFlags?.changedLineNumbers)
     expect(snapshotModifiedFlags?.[1]).toEqual(modifiedFlags?.[1])
     expect(snapshotOriginalFlags?.[1]).toEqual(originalFlags?.[1])
+    expect(() => buildDiffOverviewSegmentsFromFullHunkLayoutSnapshot(snapshot)).toThrow(
+      'Cannot build diff overview segments from a viewport-scoped hunk layout snapshot',
+    )
   })
 
   it('keeps viewport-scoped hunk layout entries tied to global chunk indexes', () => {
@@ -1280,6 +1318,78 @@ describe('meo performance guards', () => {
       lineRange: { endLineExclusive: 1, startLine: 1 },
       markerLine: null,
     })
+  })
+
+  it('derives overview segments from split hunk layout snapshots', () => {
+    const originalDoc = Text.of([
+      'one',
+      'two',
+      'three',
+      'four',
+      'five',
+      'six',
+    ])
+    const modifiedDoc = Text.of([
+      'one',
+      'TWO',
+      'three',
+      'four',
+      'five',
+      'six',
+      'seven',
+    ])
+    const chunks = Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const snapshot = buildDiffSplitHunkLayoutSnapshot(originalDoc, modifiedDoc, chunks)
+    const segments = buildDiffOverviewSegmentsFromFullHunkLayoutSnapshot(snapshot)
+
+    expect(segments).toEqual(buildLegacyDiffOverviewSegments(originalDoc, modifiedDoc, chunks))
+    expect(segments).toEqual([
+      {
+        added: false,
+        deleted: false,
+        fromLine: 2,
+        modified: true,
+        toLine: 2,
+      },
+      {
+        added: true,
+        deleted: false,
+        fromLine: 7,
+        modified: false,
+        toLine: 7,
+      },
+    ])
+
+    const deletionDoc = Text.of([
+      'one',
+      'TWO',
+      'three',
+      'five',
+      'six',
+      'seven',
+    ])
+    const deletionChunks = Chunk.build(modifiedDoc, deletionDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const deletionSnapshot = buildDiffSplitHunkLayoutSnapshot(modifiedDoc, deletionDoc, deletionChunks)
+    const deletionSegments = buildDiffOverviewSegmentsFromFullHunkLayoutSnapshot(deletionSnapshot)
+
+    expect(deletionSegments).toEqual(buildLegacyDiffOverviewSegments(modifiedDoc, deletionDoc, deletionChunks))
+    expect(deletionSegments).toEqual([
+      {
+        added: false,
+        deleted: true,
+        fromLine: 3,
+        modified: false,
+        toLine: 3,
+      },
+    ])
   })
 
   it('preserves split gutter hunk metadata for unified deleted widgets', () => {

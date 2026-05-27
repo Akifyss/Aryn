@@ -1490,8 +1490,20 @@ export function buildDiffSplitHunkLayoutSnapshot(
     return {
       chunkIndex: options.chunkIndexByChunk?.get(chunk) ?? scopedChunkIndex,
       hunkId,
-      modified: createHunkLayoutSide(modifiedDoc, chunk, 'b', modifiedRange, options.modifiedView),
-      original: createHunkLayoutSide(originalDoc, chunk, 'a', originalRange, options.originalView),
+      modified: createHunkLayoutSide(
+        modifiedDoc,
+        chunk,
+        'b',
+        modifiedRange,
+        options.modifiedView,
+      ),
+      original: createHunkLayoutSide(
+        originalDoc,
+        chunk,
+        'a',
+        originalRange,
+        options.originalView,
+      ),
       viewportScoped,
     }
   })
@@ -1524,6 +1536,44 @@ function createSplitGutterSyncSignature(
     modifiedDoc.lines,
     chunkPart,
   ].join('#')
+}
+
+export function buildDiffOverviewSegmentsFromFullHunkLayoutSnapshot(
+  snapshot: DiffSplitHunkLayoutSnapshot,
+): GitDiffOverviewSegment[] {
+  if (snapshot.viewportScoped) {
+    throw new Error('Cannot build diff overview segments from a viewport-scoped hunk layout snapshot')
+  }
+
+  const totalLines = Math.max(1, snapshot.modifiedDocLines)
+  return snapshot.entries.map((entry) => {
+    const modifiedLineCount = Math.max(
+      0,
+      entry.modified.lineRange.endLineExclusive - entry.modified.lineRange.startLine,
+    )
+    const originalLineCount = Math.max(
+      0,
+      entry.original.lineRange.endLineExclusive - entry.original.lineRange.startLine,
+    )
+    const fromLine = clampNumber(
+      modifiedLineCount === 0 ? Math.max(1, entry.modified.lineRange.startLine) : entry.modified.lineRange.startLine,
+      1,
+      totalLines,
+    )
+    const toLine = clampNumber(
+      modifiedLineCount === 0 ? fromLine : fromLine + modifiedLineCount - 1,
+      fromLine,
+      totalLines,
+    )
+
+    return {
+      added: originalLineCount === 0 && modifiedLineCount > 0,
+      deleted: modifiedLineCount === 0 && originalLineCount > 0,
+      fromLine,
+      modified: originalLineCount > 0 && modifiedLineCount > 0,
+      toLine,
+    }
+  })
 }
 
 function findChunkForLine(view: EditorView, line: { from: number, to: number }) {
@@ -4160,32 +4210,10 @@ export function createMeoDiffSplitController({
       return diffOverviewSegmentsCache ?? []
     }
 
-    const totalLines = Math.max(1, modifiedDoc.lines)
     const chunks = getActiveDiffChunks()
-
-    diffOverviewSegmentsCache = chunks.map((chunk) => {
-      const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
-      const modifiedLineCount = Math.max(0, selection.modifiedLineCount)
-      const originalLineCount = Math.max(0, selection.originalLineCount)
-      const fromLine = clampNumber(
-        modifiedLineCount === 0 ? Math.max(1, selection.modifiedStartLine) : selection.modifiedStartLine,
-        1,
-        totalLines,
-      )
-      const toLine = clampNumber(
-        modifiedLineCount === 0 ? fromLine : fromLine + modifiedLineCount - 1,
-        fromLine,
-        totalLines,
-      )
-
-      return {
-        added: originalLineCount === 0 && modifiedLineCount > 0,
-        deleted: modifiedLineCount === 0 && originalLineCount > 0,
-        fromLine,
-        modified: originalLineCount > 0 && modifiedLineCount > 0,
-        toLine,
-      }
-    })
+    diffOverviewSegmentsCache = buildDiffOverviewSegmentsFromFullHunkLayoutSnapshot(
+      buildDiffSplitHunkLayoutSnapshot(originalDoc, modifiedDoc, chunks),
+    )
     return diffOverviewSegmentsCache
   }
 
