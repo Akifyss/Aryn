@@ -1091,9 +1091,11 @@ describe('meo performance guards', () => {
     expect(modifiedFlags[1]?.hunkId).not.toBe(modifiedFlags[4]?.hunkId)
     expect(modifiedFlags[1]?.diffHunkId).toBe(modifiedFlags[1]?.hunkId)
     expect(modifiedFlags[4]?.diffHunkId).toBe(modifiedFlags[4]?.hunkId)
+    expect(modifiedFlags.changedLineNumbers).toEqual([2, 5])
     expect(originalFlags[1]?.hunkId).toEqual(expect.any(String))
     expect(originalFlags[1]?.hunkId).toBe(modifiedFlags[1]?.hunkId)
     expect(originalFlags[1]?.diffHunkId).toBe(modifiedFlags[1]?.diffHunkId)
+    expect(originalFlags.changedLineNumbers).toEqual([2])
 
     const deletionDoc = Text.of(['one', 'three', 'four'])
     const deletionChunks = Chunk.build(originalDoc, deletionDoc, {
@@ -1108,7 +1110,45 @@ describe('meo performance guards', () => {
       removed: true,
       scope: 'unstaged',
     })
+    expect(deletionOriginalFlags.changedLineNumbers).toEqual([2])
     expect(deletionModifiedFlags.some(Boolean)).toBe(false)
+    expect(deletionModifiedFlags.changedLineNumbers).toEqual([])
+  })
+
+  it('uses the scoped split gutter signature to skip unchanged viewport syncs', () => {
+    const originalDoc = Text.of(['one', 'two', 'three', 'four'])
+    const modifiedDoc = Text.of(['one', 'TWO', 'three', 'four', 'five'])
+    const chunks = Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const scopedChunks = chunks.slice(0, 1)
+
+    const signature = __meoDiffSplitGutterTestHooks.createSplitGutterSyncSignature(
+      originalDoc,
+      modifiedDoc,
+      scopedChunks,
+    )
+    const sameChunkSignature = __meoDiffSplitGutterTestHooks.createSplitGutterSyncSignature(
+      originalDoc,
+      modifiedDoc,
+      scopedChunks,
+    )
+    const differentChunkSignature = __meoDiffSplitGutterTestHooks.createSplitGutterSyncSignature(
+      originalDoc,
+      modifiedDoc,
+      chunks,
+    )
+    const changedDocumentSignature = __meoDiffSplitGutterTestHooks.createSplitGutterSyncSignature(
+      originalDoc,
+      Text.of(['one', 'TWO', 'three', 'four', 'five', 'six']),
+      scopedChunks,
+    )
+
+    expect(sameChunkSignature).toBe(signature)
+    expect(differentChunkSignature).not.toBe(signature)
+    expect(changedDocumentSignature).not.toBe(signature)
   })
 
   it('preserves split gutter hunk metadata for unified deleted widgets', () => {

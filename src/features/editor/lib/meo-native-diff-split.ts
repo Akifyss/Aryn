@@ -78,6 +78,7 @@ import { isRegularInlineSelection } from '@/vendor/meo/webview/helpers/selection
 import {
   gitDiffGutterBaselineExtensions,
   gitDiffGutterLiveRenderExtensions,
+  type GitDiffLineFlags,
   gitDiffLineFlagsField,
   setGitBaseline,
   setGitDiffLineFlags,
@@ -88,6 +89,9 @@ import {
   type GitDiffOverviewSegment,
 } from '@/vendor/meo/webview/helpers/gitDiffOverviewRuler'
 import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
+
+type DocumentViewportRange = { from: number; to: number }
+type SplitGutterSyncViewport = { a?: DocumentViewportRange; b?: DocumentViewportRange }
 
 type MeoDiffSplitControllerOptions = {
   baseline: GitBaselinePayload | null
@@ -1346,6 +1350,41 @@ function isWholeLineChangeForSide(chunk: CodeMirrorDiffChunk, side: 'a' | 'b') {
     : chunk.fromA === chunk.toA
 }
 
+function rangeTouchesDocumentRange(
+  from: number,
+  to: number,
+  viewport: { from: number; to: number },
+) {
+  return from === to
+    ? viewport.from <= from && from <= viewport.to
+    : from < viewport.to && to > viewport.from
+}
+
+function chunkTouchesDocumentViewports(
+  chunk: CodeMirrorDiffChunk,
+  viewports: SplitGutterSyncViewport,
+) {
+  return (!!viewports.a && rangeTouchesDocumentRange(chunk.fromA, chunk.toA, viewports.a))
+    || (!!viewports.b && rangeTouchesDocumentRange(chunk.fromB, chunk.toB, viewports.b))
+}
+
+function createSplitGutterSyncSignature(
+  originalDoc: Text,
+  modifiedDoc: Text,
+  chunks: readonly CodeMirrorDiffChunk[],
+) {
+  const chunkPart = chunks
+    .map((chunk) => `${chunk.fromA}:${chunk.toA}:${chunk.fromB}:${chunk.toB}`)
+    .join(',')
+  return [
+    originalDoc.length,
+    originalDoc.lines,
+    modifiedDoc.length,
+    modifiedDoc.lines,
+    chunkPart,
+  ].join('#')
+}
+
 function findChunkForLine(view: EditorView, line: { from: number, to: number }) {
   const chunkInfo = getChunks(view.state)
   if (!chunkInfo?.side) {
@@ -1363,6 +1402,21 @@ export type SplitRenderHealthIssue = 'markdown' | 'diff-line' | 'diff-text'
 
 function flagsIndicateRenderableDiff(flags: MarkerFlags | undefined | null) {
   return !!flags && flags.scope !== 'staged' && (flags.added || flags.deleted || flags.modified || flags.removed)
+}
+
+function getChangedLineNumbersFromFlags(flags: readonly (MarkerFlags | undefined)[] | null | undefined) {
+  const lineNumbers = (flags as { changedLineNumbers?: unknown } | null | undefined)?.changedLineNumbers
+  return Array.isArray(lineNumbers)
+    ? lineNumbers.filter((lineNo): lineNo is number => Number.isInteger(lineNo) && lineNo > 0)
+    : null
+}
+
+function splitFlagsHaveRenderableDiff(flags: readonly (MarkerFlags | undefined)[] | null | undefined) {
+  const changedLineNumbers = getChangedLineNumbersFromFlags(flags)
+  if (changedLineNumbers) {
+    return changedLineNumbers.some((lineNo) => flagsIndicateRenderableDiff(flags?.[lineNo - 1]))
+  }
+  return Array.isArray(flags) && flags.some(flagsIndicateRenderableDiff)
 }
 
 function getSplitDiffLineFlags(view: EditorView) {
@@ -1590,7 +1644,7 @@ function buildSplitDiffFallbackDecorationsFromInputs(
   side?: 'a' | 'b',
   visibleTextFallback = false,
 ) {
-  const hasRenderableFlags = Array.isArray(flags) && flags.some(flagsIndicateRenderableDiff)
+  const hasRenderableFlags = splitFlagsHaveRenderableDiff(flags)
   if (!hasRenderableFlags && (!side || !chunks.length)) {
     return Decoration.none
   }
@@ -1619,7 +1673,8 @@ function buildSplitDiffFallbackDecorationsFromInputs(
     }
   }
 
-  for (let lineNo = 1; lineNo <= doc.lines; lineNo += 1) {
+  const lineNumbers = getChangedLineNumbersFromFlags(flags) ?? Array.from({ length: doc.lines }, (_value, index) => index + 1)
+  for (const lineNo of lineNumbers) {
     const flag = Array.isArray(flags) ? flags[lineNo - 1] : undefined
     if (chunkLines.has(lineNo) || !flagsIndicateRenderableDiff(flag)) {
       continue
@@ -2182,9 +2237,17 @@ export function buildDiffSplitGutterFlagsFromChunks(
   modifiedDoc: Text,
   chunks: readonly CodeMirrorDiffChunk[],
   side: 'original' | 'modified',
-): (DiffSplitGutterFlags | undefined)[] {
+): GitDiffLineFlags {
   const doc = side === 'original' ? originalDoc : modifiedDoc
-  const lineFlags = new Array<DiffSplitGutterFlags | undefined>(doc.lines)
+  const lineFlags = new Array<DiffSplitGutterFlags | undefined>(doc.lines) as GitDiffLineFlags & (DiffSplitGutterFlags | undefined)[]
+  const changedLineNumbers: number[] = []
+
+  const setLineFlag = (lineNo: number, flags: DiffSplitGutterFlags) => {
+    if (!lineFlags[lineNo - 1]) {
+      changedLineNumbers.push(lineNo)
+    }
+    lineFlags[lineNo - 1] = flags
+  }
 
   for (const chunk of chunks) {
     const selection = createSelectionFromCodeMirrorChunk(originalDoc, modifiedDoc, chunk)
@@ -2199,7 +2262,7 @@ export function buildDiffSplitGutterFlagsFromChunks(
       const endLine = lineNumbers[lineNumbers.length - 1]
       const metadata = { diffHunkId: hunkId, hunkEndLine: endLine, hunkId, hunkStartLine: startLine }
       for (const lineNo of lineNumbers) {
-        lineFlags[lineNo - 1] = createDiffSplitGutterFlags({
+        setLineFlag(lineNo, createDiffSplitGutterFlags({
           diffHunkId: hunkId,
           hunkEndLine: endLine,
           hunkId,
@@ -2207,7 +2270,7 @@ export function buildDiffSplitGutterFlagsFromChunks(
           hunks: { deleted: metadata },
           removed: true,
           scope: 'unstaged',
-        })
+        }))
       }
       continue
     }
@@ -2221,7 +2284,7 @@ export function buildDiffSplitGutterFlagsFromChunks(
     const endLine = lineNumbers[lineNumbers.length - 1]
     const metadata = { diffHunkId: hunkId, hunkEndLine: endLine, hunkId, hunkStartLine: startLine }
     for (const lineNo of lineNumbers) {
-      lineFlags[lineNo - 1] = createDiffSplitGutterFlags({
+      setLineFlag(lineNo, createDiffSplitGutterFlags({
         added: true,
         diffHunkId: hunkId,
         hunkEndLine: endLine,
@@ -2229,10 +2292,11 @@ export function buildDiffSplitGutterFlagsFromChunks(
         hunkStartLine: startLine,
         hunks: { added: metadata },
         scope: 'unstaged',
-      })
+      }))
     }
   }
 
+  lineFlags.changedLineNumbers = changedLineNumbers
   return lineFlags
 }
 
@@ -2300,7 +2364,9 @@ export function mapUnifiedDiffWidgetGutterFlag(
 }
 
 export const __meoDiffSplitGutterTestHooks = {
+  createSplitGutterSyncSignature,
   createDiffSplitGutterFlags,
+  chunkTouchesDocumentViewports,
   mapUnifiedDiffWidgetGutterFlag,
 } as const
 
@@ -3782,6 +3848,7 @@ export function createMeoDiffSplitController({
   let pendingInitialRenderWorkTimer = 0
   let pendingRestoreAnchorFrame = 0
   let pendingRestoreAnchorTimer = 0
+  let lastSplitGutterSyncSignature: string | null = null
   let restoreAnchorGeneration = 0
   let restoreAnchorInputTargets: EventTarget[] = []
   let pendingRestoreAnchor: {
@@ -4172,33 +4239,57 @@ export function createMeoDiffSplitController({
       return
     }
 
-    if (
-      mergeView
+    const activeMergeView = mergeView
+    const isLongSplitDocument = (
+      activeMergeView
       && Math.max(originalDoc.length, modifiedDoc.length) >= SPLIT_GUTTER_LINE_FLAGS_MAX_DOC_CHARS
-    ) {
-      recordOpenFileProfile('diff-split:sync-gutter-line-flags:skip', {
-        mode: currentViewMode,
-        reason: 'long-split-document-gutter-flags',
-      })
-      return
-    }
+    )
 
     const chunks = getActiveDiffChunks()
+    const viewportOverride = isLongSplitDocument
+      ? activeMergeView.getSharedOuterScrollViewportOverride()
+      : undefined
+    const scopedChunks = viewportOverride
+      ? chunks.filter((chunk) => chunkTouchesDocumentViewports(chunk, viewportOverride))
+      : chunks
+    const syncSignature = createSplitGutterSyncSignature(originalDoc, modifiedDoc, scopedChunks)
+
+    if (syncSignature === lastSplitGutterSyncSignature) {
+      if (isLongSplitDocument) {
+        recordOpenFileProfile('diff-split:sync-gutter-line-flags:skip', {
+          chunks: chunks.length,
+          mode: currentViewMode,
+          reason: 'unchanged-scoped-chunks',
+          scopedChunks: scopedChunks.length,
+        })
+      }
+      return
+    }
+    lastSplitGutterSyncSignature = syncSignature
+
+    if (isLongSplitDocument) {
+      recordOpenFileProfile('diff-split:sync-gutter-line-flags:scoped', {
+        chunks: chunks.length,
+        mode: currentViewMode,
+        scopedChunks: scopedChunks.length,
+      })
+    }
+
     if (!mergeView && unifiedView) {
       setGitDiffLineFlags(
         unifiedView,
-        buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'modified'),
+        buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, scopedChunks, 'modified'),
       )
     } else {
       if (originalView) {
         setGitDiffLineFlags(
           originalView,
-          buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'original'),
+          buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, scopedChunks, 'original'),
         )
       }
       setGitDiffLineFlags(
         modifiedView,
-        buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, chunks, 'modified'),
+        buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, scopedChunks, 'modified'),
       )
     }
     recordOpenFileProfile('diff-split:sync-gutter-line-flags:end', {
@@ -4222,6 +4313,7 @@ export function createMeoDiffSplitController({
     syncDiffSplitGitBaselines(getOriginalState(), { deferLineFlags: true })
     const chunksStartedAt = performance.now()
     mergeView?.refreshChunks()
+    lastSplitGutterSyncSignature = null
     if (mergeView) {
       recordOpenFileProfile('diff-split:refresh-chunks:end', {
         chunks: mergeView.chunks.length,
@@ -4399,6 +4491,7 @@ export function createMeoDiffSplitController({
           return
         }
         refreshActiveViewDecorationsForScroll()
+        syncSplitGutterLineFlagsFromChunks()
         schedulePendingRestoreAnchor()
       })
     })
@@ -5052,6 +5145,7 @@ export function createMeoDiffSplitController({
     recordOpenFileProfile('diff-split:render:start', {
       viewMode: currentViewMode,
     })
+    lastSplitGutterSyncSignature = null
     destroyMergeView()
     body.replaceChildren()
 

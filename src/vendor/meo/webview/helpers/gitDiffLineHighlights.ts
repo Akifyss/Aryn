@@ -11,8 +11,12 @@ function hasRenderableGitDiffLines(lineFlags: unknown): boolean {
   if (!Array.isArray(lineFlags)) {
     return false;
   }
-  for (let i = 0; i < lineFlags.length; i += 1) {
-    const flags = lineFlags[i] as { added?: boolean; modified?: boolean } | undefined;
+  const changedLineNumbers = Array.isArray(lineFlags.changedLineNumbers) ? lineFlags.changedLineNumbers : null;
+  const indexes = changedLineNumbers
+    ? changedLineNumbers.map((lineNo) => lineNo - 1)
+    : Array.from({ length: lineFlags.length }, (_value, index) => index);
+  for (const index of indexes) {
+    const flags = lineFlags[index] as { added?: boolean; modified?: boolean } | undefined;
     if (flags?.added || flags?.modified) {
       return true;
     }
@@ -32,8 +36,13 @@ function buildGitDiffLineHighlights(state: EditorState): DecorationSet {
 
   const builder = new RangeSetBuilder<Decoration>();
   const doc = state.doc;
+  const changedLineNumbers = Array.isArray(lineFlags.changedLineNumbers) ? lineFlags.changedLineNumbers : null;
+  const lineNumbers = changedLineNumbers ?? Array.from({ length: doc.lines }, (_value, index) => index + 1);
 
-  for (let i = 1; i <= doc.lines; i++) {
+  for (const i of lineNumbers) {
+    if (!Number.isInteger(i) || i < 1 || i > doc.lines) {
+      continue;
+    }
     const flags = lineFlags[i - 1];
     if (!flags || flags.scope === 'staged') {
       continue;
@@ -110,4 +119,3 @@ export function setGitDiffLineHighlightsEnabled(target: unknown, enabled: boolea
 }
 
 export { gitDiffLineHighlightsField };
-

@@ -10,7 +10,7 @@ const NON_RENDERABLE_GIT_BASELINE_REASONS = new Set(['not-repo', 'ignored']);
 
 export const setGitBaselineEffect = StateEffect.define<any>();
 export const refreshGitDiffLineFlagsEffect = StateEffect.define<any>();
-const setGitDiffLineFlagsEffect = StateEffect.define<(MarkerFlags | undefined)[] | null>();
+const setGitDiffLineFlagsEffect = StateEffect.define<GitDiffLineFlags>();
 const deferGitDiffLineFlagsRefreshEffect = StateEffect.define<null>();
 const deferGitDiffLineFlagDocChangesFacet = Facet.define<boolean, boolean>({
   combine(values) {
@@ -52,6 +52,8 @@ export interface MarkerFlags {
   liveBlockEndLine?: number;
   scope?: 'staged' | 'unstaged';
 }
+
+export type GitDiffLineFlags = ((MarkerFlags | undefined)[] & { changedLineNumbers?: number[] }) | null;
 
 type GitDiffGutterRenderOptions = {
   mapLineFlag?: (flags: MarkerFlags) => MarkerFlags;
@@ -366,12 +368,31 @@ function markerFlagsPrimaryHunkIdentity(flags: MarkerFlags): string | null {
       : null;
 }
 
-function addGitHunkMetadataToLineFlags(lineFlags: (MarkerFlags | undefined)[] | null): (MarkerFlags | undefined)[] | null {
+function copyChangedLineNumbers(target: (MarkerFlags | undefined)[], source: GitDiffLineFlags): void {
+  if (Array.isArray(source?.changedLineNumbers)) {
+    target.changedLineNumbers = source.changedLineNumbers.slice();
+  }
+}
+
+function lineFlagsHaveSparseChangedLines(lineFlags: unknown): lineFlags is (MarkerFlags | undefined)[] & { changedLineNumbers: number[] } {
+  return Array.isArray(lineFlags)
+    && Array.isArray((lineFlags as { changedLineNumbers?: unknown }).changedLineNumbers);
+}
+
+function getRenderableLineNumbers(lineFlags: (MarkerFlags | undefined)[] | null): number[] | null {
+  if (lineFlagsHaveSparseChangedLines(lineFlags)) {
+    return lineFlags.changedLineNumbers;
+  }
+  return null;
+}
+
+function addGitHunkMetadataToLineFlags(lineFlags: GitDiffLineFlags): GitDiffLineFlags {
   if (!Array.isArray(lineFlags) || !lineFlags.length) {
     return lineFlags;
   }
 
   const result = lineFlags.slice();
+  copyChangedLineNumbers(result, lineFlags);
   let activeStartLine = 0;
   let activeExplicitHunkId: string | null = null;
   let activeScopeKey = '';
@@ -395,10 +416,17 @@ function addGitHunkMetadataToLineFlags(lineFlags: (MarkerFlags | undefined)[] | 
     activeScopeKey = '';
   };
 
-  for (let lineNo = 1; lineNo <= result.length; lineNo += 1) {
+  const sparseLineNumbers = getRenderableLineNumbers(result);
+  const lineNumbers = sparseLineNumbers ?? Array.from({ length: result.length }, (_value, index) => index + 1);
+  let previousLineNo = 0;
+  for (const lineNo of lineNumbers) {
+    if (sparseLineNumbers && activeStartLine && previousLineNo && lineNo > previousLineNo + 1) {
+      flush(previousLineNo + 1);
+    }
     const flags = result[lineNo - 1];
     if (!markerFlagsHaveChange(flags)) {
       flush(lineNo);
+      previousLineNo = lineNo;
       continue;
     }
 
@@ -408,6 +436,7 @@ function addGitHunkMetadataToLineFlags(lineFlags: (MarkerFlags | undefined)[] | 
       activeStartLine = lineNo;
       activeExplicitHunkId = explicitHunkId;
       activeScopeKey = scopeKey;
+      previousLineNo = lineNo;
       continue;
     }
 
@@ -420,9 +449,10 @@ function addGitHunkMetadataToLineFlags(lineFlags: (MarkerFlags | undefined)[] | 
       activeExplicitHunkId = explicitHunkId;
       activeScopeKey = scopeKey;
     }
+    previousLineNo = lineNo;
   }
 
-  flush(result.length + 1);
+  flush(sparseLineNumbers && previousLineNo ? previousLineNo + 1 : result.length + 1);
   return result;
 }
 
@@ -492,7 +522,7 @@ function hasDeferredGitDiffLineFlagRefreshEffect(tr: Transaction): boolean {
   return tr.effects.some((effect) => effect.is(deferGitDiffLineFlagsRefreshEffect));
 }
 
-function getDirectGitDiffLineFlagsEffect(tr: Transaction): (MarkerFlags | undefined)[] | null | undefined {
+function getDirectGitDiffLineFlagsEffect(tr: Transaction): GitDiffLineFlags | undefined {
   for (const effect of tr.effects) {
     if (effect.is(setGitDiffLineFlagsEffect)) {
       return effect.value;
@@ -505,29 +535,60 @@ function shouldDeferGitDiffLineFlagDocChange(tr: Transaction): boolean {
   return tr.docChanged && tr.state.facet(deferGitDiffLineFlagDocChangesFacet);
 }
 
-function buildGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: (MarkerFlags | undefined)[] | null, assumeHunkedLineFlags = false): any {
+function buildGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: GitDiffLineFlags, assumeHunkedLineFlags = false): any {
   const builder = new RangeSetBuilder<any>();
   const hunkedLineFlags = assumeHunkedLineFlags ? lineFlags : addGitHunkMetadataToLineFlags(lineFlags);
   if (!hunkedLineFlags) {
     return builder.finish();
   }
 
-  for (let lineNo = 1; lineNo <= state.doc.lines; lineNo += 1) {
+  const lineNumbers = getRenderableLineNumbers(hunkedLineFlags);
+  const maxLine = state.doc.lines;
+  const addMarker = (lineNo: number) => {
+    if (!Number.isInteger(lineNo) || lineNo < 1 || lineNo > maxLine) {
+      return;
+    }
     const flags = hunkedLineFlags[lineNo - 1];
     if (!flags) {
-      continue;
+      return;
     }
     const line = state.doc.line(lineNo);
     builder.add(line.from, line.from, gitMarker(flags));
+  };
+
+  if (lineNumbers) {
+    for (const lineNo of lineNumbers) {
+      addMarker(lineNo);
+    }
+  } else {
+    for (let lineNo = 1; lineNo <= maxLine; lineNo += 1) {
+      addMarker(lineNo);
+    }
   }
 
   return builder.finish();
 }
 
-function buildLiveGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: (MarkerFlags | undefined)[] | null, assumeHunkedLineFlags = false): any {
+function buildLiveGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: GitDiffLineFlags, assumeHunkedLineFlags = false): any {
   const builder = new RangeSetBuilder<any>();
   const hunkedLineFlags = assumeHunkedLineFlags ? lineFlags : addGitHunkMetadataToLineFlags(lineFlags);
   if (!hunkedLineFlags) {
+    return builder.finish();
+  }
+
+  const sparseLineNumbers = getRenderableLineNumbers(hunkedLineFlags);
+  if (sparseLineNumbers) {
+    for (const lineNo of sparseLineNumbers) {
+      if (!Number.isInteger(lineNo) || lineNo < 1 || lineNo > state.doc.lines) {
+        continue;
+      }
+      const flags = hunkedLineFlags[lineNo - 1];
+      if (!flags) {
+        continue;
+      }
+      const line = state.doc.line(lineNo);
+      builder.add(line.from, line.from, gitMarker(flags));
+    }
     return builder.finish();
   }
 
@@ -561,20 +622,22 @@ function buildLiveGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: (
 }
 
 function mapLineFlags(
-  lineFlags: (MarkerFlags | undefined)[] | null,
+  lineFlags: GitDiffLineFlags,
   mapLineFlag?: (flags: MarkerFlags) => MarkerFlags
-): (MarkerFlags | undefined)[] | null {
+): GitDiffLineFlags {
   if (!lineFlags || typeof mapLineFlag !== 'function') {
     return lineFlags;
   }
 
-  return lineFlags.map((flags, index) => (
+  const mapped = lineFlags.map((flags, index) => (
     flags ? inheritGitHunkMetadata(mapLineFlag(flags), flags, index + 1) : undefined
   ));
+  copyChangedLineNumbers(mapped, lineFlags);
+  return mapped;
 }
 
 function getSingleHunkMetadataForLineRange(
-  lineFlags: (MarkerFlags | undefined)[] | null | undefined,
+  lineFlags: GitDiffLineFlags | undefined,
   startLine: number,
   endLine: number,
   kind: GitGutterChangeKind | null = null
@@ -620,7 +683,7 @@ function getSingleHunkMetadataForLineRange(
 
 function liveCollapsedBlockMarkerFlags(
   block: { startLine: number; endLine: number; aggregateChangeKind: 'added' | 'deleted' | 'modified' | 'removed'; aggregateChangeScope?: 'staged' | 'unstaged' },
-  lineFlags: (MarkerFlags | undefined)[] | null = null
+  lineFlags: GitDiffLineFlags = null
 ): MarkerFlags {
   const hunkMetadata = (
     getSingleHunkMetadataForLineRange(
@@ -757,7 +820,7 @@ export function setGitBaseline(view: EditorView, snapshot: any, options: SetGitB
   });
 }
 
-export function setGitDiffLineFlags(view: EditorView, lineFlags: (MarkerFlags | undefined)[] | null): void {
+export function setGitDiffLineFlags(view: EditorView, lineFlags: GitDiffLineFlags): void {
   view.dispatch({
     effects: setGitDiffLineFlagsEffect.of(lineFlags)
   });
@@ -765,7 +828,7 @@ export function setGitDiffLineFlags(view: EditorView, lineFlags: (MarkerFlags | 
 
 function liveMarkerFlagsAtPos(
   state: EditorState,
-  lineFlags: (MarkerFlags | undefined)[] | null,
+  lineFlags: GitDiffLineFlags,
   pos: number,
   assumeHunkedLineFlags = false
 ): MarkerFlags | null {
@@ -784,7 +847,7 @@ function liveMarkerFlagsAtPos(
 
 function liveCollapsedBlockMarkerAtPos(
   state: EditorState,
-  lineFlags: (MarkerFlags | undefined)[] | null,
+  lineFlags: GitDiffLineFlags,
   pos: number,
   mapLineFlag?: (flags: MarkerFlags) => MarkerFlags
 ): GitGutterMarker | null {
@@ -795,11 +858,11 @@ function liveCollapsedBlockMarkerAtPos(
   return gitMarker(typeof mapLineFlag === 'function' ? mapLineFlag(flags) : flags);
 }
 
-export const gitDiffLineFlagsField = StateField.define<(MarkerFlags | undefined)[] | null>({
-  create(state: EditorState): (MarkerFlags | undefined)[] | null {
+export const gitDiffLineFlagsField = StateField.define<GitDiffLineFlags>({
+  create(state: EditorState): GitDiffLineFlags {
     return addGitHunkMetadataToLineFlags(buildCurrentDiffLineFlags(state, state.field(gitBaselineField)));
   },
-  update(value: (MarkerFlags | undefined)[] | null, tr: Transaction): (MarkerFlags | undefined)[] | null {
+  update(value: GitDiffLineFlags, tr: Transaction): GitDiffLineFlags {
     const directLineFlags = getDirectGitDiffLineFlagsEffect(tr);
     if (directLineFlags !== undefined) {
       return addGitHunkMetadataToLineFlags(directLineFlags);
@@ -942,7 +1005,7 @@ function gitDiffGutterLiveExtension(options: GitDiffGutterRenderOptions = {}, li
 
 function liveWidgetMarkerAtPos(
   state: EditorState,
-  lineFlags: (MarkerFlags | undefined)[] | null,
+  lineFlags: GitDiffLineFlags,
   widget: any,
   pos: number,
   mapLineFlag?: (flags: MarkerFlags) => MarkerFlags,
@@ -1310,6 +1373,7 @@ export function gitDiffGutterLiveRenderExtensions(options: GitDiffGutterRenderOp
 export const __gitDiffGutterTestHooks = {
   addGitHunkHoverClasses,
   addGitHunkMetadataToLineFlags,
+  buildGitGutterMarkersFromLineFlags,
   deferGitDiffLineFlagsRefreshEffect,
   getGitGutterHunkMarkers,
   getGitGutterMarkerChangeKindAt,

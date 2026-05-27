@@ -695,6 +695,10 @@ export class MergeView {
       : {a: secondaryViewport, b: primaryViewport}
   }
 
+  getSharedOuterScrollViewportOverride(bias = 0): SpacerViewportOverride | undefined {
+    return this.sharedOuterScrollViewportOverride(bias)
+  }
+
   private computeOuterScrollViewport(
     view: EditorView,
     policy: OuterScrollViewportPolicy,

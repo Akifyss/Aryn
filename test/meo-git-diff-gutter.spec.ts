@@ -529,6 +529,43 @@ describe('meo git diff gutter', () => {
     expect(marker?.flags?.hunks?.deleted?.diffHunkId).toBe('diff-deleted-hunk')
   })
 
+  it('renders sparse gutter flags without scanning every document line', () => {
+    const state = EditorState.create({
+      doc: Array.from({ length: 12000 }, (_, index) => `line ${index + 1}`).join('\n'),
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    const flags = new Array(state.doc.lines) as ReturnType<typeof buildLineFlagsFromVsCodeDiff> & { changedLineNumbers: number[] }
+    const changedLineFrom = state.doc.line(6000).from
+    flags[5999] = {
+      added: true,
+      deleted: false,
+      modified: false,
+      scope: 'unstaged',
+    }
+    flags.changedLineNumbers = [6000]
+
+    const originalLine = state.doc.line
+    const visitedLines: number[] = []
+    ;(state.doc as unknown as { line: typeof state.doc.line }).line = ((lineNo: number) => {
+      visitedLines.push(lineNo)
+      return originalLine.call(state.doc, lineNo)
+    }) as typeof state.doc.line
+
+    try {
+      const markers = __gitDiffGutterTestHooks.buildGitGutterMarkersFromLineFlags(state, flags, false)
+      const rendered: Array<{ from: number; hunkEndLine?: number; hunkStartLine?: number }> = []
+      markers.between(0, state.doc.length, (from: number, _to: number, marker: { flags?: { hunkEndLine?: number; hunkStartLine?: number } }) => {
+        rendered.push({ from, hunkEndLine: marker.flags?.hunkEndLine, hunkStartLine: marker.flags?.hunkStartLine })
+      })
+
+      expect(markers.size).toBe(1)
+      expect(rendered).toEqual([{ from: changedLineFrom, hunkEndLine: 6000, hunkStartLine: 6000 }])
+      expect(visitedLines).toEqual([6000])
+    } finally {
+      ;(state.doc as unknown as { line: typeof state.doc.line }).line = originalLine
+    }
+  })
+
   it('lets unified pure deletion widgets render a red marker without a modified line flag', () => {
     const state = EditorState.create({
       doc: 'A\nC\n',
