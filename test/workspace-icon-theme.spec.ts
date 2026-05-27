@@ -1,5 +1,5 @@
 import { createWriteStream } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import archiver from 'archiver'
@@ -151,6 +151,26 @@ describe('workspace icon theme import', () => {
         label: 'Fixture You',
       },
     ])
+  })
+
+  it('re-extracts stale cache entries that only contain a manifest', async () => {
+    const fixture = await createFixtureVsix()
+
+    await loadWorkspaceIconThemeCatalogFromVsix(fixture.vsixPath, fixture.cacheRootPath)
+
+    const cacheEntries = await readdir(fixture.cacheRootPath)
+    expect(cacheEntries).toHaveLength(1)
+
+    const staleCacheRootPath = path.join(fixture.cacheRootPath, cacheEntries[0])
+    const staleExtensionRootPath = path.join(staleCacheRootPath, 'extension')
+    await rm(path.join(staleCacheRootPath, '.aryn-extraction-complete'), { force: true })
+    await rm(path.join(staleExtensionRootPath, 'theme.json'), { force: true })
+    await rm(path.join(staleExtensionRootPath, 'icons'), { recursive: true, force: true })
+
+    const theme = await importWorkspaceIconThemeFromVsix(fixture.vsixPath, fixture.cacheRootPath)
+
+    expect(theme.activeThemeLabel).toBe('Fixture Dark')
+    expectDataUrl(theme.defaultFileIcon)
   })
 
   it('exposes the Flow You variant from the bundled Flow Icons package', async () => {

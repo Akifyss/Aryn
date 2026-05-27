@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { access, mkdir, readFile, readdir, rm, stat } from 'node:fs/promises'
+import { access, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import extractZip from 'extract-zip'
 import type {
@@ -45,6 +45,7 @@ type RawWorkspaceIconTheme = {
 }
 
 const preferredDarkThemePattern = /\b(dark|deep|dim|night|midnight)\b/i
+const extractionCompleteFileName = '.aryn-extraction-complete'
 const packageFileName = 'package.json'
 const iconDataUrlCache = new Map<string, Promise<string>>()
 
@@ -254,18 +255,18 @@ async function resolveExtractedExtensionRoot(extractRootPath: string) {
 async function ensureExtractedVsix(vsixPath: string, cacheRootPath: string) {
   const cacheKey = await resolveVsixCacheKey(vsixPath)
   const extractRootPath = path.join(cacheRootPath, cacheKey)
-  const extensionRootMarkerPath = path.join(extractRootPath, 'extension', packageFileName)
-  const directRootMarkerPath = path.join(extractRootPath, packageFileName)
+  const extractionCompletePath = path.join(extractRootPath, extractionCompleteFileName)
 
   await mkdir(cacheRootPath, { recursive: true })
 
-  if ((await hasFile(extensionRootMarkerPath)) || (await hasFile(directRootMarkerPath))) {
+  if (await hasFile(extractionCompletePath)) {
     return resolveExtractedExtensionRoot(extractRootPath)
   }
 
   await rm(extractRootPath, { recursive: true, force: true })
   await mkdir(extractRootPath, { recursive: true })
   await extractZip(vsixPath, { dir: extractRootPath })
+  await writeFile(extractionCompletePath, '', 'utf8')
 
   return resolveExtractedExtensionRoot(extractRootPath)
 }
