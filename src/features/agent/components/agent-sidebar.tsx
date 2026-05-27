@@ -2436,6 +2436,7 @@ function AgentProvider({
   const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
   const openSessionRequestIdRef = useRef(0)
   const previousSessionPathRef = useRef<string | null>(null)
+  const locallyEmittedWorkspaceStatesRef = useRef<WeakSet<AgentWorkspaceState>>(new WeakSet())
   const pendingExternalWorkspaceStateRef = useRef<AgentWorkspaceState | null>(null)
   const activeSessionSelectionRef = useRef(activeSessionSelection)
   const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
@@ -2764,6 +2765,10 @@ function AgentProvider({
       return
     }
 
+    if (locallyEmittedWorkspaceStatesRef.current.has(workspaceState)) {
+      return
+    }
+
     setAgentState((currentState) => {
       if (currentState === workspaceState) {
         return currentState
@@ -2901,6 +2906,7 @@ function AgentProvider({
       pendingExternalWorkspaceStateRef.current = null
     }
 
+    locallyEmittedWorkspaceStatesRef.current.add(agentState)
     onWorkspaceStateChange?.(agentState)
   }, [agentState, onWorkspaceStateChange])
 
@@ -4166,6 +4172,17 @@ function AgentChatSurface() {
     modelPickerPointerTrailRef.current = []
   }
 
+  function flushModelPickerPendingActivation(target?: AgentModelPickerSafeTriangleTarget) {
+    const pendingActivation = modelPickerPendingActivationRef.current
+    if (!pendingActivation || target && pendingActivation.target !== target) {
+      return
+    }
+
+    window.clearTimeout(pendingActivation.timeoutId)
+    modelPickerPendingActivationRef.current = null
+    pendingActivation.run()
+  }
+
   function invalidateModelPickerPointerIntent() {
     modelPickerActivationVersionRef.current += 1
     clearModelPickerPointerIntent()
@@ -4342,9 +4359,7 @@ function AgentChatSurface() {
       return
     }
 
-    window.clearTimeout(pendingActivation.timeoutId)
-    modelPickerPendingActivationRef.current = null
-    pendingActivation.run()
+    flushModelPickerPendingActivation()
   }
 
   function handleModelPickerPointerMove(event: ReactPointerEvent<HTMLElement>) {
@@ -4587,6 +4602,7 @@ function AgentChatSurface() {
   }
 
   async function handleModelPickerThinkingSelect(level: AgentThinkingLevel, modelKey: string) {
+    flushModelPickerPendingActivation('thinking')
     const option = modelPickerOptionByKey.get(modelKey)
 
     if (!option || !option.thinkingLevels.includes(level)) {
@@ -4988,9 +5004,10 @@ function AgentChatSurface() {
             {showModelPickerThinkingColumn && activeModelOption ? (
               <section
                 key={activeModelOption.key}
+                data-model-key={activeModelOption.key}
                 className='agent-model-cascader-column agent-model-cascader-column-thinking'
                 onPointerEnter={() => {
-                  clearModelPickerPendingActivation()
+                  flushModelPickerPendingActivation('thinking')
                 }}
               >
                 <div className='agent-model-cascader-column-title'>Thinking level</div>
@@ -5011,7 +5028,7 @@ function AgentChatSurface() {
                           setModelPickerKeyboardColumn('thinking')
                         }}
                         onPointerEnter={() => {
-                          clearModelPickerPendingActivation()
+                          flushModelPickerPendingActivation('thinking')
                           setModelPickerActiveThinkingLevel(level)
                           setModelPickerKeyboardColumn('thinking')
                         }}
