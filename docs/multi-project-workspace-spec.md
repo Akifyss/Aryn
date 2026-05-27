@@ -77,7 +77,8 @@ Agent 布局下，左侧栏不再使用顶部 `.section-title-text` 展示单个
   - 使用现有文件夹
 - 每个项目显示文件夹图标和项目名。
 - 项目列表继续使用目前 session 树的 `https://trees.software/` 实现，不替换树组件；只是把当前 session 树向上增加一层项目节点，形成“项目名 - session 名”的树结构。
-- 点击项目行：将该项目设为 active 项目。
+- 点击项目行：展开或折叠该项目下的 session 树，不直接切换 active 项目。
+- Agent 模式下，激活某个项目下的 session 文件时，该 session 所属项目需要同时成为 active 项目。
 - 当前 active 项目需要高亮。
 
 项目行 hover/选中时展示操作：
@@ -86,6 +87,7 @@ Agent 布局下，左侧栏不再使用顶部 `.section-title-text` 展示单个
   - 置顶项目
   - 在资源管理器、finder/访达 中打开
   - 移除
+- 在 {$项目} 中开启新对话：创建新对话时，该项目需要同时成为 active 项目。
 
 “移除项目”只从 Aryn 的项目列表移除，不删除本地文件夹。移除 active 项目时，切换到列表中下一个可用项目；如果没有项目，则 active 项目为空，并显示创建/打开项目的空状态。
 
@@ -137,6 +139,14 @@ Editor 布局保留现有 `.section-title-text` 位置。用户点击 `.section-
 4. 加入成功后加载文件树和 Git 状态。
 
 ## 切换 active 项目
+
+触发 active 项目切换的入口包括：
+
+- Agent 模式下激活某个项目下的 session 文件。
+- Agent 布局中执行“在 {$项目} 中开启新对话”。
+- Editor 布局顶部项目菜单中选择项目。
+
+Agent 布局中点击项目行只用于展开或折叠该项目下的 session 树，不触发 active 项目切换。
 
 切换 active 项目时需要处理：
 
