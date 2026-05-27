@@ -74,6 +74,8 @@ Agent 布局下，左侧栏不再使用顶部 `.section-title-text` 展示单个
 2. 项目 section：展示应用级项目列表。
 3. 底部设置入口保持。
 
+顶部全局“新对话”入口默认在当前 active 项目中创建新对话。
+
 项目 section：
 
 - 标题为“项目”。
@@ -118,7 +120,6 @@ Editor 布局保留现有 `.section-title-text` 位置。用户点击 `.section-
 入口：
 
 - Agent 布局项目 section 添加菜单。
-- Agent 布局顶部全局“新对话”入口：在当前 active 项目中创建新对话。
 - Editor 布局顶部项目菜单底部操作。
 
 流程：
