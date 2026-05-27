@@ -24,7 +24,9 @@ import {
   __meoDiffSplitGutterTestHooks,
   __meoDiffSplitSearchTestHooks,
   applyCodeMirrorChangesToText,
+  buildDiffSplitHunkLayoutSnapshot,
   buildDiffSplitGutterFlagsFromChunks,
+  buildDiffSplitGutterFlagsFromHunkLayoutSnapshot,
   shouldDeferSplitMergeChunkUpdate,
   shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange,
   shouldRefreshSplitLiveDecorationsAfterTaskMarkerChange,
@@ -1149,6 +1151,135 @@ describe('meo performance guards', () => {
     expect(sameChunkSignature).toBe(signature)
     expect(differentChunkSignature).not.toBe(signature)
     expect(changedDocumentSignature).not.toBe(signature)
+  })
+
+  it('builds a scoped split hunk layout snapshot from merge chunks', () => {
+    const originalDoc = Text.of(['one', 'two', 'three', 'four'])
+    const modifiedDoc = Text.of(['one', 'TWO', 'three', 'four', 'five'])
+    const chunks = Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const scopedChunks = chunks.slice(0, 1)
+
+    const snapshot = buildDiffSplitHunkLayoutSnapshot(originalDoc, modifiedDoc, scopedChunks, {
+      totalChunkCount: chunks.length,
+      viewportOverride: {
+        b: {
+          from: scopedChunks[0].fromB,
+          to: scopedChunks[0].toB,
+        },
+      },
+    })
+    const modifiedFlags = buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, scopedChunks, 'modified')
+    const originalFlags = buildDiffSplitGutterFlagsFromChunks(originalDoc, modifiedDoc, scopedChunks, 'original')
+    const snapshotModifiedFlags = buildDiffSplitGutterFlagsFromHunkLayoutSnapshot(snapshot, 'modified')
+    const snapshotOriginalFlags = buildDiffSplitGutterFlagsFromHunkLayoutSnapshot(snapshot, 'original')
+
+    expect(snapshot.viewportScoped).toBe(true)
+    expect(snapshot.scopedChunkCount).toBe(1)
+    expect(snapshot.totalChunkCount).toBe(chunks.length)
+    expect(snapshot.signature).toBe(__meoDiffSplitGutterTestHooks.createSplitGutterSyncSignature(
+      originalDoc,
+      modifiedDoc,
+      scopedChunks,
+    ))
+    expect(snapshot.entries).toHaveLength(1)
+    expect(snapshot.entries[0]).toMatchObject({
+      chunkIndex: 0,
+      hunkId: modifiedFlags[1]?.hunkId,
+      modified: {
+        changedLineNumbers: [2],
+        lineRange: { endLineExclusive: 3, startLine: 2 },
+        markerLine: 2,
+        measuredBottom: null,
+        measuredTop: null,
+      },
+      original: {
+        changedLineNumbers: [2],
+        lineRange: { endLineExclusive: 3, startLine: 2 },
+        markerLine: 2,
+        measuredBottom: null,
+        measuredTop: null,
+      },
+      viewportScoped: true,
+    })
+    expect(snapshot.entries[0].hunkId).toBe(originalFlags[1]?.hunkId)
+    expect(snapshotModifiedFlags?.changedLineNumbers).toEqual(modifiedFlags?.changedLineNumbers)
+    expect(snapshotOriginalFlags?.changedLineNumbers).toEqual(originalFlags?.changedLineNumbers)
+    expect(snapshotModifiedFlags?.[1]).toEqual(modifiedFlags?.[1])
+    expect(snapshotOriginalFlags?.[1]).toEqual(originalFlags?.[1])
+  })
+
+  it('keeps viewport-scoped hunk layout entries tied to global chunk indexes', () => {
+    const originalDoc = Text.of(['one', 'two', 'three', 'four', 'five'])
+    const modifiedDoc = Text.of(['ONE', 'two', 'three', 'FOUR', 'five'])
+    const chunks = Chunk.build(originalDoc, modifiedDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+
+    expect(chunks.length).toBeGreaterThan(1)
+
+    const scopedChunks = chunks.slice(1)
+    const chunkIndexByChunk = new Map(chunks.map((chunk, index) => [chunk, index]))
+    const snapshot = buildDiffSplitHunkLayoutSnapshot(originalDoc, modifiedDoc, scopedChunks, {
+      chunkIndexByChunk,
+      totalChunkCount: chunks.length,
+      viewportOverride: {
+        b: {
+          from: scopedChunks[0].fromB,
+          to: scopedChunks[0].toB,
+        },
+      },
+    })
+
+    expect(snapshot.entries.map((entry) => entry.chunkIndex)).toEqual([1])
+    expect(snapshot.scopedChunkCount).toBe(1)
+    expect(snapshot.totalChunkCount).toBe(chunks.length)
+  })
+
+  it('represents insertion and deletion empty sides without fake changed lines', () => {
+    const originalDoc = Text.of(['one', 'two', 'three', 'four'])
+    const insertionDoc = Text.of(['one', 'two', 'three', 'four', 'five'])
+    const insertionChunks = Chunk.build(originalDoc, insertionDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const insertionSnapshot = buildDiffSplitHunkLayoutSnapshot(originalDoc, insertionDoc, insertionChunks)
+
+    expect(insertionSnapshot.entries.at(-1)?.original).toMatchObject({
+      changedLineNumbers: [],
+      lineRange: { endLineExclusive: 4, startLine: 4 },
+      markerLine: null,
+    })
+    expect(insertionSnapshot.entries.at(-1)?.modified).toMatchObject({
+      changedLineNumbers: [5],
+      lineRange: { endLineExclusive: 6, startLine: 5 },
+      markerLine: 5,
+    })
+
+    const deletionDoc = Text.of(['one', 'three', 'four'])
+    const deletionChunks = Chunk.build(originalDoc, deletionDoc, {
+      overrideChunks: buildCodeMirrorChunksFromVsCodeDiff,
+      scanLimit: 1000,
+      timeout: 200,
+    })
+    const deletionSnapshot = buildDiffSplitHunkLayoutSnapshot(originalDoc, deletionDoc, deletionChunks)
+
+    expect(deletionSnapshot.entries[0].original).toMatchObject({
+      changedLineNumbers: [2],
+      lineRange: { endLineExclusive: 3, startLine: 2 },
+      markerLine: 2,
+    })
+    expect(deletionSnapshot.entries[0].modified).toMatchObject({
+      changedLineNumbers: [],
+      lineRange: { endLineExclusive: 1, startLine: 1 },
+      markerLine: null,
+    })
   })
 
   it('preserves split gutter hunk metadata for unified deleted widgets', () => {
