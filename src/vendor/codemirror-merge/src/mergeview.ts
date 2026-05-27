@@ -117,6 +117,10 @@ type DocumentRange = { from: number, to: number }
 type HeightRange = { bottom: number, top: number }
 type MergeSide = ChunkSide
 
+export function shouldMeasureMergeLayout(chunksStale: boolean) {
+  return !chunksStale
+}
+
 function chunkSideRange(chunk: Chunk, side: MergeSide): DocumentRange {
   let {from, to} = chunkActualRange(chunk, side)
   return {from, to}
@@ -833,6 +837,10 @@ export class MergeView {
   }
 
   private measure() {
+    // Spacer and revert-control measurements are derived from chunk ranges.
+    // Deferred edits keep chunks on the previous document, so measuring them
+    // against the new layout can insert block widgets into unrelated lines.
+    if (!shouldMeasureMergeLayout(this.chunksStale)) return
     updateSpacers(this.a, this.b, this.chunks, this.trailingSpacer, this.sharedOuterScrollViewportOverride())
     if (this.revertDOM) this.updateRevertButtons()
   }

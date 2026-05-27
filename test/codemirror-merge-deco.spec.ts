@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
 import { Change } from '../src/vendor/codemirror-merge/src/diff'
 import { addChunkDecorations, chunkHasChangedLineOnLine, chunkTouchesViewport, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRebuildFrozenChunkDecorationsForUpdate, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
-import { mapRangeBetweenMergeSides, sharedViewportIsAppropriate } from '../src/vendor/codemirror-merge/src/mergeview'
+import { mapRangeBetweenMergeSides, sharedViewportIsAppropriate, shouldMeasureMergeLayout } from '../src/vendor/codemirror-merge/src/mergeview'
 import { RangeSetBuilder, Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
 import { __meoDiffSplitUnifiedLineNumberTestHooks } from '../src/features/editor/lib/meo-native-diff-split'
@@ -678,6 +678,11 @@ describe('CodeMirror merge decorations', () => {
     expect(shouldRefreshChunkDecorationsForUpdate({ docChanged: true })).toBe(true)
     expect(shouldRefreshChunkDecorationsForUpdate({ configChanged: true })).toBe(true)
     expect(shouldRefreshChunkDecorationsForUpdate({})).toBe(false)
+  })
+
+  it('does not measure chunk-derived merge layout while chunks are stale', () => {
+    expect(shouldMeasureMergeLayout(true)).toBe(false)
+    expect(shouldMeasureMergeLayout(false)).toBe(true)
   })
 
   it('maps a primary modified viewport through changed chunks for split virtualization', () => {
