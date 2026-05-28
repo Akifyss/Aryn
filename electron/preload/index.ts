@@ -17,6 +17,14 @@ import type {
   WorkspaceIconThemeCatalogOption,
   WorkspaceNode,
 } from '../../src/features/workspace/types'
+import type {
+  LocalStorageStateMigration,
+  PersistedAppSettings,
+  PersistedLayoutState,
+  PersistedMeoStoredState,
+  PersistedWorkspaceTabState,
+  PersistentClientStateSnapshot,
+} from '../../src/features/persistence/types'
 
 contextBridge.exposeInMainWorld('appApi', {
   platform: process.platform,
@@ -30,6 +38,12 @@ contextBridge.exposeInMainWorld('appApi', {
   getWorkspaceRestoreState: () => ipcRenderer.invoke('workspace:get-restore-state') as Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>,
   getWorkspaceState: (workspacePath: string) => ipcRenderer.invoke('workspace:get-state', workspacePath) as Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>,
   updateWorkspaceState: (workspacePath: string, patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean }) => ipcRenderer.invoke('workspace:update-state', workspacePath, patch) as Promise<{ ok: boolean }>,
+  initializePersistentState: (migration: LocalStorageStateMigration) => ipcRenderer.invoke('persistence:initialize', migration) as Promise<PersistentClientStateSnapshot>,
+  updateSettingsState: (patch: Partial<PersistedAppSettings>) => ipcRenderer.invoke('settings:update-state', patch) as Promise<{ ok: boolean }>,
+  updateLayoutState: (patch: Partial<PersistedLayoutState>) => ipcRenderer.invoke('layout:update-state', patch) as Promise<{ ok: boolean }>,
+  getWorkspaceTabState: (workspacePath: string) => ipcRenderer.invoke('workspace-tabs:get-state', workspacePath) as Promise<PersistedWorkspaceTabState | null>,
+  updateWorkspaceTabState: (workspacePath: string, state: PersistedWorkspaceTabState) => ipcRenderer.invoke('workspace-tabs:update-state', workspacePath, state) as Promise<{ ok: boolean }>,
+  updateMeoFileState: (filePath: string, state: PersistedMeoStoredState) => ipcRenderer.invoke('meo-state:update', filePath, state) as Promise<{ ok: boolean }>,
   loadWorkspaceTree: (rootPath: string) => ipcRenderer.invoke('workspace:load-tree', rootPath) as Promise<WorkspaceNode[]>,
   resolveWorkspaceEditorKind: (filePath: string) => ipcRenderer.invoke('workspace:resolve-editor-kind', filePath) as Promise<'prose' | 'code' | null>,
   readWorkspaceFile: (filePath: string) => ipcRenderer.invoke('workspace:read-file', filePath) as Promise<string>,
@@ -81,7 +95,7 @@ contextBridge.exposeInMainWorld('appApi', {
   updateUiState: (patch: { agentComposerHeight?: number }) => ipcRenderer.invoke('ui:update-state', patch) as Promise<{ ok: boolean }>,
   startWorkspaceWatch: (rootPath: string) => ipcRenderer.invoke('workspace:start-watch', rootPath) as Promise<{ ok: boolean }>,
   stopWorkspaceWatch: () => ipcRenderer.invoke('workspace:stop-watch') as Promise<{ ok: boolean }>,
-  loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null) => ipcRenderer.invoke('agent:load-workspace', rootPath, preferredSessionPath) as Promise<AgentWorkspaceState>,
+  loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null, options?: { restoreSession?: boolean }) => ipcRenderer.invoke('agent:load-workspace', rootPath, preferredSessionPath, options) as Promise<AgentWorkspaceState>,
   listAgentSessions: (rootPath: string) => ipcRenderer.invoke('agent:list-sessions', rootPath) as Promise<AgentWorkspaceState['sessions']>,
   createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => ipcRenderer.invoke('agent:create-session', rootPath, options) as Promise<AgentWorkspaceState>,
   openAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:open-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,

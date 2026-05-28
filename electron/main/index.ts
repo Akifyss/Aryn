@@ -1,5 +1,6 @@
 import { Menu, app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { mkdirSync } from 'node:fs'
 import { mkdir, readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -42,10 +43,19 @@ import {
   getWorkspaceEntry,
   MIN_WINDOW_HEIGHT,
   MIN_WINDOW_WIDTH,
+  normalizeAppSettings,
+  normalizeLayoutState,
+  normalizeMigrationState,
 } from './app-state'
 import type { PersistedProjectRecord, PersistedWorkspaceIconThemeSelection } from './app-state'
+import {
+  normalizeMeoFileState,
+  normalizeWorkspaceTabState,
+  WorkspaceStateStore,
+} from './workspace-state-store'
 import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions } from '../../src/features/agent/types'
 import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
+import type { LocalStorageStateMigration } from '../../src/features/persistence/types'
 import type { ProjectRecord, ProjectState, WorkspaceIconThemeCatalogOption } from '../../src/features/workspace/types'
 import {
   importWorkspaceIconThemeFromVsix,
@@ -95,15 +105,21 @@ let win: BrowserWindow | null = null
 let allowWindowClose = false
 const preload = path.join(MAIN_DIST, 'preload', 'index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
-const appStatePath = path.join(app.getPath('userData'), 'app-state.json')
-const agentDir = path.join(app.getPath('userData'), 'pi-agent')
+const arynDataDir = path.join(os.homedir(), '.aryn')
+const legacyUserDataDir = app.getPath('userData')
+const appStatePath = path.join(arynDataDir, 'app-state.json')
+const workspaceStatePath = path.join(arynDataDir, 'workspace-state.json')
+const legacyAppStatePath = path.join(legacyUserDataDir, 'app-state.json')
+const legacyWorkspaceSettingsPath = path.join(legacyUserDataDir, 'workspace-settings.json')
+const agentDir = path.join(arynDataDir, 'agents', 'pi')
 const workspaceIconThemeCacheDir = path.join(app.getPath('temp'), app.getName(), 'workspace-icon-themes')
 const bundledWorkspaceIconThemeDirectoryPath = path.join(
   process.env.VITE_PUBLIC,
   'icon-themes',
 )
-const legacyWorkspaceSettingsPath = path.join(app.getPath('userData'), 'workspace-settings.json')
-const appStateStore = new AppStateStore(appStatePath, legacyWorkspaceSettingsPath)
+const appStateStore = new AppStateStore(appStatePath, [legacyAppStatePath, legacyWorkspaceSettingsPath])
+const workspaceStateStore = new WorkspaceStateStore(workspaceStatePath)
+const RENDERER_LOCAL_STORAGE_MIGRATION_VERSION = 1
 
 type WindowBackgroundTheme = 'light' | 'dark'
 type WindowAppearanceTheme = WindowBackgroundTheme | 'system'
@@ -138,6 +154,16 @@ let windowAppearanceTheme: WindowAppearanceTheme = 'system'
 function getPathBaseName(value: string) {
   return value.split(/[\\/]/).filter(Boolean).pop() ?? value
 }
+
+function prepareArynDataDirectory() {
+  try {
+    mkdirSync(agentDir, { mode: 0o700, recursive: true })
+  } catch {
+    // Startup can continue; individual stores will surface write errors when needed.
+  }
+}
+
+prepareArynDataDirectory()
 
 function normalizeProjectPath(projectPath: string) {
   return path.resolve(projectPath)
@@ -766,6 +792,134 @@ async function getWorkspaceIconThemeCatalog() {
   return catalogOptions
 }
 
+function readLocalStorageMigration(value: unknown): LocalStorageStateMigration {
+  return value && typeof value === 'object'
+    ? value as LocalStorageStateMigration
+    : {}
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function readRequiredPathArgument(value: unknown, label: string) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${label} is required.`)
+  }
+
+  return value
+}
+
+function readPathPatch(value: unknown) {
+  if (value === null) {
+    return {
+      shouldApply: true,
+      value: null,
+    }
+  }
+
+  if (typeof value === 'string') {
+    return {
+      shouldApply: true,
+      value: value.trim() ? value : null,
+    }
+  }
+
+  return {
+    shouldApply: false,
+    value: null,
+  }
+}
+
+async function applyLocalStorageStateMigration(migration: LocalStorageStateMigration) {
+  const currentAppState = await appStateStore.read()
+  const shouldApplyMigration = currentAppState.migrations.rendererLocalStorage < RENDERER_LOCAL_STORAGE_MIGRATION_VERSION
+
+  if (!shouldApplyMigration) {
+    return
+  }
+
+  if (migration.settings !== undefined || migration.layout !== undefined) {
+    await appStateStore.update((currentState) => ({
+      ...currentState,
+      ...(migration.layout !== undefined
+        ? {
+            layout: normalizeLayoutState({
+              ...currentState.layout,
+              ...readRecord(migration.layout),
+            }),
+          }
+        : null),
+      ...(migration.settings !== undefined
+        ? {
+            settings: normalizeAppSettings({
+              ...currentState.settings,
+              ...readRecord(migration.settings),
+              agent: {
+                ...currentState.settings.agent,
+                ...readRecord(readRecord(migration.settings).agent),
+              },
+              meo: {
+                ...currentState.settings.meo,
+                ...readRecord(readRecord(migration.settings).meo),
+              },
+            }),
+          }
+        : null),
+    }))
+  }
+
+  if (migration.workspaceTabs || migration.meoFileStates) {
+    await workspaceStateStore.update((currentState) => ({
+      ...currentState,
+      meoFileStates: {
+        ...currentState.meoFileStates,
+        ...Object.fromEntries(
+          Object.entries(migration.meoFileStates ?? {})
+            .filter(([filePath]) => filePath.trim().length > 0)
+            .map(([filePath, state]) => [filePath, normalizeMeoFileState(state)]),
+        ),
+      },
+      workspaceTabs: {
+        ...currentState.workspaceTabs,
+        ...Object.fromEntries(
+          Object.entries(migration.workspaceTabs ?? {})
+            .filter(([workspacePath]) => workspacePath.trim().length > 0)
+            .map(([workspacePath, state]) => [workspacePath, normalizeWorkspaceTabState(state)]),
+        ),
+      },
+    }))
+  }
+
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    migrations: normalizeMigrationState({
+      ...currentState.migrations,
+      rendererLocalStorage: RENDERER_LOCAL_STORAGE_MIGRATION_VERSION,
+    }),
+  }))
+}
+
+async function getPersistentClientStateSnapshot() {
+  const [appState, workspaceState] = await Promise.all([
+    appStateStore.read(),
+    workspaceStateStore.read(),
+  ])
+
+  return {
+    app: {
+      layout: appState.layout,
+      settings: appState.settings,
+    },
+    workspace: {
+      meoFileStates: workspaceState.meoFileStates,
+      workspaceTabs: workspaceState.workspaceTabs,
+    },
+  }
+}
+
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
   applyDefaultAppIcon()
@@ -826,7 +980,7 @@ ipcMain.handle('project:create-empty', async (_event, name: string) => {
     throw new Error('Project name is required.')
   }
 
-  const projectRootPath = path.join(app.getPath('documents'), 'Aryn')
+  const projectRootPath = app.getPath('documents')
   const folderName = sanitizeProjectFolderName(trimmedName)
   await mkdir(projectRootPath, { recursive: true })
   const projectPath = await resolveUniqueProjectPath(projectRootPath, folderName)
@@ -859,6 +1013,7 @@ ipcMain.handle('project:set-active', async (_event, projectId: string) => {
   const normalizedProjectId = typeof projectId === 'string' ? projectId : ''
   const now = new Date().toISOString()
   let nextActivePath: string | null = null
+  let didFindProject = false
 
   await appStateStore.update((currentState) => {
     const targetProject = currentState.workspace.projects.find((project) => project.id === normalizedProjectId)
@@ -867,6 +1022,7 @@ ipcMain.handle('project:set-active', async (_event, projectId: string) => {
       return currentState
     }
 
+    didFindProject = true
     nextActivePath = targetProject.path
 
     return {
@@ -881,6 +1037,10 @@ ipcMain.handle('project:set-active', async (_event, projectId: string) => {
       },
     }
   })
+
+  if (!didFindProject) {
+    throw new Error('Project not found.')
+  }
 
   const nextState = await getVisibleProjectState()
   const activeProject = nextState.projects.find((project) => project.id === nextState.activeProjectId)
@@ -902,10 +1062,6 @@ ipcMain.handle('project:remove', async (_event, projectId: string) => {
       currentState.workspace.projects.filter((project) => project.id !== normalizedProjectId),
     )
     const nextVisibleProject = remainingVisibleProjects[0] ?? null
-
-    if (remainingVisibleProjects.length === 0) {
-      throw new Error('At least one available project must remain active.')
-    }
 
     await appStateStore.update((currentState) => {
       const remainingProjects = currentState.workspace.projects.filter((project) => project.id !== normalizedProjectId)
@@ -1011,6 +1167,13 @@ ipcMain.handle('workspace:get-restore-state', async () => {
 })
 
 ipcMain.handle('workspace:get-state', async (_, workspacePath: string) => {
+  if (typeof workspacePath !== 'string' || !workspacePath.trim()) {
+    return {
+      lastAgentSessionPath: null,
+      lastFilePath: null,
+    }
+  }
+
   const state = await appStateStore.read()
   return getWorkspaceEntry(state, workspacePath)
 })
@@ -1024,28 +1187,126 @@ ipcMain.handle('workspace:update-state', async (
     markAsLastOpened?: boolean
   },
 ) => {
+  const normalizedWorkspacePath = readRequiredPathArgument(workspacePath, 'Workspace path')
+  const patchRecord = readRecord(patch)
+  const hasLastAgentSessionPath = Object.prototype.hasOwnProperty.call(patchRecord, 'lastAgentSessionPath')
+  const hasLastFilePath = Object.prototype.hasOwnProperty.call(patchRecord, 'lastFilePath')
+  const markAsLastOpened = patchRecord.markAsLastOpened === true
+  const entryPatch: { lastAgentSessionPath?: string | null; lastFilePath?: string | null } = {}
+  let shouldPatchLastFilePath = false
+
+  if (hasLastAgentSessionPath) {
+    const lastAgentSessionPatch = readPathPatch(patchRecord.lastAgentSessionPath)
+    if (lastAgentSessionPatch.shouldApply) {
+      entryPatch.lastAgentSessionPath = lastAgentSessionPatch.value
+    }
+  }
+
+  if (hasLastFilePath) {
+    const lastFilePathPatch = readPathPatch(patchRecord.lastFilePath)
+    if (lastFilePathPatch.shouldApply) {
+      entryPatch.lastFilePath = lastFilePathPatch.value
+      shouldPatchLastFilePath = true
+    }
+  }
+
   await appStateStore.update((currentState) => ({
     ...currentState,
     workspace: {
       ...currentState.workspace,
       entries: {
         ...currentState.workspace.entries,
-        [workspacePath]: {
-          ...getWorkspaceEntry(currentState, workspacePath),
-          ...(patch.lastAgentSessionPath !== undefined ? { lastAgentSessionPath: patch.lastAgentSessionPath } : {}),
-          ...(patch.lastFilePath !== undefined ? { lastFilePath: patch.lastFilePath } : {}),
+        [normalizedWorkspacePath]: {
+          ...getWorkspaceEntry(currentState, normalizedWorkspacePath),
+          ...entryPatch,
         },
       },
-      lastWorkspacePath: patch.markAsLastOpened ? workspacePath : currentState.workspace.lastWorkspacePath,
+      lastWorkspacePath: markAsLastOpened ? normalizedWorkspacePath : currentState.workspace.lastWorkspacePath,
       projects: currentState.workspace.projects.map((project) => (
-        project.path === workspacePath
+        project.path === normalizedWorkspacePath
           ? {
               ...project,
-              ...(patch.lastFilePath !== undefined ? { lastFilePath: patch.lastFilePath } : {}),
-              ...(patch.markAsLastOpened ? { lastOpenedAt: new Date().toISOString() } : {}),
+              ...(shouldPatchLastFilePath ? { lastFilePath: entryPatch.lastFilePath ?? null } : {}),
+              ...(markAsLastOpened ? { lastOpenedAt: new Date().toISOString() } : {}),
             }
           : project
       )),
+    },
+  }))
+
+  return { ok: true }
+})
+
+ipcMain.handle('persistence:initialize', async (_, migrationPayload?: unknown) => {
+  await applyLocalStorageStateMigration(readLocalStorageMigration(migrationPayload))
+  return getPersistentClientStateSnapshot()
+})
+
+ipcMain.handle('settings:update-state', async (_, patch: unknown) => {
+  const patchRecord = readRecord(patch)
+
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    settings: normalizeAppSettings({
+      ...currentState.settings,
+      ...patchRecord,
+      agent: {
+        ...currentState.settings.agent,
+        ...readRecord(patchRecord.agent),
+      },
+      meo: {
+        ...currentState.settings.meo,
+        ...readRecord(patchRecord.meo),
+      },
+    }),
+  }))
+
+  return { ok: true }
+})
+
+ipcMain.handle('layout:update-state', async (_, patch: unknown) => {
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    layout: normalizeLayoutState({
+      ...currentState.layout,
+      ...readRecord(patch),
+    }),
+  }))
+
+  return { ok: true }
+})
+
+ipcMain.handle('workspace-tabs:get-state', async (_, workspacePath: string) => {
+  if (typeof workspacePath !== 'string' || !workspacePath.trim()) {
+    return null
+  }
+
+  const state = await workspaceStateStore.read()
+  return state.workspaceTabs[workspacePath] ?? null
+})
+
+ipcMain.handle('workspace-tabs:update-state', async (_, workspacePath: string, tabState: unknown) => {
+  const normalizedWorkspacePath = readRequiredPathArgument(workspacePath, 'Workspace path')
+
+  await workspaceStateStore.update((currentState) => ({
+    ...currentState,
+    workspaceTabs: {
+      ...currentState.workspaceTabs,
+      [normalizedWorkspacePath]: normalizeWorkspaceTabState(tabState),
+    },
+  }))
+
+  return { ok: true }
+})
+
+ipcMain.handle('meo-state:update', async (_, filePath: string, state: unknown) => {
+  const normalizedFilePath = readRequiredPathArgument(filePath, 'File path')
+
+  await workspaceStateStore.update((currentState) => ({
+    ...currentState,
+    meoFileStates: {
+      ...currentState.meoFileStates,
+      [normalizedFilePath]: normalizeMeoFileState(state),
     },
   }))
 
@@ -1057,12 +1318,17 @@ ipcMain.handle('ui:get-state', async () => {
   return state.ui
 })
 
-ipcMain.handle('ui:update-state', async (_, patch: { agentComposerHeight?: number }) => {
+ipcMain.handle('ui:update-state', async (_, patch: unknown) => {
+  const patchRecord = readRecord(patch)
+  const agentComposerHeight = typeof patchRecord.agentComposerHeight === 'number'
+    ? patchRecord.agentComposerHeight
+    : undefined
+
   await appStateStore.update((currentState) => ({
     ...currentState,
     ui: {
       ...currentState.ui,
-      ...(patch.agentComposerHeight !== undefined ? { agentComposerHeight: patch.agentComposerHeight } : {}),
+      ...(agentComposerHeight !== undefined ? { agentComposerHeight } : {}),
     },
   }))
 
@@ -1354,8 +1620,13 @@ ipcMain.handle('workspace-icons:select-theme', async (_, selection: { sourceVsix
   return theme
 })
 
-ipcMain.handle('agent:load-workspace', async (_event, rootPath: string, preferredSessionPath?: string | null) => {
-  return agentManager.loadWorkspaceState(rootPath, preferredSessionPath ?? null)
+ipcMain.handle('agent:load-workspace', async (
+  _event,
+  rootPath: string,
+  preferredSessionPath?: string | null,
+  options?: { restoreSession?: boolean },
+) => {
+  return agentManager.loadWorkspaceState(rootPath, preferredSessionPath ?? null, options)
 })
 
 ipcMain.handle('agent:list-sessions', async (_event, rootPath: string) => {

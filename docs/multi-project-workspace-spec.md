@@ -17,7 +17,7 @@ Aryn 需要从“只能打开一个工作目录”升级为“应用级项目库
 ## 概念
 
 - 项目：绑定一个本地文件夹，是文件树、Git 状态、编辑器和 Agent 工作目录的归属单位。
-- 项目列表：应用级维护的项目集合，不跟随单个窗口生命周期。建议持久化到 Aryn 内部状态目录，例如 `~/.aryn`。
+- 项目列表：应用级维护的项目集合，不跟随单个窗口生命周期。持久化到 Aryn 内部状态目录 `~/.aryn`。
 - active 项目：当前应用正在使用的项目。同一时间只有一个 active 项目，应用重启后需要恢复上次 active 项目。
 - session 文件：Agent 的对话文件。session 文件归属于保存它的项目目录，当前实现从项目目录下的 `.pi/sessions/*.jsonl` 读取对话文件。Agent 布局中的 session 树展示这些对话文件，并按项目归属组织到对应项目节点下。
 
@@ -35,13 +35,23 @@ Aryn 需要从“只能打开一个工作目录”升级为“应用级项目库
 
 ## 项目数据
 
-项目列表是应用级状态，建议保存到 Aryn 内部状态目录。可以参考 Codex 使用 `~/.codex` 的方式，为 Aryn 维护 `~/.aryn`。
+项目列表是应用级状态，保存到 Aryn 内部状态目录 `~/.aryn/app-state.json`。可以参考 Codex 使用 `~/.codex` 的方式，为 Aryn 维护 `~/.aryn`。
+
+Agent backend 的全局数据使用实现命名空间保存，例如 PI backend 使用 `~/.aryn/agents/pi/`。后续新增其他 Agent 实现时，可以继续在 `~/.aryn/agents/<backend>/` 下扩展。
+
+状态文件边界：
+
+- `~/.aryn/app-state.json`：应用级核心状态，包括项目列表、active 项目、窗口尺寸、侧栏/面板布局、应用设置、一次性迁移标记。
+- `~/.aryn/workspace-state.json`：随工作区和文件增长的 UI 状态，包括编辑器 tab 状态、MEO 文件视图状态。
+- `~/.aryn/agents/pi/`：PI Agent backend 的全局数据。新增其他 Agent backend 时使用 `~/.aryn/agents/<backend>/`。
+
+`app-state.json` 和 `workspace-state.json` 需要包含 schema version，并使用原子写入，避免崩溃或异常退出时写坏项目表、active 项目、布局和编辑器状态。
 
 首次引入多项目时，需要将现有已打开或已持久化的工作目录迁移为项目：
 
 - 如果已有 `lastWorkspacePath` 或当前窗口已打开工作目录，将该路径加入项目列表，并设为 `activeProjectId`。
-- 应用正常运行态必须始终有 active 项目；不能让用户进入“无 active 项目”的主界面表现。
-- 如果启动时没有可恢复的项目，需要先引导用户创建空白项目或使用现有文件夹，再进入依赖项目的主工作区。
+- 只要存在可用项目，应用正常运行态必须有一个有效 active 项目。
+- 如果启动时没有可恢复的项目，或最后一个项目被移除，`activeProjectId` 可以为空，界面显示创建空白项目或使用现有文件夹的空状态。
 
 建议项目状态结构：
 
@@ -100,7 +110,7 @@ Agent 布局下，左侧栏不再使用顶部 `.section-title-text` 展示单个
 项目行 hover/选中时展示操作：
 
 - “更多”菜单：
-  - 在资源管理器、finder/访达 中打开
+  - 在系统文件管理器中打开（Windows 为资源管理器，macOS 为访达）
   - 移除
 - 在 {$项目} 中开启新对话：创建新对话时，该项目需要同时成为 active 项目。
 
@@ -140,7 +150,7 @@ Editor 布局保留现有 `.section-title-text` 位置。用户点击 `.section-
 
 建议默认目录：
 
-`<Documents>/Aryn/<project-name>`
+`<Documents>/<project-name>`
 
 ## 使用现有文件夹
 

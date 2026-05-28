@@ -87,6 +87,10 @@ import type {
 } from '@/features/agent/types'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
 
+type AgentProjectSwitchMenuOptions = {
+  startNewSession?: boolean
+}
+
 type AgentSidebarProps = {
   externalSessionRequest?: AgentProjectSessionRequest | null
   onExternalSessionRequestHandled?: (requestId: number) => void
@@ -94,7 +98,7 @@ type AgentSidebarProps = {
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenProviderSettings?: () => void
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
-  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect) => void
+  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
   onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
@@ -112,7 +116,7 @@ type AgentSurfaceProps = {
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenProviderSettings?: () => void
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
-  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect) => void
+  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
   onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
@@ -274,7 +278,7 @@ const AGENT_TREE_CONTEXT_MENU_GAP_PX = 2
 const AGENT_TREE_SESSION_CONTEXT_MENU_WIDTH_PX = 168
 const AGENT_TREE_SESSION_CONTEXT_MENU_HEIGHT_PX = 46
 const AGENT_TREE_PROJECT_CONTEXT_MENU_WIDTH_PX = 238
-const AGENT_TREE_PROJECT_CONTEXT_MENU_HEIGHT_PX = 116
+const AGENT_TREE_PROJECT_CONTEXT_MENU_HEIGHT_PX = 80
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -387,7 +391,7 @@ type AgentContextValue = {
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenProviderSettings?: () => void
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
-  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect) => void
+  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
   onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
@@ -511,6 +515,10 @@ function getAgentModelKey(provider: string, modelId: string) {
 
 function getAgentModelDraftKey(draft: AgentModelDraft) {
   return draft.provider && draft.modelId ? getAgentModelKey(draft.provider, draft.modelId) : null
+}
+
+function normalizeAgentProjectPath(filePath: string) {
+  return filePath.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
 }
 
 function normalizeAgentModelDraft(
@@ -2020,6 +2028,18 @@ function getStreamingPromptBehaviorForShortcut(
     : defaultBehavior
 }
 
+function getSystemFileManagerName(platform: NodeJS.Platform) {
+  if (platform === 'darwin') {
+    return '访达'
+  }
+
+  if (platform === 'win32') {
+    return '资源管理器'
+  }
+
+  return '文件管理器'
+}
+
 function UnicodeSpinner({
   className,
   name,
@@ -2436,6 +2456,7 @@ function AgentProvider({
   const locallyEmittedWorkspaceStatesRef = useRef<WeakSet<AgentWorkspaceState>>(new WeakSet())
   const pendingExternalWorkspaceStateRef = useRef<AgentWorkspaceState | null>(null)
   const handledExternalSessionRequestRef = useRef<number | null>(null)
+  const externalSessionRequestRef = useRef<AgentProjectSessionRequest | null>(externalSessionRequest ?? null)
   const activeSessionSelectionRef = useRef(activeSessionSelection)
   const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
   const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
@@ -2561,7 +2582,7 @@ function AgentProvider({
     const filePath = window.appApi.getFilePath(file).trim()
 
     if (kind !== 'image' && !filePath) {
-      throw new Error('普通文件需要来自本地磁盘路径。请使用附件按钮选择文件，或从 Finder 拖入文件。')
+      throw new Error(`普通文件需要来自本地磁盘路径。请使用附件按钮选择文件，或从${getSystemFileManagerName(window.appApi.platform)}拖入文件。`)
     }
 
     return {
@@ -2626,6 +2647,8 @@ function AgentProvider({
     activeSessionSelectionRef.current = activeSessionSelection
   }, [activeSessionSelection])
 
+  externalSessionRequestRef.current = externalSessionRequest ?? null
+
   useEffect(() => {
     const activeProject = projectState.projects.find((project) => project.id === projectState.activeProjectId)
 
@@ -2647,6 +2670,15 @@ function AgentProvider({
   useEffect(() => {
     const unsubscribe = window.appApi.onAgentEvent((event: AgentClientEvent) => {
       if (event.type === 'workspace_state') {
+        const eventWorkspacePath = event.state.runtime.workspacePath
+        if (
+          !workspacePath
+          || !eventWorkspacePath
+          || normalizeAgentProjectPath(eventWorkspacePath) !== normalizeAgentProjectPath(workspacePath)
+        ) {
+          return
+        }
+
         setAgentState(event.state)
         const nextSessionPath = event.state.activeSession?.sessionPath ?? null
         const currentSelection = activeSessionSelectionRef.current
@@ -2816,7 +2848,7 @@ function AgentProvider({
     })
 
     return unsubscribe
-  }, [agentState.activeSession?.sessionId, agentState.activeSession?.sessionPath])
+  }, [agentState.activeSession?.sessionId, agentState.activeSession?.sessionPath, workspacePath])
 
   useEffect(() => {
     if (!workspacePath || !workspaceState || workspaceState.runtime.workspacePath !== workspacePath) {
@@ -2871,9 +2903,27 @@ function AgentProvider({
     setIsLoading(true)
     setPanelError(null)
     setHasLoadedWorkspaceState(false)
+    const requestedProject = externalSessionRequestRef.current
+      ? projectState.projects.find((project) => project.id === externalSessionRequestRef.current?.projectId) ?? null
+      : null
+    const matchingExternalRequest = requestedProject
+      && normalizeAgentProjectPath(requestedProject.path) === normalizeAgentProjectPath(workspacePath)
+      ? externalSessionRequestRef.current
+      : null
+    const shouldStartNewSession = matchingExternalRequest?.kind === 'new'
+
+    if (shouldStartNewSession) {
+      syncActiveSessionSelection({ kind: 'new' })
+    }
 
     void window.appApi.getWorkspaceState(workspacePath)
-      .then((workspaceState) => window.appApi.loadAgentWorkspace(workspacePath, workspaceState.lastAgentSessionPath))
+      .then((workspaceState) => window.appApi.loadAgentWorkspace(
+        workspacePath,
+        matchingExternalRequest?.kind === 'session'
+          ? matchingExternalRequest.sessionPath
+          : workspaceState.lastAgentSessionPath,
+        shouldStartNewSession ? { restoreSession: false } : undefined,
+      ))
       .then((nextState) => {
         setAgentState(nextState)
         const nextActiveSessionPath = nextState.activeSession?.sessionPath
@@ -2882,13 +2932,16 @@ function AgentProvider({
           && nextState.sessions.some((session) => session.path === nextActiveSessionPath),
         )
         const restoredSessionPath = hasRestoredSession ? nextActiveSessionPath : null
-        syncActiveSessionSelection(restoredSessionPath
-          ? { kind: 'session', sessionPath: restoredSessionPath }
-          : { kind: 'new' })
+        const nextSelection = shouldStartNewSession
+          ? { kind: 'new' as const }
+          : restoredSessionPath
+            ? { kind: 'session' as const, sessionPath: restoredSessionPath }
+            : { kind: 'new' as const }
+        syncActiveSessionSelection(nextSelection)
         const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
         const nextNewSessionDraft = normalizeAgentModelDraft(defaultDraft, nextState.runtime, defaultDraft)
         syncNewSessionModelDraft(nextNewSessionDraft)
-        syncModelDraft(restoredSessionPath
+        syncModelDraft(nextSelection.kind === 'session'
           ? getRuntimeSelectedModelDraft(nextState.runtime)
           : nextNewSessionDraft)
         setHasLoadedWorkspaceState(true)
@@ -3145,11 +3198,19 @@ function AgentProvider({
   }
 
   useEffect(() => {
+    const requestedProject = externalSessionRequest
+      ? projectState.projects.find((project) => project.id === externalSessionRequest.projectId) ?? null
+      : null
+    const isRequestForCurrentWorkspace = Boolean(
+      requestedProject
+      && workspacePath
+      && normalizeAgentProjectPath(requestedProject.path) === normalizeAgentProjectPath(workspacePath),
+    )
+
     if (
       !externalSessionRequest
       || handledExternalSessionRequestRef.current === externalSessionRequest.requestId
-      || externalSessionRequest.projectId !== projectState.activeProjectId
-      || !workspacePath
+      || !isRequestForCurrentWorkspace
       || isLoading
       || !hasLoadedWorkspaceState
     ) {
@@ -3170,7 +3231,7 @@ function AgentProvider({
     hasLoadedWorkspaceState,
     isLoading,
     onExternalSessionRequestHandled,
-    projectState.activeProjectId,
+    projectState.projects,
     workspacePath,
   ])
 
@@ -3916,7 +3977,7 @@ function FlatAgentSessionTree({
           onRequestClose?.()
         }}
       >
-        <AddLine size={16} />
+        <EditLine size={16} />
         <span>新对话</span>
       </button>
 
@@ -3993,9 +4054,7 @@ function AgentProjectTree({
   const activeProject = useMemo(() => (
     projectState.projects.find((project) => project.id === projectState.activeProjectId) ?? null
   ), [projectState.activeProjectId, projectState.projects])
-  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => (
-    activeProject ? new Set([activeProject.id]) : new Set()
-  ))
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set())
   const [projectMenuState, setProjectMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, project: ProjectRecord } | null>(null)
   const [sessionMenuState, setSessionMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, session: AgentSessionListItem } | null>(null)
   const activeSessionProjectId = useMemo(() => {
@@ -4011,23 +4070,6 @@ function AgentProjectTree({
 
     return null
   }, [activeSessionPath, projectSessions])
-
-  useEffect(() => {
-    if (!activeProject) {
-      return
-    }
-
-    setExpandedProjectIds((currentExpandedProjectIds) => {
-      if (currentExpandedProjectIds.has(activeProject.id)) {
-        return currentExpandedProjectIds
-      }
-
-      const nextExpandedProjectIds = new Set(currentExpandedProjectIds)
-      nextExpandedProjectIds.add(activeProject.id)
-      return nextExpandedProjectIds
-    })
-    void loadProjectSessions(activeProject)
-  }, [activeProject, loadProjectSessions])
 
   useEffect(() => {
     if (!activeSessionProjectId) {
@@ -4109,7 +4151,7 @@ function AgentProjectTree({
           onRequestClose?.()
         }}
       >
-        <AddLine size={16} />
+        <EditLine size={16} />
         <span>新对话</span>
       </button>
 
@@ -4175,6 +4217,20 @@ function AgentProjectTree({
 
                   <div className='git-change-tools agent-project-row-tools' onClick={(event) => event.stopPropagation()}>
                     <div className='git-change-actions'>
+                      <button
+                        type='button'
+                        className='git-change-action git-change-icon-button agent-project-row-action'
+                        aria-label={`在 ${project.name} 中开始新对话`}
+                        title='开始新对话'
+                        onClick={() => {
+                          setProjectMenuState(null)
+                          setSessionMenuState(null)
+                          void onStartProjectSession?.(project)
+                          onRequestClose?.()
+                        }}
+                      >
+                        <EditLine size={16} />
+                      </button>
                       <button
                         type='button'
                         className='git-change-action git-change-icon-button agent-project-row-action'
@@ -4270,25 +4326,11 @@ function AgentProjectTree({
             onClick={() => {
               const project = projectMenuState.project
               setProjectMenuState(null)
-              void onStartProjectSession?.(project)
-              onRequestClose?.()
-            }}
-          >
-            <Pencil2Line size={16} />
-            <span>在 {projectMenuState.project.name} 中开始新对话</span>
-          </button>
-          <button
-            type='button'
-            role='menuitem'
-            className='agent-project-menu-item'
-            onClick={() => {
-              const project = projectMenuState.project
-              setProjectMenuState(null)
               void onOpenProjectFolder?.(project)
             }}
           >
             <ExternalLinkLine size={16} />
-            <span>在“访达”中打开</span>
+            <span>在“{getSystemFileManagerName(window.appApi.platform)}”中打开</span>
           </button>
           <button
             type='button'
@@ -4341,7 +4383,7 @@ function AgentProjectSwitchTrigger({
   activeProject: ProjectRecord | null
   className?: string
   iconTheme?: WorkspaceIconTheme | null
-  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect) => void
+  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
 }) {
   const label = activeProject?.name ?? '未选择项目'
 
@@ -4356,7 +4398,7 @@ function AgentProjectSwitchTrigger({
       aria-label={activeProject ? `切换项目，当前项目：${activeProject.name}` : '没有可切换的项目'}
       title={activeProject ? `当前项目：${activeProject.name}` : '没有可切换的项目'}
       onClick={(event) => {
-        onOpenProjectSwitchMenu?.(event.currentTarget.getBoundingClientRect())
+        onOpenProjectSwitchMenu?.(event.currentTarget.getBoundingClientRect(), { startNewSession: true })
       }}
     >
       {activeProject ? (
@@ -4385,13 +4427,13 @@ function AgentEmptyChat() {
       <h2>
         {isNewConversation && activeProject ? (
           <>
-            <span>我们应该在 </span>
+            <span>今天在</span>
             <AgentProjectSwitchTrigger
               activeProject={activeProject}
               iconTheme={iconTheme}
               onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
             />
-            <span> 中构建什么？</span>
+            <span>里处理什么？</span>
           </>
         ) : (
           '新对话'
@@ -5646,7 +5688,7 @@ function AgentChatSurface() {
                 handleStartNewSession()
               }}
             >
-              <AddLine size={16} />
+              <EditLine size={16} />
             </button>
           ) : null}
         </div>

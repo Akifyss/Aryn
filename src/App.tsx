@@ -1,5 +1,6 @@
 import type { CSSProperties, FormEvent } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer, Tabs } from '@heroui/react'
 import {
   FileLine,
@@ -72,6 +73,11 @@ import type {
 } from '@/features/workspace/types'
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
 import { useSettingsStore, type AppLayoutPreference, type AppTheme } from '@/hooks/use-settings-store'
+import type {
+  PersistedLayoutState,
+  PersistedWorkspaceTabState,
+  PersistentClientStateSnapshot,
+} from '@/features/persistence/types'
 import { HtmlPreview } from '@/features/editor/components/html-preview'
 import {
   COMPACT_LAYOUT_BREAKPOINT,
@@ -337,56 +343,6 @@ const MIN_GIT_PANEL_HEIGHT = 200
 const DEFAULT_GIT_PANEL_LAYOUT: GitPanelLayout = 'list'
 const DRAWER_INTERACTION_REFRESH_STABLE_FRAMES = 2
 const DRAWER_INTERACTION_REFRESH_MAX_FRAMES = 36
-const APP_STORAGE_PREFIX = 'aryn'
-const LEGACY_APP_STORAGE_PREFIX = String.fromCharCode(
-  119,
-  114,
-  105,
-  116,
-  105,
-  110,
-  103,
-  45,
-  119,
-  111,
-  114,
-  107,
-  115,
-  112,
-  97,
-  99,
-  101,
-)
-const TAB_STORAGE_PREFIX = `${APP_STORAGE_PREFIX}:file-tabs:`
-const LEGACY_TAB_STORAGE_PREFIXES = [
-  `${APP_STORAGE_PREFIX}:editor-tabs:`,
-  `${LEGACY_APP_STORAGE_PREFIX}:file-tabs:`,
-  `${LEGACY_APP_STORAGE_PREFIX}:editor-tabs:`,
-]
-const LAYOUT_STORAGE_KEYS = {
-  activeLeftSidebarTab: `${APP_STORAGE_PREFIX}:active-left-sidebar-tab`,
-  gitPanelHeight: `${APP_STORAGE_PREFIX}:git-panel-height`,
-  gitPanelLayout: `${APP_STORAGE_PREFIX}:git-panel-layout`,
-  leftSidebarCollapsed: `${APP_STORAGE_PREFIX}:left-sidebar-collapsed`,
-  leftSidebarWidth: `${APP_STORAGE_PREFIX}:left-sidebar-width`,
-  agentRightSidebarCollapsed: `${APP_STORAGE_PREFIX}:agent-right-sidebar-collapsed`,
-  agentRightSidebarWidthMode: `${APP_STORAGE_PREFIX}:agent-right-sidebar-width-mode`,
-  agentRightSidebarWidth: `${APP_STORAGE_PREFIX}:agent-right-sidebar-width`,
-  editorRightSidebarCollapsed: `${APP_STORAGE_PREFIX}:editor-right-sidebar-collapsed`,
-  editorRightSidebarWidth: `${APP_STORAGE_PREFIX}:editor-right-sidebar-width`,
-} as const
-const LEGACY_LAYOUT_STORAGE_KEYS: Record<keyof typeof LAYOUT_STORAGE_KEYS, string[]> = {
-  activeLeftSidebarTab: [],
-  agentRightSidebarCollapsed: [],
-  agentRightSidebarWidthMode: [],
-  agentRightSidebarWidth: [],
-  editorRightSidebarCollapsed: [`${APP_STORAGE_PREFIX}:right-sidebar-collapsed`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-collapsed`],
-  editorRightSidebarWidth: [`${APP_STORAGE_PREFIX}:right-sidebar-width`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-width`],
-  gitPanelHeight: [`${LEGACY_APP_STORAGE_PREFIX}:git-panel-height`],
-  gitPanelLayout: [`${LEGACY_APP_STORAGE_PREFIX}:git-panel-layout`],
-  leftSidebarCollapsed: [`${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-collapsed`],
-  leftSidebarWidth: [`${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-width`],
-}
 const SETTINGS_TAB_ID = 'app://settings'
 const SETTINGS_TAB_PATH = 'app://settings'
 const FIXED_FILE_TAB_ID = 'app://fixed/files'
@@ -400,7 +356,7 @@ type PanelSurfaceMode = 'docked' | 'drawer'
 type LeftSidebarTab = 'file' | 'git'
 type AgentLayoutFixedTab = 'file' | 'git'
 type AgentRightSidebarWidthMode = 'max' | 'fixed'
-type ProjectMenuMode = 'agent-add' | 'editor-switch'
+type ProjectMenuMode = 'agent-add' | 'agent-new-switch' | 'editor-switch'
 type ProjectMenuAnchorRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width' | 'height'>
 
 const PROJECT_MENU_MARGIN_PX = 8
@@ -414,6 +370,14 @@ const PROJECT_MENU_EDITOR_SWITCH_SEARCH_HEIGHT_PX = 36
 const PROJECT_MENU_EDITOR_SWITCH_ACTIONS_HEIGHT_PX = 72
 const PROJECT_MENU_PROJECT_ROW_HEIGHT_PX = 34
 const PROJECT_MENU_PROJECT_LIST_MAX_HEIGHT_PX = 320
+
+let initialLayoutState: PersistedLayoutState | null = null
+let persistedWorkspaceTabState = new Map<string, PersistedWorkspaceTabState>()
+
+export function initializeAppPersistentState(snapshot: PersistentClientStateSnapshot) {
+  initialLayoutState = snapshot.app.layout
+  persistedWorkspaceTabState = new Map(Object.entries(snapshot.workspace.workspaceTabs))
+}
 
 const emptyProjectState: ProjectState = {
   activeProjectId: null,
@@ -509,80 +473,39 @@ function resolveProjectMenuStyle(
   }
 }
 
-function getTabStorageKey(workspacePath: string) {
-  return `${TAB_STORAGE_PREFIX}${encodeURIComponent(workspacePath)}`
-}
-
-function getLegacyTabStorageKey(workspacePath: string) {
-  return LEGACY_TAB_STORAGE_PREFIXES.map((prefix) => `${prefix}${encodeURIComponent(workspacePath)}`)
-}
-
-function readStoredLocalStorageValue(
-  storage: Storage,
-  key: keyof typeof LAYOUT_STORAGE_KEYS,
-) {
-  const currentKey = LAYOUT_STORAGE_KEYS[key]
-  const currentValue = storage.getItem(currentKey)
-
-  if (currentValue !== null) {
-    return currentValue
-  }
-
-  for (const candidateKey of LEGACY_LAYOUT_STORAGE_KEYS[key]) {
-    const value = storage.getItem(candidateKey)
-
-    if (value !== null) {
-      storage.setItem(currentKey, value)
-      storage.removeItem(candidateKey)
-      return value
-    }
-  }
-
-  return null
-}
-
-function getLocalStorage() {
-  return typeof window === 'undefined' ? null : window.localStorage
-}
-
 function readStoredLayoutNumber(
-  key: keyof typeof LAYOUT_STORAGE_KEYS,
+  key: keyof PersistedLayoutState,
   fallback: number,
 ) {
-  const storage = getLocalStorage()
-  const value = storage ? readStoredLocalStorageValue(storage, key) : null
-  const parsedValue = value === null ? NaN : Number(value)
+  const value = initialLayoutState?.[key]
+  const parsedValue = typeof value === 'number' ? value : NaN
 
   return Number.isFinite(parsedValue) ? parsedValue : fallback
 }
 
 function readStoredLayoutBoolean(
-  key: keyof typeof LAYOUT_STORAGE_KEYS,
+  key: keyof PersistedLayoutState,
   fallback: boolean,
 ) {
-  const storage = getLocalStorage()
-  const value = storage ? readStoredLocalStorageValue(storage, key) : null
+  const value = initialLayoutState?.[key]
 
-  return value === null ? fallback : value === 'true'
+  return typeof value === 'boolean' ? value : fallback
 }
 
 function readStoredGitPanelLayout() {
-  const storage = getLocalStorage()
-  const value = storage ? readStoredLocalStorageValue(storage, 'gitPanelLayout') : null
+  const value = initialLayoutState?.gitPanelLayout
 
   return value === 'list' || value === 'tree' ? value : DEFAULT_GIT_PANEL_LAYOUT
 }
 
 function readStoredAgentRightSidebarWidthMode(): AgentRightSidebarWidthMode {
-  const storage = getLocalStorage()
-  const value = storage ? readStoredLocalStorageValue(storage, 'agentRightSidebarWidthMode') : null
+  const value = initialLayoutState?.agentRightSidebarWidthMode
 
   return value === 'fixed' ? 'fixed' : 'max'
 }
 
 function readStoredLeftSidebarTab() {
-  const storage = getLocalStorage()
-  const value = storage ? readStoredLocalStorageValue(storage, 'activeLeftSidebarTab') : null
+  const value = initialLayoutState?.activeLeftSidebarTab
 
   return value === 'git' ? value : 'file'
 }
@@ -616,66 +539,33 @@ function getFixedPanelTab(tab: AgentLayoutFixedTab): WorkspaceFixedPanelTab {
 }
 
 function readStoredTabState(workspacePath: string): StoredTabState {
-  try {
-    const currentStorageKey = getTabStorageKey(workspacePath)
-    const currentValue = window.localStorage.getItem(currentStorageKey)
-    const rawValue = currentValue ?? getLegacyTabStorageKey(workspacePath).reduce<string | null>((storedValue, storageKey) => {
-      if (storedValue !== null) {
-        return storedValue
-      }
+  const storedState = persistedWorkspaceTabState.get(workspacePath)
 
-      const legacyValue = window.localStorage.getItem(storageKey)
-
-      if (legacyValue !== null) {
-        window.localStorage.setItem(currentStorageKey, legacyValue)
-        window.localStorage.removeItem(storageKey)
-      }
-
-      return legacyValue
-    }, null)
-    if (!rawValue) {
-      return {
-        activePath: null,
-        paths: [],
-      }
-    }
-
-    const parsedValue = JSON.parse(rawValue) as Partial<StoredTabState>
-    const entries = Array.isArray(parsedValue.entries)
-      ? parsedValue.entries.filter(
-        (entry): entry is { path: string, viewMode?: LegacyWorkspaceFileViewMode } => (
-          typeof entry === 'object'
-          && entry !== null
-          && typeof entry.path === 'string'
-          && entry.path.trim().length > 0
-          && (
-            entry.viewMode === undefined
-            || entry.viewMode === 'default'
-            || entry.viewMode === 'code'
-            || entry.viewMode === 'preview'
-            || entry.viewMode === 'meo'
-          )
-        ),
-      )
-      : []
-    const paths = Array.isArray(parsedValue.paths)
-      ? parsedValue.paths.filter((path): path is string => typeof path === 'string' && path.trim().length > 0)
-      : []
-
+  if (storedState) {
     return {
-      activePath: typeof parsedValue.activePath === 'string' && parsedValue.activePath.trim().length > 0
-        ? parsedValue.activePath
-        : null,
-      entries,
-      paths: entries.length > 0 ? entries.map((entry) => entry.path) : paths,
-    }
-  } catch {
-    return {
-      activePath: null,
-      entries: [],
-      paths: [],
+      activePath: storedState.activePath,
+      entries: storedState.entries,
+      paths: storedState.paths,
     }
   }
+
+  return {
+    activePath: null,
+    entries: [],
+    paths: [],
+  }
+}
+
+function writeStoredTabState(workspacePath: string, state: StoredTabState) {
+  const entries = state.entries ?? state.paths.map((entryPath) => ({ path: entryPath }))
+  const nextState: PersistedWorkspaceTabState = {
+    activePath: state.activePath,
+    entries,
+    paths: entries.map((entry) => entry.path),
+  }
+
+  persistedWorkspaceTabState.set(workspacePath, nextState)
+  void window.appApi.updateWorkspaceTabState(workspacePath, nextState).catch(() => undefined)
 }
 
 function dedupeStoredEntries(entries: Array<{ path: string, viewMode?: LegacyWorkspaceFileViewMode }>) {
@@ -2462,7 +2352,10 @@ function App() {
     closeProjectMenu()
   }
 
-  async function activateProjectFromState(nextProjectState: ProjectState, options: { restoreTabs?: boolean } = {}) {
+  async function activateProjectFromState(
+    nextProjectState: ProjectState,
+    options: { restoreTabs?: boolean, startAgentNewSession?: boolean } = {},
+  ) {
     setProjectState(nextProjectState)
     const nextActiveProject = nextProjectState.projects.find((project) => project.id === nextProjectState.activeProjectId)
 
@@ -2470,13 +2363,36 @@ function App() {
       return false
     }
 
-    await connectWorkspace(nextActiveProject.path)
+    let agentSessionRequestId: number | null = null
 
-    if (options.restoreTabs !== false) {
-      await restoreWorkspaceTabs(nextActiveProject.path, nextActiveProject.lastFilePath)
+    if (options.startAgentNewSession) {
+      agentProjectSessionRequestIdRef.current += 1
+      agentSessionRequestId = agentProjectSessionRequestIdRef.current
+      flushSync(() => {
+        setPendingAgentProjectSessionRequest({
+          kind: 'new',
+          projectId: nextActiveProject.id,
+          requestId: agentSessionRequestId!,
+        })
+      })
     }
 
-    return true
+    try {
+      await connectWorkspace(nextActiveProject.path)
+
+      if (options.restoreTabs !== false) {
+        await restoreWorkspaceTabs(nextActiveProject.path, nextActiveProject.lastFilePath)
+      }
+
+      return true
+    } catch (error) {
+      if (agentSessionRequestId !== null) {
+        setPendingAgentProjectSessionRequest((currentValue) => (
+          currentValue?.requestId === agentSessionRequestId ? null : currentValue
+        ))
+      }
+      throw error
+    }
   }
 
   async function handleCreateEmptyProject(event?: FormEvent<HTMLFormElement>) {
@@ -2520,7 +2436,9 @@ function App() {
         return
       }
 
-      await activateProjectFromState(nextProjectState)
+      await activateProjectFromState(nextProjectState, {
+        startAgentNewSession: projectMenuMode === 'agent-new-switch',
+      })
       closeProjectMenu()
       setStatusMessage('项目已打开')
     } catch (error) {
@@ -2535,6 +2453,15 @@ function App() {
   async function handleSelectProject(project: ProjectRecord) {
     setIsProjectActionBusy(true)
     try {
+      if (projectMenuMode === 'agent-new-switch') {
+        const didSwitch = await requestAgentProjectSession(project, { kind: 'new' })
+        if (didSwitch) {
+          closeProjectMenu()
+          setStatusMessage(`${project.name} 已激活`)
+        }
+        return
+      }
+
       const didSwitch = await switchActiveWorkspace(project)
       if (didSwitch) {
         closeProjectMenu()
@@ -2605,32 +2532,44 @@ function App() {
     project: ProjectRecord,
     request: { kind: 'new' } | { kind: 'session', sessionPath: string },
   ) {
+    agentProjectSessionRequestIdRef.current += 1
+    const requestId = agentProjectSessionRequestIdRef.current
+    const nextRequest = request.kind === 'session'
+      ? {
+          kind: 'session' as const,
+          projectId: project.id,
+          requestId,
+          sessionPath: request.sessionPath,
+        }
+      : {
+          kind: 'new' as const,
+          projectId: project.id,
+          requestId,
+        }
+
+    flushSync(() => {
+      setPendingAgentProjectSessionRequest(nextRequest)
+    })
+
     try {
       const didSwitch = await switchActiveWorkspace(project)
 
       if (!didSwitch) {
-        return
+        setPendingAgentProjectSessionRequest((currentValue) => (
+          currentValue?.requestId === requestId ? null : currentValue
+        ))
+        return false
       }
 
-      agentProjectSessionRequestIdRef.current += 1
-      const requestId = agentProjectSessionRequestIdRef.current
-
-      setPendingAgentProjectSessionRequest(request.kind === 'session'
-        ? {
-            kind: 'session',
-            projectId: project.id,
-            requestId,
-            sessionPath: request.sessionPath,
-          }
-        : {
-            kind: 'new',
-            projectId: project.id,
-            requestId,
-          })
+      return true
     } catch (error) {
+      setPendingAgentProjectSessionRequest((currentValue) => (
+        currentValue?.requestId === requestId ? null : currentValue
+      ))
       const message = error instanceof Error ? error.message : 'Unable to open project conversation.'
       toast.danger('打开对话失败', { description: message })
       setStatusMessage(message)
+      return false
     }
   }
 
@@ -2795,7 +2734,7 @@ function App() {
       return null
     }
 
-    const isSwitchMenu = projectMenuMode === 'editor-switch'
+    const isSwitchMenu = projectMenuMode === 'editor-switch' || projectMenuMode === 'agent-new-switch'
     const menuStyle = resolveProjectMenuStyle(projectMenuMode, projectMenuAnchorRect, filteredProjectMenuProjects.length)
     const projectMenuActions = (
       <div className='project-menu-actions'>
@@ -3960,11 +3899,11 @@ function App() {
         viewMode: tab.viewMode,
       }))
 
-    window.localStorage.setItem(getTabStorageKey(currentPath), JSON.stringify({
+    writeStoredTabState(currentPath, {
       activePath: useWorkspaceStore.getState().activeTabId,
       entries: storedEntries,
       paths: storedEntries.map((entry) => entry.path),
-    } satisfies StoredTabState))
+    })
   }, [activeTabId, currentPath, openTabs])
 
   useEffect(() => {
@@ -4064,44 +4003,34 @@ function App() {
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.leftSidebarWidth, String(leftSidebarWidth))
-  }, [leftSidebarWidth])
+    const timeout = window.setTimeout(() => {
+      void window.appApi.updateLayoutState({
+        activeLeftSidebarTab,
+        agentRightSidebarCollapsed: isAgentRightSidebarCollapsed,
+        agentRightSidebarWidth,
+        agentRightSidebarWidthMode,
+        editorRightSidebarCollapsed: isEditorRightSidebarCollapsed,
+        editorRightSidebarWidth,
+        gitPanelHeight,
+        gitPanelLayout,
+        leftSidebarCollapsed: isLeftSidebarCollapsed,
+        leftSidebarWidth,
+      }).catch(() => undefined)
+    }, 180)
 
-  useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.editorRightSidebarWidth, String(editorRightSidebarWidth))
-  }, [editorRightSidebarWidth])
-
-  useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.agentRightSidebarWidth, String(agentRightSidebarWidth))
-  }, [agentRightSidebarWidth])
-
-  useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.agentRightSidebarWidthMode, agentRightSidebarWidthMode)
-  }, [agentRightSidebarWidthMode])
-
-  useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.gitPanelHeight, String(gitPanelHeight))
-  }, [gitPanelHeight])
-
-  useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.gitPanelLayout, gitPanelLayout)
-  }, [gitPanelLayout])
-
-  useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.activeLeftSidebarTab, activeLeftSidebarTab)
-  }, [activeLeftSidebarTab])
-
-  useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.leftSidebarCollapsed, String(isLeftSidebarCollapsed))
-  }, [isLeftSidebarCollapsed])
-
-  useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.editorRightSidebarCollapsed, String(isEditorRightSidebarCollapsed))
-  }, [isEditorRightSidebarCollapsed])
-
-  useEffect(() => {
-    window.localStorage.setItem(LAYOUT_STORAGE_KEYS.agentRightSidebarCollapsed, String(isAgentRightSidebarCollapsed))
-  }, [isAgentRightSidebarCollapsed])
+    return () => window.clearTimeout(timeout)
+  }, [
+    activeLeftSidebarTab,
+    agentRightSidebarWidth,
+    agentRightSidebarWidthMode,
+    editorRightSidebarWidth,
+    gitPanelHeight,
+    gitPanelLayout,
+    isAgentRightSidebarCollapsed,
+    isEditorRightSidebarCollapsed,
+    isLeftSidebarCollapsed,
+    leftSidebarWidth,
+  ])
 
   useEffect(() => {
     const nextLeftWidth = clampLeftWidth(leftSidebarWidth, shellWidth, rightSidebarWidthReservedForLeftClamp)
@@ -4634,7 +4563,7 @@ function App() {
         workspaceState={agentWorkspaceState}
         onWorkspaceStateChange={setAgentWorkspaceState}
         onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect)}
-        onOpenProjectSwitchMenu={(anchorRect) => openProjectMenu('editor-switch', anchorRect)}
+        onOpenProjectSwitchMenu={(anchorRect, options) => openProjectMenu(options?.startNewSession ? 'agent-new-switch' : 'editor-switch', anchorRect)}
         onOpenProjectFolder={handleShowProjectInFolder}
         onOpenProjectSession={handleOpenProjectSession}
         onRemoveProject={handleRemoveProject}
@@ -5167,7 +5096,7 @@ function App() {
         workspaceState={agentWorkspaceState}
         onWorkspaceStateChange={setAgentWorkspaceState}
         onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect)}
-        onOpenProjectSwitchMenu={(anchorRect) => openProjectMenu('editor-switch', anchorRect)}
+        onOpenProjectSwitchMenu={(anchorRect, options) => openProjectMenu(options?.startNewSession ? 'agent-new-switch' : 'editor-switch', anchorRect)}
         onOpenProjectFolder={handleShowProjectInFolder}
         onOpenProjectSession={handleOpenProjectSession}
         onRemoveProject={handleRemoveProject}

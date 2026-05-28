@@ -1,36 +1,23 @@
-export type MeoStoredMode = 'diff-split' | 'diff-unified' | 'live' | 'source'
+import type { PersistedMeoStoredState } from '@/features/persistence/types'
 
+export type MeoStoredMode = 'diff-split' | 'diff-unified' | 'live' | 'source'
 export type MeoStoredViewPosition = {
   topLine: number
   topLineOffset: number
 }
+export type MeoStoredState = PersistedMeoStoredState
 
-export type MeoStoredState = {
-  findOptions?: {
-    caseSensitive: boolean
-    wholeWord: boolean
-  }
-  gitChangesGutter?: boolean
-  gitChangesGutterConfigured?: boolean
-  lineNumbers?: boolean
-  mode?: MeoStoredMode
-  outlineVisible?: boolean
-  topLine?: number
-  topLineOffset?: number
-  viewPositions?: Partial<Record<MeoStoredMode, MeoStoredViewPosition>>
-}
-
-const MEO_STATE_STORAGE_PREFIX = 'aryn:meo-state:'
 const MEO_STORED_MODES: MeoStoredMode[] = ['diff-split', 'diff-unified', 'live', 'source']
+let persistedMeoFileStates: Record<string, MeoStoredState> = {}
+
+export function initializeMeoStoredStates(states: Record<string, MeoStoredState>) {
+  persistedMeoFileStates = { ...states }
+}
 
 export const DEFAULT_FIND_OPTIONS = {
   caseSensitive: false,
   wholeWord: false,
 } as const
-
-function getStoredStateKey(filePath: string) {
-  return `${MEO_STATE_STORAGE_PREFIX}${encodeURIComponent(filePath)}`
-}
 
 function isStoredMode(value: unknown): value is MeoStoredMode {
   return MEO_STORED_MODES.includes(value as MeoStoredMode)
@@ -104,27 +91,22 @@ export function resolveGitChangesGutterEnabled(storedState: MeoStoredState) {
 }
 
 export function readStoredState(filePath: string): MeoStoredState {
-  try {
-    const rawValue = window.localStorage.getItem(getStoredStateKey(filePath))
-    if (!rawValue) {
-      return {}
-    }
+  const storedState = persistedMeoFileStates[filePath]
 
-    const parsedValue = JSON.parse(rawValue) as Partial<MeoStoredState>
-
-    return {
-      findOptions: resolveFindOptions(parsedValue.findOptions),
-      gitChangesGutter: resolveOptionalBoolean(parsedValue.gitChangesGutter),
-      gitChangesGutterConfigured: resolveOptionalBoolean(parsedValue.gitChangesGutterConfigured),
-      lineNumbers: parsedValue.lineNumbers !== false,
-      mode: resolveStoredMode(parsedValue.mode),
-      outlineVisible: parsedValue.outlineVisible === true,
-      topLine: resolveOptionalNumber(parsedValue.topLine),
-      topLineOffset: resolveOptionalNumber(parsedValue.topLineOffset),
-      viewPositions: resolveStoredViewPositions(parsedValue.viewPositions),
-    }
-  } catch {
+  if (!storedState) {
     return {}
+  }
+
+  return {
+    findOptions: resolveFindOptions(storedState.findOptions),
+    gitChangesGutter: resolveOptionalBoolean(storedState.gitChangesGutter),
+    gitChangesGutterConfigured: resolveOptionalBoolean(storedState.gitChangesGutterConfigured),
+    lineNumbers: storedState.lineNumbers !== false,
+    mode: resolveStoredMode(storedState.mode),
+    outlineVisible: storedState.outlineVisible === true,
+    topLine: resolveOptionalNumber(storedState.topLine),
+    topLineOffset: resolveOptionalNumber(storedState.topLineOffset),
+    viewPositions: resolveStoredViewPositions(storedState.viewPositions),
   }
 }
 
@@ -134,6 +116,9 @@ export function writeStoredState(filePath: string, patch: Partial<MeoStoredState
     ...patch,
   }
 
-  window.localStorage.setItem(getStoredStateKey(filePath), JSON.stringify(nextState))
+  persistedMeoFileStates[filePath] = nextState
+  if (typeof window !== 'undefined' && window.appApi?.updateMeoFileState) {
+    void window.appApi.updateMeoFileState(filePath, nextState).catch(() => undefined)
+  }
   return nextState
 }

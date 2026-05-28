@@ -1,19 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-function createLocalStorage(initialValues: Record<string, string> = {}) {
-  const values = new Map(Object.entries(initialValues))
-
-  return {
-    getItem: vi.fn((key: string) => values.get(key) ?? null),
-    removeItem: vi.fn((key: string) => {
-      values.delete(key)
-    }),
-    setItem: vi.fn((key: string, value: string) => {
-      values.set(key, value)
-    }),
-  }
-}
-
 describe('useSettingsStore', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -33,60 +19,48 @@ describe('useSettingsStore', () => {
     expect(useSettingsStore.getState().agent.runningPromptEnterBehavior).toBe('followUp')
   })
 
-  it('preserves an explicitly persisted Editor layout preference', async () => {
-    vi.stubGlobal('window', {
-      localStorage: createLocalStorage({
-        'aryn:settings': JSON.stringify({
-          state: {
-            layoutPreference: 'editor',
-            theme: 'dark',
-          },
-          version: 0,
-        }),
-      }),
-    })
+  it('initializes from persisted settings loaded by the main process', async () => {
+    const { initializeSettingsStore, useSettingsStore } = await import('../src/hooks/use-settings-store')
 
-    const { useSettingsStore } = await import('../src/hooks/use-settings-store')
+    initializeSettingsStore({
+      agent: {
+        runningPromptEnterBehavior: 'steer',
+      },
+      layoutPreference: 'editor',
+      meo: {
+        focusedLineHighlight: true,
+        gitDiffLineHighlights: false,
+        imageFolder: 'images',
+        outlinePosition: 'left',
+      },
+      theme: 'dark',
+    })
 
     expect(useSettingsStore.getState().layoutPreference).toBe('editor')
-    expect(useSettingsStore.getState().agent.runningPromptEnterBehavior).toBe('followUp')
-  })
-
-  it('preserves a valid persisted running prompt behavior', async () => {
-    vi.stubGlobal('window', {
-      localStorage: createLocalStorage({
-        'aryn:settings': JSON.stringify({
-          state: {
-            agent: {
-              runningPromptEnterBehavior: 'steer',
-            },
-          },
-          version: 0,
-        }),
-      }),
-    })
-
-    const { useSettingsStore } = await import('../src/hooks/use-settings-store')
-
+    expect(useSettingsStore.getState().theme).toBe('dark')
     expect(useSettingsStore.getState().agent.runningPromptEnterBehavior).toBe('steer')
+    expect(useSettingsStore.getState().meo.outlinePosition).toBe('left')
   })
 
-  it('falls back to the default running prompt behavior for invalid persisted values', async () => {
+  it('persists setting updates through the main process API', async () => {
+    const updateSettingsState = vi.fn(() => Promise.resolve({ ok: true }))
+
     vi.stubGlobal('window', {
-      localStorage: createLocalStorage({
-        'aryn:settings': JSON.stringify({
-          state: {
-            agent: {
-              runningPromptEnterBehavior: 'invalid',
-            },
-          },
-          version: 0,
-        }),
-      }),
+      appApi: {
+        updateSettingsState,
+      },
     })
 
     const { useSettingsStore } = await import('../src/hooks/use-settings-store')
 
-    expect(useSettingsStore.getState().agent.runningPromptEnterBehavior).toBe('followUp')
+    useSettingsStore.getState().setLayoutPreference('editor')
+    useSettingsStore.getState().updateAgentSettings({ runningPromptEnterBehavior: 'steer' })
+
+    expect(updateSettingsState).toHaveBeenCalledWith({ layoutPreference: 'editor' })
+    expect(updateSettingsState).toHaveBeenCalledWith({
+      agent: {
+        runningPromptEnterBehavior: 'steer',
+      },
+    })
   })
 })

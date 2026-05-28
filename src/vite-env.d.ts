@@ -16,6 +16,14 @@ import type {
   WorkspaceIconThemeCatalogOption,
   WorkspaceNode,
 } from '@/features/workspace/types'
+import type {
+  LocalStorageStateMigration,
+  PersistedAppSettings,
+  PersistedLayoutState,
+  PersistedMeoStoredState,
+  PersistedWorkspaceTabState,
+  PersistentClientStateSnapshot,
+} from '@/features/persistence/types'
 
 /// <reference types="vite/client" />
 
@@ -33,6 +41,12 @@ declare global {
       getWorkspaceRestoreState: () => Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>
       getWorkspaceState: (workspacePath: string) => Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>
       updateWorkspaceState: (workspacePath: string, patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean }) => Promise<{ ok: boolean }>
+      initializePersistentState: (migration: LocalStorageStateMigration) => Promise<PersistentClientStateSnapshot>
+      updateSettingsState: (patch: Partial<PersistedAppSettings>) => Promise<{ ok: boolean }>
+      updateLayoutState: (patch: Partial<PersistedLayoutState>) => Promise<{ ok: boolean }>
+      getWorkspaceTabState: (workspacePath: string) => Promise<PersistedWorkspaceTabState | null>
+      updateWorkspaceTabState: (workspacePath: string, state: PersistedWorkspaceTabState) => Promise<{ ok: boolean }>
+      updateMeoFileState: (filePath: string, state: PersistedMeoStoredState) => Promise<{ ok: boolean }>
       loadWorkspaceTree: (rootPath: string) => Promise<WorkspaceNode[]>
       resolveWorkspaceEditorKind: (filePath: string) => Promise<'prose' | 'code' | null>
       readWorkspaceFile: (filePath: string) => Promise<string>
@@ -81,7 +95,7 @@ declare global {
       updateUiState: (patch: { agentComposerHeight?: number }) => Promise<{ ok: boolean }>
       startWorkspaceWatch: (rootPath: string) => Promise<{ ok: boolean }>
       stopWorkspaceWatch: () => Promise<{ ok: boolean }>
-      loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null) => Promise<AgentWorkspaceState>
+      loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null, options?: { restoreSession?: boolean }) => Promise<AgentWorkspaceState>
       listAgentSessions: (rootPath: string) => Promise<AgentWorkspaceState['sessions']>
       createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => Promise<AgentWorkspaceState>
       openAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>

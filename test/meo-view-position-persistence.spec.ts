@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createMeoViewPositionPersistenceController } from '../src/features/editor/lib/meo-native-editor-persistence'
-import { readStoredState } from '../src/features/editor/lib/meo-state'
+import { initializeMeoStoredStates, readStoredState } from '../src/features/editor/lib/meo-state'
 import type { MeoEditorMode, MeoEditorViewportPosition } from '../src/features/editor/lib/meo-native-editor-types'
 
 class MemoryStorage {
@@ -28,11 +28,15 @@ beforeEach(() => {
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
     value: {
+      appApi: {
+        updateMeoFileState: () => Promise.resolve({ ok: true }),
+      },
       clearTimeout,
       localStorage: new MemoryStorage(),
       setTimeout,
     },
   })
+  initializeMeoStoredStates({})
 })
 
 afterEach(() => {
@@ -225,14 +229,13 @@ describe('meo view position persistence', () => {
 
   it('migrates the legacy top-line position only into the stored initial mode', () => {
     const filePath = 'C:/workspace/legacy.md'
-    window.localStorage.setItem(
-      `aryn:meo-state:${encodeURIComponent(filePath)}`,
-      JSON.stringify({
+    initializeMeoStoredStates({
+      [filePath]: {
         mode: 'source',
         topLine: 42,
         topLineOffset: 6,
-      }),
-    )
+      },
+    })
 
     currentMode = 'source'
     const restored = createController(

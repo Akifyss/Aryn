@@ -69,6 +69,10 @@ type PiAgentManagerOptions = {
   agentDir: string
 }
 
+type LoadAgentWorkspaceStateOptions = {
+  restoreSession?: boolean
+}
+
 type PreparedPromptAttachments = {
   images: ImageContent[]
   text: string
@@ -1119,9 +1123,21 @@ export class PiAgentManager {
     this.modelRegistry = ModelRegistry.create(this.authStorage, path.join(options.agentDir, 'models.json'))
   }
 
-  async loadWorkspaceState(cwd: string, preferredSessionPath: string | null = null): Promise<AgentWorkspaceState> {
+  async loadWorkspaceState(
+    cwd: string,
+    preferredSessionPath: string | null = null,
+    options: LoadAgentWorkspaceStateOptions = {},
+  ): Promise<AgentWorkspaceState> {
     if (this.activeRuntime?.cwd !== cwd) {
       await this.releaseActiveSession()
+    }
+
+    if (options.restoreSession === false) {
+      if (this.activeRuntime) {
+        await this.releaseActiveSession()
+      }
+
+      return this.buildWorkspaceState(cwd)
     }
 
     if (!this.activeRuntime) {

@@ -1,98 +1,37 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
-import type { AgentRunningPromptBehavior } from '@/features/agent/types'
+import type {
+  AgentRunningPromptEnterBehavior,
+  AppLayoutPreference,
+  AppTheme,
+  PersistedAgentSettings,
+  PersistedAppSettings,
+  PersistedMeoSettings,
+  MeoOutlinePosition,
+} from '@/features/persistence/types'
 
-export type AppTheme = 'light' | 'dark' | 'auto'
-export type AppLayoutPreference = 'agent' | 'editor'
-export type AgentRunningPromptEnterBehavior = AgentRunningPromptBehavior
-export type MeoOutlinePosition = 'left' | 'right'
-
-export type AgentSettings = {
-  runningPromptEnterBehavior: AgentRunningPromptEnterBehavior
+export type {
+  AgentRunningPromptEnterBehavior,
+  AppLayoutPreference,
+  AppTheme,
+  MeoOutlinePosition,
 }
+
+export type AgentSettings = PersistedAgentSettings
+export type MeoSettings = PersistedMeoSettings
 
 export const AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS: Record<AgentRunningPromptEnterBehavior, string> = {
   followUp: '排队',
   steer: '引导',
 }
 
-export type MeoSettings = {
-  focusedLineHighlight: boolean
-  gitDiffLineHighlights: boolean
-  imageFolder: string
-  outlinePosition: MeoOutlinePosition
-}
-
-interface SettingsState {
-  agent: AgentSettings
-  layoutPreference: AppLayoutPreference
-  meo: MeoSettings
-  theme: AppTheme
+interface SettingsState extends PersistedAppSettings {
   setLayoutPreference: (layoutPreference: AppLayoutPreference) => void
   updateAgentSettings: (patch: Partial<AgentSettings>) => void
   updateMeoSettings: (patch: Partial<MeoSettings>) => void
   setTheme: (theme: AppTheme) => void
 }
 
-const SETTINGS_STORAGE_KEY = 'aryn:settings'
 export const DEFAULT_APP_LAYOUT_PREFERENCE: AppLayoutPreference = 'agent'
-const LEGACY_SETTINGS_STORAGE_KEY = `${String.fromCharCode(
-  119,
-  114,
-  105,
-  116,
-  105,
-  110,
-  103,
-  45,
-  119,
-  111,
-  114,
-  107,
-  115,
-  112,
-  97,
-  99,
-  101,
-)}:settings`
-
-const settingsStorage: StateStorage = {
-  getItem: (name) => {
-    if (typeof window === 'undefined') {
-      return null
-    }
-
-    const currentValue = window.localStorage.getItem(name)
-
-    if (currentValue !== null) {
-      return currentValue
-    }
-
-    const legacyValue = window.localStorage.getItem(LEGACY_SETTINGS_STORAGE_KEY)
-
-    if (legacyValue !== null) {
-      window.localStorage.setItem(name, legacyValue)
-      window.localStorage.removeItem(LEGACY_SETTINGS_STORAGE_KEY)
-    }
-
-    return legacyValue
-  },
-  setItem: (name, value) => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    window.localStorage.setItem(name, value)
-    window.localStorage.removeItem(LEGACY_SETTINGS_STORAGE_KEY)
-  },
-  removeItem: (name) => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    window.localStorage.removeItem(name)
-  },
-}
 
 const DEFAULT_MEO_SETTINGS: MeoSettings = {
   focusedLineHighlight: false,
@@ -103,6 +42,13 @@ const DEFAULT_MEO_SETTINGS: MeoSettings = {
 
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   runningPromptEnterBehavior: 'followUp',
+}
+
+const DEFAULT_APP_SETTINGS: PersistedAppSettings = {
+  agent: DEFAULT_AGENT_SETTINGS,
+  layoutPreference: DEFAULT_APP_LAYOUT_PREFERENCE,
+  meo: DEFAULT_MEO_SETTINGS,
+  theme: 'auto',
 }
 
 export function isAgentRunningPromptEnterBehavior(value: unknown): value is AgentRunningPromptEnterBehavior {
@@ -154,44 +100,53 @@ function sanitizeLayoutPreference(value: unknown): AppLayoutPreference {
   return value === 'editor' || value === 'agent' ? value : DEFAULT_APP_LAYOUT_PREFERENCE
 }
 
-export const useSettingsStore = create<SettingsState>()(
-  persist(
-    (set) => ({
-      agent: DEFAULT_AGENT_SETTINGS,
-      layoutPreference: DEFAULT_APP_LAYOUT_PREFERENCE,
-      meo: DEFAULT_MEO_SETTINGS,
-      theme: 'auto',
-      setLayoutPreference: (layoutPreference) => set({ layoutPreference: sanitizeLayoutPreference(layoutPreference) }),
-      setTheme: (theme) => set({ theme }),
-      updateAgentSettings: (patch) => set((state) => ({
-        agent: sanitizeAgentSettings({
-          ...state.agent,
-          ...patch,
-        }),
-      })),
-      updateMeoSettings: (patch) => set((state) => ({
-        meo: sanitizeMeoSettings({
-          ...state.meo,
-          ...patch,
-        }),
-      })),
-    }),
-    {
-      name: SETTINGS_STORAGE_KEY,
-      storage: createJSONStorage(() => settingsStorage),
-      merge: (persistedState, currentState) => {
-        const candidate = persistedState && typeof persistedState === 'object'
-          ? persistedState as Partial<SettingsState>
-          : {}
+function sanitizeTheme(value: unknown): AppTheme {
+  return value === 'light' || value === 'dark' || value === 'auto' ? value : DEFAULT_APP_SETTINGS.theme
+}
 
-        return {
-          ...currentState,
-          ...candidate,
-          agent: sanitizeAgentSettings(candidate.agent),
-          layoutPreference: sanitizeLayoutPreference(candidate.layoutPreference),
-          meo: sanitizeMeoSettings(candidate.meo),
-        }
-      },
-    },
-  ),
-)
+function persistSettingsPatch(patch: Partial<PersistedAppSettings>) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  void window.appApi?.updateSettingsState(patch).catch(() => undefined)
+}
+
+export const useSettingsStore = create<SettingsState>()((set, get) => ({
+  ...DEFAULT_APP_SETTINGS,
+  setLayoutPreference: (layoutPreference) => {
+    const nextLayoutPreference = sanitizeLayoutPreference(layoutPreference)
+    set({ layoutPreference: nextLayoutPreference })
+    persistSettingsPatch({ layoutPreference: nextLayoutPreference })
+  },
+  setTheme: (theme) => {
+    const nextTheme = sanitizeTheme(theme)
+    set({ theme: nextTheme })
+    persistSettingsPatch({ theme: nextTheme })
+  },
+  updateAgentSettings: (patch) => {
+    const agent = sanitizeAgentSettings({
+      ...get().agent,
+      ...patch,
+    })
+    set({ agent })
+    persistSettingsPatch({ agent })
+  },
+  updateMeoSettings: (patch) => {
+    const meo = sanitizeMeoSettings({
+      ...get().meo,
+      ...patch,
+    })
+    set({ meo })
+    persistSettingsPatch({ meo })
+  },
+}))
+
+export function initializeSettingsStore(settings: PersistedAppSettings) {
+  useSettingsStore.setState({
+    agent: sanitizeAgentSettings(settings.agent),
+    layoutPreference: sanitizeLayoutPreference(settings.layoutPreference),
+    meo: sanitizeMeoSettings(settings.meo),
+    theme: sanitizeTheme(settings.theme),
+  })
+}

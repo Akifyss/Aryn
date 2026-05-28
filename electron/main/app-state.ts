@@ -1,10 +1,28 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import type {
+  AgentRightSidebarWidthMode,
+  AppLayoutPreference,
+  AppTheme,
+  LeftSidebarTab,
+  PersistedAgentSettings,
+  PersistedAppSettings,
+  PersistedLayoutState,
+  PersistedMeoSettings,
+  MeoOutlinePosition,
+} from '../../src/features/persistence/types'
 
+export const APP_STATE_SCHEMA_VERSION = 1
 export const DEFAULT_WINDOW_WIDTH = 1440
 export const DEFAULT_WINDOW_HEIGHT = 900
 export const MIN_WINDOW_WIDTH = 1080
 export const MIN_WINDOW_HEIGHT = 720
 export const DEFAULT_AGENT_COMPOSER_HEIGHT = 172
+export const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
+export const DEFAULT_EDITOR_RIGHT_SIDEBAR_WIDTH = 368
+export const DEFAULT_AGENT_RIGHT_SIDEBAR_WIDTH = 520
+export const DEFAULT_GIT_PANEL_HEIGHT = 292
 
 export type PersistedWorkspaceIconThemeSelection = {
   activeThemeId: string | null
@@ -44,13 +62,58 @@ export type PersistedUiState = {
   workspaceIconTheme: PersistedWorkspaceIconThemeSelection
 }
 
+export type PersistedMigrationState = {
+  rendererLocalStorage: number
+}
+
 export type PersistedAppState = {
+  version: number
+  layout: PersistedLayoutState
+  migrations: PersistedMigrationState
+  settings: PersistedAppSettings
   ui: PersistedUiState
   workspace: PersistedWorkspaceState
   window: PersistedWindowState
 }
 
+const DEFAULT_AGENT_SETTINGS: PersistedAgentSettings = {
+  runningPromptEnterBehavior: 'followUp',
+}
+
+const DEFAULT_MEO_SETTINGS: PersistedMeoSettings = {
+  focusedLineHighlight: false,
+  gitDiffLineHighlights: true,
+  imageFolder: 'assets',
+  outlinePosition: 'right',
+}
+
+const DEFAULT_APP_SETTINGS: PersistedAppSettings = {
+  agent: DEFAULT_AGENT_SETTINGS,
+  layoutPreference: 'agent',
+  meo: DEFAULT_MEO_SETTINGS,
+  theme: 'auto',
+}
+
+const DEFAULT_LAYOUT_STATE: PersistedLayoutState = {
+  activeLeftSidebarTab: 'file',
+  agentRightSidebarCollapsed: false,
+  agentRightSidebarWidth: DEFAULT_AGENT_RIGHT_SIDEBAR_WIDTH,
+  agentRightSidebarWidthMode: 'max',
+  editorRightSidebarCollapsed: false,
+  editorRightSidebarWidth: DEFAULT_EDITOR_RIGHT_SIDEBAR_WIDTH,
+  gitPanelHeight: DEFAULT_GIT_PANEL_HEIGHT,
+  gitPanelLayout: 'list',
+  leftSidebarCollapsed: false,
+  leftSidebarWidth: DEFAULT_LEFT_SIDEBAR_WIDTH,
+}
+
 const DEFAULT_APP_STATE: PersistedAppState = {
+  version: APP_STATE_SCHEMA_VERSION,
+  layout: DEFAULT_LAYOUT_STATE,
+  migrations: {
+    rendererLocalStorage: 0,
+  },
+  settings: DEFAULT_APP_SETTINGS,
   ui: {
     agentComposerHeight: DEFAULT_AGENT_COMPOSER_HEIGHT,
     workspaceIconTheme: {
@@ -76,8 +139,152 @@ function cloneState(state: PersistedAppState) {
   return structuredClone(state)
 }
 
+export async function writeJsonFileAtomic(filePath: string, value: unknown) {
+  const directoryPath = path.dirname(filePath)
+  const temporaryFilePath = path.join(directoryPath, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`)
+
+  await mkdir(directoryPath, { mode: 0o700, recursive: true })
+
+  try {
+    await writeFile(temporaryFilePath, `${JSON.stringify(value, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    })
+    await rename(temporaryFilePath, filePath)
+  } catch (error) {
+    await rm(temporaryFilePath, { force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
 function readNullableString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : null
+}
+
+function readBoolean(value: unknown, fallback: boolean) {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+function readNumber(value: unknown, fallback: number, min = Number.NEGATIVE_INFINITY) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback
+  }
+
+  return Math.max(min, Math.round(value))
+}
+
+function readAppTheme(value: unknown): AppTheme {
+  return value === 'light' || value === 'dark' || value === 'auto' ? value : DEFAULT_APP_SETTINGS.theme
+}
+
+function readLayoutPreference(value: unknown): AppLayoutPreference {
+  return value === 'editor' || value === 'agent' ? value : DEFAULT_APP_SETTINGS.layoutPreference
+}
+
+function readRunningPromptEnterBehavior(value: unknown) {
+  return value === 'steer' || value === 'followUp'
+    ? value
+    : DEFAULT_AGENT_SETTINGS.runningPromptEnterBehavior
+}
+
+function sanitizeMeoImageFolder(imageFolder: unknown) {
+  if (typeof imageFolder !== 'string') {
+    return DEFAULT_MEO_SETTINGS.imageFolder
+  }
+
+  const segments = imageFolder
+    .replace(/[\\/]+/g, '/')
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  if (segments.length === 0 || segments.some((segment) => segment === '..')) {
+    return DEFAULT_MEO_SETTINGS.imageFolder
+  }
+
+  return segments.filter((segment) => segment !== '.').join('/')
+}
+
+function readMeoOutlinePosition(value: unknown): MeoOutlinePosition {
+  return value === 'left' ? 'left' : DEFAULT_MEO_SETTINGS.outlinePosition
+}
+
+function readAgentRightSidebarWidthMode(value: unknown): AgentRightSidebarWidthMode {
+  return value === 'fixed' ? 'fixed' : DEFAULT_LAYOUT_STATE.agentRightSidebarWidthMode
+}
+
+function readLeftSidebarTab(value: unknown): LeftSidebarTab {
+  return value === 'git' ? 'git' : DEFAULT_LAYOUT_STATE.activeLeftSidebarTab
+}
+
+function readGitPanelLayout(value: unknown) {
+  return value === 'tree' ? 'tree' : DEFAULT_LAYOUT_STATE.gitPanelLayout
+}
+
+function readNonNegativeInteger(value: unknown) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0
+  }
+
+  return Math.max(0, Math.floor(value))
+}
+
+export function normalizeMigrationState(value: unknown): PersistedMigrationState {
+  const candidate = value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {}
+
+  return {
+    rendererLocalStorage: readNonNegativeInteger(candidate.rendererLocalStorage),
+  }
+}
+
+export function normalizeAppSettings(value: unknown): PersistedAppSettings {
+  const candidate = value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {}
+  const stateCandidate = candidate.state && typeof candidate.state === 'object'
+    ? candidate.state as Record<string, unknown>
+    : candidate
+  const agentCandidate = stateCandidate.agent && typeof stateCandidate.agent === 'object'
+    ? stateCandidate.agent as Record<string, unknown>
+    : {}
+  const meoCandidate = stateCandidate.meo && typeof stateCandidate.meo === 'object'
+    ? stateCandidate.meo as Record<string, unknown>
+    : {}
+
+  return {
+    agent: {
+      runningPromptEnterBehavior: readRunningPromptEnterBehavior(agentCandidate.runningPromptEnterBehavior),
+    },
+    layoutPreference: readLayoutPreference(stateCandidate.layoutPreference),
+    meo: {
+      focusedLineHighlight: meoCandidate.focusedLineHighlight === true,
+      gitDiffLineHighlights: readBoolean(meoCandidate.gitDiffLineHighlights, DEFAULT_MEO_SETTINGS.gitDiffLineHighlights),
+      imageFolder: sanitizeMeoImageFolder(meoCandidate.imageFolder),
+      outlinePosition: readMeoOutlinePosition(meoCandidate.outlinePosition),
+    },
+    theme: readAppTheme(stateCandidate.theme),
+  }
+}
+
+export function normalizeLayoutState(value: unknown): PersistedLayoutState {
+  const candidate = value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {}
+
+  return {
+    activeLeftSidebarTab: readLeftSidebarTab(candidate.activeLeftSidebarTab),
+    agentRightSidebarCollapsed: readBoolean(candidate.agentRightSidebarCollapsed, DEFAULT_LAYOUT_STATE.agentRightSidebarCollapsed),
+    agentRightSidebarWidth: readNumber(candidate.agentRightSidebarWidth, DEFAULT_LAYOUT_STATE.agentRightSidebarWidth, 1),
+    agentRightSidebarWidthMode: readAgentRightSidebarWidthMode(candidate.agentRightSidebarWidthMode),
+    editorRightSidebarCollapsed: readBoolean(candidate.editorRightSidebarCollapsed, DEFAULT_LAYOUT_STATE.editorRightSidebarCollapsed),
+    editorRightSidebarWidth: readNumber(candidate.editorRightSidebarWidth, DEFAULT_LAYOUT_STATE.editorRightSidebarWidth, 1),
+    gitPanelHeight: readNumber(candidate.gitPanelHeight, DEFAULT_LAYOUT_STATE.gitPanelHeight, 1),
+    gitPanelLayout: readGitPanelLayout(candidate.gitPanelLayout),
+    leftSidebarCollapsed: readBoolean(candidate.leftSidebarCollapsed, DEFAULT_LAYOUT_STATE.leftSidebarCollapsed),
+    leftSidebarWidth: readNumber(candidate.leftSidebarWidth, DEFAULT_LAYOUT_STATE.leftSidebarWidth, 1),
+  }
 }
 
 function getPathBaseName(value: string) {
@@ -134,14 +341,14 @@ function createProjectRecordFromPath(projectPath: string, patch: Partial<Persist
 }
 
 function dedupeProjectRecords(projects: PersistedProjectRecord[]) {
-  const recordsById = new Map<string, PersistedProjectRecord>()
+  const recordsByPath = new Map<string, PersistedProjectRecord>()
 
   for (const project of projects) {
-    const existing = recordsById.get(project.id)
-    recordsById.set(project.id, existing ? { ...existing, ...project } : project)
+    const existing = recordsByPath.get(project.path)
+    recordsByPath.set(project.path, existing ? { ...existing, ...project } : project)
   }
 
-  return [...recordsById.values()]
+  return [...recordsByPath.values()]
 }
 
 function readWindowDimension(value: unknown, fallback: number, min: number) {
@@ -190,6 +397,15 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
   const uiCandidate = candidate.ui && typeof candidate.ui === 'object'
     ? candidate.ui as Record<string, unknown>
     : {}
+  const layoutCandidate = candidate.layout && typeof candidate.layout === 'object'
+    ? candidate.layout
+    : {}
+  const settingsCandidate = candidate.settings && typeof candidate.settings === 'object'
+    ? candidate.settings
+    : {}
+  const migrationsCandidate = candidate.migrations && typeof candidate.migrations === 'object'
+    ? candidate.migrations
+    : {}
   const entriesCandidate = workspaceCandidate.entries && typeof workspaceCandidate.entries === 'object'
     ? workspaceCandidate.entries as Record<string, unknown>
     : {}
@@ -233,6 +449,10 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
       : normalizedProjects[0]?.id ?? null
 
   return {
+    version: APP_STATE_SCHEMA_VERSION,
+    layout: normalizeLayoutState(layoutCandidate),
+    migrations: normalizeMigrationState(migrationsCandidate),
+    settings: normalizeAppSettings(settingsCandidate),
     ui: {
       agentComposerHeight: readAgentComposerHeight(uiCandidate.agentComposerHeight),
       workspaceIconTheme: readWorkspaceIconThemeSelection(uiCandidate.workspaceIconTheme),
@@ -251,35 +471,86 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
   }
 }
 
+function hasWorkspaceData(state: PersistedAppState) {
+  return Boolean(state.workspace.lastWorkspacePath)
+    || state.workspace.projects.length > 0
+    || Object.keys(state.workspace.entries).length > 0
+}
+
+function mergeLegacyAppState(primary: PersistedAppState, fallback: PersistedAppState): PersistedAppState {
+  if (!hasWorkspaceData(primary) && hasWorkspaceData(fallback)) {
+    return {
+      ...primary,
+      workspace: fallback.workspace,
+    }
+  }
+
+  const primaryProjectPaths = new Set(primary.workspace.projects.map((project) => project.path))
+  const fallbackEntriesForKnownProjects = Object.fromEntries(
+    Object.entries(fallback.workspace.entries)
+      .filter(([workspacePath]) => primaryProjectPaths.has(workspacePath)),
+  )
+  const projects = primary.workspace.projects.map((project) => {
+    const fallbackProject = fallback.workspace.projects.find((candidate) => candidate.path === project.path)
+    return fallbackProject ? { ...fallbackProject, ...project } : project
+  })
+
+  return normalizePersistedAppState({
+    ...primary,
+    workspace: {
+      activeProjectId: primary.workspace.activeProjectId,
+      entries: {
+        ...fallbackEntriesForKnownProjects,
+        ...primary.workspace.entries,
+      },
+      lastWorkspacePath: primary.workspace.lastWorkspacePath,
+      projects,
+    },
+  })
+}
+
 export class AppStateStore {
   private cachedState: PersistedAppState | null = null
+  private readonly legacyFilePaths: string[]
   private writeQueue: Promise<void> = Promise.resolve()
 
   constructor(
     private readonly filePath: string,
-    private readonly legacyFilePath?: string,
-  ) {}
+    legacyFilePaths?: string | string[],
+  ) {
+    this.legacyFilePaths = Array.isArray(legacyFilePaths)
+      ? legacyFilePaths
+      : legacyFilePaths
+        ? [legacyFilePaths]
+        : []
+  }
 
   async read() {
-    if (!this.cachedState) {
-      this.cachedState = await this.load()
-    }
-
-    return cloneState(this.cachedState)
+    await this.writeQueue.catch(() => undefined)
+    return cloneState(await this.getCachedState())
   }
 
   async update(updater: (currentState: PersistedAppState) => PersistedAppState) {
-    const nextState = normalizePersistedAppState(updater(await this.read()))
-    this.cachedState = nextState
+    let nextState: PersistedAppState | null = null
 
     this.writeQueue = this.writeQueue
       .catch(() => undefined)
       .then(async () => {
-        await writeFile(this.filePath, JSON.stringify(nextState, null, 2), 'utf8')
+        nextState = normalizePersistedAppState(updater(cloneState(await this.getCachedState())))
+        await writeJsonFileAtomic(this.filePath, nextState)
+        this.cachedState = nextState
       })
 
     await this.writeQueue
-    return cloneState(nextState)
+    return cloneState(nextState!)
+  }
+
+  private async getCachedState() {
+    if (!this.cachedState) {
+      this.cachedState = await this.load()
+    }
+
+    return this.cachedState
   }
 
   private async load() {
@@ -292,18 +563,31 @@ export class AppStateStore {
   }
 
   private async loadLegacy() {
-    if (!this.legacyFilePath) {
+    let nextState: PersistedAppState | null = null
+
+    for (const legacyFilePath of this.legacyFilePaths) {
+      try {
+        const raw = await readFile(legacyFilePath, 'utf8')
+        const legacyState = normalizePersistedAppState(JSON.parse(raw))
+        nextState = nextState
+          ? mergeLegacyAppState(nextState, legacyState)
+          : legacyState
+      } catch {
+        // Try the next legacy source.
+      }
+    }
+
+    if (!nextState) {
       return cloneState(DEFAULT_APP_STATE)
     }
 
     try {
-      const raw = await readFile(this.legacyFilePath, 'utf8')
-      const nextState = normalizePersistedAppState(JSON.parse(raw))
-      await writeFile(this.filePath, JSON.stringify(nextState, null, 2), 'utf8')
-      return nextState
+      await writeJsonFileAtomic(this.filePath, nextState)
     } catch {
-      return cloneState(DEFAULT_APP_STATE)
+      // Reading legacy state is more important than immediately persisting the migration.
     }
+
+    return nextState
   }
 }
 
