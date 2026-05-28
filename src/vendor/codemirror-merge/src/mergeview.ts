@@ -561,11 +561,12 @@ export class MergeView {
     this.ensureOuterScrollViewport(this.b)
   }
 
-  refreshLayout() {
+  refreshLayout(options: {flushDom?: boolean, immediate?: boolean} = {}) {
     this.syncOuterScrollViewports()
-    this.measureEditorViewport(this.a)
-    this.measureEditorViewport(this.b)
-    this.scheduleMeasure()
+    this.measureEditorViewport(this.a, options.flushDom)
+    this.measureEditorViewport(this.b, options.flushDom)
+    if (options.immediate) this.measure()
+    else this.scheduleMeasure()
   }
 
   private ensureOuterScrollViewport(view: EditorView) {
@@ -587,11 +588,11 @@ export class MergeView {
       view.requestMeasure()
   }
 
-  private measureEditorViewport(view: EditorView) {
+  private measureEditorViewport(view: EditorView, flushDom = false) {
     // CodeMirror's own scroll observer measures synchronously. The merge view
     // scrolls outside the panes, so use the same path only after coverage misses.
     let measurable = view as EditorView & {measure?: (flush?: boolean) => void}
-    if (typeof measurable.measure == "function") measurable.measure(false)
+    if (typeof measurable.measure == "function") measurable.measure(flushDom)
     else view.requestMeasure()
   }
 

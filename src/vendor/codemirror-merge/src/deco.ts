@@ -864,6 +864,8 @@ export type SpacerKind = "alignment" | "fakeLines"
 export type TrailingSpacerMode = "all" | "fakeLines" | "none"
 
 class Spacer extends WidgetType {
+  isMeoGitGutterTransparentWidget = true
+
   constructor(readonly height: number, readonly kind: SpacerKind = "alignment") { super() }
 
   eq(other: Spacer) { return this.height == other.height && this.kind == other.kind }
@@ -960,6 +962,10 @@ export function spacerKindAfterChunk(
 
 export function shouldAddTrailingSpacer(kind: SpacerKind, mode: TrailingSpacerMode = "all") {
   return mode == "all" || (mode == "fakeLines" && kind == "fakeLines")
+}
+
+export function spacerIsGitGutterTransparent(kind: SpacerKind = "alignment") {
+  return new Spacer(1, kind).isMeoGitGutterTransparentWidget === true
 }
 
 export function spacerSideAfterChunk(

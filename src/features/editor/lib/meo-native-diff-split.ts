@@ -2634,6 +2634,7 @@ export type MeoDiffPaneExtensionOptions = {
   lineNumbersVisible: boolean
   onChange: (nextValue: string) => void
   onCompositionChange?: (isComposing: boolean) => void
+  onCompositionLayoutChange?: () => void
   onOpenLink?: (href: string) => void
   onSave?: (nextValue: string) => void
   onSelectionChange?: (selectionState: { visible?: boolean, anchorX?: number, anchorY?: number } | null) => void
@@ -2660,6 +2661,7 @@ export function createDiffExtensions({
   lineNumbersVisible,
   onChange,
   onCompositionChange,
+  onCompositionLayoutChange,
   onOpenLink,
   onSave,
   onSelectionChange,
@@ -2851,6 +2853,7 @@ export function createDiffExtensions({
     lineNumbersCompartment.of(lineNumberExtensionFactory(lineNumbersVisible, lineNumberStart)),
     ...gitDiffGutterBaselineExtensions({ deferDocChanges: true }),
     ...gitDiffGutterLiveRenderExtensions({
+      inheritWidgetLineFlag: false,
       mapLineFlag: side === 'original' ? mapDiffSplitOriginalGutterFlag : mapDiffSplitModifiedGutterFlag,
       mapWidgetLineFlag: diffGutterWidgetLineFlagMapper,
     }),
@@ -2958,6 +2961,7 @@ export function createDiffExtensions({
         if (isCompositionInputUpdate(update)) {
           pendingCompositionDocChange = true
           pendingCompositionView = update.view
+          onCompositionLayoutChange?.()
           // Keep preedit updates out of the string-snapshot path. The committed
           // text is read once on compositionend.
           return
@@ -3089,6 +3093,13 @@ export function createDiffExtensions({
           if (!isReadOnly()) {
             setCompositionActive(view, true)
             onCompositionChange?.(true)
+            onCompositionLayoutChange?.()
+          }
+          return false
+        },
+        compositionupdate: () => {
+          if (!isReadOnly()) {
+            onCompositionLayoutChange?.()
           }
           return false
         },
@@ -3096,11 +3107,13 @@ export function createDiffExtensions({
           const shouldCompleteComposition = compositionActive
           if (!isReadOnly()) {
             schedulePendingCompositionFlush(view)
+            onCompositionLayoutChange?.()
           }
           if (shouldCompleteComposition) {
             window.setTimeout(() => {
               setCompositionActive(view, false)
               onCompositionChange?.(false)
+              onCompositionLayoutChange?.()
             }, 0)
           }
           return false
@@ -4089,6 +4102,8 @@ export function createMeoDiffSplitController({
   let pendingScrollFrame = 0
   let pendingScrollDecorationFrame = 0
   let pendingScrollDecorationCommitFrame = 0
+  let pendingCompositionLayoutFrame = 0
+  let pendingCompositionLayoutMicrotask = false
   let pendingDeferredDiffRefreshFrame = 0
   let pendingDeferredDiffRefreshTimer = 0
   let pendingInitialRenderWorkFrame = 0
@@ -4265,6 +4280,14 @@ export function createMeoDiffSplitController({
     if (pendingScrollDecorationCommitFrame) {
       window.cancelAnimationFrame(pendingScrollDecorationCommitFrame)
       pendingScrollDecorationCommitFrame = 0
+    }
+  }
+
+  const cancelPendingCompositionLayoutRefresh = () => {
+    pendingCompositionLayoutMicrotask = false
+    if (pendingCompositionLayoutFrame) {
+      window.cancelAnimationFrame(pendingCompositionLayoutFrame)
+      pendingCompositionLayoutFrame = 0
     }
   }
 
@@ -4764,6 +4787,64 @@ export function createMeoDiffSplitController({
     })
   }
 
+  const measureEditorViewLayoutNow = (view: EditorView | null | undefined, flushDom = false) => {
+    if (!view || !view.dom.isConnected) {
+      return
+    }
+
+    const measurableView = view as EditorView & { measure?: (flush?: boolean) => void }
+    if (typeof measurableView.measure === 'function') {
+      measurableView.measure(flushDom)
+      return
+    }
+
+    view.requestMeasure()
+  }
+
+  const refreshCompositionLayoutNow = () => {
+    if (destroyed) {
+      return
+    }
+
+    mergeView?.refreshLayout({ flushDom: true, immediate: true })
+    if (!mergeView) {
+      measureEditorViewLayoutNow(unifiedView, true)
+    }
+    measureEditorViewLayoutNow(previewOriginalView, true)
+    measureEditorViewLayoutNow(previewView, true)
+    syncDiffScrollPastEndPadding()
+    mergeScrollArea?.refresh()
+    resetDiffOverviewRender()
+  }
+
+  const scheduleCompositionLayoutRefresh = () => {
+    if (!pendingCompositionLayoutMicrotask) {
+      pendingCompositionLayoutMicrotask = true
+      const runMicrotaskRefresh = () => {
+        if (!pendingCompositionLayoutMicrotask) {
+          return
+        }
+        pendingCompositionLayoutMicrotask = false
+        refreshCompositionLayoutNow()
+      }
+
+      if (typeof window.queueMicrotask === 'function') {
+        window.queueMicrotask(runMicrotaskRefresh)
+      } else {
+        Promise.resolve().then(runMicrotaskRefresh)
+      }
+    }
+
+    if (pendingCompositionLayoutFrame) {
+      return
+    }
+
+    pendingCompositionLayoutFrame = window.requestAnimationFrame(() => {
+      pendingCompositionLayoutFrame = 0
+      refreshCompositionLayoutNow()
+    })
+  }
+
   const scheduleInitialRenderWork = (mode: MeoDiffViewMode) => {
     cancelPendingInitialRenderWork()
 
@@ -4824,6 +4905,7 @@ export function createMeoDiffSplitController({
 
   const destroyMergeView = (options: { clearRestoreAnchor?: boolean } = {}) => {
     cancelPendingScrollSync()
+    cancelPendingCompositionLayoutRefresh()
     clearDiffSplitNavigationHighlight(mergeView?.a ?? null, originalNavigationHighlightTimerRef)
     clearDiffSplitNavigationHighlight(mergeView?.b ?? null, modifiedNavigationHighlightTimerRef)
     clearDiffSplitNavigationHighlight(unifiedView, unifiedNavigationHighlightTimerRef)
@@ -5439,6 +5521,7 @@ export function createMeoDiffSplitController({
           lineNumbersVisible: currentLineNumbersVisible,
           onChange: handleModifiedTextChange,
           onCompositionChange: handleCompositionChange,
+          onCompositionLayoutChange: scheduleCompositionLayoutRefresh,
           onOpenLink,
           onSave,
           onSelectionChange,
@@ -5573,6 +5656,7 @@ export function createMeoDiffSplitController({
           lineNumbersVisible: currentLineNumbersVisible,
           onChange: handleModifiedTextChange,
           onCompositionChange: handleCompositionChange,
+          onCompositionLayoutChange: scheduleCompositionLayoutRefresh,
           onOpenLink,
           onSave,
           onSelectionChange,
@@ -5702,6 +5786,7 @@ export function createMeoDiffSplitController({
         lineNumbersVisible: currentLineNumbersVisible,
         onChange: handleModifiedTextChange,
         onCompositionChange: handleCompositionChange,
+        onCompositionLayoutChange: scheduleCompositionLayoutRefresh,
         onOpenLink,
         onSave,
         onSelectionChange,

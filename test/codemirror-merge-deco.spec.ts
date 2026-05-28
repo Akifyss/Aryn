@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Chunk } from '../src/vendor/codemirror-merge/src/chunk'
 import { Change } from '../src/vendor/codemirror-merge/src/diff'
-import { addChunkDecorations, chunkHasChangedLineOnLine, chunkTouchesViewport, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRebuildFrozenChunkDecorationsForUpdate, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
+import { addChunkDecorations, chunkHasChangedLineOnLine, chunkTouchesViewport, isLineFullyInsertedOrDeleted, isWholeLineChange, normalizeInlineChangeRects, shouldAddTrailingSpacer, shouldMeasureInlineChangeLayer, shouldRebuildFrozenChunkDecorationsForUpdate, shouldRefreshChunkDecorationsForUpdate, shouldRefreshFrozenChunkDecorationsForUpdate, snapInlineChangeLayerRect, spacerIsGitGutterTransparent, spacerKindAfterChunk, spacerSideAfterChunk } from '../src/vendor/codemirror-merge/src/deco'
 import { mapRangeBetweenMergeSides, sharedViewportIsAppropriate, shouldMeasureMergeLayout } from '../src/vendor/codemirror-merge/src/mergeview'
 import { RangeSetBuilder, Text } from '@codemirror/state'
 import { buildCodeMirrorChunksFromVsCodeDiff } from '../src/vendor/meo/shared/gitDiffLineFlags'
@@ -18,6 +18,11 @@ const {
 describe('CodeMirror merge decorations', () => {
   const decorationClass = (value: Decoration) =>
     value.spec?.class ?? (value.spec as any)?.widget?.className ?? ''
+
+  it('marks merge spacer widgets as transparent to git gutter inheritance', () => {
+    expect(spacerIsGitGutterTransparent('alignment')).toBe(true)
+    expect(spacerIsGitGutterTransparent('fakeLines')).toBe(true)
+  })
 
   it('builds reusable chunk decorations with the canonical merge classes', () => {
     const originalDoc = Text.of(['one', 'two', 'three'])

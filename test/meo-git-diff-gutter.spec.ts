@@ -39,6 +39,14 @@ function hunkIdsByKind(flags: ReturnType<typeof buildLineFlagsFromVsCodeDiff>) {
   }))
 }
 
+function markerLines(state: EditorState, markers: any) {
+  const lines: number[] = []
+  markers.between(0, state.doc.length, (from: number) => {
+    lines.push(state.doc.lineAt(from).number)
+  })
+  return lines
+}
+
 describe('meo git diff gutter', () => {
   it('tracks the hit segment kind and hunk when a marker has both addition and deletion visuals', () => {
     const originalHTMLElement = globalThis.HTMLElement
@@ -415,6 +423,32 @@ describe('meo git diff gutter', () => {
     expect(marker?.flags?.scope).toBe('unstaged')
   })
 
+  it('does not let layout-only live widgets inherit git gutter markers', () => {
+    let state = EditorState.create({
+      doc: 'A\nX\nC\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    state = state.update({
+      effects: setGitBaselineEffect.of({
+        available: true,
+        baseText: 'A\nB\nC\n',
+        headOid: 'HEAD',
+        indexText: null,
+        tracked: true,
+      }),
+    }).state
+
+    const line = state.doc.line(2)
+    const marker = __gitDiffGutterTestHooks.liveWidgetMarkerAtPos(
+      state,
+      state.field(gitDiffLineFlagsField),
+      { isMeoGitGutterTransparentWidget: true },
+      line.from,
+    )
+
+    expect(marker).toBeNull()
+  })
+
   it('lets unified deleted widgets override the live gutter marker color', () => {
     let state = EditorState.create({
       doc: 'A\nX\nC\n',
@@ -529,6 +563,78 @@ describe('meo git diff gutter', () => {
     expect(marker?.flags?.hunks?.deleted?.diffHunkId).toBe('diff-deleted-hunk')
   })
 
+  it('does not project live block gutter markers onto unchanged block lines', () => {
+    const state = EditorState.create({
+      doc: '| A |\n| - |\n| changed |\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    const flags = [
+      undefined,
+      undefined,
+      {
+        added: true,
+        deleted: false,
+        modified: false,
+        scope: 'unstaged',
+      },
+      undefined,
+    ] as ReturnType<typeof buildLineFlagsFromVsCodeDiff>
+
+    const markers = __gitDiffGutterTestHooks.buildLiveGitGutterMarkersFromLineFlags(state, flags, false)
+    const hunkedFlags = __gitDiffGutterTestHooks.addGitHunkMetadataToLineFlags(flags)
+    expect(markerLines(state, markers)).toEqual([3])
+    expect(__gitDiffGutterTestHooks.liveCollapsedBlockMarkerAtPos(
+      state,
+      hunkedFlags,
+      state.doc.line(2).from,
+    )).toBeNull()
+    expect(__gitDiffGutterTestHooks.liveWidgetMarkerAtPos(
+      state,
+      hunkedFlags,
+      {},
+      state.doc.line(2).from,
+    )).toBeNull()
+  })
+
+  it('does not let live widgets render gutter markers outside sparse changed lines', () => {
+    const state = EditorState.create({
+      doc: '| A |\n| - |\n| changed |\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    const flags = [
+      {
+        added: true,
+        deleted: false,
+        hunkEndLine: 3,
+        hunkId: 'changed-line-3',
+        hunkStartLine: 3,
+        modified: false,
+        scope: 'unstaged',
+      },
+      undefined,
+      {
+        added: true,
+        deleted: false,
+        hunkEndLine: 3,
+        hunkId: 'changed-line-3',
+        hunkStartLine: 3,
+        modified: false,
+        scope: 'unstaged',
+      },
+      undefined,
+    ] as ReturnType<typeof buildLineFlagsFromVsCodeDiff> & { changedLineNumbers: number[] }
+    flags.changedLineNumbers = [3]
+
+    const markers = __gitDiffGutterTestHooks.buildLiveGitGutterMarkersFromLineFlags(state, flags, true)
+    expect(markerLines(state, markers)).toEqual([3])
+    expect(__gitDiffGutterTestHooks.liveWidgetMarkerAtPos(
+      state,
+      flags,
+      {},
+      state.doc.line(1).from,
+    )).toBeNull()
+  })
+
   it('renders sparse gutter flags without scanning every document line', () => {
     const state = EditorState.create({
       doc: Array.from({ length: 12000 }, (_, index) => `line ${index + 1}`).join('\n'),
@@ -591,6 +697,59 @@ describe('meo git diff gutter', () => {
 
     expect(marker?.flags?.removed).toBe(true)
     expect(marker?.flags?.scope).toBe('unstaged')
+  })
+
+  it('can disable inherited widget gutter markers while preserving explicit widget markers', () => {
+    const state = EditorState.create({
+      doc: 'A changed\nB unchanged\n',
+      extensions: gitDiffGutterBaselineExtensions(),
+    })
+    const flags = [
+      {
+        added: true,
+        deleted: false,
+        hunkEndLine: 1,
+        hunkId: 'line-1',
+        hunkStartLine: 1,
+        modified: false,
+        scope: 'unstaged',
+      },
+      undefined,
+    ] as ReturnType<typeof buildLineFlagsFromVsCodeDiff> & { changedLineNumbers: number[] }
+    flags.changedLineNumbers = [1]
+
+    expect(__gitDiffGutterTestHooks.liveWidgetMarkerAtPos(
+      state,
+      flags,
+      {},
+      state.doc.line(1).from,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    )).toBeNull()
+
+    const explicitMarker = __gitDiffGutterTestHooks.liveWidgetMarkerAtPos(
+      state,
+      flags,
+      { marksDeletedLines: true },
+      state.doc.line(1).from,
+      undefined,
+      (_flags, context) => context.widget?.marksDeletedLines
+        ? {
+            added: false,
+            deleted: false,
+            modified: false,
+            removed: true,
+            scope: 'unstaged',
+          }
+        : undefined,
+      undefined,
+      false,
+    ) as { flags?: { removed?: boolean, scope?: string } } | null
+
+    expect(explicitMarker?.flags?.removed).toBe(true)
+    expect(explicitMarker?.flags?.scope).toBe('unstaged')
   })
 
   it('lets inline split diff widgets own their own gutter row', () => {

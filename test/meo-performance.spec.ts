@@ -271,6 +271,32 @@ describe('meo performance guards', () => {
     expect(shouldRefreshLiveMarkerLayoutForTransaction(transaction)).toBe(false)
   })
 
+  it('refreshes structural height hints during deferred live typing', () => {
+    const originalLine = 'Paragraph with enough content to wrap in split mode. '.repeat(2).trim()
+    let state = EditorState.create({
+      doc: originalLine,
+      extensions: liveModeExtensions({ deferDocChanges: true }),
+    })
+
+    const before = __meoLiveModeTestHooks.structuralMarkdownLineDecorationSet(state)
+    const beforeHints = __meoLiveModeTestHooks.collectStructuralMarkdownLineDecorationFieldDebugRanges(state)
+      .filter((range) => range.hasWidget && typeof range.estimatedHeight === 'number')
+
+    state = state.update({
+      changes: { from: state.doc.length, insert: ' more wrapping text'.repeat(16) },
+      annotations: Transaction.userEvent.of('input.type'),
+    }).state
+
+    const after = __meoLiveModeTestHooks.structuralMarkdownLineDecorationSet(state)
+    const afterHints = __meoLiveModeTestHooks.collectStructuralMarkdownLineDecorationFieldDebugRanges(state)
+      .filter((range) => range.hasWidget && typeof range.estimatedHeight === 'number')
+
+    expect(after).not.toBe(before)
+    expect(Math.max(...afterHints.map((range) => Number(range.estimatedHeight)))).toBeGreaterThan(
+      Math.max(...beforeHints.map((range) => Number(range.estimatedHeight))),
+    )
+  })
+
   it('refreshes live decorations when background parsing advances without a document change', () => {
     const state = createMarkdownState(createLongMarkdownDocument(5_000))
 

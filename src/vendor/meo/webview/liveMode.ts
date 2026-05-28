@@ -416,6 +416,7 @@ class ListIndentWidget extends WidgetType {
 
 class StructuralHeightHintWidget extends WidgetType {
   height: number;
+  isMeoGitGutterTransparentWidget = true;
 
   constructor(height: number) {
     super();
@@ -2635,10 +2636,6 @@ const structuralMarkdownLineDecorationField = StateField.define({
   },
   update(decorations, transaction) {
     const forceRefresh = hasRefreshLiveDecorationsEffect(transaction);
-    if (!forceRefresh && shouldHoldLiveDecorationRefresh(transaction)) {
-      return transaction.docChanged ? decorations.map(transaction.changes) : decorations;
-    }
-
     if (!forceRefresh && !transaction.docChanged) {
       return decorations;
     }
@@ -2854,6 +2851,9 @@ export const __meoLiveModeTestHooks = {
   },
   collectStructuralMarkdownLineDecorationDebugRanges(state) {
     return collectDecorationDebugRanges(state, buildStructuralMarkdownLineDecorations(state));
+  },
+  collectStructuralMarkdownLineDecorationFieldDebugRanges(state) {
+    return collectDecorationDebugRanges(state, state.field(structuralMarkdownLineDecorationField));
   },
   structuralMarkdownLineDecorationSet(state) {
     return state.field(structuralMarkdownLineDecorationField);

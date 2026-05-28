@@ -56,6 +56,7 @@ export interface MarkerFlags {
 export type GitDiffLineFlags = ((MarkerFlags | undefined)[] & { changedLineNumbers?: number[] }) | null;
 
 type GitDiffGutterRenderOptions = {
+  inheritWidgetLineFlag?: boolean;
   mapLineFlag?: (flags: MarkerFlags) => MarkerFlags;
   mapWidgetLineFlag?: (
     flags: MarkerFlags | undefined,
@@ -386,6 +387,25 @@ function getRenderableLineNumbers(lineFlags: (MarkerFlags | undefined)[] | null)
   return null;
 }
 
+function lineNumberIsRenderable(lineFlags: (MarkerFlags | undefined)[] | null, lineNo: number): boolean {
+  const lineNumbers = getRenderableLineNumbers(lineFlags);
+  if (!lineNumbers) {
+    return true;
+  }
+  return lineNumbers.includes(lineNo);
+}
+
+function getRenderableMarkerFlagsForLine(
+  lineFlags: (MarkerFlags | undefined)[] | null,
+  lineNo: number
+): MarkerFlags | null {
+  if (!Array.isArray(lineFlags) || !lineNumberIsRenderable(lineFlags, lineNo)) {
+    return null;
+  }
+  const flags = lineFlags[lineNo - 1];
+  return markerFlagsHaveChange(flags) ? flags : null;
+}
+
 function addGitHunkMetadataToLineFlags(lineFlags: GitDiffLineFlags): GitDiffLineFlags {
   if (!Array.isArray(lineFlags) || !lineFlags.length) {
     return lineFlags;
@@ -607,7 +627,15 @@ function buildLiveGitGutterMarkersFromLineFlags(state: EditorState, lineFlags: G
     }
 
     if (activeCollapsedBlock && lineNo >= activeCollapsedBlock.startLine && activeCollapsedFlags) {
-      builder.add(line.from, line.from, gitMarker(activeCollapsedFlags));
+      const flags = liveCollapsedBlockMarkerFlagsForLine(
+        activeCollapsedBlock,
+        hunkedLineFlags,
+        lineNo,
+        activeCollapsedFlags
+      );
+      if (flags) {
+        builder.add(line.from, line.from, gitMarker(flags));
+      }
       continue;
     }
 
@@ -681,8 +709,16 @@ function getSingleHunkMetadataForLineRange(
     : null;
 }
 
+type LiveCollapsedBlockMarkerSource = {
+  startLine: number;
+  endLine: number;
+  canonicalLine?: number;
+  aggregateChangeKind: 'added' | 'deleted' | 'modified' | 'removed';
+  aggregateChangeScope?: 'staged' | 'unstaged';
+};
+
 function liveCollapsedBlockMarkerFlags(
-  block: { startLine: number; endLine: number; aggregateChangeKind: 'added' | 'deleted' | 'modified' | 'removed'; aggregateChangeScope?: 'staged' | 'unstaged' },
+  block: LiveCollapsedBlockMarkerSource,
   lineFlags: GitDiffLineFlags = null
 ): MarkerFlags {
   const hunkMetadata = (
@@ -743,6 +779,22 @@ function liveCollapsedBlockMarkerFlags(
     liveBlockStartLine: block.startLine,
     liveBlockEndLine: block.endLine
   };
+}
+
+function liveCollapsedBlockMarkerFlagsForLine(
+  block: LiveCollapsedBlockMarkerSource & { canonicalLine: number },
+  lineFlags: GitDiffLineFlags,
+  lineNo: number,
+  aggregateFlags?: MarkerFlags | null
+): MarkerFlags | null {
+  const ownFlags = getRenderableMarkerFlagsForLine(lineFlags, lineNo);
+  if (!lineNumberIsRenderable(lineFlags, lineNo)) {
+    return null;
+  }
+  if (lineNo === block.canonicalLine) {
+    return aggregateFlags ?? liveCollapsedBlockMarkerFlags(block, lineFlags);
+  }
+  return ownFlags;
 }
 
 interface DiffSegment {
@@ -837,12 +889,15 @@ function liveMarkerFlagsAtPos(
     return null;
   }
   const lineNo = state.doc.lineAt(Math.max(0, Math.min(pos, state.doc.length))).number;
+  if (!lineNumberIsRenderable(hunkedLineFlags, lineNo)) {
+    return null;
+  }
   const block = getLiveGitCollapsedBlockAtLine(state, hunkedLineFlags, lineNo);
   if (block) {
-    return liveCollapsedBlockMarkerFlags(block, hunkedLineFlags);
+    return liveCollapsedBlockMarkerFlagsForLine(block, hunkedLineFlags, lineNo);
   }
 
-  return hunkedLineFlags[lineNo - 1] ?? null;
+  return getRenderableMarkerFlagsForLine(hunkedLineFlags, lineNo);
 }
 
 function liveCollapsedBlockMarkerAtPos(
@@ -997,7 +1052,8 @@ function gitDiffGutterLiveExtension(options: GitDiffGutterRenderOptions = {}, li
         block.from,
         options.mapLineFlag,
         options.mapWidgetLineFlag,
-        block
+        block,
+        options.inheritWidgetLineFlag !== false
       );
     }
   });
@@ -1010,9 +1066,13 @@ function liveWidgetMarkerAtPos(
   pos: number,
   mapLineFlag?: (flags: MarkerFlags) => MarkerFlags,
   mapWidgetLineFlag?: GitDiffGutterRenderOptions['mapWidgetLineFlag'],
-  block?: any
+  block?: any,
+  inheritWidgetLineFlag = true
 ) {
-  if (widget?.isMeoLiveInlineDiffWidget === true) {
+  if (
+    widget?.isMeoLiveInlineDiffWidget === true ||
+    widget?.isMeoGitGutterTransparentWidget === true
+  ) {
     return null;
   }
 
@@ -1026,6 +1086,10 @@ function liveWidgetMarkerAtPos(
     if (widgetFlags) {
       return gitMarker(inheritGitHunkMetadata(widgetFlags, flags, lineNo));
     }
+  }
+
+  if (!inheritWidgetLineFlag) {
+    return null;
   }
 
   if (!flags) {
@@ -1374,6 +1438,7 @@ export const __gitDiffGutterTestHooks = {
   addGitHunkHoverClasses,
   addGitHunkMetadataToLineFlags,
   buildGitGutterMarkersFromLineFlags,
+  buildLiveGitGutterMarkersFromLineFlags,
   deferGitDiffLineFlagsRefreshEffect,
   getGitGutterHunkMarkers,
   getGitGutterMarkerChangeKindAt,
