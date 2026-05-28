@@ -1139,6 +1139,10 @@ export class PiAgentManager {
     return this.buildWorkspaceState(cwd)
   }
 
+  async listSessionItems(cwd: string): Promise<AgentSessionListItem[]> {
+    return this.listSessions(cwd)
+  }
+
   async createSession(cwd: string, options?: string | AgentSessionCreateOptions): Promise<AgentWorkspaceState> {
     const createOptions = this.normalizeCreateSessionOptions(options)
     const session = await this.activateSession(cwd, SessionManager.create(cwd, this.getSessionDir(cwd)))

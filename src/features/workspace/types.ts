@@ -44,3 +44,17 @@ export type WorkspaceIconTheme = {
   sourceVsixPath: string
   themes: WorkspaceIconThemeOption[]
 }
+
+export type ProjectRecord = {
+  id: string
+  name: string
+  path: string
+  addedAt: string
+  lastOpenedAt: string
+  lastFilePath: string | null
+}
+
+export type ProjectState = {
+  activeProjectId: string | null
+  projects: ProjectRecord[]
+}

@@ -17,9 +17,20 @@ export type PersistedWorkspaceEntry = {
   lastFilePath: string | null
 }
 
+export type PersistedProjectRecord = {
+  id: string
+  name: string
+  path: string
+  addedAt: string
+  lastOpenedAt: string
+  lastFilePath: string | null
+}
+
 export type PersistedWorkspaceState = {
+  activeProjectId: string | null
   entries: Record<string, PersistedWorkspaceEntry>
   lastWorkspacePath: string | null
+  projects: PersistedProjectRecord[]
 }
 
 export type PersistedWindowState = {
@@ -49,8 +60,10 @@ const DEFAULT_APP_STATE: PersistedAppState = {
     },
   },
   workspace: {
+    activeProjectId: null,
     entries: {},
     lastWorkspacePath: null,
+    projects: [],
   },
   window: {
     width: DEFAULT_WINDOW_WIDTH,
@@ -67,6 +80,10 @@ function readNullableString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : null
 }
 
+function getPathBaseName(value: string) {
+  return value.split(/[\\/]/).filter(Boolean).pop() ?? value
+}
+
 function readWorkspaceEntry(value: unknown): PersistedWorkspaceEntry {
   const candidate = value && typeof value === 'object'
     ? value as Record<string, unknown>
@@ -76,6 +93,55 @@ function readWorkspaceEntry(value: unknown): PersistedWorkspaceEntry {
     lastAgentSessionPath: readNullableString(candidate.lastAgentSessionPath),
     lastFilePath: readNullableString(candidate.lastFilePath),
   }
+}
+
+function readProjectRecord(value: unknown): PersistedProjectRecord | null {
+  const candidate = value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {}
+  const path = readNullableString(candidate.path)
+
+  if (!path) {
+    return null
+  }
+
+  const id = readNullableString(candidate.id) ?? path
+  const name = readNullableString(candidate.name) ?? getPathBaseName(path)
+  const now = new Date(0).toISOString()
+
+  return {
+    id,
+    name,
+    path,
+    addedAt: readNullableString(candidate.addedAt) ?? now,
+    lastOpenedAt: readNullableString(candidate.lastOpenedAt) ?? readNullableString(candidate.addedAt) ?? now,
+    lastFilePath: readNullableString(candidate.lastFilePath),
+  }
+}
+
+function createProjectRecordFromPath(projectPath: string, patch: Partial<PersistedProjectRecord> = {}): PersistedProjectRecord {
+  const timestamp = new Date().toISOString()
+
+  return {
+    id: projectPath,
+    name: getPathBaseName(projectPath),
+    path: projectPath,
+    addedAt: timestamp,
+    lastOpenedAt: timestamp,
+    lastFilePath: null,
+    ...patch,
+  }
+}
+
+function dedupeProjectRecords(projects: PersistedProjectRecord[]) {
+  const recordsById = new Map<string, PersistedProjectRecord>()
+
+  for (const project of projects) {
+    const existing = recordsById.get(project.id)
+    recordsById.set(project.id, existing ? { ...existing, ...project } : project)
+  }
+
+  return [...recordsById.values()]
 }
 
 function readWindowDimension(value: unknown, fallback: number, min: number) {
@@ -127,6 +193,9 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
   const entriesCandidate = workspaceCandidate.entries && typeof workspaceCandidate.entries === 'object'
     ? workspaceCandidate.entries as Record<string, unknown>
     : {}
+  const projectsCandidate = Array.isArray(workspaceCandidate.projects)
+    ? workspaceCandidate.projects
+    : []
   const entries = Object.fromEntries(
     Object.entries(entriesCandidate)
       .filter(([workspacePath]) => workspacePath.trim().length > 0)
@@ -134,6 +203,9 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
   )
   const lastWorkspacePath = readNullableString(workspaceCandidate.lastWorkspacePath)
   const legacyLastFilePath = readNullableString(workspaceCandidate.lastFilePath)
+  let normalizedProjects = dedupeProjectRecords(projectsCandidate
+    .map(readProjectRecord)
+    .filter((project): project is PersistedProjectRecord => Boolean(project)))
 
   if (lastWorkspacePath && !entries[lastWorkspacePath]) {
     entries[lastWorkspacePath] = readWorkspaceEntry({
@@ -142,14 +214,34 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
     })
   }
 
+  if (lastWorkspacePath && !normalizedProjects.some((project) => project.path === lastWorkspacePath)) {
+    normalizedProjects = [
+      ...normalizedProjects,
+      createProjectRecordFromPath(lastWorkspacePath, {
+        addedAt: new Date(0).toISOString(),
+        lastFilePath: entries[lastWorkspacePath]?.lastFilePath ?? null,
+        lastOpenedAt: new Date(0).toISOString(),
+      }),
+    ]
+  }
+
+  const requestedActiveProjectId = readNullableString(workspaceCandidate.activeProjectId)
+  const activeProjectId = requestedActiveProjectId && normalizedProjects.some((project) => project.id === requestedActiveProjectId)
+    ? requestedActiveProjectId
+    : lastWorkspacePath
+      ? normalizedProjects.find((project) => project.path === lastWorkspacePath)?.id ?? null
+      : normalizedProjects[0]?.id ?? null
+
   return {
     ui: {
       agentComposerHeight: readAgentComposerHeight(uiCandidate.agentComposerHeight),
       workspaceIconTheme: readWorkspaceIconThemeSelection(uiCandidate.workspaceIconTheme),
     },
     workspace: {
+      activeProjectId,
       entries,
       lastWorkspacePath,
+      projects: normalizedProjects,
     },
     window: {
       width: readWindowDimension(windowCandidate.width, DEFAULT_WINDOW_WIDTH, MIN_WINDOW_WIDTH),

@@ -48,6 +48,7 @@ describe('app state persistence', () => {
         },
       },
       workspace: {
+        activeProjectId: 'C:/notes',
         entries: {
           'C:/notes': {
             lastAgentSessionPath: null,
@@ -55,6 +56,16 @@ describe('app state persistence', () => {
           },
         },
         lastWorkspacePath: 'C:/notes',
+        projects: [
+          {
+            addedAt: '1970-01-01T00:00:00.000Z',
+            id: 'C:/notes',
+            lastFilePath: null,
+            lastOpenedAt: '1970-01-01T00:00:00.000Z',
+            name: 'notes',
+            path: 'C:/notes',
+          },
+        ],
       },
       window: {
         width: DEFAULT_WINDOW_WIDTH,
@@ -69,6 +80,7 @@ describe('app state persistence', () => {
   it('normalizes invalid window sizes while preserving persisted workspace state', async () => {
     const nextState = normalizePersistedAppState({
       workspace: {
+        activeProjectId: 'C:/workspace',
         entries: {
           'C:/workspace': {
             lastAgentSessionPath: 'C:/workspace/.sessions/current.json',
@@ -76,6 +88,16 @@ describe('app state persistence', () => {
           },
         },
         lastWorkspacePath: 'C:/workspace',
+        projects: [
+          {
+            addedAt: '1970-01-01T00:00:00.000Z',
+            id: 'C:/workspace',
+            lastFilePath: 'C:/workspace/draft.md',
+            lastOpenedAt: '1970-01-01T00:00:00.000Z',
+            name: 'workspace',
+            path: 'C:/workspace',
+          },
+        ],
       },
       window: {
         width: 300,
@@ -97,6 +119,7 @@ describe('app state persistence', () => {
         },
       },
       workspace: {
+        activeProjectId: 'C:/workspace',
         entries: {
           'C:/workspace': {
             lastAgentSessionPath: 'C:/workspace/.sessions/current.json',
@@ -104,6 +127,16 @@ describe('app state persistence', () => {
           },
         },
         lastWorkspacePath: 'C:/workspace',
+        projects: [
+          {
+            addedAt: '1970-01-01T00:00:00.000Z',
+            id: 'C:/workspace',
+            lastFilePath: 'C:/workspace/draft.md',
+            lastOpenedAt: '1970-01-01T00:00:00.000Z',
+            name: 'workspace',
+            path: 'C:/workspace',
+          },
+        ],
       },
       window: {
         width: MIN_WINDOW_WIDTH,
@@ -120,6 +153,86 @@ describe('app state persistence', () => {
       lastAgentSessionPath: null,
       lastFilePath: null,
     })
+  })
+
+  it('restores active project from last workspace when the persisted active project is stale', () => {
+    const state = normalizePersistedAppState({
+      workspace: {
+        activeProjectId: 'C:/missing',
+        lastWorkspacePath: 'C:/active',
+        projects: [
+          {
+            id: 'C:/first',
+            name: 'first',
+            path: 'C:/first',
+          },
+          {
+            id: 'C:/active',
+            name: 'active',
+            path: 'C:/active',
+          },
+        ],
+      },
+    })
+
+    expect(state.workspace.activeProjectId).toBe('C:/active')
+  })
+
+  it('deduplicates persisted projects by id while keeping the latest normalized record', () => {
+    const state = normalizePersistedAppState({
+      workspace: {
+        activeProjectId: 'C:/workspace',
+        projects: [
+          {
+            id: 'C:/workspace',
+            name: 'old',
+            path: 'C:/workspace',
+            lastFilePath: 'C:/workspace/old.md',
+          },
+          {
+            id: 'C:/workspace',
+            name: 'workspace',
+            path: 'C:/workspace',
+            lastFilePath: 'C:/workspace/current.md',
+          },
+        ],
+      },
+    })
+
+    expect(state.workspace.projects).toHaveLength(1)
+    expect(state.workspace.projects[0]).toMatchObject({
+      id: 'C:/workspace',
+      lastFilePath: 'C:/workspace/current.md',
+      name: 'workspace',
+      path: 'C:/workspace',
+    })
+  })
+
+  it('preserves persisted project order independent of last opened time', () => {
+    const state = normalizePersistedAppState({
+      workspace: {
+        activeProjectId: 'C:/second',
+        projects: [
+          {
+            id: 'C:/first',
+            name: 'first',
+            path: 'C:/first',
+            lastOpenedAt: '2024-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'C:/second',
+            name: 'second',
+            path: 'C:/second',
+            lastOpenedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    })
+
+    expect(state.workspace.projects.map((project) => project.id)).toEqual([
+      'C:/first',
+      'C:/second',
+    ])
   })
 
   it('drops legacy app icon selections from normalized app state', () => {

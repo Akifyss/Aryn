@@ -1,18 +1,23 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer, Tabs } from '@heroui/react'
 import {
   FileLine,
   FolderLine,
+  FolderOpenLine,
   GitBranchLine,
   LayoutLeftLine,
   LayoutRightLine,
+  NewFolderLine,
+  CheckLine,
+  SearchLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
-import type { WorkspaceNode } from '@/features/workspace/types'
+import type { ProjectRecord, ProjectState, WorkspaceNode } from '@/features/workspace/types'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTitlebar } from '@/components/app-titlebar'
 import {
+  type AgentProjectSessionRequest,
   AgentChatSurface,
   AgentProvider,
   AgentSessionTree,
@@ -395,9 +400,113 @@ type PanelSurfaceMode = 'docked' | 'drawer'
 type LeftSidebarTab = 'file' | 'git'
 type AgentLayoutFixedTab = 'file' | 'git'
 type AgentRightSidebarWidthMode = 'max' | 'fixed'
+type ProjectMenuMode = 'agent-add' | 'editor-switch'
+type ProjectMenuAnchorRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width' | 'height'>
+
+const PROJECT_MENU_MARGIN_PX = 8
+const PROJECT_MENU_GAP_PX = 8
+const PROJECT_MENU_AGENT_ADD_WIDTH_PX = 288
+const PROJECT_MENU_EDITOR_SWITCH_WIDTH_PX = 320
+const PROJECT_MENU_AGENT_ADD_ESTIMATED_HEIGHT_PX = 96
+const PROJECT_MENU_EDITOR_SWITCH_MAX_HEIGHT_PX = 520
+const PROJECT_MENU_EDITOR_SWITCH_MIN_HEIGHT_PX = 180
+const PROJECT_MENU_EDITOR_SWITCH_SEARCH_HEIGHT_PX = 36
+const PROJECT_MENU_EDITOR_SWITCH_ACTIONS_HEIGHT_PX = 72
+const PROJECT_MENU_PROJECT_ROW_HEIGHT_PX = 34
+const PROJECT_MENU_PROJECT_LIST_MAX_HEIGHT_PX = 320
+
+const emptyProjectState: ProjectState = {
+  activeProjectId: null,
+  projects: [],
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
+}
+
+function serializeProjectMenuAnchorRect(rect: ProjectMenuAnchorRect): ProjectMenuAnchorRect {
+  return {
+    bottom: rect.bottom,
+    height: rect.height,
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+    width: rect.width,
+  }
+}
+
+function estimateProjectMenuHeight(
+  mode: ProjectMenuMode,
+  projectCount: number,
+  viewportHeight: number,
+) {
+  const viewportMaxHeight = Math.max(160, viewportHeight - (PROJECT_MENU_MARGIN_PX * 2))
+
+  if (mode === 'agent-add') {
+    return Math.min(PROJECT_MENU_AGENT_ADD_ESTIMATED_HEIGHT_PX, viewportMaxHeight)
+  }
+
+  const listHeight = Math.min(
+    PROJECT_MENU_PROJECT_LIST_MAX_HEIGHT_PX,
+    Math.max(PROJECT_MENU_PROJECT_ROW_HEIGHT_PX, projectCount * PROJECT_MENU_PROJECT_ROW_HEIGHT_PX),
+  )
+  const estimatedHeight = PROJECT_MENU_EDITOR_SWITCH_SEARCH_HEIGHT_PX
+    + listHeight
+    + PROJECT_MENU_EDITOR_SWITCH_ACTIONS_HEIGHT_PX
+
+  return Math.min(
+    PROJECT_MENU_EDITOR_SWITCH_MAX_HEIGHT_PX,
+    viewportMaxHeight,
+    Math.max(PROJECT_MENU_EDITOR_SWITCH_MIN_HEIGHT_PX, estimatedHeight),
+  )
+}
+
+function resolveProjectMenuStyle(
+  mode: ProjectMenuMode,
+  anchorRect: ProjectMenuAnchorRect | null,
+  projectCount = 0,
+): CSSProperties | undefined {
+  if (!anchorRect || typeof window === 'undefined') {
+    return undefined
+  }
+
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const maxWidth = Math.max(240, viewportWidth - (PROJECT_MENU_MARGIN_PX * 2))
+  const width = Math.min(
+    mode === 'agent-add' ? PROJECT_MENU_AGENT_ADD_WIDTH_PX : PROJECT_MENU_EDITOR_SWITCH_WIDTH_PX,
+    maxWidth,
+  )
+  const maxLeft = Math.max(PROJECT_MENU_MARGIN_PX, viewportWidth - width - PROJECT_MENU_MARGIN_PX)
+  const preferredLeft = mode === 'editor-switch'
+    ? anchorRect.left + (anchorRect.width / 2) - (width / 2)
+    : anchorRect.left
+  const left = clamp(preferredLeft, PROJECT_MENU_MARGIN_PX, maxLeft)
+  const estimatedHeight = estimateProjectMenuHeight(mode, projectCount, viewportHeight)
+  const maxHeight = mode === 'agent-add'
+    ? PROJECT_MENU_AGENT_ADD_ESTIMATED_HEIGHT_PX
+    : PROJECT_MENU_EDITOR_SWITCH_MAX_HEIGHT_PX
+  const availableBelow = Math.max(0, viewportHeight - anchorRect.bottom - PROJECT_MENU_MARGIN_PX - PROJECT_MENU_GAP_PX)
+  const availableAbove = Math.max(0, anchorRect.top - PROJECT_MENU_MARGIN_PX - PROJECT_MENU_GAP_PX)
+  const preferredHeight = Math.min(estimatedHeight, maxHeight)
+  const opensBelow = availableBelow >= preferredHeight || availableBelow >= availableAbove
+  const availableHeight = opensBelow ? availableBelow : availableAbove
+  const renderedHeight = Math.min(preferredHeight, availableHeight)
+  const preferredTop = anchorRect.bottom + PROJECT_MENU_GAP_PX
+  const fallbackTop = anchorRect.top - PROJECT_MENU_GAP_PX - renderedHeight
+  const top = opensBelow
+    ? Math.min(preferredTop, viewportHeight - renderedHeight - PROJECT_MENU_MARGIN_PX)
+    : Math.max(PROJECT_MENU_MARGIN_PX, fallbackTop)
+  const bottom = viewportHeight - anchorRect.top + PROJECT_MENU_GAP_PX
+
+  return {
+    left: `${left}px`,
+    maxHeight: `${availableHeight}px`,
+    ...(opensBelow
+      ? { bottom: 'auto', top: `${Math.max(PROJECT_MENU_MARGIN_PX, top)}px` }
+      : { bottom: `${bottom}px`, top: 'auto' }),
+    width: `${width}px`,
+  }
 }
 
 function getTabStorageKey(workspacePath: string) {
@@ -709,6 +818,15 @@ function App() {
   }, [theme])
 
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
+  const [projectState, setProjectState] = useState<ProjectState>(emptyProjectState)
+  const [projectMenuMode, setProjectMenuMode] = useState<ProjectMenuMode | null>(null)
+  const [projectMenuAnchorRect, setProjectMenuAnchorRect] = useState<ProjectMenuAnchorRect | null>(null)
+  const [projectMenuSearch, setProjectMenuSearch] = useState('')
+  const [isProjectActionBusy, setIsProjectActionBusy] = useState(false)
+  const [hasLoadedProjectState, setHasLoadedProjectState] = useState(false)
+  const [newProjectName, setNewProjectName] = useState('')
+  const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false)
+  const [pendingAgentProjectSessionRequest, setPendingAgentProjectSessionRequest] = useState<AgentProjectSessionRequest | null>(null)
 
   const [confirmDialogOptions, setConfirmDialogOptions] = useState<{
     isOpen: boolean
@@ -813,6 +931,7 @@ function App() {
   const leftDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
   const rightDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
   const meoEditorHostRef = useRef<MeoEditorHostHandle | null>(null)
+  const agentProjectSessionRequestIdRef = useRef(0)
   const activeTabId = useWorkspaceStore((state) => state.activeTabId)
   const activateTab = useWorkspaceStore((state) => state.activateTab)
   const closeTab = useWorkspaceStore((state) => state.closeTab)
@@ -970,6 +1089,23 @@ function App() {
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
     : 'Current workspace'
+  const activeProject = useMemo(
+    () => projectState.projects.find((project) => project.id === projectState.activeProjectId) ?? null,
+    [projectState.activeProjectId, projectState.projects],
+  )
+  const needsProjectBootstrap = hasLoadedProjectState && !activeProject
+  const filteredProjectMenuProjects = useMemo(() => {
+    const query = projectMenuSearch.trim().toLowerCase()
+
+    if (!query) {
+      return projectState.projects
+    }
+
+    return projectState.projects.filter((project) => (
+      project.name.toLowerCase().includes(query)
+      || project.path.toLowerCase().includes(query)
+    ))
+  }, [projectMenuSearch, projectState.projects])
   const shellPlatform: ShellPlatform = deriveShellPlatform(platform)
   const baseShellChromeVars = getShellChromeVars(shellPlatform, { isFullScreen: isWindowFullScreen })
   const shellChromeVars = {
@@ -987,7 +1123,11 @@ function App() {
   const isRightDrawerFullWidth = shellWidth <= RIGHT_DRAWER_MAX_WIDTH
   const isLeftSidebarVisible = !isLeftSidebarDrawer && !isLeftSidebarCollapsed
   const isRightSidebarVisible = !isRightSidebarDrawer && !isRightSidebarCollapsed
-  const isAppModalLayerOpen = isSettingsOpen || isCommandPaletteOpen || Boolean(confirmDialogOptions?.isOpen)
+  const isAppModalLayerOpen = isSettingsOpen
+    || isCommandPaletteOpen
+    || isNewProjectDialogOpen
+    || Boolean(confirmDialogOptions?.isOpen)
+    || Boolean(projectMenuMode)
   const isLeftPanelOverlayElevated = !isAppModalLayerOpen && !isRightDrawerOpen
   const isRightPanelOverlayElevated = !isAppModalLayerOpen && !isLeftDrawerOpen
   const isLeftPanelOverlayTopLayer = !isAppModalLayerOpen && isLeftDrawerOpen
@@ -1839,6 +1979,31 @@ function App() {
     await updateWorkspaceState(nextPath, { markAsLastOpened: true })
   }
 
+  async function switchActiveWorkspace(
+    project: ProjectRecord,
+    options: { restoreTabs?: boolean, skipDirtyConfirm?: boolean } = {},
+  ) {
+    if (currentPath && normalizeFilePath(currentPath) === normalizeFilePath(project.path)) {
+      await window.appApi.setActiveProject(project.id)
+      setProjectState(await window.appApi.getProjectState())
+      return true
+    }
+
+    if (!options.skipDirtyConfirm && !(await confirmDiscardDirtyTabs('switch-workspace'))) {
+      return false
+    }
+
+    const nextProjectState = await window.appApi.setActiveProject(project.id)
+    setProjectState(nextProjectState)
+    await connectWorkspace(project.path)
+
+    if (options.restoreTabs !== false) {
+      await restoreWorkspaceTabs(project.path)
+    }
+
+    return true
+  }
+
   async function handleRequestWindowClose() {
     if (windowCloseRequestInFlightRef.current) {
       return
@@ -2263,20 +2428,218 @@ function App() {
 
     setIsPickingWorkspace(true)
     try {
-      const nextPath = await window.appApi.pickWorkspace()
-      if (nextPath) {
-        if (currentPath && normalizeFilePath(currentPath) === normalizeFilePath(nextPath)) {
-          setStatusMessage('Workspace already open')
-          return
-        }
+      const nextProjectState = await window.appApi.addExistingProject()
+      if (nextProjectState) {
+        setProjectState(nextProjectState)
+        const nextActiveProject = nextProjectState.projects.find((project) => project.id === nextProjectState.activeProjectId)
 
-        await connectWorkspace(nextPath)
-        await restoreWorkspaceTabs(nextPath)
-        setStatusMessage('Workspace connected')
+        if (nextActiveProject) {
+          await connectWorkspace(nextActiveProject.path)
+          await restoreWorkspaceTabs(nextActiveProject.path, nextActiveProject.lastFilePath)
+          setStatusMessage('项目已打开')
+        }
       }
     } finally {
       setIsPickingWorkspace(false)
     }
+  }
+
+  function openProjectMenu(mode: ProjectMenuMode, anchorRect?: ProjectMenuAnchorRect) {
+    setProjectMenuAnchorRect(anchorRect ? serializeProjectMenuAnchorRect(anchorRect) : null)
+    setProjectMenuSearch('')
+    setProjectMenuMode(mode)
+  }
+
+  function closeProjectMenu() {
+    setProjectMenuAnchorRect(null)
+    setProjectMenuMode(null)
+    setProjectMenuSearch('')
+  }
+
+  function openNewProjectDialog() {
+    setNewProjectName('')
+    setIsNewProjectDialogOpen(true)
+    closeProjectMenu()
+  }
+
+  async function activateProjectFromState(nextProjectState: ProjectState, options: { restoreTabs?: boolean } = {}) {
+    setProjectState(nextProjectState)
+    const nextActiveProject = nextProjectState.projects.find((project) => project.id === nextProjectState.activeProjectId)
+
+    if (!nextActiveProject) {
+      return false
+    }
+
+    await connectWorkspace(nextActiveProject.path)
+
+    if (options.restoreTabs !== false) {
+      await restoreWorkspaceTabs(nextActiveProject.path, nextActiveProject.lastFilePath)
+    }
+
+    return true
+  }
+
+  async function handleCreateEmptyProject(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault()
+    const trimmedName = newProjectName.trim()
+
+    if (!trimmedName) {
+      return
+    }
+
+    if (!(await confirmDiscardDirtyTabs('switch-workspace'))) {
+      return
+    }
+
+    setIsProjectActionBusy(true)
+    try {
+      const nextProjectState = await window.appApi.createEmptyProject(trimmedName)
+      await activateProjectFromState(nextProjectState)
+      setIsNewProjectDialogOpen(false)
+      setNewProjectName('')
+      setStatusMessage('项目已创建')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to create project.'
+      toast.danger('创建项目失败', { description: message })
+      setStatusMessage(message)
+    } finally {
+      setIsProjectActionBusy(false)
+    }
+  }
+
+  async function handleAddExistingProject() {
+    if (!(await confirmDiscardDirtyTabs('switch-workspace'))) {
+      return
+    }
+
+    setIsProjectActionBusy(true)
+    try {
+      const nextProjectState = await window.appApi.addExistingProject()
+
+      if (!nextProjectState) {
+        return
+      }
+
+      await activateProjectFromState(nextProjectState)
+      closeProjectMenu()
+      setStatusMessage('项目已打开')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to open project.'
+      toast.danger('打开项目失败', { description: message })
+      setStatusMessage(message)
+    } finally {
+      setIsProjectActionBusy(false)
+    }
+  }
+
+  async function handleSelectProject(project: ProjectRecord) {
+    setIsProjectActionBusy(true)
+    try {
+      const didSwitch = await switchActiveWorkspace(project)
+      if (didSwitch) {
+        closeProjectMenu()
+        setStatusMessage(`${project.name} 已激活`)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to switch project.'
+      toast.danger('切换项目失败', { description: message })
+      setStatusMessage(message)
+    } finally {
+      setIsProjectActionBusy(false)
+    }
+  }
+
+  async function handleRemoveProject(project: ProjectRecord) {
+    const confirmed = await requestConfirm({
+      title: '移除项目',
+      message: `要从项目列表移除“${project.name}”吗？\n\n这不会删除本地文件夹。`,
+      confirmLabel: '移除',
+      isDanger: true,
+    })
+
+    if (!confirmed) {
+      return
+    }
+
+    setIsProjectActionBusy(true)
+    try {
+      const wasActive = projectState.activeProjectId === project.id
+      const nextProjectState = await window.appApi.removeProject(project.id)
+      setProjectState(nextProjectState)
+
+      if (wasActive) {
+        const nextActiveProject = nextProjectState.projects.find((candidate) => candidate.id === nextProjectState.activeProjectId)
+        if (nextActiveProject) {
+          await connectWorkspace(nextActiveProject.path)
+          await restoreWorkspaceTabs(nextActiveProject.path, nextActiveProject.lastFilePath)
+        } else {
+          await window.appApi.stopWorkspaceWatch()
+          setCurrentPath(null)
+          setTree([])
+          resetOpenTabs()
+          setAgentWorkspaceState(null)
+        }
+      }
+
+      setStatusMessage('项目已移除')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to remove project.'
+      toast.danger('移除项目失败', { description: message })
+      setStatusMessage(message)
+    } finally {
+      setIsProjectActionBusy(false)
+    }
+  }
+
+  async function handleShowProjectInFolder(project: ProjectRecord) {
+    try {
+      await window.appApi.showProjectInFolder(project.id)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to open project folder.'
+      toast.danger('打开文件夹失败', { description: message })
+      setStatusMessage(message)
+    }
+  }
+
+  async function requestAgentProjectSession(
+    project: ProjectRecord,
+    request: { kind: 'new' } | { kind: 'session', sessionPath: string },
+  ) {
+    try {
+      const didSwitch = await switchActiveWorkspace(project)
+
+      if (!didSwitch) {
+        return
+      }
+
+      agentProjectSessionRequestIdRef.current += 1
+      const requestId = agentProjectSessionRequestIdRef.current
+
+      setPendingAgentProjectSessionRequest(request.kind === 'session'
+        ? {
+            kind: 'session',
+            projectId: project.id,
+            requestId,
+            sessionPath: request.sessionPath,
+          }
+        : {
+            kind: 'new',
+            projectId: project.id,
+            requestId,
+          })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to open project conversation.'
+      toast.danger('打开对话失败', { description: message })
+      setStatusMessage(message)
+    }
+  }
+
+  async function handleOpenProjectSession(project: ProjectRecord, sessionPath: string) {
+    await requestAgentProjectSession(project, { kind: 'session', sessionPath })
+  }
+
+  async function handleStartProjectSession(project: ProjectRecord) {
+    await requestAgentProjectSession(project, { kind: 'new' })
   }
 
   async function handleCreateFile() {
@@ -2423,6 +2786,181 @@ function App() {
             onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
           />
         </AppScrollArea>
+      </div>
+    )
+  }
+
+  function renderProjectMenu() {
+    if (!projectMenuMode) {
+      return null
+    }
+
+    const isSwitchMenu = projectMenuMode === 'editor-switch'
+    const menuStyle = resolveProjectMenuStyle(projectMenuMode, projectMenuAnchorRect, filteredProjectMenuProjects.length)
+    const projectMenuActions = (
+      <div className='project-menu-actions'>
+        <button
+          type='button'
+          className='project-menu-action'
+          disabled={isProjectActionBusy}
+          onClick={openNewProjectDialog}
+        >
+          <NewFolderLine size={18} />
+          <span>新建空白项目</span>
+        </button>
+        <button
+          type='button'
+          className='project-menu-action'
+          disabled={isProjectActionBusy}
+          onClick={() => {
+            void handleAddExistingProject()
+          }}
+        >
+          <FolderOpenLine size={18} />
+          <span>使用现有文件夹</span>
+        </button>
+      </div>
+    )
+
+    return (
+      <div
+        className='project-menu-backdrop'
+        onPointerDown={(event) => {
+          if (event.target === event.currentTarget) {
+            closeProjectMenu()
+          }
+        }}
+      >
+        <div
+          className={`project-menu project-menu-${projectMenuMode}`}
+          role='dialog'
+          aria-label={isSwitchMenu ? '切换项目' : '添加项目'}
+          style={menuStyle}
+        >
+          {isSwitchMenu ? (
+            <>
+              <label className='project-menu-search'>
+                <SearchLine size={16} />
+                <input
+                  autoFocus
+                  value={projectMenuSearch}
+                  placeholder='搜索项目'
+                  onChange={(event) => setProjectMenuSearch(event.target.value)}
+                />
+              </label>
+              <AppScrollArea
+                className='project-menu-list'
+                contentClassName='project-menu-list-content'
+              >
+                {filteredProjectMenuProjects.map((project) => {
+                  const isActive = project.id === projectState.activeProjectId
+
+                  return (
+                    <button
+                      type='button'
+                      key={project.id}
+                      className={`project-menu-project${isActive ? ' is-active' : ''}`}
+                      disabled={isProjectActionBusy}
+                      onClick={() => {
+                        void handleSelectProject(project)
+                      }}
+                    >
+                      <FolderLine size={17} />
+                      <span className='project-menu-project-name'>{project.name}</span>
+                      {isActive ? <CheckLine className='project-menu-project-check' size={18} /> : null}
+                    </button>
+                  )
+                })}
+                {filteredProjectMenuProjects.length === 0 ? (
+                  <div className='project-menu-empty'>没有匹配项目</div>
+                ) : null}
+              </AppScrollArea>
+              {projectMenuActions}
+            </>
+          ) : projectMenuActions}
+        </div>
+      </div>
+    )
+  }
+
+  function renderNewProjectDialog() {
+    return (
+      <Modal>
+        <Modal.Backdrop
+          isOpen={isNewProjectDialogOpen}
+          onOpenChange={(isOpen) => {
+            setIsNewProjectDialogOpen(isOpen)
+          }}
+        >
+          <Modal.Container className='project-create-modal-container'>
+            <Modal.Dialog className={`project-create-modal ${resolvedTheme === 'dark' ? 'dark' : ''}`}>
+              <Modal.CloseTrigger className='project-create-modal-close' aria-label='关闭'>
+                <Icon icon='lucide:x' width={16} height={16} />
+              </Modal.CloseTrigger>
+              <Modal.Body>
+                <form className='project-create-form' onSubmit={(event) => void handleCreateEmptyProject(event)}>
+                  <div className='project-create-heading'>
+                    <h2>新建空白项目</h2>
+                    <p>创建后会自动切换到这个项目。</p>
+                  </div>
+                  <label className='project-create-field'>
+                    <span>项目名称</span>
+                    <input
+                      autoFocus
+                      value={newProjectName}
+                      placeholder='Untitled Project'
+                      onChange={(event) => setNewProjectName(event.target.value)}
+                    />
+                  </label>
+                  <div className='project-create-footer'>
+                    <Button variant='tertiary' type='button' onPress={() => setIsNewProjectDialogOpen(false)}>
+                      取消
+                    </Button>
+                    <Button variant='primary' type='submit' isDisabled={!newProjectName.trim() || isProjectActionBusy}>
+                      创建
+                    </Button>
+                  </div>
+                </form>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+    )
+  }
+
+  function renderProjectBootstrap() {
+    return (
+      <div className='project-bootstrap'>
+        <div className='project-bootstrap-panel'>
+          <div className='project-bootstrap-logo' aria-hidden='true'>
+            <img src='./branding/logo.svg' alt='' />
+          </div>
+          <div className='project-bootstrap-copy'>
+            <h1>选择一个项目开始</h1>
+            <p>Aryn 会把编辑器、Git、文件树和 Agent 对话绑定到当前 active 项目。</p>
+          </div>
+          <div className='project-bootstrap-actions'>
+            <Button
+              variant='primary'
+              onPress={openNewProjectDialog}
+              isDisabled={isProjectActionBusy}
+            >
+              <NewFolderLine className='mr-2' size={16} />
+              新建空白项目
+            </Button>
+            <Button
+              variant='outline'
+              onPress={() => {
+                void handleAddExistingProject()
+              }}
+              isDisabled={isProjectActionBusy}
+            >
+              <FolderOpenLine className='mr-2' size={16} />
+              使用现有文件夹
+            </Button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -3063,26 +3601,33 @@ function App() {
         }
       }
 
-      const restoreState = await window.appApi.getWorkspaceRestoreState()
-      const lastWorkspacePath = restoreState.workspacePath
+      const nextProjectState = await window.appApi.getProjectState()
 
-      if (!lastWorkspacePath || cancelled) {
+      if (cancelled) {
+        return
+      }
+
+      setProjectState(nextProjectState)
+      setHasLoadedProjectState(true)
+      const activeProject = nextProjectState.projects.find((project) => project.id === nextProjectState.activeProjectId) ?? null
+
+      if (!activeProject) {
+        setStatusMessage('创建或打开项目以开始。')
         return
       }
 
       try {
-        await connectWorkspace(lastWorkspacePath)
-
+        await connectWorkspace(activeProject.path)
         if (!cancelled) {
-          await restoreWorkspaceTabs(lastWorkspacePath, restoreState.filePath)
+          await restoreWorkspaceTabs(activeProject.path, activeProject.lastFilePath)
         }
 
         if (!cancelled) {
-          setStatusMessage('Last workspace restored')
+          setStatusMessage('已恢复上次项目')
         }
       } catch {
         if (!cancelled) {
-          setStatusMessage('Open a folder to start.')
+          setStatusMessage('创建或打开项目以开始。')
         }
       }
     })()
@@ -3983,14 +4528,14 @@ function App() {
         <div className={`section-title workspace-section-title${isDrawerSurface ? ' is-drawer-surface' : ''}`}>
           <button
             type='button'
-            onClick={() => {
-              void handlePickWorkspace()
+            onClick={(event) => {
+              openProjectMenu('editor-switch', event.currentTarget.getBoundingClientRect())
             }}
             disabled={isPickingWorkspace}
             className='section-title-text'
-            aria-label={isPickingWorkspace ? 'Opening workspace' : 'Open workspace'}
+            aria-label={isPickingWorkspace ? 'Opening workspace' : '切换项目'}
           >
-            <span className='section-title-label'>{workspaceLabel}</span>
+            <span className='section-title-label'>{activeProject?.name ?? workspaceLabel}</span>
           </button>
 
           <div className='section-title-drag-spacer' aria-hidden='true' />
@@ -4069,6 +4614,12 @@ function App() {
 
     return (
       <AgentSidebar
+        externalSessionRequest={pendingAgentProjectSessionRequest}
+        onExternalSessionRequestHandled={(requestId) => {
+          setPendingAgentProjectSessionRequest((currentValue) => (
+            currentValue?.requestId === requestId ? null : currentValue
+          ))
+        }}
         iconTheme={iconTheme}
         onOpenMessageFile={openAgentMessageFile}
         onOpenProviderSettings={() => {
@@ -4082,6 +4633,13 @@ function App() {
         workspacePath={currentPath}
         workspaceState={agentWorkspaceState}
         onWorkspaceStateChange={setAgentWorkspaceState}
+        onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect)}
+        onOpenProjectSwitchMenu={(anchorRect) => openProjectMenu('editor-switch', anchorRect)}
+        onOpenProjectFolder={handleShowProjectInFolder}
+        onOpenProjectSession={handleOpenProjectSession}
+        onRemoveProject={handleRemoveProject}
+        onStartProjectSession={handleStartProjectSession}
+        projectState={projectState}
       />
     )
   }
@@ -4400,7 +4958,7 @@ function App() {
       </div>
 
       <main className='panel panel-editor' id='editor-main'>
-        {isAgentLayout ? renderAgentPanel('docked') : renderEditorSurface()}
+        {needsProjectBootstrap ? renderProjectBootstrap() : isAgentLayout ? renderAgentPanel('docked') : renderEditorSurface()}
       </main>
 
       <div className={`panel-resize-slot panel-resize-slot-right${isRightSidebarVisible ? '' : ' is-hidden'}`}>
@@ -4422,7 +4980,7 @@ function App() {
 
       {isRightSidebarVisible ? (
         <aside className='panel panel-agent'>
-          {isAgentLayout ? renderEditorSurface() : renderAgentPanel('docked')}
+          {needsProjectBootstrap ? null : isAgentLayout ? renderEditorSurface() : renderAgentPanel('docked')}
         </aside>
       ) : null}
 
@@ -4497,6 +5055,9 @@ function App() {
       ) : null}
 
       <Toast.Provider placement='bottom end' />
+
+      {renderProjectMenu()}
+      {renderNewProjectDialog()}
 
       <Modal>
         <Modal.Backdrop 
@@ -4586,6 +5147,12 @@ function App() {
   if (isAgentLayout) {
     return (
       <AgentProvider
+        externalSessionRequest={pendingAgentProjectSessionRequest}
+        onExternalSessionRequestHandled={(requestId) => {
+          setPendingAgentProjectSessionRequest((currentValue) => (
+            currentValue?.requestId === requestId ? null : currentValue
+          ))
+        }}
         iconTheme={iconTheme}
         onOpenMessageFile={openAgentMessageFile}
         onOpenProviderSettings={() => {
@@ -4599,6 +5166,13 @@ function App() {
         workspacePath={currentPath}
         workspaceState={agentWorkspaceState}
         onWorkspaceStateChange={setAgentWorkspaceState}
+        onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect)}
+        onOpenProjectSwitchMenu={(anchorRect) => openProjectMenu('editor-switch', anchorRect)}
+        onOpenProjectFolder={handleShowProjectInFolder}
+        onOpenProjectSession={handleOpenProjectSession}
+        onRemoveProject={handleRemoveProject}
+        onStartProjectSession={handleStartProjectSession}
+        projectState={projectState}
       >
         {appShell}
       </AgentProvider>

@@ -1,6 +1,6 @@
 import { Menu, app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { readFile, stat } from 'node:fs/promises'
+import { mkdir, readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -43,10 +43,10 @@ import {
   MIN_WINDOW_HEIGHT,
   MIN_WINDOW_WIDTH,
 } from './app-state'
-import type { PersistedWorkspaceIconThemeSelection } from './app-state'
+import type { PersistedProjectRecord, PersistedWorkspaceIconThemeSelection } from './app-state'
 import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions } from '../../src/features/agent/types'
 import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
-import type { WorkspaceIconThemeCatalogOption } from '../../src/features/workspace/types'
+import type { ProjectRecord, ProjectState, WorkspaceIconThemeCatalogOption } from '../../src/features/workspace/types'
 import {
   importWorkspaceIconThemeFromVsix,
   loadWorkspaceIconThemeCatalogFromVsix,
@@ -134,6 +134,157 @@ const WINDOW_BACKGROUND_COLORS = {
 } as const satisfies Record<WindowBackgroundTheme, string>
 
 let windowAppearanceTheme: WindowAppearanceTheme = 'system'
+
+function getPathBaseName(value: string) {
+  return value.split(/[\\/]/).filter(Boolean).pop() ?? value
+}
+
+function normalizeProjectPath(projectPath: string) {
+  return path.resolve(projectPath)
+}
+
+function createProjectRecord(projectPath: string, patch: Partial<PersistedProjectRecord> = {}): PersistedProjectRecord {
+  const normalizedPath = normalizeProjectPath(projectPath)
+  const timestamp = new Date().toISOString()
+
+  return {
+    id: normalizedPath,
+    name: getPathBaseName(normalizedPath),
+    path: normalizedPath,
+    addedAt: timestamp,
+    lastOpenedAt: timestamp,
+    lastFilePath: null,
+    ...patch,
+  }
+}
+
+async function filterExistingProjects(projects: PersistedProjectRecord[]) {
+  const settledProjects = await Promise.all(projects.map(async (project) => {
+    const exists = await workspacePathExists(project.path)
+    return exists ? project : null
+  }))
+
+  return settledProjects.filter((project): project is PersistedProjectRecord => Boolean(project))
+}
+
+function toProjectState(projects: PersistedProjectRecord[], activeProjectId: string | null): ProjectState {
+  return {
+    activeProjectId,
+    projects: projects.map((project): ProjectRecord => ({
+      id: project.id,
+      name: project.name,
+      path: project.path,
+      addedAt: project.addedAt,
+      lastOpenedAt: project.lastOpenedAt,
+      lastFilePath: project.lastFilePath,
+    })),
+  }
+}
+
+async function getVisibleProjectState(): Promise<ProjectState> {
+  const state = await appStateStore.read()
+  const visibleProjects = await filterExistingProjects(state.workspace.projects)
+  const activeProjectId = state.workspace.activeProjectId
+    && visibleProjects.some((project) => project.id === state.workspace.activeProjectId)
+    ? state.workspace.activeProjectId
+    : visibleProjects[0]?.id ?? null
+
+  if (
+    activeProjectId !== state.workspace.activeProjectId
+  ) {
+    await appStateStore.update((currentState) => ({
+      ...currentState,
+      workspace: {
+        ...currentState.workspace,
+        activeProjectId,
+        lastWorkspacePath: visibleProjects.find((project) => project.id === activeProjectId)?.path ?? null,
+      },
+    }))
+  }
+
+  return toProjectState(visibleProjects, activeProjectId)
+}
+
+function sanitizeProjectFolderName(name: string) {
+  const sanitized = name
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/^\.+$/, '')
+    .replace(/^\.+/, '')
+    .replace(/[. ]+$/, '')
+
+  return sanitized || 'Untitled Project'
+}
+
+async function resolveUniqueProjectPath(parentPath: string, folderName: string) {
+  const basePath = path.join(parentPath, folderName)
+
+  for (let index = 0; index < 1000; index += 1) {
+    const candidatePath = index === 0 ? basePath : `${basePath} ${index + 1}`
+
+    if (!(await workspacePathExists(candidatePath))) {
+      return candidatePath
+    }
+  }
+
+  throw new Error('Unable to find an available project folder name.')
+}
+
+async function upsertProject(projectPath: string, options: { name?: string, makeActive?: boolean } = {}) {
+  const normalizedPath = normalizeProjectPath(projectPath)
+  const now = new Date().toISOString()
+  let nextProject: PersistedProjectRecord | null = null
+
+  await appStateStore.update((currentState) => {
+    const existingProject = currentState.workspace.projects.find((project) => normalizeProjectPath(project.path) === normalizedPath)
+    const projects = existingProject
+      ? currentState.workspace.projects.map((project) => {
+          if (normalizeProjectPath(project.path) !== normalizedPath) {
+            return project
+          }
+
+          nextProject = {
+            ...project,
+            id: normalizedPath,
+            path: normalizedPath,
+            ...(options.name ? { name: options.name } : {}),
+            ...(options.makeActive ? { lastOpenedAt: now } : {}),
+          }
+          return nextProject
+        })
+      : [
+          ...currentState.workspace.projects,
+          createProjectRecord(normalizedPath, {
+            ...(options.name ? { name: options.name } : {}),
+            ...(options.makeActive ? { lastOpenedAt: now } : {}),
+          }),
+        ]
+
+    if (!existingProject) {
+      nextProject = projects[projects.length - 1]
+    }
+
+    return {
+      ...currentState,
+      workspace: {
+        ...currentState.workspace,
+        activeProjectId: options.makeActive ? nextProject?.id ?? currentState.workspace.activeProjectId : currentState.workspace.activeProjectId,
+        entries: {
+          ...currentState.workspace.entries,
+          [normalizedPath]: currentState.workspace.entries[normalizedPath] ?? {
+            lastAgentSessionPath: null,
+            lastFilePath: null,
+          },
+        },
+        lastWorkspacePath: options.makeActive ? normalizedPath : currentState.workspace.lastWorkspacePath,
+        projects,
+      },
+    }
+  })
+
+  return getVisibleProjectState()
+}
 
 function getInitialWindowBackgroundColor() {
   return WINDOW_BACKGROUND_COLORS[nativeTheme.shouldUseDarkColors ? 'dark' : 'light']
@@ -664,13 +815,143 @@ ipcMain.handle('workspace:pick-directory', async () => {
   return result.filePaths[0]
 })
 
+ipcMain.handle('project:get-state', async () => {
+  return getVisibleProjectState()
+})
+
+ipcMain.handle('project:create-empty', async (_event, name: string) => {
+  const trimmedName = typeof name === 'string' ? name.trim() : ''
+
+  if (!trimmedName) {
+    throw new Error('Project name is required.')
+  }
+
+  const projectRootPath = path.join(app.getPath('documents'), 'Aryn')
+  const folderName = sanitizeProjectFolderName(trimmedName)
+  await mkdir(projectRootPath, { recursive: true })
+  const projectPath = await resolveUniqueProjectPath(projectRootPath, folderName)
+  await mkdir(projectPath, { recursive: true })
+
+  return upsertProject(projectPath, {
+    makeActive: true,
+    name: getPathBaseName(projectPath),
+  })
+})
+
+ipcMain.handle('project:add-existing', async () => {
+  if (!win) {
+    return null
+  }
+
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openDirectory'],
+    title: 'Use Existing Folder',
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+
+  return upsertProject(result.filePaths[0], { makeActive: true })
+})
+
+ipcMain.handle('project:set-active', async (_event, projectId: string) => {
+  const normalizedProjectId = typeof projectId === 'string' ? projectId : ''
+  const now = new Date().toISOString()
+  let nextActivePath: string | null = null
+
+  await appStateStore.update((currentState) => {
+    const targetProject = currentState.workspace.projects.find((project) => project.id === normalizedProjectId)
+
+    if (!targetProject) {
+      return currentState
+    }
+
+    nextActivePath = targetProject.path
+
+    return {
+      ...currentState,
+      workspace: {
+        ...currentState.workspace,
+        activeProjectId: targetProject.id,
+        lastWorkspacePath: targetProject.path,
+        projects: currentState.workspace.projects.map((project) => (
+          project.id === targetProject.id ? { ...project, lastOpenedAt: now } : project
+        )),
+      },
+    }
+  })
+
+  const nextState = await getVisibleProjectState()
+  const activeProject = nextState.projects.find((project) => project.id === nextState.activeProjectId)
+
+  if (nextActivePath && activeProject?.id !== normalizedProjectId) {
+    throw new Error('Project folder is no longer available.')
+  }
+
+  return nextState
+})
+
+ipcMain.handle('project:remove', async (_event, projectId: string) => {
+  const normalizedProjectId = typeof projectId === 'string' ? projectId : ''
+  const currentState = await appStateStore.read()
+  const projectExists = currentState.workspace.projects.some((project) => project.id === normalizedProjectId)
+
+  if (projectExists) {
+    const remainingVisibleProjects = await filterExistingProjects(
+      currentState.workspace.projects.filter((project) => project.id !== normalizedProjectId),
+    )
+    const nextVisibleProject = remainingVisibleProjects[0] ?? null
+
+    if (remainingVisibleProjects.length === 0) {
+      throw new Error('At least one available project must remain active.')
+    }
+
+    await appStateStore.update((currentState) => {
+      const remainingProjects = currentState.workspace.projects.filter((project) => project.id !== normalizedProjectId)
+      const currentActiveProject = remainingProjects.find((project) => project.id === currentState.workspace.activeProjectId) ?? null
+      const removedActive = currentState.workspace.activeProjectId === normalizedProjectId
+      const nextActiveProject = removedActive ? nextVisibleProject : currentActiveProject ?? nextVisibleProject
+
+      return {
+        ...currentState,
+        workspace: {
+          ...currentState.workspace,
+          activeProjectId: nextActiveProject?.id ?? null,
+          lastWorkspacePath: nextActiveProject?.path ?? null,
+          projects: remainingProjects,
+        },
+      }
+    })
+  }
+
+  return getVisibleProjectState()
+})
+
+ipcMain.handle('project:show-in-folder', async (_event, projectId: string) => {
+  const state = await appStateStore.read()
+  const project = state.workspace.projects.find((candidate) => candidate.id === projectId)
+
+  if (!project) {
+    throw new Error('Project not found.')
+  }
+
+  if (!(await workspacePathExists(project.path))) {
+    throw new Error('Project folder is no longer available.')
+  }
+
+  await shell.openPath(project.path)
+  return { ok: true }
+})
+
 ipcMain.handle('workspace:load-tree', async (_, rootPath: string) => {
   return loadWorkspaceTree(rootPath)
 })
 
 ipcMain.handle('workspace:get-restore-state', async () => {
   const settings = await appStateStore.read()
-  const lastWorkspacePath = settings.workspace.lastWorkspacePath
+  const activeProject = settings.workspace.projects.find((project) => project.id === settings.workspace.activeProjectId)
+  const lastWorkspacePath = activeProject?.path ?? settings.workspace.lastWorkspacePath
 
   if (!lastWorkspacePath) {
     return {
@@ -746,6 +1027,7 @@ ipcMain.handle('workspace:update-state', async (
   await appStateStore.update((currentState) => ({
     ...currentState,
     workspace: {
+      ...currentState.workspace,
       entries: {
         ...currentState.workspace.entries,
         [workspacePath]: {
@@ -755,6 +1037,15 @@ ipcMain.handle('workspace:update-state', async (
         },
       },
       lastWorkspacePath: patch.markAsLastOpened ? workspacePath : currentState.workspace.lastWorkspacePath,
+      projects: currentState.workspace.projects.map((project) => (
+        project.path === workspacePath
+          ? {
+              ...project,
+              ...(patch.lastFilePath !== undefined ? { lastFilePath: patch.lastFilePath } : {}),
+              ...(patch.markAsLastOpened ? { lastOpenedAt: new Date().toISOString() } : {}),
+            }
+          : project
+      )),
     },
   }))
 
@@ -1065,6 +1356,10 @@ ipcMain.handle('workspace-icons:select-theme', async (_, selection: { sourceVsix
 
 ipcMain.handle('agent:load-workspace', async (_event, rootPath: string, preferredSessionPath?: string | null) => {
   return agentManager.loadWorkspaceState(rootPath, preferredSessionPath ?? null)
+})
+
+ipcMain.handle('agent:list-sessions', async (_event, rootPath: string) => {
+  return agentManager.listSessionItems(rootPath)
 })
 
 ipcMain.handle('agent:create-session', async (_event, rootPath: string, options?: string | AgentSessionCreateOptions) => {

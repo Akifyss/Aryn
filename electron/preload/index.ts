@@ -11,6 +11,7 @@ import type {
   GitRepositoryState,
 } from '../../src/features/git/types'
 import type {
+  ProjectState,
   WorkspaceChangeEvent,
   WorkspaceIconTheme,
   WorkspaceIconThemeCatalogOption,
@@ -20,6 +21,12 @@ import type {
 contextBridge.exposeInMainWorld('appApi', {
   platform: process.platform,
   pickWorkspace: () => ipcRenderer.invoke('workspace:pick-directory') as Promise<string | null>,
+  getProjectState: () => ipcRenderer.invoke('project:get-state') as Promise<ProjectState>,
+  createEmptyProject: (name: string) => ipcRenderer.invoke('project:create-empty', name) as Promise<ProjectState>,
+  addExistingProject: () => ipcRenderer.invoke('project:add-existing') as Promise<ProjectState | null>,
+  setActiveProject: (projectId: string) => ipcRenderer.invoke('project:set-active', projectId) as Promise<ProjectState>,
+  removeProject: (projectId: string) => ipcRenderer.invoke('project:remove', projectId) as Promise<ProjectState>,
+  showProjectInFolder: (projectId: string) => ipcRenderer.invoke('project:show-in-folder', projectId) as Promise<{ ok: boolean }>,
   getWorkspaceRestoreState: () => ipcRenderer.invoke('workspace:get-restore-state') as Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>,
   getWorkspaceState: (workspacePath: string) => ipcRenderer.invoke('workspace:get-state', workspacePath) as Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>,
   updateWorkspaceState: (workspacePath: string, patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean }) => ipcRenderer.invoke('workspace:update-state', workspacePath, patch) as Promise<{ ok: boolean }>,
@@ -75,6 +82,7 @@ contextBridge.exposeInMainWorld('appApi', {
   startWorkspaceWatch: (rootPath: string) => ipcRenderer.invoke('workspace:start-watch', rootPath) as Promise<{ ok: boolean }>,
   stopWorkspaceWatch: () => ipcRenderer.invoke('workspace:stop-watch') as Promise<{ ok: boolean }>,
   loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null) => ipcRenderer.invoke('agent:load-workspace', rootPath, preferredSessionPath) as Promise<AgentWorkspaceState>,
+  listAgentSessions: (rootPath: string) => ipcRenderer.invoke('agent:list-sessions', rootPath) as Promise<AgentWorkspaceState['sessions']>,
   createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => ipcRenderer.invoke('agent:create-session', rootPath, options) as Promise<AgentWorkspaceState>,
   openAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:open-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,
   deleteAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:delete-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,

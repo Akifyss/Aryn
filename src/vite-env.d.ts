@@ -10,6 +10,7 @@ import type {
   GitRepositoryState,
 } from '@/features/git/types'
 import type {
+  ProjectState,
   WorkspaceChangeEvent,
   WorkspaceIconTheme,
   WorkspaceIconThemeCatalogOption,
@@ -23,6 +24,12 @@ declare global {
     appApi: {
       platform: NodeJS.Platform
       pickWorkspace: () => Promise<string | null>
+      getProjectState: () => Promise<ProjectState>
+      createEmptyProject: (name: string) => Promise<ProjectState>
+      addExistingProject: () => Promise<ProjectState | null>
+      setActiveProject: (projectId: string) => Promise<ProjectState>
+      removeProject: (projectId: string) => Promise<ProjectState>
+      showProjectInFolder: (projectId: string) => Promise<{ ok: boolean }>
       getWorkspaceRestoreState: () => Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>
       getWorkspaceState: (workspacePath: string) => Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>
       updateWorkspaceState: (workspacePath: string, patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean }) => Promise<{ ok: boolean }>
@@ -75,6 +82,7 @@ declare global {
       startWorkspaceWatch: (rootPath: string) => Promise<{ ok: boolean }>
       stopWorkspaceWatch: () => Promise<{ ok: boolean }>
       loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null) => Promise<AgentWorkspaceState>
+      listAgentSessions: (rootPath: string) => Promise<AgentWorkspaceState['sessions']>
       createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => Promise<AgentWorkspaceState>
       openAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
       deleteAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>

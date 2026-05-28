@@ -193,7 +193,7 @@ async function readIconAsDataUrl(filePath: string) {
       const mimeType = getMimeTypeForIcon(filePath)
       return `data:${mimeType};base64,${buffer.toString('base64')}`
     })
-    .catch((error) => {
+    .catch((error: unknown) => {
       iconDataUrlCache.delete(filePath)
       throw error
     })

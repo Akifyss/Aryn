@@ -16,8 +16,6 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
-import type { FileTreeRowDecorationRenderer, FileTreeSortComparator } from '@pierre/trees'
-import { FileTree, useFileTree } from '@pierre/trees/react'
 import { Button, Chip, Disclosure, ScrollShadow } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import {
@@ -33,6 +31,8 @@ import {
   DownLine,
   EyeglassLine,
   EditLine,
+  ExternalLinkLine,
+  FolderLine,
   More1Line,
   Pencil2Line,
   PicLine,
@@ -57,7 +57,7 @@ import { shouldRunAgentModelCascaderDelayedActivation } from '@/features/agent/l
 import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
 import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
 import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
-import type { WorkspaceIconTheme } from '@/features/workspace/types'
+import type { ProjectRecord, ProjectState, WorkspaceIconTheme } from '@/features/workspace/types'
 import {
   findLatestOpenableAgentFileChange,
   initialAgentFileAutoOpenState,
@@ -88,18 +88,36 @@ import type {
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
 
 type AgentSidebarProps = {
+  externalSessionRequest?: AgentProjectSessionRequest | null
+  onExternalSessionRequestHandled?: (requestId: number) => void
   iconTheme?: WorkspaceIconTheme | null
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenProviderSettings?: () => void
+  onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
+  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect) => void
+  onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
+  onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
+  onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
+  onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
+  projectState?: ProjectState
   workspaceState?: AgentWorkspaceState | null
   workspacePath: string | null
 }
 
 type AgentSurfaceProps = {
+  externalSessionRequest?: AgentProjectSessionRequest | null
+  onExternalSessionRequestHandled?: (requestId: number) => void
   iconTheme?: WorkspaceIconTheme | null
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenProviderSettings?: () => void
+  onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
+  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect) => void
+  onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
+  onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
+  onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
+  onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
+  projectState?: ProjectState
   workspaceState?: AgentWorkspaceState | null
   workspacePath: string | null
 }
@@ -108,6 +126,24 @@ type AgentSessionTreeProps = {
   className?: string
   onRequestClose?: () => void
   id?: string
+}
+
+type AgentProjectSessionBucket = {
+  error: string | null
+  hasLoaded: boolean
+  isLoading: boolean
+  sessions: AgentSessionListItem[]
+}
+
+type AgentProjectSessionRequest = {
+  kind: 'new'
+  projectId: string
+  requestId: number
+} | {
+  kind: 'session'
+  projectId: string
+  requestId: number
+  sessionPath: string
 }
 
 type AgentProviderProps = AgentSurfaceProps & {
@@ -180,6 +216,8 @@ type AgentModelPickerPoint = {
 
 type AgentSessionMenuStyle = CSSProperties
 
+type AgentMenuAnchorRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width' | 'height'>
+
 type AgentModelPickerPointerPoint = AgentModelPickerPoint & {
   time: number
 }
@@ -231,6 +269,12 @@ const AGENT_SESSION_MENU_WIDTH_PX = 320
 const AGENT_SESSION_MENU_HEIGHT_PX = 320
 const AGENT_SESSION_MENU_MIN_HEIGHT_PX = 180
 const AGENT_SESSION_MENU_MAX_HEIGHT_PX = 416
+const AGENT_TREE_CONTEXT_MENU_MARGIN_PX = 8
+const AGENT_TREE_CONTEXT_MENU_GAP_PX = 2
+const AGENT_TREE_SESSION_CONTEXT_MENU_WIDTH_PX = 168
+const AGENT_TREE_SESSION_CONTEXT_MENU_HEIGHT_PX = 46
+const AGENT_TREE_PROJECT_CONTEXT_MENU_WIDTH_PX = 238
+const AGENT_TREE_PROJECT_CONTEXT_MENU_HEIGHT_PX = 116
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -263,6 +307,11 @@ const emptyAgentState: AgentWorkspaceState = {
     workspacePath: null,
   },
   sessions: [],
+}
+
+const emptyProjectState: ProjectState = {
+  activeProjectId: null,
+  projects: [],
 }
 
 const emptyComposerState: ComposerState = {
@@ -301,124 +350,6 @@ const IMAGE_ATTACHMENT_EXTENSIONS = /\.(?:png|jpe?g|webp|gif)$/i
 const IMAGE_ATTACHMENT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const MAX_COMPOSER_ATTACHMENTS = 12
 
-const AGENT_SESSION_TREE_EMPTY_PATH = 'No sessions'
-
-const AGENT_SESSION_TREE_CSS = `
-  :host {
-    --trees-fg-override: var(--muted);
-    --trees-fg-muted-override: var(--muted);
-    --trees-bg-override: transparent;
-    --trees-bg-muted-override: var(--surface-tertiary);
-    --trees-accent-override: var(--accent);
-    --trees-border-color-override: var(--separator);
-    --trees-selected-fg-override: var(--foreground);
-    --trees-selected-bg-override: var(--surface-tertiary);
-    --trees-selected-focused-border-color-override: transparent;
-    --trees-focus-ring-color-override: var(--focus);
-    --trees-font-family-override: inherit;
-    --trees-font-size-override: 13px;
-    --trees-font-weight-regular-override: 500;
-    --trees-font-weight-semibold-override: 600;
-    --trees-padding-inline-override: 0px;
-    --trees-item-padding-x-override: 12px;
-    --trees-item-margin-x-override: 0px;
-    --trees-level-gap-override: 0px;
-    --trees-icon-width-override: 14px;
-    --trees-action-lane-width-override: 28px;
-    --trees-context-menu-trigger-inline-offset: 12px;
-    --trees-scrollbar-gutter-override: 0px;
-    background: transparent;
-  }
-
-  [data-item-section='spacing'] {
-    display: none;
-  }
-
-  [data-item-section='icon'] {
-    display: none;
-  }
-
-  button[data-type='item'] {
-    border-radius: 8px;
-    color: var(--muted);
-    transition: background-color 140ms ease, color 140ms ease;
-  }
-
-  button[data-type='item']:hover,
-  button[data-type='item'][data-item-selected] {
-    color: var(--foreground);
-    background: var(--surface-tertiary);
-  }
-
-  /* @pierre/trees marks clicked rows as focused; keep pointer focus quiet while preserving keyboard focus. */
-  button[data-type='item'][data-item-focused='true']::before {
-    outline-color: transparent;
-  }
-
-  button[data-type='item']:focus-visible::before {
-    outline-color: var(--trees-focus-ring-color);
-  }
-
-  /* Agent sessions are conversation titles, not paths: render them through the public decoration lane. */
-  [data-item-section='content'] {
-    display: none;
-  }
-
-  [data-item-section='decoration'] {
-    flex: 1 1 auto;
-    justify-content: flex-start;
-    color: inherit;
-    text-align: start;
-  }
-
-  [data-item-section='decoration'] > span {
-    display: block;
-    width: 100%;
-    justify-content: flex-start;
-    color: inherit;
-    text-align: start;
-  }
-
-  button[data-type='item'] > [data-item-section='action'] {
-    width: 0;
-    overflow: hidden;
-  }
-
-  button[data-type='item'][data-item-context-hover='true'] > [data-item-section='action'] {
-    width: var(--trees-action-lane-width);
-  }
-
-  /* "when-needed" includes focus in @pierre/trees; this surface wants hover/open only. */
-  [data-type='context-menu-anchor'][data-visible='true'] {
-    display: none;
-  }
-
-  [data-file-tree-virtualized-root='true']:has(button[data-type='item'][data-item-context-hover='true'])
-    > [data-type='context-menu-anchor'][data-visible='true'],
-  [data-type='context-menu-anchor'][data-visible='true']:has([data-type='context-menu-trigger'][aria-expanded='true']) {
-    display: flex;
-  }
-
-  button[data-type='item'][data-item-path='${AGENT_SESSION_TREE_EMPTY_PATH}'] {
-    opacity: 0.65;
-    pointer-events: none;
-  }
-
-`
-
-const renderAgentSessionTreeRowDecoration: FileTreeRowDecorationRenderer = ({ row }) => ({
-  text: row.name,
-  title: row.name,
-})
-
-function areStringArraysEqual(left: readonly string[], right: readonly string[]) {
-  if (left.length !== right.length) {
-    return false
-  }
-
-  return left.every((value, index) => value === right[index])
-}
-
 type AgentContextValue = {
   activeComposerMenu: AgentComposerMenu
   activeOverlayPanel: 'sessions' | null
@@ -455,8 +386,17 @@ type AgentContextValue = {
   modelInputValue: string
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenProviderSettings?: () => void
+  onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
+  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect) => void
+  onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
+  onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
+  onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
+  onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   overlayPanelRef: React.RefObject<HTMLDivElement | null>
   panelError: string | null
+  loadProjectSessions: (project: ProjectRecord) => Promise<void>
+  projectSessions: Record<string, AgentProjectSessionBucket>
+  projectState: ProjectState
   renderedMessages: AgentSidebarMessage[]
   resolvedSelectedProviderValue: string
   roundFileChangesByMessageId: Map<string, AgentMessageFileChange[]>
@@ -498,34 +438,31 @@ function formatSessionLabel(session: AgentSessionListItem | null) {
   return session ? sanitizeFlatAgentSessionPath(session.name ?? session.preview) || 'Untitled session' : 'Session'
 }
 
-function buildFlatAgentSessionTreeEntries(sessions: AgentSessionListItem[]) {
-  const seenLabels = new Map<string, number>()
-  const usedTreePaths = new Set<string>()
+function formatAgentSessionRelativeTime(timestamp: string) {
+  const value = Date.parse(timestamp)
 
-  return sessions.map((session) => {
-    const baseLabel = sanitizeFlatAgentSessionPath(session.name ?? session.preview) || 'Untitled session'
-    const nextCount = (seenLabels.get(baseLabel) ?? 0) + 1
-    seenLabels.set(baseLabel, nextCount)
+  if (!Number.isFinite(value)) {
+    return ''
+  }
 
-    let treePath = nextCount === 1 ? baseLabel : `${baseLabel} ${nextCount}`
-    let suffix = nextCount + 1
+  const elapsedMs = Math.max(0, Date.now() - value)
+  const minute = 60_000
+  const hour = 60 * minute
+  const day = 24 * hour
 
-    while (usedTreePaths.has(treePath)) {
-      treePath = `${baseLabel} ${suffix}`
-      suffix += 1
-    }
+  if (elapsedMs < minute) {
+    return '刚刚'
+  }
 
-    usedTreePaths.add(treePath)
+  if (elapsedMs < hour) {
+    return `${Math.max(1, Math.floor(elapsedMs / minute))} 分`
+  }
 
-    return {
-      session,
-      treePath,
-    }
-  })
-}
+  if (elapsedMs < day) {
+    return `${Math.floor(elapsedMs / hour)} 小时`
+  }
 
-function buildAgentSessionTreePathOrder(paths: readonly string[]) {
-  return new Map(paths.map((path, index) => [path, index]))
+  return `${Math.floor(elapsedMs / day)} 天`
 }
 
 function formatModelLabel(modelKey: string | null) {
@@ -936,6 +873,55 @@ function resolveAgentSessionMenuStyle(anchorRect: DOMRect): AgentSessionMenuStyl
     top: `${Math.max(margin, top)}px`,
     width: `${width}px`,
   }
+}
+
+function resolveAgentTreeContextMenuStyle(
+  anchorRect: AgentMenuAnchorRect,
+  width: number,
+  estimatedHeight: number,
+): CSSProperties {
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const margin = AGENT_TREE_CONTEXT_MENU_MARGIN_PX
+  const gap = AGENT_TREE_CONTEXT_MENU_GAP_PX
+  const maxLeft = Math.max(margin, viewportWidth - width - margin)
+  const isPointAnchor = anchorRect.width === 0 && anchorRect.height === 0
+  const preferredLeft = isPointAnchor ? anchorRect.left : anchorRect.right - width
+  const overflowFallbackLeft = isPointAnchor ? anchorRect.left - width - gap : maxLeft
+  const unclampedLeft = preferredLeft + width > viewportWidth - margin
+    ? overflowFallbackLeft
+    : preferredLeft
+  const left = Math.max(margin, Math.min(unclampedLeft, maxLeft))
+  const preferredTop = isPointAnchor ? anchorRect.top : anchorRect.bottom + gap
+  const fallbackTop = anchorRect.top - gap - estimatedHeight
+  const opensBelow = preferredTop + estimatedHeight <= viewportHeight - margin
+    || anchorRect.top < estimatedHeight + gap + margin
+  const top = opensBelow
+    ? Math.min(preferredTop, viewportHeight - estimatedHeight - margin)
+    : Math.max(margin, fallbackTop)
+
+  return {
+    left: `${left}px`,
+    position: 'fixed',
+    top: `${top}px`,
+    width: `${width}px`,
+    zIndex: 120,
+  }
+}
+
+function createAgentPointAnchorRect(clientX: number, clientY: number): AgentMenuAnchorRect {
+  return {
+    bottom: clientY,
+    height: 0,
+    left: clientX,
+    right: clientX,
+    top: clientY,
+    width: 0,
+  }
+}
+
+function isAgentTreeContextMenuEventTarget(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest('[data-agent-tree-context-menu-root="true"]'))
 }
 
 function getAgentRelativePath(rootPath: string | null, filePath: string) {
@@ -2399,10 +2385,19 @@ function AgentQueuedComposerTray({
 
 function AgentProvider({
   children,
+  externalSessionRequest,
   iconTheme,
   onOpenMessageFile,
+  onExternalSessionRequestHandled,
   onOpenProviderSettings,
+  onOpenProjectAddMenu,
+  onOpenProjectSwitchMenu,
+  onOpenProjectFolder,
+  onOpenProjectSession,
+  onRemoveProject,
+  onStartProjectSession,
   onWorkspaceStateChange,
+  projectState = emptyProjectState,
   workspaceState,
   workspacePath,
 }: AgentProviderProps) {
@@ -2431,6 +2426,7 @@ function AgentProvider({
   const [isSwitchingThinkingLevel, setIsSwitchingThinkingLevel] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
+  const [projectSessions, setProjectSessions] = useState<Record<string, AgentProjectSessionBucket>>({})
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
   const overlayPanelRef = useRef<HTMLDivElement | null>(null)
@@ -2439,6 +2435,7 @@ function AgentProvider({
   const previousSessionPathRef = useRef<string | null>(null)
   const locallyEmittedWorkspaceStatesRef = useRef<WeakSet<AgentWorkspaceState>>(new WeakSet())
   const pendingExternalWorkspaceStateRef = useRef<AgentWorkspaceState | null>(null)
+  const handledExternalSessionRequestRef = useRef<number | null>(null)
   const activeSessionSelectionRef = useRef(activeSessionSelection)
   const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
   const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
@@ -2465,6 +2462,48 @@ function AgentProvider({
     activeSessionSelectionRef.current = selection
     setActiveSessionSelection(selection)
   }
+
+  const loadProjectSessions = useCallback(async (project: ProjectRecord) => {
+    setProjectSessions((currentValue) => {
+      const existingBucket = currentValue[project.id]
+      if (existingBucket?.isLoading || existingBucket?.hasLoaded) {
+        return currentValue
+      }
+
+      return {
+        ...currentValue,
+        [project.id]: {
+          error: null,
+          hasLoaded: false,
+          isLoading: true,
+          sessions: existingBucket?.sessions ?? [],
+        },
+      }
+    })
+
+    try {
+      const sessions = await window.appApi.listAgentSessions(project.path)
+      setProjectSessions((currentValue) => ({
+        ...currentValue,
+        [project.id]: {
+          error: null,
+          hasLoaded: true,
+          isLoading: false,
+          sessions,
+        },
+      }))
+    } catch (error) {
+      setProjectSessions((currentValue) => ({
+        ...currentValue,
+        [project.id]: {
+          error: error instanceof Error ? error.message : 'Unable to load conversations.',
+          hasLoaded: true,
+          isLoading: false,
+          sessions: currentValue[project.id]?.sessions ?? [],
+        },
+      }))
+    }
+  }, [])
 
   async function ensureSelectedAgentSessionActive(selection = activeSessionSelectionRef.current) {
     if (!workspacePath || selection.kind !== 'session') {
@@ -2586,6 +2625,24 @@ function AgentProvider({
   useEffect(() => {
     activeSessionSelectionRef.current = activeSessionSelection
   }, [activeSessionSelection])
+
+  useEffect(() => {
+    const activeProject = projectState.projects.find((project) => project.id === projectState.activeProjectId)
+
+    if (!activeProject || activeProject.path !== workspacePath) {
+      return
+    }
+
+    setProjectSessions((currentValue) => ({
+      ...currentValue,
+      [activeProject.id]: {
+        error: null,
+        hasLoaded: true,
+        isLoading: false,
+        sessions: agentState.sessions,
+      },
+    }))
+  }, [agentState.sessions, projectState.activeProjectId, projectState.projects, workspacePath])
 
   useEffect(() => {
     const unsubscribe = window.appApi.onAgentEvent((event: AgentClientEvent) => {
@@ -3087,6 +3144,36 @@ function AgentProvider({
     }
   }
 
+  useEffect(() => {
+    if (
+      !externalSessionRequest
+      || handledExternalSessionRequestRef.current === externalSessionRequest.requestId
+      || externalSessionRequest.projectId !== projectState.activeProjectId
+      || !workspacePath
+      || isLoading
+      || !hasLoadedWorkspaceState
+    ) {
+      return
+    }
+
+    handledExternalSessionRequestRef.current = externalSessionRequest.requestId
+    onExternalSessionRequestHandled?.(externalSessionRequest.requestId)
+
+    if (externalSessionRequest.kind === 'new') {
+      handleStartNewSession()
+      return
+    }
+
+    void handleOpenSession(externalSessionRequest.sessionPath)
+  }, [
+    externalSessionRequest,
+    hasLoadedWorkspaceState,
+    isLoading,
+    onExternalSessionRequestHandled,
+    projectState.activeProjectId,
+    workspacePath,
+  ])
+
   async function handleDeleteSession(sessionPath: string) {
     if (!workspacePath) {
       return
@@ -3580,13 +3667,22 @@ function AgentProvider({
     isSwitchingModel,
     isSwitchingThinkingLevel,
     liveTools,
+    loadProjectSessions,
     messagesScrollRef,
     modelFieldRef,
     modelInputValue,
     onOpenMessageFile,
     onOpenProviderSettings,
+    onOpenProjectAddMenu,
+    onOpenProjectSwitchMenu,
+    onOpenProjectFolder,
+    onOpenProjectSession,
+    onRemoveProject,
+    onStartProjectSession,
     overlayPanelRef,
     panelError,
+    projectSessions,
+    projectState,
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
@@ -3634,10 +3730,19 @@ function AgentProvider({
     isSwitchingModel,
     isSwitchingThinkingLevel,
     liveTools,
+    loadProjectSessions,
     modelInputValue,
     onOpenMessageFile,
     onOpenProviderSettings,
+    onOpenProjectAddMenu,
+    onOpenProjectSwitchMenu,
+    onOpenProjectFolder,
+    onOpenProjectSession,
+    onRemoveProject,
+    onStartProjectSession,
     panelError,
+    projectSessions,
+    projectState,
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
@@ -3658,7 +3763,98 @@ function AgentProvider({
   )
 }
 
-function AgentSessionTree({
+function AgentSessionTreeContextMenu({
+  anchorRect,
+  disabled,
+  onDelete,
+}: {
+  anchorRect: AgentMenuAnchorRect
+  disabled: boolean
+  onDelete: () => void
+}) {
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  return createPortal(
+    <div
+      className='agent-session-tree-menu agent-tree-context-menu'
+      data-agent-tree-context-menu-root='true'
+      style={resolveAgentTreeContextMenuStyle(
+        anchorRect,
+        AGENT_TREE_SESSION_CONTEXT_MENU_WIDTH_PX,
+        AGENT_TREE_SESSION_CONTEXT_MENU_HEIGHT_PX,
+      )}
+    >
+      <button
+        type='button'
+        className='agent-session-tree-menu-item is-danger'
+        disabled={disabled}
+        onClick={onDelete}
+      >
+        <Delete2Line size={16} />
+        <span>删除</span>
+      </button>
+    </div>,
+    document.body,
+  )
+}
+
+function AgentSessionTreeRow({
+  isActive,
+  isDeleting,
+  label,
+  relativeTime,
+  onOpen,
+  onOpenMenu,
+}: {
+  isActive: boolean
+  isDeleting: boolean
+  label: string
+  relativeTime?: string
+  onOpen: () => void
+  onOpenMenu: (anchorRect: AgentMenuAnchorRect) => void
+}) {
+  return (
+    <li className='panel-tree-node agent-project-session-node'>
+      <div className={`workspace-tree-row agent-project-session-row${isActive ? ' is-active' : ''}`}>
+        <button
+          type='button'
+          className='workspace-tree-trigger agent-project-session-trigger'
+          title={label}
+          onClick={onOpen}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onOpenMenu(createAgentPointAnchorRect(event.clientX, event.clientY))
+          }}
+        >
+          <span className='panel-tree-label agent-project-session-label'>{label}</span>
+          {relativeTime ? <span className='agent-project-session-time'>{relativeTime}</span> : null}
+        </button>
+
+        <div className='git-change-tools agent-project-row-tools' onClick={(event) => event.stopPropagation()}>
+          <div className='git-change-actions'>
+            <button
+              type='button'
+              className='git-change-action git-change-icon-button agent-project-row-action'
+              aria-label={`打开 ${label} 菜单`}
+              title='对话菜单'
+              disabled={isDeleting}
+              onClick={(event) => {
+                onOpenMenu(event.currentTarget.getBoundingClientRect())
+              }}
+            >
+              <More1Line size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </li>
+  )
+}
+
+function FlatAgentSessionTree({
   className,
   onRequestClose,
   id = 'agent-session-tree',
@@ -3673,158 +3869,47 @@ function AgentSessionTree({
     handleStartNewSession,
     workspacePath,
   } = useAgentContext()
-  const treeEntries = useMemo(() => buildFlatAgentSessionTreeEntries(agentState.sessions), [agentState.sessions])
-  const sessionPathByTreePath = useMemo(() => {
-    const nextMap = new Map<string, string>()
-    treeEntries.forEach(({ session, treePath }) => {
-      nextMap.set(treePath, session.path)
-    })
-    return nextMap
-  }, [treeEntries])
-  const treeSelectionStateRef = useRef({
-    activeSessionPath,
-    activeSessionSelection,
-    handleOpenSession,
-    isSyncingSelection: false,
-    onRequestClose,
-    sessionPathByTreePath,
-  })
-  const treePaths = useMemo(() => {
-    if (sessionPathByTreePath.size === 0) {
-      return [AGENT_SESSION_TREE_EMPTY_PATH]
-    }
-
-    return [...sessionPathByTreePath.keys()]
-  }, [sessionPathByTreePath])
-  const treePathOrderRef = useRef(buildAgentSessionTreePathOrder(treePaths))
-  const treePathsRef = useRef(treePaths)
-  const lastSyncedActiveTreePathRef = useRef<string | null>(null)
-  const treePathSortComparatorRef = useRef<FileTreeSortComparator>((left, right) => {
-    const leftOrder = treePathOrderRef.current.get(left.path) ?? Number.MAX_SAFE_INTEGER
-    const rightOrder = treePathOrderRef.current.get(right.path) ?? Number.MAX_SAFE_INTEGER
-    const orderDelta = leftOrder - rightOrder
-
-    return orderDelta !== 0 ? orderDelta : left.path.localeCompare(right.path)
-  })
-  const activeTreePath = useMemo(() => {
-    if (!activeSessionPath) {
-      return null
-    }
-
-    for (const [treePath, sessionPath] of sessionPathByTreePath.entries()) {
-      if (sessionPath === activeSessionPath) {
-        return treePath
-      }
-    }
-
-    return null
-  }, [activeSessionPath, sessionPathByTreePath])
+  const [sessionMenuState, setSessionMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, session: AgentSessionListItem } | null>(null)
 
   useEffect(() => {
-    treeSelectionStateRef.current = {
-      activeSessionPath,
-      activeSessionSelection,
-      handleOpenSession,
-      isSyncingSelection: treeSelectionStateRef.current.isSyncingSelection,
-      onRequestClose,
-      sessionPathByTreePath,
+    if (!sessionMenuState) {
+      return
     }
-  }, [activeSessionSelection, activeSessionPath, handleOpenSession, onRequestClose, sessionPathByTreePath])
 
-  const { model } = useFileTree({
-    composition: {
-      contextMenu: {
-        buttonVisibility: 'when-needed',
-        enabled: true,
-        triggerMode: 'both',
-      },
-    },
-    id,
-    initialExpansion: 'open',
-    initialSelectedPaths: activeTreePath ? [activeTreePath] : [],
-    itemHeight: 32,
-    onSelectionChange: (selectedPaths) => {
-      const {
-        activeSessionPath: latestActiveSessionPath,
-        activeSessionSelection: latestActiveSessionSelection,
-        handleOpenSession: latestHandleOpenSession,
-        isSyncingSelection,
-        onRequestClose: latestOnRequestClose,
-        sessionPathByTreePath: latestSessionPathByTreePath,
-      } = treeSelectionStateRef.current
-      if (isSyncingSelection) {
+    const closeMenu = () => {
+      setSessionMenuState(null)
+    }
+    const handlePointerDown = (event: globalThis.PointerEvent) => {
+      if (isAgentTreeContextMenuEventTarget(event.target)) {
         return
       }
 
-      const selectedPath = selectedPaths.find((path) => (
-        path !== AGENT_SESSION_TREE_EMPTY_PATH
-        && (latestActiveSessionSelection.kind !== 'session'
-          || latestSessionPathByTreePath.get(path) !== latestActiveSessionPath)
-      )) ?? selectedPaths.find((path) => path !== AGENT_SESSION_TREE_EMPTY_PATH)
-      if (!selectedPath || selectedPath === AGENT_SESSION_TREE_EMPTY_PATH) {
-        return
+      closeMenu()
+    }
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeMenu()
       }
-
-      const sessionPath = latestSessionPathByTreePath.get(selectedPath)
-      if (!sessionPath || latestActiveSessionSelection.kind === 'session' && sessionPath === latestActiveSessionPath) {
-        return
-      }
-
-      void latestHandleOpenSession(sessionPath).then(() => {
-        latestOnRequestClose?.()
-      })
-    },
-    paths: treePaths,
-    renderRowDecoration: renderAgentSessionTreeRowDecoration,
-    sort: treePathSortComparatorRef.current,
-    unsafeCSS: AGENT_SESSION_TREE_CSS,
-  })
-
-  useEffect(() => {
-    treePathOrderRef.current = buildAgentSessionTreePathOrder(treePaths)
-    if (areStringArraysEqual(treePathsRef.current, treePaths)) {
-      return
     }
 
-    treePathsRef.current = treePaths
-    model.resetPaths(treePaths)
-  }, [model, treePaths])
-
-  useEffect(() => {
-    if (activeSessionSelection.kind === 'session' && activeTreePath === lastSyncedActiveTreePathRef.current) {
-      return
+    window.addEventListener('pointerdown', handlePointerDown, true)
+    window.addEventListener('resize', closeMenu)
+    window.addEventListener('scroll', closeMenu, true)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true)
+      window.removeEventListener('resize', closeMenu)
+      window.removeEventListener('scroll', closeMenu, true)
+      window.removeEventListener('keydown', handleKeyDown)
     }
-
-    treeSelectionStateRef.current.isSyncingSelection = true
-    model.getSelectedPaths().forEach((selectedPath) => {
-      model.getItem(selectedPath)?.deselect()
-    })
-
-    if (activeSessionSelection.kind === 'new') {
-      lastSyncedActiveTreePathRef.current = null
-      treeSelectionStateRef.current.isSyncingSelection = false
-      return
-    }
-
-    if (!activeTreePath) {
-      lastSyncedActiveTreePathRef.current = null
-      treeSelectionStateRef.current.isSyncingSelection = false
-      return
-    }
-
-    model.getItem(activeTreePath)?.select()
-    model.focusPath(activeTreePath)
-    model.scrollToPath(activeTreePath, { offset: 'nearest' })
-    lastSyncedActiveTreePathRef.current = activeTreePath
-    treeSelectionStateRef.current.isSyncingSelection = false
-  }, [activeSessionSelection.kind, activeTreePath, model])
+  }, [sessionMenuState])
 
   return (
     <div className={`agent-session-tree-shell${className ? ` ${className}` : ''}`}>
       <button
         type='button'
         disabled={!workspacePath}
-        className={`agent-session-new-button${activeSessionSelection.kind === 'new' ? ' is-active' : ''}`}
+        className='agent-session-new-button'
         aria-label='Start new conversation'
         onClick={() => {
           handleStartNewSession()
@@ -3840,60 +3925,483 @@ function AgentSessionTree({
         contentClassName='agent-session-tree-scroll-content'
         viewportClassName='agent-session-tree-scroll-viewport'
       >
-        <FileTree
-          className='agent-session-tree'
-          model={model}
-          aria-label='Agent sessions'
-          renderContextMenu={(item, context) => {
-            const sessionPath = sessionPathByTreePath.get(item.path)
-            if (!sessionPath) {
-              return null
-            }
-
-            const isDeleting = deletingSessionPath === sessionPath
+        <ul id={id} className='panel-tree-list agent-project-list agent-flat-session-list' aria-label='Agent sessions'>
+          {agentState.sessions.length === 0 ? (
+            <li className='agent-project-session-status'>暂无对话</li>
+          ) : agentState.sessions.map((session) => {
+            const label = formatSessionLabel(session)
+            const isActiveSession = activeSessionSelection.kind === 'session' && activeSessionPath === session.path
 
             return (
-              <div className='agent-session-tree-menu'>
-                <button
-                  type='button'
-                  className='agent-session-tree-menu-item'
-                  disabled={isDeleting}
-                  onClick={() => {
-                    context.close({ restoreFocus: false })
-                    void handleDeleteSession(sessionPath)
-                  }}
-                >
-                  <span>删除</span>
-                </button>
-              </div>
+              <AgentSessionTreeRow
+                key={session.path}
+                isActive={isActiveSession}
+                isDeleting={deletingSessionPath === session.path}
+                label={label}
+                onOpen={() => {
+                  setSessionMenuState(null)
+                  void handleOpenSession(session.path).then(() => {
+                    onRequestClose?.()
+                  })
+                }}
+                onOpenMenu={(anchorRect) => {
+                  setSessionMenuState({
+                    anchorRect,
+                    session,
+                  })
+                }}
+              />
             )
+          })}
+        </ul>
+      </AppScrollArea>
+
+      {sessionMenuState ? (
+        <AgentSessionTreeContextMenu
+          anchorRect={sessionMenuState.anchorRect}
+          disabled={deletingSessionPath === sessionMenuState.session.path}
+          onDelete={() => {
+            const sessionPath = sessionMenuState.session.path
+            setSessionMenuState(null)
+            void handleDeleteSession(sessionPath)
           }}
         />
+      ) : null}
+    </div>
+  )
+}
+
+function AgentProjectTree({
+  className,
+  onRequestClose,
+}: AgentSessionTreeProps) {
+  const {
+    activeSessionPath,
+    activeSessionSelection,
+    deletingSessionPath,
+    handleDeleteSession,
+    loadProjectSessions,
+    onOpenProjectAddMenu,
+    onOpenProjectFolder,
+    onOpenProjectSession,
+    onRemoveProject,
+    onStartProjectSession,
+    projectSessions,
+    projectState,
+    iconTheme,
+  } = useAgentContext()
+  const activeProject = useMemo(() => (
+    projectState.projects.find((project) => project.id === projectState.activeProjectId) ?? null
+  ), [projectState.activeProjectId, projectState.projects])
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => (
+    activeProject ? new Set([activeProject.id]) : new Set()
+  ))
+  const [projectMenuState, setProjectMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, project: ProjectRecord } | null>(null)
+  const [sessionMenuState, setSessionMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, session: AgentSessionListItem } | null>(null)
+  const activeSessionProjectId = useMemo(() => {
+    if (!activeSessionPath) {
+      return null
+    }
+
+    for (const [projectId, bucket] of Object.entries(projectSessions)) {
+      if (bucket.sessions.some((session) => session.path === activeSessionPath)) {
+        return projectId
+      }
+    }
+
+    return null
+  }, [activeSessionPath, projectSessions])
+
+  useEffect(() => {
+    if (!activeProject) {
+      return
+    }
+
+    setExpandedProjectIds((currentExpandedProjectIds) => {
+      if (currentExpandedProjectIds.has(activeProject.id)) {
+        return currentExpandedProjectIds
+      }
+
+      const nextExpandedProjectIds = new Set(currentExpandedProjectIds)
+      nextExpandedProjectIds.add(activeProject.id)
+      return nextExpandedProjectIds
+    })
+    void loadProjectSessions(activeProject)
+  }, [activeProject, loadProjectSessions])
+
+  useEffect(() => {
+    if (!activeSessionProjectId) {
+      return
+    }
+
+    setExpandedProjectIds((currentExpandedProjectIds) => {
+      if (currentExpandedProjectIds.has(activeSessionProjectId)) {
+        return currentExpandedProjectIds
+      }
+
+      const nextExpandedProjectIds = new Set(currentExpandedProjectIds)
+      nextExpandedProjectIds.add(activeSessionProjectId)
+      return nextExpandedProjectIds
+    })
+  }, [activeSessionProjectId])
+
+  useEffect(() => {
+    if (!projectMenuState && !sessionMenuState) {
+      return
+    }
+
+    const closeMenus = () => {
+      setProjectMenuState(null)
+      setSessionMenuState(null)
+    }
+    const handlePointerDown = (event: globalThis.PointerEvent) => {
+      if (isAgentTreeContextMenuEventTarget(event.target)) {
+        return
+      }
+
+      closeMenus()
+    }
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeMenus()
+      }
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown, true)
+    window.addEventListener('resize', closeMenus)
+    window.addEventListener('scroll', closeMenus, true)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true)
+      window.removeEventListener('resize', closeMenus)
+      window.removeEventListener('scroll', closeMenus, true)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [projectMenuState, sessionMenuState])
+
+  function toggleProject(project: ProjectRecord) {
+    setProjectMenuState(null)
+    setSessionMenuState(null)
+    setExpandedProjectIds((currentExpandedProjectIds) => {
+      const nextExpandedProjectIds = new Set(currentExpandedProjectIds)
+      if (nextExpandedProjectIds.has(project.id)) {
+        nextExpandedProjectIds.delete(project.id)
+      } else {
+        nextExpandedProjectIds.add(project.id)
+        void loadProjectSessions(project)
+      }
+
+      return nextExpandedProjectIds
+    })
+  }
+
+  return (
+    <div className={`agent-session-tree-shell agent-project-tree-shell${className ? ` ${className}` : ''}`}>
+      <button
+        type='button'
+        disabled={!activeProject}
+        className='agent-session-new-button'
+        aria-label='Start new conversation'
+        onClick={() => {
+          if (activeProject) {
+            void onStartProjectSession?.(activeProject)
+          }
+          onRequestClose?.()
+        }}
+      >
+        <AddLine size={16} />
+        <span>新对话</span>
+      </button>
+
+      <div className='agent-project-tree-header'>
+        <span>项目</span>
+        <button
+          type='button'
+          className='agent-project-tree-header-action'
+          aria-label='添加项目'
+          title='添加项目'
+          onClick={(event) => {
+            onOpenProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
+          }}
+        >
+          <AddLine size={15} />
+        </button>
+      </div>
+
+      <AppScrollArea
+        className='agent-session-tree-scroll agent-project-tree-scroll'
+        contentClassName='agent-session-tree-scroll-content agent-project-tree-scroll-content'
+        viewportClassName='agent-session-tree-scroll-viewport'
+      >
+        <ul className='panel-tree-list agent-project-list' aria-label='项目与对话'>
+          {projectState.projects.map((project) => {
+            const bucket = projectSessions[project.id]
+            const isExpanded = expandedProjectIds.has(project.id)
+            const sessions = bucket?.sessions ?? []
+            const showChildren = isExpanded && (
+              sessions.length > 0
+              || Boolean(bucket?.isLoading)
+              || Boolean(bucket?.error)
+              || Boolean(bucket?.hasLoaded)
+            )
+
+            return (
+              <li key={project.id} className='panel-tree-node agent-project-node'>
+                <div className='workspace-tree-row agent-project-row'>
+                  <button
+                    type='button'
+                    className='workspace-tree-trigger agent-project-row-trigger'
+                    aria-expanded={isExpanded}
+                    title={project.path}
+                    onClick={() => toggleProject(project)}
+                    onContextMenu={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      setSessionMenuState(null)
+                      setProjectMenuState({
+                        anchorRect: createAgentPointAnchorRect(event.clientX, event.clientY),
+                        project,
+                      })
+                    }}
+                  >
+                    <WorkspaceFileIcon
+                      iconTheme={iconTheme ?? null}
+                      isClosed={!isExpanded}
+                      isFolder
+                      nodeLabel={project.name}
+                    />
+                    <span className='panel-tree-label agent-project-row-label'>{project.name}</span>
+                  </button>
+
+                  <div className='git-change-tools agent-project-row-tools' onClick={(event) => event.stopPropagation()}>
+                    <div className='git-change-actions'>
+                      <button
+                        type='button'
+                        className='git-change-action git-change-icon-button agent-project-row-action'
+                        aria-label={`打开 ${project.name} 菜单`}
+                        title='项目菜单'
+                        onClick={(event) => {
+                          setSessionMenuState(null)
+                          setProjectMenuState({
+                            anchorRect: event.currentTarget.getBoundingClientRect(),
+                            project,
+                          })
+                        }}
+                      >
+                        <More1Line size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {showChildren ? (
+                  <div className='panel-tree-children agent-project-session-children'>
+                    <ul className='panel-tree-list agent-project-session-list'>
+                      {bucket?.isLoading ? <li className='agent-project-session-status'>加载中</li> : null}
+                      {bucket?.error ? <li className='agent-project-session-status is-error'>无法加载对话</li> : null}
+                      {!bucket?.isLoading && !bucket?.error && bucket?.hasLoaded && sessions.length === 0 ? (
+                        <li className='agent-project-session-status'>暂无对话</li>
+                      ) : null}
+                      {sessions.map((session) => {
+                        const isActiveSession = activeSessionSelection.kind === 'session' && activeSessionPath === session.path
+                        const label = formatSessionLabel(session)
+                        const relativeTime = formatAgentSessionRelativeTime(session.modifiedAt)
+
+                        return (
+                          <AgentSessionTreeRow
+                            key={session.path}
+                            isActive={isActiveSession}
+                            isDeleting={deletingSessionPath === session.path}
+                            label={label}
+                            relativeTime={relativeTime}
+                            onOpen={() => {
+                              setProjectMenuState(null)
+                              setSessionMenuState(null)
+                              void Promise.resolve(onOpenProjectSession?.(project, session.path)).then(() => {
+                                onRequestClose?.()
+                              })
+                            }}
+                            onOpenMenu={(anchorRect) => {
+                              setProjectMenuState(null)
+                              setSessionMenuState({
+                                anchorRect,
+                                session,
+                              })
+                            }}
+                          />
+                        )
+                      })}
+                    </ul>
+                  </div>
+                ) : null}
+              </li>
+            )
+          })}
+        </ul>
       </AppScrollArea>
+
+      {sessionMenuState ? (
+        <AgentSessionTreeContextMenu
+          anchorRect={sessionMenuState.anchorRect}
+          disabled={deletingSessionPath === sessionMenuState.session.path}
+          onDelete={() => {
+            const sessionPath = sessionMenuState.session.path
+            setSessionMenuState(null)
+            void handleDeleteSession(sessionPath)
+          }}
+        />
+      ) : null}
+
+      {projectMenuState ? createPortal(
+        <div
+          className='agent-project-menu agent-tree-context-menu'
+          data-agent-tree-context-menu-root='true'
+          role='menu'
+          style={resolveAgentTreeContextMenuStyle(
+            projectMenuState.anchorRect,
+            AGENT_TREE_PROJECT_CONTEXT_MENU_WIDTH_PX,
+            AGENT_TREE_PROJECT_CONTEXT_MENU_HEIGHT_PX,
+          )}
+        >
+          <button
+            type='button'
+            role='menuitem'
+            className='agent-project-menu-item'
+            onClick={() => {
+              const project = projectMenuState.project
+              setProjectMenuState(null)
+              void onStartProjectSession?.(project)
+              onRequestClose?.()
+            }}
+          >
+            <Pencil2Line size={16} />
+            <span>在 {projectMenuState.project.name} 中开始新对话</span>
+          </button>
+          <button
+            type='button'
+            role='menuitem'
+            className='agent-project-menu-item'
+            onClick={() => {
+              const project = projectMenuState.project
+              setProjectMenuState(null)
+              void onOpenProjectFolder?.(project)
+            }}
+          >
+            <ExternalLinkLine size={16} />
+            <span>在“访达”中打开</span>
+          </button>
+          <button
+            type='button'
+            role='menuitem'
+            className='agent-project-menu-item is-danger'
+            onClick={() => {
+              const project = projectMenuState.project
+              setProjectMenuState(null)
+              void onRemoveProject?.(project)
+            }}
+          >
+            <Delete2Line size={16} />
+            <span>移除</span>
+          </button>
+        </div>,
+        document.body,
+      ) : null}
+    </div>
+  )
+}
+
+function AgentSessionTree(props: AgentSessionTreeProps) {
+  const { projectState } = useAgentContext()
+
+  if (projectState.projects.length > 0) {
+    return <AgentProjectTree {...props} />
+  }
+
+  return <FlatAgentSessionTree {...props} />
+}
+
+function AgentBrandLogo() {
+  return (
+    <div className='agent-brand-logo' aria-hidden='true'>
+      <img className='agent-empty-logo' src='./branding/logo.svg' alt='' />
     </div>
   )
 }
 
 function AgentNewSessionIllustration() {
+  return <AgentBrandLogo />
+}
+
+function AgentProjectSwitchTrigger({
+  activeProject,
+  className,
+  iconTheme,
+  onOpenProjectSwitchMenu,
+}: {
+  activeProject: ProjectRecord | null
+  className?: string
+  iconTheme?: WorkspaceIconTheme | null
+  onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect) => void
+}) {
+  const label = activeProject?.name ?? '未选择项目'
+
   return (
-    <div className='agent-empty-icon-container' aria-hidden='true'>
-      <AiLine size={24} />
-    </div>
+    <button
+      type='button'
+      className={[
+        'agent-project-switch-trigger',
+        className,
+      ].filter(Boolean).join(' ')}
+      disabled={!activeProject || !onOpenProjectSwitchMenu}
+      aria-label={activeProject ? `切换项目，当前项目：${activeProject.name}` : '没有可切换的项目'}
+      title={activeProject ? `当前项目：${activeProject.name}` : '没有可切换的项目'}
+      onClick={(event) => {
+        onOpenProjectSwitchMenu?.(event.currentTarget.getBoundingClientRect())
+      }}
+    >
+      {activeProject ? (
+        <WorkspaceFileIcon
+          iconTheme={iconTheme ?? null}
+          isFolder
+          isClosed
+          nodeLabel={activeProject.name}
+        />
+      ) : null}
+      {!activeProject ? <FolderLine size={16} /> : null}
+      <span className='agent-project-switch-trigger-label'>{label}</span>
+      <DownLine aria-hidden='true' size={14} />
+    </button>
   )
 }
 
 function AgentEmptyChat() {
-  const { workspacePath } = useAgentContext()
+  const { activeSessionSelection, iconTheme, onOpenProjectSwitchMenu, projectState, workspacePath } = useAgentContext()
+  const activeProject = projectState.projects.find((project) => project.id === projectState.activeProjectId) ?? null
+  const isNewConversation = activeSessionSelection.kind === 'new'
 
   return (
     <div className='agent-empty-chat'>
       <AgentNewSessionIllustration />
-      <h2>新对话</h2>
-      <p className='agent-empty-subtitle'>
-        {workspacePath
-          ? '在下方消息框中输入您的请求以开始对话'
-          : '打开一个文件夹即可开始协同开发'}
-      </p>
+      <h2>
+        {isNewConversation && activeProject ? (
+          <>
+            <span>我们应该在 </span>
+            <AgentProjectSwitchTrigger
+              activeProject={activeProject}
+              iconTheme={iconTheme}
+              onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
+            />
+            <span> 中构建什么？</span>
+          </>
+        ) : (
+          '新对话'
+        )}
+      </h2>
+      {!workspacePath || !isNewConversation ? (
+        <p className='agent-empty-subtitle'>
+          {workspacePath ? '在下方消息框中输入您的请求以开始对话' : '打开一个文件夹即可开始协同开发'}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -3935,8 +4443,10 @@ function AgentChatSurface() {
     modelInputValue,
     onOpenMessageFile,
     onOpenProviderSettings,
+    onOpenProjectSwitchMenu,
     overlayPanelRef,
     panelError,
+    projectState,
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
@@ -3956,7 +4466,7 @@ function AgentChatSurface() {
   } = useAgentContext()
   const hasEmptyChat = Boolean(workspacePath && renderedMessages.length === 0)
   const isNewConversation = activeSessionSelection.kind === 'new'
-    || (hasEmptyChat && !activeSession)
+  const activeProject = projectState.projects.find((project) => project.id === projectState.activeProjectId) ?? null
   const isViewingActiveRuntime = Boolean(
     activeSessionPath
     && agentState.activeSession?.sessionPath === activeSessionPath,
@@ -4762,6 +5272,15 @@ function AgentChatSurface() {
       {composerHeader}
     </>
   ) : null
+  const projectSwitchBar = isNewConversation ? (
+    <div className='agent-new-project-bar'>
+      <AgentProjectSwitchTrigger
+        activeProject={activeProject}
+        iconTheme={iconTheme}
+        onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
+      />
+    </div>
+  ) : null
 
   const composerFooter = (
     <div ref={modelFieldRef} className='agent-composer-meta'>
@@ -5065,8 +5584,38 @@ function AgentChatSurface() {
     </div>
   )
 
+  const composerForm = (
+    <form
+      className='agent-composer'
+      onSubmit={(event) => {
+        void handleSubmit(event)
+      }}
+    >
+      <div className={`agent-composer-shell${isNewConversation ? ' has-project-bar' : ''}`}>
+        <AgentComposerMentionInput
+          aria-label='Prompt Pi Agent'
+          disabled={!workspacePath || isLoading}
+          iconTheme={iconTheme}
+          mentions={composerState.mentions}
+          onChange={setComposerState}
+          onFilesPastedOrDropped={(files) => {
+            void addComposerFiles(files)
+          }}
+          onSubmitShortcut={handleComposerKeyDown}
+          placeholder={workspacePath ? 'Message' : 'Open a folder first.'}
+          value={composerState.value}
+          workspaceNodes={workspaceTree}
+          workspacePath={workspacePath}
+          header={composerHeaderContent}
+          footer={composerFooter}
+        />
+        {projectSwitchBar}
+      </div>
+    </form>
+  )
+
   return (
-    <div className='agent-shell'>
+    <div className={`agent-shell${isNewConversation ? ' is-new-conversation' : ''}`}>
       <div className='agent-threadbar'>
         <div className='agent-threadbar-leading'>
           <div className='agent-session-select'>
@@ -5125,76 +5674,69 @@ function AgentChatSurface() {
         document.body,
       ) : null}
 
-      {statusMessage ? (
-        <div className='agent-status-inline'>
-          <p>{statusMessage}</p>
-        </div>
-      ) : null}
-
-      <AppScrollArea
-        className='agent-messages-scroll'
-        contentClassName='agent-messages-scroll-content'
-        viewportRef={messagesScrollRef}
-      >
-        <div className={`agent-messages${hasEmptyChat ? ' agent-messages-empty' : ''}`}>
-          {hasEmptyChat ? (
-            <AgentEmptyChat />
-          ) : renderedMessages.map((message) => {
-            const fileChanges = roundFileChangesByMessageId.get(message.id) ?? []
-
-            return (
-              <div key={message.id} className='agent-message-stack'>
-                <AgentMessageBubble
-                  iconTheme={iconTheme}
-                  message={message}
-                  onOpenWorkspaceFile={(filePath) => {
-                    void onOpenMessageFile?.(filePath, 'updated')
-                  }}
-                  workspacePath={workspacePath}
-                />
-                {fileChanges.length > 0 ? (
-                  <AgentMessageFileChips
-                    fileChanges={fileChanges}
-                    iconTheme={iconTheme}
-                    onOpenFile={onOpenMessageFile}
-                    workspacePath={workspacePath}
-                  />
-                ) : null}
+      {isNewConversation ? (
+        <>
+          <div className='agent-new-conversation-stage'>
+            {statusMessage ? (
+              <div className='agent-status-inline'>
+                <p>{statusMessage}</p>
               </div>
-            )
-          })}
-          {sessionStatus ? (
-            <AgentSessionStatusBubble status={sessionStatus} />
+            ) : null}
+            <div className='agent-new-conversation-content'>
+              <AgentEmptyChat />
+            </div>
+          </div>
+          {composerForm}
+        </>
+      ) : (
+        <>
+          {statusMessage ? (
+            <div className='agent-status-inline'>
+              <p>{statusMessage}</p>
+            </div>
           ) : null}
-        </div>
-      </AppScrollArea>
 
-      <form
-        className='agent-composer'
-        onSubmit={(event) => {
-          void handleSubmit(event)
-        }}
-      >
-        <div className='agent-composer-shell'>
-          <AgentComposerMentionInput
-            aria-label='Prompt Pi Agent'
-            disabled={!workspacePath || isLoading}
-            iconTheme={iconTheme}
-            mentions={composerState.mentions}
-            onChange={setComposerState}
-            onFilesPastedOrDropped={(files) => {
-              void addComposerFiles(files)
-            }}
-            onSubmitShortcut={handleComposerKeyDown}
-            placeholder={workspacePath ? 'Message' : 'Open a folder first.'}
-            value={composerState.value}
-            workspaceNodes={workspaceTree}
-            workspacePath={workspacePath}
-            header={composerHeaderContent}
-            footer={composerFooter}
-          />
-        </div>
-      </form>
+          <AppScrollArea
+            className='agent-messages-scroll'
+            contentClassName='agent-messages-scroll-content'
+            viewportRef={messagesScrollRef}
+          >
+            <div className={`agent-messages${hasEmptyChat ? ' agent-messages-empty' : ''}`}>
+              {hasEmptyChat ? (
+                <AgentEmptyChat />
+              ) : renderedMessages.map((message) => {
+                const fileChanges = roundFileChangesByMessageId.get(message.id) ?? []
+
+                return (
+                  <div key={message.id} className='agent-message-stack'>
+                    <AgentMessageBubble
+                      iconTheme={iconTheme}
+                      message={message}
+                      onOpenWorkspaceFile={(filePath) => {
+                        void onOpenMessageFile?.(filePath, 'updated')
+                      }}
+                      workspacePath={workspacePath}
+                    />
+                    {fileChanges.length > 0 ? (
+                      <AgentMessageFileChips
+                        fileChanges={fileChanges}
+                        iconTheme={iconTheme}
+                        onOpenFile={onOpenMessageFile}
+                        workspacePath={workspacePath}
+                      />
+                    ) : null}
+                  </div>
+                )
+              })}
+              {sessionStatus ? (
+                <AgentSessionStatusBubble status={sessionStatus} />
+              ) : null}
+            </div>
+          </AppScrollArea>
+
+          {composerForm}
+        </>
+      )}
     </div>
   )
 }
@@ -5209,6 +5751,7 @@ function AgentSidebar(props: AgentSidebarProps) {
 
 export {
   AgentChatSurface,
+  type AgentProjectSessionRequest,
   AgentProvider,
   AgentSessionTree,
   AgentSidebar,
