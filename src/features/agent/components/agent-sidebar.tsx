@@ -53,6 +53,7 @@ import {
 } from '@/components/file-change-visuals'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
+import { shouldRunAgentModelCascaderDelayedActivation } from '@/features/agent/lib/model-cascader-pointer-intent'
 import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
 import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
 import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
@@ -3968,6 +3969,7 @@ function AgentChatSurface() {
   const modelPickerSearchRef = useRef<HTMLInputElement | null>(null)
   const modelPickerTriggerRef = useRef<HTMLButtonElement | null>(null)
   const modelPickerPointerTrailRef = useRef<AgentModelPickerPointerPoint[]>([])
+  const modelPickerLatestPointerPointRef = useRef<AgentModelPickerPointerPoint | null>(null)
   const modelPickerPendingActivationRef = useRef<AgentModelPickerPendingActivation | null>(null)
   const modelPickerActivationVersionRef = useRef(0)
   const [modelCascaderStyle, setModelCascaderStyle] = useState<AgentModelCascaderStyle>({})
@@ -4170,6 +4172,7 @@ function AgentChatSurface() {
   function clearModelPickerPointerIntent() {
     clearModelPickerPendingActivation()
     modelPickerPointerTrailRef.current = []
+    modelPickerLatestPointerPointRef.current = null
   }
 
   function flushModelPickerPendingActivation(target?: AgentModelPickerSafeTriangleTarget) {
@@ -4208,6 +4211,7 @@ function AgentChatSurface() {
 
   function recordModelPickerPointerPoint(event: ReactPointerEvent<HTMLElement>) {
     const nextPoint = createModelPickerPointerPoint(event)
+    modelPickerLatestPointerPointRef.current = nextPoint
     const currentTrail = modelPickerPointerTrailRef.current
     const lastPoint = currentTrail[currentTrail.length - 1]
 
@@ -4333,11 +4337,20 @@ function AgentChatSurface() {
 
     const version = modelPickerActivationVersionRef.current
     const timeoutId = window.setTimeout(() => {
+      const latestPoint = modelPickerLatestPointerPointRef.current
       if (
         modelPickerPendingActivationRef.current?.timeoutId !== timeoutId
         || modelPickerPendingActivationRef.current.version !== version
         || modelPickerActivationVersionRef.current !== version
       ) {
+        return
+      }
+
+      if (!shouldRunAgentModelCascaderDelayedActivation(
+        latestPoint,
+        target,
+        isPointerInsideModelPickerSafeTriangle,
+      )) {
         return
       }
 
@@ -4602,7 +4615,9 @@ function AgentChatSurface() {
   }
 
   async function handleModelPickerThinkingSelect(level: AgentThinkingLevel, modelKey: string) {
-    flushModelPickerPendingActivation('thinking')
+    // Choosing a thinking level belongs to the currently open submenu.
+    // A delayed model hover is only a preview candidate and must not steal this click.
+    clearModelPickerPendingActivation()
     const option = modelPickerOptionByKey.get(modelKey)
 
     if (!option || !option.thinkingLevels.includes(level)) {
@@ -5007,7 +5022,7 @@ function AgentChatSurface() {
                 data-model-key={activeModelOption.key}
                 className='agent-model-cascader-column agent-model-cascader-column-thinking'
                 onPointerEnter={() => {
-                  flushModelPickerPendingActivation('thinking')
+                  clearModelPickerPendingActivation()
                 }}
               >
                 <div className='agent-model-cascader-column-title'>Thinking level</div>
@@ -5028,7 +5043,7 @@ function AgentChatSurface() {
                           setModelPickerKeyboardColumn('thinking')
                         }}
                         onPointerEnter={() => {
-                          flushModelPickerPendingActivation('thinking')
+                          clearModelPickerPendingActivation()
                           setModelPickerActiveThinkingLevel(level)
                           setModelPickerKeyboardColumn('thinking')
                         }}
