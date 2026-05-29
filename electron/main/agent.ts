@@ -1226,10 +1226,21 @@ export class PiAgentManager {
     return this.broadcastWorkspaceState(cwd)
   }
 
-  async renameActiveSession(name: string) {
-    const runtime = this.requireActiveSession()
-    runtime.session.setSessionName(name.trim())
-    return this.broadcastWorkspaceState(runtime.cwd)
+  async renameSession(cwd: string, sessionPath: string, name: string) {
+    const resolvedSessionPath = this.resolveSessionPath(cwd, sessionPath)
+    const nextName = name.trim()
+    const runtime = this.activeRuntime
+    const isRenamingActiveSession = runtime?.cwd === cwd
+      && runtime.session.sessionFile === resolvedSessionPath
+
+    if (isRenamingActiveSession) {
+      runtime.session.setSessionName(nextName)
+    } else {
+      const sessionManager = SessionManager.open(resolvedSessionPath, this.getSessionDir(cwd), cwd)
+      sessionManager.appendSessionInfo(nextName)
+    }
+
+    return this.broadcastWorkspaceState(cwd)
   }
 
   async abortActivePrompt() {

@@ -1660,8 +1660,8 @@ ipcMain.handle('agent:delete-session', async (_event, rootPath: string, sessionP
   return agentManager.deleteSession(rootPath, sessionPath)
 })
 
-ipcMain.handle('agent:rename-session', async (_event, name: string) => {
-  return agentManager.renameActiveSession(name)
+ipcMain.handle('agent:rename-session', async (_event, rootPath: string, sessionPath: string, name: string) => {
+  return agentManager.renameSession(rootPath, sessionPath, name)
 })
 
 ipcMain.handle('agent:pick-attachments', async () => {

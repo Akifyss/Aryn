@@ -101,7 +101,9 @@ contextBridge.exposeInMainWorld('appApi', {
   createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => ipcRenderer.invoke('agent:create-session', rootPath, options) as Promise<AgentWorkspaceState>,
   openAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:open-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,
   deleteAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:delete-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,
-  renameAgentSession: (name: string) => ipcRenderer.invoke('agent:rename-session', name) as Promise<AgentWorkspaceState>,
+  renameAgentSession: (rootPath: string, sessionPath: string, name: string) => (
+    ipcRenderer.invoke('agent:rename-session', rootPath, sessionPath, name) as Promise<AgentWorkspaceState>
+  ),
   pickAgentAttachments: () => ipcRenderer.invoke('agent:pick-attachments') as Promise<AgentPromptAttachment[]>,
   getFilePath: (file: File) => webUtils.getPathForFile(file),
   sendAgentPrompt: (prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments?: AgentPromptAttachment[]) => ipcRenderer.invoke('agent:send-prompt', prompt, streamingBehavior, attachments) as Promise<{ ok: boolean }>,

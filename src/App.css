@@ -3948,7 +3948,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: var(--danger);
+  color: var(--foreground);
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
@@ -3958,8 +3958,8 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-session-tree-menu-item:hover,
 .agent-session-tree-menu-item:focus-visible {
   outline: none;
-  background: var(--danger);
-  color: var(--danger-foreground);
+  background: var(--surface-tertiary);
+  color: var(--foreground);
 }
 
 .agent-session-tree-menu-item:disabled {
@@ -4055,6 +4055,15 @@ body.workspace-tree-dragging .workspace-tree-row {
   gap: 8px;
 }
 
+.agent-session-rename-trigger {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-session-rename-actions {
+  gap: 2px;
+}
+
 .agent-project-session-label {
   flex: 1 1 auto;
   min-width: 0;
@@ -4076,6 +4085,10 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-project-session-status.is-error {
   color: var(--danger);
+}
+
+.agent-session-rename-error {
+  padding-left: 14px;
 }
 
 .agent-project-row-tools {

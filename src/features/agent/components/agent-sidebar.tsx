@@ -24,11 +24,13 @@ import {
   AttachmentLine,
   ArrowUpLine,
   BrainLine,
+  CheckLine,
   CloseLine,
   CodeLine,
   CornerUpLeftLine,
   Delete2Line,
   DownLine,
+  Edit2Line,
   EyeglassLine,
   EditLine,
   ExternalLinkLine,
@@ -277,7 +279,7 @@ const AGENT_SESSION_MENU_MAX_HEIGHT_PX = 416
 const AGENT_TREE_CONTEXT_MENU_MARGIN_PX = 8
 const AGENT_TREE_CONTEXT_MENU_GAP_PX = 2
 const AGENT_TREE_SESSION_CONTEXT_MENU_WIDTH_PX = 168
-const AGENT_TREE_SESSION_CONTEXT_MENU_HEIGHT_PX = 46
+const AGENT_TREE_SESSION_CONTEXT_MENU_HEIGHT_PX = 82
 const AGENT_TREE_PROJECT_CONTEXT_MENU_WIDTH_PX = 238
 const AGENT_TREE_PROJECT_CONTEXT_MENU_HEIGHT_PX = 80
 
@@ -373,6 +375,7 @@ type AgentContextValue = {
   handleComposerKeyDown: (event: KeyboardEvent<HTMLElement>) => void
   handleDeleteSession: (sessionPath: string) => Promise<void>
   handleOpenSession: (sessionPath: string) => Promise<void>
+  handleRenameSession: (rootPath: string, sessionPath: string, name: string) => Promise<void>
   handleSelectModel: (modelKey: string) => Promise<void>
   handleThinkingLevelSelection: (level: AgentThinkingLevel, modelKey?: string) => Promise<void>
   handlePickComposerAttachments: () => Promise<void>
@@ -2990,6 +2993,10 @@ function AgentProvider({
         return
       }
 
+      if (isAgentTreeContextMenuEventTarget(target)) {
+        return
+      }
+
       setActiveOverlayPanel(null)
     }
 
@@ -3262,6 +3269,55 @@ function AgentProvider({
       setPanelError(error instanceof Error ? error.message : 'Unable to delete that session.')
     } finally {
       setDeletingSessionPath(null)
+    }
+  }
+
+  async function handleRenameSession(rootPath: string, sessionPath: string, name: string) {
+    const nextName = name.trim()
+
+    if (!nextName) {
+      return
+    }
+
+    try {
+      setPanelError(null)
+      const nextState = await window.appApi.renameAgentSession(rootPath, sessionPath, nextName)
+      const isCurrentWorkspace = Boolean(
+        workspacePath
+        && normalizeAgentProjectPath(rootPath) === normalizeAgentProjectPath(workspacePath),
+      )
+
+      if (isCurrentWorkspace) {
+        setAgentState(nextState)
+      }
+
+      const matchingProject = projectState.projects.find((project) => (
+        normalizeAgentProjectPath(project.path) === normalizeAgentProjectPath(rootPath)
+      ))
+
+      if (matchingProject) {
+        setProjectSessions((currentValue) => {
+          const currentBucket = currentValue[matchingProject.id]
+
+          if (!currentBucket) {
+            return currentValue
+          }
+
+          return {
+            ...currentValue,
+            [matchingProject.id]: {
+              ...currentBucket,
+              error: null,
+              hasLoaded: true,
+              isLoading: false,
+              sessions: nextState.sessions,
+            },
+          }
+        })
+      }
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'Unable to rename that session.')
+      throw error
     }
   }
 
@@ -3716,6 +3772,7 @@ function AgentProvider({
     handleComposerKeyDown,
     handleDeleteSession,
     handleOpenSession,
+    handleRenameSession,
     handleSelectModel,
     handleThinkingLevelSelection,
     handlePickComposerAttachments,
@@ -3779,6 +3836,7 @@ function AgentProvider({
     handleComposerKeyDown,
     handleDeleteSession,
     handleOpenSession,
+    handleRenameSession,
     handleSelectModel,
     handleThinkingLevelSelection,
     handlePickComposerAttachments,
@@ -3829,10 +3887,12 @@ function AgentSessionTreeContextMenu({
   anchorRect,
   disabled,
   onDelete,
+  onRename,
 }: {
   anchorRect: AgentMenuAnchorRect
   disabled: boolean
   onDelete: () => void
+  onRename: () => void
 }) {
   if (typeof document === 'undefined') {
     return null
@@ -3850,6 +3910,15 @@ function AgentSessionTreeContextMenu({
     >
       <button
         type='button'
+        className='agent-session-tree-menu-item'
+        disabled={disabled}
+        onClick={onRename}
+      >
+        <Edit2Line size={16} />
+        <span>重命名</span>
+      </button>
+      <button
+        type='button'
         className='agent-session-tree-menu-item is-danger'
         disabled={disabled}
         onClick={onDelete}
@@ -3865,53 +3934,177 @@ function AgentSessionTreeContextMenu({
 function AgentSessionTreeRow({
   isActive,
   isDeleting,
+  isRenaming,
   label,
   relativeTime,
   onOpen,
   onOpenMenu,
+  onCancelRename,
+  onRename,
 }: {
   isActive: boolean
   isDeleting: boolean
+  isRenaming: boolean
   label: string
   relativeTime?: string
   onOpen: () => void
   onOpenMenu: (anchorRect: AgentMenuAnchorRect) => void
+  onCancelRename: () => void
+  onRename: (name: string) => Promise<void>
 }) {
+  const [draftName, setDraftName] = useState(label)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const rowRef = useRef<HTMLDivElement | null>(null)
+  const renameInputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (!isRenaming) {
+      setDraftName(label)
+      setError(null)
+      return
+    }
+
+    setDraftName(label)
+  }, [isRenaming, label])
+
+  useEffect(() => {
+    if (!isRenaming) {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const input = renameInputRef.current
+      if (!input) return
+
+      input.focus()
+      input.setSelectionRange(0, input.value.length)
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [isRenaming])
+
+  const handleSubmitRename = async (event?: FormEvent) => {
+    event?.preventDefault()
+    const nextName = draftName.trim()
+
+    if (!nextName || nextName === label.trim()) {
+      onCancelRename()
+      return
+    }
+
+    try {
+      setIsSubmitting(true)
+      setError(null)
+      await onRename(nextName)
+      onCancelRename()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Rename failed')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <li className='panel-tree-node agent-project-session-node'>
-      <div className={`workspace-tree-row agent-project-session-row${isActive ? ' is-active' : ''}`}>
-        <button
-          type='button'
-          className='workspace-tree-trigger agent-project-session-trigger'
-          title={label}
-          onClick={onOpen}
-          onContextMenu={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            onOpenMenu(createAgentPointAnchorRect(event.clientX, event.clientY))
-          }}
-        >
-          <span className='panel-tree-label agent-project-session-label'>{label}</span>
-          {relativeTime ? <span className='agent-project-session-time'>{relativeTime}</span> : null}
-        </button>
+      <div
+        ref={rowRef}
+        className={`workspace-tree-row agent-project-session-row${isActive ? ' is-active' : ''}${isRenaming ? ' is-editing' : ''}`}
+      >
+        {isRenaming ? (
+          <>
+            <div
+              className='workspace-tree-trigger agent-project-session-trigger agent-session-rename-trigger'
+              onClick={(event) => event.stopPropagation()}
+            >
+              <input
+                ref={renameInputRef}
+                aria-label='重命名对话'
+                className='raw-rename-input'
+                value={draftName}
+                onFocus={(event) => event.target.select()}
+                onChange={(event) => setDraftName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void handleSubmitRename()
+                  }
+                  if (event.key === 'Escape') {
+                    onCancelRename()
+                  }
+                }}
+                onBlur={(event) => {
+                  if (isSubmitting) return
 
-        <div className='git-change-tools agent-project-row-tools' onClick={(event) => event.stopPropagation()}>
-          <div className='git-change-actions'>
+                  const nextFocusedElement = event.relatedTarget
+                  if (nextFocusedElement instanceof Node && rowRef.current?.contains(nextFocusedElement)) {
+                    return
+                  }
+
+                  onCancelRename()
+                }}
+              />
+            </div>
+            <div className='git-change-tools agent-project-row-tools' onClick={(event) => event.stopPropagation()}>
+              <div className='git-change-actions agent-session-rename-actions' style={{ opacity: 1, maxWidth: '4rem', transform: 'translateX(0)' }}>
+                <button
+                  type='button'
+                  className='git-change-action git-change-icon-button agent-project-row-action'
+                  aria-label='确认重命名'
+                  disabled={isSubmitting}
+                  onClick={() => void handleSubmitRename()}
+                >
+                  <CheckLine size={14} />
+                </button>
+                <button
+                  type='button'
+                  className='git-change-action git-change-icon-button agent-project-row-action'
+                  aria-label='取消重命名'
+                  disabled={isSubmitting}
+                  onClick={onCancelRename}
+                >
+                  <CloseLine size={14} />
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
             <button
               type='button'
-              className='git-change-action git-change-icon-button agent-project-row-action'
-              aria-label={`打开 ${label} 菜单`}
-              title='对话菜单'
-              disabled={isDeleting}
-              onClick={(event) => {
-                onOpenMenu(event.currentTarget.getBoundingClientRect())
+              className='workspace-tree-trigger agent-project-session-trigger'
+              title={label}
+              onClick={onOpen}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                onOpenMenu(createAgentPointAnchorRect(event.clientX, event.clientY))
               }}
             >
-              <More1Line size={16} />
+              <span className='panel-tree-label agent-project-session-label'>{label}</span>
+              {relativeTime ? <span className='agent-project-session-time'>{relativeTime}</span> : null}
             </button>
-          </div>
-        </div>
+
+            <div className='git-change-tools agent-project-row-tools' onClick={(event) => event.stopPropagation()}>
+              <div className='git-change-actions'>
+                <button
+                  type='button'
+                  className='git-change-action git-change-icon-button agent-project-row-action'
+                  aria-label={`打开 ${label} 菜单`}
+                  title='对话菜单'
+                  disabled={isDeleting}
+                  onClick={(event) => {
+                    onOpenMenu(event.currentTarget.getBoundingClientRect())
+                  }}
+                >
+                  <More1Line size={16} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
+      {error ? <p className='tree-item-error agent-session-rename-error'>{error}</p> : null}
     </li>
   )
 }
@@ -3929,10 +4122,12 @@ function FlatAgentSessionTree({
     deletingSessionPath,
     handleDeleteSession,
     handleOpenSession,
+    handleRenameSession,
     handleStartNewSession,
     workspacePath,
   } = useAgentContext()
   const [sessionMenuState, setSessionMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, session: AgentSessionListItem } | null>(null)
+  const [renamingSessionPath, setRenamingSessionPath] = useState<string | null>(null)
 
   useEffect(() => {
     if (!sessionMenuState) {
@@ -4002,19 +4197,29 @@ function FlatAgentSessionTree({
                 key={session.path}
                 isActive={isActiveSession}
                 isDeleting={deletingSessionPath === session.path}
+                isRenaming={renamingSessionPath === session.path}
                 label={label}
+                onCancelRename={() => setRenamingSessionPath(null)}
                 onOpen={() => {
+                  setRenamingSessionPath(null)
                   setSessionMenuState(null)
                   void handleOpenSession(session.path).then(() => {
                     onRequestClose?.()
                   })
                 }}
                 onOpenMenu={(anchorRect) => {
+                  if (!workspacePath) {
+                    return
+                  }
+
                   setSessionMenuState({
                     anchorRect,
                     session,
                   })
                 }}
+                onRename={(name) => workspacePath
+                  ? handleRenameSession(workspacePath, session.path, name)
+                  : Promise.resolve()}
               />
             )
           })}
@@ -4029,6 +4234,11 @@ function FlatAgentSessionTree({
             const sessionPath = sessionMenuState.session.path
             setSessionMenuState(null)
             void handleDeleteSession(sessionPath)
+          }}
+          onRename={() => {
+            const sessionPath = sessionMenuState.session.path
+            setSessionMenuState(null)
+            setRenamingSessionPath(sessionPath)
           }}
         />
       ) : null}
@@ -4046,6 +4256,7 @@ function AgentProjectTree({
     activeSessionSelection,
     deletingSessionPath,
     handleDeleteSession,
+    handleRenameSession,
     loadProjectSessions,
     onOpenProjectAddMenu,
     onOpenProjectFolder,
@@ -4062,6 +4273,7 @@ function AgentProjectTree({
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set())
   const [projectMenuState, setProjectMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, project: ProjectRecord } | null>(null)
   const [sessionMenuState, setSessionMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, session: AgentSessionListItem } | null>(null)
+  const [renamingSessionPath, setRenamingSessionPath] = useState<string | null>(null)
   const activeSessionProjectId = useMemo(() => {
     if (!activeSessionPath) {
       return null
@@ -4127,6 +4339,7 @@ function AgentProjectTree({
   }, [projectMenuState, sessionMenuState])
 
   function toggleProject(project: ProjectRecord) {
+    setRenamingSessionPath(null)
     setProjectMenuState(null)
     setSessionMenuState(null)
     const shouldLoadSessions = !expandedProjectIds.has(project.id)
@@ -4282,9 +4495,12 @@ function AgentProjectTree({
                             key={session.path}
                             isActive={isActiveSession}
                             isDeleting={deletingSessionPath === session.path}
+                            isRenaming={renamingSessionPath === session.path}
                             label={label}
+                            onCancelRename={() => setRenamingSessionPath(null)}
                             relativeTime={relativeTime}
                             onOpen={() => {
+                              setRenamingSessionPath(null)
                               setProjectMenuState(null)
                               setSessionMenuState(null)
                               void Promise.resolve(onOpenProjectSession?.(project, session.path)).then(() => {
@@ -4298,6 +4514,7 @@ function AgentProjectTree({
                                 session,
                               })
                             }}
+                            onRename={(name) => handleRenameSession(project.path, session.path, name)}
                           />
                         )
                       })}
@@ -4318,6 +4535,11 @@ function AgentProjectTree({
             const sessionPath = sessionMenuState.session.path
             setSessionMenuState(null)
             void handleDeleteSession(sessionPath)
+          }}
+          onRename={() => {
+            const sessionPath = sessionMenuState.session.path
+            setSessionMenuState(null)
+            setRenamingSessionPath(sessionPath)
           }}
         />
       ) : null}

@@ -101,7 +101,7 @@ declare global {
       createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => Promise<AgentWorkspaceState>
       openAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
       deleteAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
-      renameAgentSession: (name: string) => Promise<AgentWorkspaceState>
+      renameAgentSession: (rootPath: string, sessionPath: string, name: string) => Promise<AgentWorkspaceState>
       pickAgentAttachments: () => Promise<AgentPromptAttachment[]>
       getFilePath: (file: File) => string
       sendAgentPrompt: (prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments?: AgentPromptAttachment[]) => Promise<{ ok: boolean }>
