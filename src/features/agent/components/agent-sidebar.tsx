@@ -4124,17 +4124,22 @@ function AgentProjectTree({
   function toggleProject(project: ProjectRecord) {
     setProjectMenuState(null)
     setSessionMenuState(null)
+    const shouldLoadSessions = !expandedProjectIds.has(project.id)
+
     setExpandedProjectIds((currentExpandedProjectIds) => {
       const nextExpandedProjectIds = new Set(currentExpandedProjectIds)
       if (nextExpandedProjectIds.has(project.id)) {
         nextExpandedProjectIds.delete(project.id)
       } else {
         nextExpandedProjectIds.add(project.id)
-        void loadProjectSessions(project)
       }
 
       return nextExpandedProjectIds
     })
+
+    if (shouldLoadSessions) {
+      void loadProjectSessions(project)
+    }
   }
 
   return (
