@@ -3983,7 +3983,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-tree-context-menu {
   transform: none;
-  z-index: 20;
+  z-index: 1300;
 }
 
 .agent-project-tree-shell {

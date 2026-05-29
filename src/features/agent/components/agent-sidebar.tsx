@@ -130,6 +130,7 @@ type AgentSessionTreeProps = {
   className?: string
   onRequestClose?: () => void
   id?: string
+  isFloating?: boolean
 }
 
 type AgentProjectSessionBucket = {
@@ -913,7 +914,7 @@ function resolveAgentTreeContextMenuStyle(
     position: 'fixed',
     top: `${top}px`,
     width: `${width}px`,
-    zIndex: 120,
+    zIndex: 1300,
   }
 }
 
@@ -3919,6 +3920,7 @@ function FlatAgentSessionTree({
   className,
   onRequestClose,
   id = 'agent-session-tree',
+  isFloating,
 }: AgentSessionTreeProps) {
   const {
     activeSessionSelection,
@@ -3967,19 +3969,21 @@ function FlatAgentSessionTree({
 
   return (
     <div className={`agent-session-tree-shell${className ? ` ${className}` : ''}`}>
-      <button
-        type='button'
-        disabled={!workspacePath}
-        className='agent-session-new-button'
-        aria-label='Start new conversation'
-        onClick={() => {
-          handleStartNewSession()
-          onRequestClose?.()
-        }}
-      >
-        <EditLine size={16} />
-        <span>新对话</span>
-      </button>
+      {!isFloating ? (
+        <button
+          type='button'
+          disabled={!workspacePath}
+          className='agent-session-new-button'
+          aria-label='Start new conversation'
+          onClick={() => {
+            handleStartNewSession()
+            onRequestClose?.()
+          }}
+        >
+          <EditLine size={16} />
+          <span>新对话</span>
+        </button>
+      ) : null}
 
       <AppScrollArea
         className='agent-session-tree-scroll'
@@ -4035,6 +4039,7 @@ function FlatAgentSessionTree({
 function AgentProjectTree({
   className,
   onRequestClose,
+  isFloating,
 }: AgentSessionTreeProps) {
   const {
     activeSessionPath,
@@ -4144,36 +4149,40 @@ function AgentProjectTree({
 
   return (
     <div className={`agent-session-tree-shell agent-project-tree-shell${className ? ` ${className}` : ''}`}>
-      <button
-        type='button'
-        disabled={!activeProject}
-        className='agent-session-new-button'
-        aria-label='Start new conversation'
-        onClick={() => {
-          if (activeProject) {
-            void onStartProjectSession?.(activeProject)
-          }
-          onRequestClose?.()
-        }}
-      >
-        <EditLine size={16} />
-        <span>新对话</span>
-      </button>
-
-      <div className='agent-project-tree-header'>
-        <span>项目</span>
+      {!isFloating ? (
         <button
           type='button'
-          className='agent-project-tree-header-action'
-          aria-label='添加项目'
-          title='添加项目'
-          onClick={(event) => {
-            onOpenProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
+          disabled={!activeProject}
+          className='agent-session-new-button'
+          aria-label='Start new conversation'
+          onClick={() => {
+            if (activeProject) {
+              void onStartProjectSession?.(activeProject)
+            }
+            onRequestClose?.()
           }}
         >
-          <AddLine size={15} />
+          <EditLine size={16} />
+          <span>新对话</span>
         </button>
-      </div>
+      ) : null}
+
+      {!isFloating ? (
+        <div className='agent-project-tree-header'>
+          <span>项目</span>
+          <button
+            type='button'
+            className='agent-project-tree-header-action'
+            aria-label='添加项目'
+            title='添加项目'
+            onClick={(event) => {
+              onOpenProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
+            }}
+          >
+            <AddLine size={15} />
+          </button>
+        </div>
+      ) : null}
 
       <AppScrollArea
         className='agent-session-tree-scroll agent-project-tree-scroll'
@@ -5713,6 +5722,7 @@ function AgentChatSurface() {
           <AgentSessionTree
             className='agent-session-tree-floating'
             id='agent-session-tree-floating'
+            isFloating
             onRequestClose={() => {
               setActiveOverlayPanel(null)
             }}
