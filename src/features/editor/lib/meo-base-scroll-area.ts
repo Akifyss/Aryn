@@ -15,6 +15,8 @@ type MeoBaseScrollAreaController = {
   refresh: () => void
 }
 
+type DeferredUnmountRoot = Pick<Root, 'unmount'>
+
 type ExternalViewportBridgeProps = React.HTMLAttributes<HTMLDivElement> & {
   viewport: HTMLElement
 }
@@ -49,6 +51,23 @@ function addEventListener<K extends keyof HTMLElementEventMap>(
   }
   element.addEventListener(type, wrapped, options)
   return () => element.removeEventListener(type, wrapped, options)
+}
+
+function scheduleDeferredRootUnmount(root: DeferredUnmountRoot) {
+  let didUnmount = false
+  const unmount = () => {
+    if (didUnmount) {
+      return
+    }
+
+    didUnmount = true
+    root.unmount()
+  }
+
+  // This root can be destroyed from a parent React tree cleanup; defer to avoid unmounting
+  // a secondary root while React is still committing the parent tree.
+  globalThis.setTimeout(unmount, 0)
+  return unmount
 }
 
 const ExternalViewportBridge = React.forwardRef<HTMLDivElement, ExternalViewportBridgeProps>(
@@ -211,7 +230,12 @@ export function mountMeoBaseScrollArea({
   hostParent.appendChild(host)
 
   const root: Root = createRoot(host)
+  let destroyed = false
   const render = () => {
+    if (destroyed) {
+      return
+    }
+
     root.render(createMeoBaseScrollAreaElement({
       className,
       viewport,
@@ -244,15 +268,24 @@ export function mountMeoBaseScrollArea({
 
   return {
     destroy() {
+      if (destroyed) {
+        return
+      }
+
+      destroyed = true
       viewport.removeEventListener('pointerenter', handlePointerEnter)
       viewport.removeEventListener('pointerleave', handlePointerLeave)
       document.removeEventListener('pointermove', handleDocumentPointerMove)
       window.removeEventListener('blur', handleWindowBlur)
-      root.unmount()
       host.remove()
+      scheduleDeferredRootUnmount(root)
     },
     refresh() {
       render()
     },
   }
+}
+
+export const __meoBaseScrollAreaTestHooks = {
+  scheduleDeferredRootUnmount,
 }
