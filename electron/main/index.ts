@@ -1084,19 +1084,34 @@ ipcMain.handle('project:remove', async (_event, projectId: string) => {
   return getVisibleProjectState()
 })
 
-ipcMain.handle('project:show-in-folder', async (_event, projectId: string) => {
-  const state = await appStateStore.read()
-  const project = state.workspace.projects.find((candidate) => candidate.id === projectId)
-
-  if (!project) {
-    throw new Error('Project not found.')
+ipcMain.handle('shell:open-path', async (_event, targetPath: string) => {
+  const trimmedPath = typeof targetPath === 'string' ? targetPath.trim() : ''
+  if (!trimmedPath) {
+    throw new Error('Path is required.')
   }
-
-  if (!(await workspacePathExists(project.path))) {
-    throw new Error('Project folder is no longer available.')
+  try {
+    await stat(trimmedPath)
+  } catch {
+    throw new Error('The selected item no longer exists.')
   }
+  const errorMessage = await shell.openPath(trimmedPath)
+  if (errorMessage) {
+    throw new Error(errorMessage)
+  }
+  return { ok: true }
+})
 
-  await shell.openPath(project.path)
+ipcMain.handle('shell:show-item-in-folder', async (_event, targetPath: string) => {
+  const trimmedPath = typeof targetPath === 'string' ? targetPath.trim() : ''
+  if (!trimmedPath) {
+    throw new Error('Path is required.')
+  }
+  try {
+    await stat(trimmedPath)
+  } catch {
+    throw new Error('The selected item no longer exists.')
+  }
+  shell.showItemInFolder(trimmedPath)
   return { ok: true }
 })
 

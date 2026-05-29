@@ -37,7 +37,8 @@ declare global {
       addExistingProject: () => Promise<ProjectState | null>
       setActiveProject: (projectId: string) => Promise<ProjectState>
       removeProject: (projectId: string) => Promise<ProjectState>
-      showProjectInFolder: (projectId: string) => Promise<{ ok: boolean }>
+      openPath: (path: string) => Promise<{ ok: boolean }>
+      showItemInFolder: (path: string) => Promise<{ ok: boolean }>
       getWorkspaceRestoreState: () => Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>
       getWorkspaceState: (workspacePath: string) => Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>
       updateWorkspaceState: (workspacePath: string, patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean }) => Promise<{ ok: boolean }>

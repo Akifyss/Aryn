@@ -2520,7 +2520,7 @@ function App() {
 
   async function handleShowProjectInFolder(project: ProjectRecord) {
     try {
-      await window.appApi.showProjectInFolder(project.id)
+      await window.appApi.openPath(project.path)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to open project folder.'
       toast.danger('打开文件夹失败', { description: message })

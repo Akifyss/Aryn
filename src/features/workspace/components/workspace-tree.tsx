@@ -6,6 +6,7 @@ import {
   CodeLine,
   Delete2Line,
   Edit2Line,
+  ExternalLinkLine,
   FolderLine,
   More1Line,
 } from '@mingcute/react'
@@ -69,11 +70,18 @@ function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | un
   return { ...dominantChange, path: node.path } as GitDisplayChange
 }
 
+function getSystemFileManagerName(platform: string) {
+  if (platform === 'darwin') return '访达'
+  if (platform === 'win32') return '资源管理器'
+  return '文件管理器'
+}
+
 function FileRowActions({
   canOpenInCodeEditor,
   onOpenInCodeEditor,
   onRename,
   onDelete,
+  onShowInFolder,
   isSubmitting,
   gitChange,
 }: {
@@ -81,10 +89,12 @@ function FileRowActions({
   onOpenInCodeEditor: () => void
   onRename: () => void
   onDelete: () => void
+  onShowInFolder: () => void
   isSubmitting: boolean
   gitChange: GitDisplayChange | null
 }) {
   const [isOpen, setIsOpen] = useState(false)
+  const systemManagerName = getSystemFileManagerName(window.appApi.platform)
 
   return (
     <div className='git-change-tools'>
@@ -115,6 +125,7 @@ function FileRowActions({
               aria-label='File actions'
               onAction={(key) => {
                 if (key === 'open-code') onOpenInCodeEditor()
+                if (key === 'show-in-folder') onShowInFolder()
                 if (key === 'rename') onRename()
                 if (key === 'delete') onDelete()
               }}
@@ -127,20 +138,26 @@ function FileRowActions({
                   </div>
                 </Dropdown.Item>
               ) : null}
-              <Dropdown.Item id='rename' textValue='Rename'>
+              <Dropdown.Item id='show-in-folder' textValue={`在“${systemManagerName}”中打开`}>
+                <div className='workspace-tree-menu-item'>
+                  <ExternalLinkLine size={16} className='workspace-tree-menu-icon' />
+                  <span>在“{systemManagerName}”中打开</span>
+                </div>
+              </Dropdown.Item>
+              <Dropdown.Item id='rename' textValue='重命名'>
                 <div className='workspace-tree-menu-item'>
                   <Edit2Line size={16} className='workspace-tree-menu-icon' />
-                  <span>Rename</span>
+                  <span>重命名</span>
                 </div>
               </Dropdown.Item>
               <Dropdown.Item
                 id='delete'
-                textValue='Delete'
+                textValue='删除'
                 variant='danger'
               >
                 <div className='workspace-tree-menu-item is-danger'>
                   <Delete2Line size={16} className='workspace-tree-menu-icon' />
-                  <span>Delete</span>
+                  <span>删除</span>
                 </div>
               </Dropdown.Item>
             </Dropdown.Menu>
@@ -372,6 +389,11 @@ function FileTreeItem({
             isSubmitting={isSubmitting}
             gitChange={gitChange}
             onOpenInCodeEditor={() => onOpenInCodeEditor(node.path)}
+            onShowInFolder={() => {
+              window.appApi.showItemInFolder(node.path).catch((error) => {
+                console.error('Failed to show item in folder:', error)
+              })
+            }}
             onRename={() => {
               setDraftName(node.name)
               setIsEditing(true)
@@ -391,31 +413,31 @@ function FileTreeItem({
             {({ close }) => (
               <>
                 <AlertDialog.CloseTrigger />
-                <AlertDialog.Header>
+                 <AlertDialog.Header>
                   <AlertDialog.Icon status='danger' />
-                  <AlertDialog.Heading>Confirm Deletion</AlertDialog.Heading>
+                  <AlertDialog.Heading>确认删除</AlertDialog.Heading>
                 </AlertDialog.Header>
                 <AlertDialog.Body>
                   <p className='text-[var(--foreground)]'>
-                    Are you sure you want to delete <span style={{ fontWeight: 600 }}>{node.name}</span>?
-                    This action cannot be undone.
+                    您确定要删除 <span style={{ fontWeight: 600 }}>{node.name}</span> 吗？
+                    此操作将无法撤销。
                   </p>
                 </AlertDialog.Body>
                 <AlertDialog.Footer>
-                  <Button
+                   <Button
                     className='confirm-dialog-cancel-button'
                     variant='tertiary'
                     onPress={close}
                     isDisabled={isSubmitting}
                   >
-                    Cancel
+                    取消
                   </Button>
                   <Button
                     variant='danger'
                     onPress={() => handleDelete(close)}
                     isDisabled={isSubmitting}
                   >
-                    Delete
+                    删除
                   </Button>
                 </AlertDialog.Footer>
               </>
@@ -687,7 +709,7 @@ export function WorkspaceTree({
         <div className='tree-empty-icon'>
           <FolderLine size={26} />
         </div>
-        <p>Connect a workspace folder to browse and edit your notes.</p>
+        <p>连接工作区文件夹以浏览和编辑您的笔记。</p>
       </div>
     )
   }
