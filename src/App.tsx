@@ -4163,10 +4163,21 @@ function App() {
   ], [handleCreateFile, handleCreateDirectory, handlePickWorkspace])
 
   const handleOpenSession = useCallback((sessionPath: string) => {
-    if (currentPath) {
-      void window.appApi.openAgentSession(currentPath, sessionPath)
+    const currentProject = currentPath
+      ? projectState.projects.find((project) => project.id === projectState.activeProjectId)
+        ?? projectState.projects.find((project) => normalizeFilePath(project.path) === normalizeFilePath(currentPath))
+      : null
+
+    if (currentPath && currentProject) {
+      agentProjectSessionRequestIdRef.current += 1
+      setPendingAgentProjectSessionRequest({
+        kind: 'session',
+        projectId: currentProject.id,
+        requestId: agentProjectSessionRequestIdRef.current,
+        sessionPath,
+      })
     }
-  }, [currentPath])
+  }, [currentPath, projectState.activeProjectId, projectState.projects])
 
   const handleCloseCommandPalette = useCallback(() => setIsCommandPaletteOpen(false), [])
   const handleOpenCommandPaletteFromChrome = useCallback(() => {

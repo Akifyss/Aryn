@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
 import { getModel } from '@earendil-works/pi-ai'
-import type { SessionEntry } from '@earendil-works/pi-coding-agent'
-import { getThinkingLevelsByModel, serializeSessionEntries } from '../electron/main/agent'
+import { SessionManager, type SessionEntry } from '@earendil-works/pi-coding-agent'
+import { getThinkingLevelsByModel, PiAgentManager, serializeSessionEntries } from '../electron/main/agent'
 
 describe('agent session serialization', () => {
   it('serializes model-specific thinking levels from Pi metadata', () => {
@@ -119,5 +122,67 @@ describe('agent session serialization', () => {
         title: 'write',
       }),
     ])
+  })
+
+  it('reads a session snapshot without releasing the active runtime', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-agent-session-'))
+
+    try {
+      const workspacePath = path.join(tempRoot, 'workspace')
+      const sessionDir = path.join(workspacePath, '.pi', 'sessions')
+      const sessionManager = SessionManager.create(workspacePath, sessionDir)
+      sessionManager.appendMessage({
+        role: 'user',
+        content: [{ type: 'text', text: 'Show me the plan.' }],
+        timestamp: 1775667950000,
+      })
+      sessionManager.appendMessage({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Here is the plan.' }],
+        api: 'openai-completions',
+        model: 'deepseek/deepseek-v3.2-exp',
+        provider: 'openrouter',
+        stopReason: 'stop',
+        timestamp: 1775667951000,
+        usage: {
+          cacheRead: 0,
+          cacheWrite: 0,
+          input: 1,
+          output: 1,
+          totalTokens: 2,
+          cost: {
+            cacheRead: 0,
+            cacheWrite: 0,
+            input: 0,
+            output: 0,
+            total: 0,
+          },
+        },
+      })
+
+      const abort = vi.fn()
+      const activeRuntime = {
+        cwd: workspacePath,
+        session: {
+          abort,
+          dispose: vi.fn(),
+          isStreaming: true,
+        },
+        unsubscribe: vi.fn(),
+      }
+      const manager = new PiAgentManager(() => undefined, { agentDir: path.join(tempRoot, 'agent') })
+      ;(manager as unknown as { activeRuntime: unknown }).activeRuntime = activeRuntime
+
+      const snapshot = await manager.readSession(workspacePath, sessionManager.getSessionFile() ?? '')
+
+      expect(abort).not.toHaveBeenCalled()
+      expect((manager as unknown as { activeRuntime: unknown }).activeRuntime).toBe(activeRuntime)
+      expect(snapshot.messages.map((message) => message.text)).toEqual([
+        'Show me the plan.',
+        'Here is the plan.',
+      ])
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true })
+    }
   })
 })

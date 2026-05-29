@@ -1648,6 +1648,10 @@ ipcMain.handle('agent:list-sessions', async (_event, rootPath: string) => {
   return agentManager.listSessionItems(rootPath)
 })
 
+ipcMain.handle('agent:read-session', async (_event, rootPath: string, sessionPath: string) => {
+  return agentManager.readSession(rootPath, sessionPath)
+})
+
 ipcMain.handle('agent:create-session', async (_event, rootPath: string, options?: string | AgentSessionCreateOptions) => {
   return agentManager.createSession(rootPath, options)
 })

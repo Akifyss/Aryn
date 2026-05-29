@@ -1,5 +1,5 @@
 import { ipcRenderer, contextBridge, webUtils } from 'electron'
-import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentThinkingLevel, AgentWorkspaceState } from '../../src/features/agent/types'
+import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState } from '../../src/features/agent/types'
 import type {
   GitBaselinePayload,
   GitBlameResult,
@@ -98,6 +98,7 @@ contextBridge.exposeInMainWorld('appApi', {
   stopWorkspaceWatch: () => ipcRenderer.invoke('workspace:stop-watch') as Promise<{ ok: boolean }>,
   loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null, options?: { restoreSession?: boolean }) => ipcRenderer.invoke('agent:load-workspace', rootPath, preferredSessionPath, options) as Promise<AgentWorkspaceState>,
   listAgentSessions: (rootPath: string) => ipcRenderer.invoke('agent:list-sessions', rootPath) as Promise<AgentWorkspaceState['sessions']>,
+  readAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:read-session', rootPath, sessionPath) as Promise<AgentSessionSnapshot>,
   createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => ipcRenderer.invoke('agent:create-session', rootPath, options) as Promise<AgentWorkspaceState>,
   openAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:open-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,
   deleteAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:delete-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,

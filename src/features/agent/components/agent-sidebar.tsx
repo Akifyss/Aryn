@@ -82,6 +82,7 @@ import type {
   AgentQueuedMessageUpdate,
   AgentSessionListItem,
   AgentSessionAnnotations,
+  AgentSessionSnapshot,
   AgentSidebarMessage,
   AgentSidebarMessageStatus,
   AgentThinkingLevel,
@@ -2429,6 +2430,7 @@ function AgentProvider({
   const workspaceTree = useWorkspaceStore((state) => state.tree)
   const defaultModelSelection = parseModelSelection(null)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
+  const [viewedSessionSnapshot, setViewedSessionSnapshot] = useState<AgentSessionSnapshot | null>(null)
   const [composerState, setComposerState] = useState<ComposerState>(emptyComposerState)
   const [composerAttachments, setComposerAttachments] = useState<ComposerAttachment[]>([])
   const [modelInputValue, setModelInputValue] = useState(defaultModelSelection.modelId)
@@ -2536,6 +2538,7 @@ function AgentProvider({
     }
 
     if (agentState.activeSession?.sessionPath === selection.sessionPath) {
+      setViewedSessionSnapshot(null)
       return agentState
     }
 
@@ -2551,6 +2554,7 @@ function AgentProvider({
     }
 
     setAgentState(nextState)
+    setViewedSessionSnapshot(null)
     syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
     return nextState
   }
@@ -2693,10 +2697,11 @@ function AgentProvider({
         setAgentState(event.state)
         const nextSessionPath = event.state.activeSession?.sessionPath ?? null
         const currentSelection = activeSessionSelectionRef.current
-        if (
-          currentSelection.kind === 'session'
+        const isViewingEventRuntimeSession = currentSelection.kind === 'session'
           && currentSelection.sessionPath === nextSessionPath
-        ) {
+
+        if (isViewingEventRuntimeSession) {
+          setViewedSessionSnapshot(null)
           syncModelDraft(getRuntimeSelectedModelDraft(event.state.runtime))
         } else if (currentSelection.kind === 'new') {
           const currentDraft = newSessionModelDraftRef.current
@@ -2852,6 +2857,7 @@ function AgentProvider({
       if (
         event.type === 'error'
         && activeSessionSelectionRef.current.kind === 'session'
+        && activeSessionSelectionRef.current.sessionPath === agentState.activeSession?.sessionPath
         && (!event.sessionId || event.sessionId === agentState.activeSession?.sessionId)
       ) {
         setPanelError(event.message)
@@ -2895,6 +2901,7 @@ function AgentProvider({
   useEffect(() => {
     if (!workspacePath) {
       setAgentState(emptyAgentState)
+      setViewedSessionSnapshot(null)
       setComposerState(emptyComposerState)
       syncNewSessionModelDraft(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
       syncModelDraft(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
@@ -2913,6 +2920,7 @@ function AgentProvider({
 
     setIsLoading(true)
     setPanelError(null)
+    setViewedSessionSnapshot(null)
     setHasLoadedWorkspaceState(false)
     const requestedProject = externalSessionRequestRef.current
       ? projectState.projects.find((project) => project.id === externalSessionRequestRef.current?.projectId) ?? null
@@ -2930,13 +2938,12 @@ function AgentProvider({
     void window.appApi.getWorkspaceState(workspacePath)
       .then((workspaceState) => window.appApi.loadAgentWorkspace(
         workspacePath,
-        matchingExternalRequest?.kind === 'session'
-          ? matchingExternalRequest.sessionPath
-          : workspaceState.lastAgentSessionPath,
+        workspaceState.lastAgentSessionPath,
         shouldStartNewSession ? { restoreSession: false } : undefined,
       ))
       .then((nextState) => {
         setAgentState(nextState)
+        setViewedSessionSnapshot(null)
         const nextActiveSessionPath = nextState.activeSession?.sessionPath
         const hasRestoredSession = Boolean(
           nextActiveSessionPath
@@ -3081,6 +3088,10 @@ function AgentProvider({
     activeSessionPath
     && agentState.activeSession?.sessionPath === activeSessionPath,
   )
+  const viewedSessionForSelection = viewedSessionSnapshot?.sessionPath === activeSessionPath
+    ? viewedSessionSnapshot
+    : null
+  const visibleSessionSnapshot = isViewingActiveRuntime ? agentState.activeSession : viewedSessionForSelection
   const visibleRuntime = useMemo(() => (
     isViewingActiveRuntime
       ? agentState.runtime
@@ -3098,7 +3109,7 @@ function AgentProvider({
           steeringMessages: [],
         }
   ), [agentState.runtime, isViewingActiveRuntime])
-  const visiblePersistedMessages = isViewingActiveRuntime ? agentState.activeSession?.messages ?? [] : []
+  const visiblePersistedMessages = visibleSessionSnapshot?.messages ?? []
 
   const renderedMessages = useMemo(() => {
     const persistedMessages = visiblePersistedMessages
@@ -3163,6 +3174,7 @@ function AgentProvider({
     )
     syncNewSessionModelDraft(nextDraft)
     syncActiveSessionSelection({ kind: 'new' })
+    setViewedSessionSnapshot(null)
     syncModelDraft(nextDraft)
     setComposerState(emptyComposerState)
     setPanelError(null)
@@ -3179,6 +3191,7 @@ function AgentProvider({
     openSessionRequestIdRef.current = requestId
 
     if (agentState.activeSession?.sessionPath === sessionPath) {
+      setViewedSessionSnapshot(null)
       syncModelDraft(getRuntimeSelectedModelDraft(agentState.runtime))
       setPanelError(null)
       setActiveOverlayPanel(null)
@@ -3187,7 +3200,7 @@ function AgentProvider({
 
     try {
       setPanelError(null)
-      const nextState = await window.appApi.openAgentSession(workspacePath, sessionPath)
+      const nextSnapshot = await window.appApi.readAgentSession(workspacePath, sessionPath)
       if (
         requestId !== openSessionRequestIdRef.current
         || activeSessionSelectionRef.current.kind !== 'session'
@@ -3196,8 +3209,7 @@ function AgentProvider({
         return
       }
 
-      setAgentState(nextState)
-      syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
+      setViewedSessionSnapshot(nextSnapshot)
       setActiveOverlayPanel(null)
     } catch (error) {
       if (
@@ -3262,6 +3274,7 @@ function AgentProvider({
       setAgentState(nextState)
       const currentSelection = activeSessionSelectionRef.current
       if (currentSelection.kind === 'session' && currentSelection.sessionPath === sessionPath) {
+        setViewedSessionSnapshot(null)
         const nextActiveSessionPath = nextState.activeSession?.sessionPath
         const nextSelection = nextActiveSessionPath
           && nextState.sessions.some((session) => session.path === nextActiveSessionPath)
@@ -3296,6 +3309,11 @@ function AgentProvider({
 
       if (isCurrentWorkspace) {
         setAgentState(nextState)
+        setViewedSessionSnapshot((currentSnapshot) => (
+          currentSnapshot?.sessionPath === sessionPath
+            ? { ...currentSnapshot, name: nextName }
+            : currentSnapshot
+        ))
       }
 
       const matchingProject = projectState.projects.find((project) => (
@@ -3456,6 +3474,7 @@ function AgentProvider({
           thinkingLevel: nextDraft.thinkingLevel,
         })
         setAgentState(nextState)
+        setViewedSessionSnapshot(null)
         nextSessionPath = nextState.activeSession?.sessionPath ?? null
         syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
       } else {
@@ -3665,18 +3684,18 @@ function AgentProvider({
       || agentState.runtime.isStreaming
       || agentState.runtime.pendingMessageCount > 0)
     return buildRoundFileChangesByMessageId({
-      annotations: agentState.activeSession?.annotations ?? { fileChangesByEntryId: {} },
+      annotations: visibleSessionSnapshot?.annotations ?? { fileChangesByEntryId: {} },
       hasInFlightRound,
       messages: visiblePersistedMessages,
     })
   }, [
-    agentState.activeSession?.annotations,
     agentState.runtime.isStreaming,
     agentState.runtime.pendingMessageCount,
     draftAssistant,
     draftThinking,
     isViewingActiveRuntime,
     liveTools.length,
+    visibleSessionSnapshot?.annotations,
     visiblePersistedMessages,
   ])
   const sessionStatusKey = sessionStatus

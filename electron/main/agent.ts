@@ -1159,6 +1159,13 @@ export class PiAgentManager {
     return this.listSessions(cwd)
   }
 
+  async readSession(cwd: string, sessionPath: string): Promise<AgentSessionSnapshot> {
+    const resolvedSessionPath = this.resolveSessionPath(cwd, sessionPath)
+    const sessionManager = SessionManager.open(resolvedSessionPath, this.getSessionDir(cwd), cwd)
+
+    return this.serializeSessionManager(cwd, sessionManager)
+  }
+
   async createSession(cwd: string, options?: string | AgentSessionCreateOptions): Promise<AgentWorkspaceState> {
     const createOptions = this.normalizeCreateSessionOptions(options)
     const session = await this.activateSession(cwd, SessionManager.create(cwd, this.getSessionDir(cwd)))
@@ -2021,23 +2028,33 @@ export class PiAgentManager {
   }
 
   private async serializeSession(session: AgentSession): Promise<AgentSessionSnapshot> {
-    const branchEntries = session.sessionManager.getBranch()
+    const workspacePath = this.activeRuntime?.cwd ?? session.sessionManager.getCwd()
+
+    return this.serializeSessionManager(workspacePath, session.sessionManager, session.sessionId)
+  }
+
+  private async serializeSessionManager(
+    cwd: string,
+    sessionManager: SessionManager,
+    sessionId = sessionManager.getSessionId(),
+  ): Promise<AgentSessionSnapshot> {
+    const branchEntries = sessionManager.getBranch()
     const messages = serializeSessionEntries(branchEntries)
-    const workspacePath = this.activeRuntime?.cwd ?? ''
-    const annotations = session.sessionFile
+    const sessionPath = sessionManager.getSessionFile() ?? null
+    const annotations = sessionPath
       ? filterAnnotationsByDirectToolPaths(
-        await this.annotationStore.read(session.sessionFile),
-        collectDirectToolPathsByEntryId(branchEntries, workspacePath),
+        await this.annotationStore.read(sessionPath),
+        collectDirectToolPathsByEntryId(branchEntries, cwd),
       )
       : { fileChangesByEntryId: {} }
 
     return {
       annotations,
       messages,
-      name: session.sessionName ?? null,
-      sessionId: session.sessionId,
-      sessionPath: session.sessionFile ?? null,
-      workspacePath,
+      name: sessionManager.getSessionName() ?? null,
+      sessionId,
+      sessionPath,
+      workspacePath: cwd,
     }
   }
 
