@@ -2824,47 +2824,48 @@ function App() {
 
   function renderNewProjectDialog() {
     return (
-      <Modal>
-        <Modal.Backdrop
-          isOpen={isNewProjectDialogOpen}
-          onOpenChange={(isOpen) => {
-            setIsNewProjectDialogOpen(isOpen)
-          }}
-        >
-          <Modal.Container className='project-create-modal-container'>
-            <Modal.Dialog className={`project-create-modal ${resolvedTheme === 'dark' ? 'dark' : ''}`}>
-              <Modal.CloseTrigger className='project-create-modal-close' aria-label='关闭'>
-                <Icon icon='lucide:x' width={16} height={16} />
-              </Modal.CloseTrigger>
-              <Modal.Body>
-                <form className='project-create-form' onSubmit={(event) => void handleCreateEmptyProject(event)}>
-                  <div className='project-create-heading'>
-                    <h2>新建空白项目</h2>
-                    <p>创建后会自动切换到这个项目。</p>
-                  </div>
-                  <label className='project-create-field'>
-                    <span>项目名称</span>
-                    <input
-                      autoFocus
-                      value={newProjectName}
-                      placeholder='Untitled Project'
-                      onChange={(event) => setNewProjectName(event.target.value)}
-                    />
-                  </label>
-                  <div className='project-create-footer'>
-                    <Button variant='tertiary' type='button' onPress={() => setIsNewProjectDialogOpen(false)}>
-                      取消
-                    </Button>
-                    <Button variant='primary' type='submit' isDisabled={!newProjectName.trim() || isProjectActionBusy}>
-                      创建
-                    </Button>
-                  </div>
-                </form>
-              </Modal.Body>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <Modal.Backdrop
+        isOpen={isNewProjectDialogOpen}
+        onOpenChange={(isOpen) => {
+          setIsNewProjectDialogOpen(isOpen)
+        }}
+      >
+        <Modal.Container className='project-create-modal-container'>
+          <Modal.Dialog
+            aria-label='新建空白项目'
+            className={`project-create-modal ${resolvedTheme === 'dark' ? 'dark' : ''}`}
+          >
+            <Modal.CloseTrigger className='project-create-modal-close' aria-label='关闭'>
+              <Icon icon='lucide:x' width={16} height={16} />
+            </Modal.CloseTrigger>
+            <Modal.Body>
+              <form className='project-create-form' onSubmit={(event) => void handleCreateEmptyProject(event)}>
+                <div className='project-create-heading'>
+                  <h2>新建空白项目</h2>
+                  <p>创建后会自动切换到这个项目。</p>
+                </div>
+                <label className='project-create-field'>
+                  <span>项目名称</span>
+                  <input
+                    autoFocus
+                    value={newProjectName}
+                    placeholder='Untitled Project'
+                    onChange={(event) => setNewProjectName(event.target.value)}
+                  />
+                </label>
+                <div className='project-create-footer'>
+                  <Button variant='tertiary' type='button' onPress={() => setIsNewProjectDialogOpen(false)}>
+                    取消
+                  </Button>
+                  <Button variant='primary' type='submit' isDisabled={!newProjectName.trim() || isProjectActionBusy}>
+                    创建
+                  </Button>
+                </div>
+              </form>
+            </Modal.Body>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
     )
   }
 
@@ -4988,71 +4989,70 @@ function App() {
       {renderProjectMenu()}
       {renderNewProjectDialog()}
 
-      <Modal>
-        <Modal.Backdrop 
-          isOpen={isSettingsOpen} 
-          onOpenChange={setIsSettingsOpen}
-          variant='opaque'
-        >
-          <Modal.Container scroll='inside' className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'>
-            <Modal.Dialog className={`settings-modal p-0 m-0 relative ${resolvedTheme === 'dark' ? 'dark' : ''}`}>
-              <Modal.CloseTrigger 
-                className='settings-modal-close'
-                aria-label='Close settings'
-              >
-                <Icon icon='lucide:x' width={16} height={16} />
-              </Modal.CloseTrigger>
-              <Modal.Body className='p-0 m-0'>
-                <SettingsDialog
-                  activeSection={settingsSection}
-                  agentState={agentWorkspaceState}
-                  iconTheme={iconTheme}
-                  iconThemeOptions={iconThemeOptions}
-                  isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
-                  resolvedTheme={resolvedTheme}
-                  workspacePath={currentPath}
-                  onAgentStateChange={setAgentWorkspaceState}
-                  onSectionChange={setSettingsSection}
-                  onSelectIconTheme={handleSelectWorkspaceIconTheme}
-                  onStatusMessage={setStatusMessage}
-                />
-              </Modal.Body>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <Modal.Backdrop
+        isOpen={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        variant='opaque'
+      >
+        <Modal.Container scroll='inside' className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'>
+          <Modal.Dialog
+            aria-label='Settings'
+            className={`settings-modal p-0 m-0 relative ${resolvedTheme === 'dark' ? 'dark' : ''}`}
+          >
+            <Modal.CloseTrigger
+              className='settings-modal-close'
+              aria-label='Close settings'
+            >
+              <Icon icon='lucide:x' width={16} height={16} />
+            </Modal.CloseTrigger>
+            <Modal.Body className='p-0 m-0'>
+              <SettingsDialog
+                activeSection={settingsSection}
+                agentState={agentWorkspaceState}
+                iconTheme={iconTheme}
+                iconThemeOptions={iconThemeOptions}
+                isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
+                resolvedTheme={resolvedTheme}
+                workspacePath={currentPath}
+                onAgentStateChange={setAgentWorkspaceState}
+                onSectionChange={setSettingsSection}
+                onSelectIconTheme={handleSelectWorkspaceIconTheme}
+                onStatusMessage={setStatusMessage}
+              />
+            </Modal.Body>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
 
-      <AlertDialog>
-        <AlertDialog.Backdrop 
-          isOpen={confirmDialogOptions?.isOpen ?? false} 
-          onOpenChange={(isOpen) => {
-            if (!isOpen && confirmDialogOptions) {
-               confirmDialogOptions.onCancel()
-            }
-          }}
-        >
-          <AlertDialog.Container>
-             <AlertDialog.Dialog>
-               <AlertDialog.CloseTrigger />
-               <AlertDialog.Header>
-                 <AlertDialog.Icon status={confirmDialogOptions?.isDanger ? "danger" : "warning"} />
-                 <AlertDialog.Heading>{confirmDialogOptions?.title}</AlertDialog.Heading>
-               </AlertDialog.Header>
-               <AlertDialog.Body>
-                 <p className="text-[var(--foreground)] whitespace-pre-wrap">{confirmDialogOptions?.message}</p>
-               </AlertDialog.Body>
-               <AlertDialog.Footer>
-                <Button variant="tertiary" onPress={() => confirmDialogOptions?.onCancel()}>
-                  {confirmDialogOptions?.cancelLabel ?? '取消'}
-                </Button>
-                 <Button variant={confirmDialogOptions?.isDanger ? "danger" : "primary"} onPress={() => confirmDialogOptions?.onConfirm()}>
-                   {confirmDialogOptions?.confirmLabel ?? '确认'}
-                 </Button>
-               </AlertDialog.Footer>
-             </AlertDialog.Dialog>
-          </AlertDialog.Container>
-        </AlertDialog.Backdrop>
-      </AlertDialog>
+      <AlertDialog.Backdrop
+        isOpen={confirmDialogOptions?.isOpen ?? false}
+        onOpenChange={(isOpen) => {
+          if (!isOpen && confirmDialogOptions) {
+            confirmDialogOptions.onCancel()
+          }
+        }}
+      >
+        <AlertDialog.Container>
+          <AlertDialog.Dialog>
+            <AlertDialog.CloseTrigger />
+            <AlertDialog.Header>
+              <AlertDialog.Icon status={confirmDialogOptions?.isDanger ? "danger" : "warning"} />
+              <AlertDialog.Heading>{confirmDialogOptions?.title}</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Body>
+              <p className="text-[var(--foreground)] whitespace-pre-wrap">{confirmDialogOptions?.message}</p>
+            </AlertDialog.Body>
+            <AlertDialog.Footer>
+              <Button variant="tertiary" onPress={() => confirmDialogOptions?.onCancel()}>
+                {confirmDialogOptions?.cancelLabel ?? '取消'}
+              </Button>
+              <Button variant={confirmDialogOptions?.isDanger ? "danger" : "primary"} onPress={() => confirmDialogOptions?.onConfirm()}>
+                {confirmDialogOptions?.confirmLabel ?? '确认'}
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
 
       <CommandPalette 
         isOpen={isCommandPaletteOpen}

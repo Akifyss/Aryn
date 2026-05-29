@@ -209,18 +209,20 @@ export function CommandPalette({
   }, [isOpen, onClose])
 
   return (
-    <Modal>
-      <Modal.Backdrop
-        isOpen={isOpen}
-        onOpenChange={onClose}
-        variant='opaque'
+    <Modal.Backdrop
+      isOpen={isOpen}
+      onOpenChange={onClose}
+      variant='opaque'
+    >
+      <Modal.Container
+        scroll='inside'
+        className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'
       >
-        <Modal.Container
-          scroll='inside'
-          className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'
+        <Modal.Dialog
+          aria-label='Command palette'
+          className={`command-palette-dialog ${theme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}
         >
-          <Modal.Dialog className={`command-palette-dialog ${theme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}>
-            <Modal.Body className='p-0 m-0'>
+          <Modal.Body className='p-0 m-0'>
               {/* Header */}
               <div className='command-palette-header'>
                 <Icon icon='lucide:search' className='command-palette-icon' width={22} />
@@ -341,10 +343,9 @@ export function CommandPalette({
                   <span>CLOSE</span>
                 </div>
               </div>
-            </Modal.Body>
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+          </Modal.Body>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
   )
 }

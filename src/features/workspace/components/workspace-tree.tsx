@@ -100,17 +100,15 @@ function FileRowActions({
         style={isOpen ? { opacity: 1, maxWidth: '2rem', transform: 'translateX(0)' } : undefined}
       >
         <Dropdown onOpenChange={setIsOpen}>
-          <Dropdown.Trigger>
-            <button
-              type='button'
-              className='git-change-action git-change-icon-button'
-              disabled={isSubmitting}
-              onClick={(event) => {
-                event.stopPropagation()
-              }}
-            >
-              <More1Line size={16} />
-            </button>
+          <Dropdown.Trigger
+            aria-label='File actions'
+            className='git-change-action git-change-icon-button'
+            isDisabled={isSubmitting}
+            onClick={(event) => {
+              event.stopPropagation()
+            }}
+          >
+            <More1Line size={16} />
           </Dropdown.Trigger>
           <Dropdown.Popover placement='bottom end' className='workspace-tree-popover'>
             <Dropdown.Menu
@@ -383,50 +381,48 @@ function FileTreeItem({
         )}
       </div>
 
-      <AlertDialog>
-        <AlertDialog.Backdrop
-          isOpen={deleteModal.isOpen}
-          onOpenChange={(open) => (open ? deleteModal.open() : deleteModal.close())}
-          variant='opaque'
-        >
-          <AlertDialog.Container size='sm'>
-            <AlertDialog.Dialog>
-              {({ close }) => (
-                <>
-                  <AlertDialog.CloseTrigger />
-                  <AlertDialog.Header>
-                    <AlertDialog.Icon status='danger' />
-                    <AlertDialog.Heading>Confirm Deletion</AlertDialog.Heading>
-                  </AlertDialog.Header>
-                  <AlertDialog.Body>
-                    <p className='text-[var(--foreground)]'>
-                      Are you sure you want to delete <span style={{ fontWeight: 600 }}>{node.name}</span>?
-                      This action cannot be undone.
-                    </p>
-                  </AlertDialog.Body>
-                  <AlertDialog.Footer>
-                    <Button
-                      className='confirm-dialog-cancel-button'
-                      variant='tertiary'
-                      onPress={close}
-                      isDisabled={isSubmitting}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant='danger'
-                      onPress={() => handleDelete(close)}
-                      isDisabled={isSubmitting}
-                    >
-                      Delete
-                    </Button>
-                  </AlertDialog.Footer>
-                </>
-              )}
-            </AlertDialog.Dialog>
-          </AlertDialog.Container>
-        </AlertDialog.Backdrop>
-      </AlertDialog>
+      <AlertDialog.Backdrop
+        isOpen={deleteModal.isOpen}
+        onOpenChange={(open) => (open ? deleteModal.open() : deleteModal.close())}
+        variant='opaque'
+      >
+        <AlertDialog.Container size='sm'>
+          <AlertDialog.Dialog>
+            {({ close }) => (
+              <>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status='danger' />
+                  <AlertDialog.Heading>Confirm Deletion</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p className='text-[var(--foreground)]'>
+                    Are you sure you want to delete <span style={{ fontWeight: 600 }}>{node.name}</span>?
+                    This action cannot be undone.
+                  </p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button
+                    className='confirm-dialog-cancel-button'
+                    variant='tertiary'
+                    onPress={close}
+                    isDisabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant='danger'
+                    onPress={() => handleDelete(close)}
+                    isDisabled={isSubmitting}
+                  >
+                    Delete
+                  </Button>
+                </AlertDialog.Footer>
+              </>
+            )}
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
 
       {error && <p className='tree-item-error'>{error}</p>}
 
