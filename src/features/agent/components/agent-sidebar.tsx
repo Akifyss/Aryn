@@ -2655,8 +2655,15 @@ function AgentProvider({
 
   useEffect(() => {
     const activeProject = projectState.projects.find((project) => project.id === projectState.activeProjectId)
+    const agentWorkspacePath = agentState.runtime.workspacePath
 
-    if (!activeProject || activeProject.path !== workspacePath) {
+    if (
+      !activeProject
+      || !workspacePath
+      || !agentWorkspacePath
+      || normalizeAgentProjectPath(activeProject.path) !== normalizeAgentProjectPath(workspacePath)
+      || normalizeAgentProjectPath(agentWorkspacePath) !== normalizeAgentProjectPath(workspacePath)
+    ) {
       return
     }
 
@@ -2669,7 +2676,7 @@ function AgentProvider({
         sessions: agentState.sessions,
       },
     }))
-  }, [agentState.sessions, projectState.activeProjectId, projectState.projects, workspacePath])
+  }, [agentState.runtime.workspacePath, agentState.sessions, projectState.activeProjectId, projectState.projects, workspacePath])
 
   useEffect(() => {
     const unsubscribe = window.appApi.onAgentEvent((event: AgentClientEvent) => {
