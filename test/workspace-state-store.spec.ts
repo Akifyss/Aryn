@@ -230,4 +230,21 @@ describe('workspace UI state persistence', () => {
       },
     })
   })
+
+  it('falls back to default state when the workspace UI state file is malformed', async () => {
+    const rootPath = await createTempDir()
+    const statePath = path.join(rootPath, '.aryn', 'workspace-state.json')
+
+    await mkdir(path.dirname(statePath), { recursive: true })
+    await writeFile(statePath, '{', 'utf8')
+
+    const store = new WorkspaceStateStore(statePath)
+    const state = await store.read()
+
+    expect(state).toEqual({
+      version: WORKSPACE_STATE_SCHEMA_VERSION,
+      meoFileStates: {},
+      workspaceTabs: {},
+    })
+  })
 })

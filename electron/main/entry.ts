@@ -12,10 +12,10 @@ function toErrorText(error: unknown) {
   return String(error)
 }
 
-function writeStartupErrorLog(error: unknown) {
+function writeFatalErrorLog(error: unknown) {
   try {
     const logDirectoryPath = path.join(os.tmpdir(), 'aryn')
-    const logFilePath = path.join(logDirectoryPath, 'startup-error.log')
+    const logFilePath = path.join(logDirectoryPath, 'fatal-error.log')
     mkdirSync(logDirectoryPath, { recursive: true })
     appendFileSync(
       logFilePath,
@@ -38,10 +38,18 @@ function writeStartupMarker(message: string) {
   }
 }
 
-function reportStartupError(error: unknown) {
+function reportFatalError(title: string, error: unknown) {
   const errorText = toErrorText(error)
-  writeStartupErrorLog(error)
-  dialog.showErrorBox('Aryn Startup Error', errorText)
+  writeFatalErrorLog(error)
+  dialog.showErrorBox(title, errorText)
+}
+
+function reportStartupError(error: unknown) {
+  reportFatalError('Aryn Startup Error', error)
+}
+
+function reportRuntimeError(error: unknown) {
+  reportFatalError('Aryn Runtime Error', error)
 }
 
 writeStartupMarker('bootstrap-loaded')
@@ -54,12 +62,12 @@ if (app.isPackaged) {
 }
 
 process.on('uncaughtException', (error) => {
-  reportStartupError(error)
+  reportRuntimeError(error)
   app.exit(1)
 })
 
 process.on('unhandledRejection', (reason) => {
-  reportStartupError(reason)
+  reportRuntimeError(reason)
   app.exit(1)
 })
 

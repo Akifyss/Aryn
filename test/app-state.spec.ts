@@ -227,6 +227,37 @@ describe('app state persistence', () => {
     expect(directoryEntries.filter((entry) => entry.endsWith('.tmp'))).toEqual([])
   })
 
+  it('restores from the backup file when the app state file is malformed', async () => {
+    const rootPath = await createTempDir()
+    const appStatePath = path.join(rootPath, '.aryn', 'app-state.json')
+
+    await mkdir(path.dirname(appStatePath), { recursive: true })
+    await writeFile(appStatePath, '{', 'utf8')
+    await writeFile(`${appStatePath}.bak`, JSON.stringify({
+      workspace: {
+        lastWorkspacePath: 'C:/backup-project',
+      },
+    }), 'utf8')
+
+    const store = new AppStateStore(appStatePath)
+    const state = await store.read()
+
+    expect(state.workspace.activeProjectId).toBe('C:/backup-project')
+    expect(state.workspace.lastWorkspacePath).toBe('C:/backup-project')
+  })
+
+  it('does not silently reset app state when a malformed file has no backup', async () => {
+    const rootPath = await createTempDir()
+    const appStatePath = path.join(rootPath, '.aryn', 'app-state.json')
+
+    await mkdir(path.dirname(appStatePath), { recursive: true })
+    await writeFile(appStatePath, '{', 'utf8')
+
+    const store = new AppStateStore(appStatePath)
+
+    await expect(store.read()).rejects.toThrow(SyntaxError)
+  })
+
   it('serializes concurrent app state updates without losing patches', async () => {
     const rootPath = await createTempDir()
     const appStatePath = path.join(rootPath, '.aryn', 'app-state.json')

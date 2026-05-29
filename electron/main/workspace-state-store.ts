@@ -1,11 +1,10 @@
-import { readFile } from 'node:fs/promises'
 import type {
   PersistedMeoStoredMode,
   PersistedMeoStoredState,
   PersistedMeoStoredViewPosition,
   PersistedWorkspaceTabState,
 } from '../../src/features/persistence/types'
-import { writeJsonFileAtomic } from './app-state'
+import { readPersistedJsonFile, writeJsonFileAtomic } from './app-state'
 
 export const WORKSPACE_STATE_SCHEMA_VERSION = 1
 
@@ -210,11 +209,22 @@ export class WorkspaceStateStore {
   }
 
   private async load() {
+    let persistedJson: Awaited<ReturnType<typeof readPersistedJsonFile>>
+
     try {
-      const raw = await readFile(this.filePath, 'utf8')
-      return normalizeWorkspaceUiState(JSON.parse(raw))
-    } catch {
+      persistedJson = await readPersistedJsonFile(this.filePath)
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        return cloneState(DEFAULT_WORKSPACE_UI_STATE)
+      }
+
+      throw error
+    }
+
+    if (!persistedJson.found) {
       return cloneState(DEFAULT_WORKSPACE_UI_STATE)
     }
+
+    return normalizeWorkspaceUiState(persistedJson.value)
   }
 }

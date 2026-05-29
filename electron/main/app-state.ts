@@ -139,18 +139,131 @@ function cloneState(state: PersistedAppState) {
   return structuredClone(state)
 }
 
+function isFileSystemErrorWithCode(error: unknown, codes: string[]) {
+  const code = error && typeof error === 'object' && 'code' in error
+    ? (error as { code?: unknown }).code
+    : null
+
+  return typeof code === 'string' && codes.includes(code)
+}
+
+function isRetriableFileAccessError(error: unknown) {
+  return isFileSystemErrorWithCode(error, ['EPERM', 'EACCES', 'EBUSY'])
+}
+
+function isMissingJsonFileError(error: unknown) {
+  return isFileSystemErrorWithCode(error, ['ENOENT', 'ENOTDIR'])
+}
+
+function isMalformedJsonFileError(error: unknown) {
+  return error instanceof SyntaxError
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+async function retryFileAccess<T>(operation: () => Promise<T>) {
+  const retryDelays = [20, 50, 100, 200, 400]
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation()
+    } catch (error) {
+      if (!isRetriableFileAccessError(error) || attempt >= retryDelays.length) {
+        throw error
+      }
+
+      await sleep(retryDelays[attempt])
+    }
+  }
+}
+
+async function renameWithRetry(sourcePath: string, targetPath: string) {
+  await retryFileAccess(() => rename(sourcePath, targetPath))
+}
+
+async function writeFileWithRetry(filePath: string, value: string) {
+  await retryFileAccess(() => writeFile(filePath, value, {
+    encoding: 'utf8',
+    mode: 0o600,
+  }))
+}
+
+async function readJsonFileWithRetry(filePath: string) {
+  const raw = await retryFileAccess(() => readFile(filePath, 'utf8'))
+  return JSON.parse(raw) as unknown
+}
+
+function getJsonBackupFilePath(filePath: string) {
+  return `${filePath}.bak`
+}
+
+async function preserveExistingJsonFileBackup(filePath: string) {
+  try {
+    const currentValue = await retryFileAccess(() => readFile(filePath, 'utf8'))
+    await writeFileWithRetry(getJsonBackupFilePath(filePath), currentValue)
+  } catch (error) {
+    if (!isMissingJsonFileError(error)) {
+      throw error
+    }
+  }
+}
+
+export async function readPersistedJsonFile(filePath: string) {
+  try {
+    return {
+      found: true as const,
+      value: await readJsonFileWithRetry(filePath),
+    }
+  } catch (error) {
+    if (isMissingJsonFileError(error)) {
+      return {
+        found: false as const,
+        value: null,
+      }
+    }
+
+    if (isMalformedJsonFileError(error)) {
+      try {
+        return {
+          found: true as const,
+          value: await readJsonFileWithRetry(getJsonBackupFilePath(filePath)),
+        }
+      } catch {
+        throw error
+      }
+    }
+
+    throw error
+  }
+}
+
 export async function writeJsonFileAtomic(filePath: string, value: unknown) {
   const directoryPath = path.dirname(filePath)
   const temporaryFilePath = path.join(directoryPath, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`)
+  const serializedValue = `${JSON.stringify(value, null, 2)}\n`
 
   await mkdir(directoryPath, { mode: 0o700, recursive: true })
 
   try {
-    await writeFile(temporaryFilePath, `${JSON.stringify(value, null, 2)}\n`, {
-      encoding: 'utf8',
-      mode: 0o600,
-    })
-    await rename(temporaryFilePath, filePath)
+    await writeFileWithRetry(temporaryFilePath, serializedValue)
+    try {
+      await renameWithRetry(temporaryFilePath, filePath)
+    } catch (error) {
+      if (process.platform !== 'win32' || !isRetriableFileAccessError(error)) {
+        throw error
+      }
+
+      // Windows can reject replacing an existing file even after the temp file
+      // is fully written. After bounded retries, write the already-serialized
+      // payload directly so the logical state update can still complete.
+      await preserveExistingJsonFileBackup(filePath)
+      await writeFileWithRetry(filePath, serializedValue)
+      await rm(temporaryFilePath, { force: true }).catch(() => undefined)
+    }
   } catch (error) {
     await rm(temporaryFilePath, { force: true }).catch(() => undefined)
     throw error
@@ -554,12 +667,13 @@ export class AppStateStore {
   }
 
   private async load() {
-    try {
-      const raw = await readFile(this.filePath, 'utf8')
-      return normalizePersistedAppState(JSON.parse(raw))
-    } catch {
+    const persistedJson = await readPersistedJsonFile(this.filePath)
+
+    if (!persistedJson.found) {
       return this.loadLegacy()
     }
+
+    return normalizePersistedAppState(persistedJson.value)
   }
 
   private async loadLegacy() {

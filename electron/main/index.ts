@@ -462,6 +462,19 @@ function getWindowChromeState(targetWindow: BrowserWindow | null = win) {
   }
 }
 
+function toErrorDialogText(error: unknown) {
+  if (error instanceof Error) {
+    return error.stack || `${error.name}: ${error.message}`
+  }
+
+  return String(error)
+}
+
+function reportMainProcessError(title: string, error: unknown) {
+  console.error(title, error)
+  dialog.showErrorBox(title, toErrorDialogText(error))
+}
+
 function emitWindowChromeState(targetWindow: BrowserWindow) {
   if (targetWindow.isDestroyed() || targetWindow.webContents.isDestroyed()) {
     return
@@ -471,7 +484,12 @@ function emitWindowChromeState(targetWindow: BrowserWindow) {
 }
 
 async function persistWindowState(targetWindow: BrowserWindow) {
-  const bounds = targetWindow.isMaximized()
+  if (targetWindow.isDestroyed()) {
+    return
+  }
+
+  const isMaximized = targetWindow.isMaximized()
+  const bounds = isMaximized
     ? targetWindow.getNormalBounds()
     : targetWindow.getBounds()
 
@@ -480,25 +498,31 @@ async function persistWindowState(targetWindow: BrowserWindow) {
     window: {
       width: Math.max(MIN_WINDOW_WIDTH, bounds.width),
       height: Math.max(MIN_WINDOW_HEIGHT, bounds.height),
-      isMaximized: targetWindow.isMaximized(),
+      isMaximized,
     },
   }))
 }
 
+function persistWindowStateInBackground(targetWindow: BrowserWindow) {
+  void persistWindowState(targetWindow).catch((error) => {
+    console.warn('Failed to persist window state.', error)
+  })
+}
+
 function bindWindowStatePersistence(targetWindow: BrowserWindow) {
   const persistBounds = throttle(() => {
-    void persistWindowState(targetWindow)
+    persistWindowStateInBackground(targetWindow)
   }, 240)
 
   targetWindow.on('resize', persistBounds)
   targetWindow.on('maximize', () => {
     persistBounds.cancel()
-    void persistWindowState(targetWindow)
+    persistWindowStateInBackground(targetWindow)
     emitWindowChromeState(targetWindow)
   })
   targetWindow.on('unmaximize', () => {
     persistBounds.cancel()
-    void persistWindowState(targetWindow)
+    persistWindowStateInBackground(targetWindow)
     emitWindowChromeState(targetWindow)
   })
   targetWindow.on('enter-full-screen', () => {
@@ -509,7 +533,10 @@ function bindWindowStatePersistence(targetWindow: BrowserWindow) {
   })
   targetWindow.on('close', () => {
     persistBounds.cancel()
-    void persistWindowState(targetWindow)
+    persistWindowStateInBackground(targetWindow)
+  })
+  targetWindow.on('closed', () => {
+    persistBounds.cancel()
   })
 }
 
@@ -920,18 +947,27 @@ async function getPersistentClientStateSnapshot() {
   }
 }
 
-app.whenReady().then(async () => {
+async function startApplication() {
   Menu.setApplicationMenu(null)
   applyDefaultAppIcon()
 
-  void createWindow()
-})
+  await createWindow()
+}
+
+void app.whenReady()
+  .then(startApplication)
+  .catch((error) => {
+    reportMainProcessError('Aryn Startup Error', error)
+    app.exit(1)
+  })
 
 app.on('window-all-closed', () => {
   win = null
   cancelAllProviderAuthFlows()
   agentManager.dispose()
-  void unwatchWorkspace()
+  void unwatchWorkspace().catch((error) => {
+    console.warn('Failed to stop workspace watcher.', error)
+  })
   if (process.platform !== 'darwin') app.quit()
 })
 
@@ -948,7 +984,9 @@ app.on('activate', () => {
   if (allWindows.length) {
     allWindows[0].focus()
   } else {
-    void createWindow()
+    void createWindow().catch((error) => {
+      reportMainProcessError('Aryn Runtime Error', error)
+    })
   }
 })
 
