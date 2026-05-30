@@ -30,6 +30,7 @@
     - 只要是可滚动容器，使用 [base-ui Scroll Area](https://base-ui.com/react/components/scroll-area)。
   - Design Token / CSS 变量：优先使用 HeroUI V3 提供的系统 ([Colors](https://heroui.com/docs/react/getting-started/colors) 、 [Theming](https://heroui.com/docs/react/getting-started/theming) 、 [Styling](https://heroui.com/docs/react/getting-started/styling))。
   - 图标：优先使用 [mingcute](https://www.mingcute.com/) ([GitHub](https://github.com/mingcute-design/mingcute-icons))；若无合适图标则使用 [iconify](https://iconify.design/) ([Docs](https://iconify.design/docs/) 、 [GitHub](https://github.com/iconify/iconify))。
+  - 动效库 使用 [motion.dev](https://motion.dev/) 或者 [GSAP](https://gsap.com/)。
   - 状态管理：使用 Zustand 管理渲染器全局状态；UI 状态需标注明确。
 
 # electron 调试流程
