@@ -1,5 +1,6 @@
 import { ipcRenderer, contextBridge, webUtils } from 'electron'
 import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState } from '../../src/features/agent/types'
+import type { ActiveWorkspaceContext, ConversationRecord, ConversationState, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../../src/features/conversations/types'
 import type {
   GitBaselinePayload,
   GitBlameResult,
@@ -30,10 +31,20 @@ contextBridge.exposeInMainWorld('appApi', {
   platform: process.platform,
   pickWorkspace: () => ipcRenderer.invoke('workspace:pick-directory') as Promise<string | null>,
   getProjectState: () => ipcRenderer.invoke('project:get-state') as Promise<ProjectState>,
+  getActiveWorkspaceContext: () => ipcRenderer.invoke('workspace:get-active-context') as Promise<ActiveWorkspaceContext>,
+  setActiveWorkspaceContext: (context: ActiveWorkspaceContext) => ipcRenderer.invoke('workspace:set-active-context', context) as Promise<ActiveWorkspaceContext>,
   createEmptyProject: (name: string) => ipcRenderer.invoke('project:create-empty', name) as Promise<ProjectState>,
   addExistingProject: () => ipcRenderer.invoke('project:add-existing') as Promise<ProjectState | null>,
   setActiveProject: (projectId: string) => ipcRenderer.invoke('project:set-active', projectId) as Promise<ProjectState>,
   removeProject: (projectId: string) => ipcRenderer.invoke('project:remove', projectId) as Promise<ProjectState>,
+  getConversationState: () => ipcRenderer.invoke('conversation:get-state') as Promise<ConversationState>,
+  createConversationWorkspace: (request?: CreateConversationWorkspaceRequest) => (
+    ipcRenderer.invoke('conversation:create-workspace', request) as Promise<ConversationRecord>
+  ),
+  updateConversation: (conversationId: string, patch: UpdateConversationRequest) => (
+    ipcRenderer.invoke('conversation:update', conversationId, patch) as Promise<ConversationRecord>
+  ),
+  removeDraftConversation: (conversationId: string) => ipcRenderer.invoke('conversation:remove-draft', conversationId) as Promise<ConversationState>,
   openPath: (path: string) => ipcRenderer.invoke('shell:open-path', path) as Promise<{ ok: boolean }>,
   showItemInFolder: (path: string) => ipcRenderer.invoke('shell:show-item-in-folder', path) as Promise<{ ok: boolean }>,
   getWorkspaceRestoreState: () => ipcRenderer.invoke('workspace:get-restore-state') as Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>,
@@ -45,6 +56,7 @@ contextBridge.exposeInMainWorld('appApi', {
   getWorkspaceTabState: (workspacePath: string) => ipcRenderer.invoke('workspace-tabs:get-state', workspacePath) as Promise<PersistedWorkspaceTabState | null>,
   updateWorkspaceTabState: (workspacePath: string, state: PersistedWorkspaceTabState) => ipcRenderer.invoke('workspace-tabs:update-state', workspacePath, state) as Promise<{ ok: boolean }>,
   updateMeoFileState: (filePath: string, state: PersistedMeoStoredState) => ipcRenderer.invoke('meo-state:update', filePath, state) as Promise<{ ok: boolean }>,
+  workspacePathExists: (workspacePath: string) => ipcRenderer.invoke('workspace:path-exists', workspacePath) as Promise<{ exists: boolean }>,
   loadWorkspaceTree: (rootPath: string) => ipcRenderer.invoke('workspace:load-tree', rootPath) as Promise<WorkspaceNode[]>,
   resolveWorkspaceEditorKind: (filePath: string) => ipcRenderer.invoke('workspace:resolve-editor-kind', filePath) as Promise<'prose' | 'code' | null>,
   readWorkspaceFile: (filePath: string) => ipcRenderer.invoke('workspace:read-file', filePath) as Promise<string>,
@@ -97,6 +109,7 @@ contextBridge.exposeInMainWorld('appApi', {
   startWorkspaceWatch: (rootPath: string) => ipcRenderer.invoke('workspace:start-watch', rootPath) as Promise<{ ok: boolean }>,
   stopWorkspaceWatch: () => ipcRenderer.invoke('workspace:stop-watch') as Promise<{ ok: boolean }>,
   loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null, options?: { restoreSession?: boolean }) => ipcRenderer.invoke('agent:load-workspace', rootPath, preferredSessionPath, options) as Promise<AgentWorkspaceState>,
+  loadAgentDraftState: () => ipcRenderer.invoke('agent:load-draft-state') as Promise<AgentWorkspaceState>,
   listAgentSessions: (rootPath: string) => ipcRenderer.invoke('agent:list-sessions', rootPath) as Promise<AgentWorkspaceState['sessions']>,
   readAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:read-session', rootPath, sessionPath) as Promise<AgentSessionSnapshot>,
   createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => ipcRenderer.invoke('agent:create-session', rootPath, options) as Promise<AgentWorkspaceState>,
@@ -111,9 +124,9 @@ contextBridge.exposeInMainWorld('appApi', {
   updateAgentQueuedMessage: (update: AgentQueuedMessageUpdate) => ipcRenderer.invoke('agent:update-queued-message', update) as Promise<AgentWorkspaceState>,
   selectAgentModel: (modelKey: string) => ipcRenderer.invoke('agent:select-model', modelKey) as Promise<AgentWorkspaceState>,
   selectAgentThinkingLevel: (level: AgentThinkingLevel, modelKey?: string) => ipcRenderer.invoke('agent:select-thinking-level', level, modelKey) as Promise<AgentWorkspaceState>,
-  updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => ipcRenderer.invoke('agent:update-provider-auth', rootPath, provider, apiKey) as Promise<AgentWorkspaceState>,
-  loginAgentProviderAuth: (rootPath: string, provider: string) => ipcRenderer.invoke('agent:login-provider-auth', rootPath, provider) as Promise<AgentWorkspaceState>,
-  logoutAgentProviderAuth: (rootPath: string, provider: string) => ipcRenderer.invoke('agent:logout-provider-auth', rootPath, provider) as Promise<AgentWorkspaceState>,
+  updateAgentProviderAuth: (rootPath: string | null, provider: string, apiKey: string | null) => ipcRenderer.invoke('agent:update-provider-auth', rootPath, provider, apiKey) as Promise<AgentWorkspaceState>,
+  loginAgentProviderAuth: (rootPath: string | null, provider: string) => ipcRenderer.invoke('agent:login-provider-auth', rootPath, provider) as Promise<AgentWorkspaceState>,
+  logoutAgentProviderAuth: (rootPath: string | null, provider: string) => ipcRenderer.invoke('agent:logout-provider-auth', rootPath, provider) as Promise<AgentWorkspaceState>,
   cancelAgentProviderAuth: (provider: string) => ipcRenderer.invoke('agent:cancel-provider-auth', provider) as Promise<{ ok: boolean }>,
   respondAgentProviderAuthPrompt: (requestId: string, value: string | null) => ipcRenderer.invoke('agent:respond-provider-auth-prompt', requestId, value) as Promise<{ ok: boolean }>,
   abortAgentPrompt: () => ipcRenderer.invoke('agent:abort') as Promise<AgentWorkspaceState>,

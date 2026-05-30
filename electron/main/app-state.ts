@@ -44,7 +44,13 @@ export type PersistedProjectRecord = {
   lastFilePath: string | null
 }
 
+export type PersistedActiveWorkspaceContext =
+  | { kind: 'project'; projectId: string }
+  | { kind: 'conversation'; conversationId: string }
+  | { kind: 'conversationDraft' }
+
 export type PersistedWorkspaceState = {
+  activeContext: PersistedActiveWorkspaceContext
   activeProjectId: string | null
   entries: Record<string, PersistedWorkspaceEntry>
   lastWorkspacePath: string | null
@@ -123,6 +129,7 @@ const DEFAULT_APP_STATE: PersistedAppState = {
     },
   },
   workspace: {
+    activeContext: { kind: 'conversationDraft' },
     activeProjectId: null,
     entries: {},
     lastWorkspacePath: null,
@@ -453,15 +460,56 @@ function createProjectRecordFromPath(projectPath: string, patch: Partial<Persist
   }
 }
 
+function getProjectPathIdentity(projectPath: string) {
+  const resolvedPath = path.resolve(projectPath)
+  return process.platform === 'win32' ? resolvedPath.toLowerCase() : resolvedPath
+}
+
 function dedupeProjectRecords(projects: PersistedProjectRecord[]) {
   const recordsByPath = new Map<string, PersistedProjectRecord>()
 
   for (const project of projects) {
-    const existing = recordsByPath.get(project.path)
-    recordsByPath.set(project.path, existing ? { ...existing, ...project } : project)
+    const pathIdentity = getProjectPathIdentity(project.path)
+    const existing = recordsByPath.get(pathIdentity)
+    recordsByPath.set(pathIdentity, existing ? { ...existing, ...project } : project)
   }
 
   return [...recordsByPath.values()]
+}
+
+function readActiveWorkspaceContext(
+  value: unknown,
+  activeProjectId: string | null,
+  projects: PersistedProjectRecord[],
+): PersistedActiveWorkspaceContext {
+  const candidate = value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {}
+  const kind = candidate.kind
+
+  if (kind === 'conversationDraft') {
+    return { kind: 'conversationDraft' }
+  }
+
+  if (kind === 'conversation') {
+    const conversationId = readNullableString(candidate.conversationId)
+    if (conversationId) {
+      return { kind: 'conversation', conversationId }
+    }
+  }
+
+  if (kind === 'project') {
+    const projectId = readNullableString(candidate.projectId)
+    if (projectId && projects.some((project) => project.id === projectId)) {
+      return { kind: 'project', projectId }
+    }
+  }
+
+  if (activeProjectId && projects.some((project) => project.id === activeProjectId)) {
+    return { kind: 'project', projectId: activeProjectId }
+  }
+
+  return { kind: 'conversationDraft' }
 }
 
 function readWindowDimension(value: unknown, fallback: number, min: number) {
@@ -532,6 +580,10 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
   )
   const lastWorkspacePath = readNullableString(workspaceCandidate.lastWorkspacePath)
   const legacyLastFilePath = readNullableString(workspaceCandidate.lastFilePath)
+  const rawActiveContext = workspaceCandidate.activeContext && typeof workspaceCandidate.activeContext === 'object'
+    ? workspaceCandidate.activeContext as Record<string, unknown>
+    : {}
+  const rawActiveContextKind = rawActiveContext.kind
   let normalizedProjects = dedupeProjectRecords(projectsCandidate
     .map(readProjectRecord)
     .filter((project): project is PersistedProjectRecord => Boolean(project)))
@@ -543,7 +595,12 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
     })
   }
 
-  if (lastWorkspacePath && !normalizedProjects.some((project) => project.path === lastWorkspacePath)) {
+  if (
+    lastWorkspacePath
+    && rawActiveContextKind !== 'conversation'
+    && rawActiveContextKind !== 'conversationDraft'
+    && !normalizedProjects.some((project) => getProjectPathIdentity(project.path) === getProjectPathIdentity(lastWorkspacePath))
+  ) {
     normalizedProjects = [
       ...normalizedProjects,
       createProjectRecordFromPath(lastWorkspacePath, {
@@ -555,11 +612,15 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
   }
 
   const requestedActiveProjectId = readNullableString(workspaceCandidate.activeProjectId)
+  const projectForLastWorkspace = lastWorkspacePath
+    ? normalizedProjects.find((project) => (
+        getProjectPathIdentity(project.path) === getProjectPathIdentity(lastWorkspacePath)
+      )) ?? null
+    : null
   const activeProjectId = requestedActiveProjectId && normalizedProjects.some((project) => project.id === requestedActiveProjectId)
     ? requestedActiveProjectId
-    : lastWorkspacePath
-      ? normalizedProjects.find((project) => project.path === lastWorkspacePath)?.id ?? null
-      : normalizedProjects[0]?.id ?? null
+    : projectForLastWorkspace?.id ?? normalizedProjects[0]?.id ?? null
+  const activeContext = readActiveWorkspaceContext(workspaceCandidate.activeContext, activeProjectId, normalizedProjects)
 
   return {
     version: APP_STATE_SCHEMA_VERSION,
@@ -571,6 +632,7 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
       workspaceIconTheme: readWorkspaceIconThemeSelection(uiCandidate.workspaceIconTheme),
     },
     workspace: {
+      activeContext,
       activeProjectId,
       entries,
       lastWorkspacePath,
@@ -598,19 +660,22 @@ function mergeLegacyAppState(primary: PersistedAppState, fallback: PersistedAppS
     }
   }
 
-  const primaryProjectPaths = new Set(primary.workspace.projects.map((project) => project.path))
+  const primaryProjectPaths = new Set(primary.workspace.projects.map((project) => getProjectPathIdentity(project.path)))
   const fallbackEntriesForKnownProjects = Object.fromEntries(
     Object.entries(fallback.workspace.entries)
-      .filter(([workspacePath]) => primaryProjectPaths.has(workspacePath)),
+      .filter(([workspacePath]) => primaryProjectPaths.has(getProjectPathIdentity(workspacePath))),
   )
   const projects = primary.workspace.projects.map((project) => {
-    const fallbackProject = fallback.workspace.projects.find((candidate) => candidate.path === project.path)
+    const fallbackProject = fallback.workspace.projects.find((candidate) => (
+      getProjectPathIdentity(candidate.path) === getProjectPathIdentity(project.path)
+    ))
     return fallbackProject ? { ...fallbackProject, ...project } : project
   })
 
   return normalizePersistedAppState({
     ...primary,
     workspace: {
+      activeContext: primary.workspace.activeContext,
       activeProjectId: primary.workspace.activeProjectId,
       entries: {
         ...fallbackEntriesForKnownProjects,

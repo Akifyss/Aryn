@@ -450,6 +450,69 @@ describe('app state persistence', () => {
     expect(state.workspace.activeProjectId).toBe('C:/active')
   })
 
+  it('does not promote a conversation workspace into the project list', () => {
+    const state = normalizePersistedAppState({
+      workspace: {
+        activeContext: {
+          kind: 'conversation',
+          conversationId: 'conversation-1',
+        },
+        activeProjectId: 'C:/project',
+        lastWorkspacePath: 'C:/Users/me/Documents/Aryn/2026-05-30/topic',
+        projects: [
+          {
+            id: 'C:/project',
+            name: 'project',
+            path: 'C:/project',
+          },
+        ],
+      },
+    })
+
+    expect(state.workspace.activeContext).toEqual({
+      kind: 'conversation',
+      conversationId: 'conversation-1',
+    })
+    expect(state.workspace.projects.map((project) => project.path)).toEqual(['C:/project'])
+  })
+
+  it('keeps conversation drafts projectless even when a previous workspace path exists', () => {
+    const state = normalizePersistedAppState({
+      workspace: {
+        activeContext: {
+          kind: 'conversationDraft',
+        },
+        lastWorkspacePath: 'C:/Users/me/Documents/Aryn/2026-05-30/draft',
+      },
+    })
+
+    expect(state.workspace.activeContext).toEqual({ kind: 'conversationDraft' })
+    expect(state.workspace.activeProjectId).toBeNull()
+    expect(state.workspace.projects).toEqual([])
+  })
+
+  it('keeps a valid active project fallback when the last workspace belongs to a conversation draft', () => {
+    const state = normalizePersistedAppState({
+      workspace: {
+        activeContext: {
+          kind: 'conversationDraft',
+        },
+        lastWorkspacePath: 'C:/Users/me/Documents/Aryn/2026-05-30/draft',
+        projects: [
+          {
+            id: 'C:/project',
+            name: 'project',
+            path: 'C:/project',
+          },
+        ],
+      },
+    })
+
+    expect(state.workspace.activeContext).toEqual({ kind: 'conversationDraft' })
+    expect(state.workspace.activeProjectId).toBe('C:/project')
+    expect(state.workspace.projects.map((project) => project.path)).toEqual(['C:/project'])
+  })
+
   it('deduplicates persisted projects by path while keeping the latest normalized record', () => {
     const state = normalizePersistedAppState({
       workspace: {
@@ -477,6 +540,36 @@ describe('app state persistence', () => {
       lastFilePath: 'C:/workspace/current.md',
       name: 'workspace',
       path: 'C:/workspace',
+    })
+  })
+
+  it('deduplicates persisted Windows projects without treating path casing as identity', () => {
+    if (process.platform !== 'win32') {
+      return
+    }
+
+    const state = normalizePersistedAppState({
+      workspace: {
+        projects: [
+          {
+            id: 'C:/Workspace',
+            name: 'old',
+            path: 'C:/Workspace',
+          },
+          {
+            id: 'c:/workspace',
+            name: 'current',
+            path: 'c:/workspace',
+          },
+        ],
+      },
+    })
+
+    expect(state.workspace.projects).toHaveLength(1)
+    expect(state.workspace.projects[0]).toMatchObject({
+      id: 'c:/workspace',
+      name: 'current',
+      path: 'c:/workspace',
     })
   })
 

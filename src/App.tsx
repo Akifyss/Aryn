@@ -5,6 +5,7 @@ import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer, Tabs } from 
 import {
   FileLine,
   FolderLine,
+  FolderForbidLine,
   FolderOpenLine,
   GitBranchLine,
   LayoutLeftLine,
@@ -14,6 +15,7 @@ import {
   SearchLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
+import type { ActiveWorkspaceContext, ConversationRecord, ConversationState } from '@/features/conversations/types'
 import type { ProjectRecord, ProjectState, WorkspaceNode } from '@/features/workspace/types'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTitlebar } from '@/components/app-titlebar'
@@ -368,6 +370,7 @@ const PROJECT_MENU_EDITOR_SWITCH_MAX_HEIGHT_PX = 520
 const PROJECT_MENU_EDITOR_SWITCH_MIN_HEIGHT_PX = 180
 const PROJECT_MENU_EDITOR_SWITCH_SEARCH_HEIGHT_PX = 36
 const PROJECT_MENU_EDITOR_SWITCH_ACTIONS_HEIGHT_PX = 72
+const PROJECT_MENU_AGENT_PROJECTLESS_ACTION_HEIGHT_PX = 39
 const PROJECT_MENU_PROJECT_ROW_HEIGHT_PX = 34
 const PROJECT_MENU_PROJECT_LIST_MAX_HEIGHT_PX = 320
 
@@ -383,6 +386,13 @@ const emptyProjectState: ProjectState = {
   activeProjectId: null,
   projects: [],
 }
+
+const emptyConversationState: ConversationState = {
+  version: 1,
+  conversations: [],
+}
+
+const conversationDraftContext: ActiveWorkspaceContext = { kind: 'conversationDraft' }
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
@@ -403,6 +413,7 @@ function estimateProjectMenuHeight(
   mode: ProjectMenuMode,
   projectCount: number,
   viewportHeight: number,
+  includesProjectlessAction = false,
 ) {
   const viewportMaxHeight = Math.max(160, viewportHeight - (PROJECT_MENU_MARGIN_PX * 2))
 
@@ -417,6 +428,7 @@ function estimateProjectMenuHeight(
   const estimatedHeight = PROJECT_MENU_EDITOR_SWITCH_SEARCH_HEIGHT_PX
     + listHeight
     + PROJECT_MENU_EDITOR_SWITCH_ACTIONS_HEIGHT_PX
+    + (includesProjectlessAction ? PROJECT_MENU_AGENT_PROJECTLESS_ACTION_HEIGHT_PX : 0)
 
   return Math.min(
     PROJECT_MENU_EDITOR_SWITCH_MAX_HEIGHT_PX,
@@ -429,6 +441,7 @@ function resolveProjectMenuStyle(
   mode: ProjectMenuMode,
   anchorRect: ProjectMenuAnchorRect | null,
   projectCount = 0,
+  includesProjectlessAction = false,
 ): CSSProperties | undefined {
   if (!anchorRect || typeof window === 'undefined') {
     return undefined
@@ -446,7 +459,7 @@ function resolveProjectMenuStyle(
     ? anchorRect.left + (anchorRect.width / 2) - (width / 2)
     : anchorRect.left
   const left = clamp(preferredLeft, PROJECT_MENU_MARGIN_PX, maxLeft)
-  const estimatedHeight = estimateProjectMenuHeight(mode, projectCount, viewportHeight)
+  const estimatedHeight = estimateProjectMenuHeight(mode, projectCount, viewportHeight, includesProjectlessAction)
   const maxHeight = mode === 'agent-add'
     ? PROJECT_MENU_AGENT_ADD_ESTIMATED_HEIGHT_PX
     : PROJECT_MENU_EDITOR_SWITCH_MAX_HEIGHT_PX
@@ -709,6 +722,8 @@ function App() {
 
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
   const [projectState, setProjectState] = useState<ProjectState>(emptyProjectState)
+  const [conversationState, setConversationState] = useState<ConversationState>(emptyConversationState)
+  const [activeWorkspaceContext, setActiveWorkspaceContext] = useState<ActiveWorkspaceContext>(conversationDraftContext)
   const [projectMenuMode, setProjectMenuMode] = useState<ProjectMenuMode | null>(null)
   const [projectMenuAnchorRect, setProjectMenuAnchorRect] = useState<ProjectMenuAnchorRect | null>(null)
   const [projectMenuSearch, setProjectMenuSearch] = useState('')
@@ -763,6 +778,7 @@ function App() {
   const lastIconThemeLinkedThemeRef = useRef<ResolvedAppTheme>(resolvedTheme)
   const iconThemeLinkRequestRef = useRef(0)
   const [, setStatusMessage] = useState('Open a folder to start.')
+  const [workspaceUnavailableMessage, setWorkspaceUnavailableMessage] = useState<string | null>(null)
   const [isCreatingFile, setIsCreatingFile] = useState(false)
   const [isCreatingDirectory, setIsCreatingDirectory] = useState(false)
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
@@ -980,10 +996,20 @@ function App() {
     ? getBaseName(currentPath)
     : 'Current workspace'
   const activeProject = useMemo(
-    () => projectState.projects.find((project) => project.id === projectState.activeProjectId) ?? null,
-    [projectState.activeProjectId, projectState.projects],
+    () => {
+      if (activeWorkspaceContext.kind === 'project') {
+        return projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
+      }
+
+      return currentPath
+        ? projectState.projects.find((project) => normalizeFilePath(project.path) === normalizeFilePath(currentPath)) ?? null
+        : null
+    },
+    [activeWorkspaceContext, currentPath, projectState.projects],
   )
-  const needsProjectBootstrap = hasLoadedProjectState && !activeProject
+  const needsProjectBootstrap = hasLoadedProjectState
+    && !activeProject
+    && activeWorkspaceContext.kind === 'project'
   const filteredProjectMenuProjects = useMemo(() => {
     const query = projectMenuSearch.trim().toLowerCase()
 
@@ -1856,17 +1882,49 @@ function App() {
     await flushWorkspaceAutosave()
     await flushDiffAutosave()
     await window.appApi.stopWorkspaceWatch()
-    await loadTree(nextPath)
-    setCurrentPath(nextPath)
+
+    try {
+      await loadTree(nextPath)
+      setWorkspaceUnavailableMessage(null)
+      currentPathRef.current = nextPath
+      setCurrentPath(nextPath)
+      resetOpenTabs()
+      setIsSettingsTabOpen(false)
+      setIsSettingsTabActive(false)
+      setIsAgentLayoutFixedTabActive(false)
+      setGitCommitMessage('')
+      setGitErrorMessage(null)
+      await refreshGitState(nextPath, { silent: true })
+      await window.appApi.startWorkspaceWatch(nextPath)
+      await updateWorkspaceState(nextPath, { markAsLastOpened: true })
+    } catch (error) {
+      await window.appApi.stopWorkspaceWatch().catch(() => undefined)
+      resetWorkspaceSurface({ unavailableMessage: '无法访问当前工作目录。' })
+      throw error
+    }
+  }
+
+  function resetWorkspaceSurface(options: { unavailableMessage?: string | null } = {}) {
+    latestGitRefreshRequestIdRef.current += 1
+    currentPathRef.current = null
+    setCurrentPath(null)
+    setTree([])
+    setExpandedPaths(new Set())
     resetOpenTabs()
     setIsSettingsTabOpen(false)
     setIsSettingsTabActive(false)
     setIsAgentLayoutFixedTabActive(false)
     setGitCommitMessage('')
     setGitErrorMessage(null)
-    await refreshGitState(nextPath, { silent: true })
-    await window.appApi.startWorkspaceWatch(nextPath)
-    await updateWorkspaceState(nextPath, { markAsLastOpened: true })
+    setGitRepositoryState(null)
+    setAgentWorkspaceState(null)
+    setPendingAgentProjectSessionRequest(null)
+    setWorkspaceUnavailableMessage(options.unavailableMessage ?? null)
+  }
+
+  async function disconnectWorkspaceSurface(options: { unavailableMessage?: string | null } = {}) {
+    await window.appApi.stopWorkspaceWatch()
+    resetWorkspaceSurface(options)
   }
 
   async function switchActiveWorkspace(
@@ -1876,6 +1934,7 @@ function App() {
     if (currentPath && normalizeFilePath(currentPath) === normalizeFilePath(project.path)) {
       await window.appApi.setActiveProject(project.id)
       setProjectState(await window.appApi.getProjectState())
+      setActiveWorkspaceContext({ kind: 'project', projectId: project.id })
       return true
     }
 
@@ -1885,6 +1944,7 @@ function App() {
 
     const nextProjectState = await window.appApi.setActiveProject(project.id)
     setProjectState(nextProjectState)
+    setActiveWorkspaceContext({ kind: 'project', projectId: project.id })
     await connectWorkspace(project.path)
 
     if (options.restoreTabs !== false) {
@@ -2363,6 +2423,7 @@ function App() {
       return false
     }
 
+    setActiveWorkspaceContext({ kind: 'project', projectId: nextActiveProject.id })
     let agentSessionRequestId: number | null = null
 
     if (options.startAgentNewSession) {
@@ -2490,21 +2551,20 @@ function App() {
 
     setIsProjectActionBusy(true)
     try {
-      const wasActive = projectState.activeProjectId === project.id
+      const wasActive = activeWorkspaceContext.kind === 'project'
+        && activeWorkspaceContext.projectId === project.id
       const nextProjectState = await window.appApi.removeProject(project.id)
       setProjectState(nextProjectState)
 
       if (wasActive) {
         const nextActiveProject = nextProjectState.projects.find((candidate) => candidate.id === nextProjectState.activeProjectId)
         if (nextActiveProject) {
+          setActiveWorkspaceContext({ kind: 'project', projectId: nextActiveProject.id })
           await connectWorkspace(nextActiveProject.path)
           await restoreWorkspaceTabs(nextActiveProject.path, nextActiveProject.lastFilePath)
         } else {
-          await window.appApi.stopWorkspaceWatch()
-          setCurrentPath(null)
-          setTree([])
-          resetOpenTabs()
-          setAgentWorkspaceState(null)
+          setActiveWorkspaceContext(conversationDraftContext)
+          await disconnectWorkspaceSurface()
         }
       }
 
@@ -2579,6 +2639,167 @@ function App() {
 
   async function handleStartProjectSession(project: ProjectRecord) {
     await requestAgentProjectSession(project, { kind: 'new' })
+  }
+
+  async function handleStartContextualConversation() {
+    if (activeProject) {
+      await handleStartProjectSession(activeProject)
+      return
+    }
+
+    await handleStartStandaloneConversation()
+  }
+
+  async function handleUseNoProject() {
+    setIsProjectActionBusy(true)
+    try {
+      const didEnterDraft = await enterConversationDraft()
+      if (didEnterDraft) {
+        closeProjectMenu()
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to start a projectless conversation.'
+      toast.danger('进入普通对话失败', { description: message })
+      setStatusMessage(message)
+    } finally {
+      setIsProjectActionBusy(false)
+    }
+  }
+
+  async function enterConversationDraft(options: { skipDirtyConfirm?: boolean } = {}) {
+    if (!options.skipDirtyConfirm && currentPath && !(await confirmDiscardDirtyTabs('switch-workspace'))) {
+      return false
+    }
+
+    await flushWorkspaceAutosave()
+    await flushDiffAutosave()
+    const nextContext = await window.appApi.setActiveWorkspaceContext(conversationDraftContext)
+    setActiveWorkspaceContext(nextContext)
+    await disconnectWorkspaceSurface()
+    setStatusMessage('新对话')
+    return true
+  }
+
+  async function handleStartStandaloneConversation() {
+    await enterConversationDraft()
+  }
+
+  async function handleCreateConversationWorkspace(request: { initialPrompt?: string | null }) {
+    let record: ConversationRecord | null = null
+
+    try {
+      record = await window.appApi.createConversationWorkspace(request)
+
+      if (!record.workspacePath) {
+        throw new Error('Conversation workspace was not created.')
+      }
+
+      const nextConversationState = await window.appApi.getConversationState()
+      setConversationState(nextConversationState)
+      setActiveWorkspaceContext({ kind: 'conversation', conversationId: record.id })
+      await connectWorkspace(record.workspacePath)
+      return record
+    } catch (error) {
+      if (record) {
+        setConversationState(await window.appApi.removeDraftConversation(record.id))
+        const nextContext = await window.appApi.setActiveWorkspaceContext(conversationDraftContext)
+        setActiveWorkspaceContext(nextContext)
+      }
+
+      throw error
+    }
+  }
+
+  async function handleConversationSessionStarted(
+    conversationId: string,
+    patch: { agentSessionPath: string | null; lastMessagePreview?: string | null; title?: string | null },
+  ) {
+    const updatedConversation = await window.appApi.updateConversation(conversationId, {
+      agentSessionPath: patch.agentSessionPath,
+      lastMessagePreview: patch.lastMessagePreview ?? null,
+      status: 'active',
+      ...(patch.title !== undefined ? { title: patch.title } : {}),
+    })
+    setConversationState(await window.appApi.getConversationState())
+    if (updatedConversation.workspacePath && updatedConversation.agentSessionPath) {
+      await window.appApi.updateWorkspaceState(updatedConversation.workspacePath, {
+        lastAgentSessionPath: updatedConversation.agentSessionPath,
+      })
+    }
+  }
+
+  async function handleConversationDraftFailed(conversationId: string) {
+    const activeContext = await window.appApi.getActiveWorkspaceContext()
+    const currentConversationState = await window.appApi.getConversationState()
+    const failedConversation = currentConversationState.conversations.find((conversation) => conversation.id === conversationId) ?? null
+    setConversationState(await window.appApi.removeDraftConversation(conversationId))
+
+    if (activeContext.kind === 'conversation' && activeContext.conversationId === conversationId) {
+      const nextContext = await window.appApi.setActiveWorkspaceContext(conversationDraftContext)
+      setActiveWorkspaceContext(nextContext)
+
+      if (
+        !failedConversation?.workspacePath
+        || (
+          currentPathRef.current
+          && normalizeFilePath(currentPathRef.current) === normalizeFilePath(failedConversation.workspacePath)
+        )
+      ) {
+        await disconnectWorkspaceSurface()
+      }
+    }
+  }
+
+  async function handleOpenConversation(conversation: ConversationRecord) {
+    const targetWorkspacePath = conversation.workspacePath
+    const isCurrentWorkspace = Boolean(
+      currentPath
+      && targetWorkspacePath
+      && normalizeFilePath(currentPath) === normalizeFilePath(targetWorkspacePath),
+    )
+
+    if (currentPath && !isCurrentWorkspace) {
+      if (!(await confirmDiscardDirtyTabs('switch-workspace'))) {
+        return
+      }
+    }
+
+    try {
+      await window.appApi.setActiveWorkspaceContext({ kind: 'conversation', conversationId: conversation.id })
+      setActiveWorkspaceContext({ kind: 'conversation', conversationId: conversation.id })
+
+      const workspaceExists = targetWorkspacePath
+        ? (await window.appApi.workspacePathExists(targetWorkspacePath)).exists
+        : false
+
+      if (!targetWorkspacePath || !workspaceExists) {
+        await disconnectWorkspaceSurface({ unavailableMessage: '这个对话的工作目录已被移动或删除。' })
+        setStatusMessage(`${conversation.title}：工作目录不可用`)
+        toast.warning('对话工作目录不可用', { description: '这个对话的工作目录已被移动或删除。' })
+        return
+      }
+
+      if (conversation.agentSessionPath) {
+        await window.appApi.updateWorkspaceState(targetWorkspacePath, {
+          lastAgentSessionPath: conversation.agentSessionPath,
+        })
+      }
+      const sessionExists = conversation.agentSessionPath
+        ? (await window.appApi.workspaceFileExists(targetWorkspacePath, conversation.agentSessionPath)).exists
+        : false
+      await connectWorkspace(targetWorkspacePath)
+      await restoreWorkspaceTabs(targetWorkspacePath)
+      setPendingAgentProjectSessionRequest(null)
+      setStatusMessage(conversation.title)
+
+      if (!sessionExists) {
+        toast.warning('无法恢复对话内容', { description: '对应的 Agent session 文件不存在或不可读。工作目录仍可继续浏览。' })
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to open conversation.'
+      toast.danger('打开对话失败', { description: message })
+      setStatusMessage(message)
+    }
   }
 
   async function handleCreateFile() {
@@ -2706,24 +2927,33 @@ function App() {
           className='tree-scroll'
           contentClassName='tree-scroll-content'
         >
-          <WorkspaceTree
-            activeFilePath={activeTreePath}
-            iconTheme={iconTheme}
-            nodes={tree}
-            expandedPaths={expandedPaths}
-            setExpandedPaths={setExpandedPaths}
-            workspacePath={currentPath}
-            gitRepositoryState={gitRepositoryState}
-            onSelectFile={(filePath) => {
-              void openFile(filePath)
-            }}
-            onOpenInCodeEditor={(filePath) => {
-              void openFile(filePath, currentPath, 'code')
-            }}
-            onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
-            onDeleteNode={(node) => handleDeleteNode(node)}
-            onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
-          />
+          {workspaceUnavailableMessage ? (
+            <div className='tree-empty-state'>
+              <div className='tree-empty-icon'>
+                <FolderForbidLine size={26} />
+              </div>
+              <p>{workspaceUnavailableMessage}</p>
+            </div>
+          ) : (
+            <WorkspaceTree
+              activeFilePath={activeTreePath}
+              iconTheme={iconTheme}
+              nodes={tree}
+              expandedPaths={expandedPaths}
+              setExpandedPaths={setExpandedPaths}
+              workspacePath={currentPath}
+              gitRepositoryState={gitRepositoryState}
+              onSelectFile={(filePath) => {
+                void openFile(filePath)
+              }}
+              onOpenInCodeEditor={(filePath) => {
+                void openFile(filePath, currentPath, 'code')
+              }}
+              onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
+              onDeleteNode={(node) => handleDeleteNode(node)}
+              onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
+            />
+          )}
         </AppScrollArea>
       </div>
     )
@@ -2735,30 +2965,53 @@ function App() {
     }
 
     const isSwitchMenu = projectMenuMode === 'editor-switch' || projectMenuMode === 'agent-new-switch'
-    const menuStyle = resolveProjectMenuStyle(projectMenuMode, projectMenuAnchorRect, filteredProjectMenuProjects.length)
+    const showProjectlessAction = projectMenuMode === 'agent-new-switch' && activeWorkspaceContext.kind === 'project'
+    const menuStyle = resolveProjectMenuStyle(
+      projectMenuMode,
+      projectMenuAnchorRect,
+      filteredProjectMenuProjects.length,
+      showProjectlessAction,
+    )
     const projectMenuActions = (
-      <div className='project-menu-actions'>
-        <button
-          type='button'
-          className='project-menu-action'
-          disabled={isProjectActionBusy}
-          onClick={openNewProjectDialog}
-        >
-          <NewFolderLine size={18} />
-          <span>新建空白项目</span>
-        </button>
-        <button
-          type='button'
-          className='project-menu-action'
-          disabled={isProjectActionBusy}
-          onClick={() => {
-            void handleAddExistingProject()
-          }}
-        >
-          <FolderOpenLine size={18} />
-          <span>使用现有文件夹</span>
-        </button>
-      </div>
+      <>
+        <div className='project-menu-actions'>
+          <button
+            type='button'
+            className='project-menu-action'
+            disabled={isProjectActionBusy}
+            onClick={openNewProjectDialog}
+          >
+            <NewFolderLine size={18} />
+            <span>新建空白项目</span>
+          </button>
+          <button
+            type='button'
+            className='project-menu-action'
+            disabled={isProjectActionBusy}
+            onClick={() => {
+              void handleAddExistingProject()
+            }}
+          >
+            <FolderOpenLine size={18} />
+            <span>使用现有文件夹</span>
+          </button>
+        </div>
+        {showProjectlessAction ? (
+          <div className='project-menu-actions project-menu-projectless-actions'>
+            <button
+              type='button'
+              className='project-menu-action'
+              disabled={isProjectActionBusy}
+              onClick={() => {
+                void handleUseNoProject()
+              }}
+            >
+              <FolderForbidLine size={18} />
+              <span className='project-menu-action-spacer'>不使用项目</span>
+            </button>
+          </div>
+        ) : null}
+      </>
     )
 
     return (
@@ -2792,7 +3045,8 @@ function App() {
                 contentClassName='project-menu-list-content'
               >
                 {filteredProjectMenuProjects.map((project) => {
-                  const isActive = project.id === projectState.activeProjectId
+                  const isActive = activeWorkspaceContext.kind === 'project'
+                    && project.id === activeWorkspaceContext.projectId
 
                   return (
                     <button
@@ -3541,18 +3795,93 @@ function App() {
         }
       }
 
-      const nextProjectState = await window.appApi.getProjectState()
+      const [
+        nextProjectState,
+        nextConversationState,
+        nextActiveContext,
+      ] = await Promise.all([
+        window.appApi.getProjectState(),
+        window.appApi.getConversationState(),
+        window.appApi.getActiveWorkspaceContext(),
+      ])
 
       if (cancelled) {
         return
       }
 
       setProjectState(nextProjectState)
+      setConversationState(nextConversationState)
+      setActiveWorkspaceContext(nextActiveContext)
       setHasLoadedProjectState(true)
-      const activeProject = nextProjectState.projects.find((project) => project.id === nextProjectState.activeProjectId) ?? null
+      const activeProject = nextActiveContext.kind === 'project'
+        ? nextProjectState.projects.find((project) => project.id === nextActiveContext.projectId) ?? null
+        : nextProjectState.projects.find((project) => project.id === nextProjectState.activeProjectId) ?? null
+      const activeConversation = nextActiveContext.kind === 'conversation'
+        ? nextConversationState.conversations.find((conversation) => conversation.id === nextActiveContext.conversationId) ?? null
+        : null
+
+      if (nextActiveContext.kind === 'conversation') {
+        if (!activeConversation) {
+          const nextContext = await window.appApi.setActiveWorkspaceContext(conversationDraftContext)
+          setActiveWorkspaceContext(nextContext)
+          await disconnectWorkspaceSurface()
+          setStatusMessage('新对话')
+          return
+        }
+
+        if (!activeConversation.workspacePath) {
+          await disconnectWorkspaceSurface({ unavailableMessage: '这个对话没有可恢复的工作目录。' })
+          setStatusMessage('对话工作目录不可用')
+          return
+        }
+
+        try {
+          const workspaceExists = (await window.appApi.workspacePathExists(activeConversation.workspacePath)).exists
+
+          if (!workspaceExists) {
+            await disconnectWorkspaceSurface({ unavailableMessage: '这个对话的工作目录已被移动或删除。' })
+            setStatusMessage(`${activeConversation.title}：工作目录不可用`)
+            toast.warning('对话工作目录不可用', { description: '上次打开的普通对话目录已被移动或删除。' })
+            return
+          }
+
+          if (activeConversation.agentSessionPath) {
+            await window.appApi.updateWorkspaceState(activeConversation.workspacePath, {
+              lastAgentSessionPath: activeConversation.agentSessionPath,
+            })
+          }
+          const sessionExists = activeConversation.agentSessionPath
+            ? (await window.appApi.workspaceFileExists(activeConversation.workspacePath, activeConversation.agentSessionPath)).exists
+            : false
+          await connectWorkspace(activeConversation.workspacePath)
+          if (!cancelled) {
+            await restoreWorkspaceTabs(activeConversation.workspacePath)
+          }
+
+          if (!cancelled) {
+            setStatusMessage(activeConversation.title)
+
+            if (!sessionExists) {
+              toast.warning('无法恢复对话内容', { description: '对应的 Agent session 文件不存在或不可读。工作目录仍可继续浏览。' })
+            }
+          }
+        } catch (error) {
+          if (!cancelled) {
+            const message = error instanceof Error ? error.message : 'Unable to restore conversation.'
+            setStatusMessage(message)
+          }
+        }
+        return
+      }
+
+      if (nextActiveContext.kind === 'conversationDraft') {
+        setStatusMessage('新对话')
+        return
+      }
 
       if (!activeProject) {
-        setStatusMessage('创建或打开项目以开始。')
+        setActiveWorkspaceContext(conversationDraftContext)
+        setStatusMessage('新对话')
         return
       }
 
@@ -3878,6 +4207,12 @@ function App() {
       const isMac = platform === 'darwin'
       const modifier = isMac ? event.metaKey : event.ctrlKey
 
+      if (!isAppModalLayerOpen && event.ctrlKey && event.altKey && event.key.toLowerCase() === 'n') {
+        event.preventDefault()
+        void handleStartContextualConversation()
+        return
+      }
+
       if (modifier && event.key.toLowerCase() === 'k') {
         event.preventDefault()
         setIsCommandPaletteOpen((prev) => !prev)
@@ -3886,7 +4221,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [platform])
+  }, [activeProject, isAppModalLayerOpen, platform])
 
   useEffect(() => {
     if (!currentPath) {
@@ -4164,8 +4499,7 @@ function App() {
 
   const handleOpenSession = useCallback((sessionPath: string) => {
     const currentProject = currentPath
-      ? projectState.projects.find((project) => project.id === projectState.activeProjectId)
-        ?? projectState.projects.find((project) => normalizeFilePath(project.path) === normalizeFilePath(currentPath))
+      ? projectState.projects.find((project) => normalizeFilePath(project.path) === normalizeFilePath(currentPath))
       : null
 
     if (currentPath && currentProject) {
@@ -4177,7 +4511,7 @@ function App() {
         sessionPath,
       })
     }
-  }, [currentPath, projectState.activeProjectId, projectState.projects])
+  }, [currentPath, projectState.projects])
 
   const handleCloseCommandPalette = useCallback(() => setIsCommandPaletteOpen(false), [])
   const handleOpenCommandPaletteFromChrome = useCallback(() => {
@@ -4555,6 +4889,8 @@ function App() {
 
     return (
       <AgentSidebar
+        activeWorkspaceContext={activeWorkspaceContext}
+        conversationState={conversationState}
         externalSessionRequest={pendingAgentProjectSessionRequest}
         onExternalSessionRequestHandled={(requestId) => {
           setPendingAgentProjectSessionRequest((currentValue) => (
@@ -4562,7 +4898,11 @@ function App() {
           ))
         }}
         iconTheme={iconTheme}
+        onConversationDraftFailed={handleConversationDraftFailed}
+        onConversationSessionStarted={handleConversationSessionStarted}
+        onCreateConversationWorkspace={handleCreateConversationWorkspace}
         onOpenMessageFile={openAgentMessageFile}
+        onOpenConversation={handleOpenConversation}
         onOpenProviderSettings={() => {
           if (isDrawerSurface) {
             setIsRightDrawerOpen(false)
@@ -4579,6 +4919,7 @@ function App() {
         onOpenProjectFolder={handleShowProjectInFolder}
         onOpenProjectSession={handleOpenProjectSession}
         onRemoveProject={handleRemoveProject}
+        onStartStandaloneConversation={handleStartStandaloneConversation}
         onStartProjectSession={handleStartProjectSession}
         projectState={projectState}
       />
@@ -5087,6 +5428,8 @@ function App() {
   if (isAgentLayout) {
     return (
       <AgentProvider
+        activeWorkspaceContext={activeWorkspaceContext}
+        conversationState={conversationState}
         externalSessionRequest={pendingAgentProjectSessionRequest}
         onExternalSessionRequestHandled={(requestId) => {
           setPendingAgentProjectSessionRequest((currentValue) => (
@@ -5094,7 +5437,11 @@ function App() {
           ))
         }}
         iconTheme={iconTheme}
+        onConversationDraftFailed={handleConversationDraftFailed}
+        onConversationSessionStarted={handleConversationSessionStarted}
+        onCreateConversationWorkspace={handleCreateConversationWorkspace}
         onOpenMessageFile={openAgentMessageFile}
+        onOpenConversation={handleOpenConversation}
         onOpenProviderSettings={() => {
           if (isRightSidebarDrawer) {
             setIsRightDrawerOpen(false)
@@ -5111,6 +5458,7 @@ function App() {
         onOpenProjectFolder={handleShowProjectInFolder}
         onOpenProjectSession={handleOpenProjectSession}
         onRemoveProject={handleRemoveProject}
+        onStartStandaloneConversation={handleStartStandaloneConversation}
         onStartProjectSession={handleStartProjectSession}
         projectState={projectState}
       >

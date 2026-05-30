@@ -59,6 +59,7 @@ import { shouldRunAgentModelCascaderDelayedActivation } from '@/features/agent/l
 import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
 import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
 import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
+import type { ActiveWorkspaceContext, ConversationRecord, ConversationState } from '@/features/conversations/types'
 import type { ProjectRecord, ProjectState, WorkspaceIconTheme } from '@/features/workspace/types'
 import {
   findLatestOpenableAgentFileChange,
@@ -95,16 +96,26 @@ type AgentProjectSwitchMenuOptions = {
 }
 
 type AgentSidebarProps = {
+  activeWorkspaceContext?: ActiveWorkspaceContext
+  conversationState?: ConversationState
   externalSessionRequest?: AgentProjectSessionRequest | null
   onExternalSessionRequestHandled?: (requestId: number) => void
   iconTheme?: WorkspaceIconTheme | null
+  onConversationDraftFailed?: (conversationId: string) => Promise<void> | void
+  onConversationSessionStarted?: (
+    conversationId: string,
+    patch: { agentSessionPath: string | null; lastMessagePreview?: string | null; title?: string | null },
+  ) => Promise<void> | void
+  onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
+  onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
   onOpenProviderSettings?: () => void
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
   onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
+  onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
   projectState?: ProjectState
@@ -113,16 +124,26 @@ type AgentSidebarProps = {
 }
 
 type AgentSurfaceProps = {
+  activeWorkspaceContext?: ActiveWorkspaceContext
+  conversationState?: ConversationState
   externalSessionRequest?: AgentProjectSessionRequest | null
   onExternalSessionRequestHandled?: (requestId: number) => void
   iconTheme?: WorkspaceIconTheme | null
+  onConversationDraftFailed?: (conversationId: string) => Promise<void> | void
+  onConversationSessionStarted?: (
+    conversationId: string,
+    patch: { agentSessionPath: string | null; lastMessagePreview?: string | null; title?: string | null },
+  ) => Promise<void> | void
+  onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
+  onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
   onOpenProviderSettings?: () => void
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
   onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
+  onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   projectState?: ProjectState
   workspaceState?: AgentWorkspaceState | null
@@ -322,6 +343,15 @@ const emptyProjectState: ProjectState = {
   projects: [],
 }
 
+const emptyConversationState: ConversationState = {
+  version: 1,
+  conversations: [],
+}
+
+const defaultActiveWorkspaceContext: ActiveWorkspaceContext = {
+  kind: 'conversationDraft',
+}
+
 const emptyComposerState: ComposerState = {
   mentions: [],
   value: '',
@@ -359,6 +389,7 @@ const IMAGE_ATTACHMENT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/w
 const MAX_COMPOSER_ATTACHMENTS = 12
 
 type AgentContextValue = {
+  activeWorkspaceContext: ActiveWorkspaceContext
   activeComposerMenu: AgentComposerMenu
   activeOverlayPanel: 'sessions' | null
   activeSession: AgentWorkspaceState['sessions'][number] | null
@@ -368,10 +399,13 @@ type AgentContextValue = {
   addComposerFiles: (files: File[]) => Promise<void>
   attachmentCapabilityMessage: string | null
   canPerformComposerAction: boolean
+  canUseDraftRuntimeWithoutWorkspace: boolean
+  canUseComposerWithoutWorkspace: boolean
   composerAction: AgentComposerAction
   composerAttachments: ComposerAttachment[]
   composerState: ComposerState
   configuredProviders: string[]
+  conversationState: ConversationState
   deletingSessionPath: string | null
   handleComposerKeyDown: (event: KeyboardEvent<HTMLElement>) => void
   handleDeleteSession: (sessionPath: string) => Promise<void>
@@ -393,13 +427,21 @@ type AgentContextValue = {
   messagesScrollRef: React.RefObject<HTMLDivElement | null>
   modelFieldRef: React.RefObject<HTMLDivElement | null>
   modelInputValue: string
+  onConversationDraftFailed?: (conversationId: string) => Promise<void> | void
+  onConversationSessionStarted?: (
+    conversationId: string,
+    patch: { agentSessionPath: string | null; lastMessagePreview?: string | null; title?: string | null },
+  ) => Promise<void> | void
+  onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
+  onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
   onOpenProviderSettings?: () => void
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
   onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
+  onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   overlayPanelRef: React.RefObject<HTMLDivElement | null>
   panelError: string | null
@@ -472,6 +514,15 @@ function formatAgentSessionRelativeTime(timestamp: string) {
   }
 
   return `${Math.floor(elapsedMs / day)} 天`
+}
+
+function formatConversationPreview(prompt: string) {
+  const firstLine = prompt
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean)
+
+  return firstLine ? firstLine.replace(/\s+/g, ' ').slice(0, 48) : '新对话'
 }
 
 function formatModelLabel(modelKey: string | null) {
@@ -2409,10 +2460,16 @@ function AgentQueuedComposerTray({
 }
 
 function AgentProvider({
+  activeWorkspaceContext = defaultActiveWorkspaceContext,
   children,
+  conversationState = emptyConversationState,
   externalSessionRequest,
   iconTheme,
+  onConversationDraftFailed,
+  onConversationSessionStarted,
+  onCreateConversationWorkspace,
   onOpenMessageFile,
+  onOpenConversation,
   onExternalSessionRequestHandled,
   onOpenProviderSettings,
   onOpenProjectAddMenu,
@@ -2420,6 +2477,7 @@ function AgentProvider({
   onOpenProjectFolder,
   onOpenProjectSession,
   onRemoveProject,
+  onStartStandaloneConversation,
   onStartProjectSession,
   onWorkspaceStateChange,
   projectState = emptyProjectState,
@@ -2457,6 +2515,7 @@ function AgentProvider({
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
   const overlayPanelRef = useRef<HTMLDivElement | null>(null)
   const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
+  const loadAgentStateRequestIdRef = useRef(0)
   const openSessionRequestIdRef = useRef(0)
   const previousSessionPathRef = useRef<string | null>(null)
   const locallyEmittedWorkspaceStatesRef = useRef<WeakSet<AgentWorkspaceState>>(new WeakSet())
@@ -2464,12 +2523,18 @@ function AgentProvider({
   const handledExternalSessionRequestRef = useRef<number | null>(null)
   const externalSessionRequestRef = useRef<AgentProjectSessionRequest | null>(externalSessionRequest ?? null)
   const activeSessionSelectionRef = useRef(activeSessionSelection)
+  const workspacePathRef = useRef<string | null>(workspacePath)
   const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
   const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
   const restorableSessionPath = agentState.activeSession?.sessionPath
     && agentState.sessions.some((session) => session.path === agentState.activeSession?.sessionPath)
     ? agentState.activeSession.sessionPath
     : null
+  const canUseDraftRuntimeWithoutWorkspace = Boolean(
+    !workspacePath
+    && activeWorkspaceContext.kind === 'conversationDraft'
+    && activeSessionSelection.kind === 'new',
+  )
 
   function syncModelDraft(draft: AgentModelDraft) {
     setSelectedProviderValue(draft.provider)
@@ -2656,6 +2721,7 @@ function AgentProvider({
   }, [activeSessionSelection])
 
   externalSessionRequestRef.current = externalSessionRequest ?? null
+  workspacePathRef.current = workspacePath
 
   useEffect(() => {
     const activeProject = projectState.projects.find((project) => project.id === projectState.activeProjectId)
@@ -2686,10 +2752,11 @@ function AgentProvider({
     const unsubscribe = window.appApi.onAgentEvent((event: AgentClientEvent) => {
       if (event.type === 'workspace_state') {
         const eventWorkspacePath = event.state.runtime.workspacePath
+        const expectedWorkspacePath = workspacePathRef.current
         if (
-          !workspacePath
+          !expectedWorkspacePath
           || !eventWorkspacePath
-          || normalizeAgentProjectPath(eventWorkspacePath) !== normalizeAgentProjectPath(workspacePath)
+          || normalizeAgentProjectPath(eventWorkspacePath) !== normalizeAgentProjectPath(expectedWorkspacePath)
         ) {
           return
         }
@@ -2899,10 +2966,14 @@ function AgentProvider({
   }, [workspacePath, workspaceState])
 
   useEffect(() => {
+    const requestId = loadAgentStateRequestIdRef.current + 1
+    loadAgentStateRequestIdRef.current = requestId
+
     if (!workspacePath) {
       setAgentState(emptyAgentState)
       setViewedSessionSnapshot(null)
       setComposerState(emptyComposerState)
+      setComposerAttachments([])
       syncNewSessionModelDraft(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
       syncModelDraft(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
       setModelDrafts({
@@ -2915,6 +2986,33 @@ function AgentProvider({
       setPanelError(null)
       setHasLoadedWorkspaceState(false)
       syncActiveSessionSelection({ kind: 'new' })
+      setIsLoading(true)
+
+      void window.appApi.loadAgentDraftState()
+        .then((nextState) => {
+          if (loadAgentStateRequestIdRef.current !== requestId) {
+            return
+          }
+
+          setAgentState(nextState)
+          const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
+          const nextDraft = normalizeAgentModelDraft(defaultDraft, nextState.runtime, defaultDraft)
+          syncNewSessionModelDraft(nextDraft)
+          syncModelDraft(nextDraft)
+          setModelDrafts(nextDraft.provider ? { [nextDraft.provider]: nextDraft.modelId } : {})
+          setHasLoadedWorkspaceState(true)
+        })
+        .catch((error) => {
+          if (loadAgentStateRequestIdRef.current === requestId) {
+            setPanelError(error instanceof Error ? error.message : 'Unable to load provider settings.')
+          }
+        })
+        .finally(() => {
+          if (loadAgentStateRequestIdRef.current === requestId) {
+            setIsLoading(false)
+          }
+        })
+
       return
     }
 
@@ -2942,6 +3040,10 @@ function AgentProvider({
         shouldStartNewSession ? { restoreSession: false } : undefined,
       ))
       .then((nextState) => {
+        if (loadAgentStateRequestIdRef.current !== requestId) {
+          return
+        }
+
         setAgentState(nextState)
         setViewedSessionSnapshot(null)
         const nextActiveSessionPath = nextState.activeSession?.sessionPath
@@ -2965,10 +3067,14 @@ function AgentProvider({
         setHasLoadedWorkspaceState(true)
       })
       .catch((error) => {
-        setPanelError(error instanceof Error ? error.message : 'Unable to load Pi Agent sessions.')
+        if (loadAgentStateRequestIdRef.current === requestId) {
+          setPanelError(error instanceof Error ? error.message : 'Unable to load Pi Agent sessions.')
+        }
       })
       .finally(() => {
-        setIsLoading(false)
+        if (loadAgentStateRequestIdRef.current === requestId) {
+          setIsLoading(false)
+        }
       })
   }, [workspacePath])
 
@@ -3347,7 +3453,7 @@ function AgentProvider({
   }
 
   async function handleSelectModel(modelKey: string) {
-    if (!workspacePath) {
+    if (!workspacePath && !canUseDraftRuntimeWithoutWorkspace) {
       return
     }
 
@@ -3393,7 +3499,7 @@ function AgentProvider({
   }
 
   async function handleThinkingLevelSelection(level: AgentThinkingLevel, modelKey?: string) {
-    if (!workspacePath) {
+    if (!workspacePath && !canUseDraftRuntimeWithoutWorkspace) {
       return
     }
 
@@ -3451,9 +3557,62 @@ function AgentProvider({
     const serializedPrompt = serializeComposerText(composerState.value, composerState.mentions)
     const trimmedPrompt = serializedPrompt.trim()
 
-    if (!workspacePath || (!trimmedPrompt && composerAttachments.length === 0)) {
+    if (!trimmedPrompt && composerAttachments.length === 0) {
       return
     }
+
+    if (!agentState.runtime.hasConfiguredModels) {
+      setPanelError(agentState.runtime.setupHint ?? 'Configure a model first.')
+      return
+    }
+
+    let targetWorkspacePath = workspacePath
+    let createdConversation: ConversationRecord | null = null
+    let runtimeForSubmit = agentState.runtime
+    const draftBeforeWorkspaceCreation = newSessionModelDraftRef.current
+
+    if (!targetWorkspacePath && activeWorkspaceContext.kind === 'conversationDraft') {
+      if (!onCreateConversationWorkspace) {
+        setPanelError('Unable to create a conversation workspace.')
+        return
+      }
+
+      try {
+        setIsLoading(true)
+        createdConversation = await onCreateConversationWorkspace({ initialPrompt: trimmedPrompt })
+        targetWorkspacePath = createdConversation.workspacePath
+        workspacePathRef.current = targetWorkspacePath
+
+        if (!targetWorkspacePath) {
+          throw new Error('Conversation workspace was not created.')
+        }
+
+        const nextState = await window.appApi.loadAgentWorkspace(targetWorkspacePath, null, { restoreSession: false })
+        runtimeForSubmit = nextState.runtime
+        setAgentState(nextState)
+        setViewedSessionSnapshot(null)
+        setHasLoadedWorkspaceState(true)
+        const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
+        const nextNewSessionDraft = normalizeAgentModelDraft(draftBeforeWorkspaceCreation, nextState.runtime, defaultDraft)
+        syncNewSessionModelDraft(nextNewSessionDraft)
+        syncModelDraft(nextNewSessionDraft)
+      } catch (error) {
+        if (createdConversation) {
+          void onConversationDraftFailed?.(createdConversation.id)
+        }
+        setPanelError(error instanceof Error ? error.message : 'Unable to create a conversation workspace.')
+        setIsLoading(false)
+        return
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    if (!targetWorkspacePath) {
+      return
+    }
+
+    let didSendPromptToAgent = false
 
     try {
       setActiveComposerMenu(null)
@@ -3464,13 +3623,13 @@ function AgentProvider({
         openSessionRequestIdRef.current += 1
         const nextDraft = normalizeAgentModelDraft(
           newSessionModelDraftRef.current,
-          agentState.runtime,
-          getRuntimeDefaultModelDraft(agentState.runtime),
+          runtimeForSubmit,
+          getRuntimeDefaultModelDraft(runtimeForSubmit),
         )
         syncNewSessionModelDraft(nextDraft)
         const draftModelKey = getAgentModelDraftKey(nextDraft)
-        const nextState = await window.appApi.createAgentSession(workspacePath, {
-          ...(draftModelKey && agentState.runtime.availableModels.includes(draftModelKey) ? { modelKey: draftModelKey } : {}),
+        const nextState = await window.appApi.createAgentSession(targetWorkspacePath, {
+          ...(draftModelKey && runtimeForSubmit.availableModels.includes(draftModelKey) ? { modelKey: draftModelKey } : {}),
           thinkingLevel: nextDraft.thinkingLevel,
         })
         setAgentState(nextState)
@@ -3488,8 +3647,23 @@ function AgentProvider({
 
       const promptAttachments = composerAttachments.map(({ id: _id, ...attachment }) => attachment)
       await window.appApi.sendAgentPrompt(trimmedPrompt, streamingBehavior, promptAttachments)
+      didSendPromptToAgent = true
       if (nextSessionPath) {
         syncActiveSessionSelection({ kind: 'session', sessionPath: nextSessionPath })
+      }
+      const conversationId = createdConversation?.id
+        ?? (activeWorkspaceContext.kind === 'conversation' ? activeWorkspaceContext.conversationId : null)
+      if (conversationId) {
+        const preview = formatConversationPreview(trimmedPrompt)
+        try {
+          await onConversationSessionStarted?.(conversationId, {
+            agentSessionPath: nextSessionPath,
+            lastMessagePreview: preview,
+            ...(createdConversation ? { title: preview } : {}),
+          })
+        } catch (error) {
+          setPanelError(error instanceof Error ? error.message : 'Unable to update the conversation index.')
+        }
       }
       setComposerState(emptyComposerState)
       setComposerAttachments([])
@@ -3498,6 +3672,9 @@ function AgentProvider({
         setLiveTools([])
       }
     } catch (error) {
+      if (createdConversation && !didSendPromptToAgent) {
+        void onConversationDraftFailed?.(createdConversation.id)
+      }
       setPanelError(error instanceof Error ? error.message : 'Unable to send your prompt.')
     }
   }
@@ -3607,10 +3784,15 @@ function AgentProvider({
   const thinkingLevel = clampAgentThinkingLevel(selectedThinkingLevel, composerThinkingLevels)
   const thinkingLevelLabel = formatThinkingLevelLabel(thinkingLevel)
   const hasComposerPayload = getHasComposerPayload(composerState, composerAttachments)
+  const isConversationDraftContext = activeWorkspaceContext.kind === 'conversationDraft'
+  const canCreateConversationWorkspace = Boolean(isConversationDraftContext && onCreateConversationWorkspace)
+  const canUseComposerWithoutWorkspace = Boolean(!workspacePath && canCreateConversationWorkspace)
   const canSend = Boolean(
-    workspacePath
-    && hasComposerPayload
-    && agentState.runtime.hasConfiguredModels,
+    hasComposerPayload
+    && (
+      (workspacePath && agentState.runtime.hasConfiguredModels)
+      || (canUseComposerWithoutWorkspace && agentState.runtime.hasConfiguredModels)
+    ),
   )
   const canStopActivePrompt = Boolean(
     workspacePath
@@ -3634,7 +3816,13 @@ function AgentProvider({
     ? '当前模型不支持图片输入，图片不会作为视觉内容发送。'
     : null
   const statusMessage = !workspacePath
-    ? 'Open a workspace to start.'
+    ? (
+        isConversationDraftContext
+          ? null
+          : activeWorkspaceContext.kind === 'conversation'
+            ? '该对话的工作目录不可用。'
+            : '打开工作区以开始。'
+      )
     : !agentState.runtime.hasConfiguredModels
       ? (agentState.runtime.setupHint ?? 'Configure a model first.')
       : null
@@ -3786,14 +3974,18 @@ function AgentProvider({
     activeSession,
     activeSessionSelection,
     activeSessionPath,
+    activeWorkspaceContext,
     agentState,
     addComposerFiles,
     attachmentCapabilityMessage,
     canPerformComposerAction,
+    canUseDraftRuntimeWithoutWorkspace,
+    canUseComposerWithoutWorkspace,
     composerAction,
     composerAttachments,
     composerState,
     configuredProviders,
+    conversationState,
     deletingSessionPath,
     handleComposerKeyDown,
     handleDeleteSession,
@@ -3816,13 +4008,18 @@ function AgentProvider({
     messagesScrollRef,
     modelFieldRef,
     modelInputValue,
+    onConversationDraftFailed,
+    onConversationSessionStarted,
+    onCreateConversationWorkspace,
     onOpenMessageFile,
+    onOpenConversation,
     onOpenProviderSettings,
     onOpenProjectAddMenu,
     onOpenProjectSwitchMenu,
     onOpenProjectFolder,
     onOpenProjectSession,
     onRemoveProject,
+    onStartStandaloneConversation,
     onStartProjectSession,
     overlayPanelRef,
     panelError,
@@ -3845,6 +4042,7 @@ function AgentProvider({
     workspacePath,
     workspaceTree,
   }), [
+    activeWorkspaceContext,
     activeComposerMenu,
     activeOverlayPanel,
     activeSession,
@@ -3854,10 +4052,13 @@ function AgentProvider({
     addComposerFiles,
     attachmentCapabilityMessage,
     canPerformComposerAction,
+    canUseDraftRuntimeWithoutWorkspace,
+    canUseComposerWithoutWorkspace,
     composerAction,
     composerAttachments,
     composerState,
     configuredProviders,
+    conversationState,
     deletingSessionPath,
     handleComposerKeyDown,
     handleDeleteSession,
@@ -3878,13 +4079,18 @@ function AgentProvider({
     liveTools,
     loadProjectSessions,
     modelInputValue,
+    onConversationDraftFailed,
+    onConversationSessionStarted,
+    onCreateConversationWorkspace,
     onOpenMessageFile,
+    onOpenConversation,
     onOpenProviderSettings,
     onOpenProjectAddMenu,
     onOpenProjectSwitchMenu,
     onOpenProjectFolder,
     onOpenProjectSession,
     onRemoveProject,
+    onStartStandaloneConversation,
     onStartProjectSession,
     panelError,
     projectSessions,
@@ -4272,36 +4478,66 @@ function FlatAgentSessionTree({
   )
 }
 
+function AgentConversationRow({
+  conversation,
+  isActive,
+  onOpen,
+}: {
+  conversation: ConversationRecord
+  isActive: boolean
+  onOpen: () => void
+}) {
+  const relativeTime = formatAgentSessionRelativeTime(conversation.updatedAt)
+
+  return (
+    <li className='panel-tree-node agent-project-session-node agent-conversation-node'>
+      <div className={`workspace-tree-row agent-project-session-row agent-conversation-row${isActive ? ' is-active' : ''}`}>
+        <button
+          type='button'
+          className='workspace-tree-trigger agent-project-session-trigger agent-conversation-trigger'
+          title={conversation.title}
+          onClick={onOpen}
+        >
+          <span className='panel-tree-label agent-project-session-label'>{conversation.title}</span>
+          {relativeTime ? <span className='agent-project-session-time'>{relativeTime}</span> : null}
+        </button>
+      </div>
+    </li>
+  )
+}
+
 function AgentProjectTree({
   className,
   onRequestClose,
   isFloating,
 }: AgentSessionTreeProps) {
   const {
+    activeWorkspaceContext,
     activeSessionPath,
     activeSessionSelection,
+    conversationState,
     deletingSessionPath,
     handleDeleteSession,
     handleRenameSession,
     loadProjectSessions,
     onOpenProjectAddMenu,
+    onOpenConversation,
     onOpenProjectFolder,
     onOpenProjectSession,
     onRemoveProject,
+    onStartStandaloneConversation,
     onStartProjectSession,
     projectSessions,
     projectState,
+    workspacePath,
     iconTheme,
   } = useAgentContext()
-  const activeProject = useMemo(() => (
-    projectState.projects.find((project) => project.id === projectState.activeProjectId) ?? null
-  ), [projectState.activeProjectId, projectState.projects])
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set())
   const [projectMenuState, setProjectMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, project: ProjectRecord } | null>(null)
   const [sessionMenuState, setSessionMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, session: AgentSessionListItem } | null>(null)
   const [renamingSessionPath, setRenamingSessionPath] = useState<string | null>(null)
   const activeSessionProjectId = useMemo(() => {
-    if (!activeSessionPath) {
+    if (activeSessionSelection.kind !== 'session' || !activeSessionPath) {
       return null
     }
 
@@ -4312,7 +4548,36 @@ function AgentProjectTree({
     }
 
     return null
-  }, [activeSessionPath, projectSessions])
+  }, [activeSessionPath, activeSessionSelection.kind, projectSessions])
+  const visibleConversations = useMemo(() => (
+    conversationState.conversations
+      .filter((conversation) => conversation.status === 'active')
+      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+  ), [conversationState.conversations])
+  const activeProject = useMemo(() => {
+    if (activeWorkspaceContext.kind === 'project') {
+      return projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
+    }
+
+    return workspacePath
+      ? projectState.projects.find((project) => (
+        normalizeAgentProjectPath(project.path) === normalizeAgentProjectPath(workspacePath)
+      )) ?? null
+      : null
+  }, [activeWorkspaceContext, projectState.projects, workspacePath])
+
+  function startPrimaryNewConversation() {
+    setProjectMenuState(null)
+    setSessionMenuState(null)
+
+    if (activeProject && onStartProjectSession) {
+      void onStartProjectSession(activeProject)
+    } else {
+      void onStartStandaloneConversation?.()
+    }
+
+    onRequestClose?.()
+  }
 
   useEffect(() => {
     if (!activeSessionProjectId) {
@@ -4391,14 +4656,12 @@ function AgentProjectTree({
       {!isFloating ? (
         <button
           type='button'
-          disabled={!activeProject}
           className='agent-session-new-button'
           aria-label='Start new conversation'
+          aria-keyshortcuts='Control+Alt+N'
+          title='新对话 Ctrl+Alt+N'
           onClick={() => {
-            if (activeProject) {
-              void onStartProjectSession?.(activeProject)
-            }
-            onRequestClose?.()
+            startPrimaryNewConversation()
           }}
         >
           <EditLine size={16} />
@@ -4550,6 +4813,40 @@ function AgentProjectTree({
               </li>
             )
           })}
+          <li className='agent-project-tree-section agent-conversation-section'>
+            <div className='agent-project-tree-header agent-conversation-tree-header'>
+              <span>对话</span>
+              <button
+                type='button'
+                className='agent-project-tree-header-action'
+                aria-label='新对话'
+                aria-keyshortcuts='Control+Alt+N'
+                title='新对话 Ctrl+Alt+N'
+                onClick={() => {
+                  void onStartStandaloneConversation?.()
+                  onRequestClose?.()
+                }}
+              >
+                <EditLine size={15} />
+              </button>
+            </div>
+            <ul className='panel-tree-list agent-project-session-list agent-conversation-list'>
+              {visibleConversations.length === 0 ? (
+                <li className='agent-project-session-status'>暂无对话</li>
+              ) : visibleConversations.map((conversation) => (
+                <AgentConversationRow
+                  key={conversation.id}
+                  conversation={conversation}
+                  isActive={activeWorkspaceContext.kind === 'conversation' && activeWorkspaceContext.conversationId === conversation.id}
+                  onOpen={() => {
+                    void Promise.resolve(onOpenConversation?.(conversation)).then(() => {
+                      onRequestClose?.()
+                    })
+                  }}
+                />
+              ))}
+            </ul>
+          </li>
         </ul>
       </AppScrollArea>
 
@@ -4615,13 +4912,7 @@ function AgentProjectTree({
 }
 
 function AgentSessionTree(props: AgentSessionTreeProps) {
-  const { projectState } = useAgentContext()
-
-  if (projectState.projects.length > 0) {
-    return <AgentProjectTree {...props} />
-  }
-
-  return <FlatAgentSessionTree {...props} />
+  return <AgentProjectTree {...props} />
 }
 
 function AgentBrandLogo() {
@@ -4641,13 +4932,16 @@ function AgentProjectSwitchTrigger({
   className,
   iconTheme,
   onOpenProjectSwitchMenu,
+  placeholder,
 }: {
   activeProject: ProjectRecord | null
   className?: string
   iconTheme?: WorkspaceIconTheme | null
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
+  placeholder?: string
 }) {
-  const label = activeProject?.name ?? '未选择项目'
+  const label = activeProject?.name ?? placeholder ?? '未选择项目'
+  const isEnabled = Boolean(onOpenProjectSwitchMenu && (activeProject || placeholder))
 
   return (
     <button
@@ -4656,9 +4950,9 @@ function AgentProjectSwitchTrigger({
         'agent-project-switch-trigger',
         className,
       ].filter(Boolean).join(' ')}
-      disabled={!activeProject || !onOpenProjectSwitchMenu}
-      aria-label={activeProject ? `切换项目，当前项目：${activeProject.name}` : '没有可切换的项目'}
-      title={activeProject ? `当前项目：${activeProject.name}` : '没有可切换的项目'}
+      disabled={!isEnabled}
+      aria-label={activeProject ? `切换项目，当前项目：${activeProject.name}` : label}
+      title={activeProject ? `当前项目：${activeProject.name}` : label}
       onClick={(event) => {
         onOpenProjectSwitchMenu?.(event.currentTarget.getBoundingClientRect(), { startNewSession: true })
       }}
@@ -4679,15 +4973,20 @@ function AgentProjectSwitchTrigger({
 }
 
 function AgentEmptyChat() {
-  const { activeSessionSelection, iconTheme, onOpenProjectSwitchMenu, projectState, workspacePath } = useAgentContext()
-  const activeProject = projectState.projects.find((project) => project.id === projectState.activeProjectId) ?? null
+  const { activeSessionSelection, activeWorkspaceContext, iconTheme, onOpenProjectSwitchMenu, projectState, workspacePath } = useAgentContext()
+  const activeProject = activeWorkspaceContext.kind === 'project'
+    ? projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
+    : null
   const isNewConversation = activeSessionSelection.kind === 'new'
+  const isStandaloneConversation = activeWorkspaceContext.kind !== 'project'
 
   return (
     <div className='agent-empty-chat'>
       <AgentNewSessionIllustration />
       <h2>
-        {isNewConversation && activeProject ? (
+        {isStandaloneConversation ? (
+          '今天要处理些什么？'
+        ) : isNewConversation && activeProject ? (
           <>
             <span>今天在</span>
             <AgentProjectSwitchTrigger
@@ -4701,7 +5000,7 @@ function AgentEmptyChat() {
           '新对话'
         )}
       </h2>
-      {!workspacePath || !isNewConversation ? (
+      {((!workspacePath && !isStandaloneConversation) || !isNewConversation) ? (
         <p className='agent-empty-subtitle'>
           {workspacePath ? '在下方消息框中输入您的请求以开始对话' : '打开一个文件夹即可开始协同开发'}
         </p>
@@ -4715,6 +5014,7 @@ function AgentChatSurface() {
   const {
     activeComposerMenu,
     activeOverlayPanel,
+    activeWorkspaceContext,
     activeSession,
     activeSessionSelection,
     activeSessionPath,
@@ -4722,6 +5022,8 @@ function AgentChatSurface() {
     addComposerFiles,
     attachmentCapabilityMessage,
     canPerformComposerAction,
+    canUseDraftRuntimeWithoutWorkspace,
+    canUseComposerWithoutWorkspace,
     composerAction,
     composerAttachments,
     composerState,
@@ -4748,6 +5050,7 @@ function AgentChatSurface() {
     onOpenMessageFile,
     onOpenProviderSettings,
     onOpenProjectSwitchMenu,
+    onStartStandaloneConversation,
     overlayPanelRef,
     panelError,
     projectState,
@@ -4770,7 +5073,9 @@ function AgentChatSurface() {
   } = useAgentContext()
   const hasEmptyChat = Boolean(workspacePath && renderedMessages.length === 0)
   const isNewConversation = activeSessionSelection.kind === 'new'
-  const activeProject = projectState.projects.find((project) => project.id === projectState.activeProjectId) ?? null
+  const activeProject = activeWorkspaceContext.kind === 'project'
+    ? projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
+    : null
   const isViewingActiveRuntime = Boolean(
     activeSessionPath
     && agentState.activeSession?.sessionPath === activeSessionPath,
@@ -5230,7 +5535,7 @@ function AgentChatSurface() {
   }
 
   function openModelCascader(event?: ReactMouseEvent<HTMLButtonElement>) {
-    if (!hasConfiguredProviders || !workspacePath || isSwitchingModel || isSwitchingThinkingLevel) {
+    if (!hasConfiguredProviders || (!workspacePath && !canUseDraftRuntimeWithoutWorkspace) || isSwitchingModel || isSwitchingThinkingLevel) {
       return
     }
 
@@ -5576,12 +5881,13 @@ function AgentChatSurface() {
       {composerHeader}
     </>
   ) : null
-  const projectSwitchBar = isNewConversation ? (
+  const projectSwitchBar = isNewConversation && activeWorkspaceContext.kind !== 'conversation' ? (
     <div className='agent-new-project-bar'>
       <AgentProjectSwitchTrigger
-        activeProject={activeProject}
+        activeProject={activeWorkspaceContext.kind === 'project' ? activeProject : null}
         iconTheme={iconTheme}
         onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
+        placeholder={activeWorkspaceContext.kind === 'conversationDraft' ? '选择工作目录' : undefined}
       />
     </div>
   ) : null
@@ -5600,7 +5906,7 @@ function AgentChatSurface() {
               aria-label={modelPickerTriggerTitle}
               className='agent-model-cascader-trigger'
               disabled={
-                !workspacePath
+                (!workspacePath && !canUseDraftRuntimeWithoutWorkspace)
                 || !agentState.runtime.hasConfiguredModels
                 || isSwitchingModel
                 || isSwitchingThinkingLevel
@@ -5626,7 +5932,6 @@ function AgentChatSurface() {
           ) : (
             <Button
               className='agent-provider-setup-button'
-              isDisabled={!workspacePath}
               size='sm'
               variant='ghost'
               onPress={() => {
@@ -5644,7 +5949,7 @@ function AgentChatSurface() {
             type='button'
             aria-label='附加文件'
             className='agent-composer-attach-button'
-            disabled={!workspacePath || isLoading}
+            disabled={(!workspacePath && !canUseComposerWithoutWorkspace) || isLoading}
             title='附加文件'
             onClick={() => {
               void handlePickComposerAttachments()
@@ -5898,7 +6203,7 @@ function AgentChatSurface() {
       <div className={`agent-composer-shell${isNewConversation ? ' has-project-bar' : ''}`}>
         <AgentComposerMentionInput
           aria-label='Prompt Pi Agent'
-          disabled={!workspacePath || isLoading}
+          disabled={(!workspacePath && !canUseComposerWithoutWorkspace) || isLoading}
           iconTheme={iconTheme}
           mentions={composerState.mentions}
           onChange={setComposerState}
@@ -5906,7 +6211,7 @@ function AgentChatSurface() {
             void addComposerFiles(files)
           }}
           onSubmitShortcut={handleComposerKeyDown}
-          placeholder={workspacePath ? 'Message' : 'Open a folder first.'}
+          placeholder={workspacePath || canUseComposerWithoutWorkspace ? 'Message' : 'Open a folder first.'}
           value={composerState.value}
           workspaceNodes={workspaceTree}
           workspacePath={workspacePath}
@@ -5947,7 +6252,12 @@ function AgentChatSurface() {
               className='agent-toolbar-button'
               aria-label='Start new conversation'
               onClick={() => {
-                handleStartNewSession()
+                if (activeWorkspaceContext.kind === 'project') {
+                  handleStartNewSession()
+                  return
+                }
+
+                void onStartStandaloneConversation?.()
               }}
             >
               <EditLine size={16} />

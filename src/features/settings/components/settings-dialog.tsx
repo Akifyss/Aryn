@@ -221,6 +221,30 @@ export function SettingsDialog({
     setMeoImageFolderDraft(meo.imageFolder)
   }, [meo.imageFolder])
 
+  useEffect(() => {
+    if (activeSection !== 'providers' || workspacePath) {
+      return
+    }
+
+    let isDisposed = false
+
+    void window.appApi.loadAgentDraftState()
+      .then((nextState) => {
+        if (!isDisposed) {
+          onAgentStateChange(nextState)
+        }
+      })
+      .catch((error) => {
+        if (!isDisposed) {
+          setPanelError(error instanceof Error ? error.message : 'Unable to load provider settings.')
+        }
+      })
+
+    return () => {
+      isDisposed = true
+    }
+  }, [activeSection, onAgentStateChange, workspacePath])
+
   const authProviders = useMemo<AuthProviderViewModel[]>(() => {
     const runtimeAuth = agentState?.runtime.auth ?? {}
 
@@ -320,10 +344,6 @@ export function SettingsDialog({
   }, [])
 
   async function handleSaveProviderAuth(provider: string, apiKey: string | null) {
-    if (!workspacePath) {
-      return
-    }
-
     const providerLabel = getProviderLabel(provider)
 
     try {
@@ -346,10 +366,6 @@ export function SettingsDialog({
   }
 
   async function handleLoginProviderAuth(provider: string) {
-    if (!workspacePath) {
-      return
-    }
-
     const providerLabel = getProviderLabel(provider)
 
     try {
@@ -382,10 +398,6 @@ export function SettingsDialog({
   }
 
   async function handleLogoutProviderAuth(provider: string) {
-    if (!workspacePath) {
-      return
-    }
-
     const providerLabel = getProviderLabel(provider)
 
     try {
@@ -719,8 +731,7 @@ export function SettingsDialog({
 
     return (
       <div className='settings-card'>
-        {workspacePath ? (
-          <>
+        <>
             {authFlow && (
               <section className='settings-provider-auth-flow'>
                 <div>
@@ -879,12 +890,7 @@ export function SettingsDialog({
                 </section>
               ))}
             </div>
-          </>
-        ) : (
-          <div className='settings-empty-state'>
-            请先打开一个工作区。服务提供商配置依赖当前活动工作区上下文。
-          </div>
-        )}
+        </>
       </div>
     )
   }

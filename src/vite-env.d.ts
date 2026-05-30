@@ -1,4 +1,5 @@
 import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState } from '@/features/agent/types'
+import type { ActiveWorkspaceContext, ConversationRecord, ConversationState, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '@/features/conversations/types'
 import type {
   GitBaselinePayload,
   GitBlameResult,
@@ -33,10 +34,16 @@ declare global {
       platform: NodeJS.Platform
       pickWorkspace: () => Promise<string | null>
       getProjectState: () => Promise<ProjectState>
+      getActiveWorkspaceContext: () => Promise<ActiveWorkspaceContext>
+      setActiveWorkspaceContext: (context: ActiveWorkspaceContext) => Promise<ActiveWorkspaceContext>
       createEmptyProject: (name: string) => Promise<ProjectState>
       addExistingProject: () => Promise<ProjectState | null>
       setActiveProject: (projectId: string) => Promise<ProjectState>
       removeProject: (projectId: string) => Promise<ProjectState>
+      getConversationState: () => Promise<ConversationState>
+      createConversationWorkspace: (request?: CreateConversationWorkspaceRequest) => Promise<ConversationRecord>
+      updateConversation: (conversationId: string, patch: UpdateConversationRequest) => Promise<ConversationRecord>
+      removeDraftConversation: (conversationId: string) => Promise<ConversationState>
       openPath: (path: string) => Promise<{ ok: boolean }>
       showItemInFolder: (path: string) => Promise<{ ok: boolean }>
       getWorkspaceRestoreState: () => Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>
@@ -48,6 +55,7 @@ declare global {
       getWorkspaceTabState: (workspacePath: string) => Promise<PersistedWorkspaceTabState | null>
       updateWorkspaceTabState: (workspacePath: string, state: PersistedWorkspaceTabState) => Promise<{ ok: boolean }>
       updateMeoFileState: (filePath: string, state: PersistedMeoStoredState) => Promise<{ ok: boolean }>
+      workspacePathExists: (workspacePath: string) => Promise<{ exists: boolean }>
       loadWorkspaceTree: (rootPath: string) => Promise<WorkspaceNode[]>
       resolveWorkspaceEditorKind: (filePath: string) => Promise<'prose' | 'code' | null>
       readWorkspaceFile: (filePath: string) => Promise<string>
@@ -97,6 +105,7 @@ declare global {
       startWorkspaceWatch: (rootPath: string) => Promise<{ ok: boolean }>
       stopWorkspaceWatch: () => Promise<{ ok: boolean }>
       loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null, options?: { restoreSession?: boolean }) => Promise<AgentWorkspaceState>
+      loadAgentDraftState: () => Promise<AgentWorkspaceState>
       listAgentSessions: (rootPath: string) => Promise<AgentWorkspaceState['sessions']>
       readAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentSessionSnapshot>
       createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => Promise<AgentWorkspaceState>
@@ -109,9 +118,9 @@ declare global {
       updateAgentQueuedMessage: (update: AgentQueuedMessageUpdate) => Promise<AgentWorkspaceState>
       selectAgentModel: (modelKey: string) => Promise<AgentWorkspaceState>
       selectAgentThinkingLevel: (level: AgentThinkingLevel, modelKey?: string) => Promise<AgentWorkspaceState>
-      updateAgentProviderAuth: (rootPath: string, provider: string, apiKey: string | null) => Promise<AgentWorkspaceState>
-      loginAgentProviderAuth: (rootPath: string, provider: string) => Promise<AgentWorkspaceState>
-      logoutAgentProviderAuth: (rootPath: string, provider: string) => Promise<AgentWorkspaceState>
+      updateAgentProviderAuth: (rootPath: string | null, provider: string, apiKey: string | null) => Promise<AgentWorkspaceState>
+      loginAgentProviderAuth: (rootPath: string | null, provider: string) => Promise<AgentWorkspaceState>
+      logoutAgentProviderAuth: (rootPath: string | null, provider: string) => Promise<AgentWorkspaceState>
       cancelAgentProviderAuth: (provider: string) => Promise<{ ok: boolean }>
       respondAgentProviderAuthPrompt: (requestId: string, value: string | null) => Promise<{ ok: boolean }>
       abortAgentPrompt: () => Promise<AgentWorkspaceState>

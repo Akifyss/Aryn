@@ -73,6 +73,15 @@ type LoadAgentWorkspaceStateOptions = {
   restoreSession?: boolean
 }
 
+function getWorkspacePathIdentity(workspacePath: string) {
+  const normalizedPath = path.resolve(workspacePath)
+  return process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath
+}
+
+function areSameWorkspacePath(left: string | null | undefined, right: string | null | undefined) {
+  return Boolean(left && right && getWorkspacePathIdentity(left) === getWorkspacePathIdentity(right))
+}
+
 type PreparedPromptAttachments = {
   images: ImageContent[]
   text: string
@@ -1128,7 +1137,7 @@ export class PiAgentManager {
     preferredSessionPath: string | null = null,
     options: LoadAgentWorkspaceStateOptions = {},
   ): Promise<AgentWorkspaceState> {
-    if (this.activeRuntime?.cwd !== cwd) {
+    if (!areSameWorkspacePath(this.activeRuntime?.cwd, cwd)) {
       await this.releaseActiveSession()
     }
 
@@ -1153,6 +1162,24 @@ export class PiAgentManager {
     }
 
     return this.buildWorkspaceState(cwd)
+  }
+
+  async loadDraftState(): Promise<AgentWorkspaceState> {
+    await this.releaseActiveSession()
+    this.authStorage.reload()
+    this.modelRegistry.refresh()
+
+    return {
+      activeSession: null,
+      runtime: await this.serializeRuntime(null, null),
+      sessions: [],
+    }
+  }
+
+  async releaseWorkspaceRuntime(cwd: string) {
+    if (areSameWorkspacePath(this.activeRuntime?.cwd, cwd)) {
+      await this.releaseActiveSession()
+    }
   }
 
   async listSessionItems(cwd: string): Promise<AgentSessionListItem[]> {
@@ -1187,10 +1214,12 @@ export class PiAgentManager {
 
   async openSession(cwd: string, sessionPath: string): Promise<AgentWorkspaceState> {
     const resolvedSessionPath = this.resolveSessionPath(cwd, sessionPath)
+    const runtime = this.activeRuntime
 
     if (
-      this.activeRuntime?.cwd === cwd
-      && this.activeRuntime.session.sessionFile === resolvedSessionPath
+      runtime
+      && areSameWorkspacePath(runtime.cwd, cwd)
+      && runtime.session.sessionFile === resolvedSessionPath
     ) {
       return this.buildWorkspaceState(cwd)
     }
@@ -1201,8 +1230,12 @@ export class PiAgentManager {
 
   async deleteSession(cwd: string, sessionPath: string): Promise<AgentWorkspaceState> {
     const resolvedSessionPath = this.resolveSessionPath(cwd, sessionPath)
-    const isDeletingActiveSession = this.activeRuntime?.cwd === cwd
-      && this.activeRuntime.session.sessionFile === resolvedSessionPath
+    const runtime = this.activeRuntime
+    const isDeletingActiveSession = Boolean(
+      runtime
+      && areSameWorkspacePath(runtime.cwd, cwd)
+      && runtime.session.sessionFile === resolvedSessionPath,
+    )
 
     if (isDeletingActiveSession) {
       await this.releaseActiveSession()
@@ -1237,10 +1270,13 @@ export class PiAgentManager {
     const resolvedSessionPath = this.resolveSessionPath(cwd, sessionPath)
     const nextName = name.trim()
     const runtime = this.activeRuntime
-    const isRenamingActiveSession = runtime?.cwd === cwd
-      && runtime.session.sessionFile === resolvedSessionPath
+    const isRenamingActiveSession = Boolean(
+      runtime
+      && areSameWorkspacePath(runtime.cwd, cwd)
+      && runtime.session.sessionFile === resolvedSessionPath,
+    )
 
-    if (isRenamingActiveSession) {
+    if (runtime && isRenamingActiveSession) {
       runtime.session.setSessionName(nextName)
     } else {
       const sessionManager = SessionManager.open(resolvedSessionPath, this.getSessionDir(cwd), cwd)
@@ -1340,7 +1376,7 @@ export class PiAgentManager {
     return this.broadcastWorkspaceState(runtime.cwd)
   }
 
-  async updateProviderAuth(cwd: string, provider: string, apiKey: string | null) {
+  async updateProviderAuth(cwd: string | null, provider: string, apiKey: string | null) {
     this.authStorage.reload()
     const config = getAgentProviderAuthConfig(provider)
 
@@ -1361,7 +1397,7 @@ export class PiAgentManager {
     return this.completeProviderAuthChange(cwd)
   }
 
-  async loginProviderAuth(cwd: string, provider: string, callbacks: AgentProviderAuthLoginCallbacks) {
+  async loginProviderAuth(cwd: string | null, provider: string, callbacks: AgentProviderAuthLoginCallbacks) {
     const oauthProvider = this.authStorage.getOAuthProviders().find((candidate) => candidate.id === provider)
     const config = getAgentProviderAuthConfig(provider)
 
@@ -1404,27 +1440,31 @@ export class PiAgentManager {
     }
   }
 
-  async logoutProviderAuth(cwd: string, provider: string) {
+  async logoutProviderAuth(cwd: string | null, provider: string) {
     this.authStorage.reload()
     this.authStorage.logout(provider)
     return this.completeProviderAuthChange(cwd)
   }
 
-  private async completeProviderAuthChange(cwd: string) {
+  private async completeProviderAuthChange(cwd: string | null) {
     this.modelRegistry.refresh()
+    const runtime = this.activeRuntime
 
-    if (this.activeRuntime?.cwd === cwd) {
-      this.activeRuntime.session.modelRegistry.refresh()
-      if (this.activeRuntime.session.model && !this.activeRuntime.session.modelRegistry.hasConfiguredAuth(this.activeRuntime.session.model)) {
-        this.emitError(AUTH_SETUP_HINT, this.activeRuntime.session.sessionId)
-      } else if (!this.activeRuntime.session.model) {
-        await this.ensureModelSelected(this.activeRuntime.session)
+    if (runtime) {
+      runtime.session.modelRegistry.refresh()
+    }
+
+    if (cwd && runtime && areSameWorkspacePath(runtime.cwd, cwd)) {
+      if (runtime.session.model && !runtime.session.modelRegistry.hasConfiguredAuth(runtime.session.model)) {
+        this.emitError(AUTH_SETUP_HINT, runtime.session.sessionId)
+      } else if (!runtime.session.model) {
+        await this.ensureModelSelected(runtime.session)
       }
 
       return this.broadcastWorkspaceState(cwd)
     }
 
-    return this.buildWorkspaceState(cwd)
+    return cwd ? this.buildWorkspaceState(cwd) : this.loadDraftState()
   }
 
   async sendPrompt(prompt: string, streamingBehavior?: AgentRunningPromptBehavior, rawAttachments?: unknown) {
@@ -1559,6 +1599,11 @@ export class PiAgentManager {
       sessionDir: this.getSessionDir(cwd),
     })
     return settingsManager
+  }
+
+  private createDraftSettingsManager() {
+    const globalSettings = SettingsManager.create(this.options.agentDir, this.options.agentDir).getGlobalSettings()
+    return SettingsManager.inMemory(globalSettings)
   }
 
   private resolveAvailableModel(availableModels: Model<Api>[], modelKey: string) {
@@ -1902,7 +1947,8 @@ export class PiAgentManager {
 
   private async buildWorkspaceState(cwd: string): Promise<AgentWorkspaceState> {
     const sessions = await this.listSessions(cwd)
-    return this.serializeWorkspaceState(cwd, sessions, this.activeRuntime?.cwd === cwd ? this.activeRuntime.session : null)
+    const runtime = this.activeRuntime
+    return this.serializeWorkspaceState(cwd, sessions, runtime && areSameWorkspacePath(runtime.cwd, cwd) ? runtime.session : null)
   }
 
   private async serializeWorkspaceState(
@@ -1974,11 +2020,15 @@ export class PiAgentManager {
     }
   }
 
-  private async serializeRuntime(cwd: string, session: AgentSession | null): Promise<AgentRuntimeState> {
+  private async serializeRuntime(cwd: string | null, session: AgentSession | null): Promise<AgentRuntimeState> {
+    const activeRuntimeForCwd = this.activeRuntime && areSameWorkspacePath(this.activeRuntime.cwd, cwd)
+      ? this.activeRuntime
+      : null
     const modelRegistry = session?.modelRegistry ?? this.modelRegistry
     const availableModels = modelRegistry.getAvailable()
     const defaultModelPerProvider = await loadPiDefaultModelPerProvider()
-    const settingsManager = session?.settingsManager ?? this.createSettingsManager(cwd)
+    const settingsManager = session?.settingsManager
+      ?? (cwd ? this.createSettingsManager(cwd) : this.createDraftSettingsManager())
     const defaultModelValue = selectPiPreferredModel(availableModels, settingsManager, defaultModelPerProvider)
     const defaultModel = defaultModelValue ? `${defaultModelValue.provider}/${defaultModelValue.id}` : null
     const defaultThinkingLevel = settingsManager.getDefaultThinkingLevel() ?? 'medium'
@@ -2003,7 +2053,7 @@ export class PiAgentManager {
       availableModelInputs: getInputsByModel(availableModels),
       availableThinkingLevels,
       availableThinkingLevelsByModel: getThinkingLevelsByModel(availableModels),
-      compactionReason: this.activeRuntime?.cwd === cwd ? this.activeRuntime.status.compactionReason : null,
+      compactionReason: activeRuntimeForCwd?.status.compactionReason ?? null,
       followUpMessageCount,
       followUpMessages,
       followUpMode: session?.followUpMode ?? 'one-at-a-time',
@@ -2015,7 +2065,7 @@ export class PiAgentManager {
       pendingMessageCount: session?.pendingMessageCount ?? 0,
       preferredModelByProvider: getProviderPreferredModelKeys(availableModels, defaultModelPerProvider),
       retryAttempt: session?.retryAttempt ?? 0,
-      retryMaxAttempts: this.activeRuntime?.cwd === cwd ? this.activeRuntime.status.retryMaxAttempts : null,
+      retryMaxAttempts: activeRuntimeForCwd?.status.retryMaxAttempts ?? null,
       selectedModel,
       setupHint: availableModels.length > 0 ? null : AUTH_SETUP_HINT,
       supportsThinking: Boolean(selectedModelValue?.reasoning),

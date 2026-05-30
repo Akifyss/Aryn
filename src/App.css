@@ -820,6 +820,12 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   border-top: 1px solid var(--border);
 }
 
+.project-menu-agent-new-switch .project-menu-projectless-actions {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .project-menu-action,
 .project-menu-project {
   display: flex;
@@ -4229,7 +4235,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   font-size: 16px;
   font-weight: 550;
   line-height: 1.4;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .agent-shell.is-new-conversation .agent-empty-chat {

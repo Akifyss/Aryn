@@ -48,11 +48,13 @@ import {
   normalizeMigrationState,
 } from './app-state'
 import type { PersistedProjectRecord, PersistedWorkspaceIconThemeSelection } from './app-state'
+import { ConversationStore, type ConversationDraftCleanupResult } from './conversations'
 import {
   normalizeMeoFileState,
   normalizeWorkspaceTabState,
   WorkspaceStateStore,
 } from './workspace-state-store'
+import type { ActiveWorkspaceContext, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../../src/features/conversations/types'
 import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions } from '../../src/features/agent/types'
 import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
 import type { LocalStorageStateMigration } from '../../src/features/persistence/types'
@@ -67,6 +69,7 @@ import {
   isBundledWorkspaceIconThemePath,
   resolveBundledWorkspaceIconThemePath,
 } from './bundled-workspace-icon-theme'
+import { ensureUsableFolderName } from './path-names'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -103,22 +106,37 @@ if (process.env.ARYN_ELECTRON_DEBUG !== '1' && !app.requestSingleInstanceLock())
 
 let win: BrowserWindow | null = null
 let allowWindowClose = false
+function getOptionalAppPath(name: Parameters<typeof app.getPath>[0]) {
+  try {
+    return app.getPath(name)
+  } catch {
+    return null
+  }
+}
+
 const preload = path.join(MAIN_DIST, 'preload', 'index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
-const arynDataDir = path.join(os.homedir(), '.aryn')
-const legacyUserDataDir = app.getPath('userData')
+const homeDir = os.homedir() || getOptionalAppPath('home') || process.cwd()
+const documentsDir = getOptionalAppPath('documents') ?? path.join(homeDir, 'Documents')
+const tempDir = getOptionalAppPath('temp') ?? os.tmpdir()
+const arynDataDir = path.join(homeDir, '.aryn')
+const legacyUserDataDir = getOptionalAppPath('userData')
 const appStatePath = path.join(arynDataDir, 'app-state.json')
 const workspaceStatePath = path.join(arynDataDir, 'workspace-state.json')
-const legacyAppStatePath = path.join(legacyUserDataDir, 'app-state.json')
-const legacyWorkspaceSettingsPath = path.join(legacyUserDataDir, 'workspace-settings.json')
+const conversationIndexPath = path.join(arynDataDir, 'conversations', 'index.json')
+const legacyAppStatePath = legacyUserDataDir ? path.join(legacyUserDataDir, 'app-state.json') : null
+const legacyWorkspaceSettingsPath = legacyUserDataDir ? path.join(legacyUserDataDir, 'workspace-settings.json') : null
 const agentDir = path.join(arynDataDir, 'agents', 'pi')
-const workspaceIconThemeCacheDir = path.join(app.getPath('temp'), app.getName(), 'workspace-icon-themes')
+const workspaceIconThemeCacheDir = path.join(tempDir, app.getName(), 'workspace-icon-themes')
 const bundledWorkspaceIconThemeDirectoryPath = path.join(
   process.env.VITE_PUBLIC,
   'icon-themes',
 )
-const appStateStore = new AppStateStore(appStatePath, [legacyAppStatePath, legacyWorkspaceSettingsPath])
+const legacyAppStatePaths = [legacyAppStatePath, legacyWorkspaceSettingsPath]
+  .filter((filePath): filePath is string => Boolean(filePath))
+const appStateStore = new AppStateStore(appStatePath, legacyAppStatePaths)
 const workspaceStateStore = new WorkspaceStateStore(workspaceStatePath)
+const conversationStore = new ConversationStore(conversationIndexPath, documentsDir)
 const RENDERER_LOCAL_STORAGE_MIGRATION_VERSION = 1
 
 type WindowBackgroundTheme = 'light' | 'dark'
@@ -158,6 +176,7 @@ function getPathBaseName(value: string) {
 function prepareArynDataDirectory() {
   try {
     mkdirSync(agentDir, { mode: 0o700, recursive: true })
+    mkdirSync(path.dirname(conversationIndexPath), { mode: 0o700, recursive: true })
   } catch {
     // Startup can continue; individual stores will surface write errors when needed.
   }
@@ -167,6 +186,11 @@ prepareArynDataDirectory()
 
 function normalizeProjectPath(projectPath: string) {
   return path.resolve(projectPath)
+}
+
+function getProjectPathIdentity(projectPath: string) {
+  const normalizedPath = normalizeProjectPath(projectPath)
+  return process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath
 }
 
 function createProjectRecord(projectPath: string, patch: Partial<PersistedProjectRecord> = {}): PersistedProjectRecord {
@@ -222,8 +246,15 @@ async function getVisibleProjectState(): Promise<ProjectState> {
       ...currentState,
       workspace: {
         ...currentState.workspace,
+        activeContext: currentState.workspace.activeContext.kind === 'project'
+          ? activeProjectId
+            ? { kind: 'project', projectId: activeProjectId }
+            : { kind: 'conversationDraft' }
+          : currentState.workspace.activeContext,
         activeProjectId,
-        lastWorkspacePath: visibleProjects.find((project) => project.id === activeProjectId)?.path ?? null,
+        lastWorkspacePath: currentState.workspace.activeContext.kind === 'project'
+          ? visibleProjects.find((project) => project.id === activeProjectId)?.path ?? null
+          : currentState.workspace.lastWorkspacePath,
       },
     }))
   }
@@ -239,18 +270,30 @@ function sanitizeProjectFolderName(name: string) {
     .replace(/^\.+$/, '')
     .replace(/^\.+/, '')
     .replace(/[. ]+$/, '')
+    .slice(0, 100)
+    .trim()
 
-  return sanitized || 'Untitled Project'
+  return ensureUsableFolderName(sanitized, 'Untitled Project')
 }
 
-async function resolveUniqueProjectPath(parentPath: string, folderName: string) {
+function isAlreadyExistsError(error: unknown) {
+  return error && typeof error === 'object' && 'code' in error
+    && (error as NodeJS.ErrnoException).code === 'EEXIST'
+}
+
+async function createUniqueProjectPath(parentPath: string, folderName: string) {
   const basePath = path.join(parentPath, folderName)
 
   for (let index = 0; index < 1000; index += 1) {
     const candidatePath = index === 0 ? basePath : `${basePath} ${index + 1}`
 
-    if (!(await workspacePathExists(candidatePath))) {
+    try {
+      await mkdir(candidatePath)
       return candidatePath
+    } catch (error) {
+      if (!isAlreadyExistsError(error)) {
+        throw error
+      }
     }
   }
 
@@ -259,21 +302,20 @@ async function resolveUniqueProjectPath(parentPath: string, folderName: string) 
 
 async function upsertProject(projectPath: string, options: { name?: string, makeActive?: boolean } = {}) {
   const normalizedPath = normalizeProjectPath(projectPath)
+  const pathIdentity = getProjectPathIdentity(normalizedPath)
   const now = new Date().toISOString()
   let nextProject: PersistedProjectRecord | null = null
 
   await appStateStore.update((currentState) => {
-    const existingProject = currentState.workspace.projects.find((project) => normalizeProjectPath(project.path) === normalizedPath)
+    const existingProject = currentState.workspace.projects.find((project) => getProjectPathIdentity(project.path) === pathIdentity)
     const projects = existingProject
       ? currentState.workspace.projects.map((project) => {
-          if (normalizeProjectPath(project.path) !== normalizedPath) {
+          if (getProjectPathIdentity(project.path) !== pathIdentity) {
             return project
           }
 
           nextProject = {
             ...project,
-            id: normalizedPath,
-            path: normalizedPath,
             ...(options.name ? { name: options.name } : {}),
             ...(options.makeActive ? { lastOpenedAt: now } : {}),
           }
@@ -290,20 +332,24 @@ async function upsertProject(projectPath: string, options: { name?: string, make
     if (!existingProject) {
       nextProject = projects[projects.length - 1]
     }
+    const persistedWorkspacePath = nextProject?.path ?? normalizedPath
 
     return {
       ...currentState,
       workspace: {
         ...currentState.workspace,
         activeProjectId: options.makeActive ? nextProject?.id ?? currentState.workspace.activeProjectId : currentState.workspace.activeProjectId,
+        activeContext: options.makeActive && nextProject?.id
+          ? { kind: 'project', projectId: nextProject.id }
+          : currentState.workspace.activeContext,
         entries: {
           ...currentState.workspace.entries,
-          [normalizedPath]: currentState.workspace.entries[normalizedPath] ?? {
+          [persistedWorkspacePath]: currentState.workspace.entries[persistedWorkspacePath] ?? {
             lastAgentSessionPath: null,
             lastFilePath: null,
           },
         },
-        lastWorkspacePath: options.makeActive ? normalizedPath : currentState.workspace.lastWorkspacePath,
+        lastWorkspacePath: options.makeActive ? persistedWorkspacePath : currentState.workspace.lastWorkspacePath,
         projects,
       },
     }
@@ -947,9 +993,74 @@ async function getPersistentClientStateSnapshot() {
   }
 }
 
+async function cleanupConversationStateReferences(result: ConversationDraftCleanupResult) {
+  const validConversationIds = new Set(result.state.conversations.map((conversation) => conversation.id))
+  const removedConversationIds = new Set(result.removedDrafts.map((conversation) => conversation.id))
+  const removedWorkspacePathIds = new Set(
+    result.removedDrafts
+      .map((conversation) => conversation.workspacePath)
+      .filter((workspacePath): workspacePath is string => Boolean(workspacePath))
+      .map(getProjectPathIdentity),
+  )
+
+  await appStateStore.update((currentState) => {
+    let didChange = false
+    const entries = { ...currentState.workspace.entries }
+
+    for (const workspacePath of Object.keys(entries)) {
+      if (removedWorkspacePathIds.has(getProjectPathIdentity(workspacePath))) {
+        delete entries[workspacePath]
+        didChange = true
+      }
+    }
+
+    let activeContext = currentState.workspace.activeContext
+    if (
+      activeContext.kind === 'conversation'
+      && (
+        removedConversationIds.has(activeContext.conversationId)
+        || !validConversationIds.has(activeContext.conversationId)
+      )
+    ) {
+      activeContext = { kind: 'conversationDraft' }
+      didChange = true
+    }
+
+    let lastWorkspacePath = currentState.workspace.lastWorkspacePath
+    if (
+      lastWorkspacePath
+      && removedWorkspacePathIds.has(getProjectPathIdentity(lastWorkspacePath))
+    ) {
+      lastWorkspacePath = null
+      didChange = true
+    }
+
+    if (!didChange) {
+      return currentState
+    }
+
+    return {
+      ...currentState,
+      workspace: {
+        ...currentState.workspace,
+        activeContext,
+        entries,
+        lastWorkspacePath,
+      },
+    }
+  })
+}
+
 async function startApplication() {
   Menu.setApplicationMenu(null)
   applyDefaultAppIcon()
+
+  try {
+    const cleanupResult = await conversationStore.cleanupDrafts()
+    await cleanupConversationStateReferences(cleanupResult)
+  } catch (error) {
+    console.warn('Failed to clean up draft conversations.', error)
+  }
 
   await createWindow()
 }
@@ -1011,6 +1122,71 @@ ipcMain.handle('project:get-state', async () => {
   return getVisibleProjectState()
 })
 
+ipcMain.handle('workspace:get-active-context', async () => {
+  const state = await appStateStore.read()
+  return state.workspace.activeContext
+})
+
+ipcMain.handle('workspace:set-active-context', async (_event, context: ActiveWorkspaceContext) => {
+  const contextRecord = readRecord(context)
+  const kind = contextRecord.kind
+  let nextContext: ActiveWorkspaceContext
+  let nextActiveProjectId: string | null | undefined
+  let nextWorkspacePath: string | null | undefined
+
+  if (kind === 'project') {
+    const projectId = typeof contextRecord.projectId === 'string' ? contextRecord.projectId : ''
+    const state = await appStateStore.read()
+    const project = state.workspace.projects.find((candidate) => candidate.id === projectId)
+
+    if (!project) {
+      throw new Error('Project not found.')
+    }
+
+    nextContext = { kind: 'project', projectId: project.id }
+    nextActiveProjectId = project.id
+    nextWorkspacePath = project.path
+  } else if (kind === 'conversation') {
+    const conversationId = typeof contextRecord.conversationId === 'string' ? contextRecord.conversationId : ''
+    const conversationState = await conversationStore.read()
+    const conversation = conversationState.conversations.find((candidate) => candidate.id === conversationId)
+
+    if (!conversation) {
+      throw new Error('Conversation not found.')
+    }
+
+    nextContext = { kind: 'conversation', conversationId: conversation.id }
+    nextWorkspacePath = conversation.workspacePath
+  } else {
+    nextContext = { kind: 'conversationDraft' }
+  }
+
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    workspace: {
+      ...currentState.workspace,
+      activeContext: nextContext,
+      activeProjectId: nextActiveProjectId !== undefined
+        ? nextActiveProjectId
+        : currentState.workspace.activeProjectId,
+      entries: nextWorkspacePath
+        ? {
+            ...currentState.workspace.entries,
+            [nextWorkspacePath]: currentState.workspace.entries[nextWorkspacePath] ?? {
+              lastAgentSessionPath: null,
+              lastFilePath: null,
+            },
+          }
+        : currentState.workspace.entries,
+      lastWorkspacePath: nextWorkspacePath !== undefined
+        ? nextWorkspacePath
+        : currentState.workspace.lastWorkspacePath,
+    },
+  }))
+
+  return nextContext
+})
+
 ipcMain.handle('project:create-empty', async (_event, name: string) => {
   const trimmedName = typeof name === 'string' ? name.trim() : ''
 
@@ -1018,11 +1194,10 @@ ipcMain.handle('project:create-empty', async (_event, name: string) => {
     throw new Error('Project name is required.')
   }
 
-  const projectRootPath = app.getPath('documents')
+  const projectRootPath = documentsDir
   const folderName = sanitizeProjectFolderName(trimmedName)
   await mkdir(projectRootPath, { recursive: true })
-  const projectPath = await resolveUniqueProjectPath(projectRootPath, folderName)
-  await mkdir(projectPath, { recursive: true })
+  const projectPath = await createUniqueProjectPath(projectRootPath, folderName)
 
   return upsertProject(projectPath, {
     makeActive: true,
@@ -1067,6 +1242,7 @@ ipcMain.handle('project:set-active', async (_event, projectId: string) => {
       ...currentState,
       workspace: {
         ...currentState.workspace,
+        activeContext: { kind: 'project', projectId: targetProject.id },
         activeProjectId: targetProject.id,
         lastWorkspacePath: targetProject.path,
         projects: currentState.workspace.projects.map((project) => (
@@ -1103,16 +1279,37 @@ ipcMain.handle('project:remove', async (_event, projectId: string) => {
 
     await appStateStore.update((currentState) => {
       const remainingProjects = currentState.workspace.projects.filter((project) => project.id !== normalizedProjectId)
+      const removedProject = currentState.workspace.projects.find((project) => project.id === normalizedProjectId) ?? null
       const currentActiveProject = remainingProjects.find((project) => project.id === currentState.workspace.activeProjectId) ?? null
       const removedActive = currentState.workspace.activeProjectId === normalizedProjectId
       const nextActiveProject = removedActive ? nextVisibleProject : currentActiveProject ?? nextVisibleProject
+      const activeContext = currentState.workspace.activeContext
+      const nextActiveContext = activeContext.kind === 'project'
+        ? activeContext.projectId === normalizedProjectId
+          ? nextActiveProject
+            ? { kind: 'project' as const, projectId: nextActiveProject.id }
+            : { kind: 'conversationDraft' as const }
+          : remainingProjects.some((project) => project.id === activeContext.projectId)
+            ? activeContext
+            : nextActiveProject
+              ? { kind: 'project' as const, projectId: nextActiveProject.id }
+              : { kind: 'conversationDraft' as const }
+        : activeContext
+      const nextLastWorkspacePath = nextActiveContext.kind === 'project'
+        ? remainingProjects.find((project) => project.id === nextActiveContext.projectId)?.path ?? null
+        : nextActiveContext.kind === 'conversation'
+          ? currentState.workspace.lastWorkspacePath
+          : currentState.workspace.lastWorkspacePath === removedProject?.path
+            ? null
+            : currentState.workspace.lastWorkspacePath
 
       return {
         ...currentState,
         workspace: {
           ...currentState.workspace,
           activeProjectId: nextActiveProject?.id ?? null,
-          lastWorkspacePath: nextActiveProject?.path ?? null,
+          activeContext: nextActiveContext,
+          lastWorkspacePath: nextLastWorkspacePath,
           projects: remainingProjects,
         },
       }
@@ -1120,6 +1317,104 @@ ipcMain.handle('project:remove', async (_event, projectId: string) => {
   }
 
   return getVisibleProjectState()
+})
+
+ipcMain.handle('conversation:get-state', async () => {
+  return conversationStore.read()
+})
+
+ipcMain.handle('conversation:create-workspace', async (_event, request?: CreateConversationWorkspaceRequest) => {
+  const record = await conversationStore.createWorkspace({
+    initialPrompt: typeof request?.initialPrompt === 'string' ? request.initialPrompt : null,
+  })
+
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    workspace: {
+      ...currentState.workspace,
+      activeContext: { kind: 'conversation', conversationId: record.id },
+      entries: {
+        ...currentState.workspace.entries,
+        ...(record.workspacePath
+          ? {
+              [record.workspacePath]: currentState.workspace.entries[record.workspacePath] ?? {
+                lastAgentSessionPath: null,
+                lastFilePath: null,
+              },
+            }
+          : {}),
+      },
+      lastWorkspacePath: record.workspacePath ?? currentState.workspace.lastWorkspacePath,
+    },
+  }))
+
+  return record
+})
+
+ipcMain.handle('conversation:update', async (_event, conversationId: string, patch: UpdateConversationRequest) => {
+  const record = await conversationStore.updateConversation(conversationId, patch)
+  const workspacePath = record.workspacePath
+  const agentSessionPath = record.agentSessionPath
+
+  if (workspacePath && agentSessionPath) {
+    await appStateStore.update((currentState) => ({
+      ...currentState,
+      workspace: {
+        ...currentState.workspace,
+        entries: {
+          ...currentState.workspace.entries,
+          [workspacePath]: {
+            ...getWorkspaceEntry(currentState, workspacePath),
+            lastAgentSessionPath: agentSessionPath,
+          },
+        },
+      },
+    }))
+  }
+
+  return record
+})
+
+ipcMain.handle('conversation:remove-draft', async (_event, conversationId: string) => {
+  const previousState = await conversationStore.read()
+  const draftWorkspacePath = previousState.conversations.find((conversation) => (
+    conversation.id === conversationId && conversation.status === 'draft'
+  ))?.workspacePath ?? null
+
+  if (draftWorkspacePath) {
+    await agentManager.releaseWorkspaceRuntime(draftWorkspacePath)
+  }
+
+  const nextState = await conversationStore.removeDraft(conversationId)
+  const removedDraft = previousState.conversations.find((conversation) => (
+    conversation.id === conversationId
+    && conversation.status === 'draft'
+    && !nextState.conversations.some((candidate) => candidate.id === conversation.id)
+  )) ?? null
+
+  if (removedDraft?.workspacePath) {
+    await appStateStore.update((currentState) => {
+      const entries = { ...currentState.workspace.entries }
+      delete entries[removedDraft.workspacePath!]
+
+      return {
+        ...currentState,
+        workspace: {
+          ...currentState.workspace,
+          activeContext: currentState.workspace.activeContext.kind === 'conversation'
+            && currentState.workspace.activeContext.conversationId === removedDraft.id
+            ? { kind: 'conversationDraft' }
+            : currentState.workspace.activeContext,
+          entries,
+          lastWorkspacePath: currentState.workspace.lastWorkspacePath === removedDraft.workspacePath
+            ? null
+            : currentState.workspace.lastWorkspacePath,
+        },
+      }
+    })
+  }
+
+  return nextState
 })
 
 ipcMain.handle('shell:open-path', async (_event, targetPath: string) => {
@@ -1159,10 +1454,25 @@ ipcMain.handle('workspace:load-tree', async (_, rootPath: string) => {
 
 ipcMain.handle('workspace:get-restore-state', async () => {
   const settings = await appStateStore.read()
-  const activeProject = settings.workspace.projects.find((project) => project.id === settings.workspace.activeProjectId)
-  const lastWorkspacePath = activeProject?.path ?? settings.workspace.lastWorkspacePath
+  const activeContext = settings.workspace.activeContext
+  let restoreWorkspacePath: string | null = null
+  let restoreAgentSessionPath: string | null = null
 
-  if (!lastWorkspacePath) {
+  if (activeContext.kind === 'project') {
+    const activeProject = settings.workspace.projects.find((project) => project.id === activeContext.projectId)
+      ?? settings.workspace.projects.find((project) => project.id === settings.workspace.activeProjectId)
+      ?? null
+    restoreWorkspacePath = activeProject?.path ?? null
+  } else if (activeContext.kind === 'conversation') {
+    const conversationState = await conversationStore.read()
+    const activeConversation = conversationState.conversations.find((conversation) => (
+      conversation.id === activeContext.conversationId
+    )) ?? null
+    restoreWorkspacePath = activeConversation?.workspacePath ?? null
+    restoreAgentSessionPath = activeConversation?.agentSessionPath ?? null
+  }
+
+  if (!restoreWorkspacePath) {
     return {
       agentSessionPath: null,
       filePath: null,
@@ -1170,12 +1480,17 @@ ipcMain.handle('workspace:get-restore-state', async () => {
     }
   }
 
-  if (!(await workspacePathExists(lastWorkspacePath))) {
+  if (!(await workspacePathExists(restoreWorkspacePath))) {
     await appStateStore.update((currentState) => ({
       ...currentState,
       workspace: {
         ...currentState.workspace,
-        lastWorkspacePath: null,
+        activeContext: currentState.workspace.activeContext.kind === 'project'
+          ? { kind: 'conversationDraft' }
+          : currentState.workspace.activeContext,
+        lastWorkspacePath: currentState.workspace.lastWorkspacePath === restoreWorkspacePath
+          ? null
+          : currentState.workspace.lastWorkspacePath,
       },
     }))
     return {
@@ -1185,10 +1500,11 @@ ipcMain.handle('workspace:get-restore-state', async () => {
     }
   }
 
-  const workspaceEntry = getWorkspaceEntry(settings, lastWorkspacePath)
+  const workspaceEntry = getWorkspaceEntry(settings, restoreWorkspacePath)
+  const agentSessionPath = restoreAgentSessionPath ?? workspaceEntry.lastAgentSessionPath
   const lastFilePath = workspaceEntry.lastFilePath
 
-  if (!lastFilePath || !(await workspaceFileExists(lastWorkspacePath, lastFilePath))) {
+  if (!lastFilePath || !(await workspaceFileExists(restoreWorkspacePath, lastFilePath))) {
     if (lastFilePath) {
       await appStateStore.update((currentState) => ({
         ...currentState,
@@ -1196,8 +1512,8 @@ ipcMain.handle('workspace:get-restore-state', async () => {
           ...currentState.workspace,
           entries: {
             ...currentState.workspace.entries,
-            [lastWorkspacePath]: {
-              ...getWorkspaceEntry(currentState, lastWorkspacePath),
+            [restoreWorkspacePath]: {
+              ...getWorkspaceEntry(currentState, restoreWorkspacePath),
               lastFilePath: null,
             },
           },
@@ -1206,16 +1522,16 @@ ipcMain.handle('workspace:get-restore-state', async () => {
     }
 
     return {
-      agentSessionPath: workspaceEntry.lastAgentSessionPath,
+      agentSessionPath,
       filePath: null,
-      workspacePath: lastWorkspacePath,
+      workspacePath: restoreWorkspacePath,
     }
   }
 
   return {
-    agentSessionPath: workspaceEntry.lastAgentSessionPath,
+    agentSessionPath,
     filePath: lastFilePath,
-    workspacePath: lastWorkspacePath,
+    workspacePath: restoreWorkspacePath,
   }
 })
 
@@ -1276,7 +1592,7 @@ ipcMain.handle('workspace:update-state', async (
       },
       lastWorkspacePath: markAsLastOpened ? normalizedWorkspacePath : currentState.workspace.lastWorkspacePath,
       projects: currentState.workspace.projects.map((project) => (
-        project.path === normalizedWorkspacePath
+        getProjectPathIdentity(project.path) === getProjectPathIdentity(normalizedWorkspacePath)
           ? {
               ...project,
               ...(shouldPatchLastFilePath ? { lastFilePath: entryPatch.lastFilePath ?? null } : {}),
@@ -1428,6 +1744,10 @@ ipcMain.handle('workspace:save-file', async (_, filePath: string, content: strin
 
 ipcMain.handle('workspace:file-exists', async (_, rootPath: string, filePath: string) => {
   return { exists: await workspaceFileExists(rootPath, filePath) }
+})
+
+ipcMain.handle('workspace:path-exists', async (_, workspacePath: string) => {
+  return { exists: await workspacePathExists(workspacePath) }
 })
 
 ipcMain.handle(
@@ -1682,6 +2002,10 @@ ipcMain.handle('agent:load-workspace', async (
   return agentManager.loadWorkspaceState(rootPath, preferredSessionPath ?? null, options)
 })
 
+ipcMain.handle('agent:load-draft-state', async () => {
+  return agentManager.loadDraftState()
+})
+
 ipcMain.handle('agent:list-sessions', async (_event, rootPath: string) => {
   return agentManager.listSessionItems(rootPath)
 })
@@ -1766,11 +2090,11 @@ ipcMain.handle('agent:select-thinking-level', async (_event, level: string, mode
   return agentManager.selectThinkingLevel(level, modelKey)
 })
 
-ipcMain.handle('agent:update-provider-auth', async (_event, rootPath: string, provider: string, apiKey: string | null) => {
+ipcMain.handle('agent:update-provider-auth', async (_event, rootPath: string | null, provider: string, apiKey: string | null) => {
   return agentManager.updateProviderAuth(rootPath, provider, apiKey)
 })
 
-ipcMain.handle('agent:login-provider-auth', async (_event, rootPath: string, provider: string) => {
+ipcMain.handle('agent:login-provider-auth', async (_event, rootPath: string | null, provider: string) => {
   cancelProviderAuthFlow(provider, 'A new login was started.')
   const controller = new AbortController()
   const flowId = randomUUID()
@@ -1816,7 +2140,7 @@ ipcMain.handle('agent:login-provider-auth', async (_event, rootPath: string, pro
   }
 })
 
-ipcMain.handle('agent:logout-provider-auth', async (_event, rootPath: string, provider: string) => {
+ipcMain.handle('agent:logout-provider-auth', async (_event, rootPath: string | null, provider: string) => {
   cancelProviderAuthFlow(provider)
   return agentManager.logoutProviderAuth(rootPath, provider)
 })

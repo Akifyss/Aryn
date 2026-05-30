@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -7,6 +7,94 @@ import { SessionManager, type SessionEntry } from '@earendil-works/pi-coding-age
 import { getThinkingLevelsByModel, PiAgentManager, serializeSessionEntries } from '../electron/main/agent'
 
 describe('agent session serialization', () => {
+  it('updates application-level provider auth without creating a workspace', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-agent-draft-'))
+    const agentDir = path.join(tempRoot, 'agent')
+    const unusedWorkspacePath = path.join(tempRoot, 'conversation-workspace')
+
+    try {
+      await mkdir(agentDir, { recursive: true })
+      const manager = new PiAgentManager(() => undefined, { agentDir })
+      const state = await manager.updateProviderAuth(null, 'openrouter', 'test-api-key')
+
+      expect(state.activeSession).toBeNull()
+      expect(state.sessions).toEqual([])
+      expect(state.runtime.workspacePath).toBeNull()
+      expect(state.runtime.auth.openrouter).toMatchObject({
+        hasStoredCredential: true,
+        source: 'stored',
+        storedCredentialType: 'api_key',
+      })
+      await expect(stat(unusedWorkspacePath)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('releases the active runtime before entering a projectless draft', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-agent-draft-release-'))
+
+    try {
+      const abort = vi.fn(async () => undefined)
+      const dispose = vi.fn()
+      const unsubscribe = vi.fn()
+      const manager = new PiAgentManager(() => undefined, { agentDir: path.join(tempRoot, 'agent') })
+      ;(manager as unknown as { activeRuntime: unknown }).activeRuntime = {
+        cwd: path.join(tempRoot, 'workspace'),
+        session: {
+          abort,
+          dispose,
+          isStreaming: true,
+        },
+        unsubscribe,
+      }
+
+      const state = await manager.loadDraftState()
+
+      expect(abort).toHaveBeenCalledOnce()
+      expect(dispose).toHaveBeenCalledOnce()
+      expect(unsubscribe).toHaveBeenCalledOnce()
+      expect((manager as unknown as { activeRuntime: unknown }).activeRuntime).toBeNull()
+      expect(state.runtime.workspacePath).toBeNull()
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('matches active runtime workspace paths case-insensitively on Windows', async () => {
+    if (process.platform !== 'win32') {
+      return
+    }
+
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-agent-runtime-case-'))
+
+    try {
+      const abort = vi.fn(async () => undefined)
+      const dispose = vi.fn()
+      const unsubscribe = vi.fn()
+      const workspacePath = path.join(tempRoot, 'Workspace')
+      const manager = new PiAgentManager(() => undefined, { agentDir: path.join(tempRoot, 'agent') })
+      ;(manager as unknown as { activeRuntime: unknown }).activeRuntime = {
+        cwd: workspacePath,
+        session: {
+          abort,
+          dispose,
+          isStreaming: true,
+        },
+        unsubscribe,
+      }
+
+      await manager.releaseWorkspaceRuntime(workspacePath.toLowerCase())
+
+      expect(abort).toHaveBeenCalledOnce()
+      expect(dispose).toHaveBeenCalledOnce()
+      expect(unsubscribe).toHaveBeenCalledOnce()
+      expect((manager as unknown as { activeRuntime: unknown }).activeRuntime).toBeNull()
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
   it('serializes model-specific thinking levels from Pi metadata', () => {
     const deepseekV4Pro = getModel('openrouter', 'deepseek/deepseek-v4-pro')
     const deepseekV32 = getModel('openrouter', 'deepseek/deepseek-v3.2')
