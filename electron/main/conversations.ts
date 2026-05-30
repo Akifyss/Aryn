@@ -8,7 +8,7 @@ import type {
   CreateConversationWorkspaceRequest,
   UpdateConversationRequest,
 } from '../../src/features/conversations/types'
-import { readPersistedJsonFile, writeJsonFileAtomic } from './app-state'
+import { AtomicJsonStore } from './json-file-store'
 import { ensureUsableFolderName } from './path-names'
 
 const CONVERSATION_INDEX_SCHEMA_VERSION = 1
@@ -167,17 +167,21 @@ function normalizeConversationPatch(patch: UpdateConversationRequest = {}) {
 }
 
 export class ConversationStore {
-  private cachedState: ConversationState | null = null
-  private writeQueue: Promise<void> = Promise.resolve()
+  private readonly store: AtomicJsonStore<ConversationState>
 
   constructor(
     private readonly indexPath: string,
     private readonly documentsPath: string,
-  ) {}
+  ) {
+    this.store = new AtomicJsonStore({
+      defaultState: () => cloneState(DEFAULT_CONVERSATION_STATE),
+      filePath: this.indexPath,
+      normalize: normalizeConversationState,
+    })
+  }
 
   async read(): Promise<ConversationState> {
-    await this.writeQueue.catch(() => undefined)
-    return cloneState(await this.getCachedState())
+    return this.store.read()
   }
 
   async createWorkspace(request: CreateConversationWorkspaceRequest = {}): Promise<ConversationRecord> {
@@ -323,35 +327,6 @@ export class ConversationStore {
   }
 
   private async updateState(updater: (currentState: ConversationState) => ConversationState) {
-    let nextState: ConversationState | null = null
-
-    this.writeQueue = this.writeQueue
-      .catch(() => undefined)
-      .then(async () => {
-        nextState = normalizeConversationState(updater(cloneState(await this.getCachedState())))
-        await writeJsonFileAtomic(this.indexPath, nextState)
-        this.cachedState = nextState
-      })
-
-    await this.writeQueue
-    return cloneState(nextState!)
-  }
-
-  private async getCachedState() {
-    if (!this.cachedState) {
-      this.cachedState = await this.load()
-    }
-
-    return this.cachedState
-  }
-
-  private async load() {
-    const persistedJson = await readPersistedJsonFile(this.indexPath)
-
-    if (!persistedJson.found) {
-      return cloneState(DEFAULT_CONVERSATION_STATE)
-    }
-
-    return normalizeConversationState(persistedJson.value)
+    return this.store.update(updater)
   }
 }

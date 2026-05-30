@@ -1,6 +1,5 @@
 import { Menu, app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
 import { mkdir, readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -40,7 +39,6 @@ import {
 import { PiAgentManager } from './agent'
 import {
   AppStateStore,
-  cleanupStaleJsonTempFiles,
   getWorkspaceEntry,
   MIN_WINDOW_HEIGHT,
   MIN_WINDOW_WIDTH,
@@ -48,6 +46,7 @@ import {
   normalizeLayoutState,
   normalizeMigrationState,
 } from './app-state'
+import { cleanupStaleJsonTempFiles } from './json-file-store'
 import type { PersistedProjectRecord, PersistedWorkspaceIconThemeSelection } from './app-state'
 import { ConversationStore, type ConversationDraftCleanupResult } from './conversations'
 import {
@@ -65,6 +64,7 @@ import {
   loadWorkspaceIconThemeCatalogFromVsix,
 } from './workspace-icon-theme'
 import { getDefaultAppIconAssetPath } from './app-icon'
+import { createArynPaths, prepareArynDataDirectories } from './aryn-paths'
 import {
   isFlowIconsVsixPath,
   isBundledWorkspaceIconThemePath,
@@ -120,24 +120,22 @@ const indexHtml = path.join(RENDERER_DIST, 'index.html')
 const homeDir = os.homedir() || getOptionalAppPath('home') || process.cwd()
 const documentsDir = getOptionalAppPath('documents') ?? path.join(homeDir, 'Documents')
 const tempDir = getOptionalAppPath('temp') ?? os.tmpdir()
-const arynDataDir = path.join(homeDir, '.aryn')
 const legacyUserDataDir = getOptionalAppPath('userData')
-const appStatePath = path.join(arynDataDir, 'app-state.json')
-const workspaceStatePath = path.join(arynDataDir, 'workspace-state.json')
-const conversationIndexPath = path.join(arynDataDir, 'conversations', 'index.json')
-const legacyAppStatePath = legacyUserDataDir ? path.join(legacyUserDataDir, 'app-state.json') : null
-const legacyWorkspaceSettingsPath = legacyUserDataDir ? path.join(legacyUserDataDir, 'workspace-settings.json') : null
-const agentDir = path.join(arynDataDir, 'agents', 'pi')
-const workspaceIconThemeCacheDir = path.join(tempDir, app.getName(), 'workspace-icon-themes')
-const bundledWorkspaceIconThemeDirectoryPath = path.join(
-  process.env.VITE_PUBLIC,
-  'icon-themes',
-)
-const legacyAppStatePaths = [legacyAppStatePath, legacyWorkspaceSettingsPath]
-  .filter((filePath): filePath is string => Boolean(filePath))
-const appStateStore = new AppStateStore(appStatePath, legacyAppStatePaths)
-const workspaceStateStore = new WorkspaceStateStore(workspaceStatePath)
-const conversationStore = new ConversationStore(conversationIndexPath, documentsDir)
+const arynPaths = createArynPaths({
+  appName: app.getName(),
+  documentsDir,
+  homeDir,
+  legacyUserDataDir,
+  publicDir: process.env.VITE_PUBLIC,
+  tempDir,
+})
+const arynDataDir = arynPaths.arynDataDir
+const agentDir = arynPaths.piAgentDir
+const workspaceIconThemeCacheDir = arynPaths.workspaceIconThemeCacheDir
+const bundledWorkspaceIconThemeDirectoryPath = arynPaths.bundledWorkspaceIconThemeDirectoryPath
+const appStateStore = new AppStateStore(arynPaths.appStatePath, arynPaths.legacyAppStatePaths)
+const workspaceStateStore = new WorkspaceStateStore(arynPaths.workspaceStatePath)
+const conversationStore = new ConversationStore(arynPaths.conversationIndexPath, arynPaths.documentsDir)
 const RENDERER_LOCAL_STORAGE_MIGRATION_VERSION = 1
 
 type WindowBackgroundTheme = 'light' | 'dark'
@@ -174,16 +172,7 @@ function getPathBaseName(value: string) {
   return value.split(/[\\/]/).filter(Boolean).pop() ?? value
 }
 
-function prepareArynDataDirectory() {
-  try {
-    mkdirSync(agentDir, { mode: 0o700, recursive: true })
-    mkdirSync(path.dirname(conversationIndexPath), { mode: 0o700, recursive: true })
-  } catch {
-    // Startup can continue; individual stores will surface write errors when needed.
-  }
-}
-
-prepareArynDataDirectory()
+prepareArynDataDirectories(arynPaths)
 
 function normalizeProjectPath(projectPath: string) {
   return path.resolve(projectPath)
@@ -218,9 +207,9 @@ async function filterExistingProjects(projects: PersistedProjectRecord[]) {
   return settledProjects.filter((project): project is PersistedProjectRecord => Boolean(project))
 }
 
-function toProjectState(projects: PersistedProjectRecord[], activeProjectId: string | null): ProjectState {
+function toProjectState(projects: PersistedProjectRecord[], lastProjectId: string | null): ProjectState {
   return {
-    activeProjectId,
+    lastProjectId,
     projects: projects.map((project): ProjectRecord => ({
       id: project.id,
       name: project.name,
@@ -235,32 +224,48 @@ function toProjectState(projects: PersistedProjectRecord[], activeProjectId: str
 async function getVisibleProjectState(): Promise<ProjectState> {
   const state = await appStateStore.read()
   const visibleProjects = await filterExistingProjects(state.workspace.projects)
-  const activeProjectId = state.workspace.activeProjectId
-    && visibleProjects.some((project) => project.id === state.workspace.activeProjectId)
-    ? state.workspace.activeProjectId
+  const visibleProjectIds = new Set(visibleProjects.map((project) => project.id))
+  const fallbackLastProjectId = state.workspace.lastProjectId
+    && visibleProjects.some((project) => project.id === state.workspace.lastProjectId)
+    ? state.workspace.lastProjectId
     : visibleProjects[0]?.id ?? null
+  const activeContext = state.workspace.activeContext
+  const visibleActiveContext = activeContext.kind === 'project'
+    ? visibleProjectIds.has(activeContext.projectId)
+      ? activeContext
+      : fallbackLastProjectId
+        ? { kind: 'project' as const, projectId: fallbackLastProjectId }
+        : { kind: 'conversationDraft' as const }
+    : activeContext
+  const lastProjectId = visibleActiveContext.kind === 'project'
+    ? visibleActiveContext.projectId
+    : fallbackLastProjectId
+  const lastWorkspacePath = visibleActiveContext.kind === 'project'
+    ? visibleProjects.find((project) => project.id === lastProjectId)?.path ?? null
+    : state.workspace.lastWorkspacePath
 
   if (
-    activeProjectId !== state.workspace.activeProjectId
+    lastProjectId !== state.workspace.lastProjectId
+    || visibleActiveContext.kind !== state.workspace.activeContext.kind
+    || (
+      visibleActiveContext.kind === 'project'
+      && state.workspace.activeContext.kind === 'project'
+      && visibleActiveContext.projectId !== state.workspace.activeContext.projectId
+    )
+    || lastWorkspacePath !== state.workspace.lastWorkspacePath
   ) {
     await appStateStore.update((currentState) => ({
       ...currentState,
       workspace: {
         ...currentState.workspace,
-        activeContext: currentState.workspace.activeContext.kind === 'project'
-          ? activeProjectId
-            ? { kind: 'project', projectId: activeProjectId }
-            : { kind: 'conversationDraft' }
-          : currentState.workspace.activeContext,
-        activeProjectId,
-        lastWorkspacePath: currentState.workspace.activeContext.kind === 'project'
-          ? visibleProjects.find((project) => project.id === activeProjectId)?.path ?? null
-          : currentState.workspace.lastWorkspacePath,
+        activeContext: visibleActiveContext,
+        lastProjectId,
+        lastWorkspacePath,
       },
     }))
   }
 
-  return toProjectState(visibleProjects, activeProjectId)
+  return toProjectState(visibleProjects, lastProjectId)
 }
 
 function sanitizeProjectFolderName(name: string) {
@@ -339,7 +344,7 @@ async function upsertProject(projectPath: string, options: { name?: string, make
       ...currentState,
       workspace: {
         ...currentState.workspace,
-        activeProjectId: options.makeActive ? nextProject?.id ?? currentState.workspace.activeProjectId : currentState.workspace.activeProjectId,
+        lastProjectId: options.makeActive ? nextProject?.id ?? currentState.workspace.lastProjectId : currentState.workspace.lastProjectId,
         activeContext: options.makeActive && nextProject?.id
           ? { kind: 'project', projectId: nextProject.id }
           : currentState.workspace.activeContext,
@@ -1151,6 +1156,7 @@ ipcMain.handle('project:get-state', async () => {
 })
 
 ipcMain.handle('workspace:get-active-context', async () => {
+  await getVisibleProjectState()
   const state = await appStateStore.read()
   return state.workspace.activeContext
 })
@@ -1159,7 +1165,7 @@ ipcMain.handle('workspace:set-active-context', async (_event, context: ActiveWor
   const contextRecord = readRecord(context)
   const kind = contextRecord.kind
   let nextContext: ActiveWorkspaceContext
-  let nextActiveProjectId: string | null | undefined
+  let nextLastProjectId: string | null | undefined
   let nextWorkspacePath: string | null | undefined
 
   if (kind === 'project') {
@@ -1172,7 +1178,7 @@ ipcMain.handle('workspace:set-active-context', async (_event, context: ActiveWor
     }
 
     nextContext = { kind: 'project', projectId: project.id }
-    nextActiveProjectId = project.id
+    nextLastProjectId = project.id
     nextWorkspacePath = project.path
   } else if (kind === 'conversation') {
     const conversationId = typeof contextRecord.conversationId === 'string' ? contextRecord.conversationId : ''
@@ -1194,9 +1200,9 @@ ipcMain.handle('workspace:set-active-context', async (_event, context: ActiveWor
     workspace: {
       ...currentState.workspace,
       activeContext: nextContext,
-      activeProjectId: nextActiveProjectId !== undefined
-        ? nextActiveProjectId
-        : currentState.workspace.activeProjectId,
+      lastProjectId: nextLastProjectId !== undefined
+        ? nextLastProjectId
+        : currentState.workspace.lastProjectId,
       entries: nextWorkspacePath
         ? {
             ...currentState.workspace.entries,
@@ -1222,7 +1228,7 @@ ipcMain.handle('project:create-empty', async (_event, name: string) => {
     throw new Error('Project name is required.')
   }
 
-  const projectRootPath = documentsDir
+  const projectRootPath = arynPaths.documentsDir
   const folderName = sanitizeProjectFolderName(trimmedName)
   await mkdir(projectRootPath, { recursive: true })
   const projectPath = await createUniqueProjectPath(projectRootPath, folderName)
@@ -1271,7 +1277,7 @@ ipcMain.handle('project:set-active', async (_event, projectId: string) => {
       workspace: {
         ...currentState.workspace,
         activeContext: { kind: 'project', projectId: targetProject.id },
-        activeProjectId: targetProject.id,
+        lastProjectId: targetProject.id,
         lastWorkspacePath: targetProject.path,
         projects: currentState.workspace.projects.map((project) => (
           project.id === targetProject.id ? { ...project, lastOpenedAt: now } : project
@@ -1285,7 +1291,7 @@ ipcMain.handle('project:set-active', async (_event, projectId: string) => {
   }
 
   const nextState = await getVisibleProjectState()
-  const activeProject = nextState.projects.find((project) => project.id === nextState.activeProjectId)
+  const activeProject = nextState.projects.find((project) => project.id === nextState.lastProjectId)
 
   if (nextActivePath && activeProject?.id !== normalizedProjectId) {
     throw new Error('Project folder is no longer available.')
@@ -1308,8 +1314,8 @@ ipcMain.handle('project:remove', async (_event, projectId: string) => {
     await appStateStore.update((currentState) => {
       const remainingProjects = currentState.workspace.projects.filter((project) => project.id !== normalizedProjectId)
       const removedProject = currentState.workspace.projects.find((project) => project.id === normalizedProjectId) ?? null
-      const currentActiveProject = remainingProjects.find((project) => project.id === currentState.workspace.activeProjectId) ?? null
-      const removedActive = currentState.workspace.activeProjectId === normalizedProjectId
+      const currentActiveProject = remainingProjects.find((project) => project.id === currentState.workspace.lastProjectId) ?? null
+      const removedActive = currentState.workspace.lastProjectId === normalizedProjectId
       const nextActiveProject = removedActive ? nextVisibleProject : currentActiveProject ?? nextVisibleProject
       const activeContext = currentState.workspace.activeContext
       const nextActiveContext = activeContext.kind === 'project'
@@ -1335,7 +1341,7 @@ ipcMain.handle('project:remove', async (_event, projectId: string) => {
         ...currentState,
         workspace: {
           ...currentState.workspace,
-          activeProjectId: nextActiveProject?.id ?? null,
+          lastProjectId: nextActiveProject?.id ?? null,
           activeContext: nextActiveContext,
           lastWorkspacePath: nextLastWorkspacePath,
           projects: remainingProjects,
@@ -1489,7 +1495,7 @@ ipcMain.handle('workspace:get-restore-state', async () => {
 
   if (activeContext.kind === 'project') {
     const activeProject = settings.workspace.projects.find((project) => project.id === activeContext.projectId)
-      ?? settings.workspace.projects.find((project) => project.id === settings.workspace.activeProjectId)
+      ?? settings.workspace.projects.find((project) => project.id === settings.workspace.lastProjectId)
       ?? null
     restoreWorkspacePath = activeProject?.path ?? null
   } else if (activeContext.kind === 'conversation') {

@@ -339,7 +339,7 @@ const emptyAgentState: AgentWorkspaceState = {
 }
 
 const emptyProjectState: ProjectState = {
-  activeProjectId: null,
+  lastProjectId: null,
   projects: [],
 }
 
@@ -2724,7 +2724,7 @@ function AgentProvider({
   workspacePathRef.current = workspacePath
 
   useEffect(() => {
-    const activeProject = projectState.projects.find((project) => project.id === projectState.activeProjectId)
+    const activeProject = projectState.projects.find((project) => project.id === projectState.lastProjectId)
     const agentWorkspacePath = agentState.runtime.workspacePath
 
     if (
@@ -2746,7 +2746,7 @@ function AgentProvider({
         sessions: agentState.sessions,
       },
     }))
-  }, [agentState.runtime.workspacePath, agentState.sessions, projectState.activeProjectId, projectState.projects, workspacePath])
+  }, [agentState.runtime.workspacePath, agentState.sessions, projectState.lastProjectId, projectState.projects, workspacePath])
 
   useEffect(() => {
     const unsubscribe = window.appApi.onAgentEvent((event: AgentClientEvent) => {

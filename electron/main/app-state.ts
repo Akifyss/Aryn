@@ -1,6 +1,4 @@
-import { randomUUID } from 'node:crypto'
-import type { Dirent } from 'node:fs'
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type {
   AgentRightSidebarWidthMode,
@@ -13,8 +11,9 @@ import type {
   PersistedMeoSettings,
   MeoOutlinePosition,
 } from '../../src/features/persistence/types'
+import { AtomicJsonStore, type AtomicJsonStoreMissingResult } from './json-file-store'
 
-export const APP_STATE_SCHEMA_VERSION = 1
+export const APP_STATE_SCHEMA_VERSION = 2
 export const DEFAULT_WINDOW_WIDTH = 1440
 export const DEFAULT_WINDOW_HEIGHT = 900
 export const MIN_WINDOW_WIDTH = 1080
@@ -52,7 +51,7 @@ export type PersistedActiveWorkspaceContext =
 
 export type PersistedWorkspaceState = {
   activeContext: PersistedActiveWorkspaceContext
-  activeProjectId: string | null
+  lastProjectId: string | null
   entries: Record<string, PersistedWorkspaceEntry>
   lastWorkspacePath: string | null
   projects: PersistedProjectRecord[]
@@ -131,7 +130,7 @@ const DEFAULT_APP_STATE: PersistedAppState = {
   },
   workspace: {
     activeContext: { kind: 'conversationDraft' },
-    activeProjectId: null,
+    lastProjectId: null,
     entries: {},
     lastWorkspacePath: null,
     projects: [],
@@ -145,227 +144,6 @@ const DEFAULT_APP_STATE: PersistedAppState = {
 
 function cloneState(state: PersistedAppState) {
   return structuredClone(state)
-}
-
-const JSON_WRITE_TEMP_FILE_PATTERN = /^\.[^\\/]+\.json\.\d+\.\d+\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/i
-const DEFAULT_STALE_JSON_TEMP_FILE_AGE_MS = 60_000
-
-function isFileSystemErrorWithCode(error: unknown, codes: string[]) {
-  const code = error && typeof error === 'object' && 'code' in error
-    ? (error as { code?: unknown }).code
-    : null
-
-  return typeof code === 'string' && codes.includes(code)
-}
-
-function isRetriableFileAccessError(error: unknown) {
-  return isFileSystemErrorWithCode(error, ['EPERM', 'EACCES', 'EBUSY'])
-}
-
-function isMissingJsonFileError(error: unknown) {
-  return isFileSystemErrorWithCode(error, ['ENOENT', 'ENOTDIR'])
-}
-
-function isMalformedJsonFileError(error: unknown) {
-  return error instanceof SyntaxError
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms)
-  })
-}
-
-async function retryFileAccess<T>(operation: () => Promise<T>) {
-  const retryDelays = [20, 50, 100, 200, 400]
-
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await operation()
-    } catch (error) {
-      if (!isRetriableFileAccessError(error) || attempt >= retryDelays.length) {
-        throw error
-      }
-
-      await sleep(retryDelays[attempt])
-    }
-  }
-}
-
-async function renameWithRetry(sourcePath: string, targetPath: string) {
-  await retryFileAccess(() => rename(sourcePath, targetPath))
-}
-
-async function writeFileWithRetry(filePath: string, value: string) {
-  await retryFileAccess(() => writeFile(filePath, value, {
-    encoding: 'utf8',
-    mode: 0o600,
-  }))
-}
-
-async function readJsonFileWithRetry(filePath: string) {
-  const raw = await retryFileAccess(() => readFile(filePath, 'utf8'))
-  return JSON.parse(raw) as unknown
-}
-
-function getJsonBackupFilePath(filePath: string) {
-  return `${filePath}.bak`
-}
-
-function getJsonTempFileTimestamp(fileName: string) {
-  if (!JSON_WRITE_TEMP_FILE_PATTERN.test(fileName)) {
-    return null
-  }
-
-  const parts = fileName.split('.')
-  const timestamp = Number(parts.at(-3))
-  return Number.isFinite(timestamp) ? timestamp : null
-}
-
-function isStaleJsonTempFile(fileName: string, now: number, maxAgeMs: number) {
-  const timestamp = getJsonTempFileTimestamp(fileName)
-  return timestamp !== null && now - timestamp >= maxAgeMs
-}
-
-export async function cleanupStaleJsonTempFiles(
-  directoryPath: string,
-  options: { maxAgeMs?: number; recursive?: boolean } = {},
-) {
-  const now = Date.now()
-  const maxAgeMs = Number.isFinite(options.maxAgeMs)
-    ? Math.max(0, options.maxAgeMs ?? DEFAULT_STALE_JSON_TEMP_FILE_AGE_MS)
-    : DEFAULT_STALE_JSON_TEMP_FILE_AGE_MS
-  const recursive = options.recursive ?? false
-
-  async function cleanupDirectory(currentDirectoryPath: string): Promise<number> {
-    let entries: Dirent[]
-
-    try {
-      entries = await readdir(currentDirectoryPath, { withFileTypes: true })
-    } catch (error) {
-      if (isMissingJsonFileError(error)) {
-        return 0
-      }
-
-      throw error
-    }
-
-    const removedCounts = await Promise.all(entries.map(async (entry) => {
-      const entryPath = path.join(currentDirectoryPath, entry.name)
-
-      if (entry.isFile()) {
-        if (!isStaleJsonTempFile(entry.name, now, maxAgeMs)) {
-          return 0
-        }
-
-        try {
-          await rm(entryPath, { force: true })
-          return 1
-        } catch {
-          return 0
-        }
-      }
-
-      if (recursive && entry.isDirectory()) {
-        return cleanupDirectory(entryPath)
-      }
-
-      return 0
-    }))
-
-    return removedCounts.reduce((sum, count) => sum + count, 0)
-  }
-
-  return cleanupDirectory(directoryPath)
-}
-
-async function cleanupStaleJsonTempFilesBestEffort(directoryPath: string) {
-  try {
-    await cleanupStaleJsonTempFiles(directoryPath)
-  } catch {
-    // Stale temp files should not block the state write that would replace them.
-  }
-}
-
-async function preserveExistingJsonFileBackup(filePath: string) {
-  try {
-    const currentValue = await retryFileAccess(() => readFile(filePath, 'utf8'))
-    JSON.parse(currentValue)
-    await writeFileWithRetry(getJsonBackupFilePath(filePath), currentValue)
-  } catch (error) {
-    if (!isMissingJsonFileError(error)) {
-      throw error
-    }
-  }
-}
-
-async function preserveExistingJsonFileBackupBestEffort(filePath: string) {
-  try {
-    await preserveExistingJsonFileBackup(filePath)
-  } catch {
-    // The primary write path is still atomic via temp file + rename. A missing
-    // backup should not block saving fresh state if the target can be replaced.
-  }
-}
-
-export async function readPersistedJsonFile(filePath: string) {
-  try {
-    return {
-      found: true as const,
-      value: await readJsonFileWithRetry(filePath),
-    }
-  } catch (error) {
-    if (isMissingJsonFileError(error)) {
-      return {
-        found: false as const,
-        value: null,
-      }
-    }
-
-    if (isMalformedJsonFileError(error)) {
-      try {
-        return {
-          found: true as const,
-          value: await readJsonFileWithRetry(getJsonBackupFilePath(filePath)),
-        }
-      } catch {
-        throw error
-      }
-    }
-
-    throw error
-  }
-}
-
-export async function writeJsonFileAtomic(filePath: string, value: unknown) {
-  const directoryPath = path.dirname(filePath)
-  const temporaryFilePath = path.join(directoryPath, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`)
-  const serializedValue = `${JSON.stringify(value, null, 2)}\n`
-
-  await mkdir(directoryPath, { mode: 0o700, recursive: true })
-  await cleanupStaleJsonTempFilesBestEffort(directoryPath)
-
-  try {
-    await writeFileWithRetry(temporaryFilePath, serializedValue)
-    await preserveExistingJsonFileBackupBestEffort(filePath)
-    try {
-      await renameWithRetry(temporaryFilePath, filePath)
-    } catch (error) {
-      if (process.platform !== 'win32' || !isRetriableFileAccessError(error)) {
-        throw error
-      }
-
-      // Windows can reject replacing an existing file even after the temp file
-      // is fully written. After bounded retries, write the already-serialized
-      // payload directly so the logical state update can still complete.
-      await preserveExistingJsonFileBackupBestEffort(filePath)
-      await writeFileWithRetry(filePath, serializedValue)
-      await rm(temporaryFilePath, { force: true }).catch(() => undefined)
-    }
-  } catch (error) {
-    await rm(temporaryFilePath, { force: true }).catch(() => undefined)
-    throw error
-  }
 }
 
 function readNullableString(value: unknown) {
@@ -570,7 +348,7 @@ function dedupeProjectRecords(projects: PersistedProjectRecord[]) {
 
 function readActiveWorkspaceContext(
   value: unknown,
-  activeProjectId: string | null,
+  lastProjectId: string | null,
   projects: PersistedProjectRecord[],
 ): PersistedActiveWorkspaceContext {
   const candidate = value && typeof value === 'object'
@@ -596,8 +374,8 @@ function readActiveWorkspaceContext(
     }
   }
 
-  if (activeProjectId && projects.some((project) => project.id === activeProjectId)) {
-    return { kind: 'project', projectId: activeProjectId }
+  if (lastProjectId && projects.some((project) => project.id === lastProjectId)) {
+    return { kind: 'project', projectId: lastProjectId }
   }
 
   return { kind: 'conversationDraft' }
@@ -702,16 +480,24 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
     ]
   }
 
-  const requestedActiveProjectId = readNullableString(workspaceCandidate.activeProjectId)
+  const requestedLastProjectId = readNullableString(workspaceCandidate.lastProjectId)
+    ?? readNullableString(workspaceCandidate.activeProjectId)
   const projectForLastWorkspace = lastWorkspacePath
     ? normalizedProjects.find((project) => (
         getProjectPathIdentity(project.path) === getProjectPathIdentity(lastWorkspacePath)
       )) ?? null
     : null
-  const activeProjectId = requestedActiveProjectId && normalizedProjects.some((project) => project.id === requestedActiveProjectId)
-    ? requestedActiveProjectId
+  const fallbackLastProjectId = requestedLastProjectId && normalizedProjects.some((project) => project.id === requestedLastProjectId)
+    ? requestedLastProjectId
     : projectForLastWorkspace?.id ?? normalizedProjects[0]?.id ?? null
-  const activeContext = readActiveWorkspaceContext(workspaceCandidate.activeContext, activeProjectId, normalizedProjects)
+  const activeContext = readActiveWorkspaceContext(workspaceCandidate.activeContext, fallbackLastProjectId, normalizedProjects)
+  const lastProjectId = activeContext.kind === 'project'
+    ? activeContext.projectId
+    : fallbackLastProjectId
+  const activeProject = activeContext.kind === 'project'
+    ? normalizedProjects.find((project) => project.id === activeContext.projectId) ?? null
+    : null
+  const normalizedLastWorkspacePath = activeProject?.path ?? lastWorkspacePath
 
   return {
     version: APP_STATE_SCHEMA_VERSION,
@@ -724,9 +510,9 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
     },
     workspace: {
       activeContext,
-      activeProjectId,
+      lastProjectId,
       entries,
-      lastWorkspacePath,
+      lastWorkspacePath: normalizedLastWorkspacePath,
       projects: normalizedProjects,
     },
     window: {
@@ -767,7 +553,7 @@ function mergeLegacyAppState(primary: PersistedAppState, fallback: PersistedAppS
     ...primary,
     workspace: {
       activeContext: primary.workspace.activeContext,
-      activeProjectId: primary.workspace.activeProjectId,
+      lastProjectId: primary.workspace.lastProjectId,
       entries: {
         ...fallbackEntriesForKnownProjects,
         ...primary.workspace.entries,
@@ -779,9 +565,8 @@ function mergeLegacyAppState(primary: PersistedAppState, fallback: PersistedAppS
 }
 
 export class AppStateStore {
-  private cachedState: PersistedAppState | null = null
+  private readonly store: AtomicJsonStore<PersistedAppState>
   private readonly legacyFilePaths: string[]
-  private writeQueue: Promise<void> = Promise.resolve()
 
   constructor(
     private readonly filePath: string,
@@ -792,47 +577,23 @@ export class AppStateStore {
       : legacyFilePaths
         ? [legacyFilePaths]
         : []
+    this.store = new AtomicJsonStore({
+      defaultState: () => cloneState(DEFAULT_APP_STATE),
+      filePath: this.filePath,
+      loadMissing: () => this.loadLegacy(),
+      normalize: normalizePersistedAppState,
+    })
   }
 
   async read() {
-    await this.writeQueue.catch(() => undefined)
-    return cloneState(await this.getCachedState())
+    return this.store.read()
   }
 
   async update(updater: (currentState: PersistedAppState) => PersistedAppState) {
-    let nextState: PersistedAppState | null = null
-
-    this.writeQueue = this.writeQueue
-      .catch(() => undefined)
-      .then(async () => {
-        nextState = normalizePersistedAppState(updater(cloneState(await this.getCachedState())))
-        await writeJsonFileAtomic(this.filePath, nextState)
-        this.cachedState = nextState
-      })
-
-    await this.writeQueue
-    return cloneState(nextState!)
+    return this.store.update(updater)
   }
 
-  private async getCachedState() {
-    if (!this.cachedState) {
-      this.cachedState = await this.load()
-    }
-
-    return this.cachedState
-  }
-
-  private async load() {
-    const persistedJson = await readPersistedJsonFile(this.filePath)
-
-    if (!persistedJson.found) {
-      return this.loadLegacy()
-    }
-
-    return normalizePersistedAppState(persistedJson.value)
-  }
-
-  private async loadLegacy() {
+  private async loadLegacy(): Promise<AtomicJsonStoreMissingResult<PersistedAppState> | null> {
     let nextState: PersistedAppState | null = null
 
     for (const legacyFilePath of this.legacyFilePaths) {
@@ -848,16 +609,13 @@ export class AppStateStore {
     }
 
     if (!nextState) {
-      return cloneState(DEFAULT_APP_STATE)
+      return null
     }
 
-    try {
-      await writeJsonFileAtomic(this.filePath, nextState)
-    } catch {
-      // Reading legacy state is more important than immediately persisting the migration.
+    return {
+      persist: true,
+      state: nextState,
     }
-
-    return nextState
   }
 }
 

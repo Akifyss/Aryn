@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   AppStateStore,
   APP_STATE_SCHEMA_VERSION,
-  cleanupStaleJsonTempFiles,
   DEFAULT_AGENT_COMPOSER_HEIGHT,
   DEFAULT_WINDOW_HEIGHT,
   DEFAULT_WINDOW_WIDTH,
@@ -13,8 +12,8 @@ import {
   MIN_WINDOW_HEIGHT,
   MIN_WINDOW_WIDTH,
   normalizePersistedAppState,
-  writeJsonFileAtomic,
 } from '../electron/main/app-state'
+import { cleanupStaleJsonTempFiles, writeJsonFileAtomic } from '../electron/main/json-file-store'
 
 const tempRoots: string[] = []
 
@@ -55,7 +54,7 @@ describe('app state persistence', () => {
         },
       },
       workspace: {
-        activeProjectId: 'C:/notes',
+        lastProjectId: 'C:/notes',
         entries: {
           'C:/notes': {
             lastAgentSessionPath: null,
@@ -111,7 +110,7 @@ describe('app state persistence', () => {
     await mkdir(path.dirname(legacyAppStatePath), { recursive: true })
     await writeFile(legacyAppStatePath, JSON.stringify({
       workspace: {
-        activeProjectId: 'C:/project',
+        lastProjectId: 'C:/project',
         projects: [
           {
             id: 'C:/project',
@@ -128,9 +127,9 @@ describe('app state persistence', () => {
     const store = new AppStateStore(appStatePath, [legacyAppStatePath, legacySettingsPath])
     const state = await store.read()
 
-    expect(state.workspace.activeProjectId).toBe('C:/project')
+    expect(state.workspace.lastProjectId).toBe('C:/project')
     expect(state.workspace.projects.map((project) => project.id)).toEqual(['C:/project'])
-    await expect(readFile(appStatePath, 'utf8')).resolves.toContain('"activeProjectId": "C:/project"')
+    await expect(readFile(appStatePath, 'utf8')).resolves.toContain('"lastProjectId": "C:/project"')
   })
 
   it('merges legacy workspace settings when legacy app state has no workspace yet', async () => {
@@ -168,7 +167,7 @@ describe('app state persistence', () => {
       height: 820,
       isMaximized: true,
     })
-    expect(state.workspace.activeProjectId).toBe('C:/legacy-workspace')
+    expect(state.workspace.lastProjectId).toBe('C:/legacy-workspace')
     expect(state.workspace.lastWorkspacePath).toBe('C:/legacy-workspace')
     expect(state.workspace.projects).toEqual([
       expect.objectContaining({
@@ -189,7 +188,7 @@ describe('app state persistence', () => {
     await mkdir(path.dirname(legacyAppStatePath), { recursive: true })
     await writeFile(legacyAppStatePath, JSON.stringify({
       workspace: {
-        activeProjectId: 'C:/project',
+        lastProjectId: 'C:/project',
         projects: [
           {
             id: 'C:/project',
@@ -203,7 +202,7 @@ describe('app state persistence', () => {
     const store = new AppStateStore(appStatePath, legacyAppStatePath)
     const state = await store.read()
 
-    expect(state.workspace.activeProjectId).toBe('C:/project')
+    expect(state.workspace.lastProjectId).toBe('C:/project')
     expect(state.workspace.projects.map((project) => project.id)).toEqual(['C:/project'])
   })
 
@@ -276,8 +275,12 @@ describe('app state persistence', () => {
     const store = new AppStateStore(appStatePath)
     const state = await store.read()
 
-    expect(state.workspace.activeProjectId).toBe('C:/backup-project')
+    expect(state.workspace.lastProjectId).toBe('C:/backup-project')
     expect(state.workspace.lastWorkspacePath).toBe('C:/backup-project')
+
+    const repairedState = JSON.parse(await readFile(appStatePath, 'utf8'))
+    expect(repairedState.workspace.lastWorkspacePath).toBe('C:/backup-project')
+    expect(repairedState.version).toBe(APP_STATE_SCHEMA_VERSION)
   })
 
   it('preserves the previous valid app state as a backup before replacing it', async () => {
@@ -365,7 +368,7 @@ describe('app state persistence', () => {
   it('normalizes invalid window sizes while preserving persisted workspace state', async () => {
     const nextState = normalizePersistedAppState({
       workspace: {
-        activeProjectId: 'C:/workspace',
+        lastProjectId: 'C:/workspace',
         entries: {
           'C:/workspace': {
             lastAgentSessionPath: 'C:/workspace/.sessions/current.json',
@@ -405,7 +408,7 @@ describe('app state persistence', () => {
         },
       },
       workspace: {
-        activeProjectId: 'C:/workspace',
+        lastProjectId: 'C:/workspace',
         entries: {
           'C:/workspace': {
             lastAgentSessionPath: 'C:/workspace/.sessions/current.json',
@@ -503,10 +506,32 @@ describe('app state persistence', () => {
     })
   })
 
-  it('restores active project from last workspace when the persisted active project is stale', () => {
+  it('migrates the legacy active project field into the last project field', () => {
     const state = normalizePersistedAppState({
       workspace: {
-        activeProjectId: 'C:/missing',
+        activeProjectId: 'C:/legacy-project',
+        projects: [
+          {
+            id: 'C:/legacy-project',
+            name: 'legacy-project',
+            path: 'C:/legacy-project',
+          },
+        ],
+      },
+    })
+
+    expect(state.workspace.lastProjectId).toBe('C:/legacy-project')
+    expect(state.workspace.activeContext).toEqual({
+      kind: 'project',
+      projectId: 'C:/legacy-project',
+    })
+    expect(state.workspace).not.toHaveProperty('activeProjectId')
+  })
+
+  it('restores last project from last workspace when the persisted last project is stale', () => {
+    const state = normalizePersistedAppState({
+      workspace: {
+        lastProjectId: 'C:/missing',
         lastWorkspacePath: 'C:/active',
         projects: [
           {
@@ -523,7 +548,39 @@ describe('app state persistence', () => {
       },
     })
 
-    expect(state.workspace.activeProjectId).toBe('C:/active')
+    expect(state.workspace.lastProjectId).toBe('C:/active')
+  })
+
+  it('keeps the project context and last project in sync when persisted fields disagree', () => {
+    const state = normalizePersistedAppState({
+      workspace: {
+        activeContext: {
+          kind: 'project',
+          projectId: 'C:/second',
+        },
+        lastProjectId: 'C:/first',
+        lastWorkspacePath: 'C:/conversation-workspace',
+        projects: [
+          {
+            id: 'C:/first',
+            name: 'first',
+            path: 'C:/first',
+          },
+          {
+            id: 'C:/second',
+            name: 'second',
+            path: 'C:/second',
+          },
+        ],
+      },
+    })
+
+    expect(state.workspace.activeContext).toEqual({
+      kind: 'project',
+      projectId: 'C:/second',
+    })
+    expect(state.workspace.lastProjectId).toBe('C:/second')
+    expect(state.workspace.lastWorkspacePath).toBe('C:/second')
   })
 
   it('does not promote a conversation workspace into the project list', () => {
@@ -533,7 +590,7 @@ describe('app state persistence', () => {
           kind: 'conversation',
           conversationId: 'conversation-1',
         },
-        activeProjectId: 'C:/project',
+        lastProjectId: 'C:/project',
         lastWorkspacePath: 'C:/Users/me/Documents/Aryn/2026-05-30/topic',
         projects: [
           {
@@ -552,6 +609,76 @@ describe('app state persistence', () => {
     expect(state.workspace.projects.map((project) => project.path)).toEqual(['C:/project'])
   })
 
+  it('preserves the most recent project when the active context is a conversation', () => {
+    const state = normalizePersistedAppState({
+      workspace: {
+        activeContext: {
+          kind: 'conversation',
+          conversationId: 'conversation-1',
+        },
+        lastProjectId: 'C:/project',
+        lastWorkspacePath: 'C:/Users/me/Documents/Aryn/2026-05-30/topic',
+        projects: [
+          {
+            id: 'C:/project',
+            name: 'project',
+            path: 'C:/project',
+          },
+        ],
+      },
+    })
+
+    expect(state.workspace.activeContext).toEqual({
+      kind: 'conversation',
+      conversationId: 'conversation-1',
+    })
+    expect(state.workspace.lastProjectId).toBe('C:/project')
+    expect(state.workspace.lastWorkspacePath).toBe('C:/Users/me/Documents/Aryn/2026-05-30/topic')
+  })
+
+  it('falls back from an invalid project context to a valid recent project', () => {
+    const state = normalizePersistedAppState({
+      workspace: {
+        activeContext: {
+          kind: 'project',
+          projectId: 'C:/missing',
+        },
+        lastProjectId: 'C:/project',
+        projects: [
+          {
+            id: 'C:/project',
+            name: 'project',
+            path: 'C:/project',
+          },
+        ],
+      },
+    })
+
+    expect(state.workspace.activeContext).toEqual({
+      kind: 'project',
+      projectId: 'C:/project',
+    })
+    expect(state.workspace.lastProjectId).toBe('C:/project')
+    expect(state.workspace.lastWorkspacePath).toBe('C:/project')
+  })
+
+  it('falls back from an invalid project context to a draft when no project exists', () => {
+    const state = normalizePersistedAppState({
+      workspace: {
+        activeContext: {
+          kind: 'project',
+          projectId: 'C:/missing',
+        },
+        lastProjectId: 'C:/missing',
+        projects: [],
+      },
+    })
+
+    expect(state.workspace.activeContext).toEqual({ kind: 'conversationDraft' })
+    expect(state.workspace.lastProjectId).toBeNull()
+    expect(state.workspace.lastWorkspacePath).toBeNull()
+  })
+
   it('keeps conversation drafts projectless even when a previous workspace path exists', () => {
     const state = normalizePersistedAppState({
       workspace: {
@@ -563,7 +690,7 @@ describe('app state persistence', () => {
     })
 
     expect(state.workspace.activeContext).toEqual({ kind: 'conversationDraft' })
-    expect(state.workspace.activeProjectId).toBeNull()
+    expect(state.workspace.lastProjectId).toBeNull()
     expect(state.workspace.projects).toEqual([])
   })
 
@@ -585,14 +712,14 @@ describe('app state persistence', () => {
     })
 
     expect(state.workspace.activeContext).toEqual({ kind: 'conversationDraft' })
-    expect(state.workspace.activeProjectId).toBe('C:/project')
+    expect(state.workspace.lastProjectId).toBe('C:/project')
     expect(state.workspace.projects.map((project) => project.path)).toEqual(['C:/project'])
   })
 
   it('deduplicates persisted projects by path while keeping the latest normalized record', () => {
     const state = normalizePersistedAppState({
       workspace: {
-        activeProjectId: 'stale-id',
+        lastProjectId: 'stale-id',
         projects: [
           {
             id: 'C:/workspace',
@@ -652,7 +779,7 @@ describe('app state persistence', () => {
   it('preserves persisted project order independent of last opened time', () => {
     const state = normalizePersistedAppState({
       workspace: {
-        activeProjectId: 'C:/second',
+        lastProjectId: 'C:/second',
         projects: [
           {
             id: 'C:/first',

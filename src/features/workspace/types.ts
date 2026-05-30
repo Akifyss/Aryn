@@ -55,6 +55,6 @@ export type ProjectRecord = {
 }
 
 export type ProjectState = {
-  activeProjectId: string | null
+  lastProjectId: string | null
   projects: ProjectRecord[]
 }

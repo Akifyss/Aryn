@@ -4,7 +4,7 @@ import type {
   PersistedMeoStoredViewPosition,
   PersistedWorkspaceTabState,
 } from '../../src/features/persistence/types'
-import { readPersistedJsonFile, writeJsonFileAtomic } from './app-state'
+import { AtomicJsonStore } from './json-file-store'
 
 export const WORKSPACE_STATE_SCHEMA_VERSION = 1
 
@@ -175,56 +175,21 @@ export function normalizeWorkspaceUiState(value: unknown): PersistedWorkspaceUiS
 }
 
 export class WorkspaceStateStore {
-  private cachedState: PersistedWorkspaceUiState | null = null
-  private writeQueue: Promise<void> = Promise.resolve()
+  private readonly store: AtomicJsonStore<PersistedWorkspaceUiState>
 
-  constructor(private readonly filePath: string) {}
+  constructor(private readonly filePath: string) {
+    this.store = new AtomicJsonStore({
+      defaultState: () => cloneState(DEFAULT_WORKSPACE_UI_STATE),
+      filePath: this.filePath,
+      normalize: normalizeWorkspaceUiState,
+    })
+  }
 
   async read() {
-    await this.writeQueue.catch(() => undefined)
-    return cloneState(await this.getCachedState())
+    return this.store.read()
   }
 
   async update(updater: (currentState: PersistedWorkspaceUiState) => PersistedWorkspaceUiState) {
-    let nextState: PersistedWorkspaceUiState | null = null
-
-    this.writeQueue = this.writeQueue
-      .catch(() => undefined)
-      .then(async () => {
-        nextState = normalizeWorkspaceUiState(updater(cloneState(await this.getCachedState())))
-        await writeJsonFileAtomic(this.filePath, nextState)
-        this.cachedState = nextState
-      })
-
-    await this.writeQueue
-    return cloneState(nextState!)
-  }
-
-  private async getCachedState() {
-    if (!this.cachedState) {
-      this.cachedState = await this.load()
-    }
-
-    return this.cachedState
-  }
-
-  private async load() {
-    let persistedJson: Awaited<ReturnType<typeof readPersistedJsonFile>>
-
-    try {
-      persistedJson = await readPersistedJsonFile(this.filePath)
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        return cloneState(DEFAULT_WORKSPACE_UI_STATE)
-      }
-
-      throw error
-    }
-
-    if (!persistedJson.found) {
-      return cloneState(DEFAULT_WORKSPACE_UI_STATE)
-    }
-
-    return normalizeWorkspaceUiState(persistedJson.value)
+    return this.store.update(updater)
   }
 }

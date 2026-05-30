@@ -383,7 +383,7 @@ export function initializeAppPersistentState(snapshot: PersistentClientStateSnap
 }
 
 const emptyProjectState: ProjectState = {
-  activeProjectId: null,
+  lastProjectId: null,
   projects: [],
 }
 
@@ -2382,7 +2382,7 @@ function App() {
       const nextProjectState = await window.appApi.addExistingProject()
       if (nextProjectState) {
         setProjectState(nextProjectState)
-        const nextActiveProject = nextProjectState.projects.find((project) => project.id === nextProjectState.activeProjectId)
+        const nextActiveProject = nextProjectState.projects.find((project) => project.id === nextProjectState.lastProjectId)
 
         if (nextActiveProject) {
           await connectWorkspace(nextActiveProject.path)
@@ -2419,7 +2419,7 @@ function App() {
     options: { restoreTabs?: boolean, startAgentNewSession?: boolean } = {},
   ) {
     setProjectState(nextProjectState)
-    const nextActiveProject = nextProjectState.projects.find((project) => project.id === nextProjectState.activeProjectId)
+    const nextActiveProject = nextProjectState.projects.find((project) => project.id === nextProjectState.lastProjectId)
 
     if (!nextActiveProject) {
       return false
@@ -2562,7 +2562,7 @@ function App() {
       setProjectState(nextProjectState)
 
       if (wasActive) {
-        const nextActiveProject = nextProjectState.projects.find((candidate) => candidate.id === nextProjectState.activeProjectId)
+        const nextActiveProject = nextProjectState.projects.find((candidate) => candidate.id === nextProjectState.lastProjectId)
         if (nextActiveProject) {
           setActiveWorkspaceContext({ kind: 'project', projectId: nextActiveProject.id })
           await connectWorkspace(nextActiveProject.path)
@@ -3147,7 +3147,7 @@ function App() {
           </div>
           <div className='project-bootstrap-copy'>
             <h1>选择一个项目开始</h1>
-            <p>Aryn 会把编辑器、Git、文件树和 Agent 对话绑定到当前 active 项目。</p>
+            <p>Aryn 会把编辑器、Git、文件树和 Agent 对话绑定到当前项目。</p>
           </div>
           <div className='project-bootstrap-actions'>
             <Button
@@ -3830,7 +3830,7 @@ function App() {
       setHasLoadedProjectState(true)
       const activeProject = nextActiveContext.kind === 'project'
         ? nextProjectState.projects.find((project) => project.id === nextActiveContext.projectId) ?? null
-        : nextProjectState.projects.find((project) => project.id === nextProjectState.activeProjectId) ?? null
+        : nextProjectState.projects.find((project) => project.id === nextProjectState.lastProjectId) ?? null
       const activeConversation = nextActiveContext.kind === 'conversation'
         ? nextConversationState.conversations.find((conversation) => conversation.id === nextActiveContext.conversationId) ?? null
         : null

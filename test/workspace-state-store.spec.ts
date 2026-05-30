@@ -231,7 +231,7 @@ describe('workspace UI state persistence', () => {
     })
   })
 
-  it('falls back to default state when the workspace UI state file is malformed', async () => {
+  it('does not silently reset workspace UI state when the state file is malformed without backup', async () => {
     const rootPath = await createTempDir()
     const statePath = path.join(rootPath, '.aryn', 'workspace-state.json')
 
@@ -239,12 +239,34 @@ describe('workspace UI state persistence', () => {
     await writeFile(statePath, '{', 'utf8')
 
     const store = new WorkspaceStateStore(statePath)
+    await expect(store.read()).rejects.toThrow(SyntaxError)
+  })
+
+  it('restores workspace UI state from backup and repairs the primary file', async () => {
+    const rootPath = await createTempDir()
+    const statePath = path.join(rootPath, '.aryn', 'workspace-state.json')
+
+    await mkdir(path.dirname(statePath), { recursive: true })
+    await writeFile(statePath, '{', 'utf8')
+    await writeFile(`${statePath}.bak`, JSON.stringify({
+      workspaceTabs: {
+        'C:/workspace': {
+          paths: ['C:/workspace/restored.md'],
+        },
+      },
+    }), 'utf8')
+
+    const store = new WorkspaceStateStore(statePath)
     const state = await store.read()
 
-    expect(state).toEqual({
+    expect(state.workspaceTabs['C:/workspace'].paths).toEqual(['C:/workspace/restored.md'])
+    await expect(readFile(statePath, 'utf8').then(JSON.parse)).resolves.toMatchObject({
       version: WORKSPACE_STATE_SCHEMA_VERSION,
-      meoFileStates: {},
-      workspaceTabs: {},
+      workspaceTabs: {
+        'C:/workspace': {
+          paths: ['C:/workspace/restored.md'],
+        },
+      },
     })
   })
 })

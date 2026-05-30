@@ -222,6 +222,41 @@ describe('conversation store', () => {
     })
   })
 
+  it('deduplicates persisted conversations by stable id', async () => {
+    const rootPath = await createTempDir()
+    const indexPath = path.join(rootPath, '.aryn', 'conversations', 'index.json')
+    await mkdir(path.dirname(indexPath), { recursive: true })
+    await writeFile(indexPath, JSON.stringify({
+      conversations: [
+        {
+          id: 'conversation-1',
+          title: 'Old title',
+          createdAt: '2026-05-30T10:00:00.000Z',
+          updatedAt: '2026-05-30T10:00:00.000Z',
+          status: 'draft',
+        },
+        {
+          id: 'conversation-1',
+          title: 'Current title',
+          createdAt: '2026-05-30T10:00:00.000Z',
+          updatedAt: '2026-05-30T10:02:00.000Z',
+          status: 'active',
+        },
+      ],
+    }), 'utf8')
+    const store = new ConversationStore(indexPath, path.join(rootPath, 'Documents'))
+
+    const state = await store.read()
+
+    expect(state.conversations).toHaveLength(1)
+    expect(state.conversations[0]).toMatchObject({
+      id: 'conversation-1',
+      status: 'active',
+      title: 'Current title',
+      updatedAt: '2026-05-30T10:02:00.000Z',
+    })
+  })
+
   it('restores the conversation index from backup when the primary index is malformed', async () => {
     const rootPath = await createTempDir()
     const indexPath = path.join(rootPath, '.aryn', 'conversations', 'index.json')
@@ -247,6 +282,12 @@ describe('conversation store', () => {
       id: 'conversation-from-backup',
       title: 'Recovered conversation',
       status: 'active',
+    })
+
+    const repairedIndex = JSON.parse(await readFile(indexPath, 'utf8'))
+    expect(repairedIndex.conversations[0]).toMatchObject({
+      id: 'conversation-from-backup',
+      title: 'Recovered conversation',
     })
   })
 

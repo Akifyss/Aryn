@@ -1,18 +1,20 @@
-import { readFile, rm, writeFile } from 'node:fs/promises'
+import { rm } from 'node:fs/promises'
 import path from 'node:path'
 import type {
   AgentMessageFileChange,
   AgentSessionAnnotations,
 } from '../../src/features/agent/types'
 import { mergeAgentMessageFileChangeKind } from '../../src/features/agent/file-change-utils'
+import { AtomicJsonStore } from './json-file-store'
 
+const AGENT_SESSION_ANNOTATIONS_SCHEMA_VERSION = 1
 const EMPTY_ANNOTATIONS: AgentSessionAnnotations = {
   fileChangesByEntryId: {},
 }
 
 type StoredAgentSessionAnnotations = {
-  fileChangesByEntryId?: Record<string, Array<Partial<AgentMessageFileChange> | null> | null>
-  version?: number
+  fileChangesByEntryId: Record<string, AgentMessageFileChange[]>
+  version: number
 }
 
 function isAgentMessageFileChangeKind(value: unknown): value is AgentMessageFileChange['kind'] {
@@ -30,12 +32,14 @@ function cloneAnnotations(annotations: AgentSessionAnnotations): AgentSessionAnn
   }
 }
 
-function normalizeAnnotations(value: unknown): AgentSessionAnnotations {
+function normalizeAnnotations(value: unknown): StoredAgentSessionAnnotations {
   if (!value || typeof value !== 'object') {
-    return cloneAnnotations(EMPTY_ANNOTATIONS)
+    return createStoredAnnotations(EMPTY_ANNOTATIONS)
   }
 
-  const storedValue = value as StoredAgentSessionAnnotations
+  const storedValue = value as {
+    fileChangesByEntryId?: Record<string, Array<Partial<AgentMessageFileChange> | null> | null>
+  }
   const normalizedEntries = Object.fromEntries(
     Object.entries(storedValue.fileChangesByEntryId ?? {})
       .map(([entryId, changes]) => {
@@ -67,11 +71,25 @@ function normalizeAnnotations(value: unknown): AgentSessionAnnotations {
 
   return {
     fileChangesByEntryId: normalizedEntries,
+    version: AGENT_SESSION_ANNOTATIONS_SCHEMA_VERSION,
   }
 }
 
 function getStoredAnnotationsPath(sessionPath: string) {
   return `${sessionPath}.annotations.json`
+}
+
+function createStoredAnnotations(annotations: AgentSessionAnnotations): StoredAgentSessionAnnotations {
+  return {
+    ...cloneAnnotations(annotations),
+    version: AGENT_SESSION_ANNOTATIONS_SCHEMA_VERSION,
+  }
+}
+
+function toClientAnnotations(annotations: StoredAgentSessionAnnotations): AgentSessionAnnotations {
+  return {
+    fileChangesByEntryId: cloneAnnotations(annotations).fileChangesByEntryId,
+  }
 }
 
 export function upsertAgentSessionFileChange(
@@ -131,31 +149,12 @@ export function upsertAgentSessionFileChange(
 }
 
 export class AgentSessionAnnotationStore {
-  private readonly cache = new Map<string, AgentSessionAnnotations>()
-  private readonly writes = new Map<string, Promise<void>>()
+  private readonly stores = new Map<string, AtomicJsonStore<StoredAgentSessionAnnotations>>()
 
   async read(sessionPath: string): Promise<AgentSessionAnnotations> {
     const resolvedSessionPath = path.resolve(sessionPath)
-    const cachedValue = this.cache.get(resolvedSessionPath)
-
-    if (cachedValue) {
-      return cachedValue
-    }
-
-    try {
-      const rawContent = await readFile(getStoredAnnotationsPath(resolvedSessionPath), 'utf8')
-      const parsedValue = normalizeAnnotations(JSON.parse(rawContent))
-      this.cache.set(resolvedSessionPath, parsedValue)
-      return parsedValue
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error
-      }
-
-      const emptyValue = cloneAnnotations(EMPTY_ANNOTATIONS)
-      this.cache.set(resolvedSessionPath, emptyValue)
-      return emptyValue
-    }
+    const annotations = await this.getStore(resolvedSessionPath).read()
+    return toClientAnnotations(annotations)
   }
 
   async recordFileChange(
@@ -164,47 +163,42 @@ export class AgentSessionAnnotationStore {
     change: AgentMessageFileChange,
   ): Promise<AgentSessionAnnotations> {
     const resolvedSessionPath = path.resolve(sessionPath)
-    const currentAnnotations = await this.read(resolvedSessionPath)
-    const nextAnnotations = upsertAgentSessionFileChange(currentAnnotations, entryId, change)
+    const nextStoredAnnotations = await this.getStore(resolvedSessionPath).update((currentState) => (
+      createStoredAnnotations(upsertAgentSessionFileChange(
+        toClientAnnotations(currentState),
+        entryId,
+        change,
+      ))
+    ))
 
-    if (nextAnnotations === currentAnnotations) {
-      return currentAnnotations
-    }
-
-    this.cache.set(resolvedSessionPath, nextAnnotations)
-    await this.queueWrite(resolvedSessionPath, nextAnnotations)
-    return nextAnnotations
+    return toClientAnnotations(nextStoredAnnotations)
   }
 
   async delete(sessionPath: string) {
     const resolvedSessionPath = path.resolve(sessionPath)
-    this.cache.delete(resolvedSessionPath)
-    this.writes.delete(resolvedSessionPath)
+    const annotationsPath = getStoredAnnotationsPath(resolvedSessionPath)
+    this.stores.delete(resolvedSessionPath)
 
-    await rm(getStoredAnnotationsPath(resolvedSessionPath), {
-      force: true,
-    }).catch((error) => {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error
-      }
-    })
+    await Promise.all([
+      rm(annotationsPath, { force: true }),
+      rm(`${annotationsPath}.bak`, { force: true }),
+    ])
   }
 
-  private async queueWrite(sessionPath: string, annotations: AgentSessionAnnotations) {
-    const nextWrite = (this.writes.get(sessionPath) ?? Promise.resolve())
-      .catch(() => undefined)
-      .then(async () => {
-        await writeFile(
-          getStoredAnnotationsPath(sessionPath),
-          JSON.stringify({
-            fileChangesByEntryId: annotations.fileChangesByEntryId,
-            version: 1,
-          }, null, 2),
-          'utf8',
-        )
-      })
+  private getStore(sessionPath: string) {
+    const resolvedSessionPath = path.resolve(sessionPath)
+    const currentStore = this.stores.get(resolvedSessionPath)
 
-    this.writes.set(sessionPath, nextWrite)
-    await nextWrite
+    if (currentStore) {
+      return currentStore
+    }
+
+    const nextStore = new AtomicJsonStore<StoredAgentSessionAnnotations>({
+      defaultState: () => createStoredAnnotations(EMPTY_ANNOTATIONS),
+      filePath: getStoredAnnotationsPath(resolvedSessionPath),
+      normalize: normalizeAnnotations,
+    })
+    this.stores.set(resolvedSessionPath, nextStore)
+    return nextStore
   }
 }
