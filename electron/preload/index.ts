@@ -112,6 +112,7 @@ contextBridge.exposeInMainWorld('appApi', {
   loadAgentDraftState: () => ipcRenderer.invoke('agent:load-draft-state') as Promise<AgentWorkspaceState>,
   listAgentSessions: (rootPath: string) => ipcRenderer.invoke('agent:list-sessions', rootPath) as Promise<AgentWorkspaceState['sessions']>,
   readAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:read-session', rootPath, sessionPath) as Promise<AgentSessionSnapshot>,
+  agentSessionExists: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:session-exists', rootPath, sessionPath) as Promise<{ exists: boolean }>,
   createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => ipcRenderer.invoke('agent:create-session', rootPath, options) as Promise<AgentWorkspaceState>,
   openAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:open-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,
   deleteAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:delete-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,

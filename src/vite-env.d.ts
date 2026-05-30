@@ -108,6 +108,7 @@ declare global {
       loadAgentDraftState: () => Promise<AgentWorkspaceState>
       listAgentSessions: (rootPath: string) => Promise<AgentWorkspaceState['sessions']>
       readAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentSessionSnapshot>
+      agentSessionExists: (rootPath: string, sessionPath: string) => Promise<{ exists: boolean }>
       createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => Promise<AgentWorkspaceState>
       openAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
       deleteAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>

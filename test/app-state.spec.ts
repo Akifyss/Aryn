@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   AppStateStore,
   APP_STATE_SCHEMA_VERSION,
+  cleanupStaleJsonTempFiles,
   DEFAULT_AGENT_COMPOSER_HEIGHT,
   DEFAULT_WINDOW_HEIGHT,
   DEFAULT_WINDOW_WIDTH,
@@ -12,6 +13,7 @@ import {
   MIN_WINDOW_HEIGHT,
   MIN_WINDOW_WIDTH,
   normalizePersistedAppState,
+  writeJsonFileAtomic,
 } from '../electron/main/app-state'
 
 const tempRoots: string[] = []
@@ -227,6 +229,38 @@ describe('app state persistence', () => {
     expect(directoryEntries.filter((entry) => entry.endsWith('.tmp'))).toEqual([])
   })
 
+  it('cleans up stale internal JSON temp files without touching fresh or unrelated files', async () => {
+    const rootPath = await createTempDir()
+    const stateDir = path.join(rootPath, '.aryn')
+    const conversationDir = path.join(stateDir, 'conversations')
+    const staleTimestamp = Date.now() - 120_000
+    const freshTimestamp = Date.now()
+    const staleAppTempName = `.app-state.json.1234.${staleTimestamp}.aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.tmp`
+    const staleConversationTempName = `.index.json.1234.${staleTimestamp}.cccccccc-cccc-cccc-cccc-cccccccccccc.tmp`
+    const freshWorkspaceTempName = `.workspace-state.json.1234.${freshTimestamp}.bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.tmp`
+
+    await mkdir(conversationDir, { recursive: true })
+    await writeFile(path.join(stateDir, staleAppTempName), '{}', 'utf8')
+    await writeFile(path.join(stateDir, freshWorkspaceTempName), '{}', 'utf8')
+    await writeFile(path.join(stateDir, 'notes.tmp'), 'not ours', 'utf8')
+    await writeFile(path.join(stateDir, 'app-state.json'), '{}', 'utf8')
+    await writeFile(path.join(conversationDir, staleConversationTempName), '{}', 'utf8')
+
+    await expect(cleanupStaleJsonTempFiles(stateDir, {
+      maxAgeMs: 60_000,
+      recursive: true,
+    })).resolves.toBe(2)
+    await expect(cleanupStaleJsonTempFiles(path.join(stateDir, 'missing'))).resolves.toBe(0)
+
+    await expect(readdir(stateDir)).resolves.toEqual(expect.arrayContaining([
+      'app-state.json',
+      freshWorkspaceTempName,
+      'notes.tmp',
+    ]))
+    await expect(readdir(stateDir)).resolves.not.toContain(staleAppTempName)
+    await expect(readdir(conversationDir)).resolves.not.toContain(staleConversationTempName)
+  })
+
   it('restores from the backup file when the app state file is malformed', async () => {
     const rootPath = await createTempDir()
     const appStatePath = path.join(rootPath, '.aryn', 'app-state.json')
@@ -244,6 +278,48 @@ describe('app state persistence', () => {
 
     expect(state.workspace.activeProjectId).toBe('C:/backup-project')
     expect(state.workspace.lastWorkspacePath).toBe('C:/backup-project')
+  })
+
+  it('preserves the previous valid app state as a backup before replacing it', async () => {
+    const rootPath = await createTempDir()
+    const appStatePath = path.join(rootPath, '.aryn', 'app-state.json')
+    const store = new AppStateStore(appStatePath)
+
+    await store.update((state) => ({
+      ...state,
+      workspace: {
+        ...state.workspace,
+        lastWorkspacePath: 'C:/first',
+      },
+    }))
+    await store.update((state) => ({
+      ...state,
+      workspace: {
+        ...state.workspace,
+        lastWorkspacePath: 'C:/second',
+      },
+    }))
+
+    const currentState = JSON.parse(await readFile(appStatePath, 'utf8'))
+    const backupState = JSON.parse(await readFile(`${appStatePath}.bak`, 'utf8'))
+
+    expect(currentState.workspace.lastWorkspacePath).toBe('C:/second')
+    expect(backupState.workspace.lastWorkspacePath).toBe('C:/first')
+  })
+
+  it('does not overwrite a valid backup with a malformed current JSON file', async () => {
+    const rootPath = await createTempDir()
+    const statePath = path.join(rootPath, '.aryn', 'state.json')
+    await mkdir(path.dirname(statePath), { recursive: true })
+    await writeFile(statePath, '{', 'utf8')
+    await writeFile(`${statePath}.bak`, JSON.stringify({ value: 'previous-good-state' }), 'utf8')
+
+    await writeJsonFileAtomic(statePath, { value: 'new-state' })
+
+    await expect(readFile(statePath, 'utf8').then(JSON.parse)).resolves.toEqual({ value: 'new-state' })
+    await expect(readFile(`${statePath}.bak`, 'utf8').then(JSON.parse)).resolves.toEqual({
+      value: 'previous-good-state',
+    })
   })
 
   it('does not silently reset app state when a malformed file has no backup', async () => {

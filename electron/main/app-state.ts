@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import type { Dirent } from 'node:fs'
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type {
   AgentRightSidebarWidthMode,
@@ -146,6 +147,9 @@ function cloneState(state: PersistedAppState) {
   return structuredClone(state)
 }
 
+const JSON_WRITE_TEMP_FILE_PATTERN = /^\.[^\\/]+\.json\.\d+\.\d+\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/i
+const DEFAULT_STALE_JSON_TEMP_FILE_AGE_MS = 60_000
+
 function isFileSystemErrorWithCode(error: unknown, codes: string[]) {
   const code = error && typeof error === 'object' && 'code' in error
     ? (error as { code?: unknown }).code
@@ -208,14 +212,99 @@ function getJsonBackupFilePath(filePath: string) {
   return `${filePath}.bak`
 }
 
+function getJsonTempFileTimestamp(fileName: string) {
+  if (!JSON_WRITE_TEMP_FILE_PATTERN.test(fileName)) {
+    return null
+  }
+
+  const parts = fileName.split('.')
+  const timestamp = Number(parts.at(-3))
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
+function isStaleJsonTempFile(fileName: string, now: number, maxAgeMs: number) {
+  const timestamp = getJsonTempFileTimestamp(fileName)
+  return timestamp !== null && now - timestamp >= maxAgeMs
+}
+
+export async function cleanupStaleJsonTempFiles(
+  directoryPath: string,
+  options: { maxAgeMs?: number; recursive?: boolean } = {},
+) {
+  const now = Date.now()
+  const maxAgeMs = Number.isFinite(options.maxAgeMs)
+    ? Math.max(0, options.maxAgeMs ?? DEFAULT_STALE_JSON_TEMP_FILE_AGE_MS)
+    : DEFAULT_STALE_JSON_TEMP_FILE_AGE_MS
+  const recursive = options.recursive ?? false
+
+  async function cleanupDirectory(currentDirectoryPath: string): Promise<number> {
+    let entries: Dirent[]
+
+    try {
+      entries = await readdir(currentDirectoryPath, { withFileTypes: true })
+    } catch (error) {
+      if (isMissingJsonFileError(error)) {
+        return 0
+      }
+
+      throw error
+    }
+
+    const removedCounts = await Promise.all(entries.map(async (entry) => {
+      const entryPath = path.join(currentDirectoryPath, entry.name)
+
+      if (entry.isFile()) {
+        if (!isStaleJsonTempFile(entry.name, now, maxAgeMs)) {
+          return 0
+        }
+
+        try {
+          await rm(entryPath, { force: true })
+          return 1
+        } catch {
+          return 0
+        }
+      }
+
+      if (recursive && entry.isDirectory()) {
+        return cleanupDirectory(entryPath)
+      }
+
+      return 0
+    }))
+
+    return removedCounts.reduce((sum, count) => sum + count, 0)
+  }
+
+  return cleanupDirectory(directoryPath)
+}
+
+async function cleanupStaleJsonTempFilesBestEffort(directoryPath: string) {
+  try {
+    await cleanupStaleJsonTempFiles(directoryPath)
+  } catch {
+    // Stale temp files should not block the state write that would replace them.
+  }
+}
+
 async function preserveExistingJsonFileBackup(filePath: string) {
   try {
     const currentValue = await retryFileAccess(() => readFile(filePath, 'utf8'))
+    JSON.parse(currentValue)
     await writeFileWithRetry(getJsonBackupFilePath(filePath), currentValue)
   } catch (error) {
     if (!isMissingJsonFileError(error)) {
       throw error
     }
+  }
+}
+
+async function preserveExistingJsonFileBackupBestEffort(filePath: string) {
+  try {
+    await preserveExistingJsonFileBackup(filePath)
+  } catch {
+    // The primary write path is still atomic via temp file + rename. A missing
+    // backup should not block saving fresh state if the target can be replaced.
   }
 }
 
@@ -254,9 +343,11 @@ export async function writeJsonFileAtomic(filePath: string, value: unknown) {
   const serializedValue = `${JSON.stringify(value, null, 2)}\n`
 
   await mkdir(directoryPath, { mode: 0o700, recursive: true })
+  await cleanupStaleJsonTempFilesBestEffort(directoryPath)
 
   try {
     await writeFileWithRetry(temporaryFilePath, serializedValue)
+    await preserveExistingJsonFileBackupBestEffort(filePath)
     try {
       await renameWithRetry(temporaryFilePath, filePath)
     } catch (error) {
@@ -267,7 +358,7 @@ export async function writeJsonFileAtomic(filePath: string, value: unknown) {
       // Windows can reject replacing an existing file even after the temp file
       // is fully written. After bounded retries, write the already-serialized
       // payload directly so the logical state update can still complete.
-      await preserveExistingJsonFileBackup(filePath)
+      await preserveExistingJsonFileBackupBestEffort(filePath)
       await writeFileWithRetry(filePath, serializedValue)
       await rm(temporaryFilePath, { force: true }).catch(() => undefined)
     }

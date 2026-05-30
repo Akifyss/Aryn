@@ -731,6 +731,7 @@ function App() {
   const [hasLoadedProjectState, setHasLoadedProjectState] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false)
+  const [shouldStartAgentSessionAfterProjectCreate, setShouldStartAgentSessionAfterProjectCreate] = useState(false)
   const [pendingAgentProjectSessionRequest, setPendingAgentProjectSessionRequest] = useState<AgentProjectSessionRequest | null>(null)
 
   const [confirmDialogOptions, setConfirmDialogOptions] = useState<{
@@ -2407,6 +2408,7 @@ function App() {
   }
 
   function openNewProjectDialog() {
+    setShouldStartAgentSessionAfterProjectCreate(projectMenuMode === 'agent-new-switch')
     setNewProjectName('')
     setIsNewProjectDialogOpen(true)
     closeProjectMenu()
@@ -2471,8 +2473,11 @@ function App() {
     setIsProjectActionBusy(true)
     try {
       const nextProjectState = await window.appApi.createEmptyProject(trimmedName)
-      await activateProjectFromState(nextProjectState)
+      await activateProjectFromState(nextProjectState, {
+        startAgentNewSession: shouldStartAgentSessionAfterProjectCreate,
+      })
       setIsNewProjectDialogOpen(false)
+      setShouldStartAgentSessionAfterProjectCreate(false)
       setNewProjectName('')
       setStatusMessage('项目已创建')
     } catch (error) {
@@ -2785,7 +2790,7 @@ function App() {
         })
       }
       const sessionExists = conversation.agentSessionPath
-        ? (await window.appApi.workspaceFileExists(targetWorkspacePath, conversation.agentSessionPath)).exists
+        ? (await window.appApi.agentSessionExists(targetWorkspacePath, conversation.agentSessionPath)).exists
         : false
       await connectWorkspace(targetWorkspacePath)
       await restoreWorkspaceTabs(targetWorkspacePath)
@@ -3082,6 +3087,9 @@ function App() {
         isOpen={isNewProjectDialogOpen}
         onOpenChange={(isOpen) => {
           setIsNewProjectDialogOpen(isOpen)
+          if (!isOpen) {
+            setShouldStartAgentSessionAfterProjectCreate(false)
+          }
         }}
       >
         <Modal.Container className='project-create-modal-container'>
@@ -3108,7 +3116,14 @@ function App() {
                   />
                 </label>
                 <div className='project-create-footer'>
-                  <Button variant='tertiary' type='button' onPress={() => setIsNewProjectDialogOpen(false)}>
+                  <Button
+                    variant='tertiary'
+                    type='button'
+                    onPress={() => {
+                      setIsNewProjectDialogOpen(false)
+                      setShouldStartAgentSessionAfterProjectCreate(false)
+                    }}
+                  >
                     取消
                   </Button>
                   <Button variant='primary' type='submit' isDisabled={!newProjectName.trim() || isProjectActionBusy}>
@@ -3851,7 +3866,7 @@ function App() {
             })
           }
           const sessionExists = activeConversation.agentSessionPath
-            ? (await window.appApi.workspaceFileExists(activeConversation.workspacePath, activeConversation.agentSessionPath)).exists
+            ? (await window.appApi.agentSessionExists(activeConversation.workspacePath, activeConversation.agentSessionPath)).exists
             : false
           await connectWorkspace(activeConversation.workspacePath)
           if (!cancelled) {

@@ -346,17 +346,7 @@ export class ConversationStore {
   }
 
   private async load() {
-    let persistedJson: Awaited<ReturnType<typeof readPersistedJsonFile>>
-
-    try {
-      persistedJson = await readPersistedJsonFile(this.indexPath)
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        return cloneState(DEFAULT_CONVERSATION_STATE)
-      }
-
-      throw error
-    }
+    const persistedJson = await readPersistedJsonFile(this.indexPath)
 
     if (!persistedJson.found) {
       return cloneState(DEFAULT_CONVERSATION_STATE)

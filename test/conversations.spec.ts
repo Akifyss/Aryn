@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { getArynPiSessionDir } from '../electron/main/agent'
 import { ConversationStore } from '../electron/main/conversations'
 
 const tempRoots: string[] = []
@@ -55,7 +56,10 @@ describe('conversation store', () => {
       path.join(rootPath, 'Documents'),
     )
     const record = await store.createWorkspace({ initialPrompt: 'Initial title' })
-    const sessionPath = path.join(record.workspacePath!, '.pi', 'sessions', 'session.jsonl')
+    const sessionPath = path.join(
+      getArynPiSessionDir(record.workspacePath!, path.join(rootPath, '.aryn', 'agents', 'pi')),
+      'session.jsonl',
+    )
 
     const updated = await store.updateConversation(record.id, {
       agentSessionPath: sessionPath,
@@ -216,5 +220,43 @@ describe('conversation store', () => {
       createdAt: '1970-01-01T00:00:00.000Z',
       updatedAt: '1970-01-01T00:00:00.000Z',
     })
+  })
+
+  it('restores the conversation index from backup when the primary index is malformed', async () => {
+    const rootPath = await createTempDir()
+    const indexPath = path.join(rootPath, '.aryn', 'conversations', 'index.json')
+    await mkdir(path.dirname(indexPath), { recursive: true })
+    await writeFile(indexPath, '{', 'utf8')
+    await writeFile(`${indexPath}.bak`, JSON.stringify({
+      conversations: [
+        {
+          id: 'conversation-from-backup',
+          title: 'Recovered conversation',
+          createdAt: '2026-05-30T10:00:00.000Z',
+          updatedAt: '2026-05-30T10:01:00.000Z',
+          status: 'active',
+        },
+      ],
+    }), 'utf8')
+    const store = new ConversationStore(indexPath, path.join(rootPath, 'Documents'))
+
+    const state = await store.read()
+
+    expect(state.conversations).toHaveLength(1)
+    expect(state.conversations[0]).toMatchObject({
+      id: 'conversation-from-backup',
+      title: 'Recovered conversation',
+      status: 'active',
+    })
+  })
+
+  it('does not silently clear conversations when the index is malformed without backup', async () => {
+    const rootPath = await createTempDir()
+    const indexPath = path.join(rootPath, '.aryn', 'conversations', 'index.json')
+    await mkdir(path.dirname(indexPath), { recursive: true })
+    await writeFile(indexPath, '{', 'utf8')
+    const store = new ConversationStore(indexPath, path.join(rootPath, 'Documents'))
+
+    await expect(store.read()).rejects.toThrow(SyntaxError)
   })
 })

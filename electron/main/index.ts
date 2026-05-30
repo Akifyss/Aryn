@@ -40,6 +40,7 @@ import {
 import { PiAgentManager } from './agent'
 import {
   AppStateStore,
+  cleanupStaleJsonTempFiles,
   getWorkspaceEntry,
   MIN_WINDOW_HEIGHT,
   MIN_WINDOW_WIDTH,
@@ -1051,12 +1052,39 @@ async function cleanupConversationStateReferences(result: ConversationDraftClean
   })
 }
 
+async function discardDraftWorkspaceSessions(workspacePath: string | null | undefined) {
+  if (!workspacePath) {
+    return
+  }
+
+  try {
+    await agentManager.discardWorkspaceSessions(workspacePath)
+  } catch (error) {
+    console.warn('Failed to clean up draft conversation sessions.', error)
+  }
+}
+
+async function cleanupArynDataDirectoryTempFiles() {
+  try {
+    const removedCount = await cleanupStaleJsonTempFiles(arynDataDir, { recursive: true })
+    if (removedCount > 0) {
+      console.info(`Cleaned up ${removedCount} stale Aryn JSON temp file${removedCount === 1 ? '' : 's'}.`)
+    }
+  } catch (error) {
+    console.warn('Failed to clean up stale Aryn JSON temp files.', error)
+  }
+}
+
 async function startApplication() {
   Menu.setApplicationMenu(null)
   applyDefaultAppIcon()
+  await cleanupArynDataDirectoryTempFiles()
 
   try {
     const cleanupResult = await conversationStore.cleanupDrafts()
+    await Promise.all(cleanupResult.removedDrafts.map((conversation) => (
+      discardDraftWorkspaceSessions(conversation.workspacePath)
+    )))
     await cleanupConversationStateReferences(cleanupResult)
   } catch (error) {
     console.warn('Failed to clean up draft conversations.', error)
@@ -1386,6 +1414,7 @@ ipcMain.handle('conversation:remove-draft', async (_event, conversationId: strin
   }
 
   const nextState = await conversationStore.removeDraft(conversationId)
+  await discardDraftWorkspaceSessions(draftWorkspacePath)
   const removedDraft = previousState.conversations.find((conversation) => (
     conversation.id === conversationId
     && conversation.status === 'draft'
@@ -2012,6 +2041,10 @@ ipcMain.handle('agent:list-sessions', async (_event, rootPath: string) => {
 
 ipcMain.handle('agent:read-session', async (_event, rootPath: string, sessionPath: string) => {
   return agentManager.readSession(rootPath, sessionPath)
+})
+
+ipcMain.handle('agent:session-exists', async (_event, rootPath: string, sessionPath: string) => {
+  return { exists: await agentManager.sessionExists(rootPath, sessionPath) }
 })
 
 ipcMain.handle('agent:create-session', async (_event, rootPath: string, options?: string | AgentSessionCreateOptions) => {
