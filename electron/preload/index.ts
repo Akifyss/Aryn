@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('appApi', {
     ipcRenderer.invoke('conversation:update', conversationId, patch) as Promise<ConversationRecord>
   ),
   removeDraftConversation: (conversationId: string) => ipcRenderer.invoke('conversation:remove-draft', conversationId) as Promise<ConversationState>,
+  removeConversation: (conversationId: string) => ipcRenderer.invoke('conversation:remove', conversationId) as Promise<ConversationState>,
   openPath: (path: string) => ipcRenderer.invoke('shell:open-path', path) as Promise<{ ok: boolean }>,
   showItemInFolder: (path: string) => ipcRenderer.invoke('shell:show-item-in-folder', path) as Promise<{ ok: boolean }>,
   getWorkspaceRestoreState: () => ipcRenderer.invoke('workspace:get-restore-state') as Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>,

@@ -109,6 +109,8 @@ type AgentSidebarProps = {
   onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
+  onRenameConversation?: (conversation: ConversationRecord, title: string) => Promise<void> | void
+  onRemoveConversation?: (conversation: ConversationRecord) => Promise<void> | void
   onOpenProviderSettings?: () => void
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
@@ -137,6 +139,8 @@ type AgentSurfaceProps = {
   onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
+  onRenameConversation?: (conversation: ConversationRecord, title: string) => Promise<void> | void
+  onRemoveConversation?: (conversation: ConversationRecord) => Promise<void> | void
   onOpenProviderSettings?: () => void
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
@@ -435,6 +439,8 @@ type AgentContextValue = {
   onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
+  onRenameConversation?: (conversation: ConversationRecord, title: string) => Promise<void> | void
+  onRemoveConversation?: (conversation: ConversationRecord) => Promise<void> | void
   onOpenProviderSettings?: () => void
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
@@ -2470,6 +2476,8 @@ function AgentProvider({
   onCreateConversationWorkspace,
   onOpenMessageFile,
   onOpenConversation,
+  onRenameConversation,
+  onRemoveConversation,
   onExternalSessionRequestHandled,
   onOpenProviderSettings,
   onOpenProjectAddMenu,
@@ -4013,6 +4021,8 @@ function AgentProvider({
     onCreateConversationWorkspace,
     onOpenMessageFile,
     onOpenConversation,
+    onRenameConversation,
+    onRemoveConversation,
     onOpenProviderSettings,
     onOpenProjectAddMenu,
     onOpenProjectSwitchMenu,
@@ -4084,6 +4094,8 @@ function AgentProvider({
     onCreateConversationWorkspace,
     onOpenMessageFile,
     onOpenConversation,
+    onRenameConversation,
+    onRemoveConversation,
     onOpenProviderSettings,
     onOpenProjectAddMenu,
     onOpenProjectSwitchMenu,
@@ -4168,7 +4180,11 @@ function AgentSessionTreeRow({
   isDeleting,
   isRenaming,
   label,
+  menuTitle = '对话菜单',
+  nodeClassName,
   relativeTime,
+  rowClassName,
+  triggerClassName,
   onOpen,
   onOpenMenu,
   onCancelRename,
@@ -4178,7 +4194,11 @@ function AgentSessionTreeRow({
   isDeleting: boolean
   isRenaming: boolean
   label: string
+  menuTitle?: string
+  nodeClassName?: string
   relativeTime?: string
+  rowClassName?: string
+  triggerClassName?: string
   onOpen: () => void
   onOpenMenu: (anchorRect: AgentMenuAnchorRect) => void
   onCancelRename: () => void
@@ -4238,15 +4258,15 @@ function AgentSessionTreeRow({
   }
 
   return (
-    <li className='panel-tree-node agent-project-session-node'>
+    <li className={`panel-tree-node agent-project-session-node${nodeClassName ? ` ${nodeClassName}` : ''}`}>
       <div
         ref={rowRef}
-        className={`workspace-tree-row agent-project-session-row${isActive ? ' is-active' : ''}${isRenaming ? ' is-editing' : ''}`}
+        className={`workspace-tree-row agent-project-session-row${rowClassName ? ` ${rowClassName}` : ''}${isActive ? ' is-active' : ''}${isRenaming ? ' is-editing' : ''}`}
       >
         {isRenaming ? (
           <>
             <div
-              className='workspace-tree-trigger agent-project-session-trigger agent-session-rename-trigger'
+              className={`workspace-tree-trigger agent-project-session-trigger${triggerClassName ? ` ${triggerClassName}` : ''} agent-session-rename-trigger`}
               onClick={(event) => event.stopPropagation()}
             >
               <input
@@ -4304,7 +4324,7 @@ function AgentSessionTreeRow({
           <>
             <button
               type='button'
-              className='workspace-tree-trigger agent-project-session-trigger'
+              className={`workspace-tree-trigger agent-project-session-trigger${triggerClassName ? ` ${triggerClassName}` : ''}`}
               title={label}
               onClick={onOpen}
               onContextMenu={(event) => {
@@ -4323,7 +4343,7 @@ function AgentSessionTreeRow({
                   type='button'
                   className='git-change-action git-change-icon-button agent-project-row-action'
                   aria-label={`打开 ${label} 菜单`}
-                  title='对话菜单'
+                  title={menuTitle}
                   disabled={isDeleting}
                   onClick={(event) => {
                     onOpenMenu(event.currentTarget.getBoundingClientRect())
@@ -4480,29 +4500,41 @@ function FlatAgentSessionTree({
 
 function AgentConversationRow({
   conversation,
+  isDeleting,
+  isRenaming,
   isActive,
   onOpen,
+  onOpenMenu,
+  onCancelRename,
+  onRename,
 }: {
   conversation: ConversationRecord
+  isDeleting: boolean
+  isRenaming: boolean
   isActive: boolean
   onOpen: () => void
+  onOpenMenu: (anchorRect: AgentMenuAnchorRect) => void
+  onCancelRename: () => void
+  onRename: (name: string) => Promise<void>
 }) {
   const relativeTime = formatAgentSessionRelativeTime(conversation.updatedAt)
 
   return (
-    <li className='panel-tree-node agent-project-session-node agent-conversation-node'>
-      <div className={`workspace-tree-row agent-project-session-row agent-conversation-row${isActive ? ' is-active' : ''}`}>
-        <button
-          type='button'
-          className='workspace-tree-trigger agent-project-session-trigger agent-conversation-trigger'
-          title={conversation.title}
-          onClick={onOpen}
-        >
-          <span className='panel-tree-label agent-project-session-label'>{conversation.title}</span>
-          {relativeTime ? <span className='agent-project-session-time'>{relativeTime}</span> : null}
-        </button>
-      </div>
-    </li>
+    <AgentSessionTreeRow
+      isActive={isActive}
+      isDeleting={isDeleting}
+      isRenaming={isRenaming}
+      label={conversation.title}
+      menuTitle='对话菜单'
+      nodeClassName='agent-conversation-node'
+      relativeTime={relativeTime}
+      rowClassName='agent-conversation-row'
+      triggerClassName='agent-conversation-trigger'
+      onCancelRename={onCancelRename}
+      onOpen={onOpen}
+      onOpenMenu={onOpenMenu}
+      onRename={onRename}
+    />
   )
 }
 
@@ -4522,6 +4554,8 @@ function AgentProjectTree({
     loadProjectSessions,
     onOpenProjectAddMenu,
     onOpenConversation,
+    onRenameConversation,
+    onRemoveConversation,
     onOpenProjectFolder,
     onOpenProjectSession,
     onRemoveProject,
@@ -4535,7 +4569,10 @@ function AgentProjectTree({
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set())
   const [projectMenuState, setProjectMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, project: ProjectRecord } | null>(null)
   const [sessionMenuState, setSessionMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, session: AgentSessionListItem } | null>(null)
+  const [conversationMenuState, setConversationMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, conversation: ConversationRecord } | null>(null)
   const [renamingSessionPath, setRenamingSessionPath] = useState<string | null>(null)
+  const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null)
+  const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
   const activeSessionProjectId = useMemo(() => {
     if (activeSessionSelection.kind !== 'session' || !activeSessionPath) {
       return null
@@ -4569,6 +4606,8 @@ function AgentProjectTree({
   function startPrimaryNewConversation() {
     setProjectMenuState(null)
     setSessionMenuState(null)
+    setConversationMenuState(null)
+    setRenamingConversationId(null)
 
     if (activeProject && onStartProjectSession) {
       void onStartProjectSession(activeProject)
@@ -4596,13 +4635,14 @@ function AgentProjectTree({
   }, [activeSessionProjectId])
 
   useEffect(() => {
-    if (!projectMenuState && !sessionMenuState) {
+    if (!projectMenuState && !sessionMenuState && !conversationMenuState) {
       return
     }
 
     const closeMenus = () => {
       setProjectMenuState(null)
       setSessionMenuState(null)
+      setConversationMenuState(null)
     }
     const handlePointerDown = (event: globalThis.PointerEvent) => {
       if (isAgentTreeContextMenuEventTarget(event.target)) {
@@ -4627,12 +4667,14 @@ function AgentProjectTree({
       window.removeEventListener('scroll', closeMenus, true)
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [projectMenuState, sessionMenuState])
+  }, [conversationMenuState, projectMenuState, sessionMenuState])
 
   function toggleProject(project: ProjectRecord) {
     setRenamingSessionPath(null)
+    setRenamingConversationId(null)
     setProjectMenuState(null)
     setSessionMenuState(null)
+    setConversationMenuState(null)
     const shouldLoadSessions = !expandedProjectIds.has(project.id)
 
     setExpandedProjectIds((currentExpandedProjectIds) => {
@@ -4715,6 +4757,7 @@ function AgentProjectTree({
                     onContextMenu={(event) => {
                       event.preventDefault()
                       event.stopPropagation()
+                      setConversationMenuState(null)
                       setSessionMenuState(null)
                       setProjectMenuState({
                         anchorRect: createAgentPointAnchorRect(event.clientX, event.clientY),
@@ -4741,6 +4784,8 @@ function AgentProjectTree({
                         onClick={() => {
                           setProjectMenuState(null)
                           setSessionMenuState(null)
+                          setConversationMenuState(null)
+                          setRenamingConversationId(null)
                           void onStartProjectSession?.(project)
                           onRequestClose?.()
                         }}
@@ -4753,6 +4798,7 @@ function AgentProjectTree({
                         aria-label={`打开 ${project.name} 菜单`}
                         title='项目菜单'
                         onClick={(event) => {
+                          setConversationMenuState(null)
                           setSessionMenuState(null)
                           setProjectMenuState({
                             anchorRect: event.currentTarget.getBoundingClientRect(),
@@ -4790,14 +4836,17 @@ function AgentProjectTree({
                             relativeTime={relativeTime}
                             onOpen={() => {
                               setRenamingSessionPath(null)
+                              setRenamingConversationId(null)
                               setProjectMenuState(null)
                               setSessionMenuState(null)
+                              setConversationMenuState(null)
                               void Promise.resolve(onOpenProjectSession?.(project, session.path)).then(() => {
                                 onRequestClose?.()
                               })
                             }}
                             onOpenMenu={(anchorRect) => {
                               setProjectMenuState(null)
+                              setConversationMenuState(null)
                               setSessionMenuState({
                                 anchorRect,
                                 session,
@@ -4823,6 +4872,10 @@ function AgentProjectTree({
                 aria-keyshortcuts='Control+Alt+N'
                 title='新对话 Ctrl+Alt+N'
                 onClick={() => {
+                  setProjectMenuState(null)
+                  setSessionMenuState(null)
+                  setConversationMenuState(null)
+                  setRenamingConversationId(null)
                   void onStartStandaloneConversation?.()
                   onRequestClose?.()
                 }}
@@ -4837,12 +4890,29 @@ function AgentProjectTree({
                 <AgentConversationRow
                   key={conversation.id}
                   conversation={conversation}
+                  isDeleting={deletingConversationId === conversation.id}
+                  isRenaming={renamingConversationId === conversation.id}
                   isActive={activeWorkspaceContext.kind === 'conversation' && activeWorkspaceContext.conversationId === conversation.id}
+                  onCancelRename={() => setRenamingConversationId(null)}
                   onOpen={() => {
+                    setRenamingSessionPath(null)
+                    setRenamingConversationId(null)
+                    setProjectMenuState(null)
+                    setSessionMenuState(null)
+                    setConversationMenuState(null)
                     void Promise.resolve(onOpenConversation?.(conversation)).then(() => {
                       onRequestClose?.()
                     })
                   }}
+                  onOpenMenu={(anchorRect) => {
+                    setProjectMenuState(null)
+                    setSessionMenuState(null)
+                    setConversationMenuState({
+                      anchorRect,
+                      conversation,
+                    })
+                  }}
+                  onRename={(title) => Promise.resolve(onRenameConversation?.(conversation, title))}
                 />
               ))}
             </ul>
@@ -4863,6 +4933,28 @@ function AgentProjectTree({
             const sessionPath = sessionMenuState.session.path
             setSessionMenuState(null)
             setRenamingSessionPath(sessionPath)
+          }}
+        />
+      ) : null}
+
+      {conversationMenuState ? (
+        <AgentSessionTreeContextMenu
+          anchorRect={conversationMenuState.anchorRect}
+          disabled={deletingConversationId === conversationMenuState.conversation.id}
+          onDelete={() => {
+            const conversation = conversationMenuState.conversation
+            setConversationMenuState(null)
+            setDeletingConversationId(conversation.id)
+            void Promise.resolve(onRemoveConversation?.(conversation)).finally(() => {
+              setDeletingConversationId((currentId) => (
+                currentId === conversation.id ? null : currentId
+              ))
+            })
+          }}
+          onRename={() => {
+            const conversationId = conversationMenuState.conversation.id
+            setConversationMenuState(null)
+            setRenamingConversationId(conversationId)
           }}
         />
       ) : null}

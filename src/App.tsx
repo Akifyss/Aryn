@@ -2807,6 +2807,76 @@ function App() {
     }
   }
 
+  async function handleRenameConversation(conversation: ConversationRecord, title: string) {
+    const nextTitle = title.trim()
+
+    if (!nextTitle || nextTitle === conversation.title.trim()) {
+      return
+    }
+
+    try {
+      const updatedConversation = await window.appApi.updateConversation(conversation.id, {
+        title: nextTitle,
+      })
+      setConversationState(await window.appApi.getConversationState())
+
+      if (activeWorkspaceContext.kind === 'conversation' && activeWorkspaceContext.conversationId === conversation.id) {
+        setStatusMessage(updatedConversation.title)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to rename conversation.'
+      toast.danger('重命名对话失败', { description: message })
+      setStatusMessage(message)
+      throw error
+    }
+  }
+
+  async function handleRemoveConversation(conversation: ConversationRecord) {
+    const confirmed = await requestConfirm({
+      title: '删除对话',
+      message: `要删除“${conversation.title}”吗？\n\n这会从对话列表移除该记录，不会删除工作目录中的文件。`,
+      confirmLabel: '删除',
+      isDanger: true,
+    })
+
+    if (!confirmed) {
+      return
+    }
+
+    const wasActive = activeWorkspaceContext.kind === 'conversation'
+      && activeWorkspaceContext.conversationId === conversation.id
+
+    try {
+      if (wasActive) {
+        await flushWorkspaceAutosave()
+        await flushDiffAutosave()
+      }
+
+      const nextConversationState = await window.appApi.removeConversation(conversation.id)
+      setConversationState(nextConversationState)
+
+      if (wasActive) {
+        setActiveWorkspaceContext(conversationDraftContext)
+
+        if (
+          !conversation.workspacePath
+          || (
+            currentPathRef.current
+            && normalizeFilePath(currentPathRef.current) === normalizeFilePath(conversation.workspacePath)
+          )
+        ) {
+          await disconnectWorkspaceSurface()
+        }
+
+        setStatusMessage('新对话')
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete conversation.'
+      toast.danger('删除对话失败', { description: message })
+      setStatusMessage(message)
+    }
+  }
+
   async function handleCreateFile() {
     if (!currentPath) {
       return
@@ -4918,6 +4988,8 @@ function App() {
         onCreateConversationWorkspace={handleCreateConversationWorkspace}
         onOpenMessageFile={openAgentMessageFile}
         onOpenConversation={handleOpenConversation}
+        onRenameConversation={handleRenameConversation}
+        onRemoveConversation={handleRemoveConversation}
         onOpenProviderSettings={() => {
           if (isDrawerSurface) {
             setIsRightDrawerOpen(false)
@@ -5457,6 +5529,8 @@ function App() {
         onCreateConversationWorkspace={handleCreateConversationWorkspace}
         onOpenMessageFile={openAgentMessageFile}
         onOpenConversation={handleOpenConversation}
+        onRenameConversation={handleRenameConversation}
+        onRemoveConversation={handleRemoveConversation}
         onOpenProviderSettings={() => {
           if (isRightSidebarDrawer) {
             setIsRightDrawerOpen(false)

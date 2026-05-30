@@ -44,6 +44,7 @@ declare global {
       createConversationWorkspace: (request?: CreateConversationWorkspaceRequest) => Promise<ConversationRecord>
       updateConversation: (conversationId: string, patch: UpdateConversationRequest) => Promise<ConversationRecord>
       removeDraftConversation: (conversationId: string) => Promise<ConversationState>
+      removeConversation: (conversationId: string) => Promise<ConversationState>
       openPath: (path: string) => Promise<{ ok: boolean }>
       showItemInFolder: (path: string) => Promise<{ ok: boolean }>
       getWorkspaceRestoreState: () => Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>

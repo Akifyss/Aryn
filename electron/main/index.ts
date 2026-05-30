@@ -1452,6 +1452,70 @@ ipcMain.handle('conversation:remove-draft', async (_event, conversationId: strin
   return nextState
 })
 
+ipcMain.handle('conversation:remove', async (_event, conversationId: string) => {
+  const previousState = await conversationStore.read()
+  const removedConversation = previousState.conversations.find((conversation) => (
+    conversation.id === conversationId
+  )) ?? null
+
+  if (!removedConversation) {
+    throw new Error('Conversation not found.')
+  }
+
+  const removedWorkspacePath = removedConversation.workspacePath
+
+  if (removedWorkspacePath) {
+    await agentManager.releaseWorkspaceRuntime(removedWorkspacePath)
+  }
+
+  const nextState = await conversationStore.removeConversation(conversationId)
+
+  await appStateStore.update((currentState) => {
+    const entries = { ...currentState.workspace.entries }
+    const removedWorkspaceIdentity = removedWorkspacePath ? getProjectPathIdentity(removedWorkspacePath) : null
+    const hasRemainingWorkspaceOwner = Boolean(
+      removedWorkspaceIdentity
+      && (
+        currentState.workspace.projects.some((project) => (
+          getProjectPathIdentity(project.path) === removedWorkspaceIdentity
+        ))
+        || nextState.conversations.some((conversation) => (
+          conversation.workspacePath
+          && getProjectPathIdentity(conversation.workspacePath) === removedWorkspaceIdentity
+        ))
+      ),
+    )
+
+    if (removedWorkspaceIdentity && !hasRemainingWorkspaceOwner) {
+      for (const workspacePath of Object.keys(entries)) {
+        if (getProjectPathIdentity(workspacePath) === removedWorkspaceIdentity) {
+          delete entries[workspacePath]
+        }
+      }
+    }
+
+    return {
+      ...currentState,
+      workspace: {
+        ...currentState.workspace,
+        activeContext: currentState.workspace.activeContext.kind === 'conversation'
+          && currentState.workspace.activeContext.conversationId === removedConversation.id
+          ? { kind: 'conversationDraft' }
+          : currentState.workspace.activeContext,
+        entries,
+        lastWorkspacePath: removedWorkspacePath
+          && !hasRemainingWorkspaceOwner
+          && currentState.workspace.lastWorkspacePath
+          && getProjectPathIdentity(currentState.workspace.lastWorkspacePath) === getProjectPathIdentity(removedWorkspacePath)
+          ? null
+          : currentState.workspace.lastWorkspacePath,
+      },
+    }
+  })
+
+  return nextState
+})
+
 ipcMain.handle('shell:open-path', async (_event, targetPath: string) => {
   const trimmedPath = typeof targetPath === 'string' ? targetPath.trim() : ''
   if (!trimmedPath) {

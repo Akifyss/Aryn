@@ -177,6 +177,35 @@ describe('conversation store', () => {
     await expect(readFile(path.join(record.workspacePath!, 'notes.md'), 'utf8')).resolves.toBe('# Keep\n')
   })
 
+  it('removes an active conversation from the index without deleting workspace files', async () => {
+    const rootPath = await createTempDir()
+    const store = new ConversationStore(
+      path.join(rootPath, '.aryn', 'conversations', 'index.json'),
+      path.join(rootPath, 'Documents'),
+    )
+    const record = await store.createWorkspace({ initialPrompt: 'Keep artifacts' })
+    await store.updateConversation(record.id, {
+      status: 'active',
+      title: 'Keep artifacts',
+    })
+    await writeFile(path.join(record.workspacePath!, 'artifact.md'), '# Artifact\n', 'utf8')
+
+    const state = await store.removeConversation(record.id)
+
+    expect(state.conversations).toEqual([])
+    await expect(readFile(path.join(record.workspacePath!, 'artifact.md'), 'utf8')).resolves.toBe('# Artifact\n')
+  })
+
+  it('reports a missing conversation when removing from the index', async () => {
+    const rootPath = await createTempDir()
+    const store = new ConversationStore(
+      path.join(rootPath, '.aryn', 'conversations', 'index.json'),
+      path.join(rootPath, 'Documents'),
+    )
+
+    await expect(store.removeConversation('missing-conversation')).rejects.toThrow('Conversation not found.')
+  })
+
   it('cleans up stale draft conversations on application startup', async () => {
     const rootPath = await createTempDir()
     const store = new ConversationStore(

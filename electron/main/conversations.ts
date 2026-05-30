@@ -272,6 +272,25 @@ export class ConversationStore {
     return nextState
   }
 
+  async removeConversation(conversationId: string): Promise<ConversationState> {
+    const normalizedId = typeof conversationId === 'string' ? conversationId : ''
+
+    return this.updateState((currentState) => {
+      const conversations = currentState.conversations.filter((conversation) => (
+        conversation.id !== normalizedId
+      ))
+
+      if (conversations.length === currentState.conversations.length) {
+        throw new Error('Conversation not found.')
+      }
+
+      return {
+        ...currentState,
+        conversations,
+      }
+    })
+  }
+
   async cleanupDrafts(): Promise<ConversationDraftCleanupResult> {
     const currentState = await this.read()
     const draftRecords = currentState.conversations.filter((conversation) => conversation.status === 'draft')
