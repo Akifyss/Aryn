@@ -75,6 +75,18 @@ type SearchMatchRange = {
   end: number;
 };
 
+function normalizeEditorText(text: string | null | undefined): string {
+  return `${text ?? ''}`.replace(/\r\n?/g, '\n');
+}
+
+function clampDocumentPosition(position: number, docLength: number): number {
+  if (!Number.isFinite(position)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(position, docLength));
+}
+
 type InlineSelectionRange = {
   from: number;
   to: number;
@@ -176,6 +188,7 @@ export function createEditor({
   // VS Code webviews can hit cross-origin window access issues in the EditContext path.
   // Disable it explicitly for stability in embedded Chromium.
   (EditorView as any).EDIT_CONTEXT = false;
+  const initialText = normalizeEditorText(text);
 
   const modeCompartment = new Compartment();
   const gitGutterCompartment = new Compartment();
@@ -245,13 +258,13 @@ export function createEditor({
   };
   const initialCursorPos = (() => {
     if (typeof initialTopLine === 'number' && Number.isFinite(initialTopLine)) {
-      return getLineStartOffset(text ?? '', initialTopLine);
+      return getLineStartOffset(initialText, initialTopLine);
     }
-    if (!text) {
+    if (!initialText) {
       return 0;
     }
-    const firstLineEnd = text.indexOf('\n');
-    return firstLineEnd === -1 ? text.length : firstLineEnd;
+    const firstLineEnd = initialText.indexOf('\n');
+    return firstLineEnd === -1 ? initialText.length : firstLineEnd;
   })();
   const targetElementFrom = (target) => (
     target instanceof Element ? target : target instanceof Node ? target.parentElement : null
@@ -1230,7 +1243,7 @@ export function createEditor({
   };
 
   const state = EditorState.create({
-    doc: text,
+    doc: initialText,
     selection: { anchor: initialCursorPos },
     extensions: [
       EditorState.tabSize.of(4),
@@ -1716,21 +1729,25 @@ export function createEditor({
     setText(textValue) {
       gitBlameHover?.hide();
       const currentText = view.state.doc.toString();
-      const syncChange = findSyncChange(currentText, textValue);
+      const nextText = normalizeEditorText(textValue);
+      const syncChange = findSyncChange(currentText, nextText);
       if (!syncChange) {
         return;
       }
 
       const { anchor, head } = view.state.selection.main;
-      const newLength = textValue.length;
-      const mappedAnchor = Math.min(mapPositionThroughChange(anchor, syncChange), newLength);
-      const mappedHead = Math.min(mapPositionThroughChange(head, syncChange), newLength);
+      const newLength = nextText.length;
+      const mappedAnchor = clampDocumentPosition(mapPositionThroughChange(anchor, syncChange), newLength);
+      const mappedHead = clampDocumentPosition(mapPositionThroughChange(head, syncChange), newLength);
       applyingExternal = true;
-      view.dispatch({
-        changes: syncChange,
-        selection: { anchor: mappedAnchor, head: mappedHead }
-      });
-      applyingExternal = false;
+      try {
+        view.dispatch({
+          changes: syncChange,
+          selection: { anchor: mappedAnchor, head: mappedHead }
+        });
+      } finally {
+        applyingExternal = false;
+      }
       pendingExternalUndoSelectionPreserve = true;
       syncSelectionClass();
       emitSelectionChange();
@@ -2483,3 +2500,10 @@ function sourceMode() {
     ...mergeConflictSourceExtensions()
   ];
 }
+
+export const __meoEditorTextSyncTestHooks = {
+  clampDocumentPosition,
+  findSyncChange,
+  mapPositionThroughChange,
+  normalizeEditorText
+};

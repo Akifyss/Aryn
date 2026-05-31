@@ -599,6 +599,16 @@ function normalizeLineEndings(text: string) {
   return text.replace(/\r\n?/g, '\n')
 }
 
+function normalizeCodeMirrorText(text: string) {
+  return normalizeLineEndings(text)
+}
+
+export const __meoDiffSplitTextSyncTestHooks = {
+  findSyncChange,
+  mapPositionThroughChange,
+  normalizeCodeMirrorText,
+} as const
+
 function createDiffComparisonLabel(originalLabel: string, modifiedLabel: string) {
   return `${originalLabel} - ${modifiedLabel}`
 }
@@ -682,7 +692,7 @@ export function buildDiffComparisonOptions(
 }
 
 export function createTextDocFromContent(content: string) {
-  return Text.of(content.split('\n'))
+  return Text.of(normalizeCodeMirrorText(content).split('\n'))
 }
 
 export function mapCurrentLineToIndexLine(indexText: string, currentText: string, currentLineNumber: number) {
@@ -5018,31 +5028,32 @@ export function createMeoDiffSplitController({
     annotations: Annotation<unknown> | readonly Annotation<unknown>[],
   ) => {
     const startedAt = performance.now()
+    const nextDocumentText = normalizeCodeMirrorText(nextText)
     if (snapshot.value.length !== view.state.doc.length) {
       view.dispatch({
         annotations,
         changes: {
           from: 0,
-          insert: nextText,
+          insert: nextDocumentText,
           to: view.state.doc.length,
         },
       })
-      snapshot.value = nextText
+      snapshot.value = nextDocumentText
       recordOpenFileProfile('diff-split:sync-text-snapshot:end', {
         durationMs: getOpenFileProfileDuration(startedAt),
         fullReplace: true,
-        nextChars: nextText.length,
+        nextChars: nextDocumentText.length,
       })
       return true
     }
 
-    const syncChange = findSyncChange(snapshot.value, nextText)
+    const syncChange = findSyncChange(snapshot.value, nextDocumentText)
     if (!syncChange) {
       recordOpenFileProfile('diff-split:sync-text-snapshot:end', {
         durationMs: getOpenFileProfileDuration(startedAt),
         fullReplace: false,
         noChange: true,
-        nextChars: nextText.length,
+        nextChars: nextDocumentText.length,
       })
       return false
     }
@@ -5051,11 +5062,11 @@ export function createMeoDiffSplitController({
       annotations,
       changes: syncChange,
     })
-    snapshot.value = nextText
+    snapshot.value = nextDocumentText
     recordOpenFileProfile('diff-split:sync-text-snapshot:end', {
       durationMs: getOpenFileProfileDuration(startedAt),
       fullReplace: false,
-      nextChars: nextText.length,
+      nextChars: nextDocumentText.length,
     })
     return true
   }
@@ -5482,10 +5493,12 @@ export function createMeoDiffSplitController({
     body.replaceChildren()
 
     const originalState = getOriginalState()
+    const originalDocumentText = normalizeCodeMirrorText(originalState.text)
+    const modifiedDocumentText = normalizeCodeMirrorText(originalState.modifiedText)
     rememberResolvedViewScope(originalState)
     lastRenderedState = originalState
-    originalTextSnapshot.value = originalState.text
-    modifiedTextSnapshot.value = originalState.modifiedText
+    originalTextSnapshot.value = originalDocumentText
+    modifiedTextSnapshot.value = modifiedDocumentText
     syncLabels(originalState)
     header.replaceChildren(comparisonDropdown)
     host.classList.toggle('meo-diff-unified-host', currentViewMode === 'unified')
@@ -5499,13 +5512,13 @@ export function createMeoDiffSplitController({
         allowInlineDiffs: false,
         className: 'meo-diff-unified-editor',
         diffConfig: getDiffConfig(editable),
-        doc: originalState.modifiedText,
+        doc: modifiedDocumentText,
         gutter: false,
         highlightChanges: shouldHighlightInlineChanges(originalState),
         mergeControls: getRevertControls(originalState)
           ? (kind) => createUnifiedHunkActionControl(kind)
           : false,
-        original: originalState.text,
+        original: originalDocumentText,
         parent: body,
         renderDeletedContent: renderUnifiedDeletedContent,
         syntaxHighlightDeletions: true,
@@ -5528,7 +5541,7 @@ export function createMeoDiffSplitController({
           onViewportChange,
         readOnlyCompartment: unifiedReadOnlyCompartment,
         readOnly: () => getOriginalState().modifiedReadOnly,
-        renderHealthEnabled: originalState.modifiedText.length < SPLIT_RENDER_HEALTH_MAX_DOC_CHARS,
+        renderHealthEnabled: modifiedDocumentText.length < SPLIT_RENDER_HEALTH_MAX_DOC_CHARS,
         side: 'modified',
         textSnapshot: modifiedTextSnapshot,
       },
@@ -5623,7 +5636,7 @@ export function createMeoDiffSplitController({
       previewShell.append(previewOriginalPane, previewModifiedPane)
       body.appendChild(previewShell)
       previewOriginalView = new EditorView({
-        doc: originalState.text,
+        doc: originalDocumentText,
         extensions: createDiffExtensions({
           activeLineHighlightCompartment: originalActiveLineHighlightCompartment,
           activeLineGutterCompartment: originalActiveLineGutterCompartment,
@@ -5645,7 +5658,7 @@ export function createMeoDiffSplitController({
       })
       previewOriginalView.dom.classList.add('meo-diff-split-preview-original-editor')
       previewView = new EditorView({
-        doc: originalState.modifiedText,
+        doc: modifiedDocumentText,
         extensions: createDiffExtensions({
           activeLineHighlightCompartment: modifiedActiveLineHighlightCompartment,
           activeLineGutterCompartment: modifiedActiveLineGutterCompartment,
@@ -5759,7 +5772,7 @@ export function createMeoDiffSplitController({
     })
     mergeView = createMeoDiffSplitMergeView({
       a: {
-        doc: originalState.text,
+        doc: originalDocumentText,
         activeLineHighlightCompartment: originalActiveLineHighlightCompartment,
         activeLineGutterCompartment: originalActiveLineGutterCompartment,
         editable: false,
@@ -5771,12 +5784,12 @@ export function createMeoDiffSplitController({
         onChange: () => undefined,
         readOnlyCompartment: originalReadOnlyCompartment,
         readOnly: true,
-        renderHealthEnabled: originalState.text.length < SPLIT_RENDER_HEALTH_MAX_DOC_CHARS,
+        renderHealthEnabled: originalDocumentText.length < SPLIT_RENDER_HEALTH_MAX_DOC_CHARS,
         side: 'original',
         textSnapshot: originalTextSnapshot,
       },
       b: {
-        doc: originalState.modifiedText,
+        doc: modifiedDocumentText,
         activeLineHighlightCompartment: modifiedActiveLineHighlightCompartment,
         activeLineGutterCompartment: modifiedActiveLineGutterCompartment,
         editable,
@@ -5794,7 +5807,7 @@ export function createMeoDiffSplitController({
         readOnlyCompartment: modifiedReadOnlyCompartment,
         reportViewportChanges: false,
         readOnly: () => getOriginalState().modifiedReadOnly,
-        renderHealthEnabled: originalState.modifiedText.length < SPLIT_RENDER_HEALTH_MAX_DOC_CHARS,
+        renderHealthEnabled: modifiedDocumentText.length < SPLIT_RENDER_HEALTH_MAX_DOC_CHARS,
         side: 'modified',
         textSnapshot: modifiedTextSnapshot,
       },
@@ -6025,6 +6038,8 @@ export function createMeoDiffSplitController({
     const startedAt = performance.now()
     const previousState = lastRenderedState
     const originalState = getOriginalState()
+    const originalDocumentText = normalizeCodeMirrorText(originalState.text)
+    const modifiedDocumentText = normalizeCodeMirrorText(originalState.modifiedText)
     recordOpenFileProfile('diff-split:sync-resolved-documents:start', {
       hasPreviousState: !!previousState,
       mode: currentViewMode,
@@ -6055,23 +6070,23 @@ export function createMeoDiffSplitController({
         return
       }
 
-      if (modifiedTextSnapshot.value !== originalState.modifiedText) {
+      if (modifiedTextSnapshot.value !== modifiedDocumentText) {
         invalidateDiffOverviewSegments()
         syncTextSnapshotToView(
           previewView,
           modifiedTextSnapshot,
-          originalState.modifiedText,
+          modifiedDocumentText,
           [
             externalDocumentSync.of(true),
             Transaction.addToHistory.of(false),
           ],
         )
       }
-      if (previewOriginalView && originalTextSnapshot.value !== originalState.text) {
+      if (previewOriginalView && originalTextSnapshot.value !== originalDocumentText) {
         syncTextSnapshotToView(
           previewOriginalView,
           originalTextSnapshot,
-          originalState.text,
+          originalDocumentText,
           [
             externalDocumentSync.of(true),
             Transaction.addToHistory.of(false),
@@ -6112,27 +6127,27 @@ export function createMeoDiffSplitController({
     }
 
     if (unifiedView) {
-      if (originalTextSnapshot.value !== originalState.text) {
+      if (originalTextSnapshot.value !== originalDocumentText) {
         invalidateDiffOverviewSegments()
         const originalDoc = getOriginalDoc(unifiedView.state)
         const changes = ChangeSet.of({
           from: 0,
-          insert: originalState.text,
+          insert: originalDocumentText,
           to: originalDoc.length,
         }, originalDoc.length)
         unifiedView.dispatch({
           annotations: allowReadOnlyDocumentUpdate.of(true),
           effects: originalDocChangeEffect(unifiedView.state, changes),
         })
-        originalTextSnapshot.value = originalState.text
+        originalTextSnapshot.value = originalDocumentText
       }
 
-      if (modifiedTextSnapshot.value !== originalState.modifiedText) {
+      if (modifiedTextSnapshot.value !== modifiedDocumentText) {
         invalidateDiffOverviewSegments()
         syncTextSnapshotToView(
           unifiedView,
           modifiedTextSnapshot,
-          originalState.modifiedText,
+          modifiedDocumentText,
           [
             externalDocumentSync.of(true),
             Transaction.addToHistory.of(false),
@@ -6156,22 +6171,22 @@ export function createMeoDiffSplitController({
       return
     }
 
-    if (originalTextSnapshot.value !== originalState.text) {
+    if (originalTextSnapshot.value !== originalDocumentText) {
       invalidateDiffOverviewSegments()
       syncTextSnapshotToView(
         originalView,
         originalTextSnapshot,
-        originalState.text,
+        originalDocumentText,
         allowReadOnlyDocumentUpdate.of(true),
       )
     }
 
-    if (modifiedTextSnapshot.value !== originalState.modifiedText) {
+    if (modifiedTextSnapshot.value !== modifiedDocumentText) {
       invalidateDiffOverviewSegments()
       syncTextSnapshotToView(
         modifiedView,
         modifiedTextSnapshot,
-        originalState.modifiedText,
+        modifiedDocumentText,
         [
           externalDocumentSync.of(true),
           Transaction.addToHistory.of(false),
@@ -6611,7 +6626,8 @@ export function createMeoDiffSplitController({
       }
 
       const previousText = modifiedTextSnapshot.value
-      const syncChange = findSyncChange(previousText, originalState.modifiedText)
+      const nextDocumentText = normalizeCodeMirrorText(originalState.modifiedText)
+      const syncChange = findSyncChange(previousText, nextDocumentText)
       if (!syncChange) {
         if (baselineChanges.original || baselineChanges.modified) {
           if (hasPendingChunkRefresh()) {
@@ -6625,7 +6641,7 @@ export function createMeoDiffSplitController({
       }
 
       const { anchor, head } = view.state.selection.main
-      const newLength = originalState.modifiedText.length
+      const newLength = nextDocumentText.length
       const mappedAnchor = Math.min(Math.max(0, mapPositionThroughChange(anchor, syncChange)), newLength)
       const mappedHead = Math.min(Math.max(0, mapPositionThroughChange(head, syncChange)), newLength)
 
@@ -6639,7 +6655,7 @@ export function createMeoDiffSplitController({
           changes: syncChange,
           selection: { anchor: mappedAnchor, head: mappedHead },
         })
-        modifiedTextSnapshot.value = originalState.modifiedText
+        modifiedTextSnapshot.value = nextDocumentText
       } finally {
         applyingExternal = false
       }

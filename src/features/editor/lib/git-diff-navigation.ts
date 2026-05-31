@@ -123,8 +123,12 @@ export function createSelectionFromCodeMirrorChunk(
   }
 }
 
+function normalizeCodeMirrorText(content: string) {
+  return `${content ?? ''}`.replace(/\r\n?/g, '\n')
+}
+
 function createTextDocFromContent(content: string) {
-  return Text.of(content.split('\n'))
+  return Text.of(normalizeCodeMirrorText(content).split('\n'))
 }
 
 export function createVisualDiffSelections(originalContent: string, modifiedContent: string): GitDiffSelection[] {
