@@ -58,6 +58,10 @@ import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
 import { shouldRunAgentModelCascaderDelayedActivation } from '@/features/agent/lib/model-cascader-pointer-intent'
 import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
 import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
+import {
+  resolveAgentWorkspaceSessionRestore,
+  type AgentProjectSessionRequest,
+} from '@/features/agent/lib/project-session-request'
 import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
 import type { ActiveWorkspaceContext, ConversationRecord, ConversationState } from '@/features/conversations/types'
 import type { ProjectRecord, ProjectState, WorkspaceIconTheme } from '@/features/workspace/types'
@@ -166,17 +170,6 @@ type AgentProjectSessionBucket = {
   hasLoaded: boolean
   isLoading: boolean
   sessions: AgentSessionListItem[]
-}
-
-type AgentProjectSessionRequest = {
-  kind: 'new'
-  projectId: string
-  requestId: number
-} | {
-  kind: 'session'
-  projectId: string
-  requestId: number
-  sessionPath: string
 }
 
 type AgentProviderProps = AgentSurfaceProps & {
@@ -3042,11 +3035,18 @@ function AgentProvider({
     }
 
     void window.appApi.getWorkspaceState(workspacePath)
-      .then((workspaceState) => window.appApi.loadAgentWorkspace(
-        workspacePath,
-        workspaceState.lastAgentSessionPath,
-        shouldStartNewSession ? { restoreSession: false } : undefined,
-      ))
+      .then((workspaceState) => {
+        const sessionRestore = resolveAgentWorkspaceSessionRestore(
+          matchingExternalRequest,
+          workspaceState.lastAgentSessionPath,
+        )
+
+        return window.appApi.loadAgentWorkspace(
+          workspacePath,
+          sessionRestore.preferredSessionPath,
+          sessionRestore.options,
+        )
+      })
       .then((nextState) => {
         if (loadAgentStateRequestIdRef.current !== requestId) {
           return
@@ -4550,6 +4550,7 @@ function AgentProjectTree({
     conversationState,
     deletingSessionPath,
     handleDeleteSession,
+    handleOpenSession,
     handleRenameSession,
     loadProjectSessions,
     onOpenProjectAddMenu,
@@ -4822,6 +4823,12 @@ function AgentProjectTree({
                       ) : null}
                       {sessions.map((session) => {
                         const isActiveSession = activeSessionSelection.kind === 'session' && activeSessionPath === session.path
+                        const isCurrentActiveProject = Boolean(
+                          activeWorkspaceContext.kind === 'project'
+                          && activeWorkspaceContext.projectId === project.id
+                          && workspacePath
+                          && normalizeAgentProjectPath(workspacePath) === normalizeAgentProjectPath(project.path),
+                        )
                         const label = formatSessionLabel(session)
                         const relativeTime = formatAgentSessionRelativeTime(session.modifiedAt)
 
@@ -4840,7 +4847,10 @@ function AgentProjectTree({
                               setProjectMenuState(null)
                               setSessionMenuState(null)
                               setConversationMenuState(null)
-                              void Promise.resolve(onOpenProjectSession?.(project, session.path)).then(() => {
+                              const openSession = isCurrentActiveProject
+                                ? handleOpenSession(session.path)
+                                : onOpenProjectSession?.(project, session.path)
+                              void Promise.resolve(openSession).then(() => {
                                 onRequestClose?.()
                               })
                             }}

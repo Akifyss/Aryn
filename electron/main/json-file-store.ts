@@ -52,6 +52,24 @@ async function renameWithRetry(sourcePath: string, targetPath: string) {
   await retryFileAccess(() => rename(sourcePath, targetPath))
 }
 
+async function tryReplaceJsonFileWithTemp(sourcePath: string, targetPath: string) {
+  if (process.platform !== 'win32') {
+    await renameWithRetry(sourcePath, targetPath)
+    return true
+  }
+
+  try {
+    await rename(sourcePath, targetPath)
+    return true
+  } catch (error) {
+    if (!isRetriableFileAccessError(error)) {
+      throw error
+    }
+
+    return false
+  }
+}
+
 async function writeFileWithRetry(filePath: string, value: string) {
   await retryFileAccess(() => writeFile(filePath, value, {
     encoding: 'utf8',
@@ -211,16 +229,12 @@ export async function writeJsonFileAtomic(filePath: string, value: unknown) {
   try {
     await writeFileWithRetry(temporaryFilePath, serializedValue)
     await preserveExistingJsonFileBackupBestEffort(filePath)
-    try {
-      await renameWithRetry(temporaryFilePath, filePath)
-    } catch (error) {
-      if (process.platform !== 'win32' || !isRetriableFileAccessError(error)) {
-        throw error
-      }
+    const didReplaceAtomically = await tryReplaceJsonFileWithTemp(temporaryFilePath, filePath)
 
+    if (!didReplaceAtomically) {
       // Windows can reject replacing an existing file even after the temp file
-      // is fully written. After bounded retries, write the already-serialized
-      // payload directly so the logical state update can still complete.
+      // is fully written. Fall back immediately instead of paying the full
+      // retry backoff on every state write.
       await preserveExistingJsonFileBackupBestEffort(filePath)
       await writeFileWithRetry(filePath, serializedValue)
       await rm(temporaryFilePath, { force: true }).catch(() => undefined)

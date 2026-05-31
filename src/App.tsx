@@ -20,12 +20,12 @@ import type { ProjectRecord, ProjectState, WorkspaceNode } from '@/features/work
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTitlebar } from '@/components/app-titlebar'
 import {
-  type AgentProjectSessionRequest,
   AgentChatSurface,
   AgentProvider,
   AgentSessionTree,
   AgentSidebar,
 } from '@/features/agent/components/agent-sidebar'
+import type { AgentProjectSessionRequest } from '@/features/agent/lib/project-session-request'
 import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
 import { isLineWithinVisualDiff } from '@/features/editor/lib/git-diff-navigation'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host'
