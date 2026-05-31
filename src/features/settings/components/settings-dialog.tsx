@@ -1110,7 +1110,7 @@ export function SettingsDialog({
                                     type='button'
                                     disabled={isBusy}
                                     onClick={() => setShowPasswords(prev => ({ ...prev, [provider.key]: !showPassword }))}
-                                    className='absolute right-3 text-muted hover:text-foreground transition-colors focus:outline-none flex items-center justify-center z-10'
+                                    className='absolute right-3 text-muted hover:text-foreground cursor-pointer transition-colors focus:outline-none flex items-center justify-center z-10'
                                   >
                                     <Icon
                                       icon={showPassword ? 'mingcute:eye-line' : 'mingcute:eye-close-line'}
