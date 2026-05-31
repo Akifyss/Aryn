@@ -177,16 +177,6 @@ function resolveAppTheme(theme: AppTheme): ResolvedAppTheme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function getThemeLinkedWorkspaceIconOption(
-  resolvedTheme: ResolvedAppTheme,
-  iconThemeOptions: WorkspaceIconThemeCatalogOption[],
-) {
-  const targetLabel = resolvedTheme === 'dark' ? 'flow dawn' : 'flow deep'
-
-  return iconThemeOptions.find((option) => option.label.toLowerCase().includes(targetLabel)) ?? null
-}
-
-const THEME_LINKED_ICON_SWITCH_DELAY_MS = 300
 
 function getRelativePath(rootPath: string, filePath: string) {
   const normalizedRoot = rootPath.replace(/[\\/]+$/, '')
@@ -776,8 +766,6 @@ function App() {
   const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
   const [iconTheme, setIconTheme] = useState<WorkspaceIconTheme | null>(null)
   const [iconThemeOptions, setIconThemeOptions] = useState<WorkspaceIconThemeCatalogOption[]>([])
-  const lastIconThemeLinkedThemeRef = useRef<ResolvedAppTheme>(resolvedTheme)
-  const iconThemeLinkRequestRef = useRef(0)
   const [, setStatusMessage] = useState('Open a folder to start.')
   const [workspaceUnavailableMessage, setWorkspaceUnavailableMessage] = useState<string | null>(null)
   const [isCreatingFile, setIsCreatingFile] = useState(false)
@@ -3997,80 +3985,6 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    if (!currentPath || isImportingIconTheme || isApplyingIconTheme || iconThemeOptions.length === 0) {
-      return
-    }
-
-    if (lastIconThemeLinkedThemeRef.current === resolvedTheme) {
-      return
-    }
-
-    const targetOption = getThemeLinkedWorkspaceIconOption(resolvedTheme, iconThemeOptions)
-
-    if (!targetOption) {
-      lastIconThemeLinkedThemeRef.current = resolvedTheme
-      return
-    }
-
-    if (
-      iconTheme?.activeThemeId === targetOption.themeId
-      && iconTheme.sourceVsixPath === targetOption.sourceVsixPath
-    ) {
-      lastIconThemeLinkedThemeRef.current = resolvedTheme
-      return
-    }
-
-    const requestId = iconThemeLinkRequestRef.current + 1
-    iconThemeLinkRequestRef.current = requestId
-    lastIconThemeLinkedThemeRef.current = resolvedTheme
-
-    // Let the lightweight color theme repaint before importing the heavier icon theme.
-    const timerId = window.setTimeout(() => {
-      setIsApplyingIconTheme(true)
-
-      void (async () => {
-        try {
-          const nextIconTheme = await window.appApi.setWorkspaceIconTheme({
-            sourceVsixPath: targetOption.sourceVsixPath,
-            themeId: targetOption.themeId,
-          })
-
-          if (iconThemeLinkRequestRef.current !== requestId || !nextIconTheme) {
-            return
-          }
-
-          const nextIconThemeOptions = await window.appApi.getWorkspaceIconThemeCatalog()
-
-          if (iconThemeLinkRequestRef.current !== requestId) {
-            return
-          }
-
-          setIconTheme(nextIconTheme)
-          setIconThemeOptions(nextIconThemeOptions)
-          setStatusMessage(`${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`)
-        } catch (error) {
-          if (iconThemeLinkRequestRef.current === requestId) {
-            const message = error instanceof Error ? error.message : 'Unable to switch the icon theme.'
-            setStatusMessage(message)
-          }
-        } finally {
-          if (iconThemeLinkRequestRef.current === requestId) {
-            setIsApplyingIconTheme(false)
-          }
-        }
-      })()
-    }, THEME_LINKED_ICON_SWITCH_DELAY_MS)
-
-    return () => window.clearTimeout(timerId)
-  }, [
-    currentPath,
-    iconTheme,
-    iconThemeOptions,
-    isApplyingIconTheme,
-    isImportingIconTheme,
-    resolvedTheme,
-  ])
 
   useEffect(() => {
     setIsActiveEditorComposing(false)

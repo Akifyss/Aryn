@@ -4,20 +4,20 @@ import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '../src
 
 function createIconTheme(overrides: Partial<WorkspaceIconTheme> = {}): WorkspaceIconTheme {
   return {
-    activeThemeId: 'flow-deep',
-    activeThemeLabel: 'Flow Deep',
+    activeThemeId: 'catppuccin-latte',
+    activeThemeLabel: 'Catppuccin Latte',
     defaultFileIcon: null,
     defaultFolderExpandedIcon: null,
     defaultFolderIcon: null,
     defaultRootFolderExpandedIcon: null,
     defaultRootFolderIcon: null,
-    extensionLabel: 'Flow Icons',
+    extensionLabel: 'Catppuccin Icons for VSCode',
     fileExtensions: {},
     fileNames: {},
     folderNames: {},
     folderNamesExpanded: {},
     sourceKind: 'bundled',
-    sourceVsixPath: '/Applications/Aryn.app/Contents/Resources/icon-themes/thang-nm.flow-icons-2.0.2.vsix',
+    sourceVsixPath: '/Applications/Aryn.app/Contents/Resources/icon-themes/Catppuccin.catppuccin-vsc-icons-1.26.0.vsix',
     themes: [],
     ...overrides,
   }
@@ -25,18 +25,18 @@ function createIconTheme(overrides: Partial<WorkspaceIconTheme> = {}): Workspace
 
 const options: WorkspaceIconThemeCatalogOption[] = [
   {
-    key: '/Users/new-machine/Aryn/icon-themes/thang-nm.flow-icons-2.0.2.vsix::flow-deep',
-    label: 'Flow Deep',
+    key: '/Users/new-machine/Aryn/icon-themes/Catppuccin.catppuccin-vsc-icons-1.26.0.vsix::catppuccin-latte',
+    label: 'Catppuccin Latte',
     sourceKind: 'bundled',
-    sourceVsixPath: '/Users/new-machine/Aryn/icon-themes/thang-nm.flow-icons-2.0.2.vsix',
-    themeId: 'flow-deep',
+    sourceVsixPath: '/Users/new-machine/Aryn/icon-themes/Catppuccin.catppuccin-vsc-icons-1.26.0.vsix',
+    themeId: 'catppuccin-latte',
   },
   {
-    key: '/Users/new-machine/Aryn/icon-themes/thang-nm.flow-icons-2.0.2.vsix::flow-dawn',
-    label: 'Flow Dawn',
+    key: '/Users/new-machine/Aryn/icon-themes/Catppuccin.catppuccin-vsc-icons-1.26.0.vsix::catppuccin-mocha',
+    label: 'Catppuccin Mocha',
     sourceKind: 'bundled',
-    sourceVsixPath: '/Users/new-machine/Aryn/icon-themes/thang-nm.flow-icons-2.0.2.vsix',
-    themeId: 'flow-dawn',
+    sourceVsixPath: '/Users/new-machine/Aryn/icon-themes/Catppuccin.catppuccin-vsc-icons-1.26.0.vsix',
+    themeId: 'catppuccin-mocha',
   },
 ]
 
@@ -47,11 +47,11 @@ describe('workspace icon theme selection display', () => {
 
   it('matches bundled icon themes by theme id when the VSIX path changes across machines', () => {
     const iconTheme = createIconTheme({
-      sourceVsixPath: '/Users/old-machine/Aryn/icon-themes/thang-nm.flow-icons-2.0.2.vsix',
+      sourceVsixPath: '/Users/old-machine/Aryn/icon-themes/Catppuccin.catppuccin-vsc-icons-1.26.0.vsix',
     })
 
     expect(resolveActiveWorkspaceIconThemeKey(iconTheme, options))
-      .toBe('/Users/new-machine/Aryn/icon-themes/thang-nm.flow-icons-2.0.2.vsix::flow-deep')
+      .toBe('/Users/new-machine/Aryn/icon-themes/Catppuccin.catppuccin-vsc-icons-1.26.0.vsix::catppuccin-latte')
   })
 
   it('does not match external icon themes when their VSIX path is unavailable', () => {

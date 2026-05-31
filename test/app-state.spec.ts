@@ -824,7 +824,7 @@ describe('app state persistence', () => {
     const state = normalizePersistedAppState({
       ui: {
         workspaceIconTheme: {
-          activeThemeId: 'flow-you',
+          activeThemeId: 'catppuccin-mocha',
           sourceKind: 'external',
           sourceVsixPath: '/Users/me/theme.vsix',
         },
@@ -832,7 +832,7 @@ describe('app state persistence', () => {
     })
 
     expect(state.ui.workspaceIconTheme).toEqual({
-      activeThemeId: 'flow-you',
+      activeThemeId: 'catppuccin-mocha',
       sourceKind: 'external',
       sourceVsixPath: '/Users/me/theme.vsix',
     })
@@ -842,15 +842,15 @@ describe('app state persistence', () => {
     const state = normalizePersistedAppState({
       ui: {
         workspaceIconTheme: {
-          activeThemeId: 'flow-dawn',
+          activeThemeId: 'catppuccin-latte',
           sourceKind: 'bundled',
-          sourceVsixPath: '/old/app/public/icon-themes/thang-nm.flow-icons-1.3.2.vsix',
+          sourceVsixPath: '/old/app/public/icon-themes/Catppuccin.catppuccin-vsc-icons-1.26.0.vsix',
         },
       },
     })
 
     expect(state.ui.workspaceIconTheme).toEqual({
-      activeThemeId: 'flow-dawn',
+      activeThemeId: 'catppuccin-latte',
       sourceKind: 'bundled',
       sourceVsixPath: null,
     })
@@ -860,7 +860,7 @@ describe('app state persistence', () => {
     const state = normalizePersistedAppState({
       ui: {
         workspaceIconTheme: {
-          activeThemeId: 'flow-deep',
+          activeThemeId: 'catppuccin-latte',
           sourceKind: 'external',
           sourceVsixPath: null,
         },
@@ -868,7 +868,7 @@ describe('app state persistence', () => {
     })
 
     expect(state.ui.workspaceIconTheme).toEqual({
-      activeThemeId: 'flow-deep',
+      activeThemeId: 'catppuccin-latte',
       sourceKind: 'bundled',
       sourceVsixPath: null,
     })

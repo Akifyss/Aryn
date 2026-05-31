@@ -66,9 +66,9 @@ import {
 import { getDefaultAppIconAssetPath } from './app-icon'
 import { createArynPaths, prepareArynDataDirectories } from './aryn-paths'
 import {
-  isFlowIconsVsixPath,
   isBundledWorkspaceIconThemePath,
   resolveBundledWorkspaceIconThemePath,
+  resolveBundledWorkspaceIconThemePaths,
 } from './bundled-workspace-icon-theme'
 import { ensureUsableFolderName } from './path-names'
 
@@ -133,6 +133,7 @@ const arynDataDir = arynPaths.arynDataDir
 const agentDir = arynPaths.piAgentDir
 const workspaceIconThemeCacheDir = arynPaths.workspaceIconThemeCacheDir
 const bundledWorkspaceIconThemeDirectoryPath = arynPaths.bundledWorkspaceIconThemeDirectoryPath
+const defaultBundledWorkspaceIconThemeId = 'catppuccin-latte'
 const appStateStore = new AppStateStore(arynPaths.appStatePath, arynPaths.legacyAppStatePaths)
 const workspaceStateStore = new WorkspaceStateStore(arynPaths.workspaceStatePath)
 const conversationStore = new ConversationStore(arynPaths.conversationIndexPath, arynPaths.documentsDir)
@@ -723,10 +724,6 @@ function isBundledWorkspaceIconTheme(vsixPath: string) {
   return isBundledWorkspaceIconThemePath(vsixPath, bundledWorkspaceIconThemeDirectoryPath)
 }
 
-function isLegacyBundledWorkspaceIconTheme(vsixPath: string) {
-  return isFlowIconsVsixPath(vsixPath) && path.basename(path.dirname(vsixPath)) === 'icon-themes'
-}
-
 async function importWorkspaceIconTheme(vsixPath: string, preferredThemeId?: string | null) {
   return importWorkspaceIconThemeFromVsix(
     vsixPath,
@@ -744,20 +741,72 @@ async function loadWorkspaceIconThemeCatalog(vsixPath: string) {
   )
 }
 
-async function loadBundledWorkspaceIconTheme(preferredThemeId?: string | null) {
-  const bundledWorkspaceIconThemePath = await resolveBundledWorkspaceIconThemePath(
+async function loadBundledWorkspaceIconThemeCatalogs() {
+  const bundledWorkspaceIconThemePaths = await resolveBundledWorkspaceIconThemePaths(
     bundledWorkspaceIconThemeDirectoryPath,
   )
 
-  return importWorkspaceIconTheme(bundledWorkspaceIconThemePath, preferredThemeId)
+  const catalogs = await Promise.allSettled(
+    bundledWorkspaceIconThemePaths.map((themePath) => loadWorkspaceIconThemeCatalog(themePath)),
+  )
+
+  return catalogs
+    .filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof loadWorkspaceIconThemeCatalog>>> => (
+      result.status === 'fulfilled'
+    ))
+    .map((result) => result.value)
 }
 
-async function loadBundledWorkspaceIconThemeCatalog() {
-  const bundledWorkspaceIconThemePath = await resolveBundledWorkspaceIconThemePath(
-    bundledWorkspaceIconThemeDirectoryPath,
-  )
+async function resolveBundledWorkspaceIconThemeSelection(preferredThemeId?: string | null): Promise<{
+  activeThemeId: string | null
+  sourceVsixPath: string
+}> {
+  const bundledThemeCatalogs = await loadBundledWorkspaceIconThemeCatalogs()
 
-  return loadWorkspaceIconThemeCatalog(bundledWorkspaceIconThemePath)
+  if (preferredThemeId) {
+    const preferredThemeCatalog = bundledThemeCatalogs.find((theme) => (
+      theme.themes.some((themeOption) => themeOption.id === preferredThemeId)
+    ))
+
+    if (preferredThemeCatalog) {
+      return {
+        activeThemeId: preferredThemeId,
+        sourceVsixPath: preferredThemeCatalog.sourceVsixPath,
+      }
+    }
+  }
+
+  const defaultThemeCatalog = bundledThemeCatalogs.find((theme) => (
+    theme.themes.some((themeOption) => themeOption.id === defaultBundledWorkspaceIconThemeId)
+  ))
+
+  if (defaultThemeCatalog) {
+    return {
+      activeThemeId: defaultBundledWorkspaceIconThemeId,
+      sourceVsixPath: defaultThemeCatalog.sourceVsixPath,
+    }
+  }
+
+  const firstCatalog = bundledThemeCatalogs[0]
+  const firstThemeId = firstCatalog?.themes[0]?.id ?? null
+
+  if (firstCatalog) {
+    return {
+      activeThemeId: firstThemeId,
+      sourceVsixPath: firstCatalog.sourceVsixPath,
+    }
+  }
+
+  return {
+    activeThemeId: null,
+    sourceVsixPath: await resolveBundledWorkspaceIconThemePath(bundledWorkspaceIconThemeDirectoryPath),
+  }
+}
+
+async function loadBundledWorkspaceIconTheme(preferredThemeId?: string | null) {
+  const selection = await resolveBundledWorkspaceIconThemeSelection(preferredThemeId)
+
+  return importWorkspaceIconTheme(selection.sourceVsixPath, selection.activeThemeId)
 }
 
 function toPersistedWorkspaceIconThemeSelection(
@@ -797,67 +846,57 @@ async function getEffectiveWorkspaceIconThemeSelection(): Promise<{
   const persistedVsixPath = persistedSelection.sourceVsixPath
 
   if (persistedSelection.sourceKind === 'bundled' || !persistedVsixPath) {
-    return {
-      activeThemeId: persistedSelection.activeThemeId,
-      sourceVsixPath: await resolveBundledWorkspaceIconThemePath(bundledWorkspaceIconThemeDirectoryPath),
+    const selection = await resolveBundledWorkspaceIconThemeSelection(persistedSelection.activeThemeId)
+
+    if (selection.activeThemeId !== persistedSelection.activeThemeId) {
+      await appStateStore.update((currentState) => ({
+        ...currentState,
+        ui: {
+          ...currentState.ui,
+          workspaceIconTheme: {
+            activeThemeId: selection.activeThemeId,
+            sourceKind: 'bundled',
+            sourceVsixPath: null,
+          },
+        },
+      }))
     }
+
+    return selection
   }
 
   if (persistedSelection.sourceKind === null && isBundledWorkspaceIconTheme(persistedVsixPath)) {
+    const selection = await resolveBundledWorkspaceIconThemeSelection(persistedSelection.activeThemeId)
+
     await appStateStore.update((currentState) => ({
       ...currentState,
       ui: {
         ...currentState.ui,
         workspaceIconTheme: {
-          activeThemeId: persistedSelection.activeThemeId,
+          activeThemeId: selection.activeThemeId,
           sourceKind: 'bundled',
           sourceVsixPath: null,
         },
       },
     }))
 
-    return {
-      activeThemeId: persistedSelection.activeThemeId,
-      sourceVsixPath: await resolveBundledWorkspaceIconThemePath(bundledWorkspaceIconThemeDirectoryPath),
-    }
+    return selection
   }
 
   if (persistedVsixPath) {
-    if (isLegacyBundledWorkspaceIconTheme(persistedVsixPath)) {
-      await appStateStore.update((currentState) => ({
-        ...currentState,
-        ui: {
-          ...currentState.ui,
-          workspaceIconTheme: {
-            activeThemeId: persistedSelection.activeThemeId,
-            sourceKind: 'bundled',
-            sourceVsixPath: null,
-          },
-        },
-      }))
-
-      return {
-        activeThemeId: persistedSelection.activeThemeId,
-        sourceVsixPath: await resolveBundledWorkspaceIconThemePath(bundledWorkspaceIconThemeDirectoryPath),
-      }
-    }
-
     return {
       activeThemeId: persistedSelection.activeThemeId,
       sourceVsixPath: persistedVsixPath,
     }
   }
 
-  return {
-    activeThemeId: persistedSelection.activeThemeId,
-    sourceVsixPath: await resolveBundledWorkspaceIconThemePath(bundledWorkspaceIconThemeDirectoryPath),
-  }
+  return resolveBundledWorkspaceIconThemeSelection(persistedSelection.activeThemeId)
 }
 
 async function getWorkspaceIconThemeCatalog() {
   const selection = await getEffectiveWorkspaceIconThemeSelection()
-  const bundledTheme = await loadBundledWorkspaceIconThemeCatalog()
-  const catalogOptions = [...toCatalogOptions(bundledTheme)]
+  const bundledThemes = await loadBundledWorkspaceIconThemeCatalogs()
+  const catalogOptions = bundledThemes.flatMap(toCatalogOptions)
 
   if (!isBundledWorkspaceIconTheme(selection.sourceVsixPath)) {
     try {
@@ -2061,7 +2100,10 @@ ipcMain.handle('workspace-icons:pick-theme', async () => {
 
 ipcMain.handle('workspace-icons:set-active-theme', async (_, themeId: string) => {
   const selection = await getEffectiveWorkspaceIconThemeSelection()
-  const theme = await importWorkspaceIconTheme(selection.sourceVsixPath, themeId)
+  const nextSelection = isBundledWorkspaceIconTheme(selection.sourceVsixPath)
+    ? await resolveBundledWorkspaceIconThemeSelection(themeId)
+    : selection
+  const theme = await importWorkspaceIconTheme(nextSelection.sourceVsixPath, nextSelection.activeThemeId ?? themeId)
 
   await appStateStore.update((currentState) => ({
     ...currentState,
