@@ -3174,10 +3174,10 @@ function AgentProvider({
   }, [hasLoadedWorkspaceState, isLoading, restorableSessionPath, workspacePath])
 
   useEffect(() => {
-    if (!workspacePath) {
+    if (!workspacePath || activeWorkspaceContext.kind !== 'project') {
       setActiveOverlayPanel(null)
     }
-  }, [workspacePath])
+  }, [activeWorkspaceContext.kind, workspacePath])
 
   useEffect(() => {
     if (!activeOverlayPanel) {
@@ -5172,7 +5172,7 @@ function AgentProjectTree({
 }
 
 function AgentSessionTree(props: AgentSessionTreeProps) {
-  return <AgentProjectTree {...props} />
+  return props.isFloating ? <FlatAgentSessionTree {...props} /> : <AgentProjectTree {...props} />
 }
 
 function AgentBrandLogo() {
@@ -5333,6 +5333,7 @@ function AgentChatSurface() {
   } = useAgentContext()
   const hasEmptyChat = Boolean(workspacePath && renderedMessages.length === 0)
   const isNewConversation = activeSessionSelection.kind === 'new'
+  const canOpenSessionMenu = Boolean(workspacePath && activeWorkspaceContext.kind === 'project')
   const activeProject = activeWorkspaceContext.kind === 'project'
     ? projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
     : null
@@ -5824,6 +5825,11 @@ function AgentChatSurface() {
   }
 
   function toggleSessionMenu() {
+    if (!canOpenSessionMenu) {
+      setActiveOverlayPanel(null)
+      return
+    }
+
     if (activeOverlayPanel === 'sessions') {
       setActiveOverlayPanel(null)
       return
@@ -6488,21 +6494,28 @@ function AgentChatSurface() {
       <div className='agent-threadbar'>
         <div className='agent-threadbar-leading'>
           <div className='agent-session-select'>
-            <button
-              ref={sessionButtonRef}
-              type='button'
-              aria-controls='agent-session-tree-floating-panel'
-              aria-expanded={activeOverlayPanel === 'sessions'}
-              aria-haspopup='dialog'
-              disabled={!workspacePath}
-              className={`agent-session-trigger ${activeOverlayPanel === 'sessions' ? 'is-open' : ''}`}
-              onClick={toggleSessionMenu}
-            >
-              <span className='agent-select-current'>
-                {isNewConversation ? '新对话' : formatSessionLabel(activeSession)}
+            {canOpenSessionMenu ? (
+              <button
+                ref={sessionButtonRef}
+                type='button'
+                aria-controls='agent-session-tree-floating-panel'
+                aria-expanded={activeOverlayPanel === 'sessions'}
+                aria-haspopup='dialog'
+                className={`agent-session-trigger ${activeOverlayPanel === 'sessions' ? 'is-open' : ''}`}
+                onClick={toggleSessionMenu}
+              >
+                <span className='agent-select-current'>
+                  {isNewConversation ? '新对话' : formatSessionLabel(activeSession)}
+                </span>
+                <DownLine aria-hidden='true' className='agent-session-trigger-arrow' size={14} />
+              </button>
+            ) : (
+              <span className='agent-session-static-label'>
+                <span className='agent-select-current'>
+                  {isNewConversation ? '新对话' : formatSessionLabel(activeSession)}
+                </span>
               </span>
-              <DownLine aria-hidden='true' className='agent-session-trigger-arrow' size={14} />
-            </button>
+            )}
           </div>
 
           {!isNewConversation ? (
@@ -6528,7 +6541,7 @@ function AgentChatSurface() {
         <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
       </div>
 
-      {activeOverlayPanel === 'sessions' && typeof document !== 'undefined' ? createPortal(
+      {canOpenSessionMenu && activeOverlayPanel === 'sessions' && typeof document !== 'undefined' ? createPortal(
         <div
           ref={overlayPanelRef}
           id='agent-session-tree-floating-panel'

@@ -3869,6 +3869,17 @@ body.workspace-tree-dragging .workspace-tree-row {
   opacity: 0.65;
 }
 
+.agent-session-static-label {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 4px 10px;
+  color: var(--foreground);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
 .agent-select-current {
   display: block;
   min-width: 0;
