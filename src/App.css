@@ -747,6 +747,31 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   opacity: 0.65;
 }
 
+.editor-workspace-switch-row {
+  display: flex;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 0 8px 4px;
+  padding-left: calc(var(--sidebar-icon-x, 20px) - 12px);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.workspace-sidebar-surface.is-drawer .editor-workspace-switch-row {
+  padding-left: 8px;
+}
+
+.editor-workspace-switch-button {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 24px;
+  justify-content: flex-start;
+}
+
+.editor-workspace-switch-button .section-title-label {
+  flex: 1;
+}
+
 .section-create-button {
   min-width: 32px;
   width: 32px;

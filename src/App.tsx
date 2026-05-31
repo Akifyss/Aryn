@@ -4877,6 +4877,20 @@ function App() {
 
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
     const isDrawerSurface = surfaceMode === 'drawer'
+    const workspaceSwitchLabel = activeProject?.name ?? workspaceLabel
+    const renderWorkspaceSwitchButton = (className = 'section-title-text') => (
+      <button
+        type='button'
+        onClick={(event) => {
+          openProjectMenu('editor-switch', event.currentTarget.getBoundingClientRect())
+        }}
+        disabled={isPickingWorkspace}
+        className={className}
+        aria-label={isPickingWorkspace ? 'Opening workspace' : '切换项目'}
+      >
+        <span className='section-title-label'>{workspaceSwitchLabel}</span>
+      </button>
+    )
 
     return (
       <div
@@ -4886,20 +4900,16 @@ function App() {
         style={isDrawerSurface ? shellChromeVars : undefined}
       >
         <div className={`section-title workspace-section-title${isDrawerSurface ? ' is-drawer-surface' : ''}`}>
-          <button
-            type='button'
-            onClick={(event) => {
-              openProjectMenu('editor-switch', event.currentTarget.getBoundingClientRect())
-            }}
-            disabled={isPickingWorkspace}
-            className='section-title-text'
-            aria-label={isPickingWorkspace ? 'Opening workspace' : '切换项目'}
-          >
-            <span className='section-title-label'>{activeProject?.name ?? workspaceLabel}</span>
-          </button>
+          {renderWorkspaceSwitchButton()}
 
           <div className='section-title-drag-spacer' aria-hidden='true' />
         </div>
+
+        {!isAgentLayout ? (
+          <div className='editor-workspace-switch-row'>
+            {renderWorkspaceSwitchButton('section-title-text editor-workspace-switch-button')}
+          </div>
+        ) : null}
 
         <div ref={isDrawerSurface ? undefined : leftSidebarBodyRef} className='sidebar-stack'>
           {isAgentLayout ? (
