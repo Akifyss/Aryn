@@ -4001,7 +4001,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   align-items: center;
   justify-content: space-between;
   min-height: 28px;
-  padding: 8px 12px 2px;
+  padding: 8px 8px 2px 12px;
   color: var(--muted);
   font-size: 12px;
   letter-spacing: 0;
