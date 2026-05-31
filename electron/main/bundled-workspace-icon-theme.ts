@@ -6,6 +6,7 @@ const bundledIconThemePackageOrder = [
   'catppuccin.catppuccin-vsc-icons',
   'pkief.material-icon-theme',
   'miguelsolorio.symbols',
+  'teabyii.ayu',
 ]
 
 type BundledWorkspaceIconThemeCandidate = {

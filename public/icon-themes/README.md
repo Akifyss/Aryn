@@ -20,6 +20,11 @@ Bundled packages:
   - Source: https://github.com/miguelsolorio/vscode-symbols
   - License: MIT
   - SHA256: `9E1CA678B3DF8062B283792B1EA458B36896348345E88141B53029E4773032CF`
+- Ayu 1.1.12
+  - File: `teabyii.ayu-1.1.12.vsix`
+  - Source: https://github.com/ayu-theme/vscode-ayu
+  - License: MIT
+  - SHA256: `A702EF8A4DC644C2F2AFA19E4E6661D4CAE4807D4C81BCA87A66CD990C60E08D`
 
 Each VSIX includes its own `extension/LICENSE.txt`. Keep this list in sync when
 adding, removing, or updating bundled icon theme packages.

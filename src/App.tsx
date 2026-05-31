@@ -4814,7 +4814,7 @@ function App() {
           title='Agent mode'
           onClick={() => setLayoutPreference('agent')}
         >
-          <Chat3Line size={18} aria-hidden='true' />
+          <Chat3Line size={16} aria-hidden='true' />
         </button>
         <button
           type='button'
@@ -4824,7 +4824,7 @@ function App() {
           title='Editor mode'
           onClick={() => setLayoutPreference('editor')}
         >
-          <Pencil2Line size={18} aria-hidden='true' />
+          <Pencil2Line size={16} aria-hidden='true' />
         </button>
       </div>
     )
@@ -5191,7 +5191,7 @@ function App() {
           aria-label='Open search'
           onClick={handleOpenCommandPaletteFromChrome}
         >
-          <Icon icon='lucide:search' width={17} height={17} aria-hidden='true' />
+          <Icon icon='lucide:search' width={16} height={16} aria-hidden='true' />
         </button>
       </div>
   )

@@ -103,10 +103,6 @@ function isProviderAuthCancelError(error: unknown) {
   return error instanceof Error && /cancelled|aborted/i.test(error.message)
 }
 
-function getBaseName(filePath: string) {
-  return filePath.split(/[\\/]/).pop() ?? filePath
-}
-
 function getSectionTitle(section: SettingsSectionId) {
   switch (section) {
     case 'appearance':
@@ -562,11 +558,6 @@ export function SettingsDialog({
                 </Select.Popover>
               </Select>
             </div>
-            {iconTheme && (
-              <p className='settings-inline-hint' style={{ marginTop: '8px' }}>
-                当前使用：{iconTheme.activeThemeLabel} / {getBaseName(iconTheme.sourceVsixPath)}
-              </p>
-            )}
           </div>
 
         </div>
