@@ -148,6 +148,13 @@ function getBaseName(filePath: string) {
   return filePath.split(/[\\/]/).pop() ?? filePath
 }
 
+function hasWorkspaceFileNodes(nodes: WorkspaceNode[]): boolean {
+  return nodes.some((node) => (
+    node.kind === 'file'
+    || (node.children ? hasWorkspaceFileNodes(node.children) : false)
+  ))
+}
+
 function EditorLoadingState({ label = 'Loading editor...' }: { label?: string }) {
   useEffect(() => {
     recordOpenFileProfile('editor:fallback:mounted', { label })
@@ -829,6 +836,7 @@ function App() {
   const rightDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
   const meoEditorHostRef = useRef<MeoEditorHostHandle | null>(null)
   const agentProjectSessionRequestIdRef = useRef(0)
+  const editorEmptyWorkspaceTriggerRef = useRef<HTMLButtonElement | null>(null)
   const activeTabId = useWorkspaceStore((state) => state.activeTabId)
   const activateTab = useWorkspaceStore((state) => state.activateTab)
   const closeTab = useWorkspaceStore((state) => state.closeTab)
@@ -983,6 +991,7 @@ function App() {
     () => tree.filter((node) => node.kind === 'directory').map((node) => node.name),
     [tree],
   )
+  const hasWorkspaceFileContent = currentPath ? hasWorkspaceFileNodes(tree) : false
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
     : '选择工作目录'
@@ -1018,9 +1027,10 @@ function App() {
   }, [projectMenuSearch, projectState.projects])
   const shellPlatform: ShellPlatform = deriveShellPlatform(platform)
   const baseShellChromeVars = getShellChromeVars(shellPlatform, { isFullScreen: isWindowFullScreen })
+  const shouldExposeAgentWorkspaceTools = !isAgentLayout || hasWorkspaceFileContent
   const shellChromeVars = {
     ...baseShellChromeVars,
-    ...(isAgentLayout
+    ...(isAgentLayout && shouldExposeAgentWorkspaceTools
       ? {
           '--right-panel-content-inset':
             'calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap))',
@@ -1032,7 +1042,7 @@ function App() {
   const isRightSidebarDrawer = !isAgentLayout && layoutMode === 'focus'
   const isRightDrawerFullWidth = shellWidth <= RIGHT_DRAWER_MAX_WIDTH
   const isLeftSidebarVisible = !isLeftSidebarDrawer && !isLeftSidebarCollapsed
-  const isRightSidebarVisible = !isRightSidebarDrawer && !isRightSidebarCollapsed
+  const isRightSidebarVisible = !isRightSidebarDrawer && !isRightSidebarCollapsed && shouldExposeAgentWorkspaceTools
   const isAppModalLayerOpen = isSettingsOpen
     || isCommandPaletteOpen
     || isNewProjectDialogOpen
@@ -4800,6 +4810,8 @@ function App() {
 
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
     const isDrawerSurface = surfaceMode === 'drawer'
+    const workspaceSwitchButtonClassName = `section-title-text editor-workspace-switch-button${currentPath ? '' : ' is-empty'}`
+    const isEditorLayoutSwitchDisabled = activeWorkspaceContext.kind === 'conversationDraft' && !currentPath && isAgentLayout
     const renderLayoutModeSwitchButton = () => (
       <div
         className='layout-mode-segmented-control'
@@ -4819,10 +4831,15 @@ function App() {
         <button
           type='button'
           className={`layout-mode-segmented-option${!isAgentLayout ? ' is-active' : ''}`}
+          disabled={isEditorLayoutSwitchDisabled}
           aria-pressed={!isAgentLayout}
-          aria-label='Editor mode'
-          title='Editor mode'
-          onClick={() => setLayoutPreference('editor')}
+          aria-label={isEditorLayoutSwitchDisabled ? 'Editor mode，需要先选择工作目录' : 'Editor mode'}
+          title={isEditorLayoutSwitchDisabled ? '先选择工作目录' : 'Editor mode'}
+          onClick={() => {
+            if (!isEditorLayoutSwitchDisabled) {
+              setLayoutPreference('editor')
+            }
+          }}
         >
           <Pencil2Line size={16} aria-hidden='true' />
         </button>
@@ -4860,7 +4877,7 @@ function App() {
 
         {!isAgentLayout ? (
           <div className='editor-workspace-switch-row'>
-            {renderWorkspaceSwitchButton('section-title-text editor-workspace-switch-button', true)}
+            {renderWorkspaceSwitchButton(workspaceSwitchButtonClassName, true)}
           </div>
         ) : null}
 
@@ -5018,29 +5035,63 @@ function App() {
               onStatusMessage={setStatusMessage}
             />
           ) : !activeFixedPanelTab && !activeFileTab && !activeDiffTab ? (
-            <div className='editor-empty-state'>
-              <div className='editor-empty-content'>
-                <div className='editor-empty-logo-shell' aria-hidden='true'>
-                  <img className='editor-empty-logo' src='./branding/logo.svg' alt='' />
-                </div>
-                <div className='editor-empty-actions'>
-                  <Button variant='outline' onPress={() => setIsCommandPaletteOpen(true)}>
-                    <Icon icon='lucide:search' width={16} height={16} className='mr-2' />
-                    搜索
-                  </Button>
-                  <Button
-                    variant='outline'
-                    onPress={() => {
-                      void handleCreateFile()
-                    }}
-                    isDisabled={!currentPath || isCreatingFile}
-                  >
-                    <FileLine className='mr-2' size={16} />
-                    新建文件
-                  </Button>
+            !currentPath ? (
+              <div className='editor-empty-state is-workspace-missing'>
+                <div className='editor-empty-content'>
+                  <div className='editor-empty-logo-shell' aria-hidden='true'>
+                    <FolderOpenLine className='editor-empty-folder-icon' size={30} />
+                  </div>
+                  <div className='editor-empty-copy'>
+                    <h3>选择工作目录</h3>
+                    <p>当前对话会保留在右侧。连接一个文件夹后，可以在这里浏览、搜索和编辑文件。</p>
+                  </div>
+                  <div className='editor-empty-actions'>
+                    <Button
+                      ref={editorEmptyWorkspaceTriggerRef}
+                      variant='primary'
+                      onPress={() => {
+                        openProjectMenu(
+                          'editor-switch',
+                          editorEmptyWorkspaceTriggerRef.current?.getBoundingClientRect(),
+                        )
+                      }}
+                      isDisabled={isPickingWorkspace}
+                    >
+                      <FolderOpenLine className='mr-2' size={16} />
+                      选择工作目录
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className='editor-empty-state'>
+                <div className='editor-empty-content'>
+                  <div className='editor-empty-logo-shell' aria-hidden='true'>
+                    <img className='editor-empty-logo' src='./branding/logo.svg' alt='' />
+                  </div>
+                  <div className='editor-empty-copy'>
+                    <h3>打开文件开始编辑</h3>
+                    <p>从左侧文件树选择一个文件，或使用搜索快速打开内容。</p>
+                  </div>
+                  <div className='editor-empty-actions'>
+                    <Button variant='outline' onPress={() => setIsCommandPaletteOpen(true)}>
+                      <SearchLine className='mr-2' size={16} />
+                      搜索
+                    </Button>
+                    <Button
+                      variant='outline'
+                      onPress={() => {
+                        void handleCreateFile()
+                      }}
+                      isDisabled={isCreatingFile}
+                    >
+                      <FileLine className='mr-2' size={16} />
+                      新建文件
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )
           ) : null}
 
           {shouldRenderWorkspaceEditor && activeDiffTab ? (
@@ -5219,7 +5270,7 @@ function App() {
         } as CSSProperties
       }
     >
-      {isAgentLayout && !isRightSidebarVisible ? (
+      {isAgentLayout && shouldExposeAgentWorkspaceTools && !isRightSidebarVisible ? (
         <div
           className='agent-collapsed-tab-actions'
           data-overlay-elevated={isRightPanelOverlayElevated ? 'true' : 'false'}
@@ -5250,20 +5301,22 @@ function App() {
         </div>
       ) : null}
 
-      <button
-        type='button'
-        className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
-        data-overlay-elevated={isRightPanelOverlayElevated ? 'true' : 'false'}
-        data-react-aria-top-layer={isRightPanelOverlayTopLayer ? 'true' : undefined}
-        aria-label={isRightSidebarDrawer
-          ? (isRightDrawerOpen ? 'Close assistant panel' : 'Open assistant panel')
-          : (isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar')}
-        onClick={toggleAssistantSurface}
-      >
-        <span className='panel-toggle-icon' aria-hidden='true'>
-          <LayoutRightLine size={16} />
-        </span>
-      </button>
+      {shouldExposeAgentWorkspaceTools ? (
+        <button
+          type='button'
+          className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
+          data-overlay-elevated={isRightPanelOverlayElevated ? 'true' : 'false'}
+          data-react-aria-top-layer={isRightPanelOverlayTopLayer ? 'true' : undefined}
+          aria-label={isRightSidebarDrawer
+            ? (isRightDrawerOpen ? 'Close assistant panel' : 'Open assistant panel')
+            : (isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar')}
+          onClick={toggleAssistantSurface}
+        >
+          <span className='panel-toggle-icon' aria-hidden='true'>
+            <LayoutRightLine size={16} />
+          </span>
+        </button>
+      ) : null}
 
       {isLeftSidebarVisible ? (
         <aside className='panel panel-sidebar'>

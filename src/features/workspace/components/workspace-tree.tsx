@@ -709,7 +709,7 @@ export function WorkspaceTree({
         <div className='tree-empty-icon'>
           <FolderLine size={26} />
         </div>
-        <p>连接工作区文件夹以浏览和编辑您的笔记。</p>
+        <p>{workspacePath ? '这个工作目录还没有文件。' : '选择工作目录以浏览和编辑文件。'}</p>
       </div>
     )
   }
