@@ -1,12 +1,14 @@
 import {
   type CSSProperties,
   createContext,
+  type Dispatch,
   FormEvent,
   KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type Ref,
+  type SetStateAction,
   useCallback,
   useContext,
   useEffect,
@@ -258,6 +260,7 @@ type AgentModelPickerPendingActivation = {
 }
 
 type AgentSessionSelection = { kind: 'new' } | { kind: 'session', sessionPath: string }
+type OptimisticComposerClearToken = { id: number; revision: number }
 
 const MARKDOWN_PLUGINS = [remarkGfm]
 const AGENT_THINKING_AUTO_EXPAND_DELAY_MS = 520
@@ -361,6 +364,17 @@ function getHasComposerPayload(
   return Boolean(
     serializeComposerText(composerState.value, composerState.mentions).trim()
     || composerAttachments.length > 0
+  )
+}
+
+function isComposerPristineEmpty(
+  composerState: ComposerState,
+  composerAttachments: ComposerAttachment[],
+) {
+  return (
+    composerState.value === ''
+    && composerState.mentions.length === 0
+    && composerAttachments.length === 0
   )
 }
 
@@ -2490,8 +2504,8 @@ function AgentProvider({
   const defaultModelSelection = parseModelSelection(null)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
   const [viewedSessionSnapshot, setViewedSessionSnapshot] = useState<AgentSessionSnapshot | null>(null)
-  const [composerState, setComposerState] = useState<ComposerState>(emptyComposerState)
-  const [composerAttachments, setComposerAttachments] = useState<ComposerAttachment[]>([])
+  const [composerState, setComposerStateValue] = useState<ComposerState>(emptyComposerState)
+  const [composerAttachments, setComposerAttachmentsValue] = useState<ComposerAttachment[]>([])
   const [modelInputValue, setModelInputValue] = useState(defaultModelSelection.modelId)
   const [selectedProviderValue, setSelectedProviderValue] = useState(defaultModelSelection.provider)
   const [selectedThinkingLevel, setSelectedThinkingLevel] = useState<AgentThinkingLevel>(emptyAgentState.runtime.defaultThinkingLevel)
@@ -2509,6 +2523,7 @@ function AgentProvider({
   const [deletingSessionPath, setDeletingSessionPath] = useState<string | null>(null)
   const [isSwitchingModel, setIsSwitchingModel] = useState(false)
   const [isSwitchingThinkingLevel, setIsSwitchingThinkingLevel] = useState(false)
+  const [isSubmittingComposerPrompt, setIsSubmittingComposerPrompt] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
   const [projectSessions, setProjectSessions] = useState<Record<string, AgentProjectSessionBucket>>({})
@@ -2525,6 +2540,11 @@ function AgentProvider({
   const externalSessionRequestRef = useRef<AgentProjectSessionRequest | null>(externalSessionRequest ?? null)
   const activeSessionSelectionRef = useRef(activeSessionSelection)
   const workspacePathRef = useRef<string | null>(workspacePath)
+  const composerStateRef = useRef<ComposerState>(emptyComposerState)
+  const composerAttachmentsRef = useRef<ComposerAttachment[]>([])
+  const composerRevisionRef = useRef(0)
+  const optimisticComposerClearIdRef = useRef(0)
+  const isSubmittingComposerPromptRef = useRef(false)
   const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
   const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
   const restorableSessionPath = agentState.activeSession?.sessionPath
@@ -2554,6 +2574,63 @@ function AgentProvider({
   function syncActiveSessionSelection(selection: AgentSessionSelection) {
     activeSessionSelectionRef.current = selection
     setActiveSessionSelection(selection)
+  }
+
+  const setComposerState = useCallback<Dispatch<SetStateAction<ComposerState>>>((nextState) => {
+    const resolvedState = typeof nextState === 'function'
+      ? nextState(composerStateRef.current)
+      : nextState
+    if (composerStateRef.current !== resolvedState) {
+      composerRevisionRef.current += 1
+    }
+    composerStateRef.current = resolvedState
+    setComposerStateValue(resolvedState)
+  }, [])
+
+  const setComposerAttachments = useCallback<Dispatch<SetStateAction<ComposerAttachment[]>>>((nextAttachments) => {
+    const resolvedAttachments = typeof nextAttachments === 'function'
+      ? nextAttachments(composerAttachmentsRef.current)
+      : nextAttachments
+    if (composerAttachmentsRef.current !== resolvedAttachments) {
+      composerRevisionRef.current += 1
+    }
+    composerAttachmentsRef.current = resolvedAttachments
+    setComposerAttachmentsValue(resolvedAttachments)
+  }, [])
+
+  function clearComposerOptimistically() {
+    const clearId = optimisticComposerClearIdRef.current + 1
+    optimisticComposerClearIdRef.current = clearId
+    setComposerState(emptyComposerState)
+    setComposerAttachments([])
+    return {
+      id: clearId,
+      revision: composerRevisionRef.current,
+    }
+  }
+
+  function invalidateOptimisticComposerClear(clearToken: OptimisticComposerClearToken | null) {
+    if (clearToken !== null && optimisticComposerClearIdRef.current === clearToken.id) {
+      optimisticComposerClearIdRef.current += 1
+    }
+  }
+
+  function restoreOptimisticallyClearedComposer(
+    clearToken: OptimisticComposerClearToken | null,
+    snapshot: { attachments: ComposerAttachment[]; state: ComposerState },
+  ) {
+    if (
+      clearToken === null
+      || optimisticComposerClearIdRef.current !== clearToken.id
+      || composerRevisionRef.current !== clearToken.revision
+      || !isComposerPristineEmpty(composerStateRef.current, composerAttachmentsRef.current)
+    ) {
+      return
+    }
+
+    invalidateOptimisticComposerClear(clearToken)
+    setComposerState(snapshot.state)
+    setComposerAttachments(snapshot.attachments)
   }
 
   const loadProjectSessions = useCallback(async (project: ProjectRecord) => {
@@ -3291,6 +3368,7 @@ function AgentProvider({
     setViewedSessionSnapshot(null)
     syncModelDraft(nextDraft)
     setComposerState(emptyComposerState)
+    setComposerAttachments([])
     setPanelError(null)
     setActiveOverlayPanel(null)
   }
@@ -3562,10 +3640,12 @@ function AgentProvider({
   }
 
   async function submitComposerPrompt(streamingBehavior?: AgentRunningPromptEnterBehavior) {
-    const serializedPrompt = serializeComposerText(composerState.value, composerState.mentions)
+    const submittedComposerState = composerStateRef.current
+    const submittedComposerAttachments = composerAttachmentsRef.current
+    const serializedPrompt = serializeComposerText(submittedComposerState.value, submittedComposerState.mentions)
     const trimmedPrompt = serializedPrompt.trim()
 
-    if (!trimmedPrompt && composerAttachments.length === 0) {
+    if (!trimmedPrompt && submittedComposerAttachments.length === 0) {
       return
     }
 
@@ -3575,59 +3655,77 @@ function AgentProvider({
     }
 
     let targetWorkspacePath = workspacePath
-    let createdConversation: ConversationRecord | null = null
-    let runtimeForSubmit = agentState.runtime
-    const draftBeforeWorkspaceCreation = newSessionModelDraftRef.current
+    const requiresConversationWorkspace = !targetWorkspacePath && activeWorkspaceContext.kind === 'conversationDraft'
+    const createConversationWorkspace = onCreateConversationWorkspace
 
-    if (!targetWorkspacePath && activeWorkspaceContext.kind === 'conversationDraft') {
-      if (!onCreateConversationWorkspace) {
-        setPanelError('Unable to create a conversation workspace.')
-        return
-      }
-
-      try {
-        setIsLoading(true)
-        createdConversation = await onCreateConversationWorkspace({ initialPrompt: trimmedPrompt })
-        targetWorkspacePath = createdConversation.workspacePath
-        workspacePathRef.current = targetWorkspacePath
-
-        if (!targetWorkspacePath) {
-          throw new Error('Conversation workspace was not created.')
-        }
-
-        const nextState = await window.appApi.loadAgentWorkspace(targetWorkspacePath, null, { restoreSession: false })
-        runtimeForSubmit = nextState.runtime
-        setAgentState(nextState)
-        setViewedSessionSnapshot(null)
-        setHasLoadedWorkspaceState(true)
-        const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
-        const nextNewSessionDraft = normalizeAgentModelDraft(draftBeforeWorkspaceCreation, nextState.runtime, defaultDraft)
-        syncNewSessionModelDraft(nextNewSessionDraft)
-        syncModelDraft(nextNewSessionDraft)
-      } catch (error) {
-        if (createdConversation) {
-          void onConversationDraftFailed?.(createdConversation.id)
-        }
-        setPanelError(error instanceof Error ? error.message : 'Unable to create a conversation workspace.')
-        setIsLoading(false)
-        return
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    if (!targetWorkspacePath) {
+    if (requiresConversationWorkspace && !createConversationWorkspace) {
+      setPanelError('Unable to create a conversation workspace.')
       return
     }
 
+    if (!targetWorkspacePath && !requiresConversationWorkspace) {
+      return
+    }
+
+    if (isSubmittingComposerPromptRef.current) {
+      return
+    }
+
+    isSubmittingComposerPromptRef.current = true
+    setIsSubmittingComposerPrompt(true)
+
+    let createdConversation: ConversationRecord | null = null
+    let runtimeForSubmit = agentState.runtime
+    const draftBeforeWorkspaceCreation = newSessionModelDraftRef.current
+    const composerSnapshot = {
+      attachments: submittedComposerAttachments,
+      state: submittedComposerState,
+    }
+    const optimisticClearId = clearComposerOptimistically()
     let didSendPromptToAgent = false
+    let fallbackErrorMessage = 'Unable to send your prompt.'
 
     try {
       setActiveComposerMenu(null)
       setPanelError(null)
+
+      if (requiresConversationWorkspace) {
+        fallbackErrorMessage = 'Unable to create a conversation workspace.'
+        setIsLoading(true)
+        try {
+          if (!createConversationWorkspace) {
+            throw new Error('Unable to create a conversation workspace.')
+          }
+          createdConversation = await createConversationWorkspace({ initialPrompt: trimmedPrompt })
+          targetWorkspacePath = createdConversation.workspacePath
+          workspacePathRef.current = targetWorkspacePath
+
+          if (!targetWorkspacePath) {
+            throw new Error('Conversation workspace was not created.')
+          }
+
+          const nextState = await window.appApi.loadAgentWorkspace(targetWorkspacePath, null, { restoreSession: false })
+          runtimeForSubmit = nextState.runtime
+          setAgentState(nextState)
+          setViewedSessionSnapshot(null)
+          setHasLoadedWorkspaceState(true)
+          const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
+          const nextNewSessionDraft = normalizeAgentModelDraft(draftBeforeWorkspaceCreation, nextState.runtime, defaultDraft)
+          syncNewSessionModelDraft(nextNewSessionDraft)
+          syncModelDraft(nextNewSessionDraft)
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      if (!targetWorkspacePath) {
+        throw new Error('Open a workspace before sending your prompt.')
+      }
+
       let nextSessionPath = agentState.activeSession?.sessionPath ?? null
 
       if (activeSessionSelection.kind === 'new') {
+        fallbackErrorMessage = 'Unable to create an agent session.'
         openSessionRequestIdRef.current += 1
         const nextDraft = normalizeAgentModelDraft(
           newSessionModelDraftRef.current,
@@ -3645,17 +3743,19 @@ function AgentProvider({
         nextSessionPath = nextState.activeSession?.sessionPath ?? null
         syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
       } else {
+        fallbackErrorMessage = 'Open a session before sending your prompt.'
         const activeState = await ensureSelectedAgentSessionActive()
         if (!activeState?.activeSession) {
-          setPanelError('Open a session before sending your prompt.')
-          return
+          throw new Error('Open a session before sending your prompt.')
         }
         nextSessionPath = activeState.activeSession.sessionPath
       }
 
-      const promptAttachments = composerAttachments.map(({ id: _id, ...attachment }) => attachment)
+      fallbackErrorMessage = 'Unable to send your prompt.'
+      const promptAttachments = submittedComposerAttachments.map(({ id: _id, ...attachment }) => attachment)
       await window.appApi.sendAgentPrompt(trimmedPrompt, streamingBehavior, promptAttachments)
       didSendPromptToAgent = true
+      invalidateOptimisticComposerClear(optimisticClearId)
       if (nextSessionPath) {
         syncActiveSessionSelection({ kind: 'session', sessionPath: nextSessionPath })
       }
@@ -3673,8 +3773,6 @@ function AgentProvider({
           setPanelError(error instanceof Error ? error.message : 'Unable to update the conversation index.')
         }
       }
-      setComposerState(emptyComposerState)
-      setComposerAttachments([])
       if (!streamingBehavior) {
         setDraftAssistant('')
         setLiveTools([])
@@ -3683,7 +3781,13 @@ function AgentProvider({
       if (createdConversation && !didSendPromptToAgent) {
         void onConversationDraftFailed?.(createdConversation.id)
       }
-      setPanelError(error instanceof Error ? error.message : 'Unable to send your prompt.')
+      if (!didSendPromptToAgent) {
+        restoreOptimisticallyClearedComposer(optimisticClearId, composerSnapshot)
+      }
+      setPanelError(error instanceof Error ? error.message : fallbackErrorMessage)
+    } finally {
+      isSubmittingComposerPromptRef.current = false
+      setIsSubmittingComposerPrompt(false)
     }
   }
 
@@ -3721,7 +3825,7 @@ function AgentProvider({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    const hasPayload = getHasComposerPayload(composerState, composerAttachments)
+    const hasPayload = getHasComposerPayload(composerStateRef.current, composerAttachmentsRef.current)
 
     if (isViewingActiveRuntime && agentState.runtime.isStreaming) {
       if (!hasPayload) {
@@ -3740,7 +3844,7 @@ function AgentProvider({
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
 
-      if (!getHasComposerPayload(composerState, composerAttachments)) {
+      if (!getHasComposerPayload(composerStateRef.current, composerAttachmentsRef.current)) {
         return
       }
 
@@ -3797,6 +3901,7 @@ function AgentProvider({
   const canUseComposerWithoutWorkspace = Boolean(!workspacePath && canCreateConversationWorkspace)
   const canSend = Boolean(
     hasComposerPayload
+    && !isSubmittingComposerPrompt
     && (
       (workspacePath && agentState.runtime.hasConfiguredModels)
       || (canUseComposerWithoutWorkspace && agentState.runtime.hasConfiguredModels)
