@@ -6474,7 +6474,7 @@ function AgentChatSurface() {
             void addComposerFiles(files)
           }}
           onSubmitShortcut={handleComposerKeyDown}
-          placeholder={workspacePath || canUseComposerWithoutWorkspace ? 'Message' : 'Open a folder first.'}
+          placeholder={workspacePath ? '发送消息，输入 @ 来提及文件...' : '发送消息...'}
           value={composerState.value}
           workspaceNodes={workspaceTree}
           workspacePath={workspacePath}
