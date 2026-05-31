@@ -11,7 +11,10 @@ import {
   LayoutLeftLine,
   LayoutRightLine,
   NewFolderLine,
+  Chat3Line,
   CheckLine,
+  DownLine,
+  Pencil2Line,
   SearchLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
@@ -176,7 +179,6 @@ function resolveAppTheme(theme: AppTheme): ResolvedAppTheme {
 
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
-
 
 function getRelativePath(rootPath: string, filePath: string) {
   const normalizedRoot = rootPath.replace(/[\\/]+$/, '')
@@ -637,7 +639,7 @@ function createDiffTab(
 
 function App() {
   const platform = window.appApi.platform
-  const { layoutPreference, meo, theme } = useSettingsStore()
+  const { layoutPreference, meo, theme, setLayoutPreference } = useSettingsStore()
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedAppTheme>(() => resolveAppTheme(theme))
 
   // Apply theme to document root
@@ -983,7 +985,7 @@ function App() {
   )
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
-    : 'Current workspace'
+    : '选择工作目录'
   const activeProject = useMemo(
     () => {
       if (activeWorkspaceContext.kind === 'project') {
@@ -999,6 +1001,9 @@ function App() {
   const needsProjectBootstrap = hasLoadedProjectState
     && !activeProject
     && activeWorkspaceContext.kind === 'project'
+  const editorWorkspaceSwitchLabel = activeWorkspaceContext.kind === 'project' && activeProject
+    ? activeProject.name
+    : workspaceLabel
   const filteredProjectMenuProjects = useMemo(() => {
     const query = projectMenuSearch.trim().toLowerCase()
 
@@ -2396,10 +2401,15 @@ function App() {
   }
 
   function openNewProjectDialog() {
-    setShouldStartAgentSessionAfterProjectCreate(projectMenuMode === 'agent-new-switch')
+    setShouldStartAgentSessionAfterProjectCreate(shouldStartNewAgentSessionForProjectMenu())
     setNewProjectName('')
     setIsNewProjectDialogOpen(true)
     closeProjectMenu()
+  }
+
+  function shouldStartNewAgentSessionForProjectMenu() {
+    return projectMenuMode === 'agent-new-switch'
+      || (projectMenuMode === 'editor-switch' && !isAgentLayout)
   }
 
   async function activateProjectFromState(
@@ -2491,7 +2501,7 @@ function App() {
       }
 
       await activateProjectFromState(nextProjectState, {
-        startAgentNewSession: projectMenuMode === 'agent-new-switch',
+        startAgentNewSession: shouldStartNewAgentSessionForProjectMenu(),
       })
       closeProjectMenu()
       setStatusMessage('项目已打开')
@@ -2507,7 +2517,7 @@ function App() {
   async function handleSelectProject(project: ProjectRecord) {
     setIsProjectActionBusy(true)
     try {
-      if (projectMenuMode === 'agent-new-switch') {
+      if (shouldStartNewAgentSessionForProjectMenu()) {
         const didSwitch = await requestAgentProjectSession(project, { kind: 'new' })
         if (didSwitch) {
           closeProjectMenu()
@@ -3985,7 +3995,6 @@ function App() {
     }
   }, [])
 
-
   useEffect(() => {
     setIsActiveEditorComposing(false)
   }, [currentEditorKind, currentFilePath, currentFileViewMode])
@@ -4791,8 +4800,35 @@ function App() {
 
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
     const isDrawerSurface = surfaceMode === 'drawer'
-    const workspaceSwitchLabel = activeProject?.name ?? workspaceLabel
-    const renderWorkspaceSwitchButton = (className = 'section-title-text') => (
+    const renderLayoutModeSwitchButton = () => (
+      <div
+        className='layout-mode-segmented-control'
+        role='group'
+        aria-label='Layout mode'
+      >
+        <button
+          type='button'
+          className={`layout-mode-segmented-option${isAgentLayout ? ' is-active' : ''}`}
+          aria-pressed={isAgentLayout}
+          aria-label='Agent mode'
+          title='Agent mode'
+          onClick={() => setLayoutPreference('agent')}
+        >
+          <Chat3Line size={18} aria-hidden='true' />
+        </button>
+        <button
+          type='button'
+          className={`layout-mode-segmented-option${!isAgentLayout ? ' is-active' : ''}`}
+          aria-pressed={!isAgentLayout}
+          aria-label='Editor mode'
+          title='Editor mode'
+          onClick={() => setLayoutPreference('editor')}
+        >
+          <Pencil2Line size={18} aria-hidden='true' />
+        </button>
+      </div>
+    )
+    const renderWorkspaceSwitchButton = (className = 'section-title-text', showDropdownIcon = false) => (
       <button
         type='button'
         onClick={(event) => {
@@ -4800,9 +4836,12 @@ function App() {
         }}
         disabled={isPickingWorkspace}
         className={className}
-        aria-label={isPickingWorkspace ? 'Opening workspace' : '切换项目'}
+        aria-label={isPickingWorkspace ? 'Opening workspace' : '选择或切换工作目录'}
       >
-        <span className='section-title-label'>{workspaceSwitchLabel}</span>
+        <span className='section-title-label'>{editorWorkspaceSwitchLabel}</span>
+        {showDropdownIcon ? (
+          <DownLine className='editor-workspace-switch-chevron' size={18} aria-hidden='true' />
+        ) : null}
       </button>
     )
 
@@ -4814,14 +4853,14 @@ function App() {
         style={isDrawerSurface ? shellChromeVars : undefined}
       >
         <div className={`section-title workspace-section-title${isDrawerSurface ? ' is-drawer-surface' : ''}`}>
-          {renderWorkspaceSwitchButton()}
+          {renderLayoutModeSwitchButton()}
 
           <div className='section-title-drag-spacer' aria-hidden='true' />
         </div>
 
         {!isAgentLayout ? (
           <div className='editor-workspace-switch-row'>
-            {renderWorkspaceSwitchButton('section-title-text editor-workspace-switch-button')}
+            {renderWorkspaceSwitchButton('section-title-text editor-workspace-switch-button', true)}
           </div>
         ) : null}
 

@@ -4673,6 +4673,8 @@ function AgentProjectTree({
     iconTheme,
   } = useAgentContext()
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set())
+  const [isProjectSectionExpanded, setIsProjectSectionExpanded] = useState(true)
+  const [isConversationSectionExpanded, setIsConversationSectionExpanded] = useState(true)
   const [projectMenuState, setProjectMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, project: ProjectRecord } | null>(null)
   const [sessionMenuState, setSessionMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, session: AgentSessionListItem } | null>(null)
   const [conversationMenuState, setConversationMenuState] = useState<{ anchorRect: AgentMenuAnchorRect, conversation: ConversationRecord } | null>(null)
@@ -4729,6 +4731,7 @@ function AgentProjectTree({
       return
     }
 
+    setIsProjectSectionExpanded(true)
     setExpandedProjectIds((currentExpandedProjectIds) => {
       if (currentExpandedProjectIds.has(activeSessionProjectId)) {
         return currentExpandedProjectIds
@@ -4739,6 +4742,12 @@ function AgentProjectTree({
       return nextExpandedProjectIds
     })
   }, [activeSessionProjectId])
+
+  useEffect(() => {
+    if (activeWorkspaceContext.kind === 'conversation') {
+      setIsConversationSectionExpanded(true)
+    }
+  }, [activeWorkspaceContext])
 
   useEffect(() => {
     if (!projectMenuState && !sessionMenuState && !conversationMenuState) {
@@ -4774,6 +4783,24 @@ function AgentProjectTree({
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [conversationMenuState, projectMenuState, sessionMenuState])
+
+  function toggleProjectSection() {
+    setRenamingSessionPath(null)
+    setRenamingConversationId(null)
+    setProjectMenuState(null)
+    setSessionMenuState(null)
+    setConversationMenuState(null)
+    setIsProjectSectionExpanded((currentValue) => !currentValue)
+  }
+
+  function toggleConversationSection() {
+    setRenamingSessionPath(null)
+    setRenamingConversationId(null)
+    setProjectMenuState(null)
+    setSessionMenuState(null)
+    setConversationMenuState(null)
+    setIsConversationSectionExpanded((currentValue) => !currentValue)
+  }
 
   function toggleProject(project: ProjectRecord) {
     setRenamingSessionPath(null)
@@ -4818,8 +4845,20 @@ function AgentProjectTree({
       ) : null}
 
       {!isFloating ? (
-        <div className='agent-project-tree-header'>
-          <span>项目</span>
+        <div className={`agent-project-tree-header${isProjectSectionExpanded ? '' : ' is-collapsed'}`}>
+          <button
+            type='button'
+            className='agent-project-tree-header-toggle'
+            aria-expanded={isProjectSectionExpanded}
+            onClick={toggleProjectSection}
+          >
+            <span>项目</span>
+            {isProjectSectionExpanded ? (
+              <DownLine className='agent-project-tree-header-chevron' size={15} aria-hidden='true' />
+            ) : (
+              <RightLine className='agent-project-tree-header-chevron' size={15} aria-hidden='true' />
+            )}
+          </button>
           <button
             type='button'
             className='agent-project-tree-header-action'
@@ -4840,7 +4879,7 @@ function AgentProjectTree({
         viewportClassName='agent-session-tree-scroll-viewport'
       >
         <ul className='panel-tree-list agent-project-list' aria-label='项目与对话'>
-          {projectState.projects.map((project) => {
+          {isProjectSectionExpanded ? projectState.projects.map((project) => {
             const bucket = projectSessions[project.id]
             const isExpanded = expandedProjectIds.has(project.id)
             const sessions = bucket?.sessions ?? []
@@ -4976,10 +5015,22 @@ function AgentProjectTree({
                 ) : null}
               </li>
             )
-          })}
-          <li className='agent-project-tree-section agent-conversation-section'>
-            <div className='agent-project-tree-header agent-conversation-tree-header'>
-              <span>对话</span>
+          }) : null}
+          <li className={`agent-project-tree-section agent-conversation-section${isConversationSectionExpanded ? '' : ' is-collapsed'}`}>
+            <div className={`agent-project-tree-header agent-conversation-tree-header${isConversationSectionExpanded ? '' : ' is-collapsed'}`}>
+              <button
+                type='button'
+                className='agent-project-tree-header-toggle'
+                aria-expanded={isConversationSectionExpanded}
+                onClick={toggleConversationSection}
+              >
+                <span>对话</span>
+                {isConversationSectionExpanded ? (
+                  <DownLine className='agent-project-tree-header-chevron' size={15} aria-hidden='true' />
+                ) : (
+                  <RightLine className='agent-project-tree-header-chevron' size={15} aria-hidden='true' />
+                )}
+              </button>
               <button
                 type='button'
                 className='agent-project-tree-header-action'
@@ -4998,39 +5049,41 @@ function AgentProjectTree({
                 <EditLine size={15} />
               </button>
             </div>
-            <ul className='panel-tree-list agent-project-session-list agent-conversation-list'>
-              {visibleConversations.length === 0 ? (
-                <li className='agent-project-session-status'>暂无对话</li>
-              ) : visibleConversations.map((conversation) => (
-                <AgentConversationRow
-                  key={conversation.id}
-                  conversation={conversation}
-                  isDeleting={deletingConversationId === conversation.id}
-                  isRenaming={renamingConversationId === conversation.id}
-                  isActive={activeWorkspaceContext.kind === 'conversation' && activeWorkspaceContext.conversationId === conversation.id}
-                  onCancelRename={() => setRenamingConversationId(null)}
-                  onOpen={() => {
-                    setRenamingSessionPath(null)
-                    setRenamingConversationId(null)
-                    setProjectMenuState(null)
-                    setSessionMenuState(null)
-                    setConversationMenuState(null)
-                    void Promise.resolve(onOpenConversation?.(conversation)).then(() => {
-                      onRequestClose?.()
-                    })
-                  }}
-                  onOpenMenu={(anchorRect) => {
-                    setProjectMenuState(null)
-                    setSessionMenuState(null)
-                    setConversationMenuState({
-                      anchorRect,
-                      conversation,
-                    })
-                  }}
-                  onRename={(title) => Promise.resolve(onRenameConversation?.(conversation, title))}
-                />
-              ))}
-            </ul>
+            {isConversationSectionExpanded ? (
+              <ul className='panel-tree-list agent-project-session-list agent-conversation-list'>
+                {visibleConversations.length === 0 ? (
+                  <li className='agent-project-session-status'>暂无对话</li>
+                ) : visibleConversations.map((conversation) => (
+                  <AgentConversationRow
+                    key={conversation.id}
+                    conversation={conversation}
+                    isDeleting={deletingConversationId === conversation.id}
+                    isRenaming={renamingConversationId === conversation.id}
+                    isActive={activeWorkspaceContext.kind === 'conversation' && activeWorkspaceContext.conversationId === conversation.id}
+                    onCancelRename={() => setRenamingConversationId(null)}
+                    onOpen={() => {
+                      setRenamingSessionPath(null)
+                      setRenamingConversationId(null)
+                      setProjectMenuState(null)
+                      setSessionMenuState(null)
+                      setConversationMenuState(null)
+                      void Promise.resolve(onOpenConversation?.(conversation)).then(() => {
+                        onRequestClose?.()
+                      })
+                    }}
+                    onOpenMenu={(anchorRect) => {
+                      setProjectMenuState(null)
+                      setSessionMenuState(null)
+                      setConversationMenuState({
+                        anchorRect,
+                        conversation,
+                      })
+                    }}
+                    onRename={(title) => Promise.resolve(onRenameConversation?.(conversation, title))}
+                  />
+                ))}
+              </ul>
+            ) : null}
           </li>
         </ul>
       </AppScrollArea>
