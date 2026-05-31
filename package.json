@@ -59,6 +59,7 @@
     "@heroui/styles": "^3.0.2",
     "@heroui/system": "^2.4.28",
     "@iconify/react": "^6.0.2",
+    "@lobehub/icons": "^5.10.0",
     "@mingcute/react": "^1.4.1",
     "@monaco-editor/react": "^4.7.0",
     "@pierre/diffs": "^1.1.10",

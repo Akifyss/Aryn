@@ -6654,3 +6654,103 @@ body.workspace-tree-dragging .workspace-tree-row {
 .settings-select-popover [role="option"][data-selected="true"]:not([data-color="danger"]) {
   background: var(--app-menu-item-active-background) !important;
 }
+
+/* Service Providers UI/UX Improvements */
+
+.settings-providers-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-providers-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .settings-providers-toolbar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.provider-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.provider-card {
+  transition: all 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.provider-card:hover {
+  transform: translateY(-1px);
+}
+
+.provider-card-header {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  padding: 16px;
+  outline: none;
+}
+
+.provider-brand-icon-wrapper {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.provider-status-badge {
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+}
+
+.provider-card-details-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.provider-card-details-wrapper.is-expanded {
+  grid-template-rows: 1fr;
+}
+
+.provider-card-details-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.provider-setup-hint {
+  line-height: 1.5;
+}
+
+.provider-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Custom Input Padding for Icons */
+.settings-search-wrapper input {
+  padding-left: 36px !important;
+}
+
+.provider-apikey-input-container input {
+  padding-left: 36px !important;
+  padding-right: 36px !important;
+}

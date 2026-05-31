@@ -1,5 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Input, ListBox, Select, Switch, Tabs } from '@heroui/react'
+import { Icon } from '@iconify/react'
+import {
+  OpenAI,
+  Claude,
+  Gemini,
+  DeepSeek,
+  Mistral,
+  Groq,
+  Cerebras,
+  OpenRouter,
+  Together,
+  HuggingFace,
+  Fireworks,
+  Vercel,
+  Azure,
+  Cloudflare,
+  Aws,
+  GithubCopilot,
+  XAI,
+  Minimax,
+  Moonshot,
+  XiaomiMiMo,
+  Bedrock,
+  ZAI,
+  OpenCode
+} from '@lobehub/icons'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import {
   AGENT_PROVIDER_AUTH_CONFIGS,
@@ -190,6 +216,127 @@ function getProviderMeta(provider: AuthProviderGroupViewModel) {
   return '尚未配置。'
 }
 
+function renderProviderLobeIcon(provider: string, size = 18) {
+  const renderIcon = (IconComponent: any) => {
+    if (IconComponent.Color) {
+      const Comp = IconComponent.Color;
+      return <Comp size={size} />;
+    }
+    const Comp = IconComponent;
+    return <Comp size={size} className="text-foreground" />;
+  }
+
+  const iconWrapper = (child: React.ReactNode) => (
+    <div className="flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}>
+      {child}
+    </div>
+  );
+
+  switch (provider) {
+    case 'openai-codex':
+    case 'openai':
+      return iconWrapper(renderIcon(OpenAI));
+    case 'zai':
+      return iconWrapper(renderIcon(ZAI));
+    case 'opencode':
+    case 'opencode-go':
+      return iconWrapper(renderIcon(OpenCode));
+    case 'anthropic':
+      return iconWrapper(renderIcon(Claude));
+    case 'github-copilot':
+      return iconWrapper(renderIcon(GithubCopilot));
+    case 'openrouter':
+      return iconWrapper(renderIcon(OpenRouter));
+    case 'google':
+    case 'google-vertex':
+      return iconWrapper(renderIcon(Gemini));
+    case 'deepseek':
+      return iconWrapper(renderIcon(DeepSeek));
+    case 'mistral':
+      return iconWrapper(renderIcon(Mistral));
+    case 'groq':
+      return iconWrapper(renderIcon(Groq));
+    case 'cerebras':
+      return iconWrapper(renderIcon(Cerebras));
+    case 'xai':
+      return iconWrapper(renderIcon(XAI));
+    case 'vercel-ai-gateway':
+      return iconWrapper(renderIcon(Vercel));
+    case 'huggingface':
+      return iconWrapper(renderIcon(HuggingFace));
+    case 'fireworks':
+      return iconWrapper(renderIcon(Fireworks));
+    case 'together':
+      return iconWrapper(renderIcon(Together));
+    case 'kimi-coding':
+      return iconWrapper(renderIcon(Moonshot));
+    case 'minimax':
+    case 'minimax-cn':
+      return iconWrapper(renderIcon(Minimax));
+    case 'moonshotai':
+    case 'moonshotai-cn':
+      return iconWrapper(renderIcon(Moonshot));
+    case 'xiaomi':
+    case 'xiaomi-token-plan-cn':
+    case 'xiaomi-token-plan-ams':
+    case 'xiaomi-token-plan-sgp':
+      return iconWrapper(renderIcon(XiaomiMiMo));
+    case 'azure-openai-responses':
+      return iconWrapper(renderIcon(Azure));
+    case 'cloudflare-ai-gateway':
+    case 'cloudflare-workers-ai':
+      return iconWrapper(renderIcon(Cloudflare));
+    case 'amazon-bedrock':
+      return iconWrapper(renderIcon(Bedrock));
+    default:
+      return iconWrapper(
+        <Icon icon="mingcute:key-2-line" className="text-muted" style={{ fontSize: size * 0.7 }} />
+      );
+  }
+}
+
+function getProviderStatus(
+  provider: AuthProviderGroupViewModel,
+  category: AgentProviderCategory
+) {
+  const { state } = provider
+  const hasStoredOAuth = state.storedCredentialType === 'oauth'
+  const hasStoredApiKey = state.storedCredentialType === 'api_key'
+
+  if (category === 'subscription') {
+    if (hasStoredOAuth) {
+      return { type: 'stored', label: '订阅已登录', color: 'emerald' }
+    }
+    if (state.source === 'env') {
+      return { type: 'env', label: '来自环境变量', color: 'amber' }
+    }
+    if (hasStoredApiKey) {
+      return { type: 'stored', label: 'API 密钥已配置', color: 'blue' }
+    }
+    return { type: 'none', label: '未配置订阅', color: 'gray' }
+  } else if (category === 'api_key') {
+    if (hasStoredApiKey) {
+      return { type: 'stored', label: '已保存密钥', color: 'emerald' }
+    }
+    if (state.source === 'env') {
+      return { type: 'env', label: '来自环境变量', color: 'amber' }
+    }
+    if (hasStoredOAuth) {
+      return { type: 'stored', label: '订阅已配置', color: 'blue' }
+    }
+    return { type: 'none', label: '未配置密钥', color: 'gray' }
+  } else {
+    // cloud
+    if (state.source === 'stored' || hasStoredApiKey || hasStoredOAuth) {
+      return { type: 'stored', label: '已配置凭据', color: 'emerald' }
+    }
+    if (state.source === 'env') {
+      return { type: 'env', label: '来自环境变量', color: 'amber' }
+    }
+    return { type: 'none', label: '未配置', color: 'gray' }
+  }
+}
+
 export function SettingsDialog({
   activeSection,
   agentState,
@@ -209,6 +356,10 @@ export function SettingsDialog({
   const [isSavingAuth, setIsSavingAuth] = useState(false)
   const [meoImageFolderDraft, setMeoImageFolderDraft] = useState(meo.imageFolder)
   const [panelError, setPanelError] = useState<string | null>(null)
+  const [activeCategory, setActiveCategory] = useState<AgentProviderCategory>('subscription')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [expandedProvider, setExpandedProvider] = useState<string | null>(null)
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({})
   const activeAuthProviderRef = useRef<string | null>(null)
   const isAuthCancelingRef = useRef(false)
   const pendingAuthPromptIdRef = useRef<string | null>(null)
@@ -264,6 +415,20 @@ export function SettingsDialog({
       }))
       .filter((group) => group.providers.length > 0)
   ), [authProviders])
+
+  const filteredProviders = useMemo(() => {
+    const group = authProviderGroups.find((g) => g.category === activeCategory)
+    if (!group) return []
+    
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return group.providers
+    
+    return group.providers.filter((p) => 
+      p.label.toLowerCase().includes(query) ||
+      p.provider.toLowerCase().includes(query) ||
+      (p.state.envVarNames && p.state.envVarNames.some(name => name.toLowerCase().includes(query)))
+    )
+  }, [authProviderGroups, activeCategory, searchQuery])
 
   const activeIconThemeKey = useMemo(
     () => resolveActiveWorkspaceIconThemeKey(iconTheme, iconThemeOptions),
@@ -691,169 +856,328 @@ export function SettingsDialog({
 
   function renderProvidersSection() {
     const activeAuthProviderLabel = authFlow ? getProviderLabel(authFlow.provider) : ''
+    const activeGroupMeta = AUTH_PROVIDER_GROUPS.find(g => g.category === activeCategory)
 
     return (
-      <div className='settings-card'>
-        <>
-            {authFlow && (
-              <section className='settings-provider-auth-flow'>
-                <div>
-                  <span className='settings-provider-label'>{activeAuthProviderLabel} 登录</span>
+      <div className='settings-providers-section flex flex-col gap-3 flex-1 min-h-0 overflow-hidden'>
+        {authFlow && (
+          <section className='settings-provider-auth-flow p-5 rounded-2xl border border-blue-500/20 bg-blue-500/5 flex flex-col gap-4 relative overflow-hidden'>
+            <div className='absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl -mr-8 -mt-8' />
+            
+            <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
+              <div className='flex items-center gap-3'>
+                <div className='flex items-center justify-center w-9 h-9 rounded-xl bg-blue-500/10 text-blue-500 flex-shrink-0'>
+                  <Icon icon='mingcute:loading-3-line' className='w-5 h-5 animate-spin' />
+                </div>
+                <div className='flex flex-col min-w-0'>
+                  <span className='text-sm font-semibold text-foreground truncate'>{activeAuthProviderLabel} 登录中</span>
                   {authFlow.instructions && (
-                    <span className='settings-provider-meta'>{authFlow.instructions}</span>
+                    <span className='text-xs text-muted mt-1 leading-relaxed'>{authFlow.instructions}</span>
                   )}
                 </div>
-                <div className='settings-provider-actions'>
-                  {authFlow.authUrl && (
-                    <Button
-                      size='sm'
-                      variant='ghost'
-                      className='settings-action-button'
-                      onPress={() => void window.appApi.openExternalLink(authFlow.authUrl!)}
-                    >
-                      打开登录页
-                    </Button>
-                  )}
+              </div>
+              
+              <div className='flex gap-2 flex-shrink-0'>
+                {authFlow.authUrl && (
                   <Button
                     size='sm'
-                    variant='ghost'
-                    className='settings-action-button'
-                    onPress={() => void handleCancelAuthFlow()}
+                    variant='primary'
+                    className='settings-action-button gap-2'
+                    onPress={() => void window.appApi.openExternalLink(authFlow.authUrl!)}
                   >
-                    取消登录
+                    <Icon icon='mingcute:external-link-line' className='w-3.5 h-3.5' />
+                    打开登录页
+                  </Button>
+                )}
+                <Button
+                  size='sm'
+                  variant='ghost'
+                  className='settings-action-button gap-2'
+                  onPress={() => void handleCancelAuthFlow()}
+                >
+                  <Icon icon='mingcute:close-circle-line' className='w-3.5 h-3.5' />
+                  取消登录
+                </Button>
+              </div>
+            </div>
+
+            {authFlow.prompt && (
+              <form
+                className='settings-provider-prompt-form flex flex-col gap-3 p-4 rounded-xl bg-surface/60 border border-border/40 mt-2'
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void handleSubmitAuthPrompt()
+                }}
+              >
+                <label className='text-xs font-semibold text-foreground/80'>{authFlow.prompt.message}</label>
+                <div className='flex items-center gap-2'>
+                  <Input
+                    aria-label={authFlow.prompt.message}
+                    className='settings-provider-input flex-1'
+                    autoFocus
+                    onChange={(event) => {
+                      setAuthFlow((currentValue) => currentValue
+                        ? { ...currentValue, promptDraft: event.target.value }
+                        : currentValue)
+                    }}
+                    placeholder={authFlow.prompt.placeholder || '输入凭据'}
+                    value={authFlow.promptDraft}
+                    variant='secondary'
+                  />
+                  <Button
+                    isDisabled={!authFlow.prompt.allowEmpty && !authFlow.promptDraft.trim()}
+                    size='sm'
+                    type='submit'
+                    variant='primary'
+                    className='settings-action-button'
+                  >
+                    提交
                   </Button>
                 </div>
-                {authFlow.prompt && (
-                  <form
-                    className='settings-provider-prompt-form'
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      void handleSubmitAuthPrompt()
-                    }}
-                  >
-                    <Input
-                      aria-label={authFlow.prompt.message}
-                      className='settings-provider-input'
-                      autoFocus
-                      onChange={(event) => {
-                        setAuthFlow((currentValue) => currentValue
-                          ? { ...currentValue, promptDraft: event.target.value }
-                          : currentValue)
-                      }}
-                      placeholder={authFlow.prompt.placeholder}
-                      value={authFlow.promptDraft}
-                      variant='secondary'
-                    />
-                    <div className='settings-provider-actions'>
-                      <Button
-                        isDisabled={!authFlow.prompt.allowEmpty && !authFlow.promptDraft.trim()}
-                        size='sm'
-                        type='submit'
-                        variant='ghost'
-                        className='settings-action-button'
-                      >
-                        提交
-                      </Button>
-                    </div>
-                    <span className='settings-provider-meta'>{authFlow.prompt.message}</span>
-                  </form>
-                )}
-                {authFlow.progress.length > 0 && (
-                  <div className='settings-provider-progress'>
-                    {authFlow.progress.slice(-4).map((message, index) => (
-                      <span key={`${message}-${index}`}>{message}</span>
-                    ))}
-                  </div>
-                )}
-              </section>
+              </form>
             )}
 
-            <div className='settings-provider-groups'>
-              {authProviderGroups.map((group) => (
-                <section key={group.category} className='settings-provider-group'>
-                  <div className='settings-provider-group-header'>
-                    <span className='settings-provider-group-label'>{group.label}</span>
-                    <span className='settings-provider-meta'>{group.description}</span>
+            {authFlow.progress.length > 0 && (
+              <div className='settings-provider-progress flex flex-col gap-1.5 p-3 rounded-xl bg-surface/30 border border-border/20 text-xs text-muted font-mono mt-1'>
+                <div className='text-[10px] text-muted-foreground uppercase font-sans font-semibold tracking-wider border-b border-border/20 pb-1 mb-1'>连接日志</div>
+                {authFlow.progress.slice(-4).map((message, index) => (
+                  <div key={`${message}-${index}`} className='flex items-center gap-1.5'>
+                    <span className='w-1 h-1 rounded-full bg-blue-500/70' />
+                    <span>{message}</span>
                   </div>
-                  <div className='settings-provider-list'>
-                    {group.providers.map((provider) => {
-                      const draftValue = authDrafts[provider.key] ?? ''
-                      const hasStoredApiKey = provider.state.storedCredentialType === 'api_key'
-                      const hasStoredOAuth = provider.state.storedCredentialType === 'oauth'
-                      const isBusy = isSavingAuth || authFlow?.provider === provider.key
-                      const showsOAuthActions = provider.groupCategory === 'subscription' && provider.supportsOAuth
-                      const showsApiKeyActions = provider.groupCategory !== 'subscription' && provider.supportsApiKey
-                      const canClearStoredCredential = (
-                        (showsOAuthActions && hasStoredOAuth)
-                        || (showsApiKeyActions && hasStoredApiKey)
-                      )
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
-                      return (
-                        <section key={provider.key} className='settings-provider-card'>
-                          <div>
-                            <span className='settings-provider-label'>{provider.label}</span>
-                            <span className='settings-provider-meta'>{getProviderMeta(provider)}</span>
-                            {provider.setupHint && (
-                              <span className='settings-provider-meta'>{provider.setupHint}</span>
-                            )}
+        <div className='settings-providers-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+          <div className='settings-tabs-wrapper heroui-tabs-fix flex-1 max-w-sm'>
+            <Tabs
+              selectedKey={activeCategory}
+              onSelectionChange={(key) => {
+                setActiveCategory(key as AgentProviderCategory)
+                setExpandedProvider(null)
+              }}
+              variant='primary'
+              className='w-full'
+            >
+              <Tabs.ListContainer className='w-full'>
+                <Tabs.List aria-label='AI服务提供商类别' className='w-full'>
+                  <Tabs.Tab id='subscription' className='flex-1'>
+                    订阅服务
+                    <Tabs.Indicator />
+                  </Tabs.Tab>
+                  <Tabs.Tab id='api_key' className='flex-1'>
+                    API 密钥
+                    <Tabs.Indicator />
+                  </Tabs.Tab>
+                  <Tabs.Tab id='cloud' className='flex-1'>
+                    云厂商
+                    <Tabs.Indicator />
+                  </Tabs.Tab>
+                </Tabs.List>
+              </Tabs.ListContainer>
+            </Tabs>
+          </div>
+          
+          <div className='settings-search-wrapper relative w-full sm:w-56 flex items-center'>
+            <span className='absolute left-3 text-muted flex items-center justify-center pointer-events-none z-10'>
+              <Icon icon="mingcute:search-line" className="w-4 h-4" />
+            </span>
+            <Input
+              aria-label="搜索提供商"
+              placeholder="搜索提供商..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              variant="secondary"
+              className="w-full"
+            />
+          </div>
+        </div>
+
+        <AppScrollArea className='flex-1 min-h-0' contentClassName='pr-2 pb-6'>
+          <div className='flex flex-col gap-3'>
+            {activeGroupMeta && (
+              <div className='settings-providers-group-desc p-3.5 rounded-xl border border-border/40 bg-surface-secondary/40'>
+                <p className='text-xs text-muted leading-relaxed'>{activeGroupMeta.description}</p>
+              </div>
+            )}
+
+            {filteredProviders.length > 0 ? (
+              <div className='provider-card-list'>
+                {filteredProviders.map((provider) => {
+                  const status = getProviderStatus(provider, activeCategory)
+                  const isExpanded = expandedProvider === provider.key
+                  const draftValue = authDrafts[provider.key] ?? ''
+                  const hasStoredApiKey = provider.state.storedCredentialType === 'api_key'
+                  const hasStoredOAuth = provider.state.storedCredentialType === 'oauth'
+                  const isBusy = isSavingAuth || authFlow?.provider === provider.key
+                  const showsOAuthActions = provider.groupCategory === 'subscription' && provider.supportsOAuth
+                  const showsApiKeyActions = provider.groupCategory !== 'subscription' && provider.supportsApiKey
+                  const canClearStoredCredential = (
+                    (showsOAuthActions && hasStoredOAuth)
+                    || (showsApiKeyActions && hasStoredApiKey)
+                  )
+                  const showPassword = showPasswords[provider.key] ?? false
+
+                  return (
+                    <div
+                      key={provider.key}
+                      className={`provider-card flex flex-col rounded-2xl border transition-all duration-200 bg-surface-secondary/30 ${
+                        isExpanded 
+                          ? 'border-accent shadow-lg shadow-accent/5 ring-1 ring-accent/10' 
+                          : 'border-border/60 hover:border-border-hover hover:bg-surface-secondary/60 hover:shadow-md'
+                      }`}
+                    >
+                      <button
+                        type='button'
+                        onClick={() => setExpandedProvider(isExpanded ? null : provider.key)}
+                        className='provider-card-header flex items-center justify-between p-4 w-full text-left font-inherit outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-t-2xl'
+                      >
+                        <div className='flex items-center gap-3 min-w-0'>
+                          <div className='flex-shrink-0'>
+                            {renderProviderLobeIcon(provider.key, 18)}
                           </div>
-                          {showsApiKeyActions && (
-                            <Input
-                              aria-label={`${provider.label} API key`}
-                              className='settings-provider-input'
-                              disabled={isBusy}
-                              onChange={(event) => setAuthDrafts((prev) => ({ ...prev, [provider.key]: event.target.value }))}
-                              placeholder={provider.placeholder}
-                              type='password'
-                              value={draftValue}
-                              variant='secondary'
-                            />
-                          )}
-                          <div className='settings-provider-actions'>
-                            {showsOAuthActions && (
-                              <Button
-                                isDisabled={isBusy}
-                                size='sm'
-                                variant='ghost'
-                                className='settings-action-button'
-                                onPress={() => void handleLoginProviderAuth(provider.key)}
-                              >
-                                {hasStoredOAuth ? '重新登录订阅' : '登录订阅'}
-                              </Button>
-                            )}
+                          
+                          <div className='flex flex-col min-w-0'>
+                            <span className='provider-title text-sm font-semibold text-foreground truncate'>
+                              {provider.label}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className='flex items-center gap-2 flex-shrink-0'>
+                          <span className={`provider-status-badge text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1.5 ${
+                            status.color === 'emerald' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
+                            status.color === 'amber' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' :
+                            status.color === 'blue' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' :
+                            'bg-muted-foreground/15 text-muted border border-border/40'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              status.color === 'emerald' ? 'bg-emerald-500' :
+                              status.color === 'amber' ? 'bg-amber-500' :
+                              status.color === 'blue' ? 'bg-blue-500' :
+                              'bg-current opacity-60'
+                            }`} />
+                            {status.label}
+                          </span>
+                          
+                          <Icon
+                            icon='mingcute:down-line'
+                            className={`w-4 h-4 text-muted transition-transform duration-200 ${
+                              isExpanded ? 'rotate-180 text-foreground' : ''
+                            }`}
+                          />
+                        </div>
+                      </button>
+
+                      <div className={`provider-card-details-wrapper ${isExpanded ? 'is-expanded' : ''}`}>
+                        <div className='provider-card-details-inner'>
+                          <div className='p-4 pt-0 border-t border-border/40 bg-surface-secondary/10 flex flex-col gap-4'>
+                            <div className='provider-meta-info flex flex-col gap-2 mt-3'>
+                              <div className='text-xs text-foreground/80 leading-relaxed bg-surface/50 p-3 rounded-xl border border-border/30'>
+                                <p className='font-medium text-foreground mb-1'>当前配置状态：</p>
+                                <p className='text-muted'>{getProviderMeta(provider)}</p>
+                              </div>
+                              
+                              {provider.setupHint && (
+                                <div className='provider-setup-hint flex gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-500/5 p-3 rounded-xl border border-blue-500/15'>
+                                  <Icon icon='mingcute:information-line' className='w-4 h-4 flex-shrink-0 mt-0.5' />
+                                  <span>{provider.setupHint}</span>
+                                </div>
+                              )}
+                            </div>
+
                             {showsApiKeyActions && (
-                              <Button
-                                isDisabled={isBusy || !draftValue.trim()}
-                                size='sm'
-                                variant='ghost'
-                                className='settings-action-button'
-                                onPress={() => void handleSaveProviderAuth(provider.key, draftValue)}
-                              >
-                                保存密钥
-                              </Button>
+                              <div className='provider-apikey-form flex flex-col gap-2'>
+                                <label className='text-xs font-semibold text-foreground/80'>配置 API 密钥</label>
+                                <div className='relative flex items-center w-full provider-apikey-input-container'>
+                                  <span className='absolute left-3 text-muted pointer-events-none flex items-center justify-center z-20'>
+                                    <Icon icon='mingcute:key-2-line' className='w-4 h-4' />
+                                  </span>
+                                  <Input
+                                    aria-label={`${provider.label} API key`}
+                                    className='settings-provider-input w-full'
+                                    disabled={isBusy}
+                                    onChange={(event) => setAuthDrafts((prev) => ({ ...prev, [provider.key]: event.target.value }))}
+                                    placeholder={provider.placeholder || '输入 API 密钥'}
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={draftValue}
+                                    variant='secondary'
+                                  />
+                                  <button
+                                    type='button'
+                                    disabled={isBusy}
+                                    onClick={() => setShowPasswords(prev => ({ ...prev, [provider.key]: !showPassword }))}
+                                    className='absolute right-3 text-muted hover:text-foreground transition-colors focus:outline-none flex items-center justify-center z-10'
+                                  >
+                                    <Icon
+                                      icon={showPassword ? 'mingcute:eye-line' : 'mingcute:eye-close-line'}
+                                      className='w-4 h-4'
+                                    />
+                                  </button>
+                                </div>
+                              </div>
                             )}
-                            {(showsOAuthActions || showsApiKeyActions) && (
-                              <Button
-                                isDisabled={isBusy || !canClearStoredCredential}
-                                size='sm'
-                                variant='ghost'
-                                className='settings-action-button'
-                                onPress={() => void (showsOAuthActions
-                                  ? handleLogoutProviderAuth(provider.key)
-                                  : handleSaveProviderAuth(provider.key, null))}
-                              >
-                                {showsOAuthActions ? '退出订阅登录' : '移除已保存密钥'}
-                              </Button>
-                            )}
+
+                            <div className='provider-actions flex flex-wrap gap-2 mt-1 justify-end'>
+                              {showsOAuthActions && (
+                                <Button
+                                  isDisabled={isBusy}
+                                  size='sm'
+                                  variant='primary'
+                                  className='settings-action-button font-medium gap-2'
+                                  onPress={() => void handleLoginProviderAuth(provider.key)}
+                                >
+                                  <Icon icon='mingcute:entrance-line' className='w-4 h-4' />
+                                  {hasStoredOAuth ? '重新登录' : '订阅登录'}
+                                </Button>
+                              )}
+                              
+                              {showsApiKeyActions && (
+                                <Button
+                                  isDisabled={isBusy || !draftValue.trim()}
+                                  size='sm'
+                                  variant='primary'
+                                  className='settings-action-button font-medium gap-2'
+                                  onPress={() => void handleSaveProviderAuth(provider.key, draftValue)}
+                                >
+                                  <Icon icon='mingcute:check-line' className='w-4 h-4' />
+                                  保存密钥
+                                </Button>
+                              )}
+
+                              {(showsOAuthActions || showsApiKeyActions) && (
+                                <Button
+                                  isDisabled={isBusy || !canClearStoredCredential}
+                                  size='sm'
+                                  variant='ghost'
+                                  className='settings-action-button font-medium text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 gap-2'
+                                  onPress={() => void (showsOAuthActions
+                                    ? handleLogoutProviderAuth(provider.key)
+                                    : handleSaveProviderAuth(provider.key, null))}
+                                >
+                                  <Icon icon={showsOAuthActions ? 'mingcute:exit-line' : 'mingcute:delete-2-line'} className='w-4 h-4' />
+                                  {showsOAuthActions ? '退出登录' : '清除密钥'}
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                        </section>
-                      )
-                    })}
-                  </div>
-                </section>
-              ))}
-            </div>
-        </>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className='settings-empty-state flex flex-col items-center justify-center p-12 text-center border border-dashed border-border rounded-xl bg-surface-secondary/20'>
+                <Icon icon="mingcute:empty-box-line" className="w-12 h-12 text-muted mb-3" />
+                <p className="text-sm text-muted">未找到匹配的AI服务提供商</p>
+              </div>
+            )}
+          </div>
+        </AppScrollArea>
       </div>
     )
   }
@@ -884,17 +1208,30 @@ export function SettingsDialog({
           <h3 className='settings-panel-title'>{getSectionTitle(activeSection)}</h3>
         </div>
 
-        <AppScrollArea
-          className='settings-panel-content'
-          contentClassName='settings-panel-content-inner'
-        >
-          {panelError && <div className='settings-alert settings-alert-error'>{panelError}</div>}
+        <div className='flex-1 min-h-0 flex flex-col overflow-hidden'>
+          {panelError && <div className='settings-alert settings-alert-error mx-8 mt-4'>{panelError}</div>}
 
-          {activeSection === 'appearance' ? renderAppearanceSection() : null}
-          {activeSection === 'conversation' ? renderConversationSection() : null}
-          {activeSection === 'editor' ? renderEditorSection() : null}
-          {activeSection === 'providers' ? renderProvidersSection() : null}
-        </AppScrollArea>
+          {activeSection === 'appearance' ? (
+            <AppScrollArea className='settings-panel-content' contentClassName='settings-panel-content-inner'>
+              {renderAppearanceSection()}
+            </AppScrollArea>
+          ) : null}
+          {activeSection === 'conversation' ? (
+            <AppScrollArea className='settings-panel-content' contentClassName='settings-panel-content-inner'>
+              {renderConversationSection()}
+            </AppScrollArea>
+          ) : null}
+          {activeSection === 'editor' ? (
+            <AppScrollArea className='settings-panel-content' contentClassName='settings-panel-content-inner'>
+              {renderEditorSection()}
+            </AppScrollArea>
+          ) : null}
+          {activeSection === 'providers' ? (
+            <div className='settings-panel-content flex-1 min-h-0' style={{ padding: '20px 32px 0px', gap: '0' }}>
+              {renderProvidersSection()}
+            </div>
+          ) : null}
+        </div>
       </section>
     </div>
   )
