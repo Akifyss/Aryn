@@ -715,6 +715,7 @@ export function SettingsDialog({
             <div className='settings-field settings-field-grow'>
               <span className='settings-field-label'>大纲位置</span>
               <Select
+                aria-label='大纲位置'
                 className='settings-field-grow heroui-select-fix'
                 selectedKey={meo.outlinePosition}
                 onSelectionChange={(value) => {
