@@ -3048,7 +3048,9 @@ function App() {
     }
 
     const isSwitchMenu = projectMenuMode === 'editor-switch' || projectMenuMode === 'agent-new-switch'
-    const showProjectlessAction = projectMenuMode === 'agent-new-switch' && activeWorkspaceContext.kind === 'project'
+    const showProjectlessAction = isAgentLayout
+      && projectMenuMode === 'agent-new-switch'
+      && activeWorkspaceContext.kind === 'project'
     const menuStyle = resolveProjectMenuStyle(
       projectMenuMode,
       projectMenuAnchorRect,
