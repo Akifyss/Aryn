@@ -5217,15 +5217,12 @@ function AgentProjectSwitchTrigger({
         onOpenProjectSwitchMenu?.(event.currentTarget.getBoundingClientRect(), { startNewSession: true })
       }}
     >
-      {activeProject ? (
-        <WorkspaceFileIcon
-          iconTheme={iconTheme ?? null}
-          isFolder
-          isClosed
-          nodeLabel={activeProject.name}
-        />
-      ) : null}
-      {!activeProject ? <FolderLine size={16} /> : null}
+      <WorkspaceFileIcon
+        iconTheme={iconTheme ?? null}
+        isFolder
+        isClosed
+        nodeLabel={activeProject?.name}
+      />
       <span className='agent-project-switch-trigger-label'>{label}</span>
       <DownLine aria-hidden='true' size={14} />
     </button>

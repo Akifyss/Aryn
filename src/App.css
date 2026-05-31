@@ -4019,7 +4019,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-session-new-button {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   min-height: 32px;
   margin: 0 0 4px;
