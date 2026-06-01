@@ -90,6 +90,7 @@ import {
   deriveShellPlatform,
   FULL_LAYOUT_BREAKPOINT,
   getShellChromeVars,
+  getShellChromeOverlayState,
   RIGHT_DRAWER_MAX_WIDTH,
   type LayoutMode,
   type ShellPlatform,
@@ -1048,10 +1049,11 @@ function App() {
     || isNewProjectDialogOpen
     || Boolean(confirmDialogOptions?.isOpen)
     || Boolean(projectMenuMode)
-  const isLeftPanelOverlayElevated = !isAppModalLayerOpen && !isRightDrawerOpen
-  const isRightPanelOverlayElevated = !isAppModalLayerOpen && !isLeftDrawerOpen
-  const isLeftPanelOverlayTopLayer = !isAppModalLayerOpen && isLeftDrawerOpen
-  const isRightPanelOverlayTopLayer = !isAppModalLayerOpen && isRightDrawerOpen
+  const shellChromeOverlayState = getShellChromeOverlayState({
+    isLeftDrawerOpen,
+    isModalLayerOpen: isAppModalLayerOpen,
+    isRightDrawerOpen,
+  })
   const effectiveLeftSidebarWidth = isLeftSidebarVisible ? leftSidebarWidth : 0
   const effectiveRightSidebarWidth = isRightSidebarVisible ? rightSidebarWidth : 0
   const rightSidebarWidthReservedForLeftClamp = isAgentLayout && agentRightSidebarWidthMode === 'max'
@@ -4810,43 +4812,83 @@ function App() {
     activateFileTab(displayActiveTab?.kind === 'file' ? displayActiveTab.id : FIXED_FILE_TAB_ID)
   }
 
+  const isEditorLayoutSwitchDisabled = activeWorkspaceContext.kind === 'conversationDraft' && !currentPath && isAgentLayout
+
+  const renderLayoutModeSwitchButton = () => (
+    <div
+      className='layout-mode-segmented-control'
+      role='group'
+      aria-label='Layout mode'
+    >
+      <button
+        type='button'
+        className={`layout-mode-segmented-option${isAgentLayout ? ' is-active' : ''}`}
+        aria-pressed={isAgentLayout}
+        aria-label='Agent mode'
+        title='Agent mode'
+        onClick={() => setLayoutPreference('agent')}
+      >
+        <Chat3Line size={16} aria-hidden='true' />
+      </button>
+      <button
+        type='button'
+        className={`layout-mode-segmented-option${!isAgentLayout ? ' is-active' : ''}`}
+        disabled={isEditorLayoutSwitchDisabled}
+        aria-pressed={!isAgentLayout}
+        aria-label={isEditorLayoutSwitchDisabled ? 'Editor mode，需要先选择工作目录' : 'Editor mode'}
+        title={isEditorLayoutSwitchDisabled ? '先选择工作目录' : 'Editor mode'}
+        onClick={() => {
+          if (!isEditorLayoutSwitchDisabled) {
+            setLayoutPreference('editor')
+          }
+        }}
+      >
+        <Pencil2Line size={16} aria-hidden='true' />
+      </button>
+    </div>
+  )
+
+  const renderLeftChromeSearchButton = () => (
+    <button
+      type='button'
+      className='panel-toggle-button left-chrome-search-button'
+      aria-label='Open search'
+      onClick={handleOpenCommandPaletteFromChrome}
+    >
+      <Icon icon='lucide:search' width={16} height={16} aria-hidden='true' />
+    </button>
+  )
+
+  const renderLeftSidebarToggleButton = () => (
+    <button
+      type='button'
+      className='panel-toggle-button'
+      aria-label={isLeftSidebarDrawer
+        ? (isLeftDrawerOpen ? 'Close workspace panel' : 'Open workspace panel')
+        : (isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar')}
+      onClick={() => {
+        if (isLeftSidebarDrawer) {
+          handleLeftDrawerOpenChange(!isLeftDrawerOpen)
+          return
+        }
+
+        if (isLeftSidebarVisible) {
+          setIsLeftSidebarCollapsed(true)
+          return
+        }
+
+        setIsLeftSidebarCollapsed(false)
+      }}
+    >
+      <span className='panel-toggle-icon' aria-hidden='true'>
+        <LayoutLeftLine size={16} />
+      </span>
+    </button>
+  )
+
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
     const isDrawerSurface = surfaceMode === 'drawer'
     const workspaceSwitchButtonClassName = `section-title-text editor-workspace-switch-button${currentPath ? '' : ' is-empty'}`
-    const isEditorLayoutSwitchDisabled = activeWorkspaceContext.kind === 'conversationDraft' && !currentPath && isAgentLayout
-    const renderLayoutModeSwitchButton = () => (
-      <div
-        className='layout-mode-segmented-control'
-        role='group'
-        aria-label='Layout mode'
-      >
-        <button
-          type='button'
-          className={`layout-mode-segmented-option${isAgentLayout ? ' is-active' : ''}`}
-          aria-pressed={isAgentLayout}
-          aria-label='Agent mode'
-          title='Agent mode'
-          onClick={() => setLayoutPreference('agent')}
-        >
-          <Chat3Line size={16} aria-hidden='true' />
-        </button>
-        <button
-          type='button'
-          className={`layout-mode-segmented-option${!isAgentLayout ? ' is-active' : ''}`}
-          disabled={isEditorLayoutSwitchDisabled}
-          aria-pressed={!isAgentLayout}
-          aria-label={isEditorLayoutSwitchDisabled ? 'Editor mode，需要先选择工作目录' : 'Editor mode'}
-          title={isEditorLayoutSwitchDisabled ? '先选择工作目录' : 'Editor mode'}
-          onClick={() => {
-            if (!isEditorLayoutSwitchDisabled) {
-              setLayoutPreference('editor')
-            }
-          }}
-        >
-          <Pencil2Line size={16} aria-hidden='true' />
-        </button>
-      </div>
-    )
     const renderWorkspaceSwitchButton = (className = 'section-title-text', showDropdownIcon = false) => (
       <button
         type='button'
@@ -4872,9 +4914,10 @@ function App() {
         style={isDrawerSurface ? shellChromeVars : undefined}
       >
         <div className={`section-title workspace-section-title${isDrawerSurface ? ' is-drawer-surface' : ''}`}>
+          {isDrawerSurface ? renderLayoutModeSwitchButton() : null}
           <div className='section-title-drag-spacer' aria-hidden='true' />
-
-          {renderLayoutModeSwitchButton()}
+          {isDrawerSurface ? renderLeftChromeSearchButton() : null}
+          {isDrawerSurface ? renderLeftSidebarToggleButton() : null}
         </div>
 
         {!isAgentLayout ? (
@@ -5208,45 +5251,18 @@ function App() {
     )
   }
 
-  const leftChromeControls = (
-      <div
-        className='left-chrome-actions'
-        data-overlay-elevated={isLeftPanelOverlayElevated ? 'true' : 'false'}
-        data-react-aria-top-layer={isLeftPanelOverlayTopLayer ? 'true' : undefined}
-      >
-        <button
-          type='button'
-          className='panel-toggle-button'
-          aria-label={isLeftSidebarDrawer
-            ? (isLeftDrawerOpen ? 'Close workspace panel' : 'Open workspace panel')
-            : (isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar')}
-          onClick={() => {
-            if (isLeftSidebarDrawer) {
-              handleLeftDrawerOpenChange(!isLeftDrawerOpen)
-              return
-            }
-
-            if (isLeftSidebarVisible) {
-              setIsLeftSidebarCollapsed(true)
-              return
-            }
-
-            setIsLeftSidebarCollapsed(false)
-          }}
-        >
-          <span className='panel-toggle-icon' aria-hidden='true'>
-            <LayoutLeftLine size={16} />
-          </span>
-        </button>
-        <button
-          type='button'
-          className='panel-toggle-button left-chrome-search-button'
-          aria-label='Open search'
-          onClick={handleOpenCommandPaletteFromChrome}
-        >
-          <Icon icon='lucide:search' width={16} height={16} aria-hidden='true' />
-        </button>
-      </div>
+  const leftChromeControls = isLeftDrawerOpen ? null : (
+    <div
+      className='left-chrome-actions'
+      data-left-surface={isLeftSidebarVisible ? 'docked' : 'collapsed'}
+      data-overlay-elevated={shellChromeOverlayState.leftControlsElevated ? 'true' : 'false'}
+      data-react-aria-top-layer={shellChromeOverlayState.leftControlsTopLayer ? 'true' : undefined}
+    >
+      {renderLayoutModeSwitchButton()}
+      <div className='left-chrome-drag-spacer' aria-hidden='true' />
+      {renderLeftChromeSearchButton()}
+      {renderLeftSidebarToggleButton()}
+    </div>
   )
 
   const appShell = (
@@ -5275,8 +5291,8 @@ function App() {
       {isAgentLayout && shouldExposeAgentWorkspaceTools && !isRightSidebarVisible ? (
         <div
           className='agent-collapsed-tab-actions'
-          data-overlay-elevated={isRightPanelOverlayElevated ? 'true' : 'false'}
-          data-react-aria-top-layer={isRightPanelOverlayTopLayer ? 'true' : undefined}
+          data-overlay-elevated={shellChromeOverlayState.rightControlsElevated ? 'true' : 'false'}
+          data-react-aria-top-layer={shellChromeOverlayState.rightControlsTopLayer ? 'true' : undefined}
         >
           <button
             type='button'
@@ -5307,8 +5323,8 @@ function App() {
         <button
           type='button'
           className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
-          data-overlay-elevated={isRightPanelOverlayElevated ? 'true' : 'false'}
-          data-react-aria-top-layer={isRightPanelOverlayTopLayer ? 'true' : undefined}
+          data-overlay-elevated={shellChromeOverlayState.rightControlsElevated ? 'true' : 'false'}
+          data-react-aria-top-layer={shellChromeOverlayState.rightControlsTopLayer ? 'true' : undefined}
           aria-label={isRightSidebarDrawer
             ? (isRightDrawerOpen ? 'Close assistant panel' : 'Open assistant panel')
             : (isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar')}
@@ -5525,6 +5541,7 @@ function App() {
         void handleRequestWindowClose()
       }}
         isDrawerOpen={isLeftDrawerOpen || isRightDrawerOpen}
+        isLeftDrawerOpen={isLeftDrawerOpen}
         leftControls={leftChromeControls}
       />
     </div>

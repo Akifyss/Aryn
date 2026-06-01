@@ -22,10 +22,12 @@
   --panel-toggle-gap: 2px;
   --left-chrome-action-gap: 2px;
   --left-chrome-content-gap: 2px;
+  --left-chrome-edge-gap: 6px;
+  --layout-mode-switch-width: 62px;
   --file-tabs-collapsed-left-extra-gap: 0px;
   --left-panel-toggle-anchor: 84px;
   --right-panel-toggle-anchor: 12px;
-  --left-panel-content-inset: calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap));
+  --left-panel-content-inset: calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap));
   --right-panel-content-inset: 52px;
   --sidebar-icon-x: 20px;
 
@@ -152,6 +154,8 @@
 }
 
 .titlebar {
+  --titlebar-left-control-reserved-width: 0px;
+
   position: absolute;
   inset: 0 0 auto 0;
   display: flex;
@@ -189,6 +193,22 @@
   pointer-events: none;
 }
 
+.titlebar.is-macos {
+  --titlebar-left-control-reserved-width: max(68px, calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width)));
+}
+
+.titlebar:has(.left-chrome-actions[data-left-surface='docked']) {
+  --titlebar-left-control-reserved-width: var(--left-sidebar-width);
+}
+
+.titlebar:has(.left-chrome-actions[data-left-surface='collapsed']) {
+  --titlebar-left-control-reserved-width: calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size));
+}
+
+.titlebar[data-left-drawer-open='true'] {
+  --titlebar-left-control-reserved-width: calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width));
+}
+
 .titlebar-side-right {
   right: 0;
   justify-content: flex-end;
@@ -200,6 +220,7 @@
   z-index: var(--app-z-window-chrome);
   flex: 1;
   min-width: 0;
+  margin-left: var(--titlebar-left-control-reserved-width);
   pointer-events: auto;
   app-region: drag;
   -webkit-app-region: drag;
@@ -266,9 +287,23 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   -webkit-app-region: no-drag;
 }
 
+.left-chrome-actions[data-left-surface='docked'] {
+  width: calc(var(--left-sidebar-width) - var(--left-panel-toggle-anchor) - var(--left-chrome-edge-gap));
+}
+
+.left-chrome-drag-spacer {
+  flex: 0 0 0;
+  min-width: 0;
+  align-self: stretch;
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.left-chrome-actions[data-left-surface='docked'] .left-chrome-drag-spacer {
+  flex: 1 1 auto;
+}
+
 .left-chrome-actions[data-overlay-elevated='false'],
-.titlebar:has(+ .app-shell[data-modal-layer-open='true']) .left-chrome-actions,
-.titlebar:has(+ .app-shell[data-right-drawer-open='true']) .left-chrome-actions,
 body:has([data-slot='modal-backdrop']) .left-chrome-actions,
 body:has([data-slot='alert-dialog-backdrop']) .left-chrome-actions {
   z-index: var(--app-z-panel-toggle-underlay);
@@ -566,7 +601,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 /* When the right drawer expands to the full viewport width on narrow shells,
    the threadbar still needs to clear the macOS traffic lights on the left. */
 .panel-agent-drawer[data-platform='macos'][data-full-width='true'] .agent-threadbar {
-  padding-left: var(--left-panel-content-inset);
+  padding-left: var(--left-panel-toggle-anchor);
 }
 
 .panel-resize-slot {
@@ -656,17 +691,14 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   -webkit-app-region: drag;
 }
 
-.workspace-section-title {
-  padding-right: 8px;
-}
-
 .section-title.is-drawer-surface {
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
-.section-title.is-drawer-surface {
-  padding-left: var(--left-panel-content-inset, 52px);
+.workspace-sidebar-surface.is-drawer .workspace-section-title {
+  gap: var(--left-chrome-action-gap);
+  padding: 0 var(--left-chrome-edge-gap) 0 var(--left-panel-toggle-anchor);
 }
 
 .section-title.is-drawer-surface .section-title-text {
@@ -756,6 +788,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   align-items: center;
   flex-shrink: 0;
   gap: 2px;
+  width: var(--layout-mode-switch-width);
   min-height: 32px;
   padding: 2px;
   border-radius: 10px;

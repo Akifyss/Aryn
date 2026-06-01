@@ -4,10 +4,12 @@ import { Icon } from '@iconify/react'
 
 export function AppTitlebar({
   isDrawerOpen = false,
+  isLeftDrawerOpen = false,
   leftControls,
   onRequestClose,
 }: {
   isDrawerOpen?: boolean
+  isLeftDrawerOpen?: boolean
   leftControls?: ReactNode
   onRequestClose?: () => void
 }) {
@@ -37,6 +39,7 @@ export function AppTitlebar({
     <header
       className={`titlebar ${isMac ? 'is-macos' : 'is-windows'}`}
       data-drawer-open={isDrawerOpen ? 'true' : 'false'}
+      data-left-drawer-open={isLeftDrawerOpen ? 'true' : 'false'}
       data-react-aria-top-layer='true'
     >
       {leftControls}

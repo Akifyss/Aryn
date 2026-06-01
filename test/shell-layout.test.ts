@@ -5,11 +5,12 @@ import {
   deriveShellPlatform,
   FULL_LAYOUT_BREAKPOINT,
   getShellChromeVars,
+  getShellChromeOverlayState,
 } from '../src/features/layout/shell-layout'
 
 describe('shell layout helpers', () => {
   const leftPanelContentInset =
-    'calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))'
+    'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))'
 
   it('derives the expected three layout modes from shell width', () => {
     expect(deriveLayoutMode(FULL_LAYOUT_BREAKPOINT + 1)).toBe('full')
@@ -29,6 +30,8 @@ describe('shell layout helpers', () => {
     expect(getShellChromeVars('macos')).toMatchObject({
       '--left-chrome-action-gap': '2px',
       '--left-chrome-content-gap': '2px',
+      '--left-chrome-edge-gap': '6px',
+      '--layout-mode-switch-width': '62px',
       '--left-panel-toggle-anchor': '84px',
       '--right-panel-toggle-anchor': '12px',
       '--left-panel-content-inset': leftPanelContentInset,
@@ -38,7 +41,9 @@ describe('shell layout helpers', () => {
     expect(getShellChromeVars('windows')).toMatchObject({
       '--left-chrome-action-gap': '2px',
       '--left-chrome-content-gap': '2px',
-      '--left-panel-toggle-anchor': '12px',
+      '--left-chrome-edge-gap': '6px',
+      '--layout-mode-switch-width': '62px',
+      '--left-panel-toggle-anchor': '6px',
       '--right-panel-toggle-anchor': '156px',
       '--left-panel-content-inset': leftPanelContentInset,
       '--right-panel-content-inset': '196px',
@@ -47,8 +52,62 @@ describe('shell layout helpers', () => {
 
   it('keeps macOS fullscreen chrome aligned with the screen edge', () => {
     expect(getShellChromeVars('macos', { isFullScreen: true })).toMatchObject({
-      '--left-panel-toggle-anchor': '12px',
+      '--left-chrome-edge-gap': '6px',
+      '--layout-mode-switch-width': '62px',
+      '--left-panel-toggle-anchor': '6px',
       '--left-panel-content-inset': leftPanelContentInset,
+    })
+  })
+
+  it('places left chrome controls below the backdrop while the right drawer is open', () => {
+    expect(getShellChromeOverlayState({
+      isLeftDrawerOpen: false,
+      isModalLayerOpen: false,
+      isRightDrawerOpen: true,
+    })).toEqual({
+      leftControlsElevated: false,
+      leftControlsTopLayer: false,
+      rightControlsElevated: true,
+      rightControlsTopLayer: true,
+    })
+  })
+
+  it('lowers external chrome while the left drawer owns its own controls', () => {
+    expect(getShellChromeOverlayState({
+      isLeftDrawerOpen: true,
+      isModalLayerOpen: false,
+      isRightDrawerOpen: false,
+    })).toEqual({
+      leftControlsElevated: false,
+      leftControlsTopLayer: false,
+      rightControlsElevated: false,
+      rightControlsTopLayer: false,
+    })
+  })
+
+  it('keeps overlapping drawer flags from elevating stale chrome controls', () => {
+    expect(getShellChromeOverlayState({
+      isLeftDrawerOpen: true,
+      isModalLayerOpen: false,
+      isRightDrawerOpen: true,
+    })).toEqual({
+      leftControlsElevated: false,
+      leftControlsTopLayer: false,
+      rightControlsElevated: false,
+      rightControlsTopLayer: false,
+    })
+  })
+
+  it('lowers shell chrome controls behind modal layers', () => {
+    expect(getShellChromeOverlayState({
+      isLeftDrawerOpen: true,
+      isModalLayerOpen: true,
+      isRightDrawerOpen: true,
+    })).toEqual({
+      leftControlsElevated: false,
+      leftControlsTopLayer: false,
+      rightControlsElevated: false,
+      rightControlsTopLayer: false,
     })
   })
 })

@@ -12,9 +12,11 @@ const SHELL_CHROME_VARS = {
     '--panel-toggle-gap': '2px',
     '--left-chrome-action-gap': '2px',
     '--left-chrome-content-gap': '2px',
+    '--left-chrome-edge-gap': '6px',
+    '--layout-mode-switch-width': '62px',
     '--left-panel-toggle-anchor': '84px',
     '--right-panel-toggle-anchor': '12px',
-    '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
+    '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
     '--right-panel-content-inset': '52px',
     '--sidebar-icon-x': '20px',
   },
@@ -24,16 +26,18 @@ const SHELL_CHROME_VARS = {
     '--panel-toggle-gap': '8px',
     '--left-chrome-action-gap': '2px',
     '--left-chrome-content-gap': '2px',
-    '--left-panel-toggle-anchor': '12px',
+    '--left-chrome-edge-gap': '6px',
+    '--layout-mode-switch-width': '62px',
+    '--left-panel-toggle-anchor': '6px',
     '--right-panel-toggle-anchor': '156px',
-    '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
+    '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
     '--right-panel-content-inset': '196px',
     '--sidebar-icon-x': '20px',
   },
 } as const satisfies Record<ShellPlatform, Record<string, string>>
 
 const MACOS_FULLSCREEN_CHROME_VARS = {
-  '--left-panel-toggle-anchor': '12px',
+  '--left-panel-toggle-anchor': '6px',
 } as const
 
 export function deriveShellPlatform(platform: string): ShellPlatform {
@@ -64,4 +68,23 @@ export function getShellChromeVars(
   }
 
   return SHELL_CHROME_VARS[shellPlatform]
+}
+
+export function getShellChromeOverlayState({
+  isLeftDrawerOpen,
+  isModalLayerOpen,
+  isRightDrawerOpen,
+}: {
+  isLeftDrawerOpen: boolean
+  isModalLayerOpen: boolean
+  isRightDrawerOpen: boolean
+}) {
+  const isRightDrawerActive = isRightDrawerOpen && !isLeftDrawerOpen
+
+  return {
+    leftControlsElevated: !isModalLayerOpen && !isLeftDrawerOpen && !isRightDrawerOpen,
+    leftControlsTopLayer: false,
+    rightControlsElevated: !isModalLayerOpen && !isLeftDrawerOpen,
+    rightControlsTopLayer: !isModalLayerOpen && isRightDrawerActive,
+  }
 }
