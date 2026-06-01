@@ -4872,9 +4872,9 @@ function App() {
         style={isDrawerSurface ? shellChromeVars : undefined}
       >
         <div className={`section-title workspace-section-title${isDrawerSurface ? ' is-drawer-surface' : ''}`}>
-          {renderLayoutModeSwitchButton()}
-
           <div className='section-title-drag-spacer' aria-hidden='true' />
+
+          {renderLayoutModeSwitchButton()}
         </div>
 
         {!isAgentLayout ? (

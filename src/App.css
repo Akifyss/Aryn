@@ -656,6 +656,10 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   -webkit-app-region: drag;
 }
 
+.workspace-section-title {
+  padding-right: 8px;
+}
+
 .section-title.is-drawer-surface {
   app-region: no-drag;
   -webkit-app-region: no-drag;
