@@ -72,14 +72,14 @@ describe('shell layout helpers', () => {
     })
   })
 
-  it('lowers external chrome while the left drawer owns its own controls', () => {
+  it('keeps the titlebar switch interactive while the left drawer owns drawer-only controls', () => {
     expect(getShellChromeOverlayState({
       isLeftDrawerOpen: true,
       isModalLayerOpen: false,
       isRightDrawerOpen: false,
     })).toEqual({
-      leftControlsElevated: false,
-      leftControlsTopLayer: false,
+      leftControlsElevated: true,
+      leftControlsTopLayer: true,
       rightControlsElevated: false,
       rightControlsTopLayer: false,
     })

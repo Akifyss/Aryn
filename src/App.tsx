@@ -4914,7 +4914,6 @@ function App() {
         style={isDrawerSurface ? shellChromeVars : undefined}
       >
         <div className={`section-title workspace-section-title${isDrawerSurface ? ' is-drawer-surface' : ''}`}>
-          {isDrawerSurface ? renderLayoutModeSwitchButton() : null}
           <div className='section-title-drag-spacer' aria-hidden='true' />
           {isDrawerSurface ? renderLeftChromeSearchButton() : null}
           {isDrawerSurface ? renderLeftSidebarToggleButton() : null}
@@ -5251,17 +5250,23 @@ function App() {
     )
   }
 
-  const leftChromeControls = isLeftDrawerOpen ? null : (
+  const leftChromeSurface = isLeftDrawerOpen ? 'drawer' : isLeftSidebarVisible ? 'docked' : 'collapsed'
+
+  const leftChromeControls = (
     <div
       className='left-chrome-actions'
-      data-left-surface={isLeftSidebarVisible ? 'docked' : 'collapsed'}
+      data-left-surface={leftChromeSurface}
       data-overlay-elevated={shellChromeOverlayState.leftControlsElevated ? 'true' : 'false'}
       data-react-aria-top-layer={shellChromeOverlayState.leftControlsTopLayer ? 'true' : undefined}
     >
       {renderLayoutModeSwitchButton()}
-      <div className='left-chrome-drag-spacer' aria-hidden='true' />
-      {renderLeftChromeSearchButton()}
-      {renderLeftSidebarToggleButton()}
+      {!isLeftDrawerOpen ? (
+        <>
+          <div className='left-chrome-drag-spacer' aria-hidden='true' />
+          {renderLeftChromeSearchButton()}
+          {renderLeftSidebarToggleButton()}
+        </>
+      ) : null}
     </div>
   )
 

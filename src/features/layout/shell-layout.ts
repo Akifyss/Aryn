@@ -82,8 +82,8 @@ export function getShellChromeOverlayState({
   const isRightDrawerActive = isRightDrawerOpen && !isLeftDrawerOpen
 
   return {
-    leftControlsElevated: !isModalLayerOpen && !isLeftDrawerOpen && !isRightDrawerOpen,
-    leftControlsTopLayer: false,
+    leftControlsElevated: !isModalLayerOpen && !isRightDrawerOpen,
+    leftControlsTopLayer: !isModalLayerOpen && isLeftDrawerOpen && !isRightDrawerOpen,
     rightControlsElevated: !isModalLayerOpen && !isLeftDrawerOpen,
     rightControlsTopLayer: !isModalLayerOpen && isRightDrawerActive,
   }

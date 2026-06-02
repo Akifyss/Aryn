@@ -698,7 +698,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .workspace-sidebar-surface.is-drawer .workspace-section-title {
   gap: var(--left-chrome-action-gap);
-  padding: 0 var(--left-chrome-edge-gap) 0 var(--left-panel-toggle-anchor);
+  padding: 0 var(--left-chrome-edge-gap) 0 calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap));
 }
 
 .section-title.is-drawer-surface .section-title-text {
