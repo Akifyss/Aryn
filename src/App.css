@@ -480,6 +480,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .workspace-sidebar-surface.is-drawer {
+  position: relative;
   width: 100%;
   min-width: 0;
 }
@@ -932,6 +933,21 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   background: transparent;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+.drawer-local-overlay-root {
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.project-menu-backdrop.is-local {
+  position: absolute;
+  z-index: 1;
+  pointer-events: auto;
 }
 
 .project-menu {
@@ -3959,6 +3975,19 @@ body.workspace-tree-dragging .workspace-tree-row {
   background: var(--overlay);
   box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
   backdrop-filter: blur(22px);
+}
+
+.agent-local-overlay-root {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  pointer-events: none;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-floating-panel.is-local {
+  position: absolute;
 }
 
 .agent-auth-form {

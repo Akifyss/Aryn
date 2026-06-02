@@ -101,6 +101,8 @@ type AgentProjectSwitchMenuOptions = {
   startNewSession?: boolean
 }
 
+type AgentSurfaceMode = 'docked' | 'drawer'
+
 type AgentSidebarProps = {
   activeWorkspaceContext?: ActiveWorkspaceContext
   conversationState?: ConversationState
@@ -127,6 +129,7 @@ type AgentSidebarProps = {
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
   projectState?: ProjectState
+  surfaceMode?: AgentSurfaceMode
   workspaceState?: AgentWorkspaceState | null
   workspacePath: string | null
 }
@@ -156,6 +159,7 @@ type AgentSurfaceProps = {
   onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   projectState?: ProjectState
+  surfaceMode?: AgentSurfaceMode
   workspaceState?: AgentWorkspaceState | null
   workspacePath: string | null
 }
@@ -472,6 +476,7 @@ type AgentContextValue = {
   setComposerState: React.Dispatch<React.SetStateAction<ComposerState>>
   setPanelError: React.Dispatch<React.SetStateAction<string | null>>
   statusMessage: string | null
+  surfaceMode: AgentSurfaceMode
   streamingShortcutModifierLabel: string
   thinkingLevel: AgentThinkingLevel
   thinkingLevelLabel: string
@@ -915,16 +920,29 @@ function resolveAgentModelCascaderStyle(
   }
 }
 
-function resolveAgentSessionMenuStyle(anchorRect: DOMRect): AgentSessionMenuStyle {
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
+function resolveAgentSessionMenuStyle(
+  anchorRect: DOMRect,
+  frameRect: Pick<DOMRect, 'top' | 'left' | 'width' | 'height'> | null = null,
+): AgentSessionMenuStyle {
+  const viewportWidth = frameRect?.width ?? window.innerWidth
+  const viewportHeight = frameRect?.height ?? window.innerHeight
+  const localAnchorRect = frameRect
+    ? {
+        bottom: anchorRect.bottom - frameRect.top,
+        height: anchorRect.height,
+        left: anchorRect.left - frameRect.left,
+        right: anchorRect.right - frameRect.left,
+        top: anchorRect.top - frameRect.top,
+        width: anchorRect.width,
+      }
+    : anchorRect
   const margin = Math.min(AGENT_SESSION_MENU_MARGIN_PX, Math.max(8, viewportWidth / 32))
   const maxWidth = Math.max(240, viewportWidth - (margin * 2))
   const width = Math.min(AGENT_SESSION_MENU_WIDTH_PX, maxWidth)
-  const left = Math.max(margin, Math.min(anchorRect.left, viewportWidth - width - margin))
+  const left = Math.max(margin, Math.min(localAnchorRect.left, viewportWidth - width - margin))
   const maxViewportHeight = Math.max(AGENT_SESSION_MENU_MIN_HEIGHT_PX, viewportHeight - (margin * 2))
-  const availableBelow = Math.max(0, viewportHeight - anchorRect.bottom - margin - AGENT_SESSION_MENU_GAP_PX)
-  const availableAbove = Math.max(0, anchorRect.top - margin - AGENT_SESSION_MENU_GAP_PX)
+  const availableBelow = Math.max(0, viewportHeight - localAnchorRect.bottom - margin - AGENT_SESSION_MENU_GAP_PX)
+  const availableAbove = Math.max(0, localAnchorRect.top - margin - AGENT_SESSION_MENU_GAP_PX)
   const targetHeight = Math.min(
     AGENT_SESSION_MENU_HEIGHT_PX,
     AGENT_SESSION_MENU_MAX_HEIGHT_PX,
@@ -940,8 +958,8 @@ function resolveAgentSessionMenuStyle(anchorRect: DOMRect): AgentSessionMenuStyl
     ),
   )
   const top = opensBelow
-    ? Math.min(anchorRect.bottom + AGENT_SESSION_MENU_GAP_PX, viewportHeight - height - margin)
-    : Math.max(margin, anchorRect.top - AGENT_SESSION_MENU_GAP_PX - height)
+    ? Math.min(localAnchorRect.bottom + AGENT_SESSION_MENU_GAP_PX, viewportHeight - height - margin)
+    : Math.max(margin, localAnchorRect.top - AGENT_SESSION_MENU_GAP_PX - height)
 
   return {
     height: `${height}px`,
@@ -2496,6 +2514,7 @@ function AgentProvider({
   onStartProjectSession,
   onWorkspaceStateChange,
   projectState = emptyProjectState,
+  surfaceMode = 'docked',
   workspaceState,
   workspacePath,
 }: AgentProviderProps) {
@@ -4151,6 +4170,7 @@ function AgentProvider({
     setComposerState,
     setPanelError,
     statusMessage,
+    surfaceMode,
     streamingShortcutModifierLabel,
     thinkingLevel,
     thinkingLevelLabel,
@@ -4218,6 +4238,7 @@ function AgentProvider({
     removeComposerAttachment,
     sessionStatus,
     statusMessage,
+    surfaceMode,
     streamingShortcutModifierLabel,
     thinkingLevel,
     thinkingLevelLabel,
@@ -5322,6 +5343,7 @@ function AgentChatSurface() {
     setComposerState,
     setPanelError,
     statusMessage,
+    surfaceMode,
     streamingShortcutModifierLabel,
     thinkingLevel,
     thinkingLevelLabel,
@@ -5345,6 +5367,7 @@ function AgentChatSurface() {
   const [modelPickerKeyboardColumn, setModelPickerKeyboardColumn] = useState<AgentModelPickerKeyboardColumn>('model')
   const modelPickerSearchRef = useRef<HTMLInputElement | null>(null)
   const modelPickerTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const localOverlayRootRef = useRef<HTMLDivElement | null>(null)
   const modelPickerPointerTrailRef = useRef<AgentModelPickerPointerPoint[]>([])
   const modelPickerLatestPointerPointRef = useRef<AgentModelPickerPointerPoint | null>(null)
   const modelPickerPendingActivationRef = useRef<AgentModelPickerPendingActivation | null>(null)
@@ -5499,6 +5522,11 @@ function AgentChatSurface() {
   const modelPickerListedModels = isModelPickerSearching
     ? modelPickerSearchResults
     : modelPickerProviderModels
+  const sessionMenuPortalTarget = typeof document === 'undefined'
+    ? null
+    : surfaceMode === 'drawer'
+      ? localOverlayRootRef.current
+      : document.body
 
   const updateSessionMenuPosition = useCallback(() => {
     const triggerElement = sessionButtonRef.current
@@ -5506,11 +5534,14 @@ function AgentChatSurface() {
       return
     }
 
-    const nextStyle = resolveAgentSessionMenuStyle(triggerElement.getBoundingClientRect())
+    const frameRect = surfaceMode === 'drawer'
+      ? localOverlayRootRef.current?.getBoundingClientRect() ?? null
+      : null
+    const nextStyle = resolveAgentSessionMenuStyle(triggerElement.getBoundingClientRect(), frameRect)
     setSessionMenuStyle((currentStyle) => (
       areAgentSessionMenuStylesEqual(currentStyle, nextStyle) ? currentStyle : nextStyle
     ))
-  }, [sessionButtonRef])
+  }, [sessionButtonRef, surfaceMode])
 
   const updateModelCascaderPosition = useCallback(() => {
     const triggerElement = modelPickerTriggerRef.current
@@ -6537,12 +6568,13 @@ function AgentChatSurface() {
 
         <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
       </div>
+      <div ref={localOverlayRootRef} className='agent-local-overlay-root' />
 
-      {canOpenSessionMenu && activeOverlayPanel === 'sessions' && typeof document !== 'undefined' ? createPortal(
+      {canOpenSessionMenu && activeOverlayPanel === 'sessions' && sessionMenuPortalTarget ? createPortal(
         <div
           ref={overlayPanelRef}
           id='agent-session-tree-floating-panel'
-          className='agent-floating-panel'
+          className={`agent-floating-panel${surfaceMode === 'drawer' ? ' is-local' : ''}`}
           role='dialog'
           aria-label='Select conversation'
           style={sessionMenuStyle}
@@ -6556,7 +6588,7 @@ function AgentChatSurface() {
             }}
           />
         </div>,
-        document.body,
+        sessionMenuPortalTarget,
       ) : null}
 
       {isNewConversation ? (

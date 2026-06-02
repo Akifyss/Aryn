@@ -359,7 +359,12 @@ type LeftSidebarTab = 'file' | 'git'
 type AgentLayoutFixedTab = 'file' | 'git'
 type AgentRightSidebarWidthMode = 'max' | 'fixed'
 type ProjectMenuMode = 'agent-add' | 'agent-new-switch' | 'editor-switch'
+type ProjectMenuSurface = 'global' | 'left-drawer' | 'right-drawer'
 type ProjectMenuAnchorRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width' | 'height'>
+type ProjectMenuFrameRect = Pick<DOMRect, 'top' | 'left' | 'width' | 'height'>
+type ProjectMenuOpenOptions = {
+  surface?: ProjectMenuSurface
+}
 
 const PROJECT_MENU_MARGIN_PX = 8
 const PROJECT_MENU_GAP_PX = 8
@@ -442,13 +447,24 @@ function resolveProjectMenuStyle(
   anchorRect: ProjectMenuAnchorRect | null,
   projectCount = 0,
   includesProjectlessAction = false,
+  frameRect: ProjectMenuFrameRect | null = null,
 ): CSSProperties | undefined {
   if (!anchorRect || typeof window === 'undefined') {
     return undefined
   }
 
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
+  const viewportWidth = frameRect?.width ?? window.innerWidth
+  const viewportHeight = frameRect?.height ?? window.innerHeight
+  const localAnchorRect = frameRect
+    ? {
+        bottom: anchorRect.bottom - frameRect.top,
+        height: anchorRect.height,
+        left: anchorRect.left - frameRect.left,
+        right: anchorRect.right - frameRect.left,
+        top: anchorRect.top - frameRect.top,
+        width: anchorRect.width,
+      }
+    : anchorRect
   const maxWidth = Math.max(240, viewportWidth - (PROJECT_MENU_MARGIN_PX * 2))
   const width = Math.min(
     mode === 'agent-add' ? PROJECT_MENU_AGENT_ADD_WIDTH_PX : PROJECT_MENU_EDITOR_SWITCH_WIDTH_PX,
@@ -456,25 +472,25 @@ function resolveProjectMenuStyle(
   )
   const maxLeft = Math.max(PROJECT_MENU_MARGIN_PX, viewportWidth - width - PROJECT_MENU_MARGIN_PX)
   const preferredLeft = mode === 'editor-switch'
-    ? anchorRect.left + (anchorRect.width / 2) - (width / 2)
-    : anchorRect.left
+    ? localAnchorRect.left + (localAnchorRect.width / 2) - (width / 2)
+    : localAnchorRect.left
   const left = clamp(preferredLeft, PROJECT_MENU_MARGIN_PX, maxLeft)
   const estimatedHeight = estimateProjectMenuHeight(mode, projectCount, viewportHeight, includesProjectlessAction)
   const maxHeight = mode === 'agent-add'
     ? PROJECT_MENU_AGENT_ADD_ESTIMATED_HEIGHT_PX
     : PROJECT_MENU_EDITOR_SWITCH_MAX_HEIGHT_PX
-  const availableBelow = Math.max(0, viewportHeight - anchorRect.bottom - PROJECT_MENU_MARGIN_PX - PROJECT_MENU_GAP_PX)
-  const availableAbove = Math.max(0, anchorRect.top - PROJECT_MENU_MARGIN_PX - PROJECT_MENU_GAP_PX)
+  const availableBelow = Math.max(0, viewportHeight - localAnchorRect.bottom - PROJECT_MENU_MARGIN_PX - PROJECT_MENU_GAP_PX)
+  const availableAbove = Math.max(0, localAnchorRect.top - PROJECT_MENU_MARGIN_PX - PROJECT_MENU_GAP_PX)
   const preferredHeight = Math.min(estimatedHeight, maxHeight)
   const opensBelow = availableBelow >= preferredHeight || availableBelow >= availableAbove
   const availableHeight = opensBelow ? availableBelow : availableAbove
   const renderedHeight = Math.min(preferredHeight, availableHeight)
-  const preferredTop = anchorRect.bottom + PROJECT_MENU_GAP_PX
-  const fallbackTop = anchorRect.top - PROJECT_MENU_GAP_PX - renderedHeight
+  const preferredTop = localAnchorRect.bottom + PROJECT_MENU_GAP_PX
+  const fallbackTop = localAnchorRect.top - PROJECT_MENU_GAP_PX - renderedHeight
   const top = opensBelow
     ? Math.min(preferredTop, viewportHeight - renderedHeight - PROJECT_MENU_MARGIN_PX)
     : Math.max(PROJECT_MENU_MARGIN_PX, fallbackTop)
-  const bottom = viewportHeight - anchorRect.top + PROJECT_MENU_GAP_PX
+  const bottom = viewportHeight - localAnchorRect.top + PROJECT_MENU_GAP_PX
 
   return {
     left: `${left}px`,
@@ -725,6 +741,7 @@ function App() {
   const [conversationState, setConversationState] = useState<ConversationState>(emptyConversationState)
   const [activeWorkspaceContext, setActiveWorkspaceContext] = useState<ActiveWorkspaceContext>(conversationDraftContext)
   const [projectMenuMode, setProjectMenuMode] = useState<ProjectMenuMode | null>(null)
+  const [projectMenuSurface, setProjectMenuSurface] = useState<ProjectMenuSurface>('global')
   const [projectMenuAnchorRect, setProjectMenuAnchorRect] = useState<ProjectMenuAnchorRect | null>(null)
   const [projectMenuSearch, setProjectMenuSearch] = useState('')
   const [isProjectActionBusy, setIsProjectActionBusy] = useState(false)
@@ -1044,11 +1061,14 @@ function App() {
   const isRightDrawerFullWidth = shellWidth <= RIGHT_DRAWER_MAX_WIDTH
   const isLeftSidebarVisible = !isLeftSidebarDrawer && !isLeftSidebarCollapsed
   const isRightSidebarVisible = !isRightSidebarDrawer && !isRightSidebarCollapsed && shouldExposeAgentWorkspaceTools
+  const isProjectMenuOpen = Boolean(projectMenuMode)
+  const isGlobalProjectMenuOpen = isProjectMenuOpen && projectMenuSurface === 'global'
   const isAppModalLayerOpen = isSettingsOpen
     || isCommandPaletteOpen
     || isNewProjectDialogOpen
     || Boolean(confirmDialogOptions?.isOpen)
-    || Boolean(projectMenuMode)
+    || isGlobalProjectMenuOpen
+  const isShortcutBlockingLayerOpen = isAppModalLayerOpen || isProjectMenuOpen
   const shellChromeOverlayState = getShellChromeOverlayState({
     isLeftDrawerOpen,
     isModalLayerOpen: isAppModalLayerOpen,
@@ -2400,7 +2420,12 @@ function App() {
     }
   }
 
-  function openProjectMenu(mode: ProjectMenuMode, anchorRect?: ProjectMenuAnchorRect) {
+  function openProjectMenu(
+    mode: ProjectMenuMode,
+    anchorRect?: ProjectMenuAnchorRect,
+    options: ProjectMenuOpenOptions = {},
+  ) {
+    setProjectMenuSurface(options.surface ?? 'global')
     setProjectMenuAnchorRect(anchorRect ? serializeProjectMenuAnchorRect(anchorRect) : null)
     setProjectMenuSearch('')
     setProjectMenuMode(mode)
@@ -2409,6 +2434,7 @@ function App() {
   function closeProjectMenu() {
     setProjectMenuAnchorRect(null)
     setProjectMenuMode(null)
+    setProjectMenuSurface('global')
     setProjectMenuSearch('')
   }
 
@@ -3044,8 +3070,12 @@ function App() {
     )
   }
 
-  function renderProjectMenu() {
-    if (!projectMenuMode) {
+  function renderProjectMenu(surface: ProjectMenuSurface, frameRect: ProjectMenuFrameRect | null = null) {
+    if (!projectMenuMode || projectMenuSurface !== surface) {
+      return null
+    }
+
+    if (surface !== 'global' && !frameRect) {
       return null
     }
 
@@ -3058,6 +3088,7 @@ function App() {
       projectMenuAnchorRect,
       filteredProjectMenuProjects.length,
       showProjectlessAction,
+      frameRect,
     )
     const projectMenuActions = (
       <>
@@ -3103,7 +3134,7 @@ function App() {
 
     return (
       <div
-        className='project-menu-backdrop'
+        className={`project-menu-backdrop${surface === 'global' ? '' : ' is-local'}`}
         onPointerDown={(event) => {
           if (event.target === event.currentTarget) {
             closeProjectMenu()
@@ -3112,6 +3143,7 @@ function App() {
       >
         <div
           className={`project-menu project-menu-${projectMenuMode}`}
+          data-surface={surface}
           role='dialog'
           aria-label={isSwitchMenu ? '切换项目' : '添加项目'}
           style={menuStyle}
@@ -4229,7 +4261,7 @@ function App() {
       const isMac = platform === 'darwin'
       const modifier = isMac ? event.metaKey : event.ctrlKey
 
-      if (!isAppModalLayerOpen && event.ctrlKey && event.altKey && event.key.toLowerCase() === 'n') {
+      if (!isShortcutBlockingLayerOpen && event.ctrlKey && event.altKey && event.key.toLowerCase() === 'n') {
         event.preventDefault()
         void handleStartContextualConversation()
         return
@@ -4243,7 +4275,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeProject, isAppModalLayerOpen, platform])
+  }, [activeProject, isShortcutBlockingLayerOpen, platform])
 
   useEffect(() => {
     if (!currentPath) {
@@ -4440,6 +4472,19 @@ function App() {
       setIsRightDrawerOpen(false)
     }
   }, [isLeftDrawerOpen, isLeftSidebarDrawer, isRightDrawerOpen, isRightSidebarDrawer])
+
+  useEffect(() => {
+    if (!projectMenuMode) {
+      return
+    }
+
+    if (
+      (projectMenuSurface === 'left-drawer' && !isLeftDrawerOpen)
+      || (projectMenuSurface === 'right-drawer' && !isRightDrawerOpen)
+    ) {
+      closeProjectMenu()
+    }
+  }, [isLeftDrawerOpen, isRightDrawerOpen, projectMenuMode, projectMenuSurface])
 
   useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
@@ -4893,7 +4938,11 @@ function App() {
       <button
         type='button'
         onClick={(event) => {
-          openProjectMenu('editor-switch', event.currentTarget.getBoundingClientRect())
+          openProjectMenu(
+            'editor-switch',
+            event.currentTarget.getBoundingClientRect(),
+            { surface: isDrawerSurface ? 'left-drawer' : 'global' },
+          )
         }}
         disabled={isPickingWorkspace}
         className={className}
@@ -4985,6 +5034,11 @@ function App() {
             <span>设置</span>
           </button>
         </div>
+        {isDrawerSurface ? (
+          <div className='drawer-local-overlay-root'>
+            {renderProjectMenu('left-drawer', leftDrawerSurfaceRef.current?.getBoundingClientRect() ?? null)}
+          </div>
+        ) : null}
       </div>
     )
   }
@@ -5025,8 +5079,15 @@ function App() {
         workspacePath={currentPath}
         workspaceState={agentWorkspaceState}
         onWorkspaceStateChange={setAgentWorkspaceState}
-        onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect)}
-        onOpenProjectSwitchMenu={(anchorRect, options) => openProjectMenu(options?.startNewSession ? 'agent-new-switch' : 'editor-switch', anchorRect)}
+        surfaceMode={surfaceMode}
+        onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect, {
+          surface: isDrawerSurface ? 'right-drawer' : 'global',
+        })}
+        onOpenProjectSwitchMenu={(anchorRect, options) => openProjectMenu(
+          options?.startNewSession ? 'agent-new-switch' : 'editor-switch',
+          anchorRect,
+          { surface: isDrawerSurface ? 'right-drawer' : 'global' },
+        )}
         onOpenProjectFolder={handleShowProjectInFolder}
         onOpenProjectSession={handleOpenProjectSession}
         onRemoveProject={handleRemoveProject}
@@ -5440,6 +5501,9 @@ function App() {
                     style={shellChromeVars}
                   >
                     {isAgentLayout ? renderEditorSurface() : renderAgentPanel('drawer')}
+                    <div className='drawer-local-overlay-root'>
+                      {renderProjectMenu('right-drawer', rightDrawerSurfaceRef.current?.getBoundingClientRect() ?? null)}
+                    </div>
                   </div>
                 </Drawer.Body>
               </Drawer.Dialog>
@@ -5464,7 +5528,7 @@ function App() {
 
       <Toast.Provider placement='bottom end' />
 
-      {renderProjectMenu()}
+      {renderProjectMenu('global')}
       {renderNewProjectDialog()}
 
       <Modal.Backdrop
