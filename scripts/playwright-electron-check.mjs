@@ -228,8 +228,12 @@ try {
   assert(rightDrawer.drag.agentLocalOverlayAppRegions.every((value) => value !== 'no-drag'), 'agent local overlay root must not mark the whole surface as no-drag', rightDrawer)
   assert(rightDrawer.drag.agentThreadbarAuthoredAppRegionRules.length === 0, 'agent threadbar container must not own native drag hit-testing', rightDrawer)
   assert(rightDrawer.drag.drawerLocalOverlayAppRegions.every((value) => value !== 'no-drag'), 'drawer local overlay root must not mark the whole surface as no-drag', rightDrawer)
+  assert(rightDrawer.hits.rightToggle?.hitLabel === 'Close assistant panel', 'right drawer sidebar toggle is not clickable at its center', rightDrawer)
   assert(rightDrawer.hits.titlebarSwitch?.hitLabel !== 'Layout mode', 'right drawer backdrop should cover the titlebar switch', rightDrawer)
   assert(rightDrawer.hits.titlebarSwitch?.pointerEvents === 'none', 'left chrome should not receive pointer events under the right drawer backdrop', rightDrawer)
+
+  await page.getByLabel('Close assistant panel').click({ timeout: 5_000 })
+  await page.waitForFunction(() => document.querySelector('.app-shell')?.getAttribute('data-right-drawer-open') === 'false', null, { timeout: 5_000 })
 
   await page.screenshot({ path: screenshotPath, fullPage: false })
 
