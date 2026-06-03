@@ -552,18 +552,6 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   min-width: 0;
 }
 
-.panel-agent-drawer .agent-threadbar {
-  app-region: drag;
-  -webkit-app-region: drag;
-}
-
-/* Windows uses HTML window controls on the right; keep only the measured
-   drawer spacer/proxy draggable so those controls stay clickable. */
-.panel-agent-drawer[data-platform='windows'] .agent-threadbar {
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
 .workspace-sidebar-surface.is-drawer .section-title {
   app-region: no-drag;
   -webkit-app-region: no-drag;

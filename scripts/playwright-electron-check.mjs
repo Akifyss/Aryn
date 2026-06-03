@@ -56,6 +56,37 @@ function readShellChromeState() {
     const style = getComputedStyle(element)
     return style.getPropertyValue('-webkit-app-region') || style.getPropertyValue('app-region') || ''
   })
+  const readAuthoredAppRegionRules = (selectorPattern) => {
+    const rules = []
+    const visitRules = (cssRules) => {
+      for (const rule of cssRules) {
+        if ('cssRules' in rule) {
+          visitRules(rule.cssRules)
+          continue
+        }
+
+        if (!('selectorText' in rule) || !selectorPattern.test(rule.selectorText)) {
+          continue
+        }
+
+        const appRegion = rule.style?.getPropertyValue('-webkit-app-region')
+          || rule.style?.getPropertyValue('app-region')
+          || ''
+        if (appRegion) {
+          rules.push({
+            appRegion,
+            selector: rule.selectorText,
+          })
+        }
+      }
+    }
+
+    for (const sheet of document.styleSheets) {
+      visitRules(sheet.cssRules)
+    }
+
+    return rules
+  }
 
   return {
     shell: {
@@ -74,6 +105,7 @@ function readShellChromeState() {
     },
     drag: {
       agentLocalOverlayAppRegions: readAppRegionValues('.agent-local-overlay-root'),
+      agentThreadbarAuthoredAppRegionRules: readAuthoredAppRegionRules(/(^|[\s>+~,(])\.agent-threadbar(?![-\w])/),
       drawerLocalOverlayAppRegions: readAppRegionValues('.drawer-local-overlay-root'),
       drawerProxy: readHit('.drawer-window-drag-region'),
       drawerProxyCount: document.querySelectorAll('.drawer-window-drag-region').length,
@@ -194,6 +226,7 @@ try {
   assert(rightDrawer.drag.drawerProxyCount === 1, 'right drawer should expose one top-layer drag proxy', rightDrawer)
   assert(rightDrawer.drag.drawerProxy?.hitClassName === 'drawer-window-drag-region', 'right drawer drag proxy is not hittable at its center', rightDrawer)
   assert(rightDrawer.drag.agentLocalOverlayAppRegions.every((value) => value !== 'no-drag'), 'agent local overlay root must not mark the whole surface as no-drag', rightDrawer)
+  assert(rightDrawer.drag.agentThreadbarAuthoredAppRegionRules.length === 0, 'agent threadbar container must not own native drag hit-testing', rightDrawer)
   assert(rightDrawer.drag.drawerLocalOverlayAppRegions.every((value) => value !== 'no-drag'), 'drawer local overlay root must not mark the whole surface as no-drag', rightDrawer)
   assert(rightDrawer.hits.titlebarSwitch?.hitLabel !== 'Layout mode', 'right drawer backdrop should cover the titlebar switch', rightDrawer)
   assert(rightDrawer.hits.titlebarSwitch?.pointerEvents === 'none', 'left chrome should not receive pointer events under the right drawer backdrop', rightDrawer)
