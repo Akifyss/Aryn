@@ -3131,7 +3131,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .git-change-item:hover .git-change-actions,
 .git-tree-folder-row:hover .git-change-actions,
-.workspace-tree-row:hover .git-change-actions {
+.workspace-tree-row:hover .git-change-actions,
+.workspace-tree-row.is-menu-open .git-change-actions {
   opacity: 1;
   max-width: 136px;
   /* Expand to show icons */
@@ -3149,7 +3150,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   transition: background-color 100ms ease;
 }
 
-.workspace-tree-row:hover {
+.workspace-tree-row:hover,
+.workspace-tree-row.is-menu-open {
   background-color: var(--surface-tertiary);
 }
 
@@ -4118,8 +4120,8 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-session-tree-menu {
-  transform: translateX(-100%);
   z-index: 5;
+  width: 168px;
   min-width: 168px;
   padding: 5px;
   border: 1px solid var(--border);
@@ -4146,7 +4148,8 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-session-tree-menu-item:hover,
-.agent-session-tree-menu-item:focus-visible {
+.agent-session-tree-menu-item:focus-visible,
+.agent-session-tree-menu-item.is-highlighted {
   outline: none;
   background: var(--surface-tertiary);
   color: var(--foreground);
@@ -4166,9 +4169,14 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-session-tree-menu-item.is-danger:hover,
-.agent-session-tree-menu-item.is-danger:focus-visible {
+.agent-session-tree-menu-item.is-danger:focus-visible,
+.agent-session-tree-menu-item.is-danger.is-highlighted {
   background: var(--danger);
   color: var(--danger-foreground);
+}
+
+.agent-tree-menu-positioner {
+  z-index: 1300;
 }
 
 .agent-tree-context-menu {
@@ -4342,6 +4350,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-project-menu {
   z-index: 20;
+  width: min(238px, calc(100vw - 16px));
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -4367,7 +4376,8 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-project-menu-item:hover,
-.agent-project-menu-item:focus-visible {
+.agent-project-menu-item:focus-visible,
+.agent-project-menu-item.is-highlighted {
   outline: none;
   background: var(--surface-tertiary);
 }
@@ -4377,7 +4387,8 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-project-menu-item.is-danger:hover,
-.agent-project-menu-item.is-danger:focus-visible {
+.agent-project-menu-item.is-danger:focus-visible,
+.agent-project-menu-item.is-danger.is-highlighted {
   background: var(--danger);
   color: var(--danger-foreground);
 }
