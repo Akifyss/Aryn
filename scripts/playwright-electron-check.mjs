@@ -52,6 +52,10 @@ function readShellChromeState() {
       },
     }
   }
+  const readAppRegionValues = (selector) => Array.from(document.querySelectorAll(selector)).map((element) => {
+    const style = getComputedStyle(element)
+    return style.getPropertyValue('-webkit-app-region') || style.getPropertyValue('app-region') || ''
+  })
 
   return {
     shell: {
@@ -67,6 +71,12 @@ function readShellChromeState() {
       leftChromeElevated: document.querySelector('.left-chrome-actions')?.getAttribute('data-overlay-elevated') ?? null,
       leftChromeSurface: document.querySelector('.left-chrome-actions')?.getAttribute('data-left-surface') ?? null,
       titlebarSwitchCount: document.querySelectorAll('.titlebar .layout-mode-segmented-control').length,
+    },
+    drag: {
+      agentLocalOverlayAppRegions: readAppRegionValues('.agent-local-overlay-root'),
+      drawerLocalOverlayAppRegions: readAppRegionValues('.drawer-local-overlay-root'),
+      drawerProxy: readHit('.drawer-window-drag-region'),
+      drawerProxyCount: document.querySelectorAll('.drawer-window-drag-region').length,
     },
     hits: {
       drawerSearch: readHit('.workspace-sidebar-surface.is-drawer .left-chrome-search-button'),
@@ -165,6 +175,9 @@ try {
   assert(leftDrawer.chrome.titlebarSwitchCount === 1, 'layout switch must stay in the titlebar', leftDrawer)
   assert(leftDrawer.chrome.leftChromeSurface === 'drawer', 'titlebar switch should use drawer surface state while the left drawer is open', leftDrawer)
   assert(leftDrawer.chrome.leftChromeElevated === 'true', 'titlebar switch should remain above the left drawer backdrop', leftDrawer)
+  assert(leftDrawer.drag.drawerProxyCount === 1, 'left drawer should expose one top-layer drag proxy', leftDrawer)
+  assert(leftDrawer.drag.drawerProxy?.hitClassName === 'drawer-window-drag-region', 'left drawer drag proxy is not hittable at its center', leftDrawer)
+  assert(leftDrawer.drag.drawerLocalOverlayAppRegions.every((value) => value !== 'no-drag'), 'drawer local overlay root must not mark the whole surface as no-drag', leftDrawer)
   assert(leftDrawer.hits.drawerSearch?.hitLabel === 'Open search', 'left drawer search button is not clickable at its center', leftDrawer)
   assert(leftDrawer.hits.drawerToggle?.hitLabel === 'Close workspace panel', 'left drawer sidebar toggle is not clickable at its center', leftDrawer)
 
@@ -178,6 +191,10 @@ try {
   const rightDrawer = await page.evaluate(readShellChromeState)
 
   assert(rightDrawer.chrome.leftChromeElevated === 'false', 'left chrome should be below the right drawer backdrop', rightDrawer)
+  assert(rightDrawer.drag.drawerProxyCount === 1, 'right drawer should expose one top-layer drag proxy', rightDrawer)
+  assert(rightDrawer.drag.drawerProxy?.hitClassName === 'drawer-window-drag-region', 'right drawer drag proxy is not hittable at its center', rightDrawer)
+  assert(rightDrawer.drag.agentLocalOverlayAppRegions.every((value) => value !== 'no-drag'), 'agent local overlay root must not mark the whole surface as no-drag', rightDrawer)
+  assert(rightDrawer.drag.drawerLocalOverlayAppRegions.every((value) => value !== 'no-drag'), 'drawer local overlay root must not mark the whole surface as no-drag', rightDrawer)
   assert(rightDrawer.hits.titlebarSwitch?.hitLabel !== 'Layout mode', 'right drawer backdrop should cover the titlebar switch', rightDrawer)
   assert(rightDrawer.hits.titlebarSwitch?.pointerEvents === 'none', 'left chrome should not receive pointer events under the right drawer backdrop', rightDrawer)
 

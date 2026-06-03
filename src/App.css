@@ -365,7 +365,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   flex-shrink: 0;
 }
 
-.right-drawer-window-drag-region {
+.drawer-window-drag-region {
   position: fixed;
   z-index: calc(var(--app-z-panel-toggle) + 1);
   pointer-events: auto;
@@ -940,8 +940,6 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   inset: 0;
   z-index: 90;
   pointer-events: none;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
 }
 
 .project-menu-backdrop.is-local {
@@ -3982,8 +3980,6 @@ body.workspace-tree-dragging .workspace-tree-row {
   inset: 0;
   z-index: 1200;
   pointer-events: none;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
 }
 
 .agent-floating-panel.is-local {

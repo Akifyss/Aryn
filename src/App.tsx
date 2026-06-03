@@ -358,6 +358,12 @@ type PanelSurfaceMode = 'docked' | 'drawer'
 type LeftSidebarTab = 'file' | 'git'
 type AgentLayoutFixedTab = 'file' | 'git'
 type AgentRightSidebarWidthMode = 'max' | 'fixed'
+type DrawerDragRegion = {
+  height: number
+  left: number
+  top: number
+  width: number
+}
 type ProjectMenuMode = 'agent-add' | 'agent-new-switch' | 'editor-switch'
 type ProjectMenuSurface = 'global' | 'left-drawer' | 'right-drawer'
 type ProjectMenuAnchorRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width' | 'height'>
@@ -842,12 +848,7 @@ function App() {
   const [isWindowFullScreen, setIsWindowFullScreen] = useState(false)
   const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false)
   const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false)
-  const [rightDrawerDragRegion, setRightDrawerDragRegion] = useState<{
-    height: number
-    left: number
-    top: number
-    width: number
-  } | null>(null)
+  const [drawerDragRegion, setDrawerDragRegion] = useState<DrawerDragRegion | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
   const leftDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
@@ -4673,8 +4674,11 @@ function App() {
   }, [isLeftDrawerOpen, isRightDrawerOpen])
 
   useEffect(() => {
-    if (!isRightDrawerOpen || !isRightSidebarDrawer) {
-      setRightDrawerDragRegion(null)
+    const hasDrawerDragTarget = (isLeftDrawerOpen && isLeftSidebarDrawer)
+      || (isRightDrawerOpen && isRightSidebarDrawer)
+
+    if (!hasDrawerDragTarget) {
+      setDrawerDragRegion(null)
       return
     }
 
@@ -4683,9 +4687,11 @@ function App() {
     let frameCount = 0
     let stableFrameCount = 0
     let previousRectSignature = ''
+    let resizeObserver: ResizeObserver | null = null
+    let observedDragSpacer: HTMLElement | null = null
 
     const publishDragRegion = (rect: DOMRect) => {
-      setRightDrawerDragRegion((currentRegion) => {
+      setDrawerDragRegion((currentRegion) => {
         const nextRegion = {
           height: Math.round(rect.height),
           left: Math.round(rect.left),
@@ -4707,6 +4713,31 @@ function App() {
       })
     }
 
+    const resolveDragSpacer = () => {
+      if (isLeftDrawerOpen && isLeftSidebarDrawer) {
+        return leftDrawerSurfaceRef.current?.querySelector<HTMLElement>('.section-title-drag-spacer') ?? null
+      }
+
+      if (isRightDrawerOpen && isRightSidebarDrawer) {
+        return rightDrawerSurfaceRef.current?.querySelector<HTMLElement>('.agent-threadbar-drag-spacer, .file-tabs-drag-spacer') ?? null
+      }
+
+      return null
+    }
+
+    const syncResizeObserver = (dragSpacer: HTMLElement) => {
+      if (typeof ResizeObserver === 'undefined' || observedDragSpacer === dragSpacer) {
+        return
+      }
+
+      resizeObserver?.disconnect()
+      resizeObserver = new ResizeObserver(() => {
+        publishDragRegion(dragSpacer.getBoundingClientRect())
+      })
+      resizeObserver.observe(dragSpacer)
+      observedDragSpacer = dragSpacer
+    }
+
     const tick = () => {
       if (cancelled) {
         return
@@ -4714,7 +4745,7 @@ function App() {
 
       frameCount += 1
 
-      const dragSpacer = rightDrawerSurfaceRef.current?.querySelector<HTMLElement>('.agent-threadbar-drag-spacer, .file-tabs-drag-spacer')
+      const dragSpacer = resolveDragSpacer()
       if (!dragSpacer) {
         if (frameCount < DRAWER_INTERACTION_REFRESH_MAX_FRAMES) {
           rafId = window.requestAnimationFrame(tick)
@@ -4731,6 +4762,7 @@ function App() {
       }
 
       publishDragRegion(rect)
+      syncResizeObserver(dragSpacer)
 
       const rectSignature = [
         Math.round(rect.x * 10) / 10,
@@ -4754,21 +4786,12 @@ function App() {
 
     rafId = window.requestAnimationFrame(tick)
 
-    const dragSpacer = rightDrawerSurfaceRef.current?.querySelector<HTMLElement>('.agent-threadbar-drag-spacer, .file-tabs-drag-spacer')
-    const resizeObserver = typeof ResizeObserver !== 'undefined' && dragSpacer
-      ? new ResizeObserver(() => {
-          publishDragRegion(dragSpacer.getBoundingClientRect())
-        })
-      : null
-
-    resizeObserver?.observe(dragSpacer as Element)
-
     return () => {
       cancelled = true
       window.cancelAnimationFrame(rafId)
       resizeObserver?.disconnect()
     }
-  }, [isRightDrawerOpen, isRightSidebarDrawer, shellWidth])
+  }, [isLeftDrawerOpen, isLeftSidebarDrawer, isRightDrawerOpen, isRightSidebarDrawer, shellWidth])
 
   useEffect(() => {
     if (!isLeftDrawerOpen && !isRightDrawerOpen) {
@@ -5512,16 +5535,16 @@ function App() {
         </Drawer>
       ) : null}
 
-      {rightDrawerDragRegion ? (
+      {drawerDragRegion ? (
         <div
           aria-hidden='true'
-          className='right-drawer-window-drag-region'
+          className='drawer-window-drag-region'
           data-react-aria-top-layer='true'
           style={{
-            height: `${rightDrawerDragRegion.height}px`,
-            left: `${rightDrawerDragRegion.left}px`,
-            top: `${rightDrawerDragRegion.top}px`,
-            width: `${rightDrawerDragRegion.width}px`,
+            height: `${drawerDragRegion.height}px`,
+            left: `${drawerDragRegion.left}px`,
+            top: `${drawerDragRegion.top}px`,
+            width: `${drawerDragRegion.width}px`,
           }}
         />
       ) : null}
