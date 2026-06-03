@@ -22,6 +22,7 @@ import type { ActiveWorkspaceContext, ConversationRecord, ConversationState } fr
 import type { ProjectRecord, ProjectState, WorkspaceNode } from '@/features/workspace/types'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTitlebar } from '@/components/app-titlebar'
+import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import {
   AgentChatSurface,
   AgentProvider,
@@ -3081,11 +3082,13 @@ function App() {
     }
 
     const isSwitchMenu = projectMenuMode === 'editor-switch' || projectMenuMode === 'agent-new-switch'
+    const hasProjectMenuProjects = projectState.projects.length > 0
+    const renderedProjectMenuMode = isSwitchMenu && !hasProjectMenuProjects ? 'agent-add' : projectMenuMode
     const showProjectlessAction = isAgentLayout
-      && projectMenuMode === 'agent-new-switch'
+      && renderedProjectMenuMode === 'agent-new-switch'
       && activeWorkspaceContext.kind === 'project'
     const menuStyle = resolveProjectMenuStyle(
-      projectMenuMode,
+      renderedProjectMenuMode,
       projectMenuAnchorRect,
       filteredProjectMenuProjects.length,
       showProjectlessAction,
@@ -3143,13 +3146,13 @@ function App() {
         }}
       >
         <div
-          className={`project-menu project-menu-${projectMenuMode}`}
+          className={`project-menu project-menu-${renderedProjectMenuMode}`}
           data-surface={surface}
           role='dialog'
-          aria-label={isSwitchMenu ? '切换项目' : '添加项目'}
+          aria-label={isSwitchMenu && hasProjectMenuProjects ? '切换项目' : '添加项目'}
           style={menuStyle}
         >
-          {isSwitchMenu ? (
+          {isSwitchMenu && hasProjectMenuProjects ? (
             <>
               <label className='project-menu-search'>
                 <SearchLine size={16} />
@@ -3178,9 +3181,14 @@ function App() {
                         void handleSelectProject(project)
                       }}
                     >
-                      <FolderLine size={17} />
+                      <WorkspaceFileIcon
+                        iconTheme={iconTheme}
+                        isFolder
+                        isClosed
+                        nodeLabel={project.name}
+                      />
                       <span className='project-menu-project-name'>{project.name}</span>
-                      {isActive ? <CheckLine className='project-menu-project-check' size={18} /> : null}
+                      {isActive ? <CheckLine className='project-menu-project-check' size={16} /> : null}
                     </button>
                   )
                 })}

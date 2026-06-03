@@ -968,8 +968,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   gap: 3px;
 }
 
-.project-menu-editor-switch .project-menu-actions,
-.project-menu-agent-new-switch .project-menu-actions {
+.project-menu-editor-switch .project-menu-list + .project-menu-actions,
+.project-menu-agent-new-switch .project-menu-list + .project-menu-actions {
   margin-top: 4px;
   padding-top: 4px;
   border-top: 1px solid var(--border);
@@ -1056,8 +1056,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .project-menu-search > svg {
   flex: 0 0 auto;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 
 .project-menu-search input {
