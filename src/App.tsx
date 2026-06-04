@@ -73,6 +73,7 @@ import {
   type WorkspaceRefreshRequest,
   type WorkspaceRefreshScheduleMode,
 } from '@/features/workspace/lib/workspace-refresh-coordinator'
+import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
 import type {
   WorkspaceIconTheme,
@@ -3179,9 +3180,15 @@ function App() {
       <Menu.Root
         modal={false}
         open={isProjectMenuOpen}
-        onOpenChange={(open) => {
-          if (!open) {
+        onOpenChange={(open, details) => {
+          if (open) {
+            return
+          }
+
+          if (shouldCloseClickOpenedMenu(details)) {
             closeProjectMenu()
+          } else {
+            details.cancel?.()
           }
         }}
       >

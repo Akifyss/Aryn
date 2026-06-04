@@ -55,12 +55,23 @@ function readShellChromeState() {
     }
 
     const rect = element.getBoundingClientRect()
-    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+    const visibleLeft = Math.max(rect.left, 0)
+    const visibleTop = Math.max(rect.top, 0)
+    const visibleRight = Math.min(rect.right, window.innerWidth)
+    const visibleBottom = Math.min(rect.bottom, window.innerHeight)
+    const hasVisibleArea = visibleRight > visibleLeft && visibleBottom > visibleTop
+    const hitX = hasVisibleArea ? visibleLeft + (visibleRight - visibleLeft) / 2 : rect.left + rect.width / 2
+    const hitY = hasVisibleArea ? visibleTop + (visibleBottom - visibleTop) / 2 : rect.top + rect.height / 2
+    const hit = document.elementFromPoint(hitX, hitY)
 
     return {
       hitClassName: typeof hit?.className === 'string' ? hit.className : null,
       hitLabel: hit?.getAttribute('aria-label') ?? hit?.closest('[aria-label]')?.getAttribute('aria-label') ?? null,
       hitTag: hit?.tagName ?? null,
+      hitPoint: {
+        x: Math.round(hitX),
+        y: Math.round(hitY),
+      },
       pointerEvents: getComputedStyle(element).pointerEvents,
       rect: {
         height: Math.round(rect.height),
@@ -318,6 +329,16 @@ try {
   assert(drawerFileTreeMenu.hitRoot, 'workspace tree menu center should be hittable inside the drawer local overlay root', drawerFileTreeMenu)
   assert(drawerFileTreeMenu.pointerEvents !== 'none', 'workspace tree menu should accept pointer events', drawerFileTreeMenu)
   assert(drawerFileTreeMenu.hitText !== null, 'workspace tree menu center should hit a menu item', drawerFileTreeMenu)
+  await page.mouse.move(800, 500)
+  await page.waitForTimeout(250)
+  assert(
+    await page.locator('.drawer-local-overlay-root .workspace-tree-menu').count() === 1,
+    'workspace tree menu should stay open when the pointer leaves the menu',
+    await page.evaluate(() => ({
+      menuCount: document.querySelectorAll('.workspace-tree-menu').length,
+      openButtons: document.querySelectorAll('.workspace-sidebar-surface.is-drawer .workspace-tree-root .git-change-icon-button[aria-expanded="true"]').length,
+    })),
+  )
   await page.locator('.drawer-local-overlay-root .workspace-tree-menu [data-menu-action="rename"]').click({ timeout: 5_000 })
   await page.waitForSelector('.workspace-sidebar-surface.is-drawer .workspace-tree-root .workspace-tree-row.is-editing .raw-rename-input', { timeout: 5_000 })
   await page.keyboard.press('Escape')
@@ -395,6 +416,16 @@ try {
   assert(drawerProjectMenu.hitRoot, 'project add menu center should be hittable inside the drawer local overlay root', drawerProjectMenu)
   assert(drawerProjectMenu.pointerEvents !== 'none', 'project add menu should accept pointer events', drawerProjectMenu)
   assert(drawerProjectMenu.surface === 'left-drawer', 'project add menu should use the left drawer surface', drawerProjectMenu)
+  await page.mouse.move(800, 500)
+  await page.waitForTimeout(250)
+  assert(
+    await page.locator('.drawer-local-overlay-root .project-menu-agent-add').count() === 1,
+    'project add menu should stay open when the pointer leaves the menu',
+    await page.evaluate(() => ({
+      menuCount: document.querySelectorAll('.project-menu-agent-add').length,
+      surface: document.querySelector('.project-menu-agent-add')?.getAttribute('data-surface') ?? null,
+    })),
+  )
   await page.locator('.drawer-local-overlay-root .project-menu-agent-add .project-menu-action').first().click({ timeout: 5_000 })
   await page.waitForSelector('.project-create-modal', { timeout: 5_000 })
   await page.locator('.project-create-modal-close').click({ timeout: 5_000 })

@@ -24,6 +24,7 @@ import {
   resolveDropTargetDirectoryPath,
 } from '@/features/workspace/lib/workspace-tree-dnd'
 import { recordOpenFileProfile } from '@/lib/open-file-profile'
+import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 import type { GitDisplayChange, GitRepositoryState } from '@/features/git/types'
 
@@ -113,7 +114,22 @@ function FileRowActions({
         className='git-change-actions'
         style={isOpen ? { opacity: 1, maxWidth: '2rem', transform: 'translateX(0)' } : undefined}
       >
-        <Menu.Root modal={false} onOpenChange={setIsOpen}>
+        <Menu.Root
+          modal={false}
+          open={isOpen}
+          onOpenChange={(open, details) => {
+            if (open) {
+              setIsOpen(true)
+              return
+            }
+
+            if (shouldCloseClickOpenedMenu(details)) {
+              setIsOpen(false)
+            } else {
+              details.cancel?.()
+            }
+          }}
+        >
           <Menu.Trigger
             aria-label='File actions'
             className='git-change-action git-change-icon-button'
