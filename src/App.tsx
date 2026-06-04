@@ -1,6 +1,7 @@
 import type { CSSProperties, FormEvent } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
+import { Menu } from '@base-ui/react/menu'
 import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer, Tabs } from '@heroui/react'
 import {
   FileLine,
@@ -451,61 +452,80 @@ function estimateProjectMenuHeight(
 
 function resolveProjectMenuStyle(
   mode: ProjectMenuMode,
-  anchorRect: ProjectMenuAnchorRect | null,
   projectCount = 0,
   includesProjectlessAction = false,
   frameRect: ProjectMenuFrameRect | null = null,
 ): CSSProperties | undefined {
-  if (!anchorRect || typeof window === 'undefined') {
+  if (typeof window === 'undefined') {
     return undefined
   }
 
   const viewportWidth = frameRect?.width ?? window.innerWidth
   const viewportHeight = frameRect?.height ?? window.innerHeight
-  const localAnchorRect = frameRect
-    ? {
-        bottom: anchorRect.bottom - frameRect.top,
-        height: anchorRect.height,
-        left: anchorRect.left - frameRect.left,
-        right: anchorRect.right - frameRect.left,
-        top: anchorRect.top - frameRect.top,
-        width: anchorRect.width,
-      }
-    : anchorRect
   const maxWidth = Math.max(240, viewportWidth - (PROJECT_MENU_MARGIN_PX * 2))
   const width = Math.min(
     mode === 'agent-add' ? PROJECT_MENU_AGENT_ADD_WIDTH_PX : PROJECT_MENU_EDITOR_SWITCH_WIDTH_PX,
     maxWidth,
   )
-  const maxLeft = Math.max(PROJECT_MENU_MARGIN_PX, viewportWidth - width - PROJECT_MENU_MARGIN_PX)
-  const preferredLeft = mode === 'editor-switch'
-    ? localAnchorRect.left + (localAnchorRect.width / 2) - (width / 2)
-    : localAnchorRect.left
-  const left = clamp(preferredLeft, PROJECT_MENU_MARGIN_PX, maxLeft)
-  const estimatedHeight = estimateProjectMenuHeight(mode, projectCount, viewportHeight, includesProjectlessAction)
   const maxHeight = mode === 'agent-add'
     ? PROJECT_MENU_AGENT_ADD_ESTIMATED_HEIGHT_PX
     : PROJECT_MENU_EDITOR_SWITCH_MAX_HEIGHT_PX
-  const availableBelow = Math.max(0, viewportHeight - localAnchorRect.bottom - PROJECT_MENU_MARGIN_PX - PROJECT_MENU_GAP_PX)
-  const availableAbove = Math.max(0, localAnchorRect.top - PROJECT_MENU_MARGIN_PX - PROJECT_MENU_GAP_PX)
-  const preferredHeight = Math.min(estimatedHeight, maxHeight)
-  const opensBelow = availableBelow >= preferredHeight || availableBelow >= availableAbove
-  const availableHeight = opensBelow ? availableBelow : availableAbove
-  const renderedHeight = Math.min(preferredHeight, availableHeight)
-  const preferredTop = localAnchorRect.bottom + PROJECT_MENU_GAP_PX
-  const fallbackTop = localAnchorRect.top - PROJECT_MENU_GAP_PX - renderedHeight
-  const top = opensBelow
-    ? Math.min(preferredTop, viewportHeight - renderedHeight - PROJECT_MENU_MARGIN_PX)
-    : Math.max(PROJECT_MENU_MARGIN_PX, fallbackTop)
-  const bottom = viewportHeight - localAnchorRect.top + PROJECT_MENU_GAP_PX
+  const availableHeight = Math.max(
+    PROJECT_MENU_EDITOR_SWITCH_MIN_HEIGHT_PX,
+    viewportHeight - (PROJECT_MENU_MARGIN_PX * 2),
+  )
+  const estimatedHeight = estimateProjectMenuHeight(mode, projectCount, viewportHeight, includesProjectlessAction)
 
   return {
-    left: `${left}px`,
-    maxHeight: `${availableHeight}px`,
-    ...(opensBelow
-      ? { bottom: 'auto', top: `${Math.max(PROJECT_MENU_MARGIN_PX, top)}px` }
-      : { bottom: `${bottom}px`, top: 'auto' }),
+    maxHeight: `${Math.min(maxHeight, availableHeight, estimatedHeight)}px`,
     width: `${width}px`,
+  }
+}
+
+function createProjectMenuVirtualAnchor(
+  anchorRect: ProjectMenuAnchorRect | null,
+  frameRect: ProjectMenuFrameRect | null = null,
+) {
+  const fallbackLeft = (frameRect?.left ?? 0) + PROJECT_MENU_MARGIN_PX
+  const fallbackTop = (frameRect?.top ?? 0) + PROJECT_MENU_MARGIN_PX
+  const rect = anchorRect ?? {
+    bottom: fallbackTop,
+    height: 0,
+    left: fallbackLeft,
+    right: fallbackLeft,
+    top: fallbackTop,
+    width: 0,
+  }
+
+  return {
+    getBoundingClientRect() {
+      return {
+        bottom: rect.bottom,
+        height: rect.height,
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        width: rect.width,
+        x: rect.left,
+        y: rect.top,
+        toJSON() {
+          return this
+        },
+      }
+    },
+  }
+}
+
+function resolveProjectMenuCollisionBoundary(frameRect: ProjectMenuFrameRect | null) {
+  if (!frameRect) {
+    return undefined
+  }
+
+  return {
+    height: frameRect.height,
+    width: frameRect.width,
+    x: frameRect.left,
+    y: frameRect.top,
   }
 }
 
@@ -2983,7 +3003,9 @@ function App() {
     }
   }
 
-  function renderWorkspaceTreePanel() {
+  function renderWorkspaceTreePanel(surfaceMode: PanelSurfaceMode = 'docked') {
+    const menuPortalTarget = surfaceMode === 'drawer' ? leftDrawerOverlayRoot : null
+
     return (
       <div className='sidebar-stack-pane sidebar-tree-pane'>
         <div className='file-panel-header'>
@@ -3067,6 +3089,7 @@ function App() {
               onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
               onDeleteNode={(node) => handleDeleteNode(node)}
               onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
+              menuPortalTarget={menuPortalTarget}
             />
           )}
         </AppScrollArea>
@@ -3079,7 +3102,13 @@ function App() {
       return null
     }
 
-    if (surface !== 'global' && !frameRect) {
+    const portalContainer = surface === 'left-drawer'
+      ? leftDrawerOverlayRoot
+      : surface === 'right-drawer'
+        ? rightDrawerOverlayRoot
+        : null
+
+    if (surface !== 'global' && (!frameRect || !portalContainer)) {
       return null
     }
 
@@ -3091,118 +3120,155 @@ function App() {
       && activeWorkspaceContext.kind === 'project'
     const menuStyle = resolveProjectMenuStyle(
       renderedProjectMenuMode,
-      projectMenuAnchorRect,
       filteredProjectMenuProjects.length,
       showProjectlessAction,
       frameRect,
     )
+    const menuAnchor = createProjectMenuVirtualAnchor(projectMenuAnchorRect, frameRect)
+    const collisionBoundary = resolveProjectMenuCollisionBoundary(frameRect)
+    const menuAlign = renderedProjectMenuMode === 'editor-switch' ? 'center' : 'start'
     const projectMenuActions = (
       <>
         <div className='project-menu-actions'>
-          <button
-            type='button'
-            className='project-menu-action'
+          <Menu.Item
+            nativeButton
+            render={<button type='button' />}
+            className={({ highlighted }) => `project-menu-action${highlighted ? ' is-highlighted' : ''}`}
             disabled={isProjectActionBusy}
+            label='新建空白项目'
             onClick={openNewProjectDialog}
           >
             <NewFolderLine size={18} />
             <span>新建空白项目</span>
-          </button>
-          <button
-            type='button'
-            className='project-menu-action'
+          </Menu.Item>
+          <Menu.Item
+            nativeButton
+            render={<button type='button' />}
+            className={({ highlighted }) => `project-menu-action${highlighted ? ' is-highlighted' : ''}`}
             disabled={isProjectActionBusy}
+            label='使用现有文件夹'
             onClick={() => {
               void handleAddExistingProject()
             }}
           >
             <FolderOpenLine size={18} />
             <span>使用现有文件夹</span>
-          </button>
+          </Menu.Item>
         </div>
         {showProjectlessAction ? (
           <div className='project-menu-actions project-menu-projectless-actions'>
-            <button
-              type='button'
-              className='project-menu-action'
+            <Menu.Item
+              nativeButton
+              render={<button type='button' />}
+              className={({ highlighted }) => `project-menu-action${highlighted ? ' is-highlighted' : ''}`}
               disabled={isProjectActionBusy}
+              label='不使用项目'
               onClick={() => {
                 void handleUseNoProject()
               }}
             >
               <FolderForbidLine size={18} />
               <span className='project-menu-action-spacer'>不使用项目</span>
-            </button>
+            </Menu.Item>
           </div>
         ) : null}
       </>
     )
 
     return (
-      <div
-        className={`project-menu-backdrop${surface === 'global' ? '' : ' is-local'}`}
-        onPointerDown={(event) => {
-          if (event.target === event.currentTarget) {
+      <Menu.Root
+        modal={false}
+        open={isProjectMenuOpen}
+        onOpenChange={(open) => {
+          if (!open) {
             closeProjectMenu()
           }
         }}
       >
-        <div
-          className={`project-menu project-menu-${renderedProjectMenuMode}`}
-          data-surface={surface}
-          role='dialog'
-          aria-label={isSwitchMenu && hasProjectMenuProjects ? '切换项目' : '添加项目'}
-          style={menuStyle}
+        <Menu.Portal
+          container={portalContainer ?? undefined}
         >
-          {isSwitchMenu && hasProjectMenuProjects ? (
-            <>
-              <label className='project-menu-search'>
-                <SearchLine size={16} />
-                <input
-                  autoFocus
-                  value={projectMenuSearch}
-                  placeholder='搜索项目'
-                  onChange={(event) => setProjectMenuSearch(event.target.value)}
-                />
-              </label>
-              <AppScrollArea
-                className='project-menu-list'
-                contentClassName='project-menu-list-content'
-              >
-                {filteredProjectMenuProjects.map((project) => {
-                  const isActive = activeWorkspaceContext.kind === 'project'
-                    && project.id === activeWorkspaceContext.projectId
+          <Menu.Backdrop
+            className={`project-menu-backdrop${surface === 'global' ? '' : ' is-local'}`}
+            onPointerDown={(event) => {
+              if (event.target === event.currentTarget) {
+                closeProjectMenu()
+              }
+            }}
+          />
+          <Menu.Positioner
+            align={menuAlign}
+            anchor={menuAnchor}
+            className={`project-menu-positioner${surface === 'global' ? '' : ' is-local'}`}
+            collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
+            collisionBoundary={collisionBoundary}
+            collisionPadding={PROJECT_MENU_MARGIN_PX}
+            positionMethod='fixed'
+            side='bottom'
+            sideOffset={PROJECT_MENU_GAP_PX}
+          >
+            <Menu.Popup
+              className={`project-menu project-menu-${renderedProjectMenuMode}`}
+              data-surface={surface}
+              aria-label={isSwitchMenu && hasProjectMenuProjects ? '切换项目' : '添加项目'}
+              finalFocus={false}
+              style={menuStyle}
+            >
+              {isSwitchMenu && hasProjectMenuProjects ? (
+                <>
+                  <label className='project-menu-search'>
+                    <SearchLine size={16} />
+                    <input
+                      autoFocus
+                      value={projectMenuSearch}
+                      placeholder='搜索项目'
+                      onChange={(event) => setProjectMenuSearch(event.target.value)}
+                    />
+                  </label>
+                  <AppScrollArea
+                    className='project-menu-list'
+                    contentClassName='project-menu-list-content'
+                  >
+                    {filteredProjectMenuProjects.map((project) => {
+                      const isActive = activeWorkspaceContext.kind === 'project'
+                        && project.id === activeWorkspaceContext.projectId
 
-                  return (
-                    <button
-                      type='button'
-                      key={project.id}
-                      className={`project-menu-project${isActive ? ' is-active' : ''}`}
-                      disabled={isProjectActionBusy}
-                      onClick={() => {
-                        void handleSelectProject(project)
-                      }}
-                    >
-                      <WorkspaceFileIcon
-                        iconTheme={iconTheme}
-                        isFolder
-                        isClosed
-                        nodeLabel={project.name}
-                      />
-                      <span className='project-menu-project-name'>{project.name}</span>
-                      {isActive ? <CheckLine className='project-menu-project-check' size={16} /> : null}
-                    </button>
-                  )
-                })}
-                {filteredProjectMenuProjects.length === 0 ? (
-                  <div className='project-menu-empty'>没有匹配项目</div>
-                ) : null}
-              </AppScrollArea>
-              {projectMenuActions}
-            </>
-          ) : projectMenuActions}
-        </div>
-      </div>
+                      return (
+                        <Menu.Item
+                          key={project.id}
+                          nativeButton
+                          render={<button type='button' />}
+                          className={({ highlighted }) => (
+                            `project-menu-project${isActive ? ' is-active' : ''}${highlighted ? ' is-highlighted' : ''}`
+                          )}
+                          disabled={isProjectActionBusy}
+                          label={project.name}
+                          onClick={() => {
+                            void handleSelectProject(project)
+                          }}
+                        >
+                          <WorkspaceFileIcon
+                            iconTheme={iconTheme}
+                            isFolder
+                            isClosed
+                            nodeLabel={project.name}
+                          />
+                          <span className='project-menu-project-name'>{project.name}</span>
+                          {isActive ? <CheckLine className='project-menu-project-check' size={16} /> : null}
+                        </Menu.Item>
+                      )
+                    })}
+                    {filteredProjectMenuProjects.length === 0 ? (
+                      <div className='project-menu-empty'>没有匹配项目</div>
+                    ) : null}
+                  </AppScrollArea>
+                  {projectMenuActions}
+                </>
+              ) : projectMenuActions}
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
     )
   }
 
@@ -5045,7 +5111,7 @@ function App() {
                 </Tabs.ListContainer>
 
                 <Tabs.Panel id='file' className='sidebar-vertical-tab-panel'>
-                  {renderWorkspaceTreePanel()}
+                  {renderWorkspaceTreePanel(surfaceMode)}
                 </Tabs.Panel>
                 <Tabs.Panel id='git' className='sidebar-vertical-tab-panel'>
                   {renderGitPanel()}

@@ -154,11 +154,29 @@ const app = await electron.launch({
 
 try {
   const page = await app.firstWindow()
+  const rendererErrors = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      rendererErrors.push(message.text())
+    }
+  })
+  page.on('pageerror', (error) => {
+    rendererErrors.push(error.stack || error.message)
+  })
 
   await page.waitForFunction(() => !!window.appApi, null, { timeout: 30_000 })
   await page.waitForSelector('.app-shell', { timeout: 30_000 })
-  await page.evaluate(
-    ({ filePath, storageKey, workspacePath }) => {
+  const activeProjectFixture = await page.evaluate(
+    async ({ filePath, storageKey, workspacePath }) => {
+      const projectState = await window.appApi.getProjectState()
+      const activeProject = projectState.projects.find((project) => project.id === projectState.lastProjectId)
+        ?? projectState.projects[0]
+        ?? null
+
+      if (!activeProject) {
+        throw new Error('No visible project found in the real .aryn project state.')
+      }
+
       window.localStorage.setItem(storageKey, JSON.stringify({
         activePath: filePath,
         entries: [{ path: filePath, viewMode: 'meo' }],
@@ -167,7 +185,8 @@ try {
       window.localStorage.setItem('aryn:left-sidebar-collapsed', 'false')
       window.localStorage.setItem('aryn:right-sidebar-collapsed', 'false')
 
-      return Promise.all([
+      await Promise.all([
+        window.appApi.setActiveProject(activeProject.id),
         window.appApi.updateSettingsState({
           layoutPreference: 'editor',
           meo: {
@@ -182,7 +201,17 @@ try {
           lastFilePath: filePath,
           markAsLastOpened: true,
         }),
+        window.appApi.updateLayoutState({
+          activeLeftSidebarTab: 'file',
+          leftSidebarCollapsed: false,
+        }),
       ])
+
+      return {
+        id: activeProject.id,
+        name: activeProject.name,
+        path: activeProject.path,
+      }
     },
     {
       filePath,
@@ -231,8 +260,83 @@ try {
   assert(leftDrawer.hits.drawerSearch?.hitLabel === 'Open search', 'left drawer search button is not clickable at its center', leftDrawer)
   assert(leftDrawer.hits.drawerToggle?.hitLabel === 'Close workspace panel', 'left drawer sidebar toggle is not clickable at its center', leftDrawer)
 
-  await page.getByLabel('Close workspace panel').click({ timeout: 5_000 })
-  await page.waitForFunction(() => document.querySelector('.app-shell')?.getAttribute('data-left-drawer-open') === 'false', null, { timeout: 5_000 })
+  await page.waitForSelector('.workspace-sidebar-surface.is-drawer .workspace-tree-root .workspace-tree-row .git-change-icon-button', { timeout: 10_000 })
+  const drawerFileRow = page.locator('.workspace-sidebar-surface.is-drawer .workspace-tree-root .workspace-tree-row', {
+    has: page.locator('.git-change-icon-button'),
+  }).first()
+  await drawerFileRow.hover({ timeout: 5_000 })
+  await drawerFileRow.locator('.git-change-icon-button').click({ timeout: 5_000 })
+  const drawerFileTreeTriggerProbe = await page.evaluate(() => {
+    const button = document.querySelector('.workspace-sidebar-surface.is-drawer .workspace-tree-root .workspace-tree-row .git-change-icon-button')
+    const rect = button?.getBoundingClientRect()
+    const hit = rect
+      ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      : null
+
+    return {
+      buttonAriaExpanded: button?.getAttribute('aria-expanded') ?? null,
+      buttonDisabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      buttonRect: rect ? {
+        height: Math.round(rect.height),
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+      } : null,
+      hitClassName: hit instanceof Element ? hit.className : null,
+      hitLabel: hit instanceof Element ? hit.getAttribute('aria-label') ?? hit.closest('[aria-label]')?.getAttribute('aria-label') ?? null : null,
+      hitTag: hit instanceof Element ? hit.tagName : null,
+      menuCount: document.querySelectorAll('.workspace-tree-menu').length,
+      portalCount: document.querySelectorAll('.workspace-tree-menu-portal').length,
+      roleMenus: Array.from(document.querySelectorAll('[role="menu"]')).map((menu) => ({
+        className: typeof menu.className === 'string' ? menu.className : null,
+        parentClassName: menu.parentElement && typeof menu.parentElement.className === 'string' ? menu.parentElement.className : null,
+        rootClassName: menu.parentElement?.parentElement && typeof menu.parentElement.parentElement.className === 'string'
+          ? menu.parentElement.parentElement.className
+          : null,
+        text: menu.textContent?.trim() ?? '',
+      })),
+    }
+  })
+  await page.waitForSelector('.workspace-tree-menu', { timeout: 5_000 }).catch((error) => {
+    throw new Error(`${error.message}\n${JSON.stringify({ drawerFileTreeTriggerProbe, rendererErrors }, null, 2)}`)
+  })
+  const drawerFileTreeMenu = await page.evaluate(() => {
+    const menu = document.querySelector('.workspace-tree-menu')
+    const rect = menu?.getBoundingClientRect()
+    const hit = rect
+      ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      : null
+
+    return {
+      hitRoot: hit instanceof Element ? Boolean(hit.closest('.drawer-local-overlay-root')) : false,
+      hitText: hit instanceof Element ? hit.closest('.workspace-tree-menu-item')?.textContent?.trim() ?? null : null,
+      menuRoot: menu instanceof Element ? Boolean(menu.closest('.drawer-local-overlay-root')) : false,
+      pointerEvents: menu ? getComputedStyle(menu).pointerEvents : null,
+    }
+  })
+  assert(drawerFileTreeMenu.menuRoot, 'workspace tree menu should portal into the drawer local overlay root', drawerFileTreeMenu)
+  assert(drawerFileTreeMenu.hitRoot, 'workspace tree menu center should be hittable inside the drawer local overlay root', drawerFileTreeMenu)
+  assert(drawerFileTreeMenu.pointerEvents !== 'none', 'workspace tree menu should accept pointer events', drawerFileTreeMenu)
+  assert(drawerFileTreeMenu.hitText !== null, 'workspace tree menu center should hit a menu item', drawerFileTreeMenu)
+  await page.locator('.drawer-local-overlay-root .workspace-tree-menu [data-menu-action="rename"]').click({ timeout: 5_000 })
+  await page.waitForSelector('.workspace-sidebar-surface.is-drawer .workspace-tree-root .workspace-tree-row.is-editing .raw-rename-input', { timeout: 5_000 })
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => !document.querySelector('.workspace-sidebar-surface.is-drawer .workspace-tree-root .workspace-tree-row.is-editing'), null, { timeout: 5_000 })
+
+  const leftDrawerStillOpen = await page.evaluate(() => document.querySelector('.app-shell')?.getAttribute('data-left-drawer-open') === 'true')
+  if (leftDrawerStillOpen) {
+    const clickedLeftDrawerToggle = await page.evaluate(() => {
+      const button = document.querySelector('.workspace-sidebar-surface.is-drawer .panel-toggle-button:not(.left-chrome-search-button)')
+      if (!(button instanceof HTMLButtonElement)) {
+        return false
+      }
+
+      button.click()
+      return true
+    })
+    assert(clickedLeftDrawerToggle, 'left drawer toggle should be available after closing the workspace tree menu', await page.evaluate(readShellChromeState))
+    await page.waitForFunction(() => document.querySelector('.app-shell')?.getAttribute('data-left-drawer-open') === 'false', null, { timeout: 5_000 })
+  }
 
   await page.getByLabel('Open assistant panel').click({ timeout: 5_000 })
   await page.waitForFunction(() => document.querySelector('.app-shell')?.getAttribute('data-right-drawer-open') === 'true', null, { timeout: 5_000 })
@@ -324,6 +428,8 @@ try {
 
   const report = {
     agentLeftDrawer,
+    activeProjectFixture,
+    drawerFileTreeMenu,
     drawerProjectMenu,
     drawerTreeMenu,
     initial,

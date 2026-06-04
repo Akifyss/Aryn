@@ -1,5 +1,6 @@
 import { type Dispatch, type DragEvent, type FormEvent, type SetStateAction, useEffect, useRef, useState } from 'react'
-import { AlertDialog, Button, Dropdown, useOverlayState } from '@heroui/react'
+import { Menu } from '@base-ui/react/menu'
+import { AlertDialog, Button, useOverlayState } from '@heroui/react'
 import {
   CheckLine,
   CloseLine,
@@ -39,6 +40,7 @@ type WorkspaceTreeProps = {
   onDeleteNode: (node: WorkspaceNode) => Promise<void>
   onMoveNode: (node: WorkspaceNode, targetDirectoryPath: string) => Promise<void>
   gitRepositoryState?: GitRepositoryState | null
+  menuPortalTarget?: HTMLElement | null
 }
 
 function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | undefined, node: WorkspaceNode): GitDisplayChange | null {
@@ -84,6 +86,7 @@ function FileRowActions({
   onShowInFolder,
   isSubmitting,
   gitChange,
+  menuPortalTarget,
 }: {
   canOpenInCodeEditor: boolean
   onOpenInCodeEditor: () => void
@@ -92,12 +95,13 @@ function FileRowActions({
   onShowInFolder: () => void
   isSubmitting: boolean
   gitChange: GitDisplayChange | null
+  menuPortalTarget?: HTMLElement | null
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const systemManagerName = getSystemFileManagerName(window.appApi.platform)
 
   return (
-    <div className='git-change-tools'>
+    <div className='git-change-tools' onClick={(event) => event.stopPropagation()}>
       {gitChange && (
         <span
           className={`git-status-dot git-status-dot-${gitChange.kind}`}
@@ -109,60 +113,83 @@ function FileRowActions({
         className='git-change-actions'
         style={isOpen ? { opacity: 1, maxWidth: '2rem', transform: 'translateX(0)' } : undefined}
       >
-        <Dropdown onOpenChange={setIsOpen}>
-          <Dropdown.Trigger
+        <Menu.Root modal={false} onOpenChange={setIsOpen}>
+          <Menu.Trigger
             aria-label='File actions'
             className='git-change-action git-change-icon-button'
-            isDisabled={isSubmitting}
-            onClick={(event) => {
-              event.stopPropagation()
-            }}
+            disabled={isSubmitting}
+            render={<button type='button' />}
           >
             <More1Line size={16} />
-          </Dropdown.Trigger>
-          <Dropdown.Popover placement='bottom end' className='workspace-tree-popover'>
-            <Dropdown.Menu
-              aria-label='File actions'
-              onAction={(key) => {
-                if (key === 'open-code') onOpenInCodeEditor()
-                if (key === 'show-in-folder') onShowInFolder()
-                if (key === 'rename') onRename()
-                if (key === 'delete') onDelete()
-              }}
+          </Menu.Trigger>
+          <Menu.Portal
+            className='workspace-tree-menu-portal'
+            container={menuPortalTarget ?? undefined}
+          >
+            <Menu.Positioner
+              align='end'
+              className='workspace-tree-menu-positioner'
+              collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
+              collisionPadding={8}
+              positionMethod='fixed'
+              side='bottom'
+              sideOffset={2}
             >
-              {canOpenInCodeEditor ? (
-                <Dropdown.Item id='open-code' textValue='Open in code editor'>
-                  <div className='workspace-tree-menu-item'>
+              <Menu.Popup
+                aria-label='File actions'
+                className='workspace-tree-menu'
+                finalFocus={false}
+              >
+                {canOpenInCodeEditor ? (
+                  <Menu.Item
+                    nativeButton
+                    render={<button type='button' />}
+                    className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
+                    data-menu-action='open-code'
+                    label='在代码编辑器打开'
+                    onClick={onOpenInCodeEditor}
+                  >
                     <CodeLine size={16} className='workspace-tree-menu-icon' />
                     <span>在代码编辑器打开</span>
-                  </div>
-                </Dropdown.Item>
-              ) : null}
-              <Dropdown.Item id='show-in-folder' textValue={`在“${systemManagerName}”中打开`}>
-                <div className='workspace-tree-menu-item'>
+                  </Menu.Item>
+                ) : null}
+                <Menu.Item
+                  nativeButton
+                  render={<button type='button' />}
+                  className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
+                  data-menu-action='show-in-folder'
+                  label={`在“${systemManagerName}”中打开`}
+                  onClick={onShowInFolder}
+                >
                   <ExternalLinkLine size={16} className='workspace-tree-menu-icon' />
-                  <span>在“{systemManagerName}”中打开</span>
-                </div>
-              </Dropdown.Item>
-              <Dropdown.Item id='rename' textValue='重命名'>
-                <div className='workspace-tree-menu-item'>
+                  <span>{`在“${systemManagerName}”中打开`}</span>
+                </Menu.Item>
+                <Menu.Item
+                  nativeButton
+                  render={<button type='button' />}
+                  className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
+                  data-menu-action='rename'
+                  label='重命名'
+                  onClick={onRename}
+                >
                   <Edit2Line size={16} className='workspace-tree-menu-icon' />
                   <span>重命名</span>
-                </div>
-              </Dropdown.Item>
-              <Dropdown.Item
-                id='delete'
-                textValue='删除'
-                variant='danger'
-              >
-                <div className='workspace-tree-menu-item is-danger'>
+                </Menu.Item>
+                <Menu.Item
+                  nativeButton
+                  render={<button type='button' />}
+                  className={({ highlighted }) => `workspace-tree-menu-item is-danger${highlighted ? ' is-highlighted' : ''}`}
+                  data-menu-action='delete'
+                  label='删除'
+                  onClick={onDelete}
+                >
                   <Delete2Line size={16} className='workspace-tree-menu-icon' />
                   <span>删除</span>
-                </div>
-              </Dropdown.Item>
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown>
+                </Menu.Item>
+              </Menu.Popup>
+            </Menu.Positioner>
+          </Menu.Portal>
+        </Menu.Root>
       </div>
     </div>
   )
@@ -187,6 +214,7 @@ function FileTreeItem({
   onSelectFile,
   onToggleDirectory,
   gitRepositoryState,
+  menuPortalTarget,
 }: {
   activeFilePath: string | null
   draggedNode: WorkspaceNode | null
@@ -206,6 +234,7 @@ function FileTreeItem({
   onSelectFile: (path: string) => void
   onToggleDirectory: (path: string) => void
   gitRepositoryState?: GitRepositoryState | null
+  menuPortalTarget?: HTMLElement | null
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -388,6 +417,7 @@ function FileTreeItem({
             canOpenInCodeEditor={canOpenInCodeEditor}
             isSubmitting={isSubmitting}
             gitChange={gitChange}
+            menuPortalTarget={menuPortalTarget}
             onOpenInCodeEditor={() => onOpenInCodeEditor(node.path)}
             onShowInFolder={() => {
               window.appApi.showItemInFolder(node.path).catch((error) => {
@@ -472,6 +502,7 @@ function FileTreeItem({
                 onSelectFile={onSelectFile}
                 onToggleDirectory={onToggleDirectory}
                 gitRepositoryState={gitRepositoryState}
+                menuPortalTarget={menuPortalTarget}
               />
             ))}
           </ul>
@@ -494,6 +525,7 @@ export function WorkspaceTree({
   onDeleteNode,
   onMoveNode,
   gitRepositoryState,
+  menuPortalTarget,
 }: WorkspaceTreeProps) {
   const [draggedNode, setDraggedNode] = useState<WorkspaceNode | null>(null)
   const [dropTargetDirectoryPath, setDropTargetDirectoryPath] = useState<string | null>(null)
@@ -742,6 +774,7 @@ export function WorkspaceTree({
           onSelectFile={onSelectFile}
           onToggleDirectory={handleToggle}
           gitRepositoryState={gitRepositoryState}
+          menuPortalTarget={menuPortalTarget}
         />
       ))}
     </ul>

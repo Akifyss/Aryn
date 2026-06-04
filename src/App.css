@@ -936,10 +936,18 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   pointer-events: auto;
 }
 
+.project-menu-positioner {
+  z-index: 81;
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.project-menu-positioner.is-local {
+  z-index: 2;
+}
+
 .project-menu {
-  position: absolute;
-  top: max(48px, calc(var(--titlebar-height, 0px) + 10px));
-  left: max(12px, var(--left-panel-content-inset, 92px));
   width: min(360px, calc(100vw - 24px));
   max-height: min(520px, calc(100vh - 72px));
   overflow: hidden;
@@ -957,8 +965,6 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .project-menu-agent-add {
-  top: 126px;
-  left: min(414px, calc(100vw - 372px));
   width: 288px;
 }
 
@@ -1028,8 +1034,10 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .project-menu-action:hover,
 .project-menu-action:focus-visible,
+.project-menu-action.is-highlighted,
 .project-menu-project:hover,
 .project-menu-project:focus-visible,
+.project-menu-project.is-highlighted,
 .project-menu-project.is-active {
   outline: none;
   background: var(--surface-tertiary);
@@ -2719,13 +2727,47 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   color: var(--foreground);
 }
 
+.workspace-tree-menu-positioner {
+  z-index: 82;
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.workspace-tree-menu-portal {
+  pointer-events: auto;
+}
+
+.workspace-tree-menu {
+  min-width: 220px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--overlay);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(22px);
+}
+
 .workspace-tree-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  min-height: 34px;
   min-width: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  font: inherit;
   font-size: 13px;
   line-height: 1.4;
+  text-align: left;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
 .workspace-tree-menu-item .workspace-tree-menu-icon {
@@ -2735,6 +2777,13 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .workspace-tree-menu-item.is-danger {
   color: var(--danger);
+}
+
+.workspace-tree-menu-item:hover,
+.workspace-tree-menu-item:focus-visible,
+.workspace-tree-menu-item.is-highlighted {
+  outline: none;
+  background: var(--app-menu-item-hover-background);
 }
 
 .git-panel-section-header,
@@ -6705,7 +6754,6 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 /* Unified dropdown menu popover styles */
-.workspace-tree-popover [data-slot="content"],
 .settings-select-popover [data-slot="content"] {
   background: var(--overlay) !important;
   border: 1px solid var(--border) !important;
@@ -6714,7 +6762,6 @@ body.workspace-tree-dragging .workspace-tree-row {
   backdrop-filter: blur(22px) !important;
 }
 
-.workspace-tree-popover [role="menuitem"][data-hover="true"]:not([data-color="danger"]),
 .settings-select-popover [role="option"][data-hover="true"]:not([data-color="danger"]) {
   background: var(--app-menu-item-hover-background) !important;
 }
