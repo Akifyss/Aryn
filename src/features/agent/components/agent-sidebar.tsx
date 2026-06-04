@@ -169,8 +169,10 @@ type AgentSurfaceProps = {
 type AgentSessionTreeProps = {
   className?: string
   onRequestClose?: () => void
+  onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   id?: string
   isFloating?: boolean
+  menuPortalTarget?: HTMLElement | null
 }
 
 type AgentProjectSessionBucket = {
@@ -4258,15 +4260,20 @@ function AgentTreeActionMenuItems({
 
 function AgentTreeMenuPopup({
   disabled,
+  menuPortalTarget,
   onDelete,
   onRename,
 }: {
   disabled: boolean
+  menuPortalTarget?: HTMLElement | null
   onDelete: () => void
   onRename: () => void
 }) {
   return (
-    <Menu.Portal>
+    <Menu.Portal
+      className='agent-tree-menu-portal'
+      container={menuPortalTarget ?? undefined}
+    >
       <Menu.Positioner
         align='end'
         {...AGENT_TREE_MENU_POSITIONER_PROPS}
@@ -4284,15 +4291,20 @@ function AgentTreeMenuPopup({
 
 function AgentTreeContextMenuPopup({
   disabled,
+  menuPortalTarget,
   onDelete,
   onRename,
 }: {
   disabled: boolean
+  menuPortalTarget?: HTMLElement | null
   onDelete: () => void
   onRename: () => void
 }) {
   return (
-    <ContextMenu.Portal>
+    <ContextMenu.Portal
+      className='agent-tree-menu-portal'
+      container={menuPortalTarget ?? undefined}
+    >
       <ContextMenu.Positioner
         align='start'
         {...AGENT_TREE_MENU_POSITIONER_PROPS}
@@ -4355,14 +4367,19 @@ function AgentProjectMenuItems({
 }
 
 function AgentProjectMenuPopup({
+  menuPortalTarget,
   onOpenFolder,
   onRemoveProject,
 }: {
+  menuPortalTarget?: HTMLElement | null
   onOpenFolder: () => void
   onRemoveProject: () => void
 }) {
   return (
-    <Menu.Portal>
+    <Menu.Portal
+      className='agent-tree-menu-portal'
+      container={menuPortalTarget ?? undefined}
+    >
       <Menu.Positioner
         align='end'
         {...AGENT_TREE_MENU_POSITIONER_PROPS}
@@ -4379,14 +4396,19 @@ function AgentProjectMenuPopup({
 }
 
 function AgentProjectContextMenuPopup({
+  menuPortalTarget,
   onOpenFolder,
   onRemoveProject,
 }: {
+  menuPortalTarget?: HTMLElement | null
   onOpenFolder: () => void
   onRemoveProject: () => void
 }) {
   return (
-    <ContextMenu.Portal>
+    <ContextMenu.Portal
+      className='agent-tree-menu-portal'
+      container={menuPortalTarget ?? undefined}
+    >
       <ContextMenu.Positioner
         align='start'
         {...AGENT_TREE_MENU_POSITIONER_PROPS}
@@ -4411,6 +4433,7 @@ function AgentSessionTreeRow({
   isDeleting,
   isRenaming,
   label,
+  menuPortalTarget,
   menuTitle = '对话菜单',
   nodeClassName,
   relativeTime,
@@ -4426,6 +4449,7 @@ function AgentSessionTreeRow({
   isDeleting: boolean
   isRenaming: boolean
   label: string
+  menuPortalTarget?: HTMLElement | null
   menuTitle?: string
   nodeClassName?: string
   relativeTime?: string
@@ -4570,6 +4594,7 @@ function AgentSessionTreeRow({
               </ContextMenu.Trigger>
               <AgentTreeContextMenuPopup
                 disabled={isDeleting}
+                menuPortalTarget={menuPortalTarget}
                 onDelete={onDelete}
                 onRename={onRequestRename}
               />
@@ -4589,6 +4614,7 @@ function AgentSessionTreeRow({
                   </Menu.Trigger>
                   <AgentTreeMenuPopup
                     disabled={isDeleting}
+                    menuPortalTarget={menuPortalTarget}
                     onDelete={onDelete}
                     onRename={onRequestRename}
                   />
@@ -4608,6 +4634,7 @@ function FlatAgentSessionTree({
   onRequestClose,
   id = 'agent-session-tree',
   isFloating,
+  menuPortalTarget,
 }: AgentSessionTreeProps) {
   const {
     activeSessionSelection,
@@ -4659,6 +4686,7 @@ function FlatAgentSessionTree({
                 isDeleting={deletingSessionPath === session.path}
                 isRenaming={renamingSessionPath === session.path}
                 label={label}
+                menuPortalTarget={menuPortalTarget}
                 onCancelRename={() => setRenamingSessionPath(null)}
                 onDelete={() => {
                   void handleDeleteSession(session.path)
@@ -4688,6 +4716,7 @@ function AgentConversationRow({
   isDeleting,
   isRenaming,
   isActive,
+  menuPortalTarget,
   onOpen,
   onCancelRename,
   onDelete,
@@ -4698,6 +4727,7 @@ function AgentConversationRow({
   isDeleting: boolean
   isRenaming: boolean
   isActive: boolean
+  menuPortalTarget?: HTMLElement | null
   onOpen: () => void
   onCancelRename: () => void
   onDelete: () => void
@@ -4712,6 +4742,7 @@ function AgentConversationRow({
       isDeleting={isDeleting}
       isRenaming={isRenaming}
       label={conversation.title}
+      menuPortalTarget={menuPortalTarget}
       menuTitle='对话菜单'
       nodeClassName='agent-conversation-node'
       relativeTime={relativeTime}
@@ -4729,7 +4760,9 @@ function AgentConversationRow({
 function AgentProjectTree({
   className,
   onRequestClose,
+  onOpenProjectAddMenu: onOpenProjectAddMenuOverride,
   isFloating,
+  menuPortalTarget,
 }: AgentSessionTreeProps) {
   const {
     activeWorkspaceContext,
@@ -4913,7 +4946,8 @@ function AgentProjectTree({
             aria-label='添加项目'
             title='添加项目'
             onClick={(event) => {
-              onOpenProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
+              const openProjectAddMenu = onOpenProjectAddMenuOverride ?? onOpenProjectAddMenu
+              openProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
             }}
           >
             <AddLine size={15} />
@@ -4958,6 +4992,7 @@ function AgentProjectTree({
                       <span className='panel-tree-label agent-project-row-label'>{project.name}</span>
                     </ContextMenu.Trigger>
                     <AgentProjectContextMenuPopup
+                      menuPortalTarget={menuPortalTarget}
                       onOpenFolder={() => {
                         void onOpenProjectFolder?.(project)
                       }}
@@ -4992,6 +5027,7 @@ function AgentProjectTree({
                           <More1Line size={16} />
                         </Menu.Trigger>
                         <AgentProjectMenuPopup
+                          menuPortalTarget={menuPortalTarget}
                           onOpenFolder={() => {
                             void onOpenProjectFolder?.(project)
                           }}
@@ -5030,6 +5066,7 @@ function AgentProjectTree({
                             isDeleting={deletingSessionPath === session.path}
                             isRenaming={renamingSessionPath === session.path}
                             label={label}
+                            menuPortalTarget={menuPortalTarget}
                             onCancelRename={() => setRenamingSessionPath(null)}
                             relativeTime={relativeTime}
                             onDelete={() => {
@@ -5097,6 +5134,7 @@ function AgentProjectTree({
                     isDeleting={deletingConversationId === conversation.id}
                     isRenaming={renamingConversationId === conversation.id}
                     isActive={activeWorkspaceContext.kind === 'conversation' && activeWorkspaceContext.conversationId === conversation.id}
+                    menuPortalTarget={menuPortalTarget}
                     onCancelRename={() => setRenamingConversationId(null)}
                     onDelete={() => {
                       setDeletingConversationId(conversation.id)
@@ -5300,9 +5338,14 @@ function AgentChatSurface() {
   const [modelPickerActiveModelKey, setModelPickerActiveModelKey] = useState<string | null>(null)
   const [modelPickerActiveThinkingLevel, setModelPickerActiveThinkingLevel] = useState<AgentThinkingLevel | null>(null)
   const [modelPickerKeyboardColumn, setModelPickerKeyboardColumn] = useState<AgentModelPickerKeyboardColumn>('model')
+  const [localOverlayRoot, setLocalOverlayRoot] = useState<HTMLDivElement | null>(null)
   const modelPickerSearchRef = useRef<HTMLInputElement | null>(null)
   const modelPickerTriggerRef = useRef<HTMLButtonElement | null>(null)
   const localOverlayRootRef = useRef<HTMLDivElement | null>(null)
+  const handleLocalOverlayRootRef = useCallback((node: HTMLDivElement | null) => {
+    localOverlayRootRef.current = node
+    setLocalOverlayRoot(node)
+  }, [])
   const modelPickerPointerTrailRef = useRef<AgentModelPickerPointerPoint[]>([])
   const modelPickerLatestPointerPointRef = useRef<AgentModelPickerPointerPoint | null>(null)
   const modelPickerPendingActivationRef = useRef<AgentModelPickerPendingActivation | null>(null)
@@ -5460,7 +5503,7 @@ function AgentChatSurface() {
   const sessionMenuPortalTarget = typeof document === 'undefined'
     ? null
     : surfaceMode === 'drawer'
-      ? localOverlayRootRef.current
+      ? localOverlayRoot
       : document.body
 
   const updateSessionMenuPosition = useCallback(() => {
@@ -5470,13 +5513,13 @@ function AgentChatSurface() {
     }
 
     const frameRect = surfaceMode === 'drawer'
-      ? localOverlayRootRef.current?.getBoundingClientRect() ?? null
+      ? localOverlayRoot?.getBoundingClientRect() ?? null
       : null
     const nextStyle = resolveAgentSessionMenuStyle(triggerElement.getBoundingClientRect(), frameRect)
     setSessionMenuStyle((currentStyle) => (
       areAgentSessionMenuStylesEqual(currentStyle, nextStyle) ? currentStyle : nextStyle
     ))
-  }, [sessionButtonRef, surfaceMode])
+  }, [localOverlayRoot, sessionButtonRef, surfaceMode])
 
   const updateModelCascaderPosition = useCallback(() => {
     const triggerElement = modelPickerTriggerRef.current
@@ -6503,7 +6546,7 @@ function AgentChatSurface() {
 
         <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
       </div>
-      <div ref={localOverlayRootRef} className='agent-local-overlay-root' />
+      <div ref={handleLocalOverlayRootRef} className='agent-local-overlay-root' />
 
       {canOpenSessionMenu && activeOverlayPanel === 'sessions' && sessionMenuPortalTarget ? createPortal(
         <div
@@ -6518,6 +6561,7 @@ function AgentChatSurface() {
             className='agent-session-tree-floating'
             id='agent-session-tree-floating'
             isFloating
+            menuPortalTarget={surfaceMode === 'drawer' ? localOverlayRoot : null}
             onRequestClose={() => {
               setActiveOverlayPanel(null)
             }}

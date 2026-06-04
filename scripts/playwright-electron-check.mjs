@@ -11,16 +11,34 @@ const localAppDataRoot = path.join(runRoot, 'localappdata')
 const tempRoot = path.join(runRoot, 'temp')
 const workspacePath = path.join(runRoot, 'workspace')
 const filePath = path.join(workspacePath, 'debug.md')
+const conversationIndexPath = path.join(workspacePath, '.aryn', 'conversations', 'index.json')
 const reportPath = path.join(artifactRoot, 'report.json')
 const screenshotPath = path.join(artifactRoot, 'screenshot.png')
 const tabStorageKey = `aryn:workspace-tabs:${workspacePath}`
+const seededConversationTitle = 'E2E drawer menu conversation'
 
 await fs.rm(runRoot, { force: true, recursive: true })
 await fs.mkdir(appDataRoot, { recursive: true })
 await fs.mkdir(localAppDataRoot, { recursive: true })
 await fs.mkdir(tempRoot, { recursive: true })
 await fs.mkdir(workspacePath, { recursive: true })
+await fs.mkdir(path.dirname(conversationIndexPath), { recursive: true })
 await fs.writeFile(filePath, '# Electron chrome check\n\nTemporary workspace fixture.\n', 'utf8')
+await fs.writeFile(conversationIndexPath, JSON.stringify({
+  version: 1,
+  conversations: [
+    {
+      agentSessionPath: null,
+      createdAt: '2026-06-04T00:00:00.000Z',
+      id: 'drawer-menu-conversation',
+      lastMessagePreview: 'Drawer menu interaction fixture',
+      status: 'active',
+      title: seededConversationTitle,
+      updatedAt: '2026-06-04T00:00:00.000Z',
+      workspacePath: null,
+    },
+  ],
+}, null, 2), 'utf8')
 
 function assert(condition, message, details) {
   if (!condition) {
@@ -235,9 +253,79 @@ try {
   await page.getByLabel('Close assistant panel').click({ timeout: 5_000 })
   await page.waitForFunction(() => document.querySelector('.app-shell')?.getAttribute('data-right-drawer-open') === 'false', null, { timeout: 5_000 })
 
+  await page.evaluate(() => window.appApi.updateSettingsState({ layoutPreference: 'agent' }))
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 })
+  await page.waitForFunction(() => (
+    document.querySelector('.app-shell')?.getAttribute('data-app-layout') === 'agent'
+    && document.querySelector('.app-shell')?.getAttribute('data-layout') === 'focus'
+  ), null, { timeout: 30_000 })
+  await page.waitForTimeout(300)
+
+  await page.getByLabel('Open workspace panel').click({ timeout: 5_000 })
+  await page.waitForFunction(() => document.querySelector('.app-shell')?.getAttribute('data-left-drawer-open') === 'true', null, { timeout: 5_000 })
+  await page.waitForSelector('.workspace-sidebar-surface.is-drawer .agent-conversation-row', { timeout: 10_000 })
+
+  const agentLeftDrawer = await page.evaluate(readShellChromeState)
+  assert(agentLeftDrawer.drag.drawerProxyCount === 1, 'agent left drawer should keep one top-layer drag proxy', agentLeftDrawer)
+  assert(agentLeftDrawer.drag.drawerProxy?.hitClassName === 'drawer-window-drag-region', 'agent left drawer drag proxy is not hittable at its center', agentLeftDrawer)
+  assert(agentLeftDrawer.drag.drawerLocalOverlayAppRegions.every((value) => value !== 'no-drag'), 'agent left drawer local overlay root must not mark the whole surface as no-drag', agentLeftDrawer)
+
+  await page.locator('.workspace-sidebar-surface.is-drawer .agent-project-tree-header').first().hover({ timeout: 5_000 })
+  await page.locator('.workspace-sidebar-surface.is-drawer .agent-project-tree-header-action').first().click({ timeout: 5_000 })
+  await page.waitForSelector('.drawer-local-overlay-root .project-menu-agent-add', { timeout: 5_000 })
+  const drawerProjectMenu = await page.evaluate(() => {
+    const menu = document.querySelector('.project-menu-agent-add')
+    const rect = menu?.getBoundingClientRect()
+    const hit = rect
+      ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      : null
+
+    return {
+      hitRoot: hit instanceof Element ? Boolean(hit.closest('.drawer-local-overlay-root')) : false,
+      menuRoot: menu instanceof Element ? Boolean(menu.closest('.drawer-local-overlay-root')) : false,
+      pointerEvents: menu ? getComputedStyle(menu).pointerEvents : null,
+      surface: menu?.getAttribute('data-surface') ?? null,
+    }
+  })
+  assert(drawerProjectMenu.menuRoot, 'project add menu should portal into the drawer local overlay root', drawerProjectMenu)
+  assert(drawerProjectMenu.hitRoot, 'project add menu center should be hittable inside the drawer local overlay root', drawerProjectMenu)
+  assert(drawerProjectMenu.pointerEvents !== 'none', 'project add menu should accept pointer events', drawerProjectMenu)
+  assert(drawerProjectMenu.surface === 'left-drawer', 'project add menu should use the left drawer surface', drawerProjectMenu)
+  await page.locator('.drawer-local-overlay-root .project-menu-agent-add .project-menu-action').first().click({ timeout: 5_000 })
+  await page.waitForSelector('.project-create-modal', { timeout: 5_000 })
+  await page.locator('.project-create-modal-close').click({ timeout: 5_000 })
+  await page.waitForSelector('.project-create-modal', { state: 'detached', timeout: 5_000 })
+
+  const drawerConversationRow = page.locator('.workspace-sidebar-surface.is-drawer .agent-conversation-row').first()
+  await drawerConversationRow.hover({ timeout: 5_000 })
+  await drawerConversationRow.locator('.agent-project-row-action').first().click({ timeout: 5_000 })
+  await page.waitForSelector('.drawer-local-overlay-root .agent-session-tree-menu', { timeout: 5_000 })
+  const drawerTreeMenu = await page.evaluate(() => {
+    const menu = document.querySelector('.agent-session-tree-menu')
+    const rect = menu?.getBoundingClientRect()
+    const hit = rect
+      ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      : null
+
+    return {
+      hitLabel: hit?.getAttribute('aria-label') ?? hit?.closest('[aria-label]')?.getAttribute('aria-label') ?? null,
+      hitRoot: hit instanceof Element ? Boolean(hit.closest('.drawer-local-overlay-root')) : false,
+      menuRoot: menu instanceof Element ? Boolean(menu.closest('.drawer-local-overlay-root')) : false,
+      pointerEvents: menu ? getComputedStyle(menu).pointerEvents : null,
+    }
+  })
+  assert(drawerTreeMenu.menuRoot, 'agent tree menu should portal into the drawer local overlay root', drawerTreeMenu)
+  assert(drawerTreeMenu.hitRoot, 'agent tree menu center should be hittable inside the drawer local overlay root', drawerTreeMenu)
+  assert(drawerTreeMenu.pointerEvents !== 'none', 'agent tree menu should accept pointer events', drawerTreeMenu)
+  await page.locator('.drawer-local-overlay-root .agent-session-tree-menu .agent-session-tree-menu-item').first().click({ timeout: 5_000 })
+  await page.waitForSelector('.workspace-sidebar-surface.is-drawer .agent-conversation-row.is-editing .raw-rename-input', { timeout: 5_000 })
+
   await page.screenshot({ path: screenshotPath, fullPage: false })
 
   const report = {
+    agentLeftDrawer,
+    drawerProjectMenu,
+    drawerTreeMenu,
     initial,
     leftDrawer,
     nativeWindowControls,

@@ -924,7 +924,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .drawer-local-overlay-root {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 90;
   pointer-events: none;
@@ -3970,6 +3970,14 @@ body.workspace-tree-dragging .workspace-tree-row {
   inset: 0;
   z-index: 1200;
   pointer-events: none;
+}
+
+.panel-agent-drawer .agent-local-overlay-root {
+  position: fixed;
+}
+
+.agent-tree-menu-portal {
+  pointer-events: auto;
 }
 
 .agent-floating-panel.is-local {

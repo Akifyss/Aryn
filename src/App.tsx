@@ -853,7 +853,9 @@ function App() {
   const appShellRef = useRef<HTMLDivElement | null>(null)
   const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
   const leftDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
+  const [leftDrawerOverlayRoot, setLeftDrawerOverlayRoot] = useState<HTMLDivElement | null>(null)
   const rightDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
+  const [rightDrawerOverlayRoot, setRightDrawerOverlayRoot] = useState<HTMLDivElement | null>(null)
   const meoEditorHostRef = useRef<MeoEditorHostHandle | null>(null)
   const agentProjectSessionRequestIdRef = useRef(0)
   const editorEmptyWorkspaceTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -5008,6 +5010,10 @@ function App() {
         <div ref={isDrawerSurface ? undefined : leftSidebarBodyRef} className='sidebar-stack'>
           {isAgentLayout ? (
             <AgentSessionTree
+              menuPortalTarget={isDrawerSurface ? leftDrawerOverlayRoot : null}
+              onOpenProjectAddMenu={isDrawerSurface
+                ? (anchorRect) => openProjectMenu('agent-add', anchorRect, { surface: 'left-drawer' })
+                : undefined}
               onRequestClose={isDrawerSurface ? () => setIsLeftDrawerOpen(false) : undefined}
             />
           ) : (
@@ -5066,8 +5072,8 @@ function App() {
           </button>
         </div>
         {isDrawerSurface ? (
-          <div className='drawer-local-overlay-root'>
-            {renderProjectMenu('left-drawer', leftDrawerSurfaceRef.current?.getBoundingClientRect() ?? null)}
+          <div ref={setLeftDrawerOverlayRoot} className='drawer-local-overlay-root'>
+            {renderProjectMenu('left-drawer', leftDrawerOverlayRoot?.getBoundingClientRect() ?? null)}
           </div>
         ) : null}
       </div>
@@ -5532,8 +5538,8 @@ function App() {
                     style={shellChromeVars}
                   >
                     {isAgentLayout ? renderEditorSurface() : renderAgentPanel('drawer')}
-                    <div className='drawer-local-overlay-root'>
-                      {renderProjectMenu('right-drawer', rightDrawerSurfaceRef.current?.getBoundingClientRect() ?? null)}
+                    <div ref={setRightDrawerOverlayRoot} className='drawer-local-overlay-root'>
+                      {renderProjectMenu('right-drawer', rightDrawerOverlayRoot?.getBoundingClientRect() ?? null)}
                     </div>
                   </div>
                 </Drawer.Body>
