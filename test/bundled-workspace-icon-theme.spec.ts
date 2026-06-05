@@ -34,6 +34,7 @@ describe('bundled workspace icon theme resolution', () => {
       writeEmptyFile(path.join(rootPath, 'PKief.material-icon-theme-5.35.0.vsix')),
       writeEmptyFile(path.join(rootPath, 'miguelsolorio.symbols-0.0.25.vsix')),
       writeEmptyFile(path.join(rootPath, 'teabyii.ayu-1.1.12.vsix')),
+      writeEmptyFile(path.join(rootPath, 'pierrecomputer.pierre-vscode-icons-0.0.9.vsix')),
       writeEmptyFile(path.join(rootPath, 'readme.txt')),
     ])
 
@@ -44,6 +45,7 @@ describe('bundled workspace icon theme resolution', () => {
         path.join(rootPath, 'PKief.material-icon-theme-5.35.0.vsix'),
         path.join(rootPath, 'miguelsolorio.symbols-0.0.25.vsix'),
         path.join(rootPath, 'teabyii.ayu-1.1.12.vsix'),
+        path.join(rootPath, 'pierrecomputer.pierre-vscode-icons-0.0.9.vsix'),
       ])
   })
 

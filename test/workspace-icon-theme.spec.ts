@@ -209,7 +209,7 @@ describe('workspace icon theme import', () => {
     expectDataUrl(theme.defaultFileIcon)
   })
 
-  it('exposes the bundled Catppuccin, Material, Symbols, and Ayu icon themes', async () => {
+  it('exposes the bundled Catppuccin, Material, Symbols, Ayu, and Pierre icon themes', async () => {
     const bundledThemeDirectoryPath = path.join(process.cwd(), 'public', 'icon-themes')
     const bundledThemePaths = await resolveBundledWorkspaceIconThemePaths(bundledThemeDirectoryPath)
     const cacheRootPath = await createTempDir('workspace-icon-theme-cache-')
@@ -226,6 +226,9 @@ describe('workspace icon theme import', () => {
       'Material Icon Theme',
       'Symbol Icons',
       'Ayu',
+      'Pierre Icons (Minimal)',
+      'Pierre Icons',
+      'Pierre Icons (Complete)',
     ]))
   })
 
