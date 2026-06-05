@@ -59,6 +59,7 @@ import {
 } from '@/components/file-change-visuals'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
+import { shouldStickAgentMessagesToBottom } from '@/features/agent/lib/message-scroll-stickiness'
 import { shouldRunAgentModelCascaderDelayedActivation } from '@/features/agent/lib/model-cascader-pointer-intent'
 import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
 import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
@@ -318,6 +319,21 @@ const AGENT_MODEL_CASCADER_PROVIDER_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SE
 const AGENT_MODEL_CASCADER_MODEL_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-model`
 const AGENT_MODEL_CASCADER_RESULTS_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-results`
 const AGENT_MODEL_CASCADER_THINKING_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-thinking`
+
+function getAgentMessagesScrollContentElement(scrollElement: HTMLElement) {
+  for (const childElement of Array.from(scrollElement.children)) {
+    if (
+      childElement instanceof HTMLElement
+      && childElement.classList.contains('agent-messages-scroll-content')
+    ) {
+      return childElement
+    }
+  }
+
+  const firstChildElement = scrollElement.firstElementChild
+  return firstChildElement instanceof HTMLElement ? firstChildElement : null
+}
+
 const AGENT_SESSION_MENU_MARGIN_PX = 8
 const AGENT_SESSION_MENU_GAP_PX = 8
 const AGENT_SESSION_MENU_WIDTH_PX = 320
@@ -2569,6 +2585,7 @@ function AgentProvider({
   const loadAgentStateRequestIdRef = useRef(0)
   const openSessionRequestIdRef = useRef(0)
   const previousSessionPathRef = useRef<string | null>(null)
+  const shouldStickMessagesToBottomRef = useRef(true)
   const locallyEmittedWorkspaceStatesRef = useRef<WeakSet<AgentWorkspaceState>>(new WeakSet())
   const pendingExternalWorkspaceStateRef = useRef<AgentWorkspaceState | null>(null)
   const handledExternalSessionRequestRef = useRef<number | null>(null)
@@ -4075,6 +4092,72 @@ function AgentProvider({
     selectedProviderValue,
   ])
 
+  useEffect(() => {
+    const scrollElement = messagesScrollRef.current
+    if (!scrollElement) {
+      shouldStickMessagesToBottomRef.current = true
+      return
+    }
+
+    const updateMessagesScrollStickiness = () => {
+      shouldStickMessagesToBottomRef.current = shouldStickAgentMessagesToBottom(scrollElement)
+    }
+
+    updateMessagesScrollStickiness()
+    scrollElement.addEventListener('scroll', updateMessagesScrollStickiness, { passive: true })
+
+    return () => {
+      scrollElement.removeEventListener('scroll', updateMessagesScrollStickiness)
+    }
+  }, [activeSessionPath])
+
+  useEffect(() => {
+    const scrollElement = messagesScrollRef.current
+    if (!scrollElement || typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    let frameId: number | null = null
+    const scrollToBottom = () => {
+      scrollElement.scrollTop = scrollElement.scrollHeight
+      shouldStickMessagesToBottomRef.current = true
+    }
+
+    const syncPinnedScrollAfterResize = () => {
+      if (!shouldStickMessagesToBottomRef.current) {
+        shouldStickMessagesToBottomRef.current = shouldStickAgentMessagesToBottom(scrollElement)
+        return
+      }
+
+      scrollToBottom()
+
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        scrollToBottom()
+      })
+    }
+
+    const resizeObserver = new ResizeObserver(syncPinnedScrollAfterResize)
+    resizeObserver.observe(scrollElement)
+
+    const contentElement = getAgentMessagesScrollContentElement(scrollElement)
+    if (contentElement) {
+      resizeObserver.observe(contentElement)
+    }
+
+    return () => {
+      resizeObserver.disconnect()
+
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+    }
+  }, [activeSessionPath])
+
   useLayoutEffect(() => {
     const scrollElement = messagesScrollRef.current
     if (!scrollElement) {
@@ -4086,6 +4169,7 @@ function AgentProvider({
 
     const scrollToBottom = () => {
       scrollElement.scrollTop = scrollElement.scrollHeight
+      shouldStickMessagesToBottomRef.current = true
     }
 
     scrollToBottom()
