@@ -347,8 +347,6 @@ const MIN_GIT_PANEL_HEIGHT = 200
 const DEFAULT_GIT_PANEL_LAYOUT: GitPanelLayout = 'list'
 const DRAWER_INTERACTION_REFRESH_STABLE_FRAMES = 2
 const DRAWER_INTERACTION_REFRESH_MAX_FRAMES = 36
-const SETTINGS_TAB_ID = 'app://settings'
-const SETTINGS_TAB_PATH = 'app://settings'
 const FIXED_FILE_TAB_ID = 'app://fixed/files'
 const FIXED_GIT_TAB_ID = 'app://fixed/git'
 const WORKSPACE_AUTO_SAVE_DELAY_MS = 1000
@@ -802,8 +800,6 @@ function App() {
 
   const [isImportingIconTheme, setIsImportingIconTheme] = useState(false)
   const [isApplyingIconTheme, setIsApplyingIconTheme] = useState(false)
-  const [isSettingsTabOpen, setIsSettingsTabOpen] = useState(false)
-  const [isSettingsTabActive, setIsSettingsTabActive] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance')
   const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
   const [iconTheme, setIconTheme] = useState<WorkspaceIconTheme | null>(null)
@@ -922,42 +918,23 @@ function App() {
       const fixedTabs = isAgentLayout
         ? [getFixedPanelTab('git'), getFixedPanelTab('file')]
         : []
-      const workspaceTabs = [
+
+      return [
         ...fixedTabs,
         ...openTabs,
       ]
-
-      if (!isSettingsTabOpen) {
-        return workspaceTabs
-      }
-
-      return [
-        ...workspaceTabs,
-        {
-          content: '',
-          editorKind: 'prose',
-          exists: true,
-          filePath: SETTINGS_TAB_PATH,
-          id: SETTINGS_TAB_ID,
-          isDirty: false,
-          kind: 'settings',
-          savedContent: '',
-        },
-      ]
     },
-    [isAgentLayout, isSettingsTabOpen, openTabs],
+    [isAgentLayout, openTabs],
   )
-  const displayActiveTabId = isSettingsTabActive
-    ? SETTINGS_TAB_ID
-    : isAgentLayout && (isAgentLayoutFixedTabActive || !activeTabId)
-      ? (activeAgentLayoutFixedTab === 'git' ? FIXED_GIT_TAB_ID : FIXED_FILE_TAB_ID)
-      : activeTabId
+  const displayActiveTabId = isAgentLayout && (isAgentLayoutFixedTabActive || !activeTabId)
+    ? (activeAgentLayoutFixedTab === 'git' ? FIXED_GIT_TAB_ID : FIXED_FILE_TAB_ID)
+    : activeTabId
   const displayActiveTab = useMemo(
     () => displayTabs.find((tab) => tab.id === displayActiveTabId) ?? null,
     [displayActiveTabId, displayTabs],
   )
   const activeFixedPanelTab = isWorkspaceFixedPanelTab(displayActiveTab) ? displayActiveTab : null
-  const shouldRenderWorkspaceEditor = !activeFixedPanelTab && !isSettingsTabActive
+  const shouldRenderWorkspaceEditor = !activeFixedPanelTab
   const currentFileContent = activeFileTab?.content ?? ''
   const currentEditorKind = activeFileTab?.editorKind ?? null
   const currentFileViewMode = activeFileTab?.viewMode ?? null
@@ -1852,18 +1829,6 @@ function App() {
       return false
     }
 
-    if (tabId === SETTINGS_TAB_ID) {
-      setIsSettingsTabOpen(false)
-      setIsSettingsTabActive(false)
-      setIsAgentLayoutFixedTabActive(false)
-
-      if (!options.silent) {
-        setStatusMessage('Settings closed')
-      }
-
-      return true
-    }
-
     const targetTab = openTabs.find((tab) => tab.id === tabId)
 
     if (!targetTab) {
@@ -1927,8 +1892,6 @@ function App() {
       currentPathRef.current = nextPath
       setCurrentPath(nextPath)
       resetOpenTabs()
-      setIsSettingsTabOpen(false)
-      setIsSettingsTabActive(false)
       setIsAgentLayoutFixedTabActive(false)
       setGitCommitMessage('')
       setGitErrorMessage(null)
@@ -1949,8 +1912,6 @@ function App() {
     setTree([])
     setExpandedPaths(new Set())
     resetOpenTabs()
-    setIsSettingsTabOpen(false)
-    setIsSettingsTabActive(false)
     setIsAgentLayoutFixedTabActive(false)
     setGitCommitMessage('')
     setGitErrorMessage(null)
@@ -2050,7 +2011,6 @@ function App() {
     recordOpenFileProfile('app:open-file:capture-active-position:end', {
       elapsedMs: getOpenFileProfileDuration(openStartedAt),
     })
-    setIsSettingsTabActive(false)
     setIsAgentLayoutFixedTabActive(false)
 
     const editorKindStartedAt = performance.now()
@@ -2188,7 +2148,6 @@ function App() {
 
     if (existingFileTab) {
       captureActiveMeoViewPosition()
-      setIsSettingsTabActive(false)
       setIsAgentLayoutFixedTabActive(false)
       expandAgentEditorSurface()
       activateTab(existingFileTab.id)
@@ -2260,7 +2219,6 @@ function App() {
       gitDiffRequest,
       viewMode: targetViewMode,
     })
-    setIsSettingsTabActive(false)
     setIsAgentLayoutFixedTabActive(false)
 
     if (currentPath) {
@@ -2319,7 +2277,6 @@ function App() {
         } satisfies WorkspaceDiffNavigationRequest
         : null
       openDiffTab(createDiffTab(change, change.scope, diff, navigationRequest))
-      setIsSettingsTabActive(false)
       setIsAgentLayoutFixedTabActive(false)
 
       if (isLeftSidebarDrawer) {
@@ -2372,7 +2329,6 @@ function App() {
 
     if (candidateEntries.length === 0) {
       replaceTabs([], null)
-      setIsSettingsTabActive(false)
       setIsAgentLayoutFixedTabActive(false)
       return
     }
@@ -2403,7 +2359,6 @@ function App() {
       : nextTabs[0]?.id ?? null
 
     replaceTabs(nextTabs, nextActiveId)
-    setIsSettingsTabActive(false)
     setIsAgentLayoutFixedTabActive(false)
     const nextActiveFileTab = nextTabs.find((tab) => tab.id === nextActiveId && tab.kind === 'file')
     await updateWorkspaceState(workspacePath, { lastFilePath: nextActiveFileTab?.filePath ?? null })
@@ -3469,13 +3424,6 @@ function App() {
     }
   }
 
-  function openSettings(section: SettingsSectionId) {
-    setSettingsSection(section)
-    setIsSettingsTabOpen(true)
-    setIsSettingsTabActive(true)
-    setIsAgentLayoutFixedTabActive(false)
-  }
-
   async function handleMoveWorkspaceNode(node: WorkspaceNode, nextRelativePath: string, successMessage: string) {
     if (!currentPath) {
       throw new Error('Open a workspace first.')
@@ -3701,20 +3649,11 @@ function App() {
     }
 
     if (tabId === FIXED_FILE_TAB_ID || tabId === FIXED_GIT_TAB_ID) {
-      setIsSettingsTabActive(false)
       setActiveAgentLayoutFixedTab(tabId === FIXED_GIT_TAB_ID ? 'git' : 'file')
       setIsAgentLayoutFixedTabActive(true)
       return
     }
 
-    if (tabId === SETTINGS_TAB_ID) {
-      setIsSettingsTabOpen(true)
-      setIsSettingsTabActive(true)
-      setIsAgentLayoutFixedTabActive(false)
-      return
-    }
-
-    setIsSettingsTabActive(false)
     setIsAgentLayoutFixedTabActive(false)
     activateTab(tabId)
 
@@ -4568,11 +4507,6 @@ function App() {
 
       if ((event.ctrlKey || event.metaKey) && key === 'w') {
         event.preventDefault()
-        if (isSettingsTabActive) {
-          void closeEditorTab(SETTINGS_TAB_ID)
-          return
-        }
-
         if (displayActiveTabId) {
           void closeEditorTab(displayActiveTabId)
         }
@@ -4599,7 +4533,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [closeEditorTab, cycleTabs, displayActiveTabId, handleSaveActiveTab, isSettingsTabActive])
+  }, [closeEditorTab, cycleTabs, displayActiveTabId, handleSaveActiveTab])
 
   useEffect(() => {
     if (!isLeftSidebarVisible && activeResizePanel === 'left') {
@@ -5148,6 +5082,7 @@ function App() {
       <div className='editor-frame'>
         <FileTabs
           activeTabId={displayActiveTabId}
+          iconTheme={iconTheme}
           tabs={displayTabs}
           workspacePath={currentPath}
           onActivate={activateFileTab}
@@ -5170,21 +5105,7 @@ function App() {
         <div className='editor-content-shell' id='editor-content-panel'>
           {activeFixedPanelTab?.fixedTabKind === 'file-panel' ? renderWorkspaceTreePanel() : null}
           {activeFixedPanelTab?.fixedTabKind === 'git-panel' ? renderGitPanel() : null}
-          {isSettingsTabActive ? (
-            <SettingsDialog
-              activeSection={settingsSection}
-              agentState={agentWorkspaceState}
-              iconTheme={iconTheme}
-              iconThemeOptions={iconThemeOptions}
-              isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
-              resolvedTheme={resolvedTheme}
-              workspacePath={currentPath}
-              onAgentStateChange={setAgentWorkspaceState}
-              onSectionChange={setSettingsSection}
-              onSelectIconTheme={handleSelectWorkspaceIconTheme}
-              onStatusMessage={setStatusMessage}
-            />
-          ) : !activeFixedPanelTab && !activeFileTab && !activeDiffTab ? (
+          {!activeFixedPanelTab && !activeFileTab && !activeDiffTab ? (
             !currentPath ? (
               <div className='editor-empty-state is-workspace-missing'>
                 <div className='editor-empty-content'>

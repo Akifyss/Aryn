@@ -50,17 +50,6 @@ export type WorkspaceDiffNavigationRequest = {
 
 export type WorkspaceTab = WorkspaceFileTab | WorkspaceDiffTab
 
-export type WorkspaceSettingsTab = {
-  content: ''
-  editorKind: 'prose'
-  exists: true
-  filePath: 'app://settings'
-  id: 'app://settings'
-  isDirty: false
-  kind: 'settings'
-  savedContent: ''
-}
-
 export type WorkspaceFixedPanelTab = {
   content: ''
   editorKind: 'prose'
@@ -73,7 +62,7 @@ export type WorkspaceFixedPanelTab = {
   savedContent: ''
 }
 
-export type WorkspaceDisplayTab = WorkspaceTab | WorkspaceSettingsTab | WorkspaceFixedPanelTab
+export type WorkspaceDisplayTab = WorkspaceTab | WorkspaceFixedPanelTab
 export type TabDropPosition = 'before' | 'after'
 
 type WorkspaceState = {

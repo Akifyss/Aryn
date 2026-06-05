@@ -1,15 +1,18 @@
 import { type DragEvent as ReactDragEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { CloseLine, FolderLine, GitBranchLine, GitCompareLine } from '@mingcute/react'
+import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import {
   reorderWorkspaceTabs,
   type TabDropPosition,
   type WorkspaceDisplayTab,
   type WorkspaceTab,
 } from '@/features/workspace/store/use-workspace-store'
+import type { WorkspaceIconTheme } from '@/features/workspace/types'
 
 type FileTabsProps = {
   activeTabId: string | null
   actions?: ReactNode
+  iconTheme: WorkspaceIconTheme | null
   tabs: WorkspaceDisplayTab[]
   workspacePath: string | null
   onActivate: (tabId: string) => void
@@ -29,13 +32,17 @@ function getBaseName(tab: WorkspaceDisplayTab) {
     return tab.fixedTabKind === 'file-panel' ? '文件' : '更改'
   }
 
-  if (tab.kind === 'settings') {
-    return '设置'
-  }
-
   return tab.kind === 'diff'
     ? tab.title
     : tab.filePath.split(/[\\/]/).pop() ?? tab.filePath
+}
+
+function getFileIconName(tab: WorkspaceDisplayTab) {
+  if (tab.kind !== 'file' && tab.kind !== 'diff') {
+    return null
+  }
+
+  return tab.filePath.split(/[\\/]/).pop() ?? tab.filePath
 }
 
 function getRelativePath(rootPath: string, filePath: string) {
@@ -53,10 +60,6 @@ function getRelativePath(rootPath: string, filePath: string) {
 function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab, hasDuplicateName: boolean) {
   if (tab.kind === 'fixed-panel') {
     return null
-  }
-
-  if (tab.kind === 'settings') {
-    return 'Application'
   }
 
   if (tab.kind === 'diff') {
@@ -84,7 +87,7 @@ function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab,
 }
 
 function isReorderableTab(tab: WorkspaceDisplayTab): tab is WorkspaceTab {
-  return tab.kind !== 'settings' && tab.kind !== 'fixed-panel'
+  return tab.kind !== 'fixed-panel'
 }
 
 function getTabTitle(tab: WorkspaceDisplayTab) {
@@ -109,6 +112,7 @@ function resolveDropPosition(event: ReactDragEvent<HTMLElement>, element: HTMLEl
 export function FileTabs({
   activeTabId,
   actions,
+  iconTheme,
   tabs,
   workspacePath,
   onActivate,
@@ -411,9 +415,10 @@ export function FileTabs({
       >
         {tabs.length > 0 && tabs.map((tab, index) => {
           const baseName = getBaseName(tab)
+          const fileIconName = getFileIconName(tab)
           const metaLabel = getTabMetaLabel(workspacePath, tab, duplicateNameSet.has(baseName))
           const isActive = activeTabId === tab.id
-          const isPinned = tab.kind === 'fixed-panel' || tab.kind === 'settings'
+          const isPinned = tab.kind === 'fixed-panel'
           const title = getTabTitle(tab)
 
           return (
@@ -503,6 +508,8 @@ export function FileTabs({
                   tab.fixedTabKind === 'file-panel'
                     ? <FolderLine size={16} className='file-tab-leading-icon' />
                     : <GitBranchLine size={16} className='file-tab-leading-icon' />
+                ) : fileIconName ? (
+                  <WorkspaceFileIcon fileName={fileIconName} iconTheme={iconTheme} />
                 ) : null}
                 <span className='file-tab-label'>{baseName}</span>
                 {metaLabel ? <span className='file-tab-meta'>{metaLabel}</span> : null}

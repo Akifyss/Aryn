@@ -1931,7 +1931,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 .file-tab-trigger {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
   min-height: var(--tabs-chrome-height);
   padding: 0 24px 0 8px;
