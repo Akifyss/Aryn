@@ -5114,57 +5114,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   gap: 8px;
 }
 
-.agent-message-file-chip-wrapper {
-  display: inline-flex;
-  max-width: 100%;
-}
-
-.agent-message-file-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  max-width: 100%;
-  min-height: 28px;
-  padding: 4px 8px;
-  color: var(--foreground);
-  font-size: 11px;
-  line-height: 1;
-}
-
-.agent-message-file-chip.is-interactive {
-  cursor: pointer;
-  transition: background-color 120ms ease;
-}
-
-.agent-message-file-chip.is-static {
-  cursor: default;
-}
-
-.agent-message-file-chip.is-interactive:hover {
-  background: var(--surface-secondary);
-}
-
-.agent-message-file-chip-wrapper[role='button']:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 8px;
-}
-
-.agent-message-file-chip .git-row-icon {
-  color: var(--muted);
-}
-
-.agent-message-file-chip-label {
-  font-size: 11px;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--foreground);
-}
-
-.agent-message-file-chip-status {
+.agent-message-file-card-status {
   width: 16px;
   height: 16px;
   font-size: 11px;
@@ -5172,8 +5122,25 @@ body.workspace-tree-dragging .workspace-tree-row {
   flex: 0 0 auto;
 }
 
-.agent-message-file-chip-overflow {
+.agent-message-file-overflow-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 52px;
+  height: 52px;
+  padding: 0 14px;
+  border: 1px dashed color-mix(in oklab, var(--outline) 64%, transparent);
+  border-radius: 11px;
+  box-sizing: border-box;
+  background: color-mix(in oklab, var(--surface-secondary) 70%, var(--color-field));
   color: var(--muted);
+}
+
+.agent-message-file-overflow-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .agent-markdown {
@@ -5819,7 +5786,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   min-width: max-content;
 }
 
-.agent-attachment-item {
+.agent-file-card {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -5838,7 +5805,21 @@ body.workspace-tree-dragging .workspace-tree-row {
   color: var(--foreground);
 }
 
-.agent-attachment-item.is-image {
+.agent-file-card.is-interactive {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.agent-file-card.is-interactive:hover {
+  background: color-mix(in oklab, var(--surface-secondary) 72%, var(--color-field));
+}
+
+.agent-file-card[role='button']:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.agent-file-card.is-image {
   width: 52px;
   height: 52px;
   min-height: 52px;
@@ -5850,7 +5831,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   box-shadow: none;
 }
 
-.agent-attachment-preview {
+.agent-file-card-preview {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -5865,20 +5846,20 @@ body.workspace-tree-dragging .workspace-tree-row {
   color: var(--muted);
 }
 
-.agent-attachment-preview.has-image {
+.agent-file-card-preview.has-image {
   width: 40px;
   height: 40px;
   border-radius: 9px;
   background: var(--surface-secondary);
 }
 
-.agent-attachment-preview .git-row-icon,
-.agent-attachment-preview .git-row-icon img {
+.agent-file-card-preview .git-row-icon,
+.agent-file-card-preview .git-row-icon img {
   width: 24px;
   height: 24px;
 }
 
-.agent-attachment-item.is-image .agent-attachment-preview {
+.agent-file-card.is-image .agent-file-card-preview {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
@@ -5889,7 +5870,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   box-shadow: none;
 }
 
-.agent-attachment-preview img {
+.agent-file-card-preview img {
   display: block;
   width: 100%;
   height: 100%;
@@ -5897,7 +5878,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   object-fit: cover;
 }
 
-.agent-attachment-text {
+.agent-file-card-text {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -5906,31 +5887,39 @@ body.workspace-tree-dragging .workspace-tree-row {
   flex: 1 1 auto;
 }
 
-.agent-attachment-name,
-.agent-attachment-meta {
+.agent-file-card-name,
+.agent-file-card-meta {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.agent-attachment-name {
+.agent-file-card-name {
   font-size: 12px;
   font-weight: 500;
   line-height: 1.2;
 }
 
-.agent-attachment-meta {
+.agent-file-card-meta {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.2;
 }
 
-.agent-attachment-item.is-omitted {
+.agent-file-card-trailing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.agent-file-card.is-muted {
   color: var(--muted);
 }
 
-.agent-attachment-remove {
+.agent-file-card-remove {
   position: absolute;
   top: -6px;
   right: -6px;
@@ -5953,14 +5942,14 @@ body.workspace-tree-dragging .workspace-tree-row {
     background-color 120ms ease;
 }
 
-.agent-attachment-item:hover .agent-attachment-remove,
-.agent-attachment-remove:focus-visible {
+.agent-file-card:hover .agent-file-card-remove,
+.agent-file-card-remove:focus-visible {
   opacity: 1;
   transform: scale(1);
 }
 
-.agent-attachment-remove:hover,
-.agent-attachment-remove:focus-visible {
+.agent-file-card-remove:hover,
+.agent-file-card-remove:focus-visible {
   outline: none;
   background: color-mix(in oklab, var(--foreground) 62%, var(--surface));
   color: var(--surface);

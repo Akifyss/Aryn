@@ -20,7 +20,7 @@ import {
 import { createPortal } from 'react-dom'
 import { ContextMenu } from '@base-ui/react/context-menu'
 import { Menu } from '@base-ui/react/menu'
-import { Button, Chip, Disclosure, ScrollShadow } from '@heroui/react'
+import { Button, Disclosure, ScrollShadow } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import {
   AiLine,
@@ -214,9 +214,25 @@ type AgentQueuedComposerMessage = {
   text: string
 }
 
-type AgentAttachmentItemData = (AgentPromptAttachment | AgentMessageAttachment) & {
+type AgentFileCardAttachmentData = (AgentPromptAttachment | AgentMessageAttachment) & {
   id?: string
   status?: AgentMessageAttachment['status']
+}
+
+type AgentFileCardProps = {
+  ariaLabel?: string
+  className?: string
+  fileName: string
+  iconSize?: number
+  iconTheme?: WorkspaceIconTheme | null
+  imageSrc?: string
+  isImage?: boolean
+  isMuted?: boolean
+  meta?: string
+  onActivate?: () => void
+  onRemove?: () => void
+  title?: string
+  trailing?: ReactNode
 }
 
 type AgentComposerMenu = 'model-cascader' | null
@@ -277,7 +293,7 @@ const AGENT_THINKING_AUTO_EXPAND_DELAY_MS = 520
 const AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS = 140
 const AGENT_THINKING_MIN_EXPANDED_MS = 360
 const AGENT_THINKING_SCROLL_STICKY_THRESHOLD_PX = 24
-const MAX_VISIBLE_MESSAGE_FILE_CHIPS = 6
+const MAX_VISIBLE_MESSAGE_FILE_CARDS = 6
 const AGENT_MODEL_CASCADER_MARGIN_PX = 12
 const AGENT_MODEL_CASCADER_GAP_PX = 10
 const AGENT_MODEL_CASCADER_MAX_WIDTH_PX = 680
@@ -1415,7 +1431,88 @@ function AgentMessageDisclosure({
   )
 }
 
-function AgentMessageFileChips({
+function AgentFileCard({
+  ariaLabel,
+  className,
+  fileName,
+  iconSize = 18,
+  iconTheme,
+  imageSrc,
+  isImage = false,
+  isMuted = false,
+  meta,
+  onActivate,
+  onRemove,
+  title,
+  trailing,
+}: AgentFileCardProps) {
+  const isInteractive = Boolean(onActivate)
+  const fileCardClassName = [
+    'agent-file-card',
+    className,
+    isImage ? 'is-image' : '',
+    isMuted ? 'is-muted' : '',
+    isInteractive ? 'is-interactive' : '',
+  ].filter(Boolean).join(' ')
+
+  function handleActivate() {
+    onActivate?.()
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return
+    }
+
+    event.preventDefault()
+    onActivate?.()
+  }
+
+  return (
+    <div
+      aria-label={isInteractive ? ariaLabel : undefined}
+      className={fileCardClassName}
+      role={isInteractive ? 'button' : undefined}
+      tabIndex={isInteractive ? 0 : undefined}
+      title={title ?? fileName}
+      onClick={isInteractive ? handleActivate : undefined}
+      onKeyDown={isInteractive ? handleKeyDown : undefined}
+    >
+      <span className={`agent-file-card-preview${imageSrc ? ' has-image' : ''}`}>
+        {imageSrc ? (
+          <img alt='' draggable='false' src={imageSrc} />
+        ) : isImage ? (
+          <PicLine aria-hidden='true' size={iconSize} />
+        ) : (
+          <WorkspaceFileIcon fileName={fileName} iconTheme={iconTheme ?? null} />
+        )}
+      </span>
+      {isImage ? null : (
+        <span className='agent-file-card-text'>
+          <span className='agent-file-card-name'>{fileName}</span>
+          {meta ? <span className='agent-file-card-meta'>{meta}</span> : null}
+        </span>
+      )}
+      {trailing ? <span className='agent-file-card-trailing'>{trailing}</span> : null}
+      {onRemove ? (
+        <button
+          type='button'
+          className='agent-file-card-remove'
+          aria-label={`移除 ${fileName}`}
+          title='移除附件'
+          onClick={(event) => {
+            event.stopPropagation()
+            onRemove()
+          }}
+        >
+          <CloseLine aria-hidden='true' size={10} />
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+function AgentMessageFileCards({
   fileChanges,
   iconTheme,
   onOpenFile,
@@ -1430,7 +1527,7 @@ function AgentMessageFileChips({
     return null
   }
 
-  const visibleChanges = fileChanges.slice(0, MAX_VISIBLE_MESSAGE_FILE_CHIPS)
+  const visibleChanges = fileChanges.slice(0, MAX_VISIBLE_MESSAGE_FILE_CARDS)
   const hiddenCount = fileChanges.length - visibleChanges.length
   const title = getMessageFileSectionTitle(fileChanges)
 
@@ -1444,73 +1541,46 @@ function AgentMessageFileChips({
         {visibleChanges.map((change) => {
           const relativePath = getAgentRelativePath(workspacePath, change.filePath)
           const label = relativePath.split('/').pop() ?? relativePath
-          const isInteractive = change.kind !== 'deleted'
-          const chipContent = (
-            <Chip
-              className={`agent-message-file-chip ${isInteractive ? 'is-interactive' : 'is-static'}`}
-              color='default'
-              size='sm'
-              title={isInteractive ? relativePath : `${relativePath} (deleted)`}
-              variant='soft'
-            >
-              <WorkspaceFileIcon fileName={label} iconTheme={iconTheme ?? null} />
-              <Chip.Label className='agent-message-file-chip-label'>{label}</Chip.Label>
-              <FileChangeStatusBadge className='agent-message-file-chip-status' kind={getAgentFileChangeVisualKind(change.kind)} />
-            </Chip>
-          )
-
-          if (!isInteractive) {
-            return (
-              <div key={`${change.filePath}:${change.kind}`} className='agent-message-file-chip-wrapper'>
-                {chipContent}
-              </div>
-            )
-          }
+          const onActivate = change.kind !== 'deleted' && onOpenFile
+            ? () => {
+                onOpenFile(change.filePath, change.kind)
+              }
+            : undefined
 
           return (
-            <div
+            <AgentFileCard
               key={`${change.filePath}:${change.kind}`}
               aria-label={`Open ${relativePath}`}
-              className='agent-message-file-chip-wrapper'
-              role='button'
-              tabIndex={0}
-              onClick={() => {
-                onOpenFile?.(change.filePath, change.kind)
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') {
-                  return
-                }
-
-                event.preventDefault()
-                onOpenFile?.(change.filePath, change.kind)
-              }}
-            >
-              {chipContent}
-            </div>
+              className='agent-message-file-card'
+              fileName={label}
+              iconTheme={iconTheme}
+              onActivate={onActivate}
+              title={change.kind !== 'deleted' ? relativePath : `${relativePath} (deleted)`}
+              trailing={<FileChangeStatusBadge className='agent-message-file-card-status' kind={getAgentFileChangeVisualKind(change.kind)} />}
+            />
           )
         })}
         {hiddenCount > 0 ? (
-          <Chip className='agent-message-file-chip agent-message-file-chip-overflow' color='default' size='sm' variant='soft'>
-            <Chip.Label className='agent-message-file-chip-label'>+{hiddenCount}</Chip.Label>
-          </Chip>
+          <div className='agent-message-file-overflow-card' title={`${hiddenCount} more files`}>
+            <span className='agent-message-file-overflow-label'>+{hiddenCount}</span>
+          </div>
         ) : null}
       </div>
     </div>
   )
 }
 
-function AgentAttachmentItem({
+function getAgentAttachmentFileCardProps({
   attachment,
   iconTheme,
   iconSize = 18,
   onRemove,
 }: {
-  attachment: AgentAttachmentItemData
+  attachment: AgentFileCardAttachmentData
   iconTheme?: WorkspaceIconTheme | null
   iconSize?: number
   onRemove?: () => void
-}) {
+}): AgentFileCardProps {
   const isImage = attachment.kind === 'image'
   const previewSrc = isImage ? attachment.data : undefined
   const statusLabel = getAttachmentStatusLabel(attachment.status)
@@ -1521,36 +1591,17 @@ function AgentAttachmentItem({
     statusLabel,
   ].filter(Boolean).join(' · ')
 
-  return (
-    <div className={`agent-attachment-item${isImage ? ' is-image' : ''}${attachment.status === 'omitted' ? ' is-omitted' : ''}`} title={attachment.path ?? attachment.fileName}>
-      <span className={`agent-attachment-preview${previewSrc ? ' has-image' : ''}`}>
-        {previewSrc ? (
-          <img alt='' draggable='false' src={previewSrc} />
-        ) : isImage ? (
-          <PicLine aria-hidden='true' size={iconSize} />
-        ) : (
-          <WorkspaceFileIcon fileName={attachment.fileName} iconTheme={iconTheme ?? null} />
-        )}
-      </span>
-      {isImage ? null : (
-        <span className='agent-attachment-text'>
-          <span className='agent-attachment-name'>{attachment.fileName}</span>
-          {meta ? <span className='agent-attachment-meta'>{meta}</span> : null}
-        </span>
-      )}
-      {onRemove ? (
-        <button
-          type='button'
-          className='agent-attachment-remove'
-          aria-label={`移除 ${attachment.fileName}`}
-          title='移除附件'
-          onClick={onRemove}
-        >
-          <CloseLine aria-hidden='true' size={10} />
-        </button>
-      ) : null}
-    </div>
-  )
+  return {
+    fileName: attachment.fileName,
+    iconSize,
+    iconTheme,
+    imageSrc: previewSrc,
+    isImage,
+    isMuted: attachment.status === 'omitted',
+    meta,
+    onRemove,
+    title: attachment.path ?? attachment.fileName,
+  }
 }
 
 function AgentMessageAttachments({
@@ -1567,10 +1618,9 @@ function AgentMessageAttachments({
   return (
     <div className='agent-message-attachments' aria-label='Attachments'>
       {attachments.map((attachment, index) => (
-        <AgentAttachmentItem
+        <AgentFileCard
           key={`${attachment.fileName}-${index}`}
-          attachment={attachment}
-          iconTheme={iconTheme}
+          {...getAgentAttachmentFileCardProps({ attachment, iconTheme })}
         />
       ))}
     </div>
@@ -6131,13 +6181,15 @@ function AgentChatSurface() {
     >
       <div className='agent-composer-attachments-content'>
         {composerAttachments.map((attachment) => (
-          <AgentAttachmentItem
+          <AgentFileCard
             key={attachment.id}
-            attachment={attachment}
-            iconTheme={iconTheme}
-            onRemove={() => {
-              removeComposerAttachment(attachment.id)
-            }}
+            {...getAgentAttachmentFileCardProps({
+              attachment,
+              iconTheme,
+              onRemove: () => {
+                removeComposerAttachment(attachment.id)
+              },
+            })}
           />
         ))}
         {attachmentCapabilityMessage ? (
@@ -6625,7 +6677,7 @@ function AgentChatSurface() {
                       workspacePath={workspacePath}
                     />
                     {fileChanges.length > 0 ? (
-                      <AgentMessageFileChips
+                      <AgentMessageFileCards
                         fileChanges={fileChanges}
                         iconTheme={iconTheme}
                         onOpenFile={onOpenMessageFile}
