@@ -5743,6 +5743,7 @@ function App() {
         workspacePath={currentPath}
         workspaceState={agentWorkspaceState}
         onWorkspaceStateChange={setAgentWorkspaceState}
+        isAgentLayout
         onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect)}
         onOpenProjectSwitchMenu={(anchorRect, options) => openProjectMenu(options?.startNewSession ? 'agent-new-switch' : 'editor-switch', anchorRect)}
         onOpenProjectFolder={handleShowProjectInFolder}

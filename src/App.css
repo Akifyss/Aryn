@@ -143,6 +143,18 @@
   padding-left: var(--left-panel-content-inset);
 }
 
+.app-shell[data-app-layout='agent'] .panel-editor .agent-threadbar-new-button {
+  display: none;
+}
+
+.app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-editor .agent-threadbar-new-button {
+  display: inline-flex;
+}
+
+.app-shell[data-app-layout='agent'] .panel-editor .agent-threadbar-leading {
+  padding: 0 2px;
+}
+
 .app-shell::before {
   content: "";
   position: absolute;
@@ -3842,7 +3854,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 .agent-threadbar-leading {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   flex: 0 1 auto;
   max-width: 100%;

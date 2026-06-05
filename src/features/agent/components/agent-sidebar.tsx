@@ -131,6 +131,7 @@ type AgentSidebarProps = {
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
   projectState?: ProjectState
+  isAgentLayout?: boolean
   surfaceMode?: AgentSurfaceMode
   workspaceState?: AgentWorkspaceState | null
   workspacePath: string | null
@@ -161,6 +162,7 @@ type AgentSurfaceProps = {
   onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   projectState?: ProjectState
+  isAgentLayout?: boolean
   surfaceMode?: AgentSurfaceMode
   workspaceState?: AgentWorkspaceState | null
   workspacePath: string | null
@@ -442,6 +444,7 @@ type AgentContextValue = {
   hasComposerPayload: boolean
   hasConfiguredProviders: boolean
   iconTheme?: WorkspaceIconTheme | null
+  isAgentLayout: boolean
   isLoading: boolean
   isSwitchingModel: boolean
   isSwitchingThinkingLevel: boolean
@@ -2476,6 +2479,7 @@ function AgentProvider({
   onStartProjectSession,
   onWorkspaceStateChange,
   projectState = emptyProjectState,
+  isAgentLayout = false,
   surfaceMode = 'docked',
   workspaceState,
   workspacePath,
@@ -4094,6 +4098,7 @@ function AgentProvider({
     hasComposerPayload,
     hasConfiguredProviders,
     iconTheme,
+    isAgentLayout,
     isLoading,
     isSwitchingModel,
     isSwitchingThinkingLevel,
@@ -4170,6 +4175,7 @@ function AgentProvider({
     hasComposerPayload,
     hasConfiguredProviders,
     iconTheme,
+    isAgentLayout,
     isLoading,
     isSwitchingModel,
     isSwitchingThinkingLevel,
@@ -5291,6 +5297,7 @@ function AgentChatSurface() {
     hasComposerPayload,
     hasConfiguredProviders,
     iconTheme,
+    isAgentLayout,
     deletingSessionPath,
     isLoading,
     isSwitchingModel,
@@ -6495,10 +6502,31 @@ function AgentChatSurface() {
     </form>
   )
 
+  const threadbarNewButton = !isNewConversation ? (
+    <button
+      type='button'
+      disabled={!workspacePath}
+      className='agent-toolbar-button agent-threadbar-new-button'
+      aria-label='Start new conversation'
+      onClick={() => {
+        if (activeWorkspaceContext.kind === 'project') {
+          handleStartNewSession()
+          return
+        }
+
+        void onStartStandaloneConversation?.()
+      }}
+    >
+      <EditLine size={16} />
+    </button>
+  ) : null
+
   return (
     <div className={`agent-shell${isNewConversation ? ' is-new-conversation' : ''}`}>
       <div className='agent-threadbar'>
         <div className='agent-threadbar-leading'>
+          {isAgentLayout ? threadbarNewButton : null}
+
           <div className='agent-session-select'>
             {canOpenSessionMenu ? (
               <button
@@ -6524,24 +6552,7 @@ function AgentChatSurface() {
             )}
           </div>
 
-          {!isNewConversation ? (
-            <button
-              type='button'
-              disabled={!workspacePath}
-              className='agent-toolbar-button'
-              aria-label='Start new conversation'
-              onClick={() => {
-                if (activeWorkspaceContext.kind === 'project') {
-                  handleStartNewSession()
-                  return
-                }
-
-                void onStartStandaloneConversation?.()
-              }}
-            >
-              <EditLine size={16} />
-            </button>
-          ) : null}
+          {isAgentLayout ? null : threadbarNewButton}
         </div>
 
         <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
