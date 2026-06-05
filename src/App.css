@@ -3751,12 +3751,6 @@ body.workspace-tree-dragging .workspace-tree-row {
   font-weight: 600;
 }
 
-.settings-select {
-  min-height: 44px;
-  border-radius: 15px;
-  background: var(--field-background);
-}
-
 .settings-card-compact {
   gap: 14px;
 }
@@ -6767,22 +6761,150 @@ body.workspace-tree-dragging .workspace-tree-row {
   background: var(--surface);
 }
 
-/* Unified dropdown menu popover styles */
-.settings-select-popover [data-slot="content"] {
-  background: var(--overlay) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 14px !important;
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18) !important;
-  backdrop-filter: blur(22px) !important;
+/* Settings dropdowns use Base UI Select so popup geometry stays inside the modal stack. */
+.settings-select-trigger {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--field-background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  outline: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
 }
 
-.settings-select-popover [role="option"][data-hover="true"]:not([data-color="danger"]) {
-  background: var(--app-menu-item-hover-background) !important;
+.settings-select-trigger:hover:not([data-disabled]) {
+  background: var(--surface-secondary);
 }
 
-.settings-select-popover [role="option"][aria-selected="true"]:not([data-color="danger"]),
-.settings-select-popover [role="option"][data-selected="true"]:not([data-color="danger"]) {
-  background: var(--app-menu-item-active-background) !important;
+.settings-select-trigger:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.settings-select-trigger[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.settings-select-value {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-select-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  transition: transform 140ms ease, color 140ms ease;
+}
+
+.settings-select-trigger[data-popup-open] .settings-select-icon {
+  color: var(--foreground);
+  transform: rotate(180deg);
+}
+
+.settings-select-positioner {
+  z-index: 110;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.settings-select-popup {
+  width: var(--anchor-width);
+  max-width: var(--available-width);
+  max-height: min(280px, calc(100vh - 96px));
+  overflow: hidden;
+  padding: 6px 0 6px 6px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--overlay);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(22px);
+}
+
+.settings-select-scroll {
+  max-height: min(268px, calc(100vh - 108px));
+  --app-scroll-area-scrollbar-gap: 0px;
+}
+
+.settings-select-scroll .app-scroll-area-viewport {
+  max-height: min(268px, calc(100vh - 108px));
+}
+
+.settings-select-scroll .app-scroll-area-scrollbar[data-orientation='vertical'] {
+  right: 0;
+}
+
+.settings-select-scroll-content,
+.settings-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-select-scroll-content {
+  padding-right: 6px;
+}
+
+.settings-select-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 9px;
+  border-radius: 10px;
+  color: var(--foreground);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.3;
+  outline: none;
+}
+
+.settings-select-item[data-highlighted] {
+  background: var(--app-menu-item-hover-background);
+}
+
+.settings-select-item[data-selected] {
+  background: var(--app-menu-item-active-background);
+}
+
+.settings-select-item-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-select-item-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  opacity: 0;
+}
+
+.settings-select-item[data-selected] .settings-select-item-indicator {
+  opacity: 1;
 }
 
 /* Service Providers UI/UX Improvements */

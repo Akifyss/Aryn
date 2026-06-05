@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Input, ListBox, Select, Switch, Tabs } from '@heroui/react'
+import { Select as BaseSelect } from '@base-ui/react/select'
+import { Button, Input, Switch, Tabs } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import {
   OpenAI,
@@ -97,6 +98,96 @@ type AuthProviderViewModel = AgentProviderAuthConfig & {
 
 type AuthProviderGroupViewModel = AuthProviderViewModel & {
   groupCategory: AgentProviderCategory
+}
+
+type SettingsSelectOption = {
+  label: string
+  value: string
+}
+
+const OUTLINE_POSITION_OPTIONS: SettingsSelectOption[] = [
+  { label: '右侧', value: 'right' },
+  { label: '左侧', value: 'left' },
+]
+
+type SettingsSelectProps = {
+  ariaLabel: string
+  className?: string
+  disabled?: boolean
+  onValueChange: (value: string) => void
+  options: SettingsSelectOption[]
+  placeholder?: string
+  value: string | null
+}
+
+function joinClasses(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(' ')
+}
+
+function SettingsSelect({
+  ariaLabel,
+  className,
+  disabled = false,
+  onValueChange,
+  options,
+  placeholder,
+  value,
+}: SettingsSelectProps) {
+  return (
+    <BaseSelect.Root
+      disabled={disabled}
+      items={options}
+      modal={false}
+      value={value}
+      onValueChange={(nextValue) => {
+        if (typeof nextValue === 'string') {
+          onValueChange(nextValue)
+        }
+      }}
+    >
+      <BaseSelect.Trigger
+        type='button'
+        aria-label={ariaLabel}
+        className={joinClasses('settings-select-trigger', className)}
+      >
+        <BaseSelect.Value className='settings-select-value' placeholder={placeholder} />
+        <BaseSelect.Icon className='settings-select-icon'>
+          <Icon icon='mingcute:down-line' width={18} height={18} />
+        </BaseSelect.Icon>
+      </BaseSelect.Trigger>
+      <BaseSelect.Positioner
+        align='start'
+        className='settings-select-positioner'
+        collisionPadding={8}
+        positionMethod='fixed'
+        side='bottom'
+        sideOffset={6}
+      >
+        <BaseSelect.Popup className='settings-select-popup'>
+          <AppScrollArea
+            className='settings-select-scroll'
+            contentClassName='settings-select-scroll-content'
+          >
+            <BaseSelect.List className='settings-select-list'>
+              {options.map((option) => (
+                <BaseSelect.Item
+                  key={option.value}
+                  className='settings-select-item'
+                  label={option.label}
+                  value={option.value}
+                >
+                  <BaseSelect.ItemText className='settings-select-item-text'>{option.label}</BaseSelect.ItemText>
+                  <BaseSelect.ItemIndicator className='settings-select-item-indicator'>
+                    <Icon icon='mingcute:check-line' width={16} height={16} />
+                  </BaseSelect.ItemIndicator>
+                </BaseSelect.Item>
+              ))}
+            </BaseSelect.List>
+          </AppScrollArea>
+        </BaseSelect.Popup>
+      </BaseSelect.Positioner>
+    </BaseSelect.Root>
+  )
 }
 
 const AUTH_PROVIDER_GROUPS: Array<{
@@ -434,6 +525,13 @@ export function SettingsDialog({
     () => resolveActiveWorkspaceIconThemeKey(iconTheme, iconThemeOptions),
     [iconTheme, iconThemeOptions],
   )
+  const iconThemeSelectOptions = useMemo(
+    () => iconThemeOptions.map((option) => ({
+      label: option.label,
+      value: option.key,
+    })),
+    [iconThemeOptions],
+  )
 
   useEffect(() => {
     activeAuthProviderRef.current = authFlow?.provider ?? null
@@ -658,16 +756,15 @@ export function SettingsDialog({
               <p>控制文件树与工作区中的图标显示样式。</p>
             </div>
             <div className='settings-inline-form' style={{ display: 'flex', alignItems: 'center' }}>
-              <Select
-                aria-label='文件图标主题'
-                className='flex-1 heroui-select-fix'
-                selectedKey={activeIconThemeKey}
-                onSelectionChange={(value) => {
-                  if (value === null) {
-                    return
-                  }
-
-                  const selectedOption = iconThemeOptions.find((option) => option.key === String(value))
+              <SettingsSelect
+                ariaLabel='文件图标主题'
+                className='flex-1'
+                disabled={isIconThemeBusy || iconThemeOptions.length === 0}
+                options={iconThemeSelectOptions}
+                placeholder='选择文件图标主题'
+                value={activeIconThemeKey}
+                onValueChange={(value) => {
+                  const selectedOption = iconThemeOptions.find((option) => option.key === value)
 
                   if (selectedOption) {
                     void onSelectIconTheme({
@@ -676,24 +773,7 @@ export function SettingsDialog({
                     })
                   }
                 }}
-                placeholder='选择文件图标主题'
-                isDisabled={isIconThemeBusy || iconThemeOptions.length === 0}
-              >
-                <Select.Trigger className='settings-select-trigger'>
-                  <Select.Value />
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover className='settings-select-popover'>
-                  <ListBox>
-                    {iconThemeOptions.map((option) => (
-                      <ListBox.Item key={option.key} id={option.key} textValue={option.label}>
-                        {option.label}
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
+              />
             </div>
           </div>
 
@@ -714,32 +794,17 @@ export function SettingsDialog({
           <div className='settings-inline-form' style={{ marginTop: '12px' }}>
             <div className='settings-field settings-field-grow'>
               <span className='settings-field-label'>大纲位置</span>
-              <Select
-                aria-label='大纲位置'
-                className='settings-field-grow heroui-select-fix'
-                selectedKey={meo.outlinePosition}
-                onSelectionChange={(value) => {
-                  const nextValue = String(value)
+              <SettingsSelect
+                ariaLabel='大纲位置'
+                className='settings-field-grow'
+                options={OUTLINE_POSITION_OPTIONS}
+                value={meo.outlinePosition}
+                onValueChange={(nextValue) => {
                   if (nextValue === 'left' || nextValue === 'right') {
                     updateMeoSettings({ outlinePosition: nextValue })
                   }
                 }}
-              >
-                <Select.Trigger className='settings-select-trigger'>
-                  <Select.Value />
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover className='settings-select-popover'>
-                  <ListBox>
-                    <ListBox.Item key='right' id='right' textValue='右侧'>
-                      右侧
-                    </ListBox.Item>
-                    <ListBox.Item key='left' id='left' textValue='左侧'>
-                      左侧
-                    </ListBox.Item>
-                  </ListBox>
-                </Select.Popover>
-              </Select>
+              />
             </div>
 
             <div className='settings-field settings-field-grow settings-switch-row'>
