@@ -28,7 +28,6 @@ import {
   AgentChatSurface,
   AgentProvider,
   AgentSessionTree,
-  AgentSidebar,
 } from '@/features/agent/components/agent-sidebar'
 import type { AgentProjectSessionRequest } from '@/features/agent/lib/project-session-request'
 import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
@@ -5140,59 +5139,8 @@ function App() {
     )
   }
 
-  function renderAgentPanel(surfaceMode: PanelSurfaceMode = 'docked') {
-    const isDrawerSurface = surfaceMode === 'drawer'
-
-    if (isAgentLayout) {
-      return <AgentChatSurface />
-    }
-
-    return (
-      <AgentSidebar
-        activeWorkspaceContext={activeWorkspaceContext}
-        conversationState={conversationState}
-        externalSessionRequest={pendingAgentProjectSessionRequest}
-        onExternalSessionRequestHandled={(requestId) => {
-          setPendingAgentProjectSessionRequest((currentValue) => (
-            currentValue?.requestId === requestId ? null : currentValue
-          ))
-        }}
-        iconTheme={iconTheme}
-        onConversationDraftFailed={handleConversationDraftFailed}
-        onConversationSessionStarted={handleConversationSessionStarted}
-        onCreateConversationWorkspace={handleCreateConversationWorkspace}
-        onOpenMessageFile={openAgentMessageFile}
-        onOpenConversation={handleOpenConversation}
-        onRenameConversation={handleRenameConversation}
-        onRemoveConversation={handleRemoveConversation}
-        onOpenProviderSettings={() => {
-          if (isDrawerSurface) {
-            setIsRightDrawerOpen(false)
-          }
-
-          setSettingsSection('providers')
-          setIsSettingsOpen(true)
-        }}
-        workspacePath={currentPath}
-        workspaceState={agentWorkspaceState}
-        onWorkspaceStateChange={setAgentWorkspaceState}
-        surfaceMode={surfaceMode}
-        onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect, {
-          surface: isDrawerSurface ? 'right-drawer' : 'global',
-        })}
-        onOpenProjectSwitchMenu={(anchorRect, options) => openProjectMenu(
-          options?.startNewSession ? 'agent-new-switch' : 'editor-switch',
-          anchorRect,
-          { surface: isDrawerSurface ? 'right-drawer' : 'global' },
-        )}
-        onOpenProjectFolder={handleShowProjectInFolder}
-        onOpenProjectSession={handleOpenProjectSession}
-        onRemoveProject={handleRemoveProject}
-        onStartStandaloneConversation={handleStartStandaloneConversation}
-        onStartProjectSession={handleStartProjectSession}
-        projectState={projectState}
-      />
-    )
+  function renderAgentPanel() {
+    return <AgentChatSurface />
   }
 
   function renderEditorSurface() {
@@ -5524,7 +5472,7 @@ function App() {
       </div>
 
       <main className='panel panel-editor' id='editor-main'>
-        {needsProjectBootstrap ? renderProjectBootstrap() : isAgentLayout ? renderAgentPanel('docked') : renderEditorSurface()}
+        {needsProjectBootstrap ? renderProjectBootstrap() : isAgentLayout ? renderAgentPanel() : renderEditorSurface()}
       </main>
 
       <div className={`panel-resize-slot panel-resize-slot-right${isRightSidebarVisible ? '' : ' is-hidden'}`}>
@@ -5546,7 +5494,7 @@ function App() {
 
       {isRightSidebarVisible ? (
         <aside className='panel panel-agent'>
-          {needsProjectBootstrap ? null : isAgentLayout ? renderEditorSurface() : renderAgentPanel('docked')}
+          {needsProjectBootstrap ? null : isAgentLayout ? renderEditorSurface() : renderAgentPanel()}
         </aside>
       ) : null}
 
@@ -5597,7 +5545,7 @@ function App() {
                     data-platform={shellPlatform}
                     style={shellChromeVars}
                   >
-                    {isAgentLayout ? renderEditorSurface() : renderAgentPanel('drawer')}
+                    {isAgentLayout ? renderEditorSurface() : renderAgentPanel()}
                     <div ref={setRightDrawerOverlayRoot} className='drawer-local-overlay-root'>
                       {renderProjectMenu('right-drawer', rightDrawerOverlayRoot?.getBoundingClientRect() ?? null)}
                     </div>
@@ -5713,52 +5661,58 @@ function App() {
     </div>
   )
 
-  if (isAgentLayout) {
-    return (
-      <AgentProvider
-        activeWorkspaceContext={activeWorkspaceContext}
-        conversationState={conversationState}
-        externalSessionRequest={pendingAgentProjectSessionRequest}
-        onExternalSessionRequestHandled={(requestId) => {
-          setPendingAgentProjectSessionRequest((currentValue) => (
-            currentValue?.requestId === requestId ? null : currentValue
-          ))
-        }}
-        iconTheme={iconTheme}
-        onConversationDraftFailed={handleConversationDraftFailed}
-        onConversationSessionStarted={handleConversationSessionStarted}
-        onCreateConversationWorkspace={handleCreateConversationWorkspace}
-        onOpenMessageFile={openAgentMessageFile}
-        onOpenConversation={handleOpenConversation}
-        onRenameConversation={handleRenameConversation}
-        onRemoveConversation={handleRemoveConversation}
-        onOpenProviderSettings={() => {
-          if (isRightSidebarDrawer) {
-            setIsRightDrawerOpen(false)
-          }
+  const agentSurfaceMode = !isAgentLayout && isRightSidebarDrawer ? 'drawer' : 'docked'
+  const agentProjectMenuSurface: ProjectMenuSurface = agentSurfaceMode === 'drawer' ? 'right-drawer' : 'global'
 
-          setSettingsSection('providers')
-          setIsSettingsOpen(true)
-        }}
-        workspacePath={currentPath}
-        workspaceState={agentWorkspaceState}
-        onWorkspaceStateChange={setAgentWorkspaceState}
-        isAgentLayout
-        onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect)}
-        onOpenProjectSwitchMenu={(anchorRect, options) => openProjectMenu(options?.startNewSession ? 'agent-new-switch' : 'editor-switch', anchorRect)}
-        onOpenProjectFolder={handleShowProjectInFolder}
-        onOpenProjectSession={handleOpenProjectSession}
-        onRemoveProject={handleRemoveProject}
-        onStartStandaloneConversation={handleStartStandaloneConversation}
-        onStartProjectSession={handleStartProjectSession}
-        projectState={projectState}
-      >
-        {appShell}
-      </AgentProvider>
-    )
-  }
+  return (
+    <AgentProvider
+      activeWorkspaceContext={activeWorkspaceContext}
+      conversationState={conversationState}
+      externalSessionRequest={pendingAgentProjectSessionRequest}
+      onExternalSessionRequestHandled={(requestId) => {
+        setPendingAgentProjectSessionRequest((currentValue) => (
+          currentValue?.requestId === requestId ? null : currentValue
+        ))
+      }}
+      iconTheme={iconTheme}
+      onConversationDraftFailed={handleConversationDraftFailed}
+      onConversationSessionStarted={handleConversationSessionStarted}
+      onCreateConversationWorkspace={handleCreateConversationWorkspace}
+      onOpenMessageFile={openAgentMessageFile}
+      onOpenConversation={handleOpenConversation}
+      onRenameConversation={handleRenameConversation}
+      onRemoveConversation={handleRemoveConversation}
+      onOpenProviderSettings={() => {
+        if (agentSurfaceMode === 'drawer') {
+          setIsRightDrawerOpen(false)
+        }
 
-  return appShell
+        setSettingsSection('providers')
+        setIsSettingsOpen(true)
+      }}
+      workspacePath={currentPath}
+      workspaceState={agentWorkspaceState}
+      onWorkspaceStateChange={setAgentWorkspaceState}
+      isAgentLayout={isAgentLayout}
+      surfaceMode={agentSurfaceMode}
+      onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect, {
+        surface: agentProjectMenuSurface,
+      })}
+      onOpenProjectSwitchMenu={(anchorRect, options) => openProjectMenu(
+        options?.startNewSession ? 'agent-new-switch' : 'editor-switch',
+        anchorRect,
+        { surface: agentProjectMenuSurface },
+      )}
+      onOpenProjectFolder={handleShowProjectInFolder}
+      onOpenProjectSession={handleOpenProjectSession}
+      onRemoveProject={handleRemoveProject}
+      onStartStandaloneConversation={handleStartStandaloneConversation}
+      onStartProjectSession={handleStartProjectSession}
+      projectState={projectState}
+    >
+      {appShell}
+    </AgentProvider>
+  )
 }
 
 export default App
