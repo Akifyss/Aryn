@@ -371,6 +371,9 @@ type ProjectMenuMode = 'agent-add' | 'agent-new-switch' | 'editor-switch'
 type ProjectMenuSurface = 'global' | 'left-drawer' | 'right-drawer'
 type ProjectMenuAnchorRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width' | 'height'>
 type ProjectMenuFrameRect = Pick<DOMRect, 'top' | 'left' | 'width' | 'height'>
+type ProjectMenuStyle = CSSProperties & {
+  '--project-menu-list-max-height'?: string
+}
 type ProjectMenuOpenOptions = {
   surface?: ProjectMenuSurface
 }
@@ -387,6 +390,7 @@ const PROJECT_MENU_EDITOR_SWITCH_ACTIONS_HEIGHT_PX = 72
 const PROJECT_MENU_AGENT_PROJECTLESS_ACTION_HEIGHT_PX = 39
 const PROJECT_MENU_PROJECT_ROW_HEIGHT_PX = 34
 const PROJECT_MENU_PROJECT_LIST_MAX_HEIGHT_PX = 320
+const PROJECT_MENU_EDITOR_SWITCH_VERTICAL_CHROME_PX = 24
 
 let initialLayoutState: PersistedLayoutState | null = null
 let persistedWorkspaceTabState = new Map<string, PersistedWorkspaceTabState>()
@@ -423,40 +427,11 @@ function serializeProjectMenuAnchorRect(rect: ProjectMenuAnchorRect): ProjectMen
   }
 }
 
-function estimateProjectMenuHeight(
-  mode: ProjectMenuMode,
-  projectCount: number,
-  viewportHeight: number,
-  includesProjectlessAction = false,
-) {
-  const viewportMaxHeight = Math.max(160, viewportHeight - (PROJECT_MENU_MARGIN_PX * 2))
-
-  if (mode === 'agent-add') {
-    return Math.min(PROJECT_MENU_AGENT_ADD_ESTIMATED_HEIGHT_PX, viewportMaxHeight)
-  }
-
-  const listHeight = Math.min(
-    PROJECT_MENU_PROJECT_LIST_MAX_HEIGHT_PX,
-    Math.max(PROJECT_MENU_PROJECT_ROW_HEIGHT_PX, projectCount * PROJECT_MENU_PROJECT_ROW_HEIGHT_PX),
-  )
-  const estimatedHeight = PROJECT_MENU_EDITOR_SWITCH_SEARCH_HEIGHT_PX
-    + listHeight
-    + PROJECT_MENU_EDITOR_SWITCH_ACTIONS_HEIGHT_PX
-    + (includesProjectlessAction ? PROJECT_MENU_AGENT_PROJECTLESS_ACTION_HEIGHT_PX : 0)
-
-  return Math.min(
-    PROJECT_MENU_EDITOR_SWITCH_MAX_HEIGHT_PX,
-    viewportMaxHeight,
-    Math.max(PROJECT_MENU_EDITOR_SWITCH_MIN_HEIGHT_PX, estimatedHeight),
-  )
-}
-
 function resolveProjectMenuStyle(
   mode: ProjectMenuMode,
-  projectCount = 0,
   includesProjectlessAction = false,
   frameRect: ProjectMenuFrameRect | null = null,
-): CSSProperties | undefined {
+): ProjectMenuStyle | undefined {
   if (typeof window === 'undefined') {
     return undefined
   }
@@ -475,12 +450,25 @@ function resolveProjectMenuStyle(
     PROJECT_MENU_EDITOR_SWITCH_MIN_HEIGHT_PX,
     viewportHeight - (PROJECT_MENU_MARGIN_PX * 2),
   )
-  const estimatedHeight = estimateProjectMenuHeight(mode, projectCount, viewportHeight, includesProjectlessAction)
+  const menuMaxHeight = Math.min(maxHeight, availableHeight)
+  const fixedMenuHeight = PROJECT_MENU_EDITOR_SWITCH_SEARCH_HEIGHT_PX
+    + PROJECT_MENU_EDITOR_SWITCH_ACTIONS_HEIGHT_PX
+    + (includesProjectlessAction ? PROJECT_MENU_AGENT_PROJECTLESS_ACTION_HEIGHT_PX : 0)
+    + PROJECT_MENU_EDITOR_SWITCH_VERTICAL_CHROME_PX
+  const listMaxHeight = Math.max(
+    PROJECT_MENU_PROJECT_ROW_HEIGHT_PX,
+    Math.min(PROJECT_MENU_PROJECT_LIST_MAX_HEIGHT_PX, menuMaxHeight - fixedMenuHeight),
+  )
 
-  return {
-    maxHeight: `${Math.min(maxHeight, availableHeight, estimatedHeight)}px`,
+  const style: ProjectMenuStyle = {
     width: `${width}px`,
   }
+
+  if (mode !== 'agent-add') {
+    style['--project-menu-list-max-height'] = `${listMaxHeight}px`
+  }
+
+  return style
 }
 
 function createProjectMenuVirtualAnchor(
@@ -3121,7 +3109,6 @@ function App() {
       && activeWorkspaceContext.kind === 'project'
     const menuStyle = resolveProjectMenuStyle(
       renderedProjectMenuMode,
-      filteredProjectMenuProjects.length,
       showProjectlessAction,
       frameRect,
     )

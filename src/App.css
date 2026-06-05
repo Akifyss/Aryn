@@ -948,6 +948,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .project-menu {
+  display: flex;
+  flex-direction: column;
   width: min(360px, calc(100vw - 24px));
   max-height: min(520px, calc(100vh - 72px));
   overflow: hidden;
@@ -956,6 +958,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   border-radius: 13px;
   background: var(--overlay);
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
+  --project-menu-list-max-height: 320px;
 }
 
 .project-menu-editor-switch,
@@ -970,14 +973,15 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .project-menu-actions {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 3px;
 }
 
 .project-menu-editor-switch .project-menu-list + .project-menu-actions,
 .project-menu-agent-new-switch .project-menu-list + .project-menu-actions {
-  margin-top: 4px;
-  padding-top: 4px;
+  margin: 4px -8px 0;
+  padding: 4px 8px 0;
   border-top: 1px solid var(--border);
 }
 
@@ -1051,6 +1055,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .project-menu-search {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
   min-height: 32px;
@@ -1080,18 +1085,27 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .project-menu-list {
-  max-height: 320px;
+  flex: 0 1 auto;
+  max-height: var(--project-menu-list-max-height);
   min-height: 0;
-  margin-bottom: 0;
+  margin: 0 -8px 0 0;
+  padding-right: 8px;
+  overflow: hidden;
+  --app-scroll-area-scrollbar-gap: 0px;
 }
 
 .project-menu-list.app-scroll-area {
   height: auto;
+  max-height: var(--project-menu-list-max-height);
 }
 
 .project-menu-list .app-scroll-area-viewport {
   height: auto;
-  max-height: 320px;
+  max-height: var(--project-menu-list-max-height);
+}
+
+.project-menu-list .app-scroll-area-scrollbar[data-orientation='vertical'] {
+  right: 0;
 }
 
 .project-menu-list-content {
