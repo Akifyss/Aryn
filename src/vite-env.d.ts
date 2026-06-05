@@ -15,6 +15,8 @@ import type {
   WorkspaceChangeEvent,
   WorkspaceIconTheme,
   WorkspaceIconThemeCatalogOption,
+  WorkspaceIconThemeMode,
+  WorkspaceIconThemeSelection,
   WorkspaceNode,
 } from '@/features/workspace/types'
 import type {
@@ -97,10 +99,10 @@ declare global {
         lineNumber: number,
         contentText?: string,
       ) => Promise<GitBlameResult>
-      getWorkspaceIconTheme: () => Promise<WorkspaceIconTheme | null>
+      getWorkspaceIconTheme: (mode?: WorkspaceIconThemeMode) => Promise<WorkspaceIconTheme | null>
       getWorkspaceIconThemeCatalog: () => Promise<WorkspaceIconThemeCatalogOption[]>
-      pickWorkspaceIconTheme: () => Promise<WorkspaceIconTheme | null>
-      setWorkspaceIconTheme: (selection: { sourceVsixPath: string, themeId: string }) => Promise<WorkspaceIconTheme | null>
+      pickWorkspaceIconTheme: (mode?: WorkspaceIconThemeMode) => Promise<WorkspaceIconTheme | null>
+      setWorkspaceIconTheme: (mode: WorkspaceIconThemeMode, selection: WorkspaceIconThemeSelection) => Promise<WorkspaceIconTheme | null>
       getUiState: () => Promise<{ agentComposerHeight: number }>
       updateUiState: (patch: { agentComposerHeight?: number }) => Promise<{ ok: boolean }>
       startWorkspaceWatch: (rootPath: string) => Promise<{ ok: boolean }>

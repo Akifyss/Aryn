@@ -16,6 +16,8 @@ import type {
   WorkspaceChangeEvent,
   WorkspaceIconTheme,
   WorkspaceIconThemeCatalogOption,
+  WorkspaceIconThemeMode,
+  WorkspaceIconThemeSelection,
   WorkspaceNode,
 } from '../../src/features/workspace/types'
 import type {
@@ -101,10 +103,10 @@ contextBridge.exposeInMainWorld('appApi', {
     lineNumber: number,
     contentText?: string,
   ) => ipcRenderer.invoke('git:get-line-blame', workspacePath, filePath, lineNumber, contentText) as Promise<GitBlameResult>,
-  getWorkspaceIconTheme: () => ipcRenderer.invoke('workspace-icons:get-theme') as Promise<WorkspaceIconTheme | null>,
+  getWorkspaceIconTheme: (mode?: WorkspaceIconThemeMode) => ipcRenderer.invoke('workspace-icons:get-theme', mode) as Promise<WorkspaceIconTheme | null>,
   getWorkspaceIconThemeCatalog: () => ipcRenderer.invoke('workspace-icons:catalog') as Promise<WorkspaceIconThemeCatalogOption[]>,
-  pickWorkspaceIconTheme: () => ipcRenderer.invoke('workspace-icons:pick-theme') as Promise<WorkspaceIconTheme | null>,
-  setWorkspaceIconTheme: (selection: { sourceVsixPath: string, themeId: string }) => ipcRenderer.invoke('workspace-icons:select-theme', selection) as Promise<WorkspaceIconTheme | null>,
+  pickWorkspaceIconTheme: (mode?: WorkspaceIconThemeMode) => ipcRenderer.invoke('workspace-icons:pick-theme', mode) as Promise<WorkspaceIconTheme | null>,
+  setWorkspaceIconTheme: (mode: WorkspaceIconThemeMode, selection: WorkspaceIconThemeSelection) => ipcRenderer.invoke('workspace-icons:select-theme', mode, selection) as Promise<WorkspaceIconTheme | null>,
   getUiState: () => ipcRenderer.invoke('ui:get-state') as Promise<{ agentComposerHeight: number }>,
   updateUiState: (patch: { agentComposerHeight?: number }) => ipcRenderer.invoke('ui:update-state', patch) as Promise<{ ok: boolean }>,
   startWorkspaceWatch: (rootPath: string) => ipcRenderer.invoke('workspace:start-watch', rootPath) as Promise<{ ok: boolean }>,

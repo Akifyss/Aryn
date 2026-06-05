@@ -20,7 +20,15 @@ import {
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import type { ActiveWorkspaceContext, ConversationRecord, ConversationState } from '@/features/conversations/types'
-import type { ProjectRecord, ProjectState, WorkspaceNode } from '@/features/workspace/types'
+import type {
+  ProjectRecord,
+  ProjectState,
+  WorkspaceIconThemeCatalogOption,
+  WorkspaceIconThemeMode,
+  WorkspaceIconThemeSelection,
+  WorkspaceIconThemesByMode,
+  WorkspaceNode,
+} from '@/features/workspace/types'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
@@ -74,10 +82,6 @@ import {
 } from '@/features/workspace/lib/workspace-refresh-coordinator'
 import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
-import type {
-  WorkspaceIconTheme,
-  WorkspaceIconThemeCatalogOption,
-} from '@/features/workspace/types'
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
 import { useSettingsStore, type AppLayoutPreference, type AppTheme } from '@/hooks/use-settings-store'
 import type {
@@ -177,6 +181,13 @@ function EditorLoadingState({ label = 'Loading editor...' }: { label?: string })
 
 type ResolvedAppTheme = 'light' | 'dark'
 type WindowAppearanceTheme = ResolvedAppTheme | 'system'
+
+function createEmptyWorkspaceIconThemes(): WorkspaceIconThemesByMode {
+  return {
+    dark: null,
+    light: null,
+  }
+}
 
 function resolveAppTheme(theme: AppTheme): ResolvedAppTheme {
   if (theme !== 'auto') {
@@ -798,12 +809,12 @@ function App() {
     })
   }
 
-  const [isImportingIconTheme, setIsImportingIconTheme] = useState(false)
   const [isApplyingIconTheme, setIsApplyingIconTheme] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance')
   const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
-  const [iconTheme, setIconTheme] = useState<WorkspaceIconTheme | null>(null)
+  const [iconThemes, setIconThemes] = useState<WorkspaceIconThemesByMode>(() => createEmptyWorkspaceIconThemes())
   const [iconThemeOptions, setIconThemeOptions] = useState<WorkspaceIconThemeCatalogOption[]>([])
+  const iconTheme = useMemo(() => iconThemes[resolvedTheme], [iconThemes, resolvedTheme])
   const [, setStatusMessage] = useState('Open a folder to start.')
   const [workspaceUnavailableMessage, setWorkspaceUnavailableMessage] = useState<string | null>(null)
   const [isCreatingFile, setIsCreatingFile] = useState(false)
@@ -3377,43 +3388,31 @@ function App() {
     )
   }
 
-  async function handlePickWorkspaceIconTheme() {
-    try {
-      setIsImportingIconTheme(true)
-      const nextIconTheme = await window.appApi.pickWorkspaceIconTheme()
+  async function handleSelectWorkspaceIconTheme(
+    mode: WorkspaceIconThemeMode,
+    selection: WorkspaceIconThemeSelection,
+  ) {
+    const currentIconTheme = iconThemes[mode]
 
-      if (!nextIconTheme) {
-        return
-      }
-
-      setIconTheme(nextIconTheme)
-      setIconThemeOptions(await window.appApi.getWorkspaceIconThemeCatalog())
-      setStatusMessage(`${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to import the VSIX icon theme.'
-      setStatusMessage(message)
-    } finally {
-      setIsImportingIconTheme(false)
-    }
-  }
-
-  async function handleSelectWorkspaceIconTheme(selection: { sourceVsixPath: string, themeId: string }) {
     if (
-      iconTheme?.activeThemeId === selection.themeId
-      && iconTheme.sourceVsixPath === selection.sourceVsixPath
+      currentIconTheme?.activeThemeId === selection.themeId
+      && currentIconTheme.sourceVsixPath === selection.sourceVsixPath
     ) {
       return
     }
 
     try {
       setIsApplyingIconTheme(true)
-      const nextIconTheme = await window.appApi.setWorkspaceIconTheme(selection)
+      const nextIconTheme = await window.appApi.setWorkspaceIconTheme(mode, selection)
 
       if (!nextIconTheme) {
         return
       }
 
-      setIconTheme(nextIconTheme)
+      setIconThemes((currentValue) => ({
+        ...currentValue,
+        [mode]: nextIconTheme,
+      }))
       setIconThemeOptions(await window.appApi.getWorkspaceIconThemeCatalog())
       setStatusMessage(`${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`)
     } catch (error) {
@@ -3916,19 +3915,24 @@ function App() {
     void (async () => {
       try {
         const [
-          persistedIconTheme,
+          persistedLightIconTheme,
+          persistedDarkIconTheme,
           persistedIconThemeOptions,
         ] = await Promise.all([
-          window.appApi.getWorkspaceIconTheme(),
+          window.appApi.getWorkspaceIconTheme('light'),
+          window.appApi.getWorkspaceIconTheme('dark'),
           window.appApi.getWorkspaceIconThemeCatalog(),
         ])
         if (!cancelled) {
-          setIconTheme(persistedIconTheme)
+          setIconThemes({
+            dark: persistedDarkIconTheme,
+            light: persistedLightIconTheme,
+          })
           setIconThemeOptions(persistedIconThemeOptions)
         }
       } catch {
         if (!cancelled) {
-          setIconTheme(null)
+          setIconThemes(createEmptyWorkspaceIconThemes())
           setIconThemeOptions([])
         }
       }
@@ -5517,9 +5521,9 @@ function App() {
               <SettingsDialog
                 activeSection={settingsSection}
                 agentState={agentWorkspaceState}
-                iconTheme={iconTheme}
+                iconThemes={iconThemes}
                 iconThemeOptions={iconThemeOptions}
-                isIconThemeBusy={isImportingIconTheme || isApplyingIconTheme}
+                isIconThemeBusy={isApplyingIconTheme}
                 resolvedTheme={resolvedTheme}
                 workspacePath={currentPath}
                 onAgentStateChange={setAgentWorkspaceState}

@@ -58,7 +58,12 @@ import type { ActiveWorkspaceContext, CreateConversationWorkspaceRequest, Update
 import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions } from '../../src/features/agent/types'
 import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
 import type { LocalStorageStateMigration } from '../../src/features/persistence/types'
-import type { ProjectRecord, ProjectState, WorkspaceIconThemeCatalogOption } from '../../src/features/workspace/types'
+import type {
+  ProjectRecord,
+  ProjectState,
+  WorkspaceIconThemeCatalogOption,
+  WorkspaceIconThemeMode,
+} from '../../src/features/workspace/types'
 import {
   importWorkspaceIconThemeFromVsix,
   loadWorkspaceIconThemeCatalogFromVsix,
@@ -133,7 +138,11 @@ const arynDataDir = arynPaths.arynDataDir
 const agentDir = arynPaths.piAgentDir
 const workspaceIconThemeCacheDir = arynPaths.workspaceIconThemeCacheDir
 const bundledWorkspaceIconThemeDirectoryPath = arynPaths.bundledWorkspaceIconThemeDirectoryPath
-const defaultBundledWorkspaceIconThemeId = 'catppuccin-latte'
+const workspaceIconThemeModes = ['light', 'dark'] as const satisfies readonly WorkspaceIconThemeMode[]
+const defaultBundledWorkspaceIconThemeIds = {
+  dark: 'catppuccin-mocha',
+  light: 'catppuccin-latte',
+} as const satisfies Record<WorkspaceIconThemeMode, string>
 const appStateStore = new AppStateStore(arynPaths.appStatePath, arynPaths.legacyAppStatePaths)
 const workspaceStateStore = new WorkspaceStateStore(arynPaths.workspaceStatePath)
 const conversationStore = new ConversationStore(arynPaths.conversationIndexPath, arynPaths.documentsDir)
@@ -757,7 +766,10 @@ async function loadBundledWorkspaceIconThemeCatalogs() {
     .map((result) => result.value)
 }
 
-async function resolveBundledWorkspaceIconThemeSelection(preferredThemeId?: string | null): Promise<{
+async function resolveBundledWorkspaceIconThemeSelection(
+  preferredThemeId?: string | null,
+  mode: WorkspaceIconThemeMode = 'light',
+): Promise<{
   activeThemeId: string | null
   sourceVsixPath: string
 }> {
@@ -776,6 +788,7 @@ async function resolveBundledWorkspaceIconThemeSelection(preferredThemeId?: stri
     }
   }
 
+  const defaultBundledWorkspaceIconThemeId = defaultBundledWorkspaceIconThemeIds[mode]
   const defaultThemeCatalog = bundledThemeCatalogs.find((theme) => (
     theme.themes.some((themeOption) => themeOption.id === defaultBundledWorkspaceIconThemeId)
   ))
@@ -803,8 +816,11 @@ async function resolveBundledWorkspaceIconThemeSelection(preferredThemeId?: stri
   }
 }
 
-async function loadBundledWorkspaceIconTheme(preferredThemeId?: string | null) {
-  const selection = await resolveBundledWorkspaceIconThemeSelection(preferredThemeId)
+async function loadBundledWorkspaceIconTheme(
+  preferredThemeId?: string | null,
+  mode: WorkspaceIconThemeMode = 'light',
+) {
+  const selection = await resolveBundledWorkspaceIconThemeSelection(preferredThemeId, mode)
 
   return importWorkspaceIconTheme(selection.sourceVsixPath, selection.activeThemeId)
 }
@@ -827,6 +843,22 @@ function toPersistedWorkspaceIconThemeSelection(
   }
 }
 
+async function updatePersistedWorkspaceIconTheme(
+  mode: WorkspaceIconThemeMode,
+  theme: Awaited<ReturnType<typeof importWorkspaceIconTheme>>,
+) {
+  await appStateStore.update((currentState) => ({
+    ...currentState,
+    ui: {
+      ...currentState.ui,
+      workspaceIconThemes: {
+        ...currentState.ui.workspaceIconThemes,
+        [mode]: toPersistedWorkspaceIconThemeSelection(theme),
+      },
+    },
+  }))
+}
+
 function toCatalogOptions(theme: Awaited<ReturnType<typeof loadWorkspaceIconThemeCatalog>>): WorkspaceIconThemeCatalogOption[] {
   return theme.themes.map((themeOption) => ({
     key: `${theme.sourceVsixPath}::${themeOption.id}`,
@@ -837,26 +869,31 @@ function toCatalogOptions(theme: Awaited<ReturnType<typeof loadWorkspaceIconThem
   }))
 }
 
-async function getEffectiveWorkspaceIconThemeSelection(): Promise<{
+async function getEffectiveWorkspaceIconThemeSelection(
+  mode: WorkspaceIconThemeMode = 'light',
+): Promise<{
   activeThemeId: string | null
   sourceVsixPath: string
 }> {
   const state = await appStateStore.read()
-  const persistedSelection = state.ui.workspaceIconTheme
+  const persistedSelection = state.ui.workspaceIconThemes[mode]
   const persistedVsixPath = persistedSelection.sourceVsixPath
 
   if (persistedSelection.sourceKind === 'bundled' || !persistedVsixPath) {
-    const selection = await resolveBundledWorkspaceIconThemeSelection(persistedSelection.activeThemeId)
+    const selection = await resolveBundledWorkspaceIconThemeSelection(persistedSelection.activeThemeId, mode)
 
     if (selection.activeThemeId !== persistedSelection.activeThemeId) {
       await appStateStore.update((currentState) => ({
         ...currentState,
         ui: {
           ...currentState.ui,
-          workspaceIconTheme: {
-            activeThemeId: selection.activeThemeId,
-            sourceKind: 'bundled',
-            sourceVsixPath: null,
+          workspaceIconThemes: {
+            ...currentState.ui.workspaceIconThemes,
+            [mode]: {
+              activeThemeId: selection.activeThemeId,
+              sourceKind: 'bundled',
+              sourceVsixPath: null,
+            },
           },
         },
       }))
@@ -866,16 +903,19 @@ async function getEffectiveWorkspaceIconThemeSelection(): Promise<{
   }
 
   if (persistedSelection.sourceKind === null && isBundledWorkspaceIconTheme(persistedVsixPath)) {
-    const selection = await resolveBundledWorkspaceIconThemeSelection(persistedSelection.activeThemeId)
+    const selection = await resolveBundledWorkspaceIconThemeSelection(persistedSelection.activeThemeId, mode)
 
     await appStateStore.update((currentState) => ({
       ...currentState,
       ui: {
         ...currentState.ui,
-        workspaceIconTheme: {
-          activeThemeId: selection.activeThemeId,
-          sourceKind: 'bundled',
-          sourceVsixPath: null,
+        workspaceIconThemes: {
+          ...currentState.ui.workspaceIconThemes,
+          [mode]: {
+            activeThemeId: selection.activeThemeId,
+            sourceKind: 'bundled',
+            sourceVsixPath: null,
+          },
         },
       },
     }))
@@ -890,17 +930,22 @@ async function getEffectiveWorkspaceIconThemeSelection(): Promise<{
     }
   }
 
-  return resolveBundledWorkspaceIconThemeSelection(persistedSelection.activeThemeId)
+  return resolveBundledWorkspaceIconThemeSelection(persistedSelection.activeThemeId, mode)
 }
 
 async function getWorkspaceIconThemeCatalog() {
-  const selection = await getEffectiveWorkspaceIconThemeSelection()
+  const selections = await Promise.all(workspaceIconThemeModes.map((mode) => getEffectiveWorkspaceIconThemeSelection(mode)))
   const bundledThemes = await loadBundledWorkspaceIconThemeCatalogs()
   const catalogOptions = bundledThemes.flatMap(toCatalogOptions)
+  const importedVsixPaths = new Set(
+    selections
+      .map((selection) => selection.sourceVsixPath)
+      .filter((sourceVsixPath) => !isBundledWorkspaceIconTheme(sourceVsixPath)),
+  )
 
-  if (!isBundledWorkspaceIconTheme(selection.sourceVsixPath)) {
+  for (const sourceVsixPath of importedVsixPaths) {
     try {
-      const importedTheme = await loadWorkspaceIconThemeCatalog(selection.sourceVsixPath)
+      const importedTheme = await loadWorkspaceIconThemeCatalog(sourceVsixPath)
       catalogOptions.push(...toCatalogOptions(importedTheme))
     } catch {
       // Ignore broken imported themes so built-in themes remain selectable.
@@ -920,6 +965,10 @@ function readRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object'
     ? value as Record<string, unknown>
     : {}
+}
+
+function readWorkspaceIconThemeMode(value: unknown): WorkspaceIconThemeMode {
+  return value === 'dark' ? 'dark' : 'light'
 }
 
 function readRequiredPathArgument(value: unknown, label: string) {
@@ -2021,25 +2070,27 @@ ipcMain.handle('workspace:stop-watch', async () => {
   return { ok: true }
 })
 
-ipcMain.handle('workspace-icons:get-theme', async () => {
+ipcMain.handle('workspace-icons:get-theme', async (_, modeValue?: unknown) => {
+  const mode = readWorkspaceIconThemeMode(modeValue)
   const state = await appStateStore.read()
-  const persistedSelection = await getEffectiveWorkspaceIconThemeSelection()
+  const persistedSourceSelection = state.ui.workspaceIconThemes[mode]
+  const persistedSelection = await getEffectiveWorkspaceIconThemeSelection(mode)
   const theme = await importWorkspaceIconTheme(
     persistedSelection.sourceVsixPath,
     persistedSelection.activeThemeId,
   )
     .catch(async (error) => {
-      if (state.ui.workspaceIconTheme.sourceKind === 'bundled') {
+      if (persistedSourceSelection.sourceKind === 'bundled') {
         try {
-          return await loadBundledWorkspaceIconTheme()
+          return await loadBundledWorkspaceIconTheme(null, mode)
         } catch {
           throw error
         }
       }
 
       if (
-        state.ui.workspaceIconTheme.sourceKind !== 'external'
-        && state.ui.workspaceIconTheme.sourceKind !== null
+        persistedSourceSelection.sourceKind !== 'external'
+        && persistedSourceSelection.sourceKind !== null
       ) {
         return null
       }
@@ -2048,16 +2099,19 @@ ipcMain.handle('workspace-icons:get-theme', async () => {
         ...currentState,
         ui: {
           ...currentState.ui,
-          workspaceIconTheme: {
-            activeThemeId: null,
-            sourceKind: 'bundled',
-            sourceVsixPath: null,
+          workspaceIconThemes: {
+            ...currentState.ui.workspaceIconThemes,
+            [mode]: {
+              activeThemeId: null,
+              sourceKind: 'bundled',
+              sourceVsixPath: null,
+            },
           },
         },
       }))
 
       try {
-        return await loadBundledWorkspaceIconTheme()
+        return await loadBundledWorkspaceIconTheme(null, mode)
       } catch {
         throw error
       }
@@ -2066,7 +2120,9 @@ ipcMain.handle('workspace-icons:get-theme', async () => {
   return theme
 })
 
-ipcMain.handle('workspace-icons:pick-theme', async () => {
+ipcMain.handle('workspace-icons:pick-theme', async (_, modeValue?: unknown) => {
+  const mode = readWorkspaceIconThemeMode(modeValue)
+
   if (!win) {
     return null
   }
@@ -2087,31 +2143,30 @@ ipcMain.handle('workspace-icons:pick-theme', async () => {
   }
 
   const theme = await importWorkspaceIconTheme(result.filePaths[0])
-  await appStateStore.update((currentState) => ({
-    ...currentState,
-    ui: {
-      ...currentState.ui,
-      workspaceIconTheme: toPersistedWorkspaceIconThemeSelection(theme),
-    },
-  }))
+  await updatePersistedWorkspaceIconTheme(mode, theme)
 
   return theme
 })
 
-ipcMain.handle('workspace-icons:set-active-theme', async (_, themeId: string) => {
-  const selection = await getEffectiveWorkspaceIconThemeSelection()
+ipcMain.handle('workspace-icons:set-active-theme', async (_, modeValue: unknown, themeIdValue?: unknown) => {
+  const hasExplicitMode = modeValue === 'light' || modeValue === 'dark'
+  const mode = hasExplicitMode ? readWorkspaceIconThemeMode(modeValue) : 'light'
+  const rawThemeId = hasExplicitMode ? themeIdValue : modeValue
+  const themeId = typeof rawThemeId === 'string' && rawThemeId.trim()
+    ? rawThemeId.trim()
+    : null
+
+  if (!themeId) {
+    throw new Error('Icon theme id is required.')
+  }
+
+  const selection = await getEffectiveWorkspaceIconThemeSelection(mode)
   const nextSelection = isBundledWorkspaceIconTheme(selection.sourceVsixPath)
-    ? await resolveBundledWorkspaceIconThemeSelection(themeId)
+    ? await resolveBundledWorkspaceIconThemeSelection(themeId, mode)
     : selection
   const theme = await importWorkspaceIconTheme(nextSelection.sourceVsixPath, nextSelection.activeThemeId ?? themeId)
 
-  await appStateStore.update((currentState) => ({
-    ...currentState,
-    ui: {
-      ...currentState.ui,
-      workspaceIconTheme: toPersistedWorkspaceIconThemeSelection(theme),
-    },
-  }))
+  await updatePersistedWorkspaceIconTheme(mode, theme)
 
   return theme
 })
@@ -2120,16 +2175,27 @@ ipcMain.handle('workspace-icons:catalog', async () => {
   return getWorkspaceIconThemeCatalog()
 })
 
-ipcMain.handle('workspace-icons:select-theme', async (_, selection: { sourceVsixPath: string, themeId: string }) => {
-  const theme = await importWorkspaceIconTheme(selection.sourceVsixPath, selection.themeId)
+ipcMain.handle('workspace-icons:select-theme', async (
+  _,
+  modeOrSelection: unknown,
+  selectionValue?: unknown,
+) => {
+  const hasExplicitMode = modeOrSelection === 'light' || modeOrSelection === 'dark'
+  const mode = hasExplicitMode ? readWorkspaceIconThemeMode(modeOrSelection) : 'light'
+  const selection = hasExplicitMode ? selectionValue : modeOrSelection
+  const selectionRecord = readRecord(selection)
+  const sourceVsixPath = readRequiredPathArgument(selectionRecord.sourceVsixPath, 'Icon theme VSIX path')
+  const themeId = typeof selectionRecord.themeId === 'string' && selectionRecord.themeId.trim()
+    ? selectionRecord.themeId.trim()
+    : null
 
-  await appStateStore.update((currentState) => ({
-    ...currentState,
-    ui: {
-      ...currentState.ui,
-      workspaceIconTheme: toPersistedWorkspaceIconThemeSelection(theme),
-    },
-  }))
+  if (!themeId) {
+    throw new Error('Icon theme id is required.')
+  }
+
+  const theme = await importWorkspaceIconTheme(sourceVsixPath, themeId)
+
+  await updatePersistedWorkspaceIconTheme(mode, theme)
 
   return theme
 })

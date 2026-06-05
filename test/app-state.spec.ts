@@ -27,6 +27,21 @@ async function createTempDir() {
   return rootPath
 }
 
+function createDefaultWorkspaceIconThemeSelections() {
+  return {
+    dark: {
+      activeThemeId: null,
+      sourceKind: 'bundled',
+      sourceVsixPath: null,
+    },
+    light: {
+      activeThemeId: null,
+      sourceKind: 'bundled',
+      sourceVsixPath: null,
+    },
+  }
+}
+
 describe('app state persistence', () => {
   it('migrates legacy workspace settings into the new app state file', async () => {
     const rootPath = await createTempDir()
@@ -47,11 +62,7 @@ describe('app state persistence', () => {
       },
       ui: {
         agentComposerHeight: DEFAULT_AGENT_COMPOSER_HEIGHT,
-        workspaceIconTheme: {
-          activeThemeId: null,
-          sourceKind: 'bundled',
-          sourceVsixPath: null,
-        },
+        workspaceIconThemes: createDefaultWorkspaceIconThemeSelections(),
       },
       workspace: {
         lastProjectId: 'C:/notes',
@@ -401,11 +412,7 @@ describe('app state persistence', () => {
       version: APP_STATE_SCHEMA_VERSION,
       ui: {
         agentComposerHeight: 132,
-        workspaceIconTheme: {
-          activeThemeId: null,
-          sourceKind: 'bundled',
-          sourceVsixPath: null,
-        },
+        workspaceIconThemes: createDefaultWorkspaceIconThemeSelections(),
       },
       workspace: {
         lastProjectId: 'C:/workspace',
@@ -812,65 +819,98 @@ describe('app state persistence', () => {
 
     expect(state.ui).toEqual({
       agentComposerHeight: DEFAULT_AGENT_COMPOSER_HEIGHT,
-      workspaceIconTheme: {
+      workspaceIconThemes: createDefaultWorkspaceIconThemeSelections(),
+    })
+  })
+
+  it('preserves separate light and dark workspace icon theme selections', () => {
+    const state = normalizePersistedAppState({
+      ui: {
+        workspaceIconThemes: {
+          dark: {
+            activeThemeId: 'catppuccin-mocha',
+            sourceKind: 'bundled',
+            sourceVsixPath: '/old/app/public/icon-themes/Catppuccin.catppuccin-vsc-icons-1.26.0.vsix',
+          },
+          light: {
+            activeThemeId: 'custom-light',
+            sourceKind: 'external',
+            sourceVsixPath: '/Users/me/custom-light.vsix',
+          },
+        },
+      },
+    })
+
+    expect(state.ui.workspaceIconThemes).toEqual({
+      dark: {
+        activeThemeId: 'catppuccin-mocha',
+        sourceKind: 'bundled',
+        sourceVsixPath: null,
+      },
+      light: {
+        activeThemeId: 'custom-light',
+        sourceKind: 'external',
+        sourceVsixPath: '/Users/me/custom-light.vsix',
+      },
+    })
+  })
+
+  it('uses the default dark icon theme selection when dark mode is missing', () => {
+    const state = normalizePersistedAppState({
+      ui: {
+        workspaceIconThemes: {
+          light: {
+            activeThemeId: 'catppuccin-latte',
+            sourceKind: 'bundled',
+            sourceVsixPath: null,
+          },
+        },
+      },
+    })
+
+    expect(state.ui.workspaceIconThemes).toEqual({
+      dark: {
         activeThemeId: null,
+        sourceKind: 'bundled',
+        sourceVsixPath: null,
+      },
+      light: {
+        activeThemeId: 'catppuccin-latte',
         sourceKind: 'bundled',
         sourceVsixPath: null,
       },
     })
   })
 
-  it('preserves external workspace icon theme paths', () => {
+  it('normalizes invalid external workspace icon theme selections to bundled per mode', () => {
     const state = normalizePersistedAppState({
       ui: {
-        workspaceIconTheme: {
-          activeThemeId: 'catppuccin-mocha',
-          sourceKind: 'external',
-          sourceVsixPath: '/Users/me/theme.vsix',
+        workspaceIconThemes: {
+          dark: {
+            activeThemeId: 'catppuccin-mocha',
+            sourceKind: 'external',
+            sourceVsixPath: '',
+          },
+          light: {
+            activeThemeId: 'catppuccin-latte',
+            sourceKind: 'external',
+            sourceVsixPath: null,
+          },
         },
       },
     })
 
-    expect(state.ui.workspaceIconTheme).toEqual({
-      activeThemeId: 'catppuccin-mocha',
-      sourceKind: 'external',
-      sourceVsixPath: '/Users/me/theme.vsix',
-    })
-  })
-
-  it('stores bundled workspace icon theme selections without a VSIX path', () => {
-    const state = normalizePersistedAppState({
-      ui: {
-        workspaceIconTheme: {
-          activeThemeId: 'catppuccin-latte',
-          sourceKind: 'bundled',
-          sourceVsixPath: '/old/app/public/icon-themes/Catppuccin.catppuccin-vsc-icons-1.26.0.vsix',
-        },
+    expect(state.ui.workspaceIconThemes).toEqual({
+      dark: {
+        activeThemeId: 'catppuccin-mocha',
+        sourceKind: 'bundled',
+        sourceVsixPath: null,
       },
-    })
-
-    expect(state.ui.workspaceIconTheme).toEqual({
-      activeThemeId: 'catppuccin-latte',
-      sourceKind: 'bundled',
-      sourceVsixPath: null,
-    })
-  })
-
-  it('normalizes invalid external workspace icon theme selections to bundled', () => {
-    const state = normalizePersistedAppState({
-      ui: {
-        workspaceIconTheme: {
-          activeThemeId: 'catppuccin-latte',
-          sourceKind: 'external',
-          sourceVsixPath: null,
-        },
+      light: {
+        activeThemeId: 'catppuccin-latte',
+        sourceKind: 'bundled',
+        sourceVsixPath: null,
       },
-    })
-
-    expect(state.ui.workspaceIconTheme).toEqual({
-      activeThemeId: 'catppuccin-latte',
-      sourceKind: 'bundled',
-      sourceVsixPath: null,
     })
   })
 })

@@ -11,6 +11,7 @@ import type {
   PersistedMeoSettings,
   MeoOutlinePosition,
 } from '../../src/features/persistence/types'
+import type { WorkspaceIconThemeMode } from '../../src/features/workspace/types'
 import { AtomicJsonStore, type AtomicJsonStoreMissingResult } from './json-file-store'
 
 export const APP_STATE_SCHEMA_VERSION = 2
@@ -29,6 +30,11 @@ export type PersistedWorkspaceIconThemeSelection = {
   sourceKind: 'bundled' | 'external' | null
   sourceVsixPath: string | null
 }
+
+export type PersistedWorkspaceIconThemeSelections = Record<
+  WorkspaceIconThemeMode,
+  PersistedWorkspaceIconThemeSelection
+>
 
 export type PersistedWorkspaceEntry = {
   lastAgentSessionPath: string | null
@@ -65,7 +71,7 @@ export type PersistedWindowState = {
 
 export type PersistedUiState = {
   agentComposerHeight: number
-  workspaceIconTheme: PersistedWorkspaceIconThemeSelection
+  workspaceIconThemes: PersistedWorkspaceIconThemeSelections
 }
 
 export type PersistedMigrationState = {
@@ -100,6 +106,21 @@ const DEFAULT_APP_SETTINGS: PersistedAppSettings = {
   theme: 'auto',
 }
 
+function createDefaultWorkspaceIconThemeSelection(): PersistedWorkspaceIconThemeSelection {
+  return {
+    activeThemeId: null,
+    sourceKind: 'bundled',
+    sourceVsixPath: null,
+  }
+}
+
+function createDefaultWorkspaceIconThemeSelections(): PersistedWorkspaceIconThemeSelections {
+  return {
+    dark: createDefaultWorkspaceIconThemeSelection(),
+    light: createDefaultWorkspaceIconThemeSelection(),
+  }
+}
+
 const DEFAULT_LAYOUT_STATE: PersistedLayoutState = {
   activeLeftSidebarTab: 'file',
   agentRightSidebarCollapsed: false,
@@ -122,11 +143,7 @@ const DEFAULT_APP_STATE: PersistedAppState = {
   settings: DEFAULT_APP_SETTINGS,
   ui: {
     agentComposerHeight: DEFAULT_AGENT_COMPOSER_HEIGHT,
-    workspaceIconTheme: {
-      activeThemeId: null,
-      sourceKind: 'bundled',
-      sourceVsixPath: null,
-    },
+    workspaceIconThemes: createDefaultWorkspaceIconThemeSelections(),
   },
   workspace: {
     activeContext: { kind: 'conversationDraft' },
@@ -412,6 +429,23 @@ function readWorkspaceIconThemeSelection(value: unknown): PersistedWorkspaceIcon
   }
 }
 
+function readWorkspaceIconThemeSelections(value: unknown): PersistedWorkspaceIconThemeSelections {
+  const candidate = value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {}
+  const hasDarkSelection = Object.prototype.hasOwnProperty.call(candidate, 'dark')
+  const hasLightSelection = Object.prototype.hasOwnProperty.call(candidate, 'light')
+
+  return {
+    dark: hasDarkSelection
+      ? readWorkspaceIconThemeSelection(candidate.dark)
+      : createDefaultWorkspaceIconThemeSelection(),
+    light: hasLightSelection
+      ? readWorkspaceIconThemeSelection(candidate.light)
+      : createDefaultWorkspaceIconThemeSelection(),
+  }
+}
+
 export function normalizePersistedAppState(value: unknown): PersistedAppState {
   if (!value || typeof value !== 'object') {
     return cloneState(DEFAULT_APP_STATE)
@@ -506,7 +540,7 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
     settings: normalizeAppSettings(settingsCandidate),
     ui: {
       agentComposerHeight: readAgentComposerHeight(uiCandidate.agentComposerHeight),
-      workspaceIconTheme: readWorkspaceIconThemeSelection(uiCandidate.workspaceIconTheme),
+      workspaceIconThemes: readWorkspaceIconThemeSelections(uiCandidate.workspaceIconThemes),
     },
     workspace: {
       activeContext,

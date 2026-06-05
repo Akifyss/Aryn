@@ -18,6 +18,7 @@ export type WorkspaceIconThemeOption = {
 }
 
 export type WorkspaceIconThemeSourceKind = 'bundled' | 'external'
+export type WorkspaceIconThemeMode = 'light' | 'dark'
 
 export type WorkspaceIconThemeCatalogOption = {
   key: string
@@ -44,6 +45,13 @@ export type WorkspaceIconTheme = {
   sourceVsixPath: string
   themes: WorkspaceIconThemeOption[]
 }
+
+export type WorkspaceIconThemeSelection = {
+  sourceVsixPath: string
+  themeId: string
+}
+
+export type WorkspaceIconThemesByMode = Record<WorkspaceIconThemeMode, WorkspaceIconTheme | null>
 
 export type ProjectRecord = {
   id: string

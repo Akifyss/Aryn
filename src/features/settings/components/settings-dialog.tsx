@@ -35,7 +35,12 @@ import {
 } from '@/features/agent/provider-auth'
 import type { AgentProviderAuthState, AgentProviderAuthUiEvent, AgentWorkspaceState } from '@/features/agent/types'
 import { resolveActiveWorkspaceIconThemeKey } from '@/features/settings/lib/icon-theme-selection'
-import type { WorkspaceIconTheme, WorkspaceIconThemeCatalogOption } from '@/features/workspace/types'
+import type {
+  WorkspaceIconThemeCatalogOption,
+  WorkspaceIconThemeMode,
+  WorkspaceIconThemeSelection,
+  WorkspaceIconThemesByMode,
+} from '@/features/workspace/types'
 import {
   AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS,
   getAlternateRunningPromptBehavior,
@@ -48,12 +53,12 @@ export type SettingsSectionId = 'appearance' | 'conversation' | 'editor' | 'prov
 type SettingsViewProps = {
   activeSection: SettingsSectionId
   agentState: AgentWorkspaceState | null
-  iconTheme: WorkspaceIconTheme | null
+  iconThemes: WorkspaceIconThemesByMode
   iconThemeOptions: WorkspaceIconThemeCatalogOption[]
   isIconThemeBusy: boolean
   onAgentStateChange: (state: AgentWorkspaceState) => void
   onSectionChange: (section: SettingsSectionId) => void
-  onSelectIconTheme: (selection: { sourceVsixPath: string, themeId: string }) => Promise<void>
+  onSelectIconTheme: (mode: WorkspaceIconThemeMode, selection: WorkspaceIconThemeSelection) => Promise<void>
   onStatusMessage: (message: string) => void
   resolvedTheme: 'light' | 'dark'
   workspacePath: string | null
@@ -431,7 +436,7 @@ function getProviderStatus(
 export function SettingsDialog({
   activeSection,
   agentState,
-  iconTheme,
+  iconThemes,
   iconThemeOptions,
   isIconThemeBusy,
   onAgentStateChange,
@@ -521,9 +526,12 @@ export function SettingsDialog({
     )
   }, [authProviderGroups, activeCategory, searchQuery])
 
-  const activeIconThemeKey = useMemo(
-    () => resolveActiveWorkspaceIconThemeKey(iconTheme, iconThemeOptions),
-    [iconTheme, iconThemeOptions],
+  const activeIconThemeKeys = useMemo(
+    () => ({
+      dark: resolveActiveWorkspaceIconThemeKey(iconThemes.dark, iconThemeOptions),
+      light: resolveActiveWorkspaceIconThemeKey(iconThemes.light, iconThemeOptions),
+    }),
+    [iconThemes.dark, iconThemes.light, iconThemeOptions],
   )
   const iconThemeSelectOptions = useMemo(
     () => iconThemeOptions.map((option) => ({
@@ -717,6 +725,17 @@ export function SettingsDialog({
     updateMeoSettings({ imageFolder: meoImageFolderDraft })
   }
 
+  function handleIconThemeSelect(mode: WorkspaceIconThemeMode, value: string) {
+    const selectedOption = iconThemeOptions.find((option) => option.key === value)
+
+    if (selectedOption) {
+      void onSelectIconTheme(mode, {
+        sourceVsixPath: selectedOption.sourceVsixPath,
+        themeId: selectedOption.themeId,
+      })
+    }
+  }
+
   function renderAppearanceSection() {
     return (
       <div className='settings-card'>
@@ -752,26 +771,39 @@ export function SettingsDialog({
 
           <div className='settings-field' style={{ marginTop: '24px' }}>
             <div className='settings-copy-block'>
-              <h4>文件图标主题</h4>
-              <p>控制文件树与工作区中的图标显示样式。</p>
+              <h4>文件图标主题（浅色模式）</h4>
+              <p>控制浅色模式下文件树与工作区中的图标显示样式。</p>
             </div>
             <div className='settings-inline-form' style={{ display: 'flex', alignItems: 'center' }}>
               <SettingsSelect
-                ariaLabel='文件图标主题'
+                ariaLabel='浅色模式文件图标主题'
                 className='flex-1'
                 disabled={isIconThemeBusy || iconThemeOptions.length === 0}
                 options={iconThemeSelectOptions}
-                placeholder='选择文件图标主题'
-                value={activeIconThemeKey}
+                placeholder='选择浅色图标主题'
+                value={activeIconThemeKeys.light}
                 onValueChange={(value) => {
-                  const selectedOption = iconThemeOptions.find((option) => option.key === value)
+                  handleIconThemeSelect('light', value)
+                }}
+              />
+            </div>
+          </div>
 
-                  if (selectedOption) {
-                    void onSelectIconTheme({
-                      sourceVsixPath: selectedOption.sourceVsixPath,
-                      themeId: selectedOption.themeId,
-                    })
-                  }
+          <div className='settings-field' style={{ marginTop: '24px' }}>
+            <div className='settings-copy-block'>
+              <h4>文件图标主题（暗色模式）</h4>
+              <p>控制暗色模式下文件树与工作区中的图标显示样式。</p>
+            </div>
+            <div className='settings-inline-form' style={{ display: 'flex', alignItems: 'center' }}>
+              <SettingsSelect
+                ariaLabel='暗色模式文件图标主题'
+                className='flex-1'
+                disabled={isIconThemeBusy || iconThemeOptions.length === 0}
+                options={iconThemeSelectOptions}
+                placeholder='选择暗色图标主题'
+                value={activeIconThemeKeys.dark}
+                onValueChange={(value) => {
+                  handleIconThemeSelect('dark', value)
                 }}
               />
             </div>
