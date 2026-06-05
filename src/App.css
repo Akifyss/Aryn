@@ -3845,7 +3845,6 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 4px;
   flex-shrink: 0;
   min-height: var(--chrome-height);
   padding: 0 var(--right-panel-content-inset) 0 6px;
