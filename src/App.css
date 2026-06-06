@@ -5515,11 +5515,14 @@ body.workspace-tree-dragging .workspace-tree-row {
   display: inline-flex;
 }
 
-.agent-queued-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+.agent-queued-menu-positioner {
   z-index: 80;
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-queued-menu {
   display: flex;
   flex-direction: column;
   min-width: 148px;
@@ -5558,7 +5561,8 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .agent-queued-menu-item:hover,
-.agent-queued-menu-item:focus-visible {
+.agent-queued-menu-item:focus-visible,
+.agent-queued-menu-item.is-highlighted {
   outline: none;
   background: var(--app-menu-item-hover-background);
 }
@@ -6297,11 +6301,6 @@ body.workspace-tree-dragging .workspace-tree-row {
   .agent-queued-actions {
     grid-column: 2;
     justify-content: flex-start;
-  }
-
-  .agent-queued-menu {
-    left: 0;
-    right: auto;
   }
 
   .agent-model-field {
