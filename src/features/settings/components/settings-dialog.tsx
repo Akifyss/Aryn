@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Select as BaseSelect } from '@base-ui/react/select'
+import { ScrollArea } from '@base-ui/react/scroll-area'
 import { Button, Input, Switch, Tabs } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import {
@@ -169,11 +170,35 @@ function SettingsSelect({
         sideOffset={6}
       >
         <BaseSelect.Popup className='settings-select-popup'>
-          <AppScrollArea
-            className='settings-select-scroll'
-            contentClassName='settings-select-scroll-content'
-          >
-            <BaseSelect.List className='settings-select-list'>
+          <ScrollArea.Root className='app-scroll-area settings-select-scroll'>
+            {/* Select.List must be the scroll viewport so Base UI can align the selected item with the trigger. */}
+            <BaseSelect.List
+              className='app-scroll-area-viewport settings-select-list'
+              render={(listProps) => {
+                const { children, style, ...viewportProps } = listProps
+                const nextStyle = { ...style }
+                delete nextStyle.maxHeight
+                delete nextStyle.overflowX
+                delete nextStyle.overflowY
+
+                return (
+                  <ScrollArea.Viewport
+                    {...viewportProps}
+                    style={{
+                      ...nextStyle,
+                      overflow: 'hidden auto',
+                    }}
+                  >
+                    <ScrollArea.Content
+                      className='settings-select-scroll-content'
+                      style={{ minWidth: '100%' }}
+                    >
+                      {children}
+                    </ScrollArea.Content>
+                  </ScrollArea.Viewport>
+                )
+              }}
+            >
               {options.map((option) => (
                 <BaseSelect.Item
                   key={option.value}
@@ -188,7 +213,10 @@ function SettingsSelect({
                 </BaseSelect.Item>
               ))}
             </BaseSelect.List>
-          </AppScrollArea>
+            <ScrollArea.Scrollbar className='app-scroll-area-scrollbar' orientation='vertical'>
+              <ScrollArea.Thumb className='app-scroll-area-thumb' />
+            </ScrollArea.Scrollbar>
+          </ScrollArea.Root>
         </BaseSelect.Popup>
       </BaseSelect.Positioner>
     </BaseSelect.Root>
