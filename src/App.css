@@ -7077,13 +7077,20 @@ body.workspace-tree-dragging .workspace-tree-row {
   backdrop-filter: blur(22px);
 }
 
+.settings-select-scroll {
+  height: 100%;
+  --app-scroll-area-scrollbar-gap: 0px;
+}
+
+.settings-select-scroll .app-scroll-area-scrollbar[data-orientation='vertical'] {
+  right: 0;
+}
+
 .settings-select-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding-right: 6px;
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
 .settings-select-item {
