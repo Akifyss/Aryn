@@ -849,14 +849,15 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   display: flex;
   flex-shrink: 0;
   min-width: 0;
-  padding: 0 8px 6px;
-  padding-left: calc(var(--sidebar-icon-x, 20px) - 12px);
+  padding: 6px;
+  padding-top: 0;
+  padding-left: calc(var(--sidebar-icon-x, 20px) - 14px);
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
 .workspace-sidebar-surface.is-drawer .editor-workspace-switch-row {
-  padding-left: 8px;
+  padding-left: 6px;
 }
 
 .editor-workspace-switch-button {
@@ -865,7 +866,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   min-height: 32px;
   justify-content: flex-start;
   gap: 8px;
-  padding: 0 10px 0 12px;
+  padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: transparent;
@@ -4302,7 +4303,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  padding: 8px;
+  padding: 6px;
   background: transparent;
 }
 
@@ -4321,7 +4322,7 @@ body.workspace-tree-dragging .workspace-tree-row {
   width: 100%;
   min-height: 32px;
   margin: 0 0 4px;
-  padding: 0 12px;
+  padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
