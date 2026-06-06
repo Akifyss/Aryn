@@ -7068,7 +7068,6 @@ body.workspace-tree-dragging .workspace-tree-row {
 .settings-select-popup {
   width: var(--anchor-width);
   max-width: var(--available-width);
-  max-height: min(280px, calc(100vh - 96px));
   overflow: hidden;
   padding: 6px 0 6px 6px;
   border: 1px solid var(--border);
@@ -7078,24 +7077,13 @@ body.workspace-tree-dragging .workspace-tree-row {
   backdrop-filter: blur(22px);
 }
 
-.settings-select-scroll {
-  max-height: min(268px, calc(100vh - 108px));
-  --app-scroll-area-scrollbar-gap: 0px;
-}
-
-.settings-select-scroll .app-scroll-area-scrollbar[data-orientation='vertical'] {
-  right: 0;
-}
-
 .settings-select-list {
-  max-height: min(268px, calc(100vh - 108px));
-}
-
-.settings-select-scroll-content {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding-right: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .settings-select-item {
