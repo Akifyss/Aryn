@@ -61,6 +61,7 @@ import { AgentComposerMentionInput } from '@/features/agent/components/agent-com
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
 import { shouldStickAgentMessagesToBottom } from '@/features/agent/lib/message-scroll-stickiness'
 import { shouldRunAgentModelCascaderDelayedActivation } from '@/features/agent/lib/model-cascader-pointer-intent'
+import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
 import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
 import {
@@ -269,8 +270,6 @@ type AgentModelPickerPoint = {
   y: number
 }
 
-type AgentSessionMenuStyle = CSSProperties
-
 type AgentMenuAnchorRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width' | 'height'>
 
 type AgentModelPickerPointerPoint = AgentModelPickerPoint & {
@@ -334,12 +333,14 @@ function getAgentMessagesScrollContentElement(scrollElement: HTMLElement) {
   return firstChildElement instanceof HTMLElement ? firstChildElement : null
 }
 
-const AGENT_SESSION_MENU_MARGIN_PX = 8
-const AGENT_SESSION_MENU_GAP_PX = 8
-const AGENT_SESSION_MENU_WIDTH_PX = 320
-const AGENT_SESSION_MENU_HEIGHT_PX = 320
-const AGENT_SESSION_MENU_MIN_HEIGHT_PX = 180
-const AGENT_SESSION_MENU_MAX_HEIGHT_PX = 416
+const AGENT_SESSION_MENU_POSITIONER_PROPS = {
+  className: 'agent-session-menu-positioner',
+  collisionAvoidance: { side: 'flip', align: 'shift', fallbackAxisSide: 'none' },
+  collisionPadding: 8,
+  positionMethod: 'fixed',
+  side: 'bottom',
+  sideOffset: 8,
+} as const
 const AGENT_TREE_MENU_POSITIONER_PROPS = {
   className: 'agent-tree-menu-positioner',
   collisionAvoidance: { side: 'flip', align: 'shift', fallbackAxisSide: 'none' },
@@ -502,7 +503,6 @@ type AgentContextValue = {
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
   onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
-  overlayPanelRef: React.RefObject<HTMLDivElement | null>
   panelError: string | null
   loadProjectSessions: (project: ProjectRecord) => Promise<void>
   projectSessions: Record<string, AgentProjectSessionBucket>
@@ -511,7 +511,6 @@ type AgentContextValue = {
   resolvedSelectedProviderValue: string
   roundFileChangesByMessageId: Map<string, AgentMessageFileChange[]>
   removeComposerAttachment: (attachmentId: string) => void
-  sessionButtonRef: React.RefObject<HTMLButtonElement | null>
   sessionStatus: AgentSessionStatus | null
   setActiveComposerMenu: React.Dispatch<React.SetStateAction<AgentComposerMenu>>
   setActiveOverlayPanel: React.Dispatch<React.SetStateAction<'sessions' | null>>
@@ -847,17 +846,6 @@ function areAgentModelCascaderStylesEqual(
     && left['--agent-model-cascader-thinking-width'] === right['--agent-model-cascader-thinking-width']
 }
 
-function areAgentSessionMenuStylesEqual(
-  left: AgentSessionMenuStyle,
-  right: AgentSessionMenuStyle,
-) {
-  return left.height === right.height
-    && left.left === right.left
-    && left.maxHeight === right.maxHeight
-    && left.top === right.top
-    && left.width === right.width
-}
-
 function scrollAgentModelCascaderActiveItemsIntoView() {
   if (typeof document === 'undefined') {
     return
@@ -959,56 +947,6 @@ function resolveAgentModelCascaderStyle(
     '--agent-model-cascader-grid-height': `${gridHeight}px`,
     '--agent-model-cascader-provider-width': `${layoutMetrics.providerColumnWidth}px`,
     '--agent-model-cascader-thinking-width': `${layoutMetrics.thinkingColumnWidth}px`,
-  }
-}
-
-function resolveAgentSessionMenuStyle(
-  anchorRect: DOMRect,
-  frameRect: Pick<DOMRect, 'top' | 'left' | 'width' | 'height'> | null = null,
-): AgentSessionMenuStyle {
-  const viewportWidth = frameRect?.width ?? window.innerWidth
-  const viewportHeight = frameRect?.height ?? window.innerHeight
-  const localAnchorRect = frameRect
-    ? {
-        bottom: anchorRect.bottom - frameRect.top,
-        height: anchorRect.height,
-        left: anchorRect.left - frameRect.left,
-        right: anchorRect.right - frameRect.left,
-        top: anchorRect.top - frameRect.top,
-        width: anchorRect.width,
-      }
-    : anchorRect
-  const margin = Math.min(AGENT_SESSION_MENU_MARGIN_PX, Math.max(8, viewportWidth / 32))
-  const maxWidth = Math.max(240, viewportWidth - (margin * 2))
-  const width = Math.min(AGENT_SESSION_MENU_WIDTH_PX, maxWidth)
-  const left = Math.max(margin, Math.min(localAnchorRect.left, viewportWidth - width - margin))
-  const maxViewportHeight = Math.max(AGENT_SESSION_MENU_MIN_HEIGHT_PX, viewportHeight - (margin * 2))
-  const availableBelow = Math.max(0, viewportHeight - localAnchorRect.bottom - margin - AGENT_SESSION_MENU_GAP_PX)
-  const availableAbove = Math.max(0, localAnchorRect.top - margin - AGENT_SESSION_MENU_GAP_PX)
-  const targetHeight = Math.min(
-    AGENT_SESSION_MENU_HEIGHT_PX,
-    AGENT_SESSION_MENU_MAX_HEIGHT_PX,
-    maxViewportHeight,
-  )
-  const opensBelow = availableBelow >= targetHeight || availableBelow >= availableAbove
-  const availableHeight = opensBelow ? availableBelow : availableAbove
-  const height = Math.min(
-    targetHeight,
-    Math.max(
-      AGENT_SESSION_MENU_MIN_HEIGHT_PX,
-      Math.min(availableHeight || maxViewportHeight, maxViewportHeight),
-    ),
-  )
-  const top = opensBelow
-    ? Math.min(localAnchorRect.bottom + AGENT_SESSION_MENU_GAP_PX, viewportHeight - height - margin)
-    : Math.max(margin, localAnchorRect.top - AGENT_SESSION_MENU_GAP_PX - height)
-
-  return {
-    height: `${height}px`,
-    left: `${left}px`,
-    maxHeight: `${Math.min(AGENT_SESSION_MENU_MAX_HEIGHT_PX, maxViewportHeight)}px`,
-    top: `${Math.max(margin, top)}px`,
-    width: `${width}px`,
   }
 }
 
@@ -2580,8 +2518,6 @@ function AgentProvider({
   const [projectSessions, setProjectSessions] = useState<Record<string, AgentProjectSessionBucket>>({})
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
-  const overlayPanelRef = useRef<HTMLDivElement | null>(null)
-  const sessionButtonRef = useRef<HTMLButtonElement | null>(null)
   const loadAgentStateRequestIdRef = useRef(0)
   const openSessionRequestIdRef = useRef(0)
   const previousSessionPathRef = useRef<string | null>(null)
@@ -3230,47 +3166,6 @@ function AgentProvider({
       setActiveOverlayPanel(null)
     }
   }, [activeWorkspaceContext.kind, workspacePath])
-
-  useEffect(() => {
-    if (!activeOverlayPanel) {
-      return
-    }
-
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target
-      if (!(target instanceof Node)) {
-        return
-      }
-
-      if (overlayPanelRef.current?.contains(target)) {
-        return
-      }
-
-      if (sessionButtonRef.current?.contains(target)) {
-        return
-      }
-
-      if (isAgentTreeMenuEventTarget(target)) {
-        return
-      }
-
-      setActiveOverlayPanel(null)
-    }
-
-    function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setActiveOverlayPanel(null)
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    window.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [activeOverlayPanel])
 
   useEffect(() => {
     const pendingExternalState = pendingExternalWorkspaceStateRef.current
@@ -4256,7 +4151,6 @@ function AgentProvider({
     onRemoveProject,
     onStartStandaloneConversation,
     onStartProjectSession,
-    overlayPanelRef,
     panelError,
     projectSessions,
     projectState,
@@ -4264,7 +4158,6 @@ function AgentProvider({
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
     removeComposerAttachment,
-    sessionButtonRef,
     sessionStatus,
     setActiveComposerMenu,
     setActiveOverlayPanel,
@@ -5443,14 +5336,12 @@ function AgentChatSurface() {
     onOpenProviderSettings,
     onOpenProjectSwitchMenu,
     onStartStandaloneConversation,
-    overlayPanelRef,
     panelError,
     projectState,
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
     removeComposerAttachment,
-    sessionButtonRef,
     sessionStatus,
     setActiveComposerMenu,
     setActiveOverlayPanel,
@@ -5492,7 +5383,6 @@ function AgentChatSurface() {
   const modelPickerPendingActivationRef = useRef<AgentModelPickerPendingActivation | null>(null)
   const modelPickerActivationVersionRef = useRef(0)
   const [modelCascaderStyle, setModelCascaderStyle] = useState<AgentModelCascaderStyle>({})
-  const [sessionMenuStyle, setSessionMenuStyle] = useState<AgentSessionMenuStyle>({})
   const queuedComposerMessages = useMemo(
     () => isViewingActiveRuntime ? buildQueuedComposerMessages(agentState.runtime) : [],
     [agentState.runtime, isViewingActiveRuntime],
@@ -5646,21 +5536,6 @@ function AgentChatSurface() {
     : surfaceMode === 'drawer'
       ? localOverlayRoot
       : document.body
-
-  const updateSessionMenuPosition = useCallback(() => {
-    const triggerElement = sessionButtonRef.current
-    if (!triggerElement) {
-      return
-    }
-
-    const frameRect = surfaceMode === 'drawer'
-      ? localOverlayRoot?.getBoundingClientRect() ?? null
-      : null
-    const nextStyle = resolveAgentSessionMenuStyle(triggerElement.getBoundingClientRect(), frameRect)
-    setSessionMenuStyle((currentStyle) => (
-      areAgentSessionMenuStylesEqual(currentStyle, nextStyle) ? currentStyle : nextStyle
-    ))
-  }, [localOverlayRoot, sessionButtonRef, surfaceMode])
 
   const updateModelCascaderPosition = useCallback(() => {
     const triggerElement = modelPickerTriggerRef.current
@@ -5971,21 +5846,6 @@ function AgentChatSurface() {
     setActiveComposerMenu('model-cascader')
   }
 
-  function toggleSessionMenu() {
-    if (!canOpenSessionMenu) {
-      setActiveOverlayPanel(null)
-      return
-    }
-
-    if (activeOverlayPanel === 'sessions') {
-      setActiveOverlayPanel(null)
-      return
-    }
-
-    updateSessionMenuPosition()
-    setActiveOverlayPanel('sessions')
-  }
-
   function handleModelPickerProviderFocus(provider: string) {
     clearModelPickerPointerIntent()
     setModelPickerProvider(provider)
@@ -6172,23 +6032,11 @@ function AgentChatSurface() {
     invalidateModelPickerPointerIntent()
   }, [])
 
-  useLayoutEffect(() => {
-    if (activeOverlayPanel !== 'sessions') {
-      return
+  useEffect(() => {
+    if (!canOpenSessionMenu && activeOverlayPanel === 'sessions') {
+      setActiveOverlayPanel(null)
     }
-
-    updateSessionMenuPosition()
-
-    const frameId = window.requestAnimationFrame(updateSessionMenuPosition)
-    window.addEventListener('resize', updateSessionMenuPosition)
-    window.addEventListener('scroll', updateSessionMenuPosition, true)
-
-    return () => {
-      window.cancelAnimationFrame(frameId)
-      window.removeEventListener('resize', updateSessionMenuPosition)
-      window.removeEventListener('scroll', updateSessionMenuPosition, true)
-    }
-  }, [activeOverlayPanel, updateSessionMenuPosition])
+  }, [activeOverlayPanel, canOpenSessionMenu, setActiveOverlayPanel])
 
   useLayoutEffect(() => {
     if (activeComposerMenu !== 'model-cascader') {
@@ -6665,20 +6513,63 @@ function AgentChatSurface() {
 
           <div className='agent-session-select'>
             {canOpenSessionMenu ? (
-              <button
-                ref={sessionButtonRef}
-                type='button'
-                aria-controls='agent-session-tree-floating-panel'
-                aria-expanded={activeOverlayPanel === 'sessions'}
-                aria-haspopup='dialog'
-                className={`agent-session-trigger ${activeOverlayPanel === 'sessions' ? 'is-open' : ''}`}
-                onClick={toggleSessionMenu}
+              <Menu.Root
+                modal={false}
+                open={activeOverlayPanel === 'sessions'}
+                onOpenChange={(open, details) => {
+                  if (open) {
+                    setActiveOverlayPanel('sessions')
+                    return
+                  }
+
+                  if (details.reason === 'outside-press' && isAgentTreeMenuEventTarget(details.event.target)) {
+                    details.cancel()
+                    return
+                  }
+
+                  if (shouldCloseClickOpenedMenu(details)) {
+                    setActiveOverlayPanel(null)
+                  } else {
+                    details.cancel()
+                  }
+                }}
               >
-                <span className='agent-select-current'>
-                  {isNewConversation ? '新对话' : formatSessionLabel(activeSession)}
-                </span>
-                <DownLine aria-hidden='true' className='agent-session-trigger-arrow' size={14} />
-              </button>
+                <Menu.Trigger
+                  aria-controls='agent-session-tree-floating-panel'
+                  className={`agent-session-trigger ${activeOverlayPanel === 'sessions' ? 'is-open' : ''}`}
+                  render={<button type='button' />}
+                >
+                  <span className='agent-select-current'>
+                    {isNewConversation ? '新对话' : formatSessionLabel(activeSession)}
+                  </span>
+                  <DownLine aria-hidden='true' className='agent-session-trigger-arrow' size={14} />
+                </Menu.Trigger>
+                {sessionMenuPortalTarget ? (
+                  <Menu.Portal container={sessionMenuPortalTarget}>
+                    <Menu.Positioner
+                      align='start'
+                      {...AGENT_SESSION_MENU_POSITIONER_PROPS}
+                    >
+                      <Menu.Popup
+                        id='agent-session-tree-floating-panel'
+                        className='agent-floating-panel'
+                        aria-label='Select conversation'
+                        finalFocus={false}
+                      >
+                        <AgentSessionTree
+                          className='agent-session-tree-floating'
+                          id='agent-session-tree-floating'
+                          isFloating
+                          menuPortalTarget={surfaceMode === 'drawer' ? localOverlayRoot : null}
+                          onRequestClose={() => {
+                            setActiveOverlayPanel(null)
+                          }}
+                        />
+                      </Menu.Popup>
+                    </Menu.Positioner>
+                  </Menu.Portal>
+                ) : null}
+              </Menu.Root>
             ) : (
               <span className='agent-session-static-label'>
                 <span className='agent-select-current'>
@@ -6694,28 +6585,6 @@ function AgentChatSurface() {
         <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
       </div>
       <div ref={handleLocalOverlayRootRef} className='agent-local-overlay-root' />
-
-      {canOpenSessionMenu && activeOverlayPanel === 'sessions' && sessionMenuPortalTarget ? createPortal(
-        <div
-          ref={overlayPanelRef}
-          id='agent-session-tree-floating-panel'
-          className={`agent-floating-panel${surfaceMode === 'drawer' ? ' is-local' : ''}`}
-          role='dialog'
-          aria-label='Select conversation'
-          style={sessionMenuStyle}
-        >
-          <AgentSessionTree
-            className='agent-session-tree-floating'
-            id='agent-session-tree-floating'
-            isFloating
-            menuPortalTarget={surfaceMode === 'drawer' ? localOverlayRoot : null}
-            onRequestClose={() => {
-              setActiveOverlayPanel(null)
-            }}
-          />
-        </div>,
-        sessionMenuPortalTarget,
-      ) : null}
 
       {isNewConversation ? (
         <>

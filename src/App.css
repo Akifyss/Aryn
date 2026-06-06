@@ -4018,11 +4018,10 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-floating-panel {
   pointer-events: auto;
-  position: fixed;
-  z-index: 1200;
   width: min(320px, calc(100vw - 16px));
   height: min(320px, calc(100vh - 16px));
   max-height: min(416px, calc(100vh - 16px));
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4031,6 +4030,15 @@ body.workspace-tree-dragging .workspace-tree-row {
   background: var(--overlay);
   box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
   backdrop-filter: blur(22px);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-session-menu-positioner {
+  z-index: 1200;
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
 .agent-local-overlay-root {
@@ -4046,10 +4054,6 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .agent-tree-menu-portal {
   pointer-events: auto;
-}
-
-.agent-floating-panel.is-local {
-  position: absolute;
 }
 
 .agent-auth-form {
