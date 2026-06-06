@@ -6474,6 +6474,7 @@ function AgentChatSurface() {
             void addComposerFiles(files)
           }}
           onSubmitShortcut={handleComposerKeyDown}
+          portalContainer={surfaceMode === 'drawer' ? localOverlayRoot : undefined}
           placeholder={workspacePath ? '发送消息，输入 @ 来提及文件...' : '发送消息...'}
           value={composerState.value}
           workspaceNodes={workspaceTree}

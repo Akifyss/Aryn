@@ -5623,10 +5623,16 @@ body.workspace-tree-dragging .workspace-tree-row {
   -webkit-box-decoration-break: clone;
 }
 
+.agent-composer-mention-positioner {
+  z-index: 1300;
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
 .agent-composer-mention-menu {
-  position: fixed;
-  z-index: 1000;
   overflow: hidden;
+  width: var(--agent-composer-mention-menu-width);
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--overlay);

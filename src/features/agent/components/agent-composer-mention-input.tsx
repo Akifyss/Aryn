@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { createPortal } from 'react-dom'
+import { Popover } from '@base-ui/react/popover'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import type {
@@ -48,6 +48,7 @@ type AgentComposerMentionInputProps = {
   onChange: (nextModel: ComposerModel) => void
   onSubmitShortcut?: (event: ReactKeyboardEvent<HTMLDivElement>) => void
   placeholder?: string
+  portalContainer?: HTMLElement | null
   value: string
   workspaceNodes: WorkspaceNode[]
   workspacePath: string | null
@@ -79,8 +80,26 @@ const MENTION_MENU_MARGIN = 12
 const MENTION_MENU_MIN_WIDTH = 260
 const MENTION_MENU_MAX_WIDTH = 420
 
-type MentionMenuStyle = CSSProperties & {
+type MentionMenuRect = {
+  bottom: number
+  height: number
+  left: number
+  right: number
+  top: number
+  width: number
+  x: number
+  y: number
+}
+
+type MentionMenuLayout = {
+  anchorRect: MentionMenuRect
+  height: number
+  width: number
+}
+
+type MentionMenuCssVars = CSSProperties & {
   '--agent-composer-mention-menu-height'?: string
+  '--agent-composer-mention-menu-width'?: string
 }
 
 function buildActiveMentionKey(activeMention: ActiveComposerMentionQuery | null) {
@@ -314,6 +333,34 @@ function getEditorCaretRect(editor: HTMLElement, offset: number) {
   return rect
 }
 
+function toMentionMenuRect(rect: DOMRect): MentionMenuRect {
+  return {
+    bottom: rect.bottom,
+    height: rect.height,
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+    width: rect.width,
+    x: rect.x,
+    y: rect.y,
+  }
+}
+
+function areMentionMenuLayoutsEqual(left: MentionMenuLayout | null, right: MentionMenuLayout) {
+  if (!left) {
+    return false
+  }
+
+  return left.width === right.width
+    && left.height === right.height
+    && left.anchorRect.bottom === right.anchorRect.bottom
+    && left.anchorRect.height === right.anchorRect.height
+    && left.anchorRect.left === right.anchorRect.left
+    && left.anchorRect.right === right.anchorRect.right
+    && left.anchorRect.top === right.anchorRect.top
+    && left.anchorRect.width === right.anchorRect.width
+}
+
 function renderEditorContent(editor: HTMLElement, value: string, mentions: ComposerMentionToken[]) {
   const fragment = document.createDocumentFragment()
   let cursor = 0
@@ -422,6 +469,7 @@ export function AgentComposerMentionInput({
   onChange,
   onSubmitShortcut,
   placeholder = 'Message',
+  portalContainer,
   value,
   workspaceNodes,
   workspacePath,
@@ -445,7 +493,7 @@ export function AgentComposerMentionInput({
   const [isFocused, setIsFocused] = useState(false)
   const [dismissedMentionKey, setDismissedMentionKey] = useState<string | null>(null)
   const [isComposing, setIsComposing] = useState(false)
-  const [mentionMenuStyle, setMentionMenuStyle] = useState<MentionMenuStyle | null>(null)
+  const [mentionMenuLayout, setMentionMenuLayout] = useState<MentionMenuLayout | null>(null)
 
   const normalizedMentions = useMemo(() => parseComposerMentionRanges(value, mentions), [mentions, value])
   const mentionItems = useMemo(
@@ -467,58 +515,58 @@ export function AgentComposerMentionInput({
     && activeMentionKey !== dismissedMentionKey,
   )
   const shouldShowPlaceholder = !value && !isComposing
+  const isMentionMenuOpen = shouldShowMentionMenu && mentionMenuLayout !== null
   const mentionMenuHeight = useMemo(
     () => mentionResults.length > 0
       ? Math.min((mentionResults.length * MENTION_MENU_ROW_HEIGHT) + MENTION_MENU_PADDING, MENTION_MENU_MAX_HEIGHT)
       : MENTION_MENU_EMPTY_HEIGHT,
     [mentionResults.length],
   )
+  const mentionMenuAnchor = useMemo(() => {
+    if (!mentionMenuLayout) {
+      return null
+    }
+
+    return {
+      getBoundingClientRect: () => mentionMenuLayout.anchorRect,
+    }
+  }, [mentionMenuLayout])
+  const mentionMenuCssVars = useMemo<MentionMenuCssVars | undefined>(() => (
+    mentionMenuLayout
+      ? {
+          '--agent-composer-mention-menu-height': `${mentionMenuLayout.height}px`,
+          '--agent-composer-mention-menu-width': `${mentionMenuLayout.width}px`,
+        }
+      : undefined
+  ), [mentionMenuLayout])
 
   function updateMentionMenuPosition() {
     const editor = editorRef.current
 
     if (!editor || !activeMention) {
-      setMentionMenuStyle(null)
+      setMentionMenuLayout(null)
       return
     }
 
     const editorRect = editor.getBoundingClientRect()
     const anchorRect = getEditorCaretRect(editor, activeMention.end)
     const viewportWidth = window.innerWidth
-    const viewportHeight = window.innerHeight
     const maxWidth = Math.max(MENTION_MENU_MIN_WIDTH, viewportWidth - (MENTION_MENU_MARGIN * 2))
     const width = Math.min(Math.max(editorRect.width, MENTION_MENU_MIN_WIDTH), MENTION_MENU_MAX_WIDTH, maxWidth)
-    const left = Math.max(MENTION_MENU_MARGIN, Math.min(anchorRect.left, viewportWidth - width - MENTION_MENU_MARGIN))
-    const availableBelow = viewportHeight - anchorRect.bottom - MENTION_MENU_GAP - MENTION_MENU_MARGIN
     const availableAbove = anchorRect.top - MENTION_MENU_GAP - MENTION_MENU_MARGIN
-    const opensBelow = availableBelow >= Math.min(mentionMenuHeight, MENTION_MENU_MAX_HEIGHT) || availableBelow >= availableAbove
     const maxHeight = Math.max(
       MENTION_MENU_EMPTY_HEIGHT,
-      Math.min(mentionMenuHeight, opensBelow ? availableBelow : availableAbove, MENTION_MENU_MAX_HEIGHT),
+      Math.min(mentionMenuHeight, availableAbove, MENTION_MENU_MAX_HEIGHT),
     )
-    const top = opensBelow
-      ? Math.min(anchorRect.bottom + MENTION_MENU_GAP, viewportHeight - maxHeight - MENTION_MENU_MARGIN)
-      : Math.max(MENTION_MENU_MARGIN, anchorRect.top - MENTION_MENU_GAP - maxHeight)
-    const nextStyle: MentionMenuStyle = {
-      left: `${left}px`,
-      top: `${Math.max(MENTION_MENU_MARGIN, top)}px`,
-      width: `${width}px`,
-      '--agent-composer-mention-menu-height': `${maxHeight}px`,
+    const nextLayout: MentionMenuLayout = {
+      anchorRect: toMentionMenuRect(anchorRect),
+      height: maxHeight,
+      width,
     }
 
-    setMentionMenuStyle((currentStyle) => {
-      if (
-        currentStyle
-        && currentStyle.left === nextStyle.left
-        && currentStyle.top === nextStyle.top
-        && currentStyle.width === nextStyle.width
-        && currentStyle['--agent-composer-mention-menu-height'] === nextStyle['--agent-composer-mention-menu-height']
-      ) {
-        return currentStyle
-      }
-
-      return nextStyle
-    })
+    setMentionMenuLayout((currentLayout) => (
+      areMentionMenuLayoutsEqual(currentLayout, nextLayout) ? currentLayout : nextLayout
+    ))
   }
 
   useLayoutEffect(() => {
@@ -547,7 +595,7 @@ export function AgentComposerMentionInput({
 
   useLayoutEffect(() => {
     if (!shouldShowMentionMenu) {
-      setMentionMenuStyle(null)
+      setMentionMenuLayout(null)
       return
     }
 
@@ -856,63 +904,106 @@ export function AgentComposerMentionInput({
     emitModel(nextModel, nextSelection)
   }
 
-  const mentionMenu = shouldShowMentionMenu && mentionMenuStyle && typeof document !== 'undefined'
-    ? createPortal(
-      <div className='agent-composer-mention-menu' style={mentionMenuStyle}>
-        <AppScrollArea
-          ref={menuRef}
-          className='agent-composer-mention-menu-scroll'
-          contentClassName='agent-composer-mention-menu-scroll-content'
-          rootStyle={{ height: 'var(--agent-composer-mention-menu-height)' }}
+  const mentionPortalContainer = typeof document === 'undefined'
+    ? null
+    : portalContainer === undefined
+      ? document.body
+      : portalContainer
+
+  const mentionMenu = mentionPortalContainer ? (
+    <Popover.Root
+      modal={false}
+      open={isMentionMenuOpen}
+      onOpenChange={(open, details) => {
+        if (open) {
+          return
+        }
+
+        if (details.reason === 'outside-press') {
+          const target = details.event.target
+          if (target instanceof Node && editorRef.current?.contains(target)) {
+            details.cancel()
+            return
+          }
+        }
+
+        if (activeMentionKey) {
+          setDismissedMentionKey(activeMentionKey)
+        }
+      }}
+    >
+      <Popover.Portal container={mentionPortalContainer}>
+        <Popover.Positioner
+          anchor={mentionMenuAnchor}
+          align='start'
+          className='agent-composer-mention-positioner'
+          collisionAvoidance={{ align: 'shift', fallbackAxisSide: 'none', side: 'shift' }}
+          collisionPadding={MENTION_MENU_MARGIN}
+          positionMethod='fixed'
+          side='top'
+          sideOffset={MENTION_MENU_GAP}
         >
-          <div className='agent-composer-mention-menu-list' role='listbox' aria-label='Project files'>
-            {mentionResults.length > 0 ? mentionResults.map((item, index) => {
-              const isActive = index === selectedIndex
+          <Popover.Popup
+            className='agent-composer-mention-menu'
+            finalFocus={false}
+            initialFocus={false}
+            style={mentionMenuCssVars}
+          >
+            <AppScrollArea
+              ref={menuRef}
+              className='agent-composer-mention-menu-scroll'
+              contentClassName='agent-composer-mention-menu-scroll-content'
+              rootStyle={{ height: 'var(--agent-composer-mention-menu-height)' }}
+            >
+              <div className='agent-composer-mention-menu-list' role='listbox' aria-label='Project files'>
+                {mentionResults.length > 0 ? mentionResults.map((item, index) => {
+                  const isActive = index === selectedIndex
 
-              return (
-                <button
-                  key={item.id}
-                  type='button'
-                  role='option'
-                  aria-selected={isActive}
-                  data-active={isActive ? 'true' : 'false'}
-                  className={`agent-composer-mention-option${isActive ? ' is-active' : ''}`}
-                  title={item.relativePath}
-                  onMouseDown={(mouseEvent) => {
-                    mouseEvent.preventDefault()
-                    applyMentionSelection(index)
-                  }}
-                  onMouseEnter={() => {
-                    setSelectedIndex(index)
-                  }}
-                >
-                  <span className='git-row-icon'>
-                    <WorkspaceFileIcon
-                      fileName={item.name}
-                      iconTheme={iconTheme ?? null}
-                      isClosed={item.kind === 'directory'}
-                      isFolder={item.kind === 'directory'}
-                      nodeLabel={item.name}
-                    />
-                  </span>
+                  return (
+                    <button
+                      key={item.id}
+                      type='button'
+                      role='option'
+                      aria-selected={isActive}
+                      data-active={isActive ? 'true' : 'false'}
+                      className={`agent-composer-mention-option${isActive ? ' is-active' : ''}`}
+                      title={item.relativePath}
+                      onMouseDown={(mouseEvent) => {
+                        mouseEvent.preventDefault()
+                        applyMentionSelection(index)
+                      }}
+                      onMouseEnter={() => {
+                        setSelectedIndex(index)
+                      }}
+                    >
+                      <span className='git-row-icon'>
+                        <WorkspaceFileIcon
+                          fileName={item.name}
+                          iconTheme={iconTheme ?? null}
+                          isClosed={item.kind === 'directory'}
+                          isFolder={item.kind === 'directory'}
+                          nodeLabel={item.name}
+                        />
+                      </span>
 
-                  <span className='agent-composer-mention-option-inline'>
-                    <span className='panel-tree-label'>{item.displayName}</span>
-                    {item.displayPath ? (
-                      <span className='git-change-meta'>{item.displayPath}</span>
-                    ) : null}
-                  </span>
-                </button>
-              )
-            }) : (
-              <div className='agent-composer-mention-empty'>No matching files or folders</div>
-            )}
-          </div>
-        </AppScrollArea>
-      </div>,
-      document.body,
-    )
-    : null
+                      <span className='agent-composer-mention-option-inline'>
+                        <span className='panel-tree-label'>{item.displayName}</span>
+                        {item.displayPath ? (
+                          <span className='git-change-meta'>{item.displayPath}</span>
+                        ) : null}
+                      </span>
+                    </button>
+                  )
+                }) : (
+                  <div className='agent-composer-mention-empty'>No matching files or folders</div>
+                )}
+              </div>
+            </AppScrollArea>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  ) : null
 
   return (
     <>
