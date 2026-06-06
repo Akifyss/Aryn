@@ -6566,6 +6566,9 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .command-palette-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
   color: var(--muted);
 }
 
@@ -6656,9 +6659,18 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .command-palette-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
   color: var(--muted);
   transition: color 140ms ease;
+}
+
+.command-palette-item-icon .git-row-icon {
+  color: inherit;
 }
 
 .command-palette-item[data-command-active="true"] .command-palette-item-icon {

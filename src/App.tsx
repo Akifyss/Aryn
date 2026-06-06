@@ -4549,29 +4549,6 @@ function App() {
     }
   }, [activeResizePanel, isLeftSidebarVisible, isRightSidebarVisible])
 
-  const commandPaletteActions = useMemo(() => [
-    {
-      label: 'Open Settings',
-      icon: 'lucide:settings',
-      onSelect: () => setIsSettingsOpen(true)
-    },
-    {
-      label: 'Create New File',
-      icon: 'lucide:file-plus',
-      onSelect: () => handleCreateFile()
-    },
-    {
-      label: 'Create New Folder',
-      icon: 'lucide:folder-plus',
-      onSelect: () => handleCreateDirectory()
-    },
-    {
-      label: 'Switch Workspace',
-      icon: 'mingcute:transfer-4-line',
-      onSelect: () => handlePickWorkspace()
-    }
-  ], [handleCreateFile, handleCreateDirectory, handlePickWorkspace])
-
   const handleOpenSession = useCallback((sessionPath: string) => {
     const currentProject = currentPath
       ? projectState.projects.find((project) => normalizeFilePath(project.path) === normalizeFilePath(currentPath))
@@ -5571,9 +5548,9 @@ function App() {
         onClose={handleCloseCommandPalette}
         files={tree}
         sessions={agentWorkspaceState?.sessions ?? []}
+        iconTheme={iconTheme}
         onOpenFile={openFile}
         onOpenSession={handleOpenSession}
-        actions={commandPaletteActions}
         theme={theme}
       />
       <AppTitlebar onRequestClose={() => {

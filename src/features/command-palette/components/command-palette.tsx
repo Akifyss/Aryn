@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import {
   Modal,
   Kbd,
@@ -7,30 +7,23 @@ import {
 } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import { WorkspaceFileIcon } from '@/components/file-change-visuals'
+import {
+  buildCommandPaletteResultSections,
+  type CommandPaletteResult,
+} from '@/features/command-palette/lib/search-results'
 import type { WorkspaceNode } from '@/features/workspace/types'
+import type { WorkspaceIconTheme } from '@/features/workspace/types'
 import type { AgentSessionListItem } from '@/features/agent/types'
-
-export type CommandItem = {
-  id: string
-  label: string
-  description?: string
-  icon: string
-  category: 'action' | 'file' | 'session'
-  onSelect: () => void
-}
 
 type CommandPaletteProps = {
   isOpen: boolean
   onClose: () => void
   files: WorkspaceNode[]
   sessions: AgentSessionListItem[]
-  actions: {
-    label: string
-    icon: string
-    onSelect: () => void
-  }[]
+  iconTheme: WorkspaceIconTheme | null
   onOpenFile: (path: string) => void
-  onOpenSession: (id: string) => void
+  onOpenSession: (path: string) => void
   theme: 'light' | 'dark' | 'auto'
 }
 
@@ -41,7 +34,7 @@ export function CommandPalette({
   onClose,
   files,
   sessions,
-  actions,
+  iconTheme,
   onOpenFile,
   onOpenSession,
   theme
@@ -53,76 +46,30 @@ export function CommandPalette({
   const cmdKey = isMac ? '⌘' : 'Ctrl'
 
   const inputRef = useRef<HTMLInputElement>(null)
-  const resultsRef = useRef<CommandItem[]>([])
+  const resultsRef = useRef<CommandPaletteResult[]>([])
   const selectedIndexRef = useRef(0)
 
-  const flattenedFiles = useMemo(() => {
-    const isMac = typeof window !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
-    const list: WorkspaceNode[] = []
-    const flatten = (nodes: WorkspaceNode[]) => {
-      nodes.forEach(node => {
-        if (node.kind === 'file') list.push(node)
-        if (node.children) flatten(node.children)
-      })
+  const resultSections = useMemo(() => (
+    buildCommandPaletteResultSections({
+      files,
+      query,
+      sessions,
+    })
+  ), [files, query, sessions])
+
+  const results = useMemo(() => (
+    resultSections.flatMap((section) => section.items)
+  ), [resultSections])
+
+  const selectResult = useCallback((item: CommandPaletteResult) => {
+    if (item.category === 'file') {
+      onOpenFile(item.path)
+    } else {
+      onOpenSession(item.path)
     }
-    flatten(files)
-    return list
-  }, [files])
 
-  const results = useMemo(() => {
-    const q = query.toLowerCase().trim()
-    const all: CommandItem[] = []
-
-    actions.forEach(action => {
-      if (!q || action.label.toLowerCase().includes(q)) {
-        all.push({
-          id: `action-${action.label}`,
-          label: action.label,
-          icon: action.icon,
-          category: 'action',
-          onSelect: () => {
-            action.onSelect()
-            onClose()
-          }
-        })
-      }
-    })
-
-    flattenedFiles.forEach(file => {
-      if (!q || file.name.toLowerCase().includes(q) || file.path.toLowerCase().includes(q)) {
-        all.push({
-          id: `file-${file.path}`,
-          label: file.name,
-          description: file.path,
-          icon: 'lucide:file-text',
-          category: 'file',
-          onSelect: () => {
-            onOpenFile(file.path)
-            onClose()
-          }
-        })
-      }
-    })
-
-    sessions.forEach(session => {
-      const name = session.name || 'Untitled Session'
-      if (!q || name.toLowerCase().includes(q)) {
-        all.push({
-          id: `session-${session.id}`,
-          label: name,
-          description: session.preview || 'AI chat session',
-          icon: 'lucide:message-square',
-          category: 'session',
-          onSelect: () => {
-            onOpenSession(session.path)
-            onClose()
-          }
-        })
-      }
-    })
-
-    return all.slice(0, 50)
-  }, [query, flattenedFiles, sessions, actions, onOpenFile, onOpenSession, onClose])
+    onClose()
+  }, [onClose, onOpenFile, onOpenSession])
 
   useEffect(() => {
     resultsRef.current = results
@@ -144,16 +91,18 @@ export function CommandPalette({
     setSelectedIndex(0)
   }, [query])
 
-  // EXTREME FIX: Clamp selectedIndex when results change to avoid out-of-bounds access
+  // Keep keyboard selection valid as the query or backing data changes.
   useEffect(() => {
+    if (results.length === 0 && selectedIndex !== 0) {
+      setSelectedIndex(0)
+      return
+    }
+
     if (results.length > 0 && selectedIndex >= results.length) {
       setSelectedIndex(results.length - 1)
     }
   }, [results.length, selectedIndex])
 
-  // EXTREME FIX: Deep Bound Auto-scroll with High Visibility Padding
-  // Use scrollIntoView + scroll-margin (defined in CSS) for native-first performance
-  // and wrap in requestAnimationFrame to prevent layout thrashing on rapid keydown.
   useEffect(() => {
     if (!isOpen) return
 
@@ -189,16 +138,20 @@ export function CommandPalette({
         lastNavigateTime.current = now
 
         e.preventDefault()
+        if (currentResults.length === 0) {
+          return
+        }
+
         if (e.key === 'ArrowDown') {
-          setSelectedIndex(prev => (prev + 1) % Math.max(currentResults.length, 1))
+          setSelectedIndex(prev => (prev + 1) % currentResults.length)
         } else {
-          setSelectedIndex(prev => (prev - 1 + currentResults.length) % Math.max(currentResults.length, 1))
+          setSelectedIndex(prev => (prev - 1 + currentResults.length) % currentResults.length)
         }
       } else if (e.key === 'Enter') {
         e.preventDefault()
         const selected = currentResults[currentIndex]
         if (selected) {
-          selected.onSelect()
+          selectResult(selected)
         }
       } else if (e.key === 'Escape') {
         onClose()
@@ -206,7 +159,7 @@ export function CommandPalette({
     }
     window.addEventListener('keydown', handleGlobalKeyDown, true)
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, true)
-  }, [isOpen, onClose])
+  }, [isOpen, onClose, selectResult])
 
   return (
     <Modal.Backdrop
@@ -225,12 +178,12 @@ export function CommandPalette({
           <Modal.Body className='p-0 m-0'>
               {/* Header */}
               <div className='command-palette-header'>
-                <Icon icon='lucide:search' className='command-palette-icon' width={22} />
+                <Icon icon='lucide:search' className='command-palette-icon' width={16} height={16} />
                 <input
                   ref={inputRef}
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder='Search...'
+                  placeholder='搜索...'
                   style={{ outline: 'none', boxShadow: 'none' }}
                   className='command-palette-input'
                 />
@@ -252,33 +205,24 @@ export function CommandPalette({
                 {results.length > 0 ? (
                   <div className='flex flex-col gap-6'>
                     {(() => {
-                      const activeId = results[selectedIndex]?.id;
-                      // Optimization: Group by category once per render to avoid O(N^2) total work
-                      const categorized: Record<string, CommandItem[]> = { action: [], file: [], session: [] }
-                      results.forEach(item => {
-                        if (categorized[item.category]) categorized[item.category].push(item)
-                      })
+                      const activeId = results[selectedIndex]?.id
 
-                      return ['action', 'file', 'session'].map((cat) => {
-                        const items = categorized[cat]
-                        if (items.length === 0) return null
-                        const label = cat === 'action' ? 'Navigation' : cat === 'file' ? 'Recent Files' : 'Sessions'
-
+                      return resultSections.map((section) => {
                         return (
-                          <div key={cat} className='command-palette-section'>
+                          <div key={section.category} className='command-palette-section'>
                             <header className='command-palette-section-header'>
-                              {label}
+                              {section.label}
                             </header>
                             <ListBox
-                              aria-label={label}
+                              aria-label={section.label}
                               className='p-0 gap-0 outline-none'
                               selectionMode='single'
                               onAction={(key) => {
                                 const item = resultsRef.current.find(i => i.id === key)
-                                if (item) item.onSelect()
+                                if (item) selectResult(item)
                               }}
                             >
-                              {items.map((item) => {
+                              {section.items.map((item) => {
                                 const isSelected = item.id === activeId
 
                                 return (
@@ -287,12 +231,16 @@ export function CommandPalette({
                                     data-command-active={isSelected ? 'true' : 'false'}
                                     textValue={item.label}
                                     className='command-palette-item'
-                                    onPress={() => item.onSelect()}
+                                    onPress={() => selectResult(item)}
                                     style={{ outline: 'none' }}
                                   >
                                     <div className='command-palette-item-content'>
                                       <div className='command-palette-item-icon'>
-                                        <Icon icon={item.icon} width={18} />
+                                        {item.category === 'file' ? (
+                                          <WorkspaceFileIcon fileName={item.fileName} iconTheme={iconTheme} />
+                                        ) : (
+                                          <WorkspaceFileIcon fileName='.jsonl' iconTheme={iconTheme} />
+                                        )}
                                       </div>
                                       <div className='command-palette-item-text'>
                                         <span className='command-palette-item-title'>{item.label}</span>
@@ -318,7 +266,7 @@ export function CommandPalette({
                 ) : (
                   <div className='command-palette-empty'>
                     <Icon icon='lucide:search' width={32} className='command-palette-empty-icon' />
-                    <p className='command-palette-empty-text'>No results found</p>
+                    <p className='command-palette-empty-text'>未找到结果</p>
                   </div>
                 )}
               </AppScrollArea>
@@ -331,16 +279,16 @@ export function CommandPalette({
                       <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none min-w-[20px]">↑</Kbd>
                       <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none min-w-[20px]">↓</Kbd>
                     </div>
-                    <span>NAVIGATE</span>
+                    <span>导航</span>
                   </div>
                   <div className='command-palette-footer-item'>
                     <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">ENTER</Kbd>
-                    <span>SELECT</span>
+                    <span>选择</span>
                   </div>
                 </div>
                 <div className='command-palette-footer-item'>
                   <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">ESC</Kbd>
-                  <span>CLOSE</span>
+                  <span>关闭</span>
                 </div>
               </div>
           </Modal.Body>
