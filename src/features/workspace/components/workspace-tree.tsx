@@ -1,4 +1,4 @@
-import { type Dispatch, type DragEvent, type FormEvent, type SetStateAction, useEffect, useRef, useState } from 'react'
+import { type Dispatch, type DragEvent, type FormEvent, type MouseEvent, type SetStateAction, useEffect, useRef, useState } from 'react'
 import { Menu } from '@base-ui/react/menu'
 import { AlertDialog, Button, useOverlayState } from '@heroui/react'
 import {
@@ -9,6 +9,7 @@ import {
   Edit2Line,
   ExternalLinkLine,
   FolderLine,
+  GitBranchLine,
   More1Line,
 } from '@mingcute/react'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
@@ -26,7 +27,7 @@ import {
 import { recordOpenFileProfile } from '@/lib/open-file-profile'
 import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
-import type { GitDisplayChange, GitRepositoryState } from '@/features/git/types'
+import type { GitChangeItem, GitDisplayChange, GitRepositoryState } from '@/features/git/types'
 
 type WorkspaceTreeProps = {
   activeFilePath: string | null
@@ -35,8 +36,9 @@ type WorkspaceTreeProps = {
   expandedPaths: Set<string>
   setExpandedPaths: Dispatch<SetStateAction<Set<string>>>
   workspacePath: string | null
-  onSelectFile: (path: string) => void
+  onSelectFile: (path: string, event: MouseEvent<HTMLDivElement>) => void
   onOpenInCodeEditor: (path: string) => void
+  onOpenDiff?: (change: GitChangeItem) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onDeleteNode: (node: WorkspaceNode) => Promise<void>
   onMoveNode: (node: WorkspaceNode, targetDirectoryPath: string) => Promise<void>
@@ -73,6 +75,18 @@ function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | un
   return { ...dominantChange, path: node.path } as GitDisplayChange
 }
 
+function findGitDiffChangeByFilePath(repositoryState: GitRepositoryState | null | undefined, node: WorkspaceNode): GitChangeItem | null {
+  if (!repositoryState?.isRepository || node.kind !== 'file') {
+    return null
+  }
+
+  const targetPath = normalizeWorkspacePath(node.path)
+
+  return repositoryState.unstagedChanges.find(c => normalizeWorkspacePath(c.path) === targetPath)
+    ?? repositoryState.stagedChanges.find(c => normalizeWorkspacePath(c.path) === targetPath)
+    ?? null
+}
+
 function getSystemFileManagerName(platform: string) {
   if (platform === 'darwin') return '访达'
   if (platform === 'win32') return '资源管理器'
@@ -87,7 +101,9 @@ function FileRowActions({
   onShowInFolder,
   isSubmitting,
   gitChange,
+  gitDiffChange,
   menuPortalTarget,
+  onOpenDiff,
 }: {
   canOpenInCodeEditor: boolean
   onOpenInCodeEditor: () => void
@@ -96,13 +112,19 @@ function FileRowActions({
   onShowInFolder: () => void
   isSubmitting: boolean
   gitChange: GitDisplayChange | null
+  gitDiffChange: GitChangeItem | null
   menuPortalTarget?: HTMLElement | null
+  onOpenDiff?: (change: GitChangeItem) => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const systemManagerName = getSystemFileManagerName(window.appApi.platform)
 
   return (
-    <div className='git-change-tools' onClick={(event) => event.stopPropagation()}>
+    <div
+      className='git-change-tools'
+      onAuxClick={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
       {gitChange && (
         <span
           className={`git-status-dot git-status-dot-${gitChange.kind}`}
@@ -169,6 +191,19 @@ function FileRowActions({
                     <span>在代码编辑器打开</span>
                   </Menu.Item>
                 ) : null}
+                {gitDiffChange && onOpenDiff ? (
+                  <Menu.Item
+                    nativeButton
+                    render={<button type='button' />}
+                    className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
+                    data-menu-action='open-diff'
+                    label='查看差异'
+                    onClick={() => onOpenDiff(gitDiffChange)}
+                  >
+                    <GitBranchLine size={16} className='workspace-tree-menu-icon' />
+                    <span>查看差异</span>
+                  </Menu.Item>
+                ) : null}
                 <Menu.Item
                   nativeButton
                   render={<button type='button' />}
@@ -226,6 +261,7 @@ function FileTreeItem({
   onDragStartNode,
   onDropOnNode,
   onOpenInCodeEditor,
+  onOpenDiff,
   onRenameNode,
   onSelectFile,
   onToggleDirectory,
@@ -246,8 +282,9 @@ function FileTreeItem({
   onDragStartNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
   onDropOnNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => Promise<void>
   onOpenInCodeEditor: (path: string) => void
+  onOpenDiff?: (change: GitChangeItem) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
-  onSelectFile: (path: string) => void
+  onSelectFile: (path: string, event: MouseEvent<HTMLDivElement>) => void
   onToggleDirectory: (path: string) => void
   gitRepositoryState?: GitRepositoryState | null
   menuPortalTarget?: HTMLElement | null
@@ -265,6 +302,7 @@ function FileTreeItem({
   const isExpanded = expandedPaths.has(node.path)
   const isActive = activeFilePath === node.path
   const gitChange = findGitChangeByFilePath(gitRepositoryState, node)
+  const gitDiffChange = findGitDiffChangeByFilePath(gitRepositoryState, node)
   const resolvedDropTargetDirectoryPath = resolveDropTargetDirectoryPath(node, workspacePath)
   const isDragSource = draggedNode?.path === node.path
   const isDropTarget = Boolean(
@@ -313,6 +351,23 @@ function FileTreeItem({
 
   const deleteModal = useOverlayState()
 
+  const handleSelectNode = (event: MouseEvent<HTMLDivElement>) => {
+    recordOpenFileProfile('workspace-tree:row-click', {
+      button: event.button,
+      kind: node.kind,
+      path: node.path,
+    })
+
+    if (isFolder) {
+      if (event.button === 0) {
+        onToggleDirectory(node.path)
+      }
+      return
+    }
+
+    onSelectFile(node.path, event)
+  }
+
   const handleDelete = async (onClose: () => void) => {
     try {
       setIsSubmitting(true)
@@ -331,17 +386,12 @@ function FileTreeItem({
       <div
         ref={rowRef}
         className={`workspace-tree-row${isEditing ? ' is-editing' : ''}${isActive ? ' is-active' : ''}${isDragSource ? ' is-drag-source' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
-        onClick={() => {
-          recordOpenFileProfile('workspace-tree:row-click', {
-            kind: node.kind,
-            path: node.path,
-          })
-          if (isFolder) {
-            onToggleDirectory(node.path)
-          } else {
-            onSelectFile(node.path)
+        onAuxClick={(event) => {
+          if (event.button === 1) {
+            handleSelectNode(event)
           }
         }}
+        onClick={handleSelectNode}
         onDragLeave={(event) => onDragLeaveNode(node, event)}
         onDragOver={(event) => onDragOverNode(node, event)}
         onDrop={(event) => void onDropOnNode(node, event)}
@@ -384,7 +434,11 @@ function FileTreeItem({
                 }}
               />
             </div>
-            <div className='git-change-tools' onClick={event => event.stopPropagation()}>
+            <div
+              className='git-change-tools'
+              onAuxClick={event => event.stopPropagation()}
+              onClick={event => event.stopPropagation()}
+            >
               <div className='git-change-actions' style={{ opacity: 1, maxWidth: '4rem', transform: 'translateX(0)' }}>
                 <button
                   type='button'
@@ -433,8 +487,10 @@ function FileTreeItem({
             canOpenInCodeEditor={canOpenInCodeEditor}
             isSubmitting={isSubmitting}
             gitChange={gitChange}
+            gitDiffChange={gitDiffChange}
             menuPortalTarget={menuPortalTarget}
             onOpenInCodeEditor={() => onOpenInCodeEditor(node.path)}
+            onOpenDiff={onOpenDiff}
             onShowInFolder={() => {
               window.appApi.showItemInFolder(node.path).catch((error) => {
                 console.error('Failed to show item in folder:', error)
@@ -514,6 +570,7 @@ function FileTreeItem({
                 onDragStartNode={onDragStartNode}
                 onDropOnNode={onDropOnNode}
                 onOpenInCodeEditor={onOpenInCodeEditor}
+                onOpenDiff={onOpenDiff}
                 onRenameNode={onRenameNode}
                 onSelectFile={onSelectFile}
                 onToggleDirectory={onToggleDirectory}
@@ -537,6 +594,7 @@ export function WorkspaceTree({
   workspacePath,
   onSelectFile,
   onOpenInCodeEditor,
+  onOpenDiff,
   onRenameNode,
   onDeleteNode,
   onMoveNode,
@@ -785,6 +843,7 @@ export function WorkspaceTree({
           onDragOverNode={handleDragOverNode}
           onDragStartNode={handleDragStartNode}
           onDropOnNode={handleDropOnNode}
+          onOpenDiff={onOpenDiff}
           onOpenInCodeEditor={onOpenInCodeEditor}
           onRenameNode={onRenameNode}
           onSelectFile={onSelectFile}

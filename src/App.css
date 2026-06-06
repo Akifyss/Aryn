@@ -2143,12 +2143,125 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .editor-content-shell {
+  --editor-surface-header-height: 44px;
+  --editor-directory-toggle-left: 8px;
+  --editor-directory-toggle-top: 6px;
+  --editor-directory-toggle-size: 32px;
+  --editor-directory-toolbar-gap: 8px;
+
   position: relative;
   display: flex;
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  background: var(--surface);
+}
+
+.editor-directory-sidebar {
+  display: flex;
+  flex: 0 0 clamp(216px, 22vw, 276px);
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--separator);
+  background: var(--surface);
+}
+
+.editor-fixed-file-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.editor-fixed-file-empty-panel {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.editor-directory-toggle-slot {
+  position: absolute;
+  top: var(--editor-directory-toggle-top);
+  left: var(--editor-directory-toggle-left);
+  z-index: 20;
+  display: flex;
+  width: var(--editor-directory-toggle-size);
+  height: var(--editor-directory-toggle-size);
+  pointer-events: none;
+}
+
+.editor-directory-toggle-slot .editor-directory-toggle {
+  pointer-events: auto;
+}
+
+.editor-directory-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--editor-directory-toggle-size);
+  height: var(--editor-directory-toggle-size);
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.editor-directory-toggle:hover {
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+}
+
+.editor-directory-toggle:focus-visible {
+  outline: none;
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+}
+
+.editor-directory-toggle:active {
+  transform: scale(0.94);
+}
+
+.editor-directory-toggle.is-active {
+  background: transparent;
+  color: var(--foreground);
+}
+
+.editor-directory-toggle.is-active:hover,
+.editor-directory-toggle.is-active:focus-visible {
+  background: var(--surface-tertiary);
+}
+
+.editor-directory-toggle-spacer {
+  flex: 0 0 var(--editor-directory-toggle-size);
+  width: var(--editor-directory-toggle-size);
+  height: var(--editor-directory-toggle-size);
+}
+
+.editor-view-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.editor-plain-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--editor-directory-toolbar-gap);
+  flex: 0 0 var(--editor-surface-header-height);
+  height: var(--editor-surface-header-height);
+  padding: 0 14px 0 var(--editor-directory-toggle-left);
+  border-bottom: 1px solid var(--separator);
   background: var(--surface);
 }
 
@@ -2218,9 +2331,20 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   justify-content: space-between;
   gap: 16px;
   padding: 0 20px;
-  height: 48px;
+  flex: 0 0 var(--editor-surface-header-height, 44px);
+  height: var(--editor-surface-header-height, 44px);
+  min-height: var(--editor-surface-header-height, 44px);
   border-bottom: 1px solid var(--separator);
   background: var(--surface);
+}
+
+.git-diff-header-leading-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--editor-directory-toggle-size, 32px);
+  width: var(--editor-directory-toggle-size, 32px);
+  height: var(--editor-directory-toggle-size, 32px);
 }
 
 .git-diff-header-title-area {
@@ -2847,6 +2971,33 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   overflow: hidden;
 }
 
+.workspace-tree-panel-directory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 var(--editor-surface-header-height, 44px);
+  height: var(--editor-surface-header-height, 44px);
+  min-height: var(--editor-surface-header-height, 44px);
+  padding: 0 8px 0 16px;
+  background: var(--surface);
+}
+
+.workspace-tree-panel-directory-title {
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+  user-select: none;
+}
+
+.workspace-tree-panel-directory-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
 .file-panel-header {
   display: flex;
   align-items: center;
@@ -2857,9 +3008,19 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   flex-shrink: 0;
 }
 
+.sidebar-tree-pane.has-directory-header .file-panel-header {
+  height: 32px;
+  padding-left: 16px;
+  border-bottom: 0;
+}
+
 .file-panel-title {
+  min-width: 0;
+  overflow: hidden;
   font-size: 12px;
   color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   opacity: 0.8;
@@ -2868,6 +3029,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .file-panel-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 2px;
 }
 
@@ -6776,6 +6938,8 @@ body.workspace-tree-dragging .workspace-tree-row {
 }
 
 .meo-editor-shell {
+  --meo-directory-toolbar-inset: 0px;
+
   position: relative;
   display: flex;
   flex-direction: column;
@@ -6784,6 +6948,29 @@ body.workspace-tree-dragging .workspace-tree-row {
   min-height: 0;
   overflow: hidden;
   background: var(--surface);
+}
+
+.meo-editor-shell[data-leading-toolbar-inset='true'] {
+  --meo-directory-toolbar-inset: calc(
+    var(--editor-directory-toggle-left, 8px)
+    + var(--editor-directory-toggle-size, 32px)
+    + var(--editor-directory-toolbar-gap, 8px)
+  );
+}
+
+.meo-editor-shell.meo-native-theme .mode-toolbar {
+  flex: 0 0 var(--editor-surface-header-height, 44px);
+  height: var(--editor-surface-header-height, 44px);
+  min-height: var(--editor-surface-header-height, 44px);
+  padding-block: 0;
+}
+
+.meo-editor-shell.meo-native-theme[data-leading-toolbar-inset='true'] .mode-toolbar {
+  padding-left: calc(82px + var(--meo-directory-toolbar-inset));
+}
+
+.meo-editor-shell.meo-native-theme[data-leading-toolbar-inset='true'] .editor-root:has(.cm-editor.meo-line-numbers-hidden) .mode-toolbar {
+  padding-left: calc(17px + var(--meo-directory-toolbar-inset));
 }
 
 /* Settings dropdowns use Base UI Select so popup geometry stays inside the modal stack. */

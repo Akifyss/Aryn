@@ -13,6 +13,7 @@ type MeoEditorHostProps = {
   filePath: string
   gitDiffRequest?: WorkspaceFileGitDiffRequest | null
   gitRepositoryState?: GitRepositoryState | null
+  hasLeadingToolbarInset?: boolean
   meoSettings: MeoSettings
   onCompositionChange?: (isComposing: boolean) => void
   onOpenFile?: (filePath: string) => void
@@ -68,6 +69,7 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
   filePath,
   gitDiffRequest = null,
   gitRepositoryState,
+  hasLeadingToolbarInset = false,
   meoSettings,
   onCompositionChange,
   onOpenFile,
@@ -441,6 +443,7 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
     <div
       ref={shellRef}
       className={`meo-editor-shell meo-native-theme ${resolvedTheme}`}
+      data-leading-toolbar-inset={hasLeadingToolbarInset ? 'true' : undefined}
       data-theme={resolvedTheme}
     >
       <div ref={rootRef} className='meo-editor-root-host' />

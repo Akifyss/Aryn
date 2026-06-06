@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react'
+import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import * as monaco from 'monaco-editor'
 import { AddLine, Back2Line } from '@mingcute/react'
 import { Icon } from '@iconify/react'
-import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
+import type { GitChangeItem, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
 import { getCodeLanguage } from '@/features/workspace/lib/file-types'
 import {
   DiffEditor,
@@ -51,11 +51,10 @@ const DEFAULT_DIFF_OPTIONS: MonacoDiffEditorOptions = {
 }
 
 function getGitActionsDisabledReason(options: {
-  isApplyingAction: boolean
   isComposing: boolean
   isSaving: boolean
 }) {
-  if (options.isSaving || options.isApplyingAction) {
+  if (options.isSaving) {
     return 'Wait for the current file action to finish first.'
   }
 
@@ -181,19 +180,6 @@ function normalizeEditorLineNumber(lineNumber: number, model: monaco.editor.ITex
   return Math.max(1, Math.min(model.getLineCount(), Math.floor(lineNumber)))
 }
 
-function getDiffSelectionKey(selection: GitDiffSelection | null) {
-  if (!selection) {
-    return ''
-  }
-
-  return [
-    selection.originalStartLine,
-    selection.originalLineCount,
-    selection.modifiedStartLine,
-    selection.modifiedLineCount,
-  ].join(':')
-}
-
 function isLineInsideSelection(selection: GitDiffSelection, side: DiffNavigationSide, lineNumber: number) {
   const normalizedLineNumber = Math.max(1, Math.floor(lineNumber))
   const startLine = getNavigationSelectionLineStart(selection, side)
@@ -204,14 +190,6 @@ function isLineInsideSelection(selection: GitDiffSelection, side: DiffNavigation
   }
 
   return normalizedLineNumber >= startLine && normalizedLineNumber < startLine + lineCount
-}
-
-function findSelectionAtLine(
-  selections: readonly GitDiffSelection[],
-  side: DiffNavigationSide,
-  lineNumber: number,
-) {
-  return selections.find((selection) => isLineInsideSelection(selection, side, lineNumber)) ?? null
 }
 
 function clearNavigationHighlight(
@@ -281,7 +259,6 @@ function MonacoDiffRenderer({
   isComposing,
   navigationRequest,
   onCompositionChange,
-  onActiveSelectionChange,
   onDraftChange,
   onSave,
   theme = 'auto',
@@ -290,7 +267,6 @@ function MonacoDiffRenderer({
   isEditable: boolean
   isComposing: boolean
   navigationRequest: WorkspaceDiffNavigationRequest | null
-  onActiveSelectionChange: (selection: GitDiffSelection | null) => void
   onCompositionChange: (isComposing: boolean) => void
   onDraftChange: (content: string) => void
   onSave: () => void
@@ -299,10 +275,8 @@ function MonacoDiffRenderer({
   const diffEditorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null)
   const disposablesRef = useRef<monaco.IDisposable[]>([])
   const isApplyingExternalValueRef = useRef(false)
-  const activeSideRef = useRef<DiffNavigationSide | null>(null)
   const isModifiedFocusedRef = useRef(false)
   const isComposingRef = useRef(isComposing)
-  const lastActiveSelectionKeyRef = useRef('')
   const lastForwardedValueRef = useRef(diff.modifiedContent)
   const lastHandledNavigationRequestKeyRef = useRef<string | null>(null)
   const compositionEndTimerRef = useRef<number | null>(null)
@@ -310,38 +284,11 @@ function MonacoDiffRenderer({
   const originalNavigationDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
   const modifiedNavigationHighlightTimerRef = useRef<number | null>(null)
   const originalNavigationHighlightTimerRef = useRef<number | null>(null)
-  const onActiveSelectionChangeRef = useRef(onActiveSelectionChange)
   const onCompositionChangeRef = useRef(onCompositionChange)
   const onDraftChangeRef = useRef(onDraftChange)
   const onSaveRef = useRef(onSave)
-  const selectionsRef = useRef(diff.selections)
   const monacoTheme = resolveMonacoTheme(theme)
   const language = getCodeLanguage(diff.change.path)
-
-  const emitActiveSelectionChange = useCallback((nextSelection: GitDiffSelection | null) => {
-    const nextKey = getDiffSelectionKey(nextSelection)
-
-    if (lastActiveSelectionKeyRef.current === nextKey) {
-      return
-    }
-
-    lastActiveSelectionKeyRef.current = nextKey
-    onActiveSelectionChangeRef.current(nextSelection)
-  }, [])
-
-  const updateActiveSelectionFromEditor = useCallback((
-    side: DiffNavigationSide,
-    editor: monaco.editor.IStandaloneCodeEditor,
-  ) => {
-    const lineNumber = editor.getPosition()?.lineNumber
-
-    if (typeof lineNumber !== 'number') {
-      emitActiveSelectionChange(null)
-      return
-    }
-
-    emitActiveSelectionChange(findSelectionAtLine(selectionsRef.current, side, lineNumber))
-  }, [emitActiveSelectionChange])
 
   const emitDraftChange = useCallback((nextValue: string) => {
     if (nextValue === lastForwardedValueRef.current) {
@@ -351,10 +298,6 @@ function MonacoDiffRenderer({
     lastForwardedValueRef.current = nextValue
     onDraftChangeRef.current(nextValue)
   }, [])
-
-  useEffect(() => {
-    onActiveSelectionChangeRef.current = onActiveSelectionChange
-  }, [onActiveSelectionChange])
 
   useEffect(() => {
     onCompositionChangeRef.current = onCompositionChange
@@ -371,29 +314,6 @@ function MonacoDiffRenderer({
   useEffect(() => {
     isComposingRef.current = isComposing
   }, [isComposing])
-
-  useEffect(() => {
-    selectionsRef.current = diff.selections
-    const diffEditor = diffEditorRef.current
-    const activeSide = activeSideRef.current
-
-    if (!diffEditor || !activeSide) {
-      emitActiveSelectionChange(null)
-      return
-    }
-
-    updateActiveSelectionFromEditor(
-      activeSide,
-      activeSide === 'original'
-        ? diffEditor.getOriginalEditor()
-        : diffEditor.getModifiedEditor(),
-    )
-  }, [diff.selections, emitActiveSelectionChange, updateActiveSelectionFromEditor])
-
-  useEffect(() => {
-    activeSideRef.current = null
-    emitActiveSelectionChange(null)
-  }, [diff.change.path, diff.change.scope, emitActiveSelectionChange])
 
   useEffect(() => {
     const diffEditor = diffEditorRef.current
@@ -424,9 +344,7 @@ function MonacoDiffRenderer({
 
     disposablesRef.current = [
       modifiedEditor.onDidFocusEditorText(() => {
-        activeSideRef.current = 'modified'
         isModifiedFocusedRef.current = true
-        updateActiveSelectionFromEditor('modified', modifiedEditor)
       }),
       modifiedEditor.onDidBlurEditorText(() => {
         isModifiedFocusedRef.current = false
@@ -460,23 +378,11 @@ function MonacoDiffRenderer({
 
         emitDraftChange(nextValue)
       }),
-      modifiedEditor.onDidChangeCursorPosition(() => {
-        if (activeSideRef.current === 'modified') {
-          updateActiveSelectionFromEditor('modified', modifiedEditor)
-        }
-      }),
       originalEditor.onDidFocusEditorText(() => {
-        activeSideRef.current = 'original'
         isModifiedFocusedRef.current = false
-        updateActiveSelectionFromEditor('original', originalEditor)
-      }),
-      originalEditor.onDidChangeCursorPosition(() => {
-        if (activeSideRef.current === 'original') {
-          updateActiveSelectionFromEditor('original', originalEditor)
-        }
       }),
     ]
-  }, [emitDraftChange, updateActiveSelectionFromEditor])
+  }, [emitDraftChange])
 
   useEffect(() => () => {
     disposablesRef.current.forEach((disposable) => {
@@ -491,14 +397,12 @@ function MonacoDiffRenderer({
     clearNavigationHighlight(originalNavigationDecorationsRef.current, originalNavigationHighlightTimerRef)
     modifiedNavigationDecorationsRef.current = null
     originalNavigationDecorationsRef.current = null
-    activeSideRef.current = null
     diffEditorRef.current = null
     isApplyingExternalValueRef.current = false
     isComposingRef.current = false
     isModifiedFocusedRef.current = false
-    emitActiveSelectionChange(null)
     onCompositionChangeRef.current(false)
-  }, [emitActiveSelectionChange])
+  }, [])
 
   useEffect(() => {
     const diffEditor = diffEditorRef.current
@@ -629,8 +533,8 @@ export function GitDiffEditor({
   diff,
   draftContent: initialDraftContent,
   hasDirtyRelatedFileTab = false,
+  leadingToolbarAction = null,
   navigationRequest = null,
-  onApplyBlockAction,
   onDiscardChange,
   onDraftChange: onDraftContentChange,
   onSaveEditedFile,
@@ -641,8 +545,8 @@ export function GitDiffEditor({
   diff: GitFileDiffResult
   draftContent: string
   hasDirtyRelatedFileTab?: boolean
+  leadingToolbarAction?: ReactNode
   navigationRequest?: WorkspaceDiffNavigationRequest | null
-  onApplyBlockAction: (change: GitChangeItem, selection: GitDiffSelection, action: GitDiffBlockAction) => Promise<void>
   onDiscardChange: (change: GitChangeItem) => void
   onDraftChange: (content: string) => void
   onSaveEditedFile: (filePath: string, content: string) => Promise<void>
@@ -651,8 +555,6 @@ export function GitDiffEditor({
   theme?: MonacoThemePreference
 }) {
   const [draftContent, setDraftContent] = useState(initialDraftContent)
-  const [activeHunkSelection, setActiveHunkSelection] = useState<GitDiffSelection | null>(null)
-  const [isApplyingHunkAction, setIsApplyingHunkAction] = useState(false)
   const [isComposing, setIsComposing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const draftContentRef = useRef(initialDraftContent)
@@ -662,12 +564,10 @@ export function GitDiffEditor({
   const onDraftContentChangeRef = useRef(onDraftContentChange)
   const isEditable = diff.change.scope === 'unstaged' && diff.modifiedExists
   const gitActionsDisabledReason = getGitActionsDisabledReason({
-    isApplyingAction: isApplyingHunkAction,
     isComposing,
     isSaving,
   })
   const areFileGitActionsEnabled = gitActionsDisabledReason === null
-  const areHunkGitActionsEnabled = areFileGitActionsEnabled && Boolean(activeHunkSelection)
 
   useEffect(() => {
     setDraftContent((current) => current === initialDraftContent ? current : initialDraftContent)
@@ -694,7 +594,6 @@ export function GitDiffEditor({
   useEffect(() => {
     setIsComposing(false)
     isComposingRef.current = false
-    setActiveHunkSelection(null)
   }, [diff.change.path, diff.change.scope])
 
   const handleCompositionChange = useCallback((nextValue: boolean) => {
@@ -729,36 +628,14 @@ export function GitDiffEditor({
     }
   }, [diff.change.path, hasDirtyRelatedFileTab, isEditable, onSaveEditedFile])
 
-  const getHunkActionTitle = useCallback((label: string) => {
-    if (gitActionsDisabledReason) {
-      return gitActionsDisabledReason
-    }
-
-    if (!activeHunkSelection) {
-      return 'Select a changed hunk first.'
-    }
-
-    return label
-  }, [activeHunkSelection, gitActionsDisabledReason])
-
-  const handleHunkAction = useCallback(async (action: GitDiffBlockAction) => {
-    if (!areHunkGitActionsEnabled || !activeHunkSelection) {
-      return
-    }
-
-    setIsApplyingHunkAction(true)
-
-    try {
-      await onApplyBlockAction(diff.change, activeHunkSelection, action)
-      setActiveHunkSelection(null)
-    } finally {
-      setIsApplyingHunkAction(false)
-    }
-  }, [activeHunkSelection, areHunkGitActionsEnabled, diff.change, onApplyBlockAction])
-
   return (
     <div className='git-diff-editor'>
       <header className='git-diff-header'>
+        {leadingToolbarAction ? (
+          <div className='git-diff-header-leading-slot'>
+            {leadingToolbarAction}
+          </div>
+        ) : null}
         <div className='git-diff-header-title-area'>
           <h3 className='git-diff-header-title'>{diff.change.relativePath}</h3>
         </div>
@@ -790,32 +667,6 @@ export function GitDiffEditor({
               >
                 <AddLine size={16} />
               </button>
-              <button
-                type='button'
-                className='git-diff-view-mode git-diff-view-mode-with-label'
-                aria-label='Discard current hunk'
-                title={getHunkActionTitle('Discard current hunk')}
-                disabled={!areHunkGitActionsEnabled}
-                onClick={() => {
-                  void handleHunkAction('discard')
-                }}
-              >
-                <Back2Line size={16} />
-                <span>Discard hunk</span>
-              </button>
-              <button
-                type='button'
-                className='git-diff-view-mode git-diff-view-mode-with-label'
-                aria-label='Stage current hunk'
-                title={getHunkActionTitle('Stage current hunk')}
-                disabled={!areHunkGitActionsEnabled}
-                onClick={() => {
-                  void handleHunkAction('stage')
-                }}
-              >
-                <AddLine size={16} />
-                <span>Stage hunk</span>
-              </button>
             </>
           ) : (
             <>
@@ -831,19 +682,6 @@ export function GitDiffEditor({
               >
                 <Icon icon='mdi:minus' width={16} height={16} />
               </button>
-              <button
-                type='button'
-                className='git-diff-view-mode git-diff-view-mode-with-label'
-                aria-label='Unstage current hunk'
-                title={getHunkActionTitle('Unstage current hunk')}
-                disabled={!areHunkGitActionsEnabled}
-                onClick={() => {
-                  void handleHunkAction('unstage')
-                }}
-              >
-                <Icon icon='mdi:minus' width={16} height={16} />
-                <span>Unstage hunk</span>
-              </button>
             </>
           )}
         </div>
@@ -857,7 +695,6 @@ export function GitDiffEditor({
         isComposing={isComposing}
         isEditable={isEditable}
         navigationRequest={navigationRequest}
-        onActiveSelectionChange={setActiveHunkSelection}
         onCompositionChange={handleCompositionChange}
         onDraftChange={handleDraftChange}
         onSave={() => {

@@ -87,6 +87,13 @@ type WorkspaceState = {
     gitDiffRequest?: WorkspaceFileGitDiffRequest | null
     viewMode?: LegacyWorkspaceFileViewMode
   }) => void
+  replaceActiveFileTab: (tab: {
+    content: string
+    editorKind: SupportedWorkspaceEditorKind
+    exists?: boolean
+    filePath: string
+    viewMode?: LegacyWorkspaceFileViewMode
+  }) => void
   renameTab: (currentPath: string, nextPath: string) => void
   replaceTabs: (tabs: WorkspaceTab[], activeTabId: string | null) => void
   resetOpenTabs: () => void
@@ -358,6 +365,56 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return {
       activeTabId: activate ? tab.id : state.activeTabId,
       openTabs: nextTabs,
+    }
+  }),
+  replaceActiveFileTab: ({ content, editorKind, exists = true, filePath, viewMode }) => set((state) => {
+    const nextViewMode = normalizeWorkspaceFileViewMode(filePath, editorKind, viewMode)
+    const nextTabId = createWorkspaceFileTabId(filePath, nextViewMode)
+    const activeTab = state.openTabs.find((tab) => tab.id === state.activeTabId)
+    const existingTargetTab = state.openTabs.find(
+      (tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.id === nextTabId,
+    )
+    const activeFileTabId = activeTab?.kind === 'file' ? activeTab.id : null
+
+    if (existingTargetTab) {
+      return {
+        activeTabId: nextTabId,
+        openTabs: state.openTabs
+          .filter((tab) => !(activeFileTabId && tab.id === activeFileTabId && tab.id !== nextTabId))
+          .map((tab) => (
+            tab.kind === 'file' && tab.id === nextTabId
+              ? {
+                ...tab,
+                editorKind,
+                exists: tab.exists || exists,
+              }
+              : tab
+          )),
+      }
+    }
+
+    const nextTab: WorkspaceFileTab = {
+      content,
+      editorKind,
+      exists,
+      filePath,
+      id: nextTabId,
+      isDirty: false,
+      kind: 'file',
+      savedContent: content,
+      viewMode: nextViewMode,
+    }
+
+    if (!activeFileTabId) {
+      return {
+        activeTabId: nextTabId,
+        openTabs: [...state.openTabs, nextTab],
+      }
+    }
+
+    return {
+      activeTabId: nextTabId,
+      openTabs: state.openTabs.map((tab) => tab.id === activeFileTabId ? nextTab : tab),
     }
   }),
   renameTab: (currentPath, nextPath) => set((state) => {

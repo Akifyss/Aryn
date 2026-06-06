@@ -304,6 +304,106 @@ describe('useWorkspaceStore', () => {
     ])
   })
 
+  it('replaces the active file tab with the requested file tab', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({ content: 'alpha', editorKind: 'prose', filePath: 'C:/workspace/a.md' })
+    store.replaceActiveFileTab({ content: 'beta', editorKind: 'prose', filePath: 'C:/workspace/b.md' })
+
+    const nextState = useWorkspaceStore.getState()
+    expect(nextState.openTabs).toHaveLength(1)
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/b.md', 'meo'))
+    expect(nextState.openTabs[0]).toMatchObject({
+      content: 'beta',
+      filePath: 'C:/workspace/b.md',
+      kind: 'file',
+      viewMode: 'meo',
+    })
+  })
+
+  it('activates an existing target file tab and removes the replaced active file tab', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({ content: 'alpha', editorKind: 'prose', filePath: 'C:/workspace/a.md' })
+    store.openTab({ content: 'beta', editorKind: 'prose', filePath: 'C:/workspace/b.md' })
+    store.activateTab(createWorkspaceFileTabId('C:/workspace/a.md', 'meo'))
+
+    store.replaceActiveFileTab({ content: 'ignored', editorKind: 'prose', filePath: 'C:/workspace/b.md' })
+
+    const nextState = useWorkspaceStore.getState()
+    expect(nextState.openTabs).toHaveLength(1)
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/b.md', 'meo'))
+    expect(nextState.openTabs[0]).toMatchObject({
+      content: 'beta',
+      filePath: 'C:/workspace/b.md',
+      kind: 'file',
+    })
+  })
+
+  it('preserves surrounding tabs when replacing the active file tab', () => {
+    const store = useWorkspaceStore.getState()
+
+    store.openTab({ content: 'alpha', editorKind: 'prose', filePath: 'C:/workspace/a.md' })
+    store.openTab({ content: 'beta', editorKind: 'prose', filePath: 'C:/workspace/b.md' })
+    store.openTab({ content: 'gamma', editorKind: 'prose', filePath: 'C:/workspace/c.md' })
+    store.activateTab(createWorkspaceFileTabId('C:/workspace/b.md', 'meo'))
+
+    store.replaceActiveFileTab({ content: 'delta', editorKind: 'prose', filePath: 'C:/workspace/d.md' })
+
+    const nextState = useWorkspaceStore.getState()
+    expect(nextState.openTabs.map((tab) => tab.filePath)).toEqual([
+      'C:/workspace/a.md',
+      'C:/workspace/d.md',
+      'C:/workspace/c.md',
+    ])
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/d.md', 'meo'))
+  })
+
+  it('keeps an active diff tab when replacing from a non-file tab', () => {
+    const store = useWorkspaceStore.getState()
+    const diffTabId = createDiffTabId('C:/workspace/file.md', 'unstaged')
+
+    store.openDiffTab({
+      draftContent: null,
+      diff: {
+        change: {
+          kind: 'modified',
+          originalPath: null,
+          path: 'C:/workspace/file.md',
+          relativePath: 'file.md',
+          scope: 'unstaged',
+          statusCode: 'M',
+        },
+        editorKind: 'prose',
+        modifiedContent: 'new',
+        modifiedExists: true,
+        modifiedLabel: 'Working tree',
+        originalContent: 'old',
+        originalExists: true,
+        originalLabel: 'Index',
+        repositoryRootPath: 'C:/workspace',
+      },
+      exists: true,
+      filePath: diffTabId,
+      id: diffTabId,
+      isDirty: false,
+      kind: 'diff',
+      title: 'file.md',
+    })
+
+    store.replaceActiveFileTab({ content: 'notes', editorKind: 'prose', filePath: 'C:/workspace/notes.md' })
+
+    const nextState = useWorkspaceStore.getState()
+    expect(nextState.openTabs).toHaveLength(2)
+    expect(nextState.openTabs[0]).toMatchObject({ id: diffTabId, kind: 'diff' })
+    expect(nextState.openTabs[1]).toMatchObject({
+      content: 'notes',
+      filePath: 'C:/workspace/notes.md',
+      kind: 'file',
+    })
+    expect(nextState.activeTabId).toBe(createWorkspaceFileTabId('C:/workspace/notes.md', 'meo'))
+  })
+
   it('closes the active tab and falls back to the nearest tab on the right first', () => {
     const store = useWorkspaceStore.getState()
 

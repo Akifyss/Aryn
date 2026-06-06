@@ -1,4 +1,4 @@
-import type { CSSProperties, FormEvent } from 'react'
+import type { CSSProperties, FormEvent, MouseEvent, ReactNode } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Menu } from '@base-ui/react/menu'
@@ -56,7 +56,7 @@ import {
   type SettingsSectionId,
 } from '@/features/settings/components/settings-dialog'
 import { FileTabs } from '@/features/workspace/components/file-tabs'
-import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
+import { WorkspaceTreePanel } from '@/features/workspace/components/workspace-tree-panel'
 import {
   createWorkspaceFileTabId,
   dedupeWorkspaceTabs,
@@ -366,6 +366,7 @@ const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
 
 type ResizePanel = 'left' | 'right'
 type PanelSurfaceMode = 'docked' | 'drawer'
+type WorkspaceTreeFileClickMode = 'open-tab' | 'replace-active-tab'
 type LeftSidebarTab = 'file' | 'git'
 type AgentLayoutFixedTab = 'file' | 'git'
 type AgentRightSidebarWidthMode = 'max' | 'fixed'
@@ -824,6 +825,7 @@ function App() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [activeAgentLayoutFixedTab, setActiveAgentLayoutFixedTab] = useState<AgentLayoutFixedTab>('file')
   const [isAgentLayoutFixedTabActive, setIsAgentLayoutFixedTabActive] = useState(false)
+  const [isDirectorySidebarOpen, setIsDirectorySidebarOpen] = useState(true)
 
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(
     () => readStoredLayoutNumber('leftSidebarWidth', DEFAULT_LEFT_SIDEBAR_WIDTH),
@@ -886,6 +888,7 @@ function App() {
   const openTab = useWorkspaceStore((state) => state.openTab)
   const openTabs = useWorkspaceStore((state) => state.openTabs)
   const renameTab = useWorkspaceStore((state) => state.renameTab)
+  const replaceActiveFileTab = useWorkspaceStore((state) => state.replaceActiveFileTab)
   const replaceTabs = useWorkspaceStore((state) => state.replaceTabs)
   const resetOpenTabs = useWorkspaceStore((state) => state.resetOpenTabs)
   const setCurrentPath = useWorkspaceStore((state) => state.setCurrentPath)
@@ -1080,6 +1083,14 @@ function App() {
     ? (isRightSidebarVisible ? AGENT_LAYOUT_RIGHT_SIDEBAR_MIN_WIDTH : 0)
     : effectiveRightSidebarWidth
   const activeTreePath = activeFileTab?.filePath ?? activeDiffTab?.diff.change.path ?? null
+  const isDirectorySidebarAvailable = Boolean(
+    currentPath
+    && isAgentLayout
+    && shouldRenderWorkspaceEditor
+    && (activeFileTab || activeDiffTab),
+  )
+  const isDirectorySidebarVisible = isDirectorySidebarAvailable && isDirectorySidebarOpen
+  const isDirectoryToggleSlotVisible = isDirectorySidebarAvailable && !isDirectorySidebarVisible
   const canAttemptOpenCurrentDiff = Boolean(
     activeFileTab
     && currentPath
@@ -2149,6 +2160,115 @@ function App() {
     openTab,
   ])
 
+  const replaceActiveFileWithPath = useCallback(async (filePath: string) => {
+    const replaceStartedAt = performance.now()
+    const storeSnapshot = useWorkspaceStore.getState()
+    const currentActiveTab = storeSnapshot.openTabs.find((tab) => tab.id === storeSnapshot.activeTabId) ?? null
+    const currentActiveFileTab = currentActiveTab?.kind === 'file' ? currentActiveTab : null
+
+    recordOpenFileProfile('app:replace-active-file:start', {
+      activeTabId: storeSnapshot.activeTabId,
+      filePath,
+    })
+
+    if (currentActiveFileTab && normalizeFilePath(currentActiveFileTab.filePath) === normalizeFilePath(filePath)) {
+      setIsAgentLayoutFixedTabActive(false)
+      activateTab(currentActiveFileTab.id)
+      setStatusMessage(`${getBaseName(filePath)} focused`)
+      return
+    }
+
+    if (currentActiveFileTab && isWorkspaceAutosaveTab(currentActiveFileTab) && currentActiveFileTab.isDirty) {
+      if (isActiveEditorComposing) {
+        const message = '请先结束当前输入法组合，再切换目录文件。'
+        toast.warning('请先完成编辑', { description: message })
+        setStatusMessage(message)
+        return
+      }
+
+      try {
+        await flushWorkspaceAutosave(currentActiveFileTab.filePath)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '保存当前文件失败。'
+        toast.danger('无法切换文件', { description: message })
+        setStatusMessage(message)
+        return
+      }
+
+      const latestActiveTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.id === currentActiveFileTab.id)
+      if (isWorkspaceAutosaveTab(latestActiveTab) && latestActiveTab.isDirty) {
+        const message = '当前文件仍有未保存内容。请保存后再切换目录文件。'
+        toast.warning('无法切换文件', { description: message })
+        setStatusMessage(message)
+        return
+      }
+    }
+
+    captureActiveMeoViewPosition()
+    setIsAgentLayoutFixedTabActive(false)
+
+    const editorKind = await window.appApi.resolveWorkspaceEditorKind(filePath)
+    if (!editorKind) {
+      toast.warning(`Cannot open ${getBaseName(filePath)} yet`, {
+        description: 'Only text files can open in tabs right now. This file looks binary or unsupported.',
+      })
+      setStatusMessage(`${getBaseName(filePath)} is not supported yet`)
+      recordOpenFileProfile('app:replace-active-file:unsupported:end', {
+        elapsedMs: getOpenFileProfileDuration(replaceStartedAt),
+      })
+      return
+    }
+
+    expandAgentEditorSurface()
+
+    try {
+      const targetViewMode = resolveWorkspaceFileViewMode(filePath, editorKind, currentActiveFileTab?.viewMode)
+      const targetTabId = createWorkspaceFileTabId(filePath, targetViewMode)
+      const existingTargetTab = useWorkspaceStore.getState().openTabs.find(
+        (tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.id === targetTabId,
+      )
+      const fileContent = existingTargetTab
+        ? existingTargetTab.content
+        : await window.appApi.readWorkspaceFile(filePath)
+
+      replaceActiveFileTab({
+        filePath,
+        content: fileContent,
+        editorKind,
+        viewMode: targetViewMode,
+      })
+
+      if (currentPath) {
+        await updateWorkspaceState(currentPath, { lastFilePath: filePath })
+      }
+
+      setStatusMessage(existingTargetTab ? `${getBaseName(filePath)} focused` : `${getBaseName(filePath)} opened`)
+      recordOpenFileProfile('app:replace-active-file:end', {
+        elapsedMs: getOpenFileProfileDuration(replaceStartedAt),
+        reusedExistingTab: Boolean(existingTargetTab),
+        targetViewMode,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to open file.'
+      toast.danger(`Failed to open ${getBaseName(filePath)}`, {
+        description: message,
+      })
+      setStatusMessage(message)
+      recordOpenFileProfile('app:replace-active-file:error:end', {
+        elapsedMs: getOpenFileProfileDuration(replaceStartedAt),
+        message,
+      })
+    }
+  }, [
+    activateTab,
+    captureActiveMeoViewPosition,
+    currentPath,
+    expandAgentEditorSurface,
+    flushWorkspaceAutosave,
+    isActiveEditorComposing,
+    replaceActiveFileTab,
+  ])
+
   const openAgentMessageFile = useCallback(async (
     filePath: string,
     changeKind: AgentMessageFileChangeKind,
@@ -2957,97 +3077,65 @@ function App() {
     }
   }
 
-  function renderWorkspaceTreePanel(surfaceMode: PanelSurfaceMode = 'docked') {
+  function renderWorkspaceTreePanel(options: {
+    directoryHeaderAction?: ReactNode
+    fileClickMode?: WorkspaceTreeFileClickMode
+    showDirectoryHeader?: boolean
+    surfaceMode?: PanelSurfaceMode
+    title?: string
+  } = {}) {
+    const {
+      directoryHeaderAction,
+      fileClickMode = 'open-tab',
+      showDirectoryHeader = false,
+      surfaceMode = 'docked',
+      title = '文件树',
+    } = options
     const menuPortalTarget = surfaceMode === 'drawer' ? leftDrawerOverlayRoot : null
+    const handleSelectFile = (filePath: string, event: MouseEvent<HTMLDivElement>) => {
+      if (
+        fileClickMode === 'replace-active-tab'
+        && event.button === 0
+        && !event.ctrlKey
+        && !event.metaKey
+      ) {
+        void replaceActiveFileWithPath(filePath)
+        return
+      }
+
+      void openFile(filePath)
+    }
 
     return (
-      <div className='sidebar-stack-pane sidebar-tree-pane'>
-        <div className='file-panel-header'>
-          <span className='file-panel-title'>文件树</span>
-          <div className='file-panel-actions'>
-            <Tooltip closeDelay={0}>
-              <Tooltip.Trigger>
-                <button
-                  type='button'
-                  className='file-panel-action'
-                  onClick={() => void handleCreateFile()}
-                  disabled={!currentPath || isCreatingFile}
-                  aria-label='Create File'
-                >
-                  <Icon icon='lucide:file-plus' width={16} height={16} />
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Content>Create File</Tooltip.Content>
-            </Tooltip>
-            <Tooltip closeDelay={0}>
-              <Tooltip.Trigger>
-                <button
-                  type='button'
-                  className='file-panel-action'
-                  onClick={() => void handleCreateDirectory()}
-                  disabled={!currentPath || isCreatingDirectory}
-                  aria-label='Create Folder'
-                >
-                  <Icon icon='lucide:folder-plus' width={16} height={16} />
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Content>Create Folder</Tooltip.Content>
-            </Tooltip>
-            <Tooltip closeDelay={0}>
-              <Tooltip.Trigger>
-                <button
-                  type='button'
-                  className='file-panel-action'
-                  onClick={handleToggleFileTreeExpansion}
-                  disabled={!currentPath || tree.length === 0}
-                  aria-label='Toggle Expansion'
-                >
-                  <Icon
-                    icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'}
-                    width={16}
-                    height={16}
-                  />
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Content>{expandedPaths.size > 0 ? 'Collapse All' : 'Expand All'}</Tooltip.Content>
-            </Tooltip>
-          </div>
-        </div>
-
-        <AppScrollArea
-          className='tree-scroll'
-          contentClassName='tree-scroll-content'
-        >
-          {workspaceUnavailableMessage ? (
-            <div className='tree-empty-state'>
-              <div className='tree-empty-icon'>
-                <FolderForbidLine size={26} />
-              </div>
-              <p>{workspaceUnavailableMessage}</p>
-            </div>
-          ) : (
-            <WorkspaceTree
-              activeFilePath={activeTreePath}
-              iconTheme={iconTheme}
-              nodes={tree}
-              expandedPaths={expandedPaths}
-              setExpandedPaths={setExpandedPaths}
-              workspacePath={currentPath}
-              gitRepositoryState={gitRepositoryState}
-              onSelectFile={(filePath) => {
-                void openFile(filePath)
-              }}
-              onOpenInCodeEditor={(filePath) => {
-                void openFile(filePath, currentPath, 'code')
-              }}
-              onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
-              onDeleteNode={(node) => handleDeleteNode(node)}
-              onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
-              menuPortalTarget={menuPortalTarget}
-            />
-          )}
-        </AppScrollArea>
-      </div>
+      <WorkspaceTreePanel
+        activeFilePath={activeTreePath}
+        directoryHeaderAction={directoryHeaderAction}
+        expandedPaths={expandedPaths}
+        gitRepositoryState={gitRepositoryState}
+        iconTheme={iconTheme}
+        isCreatingDirectory={isCreatingDirectory}
+        isCreatingFile={isCreatingFile}
+        menuPortalTarget={menuPortalTarget}
+        nodes={tree}
+        setExpandedPaths={setExpandedPaths}
+        showDirectoryHeader={showDirectoryHeader}
+        title={title}
+        workspacePath={currentPath}
+        workspaceUnavailableMessage={workspaceUnavailableMessage}
+        onCreateDirectory={() => void handleCreateDirectory()}
+        onCreateFile={() => void handleCreateFile()}
+        onDeleteNode={(node) => handleDeleteNode(node)}
+        onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
+        onOpenDiff={(change) => {
+          void openGitDiff(change)
+        }}
+        onOpenInCodeEditor={(filePath) => {
+          void openFile(filePath, currentPath, 'code')
+        }}
+        onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
+        onSelectFile={handleSelectFile}
+        onToggleFileTreeExpansion={handleToggleFileTreeExpansion}
+      />
     )
   }
 
@@ -5019,7 +5107,7 @@ function App() {
                 </Tabs.ListContainer>
 
                 <Tabs.Panel id='file' className='sidebar-vertical-tab-panel'>
-                  {renderWorkspaceTreePanel(surfaceMode)}
+                  {renderWorkspaceTreePanel({ surfaceMode })}
                 </Tabs.Panel>
                 <Tabs.Panel id='git' className='sidebar-vertical-tab-panel'>
                   {renderGitPanel()}
@@ -5058,7 +5146,134 @@ function App() {
     return <AgentChatSurface />
   }
 
+  function renderDirectorySidebarToggle() {
+    if (!isDirectorySidebarAvailable) {
+      return null
+    }
+
+    return (
+      <Tooltip closeDelay={0}>
+        <Tooltip.Trigger>
+          <button
+            type='button'
+            className={`editor-directory-toggle${isDirectorySidebarVisible ? ' is-active' : ''}`}
+            aria-label={isDirectorySidebarVisible ? '隐藏目录侧边栏' : '显示目录侧边栏'}
+            aria-pressed={isDirectorySidebarVisible}
+            onClick={() => setIsDirectorySidebarOpen((currentValue) => !currentValue)}
+          >
+            <Icon
+              icon={isDirectorySidebarVisible ? 'ri:menu-fold-line' : 'ri:menu-fold-2-line'}
+              width={16}
+              height={16}
+              aria-hidden='true'
+            />
+          </button>
+        </Tooltip.Trigger>
+        <Tooltip.Content>
+          {isDirectorySidebarVisible ? '隐藏目录' : '显示目录'}
+        </Tooltip.Content>
+      </Tooltip>
+    )
+  }
+
+  function renderDirectorySidebar(options: {
+    action?: ReactNode
+    fileClickMode: WorkspaceTreeFileClickMode
+  }) {
+    return (
+      <aside className='editor-directory-sidebar'>
+        {renderWorkspaceTreePanel({
+          directoryHeaderAction: options.action,
+          fileClickMode: options.fileClickMode,
+          showDirectoryHeader: true,
+          title: workspaceLabel,
+        })}
+      </aside>
+    )
+  }
+
+  function renderEditorEmptyState() {
+    return !currentPath ? (
+      <div className='editor-empty-state is-workspace-missing'>
+        <div className='editor-empty-content'>
+          <div className='editor-empty-logo-shell' aria-hidden='true'>
+            <FolderOpenLine className='editor-empty-folder-icon' size={30} />
+          </div>
+          <div className='editor-empty-copy'>
+            <h3>选择工作目录</h3>
+            <p>当前对话会保留在右侧。连接一个文件夹后，可以在这里浏览、搜索和编辑文件。</p>
+          </div>
+          <div className='editor-empty-actions'>
+            <Button
+              ref={editorEmptyWorkspaceTriggerRef}
+              variant='primary'
+              onPress={() => {
+                openProjectMenu(
+                  'editor-switch',
+                  editorEmptyWorkspaceTriggerRef.current?.getBoundingClientRect(),
+                )
+              }}
+              isDisabled={isPickingWorkspace}
+            >
+              <FolderOpenLine className='mr-2' size={16} />
+              选择工作目录
+            </Button>
+          </div>
+        </div>
+      </div>
+    ) : (
+      <div className='editor-empty-state'>
+        <div className='editor-empty-content'>
+          <div className='editor-empty-logo-shell' aria-hidden='true'>
+            <img className='editor-empty-logo' src='./branding/logo.svg' alt='' />
+          </div>
+          <div className='editor-empty-copy'>
+            <h3>打开文件开始编辑</h3>
+            <p>从左侧文件树选择一个文件，或使用搜索快速打开内容。</p>
+          </div>
+          <div className='editor-empty-actions'>
+            <Button variant='outline' onPress={() => setIsCommandPaletteOpen(true)}>
+              <SearchLine className='mr-2' size={16} />
+              搜索
+            </Button>
+            <Button
+              variant='outline'
+              onPress={() => {
+                void handleCreateFile()
+              }}
+              isDisabled={isCreatingFile}
+            >
+              <FileLine className='mr-2' size={16} />
+              新建文件
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function renderFixedFilePanel() {
+    return (
+      <div className='editor-fixed-file-panel'>
+        {renderDirectorySidebar({ fileClickMode: 'open-tab' })}
+        <div className='editor-fixed-file-empty-panel'>
+          {renderEditorEmptyState()}
+        </div>
+      </div>
+    )
+  }
+
   function renderEditorSurface() {
+    const directorySidebarToggle = renderDirectorySidebarToggle()
+    const editorToolbarLeadingAction = isDirectoryToggleSlotVisible
+      ? <span className='editor-directory-toggle-spacer' aria-hidden='true' />
+      : null
+    const isCodeEditorView = Boolean(activeFileTab && (
+      (currentEditorKind === 'code' && currentFileViewMode === 'code')
+      || (currentEditorKind === 'prose' && currentFileViewMode === 'code')
+    ))
+    const isPreviewEditorView = Boolean(activeFileTab && currentEditorKind === 'code' && currentFileViewMode === 'preview')
+
     return (
       <div className='editor-frame'>
         <FileTabs
@@ -5084,67 +5299,18 @@ function App() {
         />
 
         <div className='editor-content-shell' id='editor-content-panel'>
-          {activeFixedPanelTab?.fixedTabKind === 'file-panel' ? renderWorkspaceTreePanel() : null}
+          {activeFixedPanelTab?.fixedTabKind === 'file-panel' ? renderFixedFilePanel() : null}
           {activeFixedPanelTab?.fixedTabKind === 'git-panel' ? renderGitPanel() : null}
-          {!activeFixedPanelTab && !activeFileTab && !activeDiffTab ? (
-            !currentPath ? (
-              <div className='editor-empty-state is-workspace-missing'>
-                <div className='editor-empty-content'>
-                  <div className='editor-empty-logo-shell' aria-hidden='true'>
-                    <FolderOpenLine className='editor-empty-folder-icon' size={30} />
-                  </div>
-                  <div className='editor-empty-copy'>
-                    <h3>选择工作目录</h3>
-                    <p>当前对话会保留在右侧。连接一个文件夹后，可以在这里浏览、搜索和编辑文件。</p>
-                  </div>
-                  <div className='editor-empty-actions'>
-                    <Button
-                      ref={editorEmptyWorkspaceTriggerRef}
-                      variant='primary'
-                      onPress={() => {
-                        openProjectMenu(
-                          'editor-switch',
-                          editorEmptyWorkspaceTriggerRef.current?.getBoundingClientRect(),
-                        )
-                      }}
-                      isDisabled={isPickingWorkspace}
-                    >
-                      <FolderOpenLine className='mr-2' size={16} />
-                      选择工作目录
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className='editor-empty-state'>
-                <div className='editor-empty-content'>
-                  <div className='editor-empty-logo-shell' aria-hidden='true'>
-                    <img className='editor-empty-logo' src='./branding/logo.svg' alt='' />
-                  </div>
-                  <div className='editor-empty-copy'>
-                    <h3>打开文件开始编辑</h3>
-                    <p>从左侧文件树选择一个文件，或使用搜索快速打开内容。</p>
-                  </div>
-                  <div className='editor-empty-actions'>
-                    <Button variant='outline' onPress={() => setIsCommandPaletteOpen(true)}>
-                      <SearchLine className='mr-2' size={16} />
-                      搜索
-                    </Button>
-                    <Button
-                      variant='outline'
-                      onPress={() => {
-                        void handleCreateFile()
-                      }}
-                      isDisabled={isCreatingFile}
-                    >
-                      <FileLine className='mr-2' size={16} />
-                      新建文件
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )
+          {isDirectorySidebarVisible ? renderDirectorySidebar({
+            action: directorySidebarToggle,
+            fileClickMode: 'replace-active-tab',
+          }) : null}
+          {isDirectoryToggleSlotVisible ? (
+            <div className='editor-directory-toggle-slot'>
+              {directorySidebarToggle}
+            </div>
           ) : null}
+          {!activeFixedPanelTab && !activeFileTab && !activeDiffTab ? renderEditorEmptyState() : null}
 
           {shouldRenderWorkspaceEditor && activeDiffTab ? (
             <Suspense fallback={<EditorLoadingState label='Loading diff editor...' />}>
@@ -5154,8 +5320,8 @@ function App() {
                 draftContent={activeDiffDraftContent}
                 navigationRequest={activeDiffTab.navigationRequest ?? null}
                 hasDirtyRelatedFileTab={activeDiffHasDirtyRelatedFileTab}
+                leadingToolbarAction={editorToolbarLeadingAction}
                 theme={theme}
-                onApplyBlockAction={handleApplyGitDiffSelection}
                 onDiscardChange={(change) => {
                   void handleDiscardGitChange(change)
                 }}
@@ -5180,6 +5346,7 @@ function App() {
                 ref={meoEditorHostRef}
                 filePath={activeFileTab.filePath}
                 gitDiffRequest={activeFileTab.gitDiffRequest ?? null}
+                hasLeadingToolbarInset={isDirectoryToggleSlotVisible}
                 onChange={(nextValue) => {
                   updateFileTabsContent(activeFileTab.filePath, nextValue)
                 }}
@@ -5222,36 +5389,47 @@ function App() {
             </Suspense>
           ) : null}
 
-          {shouldRenderWorkspaceEditor && activeFileTab && (
-            (currentEditorKind === 'code' && currentFileViewMode === 'code')
-            || (currentEditorKind === 'prose' && currentFileViewMode === 'code')
-          ) ? (
-            <Suspense fallback={<EditorLoadingState />}>
-              <CodeEditor
-                key={activeFileTab.id}
-                disabled={false}
-                filePath={activeFileTab.filePath}
-                onChange={(nextValue) => {
-                  updateFileTabsContent(activeFileTab.filePath, nextValue)
-                }}
-                onCompositionChange={setIsActiveEditorComposing}
-                onSave={(content) => {
-                  void handleSave({
-                    content,
-                    filePath: activeFileTab.filePath,
-                  })
-                }}
-                value={currentFileContent}
-                theme={theme}
-              />
-            </Suspense>
+          {shouldRenderWorkspaceEditor && activeFileTab && isCodeEditorView ? (
+            <div className='editor-view-shell'>
+              {editorToolbarLeadingAction ? (
+                <div className='editor-plain-toolbar'>
+                  {editorToolbarLeadingAction}
+                </div>
+              ) : null}
+              <Suspense fallback={<EditorLoadingState />}>
+                <CodeEditor
+                  key={activeFileTab.id}
+                  disabled={false}
+                  filePath={activeFileTab.filePath}
+                  onChange={(nextValue) => {
+                    updateFileTabsContent(activeFileTab.filePath, nextValue)
+                  }}
+                  onCompositionChange={setIsActiveEditorComposing}
+                  onSave={(content) => {
+                    void handleSave({
+                      content,
+                      filePath: activeFileTab.filePath,
+                    })
+                  }}
+                  value={currentFileContent}
+                  theme={theme}
+                />
+              </Suspense>
+            </div>
           ) : null}
 
-          {shouldRenderWorkspaceEditor && activeFileTab && currentEditorKind === 'code' && currentFileViewMode === 'preview' ? (
-            <HtmlPreview
-              content={currentFileContent}
-              filePath={activeFileTab.filePath}
-            />
+          {shouldRenderWorkspaceEditor && activeFileTab && isPreviewEditorView ? (
+            <div className='editor-view-shell'>
+              {editorToolbarLeadingAction ? (
+                <div className='editor-plain-toolbar'>
+                  {editorToolbarLeadingAction}
+                </div>
+              ) : null}
+              <HtmlPreview
+                content={currentFileContent}
+                filePath={activeFileTab.filePath}
+              />
+            </div>
           ) : null}
         </div>
       </div>
