@@ -5052,9 +5052,15 @@ function App() {
         className={className}
         aria-label={isPickingWorkspace ? 'Opening workspace' : '选择或切换工作目录'}
       >
+        <WorkspaceFileIcon
+          iconTheme={iconTheme}
+          isFolder
+          isClosed
+          nodeLabel={editorWorkspaceSwitchLabel}
+        />
         <span className='section-title-label'>{editorWorkspaceSwitchLabel}</span>
         {showDropdownIcon ? (
-          <DownLine className='editor-workspace-switch-chevron' size={18} aria-hidden='true' />
+          <DownLine className='editor-workspace-switch-chevron' size={16} aria-hidden='true' />
         ) : null}
       </button>
     )
