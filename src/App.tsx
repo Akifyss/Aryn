@@ -4956,37 +4956,45 @@ function App() {
   const isEditorLayoutSwitchDisabled = activeWorkspaceContext.kind === 'conversationDraft' && !currentPath && isAgentLayout
 
   const renderLayoutModeSwitchButton = () => (
-    <div
-      className='layout-mode-segmented-control'
-      role='group'
-      aria-label='Layout mode'
+    <BaseTabs.Root
+      className='layout-mode-tabs-root'
+      orientation='horizontal'
+      value={appLayoutPreference}
+      onValueChange={(value) => {
+        if (value === 'agent') {
+          setLayoutPreference('agent')
+          return
+        }
+
+        if (value === 'editor' && !isEditorLayoutSwitchDisabled) {
+          setLayoutPreference('editor')
+        }
+      }}
     >
-      <button
-        type='button'
-        className={`layout-mode-segmented-option${isAgentLayout ? ' is-active' : ''}`}
-        aria-pressed={isAgentLayout}
-        aria-label='Agent mode'
-        title='Agent mode'
-        onClick={() => setLayoutPreference('agent')}
+      <BaseTabs.List
+        className='layout-mode-segmented-control'
+        aria-label='Layout mode'
       >
-        <Chat3Line size={16} aria-hidden='true' />
-      </button>
-      <button
-        type='button'
-        className={`layout-mode-segmented-option${!isAgentLayout ? ' is-active' : ''}`}
-        disabled={isEditorLayoutSwitchDisabled}
-        aria-pressed={!isAgentLayout}
-        aria-label={isEditorLayoutSwitchDisabled ? 'Editor mode，需要先选择工作目录' : 'Editor mode'}
-        title={isEditorLayoutSwitchDisabled ? '先选择工作目录' : 'Editor mode'}
-        onClick={() => {
-          if (!isEditorLayoutSwitchDisabled) {
-            setLayoutPreference('editor')
-          }
-        }}
-      >
-        <Pencil2Line size={16} aria-hidden='true' />
-      </button>
-    </div>
+        <BaseTabs.Tab
+          value='agent'
+          className={`layout-mode-segmented-option${isAgentLayout ? ' is-active' : ''}`}
+          aria-label='Agent mode'
+          title='Agent mode'
+        >
+          <Chat3Line size={16} aria-hidden='true' />
+        </BaseTabs.Tab>
+        <BaseTabs.Tab
+          value='editor'
+          className={`layout-mode-segmented-option${!isAgentLayout ? ' is-active' : ''}`}
+          disabled={isEditorLayoutSwitchDisabled}
+          aria-label={isEditorLayoutSwitchDisabled ? 'Editor mode，需要先选择工作目录' : 'Editor mode'}
+          title={isEditorLayoutSwitchDisabled ? '先选择工作目录' : 'Editor mode'}
+        >
+          <Pencil2Line size={16} aria-hidden='true' />
+        </BaseTabs.Tab>
+        <BaseTabs.Indicator className='layout-mode-segmented-indicator' />
+      </BaseTabs.List>
+    </BaseTabs.Root>
   )
 
   const renderLeftChromeSearchButton = () => (
