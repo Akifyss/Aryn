@@ -139,6 +139,10 @@
   padding-right: calc(var(--right-panel-content-inset) + var(--agent-collapsed-tab-actions-width) + var(--panel-toggle-gap));
 }
 
+.app-shell[data-app-layout='agent'][data-right-collapsed='false'] .panel-editor .agent-threadbar {
+  padding-right: 0;
+}
+
 .app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-editor .agent-threadbar {
   padding-left: var(--left-panel-content-inset);
 }
