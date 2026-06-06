@@ -16,7 +16,6 @@ import {
   Chat3Line,
   CheckLine,
   DownLine,
-  Pencil2Line,
   SearchLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
@@ -4990,7 +4989,7 @@ function App() {
           aria-label={isEditorLayoutSwitchDisabled ? 'Editor mode，需要先选择工作目录' : 'Editor mode'}
           title={isEditorLayoutSwitchDisabled ? '先选择工作目录' : 'Editor mode'}
         >
-          <Pencil2Line size={16} aria-hidden='true' />
+          <FolderLine size={16} aria-hidden='true' />
         </BaseTabs.Tab>
         <BaseTabs.Indicator className='layout-mode-segmented-indicator' />
       </BaseTabs.List>
