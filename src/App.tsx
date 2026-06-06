@@ -2,7 +2,8 @@ import type { CSSProperties, FormEvent, MouseEvent, ReactNode } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Menu } from '@base-ui/react/menu'
-import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer, Tabs } from '@heroui/react'
+import { Tabs as BaseTabs } from '@base-ui/react/tabs'
+import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
 import {
   FileLine,
   FolderLine,
@@ -5080,39 +5081,37 @@ function App() {
             />
           ) : (
             <>
-              <Tabs
-                aria-label='工作区面板'
-                className='sidebar-vertical-tabs'
-                orientation='vertical'
-                selectedKey={activeLeftSidebarTab}
-                onSelectionChange={(key) => {
-                  if (key === 'file' || key === 'git') {
-                    setActiveLeftSidebarTab(key)
+              <BaseTabs.Root
+                className='sidebar-workspace-tabs'
+                orientation='horizontal'
+                value={activeLeftSidebarTab}
+                onValueChange={(value) => {
+                  if (value === 'file' || value === 'git') {
+                    setActiveLeftSidebarTab(value)
                   }
                 }}
               >
-                <Tabs.ListContainer className='sidebar-vertical-tabs-list-container'>
-                  <Tabs.List aria-label='工作区面板' className='sidebar-vertical-tabs-list'>
-                    <Tabs.Tab id='file' className='sidebar-vertical-tab'>
-                      <FolderLine size={16} className='sidebar-vertical-tab-icon' />
-                      <span className='sidebar-vertical-tab-label'>文件</span>
-                      <Tabs.Indicator className='sidebar-vertical-tab-indicator' />
-                    </Tabs.Tab>
-                    <Tabs.Tab id='git' className='sidebar-vertical-tab'>
-                      <GitBranchLine size={16} className='sidebar-vertical-tab-icon' />
-                      <span className='sidebar-vertical-tab-label'>更改</span>
-                      <Tabs.Indicator className='sidebar-vertical-tab-indicator' />
-                    </Tabs.Tab>
-                  </Tabs.List>
-                </Tabs.ListContainer>
+                <div className='sidebar-workspace-tabs-list-container'>
+                  <BaseTabs.List aria-label='工作区面板' className='sidebar-workspace-tabs-list'>
+                    <BaseTabs.Tab value='file' className='sidebar-workspace-tab'>
+                      <FolderLine size={16} className='sidebar-workspace-tab-icon' />
+                      <span className='sidebar-workspace-tab-label'>文件</span>
+                    </BaseTabs.Tab>
+                    <BaseTabs.Tab value='git' className='sidebar-workspace-tab'>
+                      <GitBranchLine size={16} className='sidebar-workspace-tab-icon' />
+                      <span className='sidebar-workspace-tab-label'>更改</span>
+                    </BaseTabs.Tab>
+                    <BaseTabs.Indicator className='sidebar-workspace-tab-indicator' />
+                  </BaseTabs.List>
+                </div>
 
-                <Tabs.Panel id='file' className='sidebar-vertical-tab-panel'>
+                <BaseTabs.Panel value='file' className='sidebar-workspace-tab-panel'>
                   {renderWorkspaceTreePanel({ surfaceMode })}
-                </Tabs.Panel>
-                <Tabs.Panel id='git' className='sidebar-vertical-tab-panel'>
+                </BaseTabs.Panel>
+                <BaseTabs.Panel value='git' className='sidebar-workspace-tab-panel'>
                   {renderGitPanel()}
-                </Tabs.Panel>
-              </Tabs>
+                </BaseTabs.Panel>
+              </BaseTabs.Root>
             </>
           )}
         </div>

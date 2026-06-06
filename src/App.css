@@ -1329,7 +1329,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   overflow: hidden;
 }
 
-.workspace-sidebar-surface .sidebar-stack .sidebar-vertical-tabs {
+.workspace-sidebar-surface .sidebar-stack .sidebar-workspace-tabs {
   display: flex;
   flex: 1;
   min-height: 0;
@@ -1338,72 +1338,76 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   overflow: hidden;
 }
 
-.workspace-sidebar-surface .sidebar-vertical-tabs-list-container {
+.workspace-sidebar-surface .sidebar-workspace-tabs-list-container {
   flex: none;
-  padding: 0 8px 8px;
-  padding-left: calc(var(--sidebar-icon-x, 20px) - 12px);
+  padding: 0 6px 8px;
 }
 
-.workspace-sidebar-surface .sidebar-vertical-tabs-list {
+.workspace-sidebar-surface .sidebar-workspace-tabs-list {
+  position: relative;
   display: flex;
   width: 100%;
-  flex-direction: column;
+  min-height: 32px;
+  flex-direction: row;
   gap: 2px;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--surface-secondary);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--border) 72%, transparent);
 }
 
-.workspace-sidebar-surface .sidebar-vertical-tab {
+.workspace-sidebar-surface .sidebar-workspace-tab {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  width: 100%;
-  height: auto;
+  justify-content: center;
+  gap: 6px;
+  flex: 1 1 0;
+  height: 28px;
   min-width: 0;
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 0 8px;
+  border-radius: 6px;
   border: none;
   background: transparent;
   color: var(--muted);
   font-size: 13px;
   font-weight: 500;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition:
     color 140ms ease,
     background-color 140ms ease,
     opacity 140ms ease;
+  z-index: 1;
 }
 
-.workspace-sidebar-surface .sidebar-vertical-tab:hover,
-.workspace-sidebar-surface .sidebar-vertical-tab[data-hovered="true"] {
-  background: var(--surface-tertiary);
+.workspace-sidebar-surface .sidebar-workspace-tab:hover {
   color: var(--foreground);
   opacity: 1;
 }
 
-.workspace-sidebar-surface .sidebar-vertical-tab[data-selected="true"] {
-  background: var(--surface-tertiary);
+.workspace-sidebar-surface .sidebar-workspace-tab[data-active] {
   color: var(--foreground);
   font-weight: 600;
 }
 
-.workspace-sidebar-surface .sidebar-vertical-tab-indicator {
+.workspace-sidebar-surface .sidebar-workspace-tab-indicator {
+  position: absolute;
   left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 4px;
-  height: auto;
-  background: var(--accent);
-  border-radius: 999px;
-  box-shadow: none;
+  top: var(--active-tab-top);
+  width: var(--active-tab-width);
+  height: var(--active-tab-height);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow:
+    0 1px 3px rgb(15 23 42 / 0.12),
+    inset 0 0 0 1px color-mix(in oklab, var(--border) 76%, transparent);
   z-index: 0;
+  transform: translate3d(var(--active-tab-left), 0, 0);
+  transition: transform 160ms ease;
 }
 
-.sidebar-vertical-tab-icon {
+.sidebar-workspace-tab-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1413,13 +1417,12 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   z-index: 1;
 }
 
-.workspace-sidebar-surface .sidebar-vertical-tab:active .sidebar-vertical-tab-icon,
-.workspace-sidebar-surface .sidebar-vertical-tab[data-pressed="true"] .sidebar-vertical-tab-icon {
+.workspace-sidebar-surface .sidebar-workspace-tab:active .sidebar-workspace-tab-icon {
   transform: scale(0.92);
 }
 
-.sidebar-vertical-tab-label {
-  flex: 1;
+.sidebar-workspace-tab-label {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1427,7 +1430,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   z-index: 1;
 }
 
-.workspace-sidebar-surface .sidebar-vertical-tab-panel {
+.workspace-sidebar-surface .sidebar-workspace-tab-panel {
   display: flex;
   flex: 1;
   min-height: 0;
