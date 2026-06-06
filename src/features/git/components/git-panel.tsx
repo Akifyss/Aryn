@@ -8,7 +8,6 @@ import {
   CheckLine,
   CloseCircleLine,
   DownloadLine,
-  ExternalLinkLine,
   FolderLine,
   GitBranchLine,
   MarkdownLine,
@@ -233,7 +232,7 @@ function GitRowActions({
   onUnstage,
   onStage,
   onDiscard,
-  onOpenDiff,
+  onOpenFile,
   onOpenMeoDiff,
   isFolder,
   change,
@@ -243,33 +242,34 @@ function GitRowActions({
   onUnstage?: () => void
   onStage?: () => void
   onDiscard?: () => void
-  onOpenDiff?: () => void
+  onOpenFile?: () => void
   onOpenMeoDiff?: () => void
   isFolder?: boolean
   change?: GitDisplayChange
   changesCount?: number
 }) {
-  const isChange = change && isScopedGitChange(change)
+  const scopedChange = change && isScopedGitChange(change) ? change : null
   const hasMeoDiff = change ? supportsMeoDiff(change) : false
+  const canOpenFile = Boolean(scopedChange && scopedChange.kind !== 'deleted' && onOpenFile)
 
   return (
     <div className='git-change-tools'>
       <div className='git-change-actions'>
-        {!isFolder && isChange && (
+        {!isFolder && canOpenFile && (
           <button
             type='button'
             className='git-change-action git-change-icon-button'
-            aria-label='打开差异'
-            title={isChange ? '打开差异' : '打开文件'}
+            aria-label='打开文件'
+            title='打开文件'
             onClick={(e) => {
               e.stopPropagation()
-              onOpenDiff?.()
+              onOpenFile?.()
             }}
           >
-            <ExternalLinkLine size={16} />
+            <Icon icon='material-symbols:file-export-outline-rounded' width={16} height={16} />
           </button>
         )}
-        {!isFolder && isChange && hasMeoDiff && (
+        {!isFolder && scopedChange && hasMeoDiff && (
           <button
             type='button'
             className='git-change-action git-change-icon-button'
@@ -329,10 +329,10 @@ function GitRowActions({
         )}
       </div>
 
-      {isChange && (
+      {scopedChange && (
         <FileChangeStatusBadge
-          kind={change.kind}
-          title={getGitChangeKindLabel(change.kind)}
+          kind={scopedChange.kind}
+          title={getGitChangeKindLabel(scopedChange.kind)}
         />
       )}
       {isFolder && <span className='git-panel-section-count'>{changesCount ?? 0}</span>}
@@ -500,7 +500,7 @@ function GitChangeList({
               onStage={() => onStage([change.path])}
               onUnstage={() => onUnstage([change.path])}
               onDiscard={() => onDiscardMany([change as GitChangeItem])}
-              onOpenDiff={() => isChange && onOpenDiff(change)}
+              onOpenFile={() => onOpenFile(change.path)}
               onOpenMeoDiff={() => isChange && onOpenMeoDiff(change)}
             />
           </li>
