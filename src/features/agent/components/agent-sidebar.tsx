@@ -53,7 +53,6 @@ import remarkGfm from 'remark-gfm'
 import spinners, { type BrailleSpinnerName } from 'unicode-animations'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import {
-  TreeHeader,
   TreeItemActionButton,
   TreeItemChildren,
   TreeItem,
@@ -4995,14 +4994,15 @@ function AgentProjectTree({
         <TreeList className='agent-session-section-stack' aria-label='项目与对话'>
           <TreeSection className={`agent-project-tree-section agent-project-section${isProjectSectionExpanded ? '' : ' is-collapsed'}${isFloating ? ' is-floating' : ''}`}>
             {!isFloating ? (
-              <TreeHeader
-                className={`agent-project-tree-header${isProjectAddMenuOpen ? ' is-menu-open' : ''}`}
-                title='项目'
+              <TreeItem
+                variant='header'
+                itemClassName='agent-project-tree-header'
+                label='项目'
                 isExpanded={isProjectSectionExpanded}
+                isMenuOpen={isProjectAddMenuOpen}
                 actions={(
-                  <button
-                    type='button'
-                    className={`tree-header-action${isProjectAddMenuOpen ? ' is-menu-open' : ''}`}
+                  <TreeItemActionButton
+                    className={isProjectAddMenuOpen ? 'is-menu-open' : undefined}
                     aria-label='添加项目'
                     title='添加项目'
                     onClick={(event) => {
@@ -5011,7 +5011,7 @@ function AgentProjectTree({
                     }}
                   >
                     <AddLine size={16} />
-                  </button>
+                  </TreeItemActionButton>
                 )}
                 onToggle={toggleProjectSection}
               />
@@ -5164,14 +5164,13 @@ function AgentProjectTree({
             ) : null}
           </TreeSection>
           <TreeSection className={`agent-project-tree-section agent-conversation-section${isConversationSectionExpanded ? '' : ' is-collapsed'}`}>
-            <TreeHeader
-              className='agent-project-tree-header agent-conversation-tree-header'
-              title='对话'
+            <TreeItem
+              variant='header'
+              itemClassName='agent-project-tree-header agent-conversation-tree-header'
+              label='对话'
               isExpanded={isConversationSectionExpanded}
               actions={(
-                <button
-                  type='button'
-                  className='tree-header-action'
+                <TreeItemActionButton
                   aria-label='新对话'
                   aria-keyshortcuts='Control+Alt+N'
                   title='新对话 Ctrl+Alt+N'
@@ -5182,7 +5181,7 @@ function AgentProjectTree({
                   }}
                 >
                   <EditLine size={16} />
-                </button>
+                </TreeItemActionButton>
               )}
               onToggle={toggleConversationSection}
             />

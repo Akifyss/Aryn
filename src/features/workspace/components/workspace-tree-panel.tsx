@@ -2,7 +2,7 @@ import type { Dispatch, MouseEvent, ReactNode, SetStateAction } from 'react'
 import { Icon } from '@iconify/react'
 import { FolderForbidLine } from '@mingcute/react'
 import { AppTooltipButton } from '@/components/app-tooltip'
-import { TreeHeader, TreeScrollArea } from '@/components/tree'
+import { TreeItem, TreeScrollArea } from '@/components/tree'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
 import type { GitChangeItem, GitRepositoryState } from '@/features/git/types'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
@@ -71,14 +71,15 @@ export function WorkspaceTreePanel({
         </div>
       ) : null}
 
-      <TreeHeader
-        className='file-panel-header'
-        title={title}
+      <TreeItem
+        variant='header'
+        itemClassName='file-panel-header'
+        label={title}
         actions={(
           <>
             <AppTooltipButton
               type='button'
-              className='file-panel-action'
+              className='tree-item-action'
               onPress={onCreateFile}
               isDisabled={!workspacePath || isCreatingFile}
               aria-label='Create File'
@@ -88,7 +89,7 @@ export function WorkspaceTreePanel({
             </AppTooltipButton>
             <AppTooltipButton
               type='button'
-              className='file-panel-action'
+              className='tree-item-action'
               onPress={onCreateDirectory}
               isDisabled={!workspacePath || isCreatingDirectory}
               aria-label='Create Folder'
@@ -98,7 +99,7 @@ export function WorkspaceTreePanel({
             </AppTooltipButton>
             <AppTooltipButton
               type='button'
-              className='file-panel-action'
+              className='tree-item-action'
               onPress={onToggleFileTreeExpansion}
               isDisabled={!workspacePath || nodes.length === 0}
               aria-label='Toggle Expansion'

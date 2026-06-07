@@ -30,6 +30,7 @@ type TreeRowState = TreeItemState & {
 
 export type TreeItemInfoVariant = 'count' | 'status' | 'text'
 export type TreeItemStatusTone = 'danger' | 'neutral' | 'success' | 'warning'
+export type TreeItemVariant = 'default' | 'header'
 export type TreeStatusItemTone = 'danger' | 'default'
 
 export type TreeItemTextSlotProps = Omit<HTMLAttributes<HTMLSpanElement>, 'children' | 'className'> & {
@@ -58,19 +59,10 @@ type TreeItemMainContentProps = {
   label?: ReactNode
   labelClassName?: string
   labelProps?: TreeItemTextSlotProps
+  labelSuffix?: ReactNode
 }
 
-export type TreeHeaderProps = {
-  actions?: ReactNode
-  className?: string
-  count?: ReactNode
-  isExpanded?: boolean
-  title: ReactNode
-  toggleAriaLabel?: string
-  onToggle?: () => void
-}
-
-export type TreeItemProps = Omit<HTMLAttributes<HTMLDivElement>, 'children' | 'className'> & TreeItemState & {
+export type TreeItemProps = Omit<HTMLAttributes<HTMLDivElement>, 'children' | 'className' | 'onToggle'> & TreeItemState & {
   actions?: TreeItemSlot
   actionsAlwaysVisible?: boolean
   actionsClassName?: string
@@ -85,15 +77,21 @@ export type TreeItemProps = Omit<HTMLAttributes<HTMLDivElement>, 'children' | 'c
   infoClassName?: string
   infoProps?: TreeItemInfoSlotProps
   infoVariant?: TreeItemInfoVariant
+  isExpanded?: boolean
+  itemAs?: 'div' | 'li'
   itemClassName?: string
   label?: ReactNode
   labelClassName?: string
   labelProps?: TreeItemTextSlotProps
+  labelSuffix?: ReactNode
   main?: ReactNode
   mainButtonProps?: Omit<TreeItemMainButtonProps, 'children' | 'className'> & { className?: string }
   mainClassName?: string
   renderMain?: TreeItemMainRenderer
   rowClassName?: string
+  toggleAriaLabel?: string
+  variant?: TreeItemVariant
+  onToggle?: () => void
 }
 
 export type TreeStatusItemProps = LiHTMLAttributes<HTMLLIElement> & {
@@ -192,49 +190,6 @@ export const TreeScrollArea = forwardRef<HTMLDivElement, TreeScrollAreaProps>(fu
   )
 })
 
-export function TreeHeader({
-  actions,
-  className,
-  count,
-  isExpanded,
-  title,
-  toggleAriaLabel,
-  onToggle,
-}: TreeHeaderProps) {
-  const isToggleable = typeof isExpanded === 'boolean' && Boolean(onToggle)
-  const renderedCount = count === undefined ? null : <span className='tree-header-count'>{count}</span>
-  const renderedActions = actions ? <div className='tree-header-actions'>{actions}</div> : null
-  const renderedChevron = isToggleable
-    ? isExpanded
-      ? <DownLine className='tree-header-chevron tree-header-chevron-box' size={16} aria-hidden='true' />
-      : <RightLine className='tree-header-chevron tree-header-chevron-box' size={16} aria-hidden='true' />
-    : null
-
-  return (
-    <div className={cx('tree-header', isToggleable && !isExpanded && 'is-collapsed', className)}>
-      {isToggleable ? (
-        <button
-          type='button'
-          className='tree-header-toggle'
-          aria-expanded={isExpanded}
-          aria-label={toggleAriaLabel}
-          onClick={onToggle}
-        >
-          <span className='tree-header-title'>{title}</span>
-          {renderedCount}
-          {renderedChevron}
-        </button>
-      ) : (
-        <div className='tree-header-title-area'>
-          <span className='tree-header-title'>{title}</span>
-          {renderedCount}
-        </div>
-      )}
-      {renderedActions}
-    </div>
-  )
-}
-
 const TreeItemRow = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & TreeRowState>(function TreeItemRow(
   {
     className,
@@ -289,16 +244,22 @@ export const TreeItem = forwardRef<HTMLDivElement, TreeItemProps>(function TreeI
     info,
     infoClassName,
     infoProps,
-    infoVariant = 'text',
+    infoVariant,
+    isExpanded,
+    itemAs,
     itemClassName,
     label,
     labelClassName,
     labelProps,
+    labelSuffix,
     main,
     mainButtonProps,
     mainClassName,
     renderMain,
     rowClassName,
+    toggleAriaLabel,
+    variant = 'default',
+    onToggle,
     isActive,
     isDragSource,
     isDropTarget,
@@ -308,10 +269,29 @@ export const TreeItem = forwardRef<HTMLDivElement, TreeItemProps>(function TreeI
   },
   ref,
 ) {
+  const isHeader = variant === 'header'
+  const isHeaderToggleable = isHeader && typeof isExpanded === 'boolean' && Boolean(onToggle)
   const renderedActions = typeof actions === 'function' ? actions() : actions
   const hasActions = renderedActions !== undefined && renderedActions !== null && renderedActions !== false
   const hasInfo = info !== undefined && info !== null && info !== false
-  const hasConfiguredContent = icon !== undefined || label !== undefined || description !== undefined
+  const renderedHeaderChevron = isHeaderToggleable
+    ? isExpanded
+      ? <DownLine className='tree-item-chevron tree-item-chevron-box' size={16} aria-hidden='true' />
+      : <RightLine className='tree-item-chevron tree-item-chevron-box' size={16} aria-hidden='true' />
+    : null
+  const hasLabelSuffix = labelSuffix !== undefined && labelSuffix !== null && labelSuffix !== false
+  const resolvedLabelSuffix = hasLabelSuffix || renderedHeaderChevron
+    ? (
+      <>
+        {labelSuffix}
+        {renderedHeaderChevron}
+      </>
+    )
+    : undefined
+  const effectiveInfoVariant = infoVariant ?? (isHeader ? 'count' : 'text')
+  const effectiveItemAs = itemAs ?? (isHeader ? 'div' : 'li')
+  const effectiveItemClassName = cx(isHeader && 'tree-header', itemClassName)
+  const hasConfiguredContent = icon !== undefined || label !== undefined || description !== undefined || resolvedLabelSuffix !== undefined
   const hasDescription = description !== undefined && description !== null && description !== false
   const mainRenderProps: TreeItemMainRenderProps = {
     hasDescription,
@@ -326,14 +306,24 @@ export const TreeItem = forwardRef<HTMLDivElement, TreeItemProps>(function TreeI
       label={label}
       labelClassName={labelClassName}
       labelProps={labelProps}
+      labelSuffix={resolvedLabelSuffix}
     />
   ) : null
   const resolvedMainButtonProps: TreeItemMainButtonProps = {
+    ...(isHeaderToggleable ? {
+      'aria-expanded': isExpanded,
+      'aria-label': toggleAriaLabel,
+      onClick: onToggle,
+    } : {}),
     ...mainButtonProps,
     ...mainRenderProps,
   }
   const defaultMain = main ?? (hasConfiguredContent ? (
-    renderMain ? renderMain(mainContent, mainRenderProps) : (
+    renderMain ? renderMain(mainContent, mainRenderProps) : isHeader && !isHeaderToggleable ? (
+      <TreeItemMain {...mainRenderProps}>
+        {mainContent}
+      </TreeItemMain>
+    ) : (
       <TreeItemMainButton {...resolvedMainButtonProps}>
         {mainContent}
       </TreeItemMainButton>
@@ -352,7 +342,7 @@ export const TreeItem = forwardRef<HTMLDivElement, TreeItemProps>(function TreeI
       {hasInfo ? (
         <TreeItemInfo
           {...infoProps}
-          variant={infoVariant}
+          variant={effectiveInfoVariant}
           className={cx(infoClassName, infoProps?.className)}
         >
           {info}
@@ -361,8 +351,10 @@ export const TreeItem = forwardRef<HTMLDivElement, TreeItemProps>(function TreeI
     </TreeItemEnd>
   ) : null)
 
+  const ItemElement = effectiveItemAs
+
   return (
-    <li className={cx('tree-item', itemClassName)}>
+    <ItemElement className={cx('tree-item', effectiveItemClassName)}>
       <TreeItemRow
         ref={ref}
         className={rowClassName}
@@ -381,7 +373,7 @@ export const TreeItem = forwardRef<HTMLDivElement, TreeItemProps>(function TreeI
         {defaultEnd}
       </TreeItemRow>
       {after}
-    </li>
+    </ItemElement>
   )
 })
 
@@ -407,6 +399,7 @@ function TreeItemMainContent({
   label,
   labelClassName,
   labelProps,
+  labelSuffix,
 }: TreeItemMainContentProps) {
   const hasDescription = description !== undefined && description !== null && description !== false
   const hasLabel = label !== undefined && label !== null && label !== false
@@ -422,6 +415,7 @@ function TreeItemMainContent({
           {label}
         </TreeItemLabel>
       ) : null}
+      {labelSuffix}
       {hasDescription ? (
         <span
           {...descriptionProps}

@@ -23,7 +23,6 @@ import {
   WorkspaceFileIcon,
 } from '@/components/file-change-visuals'
 import {
-  TreeHeader,
   TreeItemActionButton,
   TreeItemChildren,
   TreeItem,
@@ -555,11 +554,12 @@ function GitSection({
 
   return (
     <div className='git-panel-section'>
-      <TreeHeader
-        className='git-panel-section-header'
-        title={title}
+      <TreeItem
+        variant='header'
+        itemClassName='git-panel-section-header'
+        label={title}
         isExpanded={isExpanded}
-        count={changes.length}
+        info={changes.length}
         actions={action}
         onToggle={() => setIsExpanded((v) => !v)}
       />
@@ -894,15 +894,13 @@ export function GitPanel({
               onStage={onStage}
               onUnstage={onUnstage}
               action={
-                <button
-                  type='button'
-                  className='tree-header-action'
+                <TreeItemActionButton
                   aria-label='全部取消暂存'
                   title='全部取消暂存'
                   onClick={() => onUnstage(stagedPaths)}
                 >
                   <Icon icon='mdi:minus' width={16} height={16} />
-                </button>
+                </TreeItemActionButton>
               }
             />
 
@@ -920,24 +918,20 @@ export function GitPanel({
               onUnstage={onUnstage}
               action={
                 <>
-                  <button
-                    type='button'
-                    className='tree-header-action'
+                  <TreeItemActionButton
                     aria-label='全部放弃'
                     title='全部放弃'
                     onClick={onDiscardAll}
                   >
                     <Back2Line size={16} />
-                  </button>
-                  <button
-                    type='button'
-                    className='tree-header-action'
+                  </TreeItemActionButton>
+                  <TreeItemActionButton
                     aria-label='全部暂存'
                     title='全部暂存'
                     onClick={() => onStage(unstagedPaths)}
                   >
                     <AddLine size={16} />
-                  </button>
+                  </TreeItemActionButton>
                 </>
               }
             />
