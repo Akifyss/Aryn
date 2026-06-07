@@ -3007,12 +3007,14 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   padding: 0;
 }
 
-.file-panel-action:hover:not(:disabled) {
+.file-panel-action:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
   background: var(--separator);
   color: var(--foreground);
 }
 
-.file-panel-action:disabled {
+.file-panel-action:disabled,
+.file-panel-action[aria-disabled='true'],
+.file-panel-action[data-disabled] {
   opacity: 0.35;
   cursor: default;
 }
@@ -4539,7 +4541,7 @@ body.workspace-tree-dragging .workspace-tree-row {
 
 .tree-header-actions > button:hover:not(:disabled),
 .tree-header-actions > button.is-menu-open:not(:disabled),
-.tree-header-actions .file-panel-action:hover:not(:disabled),
+.tree-header-actions .file-panel-action:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
 .tree-header-actions .git-change-action:hover:not(:disabled),
 .tree-header-actions .agent-project-tree-header-action:hover {
   outline: none;

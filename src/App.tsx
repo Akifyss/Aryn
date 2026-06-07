@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { flushSync } from 'react-dom'
 import { Menu } from '@base-ui/react/menu'
 import { Tabs as BaseTabs } from '@base-ui/react/tabs'
-import { Button, Tooltip, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
+import { Button, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
 import {
   FileLine,
   FolderLine,
@@ -30,6 +30,7 @@ import type {
   WorkspaceNode,
 } from '@/features/workspace/types'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import { AppTooltipButton } from '@/components/app-tooltip'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import {
@@ -5170,27 +5171,21 @@ function App() {
     }
 
     return (
-      <Tooltip closeDelay={0}>
-        <Tooltip.Trigger>
-          <button
-            type='button'
-            className={`editor-directory-toggle${isDirectorySidebarVisible ? ' is-active' : ''}`}
-            aria-label={isDirectorySidebarVisible ? '隐藏目录侧边栏' : '显示目录侧边栏'}
-            aria-pressed={isDirectorySidebarVisible}
-            onClick={() => setIsDirectorySidebarOpen((currentValue) => !currentValue)}
-          >
-            <Icon
-              icon={isDirectorySidebarVisible ? 'ri:menu-fold-line' : 'ri:menu-fold-2-line'}
-              width={16}
-              height={16}
-              aria-hidden='true'
-            />
-          </button>
-        </Tooltip.Trigger>
-        <Tooltip.Content>
-          {isDirectorySidebarVisible ? '隐藏目录' : '显示目录'}
-        </Tooltip.Content>
-      </Tooltip>
+      <AppTooltipButton
+        type='button'
+        className={`editor-directory-toggle${isDirectorySidebarVisible ? ' is-active' : ''}`}
+        aria-label={isDirectorySidebarVisible ? '隐藏目录侧边栏' : '显示目录侧边栏'}
+        aria-pressed={isDirectorySidebarVisible}
+        onPress={() => setIsDirectorySidebarOpen((currentValue) => !currentValue)}
+        tooltip={isDirectorySidebarVisible ? '隐藏目录' : '显示目录'}
+      >
+        <Icon
+          icon={isDirectorySidebarVisible ? 'ri:menu-fold-line' : 'ri:menu-fold-2-line'}
+          width={16}
+          height={16}
+          aria-hidden='true'
+        />
+      </AppTooltipButton>
     )
   }
 

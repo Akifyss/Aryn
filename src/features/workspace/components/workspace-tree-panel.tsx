@@ -1,8 +1,8 @@
 import type { Dispatch, MouseEvent, ReactNode, SetStateAction } from 'react'
-import { Tooltip } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import { FolderForbidLine } from '@mingcute/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import { AppTooltipButton } from '@/components/app-tooltip'
 import { TreeHeader } from '@/components/tree-header'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
 import type { GitChangeItem, GitRepositoryState } from '@/features/git/types'
@@ -77,52 +77,40 @@ export function WorkspaceTreePanel({
         title={title}
         actions={(
           <>
-            <Tooltip closeDelay={0}>
-              <Tooltip.Trigger>
-                <button
-                  type='button'
-                  className='file-panel-action'
-                  onClick={onCreateFile}
-                  disabled={!workspacePath || isCreatingFile}
-                  aria-label='Create File'
-                >
-                  <Icon icon='lucide:file-plus' width={16} height={16} />
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Content>Create File</Tooltip.Content>
-            </Tooltip>
-            <Tooltip closeDelay={0}>
-              <Tooltip.Trigger>
-                <button
-                  type='button'
-                  className='file-panel-action'
-                  onClick={onCreateDirectory}
-                  disabled={!workspacePath || isCreatingDirectory}
-                  aria-label='Create Folder'
-                >
-                  <Icon icon='lucide:folder-plus' width={16} height={16} />
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Content>Create Folder</Tooltip.Content>
-            </Tooltip>
-            <Tooltip closeDelay={0}>
-              <Tooltip.Trigger>
-                <button
-                  type='button'
-                  className='file-panel-action'
-                  onClick={onToggleFileTreeExpansion}
-                  disabled={!workspacePath || nodes.length === 0}
-                  aria-label='Toggle Expansion'
-                >
-                  <Icon
-                    icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'}
-                    width={16}
-                    height={16}
-                  />
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Content>{expandedPaths.size > 0 ? 'Collapse All' : 'Expand All'}</Tooltip.Content>
-            </Tooltip>
+            <AppTooltipButton
+              type='button'
+              className='file-panel-action'
+              onPress={onCreateFile}
+              isDisabled={!workspacePath || isCreatingFile}
+              aria-label='Create File'
+              tooltip='Create File'
+            >
+              <Icon icon='lucide:file-plus' width={16} height={16} />
+            </AppTooltipButton>
+            <AppTooltipButton
+              type='button'
+              className='file-panel-action'
+              onPress={onCreateDirectory}
+              isDisabled={!workspacePath || isCreatingDirectory}
+              aria-label='Create Folder'
+              tooltip='Create Folder'
+            >
+              <Icon icon='lucide:folder-plus' width={16} height={16} />
+            </AppTooltipButton>
+            <AppTooltipButton
+              type='button'
+              className='file-panel-action'
+              onPress={onToggleFileTreeExpansion}
+              isDisabled={!workspacePath || nodes.length === 0}
+              aria-label='Toggle Expansion'
+              tooltip={expandedPaths.size > 0 ? 'Collapse All' : 'Expand All'}
+            >
+              <Icon
+                icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'}
+                width={16}
+                height={16}
+              />
+            </AppTooltipButton>
           </>
         )}
       />
