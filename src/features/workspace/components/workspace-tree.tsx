@@ -104,6 +104,7 @@ function FileRowActions({
   gitDiffChange,
   menuPortalTarget,
   onOpenDiff,
+  onMenuOpenChange,
 }: {
   canOpenInCodeEditor: boolean
   onOpenInCodeEditor: () => void
@@ -115,9 +116,15 @@ function FileRowActions({
   gitDiffChange: GitChangeItem | null
   menuPortalTarget?: HTMLElement | null
   onOpenDiff?: (change: GitChangeItem) => void
+  onMenuOpenChange?: (open: boolean) => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const systemManagerName = getSystemFileManagerName(window.appApi.platform)
+
+  const updateOpen = (open: boolean) => {
+    setIsOpen(open)
+    onMenuOpenChange?.(open)
+  }
 
   return (
     <div
@@ -141,12 +148,12 @@ function FileRowActions({
           open={isOpen}
           onOpenChange={(open, details) => {
             if (open) {
-              setIsOpen(true)
+              updateOpen(true)
               return
             }
 
             if (shouldCloseClickOpenedMenu(details)) {
-              setIsOpen(false)
+              updateOpen(false)
             } else {
               details.cancel?.()
             }
@@ -290,6 +297,7 @@ function FileTreeItem({
   menuPortalTarget?: HTMLElement | null
 }) {
   const [isEditing, setIsEditing] = useState(false)
+  const [isRowMenuOpen, setIsRowMenuOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [draftName, setDraftName] = useState(node.name)
   const [error, setError] = useState<string | null>(null)
@@ -315,6 +323,12 @@ function FileTreeItem({
   useEffect(() => {
     setDraftName(node.name)
   }, [node.name])
+
+  useEffect(() => {
+    if (isEditing) {
+      setIsRowMenuOpen(false)
+    }
+  }, [isEditing])
 
   useEffect(() => {
     if (!isEditing) return
@@ -385,7 +399,7 @@ function FileTreeItem({
     <li className='panel-tree-node'>
       <div
         ref={rowRef}
-        className={`workspace-tree-row${isEditing ? ' is-editing' : ''}${isActive ? ' is-active' : ''}${isDragSource ? ' is-drag-source' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
+        className={`workspace-tree-row${isEditing ? ' is-editing' : ''}${isActive ? ' is-active' : ''}${isRowMenuOpen ? ' is-menu-open' : ''}${isDragSource ? ' is-drag-source' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
         onAuxClick={(event) => {
           if (event.button === 1) {
             handleSelectNode(event)
@@ -489,6 +503,7 @@ function FileTreeItem({
             gitChange={gitChange}
             gitDiffChange={gitDiffChange}
             menuPortalTarget={menuPortalTarget}
+            onMenuOpenChange={setIsRowMenuOpen}
             onOpenInCodeEditor={() => onOpenInCodeEditor(node.path)}
             onOpenDiff={onOpenDiff}
             onShowInFolder={() => {

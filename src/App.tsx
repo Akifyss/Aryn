@@ -1065,6 +1065,11 @@ function App() {
   const isLeftSidebarVisible = !isLeftSidebarDrawer && !isLeftSidebarCollapsed
   const isRightSidebarVisible = !isRightSidebarDrawer && !isRightSidebarCollapsed && shouldExposeAgentWorkspaceTools
   const isProjectMenuOpen = Boolean(projectMenuMode)
+  const isProjectAddMenuOpenForSurface = (surface: ProjectMenuSurface) => (
+    isProjectMenuOpen
+    && projectMenuMode === 'agent-add'
+    && projectMenuSurface === surface
+  )
   const isGlobalProjectMenuOpen = isProjectMenuOpen && projectMenuSurface === 'global'
   const isAppModalLayerOpen = isSettingsOpen
     || isCommandPaletteOpen
@@ -5086,6 +5091,7 @@ function App() {
         <div ref={isDrawerSurface ? undefined : leftSidebarBodyRef} className='sidebar-stack'>
           {isAgentLayout ? (
             <AgentSessionTree
+              isProjectAddMenuOpen={isProjectAddMenuOpenForSurface(isDrawerSurface ? 'left-drawer' : 'global')}
               menuPortalTarget={isDrawerSurface ? leftDrawerOverlayRoot : null}
               onOpenProjectAddMenu={isDrawerSurface
                 ? (anchorRect) => openProjectMenu('agent-add', anchorRect, { surface: 'left-drawer' })
@@ -5801,6 +5807,7 @@ function App() {
       onStartStandaloneConversation={handleStartStandaloneConversation}
       onStartProjectSession={handleStartProjectSession}
       projectState={projectState}
+      isProjectAddMenuOpen={isProjectAddMenuOpenForSurface(agentProjectMenuSurface)}
     >
       {appShell}
     </AgentProvider>

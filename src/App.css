@@ -4512,20 +4512,23 @@ body.workspace-tree-dragging .workspace-tree-row {
   height: var(--tree-header-icon-size);
 }
 
-.tree-header:hover .tree-header-actions {
+.tree-header:hover .tree-header-actions,
+.tree-header.is-menu-open .tree-header-actions {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
   transition-delay: 0s;
 }
 
-.tree-header:hover .tree-header-chevron-box {
+.tree-header:hover .tree-header-chevron-box,
+.tree-header.is-menu-open .tree-header-chevron-box {
   opacity: 1;
   visibility: visible;
   transition-delay: 0s;
 }
 
 .tree-header-actions > button:hover:not(:disabled),
+.tree-header-actions > button.is-menu-open:not(:disabled),
 .tree-header-actions .file-panel-action:hover:not(:disabled),
 .tree-header-actions .git-change-action:hover:not(:disabled),
 .tree-header-actions .agent-project-tree-header-action:hover {

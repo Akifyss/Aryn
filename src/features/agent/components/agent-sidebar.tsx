@@ -134,6 +134,7 @@ type AgentSidebarProps = {
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
   projectState?: ProjectState
+  isProjectAddMenuOpen?: boolean
   isAgentLayout?: boolean
   surfaceMode?: AgentSurfaceMode
   workspaceState?: AgentWorkspaceState | null
@@ -165,6 +166,7 @@ type AgentSurfaceProps = {
   onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   projectState?: ProjectState
+  isProjectAddMenuOpen?: boolean
   isAgentLayout?: boolean
   surfaceMode?: AgentSurfaceMode
   workspaceState?: AgentWorkspaceState | null
@@ -177,6 +179,7 @@ type AgentSessionTreeProps = {
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   id?: string
   isFloating?: boolean
+  isProjectAddMenuOpen?: boolean
   menuPortalTarget?: HTMLElement | null
 }
 
@@ -479,6 +482,7 @@ type AgentContextValue = {
   hasConfiguredProviders: boolean
   iconTheme?: WorkspaceIconTheme | null
   isAgentLayout: boolean
+  isProjectAddMenuOpen: boolean
   isLoading: boolean
   isSwitchingModel: boolean
   isSwitchingThinkingLevel: boolean
@@ -2489,6 +2493,7 @@ function AgentProvider({
   onStartProjectSession,
   onWorkspaceStateChange,
   projectState = emptyProjectState,
+  isProjectAddMenuOpen = false,
   isAgentLayout = false,
   surfaceMode = 'docked',
   workspaceState,
@@ -4134,6 +4139,7 @@ function AgentProvider({
     hasConfiguredProviders,
     iconTheme,
     isAgentLayout,
+    isProjectAddMenuOpen,
     isLoading,
     isSwitchingModel,
     isSwitchingThinkingLevel,
@@ -4209,6 +4215,7 @@ function AgentProvider({
     hasConfiguredProviders,
     iconTheme,
     isAgentLayout,
+    isProjectAddMenuOpen,
     isLoading,
     isSwitchingModel,
     isSwitchingThinkingLevel,
@@ -4801,6 +4808,7 @@ function AgentProjectTree({
   onRequestClose,
   onOpenProjectAddMenu: onOpenProjectAddMenuOverride,
   isFloating,
+  isProjectAddMenuOpen: isProjectAddMenuOpenOverride,
   menuPortalTarget,
 }: AgentSessionTreeProps) {
   const {
@@ -4824,6 +4832,7 @@ function AgentProjectTree({
     onStartProjectSession,
     projectSessions,
     projectState,
+    isProjectAddMenuOpen: contextIsProjectAddMenuOpen,
     workspacePath,
     iconTheme,
   } = useAgentContext()
@@ -4834,6 +4843,7 @@ function AgentProjectTree({
   const [renamingSessionPath, setRenamingSessionPath] = useState<string | null>(null)
   const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null)
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
+  const isProjectAddMenuOpen = isProjectAddMenuOpenOverride ?? contextIsProjectAddMenuOpen
   const activeSessionProjectId = useMemo(() => {
     if (activeSessionSelection.kind !== 'session' || !activeSessionPath) {
       return null
@@ -4966,13 +4976,13 @@ function AgentProjectTree({
 
       {!isFloating ? (
         <TreeHeader
-          className='agent-project-tree-header'
+          className={`agent-project-tree-header${isProjectAddMenuOpen ? ' is-menu-open' : ''}`}
           title='项目'
           isExpanded={isProjectSectionExpanded}
           actions={(
             <button
               type='button'
-              className='tree-header-action'
+              className={`tree-header-action${isProjectAddMenuOpen ? ' is-menu-open' : ''}`}
               aria-label='添加项目'
               title='添加项目'
               onClick={(event) => {
