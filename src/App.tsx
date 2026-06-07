@@ -3098,7 +3098,7 @@ function App() {
       title = '文件树',
     } = options
     const menuPortalTarget = surfaceMode === 'drawer' ? leftDrawerOverlayRoot : null
-    const handleSelectFile = (filePath: string, event: MouseEvent<HTMLDivElement>) => {
+    const handleSelectFile = (filePath: string, event: MouseEvent<HTMLElement>) => {
       if (
         fileClickMode === 'replace-active-tab'
         && event.button === 0

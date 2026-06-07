@@ -976,20 +976,18 @@ export function AgentComposerMentionInput({
                         setSelectedIndex(index)
                       }}
                     >
-                      <span className='git-row-icon'>
-                        <WorkspaceFileIcon
-                          fileName={item.name}
-                          iconTheme={iconTheme ?? null}
-                          isClosed={item.kind === 'directory'}
-                          isFolder={item.kind === 'directory'}
-                          nodeLabel={item.name}
-                        />
-                      </span>
+                      <WorkspaceFileIcon
+                        fileName={item.name}
+                        iconTheme={iconTheme ?? null}
+                        isClosed={item.kind === 'directory'}
+                        isFolder={item.kind === 'directory'}
+                        nodeLabel={item.name}
+                      />
 
                       <span className='agent-composer-mention-option-inline'>
-                        <span className='panel-tree-label'>{item.displayName}</span>
+                        <span className='agent-composer-mention-option-label'>{item.displayName}</span>
                         {item.displayPath ? (
-                          <span className='git-change-meta'>{item.displayPath}</span>
+                          <span className='agent-composer-mention-option-meta'>{item.displayPath}</span>
                         ) : null}
                       </span>
                     </button>

@@ -52,7 +52,19 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import spinners, { type BrailleSpinnerName } from 'unicode-animations'
 import { AppScrollArea } from '@/components/app-scroll-area'
-import { TreeHeader } from '@/components/tree-header'
+import {
+  TreeHeader,
+  TreeItemActionButton,
+  TreeItemChildren,
+  TreeItem,
+  TreeList,
+  TreeSection,
+  TreeStatusItem,
+  TreeScrollArea,
+  TreeItemMain,
+  TreeItemMainButton,
+  type TreeItemMainRenderer,
+} from '@/components/tree'
 import { getAgentProviderOrder } from '@/features/agent/provider-auth'
 import {
   FileChangeStatusBadge,
@@ -4481,10 +4493,9 @@ function AgentSessionTreeRow({
   label,
   menuPortalTarget,
   menuTitle = '对话菜单',
-  nodeClassName,
+  itemClassName,
   relativeTime,
   rowClassName,
-  triggerClassName,
   onOpen,
   onCancelRename,
   onDelete,
@@ -4497,10 +4508,9 @@ function AgentSessionTreeRow({
   label: string
   menuPortalTarget?: HTMLElement | null
   menuTitle?: string
-  nodeClassName?: string
+  itemClassName?: string
   relativeTime?: string
   rowClassName?: string
-  triggerClassName?: string
   onOpen: () => void
   onCancelRename: () => void
   onDelete: () => void
@@ -4563,116 +4573,120 @@ function AgentSessionTreeRow({
     }
   }
 
-  return (
-    <li className={`panel-tree-node agent-project-session-node${nodeClassName ? ` ${nodeClassName}` : ''}`}>
-      <div
-        ref={rowRef}
-        className={`workspace-tree-row agent-project-session-row${rowClassName ? ` ${rowClassName}` : ''}${isActive ? ' is-active' : ''}${isRenaming ? ' is-editing' : ''}${isMenuOpen ? ' is-menu-open' : ''}`}
+  const rowMain = isRenaming ? (
+    <TreeItemMain
+      className='agent-session-rename-trigger'
+      onClick={(event) => event.stopPropagation()}
+    >
+      <input
+        ref={renameInputRef}
+        aria-label='Rename conversation'
+        className='raw-rename-input'
+        value={draftName}
+        onFocus={(event) => event.target.select()}
+        onChange={(event) => setDraftName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            void handleSubmitRename()
+          }
+          if (event.key === 'Escape') {
+            onCancelRename()
+          }
+        }}
+        onBlur={(event) => {
+          if (isSubmitting) return
+
+          const nextFocusedElement = event.relatedTarget
+          if (nextFocusedElement instanceof Node && rowRef.current?.contains(nextFocusedElement)) {
+            return
+          }
+
+          onCancelRename()
+        }}
+      />
+    </TreeItemMain>
+  ) : undefined
+  const renderSessionMain: TreeItemMainRenderer | undefined = isRenaming
+    ? undefined
+    : (content, mainProps) => {
+      const { className, hasDescription } = mainProps
+
+      return (
+        <ContextMenu.Root onOpenChange={setIsContextMenuOpen}>
+          <ContextMenu.Trigger
+            render={<TreeItemMainButton className={className} hasDescription={hasDescription} />}
+            title={label}
+            onClick={onOpen}
+          >
+            {content}
+          </ContextMenu.Trigger>
+          <AgentTreeContextMenuPopup
+            disabled={isDeleting}
+            menuPortalTarget={menuPortalTarget}
+            onDelete={onDelete}
+            onRename={onRequestRename}
+          />
+        </ContextMenu.Root>
+      )
+    }
+  const rowActions = isRenaming ? (
+    <>
+      <TreeItemActionButton
+        aria-label='Confirm rename'
+        disabled={isSubmitting}
+        onClick={() => void handleSubmitRename()}
       >
-        {isRenaming ? (
-          <>
-            <div
-              className={`workspace-tree-trigger agent-project-session-trigger${triggerClassName ? ` ${triggerClassName}` : ''} agent-session-rename-trigger`}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <input
-                ref={renameInputRef}
-                aria-label='重命名对话'
-                className='raw-rename-input'
-                value={draftName}
-                onFocus={(event) => event.target.select()}
-                onChange={(event) => setDraftName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    void handleSubmitRename()
-                  }
-                  if (event.key === 'Escape') {
-                    onCancelRename()
-                  }
-                }}
-                onBlur={(event) => {
-                  if (isSubmitting) return
-
-                  const nextFocusedElement = event.relatedTarget
-                  if (nextFocusedElement instanceof Node && rowRef.current?.contains(nextFocusedElement)) {
-                    return
-                  }
-
-                  onCancelRename()
-                }}
-              />
-            </div>
-            <div className='git-change-tools agent-project-row-tools' onClick={(event) => event.stopPropagation()}>
-              <div className='git-change-actions agent-session-rename-actions' style={{ opacity: 1, maxWidth: '4rem', transform: 'translateX(0)' }}>
-                <button
-                  type='button'
-                  className='git-change-action git-change-icon-button agent-project-row-action'
-                  aria-label='确认重命名'
-                  disabled={isSubmitting}
-                  onClick={() => void handleSubmitRename()}
-                >
-                  <CheckLine size={14} />
-                </button>
-                <button
-                  type='button'
-                  className='git-change-action git-change-icon-button agent-project-row-action'
-                  aria-label='取消重命名'
-                  disabled={isSubmitting}
-                  onClick={onCancelRename}
-                >
-                  <CloseLine size={14} />
-                </button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <ContextMenu.Root onOpenChange={setIsContextMenuOpen}>
-              <ContextMenu.Trigger
-                className={`workspace-tree-trigger agent-project-session-trigger${triggerClassName ? ` ${triggerClassName}` : ''}`}
-                render={<button type='button' />}
-                title={label}
-                onClick={onOpen}
-              >
-                <span className='panel-tree-label agent-project-session-label'>{label}</span>
-                {relativeTime ? <span className='agent-project-session-time'>{relativeTime}</span> : null}
-              </ContextMenu.Trigger>
-              <AgentTreeContextMenuPopup
-                disabled={isDeleting}
-                menuPortalTarget={menuPortalTarget}
-                onDelete={onDelete}
-                onRename={onRequestRename}
-              />
-            </ContextMenu.Root>
-
-            <div className='git-change-tools agent-project-row-tools' onClick={(event) => event.stopPropagation()}>
-              <div className='git-change-actions'>
-                <Menu.Root modal={false} onOpenChange={setIsActionMenuOpen}>
-                  <Menu.Trigger
-                    className='git-change-action git-change-icon-button agent-project-row-action'
-                    aria-label={`打开 ${label} 菜单`}
-                    disabled={isDeleting}
-                    render={<button type='button' />}
-                    title={menuTitle}
-                  >
-                    <More1Line size={16} />
-                  </Menu.Trigger>
-                  <AgentTreeMenuPopup
-                    disabled={isDeleting}
-                    menuPortalTarget={menuPortalTarget}
-                    onDelete={onDelete}
-                    onRename={onRequestRename}
-                  />
-                </Menu.Root>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-      {error ? <p className='tree-item-error agent-session-rename-error'>{error}</p> : null}
-    </li>
+        <CheckLine size={16} />
+      </TreeItemActionButton>
+      <TreeItemActionButton
+        aria-label='Cancel rename'
+        disabled={isSubmitting}
+        onClick={onCancelRename}
+      >
+        <CloseLine size={16} />
+      </TreeItemActionButton>
+    </>
+  ) : (
+    <Menu.Root modal={false} onOpenChange={setIsActionMenuOpen}>
+      <Menu.Trigger
+        aria-label={`Open ${label} menu`}
+        disabled={isDeleting}
+        render={<TreeItemActionButton />}
+        title={menuTitle}
+      >
+        <More1Line size={16} />
+      </Menu.Trigger>
+      <AgentTreeMenuPopup
+        disabled={isDeleting}
+        menuPortalTarget={menuPortalTarget}
+        onDelete={onDelete}
+        onRename={onRequestRename}
+      />
+    </Menu.Root>
   )
+
+  return (
+    <TreeItem
+      itemClassName={`agent-project-session-node${itemClassName ? ` ${itemClassName}` : ''}`}
+      ref={rowRef}
+      rowClassName={`agent-project-session-row${rowClassName ? ` ${rowClassName}` : ''}`}
+      isActive={isActive}
+      isEditing={isRenaming}
+      isMenuOpen={isMenuOpen}
+      after={error ? <p className='tree-error agent-session-rename-error'>{error}</p> : null}
+      main={rowMain}
+      label={!isRenaming ? label : undefined}
+      labelClassName={!isRenaming ? 'agent-project-session-label' : undefined}
+      renderMain={renderSessionMain}
+      actions={rowActions}
+      actionsAlwaysVisible={isRenaming}
+      actionsClassName={isRenaming ? 'agent-session-rename-actions' : undefined}
+      info={!isRenaming && relativeTime ? relativeTime : undefined}
+      infoVariant='text'
+    />
+  )
+
 }
 
 function FlatAgentSessionTree({
@@ -4683,8 +4697,8 @@ function FlatAgentSessionTree({
   menuPortalTarget,
 }: AgentSessionTreeProps) {
   const {
-    activeSessionSelection,
     activeSessionPath,
+    activeSessionSelection,
     agentState,
     deletingSessionPath,
     handleDeleteSession,
@@ -4713,14 +4727,14 @@ function FlatAgentSessionTree({
         </button>
       ) : null}
 
-      <AppScrollArea
+      <TreeScrollArea
         className='agent-session-tree-scroll'
         contentClassName='agent-session-tree-scroll-content'
         viewportClassName='agent-session-tree-scroll-viewport'
       >
-        <ul id={id} className='panel-tree-list agent-project-list agent-flat-session-list' aria-label='Agent sessions'>
+        <TreeList id={id} className='agent-project-list agent-flat-session-list' aria-label='Agent sessions'>
           {agentState.sessions.length === 0 ? (
-            <li className='agent-project-session-status'>暂无对话</li>
+            <TreeStatusItem>暂无对话</TreeStatusItem>
           ) : agentState.sessions.map((session) => {
             const label = formatSessionLabel(session)
             const isActiveSession = activeSessionSelection.kind === 'session' && activeSessionPath === session.path
@@ -4750,8 +4764,8 @@ function FlatAgentSessionTree({
               />
             )
           })}
-        </ul>
-      </AppScrollArea>
+        </TreeList>
+      </TreeScrollArea>
 
     </div>
   )
@@ -4790,10 +4804,9 @@ function AgentConversationRow({
       label={conversation.title}
       menuPortalTarget={menuPortalTarget}
       menuTitle='对话菜单'
-      nodeClassName='agent-conversation-node'
+      itemClassName='agent-conversation-node'
       relativeTime={relativeTime}
       rowClassName='agent-conversation-row'
-      triggerClassName='agent-conversation-trigger'
       onCancelRename={onCancelRename}
       onDelete={onDelete}
       onOpen={onOpen}
@@ -4974,36 +4987,38 @@ function AgentProjectTree({
         </button>
       ) : null}
 
-      {!isFloating ? (
-        <TreeHeader
-          className={`agent-project-tree-header${isProjectAddMenuOpen ? ' is-menu-open' : ''}`}
-          title='项目'
-          isExpanded={isProjectSectionExpanded}
-          actions={(
-            <button
-              type='button'
-              className={`tree-header-action${isProjectAddMenuOpen ? ' is-menu-open' : ''}`}
-              aria-label='添加项目'
-              title='添加项目'
-              onClick={(event) => {
-                const openProjectAddMenu = onOpenProjectAddMenuOverride ?? onOpenProjectAddMenu
-                openProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
-              }}
-            >
-              <AddLine size={16} />
-            </button>
-          )}
-          onToggle={toggleProjectSection}
-        />
-      ) : null}
-
-      <AppScrollArea
-        className='agent-session-tree-scroll agent-project-tree-scroll'
-        contentClassName='agent-session-tree-scroll-content agent-project-tree-scroll-content'
+      <TreeScrollArea
+        className='agent-session-tree-scroll'
+        contentClassName='agent-session-tree-scroll-content'
         viewportClassName='agent-session-tree-scroll-viewport'
       >
-        <ul className='panel-tree-list agent-project-list' aria-label='项目与对话'>
-          {isProjectSectionExpanded ? projectState.projects.map((project) => {
+        <TreeList className='agent-session-section-stack' aria-label='项目与对话'>
+          <TreeSection className={`agent-project-tree-section agent-project-section${isProjectSectionExpanded ? '' : ' is-collapsed'}${isFloating ? ' is-floating' : ''}`}>
+            {!isFloating ? (
+              <TreeHeader
+                className={`agent-project-tree-header${isProjectAddMenuOpen ? ' is-menu-open' : ''}`}
+                title='项目'
+                isExpanded={isProjectSectionExpanded}
+                actions={(
+                  <button
+                    type='button'
+                    className={`tree-header-action${isProjectAddMenuOpen ? ' is-menu-open' : ''}`}
+                    aria-label='添加项目'
+                    title='添加项目'
+                    onClick={(event) => {
+                      const openProjectAddMenu = onOpenProjectAddMenuOverride ?? onOpenProjectAddMenu
+                      openProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
+                    }}
+                  >
+                    <AddLine size={16} />
+                  </button>
+                )}
+                onToggle={toggleProjectSection}
+              />
+            ) : null}
+            {isProjectSectionExpanded ? (
+              <TreeList className='agent-project-list'>
+                {projectState.projects.map((project) => {
             const bucket = projectSessions[project.id]
             const isExpanded = expandedProjectIds.has(project.id)
             const sessions = bucket?.sessions ?? []
@@ -5014,81 +5029,86 @@ function AgentProjectTree({
               || Boolean(bucket?.hasLoaded)
             )
 
+            const projectIcon = (
+              <WorkspaceFileIcon
+                iconTheme={iconTheme ?? null}
+                isClosed={!isExpanded}
+                isFolder
+                nodeLabel={project.name}
+              />
+            )
+            const renderProjectMain: TreeItemMainRenderer = (content, mainProps) => {
+              const { className, hasDescription } = mainProps
+
+              return (
+                <ContextMenu.Root onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
+                  <ContextMenu.Trigger
+                    aria-expanded={isExpanded}
+                    render={<TreeItemMainButton className={className} hasDescription={hasDescription} />}
+                    title={project.path}
+                    onClick={() => toggleProject(project)}
+                  >
+                    {content}
+                  </ContextMenu.Trigger>
+                  <AgentProjectContextMenuPopup
+                    menuPortalTarget={menuPortalTarget}
+                    onOpenFolder={() => {
+                      void onOpenProjectFolder?.(project)
+                    }}
+                    onRemoveProject={() => {
+                      void onRemoveProject?.(project)
+                    }}
+                  />
+                </ContextMenu.Root>
+              )
+            }
+            const projectRowActions = (
+              <>
+                <TreeItemActionButton
+                  aria-label={`Start new conversation in ${project.name}`}
+                  title='Start new conversation'
+                  onClick={() => {
+                    setRenamingConversationId(null)
+                    void onStartProjectSession?.(project)
+                    onRequestClose?.()
+                  }}
+                >
+                  <EditLine size={16} />
+                </TreeItemActionButton>
+                <Menu.Root modal={false} onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
+                  <Menu.Trigger
+                    aria-label={`Open ${project.name} menu`}
+                    render={<TreeItemActionButton />}
+                    title='Project menu'
+                  >
+                    <More1Line size={16} />
+                  </Menu.Trigger>
+                  <AgentProjectMenuPopup
+                    menuPortalTarget={menuPortalTarget}
+                    onOpenFolder={() => {
+                      void onOpenProjectFolder?.(project)
+                    }}
+                    onRemoveProject={() => {
+                      void onRemoveProject?.(project)
+                    }}
+                  />
+                </Menu.Root>
+              </>
+            )
+
             return (
-              <li key={project.id} className='panel-tree-node agent-project-node'>
-                <div className={`workspace-tree-row agent-project-row${openProjectMenuId === project.id ? ' is-menu-open' : ''}`}>
-                  <ContextMenu.Root onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
-                    <ContextMenu.Trigger
-                      className='workspace-tree-trigger agent-project-row-trigger'
-                      aria-expanded={isExpanded}
-                      render={<button type='button' />}
-                      title={project.path}
-                      onClick={() => toggleProject(project)}
-                    >
-                      <WorkspaceFileIcon
-                        iconTheme={iconTheme ?? null}
-                        isClosed={!isExpanded}
-                        isFolder
-                        nodeLabel={project.name}
-                      />
-                      <span className='panel-tree-label agent-project-row-label'>{project.name}</span>
-                    </ContextMenu.Trigger>
-                    <AgentProjectContextMenuPopup
-                      menuPortalTarget={menuPortalTarget}
-                      onOpenFolder={() => {
-                        void onOpenProjectFolder?.(project)
-                      }}
-                      onRemoveProject={() => {
-                        void onRemoveProject?.(project)
-                      }}
-                    />
-                  </ContextMenu.Root>
-
-                  <div className='git-change-tools agent-project-row-tools' onClick={(event) => event.stopPropagation()}>
-                    <div className='git-change-actions'>
-                      <button
-                        type='button'
-                        className='git-change-action git-change-icon-button agent-project-row-action'
-                        aria-label={`在 ${project.name} 中开始新对话`}
-                        title='开始新对话'
-                        onClick={() => {
-                          setRenamingConversationId(null)
-                          void onStartProjectSession?.(project)
-                          onRequestClose?.()
-                        }}
-                      >
-                        <EditLine size={16} />
-                      </button>
-                      <Menu.Root modal={false} onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
-                        <Menu.Trigger
-                          className='git-change-action git-change-icon-button agent-project-row-action'
-                          aria-label={`打开 ${project.name} 菜单`}
-                          render={<button type='button' />}
-                          title='项目菜单'
-                        >
-                          <More1Line size={16} />
-                        </Menu.Trigger>
-                        <AgentProjectMenuPopup
-                          menuPortalTarget={menuPortalTarget}
-                          onOpenFolder={() => {
-                            void onOpenProjectFolder?.(project)
-                          }}
-                          onRemoveProject={() => {
-                            void onRemoveProject?.(project)
-                          }}
-                        />
-                      </Menu.Root>
-                    </div>
-                  </div>
-                </div>
-
-                {showChildren ? (
-                  <div className='panel-tree-children agent-project-session-children'>
-                    <ul className='panel-tree-list agent-project-session-list'>
-                      {bucket?.isLoading ? <li className='agent-project-session-status'>加载中</li> : null}
-                      {bucket?.error ? <li className='agent-project-session-status is-error'>无法加载对话</li> : null}
+              <TreeItem
+                key={project.id}
+                itemClassName='agent-project-node'
+                rowClassName='agent-project-row'
+                isMenuOpen={openProjectMenuId === project.id}
+                after={showChildren ? (
+                  <TreeItemChildren className='agent-project-session-children'>
+                    <TreeList className='agent-project-session-list'>
+                      {bucket?.isLoading ? <TreeStatusItem>加载中</TreeStatusItem> : null}
+                      {bucket?.error ? <TreeStatusItem tone='danger'>无法加载对话</TreeStatusItem> : null}
                       {!bucket?.isLoading && !bucket?.error && bucket?.hasLoaded && sessions.length === 0 ? (
-                        <li className='agent-project-session-status'>暂无对话</li>
+                        <TreeStatusItem>暂无对话</TreeStatusItem>
                       ) : null}
                       {sessions.map((session) => {
                         const isActiveSession = activeSessionSelection.kind === 'session' && activeSessionPath === session.path
@@ -5129,13 +5149,21 @@ function AgentProjectTree({
                           />
                         )
                       })}
-                    </ul>
-                  </div>
+                    </TreeList>
+                  </TreeItemChildren>
                 ) : null}
-              </li>
+                icon={projectIcon}
+                label={project.name}
+                labelClassName='agent-project-row-label'
+                renderMain={renderProjectMain}
+                actions={projectRowActions}
+              />
             )
-          }) : null}
-          <li className={`agent-project-tree-section agent-conversation-section${isConversationSectionExpanded ? '' : ' is-collapsed'}`}>
+          })}
+              </TreeList>
+            ) : null}
+          </TreeSection>
+          <TreeSection className={`agent-project-tree-section agent-conversation-section${isConversationSectionExpanded ? '' : ' is-collapsed'}`}>
             <TreeHeader
               className='agent-project-tree-header agent-conversation-tree-header'
               title='对话'
@@ -5159,9 +5187,9 @@ function AgentProjectTree({
               onToggle={toggleConversationSection}
             />
             {isConversationSectionExpanded ? (
-              <ul className='panel-tree-list agent-project-session-list agent-conversation-list'>
+              <TreeList className='agent-project-session-list agent-conversation-list'>
                 {visibleConversations.length === 0 ? (
-                  <li className='agent-project-session-status'>暂无对话</li>
+                  <TreeStatusItem>暂无对话</TreeStatusItem>
                 ) : visibleConversations.map((conversation) => (
                   <AgentConversationRow
                     key={conversation.id}
@@ -5190,11 +5218,11 @@ function AgentProjectTree({
                     onRequestRename={() => setRenamingConversationId(conversation.id)}
                   />
                 ))}
-              </ul>
+              </TreeList>
             ) : null}
-          </li>
-        </ul>
-      </AppScrollArea>
+          </TreeSection>
+        </TreeList>
+      </TreeScrollArea>
 
     </div>
   )

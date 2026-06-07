@@ -12,7 +12,17 @@ import {
   GitBranchLine,
   More1Line,
 } from '@mingcute/react'
-import { WorkspaceFileIcon } from '@/components/file-change-visuals'
+import {
+  FileChangeStatusBadge,
+  WorkspaceFileIcon,
+} from '@/components/file-change-visuals'
+import {
+  TreeItemActionButton,
+  TreeItemChildren,
+  TreeItem,
+  TreeList,
+  TreeItemMain,
+} from '@/components/tree'
 import { pickDominantGitDisplayChange } from '@/features/git/lib/display-change'
 import {
   getSupportedWorkspaceEditorKind,
@@ -36,7 +46,7 @@ type WorkspaceTreeProps = {
   expandedPaths: Set<string>
   setExpandedPaths: Dispatch<SetStateAction<Set<string>>>
   workspacePath: string | null
-  onSelectFile: (path: string, event: MouseEvent<HTMLDivElement>) => void
+  onSelectFile: (path: string, event: MouseEvent<HTMLElement>) => void
   onOpenInCodeEditor: (path: string) => void
   onOpenDiff?: (change: GitChangeItem) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
@@ -93,14 +103,13 @@ function getSystemFileManagerName(platform: string) {
   return '文件管理器'
 }
 
-function FileRowActions({
+function FileRowActionMenu({
   canOpenInCodeEditor,
   onOpenInCodeEditor,
   onRename,
   onDelete,
   onShowInFolder,
   isSubmitting,
-  gitChange,
   gitDiffChange,
   menuPortalTarget,
   onOpenDiff,
@@ -112,7 +121,6 @@ function FileRowActions({
   onDelete: () => void
   onShowInFolder: () => void
   isSubmitting: boolean
-  gitChange: GitDisplayChange | null
   gitDiffChange: GitChangeItem | null
   menuPortalTarget?: HTMLElement | null
   onOpenDiff?: (change: GitChangeItem) => void
@@ -127,22 +135,6 @@ function FileRowActions({
   }
 
   return (
-    <div
-      className='git-change-tools'
-      onAuxClick={(event) => event.stopPropagation()}
-      onClick={(event) => event.stopPropagation()}
-    >
-      {gitChange && (
-        <span
-          className={`git-status-dot git-status-dot-${gitChange.kind}`}
-          aria-hidden='true'
-          title={gitChange.kind.charAt(0).toUpperCase() + gitChange.kind.slice(1)}
-        />
-      )}
-      <div
-        className='git-change-actions'
-        style={isOpen ? { opacity: 1, maxWidth: '2rem', transform: 'translateX(0)' } : undefined}
-      >
         <Menu.Root
           modal={false}
           open={isOpen}
@@ -161,9 +153,8 @@ function FileRowActions({
         >
           <Menu.Trigger
             aria-label='File actions'
-            className='git-change-action git-change-icon-button'
             disabled={isSubmitting}
-            render={<button type='button' />}
+            render={<TreeItemActionButton />}
           >
             <More1Line size={16} />
           </Menu.Trigger>
@@ -248,8 +239,6 @@ function FileRowActions({
             </Menu.Positioner>
           </Menu.Portal>
         </Menu.Root>
-      </div>
-    </div>
   )
 }
 
@@ -284,14 +273,14 @@ function FileTreeItem({
   workspacePath: string | null
   onDeleteNode: (node: WorkspaceNode) => Promise<void>
   onDragEndNode: () => void
-  onDragLeaveNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
-  onDragOverNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
-  onDragStartNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => void
-  onDropOnNode: (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => Promise<void>
+  onDragLeaveNode: (node: WorkspaceNode, event: DragEvent<HTMLElement>) => void
+  onDragOverNode: (node: WorkspaceNode, event: DragEvent<HTMLElement>) => void
+  onDragStartNode: (node: WorkspaceNode, event: DragEvent<HTMLElement>) => void
+  onDropOnNode: (node: WorkspaceNode, event: DragEvent<HTMLElement>) => Promise<void>
   onOpenInCodeEditor: (path: string) => void
   onOpenDiff?: (change: GitChangeItem) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
-  onSelectFile: (path: string, event: MouseEvent<HTMLDivElement>) => void
+  onSelectFile: (path: string, event: MouseEvent<HTMLElement>) => void
   onToggleDirectory: (path: string) => void
   gitRepositoryState?: GitRepositoryState | null
   menuPortalTarget?: HTMLElement | null
@@ -365,7 +354,7 @@ function FileTreeItem({
 
   const deleteModal = useOverlayState()
 
-  const handleSelectNode = (event: MouseEvent<HTMLDivElement>) => {
+  const handleSelectNode = (event: MouseEvent<HTMLElement>) => {
     recordOpenFileProfile('workspace-tree:row-click', {
       button: event.button,
       kind: node.kind,
@@ -395,179 +384,60 @@ function FileTreeItem({
     }
   }
 
-  return (
-    <li className='panel-tree-node'>
-      <div
-        ref={rowRef}
-        className={`workspace-tree-row${isEditing ? ' is-editing' : ''}${isActive ? ' is-active' : ''}${isRowMenuOpen ? ' is-menu-open' : ''}${isDragSource ? ' is-drag-source' : ''}${isDropTarget ? ' is-drop-target' : ''}`}
-        onAuxClick={(event) => {
-          if (event.button === 1) {
-            handleSelectNode(event)
-          }
-        }}
-        onClick={handleSelectNode}
-        onDragLeave={(event) => onDragLeaveNode(node, event)}
-        onDragOver={(event) => onDragOverNode(node, event)}
-        onDrop={(event) => void onDropOnNode(node, event)}
-      >
-        {isEditing ? (
-          <>
-            <div className='workspace-tree-trigger' onClick={event => event.stopPropagation()}>
-              <WorkspaceFileIcon
-                fileName={node.kind === 'file' ? node.name : undefined}
-                iconTheme={iconTheme}
-                isClosed={node.kind === 'directory' ? !isExpanded : undefined}
-                isFolder={node.kind === 'directory'}
-                nodeLabel={node.kind === 'directory' ? node.name : undefined}
-              />
-              <input
-                ref={renameInputRef}
-                className='raw-rename-input'
-                value={draftName}
-                onFocus={event => event.target.select()}
-                onChange={event => setDraftName(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    void handleSubmitRename()
-                  }
-                  if (event.key === 'Escape') {
-                    setDraftName(node.name)
-                    setIsEditing(false)
-                  }
-                }}
-                onBlur={(event) => {
-                  if (isSubmitting) return
-
-                  const nextFocusedElement = event.relatedTarget
-                  if (nextFocusedElement instanceof Node && rowRef.current?.contains(nextFocusedElement)) {
-                    return
-                  }
-
-                  setIsEditing(false)
-                }}
-              />
-            </div>
-            <div
-              className='git-change-tools'
-              onAuxClick={event => event.stopPropagation()}
-              onClick={event => event.stopPropagation()}
-            >
-              <div className='git-change-actions' style={{ opacity: 1, maxWidth: '4rem', transform: 'translateX(0)' }}>
-                <button
-                  type='button'
-                  className='git-change-action git-change-icon-button'
-                  disabled={isSubmitting}
-                  onClick={() => void handleSubmitRename()}
+  const deleteDialog = (
+    <AlertDialog.Backdrop
+      isOpen={deleteModal.isOpen}
+      onOpenChange={(open) => (open ? deleteModal.open() : deleteModal.close())}
+      variant='opaque'
+    >
+      <AlertDialog.Container size='sm'>
+        <AlertDialog.Dialog>
+          {({ close }) => (
+            <>
+              <AlertDialog.CloseTrigger />
+              <AlertDialog.Header>
+                <AlertDialog.Icon status='danger' />
+                <AlertDialog.Heading>确认删除</AlertDialog.Heading>
+              </AlertDialog.Header>
+              <AlertDialog.Body>
+                <p className='text-[var(--foreground)]'>
+                  您确定要删除 <span style={{ fontWeight: 600 }}>{node.name}</span> 吗？
+                  此操作将无法撤销。
+                </p>
+              </AlertDialog.Body>
+              <AlertDialog.Footer>
+                <Button
+                  className='confirm-dialog-cancel-button'
+                  variant='tertiary'
+                  onPress={close}
+                  isDisabled={isSubmitting}
                 >
-                  <CheckLine size={14} />
-                </button>
-                <button
-                  type='button'
-                  className='git-change-action git-change-icon-button'
-                  onClick={() => {
-                    setDraftName(node.name)
-                    setIsEditing(false)
-                  }}
+                  取消
+                </Button>
+                <Button
+                  variant='danger'
+                  onPress={() => handleDelete(close)}
+                  isDisabled={isSubmitting}
                 >
-                  <CloseLine size={14} />
-                </button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div
-            className='workspace-tree-trigger'
-            draggable={!isSubmitting}
-            title={node.path}
-            onDragEnd={onDragEndNode}
-            onDragStart={(event) => onDragStartNode(node, event)}
-          >
-            <WorkspaceFileIcon
-              fileName={node.kind === 'file' ? node.name : undefined}
-              iconTheme={iconTheme}
-              isClosed={node.kind === 'directory' ? !isExpanded : undefined}
-              isFolder={node.kind === 'directory'}
-              nodeLabel={node.kind === 'directory' ? node.name : undefined}
-            />
-            <span className='panel-tree-label' style={{ fontWeight: isFolder ? 600 : 500 }}>
-              {node.name}
-            </span>
-          </div>
-        )}
+                  删除
+                </Button>
+              </AlertDialog.Footer>
+            </>
+          )}
+        </AlertDialog.Dialog>
+      </AlertDialog.Container>
+    </AlertDialog.Backdrop>
+  )
 
-        {!isEditing && (
-          <FileRowActions
-            canOpenInCodeEditor={canOpenInCodeEditor}
-            isSubmitting={isSubmitting}
-            gitChange={gitChange}
-            gitDiffChange={gitDiffChange}
-            menuPortalTarget={menuPortalTarget}
-            onMenuOpenChange={setIsRowMenuOpen}
-            onOpenInCodeEditor={() => onOpenInCodeEditor(node.path)}
-            onOpenDiff={onOpenDiff}
-            onShowInFolder={() => {
-              window.appApi.showItemInFolder(node.path).catch((error) => {
-                console.error('Failed to show item in folder:', error)
-              })
-            }}
-            onRename={() => {
-              setDraftName(node.name)
-              setIsEditing(true)
-            }}
-            onDelete={deleteModal.open}
-          />
-        )}
-      </div>
+  const fileTreeItemAfter = (
+    <>
+      {deleteDialog}
 
-      <AlertDialog.Backdrop
-        isOpen={deleteModal.isOpen}
-        onOpenChange={(open) => (open ? deleteModal.open() : deleteModal.close())}
-        variant='opaque'
-      >
-        <AlertDialog.Container size='sm'>
-          <AlertDialog.Dialog>
-            {({ close }) => (
-              <>
-                <AlertDialog.CloseTrigger />
-                 <AlertDialog.Header>
-                  <AlertDialog.Icon status='danger' />
-                  <AlertDialog.Heading>确认删除</AlertDialog.Heading>
-                </AlertDialog.Header>
-                <AlertDialog.Body>
-                  <p className='text-[var(--foreground)]'>
-                    您确定要删除 <span style={{ fontWeight: 600 }}>{node.name}</span> 吗？
-                    此操作将无法撤销。
-                  </p>
-                </AlertDialog.Body>
-                <AlertDialog.Footer>
-                   <Button
-                    className='confirm-dialog-cancel-button'
-                    variant='tertiary'
-                    onPress={close}
-                    isDisabled={isSubmitting}
-                  >
-                    取消
-                  </Button>
-                  <Button
-                    variant='danger'
-                    onPress={() => handleDelete(close)}
-                    isDisabled={isSubmitting}
-                  >
-                    删除
-                  </Button>
-                </AlertDialog.Footer>
-              </>
-            )}
-          </AlertDialog.Dialog>
-        </AlertDialog.Container>
-      </AlertDialog.Backdrop>
-
-      {error && <p className='tree-item-error'>{error}</p>}
+      {error && <p className='tree-error'>{error}</p>}
 
       {isFolder && isExpanded && node.children && (
-        <div className='panel-tree-children'>
-          <ul className='panel-tree-list'>
+        <TreeItemChildren>
+          <TreeList>
             {node.children.map(child => (
               <FileTreeItem
                 key={child.path}
@@ -593,10 +463,132 @@ function FileTreeItem({
                 menuPortalTarget={menuPortalTarget}
               />
             ))}
-          </ul>
-        </div>
+          </TreeList>
+        </TreeItemChildren>
       )}
-    </li>
+    </>
+  )
+
+  const changeTitle = gitChange ? gitChange.kind.charAt(0).toUpperCase() + gitChange.kind.slice(1) : undefined
+  const nodeIcon = (
+    <WorkspaceFileIcon
+      fileName={node.kind === 'file' ? node.name : undefined}
+      iconTheme={iconTheme}
+      isClosed={node.kind === 'directory' ? !isExpanded : undefined}
+      isFolder={node.kind === 'directory'}
+      nodeLabel={node.kind === 'directory' ? node.name : undefined}
+    />
+  )
+  const rowMain = isEditing ? (
+    <TreeItemMain onClick={event => event.stopPropagation()}>
+      {nodeIcon}
+      <input
+        ref={renameInputRef}
+        className='raw-rename-input'
+        value={draftName}
+        onFocus={event => event.target.select()}
+        onChange={event => setDraftName(event.target.value)}
+        onKeyDown={event => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            void handleSubmitRename()
+          }
+          if (event.key === 'Escape') {
+            setDraftName(node.name)
+            setIsEditing(false)
+          }
+        }}
+        onBlur={(event) => {
+          if (isSubmitting) return
+
+          const nextFocusedElement = event.relatedTarget
+          if (nextFocusedElement instanceof Node && rowRef.current?.contains(nextFocusedElement)) {
+            return
+          }
+
+          setIsEditing(false)
+        }}
+      />
+    </TreeItemMain>
+  ) : undefined
+  const rowActions = isEditing ? (
+    <>
+      <TreeItemActionButton
+        disabled={isSubmitting}
+        onClick={() => void handleSubmitRename()}
+      >
+        <CheckLine size={16} />
+      </TreeItemActionButton>
+      <TreeItemActionButton
+        onClick={() => {
+          setDraftName(node.name)
+          setIsEditing(false)
+        }}
+      >
+        <CloseLine size={16} />
+      </TreeItemActionButton>
+    </>
+  ) : (
+    <FileRowActionMenu
+      canOpenInCodeEditor={canOpenInCodeEditor}
+      isSubmitting={isSubmitting}
+      gitDiffChange={gitDiffChange}
+      menuPortalTarget={menuPortalTarget}
+      onMenuOpenChange={setIsRowMenuOpen}
+      onOpenInCodeEditor={() => onOpenInCodeEditor(node.path)}
+      onOpenDiff={onOpenDiff}
+      onShowInFolder={() => {
+        window.appApi.showItemInFolder(node.path).catch((error) => {
+          console.error('Failed to show item in folder:', error)
+        })
+      }}
+      onRename={() => {
+        setDraftName(node.name)
+        setIsEditing(true)
+      }}
+      onDelete={deleteModal.open}
+    />
+  )
+
+  return (
+    <TreeItem
+      ref={rowRef}
+      isActive={isActive}
+      isDragSource={isDragSource}
+      isDropTarget={isDropTarget}
+      isEditing={isEditing}
+      isMenuOpen={isRowMenuOpen}
+      after={fileTreeItemAfter}
+      onDragLeave={(event) => onDragLeaveNode(node, event)}
+      onDragOver={(event) => onDragOverNode(node, event)}
+      onDrop={(event) => void onDropOnNode(node, event)}
+      main={rowMain}
+      icon={!isEditing ? nodeIcon : undefined}
+      label={!isEditing ? node.name : undefined}
+      labelProps={!isEditing ? { style: { fontWeight: isFolder ? 600 : 500 } } : undefined}
+      mainButtonProps={!isEditing ? {
+        draggable: !isSubmitting,
+        title: node.path,
+        'aria-expanded': isFolder ? isExpanded : undefined,
+        onAuxClick: (event) => {
+          if (event.button === 1) {
+            handleSelectNode(event)
+          }
+        },
+        onClick: handleSelectNode,
+        onDragEnd: onDragEndNode,
+        onDragStart: (event) => onDragStartNode(node, event),
+      } : undefined}
+      actions={rowActions}
+      actionsAlwaysVisible={isEditing || isRowMenuOpen}
+      info={!isEditing && gitChange ? (
+        <FileChangeStatusBadge
+          kind={gitChange.kind}
+          title={changeTitle}
+        />
+      ) : undefined}
+      infoVariant='status'
+    />
   )
 }
 
@@ -656,7 +648,7 @@ export function WorkspaceTree({
     })
   }
 
-  const handleDragStartNode = (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
+  const handleDragStartNode = (node: WorkspaceNode, event: DragEvent<HTMLElement>) => {
     if (isMovingNode) {
       event.preventDefault()
       return
@@ -675,7 +667,7 @@ export function WorkspaceTree({
     clearExpandTimer()
   }
 
-  const handleDragOverNode = (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
+  const handleDragOverNode = (node: WorkspaceNode, event: DragEvent<HTMLElement>) => {
     if (!draggedNode) {
       return
     }
@@ -719,7 +711,7 @@ export function WorkspaceTree({
     }, 550)
   }
 
-  const handleDragLeaveNode = (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
+  const handleDragLeaveNode = (node: WorkspaceNode, event: DragEvent<HTMLElement>) => {
     if (!draggedNode) {
       return
     }
@@ -745,7 +737,7 @@ export function WorkspaceTree({
     }
   }
 
-  const handleDropOnNode = async (node: WorkspaceNode, event: DragEvent<HTMLDivElement>) => {
+  const handleDropOnNode = async (node: WorkspaceNode, event: DragEvent<HTMLElement>) => {
     if (!draggedNode) {
       return
     }
@@ -826,8 +818,8 @@ export function WorkspaceTree({
 
   if (nodes.length === 0) {
     return (
-      <div className='tree-empty-state'>
-        <div className='tree-empty-icon'>
+      <div className='workspace-tree-empty-state'>
+        <div className='workspace-tree-empty-icon'>
           <FolderLine size={26} />
         </div>
         <p>{workspacePath ? '这个工作目录还没有文件。' : '选择工作目录以浏览和编辑文件。'}</p>
@@ -836,8 +828,8 @@ export function WorkspaceTree({
   }
 
   return (
-    <ul
-      className={`panel-tree-list workspace-tree-root${draggedNode ? ' is-dragging' : ''}${isRootDropTarget ? ' is-root-drop-target' : ''}`}
+    <TreeList
+      className={`workspace-tree-root${draggedNode ? ' is-dragging' : ''}${isRootDropTarget ? ' is-root-drop-target' : ''}`}
       onDragLeave={handleRootDragLeave}
       onDragOver={handleRootDragOver}
       onDrop={(event) => void handleRootDrop(event)}
@@ -867,6 +859,6 @@ export function WorkspaceTree({
           menuPortalTarget={menuPortalTarget}
         />
       ))}
-    </ul>
+    </TreeList>
   )
 }

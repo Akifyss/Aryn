@@ -1,9 +1,8 @@
 import type { Dispatch, MouseEvent, ReactNode, SetStateAction } from 'react'
 import { Icon } from '@iconify/react'
 import { FolderForbidLine } from '@mingcute/react'
-import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTooltipButton } from '@/components/app-tooltip'
-import { TreeHeader } from '@/components/tree-header'
+import { TreeHeader, TreeScrollArea } from '@/components/tree'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
 import type { GitChangeItem, GitRepositoryState } from '@/features/git/types'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
@@ -30,7 +29,7 @@ type WorkspaceTreePanelProps = {
   onOpenDiff?: (change: GitChangeItem) => void
   onOpenInCodeEditor: (path: string) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
-  onSelectFile: (path: string, event: MouseEvent<HTMLDivElement>) => void
+  onSelectFile: (path: string, event: MouseEvent<HTMLElement>) => void
   onToggleFileTreeExpansion: () => void
 }
 
@@ -60,7 +59,7 @@ export function WorkspaceTreePanel({
   onToggleFileTreeExpansion,
 }: WorkspaceTreePanelProps) {
   return (
-    <div className={`sidebar-stack-pane sidebar-tree-pane${showDirectoryHeader ? ' has-directory-header' : ''}`}>
+    <div className={`sidebar-stack-pane workspace-tree-pane${showDirectoryHeader ? ' has-directory-header' : ''}`}>
       {showDirectoryHeader ? (
         <div className='workspace-tree-panel-directory-header'>
           <span className='workspace-tree-panel-directory-title'>目录</span>
@@ -115,13 +114,13 @@ export function WorkspaceTreePanel({
         )}
       />
 
-      <AppScrollArea
-        className='tree-scroll'
-        contentClassName='tree-scroll-content'
+      <TreeScrollArea
+        className='workspace-tree-scroll'
+        contentClassName='workspace-tree-scroll-content'
       >
         {workspaceUnavailableMessage ? (
-          <div className='tree-empty-state'>
-            <div className='tree-empty-icon'>
+          <div className='workspace-tree-empty-state'>
+            <div className='workspace-tree-empty-icon'>
               <FolderForbidLine size={26} />
             </div>
             <p>{workspaceUnavailableMessage}</p>
@@ -144,7 +143,7 @@ export function WorkspaceTreePanel({
             onSelectFile={onSelectFile}
           />
         )}
-      </AppScrollArea>
+      </TreeScrollArea>
     </div>
   )
 }
