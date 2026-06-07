@@ -15,8 +15,6 @@ import {
   Refresh3Line,
   Back2Line,
   ListCheckLine,
-  DownLine,
-  RightLine,
   UploadLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
@@ -25,6 +23,7 @@ import {
   FileChangeStatusBadge,
   WorkspaceFileIcon,
 } from '@/components/file-change-visuals'
+import { TreeHeader } from '@/components/tree-header'
 import type {
   GitChangeItem,
   GitPanelLayout,
@@ -556,25 +555,14 @@ function GitSection({
 
   return (
     <div className='git-panel-section'>
-      <div
+      <TreeHeader
         className='git-panel-section-header'
-        role='button'
-        tabIndex={0}
-        onClick={() => setIsExpanded((v) => !v)}
-      >
-        <div className='git-panel-section-title-area'>
-          {isExpanded ? (
-            <DownLine className='git-panel-section-caret' size={14} />
-          ) : (
-            <RightLine className='git-panel-section-caret' size={14} />
-          )}
-          <span className='git-panel-section-title'>{title}</span>
-        </div>
-        <div className='git-panel-section-tools' onClick={(e) => e.stopPropagation()}>
-          {action}
-          <span className='git-panel-section-count'>{changes.length}</span>
-        </div>
-      </div>
+        title={title}
+        isExpanded={isExpanded}
+        count={changes.length}
+        actions={action}
+        onToggle={() => setIsExpanded((v) => !v)}
+      />
 
       {isExpanded && changes.length > 0 && (
         <div className={layout === 'tree' ? 'git-panel-tree-shell' : ''}>
@@ -908,12 +896,12 @@ export function GitPanel({
               action={
                 <button
                   type='button'
-                  className='git-change-action git-change-icon-button'
+                  className='tree-header-action'
                   aria-label='全部取消暂存'
                   title='全部取消暂存'
                   onClick={() => onUnstage(stagedPaths)}
                 >
-                  <Icon icon='mdi:minus' width={14} height={14} />
+                  <Icon icon='mdi:minus' width={16} height={16} />
                 </button>
               }
             />
@@ -934,21 +922,21 @@ export function GitPanel({
                 <>
                   <button
                     type='button'
-                    className='git-change-action git-change-icon-button'
+                    className='tree-header-action'
                     aria-label='全部放弃'
                     title='全部放弃'
                     onClick={onDiscardAll}
                   >
-                    <Back2Line size={14} />
+                    <Back2Line size={16} />
                   </button>
                   <button
                     type='button'
-                    className='git-change-action git-change-icon-button'
+                    className='tree-header-action'
                     aria-label='全部暂存'
                     title='全部暂存'
                     onClick={() => onStage(unstagedPaths)}
                   >
-                    <AddLine size={14} />
+                    <AddLine size={16} />
                   </button>
                 </>
               }

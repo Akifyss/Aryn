@@ -52,6 +52,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import spinners, { type BrailleSpinnerName } from 'unicode-animations'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import { TreeHeader } from '@/components/tree-header'
 import { getAgentProviderOrder } from '@/features/agent/provider-auth'
 import {
   FileChangeStatusBadge,
@@ -4964,33 +4965,26 @@ function AgentProjectTree({
       ) : null}
 
       {!isFloating ? (
-        <div className={`agent-project-tree-header${isProjectSectionExpanded ? '' : ' is-collapsed'}`}>
-          <button
-            type='button'
-            className='agent-project-tree-header-toggle'
-            aria-expanded={isProjectSectionExpanded}
-            onClick={toggleProjectSection}
-          >
-            <span>项目</span>
-            {isProjectSectionExpanded ? (
-              <DownLine className='agent-project-tree-header-chevron' size={15} aria-hidden='true' />
-            ) : (
-              <RightLine className='agent-project-tree-header-chevron' size={15} aria-hidden='true' />
-            )}
-          </button>
-          <button
-            type='button'
-            className='agent-project-tree-header-action'
-            aria-label='添加项目'
-            title='添加项目'
-            onClick={(event) => {
-              const openProjectAddMenu = onOpenProjectAddMenuOverride ?? onOpenProjectAddMenu
-              openProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
-            }}
-          >
-            <AddLine size={15} />
-          </button>
-        </div>
+        <TreeHeader
+          className='agent-project-tree-header'
+          title='项目'
+          isExpanded={isProjectSectionExpanded}
+          actions={(
+            <button
+              type='button'
+              className='tree-header-action'
+              aria-label='添加项目'
+              title='添加项目'
+              onClick={(event) => {
+                const openProjectAddMenu = onOpenProjectAddMenuOverride ?? onOpenProjectAddMenu
+                openProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
+              }}
+            >
+              <AddLine size={16} />
+            </button>
+          )}
+          onToggle={toggleProjectSection}
+        />
       ) : null}
 
       <AppScrollArea
@@ -5132,35 +5126,28 @@ function AgentProjectTree({
             )
           }) : null}
           <li className={`agent-project-tree-section agent-conversation-section${isConversationSectionExpanded ? '' : ' is-collapsed'}`}>
-            <div className={`agent-project-tree-header agent-conversation-tree-header${isConversationSectionExpanded ? '' : ' is-collapsed'}`}>
-              <button
-                type='button'
-                className='agent-project-tree-header-toggle'
-                aria-expanded={isConversationSectionExpanded}
-                onClick={toggleConversationSection}
-              >
-                <span>对话</span>
-                {isConversationSectionExpanded ? (
-                  <DownLine className='agent-project-tree-header-chevron' size={15} aria-hidden='true' />
-                ) : (
-                  <RightLine className='agent-project-tree-header-chevron' size={15} aria-hidden='true' />
-                )}
-              </button>
-              <button
-                type='button'
-                className='agent-project-tree-header-action'
-                aria-label='新对话'
-                aria-keyshortcuts='Control+Alt+N'
-                title='新对话 Ctrl+Alt+N'
-                onClick={() => {
-                  setRenamingConversationId(null)
-                  void onStartStandaloneConversation?.()
-                  onRequestClose?.()
-                }}
-              >
-                <EditLine size={15} />
-              </button>
-            </div>
+            <TreeHeader
+              className='agent-project-tree-header agent-conversation-tree-header'
+              title='对话'
+              isExpanded={isConversationSectionExpanded}
+              actions={(
+                <button
+                  type='button'
+                  className='tree-header-action'
+                  aria-label='新对话'
+                  aria-keyshortcuts='Control+Alt+N'
+                  title='新对话 Ctrl+Alt+N'
+                  onClick={() => {
+                    setRenamingConversationId(null)
+                    void onStartStandaloneConversation?.()
+                    onRequestClose?.()
+                  }}
+                >
+                  <EditLine size={16} />
+                </button>
+              )}
+              onToggle={toggleConversationSection}
+            />
             {isConversationSectionExpanded ? (
               <ul className='panel-tree-list agent-project-session-list agent-conversation-list'>
                 {visibleConversations.length === 0 ? (

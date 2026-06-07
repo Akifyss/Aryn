@@ -1357,12 +1357,14 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   min-height: 0;
   flex-direction: column;
   gap: 0;
+  box-sizing: border-box;
+  padding: 0 6px 6px;
   overflow: hidden;
 }
 
 .workspace-sidebar-surface .sidebar-workspace-tabs-list-container {
   flex: none;
-  padding: 0 6px 8px;
+  padding: 0 0 8px;
 }
 
 .workspace-sidebar-surface .sidebar-workspace-tabs-list {
@@ -1459,6 +1461,13 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   width: 100%;
   margin-left: 0;
   padding: 0;
+}
+
+.workspace-sidebar-surface .sidebar-workspace-tabs .git-change-item,
+.workspace-sidebar-surface .sidebar-workspace-tabs .git-tree-folder-row,
+.workspace-sidebar-surface .sidebar-workspace-tabs .workspace-tree-row {
+  margin-right: 0;
+  margin-left: 0;
 }
 
 .sidebar-tree-pane {
@@ -2400,8 +2409,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .git-diff-view-mode,
 .git-toolbar-action,
-.git-change-action,
-.git-panel-section-toggle {
+.git-change-action {
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -2534,7 +2542,6 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   align-items: stretch;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--separator);
   background: transparent;
 }
 
@@ -2732,44 +2739,12 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 .git-panel-section {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--separator);
   margin-top: -1px;
 }
 
 .git-panel-section:first-child {
   border-top: 0;
   margin-top: 0;
-}
-
-.git-panel-section-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border-bottom: 1px solid var(--separator);
-  margin: 0;
-  min-height: 34px;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.git-panel-section-header:hover {
-  background: var(--surface-tertiary);
-}
-
-.git-panel-section-title-area {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-  padding: 7px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
-
-.git-panel-section-header:hover .git-panel-section-title-area {
-  color: var(--foreground);
 }
 
 .git-panel-section-title {
@@ -2779,28 +2754,11 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   min-width: 0;
 }
 
-.git-panel-section-caret {
-  color: var(--muted);
-  flex-shrink: 0;
-}
-
 .git-panel-section-count {
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
   margin-left: auto;
-}
-
-.git-panel-section-tools {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding-right: 12px;
-}
-
-.git-panel-section-toggle:hover {
-  color: var(--foreground);
-  background: var(--surface-tertiary);
 }
 
 .git-change-list {
@@ -3022,41 +2980,6 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-}
-
-.file-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 36px;
-  padding: 0 8px 0 20px;
-  border-bottom: 0;
-  flex-shrink: 0;
-}
-
-.sidebar-tree-pane.has-directory-header .file-panel-header {
-  height: 32px;
-  padding-left: 16px;
-  border-bottom: 0;
-}
-
-.file-panel-title {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 12px;
-  color: var(--muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.8;
-  user-select: none;
-}
-
-.file-panel-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 2px;
 }
 
 .file-panel-action {
@@ -3459,7 +3382,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   min-height: 100%;
   box-sizing: border-box;
   flex-direction: column;
-  padding: 6px 0;
+  padding: 0;
 }
 
 .workspace-tree-root.is-dragging .workspace-tree-row.is-drag-source .workspace-tree-trigger,
@@ -4460,23 +4383,34 @@ body.workspace-tree-dragging .workspace-tree-row {
   gap: 0;
 }
 
-.agent-project-tree-header {
+.tree-header {
+  --tree-header-icon-box-size: 32px;
+  --tree-header-icon-size: 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  min-height: 28px;
-  padding: 8px 8px 2px 12px;
+  height: 32px;
+  min-height: 32px;
+  margin: 0;
+  padding: 0 0 0 8px;
+  border-bottom: 0;
   color: var(--muted);
   font-size: 12px;
+  font-weight: 400;
   letter-spacing: 0;
+  text-transform: none;
+  flex-shrink: 0;
+  cursor: default;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
-.agent-project-tree-header-toggle {
+.tree-header-toggle,
+.tree-header-title-area {
   display: inline-flex;
   align-items: center;
   flex: 1 1 auto;
-  gap: 4px;
+  gap: 0;
   min-width: 0;
   min-height: 24px;
   padding: 0;
@@ -4486,54 +4420,148 @@ body.workspace-tree-dragging .workspace-tree-row {
   color: inherit;
   cursor: pointer;
   font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: 0;
   text-align: left;
+  text-transform: none;
 }
 
-.agent-project-tree-header-toggle:hover,
-.agent-project-tree-header-toggle:focus-visible {
+.tree-header-title-area {
+  cursor: default;
+}
+
+.tree-header-toggle:hover {
   outline: none;
   color: var(--foreground);
 }
 
-.agent-project-tree-header-chevron {
-  flex: 0 0 auto;
-  width: 15px;
-  height: 15px;
-  opacity: 0;
-  transition: opacity 140ms ease;
+.tree-header-title {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 1;
+  user-select: none;
 }
 
-.agent-project-tree-header-action {
+.tree-header-chevron {
+  display: block;
+  flex: 0 0 auto;
+  width: var(--tree-header-icon-size);
+  height: var(--tree-header-icon-size);
+  color: currentColor;
+}
+
+.tree-header-chevron-box {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 140ms ease, visibility 0s linear 140ms;
+}
+
+.tree-header-actions {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 140ms ease, visibility 0s linear 140ms;
+}
+
+.tree-header-actions .tree-header-action,
+.tree-header-actions > button,
+.tree-header-actions .file-panel-action,
+.tree-header-actions .git-change-action,
+.tree-header-actions .agent-project-tree-header-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--tree-header-icon-box-size);
+  min-width: var(--tree-header-icon-box-size);
+  height: var(--tree-header-icon-box-size);
+  min-height: var(--tree-header-icon-box-size);
+  padding: 0;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
   transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
 }
 
-.agent-project-tree-header:hover .agent-project-tree-header-action {
+.tree-header-actions > button svg,
+.tree-header-actions .file-panel-action svg,
+.tree-header-actions .git-change-action svg,
+.tree-header-actions .tree-header-action svg,
+.tree-header-actions .agent-project-tree-header-action svg {
+  width: var(--tree-header-icon-size);
+  height: var(--tree-header-icon-size);
+}
+
+.tree-header:hover .tree-header-actions {
   opacity: 1;
   pointer-events: auto;
+  visibility: visible;
+  transition-delay: 0s;
 }
 
-.agent-project-tree-header:hover .agent-project-tree-header-chevron {
+.tree-header:hover .tree-header-chevron-box {
   opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
 }
 
-.agent-project-tree-header-action:hover,
-.agent-project-tree-header-action:focus-visible {
+.tree-header-actions > button:hover:not(:disabled),
+.tree-header-actions .file-panel-action:hover:not(:disabled),
+.tree-header-actions .git-change-action:hover:not(:disabled),
+.tree-header-actions .agent-project-tree-header-action:hover {
   outline: none;
   background: var(--surface-tertiary);
   color: var(--foreground);
+}
+
+.tree-header-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  margin-left: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid color-mix(in oklab, var(--separator) 82%, var(--foreground));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--surface-tertiary) 86%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  user-select: none;
+}
+
+.tree-header.file-panel-header,
+.tree-header.git-panel-section-header {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 0 0 8px;
+  border-bottom: 0;
+  background: transparent;
 }
 
 .agent-project-list {
