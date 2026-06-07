@@ -4261,7 +4261,8 @@ body.workspace-tree-dragging .tree-item-row {
 }
 
 .workspace-tree-pane > .tree-header.file-panel-header {
-  margin-inline: var(--sidebar-content-inline-padding, 6px);
+  box-sizing: border-box;
+  padding-inline: var(--tree-scroll-content-inline-padding, var(--sidebar-content-inline-padding, 6px));
 }
 
 .agent-project-row-label {
