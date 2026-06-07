@@ -828,15 +828,25 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   z-index: 1;
 }
 
-.layout-mode-segmented-option:hover:not(:disabled):not(.is-active),
-.layout-mode-segmented-option:focus-visible:not(.is-active) {
+.layout-mode-segmented-option:hover:not(:disabled):not([data-disabled]):not([aria-disabled='true']):not(.is-active),
+.layout-mode-segmented-option:focus-visible:not(:disabled):not([data-disabled]):not([aria-disabled='true']):not(.is-active) {
   outline: none;
   color: var(--foreground);
 }
 
-.layout-mode-segmented-option:disabled {
+.layout-mode-segmented-option:disabled,
+.layout-mode-segmented-option[data-disabled],
+.layout-mode-segmented-option[aria-disabled='true'] {
   cursor: not-allowed;
-  opacity: 0.48;
+  color: color-mix(in oklab, var(--muted) 68%, var(--surface-secondary));
+  opacity: 0.5;
+}
+
+.layout-mode-segmented-option:disabled:hover,
+.layout-mode-segmented-option[data-disabled]:hover,
+.layout-mode-segmented-option[aria-disabled='true']:hover {
+  cursor: not-allowed;
+  color: color-mix(in oklab, var(--muted) 68%, var(--surface-secondary));
 }
 
 .layout-mode-segmented-option.is-active {
@@ -844,8 +854,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   cursor: default;
 }
 
-.layout-mode-segmented-option.is-active:hover:not(:disabled),
-.layout-mode-segmented-option.is-active:focus-visible {
+.layout-mode-segmented-option.is-active:hover:not(:disabled):not([data-disabled]):not([aria-disabled='true']),
+.layout-mode-segmented-option.is-active:focus-visible:not(:disabled):not([data-disabled]):not([aria-disabled='true']) {
   outline: none;
   color: var(--accent);
 }

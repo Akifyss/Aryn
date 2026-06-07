@@ -4957,7 +4957,7 @@ function App() {
     activateFileTab(displayActiveTab?.kind === 'file' ? displayActiveTab.id : FIXED_FILE_TAB_ID)
   }
 
-  const isEditorLayoutSwitchDisabled = activeWorkspaceContext.kind === 'conversationDraft' && !currentPath && isAgentLayout
+  const isEditorLayoutSwitchDisabled = activeWorkspaceContext.kind === 'conversationDraft' && isAgentLayout
 
   const renderLayoutModeSwitchButton = () => (
     <BaseTabs.Root
