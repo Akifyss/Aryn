@@ -9,6 +9,7 @@ import {
   loadWorkspaceIconThemeCatalogFromVsix,
 } from '../electron/main/workspace-icon-theme'
 import {
+  defaultBundledWorkspaceIconThemeIds,
   resolveBundledWorkspaceIconThemePaths,
 } from '../electron/main/bundled-workspace-icon-theme'
 import {
@@ -209,7 +210,7 @@ describe('workspace icon theme import', () => {
     expectDataUrl(theme.defaultFileIcon)
   })
 
-  it('exposes the bundled Catppuccin, Material, Symbols, Ayu, and Pierre icon themes', async () => {
+  it('exposes the bundled Catppuccin, Charmed, Material, Symbols, Ayu, and Pierre icon themes', async () => {
     const bundledThemeDirectoryPath = path.join(process.cwd(), 'public', 'icon-themes')
     const bundledThemePaths = await resolveBundledWorkspaceIconThemePaths(bundledThemeDirectoryPath)
     const cacheRootPath = await createTempDir('workspace-icon-theme-cache-')
@@ -218,11 +219,17 @@ describe('workspace icon theme import', () => {
       bundledThemePaths.map((themePath) => loadWorkspaceIconThemeCatalogFromVsix(themePath, cacheRootPath, 'bundled')),
     )
     const labels = catalogs.flatMap((theme) => theme.themes.map((themeOption) => themeOption.label))
+    const themeIds = catalogs.flatMap((theme) => theme.themes.map((themeOption) => themeOption.id))
 
     expect(catalogs.every((theme) => theme.sourceKind === 'bundled')).toBe(true)
+    expect(themeIds).toEqual(expect.arrayContaining(Object.values(defaultBundledWorkspaceIconThemeIds)))
     expect(labels).toEqual(expect.arrayContaining([
       'Catppuccin Latte',
       'Catppuccin Mocha',
+      'Charmed',
+      'Charmed Light',
+      'Charmed Soft',
+      'Charmed Warm',
       'Material Icon Theme',
       'Symbol Icons',
       'Ayu',

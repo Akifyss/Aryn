@@ -1,9 +1,16 @@
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'
+import type { WorkspaceIconThemeMode } from '../../src/features/workspace/types'
 
 const bundledVsixPattern = /^(.+)-(\d+(?:\.\d+)*)\.vsix$/u
+export const defaultBundledWorkspaceIconThemeIds = {
+  dark: 'charmed-soft',
+  light: 'charmed-light',
+} as const satisfies Record<WorkspaceIconThemeMode, string>
+
 const bundledIconThemePackageOrder = [
   'catppuccin.catppuccin-vsc-icons',
+  'littensy.charmed-icons',
   'pkief.material-icon-theme',
   'miguelsolorio.symbols',
   'teabyii.ayu',

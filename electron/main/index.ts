@@ -71,6 +71,7 @@ import {
 import { getDefaultAppIconAssetPath } from './app-icon'
 import { createArynPaths, prepareArynDataDirectories } from './aryn-paths'
 import {
+  defaultBundledWorkspaceIconThemeIds,
   isBundledWorkspaceIconThemePath,
   resolveBundledWorkspaceIconThemePath,
   resolveBundledWorkspaceIconThemePaths,
@@ -139,10 +140,6 @@ const agentDir = arynPaths.piAgentDir
 const workspaceIconThemeCacheDir = arynPaths.workspaceIconThemeCacheDir
 const bundledWorkspaceIconThemeDirectoryPath = arynPaths.bundledWorkspaceIconThemeDirectoryPath
 const workspaceIconThemeModes = ['light', 'dark'] as const satisfies readonly WorkspaceIconThemeMode[]
-const defaultBundledWorkspaceIconThemeIds = {
-  dark: 'catppuccin-mocha',
-  light: 'catppuccin-latte',
-} as const satisfies Record<WorkspaceIconThemeMode, string>
 const appStateStore = new AppStateStore(arynPaths.appStatePath, arynPaths.legacyAppStatePaths)
 const workspaceStateStore = new WorkspaceStateStore(arynPaths.workspaceStatePath)
 const conversationStore = new ConversationStore(arynPaths.conversationIndexPath, arynPaths.documentsDir)

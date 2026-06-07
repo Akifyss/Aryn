@@ -10,6 +10,11 @@ Bundled packages:
   - Source: https://github.com/catppuccin/vscode-icons
   - License: MIT
   - SHA256: `57566136D0A8BA8D040EB6E5BE866C88CCBB04F3D219D3A7E52A19978900FF3D`
+- Charmed Icons 0.10.0
+  - File: `littensy.charmed-icons-0.10.0.vsix`
+  - Source: https://github.com/littensy/charmed-icons
+  - License: MIT
+  - SHA256: `C0CB60F24104FF04DFBAC1AE205664F6B4EBD440023FC870670767F8CAE607D7`
 - Material Icon Theme 5.35.0
   - File: `PKief.material-icon-theme-5.35.0.vsix`
   - Source: https://github.com/material-extensions/vscode-material-icon-theme

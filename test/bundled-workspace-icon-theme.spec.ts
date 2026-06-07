@@ -31,6 +31,7 @@ describe('bundled workspace icon theme resolution', () => {
     await Promise.all([
       writeEmptyFile(path.join(rootPath, 'Catppuccin.catppuccin-vsc-icons-1.25.0.vsix')),
       writeEmptyFile(path.join(rootPath, 'Catppuccin.catppuccin-vsc-icons-1.26.0.vsix')),
+      writeEmptyFile(path.join(rootPath, 'littensy.charmed-icons-0.10.0.vsix')),
       writeEmptyFile(path.join(rootPath, 'PKief.material-icon-theme-5.35.0.vsix')),
       writeEmptyFile(path.join(rootPath, 'miguelsolorio.symbols-0.0.25.vsix')),
       writeEmptyFile(path.join(rootPath, 'teabyii.ayu-1.1.12.vsix')),
@@ -42,6 +43,7 @@ describe('bundled workspace icon theme resolution', () => {
       .resolves
       .toEqual([
         path.join(rootPath, 'Catppuccin.catppuccin-vsc-icons-1.26.0.vsix'),
+        path.join(rootPath, 'littensy.charmed-icons-0.10.0.vsix'),
         path.join(rootPath, 'PKief.material-icon-theme-5.35.0.vsix'),
         path.join(rootPath, 'miguelsolorio.symbols-0.0.25.vsix'),
         path.join(rootPath, 'teabyii.ayu-1.1.12.vsix'),
