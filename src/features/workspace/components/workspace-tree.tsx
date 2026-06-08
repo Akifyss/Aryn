@@ -103,6 +103,15 @@ function getSystemFileManagerName(platform: string) {
   return '文件管理器'
 }
 
+function stopFileActionMenuPropagation(event: MouseEvent<HTMLElement>) {
+  event.stopPropagation()
+}
+
+function runFileActionMenuAction(event: MouseEvent<HTMLElement>, action: () => void) {
+  stopFileActionMenuPropagation(event)
+  action()
+}
+
 function FileRowActionMenu({
   canOpenInCodeEditor,
   onOpenInCodeEditor,
@@ -175,6 +184,8 @@ function FileRowActionMenu({
                 aria-label='File actions'
                 className='workspace-tree-menu'
                 finalFocus={false}
+                onAuxClick={stopFileActionMenuPropagation}
+                onClick={stopFileActionMenuPropagation}
               >
                 {canOpenInCodeEditor ? (
                   <Menu.Item
@@ -183,7 +194,7 @@ function FileRowActionMenu({
                     className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
                     data-menu-action='open-code'
                     label='在代码编辑器打开'
-                    onClick={onOpenInCodeEditor}
+                    onClick={(event) => runFileActionMenuAction(event, onOpenInCodeEditor)}
                   >
                     <CodeLine size={16} className='workspace-tree-menu-icon' />
                     <span>在代码编辑器打开</span>
@@ -196,7 +207,7 @@ function FileRowActionMenu({
                     className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
                     data-menu-action='open-diff'
                     label='查看差异'
-                    onClick={() => onOpenDiff(gitDiffChange)}
+                    onClick={(event) => runFileActionMenuAction(event, () => onOpenDiff(gitDiffChange))}
                   >
                     <GitBranchLine size={16} className='workspace-tree-menu-icon' />
                     <span>查看差异</span>
@@ -208,7 +219,7 @@ function FileRowActionMenu({
                   className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
                   data-menu-action='show-in-folder'
                   label={`在“${systemManagerName}”中打开`}
-                  onClick={onShowInFolder}
+                  onClick={(event) => runFileActionMenuAction(event, onShowInFolder)}
                 >
                   <ExternalLinkLine size={16} className='workspace-tree-menu-icon' />
                   <span>{`在“${systemManagerName}”中打开`}</span>
@@ -219,7 +230,7 @@ function FileRowActionMenu({
                   className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
                   data-menu-action='rename'
                   label='重命名'
-                  onClick={onRename}
+                  onClick={(event) => runFileActionMenuAction(event, onRename)}
                 >
                   <Edit2Line size={16} className='workspace-tree-menu-icon' />
                   <span>重命名</span>
@@ -230,7 +241,7 @@ function FileRowActionMenu({
                   className={({ highlighted }) => `workspace-tree-menu-item is-danger${highlighted ? ' is-highlighted' : ''}`}
                   data-menu-action='delete'
                   label='删除'
-                  onClick={onDelete}
+                  onClick={(event) => runFileActionMenuAction(event, onDelete)}
                 >
                   <Delete2Line size={16} className='workspace-tree-menu-icon' />
                   <span>删除</span>
