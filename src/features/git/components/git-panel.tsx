@@ -1,18 +1,16 @@
-import { type ReactNode, useMemo, useState } from 'react'
+import { type MouseEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { Button } from '@heroui/react'
+import { Menu } from '@base-ui/react/menu'
+import { ScrollArea } from '@base-ui/react/scroll-area'
 import {
   AddLine,
-  ArrowDownLine,
-  ArrowUpLine,
   ArrowUpCircleLine,
   CheckLine,
-  CloseCircleLine,
   DownloadLine,
+  DownLine,
   FolderLine,
-  GitBranchLine,
   MarkdownLine,
   Refresh2Line,
-  Refresh3Line,
   Back2Line,
   ListCheckLine,
   UploadLine,
@@ -40,6 +38,7 @@ import {
   getSupportedWorkspaceEditorKind,
   supportsMeoEditor,
 } from '@/features/workspace/lib/file-types'
+import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 
 type GitPanelProps = {
   busyLabel: string | null
@@ -64,6 +63,7 @@ type GitPanelProps = {
   repositoryState: GitRepositoryState | null
   workspacePath: string | null
   iconTheme: WorkspaceIconTheme | null
+  menuPortalTarget?: HTMLElement | null
 }
 
 type GitPanelSectionKind = 'staged' | 'unstaged' | 'pulled'
@@ -620,6 +620,115 @@ function GitSection({
   )
 }
 
+function runCommitMenuAction(event: MouseEvent<HTMLElement>, action: () => void) {
+  event.stopPropagation()
+  action()
+}
+
+function GitCommitActionMenu({
+  canSubmitCommit,
+  isBusy,
+  menuPortalTarget,
+  syncDisabledReason,
+  onCommit,
+  onCommitAndSync,
+}: {
+  canSubmitCommit: boolean
+  isBusy: boolean
+  menuPortalTarget?: HTMLElement | null
+  syncDisabledReason: string | null
+  onCommit: () => void
+  onCommitAndSync: () => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const commitDisabled = !canSubmitCommit || isBusy
+  const commitAndSyncDisabled = !canSubmitCommit || Boolean(syncDisabledReason)
+  const menuDisabled = commitDisabled
+  const isMenuOpen = isOpen && !menuDisabled
+
+  useEffect(() => {
+    if (menuDisabled) {
+      setIsOpen(false)
+    }
+  }, [menuDisabled])
+
+  return (
+    <Menu.Root
+      modal={false}
+      open={isMenuOpen}
+      onOpenChange={(open, details) => {
+        if (open) {
+          if (menuDisabled) {
+            return
+          }
+
+          setIsOpen(true)
+          return
+        }
+
+        if (shouldCloseClickOpenedMenu(details)) {
+          setIsOpen(false)
+        } else {
+          details.cancel?.()
+        }
+      }}
+    >
+      <Menu.Trigger
+        aria-label='打开提交菜单'
+        className={`git-commit-menu-trigger${isMenuOpen ? ' is-open' : ''}`}
+        disabled={menuDisabled}
+        render={<button type='button' />}
+        title='提交选项'
+      >
+        <DownLine size={14} />
+      </Menu.Trigger>
+      <Menu.Portal
+        className='git-commit-menu-portal'
+        container={menuPortalTarget ?? undefined}
+      >
+        <Menu.Positioner
+          align='end'
+          className='git-commit-menu-positioner'
+          collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
+          collisionPadding={8}
+          positionMethod='fixed'
+          side='bottom'
+          sideOffset={4}
+        >
+          <Menu.Popup
+            aria-label='提交选项'
+            className='git-commit-menu'
+            finalFocus={false}
+          >
+            <Menu.Item
+              nativeButton
+              render={<button type='button' />}
+              className={({ highlighted }) => `git-commit-menu-item${highlighted ? ' is-highlighted' : ''}`}
+              disabled={commitDisabled}
+              label='提交'
+              onClick={(event) => runCommitMenuAction(event, onCommit)}
+            >
+              <CheckLine size={16} className='git-commit-menu-icon' />
+              <span>提交</span>
+            </Menu.Item>
+            <Menu.Item
+              nativeButton
+              render={<button type='button' />}
+              className={({ highlighted }) => `git-commit-menu-item${highlighted ? ' is-highlighted' : ''}`}
+              disabled={commitAndSyncDisabled}
+              label='提交并同步'
+              onClick={(event) => runCommitMenuAction(event, onCommitAndSync)}
+            >
+              <ArrowUpCircleLine size={16} className='git-commit-menu-icon' />
+              <span>提交并同步</span>
+            </Menu.Item>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
+  )
+}
+
 export function GitPanel({
   busyLabel,
   commitMessage,
@@ -643,6 +752,7 @@ export function GitPanel({
   repositoryState,
   workspacePath,
   iconTheme,
+  menuPortalTarget,
 }: GitPanelProps) {
   const stagedPaths = useMemo(
     () => repositoryState?.stagedChanges.map((change) => change.path) ?? [],
@@ -705,26 +815,6 @@ export function GitPanel({
           <div className='git-panel-toolbar'>
             {shouldShowCommitWorkflow ? (
               <>
-                <button
-                  type='button'
-                  className='git-toolbar-action git-toolbar-icon-button'
-                  aria-label='提交并同步'
-                  title={syncDisabledReason ?? '提交并同步'}
-                  disabled={!canSubmitCommit || Boolean(syncDisabledReason)}
-                  onClick={onCommitAndSync}
-                >
-                  <ArrowUpCircleLine size={16} />
-                </button>
-                <button
-                  type='button'
-                  className='git-toolbar-action git-toolbar-icon-button'
-                  aria-label='提交'
-                  title='提交'
-                  disabled={!canSubmitCommit || Boolean(busyLabel)}
-                  onClick={onCommit}
-                >
-                  <CheckLine size={16} />
-                </button>
                 <button
                   type='button'
                   className='git-toolbar-action git-toolbar-icon-button'
@@ -799,30 +889,50 @@ export function GitPanel({
           {shouldShowCommitWorkflow ? (
             <div className='git-panel-commit-row'>
               <div className='git-panel-commit-field'>
-                <textarea
-                  value={commitMessage}
-                  aria-label='提交信息'
-                  className='git-commit-textarea'
-                  disabled={Boolean(busyLabel)}
-                  placeholder='提交信息'
-                  rows={1}
-                  onChange={(event) => {
-                    onCommitMessageChange(event.target.value)
-                  }}
-                />
-                {commitMessage ? (
+                <ScrollArea.Root className='app-scroll-area git-commit-input-scroll' overflowEdgeThreshold={4}>
+                  <ScrollArea.Viewport
+                    render={(
+                      <textarea
+                        value={commitMessage}
+                        aria-label='提交信息'
+                        className='git-commit-textarea'
+                        disabled={Boolean(busyLabel)}
+                        placeholder='提交信息'
+                        rows={1}
+                        onChange={(event) => {
+                          onCommitMessageChange(event.target.value)
+                        }}
+                      />
+                    )}
+                  />
+                  <ScrollArea.Scrollbar
+                    className='app-scroll-area-scrollbar git-commit-input-scrollbar'
+                    orientation='vertical'
+                  >
+                    <ScrollArea.Thumb className='app-scroll-area-thumb' />
+                  </ScrollArea.Scrollbar>
+                </ScrollArea.Root>
+                <div className='git-commit-actions' role='group' aria-label='提交操作'>
                   <button
                     type='button'
-                    className='git-panel-commit-clear'
-                    aria-label='清空提交信息'
-                    title='清空'
-                    onClick={() => {
-                      onCommitMessageChange('')
-                    }}
+                    className='git-commit-submit-button'
+                    aria-label='提交'
+                    title='提交'
+                    disabled={!canSubmitCommit || Boolean(busyLabel)}
+                    onClick={onCommit}
                   >
-                    <CloseCircleLine size={16} />
+                    <CheckLine size={15} />
+                    <span>提交</span>
                   </button>
-                ) : null}
+                  <GitCommitActionMenu
+                    canSubmitCommit={canSubmitCommit}
+                    isBusy={Boolean(busyLabel)}
+                    menuPortalTarget={menuPortalTarget}
+                    syncDisabledReason={syncDisabledReason}
+                    onCommit={onCommit}
+                    onCommitAndSync={onCommitAndSync}
+                  />
+                </div>
               </div>
             </div>
           ) : null}

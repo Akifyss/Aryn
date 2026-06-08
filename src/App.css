@@ -2364,22 +2364,157 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   min-width: 0;
 }
 
-.git-panel-commit-clear {
+.git-commit-input-scroll {
+  --app-scroll-area-scrollbar-gap: 4px;
+  --app-scroll-area-scrollbar-thickness: 5px;
+  border-radius: 8px;
+}
+
+.git-commit-input-scrollbar {
+  top: 8px;
+  bottom: 8px;
+  right: 4px;
+}
+
+.git-commit-actions {
   position: absolute;
-  top: 11px;
-  right: 12px;
+  right: 7px;
+  bottom: 6px;
+  z-index: 1;
+  display: inline-flex;
+  height: 26px;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.07);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.git-commit-submit-button,
+.git-commit-menu-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.git-commit-submit-button {
+  gap: 4px;
+  padding: 0 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+.git-commit-menu-trigger {
   width: 24px;
-  height: 24px;
-  border-radius: 999px;
+  min-width: 24px;
+  border-left: 1px solid var(--separator);
   color: var(--muted);
 }
 
-.git-panel-commit-clear:hover {
-  color: var(--foreground);
+.git-commit-submit-button:hover:not(:disabled) {
   background: var(--surface-tertiary);
+}
+
+.git-commit-submit-button:active:not(:disabled) {
+  background: var(--surface-secondary);
+}
+
+.git-commit-menu-trigger:hover:not(:disabled),
+.git-commit-menu-trigger.is-open {
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+}
+
+.git-commit-submit-button:focus-visible,
+.git-commit-menu-trigger:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.git-commit-submit-button:disabled,
+.git-commit-menu-trigger:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+.git-commit-submit-button:disabled {
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.git-commit-menu-positioner {
+  z-index: 82;
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.git-commit-menu-portal {
+  pointer-events: auto;
+}
+
+.git-commit-menu {
+  min-width: 168px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--overlay);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(22px);
+}
+
+.git-commit-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.git-commit-menu-icon {
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
+.git-commit-menu-item:hover,
+.git-commit-menu-item:focus-visible,
+.git-commit-menu-item.is-highlighted {
+  outline: none;
+  background: var(--app-menu-item-hover-background);
+}
+
+.git-commit-menu-item:disabled,
+.git-commit-menu-item[data-disabled] {
+  cursor: not-allowed;
+  color: var(--muted);
+  opacity: 0.5;
 }
 
 .git-panel-summary {
@@ -3236,18 +3371,24 @@ body.workspace-tree-dragging .tree-item-row {
 
 .git-commit-textarea {
   display: block;
+  box-sizing: border-box;
   width: 100%;
-  min-height: 64px;
+  min-height: 92px;
   max-height: 160px;
-  padding: 12px 40px 12px 16px;
+  padding: 8px 8px 30px;
+  scroll-padding: 8px 8px 34px;
   border: 1px solid var(--separator);
-  border-radius: 15px;
+  border-radius: 8px;
   background: var(--field-background);
   color: var(--foreground);
   font: inherit;
   font-size: 12px;
   line-height: 1.5;
-  resize: vertical;
+  resize: none;
+}
+
+.git-commit-textarea::-webkit-scrollbar {
+  display: none;
 }
 
 .git-commit-textarea::placeholder {
@@ -3258,7 +3399,7 @@ body.workspace-tree-dragging .tree-item-row {
 .git-commit-textarea:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
-  border-color: var(--accent);
+  border-color: var(--separator);
 }
 
 @media (max-width: 860px) {

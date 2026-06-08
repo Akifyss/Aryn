@@ -3418,7 +3418,12 @@ function App() {
     )
   }
 
-  function renderGitPanel() {
+  function renderGitPanel(options: {
+    surfaceMode?: PanelSurfaceMode
+  } = {}) {
+    const { surfaceMode = 'docked' } = options
+    const menuPortalTarget = surfaceMode === 'drawer' ? leftDrawerOverlayRoot : null
+
     return (
       <div className='sidebar-stack-pane sidebar-git-pane' id='git-panel'>
         <GitPanel
@@ -3477,6 +3482,7 @@ function App() {
           repositoryState={gitRepositoryState}
           workspacePath={currentPath}
           iconTheme={iconTheme}
+          menuPortalTarget={menuPortalTarget}
         />
       </div>
     )
@@ -5129,7 +5135,7 @@ function App() {
                   {renderWorkspaceTreePanel({ surfaceMode })}
                 </BaseTabs.Panel>
                 <BaseTabs.Panel value='git' className='sidebar-workspace-tab-panel'>
-                  {renderGitPanel()}
+                  {renderGitPanel({ surfaceMode })}
                 </BaseTabs.Panel>
               </BaseTabs.Root>
             </>
