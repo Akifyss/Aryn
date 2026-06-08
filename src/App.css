@@ -2760,12 +2760,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
     visibility 0s linear 0s;
 }
 
-.tree-item-info-text {
-  max-width: 4.5rem;
-}
-
 .tree-item-info-count {
-  max-width: var(--tree-item-trailing-size, 32px);
   font-weight: 600;
 }
 
