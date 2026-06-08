@@ -33,9 +33,9 @@ describe('shell layout helpers', () => {
       '--left-chrome-edge-gap': '6px',
       '--layout-mode-switch-width': '62px',
       '--left-panel-toggle-anchor': '84px',
-      '--right-panel-toggle-anchor': '12px',
+      '--right-panel-toggle-anchor': '6px',
       '--left-panel-content-inset': leftPanelContentInset,
-      '--right-panel-content-inset': '52px',
+      '--right-panel-content-inset': '46px',
     })
 
     expect(getShellChromeVars('windows')).toMatchObject({
@@ -44,9 +44,9 @@ describe('shell layout helpers', () => {
       '--left-chrome-edge-gap': '6px',
       '--layout-mode-switch-width': '62px',
       '--left-panel-toggle-anchor': '6px',
-      '--right-panel-toggle-anchor': '156px',
+      '--right-panel-toggle-anchor': '150px',
       '--left-panel-content-inset': leftPanelContentInset,
-      '--right-panel-content-inset': '196px',
+      '--right-panel-content-inset': '190px',
     })
   })
 

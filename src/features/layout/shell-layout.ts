@@ -15,9 +15,9 @@ const SHELL_CHROME_VARS = {
     '--left-chrome-edge-gap': '6px',
     '--layout-mode-switch-width': '62px',
     '--left-panel-toggle-anchor': '84px',
-    '--right-panel-toggle-anchor': '12px',
+    '--right-panel-toggle-anchor': '6px',
     '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
-    '--right-panel-content-inset': '52px',
+    '--right-panel-content-inset': '46px',
     '--sidebar-icon-x': '20px',
   },
   windows: {
@@ -29,9 +29,9 @@ const SHELL_CHROME_VARS = {
     '--left-chrome-edge-gap': '6px',
     '--layout-mode-switch-width': '62px',
     '--left-panel-toggle-anchor': '6px',
-    '--right-panel-toggle-anchor': '156px',
+    '--right-panel-toggle-anchor': '150px',
     '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
-    '--right-panel-content-inset': '196px',
+    '--right-panel-content-inset': '190px',
     '--sidebar-icon-x': '20px',
   },
 } as const satisfies Record<ShellPlatform, Record<string, string>>
