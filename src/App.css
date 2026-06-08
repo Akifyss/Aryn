@@ -2200,7 +2200,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: var(--tree-item-action-size, 32px);
+  min-height: var(--tree-item-action-size, var(--tree-item-trailing-size, 32px));
   padding: 0 12px;
   border-radius: 12px;
   font-size: 12px;
@@ -2222,8 +2222,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .git-toolbar-icon-button,
 .tree-item-action {
-  width: var(--tree-item-action-size, 32px);
-  min-width: var(--tree-item-action-size, 32px);
+  width: var(--tree-item-action-size, var(--tree-item-trailing-size, 32px));
+  min-width: var(--tree-item-action-size, var(--tree-item-trailing-size, 32px));
   padding: 0;
 }
 
@@ -2561,10 +2561,15 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .tree-list {
-  --tree-item-action-size: 32px;
+  --tree-item-trailing-size: 32px;
+  --tree-item-action-size: var(--tree-item-trailing-size);
+  --tree-item-action-gap: 2px;
   --tree-item-icon-center-offset: 8px;
   --tree-item-icon-size: 16px;
-  --tree-indent-guide-offset: calc(var(--tree-item-row-padding-x) + var(--tree-item-icon-center-offset));
+  --tree-item-row-padding-x: 8px;
+  --tree-item-row-padding-left: var(--tree-item-row-padding-x);
+  --tree-item-row-padding-right: 0;
+  --tree-indent-guide-offset: calc(var(--tree-item-row-padding-left) + var(--tree-item-icon-center-offset));
   --tree-list-padding-bottom: 0;
   --tree-list-padding-left: 0;
   --tree-list-padding-right: 0;
@@ -2572,7 +2577,6 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   --tree-nested-list-padding-left: 6px;
   --tree-item-row-description-min-height: 48px;
   --tree-item-row-height: 32px;
-  --tree-item-row-padding-x: 8px;
   box-sizing: border-box;
   margin: 0;
   padding:
@@ -2623,7 +2627,11 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   height: var(--tree-item-row-height);
   min-height: var(--tree-item-row-height);
   margin: 0 0 2px;
-  padding: 0 var(--tree-item-row-padding-x);
+  padding:
+    0
+    var(--tree-item-row-padding-right, 0)
+    0
+    var(--tree-item-row-padding-left, var(--tree-item-row-padding-x, 8px));
   border-radius: 8px;
   cursor: pointer;
   transition: background-color 120ms ease;
@@ -2736,7 +2744,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  min-width: 0;
+  min-width: var(--tree-item-trailing-size, 32px);
+  min-height: var(--tree-item-trailing-size, 32px);
   color: var(--muted);
   font-size: 12px;
   line-height: 1;
@@ -2756,15 +2765,11 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .tree-item-info-count {
-  min-width: 16px;
-  max-width: 2rem;
+  max-width: var(--tree-item-trailing-size, 32px);
   font-weight: 600;
 }
 
 .tree-item-info-status {
-  width: 16px;
-  height: 16px;
-  max-width: 16px;
   line-height: 0;
 }
 
@@ -3147,7 +3152,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 2px;
+  gap: var(--tree-item-action-gap, 2px);
   opacity: 0;
   max-width: 0;
   overflow: hidden;
@@ -4182,11 +4187,14 @@ body.workspace-tree-dragging .tree-item-row {
 }
 
 .tree-header {
-  --tree-item-action-size: 32px;
+  --tree-item-trailing-size: 32px;
+  --tree-item-action-size: var(--tree-item-trailing-size);
+  --tree-item-action-gap: 2px;
   --tree-item-actions-max-width: 136px;
   --tree-item-icon-size: 16px;
   --tree-item-row-height: 32px;
-  --tree-item-row-padding-x: 8px;
+  --tree-item-row-padding-left: 8px;
+  --tree-item-row-padding-right: 0;
   margin: 0;
   border-bottom: 0;
   color: var(--muted);
