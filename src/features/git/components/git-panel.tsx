@@ -812,79 +812,50 @@ export function GitPanel({
     <div className='git-panel'>
       {hasVisibleChanges ? (
         <header className='git-panel-header'>
-          <div className='git-panel-toolbar'>
-            {shouldShowCommitWorkflow ? (
+          <TreeItem
+            variant='header'
+            label='Git'
+            actions={(
               <>
-                <button
-                  type='button'
-                  className='git-toolbar-action git-toolbar-icon-button'
-                  aria-label='全部暂存'
-                  title='全部暂存'
-                  disabled={unstagedPaths.length === 0 || Boolean(busyLabel)}
+                <TreeItemActionButton
+                  className={hasUnpushedCommits ? 'git-push-action-with-badge' : undefined}
+                  aria-label={pushAccessibleLabel}
+                  title={syncDisabledReason ?? pushAccessibleLabel}
+                  disabled={Boolean(syncDisabledReason)}
+                  onClick={onPush}
+                >
+                  <UploadLine size={16} />
+                  {hasUnpushedCommits ? <span className='git-push-action-badge'>{pushBadgeLabel}</span> : null}
+                </TreeItemActionButton>
+                <TreeItemActionButton
+                  aria-label='拉取'
+                  title={syncDisabledReason ?? '拉取'}
+                  disabled={Boolean(syncDisabledReason)}
+                  onClick={onPull}
+                >
+                  <DownloadLine size={16} />
+                </TreeItemActionButton>
+                <TreeItemActionButton
+                  aria-label={layout === 'tree' ? '切换到列表视图' : '切换到树状视图'}
+                  title={layout === 'tree' ? '列表视图' : '树状视图'}
+                  disabled={Boolean(busyLabel)}
                   onClick={() => {
-                    onStage(unstagedPaths)
+                    onLayoutChange(layout === 'tree' ? 'list' : 'tree')
                   }}
                 >
-                  <AddLine size={16} />
-                </button>
-                <button
-                  type='button'
-                  className='git-toolbar-action git-toolbar-icon-button'
-                  aria-label='全部取消暂存'
-                  title='全部取消暂存'
-                  disabled={stagedPaths.length === 0 || Boolean(busyLabel)}
-                  onClick={() => {
-                    onUnstage(stagedPaths)
-                  }}
+                  {layout === 'tree' ? <ListCheckLine size={16} /> : <FolderLine size={16} />}
+                </TreeItemActionButton>
+                <TreeItemActionButton
+                  aria-label='刷新 Git 状态'
+                  title='刷新'
+                  disabled={Boolean(busyLabel)}
+                  onClick={onRefresh}
                 >
-                  <Icon icon='mdi:minus' width={16} height={16} />
-                </button>
+                  <Refresh2Line size={16} />
+                </TreeItemActionButton>
               </>
-            ) : null}
-            <button
-              type='button'
-              className={`git-toolbar-action git-toolbar-icon-button${hasUnpushedCommits ? ' git-toolbar-action-with-badge' : ''}`}
-              aria-label={pushAccessibleLabel}
-              title={syncDisabledReason ?? pushAccessibleLabel}
-              disabled={Boolean(syncDisabledReason)}
-              onClick={onPush}
-            >
-              <UploadLine size={16} />
-              {hasUnpushedCommits ? <span className='git-toolbar-action-badge'>{pushBadgeLabel}</span> : null}
-            </button>
-            <button
-              type='button'
-              className='git-toolbar-action git-toolbar-icon-button'
-              aria-label='拉取'
-              title={syncDisabledReason ?? '拉取'}
-              disabled={Boolean(syncDisabledReason)}
-              onClick={onPull}
-            >
-              <DownloadLine size={16} />
-            </button>
-            <button
-              type='button'
-              className='git-toolbar-action git-toolbar-icon-button'
-              aria-label={layout === 'tree' ? '切换到列表视图' : '切换到树状视图'}
-              title={layout === 'tree' ? '列表视图' : '树状视图'}
-              disabled={Boolean(busyLabel)}
-              onClick={() => {
-                onLayoutChange(layout === 'tree' ? 'list' : 'tree')
-              }}
-            >
-              {layout === 'tree' ? <ListCheckLine size={16} /> : <FolderLine size={16} />}
-            </button>
-            <button
-              type='button'
-              className='git-toolbar-action git-toolbar-icon-button'
-              aria-label='刷新 Git 状态'
-              title='刷新'
-              disabled={Boolean(busyLabel)}
-              onClick={onRefresh}
-            >
-              <Refresh2Line size={16} />
-            </button>
-          </div>
+            )}
+          />
 
           {shouldShowCommitWorkflow ? (
             <div className='git-panel-commit-row'>
@@ -1007,6 +978,7 @@ export function GitPanel({
                 <TreeItemActionButton
                   aria-label='全部取消暂存'
                   title='全部取消暂存'
+                  disabled={Boolean(busyLabel)}
                   onClick={() => onUnstage(stagedPaths)}
                 >
                   <Icon icon='mdi:minus' width={16} height={16} />
@@ -1031,6 +1003,7 @@ export function GitPanel({
                   <TreeItemActionButton
                     aria-label='全部放弃'
                     title='全部放弃'
+                    disabled={Boolean(busyLabel)}
                     onClick={onDiscardAll}
                   >
                     <Back2Line size={16} />
@@ -1038,6 +1011,7 @@ export function GitPanel({
                   <TreeItemActionButton
                     aria-label='全部暂存'
                     title='全部暂存'
+                    disabled={Boolean(busyLabel)}
                     onClick={() => onStage(unstagedPaths)}
                   >
                     <AddLine size={16} />
