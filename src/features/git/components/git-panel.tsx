@@ -708,7 +708,7 @@ function GitCommitActionMenu({
         render={<button type='button' />}
         title='提交选项'
       >
-        <DownLine size={14} />
+        <DownLine size={12} />
       </Menu.Trigger>
       <Menu.Portal
         className='git-commit-menu-portal'
@@ -928,7 +928,7 @@ export function GitPanel({
                     disabled={!canSubmitCommit || Boolean(busyLabel)}
                     onClick={onCommit}
                   >
-                    <CheckLine size={15} />
+                    <CheckLine size={16} />
                     <span>提交</span>
                   </button>
                   <GitCommitActionMenu
@@ -991,7 +991,7 @@ export function GitPanel({
                 disabled={Boolean(busyLabel)}
                 onClick={onRefresh}
               >
-                <Refresh2Line size={15} />
+                <Refresh2Line size={16} />
                 <span>刷新</span>
               </button>
             </div>

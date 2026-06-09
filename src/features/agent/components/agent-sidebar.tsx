@@ -2297,7 +2297,7 @@ function AgentQueuedComposerTray({
           >
             <div className='agent-queued-row-leading' aria-hidden='true'>
               <span className='agent-queued-row-grip'>::</span>
-              <CornerUpLeftLine size={15} />
+              <CornerUpLeftLine size={16} />
             </div>
 
             <div className='agent-queued-row-main'>
@@ -2389,7 +2389,7 @@ function AgentQueuedComposerTray({
                       })
                     }}
                   >
-                    <Delete2Line size={15} />
+                    <Delete2Line size={16} />
                   </button>
                   <Menu.Root
                     modal={false}
@@ -6262,7 +6262,7 @@ function AgentChatSurface() {
               className={`agent-send-button${composerAction === 'stop' ? ' is-stop' : ''}`}
             >
               {composerAction === 'stop' ? (
-                <StopFill size={15} />
+                <StopFill size={16} />
               ) : (
                 <ArrowUpLine size={16} />
               )}
