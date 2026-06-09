@@ -4,16 +4,16 @@ import { Menu } from '@base-ui/react/menu'
 import { ScrollArea } from '@base-ui/react/scroll-area'
 import {
   AddLine,
+  ArrowDownLine,
   ArrowUpCircleLine,
+  ArrowUpLine,
   CheckLine,
-  DownloadLine,
   DownLine,
   FolderLine,
   MarkdownLine,
   Refresh2Line,
   Back2Line,
   ListCheckLine,
-  UploadLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import {
@@ -150,6 +150,34 @@ function getRepositoryMeta(repositoryState: GitRepositoryState, workspacePath: s
   }
 
   return parts.join(' / ')
+}
+
+function getRepositorySyncSummary(repositoryState: GitRepositoryState) {
+  const contentParts: ReactNode[] = []
+  const labelParts: string[] = []
+
+  if (repositoryState.ahead > 0) {
+    contentParts.push(
+      <ArrowUpLine key='ahead-icon' size={12} aria-hidden='true' />,
+      <span key='ahead-count'>{repositoryState.ahead}</span>,
+    )
+    labelParts.push(`本地领先远端 ${repositoryState.ahead} 个提交`)
+  }
+
+  if (repositoryState.behind > 0) {
+    contentParts.push(
+      <ArrowDownLine key='behind-icon' size={12} aria-hidden='true' />,
+      <span key='behind-count'>{repositoryState.behind}</span>,
+    )
+    labelParts.push(`本地落后远端 ${repositoryState.behind} 个提交`)
+  }
+
+  return contentParts.length > 0
+    ? {
+        content: contentParts,
+        label: labelParts.join('，'),
+      }
+    : null
 }
 
 function getCleanStateSubtext(repositoryState: GitRepositoryState) {
@@ -807,6 +835,7 @@ export function GitPanel({
   const hasVisibleChanges = repositoryState.hasChanges
   const shouldShowCommitWorkflow = repositoryState.hasChanges
   const cleanStateSubtext = getCleanStateSubtext(repositoryState)
+  const syncSummary = getRepositorySyncSummary(repositoryState)
 
   return (
     <div className='git-panel'>
@@ -815,6 +844,13 @@ export function GitPanel({
           <TreeItem
             variant='header'
             label='Git'
+            info={syncSummary?.content}
+            infoVariant='summary'
+            infoProps={syncSummary ? {
+              'aria-label': syncSummary.label,
+              role: 'img',
+              title: syncSummary.label,
+            } : undefined}
             actions={(
               <>
                 <TreeItemActionButton
@@ -824,7 +860,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPush}
                 >
-                  <UploadLine size={16} />
+                  <ArrowUpLine size={16} />
                   {hasUnpushedCommits ? <span className='git-push-action-badge'>{pushBadgeLabel}</span> : null}
                 </TreeItemActionButton>
                 <TreeItemActionButton
@@ -833,7 +869,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPull}
                 >
-                  <DownloadLine size={16} />
+                  <ArrowDownLine size={16} />
                 </TreeItemActionButton>
                 <TreeItemActionButton
                   aria-label={layout === 'tree' ? '切换到列表视图' : '切换到树状视图'}
@@ -932,7 +968,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPush}
                 >
-                  <UploadLine size={15} />
+                  <ArrowUpLine size={16} />
                   <span>推送</span>
                 </button>
               ) : null}
@@ -944,7 +980,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPull}
                 >
-                  <DownloadLine size={15} />
+                  <ArrowDownLine size={16} />
                   <span>拉取</span>
                 </button>
               ) : null}

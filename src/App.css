@@ -2883,6 +2883,20 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   line-height: 0;
 }
 
+.tree-item-info-summary {
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.tree-item-info-summary svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
 .workspace-tree-menu-positioner {
   z-index: 82;
   pointer-events: auto;

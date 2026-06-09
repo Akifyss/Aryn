@@ -28,7 +28,7 @@ type TreeRowState = TreeItemState & {
   hasVisibleActions?: boolean
 }
 
-export type TreeItemInfoVariant = 'count' | 'status' | 'text'
+export type TreeItemInfoVariant = 'count' | 'status' | 'summary' | 'text'
 export type TreeItemStatusTone = 'danger' | 'neutral' | 'success' | 'warning'
 export type TreeItemVariant = 'default' | 'header'
 export type TreeStatusItemTone = 'danger' | 'default'
