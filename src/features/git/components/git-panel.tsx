@@ -843,7 +843,7 @@ export function GitPanel({
         <header className='git-panel-header'>
           <TreeItem
             variant='header'
-            label='Git'
+            label='工作树'
             info={syncSummary?.content}
             infoVariant='summary'
             infoProps={syncSummary ? {
