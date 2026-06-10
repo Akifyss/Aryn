@@ -6,12 +6,16 @@ import {
   type ReactNode,
   type Ref,
   forwardRef,
+  useEffect,
+  useRef,
+  useState,
 } from 'react'
 import {
   DownLine,
   RightLine,
 } from '@mingcute/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 
 type TreeItemState = {
   isActive?: boolean
@@ -46,6 +50,9 @@ type TreeItemMainState = {
 }
 
 export type TreeItemMainButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & TreeItemMainState
+export type TreeItemActionButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  tooltip?: ReactNode
+}
 export type TreeItemMainRenderProps = TreeItemMainState & {
   className?: string
 }
@@ -384,11 +391,113 @@ export const TreeItemMain = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivEle
   return <div ref={ref} className={treeClassNames.main(cx(hasDescription && 'has-description', className))} {...props} />
 })
 
+const TREE_ITEM_MAIN_TOOLTIP_DELAY = 500
+const TREE_ITEM_TEXT_OVERFLOW_EPSILON = 1
+
+function getTreeItemMainOverflowTooltip(element: HTMLElement) {
+  const overflowedTexts = Array.from(
+    element.querySelectorAll<HTMLElement>('.tree-item-label, .tree-item-description'),
+  ).flatMap((textElement) => {
+    const hasOverflow = textElement.scrollWidth > textElement.clientWidth + TREE_ITEM_TEXT_OVERFLOW_EPSILON
+    const text = textElement.textContent?.trim()
+
+    return hasOverflow && text ? [text] : []
+  })
+
+  if (overflowedTexts.length > 0) {
+    return overflowedTexts.join(' · ')
+  }
+
+  return null
+}
+
 export const TreeItemMainButton = forwardRef<HTMLButtonElement, TreeItemMainButtonProps>(function TreeItemMainButton(
-  { className, hasDescription, type = 'button', ...props },
+  {
+    className,
+    disabled,
+    hasDescription,
+    onBlur,
+    onFocus,
+    onPointerEnter,
+    onPointerLeave,
+    title,
+    type = 'button',
+    ...props
+  },
   ref,
 ) {
-  return <button ref={ref} type={type} className={treeClassNames.main(cx(hasDescription && 'has-description', className))} {...props} />
+  const openTimerRef = useRef<number | null>(null)
+  const [overflowTooltip, setOverflowTooltip] = useState<string | null>(null)
+  const [isOverflowTooltipOpen, setIsOverflowTooltipOpen] = useState(false)
+
+  const clearOpenTimer = () => {
+    if (openTimerRef.current !== null) {
+      window.clearTimeout(openTimerRef.current)
+      openTimerRef.current = null
+    }
+  }
+
+  const closeOverflowTooltip = () => {
+    clearOpenTimer()
+    setIsOverflowTooltipOpen(false)
+  }
+
+  const scheduleOverflowTooltip = (element: HTMLElement) => {
+    clearOpenTimer()
+
+    if (disabled) {
+      setIsOverflowTooltipOpen(false)
+      return
+    }
+
+    openTimerRef.current = window.setTimeout(() => {
+      openTimerRef.current = null
+      const nextTooltip = getTreeItemMainOverflowTooltip(element)
+
+      setOverflowTooltip(nextTooltip)
+      setIsOverflowTooltipOpen(Boolean(nextTooltip))
+    }, TREE_ITEM_MAIN_TOOLTIP_DELAY)
+  }
+
+  useEffect(() => () => {
+    clearOpenTimer()
+  }, [])
+
+  const handlePointerEnter: TreeItemMainButtonProps['onPointerEnter'] = (event) => {
+    onPointerEnter?.(event)
+    scheduleOverflowTooltip(event.currentTarget)
+  }
+
+  const handlePointerLeave: TreeItemMainButtonProps['onPointerLeave'] = (event) => {
+    onPointerLeave?.(event)
+    closeOverflowTooltip()
+  }
+
+  const handleFocus: TreeItemMainButtonProps['onFocus'] = (event) => {
+    onFocus?.(event)
+    scheduleOverflowTooltip(event.currentTarget)
+  }
+
+  const handleBlur: TreeItemMainButtonProps['onBlur'] = (event) => {
+    onBlur?.(event)
+    closeOverflowTooltip()
+  }
+
+  return (
+    <AppTooltipButton
+      ref={ref}
+      type={type}
+      className={treeClassNames.main(cx(hasDescription && 'has-description', className))}
+      disabled={disabled}
+      isTooltipOpen={isOverflowTooltipOpen}
+      tooltip={overflowTooltip ?? title ?? ''}
+      onBlur={handleBlur}
+      onFocus={handleFocus}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
+      {...props}
+    />
+  )
 })
 
 function TreeItemMainContent({
@@ -463,11 +572,29 @@ const TreeItemActions = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement
   },
 )
 
-export const TreeItemActionButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>(function TreeItemActionButton(
-  { className, type = 'button', ...props },
+export const TreeItemActionButton = forwardRef<HTMLButtonElement, TreeItemActionButtonProps>(function TreeItemActionButton(
+  {
+    'aria-label': ariaLabel,
+    className,
+    disabled,
+    title,
+    tooltip,
+    type = 'button',
+    ...props
+  },
   ref,
 ) {
-  return <button ref={ref} type={type} className={treeClassNames.action(className)} {...props} />
+  return (
+    <AppTooltipButton
+      ref={ref}
+      type={type}
+      className={treeClassNames.action(className)}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      tooltip={tooltip ?? title ?? ariaLabel}
+      {...props}
+    />
+  )
 })
 
 export const TreeItemIcon = forwardRef<HTMLSpanElement, HTMLAttributes<HTMLSpanElement>>(function TreeItemIcon(
@@ -488,10 +615,14 @@ const TreeItemInfo = forwardRef<
   HTMLSpanElement,
   HTMLAttributes<HTMLSpanElement> & { variant?: TreeItemInfoVariant }
 >(function TreeItemInfo(
-  { className, variant = 'text', ...props },
+  { className, title, variant = 'text', ...props },
   ref,
 ) {
-  return <span ref={ref} className={treeClassNames.info(variant, className)} {...props} />
+  return (
+    <AppTooltip excludeFromTabOrder tooltip={title} triggerMode='focusable'>
+      <span ref={ref} className={treeClassNames.info(variant, className)} {...props} />
+    </AppTooltip>
+  )
 })
 
 export const TreeItemStatusDot = forwardRef<
@@ -503,11 +634,12 @@ export const TreeItemStatusDot = forwardRef<
     tone = 'neutral',
     'aria-hidden': ariaHidden,
     'aria-label': ariaLabel,
+    title,
     ...props
   },
   ref,
 ) {
-  return (
+  const dot = (
     <span
       ref={ref}
       className={treeClassNames.statusDot(tone, className)}
@@ -517,4 +649,6 @@ export const TreeItemStatusDot = forwardRef<
       {...props}
     />
   )
+
+  return <AppTooltip excludeFromTabOrder tooltip={title} triggerMode='focusable'>{dot}</AppTooltip>
 })

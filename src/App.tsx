@@ -30,7 +30,7 @@ import type {
   WorkspaceNode,
 } from '@/features/workspace/types'
 import { AppScrollArea } from '@/components/app-scroll-area'
-import { AppTooltipButton } from '@/components/app-tooltip'
+import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import {
@@ -4986,65 +4986,79 @@ function App() {
         className='layout-mode-segmented-control'
         aria-label='Layout mode'
       >
-        <BaseTabs.Tab
-          value='agent'
-          className={`layout-mode-segmented-option${isAgentLayout ? ' is-active' : ''}`}
-          aria-label='Agent mode'
-          title='Agent mode'
+        <AppTooltip tooltip='Agent 模式' triggerMode='focusable'>
+          <BaseTabs.Tab
+            value='agent'
+            className={`layout-mode-segmented-option${isAgentLayout ? ' is-active' : ''}`}
+            aria-label='Agent mode'
+          >
+            <Chat3Line size={16} aria-hidden='true' />
+          </BaseTabs.Tab>
+        </AppTooltip>
+        <AppTooltip
+          tooltip={isEditorLayoutSwitchDisabled ? '先选择工作目录' : '编辑器模式'}
+          triggerMode='focusable'
         >
-          <Chat3Line size={16} aria-hidden='true' />
-        </BaseTabs.Tab>
-        <BaseTabs.Tab
-          value='editor'
-          className={`layout-mode-segmented-option${!isAgentLayout ? ' is-active' : ''}`}
-          disabled={isEditorLayoutSwitchDisabled}
-          aria-label={isEditorLayoutSwitchDisabled ? 'Editor mode，需要先选择工作目录' : 'Editor mode'}
-          title={isEditorLayoutSwitchDisabled ? '先选择工作目录' : 'Editor mode'}
-        >
-          <FolderLine size={16} aria-hidden='true' />
-        </BaseTabs.Tab>
+          <BaseTabs.Tab
+            value='editor'
+            className={`layout-mode-segmented-option${!isAgentLayout ? ' is-active' : ''}`}
+            disabled={isEditorLayoutSwitchDisabled}
+            aria-label={isEditorLayoutSwitchDisabled ? 'Editor mode, select a workspace first' : 'Editor mode'}
+          >
+            <FolderLine size={16} aria-hidden='true' />
+          </BaseTabs.Tab>
+        </AppTooltip>
         <BaseTabs.Indicator className='layout-mode-segmented-indicator' />
       </BaseTabs.List>
     </BaseTabs.Root>
   )
 
   const renderLeftChromeSearchButton = () => (
-    <button
+    <AppTooltipButton
       type='button'
       className='panel-toggle-button left-chrome-search-button'
       aria-label='Open search'
+      tooltip='搜索'
       onClick={handleOpenCommandPaletteFromChrome}
     >
       <Icon icon='lucide:search' width={16} height={16} aria-hidden='true' />
-    </button>
+    </AppTooltipButton>
   )
 
-  const renderLeftSidebarToggleButton = () => (
-    <button
-      type='button'
-      className='panel-toggle-button'
-      aria-label={isLeftSidebarDrawer
-        ? (isLeftDrawerOpen ? 'Close workspace panel' : 'Open workspace panel')
-        : (isLeftSidebarVisible ? 'Collapse workspace sidebar' : 'Expand workspace sidebar')}
-      onClick={() => {
-        if (isLeftSidebarDrawer) {
-          handleLeftDrawerOpenChange(!isLeftDrawerOpen)
-          return
-        }
+  const renderLeftSidebarToggleButton = () => {
+    const toggleAriaLabel = isLeftSidebarDrawer
+      ? (isLeftDrawerOpen ? 'Close workspace panel' : 'Open workspace panel')
+      : (isLeftSidebarVisible ? 'Collapse sidebar' : 'Expand sidebar')
+    const toggleTooltip = isLeftSidebarDrawer
+      ? (isLeftDrawerOpen ? '关闭抽屉' : '打开抽屉')
+      : (isLeftSidebarVisible ? '收起侧边栏' : '展开侧边栏')
 
-        if (isLeftSidebarVisible) {
-          setIsLeftSidebarCollapsed(true)
-          return
-        }
+    return (
+      <AppTooltipButton
+        type='button'
+        className='panel-toggle-button'
+        aria-label={toggleAriaLabel}
+        tooltip={toggleTooltip}
+        onClick={() => {
+          if (isLeftSidebarDrawer) {
+            handleLeftDrawerOpenChange(!isLeftDrawerOpen)
+            return
+          }
 
-        setIsLeftSidebarCollapsed(false)
-      }}
-    >
-      <span className='panel-toggle-icon' aria-hidden='true'>
-        <LayoutLeftLine size={16} />
-      </span>
-    </button>
-  )
+          if (isLeftSidebarVisible) {
+            setIsLeftSidebarCollapsed(true)
+            return
+          }
+
+          setIsLeftSidebarCollapsed(false)
+        }}
+      >
+        <span className='panel-toggle-icon' aria-hidden='true'>
+          <LayoutLeftLine size={16} />
+        </span>
+      </AppTooltipButton>
+    )
+  }
 
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
     const isDrawerSurface = surfaceMode === 'drawer'
@@ -5182,7 +5196,7 @@ function App() {
         className={`editor-directory-toggle${isDirectorySidebarVisible ? ' is-active' : ''}`}
         aria-label={isDirectorySidebarVisible ? '隐藏目录侧边栏' : '显示目录侧边栏'}
         aria-pressed={isDirectorySidebarVisible}
-        onPress={() => setIsDirectorySidebarOpen((currentValue) => !currentValue)}
+        onClick={() => setIsDirectorySidebarOpen((currentValue) => !currentValue)}
         tooltip={isDirectorySidebarVisible ? '隐藏目录' : '显示目录'}
       >
         <Icon
@@ -5504,47 +5518,55 @@ function App() {
           data-overlay-elevated={shellChromeOverlayState.rightControlsElevated ? 'true' : 'false'}
           data-react-aria-top-layer={shellChromeOverlayState.rightControlsTopLayer ? 'true' : undefined}
         >
-          <button
+          <AppTooltipButton
             type='button'
             className='agent-collapsed-tab-button'
             aria-label='Expand right sidebar and open Git'
-            title='Git'
+            tooltip='更改'
             onClick={() => {
               handleCollapsedAgentFixedTabClick('git')
             }}
           >
             <GitBranchLine size={16} />
-          </button>
-          <button
+          </AppTooltipButton>
+          <AppTooltipButton
             type='button'
             className='agent-collapsed-tab-button'
             aria-label='Expand right sidebar and open files'
-            title='Files'
+            tooltip='文件'
             onClick={() => {
               handleCollapsedAgentFixedTabClick('file')
             }}
           >
             <FolderLine size={16} />
-          </button>
+          </AppTooltipButton>
         </div>
       ) : null}
 
-      {shouldExposeAgentWorkspaceTools ? (
-        <button
-          type='button'
-          className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
-          data-overlay-elevated={shellChromeOverlayState.rightControlsElevated ? 'true' : 'false'}
-          data-react-aria-top-layer={shellChromeOverlayState.rightControlsTopLayer ? 'true' : undefined}
-          aria-label={isRightSidebarDrawer
-            ? (isRightDrawerOpen ? 'Close assistant panel' : 'Open assistant panel')
-            : (isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar')}
-          onClick={toggleAssistantSurface}
-        >
-          <span className='panel-toggle-icon' aria-hidden='true'>
-            <LayoutRightLine size={16} />
-          </span>
-        </button>
-      ) : null}
+      {shouldExposeAgentWorkspaceTools ? (() => {
+        const rightSidebarToggleAriaLabel = isRightSidebarDrawer
+          ? (isRightDrawerOpen ? 'Close assistant panel' : 'Open assistant panel')
+          : (isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar')
+        const rightSidebarToggleTooltip = isRightSidebarDrawer
+          ? (isRightDrawerOpen ? '关闭抽屉' : '打开抽屉')
+          : (isRightSidebarVisible ? '收起侧边栏' : '展开侧边栏')
+
+        return (
+          <AppTooltipButton
+            type='button'
+            className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
+            data-overlay-elevated={shellChromeOverlayState.rightControlsElevated ? 'true' : 'false'}
+            data-react-aria-top-layer={shellChromeOverlayState.rightControlsTopLayer ? 'true' : undefined}
+            aria-label={rightSidebarToggleAriaLabel}
+            tooltip={rightSidebarToggleTooltip}
+            onClick={toggleAssistantSurface}
+          >
+            <span className='panel-toggle-icon' aria-hidden='true'>
+              <LayoutRightLine size={16} />
+            </span>
+          </AppTooltipButton>
+        )
+      })() : null}
 
       {isLeftSidebarVisible ? (
         <aside className='panel panel-sidebar'>
@@ -5685,12 +5707,14 @@ function App() {
             aria-label='Settings'
             className={`settings-modal p-0 m-0 relative ${resolvedTheme === 'dark' ? 'dark' : ''}`}
           >
-            <Modal.CloseTrigger
-              className='settings-modal-close'
-              aria-label='Close settings'
-            >
-              <Icon icon='lucide:x' width={16} height={16} />
-            </Modal.CloseTrigger>
+            <AppTooltip tooltip='关闭' triggerMode='context'>
+              <Modal.CloseTrigger
+                className='settings-modal-close'
+                aria-label='Close settings'
+              >
+                <Icon icon='lucide:x' width={16} height={16} />
+              </Modal.CloseTrigger>
+            </AppTooltip>
             <Modal.Body className='p-0 m-0'>
               <SettingsDialog
                 activeSection={settingsSection}

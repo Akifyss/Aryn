@@ -85,6 +85,27 @@ function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | un
   return { ...dominantChange, path: node.path } as GitDisplayChange
 }
 
+function getGitChangeTooltip(kind: GitDisplayChange['kind']) {
+  switch (kind) {
+    case 'added':
+      return '新增'
+    case 'copied':
+      return '复制'
+    case 'conflicted':
+      return '冲突'
+    case 'deleted':
+      return '删除'
+    case 'modified':
+      return '修改'
+    case 'renamed':
+      return '重命名'
+    case 'type-changed':
+      return '类型变更'
+    case 'untracked':
+      return '未跟踪'
+  }
+}
+
 function findGitDiffChangeByFilePath(repositoryState: GitRepositoryState | null | undefined, node: WorkspaceNode): GitChangeItem | null {
   if (!repositoryState?.isRepository || node.kind !== 'file') {
     return null
@@ -164,6 +185,7 @@ function FileRowActionMenu({
             aria-label='File actions'
             disabled={isSubmitting}
             render={<TreeItemActionButton />}
+            title='更多'
           >
             <More1Line size={16} />
           </Menu.Trigger>
@@ -480,7 +502,7 @@ function FileTreeItem({
     </>
   )
 
-  const changeTitle = gitChange ? gitChange.kind.charAt(0).toUpperCase() + gitChange.kind.slice(1) : undefined
+  const changeTitle = gitChange ? getGitChangeTooltip(gitChange.kind) : undefined
   const nodeIcon = (
     <WorkspaceFileIcon
       fileName={node.kind === 'file' ? node.name : undefined}
@@ -525,12 +547,16 @@ function FileTreeItem({
   const rowActions = isEditing ? (
     <>
       <TreeItemActionButton
+        aria-label='Confirm rename'
+        title='确认重命名'
         disabled={isSubmitting}
         onClick={() => void handleSubmitRename()}
       >
         <CheckLine size={16} />
       </TreeItemActionButton>
       <TreeItemActionButton
+        aria-label='Cancel rename'
+        title='取消重命名'
         onClick={() => {
           setDraftName(node.name)
           setIsEditing(false)

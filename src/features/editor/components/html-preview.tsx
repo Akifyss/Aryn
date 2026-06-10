@@ -65,7 +65,7 @@ export function HtmlPreview({
         referrerPolicy='no-referrer'
         sandbox={HTML_PREVIEW_IFRAME_SANDBOX}
         srcDoc={srcDoc}
-        title={`${filePath} preview`}
+        aria-label={`${filePath} preview`}
       />
     </div>
   )

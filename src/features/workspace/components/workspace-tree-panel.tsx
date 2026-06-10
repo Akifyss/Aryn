@@ -1,8 +1,7 @@
 import type { Dispatch, MouseEvent, ReactNode, SetStateAction } from 'react'
 import { Icon } from '@iconify/react'
 import { FolderForbidLine } from '@mingcute/react'
-import { AppTooltipButton } from '@/components/app-tooltip'
-import { TreeItem, TreeScrollArea } from '@/components/tree'
+import { TreeItem, TreeItemActionButton, TreeScrollArea } from '@/components/tree'
 import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
 import type { GitChangeItem, GitRepositoryState } from '@/features/git/types'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
@@ -77,40 +76,34 @@ export function WorkspaceTreePanel({
         label={title}
         actions={(
           <>
-            <AppTooltipButton
-              type='button'
-              className='tree-item-action'
-              onPress={onCreateFile}
-              isDisabled={!workspacePath || isCreatingFile}
+            <TreeItemActionButton
+              onClick={onCreateFile}
+              disabled={!workspacePath || isCreatingFile}
               aria-label='Create File'
-              tooltip='Create File'
+              title='新建文件'
             >
               <Icon icon='lucide:file-plus' width={16} height={16} />
-            </AppTooltipButton>
-            <AppTooltipButton
-              type='button'
-              className='tree-item-action'
-              onPress={onCreateDirectory}
-              isDisabled={!workspacePath || isCreatingDirectory}
+            </TreeItemActionButton>
+            <TreeItemActionButton
+              onClick={onCreateDirectory}
+              disabled={!workspacePath || isCreatingDirectory}
               aria-label='Create Folder'
-              tooltip='Create Folder'
+              title='新建文件夹'
             >
               <Icon icon='lucide:folder-plus' width={16} height={16} />
-            </AppTooltipButton>
-            <AppTooltipButton
-              type='button'
-              className='tree-item-action'
-              onPress={onToggleFileTreeExpansion}
-              isDisabled={!workspacePath || nodes.length === 0}
+            </TreeItemActionButton>
+            <TreeItemActionButton
+              onClick={onToggleFileTreeExpansion}
+              disabled={!workspacePath || nodes.length === 0}
               aria-label='Toggle Expansion'
-              tooltip={expandedPaths.size > 0 ? 'Collapse All' : 'Expand All'}
+              title={expandedPaths.size > 0 ? '全部折叠' : '全部展开'}
             >
               <Icon
                 icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'}
                 width={16}
                 height={16}
               />
-            </AppTooltipButton>
+            </TreeItemActionButton>
           </>
         )}
       />

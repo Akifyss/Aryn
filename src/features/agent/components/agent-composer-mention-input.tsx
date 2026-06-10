@@ -13,6 +13,7 @@ import {
 } from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import { AppTooltipButton } from '@/components/app-tooltip'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import type {
   ActiveComposerMentionQuery,
@@ -960,14 +961,13 @@ export function AgentComposerMentionInput({
                   const isActive = index === selectedIndex
 
                   return (
-                    <button
+                    <AppTooltipButton
                       key={item.id}
                       type='button'
                       role='option'
                       aria-selected={isActive}
                       data-active={isActive ? 'true' : 'false'}
                       className={`agent-composer-mention-option${isActive ? ' is-active' : ''}`}
-                      title={item.relativePath}
                       onMouseDown={(mouseEvent) => {
                         mouseEvent.preventDefault()
                         applyMentionSelection(index)
@@ -990,7 +990,7 @@ export function AgentComposerMentionInput({
                           <span className='agent-composer-mention-option-meta'>{item.displayPath}</span>
                         ) : null}
                       </span>
-                    </button>
+                    </AppTooltipButton>
                   )
                 }) : (
                   <div className='agent-composer-mention-empty'>No matching files or folders</div>

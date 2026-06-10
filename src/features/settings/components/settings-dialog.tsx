@@ -3,6 +3,7 @@ import { Select as BaseSelect } from '@base-ui/react/select'
 import { ScrollArea } from '@base-ui/react/scroll-area'
 import { Button, Input, Switch, Tabs } from '@heroui/react'
 import { Icon } from '@iconify/react'
+import { AppTooltipButton } from '@/components/app-tooltip'
 import {
   OpenAI,
   Claude,
@@ -1224,9 +1225,11 @@ export function SettingsDialog({
                                     value={draftValue}
                                     variant='secondary'
                                   />
-                                  <button
+                                  <AppTooltipButton
                                     type='button'
                                     disabled={isBusy}
+                                    aria-label={showPassword ? 'Hide API key' : 'Show API key'}
+                                    tooltip={showPassword ? '隐藏 API 密钥' : '显示 API 密钥'}
                                     onClick={() => setShowPasswords(prev => ({ ...prev, [provider.key]: !showPassword }))}
                                     className='absolute right-3 text-muted hover:text-foreground cursor-pointer transition-colors focus:outline-none flex items-center justify-center z-10'
                                   >
@@ -1234,7 +1237,7 @@ export function SettingsDialog({
                                       icon={showPassword ? 'mingcute:eye-line' : 'mingcute:eye-close-line'}
                                       className='w-4 h-4'
                                     />
-                                  </button>
+                                  </AppTooltipButton>
                                 </div>
                               </div>
                             )}

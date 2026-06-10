@@ -5,8 +5,14 @@
   --app-z-window-chrome: 30;
   --app-z-panel-toggle: 60;
   --app-z-window-controls: 70;
+  --app-z-tooltip: 1400;
   --app-menu-item-hover-background: var(--surface-secondary);
   --app-menu-item-active-background: var(--surface-tertiary);
+}
+
+.app-tooltip {
+  z-index: var(--app-z-tooltip);
+  pointer-events: none;
 }
 
 .app-shell {

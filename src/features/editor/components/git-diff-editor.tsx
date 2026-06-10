@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ComponentProps, type Rea
 import * as monaco from 'monaco-editor'
 import { AddLine, Back2Line } from '@mingcute/react'
 import { Icon } from '@iconify/react'
+import { AppTooltipButton } from '@/components/app-tooltip'
 import type { GitChangeItem, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
 import { getCodeLanguage } from '@/features/workspace/lib/file-types'
 import {
@@ -643,45 +644,45 @@ export function GitDiffEditor({
         <div className='git-diff-view-modes'>
           {diff.change.scope === 'unstaged' ? (
             <>
-              <button
+              <AppTooltipButton
                 type='button'
                 className='git-diff-view-mode git-diff-view-mode-icon-only'
                 aria-label='Discard'
-                title='Discard'
+                tooltip='放弃更改'
                 disabled={!areFileGitActionsEnabled}
                 onClick={() => {
                   onDiscardChange(diff.change)
                 }}
               >
                 <Back2Line size={16} />
-              </button>
-              <button
+              </AppTooltipButton>
+              <AppTooltipButton
                 type='button'
                 className='git-diff-view-mode git-diff-view-mode-icon-only'
                 aria-label='Stage'
-                title='Stage'
+                tooltip='暂存'
                 disabled={!areFileGitActionsEnabled}
                 onClick={() => {
                   onStageChange(diff.change)
                 }}
               >
                 <AddLine size={16} />
-              </button>
+              </AppTooltipButton>
             </>
           ) : (
             <>
-              <button
+              <AppTooltipButton
                 type='button'
                 className='git-diff-view-mode git-diff-view-mode-icon-only'
                 aria-label='Unstage'
-                title='Unstage'
+                tooltip='取消暂存'
                 disabled={!areFileGitActionsEnabled}
                 onClick={() => {
                   onUnstageChange(diff.change)
                 }}
               >
                 <Icon icon='mdi:minus' width={16} height={16} />
-              </button>
+              </AppTooltipButton>
             </>
           )}
         </div>

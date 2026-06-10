@@ -52,6 +52,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import spinners, { type BrailleSpinnerName } from 'unicode-animations'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import {
   TreeItemActionButton,
   TreeItemChildren,
@@ -248,7 +249,6 @@ type AgentFileCardProps = {
   meta?: string
   onActivate?: () => void
   onRemove?: () => void
-  title?: string
   trailing?: ReactNode
 }
 
@@ -1088,11 +1088,11 @@ function getMessageStatus(message: AgentSidebarMessage): AgentSidebarMessageStat
 function getToolStatusLabel(status: AgentSidebarMessageStatus) {
   switch (status) {
     case 'running':
-      return 'Running'
+      return '运行中'
     case 'error':
-      return 'Failed'
+      return '失败'
     default:
-      return 'Done'
+      return '完成'
   }
 }
 
@@ -1358,21 +1358,26 @@ function AgentMessageDisclosure({
         <>
           <div className='agent-message-disclosure-header'>
             <Disclosure.Heading className='agent-disclosure-heading'>
-              <Disclosure.Trigger className='agent-message-toggle'>
-                {getMessageDisclosureIcon(kind, title)}
-                <span className='agent-message-toggle-title'>{displayTitle}</span>
-                <span className='agent-message-toggle-trailing' title={status ? getToolStatusLabel(status) : undefined}>
-                  {statusIcon && !disclosureExpanded ? (
-                    <span className='agent-message-toggle-status-slot'>
-                      {statusIcon}
-                    </span>
-                  ) : null}
-                  <RightLine
-                    aria-hidden='true'
-                    className={`agent-message-toggle-arrow ${disclosureExpanded ? 'is-open' : ''} ${statusIcon && !disclosureExpanded ? 'has-status' : ''}`}
-                  />
-                </span>
-              </Disclosure.Trigger>
+              <AppTooltip
+                tooltip={status ? getToolStatusLabel(status) : undefined}
+                triggerMode='context'
+              >
+                <Disclosure.Trigger className='agent-message-toggle'>
+                  {getMessageDisclosureIcon(kind, title)}
+                  <span className='agent-message-toggle-title'>{displayTitle}</span>
+                  <span className='agent-message-toggle-trailing'>
+                    {statusIcon && !disclosureExpanded ? (
+                      <span className='agent-message-toggle-status-slot'>
+                        {statusIcon}
+                      </span>
+                    ) : null}
+                    <RightLine
+                      aria-hidden='true'
+                      className={`agent-message-toggle-arrow ${disclosureExpanded ? 'is-open' : ''} ${statusIcon && !disclosureExpanded ? 'has-status' : ''}`}
+                    />
+                  </span>
+                </Disclosure.Trigger>
+              </AppTooltip>
             </Disclosure.Heading>
             {label ? (
               <div className='agent-message-disclosure-meta'>
@@ -1413,7 +1418,6 @@ function AgentFileCard({
   meta,
   onActivate,
   onRemove,
-  title,
   trailing,
 }: AgentFileCardProps) {
   const isInteractive = Boolean(onActivate)
@@ -1438,13 +1442,12 @@ function AgentFileCard({
     onActivate?.()
   }
 
-  return (
+  const card = (
     <div
       aria-label={isInteractive ? ariaLabel : undefined}
       className={fileCardClassName}
       role={isInteractive ? 'button' : undefined}
       tabIndex={isInteractive ? 0 : undefined}
-      title={title ?? fileName}
       onClick={isInteractive ? handleActivate : undefined}
       onKeyDown={isInteractive ? handleKeyDown : undefined}
     >
@@ -1465,21 +1468,23 @@ function AgentFileCard({
       )}
       {trailing ? <span className='agent-file-card-trailing'>{trailing}</span> : null}
       {onRemove ? (
-        <button
+        <AppTooltipButton
           type='button'
           className='agent-file-card-remove'
           aria-label={`移除 ${fileName}`}
-          title='移除附件'
+          tooltip='移除附件'
           onClick={(event) => {
             event.stopPropagation()
             onRemove()
           }}
         >
           <CloseLine aria-hidden='true' size={10} />
-        </button>
+        </AppTooltipButton>
       ) : null}
     </div>
   )
+
+  return card
 }
 
 function AgentMessageFileCards({
@@ -1525,15 +1530,20 @@ function AgentMessageFileCards({
               fileName={label}
               iconTheme={iconTheme}
               onActivate={onActivate}
-              title={change.kind !== 'deleted' ? relativePath : `${relativePath} (deleted)`}
               trailing={<FileChangeStatusBadge className='agent-message-file-card-status' kind={getAgentFileChangeVisualKind(change.kind)} />}
             />
           )
         })}
         {hiddenCount > 0 ? (
-          <div className='agent-message-file-overflow-card' title={`${hiddenCount} more files`}>
-            <span className='agent-message-file-overflow-label'>+{hiddenCount}</span>
-          </div>
+          <AppTooltip
+            excludeFromTabOrder
+            tooltip={`还有 ${hiddenCount} 个文件`}
+            triggerRole='img'
+          >
+            <div className='agent-message-file-overflow-card'>
+              <span className='agent-message-file-overflow-label'>+{hiddenCount}</span>
+            </div>
+          </AppTooltip>
         ) : null}
       </div>
     </div>
@@ -1570,7 +1580,6 @@ function getAgentAttachmentFileCardProps({
     isMuted: attachment.status === 'omitted',
     meta,
     onRemove,
-    title: attachment.path ?? attachment.fileName,
   }
 }
 
@@ -2169,18 +2178,23 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
         {status.label}
       </span>
       {status.badges?.map((badge) => (
-        <span
+        <AppTooltip
+          excludeFromTabOrder
           key={`${badge.kind}:${badge.label}`}
-          className={`agent-session-status-badge agent-session-status-badge-${badge.kind}`}
-          aria-label={badge.title}
-          title={badge.title}
+          tooltip={badge.title}
+          triggerRole='status'
         >
-          <UnicodeSpinner
-            className='agent-session-status-badge-indicator'
-            name={badge.indicator.name}
-          />
-          <span className='agent-session-status-badge-label'>{badge.label}</span>
-        </span>
+          <span
+            className={`agent-session-status-badge agent-session-status-badge-${badge.kind}`}
+            aria-label={badge.title}
+          >
+            <UnicodeSpinner
+              className='agent-session-status-badge-indicator'
+              name={badge.indicator.name}
+            />
+            <span className='agent-session-status-badge-label'>{badge.label}</span>
+          </span>
+        </AppTooltip>
       ))}
     </article>
   )
@@ -2327,9 +2341,16 @@ function AgentQueuedComposerTray({
                   }}
                 />
               ) : (
-                <span className='agent-queued-text' title={message.text}>
-                  {message.text}
-                </span>
+                <AppTooltip
+                  excludeFromTabOrder
+                  tooltip={message.text}
+                  triggerClassName='agent-queued-text'
+                  triggerRole='note'
+                >
+                  <span>
+                    {message.text}
+                  </span>
+                </AppTooltip>
               )}
             </div>
 
@@ -2357,11 +2378,10 @@ function AgentQueuedComposerTray({
                 </>
               ) : (
                 <>
-                  <button
+                  <AppTooltipButton
                     type='button'
                     className='agent-queued-action is-text'
                     disabled={isUpdating}
-                    title={isFollowUp ? '改为引导当前运行' : '改为当前运行结束后执行'}
                     onClick={() => {
                       void runUpdate(message, {
                         action: 'move',
@@ -2373,13 +2393,13 @@ function AgentQueuedComposerTray({
                     }}
                   >
                     {isFollowUp ? '引导' : '排队'}
-                  </button>
-                  <button
+                  </AppTooltipButton>
+                  <AppTooltipButton
                     type='button'
                     className='agent-queued-action'
                     disabled={isUpdating}
                     aria-label='删除待处理消息'
-                    title='删除'
+                    tooltip='删除'
                     onClick={() => {
                       void runUpdate(message, {
                         action: 'delete',
@@ -2390,7 +2410,7 @@ function AgentQueuedComposerTray({
                     }}
                   >
                     <Delete2Line size={16} />
-                  </button>
+                  </AppTooltipButton>
                   <Menu.Root
                     modal={false}
                     open={isMenuOpen}
@@ -2414,8 +2434,7 @@ function AgentQueuedComposerTray({
                         className='agent-queued-action'
                         disabled={isUpdating}
                         aria-label='更多待处理消息操作'
-                        render={<button type='button' />}
-                        title='更多'
+                        render={<AppTooltipButton tooltip='更多' />}
                       >
                         <More1Line size={16} />
                       </Menu.Trigger>
@@ -4491,7 +4510,7 @@ function AgentSessionTreeRow({
   isRenaming,
   label,
   menuPortalTarget,
-  menuTitle = '对话菜单',
+  menuTitle = '更多',
   itemClassName,
   relativeTime,
   rowClassName,
@@ -4633,6 +4652,7 @@ function AgentSessionTreeRow({
     <>
       <TreeItemActionButton
         aria-label='Confirm rename'
+        title='确认重命名'
         disabled={isSubmitting}
         onClick={() => void handleSubmitRename()}
       >
@@ -4640,6 +4660,7 @@ function AgentSessionTreeRow({
       </TreeItemActionButton>
       <TreeItemActionButton
         aria-label='Cancel rename'
+        title='取消重命名'
         disabled={isSubmitting}
         onClick={onCancelRename}
       >
@@ -4802,7 +4823,7 @@ function AgentConversationRow({
       isRenaming={isRenaming}
       label={conversation.title}
       menuPortalTarget={menuPortalTarget}
-      menuTitle='对话菜单'
+      menuTitle='更多'
       itemClassName='agent-conversation-node'
       relativeTime={relativeTime}
       rowClassName='agent-conversation-row'
@@ -4971,19 +4992,18 @@ function AgentProjectTree({
   return (
     <div className={`agent-session-tree-shell agent-project-tree-shell${className ? ` ${className}` : ''}`}>
       {!isFloating ? (
-        <button
+        <AppTooltipButton
           type='button'
           className='agent-session-new-button'
           aria-label='Start new conversation'
           aria-keyshortcuts='Control+Alt+N'
-          title='新对话 Ctrl+Alt+N'
           onClick={() => {
             startPrimaryNewConversation()
           }}
         >
           <EditLine size={16} />
           <span>新对话</span>
-        </button>
+        </AppTooltipButton>
       ) : null}
 
       <TreeScrollArea
@@ -5066,7 +5086,7 @@ function AgentProjectTree({
               <>
                 <TreeItemActionButton
                   aria-label={`Start new conversation in ${project.name}`}
-                  title='Start new conversation'
+                  title='新建对话'
                   onClick={() => {
                     setRenamingConversationId(null)
                     void onStartProjectSession?.(project)
@@ -5079,7 +5099,7 @@ function AgentProjectTree({
                   <Menu.Trigger
                     aria-label={`Open ${project.name} menu`}
                     render={<TreeItemActionButton />}
-                    title='Project menu'
+                    title='更多'
                   >
                     <More1Line size={16} />
                   </Menu.Trigger>
@@ -5260,7 +5280,7 @@ function AgentProjectSwitchTrigger({
   const isEnabled = Boolean(onOpenProjectSwitchMenu && (activeProject || placeholder))
 
   return (
-    <button
+    <AppTooltipButton
       type='button'
       className={[
         'agent-project-switch-trigger',
@@ -5268,7 +5288,6 @@ function AgentProjectSwitchTrigger({
       ].filter(Boolean).join(' ')}
       disabled={!isEnabled}
       aria-label={activeProject ? `切换项目，当前项目：${activeProject.name}` : label}
-      title={activeProject ? `当前项目：${activeProject.name}` : label}
       onClick={(event) => {
         onOpenProjectSwitchMenu?.(event.currentTarget.getBoundingClientRect(), { startNewSession: true })
       }}
@@ -5281,7 +5300,7 @@ function AgentProjectSwitchTrigger({
       />
       <span className='agent-project-switch-trigger-label'>{label}</span>
       <DownLine aria-hidden='true' size={14} />
-    </button>
+    </AppTooltipButton>
   )
 }
 
@@ -6190,7 +6209,7 @@ function AgentChatSurface() {
       <div className='agent-composer-actions'>
         <div className='agent-model-field'>
           {hasConfiguredProviders ? (
-            <button
+            <AppTooltipButton
               ref={modelPickerTriggerRef}
               type='button'
               aria-expanded={activeComposerMenu === 'model-cascader'}
@@ -6204,7 +6223,6 @@ function AgentChatSurface() {
                 || isSwitchingModel
                 || isSwitchingThinkingLevel
               }
-              title={modelPickerTriggerTitle}
               onClick={openModelCascader}
               onPointerMove={(event) => {
                 if (activeComposerMenu === 'model-cascader') {
@@ -6221,7 +6239,7 @@ function AgentChatSurface() {
                   </span>
                 </>
               ) : null}
-            </button>
+            </AppTooltipButton>
           ) : (
             <Button
               className='agent-provider-setup-button'
@@ -6238,20 +6256,20 @@ function AgentChatSurface() {
         </div>
 
         <div className='agent-composer-right-actions'>
-          <button
+          <AppTooltipButton
             type='button'
             aria-label='附加文件'
             className='agent-composer-attach-button'
             disabled={(!workspacePath && !canUseComposerWithoutWorkspace) || isLoading}
-            title='附加文件'
+            tooltip='附加文件'
             onClick={() => {
               void handlePickComposerAttachments()
             }}
           >
             <AttachmentLine aria-hidden='true' size={16} />
-          </button>
+          </AppTooltipButton>
 
-          <span title={composerActionTitle}>
+          <AppTooltip tooltip={composerActionTitle} triggerMode='context'>
             <Button
               isIconOnly
               aria-label={composerAction === 'stop' ? '停止当前运行' : '发送消息'}
@@ -6267,7 +6285,7 @@ function AgentChatSurface() {
                 <ArrowUpLine size={16} />
               )}
             </Button>
-          </span>
+          </AppTooltip>
         </div>
       </div>
 
@@ -6296,11 +6314,11 @@ function AgentChatSurface() {
               onKeyDown={handleModelPickerSearchKeyDown}
             />
             {modelPickerQuery ? (
-              <button
+              <AppTooltipButton
                 type='button'
                 className='agent-model-cascader-search-clear'
                 aria-label='Clear model search'
-                title='Clear search'
+                tooltip='清除搜索'
                 onPointerDown={(event) => {
                   event.preventDefault()
                 }}
@@ -6312,7 +6330,7 @@ function AgentChatSurface() {
                 }}
               >
                 <CloseLine aria-hidden='true' size={14} />
-              </button>
+              </AppTooltipButton>
             ) : null}
           </div>
 
@@ -6518,11 +6536,12 @@ function AgentChatSurface() {
   )
 
   const threadbarNewButton = !isNewConversation ? (
-    <button
+    <AppTooltipButton
       type='button'
       disabled={!workspacePath}
       className='agent-toolbar-button agent-threadbar-new-button'
       aria-label='Start new conversation'
+      tooltip='新对话'
       onClick={() => {
         if (activeWorkspaceContext.kind === 'project') {
           handleStartNewSession()
@@ -6533,7 +6552,7 @@ function AgentChatSurface() {
       }}
     >
       <EditLine size={16} />
-    </button>
+    </AppTooltipButton>
   ) : null
 
   return (

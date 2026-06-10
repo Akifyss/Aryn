@@ -1,6 +1,7 @@
 import { type DragEvent as ReactDragEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { CloseLine, FolderLine, GitBranchLine, GitCompareLine } from '@mingcute/react'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
+import { AppTooltipButton } from '@/components/app-tooltip'
 import {
   reorderWorkspaceTabs,
   type TabDropPosition,
@@ -88,20 +89,6 @@ function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab,
 
 function isReorderableTab(tab: WorkspaceDisplayTab): tab is WorkspaceTab {
   return tab.kind !== 'fixed-panel'
-}
-
-function getTabTitle(tab: WorkspaceDisplayTab) {
-  if (tab.kind === 'fixed-panel') {
-    return tab.fixedTabKind === 'file-panel' ? '文件' : '更改'
-  }
-
-  const titleParts = [
-    tab.kind === 'diff' ? tab.diff.change.path : tab.filePath,
-    !tab.exists ? 'Missing from workspace. Save to recreate it.' : null,
-    tab.isDirty ? 'Unsaved changes' : null,
-  ]
-
-  return titleParts.filter(Boolean).join('\n')
 }
 
 function resolveDropPosition(event: ReactDragEvent<HTMLElement>, element: HTMLElement): TabDropPosition {
@@ -419,7 +406,6 @@ export function FileTabs({
           const metaLabel = getTabMetaLabel(workspacePath, tab, duplicateNameSet.has(baseName))
           const isActive = activeTabId === tab.id
           const isPinned = tab.kind === 'fixed-panel'
-          const title = getTabTitle(tab)
 
           return (
             <div
@@ -432,7 +418,7 @@ export function FileTabs({
               data-reorderable={isReorderableTab(tab) ? 'true' : 'false'}
               data-tab-id={tab.id}
             >
-              <button
+              <AppTooltipButton
                 ref={(element) => {
                   tabRefs.current[tab.id] = element
                 }}
@@ -443,7 +429,6 @@ export function FileTabs({
                 aria-controls='editor-content-panel'
                 aria-grabbed={draggingTabId === tab.id}
                 className='file-tab-trigger'
-                title={title}
                 onClick={() => {
                   onActivate(tab.id)
                 }}
@@ -513,14 +498,15 @@ export function FileTabs({
                 ) : null}
                 <span className='file-tab-label'>{baseName}</span>
                 {metaLabel ? <span className='file-tab-meta'>{metaLabel}</span> : null}
-              </button>
+              </AppTooltipButton>
 
               {!isPinned ? (
                 <div className='file-tab-actions'>
-                  <button
+                  <AppTooltipButton
                     type='button'
                     className='file-tab-close'
                     aria-label={`Close ${baseName}`}
+                    tooltip='关闭'
                     onClick={(event) => {
                       event.stopPropagation()
                       onClose(tab.id)
@@ -528,7 +514,7 @@ export function FileTabs({
                   >
                     <span className='file-tab-dirty-indicator' aria-hidden='true' />
                     <CloseLine size={16} />
-                  </button>
+                  </AppTooltipButton>
                 </div>
               ) : null}
             </div>
@@ -594,17 +580,17 @@ export function FileTabs({
       {(canOpenActiveDiff || actions) ? (
         <div className='file-tabs-actions'>
           {canOpenActiveDiff && activeFileTab ? (
-            <button
+            <AppTooltipButton
               type='button'
               className='file-tabs-toolbar-button'
               aria-label={`Open diff for ${getBaseName(activeFileTab)}`}
-              title='Open Git diff'
+              tooltip='查看 Git 差异'
               onClick={() => {
                 onOpenDiff?.(activeFileTab.filePath)
               }}
             >
               <GitCompareLine size={16} />
-            </button>
+            </AppTooltipButton>
           ) : null}
           {actions}
         </div>

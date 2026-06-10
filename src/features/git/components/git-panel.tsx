@@ -27,6 +27,7 @@ import {
   TreeList,
   TreeScrollArea,
 } from '@/components/tree'
+import { AppTooltipButton } from '@/components/app-tooltip'
 import type {
   GitChangeItem,
   GitPanelLayout,
@@ -705,8 +706,7 @@ function GitCommitActionMenu({
         aria-label='打开提交菜单'
         className={`git-commit-menu-trigger${isMenuOpen ? ' is-open' : ''}`}
         disabled={menuDisabled}
-        render={<button type='button' />}
-        title='提交选项'
+        render={<AppTooltipButton tooltip='提交选项' />}
       >
         <DownLine size={12} />
       </Menu.Trigger>
@@ -920,17 +920,16 @@ export function GitPanel({
                   </ScrollArea.Scrollbar>
                 </ScrollArea.Root>
                 <div className='git-commit-actions' role='group' aria-label='提交操作'>
-                  <button
+                  <AppTooltipButton
                     type='button'
                     className='git-commit-submit-button'
                     aria-label='提交'
-                    title='提交'
                     disabled={!canSubmitCommit || Boolean(busyLabel)}
                     onClick={onCommit}
                   >
                     <CheckLine size={16} />
                     <span>提交</span>
-                  </button>
+                  </AppTooltipButton>
                   <GitCommitActionMenu
                     canSubmitCommit={canSubmitCommit}
                     isBusy={Boolean(busyLabel)}
@@ -961,39 +960,36 @@ export function GitPanel({
             <span className='git-empty-subtext'>{cleanStateSubtext}</span>
             <div className='git-clean-actions'>
               {hasUnpushedCommits ? (
-                <button
+                <AppTooltipButton
                   type='button'
                   className='git-clean-action'
-                  title={syncDisabledReason ?? pushAccessibleLabel}
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPush}
                 >
                   <ArrowUpLine size={16} />
                   <span>推送</span>
-                </button>
+                </AppTooltipButton>
               ) : null}
               {repositoryState.behind > 0 ? (
-                <button
+                <AppTooltipButton
                   type='button'
                   className='git-clean-action'
-                  title={syncDisabledReason ?? '拉取'}
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPull}
                 >
                   <ArrowDownLine size={16} />
                   <span>拉取</span>
-                </button>
+                </AppTooltipButton>
               ) : null}
-              <button
+              <AppTooltipButton
                 type='button'
                 className='git-clean-action'
-                title='刷新'
                 disabled={Boolean(busyLabel)}
                 onClick={onRefresh}
               >
                 <Refresh2Line size={16} />
                 <span>刷新</span>
-              </button>
+              </AppTooltipButton>
             </div>
           </div>
         ) : (
