@@ -5,8 +5,12 @@ export const RIGHT_DRAWER_MAX_WIDTH = 420
 export type LayoutMode = 'full' | 'compact' | 'focus'
 export type ShellPlatform = 'macos' | 'windows'
 
+const RIGHT_PANEL_TOGGLE_ANCHOR =
+  'calc(var(--right-window-controls-width) + var(--right-chrome-edge-gap))'
 const RIGHT_PANEL_CONTENT_INSET =
   'calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap))'
+const RIGHT_WINDOW_CONTROLS_WIDTH =
+  'calc(var(--window-control-button-width) * var(--window-control-button-count))'
 
 const SHELL_CHROME_VARS = {
   macos: {
@@ -16,9 +20,13 @@ const SHELL_CHROME_VARS = {
     '--left-chrome-action-gap': '2px',
     '--left-chrome-content-gap': '2px',
     '--left-chrome-edge-gap': '6px',
+    '--right-chrome-edge-gap': '6px',
+    '--window-control-button-width': '48px',
+    '--window-control-button-count': '0',
+    '--right-window-controls-width': RIGHT_WINDOW_CONTROLS_WIDTH,
     '--layout-mode-switch-width': '62px',
     '--left-panel-toggle-anchor': '84px',
-    '--right-panel-toggle-anchor': '6px',
+    '--right-panel-toggle-anchor': RIGHT_PANEL_TOGGLE_ANCHOR,
     '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
     '--right-panel-content-inset': RIGHT_PANEL_CONTENT_INSET,
     '--sidebar-icon-x': '20px',
@@ -30,9 +38,13 @@ const SHELL_CHROME_VARS = {
     '--left-chrome-action-gap': '2px',
     '--left-chrome-content-gap': '2px',
     '--left-chrome-edge-gap': '6px',
+    '--right-chrome-edge-gap': '6px',
+    '--window-control-button-width': '48px',
+    '--window-control-button-count': '3',
+    '--right-window-controls-width': RIGHT_WINDOW_CONTROLS_WIDTH,
     '--layout-mode-switch-width': '62px',
     '--left-panel-toggle-anchor': '6px',
-    '--right-panel-toggle-anchor': '150px',
+    '--right-panel-toggle-anchor': RIGHT_PANEL_TOGGLE_ANCHOR,
     '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
     '--right-panel-content-inset': RIGHT_PANEL_CONTENT_INSET,
     '--sidebar-icon-x': '20px',

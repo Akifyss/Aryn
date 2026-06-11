@@ -12,8 +12,33 @@ import {
 describe('shell layout helpers', () => {
   const leftPanelContentInset =
     'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))'
+  const rightPanelToggleAnchor =
+    'calc(var(--right-window-controls-width) + var(--right-chrome-edge-gap))'
   const rightPanelContentInset =
     'calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap))'
+  const rightWindowControlsWidth =
+    'calc(var(--window-control-button-width) * var(--window-control-button-count))'
+
+  function px(vars: Record<string, string>, name: string) {
+    const value = vars[name]
+
+    if (!value?.endsWith('px')) {
+      throw new Error(`Expected ${name} to be a px token, received ${value}`)
+    }
+
+    return Number.parseFloat(value)
+  }
+
+  function rightPanelToggleAnchorPx(vars: Record<string, string>) {
+    return (px(vars, '--window-control-button-width') * Number(vars['--window-control-button-count']))
+      + px(vars, '--right-chrome-edge-gap')
+  }
+
+  function rightPanelContentInsetPx(vars: Record<string, string>) {
+    return rightPanelToggleAnchorPx(vars)
+      + px(vars, '--panel-toggle-size')
+      + px(vars, '--panel-toggle-gap')
+  }
 
   it('derives the expected three layout modes from shell width', () => {
     expect(deriveLayoutMode(FULL_LAYOUT_BREAKPOINT + 1)).toBe('full')
@@ -31,28 +56,48 @@ describe('shell layout helpers', () => {
 
   it('returns stable chrome safe-area variables for each supported platform', () => {
     expect(getShellChromeVars('macos')).toMatchObject({
+      '--panel-toggle-size': '32px',
       '--left-chrome-action-gap': '2px',
       '--left-chrome-content-gap': '2px',
       '--left-chrome-edge-gap': '6px',
+      '--right-chrome-edge-gap': '6px',
+      '--window-control-button-width': '48px',
+      '--window-control-button-count': '0',
+      '--right-window-controls-width': rightWindowControlsWidth,
       '--panel-toggle-gap': '2px',
       '--layout-mode-switch-width': '62px',
       '--left-panel-toggle-anchor': '84px',
-      '--right-panel-toggle-anchor': '6px',
+      '--right-panel-toggle-anchor': rightPanelToggleAnchor,
       '--left-panel-content-inset': leftPanelContentInset,
       '--right-panel-content-inset': rightPanelContentInset,
     })
 
     expect(getShellChromeVars('windows')).toMatchObject({
+      '--panel-toggle-size': '32px',
       '--left-chrome-action-gap': '2px',
       '--left-chrome-content-gap': '2px',
       '--left-chrome-edge-gap': '6px',
+      '--right-chrome-edge-gap': '6px',
+      '--window-control-button-width': '48px',
+      '--window-control-button-count': '3',
+      '--right-window-controls-width': rightWindowControlsWidth,
       '--panel-toggle-gap': '2px',
       '--layout-mode-switch-width': '62px',
       '--left-panel-toggle-anchor': '6px',
-      '--right-panel-toggle-anchor': '150px',
+      '--right-panel-toggle-anchor': rightPanelToggleAnchor,
       '--left-panel-content-inset': leftPanelContentInset,
       '--right-panel-content-inset': rightPanelContentInset,
     })
+  })
+
+  it('derives right chrome safe-area widths from button count and edge gaps', () => {
+    const macosVars = getShellChromeVars('macos')
+    const windowsVars = getShellChromeVars('windows')
+
+    expect(rightPanelToggleAnchorPx(macosVars)).toBe(6)
+    expect(rightPanelContentInsetPx(macosVars)).toBe(40)
+    expect(rightPanelToggleAnchorPx(windowsVars)).toBe(150)
+    expect(rightPanelContentInsetPx(windowsVars)).toBe(184)
   })
 
   it('scopes file tab action padding to expanded editor sidebars', async () => {
@@ -66,7 +111,10 @@ describe('shell layout helpers', () => {
     expect(appCss).toContain(`.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-actions {
   padding: 0 6px 0 0;
 }`)
+    expect(appCss).toContain('--right-window-controls-width: calc(var(--window-control-button-width) * var(--window-control-button-count));')
+    expect(appCss).toContain('--right-panel-toggle-anchor: calc(var(--right-window-controls-width) + var(--right-chrome-edge-gap));')
     expect(appCss).toContain('--right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));')
+    expect(appCss).toContain('width: var(--window-control-button-width);')
   })
 
   it('keeps macOS fullscreen chrome aligned with the screen edge', () => {
