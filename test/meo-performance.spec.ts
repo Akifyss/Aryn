@@ -216,15 +216,140 @@ describe('meo performance guards', () => {
     const inactiveLine = state.doc.line(1)
     const touchesLine = (range: { from: number; to: number }, line: { from: number; to: number }) =>
       range.to > line.from && range.from < line.to
-    const isInlineDecoration = (range: { isLine: boolean }) => !range.isLine
+    const isFilteredInlineDecoration = (range: { isLine: boolean; isLiveListLayout: boolean }) =>
+      !range.isLine && !range.isLiveListLayout
 
     const liveDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(state)
     const liveSyntaxDecorations = __meoLiveModeTestHooks.collectLiveSyntaxHighlightDebugRanges(state)
 
-    expect(liveDecorations.some((range) => isInlineDecoration(range) && touchesLine(range, inactiveLine))).toBe(true)
-    expect(liveDecorations.some((range) => isInlineDecoration(range) && touchesLine(range, activeLine))).toBe(false)
+    expect(liveDecorations.some((range) => isFilteredInlineDecoration(range) && touchesLine(range, inactiveLine))).toBe(true)
+    expect(liveDecorations.some((range) => isFilteredInlineDecoration(range) && touchesLine(range, activeLine))).toBe(false)
     expect(liveSyntaxDecorations.some((range) => touchesLine(range, inactiveLine))).toBe(true)
     expect(liveSyntaxDecorations.some((range) => touchesLine(range, activeLine))).toBe(false)
+  })
+
+  it('keeps list layout replacements when editing live list content', () => {
+    const doc = '  - active list item with _editable emphasis_'
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: doc.length },
+      extensions: liveModeExtensions(),
+    })
+    const line = state.doc.line(1)
+
+    const liveDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(state)
+
+    expect(liveDecorations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        from: line.from,
+        to: line.from + 2,
+        hasWidget: true,
+        isReplace: true,
+      }),
+      expect.objectContaining({
+        from: line.from + 2,
+        to: line.from + 3,
+        hasWidget: true,
+        isReplace: true,
+      }),
+    ]))
+    expect(liveDecorations.some((range) => range.className.includes('meo-md-em'))).toBe(false)
+
+    const taskDoc = '- [ ] active task item'
+    const taskState = EditorState.create({
+      doc: taskDoc,
+      selection: { anchor: taskDoc.length },
+      extensions: liveModeExtensions(),
+    })
+    const taskDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(taskState)
+    expect(taskDecorations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        from: 0,
+        to: 5,
+        hasWidget: true,
+        isReplace: true,
+      }),
+    ]))
+
+    const contentStartDoc = '1. active ordered item'
+    const contentStartState = EditorState.create({
+      doc: contentStartDoc,
+      selection: { anchor: 3 },
+      extensions: liveModeExtensions(),
+    })
+    const contentStartDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(contentStartState)
+    expect(contentStartDecorations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        from: 0,
+        to: 2,
+        hasWidget: true,
+        isReplace: true,
+      }),
+    ]))
+  })
+
+  it('removes list layout replacements when editing the live list prefix', () => {
+    const doc = '  - active list item'
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: 0 },
+      extensions: liveModeExtensions(),
+    })
+
+    const liveDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(state)
+
+    expect(liveDecorations.some((range) => range.hasWidget && range.isReplace)).toBe(false)
+
+    const insidePrefixState = EditorState.create({
+      doc,
+      selection: { anchor: 3 },
+      extensions: liveModeExtensions(),
+    })
+    const insidePrefixDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(insidePrefixState)
+    expect(insidePrefixDecorations.some((range) => range.hasWidget && range.isReplace)).toBe(false)
+
+    const selectedState = EditorState.create({
+      doc,
+      selection: { anchor: doc.length, head: 0 },
+      extensions: liveModeExtensions(),
+    })
+    const selectedDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(selectedState)
+    expect(selectedDecorations.some((range) => range.hasWidget && range.isReplace)).toBe(false)
+  })
+
+  it('keeps active list layout replacements stable throughout IME composition', () => {
+    const doc = '  - active list item'
+    let state = EditorState.create({
+      doc,
+      selection: { anchor: doc.length },
+      extensions: liveModeExtensions(),
+    })
+    const layoutReplacements = () => (
+      __meoLiveModeTestHooks.collectLiveDecorationFieldDebugRanges(state)
+        .filter((range) => range.hasWidget && range.isReplace)
+        .map(({ from, to }) => ({ from, to }))
+    )
+
+    expect(layoutReplacements()).toEqual([
+      { from: 0, to: 2 },
+      { from: 2, to: 3 },
+    ])
+
+    state = state.update({
+      effects: setLiveCompositionActiveEffect.of(true),
+      annotations: Transaction.addToHistory.of(false),
+    }).state
+    const compositionTransaction = state.update({
+      changes: { from: state.doc.length, insert: 'ime' },
+      annotations: Transaction.userEvent.of('input.type.compose'),
+    })
+    state = compositionTransaction.state
+
+    expect(shouldRefreshLiveDecorationsForTransaction(compositionTransaction)).toBe(false)
+    expect(layoutReplacements()).toEqual([
+      { from: 0, to: 2 },
+      { from: 2, to: 3 },
+    ])
   })
 
   it('filters external inline decorations from the live source-like active line', () => {

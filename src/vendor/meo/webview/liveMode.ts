@@ -34,6 +34,7 @@ import {
   addListMarkerDecoration,
   listMarkerData,
   detectListIndentStylesByLine,
+  liveListLayoutDecorationSpec,
   nextOrderedSequenceNumber
 } from './helpers/listMarkers';
 import { addTableDecorations, addTableDecorationsForLineRange, isTableDelimiterLine, parseTableInfo } from './helpers/tables';
@@ -1270,7 +1271,8 @@ function pointTouchesActiveLine(state: EditorState, pos: number, activeLines: Se
 }
 
 // CodeMirror does not expose a public discriminator for line decorations.
-// Keep line-level classes while removing marks/widgets/replacements from the editable source line.
+// Keep line-level classes while filtering inline decorations from the editable
+// source line. Layout-critical list replacements are handled separately below.
 function isLineDecoration(value): boolean {
   return value.widget == null
     && value.point === true
@@ -1278,13 +1280,41 @@ function isLineDecoration(value): boolean {
     && value.startSide === value.endSide;
 }
 
+function selectionTouchesListPrefix(state: EditorState, line, contentFrom: number): boolean {
+  return state.selection.ranges.some((range) => {
+    const from = Math.min(range.from, range.to);
+    const to = Math.max(range.from, range.to);
+    if (range.empty) {
+      return from >= line.from && from < contentFrom;
+    }
+    return from < contentFrom && to > line.from;
+  });
+}
+
+function shouldPreserveListLayoutDecoration(state: EditorState, from: number, value): boolean {
+  if (value.spec?.isMeoLiveListLayoutDecoration !== true) {
+    return false;
+  }
+
+  // Keep wrapping stable while editing list content, but expose a source-like
+  // prefix when the cursor or selection reaches syntax the user may edit.
+  const line = state.doc.lineAt(from);
+  const marker = listMarkerData(state.doc.sliceString(line.from, line.to));
+  if (!marker) {
+    return false;
+  }
+
+  return !selectionTouchesListPrefix(state, line, line.from + marker.toOffset);
+}
+
 function decorationTouchesSourceLikeLine(state: EditorState, from: number, to: number, value, sourceLikeLines: Set<number>): boolean {
   if (!sourceLikeLines.size || isLineDecoration(value)) {
     return false;
   }
-  return to > from
+  const touchesSourceLikeLine = to > from
     ? rangeTouchesActiveLine(state, from, to, sourceLikeLines)
     : pointTouchesActiveLine(state, from, sourceLikeLines);
+  return touchesSourceLikeLine && !shouldPreserveListLayoutDecoration(state, from, value);
 }
 
 function filterDecorationsForSourceLikeLines(state: EditorState, decorations, sourceLikeLines: Set<number>) {
@@ -1526,7 +1556,8 @@ function addListLineDecorations(builder, state, indentSelectedLines, frontmatter
       builder.push(
         Decoration.replace({
           widget: listIndentWidget(marker.indentColumns ?? 0),
-          inclusive: false
+          inclusive: false,
+          ...liveListLayoutDecorationSpec
         }).range(line.from, line.from + marker.fromOffset)
       );
     }
@@ -2837,6 +2868,7 @@ function collectDecorationDebugRanges(state, decorations) {
       to,
       className: value.spec?.class ?? '',
       isLine: isLineDecoration(value),
+      isLiveListLayout: value.spec?.isMeoLiveListLayoutDecoration === true,
       hasWidget: Boolean(value.widget),
       estimatedHeight: value.widget?.estimatedHeight ?? null,
       isReplace: Boolean(value.isReplace)
@@ -2848,6 +2880,9 @@ function collectDecorationDebugRanges(state, decorations) {
 export const __meoLiveModeTestHooks = {
   collectLiveDecorationDebugRanges(state) {
     return collectDecorationDebugRanges(state, buildDecorations(state));
+  },
+  collectLiveDecorationFieldDebugRanges(state) {
+    return collectDecorationDebugRanges(state, state.field(liveDecorationField));
   },
   collectStructuralMarkdownLineDecorationDebugRanges(state) {
     return collectDecorationDebugRanges(state, buildStructuralMarkdownLineDecorations(state));

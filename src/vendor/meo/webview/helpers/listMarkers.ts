@@ -31,6 +31,10 @@ const sourceListMarkerDeco = Decoration.mark({ class: 'meo-md-list-prefix' });
 const sourceTaskBracketDeco = Decoration.mark({ class: 'meo-md-task-bracket' });
 const taskCompleteDeco = Decoration.mark({ class: 'meo-task-complete' });
 const taskDroppedDeco = Decoration.mark({ class: 'meo-task-dropped' });
+// These replacements define the visual prefix width used by the live list
+// line's hanging indent. The active-line filter may preserve them while the
+// selection stays outside the editable list prefix.
+export const liveListLayoutDecorationSpec = { isMeoLiveListLayoutDecoration: true };
 const listItemRegex = /^(\s*)(?:[-+*]|\d+[.)])(?:\s+|$)/;
 const listMarkerRegex = /^(\s*)(?:([-+*])|(\d+)([.)]))(?:\s+(?:\[([ xX~\-])\]\s+)?|$)/;
 const TWO_SPACE_INDENT = '  ';
@@ -532,7 +536,8 @@ export function addListMarkerDecoration(
     builder.push(
       Decoration.replace({
         widget: new CheckboxWidget(taskStatus, bracketStart),
-        inclusive: false
+        inclusive: false,
+        ...liveListLayoutDecorationSpec
       }).range(indentEnd, fullEnd)
     );
 
@@ -546,7 +551,8 @@ export function addListMarkerDecoration(
     builder.push(
       Decoration.replace({
         widget: new ListMarkerWidget(marker.markerText, marker.classes),
-        inclusive: false
+        inclusive: false,
+        ...liveListLayoutDecorationSpec
       }).range(indentEnd, markerEnd)
     );
   }
