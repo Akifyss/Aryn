@@ -28,6 +28,14 @@ type DragTarget = {
   targetId: string
 }
 
+type FileTabLabelTooltip = {
+  tabId: string
+  text: string
+}
+
+const FILE_TAB_LABEL_TOOLTIP_DELAY = 500
+const FILE_TAB_TEXT_OVERFLOW_EPSILON = 1
+
 function getBaseName(tab: WorkspaceDisplayTab) {
   if (tab.kind === 'fixed-panel') {
     return tab.fixedTabKind === 'file-panel' ? '文件' : '更改'
@@ -91,6 +99,19 @@ function isReorderableTab(tab: WorkspaceDisplayTab): tab is WorkspaceTab {
   return tab.kind !== 'fixed-panel'
 }
 
+function getFileTabLabelOverflowTooltip(element: HTMLElement) {
+  const labelElement = element.querySelector<HTMLElement>('.file-tab-label')
+  const label = labelElement?.textContent?.trim()
+
+  if (!labelElement || !label) {
+    return null
+  }
+
+  return labelElement.scrollWidth > labelElement.clientWidth + FILE_TAB_TEXT_OVERFLOW_EPSILON
+    ? label
+    : null
+}
+
 function resolveDropPosition(event: ReactDragEvent<HTMLElement>, element: HTMLElement): TabDropPosition {
   const { left, width } = element.getBoundingClientRect()
   return event.clientX < left + width / 2 ? 'before' : 'after'
@@ -113,8 +134,10 @@ export function FileTabs({
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const tabContainerRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
+  const labelTooltipTimerRef = useRef<number | null>(null)
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null)
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null)
+  const [labelTooltip, setLabelTooltip] = useState<FileTabLabelTooltip | null>(null)
   const reorderableTabs = useMemo(
     () => tabs.filter(isReorderableTab),
     [tabs],
@@ -169,8 +192,15 @@ export function FileTabs({
   }, [dragTarget, draggingTabId, reorderableTabs])
 
   useEffect(() => () => {
+    clearLabelTooltipTimer()
     cleanupDragPreview()
   }, [])
+
+  useEffect(() => {
+    if (labelTooltip && !tabs.some((tab) => tab.id === labelTooltip.tabId)) {
+      setLabelTooltip(null)
+    }
+  }, [labelTooltip, tabs])
 
   function focusTabAtIndex(index: number) {
     const nextTab = tabs[index]
@@ -230,6 +260,29 @@ export function FileTabs({
     }
 
     return null
+  }
+
+  function clearLabelTooltipTimer() {
+    if (labelTooltipTimerRef.current !== null) {
+      window.clearTimeout(labelTooltipTimerRef.current)
+      labelTooltipTimerRef.current = null
+    }
+  }
+
+  function closeLabelTooltip() {
+    clearLabelTooltipTimer()
+    setLabelTooltip(null)
+  }
+
+  function scheduleLabelTooltip(tabId: string, element: HTMLElement) {
+    clearLabelTooltipTimer()
+
+    labelTooltipTimerRef.current = window.setTimeout(() => {
+      labelTooltipTimerRef.current = null
+      const nextTooltip = getFileTabLabelOverflowTooltip(element)
+
+      setLabelTooltip(nextTooltip ? { tabId, text: nextTooltip } : null)
+    }, FILE_TAB_LABEL_TOOLTIP_DELAY)
   }
 
   function autoScrollDuringDrag(clientX: number) {
@@ -429,15 +482,26 @@ export function FileTabs({
                 aria-controls='editor-content-panel'
                 aria-grabbed={draggingTabId === tab.id}
                 className='file-tab-trigger'
+                isTooltipOpen={labelTooltip?.tabId === tab.id}
+                tooltip={labelTooltip?.tabId === tab.id ? labelTooltip.text : baseName}
                 onClick={() => {
                   onActivate(tab.id)
                 }}
+                onPointerEnter={(event) => {
+                  scheduleLabelTooltip(tab.id, event.currentTarget)
+                }}
+                onPointerLeave={closeLabelTooltip}
+                onFocus={(event) => {
+                  scheduleLabelTooltip(tab.id, event.currentTarget)
+                }}
+                onBlur={closeLabelTooltip}
                 onDragStart={(event) => {
                   if (!isReorderableTab(tab)) {
                     event.preventDefault()
                     return
                   }
 
+                  closeLabelTooltip()
                   setDraggingTabId(tab.id)
                   setDragTarget(null)
                   event.dataTransfer.effectAllowed = 'move'
