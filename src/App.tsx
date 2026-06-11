@@ -1048,17 +1048,8 @@ function App() {
     ))
   }, [projectMenuSearch, projectState.projects])
   const shellPlatform: ShellPlatform = deriveShellPlatform(platform)
-  const baseShellChromeVars = getShellChromeVars(shellPlatform, { isFullScreen: isWindowFullScreen })
+  const shellChromeVars = getShellChromeVars(shellPlatform, { isFullScreen: isWindowFullScreen }) as CSSProperties
   const shouldExposeAgentWorkspaceTools = !isAgentLayout || hasWorkspaceFileContent
-  const shellChromeVars = {
-    ...baseShellChromeVars,
-    ...(isAgentLayout && shouldExposeAgentWorkspaceTools
-      ? {
-          '--right-panel-content-inset':
-            'calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap))',
-        }
-      : null),
-  } as CSSProperties
   const layoutMode: LayoutMode = deriveLayoutMode(shellWidth)
   const isLeftSidebarDrawer = layoutMode !== 'full'
   const isRightSidebarDrawer = !isAgentLayout && layoutMode === 'focus'

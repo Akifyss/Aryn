@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import {
   COMPACT_LAYOUT_BREAKPOINT,
@@ -11,6 +12,8 @@ import {
 describe('shell layout helpers', () => {
   const leftPanelContentInset =
     'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))'
+  const rightPanelContentInset =
+    'calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap))'
 
   it('derives the expected three layout modes from shell width', () => {
     expect(deriveLayoutMode(FULL_LAYOUT_BREAKPOINT + 1)).toBe('full')
@@ -31,23 +34,39 @@ describe('shell layout helpers', () => {
       '--left-chrome-action-gap': '2px',
       '--left-chrome-content-gap': '2px',
       '--left-chrome-edge-gap': '6px',
+      '--panel-toggle-gap': '2px',
       '--layout-mode-switch-width': '62px',
       '--left-panel-toggle-anchor': '84px',
       '--right-panel-toggle-anchor': '6px',
       '--left-panel-content-inset': leftPanelContentInset,
-      '--right-panel-content-inset': '46px',
+      '--right-panel-content-inset': rightPanelContentInset,
     })
 
     expect(getShellChromeVars('windows')).toMatchObject({
       '--left-chrome-action-gap': '2px',
       '--left-chrome-content-gap': '2px',
       '--left-chrome-edge-gap': '6px',
+      '--panel-toggle-gap': '2px',
       '--layout-mode-switch-width': '62px',
       '--left-panel-toggle-anchor': '6px',
       '--right-panel-toggle-anchor': '150px',
       '--left-panel-content-inset': leftPanelContentInset,
-      '--right-panel-content-inset': '190px',
+      '--right-panel-content-inset': rightPanelContentInset,
     })
+  })
+
+  it('scopes file tab action padding to expanded editor sidebars', async () => {
+    const appCss = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
+
+    expect(appCss).toContain(`.file-tabs-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;`)
+    expect(appCss).toContain(`.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-actions {
+  padding: 0 6px 0 0;
+}`)
+    expect(appCss).toContain('--right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));')
   })
 
   it('keeps macOS fullscreen chrome aligned with the screen edge', () => {

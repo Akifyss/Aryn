@@ -5,6 +5,9 @@ export const RIGHT_DRAWER_MAX_WIDTH = 420
 export type LayoutMode = 'full' | 'compact' | 'focus'
 export type ShellPlatform = 'macos' | 'windows'
 
+const RIGHT_PANEL_CONTENT_INSET =
+  'calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap))'
+
 const SHELL_CHROME_VARS = {
   macos: {
     '--chrome-height': '44px',
@@ -17,13 +20,13 @@ const SHELL_CHROME_VARS = {
     '--left-panel-toggle-anchor': '84px',
     '--right-panel-toggle-anchor': '6px',
     '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
-    '--right-panel-content-inset': '46px',
+    '--right-panel-content-inset': RIGHT_PANEL_CONTENT_INSET,
     '--sidebar-icon-x': '20px',
   },
   windows: {
     '--chrome-height': '44px',
     '--panel-toggle-size': '32px',
-    '--panel-toggle-gap': '8px',
+    '--panel-toggle-gap': '2px',
     '--left-chrome-action-gap': '2px',
     '--left-chrome-content-gap': '2px',
     '--left-chrome-edge-gap': '6px',
@@ -31,7 +34,7 @@ const SHELL_CHROME_VARS = {
     '--left-panel-toggle-anchor': '6px',
     '--right-panel-toggle-anchor': '150px',
     '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
-    '--right-panel-content-inset': '190px',
+    '--right-panel-content-inset': RIGHT_PANEL_CONTENT_INSET,
     '--sidebar-icon-x': '20px',
   },
 } as const satisfies Record<ShellPlatform, Record<string, string>>

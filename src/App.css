@@ -34,7 +34,7 @@
   --left-panel-toggle-anchor: 84px;
   --right-panel-toggle-anchor: 6px;
   --left-panel-content-inset: calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap));
-  --right-panel-content-inset: 46px;
+  --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
   --sidebar-icon-x: 20px;
 
   position: relative;
@@ -71,7 +71,6 @@
 .app-shell[data-app-layout='agent'] {
   --agent-chat-min-width: 320px;
   --agent-collapsed-tab-actions-width: calc((var(--panel-toggle-size) * 2) + var(--panel-toggle-gap));
-  --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
 }
 
 .app-shell[data-app-layout='agent'][data-layout='full'] {
@@ -1648,17 +1647,15 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 .file-tabs-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 10px 0 0;
+  gap: 2px;
+  padding: 0;
   border-bottom: 1px solid var(--separator);
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
-.app-shell[data-right-collapsed='true'] .file-tabs-actions,
-.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-actions,
-.app-shell[data-app-layout='agent'] .panel-agent-drawer .file-tabs-actions {
-  padding-right: 0;
+.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-actions {
+  padding: 0 6px 0 0;
 }
 
 .file-tabs-scroller::-webkit-scrollbar {
