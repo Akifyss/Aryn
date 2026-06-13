@@ -72,7 +72,10 @@ import {
 } from '@/components/file-change-visuals'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
-import { shouldStickAgentMessagesToBottom } from '@/features/agent/lib/message-scroll-stickiness'
+import {
+  isAgentMessagesScrollIntentKey,
+  resolveAgentMessagesScrollStickiness,
+} from '@/features/agent/lib/message-scroll-stickiness'
 import { shouldRunAgentModelCascaderDelayedActivation } from '@/features/agent/lib/model-cascader-pointer-intent'
 import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
@@ -321,6 +324,7 @@ const AGENT_THINKING_AUTO_EXPAND_DELAY_MS = 520
 const AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS = 140
 const AGENT_THINKING_MIN_EXPANDED_MS = 360
 const AGENT_THINKING_SCROLL_STICKY_THRESHOLD_PX = 24
+const AGENT_MESSAGES_TRANSIENT_SCROLL_INTENT_MS = 600
 const MAX_VISIBLE_MESSAGE_FILE_CARDS = 6
 const AGENT_MODEL_CASCADER_MARGIN_PX = 12
 const AGENT_MODEL_CASCADER_GAP_PX = 10
@@ -359,6 +363,45 @@ function getAgentMessagesScrollContentElement(scrollElement: HTMLElement) {
 
   const firstChildElement = scrollElement.firstElementChild
   return firstChildElement instanceof HTMLElement ? firstChildElement : null
+}
+
+function getAgentMessagesEventTargetElement(event: Event) {
+  const target = event.target
+  if (target instanceof Element) {
+    return target
+  }
+
+  return target instanceof Node ? target.parentElement : null
+}
+
+function isAgentMessagesScrollAreaEvent(event: Event, scrollRootElement: Element) {
+  return getAgentMessagesEventTargetElement(event)?.closest('.app-scroll-area') === scrollRootElement
+}
+
+function isAgentMessagesScrollbarPointerEvent(
+  event: PointerEvent,
+  scrollElement: HTMLElement,
+  scrollRootElement: Element,
+) {
+  const targetElement = getAgentMessagesEventTargetElement(event)
+  const scrollbarElement = targetElement?.closest('.app-scroll-area-scrollbar, .app-scroll-area-thumb')
+
+  if (scrollbarElement?.closest('.app-scroll-area') === scrollRootElement) {
+    return true
+  }
+
+  if (targetElement !== scrollElement) {
+    return false
+  }
+
+  const rect = scrollElement.getBoundingClientRect()
+  const verticalScrollbarWidth = scrollElement.offsetWidth - scrollElement.clientWidth
+  const horizontalScrollbarHeight = scrollElement.offsetHeight - scrollElement.clientHeight
+
+  return (
+    (verticalScrollbarWidth > 0 && event.clientX >= rect.right - verticalScrollbarWidth)
+    || (horizontalScrollbarHeight > 0 && event.clientY >= rect.bottom - horizontalScrollbarHeight)
+  )
 }
 
 const AGENT_SESSION_MENU_POSITIONER_PROPS = {
@@ -2575,6 +2618,8 @@ function AgentProvider({
   const openSessionRequestIdRef = useRef(0)
   const previousSessionPathRef = useRef<string | null>(null)
   const shouldStickMessagesToBottomRef = useRef(true)
+  const messagesUserScrollIntentRef = useRef(false)
+  const messagesUserScrollIntentTimeoutRef = useRef<number | null>(null)
   const locallyEmittedWorkspaceStatesRef = useRef<WeakSet<AgentWorkspaceState>>(new WeakSet())
   const pendingExternalWorkspaceStateRef = useRef<AgentWorkspaceState | null>(null)
   const handledExternalSessionRequestRef = useRef<number | null>(null)
@@ -4066,6 +4111,40 @@ function AgentProvider({
     findLatestOpenableAgentFileChange(visiblePersistedMessages, roundFileChangesByMessageId)
   ), [visiblePersistedMessages, roundFileChangesByMessageId])
 
+  function clearMessagesUserScrollIntent() {
+    messagesUserScrollIntentRef.current = false
+
+    if (messagesUserScrollIntentTimeoutRef.current !== null) {
+      window.clearTimeout(messagesUserScrollIntentTimeoutRef.current)
+      messagesUserScrollIntentTimeoutRef.current = null
+    }
+  }
+
+  function markMessagesUserScrollIntent(options: { transient: boolean }) {
+    messagesUserScrollIntentRef.current = true
+
+    if (messagesUserScrollIntentTimeoutRef.current !== null) {
+      window.clearTimeout(messagesUserScrollIntentTimeoutRef.current)
+      messagesUserScrollIntentTimeoutRef.current = null
+    }
+
+    if (!options.transient) {
+      return
+    }
+
+    messagesUserScrollIntentTimeoutRef.current = window.setTimeout(() => {
+      messagesUserScrollIntentRef.current = false
+      messagesUserScrollIntentTimeoutRef.current = null
+    }, AGENT_MESSAGES_TRANSIENT_SCROLL_INTENT_MS)
+  }
+
+  function updateMessagesScrollStickiness(scrollElement: HTMLElement, hasUserScrollIntent: boolean) {
+    shouldStickMessagesToBottomRef.current = resolveAgentMessagesScrollStickiness(scrollElement, {
+      currentShouldStick: shouldStickMessagesToBottomRef.current,
+      hasUserScrollIntent,
+    })
+  }
+
   useEffect(() => {
     if (!hasConfiguredProviders && activeComposerMenu === 'model-cascader') {
       setActiveComposerMenu(null)
@@ -4098,22 +4177,99 @@ function AgentProvider({
 
   useEffect(() => {
     const scrollElement = messagesScrollRef.current
+    clearMessagesUserScrollIntent()
+
     if (!scrollElement) {
       shouldStickMessagesToBottomRef.current = true
       return
     }
 
-    const updateMessagesScrollStickiness = () => {
-      shouldStickMessagesToBottomRef.current = shouldStickAgentMessagesToBottom(scrollElement)
+    const scrollRootElement = scrollElement.closest('.agent-messages-scroll') ?? scrollElement
+    let isScrollbarPointerIntentActive = false
+
+    const stopScrollbarPointerIntent = () => {
+      if (!isScrollbarPointerIntentActive) {
+        return
+      }
+
+      isScrollbarPointerIntentActive = false
+      clearMessagesUserScrollIntent()
+      window.removeEventListener('pointerup', stopScrollbarPointerIntent)
+      window.removeEventListener('pointercancel', stopScrollbarPointerIntent)
     }
 
-    updateMessagesScrollStickiness()
-    scrollElement.addEventListener('scroll', updateMessagesScrollStickiness, { passive: true })
+    const userScrollIntentListenerOptions = { capture: true, passive: true }
+
+    const handleUserScrollIntent = (event: Event) => {
+      if (!isAgentMessagesScrollAreaEvent(event, scrollRootElement)) {
+        return
+      }
+
+      markMessagesUserScrollIntent({ transient: true })
+    }
+
+    const handleKeyDown = (event: Event) => {
+      if (!(event instanceof globalThis.KeyboardEvent)) {
+        return
+      }
+
+      if (!isAgentMessagesScrollAreaEvent(event, scrollRootElement)) {
+        return
+      }
+
+      if (event.altKey || event.ctrlKey || event.metaKey) {
+        return
+      }
+
+      if (isAgentMessagesScrollIntentKey(event.key, event.code)) {
+        markMessagesUserScrollIntent({ transient: true })
+      }
+    }
+
+    const handlePointerDown = (event: Event) => {
+      if (!(event instanceof PointerEvent)) {
+        return
+      }
+
+      if (!isAgentMessagesScrollbarPointerEvent(event, scrollElement, scrollRootElement)) {
+        return
+      }
+
+      if (isScrollbarPointerIntentActive) {
+        stopScrollbarPointerIntent()
+      }
+
+      isScrollbarPointerIntentActive = true
+      markMessagesUserScrollIntent({ transient: false })
+      window.addEventListener('pointerup', stopScrollbarPointerIntent)
+      window.addEventListener('pointercancel', stopScrollbarPointerIntent)
+    }
+
+    const handleScroll = () => {
+      updateMessagesScrollStickiness(scrollElement, messagesUserScrollIntentRef.current)
+    }
+
+    handleScroll()
+    scrollRootElement.addEventListener('wheel', handleUserScrollIntent, userScrollIntentListenerOptions)
+    scrollRootElement.addEventListener('touchmove', handleUserScrollIntent, userScrollIntentListenerOptions)
+    scrollRootElement.addEventListener('keydown', handleKeyDown)
+    scrollElement.addEventListener('scroll', handleScroll, { passive: true })
+    scrollRootElement.addEventListener('pointerdown', handlePointerDown, true)
 
     return () => {
-      scrollElement.removeEventListener('scroll', updateMessagesScrollStickiness)
+      stopScrollbarPointerIntent()
+      clearMessagesUserScrollIntent()
+      scrollRootElement.removeEventListener('wheel', handleUserScrollIntent, userScrollIntentListenerOptions)
+      scrollRootElement.removeEventListener('touchmove', handleUserScrollIntent, userScrollIntentListenerOptions)
+      scrollRootElement.removeEventListener('keydown', handleKeyDown)
+      scrollElement.removeEventListener('scroll', handleScroll)
+      scrollRootElement.removeEventListener('pointerdown', handlePointerDown, true)
     }
   }, [activeSessionPath])
+
+  useEffect(() => () => {
+    clearMessagesUserScrollIntent()
+  }, [])
 
   useEffect(() => {
     const scrollElement = messagesScrollRef.current
@@ -4122,18 +4278,23 @@ function AgentProvider({
     }
 
     let frameId: number | null = null
-    const scrollToBottom = () => {
+    const scrollToBottomIfSticky = () => {
+      if (!shouldStickMessagesToBottomRef.current) {
+        return
+      }
+
       scrollElement.scrollTop = scrollElement.scrollHeight
       shouldStickMessagesToBottomRef.current = true
     }
 
     const syncPinnedScrollAfterResize = () => {
+      updateMessagesScrollStickiness(scrollElement, false)
+
       if (!shouldStickMessagesToBottomRef.current) {
-        shouldStickMessagesToBottomRef.current = shouldStickAgentMessagesToBottom(scrollElement)
         return
       }
 
-      scrollToBottom()
+      scrollToBottomIfSticky()
 
       if (frameId !== null) {
         window.cancelAnimationFrame(frameId)
@@ -4141,7 +4302,7 @@ function AgentProvider({
 
       frameId = window.requestAnimationFrame(() => {
         frameId = null
-        scrollToBottom()
+        scrollToBottomIfSticky()
       })
     }
 
@@ -4171,19 +4332,36 @@ function AgentProvider({
     const isSessionChanged = previousSessionPathRef.current !== activeSessionPath
     previousSessionPathRef.current = activeSessionPath
 
-    const scrollToBottom = () => {
+    const forceScrollToBottom = () => {
       scrollElement.scrollTop = scrollElement.scrollHeight
       shouldStickMessagesToBottomRef.current = true
     }
 
-    scrollToBottom()
-
     if (isSessionChanged) {
+      clearMessagesUserScrollIntent()
+      forceScrollToBottom()
+
+      const frameId = window.requestAnimationFrame(() => {
+        forceScrollToBottom()
+      })
+
+      return () => {
+        window.cancelAnimationFrame(frameId)
+      }
+    }
+
+    updateMessagesScrollStickiness(scrollElement, false)
+
+    if (!shouldStickMessagesToBottomRef.current) {
       return
     }
 
+    forceScrollToBottom()
+
     const frameId = window.requestAnimationFrame(() => {
-      scrollToBottom()
+      if (shouldStickMessagesToBottomRef.current) {
+        forceScrollToBottom()
+      }
     })
 
     return () => {
