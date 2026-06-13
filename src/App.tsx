@@ -5541,7 +5541,7 @@ function App() {
       {renderLayoutModeSwitchButton()}
       {!isLeftDrawerOpen ? (
         <>
-          <div className='left-chrome-drag-spacer' aria-hidden='true' />
+          {isLeftSidebarVisible ? <div className='left-chrome-drag-spacer' aria-hidden='true' /> : null}
           {renderLeftChromeSearchButton()}
           {renderLeftSidebarToggleButton()}
         </>
