@@ -83,6 +83,10 @@ import {
   type WorkspaceFileViewMode,
 } from '@/features/workspace/lib/file-types'
 import {
+  resolveWorkspaceTreeActiveFilePath,
+  type WorkspaceTreeActiveFileMode,
+} from '@/features/workspace/lib/workspace-tree-active-file'
+import {
   createWorkspaceRefreshCoordinator,
   type WorkspaceRefreshRequest,
   type WorkspaceRefreshScheduleMode,
@@ -3130,6 +3134,7 @@ function App() {
   }
 
   function renderWorkspaceTreePanel(options: {
+    activeFileMode?: WorkspaceTreeActiveFileMode
     directoryHeaderAction?: ReactNode
     fileClickMode?: WorkspaceTreeFileClickMode
     showDirectoryHeader?: boolean
@@ -3137,6 +3142,7 @@ function App() {
     title?: string
   } = {}) {
     const {
+      activeFileMode = 'track-active-file',
       directoryHeaderAction,
       fileClickMode = 'open-tab',
       showDirectoryHeader = false,
@@ -3144,6 +3150,7 @@ function App() {
       title = '文件树',
     } = options
     const menuPortalTarget = surfaceMode === 'drawer' ? leftDrawerOverlayRoot : null
+    const treeActiveFilePath = resolveWorkspaceTreeActiveFilePath(activeTreePath, activeFileMode)
     const handleSelectFile = (filePath: string, event: WorkspaceTreeActivationEvent) => {
       if (
         fileClickMode === 'replace-active-tab'
@@ -3160,7 +3167,7 @@ function App() {
 
     return (
       <WorkspaceTreePanel
-        activeFilePath={activeTreePath}
+        activeFilePath={treeActiveFilePath}
         directoryHeaderAction={directoryHeaderAction}
         expandedPaths={expandedPaths}
         gitRepositoryState={gitRepositoryState}
@@ -5270,12 +5277,14 @@ function App() {
   }
 
   function renderDirectorySidebar(options: {
+    activeFileMode?: WorkspaceTreeActiveFileMode
     action?: ReactNode
     fileClickMode: WorkspaceTreeFileClickMode
   }) {
     return (
       <aside className='editor-directory-sidebar'>
         {renderWorkspaceTreePanel({
+          activeFileMode: options.activeFileMode,
           directoryHeaderAction: options.action,
           fileClickMode: options.fileClickMode,
           showDirectoryHeader: true,
@@ -5348,7 +5357,7 @@ function App() {
   function renderFixedFilePanel() {
     return (
       <div className='editor-fixed-file-panel'>
-        {renderDirectorySidebar({ fileClickMode: 'open-tab' })}
+        {renderDirectorySidebar({ activeFileMode: 'none', fileClickMode: 'open-tab' })}
         <div className='editor-fixed-file-empty-panel'>
           {renderEditorEmptyState()}
         </div>
