@@ -149,7 +149,7 @@
 }
 
 .app-shell[data-app-layout='agent'][data-right-collapsed='false'] .panel-editor .agent-threadbar {
-  padding-right: 0;
+  padding-right: 6px;
 }
 
 .app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-editor .agent-threadbar {
@@ -162,10 +162,6 @@
 
 .app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-editor .agent-threadbar-new-button {
   display: inline-flex;
-}
-
-.app-shell[data-app-layout='agent'] .panel-editor .agent-threadbar-leading {
-  padding: 0 2px;
 }
 
 .app-shell::before {
