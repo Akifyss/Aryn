@@ -11,6 +11,7 @@ interface ListMarkerData {
   markerEndOffset: number;
   toOffset: number;
   contentOffsetColumns: number;
+  renderedContentOffsetColumns: number;
   markerText: string;
   classes: string;
   orderedNumber: string;
@@ -412,6 +413,10 @@ export function listMarkerData(lineText: string, orderedDisplayIndex: string | n
   const markerEndOffset = indent + markerCharLength;
   const indentColumns = indentationColumns(leadingWhitespace, style);
   const contentOffsetColumns = indentColumns + (match[0].length - indent);
+  // Live mode hides ordinary marker padding and renders a normalized single
+  // marker gap, so wrapped lines should follow the rendered marker width.
+  const hasMarkerGap = match[0].length > markerEndOffset;
+  const renderedContentOffsetColumns = indentColumns + markerText.length + (hasMarkerGap ? 1 : 0);
 
   const result: ListMarkerData = {
     fromOffset: indent,
@@ -421,6 +426,7 @@ export function listMarkerData(lineText: string, orderedDisplayIndex: string | n
     markerEndOffset,
     toOffset: match[0].length,
     contentOffsetColumns,
+    renderedContentOffsetColumns,
     markerText,
     classes,
     orderedNumber,
@@ -434,6 +440,7 @@ export function listMarkerData(lineText: string, orderedDisplayIndex: string | n
     result.taskStatus = taskStatusFromMarker(taskMarker);
     result.isTask = true;
     result.taskHiddenPrefixColumns = hiddenTaskPrefixLength;
+    result.renderedContentOffsetColumns = contentOffsetColumns;
   }
 
   return result;
@@ -442,20 +449,28 @@ export function listMarkerData(lineText: string, orderedDisplayIndex: string | n
 class ListMarkerWidget extends WidgetType {
   text: string;
   classes: string;
+  widthColumns: number;
 
-  constructor(text: string, classes: string) {
+  constructor(text: string, classes: string, widthColumns: number) {
     super();
     this.text = text;
     this.classes = classes;
+    this.widthColumns = widthColumns;
   }
 
   eq(other: WidgetType): boolean {
-    return other instanceof ListMarkerWidget && other.text === this.text && other.classes === this.classes;
+    return other instanceof ListMarkerWidget
+      && other.text === this.text
+      && other.classes === this.classes
+      && other.widthColumns === this.widthColumns;
   }
 
   toDOM(): HTMLElement {
     const marker = document.createElement('span');
     marker.className = `meo-md-list-marker ${this.classes}`;
+    marker.style.display = 'inline-block';
+    marker.style.width = `${Math.max(0, this.widthColumns)}ch`;
+    marker.style.textIndent = '0';
     marker.textContent = this.text;
     return marker;
   }
@@ -548,12 +563,17 @@ export function addListMarkerDecoration(
       }
     }
   } else if (markerEnd > indentEnd) {
+    const markerWidthColumns = Math.max(
+      0,
+      (marker.renderedContentOffsetColumns ?? marker.contentOffsetColumns ?? marker.toOffset)
+        - (marker.indentColumns ?? 0)
+    );
     builder.push(
       Decoration.replace({
-        widget: new ListMarkerWidget(marker.markerText, marker.classes),
+        widget: new ListMarkerWidget(marker.markerText, marker.classes, markerWidthColumns),
         inclusive: false,
         ...liveListLayoutDecorationSpec
-      }).range(indentEnd, markerEnd)
+      }).range(indentEnd, markerTo)
     );
   }
 

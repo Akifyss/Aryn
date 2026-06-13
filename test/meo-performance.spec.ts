@@ -22,6 +22,7 @@ import {
   indentListByTwoSpaces,
   outdentListByTwoSpaces,
   shouldCollectOrderedListRenumberChanges,
+  listMarkerData,
 } from '../src/vendor/meo/webview/helpers/listMarkers'
 import {
   __meoDiffSplitRenderHealthTestHooks,
@@ -248,7 +249,7 @@ describe('meo performance guards', () => {
       }),
       expect.objectContaining({
         from: line.from + 2,
-        to: line.from + 3,
+        to: line.from + 4,
         hasWidget: true,
         isReplace: true,
       }),
@@ -281,40 +282,163 @@ describe('meo performance guards', () => {
     expect(contentStartDecorations).toEqual(expect.arrayContaining([
       expect.objectContaining({
         from: 0,
-        to: 2,
+        to: 3,
         hasWidget: true,
         isReplace: true,
       }),
     ]))
   })
 
-  it('removes list layout replacements when editing the live list prefix', () => {
-    const doc = '  - active list item'
+  it('renders extra marker spacing without expanding live list wrap indentation', () => {
+    const marker = listMarkerData('  -    nested item') as any
+    expect(marker.contentOffsetColumns).toBe(7)
+    expect(marker.renderedContentOffsetColumns).toBe(4)
+
+    const doc = '  -    nested item with enough text to exercise wrapping'
     const state = EditorState.create({
+      doc,
+      selection: { anchor: doc.length },
+      extensions: liveModeExtensions(),
+    })
+    const liveDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(state)
+    const listLine = liveDecorations.find((range) => range.isLine && range.className.includes('meo-md-list-line'))
+
+    expect(listLine?.style).toContain('--list-hanging-indent:4ch')
+    expect(liveDecorations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        from: 0,
+        to: 2,
+        hasWidget: true,
+        isReplace: true,
+      }),
+      expect.objectContaining({
+        from: 2,
+        to: 7,
+        hasWidget: true,
+        isReplace: true,
+        widgetWidthColumns: 2,
+      }),
+    ]))
+
+    const selectedPrefixState = EditorState.create({
+      doc,
+      selection: { anchor: 2, head: 7 },
+      extensions: liveModeExtensions(),
+    })
+    const selectedPrefixDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(selectedPrefixState)
+    const selectedPrefixListLine = selectedPrefixDecorations
+      .find((range) => range.isLine && range.className.includes('meo-md-list-line'))
+
+    expect(selectedPrefixListLine?.style).toContain('--list-hanging-indent:4ch')
+    expect(selectedPrefixDecorations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        from: 0,
+        to: 2,
+        hasWidget: true,
+        isReplace: true,
+      }),
+      expect.objectContaining({
+        from: 2,
+        to: 7,
+        hasWidget: true,
+        isReplace: true,
+        widgetWidthColumns: 2,
+      }),
+    ]))
+
+    const orderedMarker = listMarkerData('10.    ordered item', '10') as any
+    expect(orderedMarker.contentOffsetColumns).toBe(7)
+    expect(orderedMarker.renderedContentOffsetColumns).toBe(4)
+
+    const orderedDoc = '10.    ordered item with enough text to exercise wrapping'
+    const orderedState = EditorState.create({
+      doc: orderedDoc,
+      selection: { anchor: 0, head: 7 },
+      extensions: liveModeExtensions(),
+    })
+    const orderedDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(orderedState)
+    const orderedListLine = orderedDecorations
+      .find((range) => range.isLine && range.className.includes('meo-md-list-line'))
+
+    expect(orderedListLine?.style).toContain('--list-hanging-indent:4ch')
+    expect(orderedDecorations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        from: 0,
+        to: 7,
+        hasWidget: true,
+        isReplace: true,
+        widgetWidthColumns: 4,
+      }),
+    ]))
+
+    const tabMarker = listMarkerData('-\ttabbed item') as any
+    expect(tabMarker.contentOffsetColumns).toBe(2)
+    expect(tabMarker.renderedContentOffsetColumns).toBe(2)
+  })
+
+  it('does not classify list-item indented code blocks as live list lines', () => {
+    const doc = '-     code text'
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: doc.length },
+      extensions: liveModeExtensions(),
+    })
+
+    const liveDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(state)
+    const structuralDecorations = __meoLiveModeTestHooks.collectStructuralMarkdownLineDecorationDebugRanges(state)
+    const liveLineClasses = liveDecorations
+      .filter((range) => range.isLine)
+      .map((range) => range.className)
+    const structuralLineClasses = structuralDecorations
+      .filter((range) => range.isLine)
+      .map((range) => range.className)
+
+    expect(liveLineClasses).toContain('meo-md-code-block')
+    expect(liveLineClasses).not.toContain('meo-md-list-line')
+    expect(structuralLineClasses).toContain('meo-md-code-block')
+    expect(structuralLineClasses).not.toContain('meo-md-list-line')
+  })
+
+  it('keeps list layout replacements when editing the live list prefix', () => {
+    const doc = '  - active list item'
+    const layoutReplacements = (state: EditorState) => (
+      __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(state)
+        .filter((range) => range.hasWidget && range.isReplace)
+        .map(({ from, to, widgetWidthColumns }) => ({ from, to, widgetWidthColumns }))
+    )
+
+    const lineStartState = EditorState.create({
       doc,
       selection: { anchor: 0 },
       extensions: liveModeExtensions(),
     })
 
-    const liveDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(state)
-
-    expect(liveDecorations.some((range) => range.hasWidget && range.isReplace)).toBe(false)
+    expect(layoutReplacements(lineStartState)).toEqual([
+      { from: 0, to: 2, widgetWidthColumns: null },
+      { from: 2, to: 4, widgetWidthColumns: 2 },
+    ])
 
     const insidePrefixState = EditorState.create({
       doc,
       selection: { anchor: 3 },
       extensions: liveModeExtensions(),
     })
-    const insidePrefixDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(insidePrefixState)
-    expect(insidePrefixDecorations.some((range) => range.hasWidget && range.isReplace)).toBe(false)
+
+    expect(layoutReplacements(insidePrefixState)).toEqual([
+      { from: 0, to: 2, widgetWidthColumns: null },
+      { from: 2, to: 4, widgetWidthColumns: 2 },
+    ])
 
     const selectedState = EditorState.create({
       doc,
-      selection: { anchor: doc.length, head: 0 },
+      selection: { anchor: 2, head: doc.length },
       extensions: liveModeExtensions(),
     })
-    const selectedDecorations = __meoLiveModeTestHooks.collectLiveDecorationDebugRanges(selectedState)
-    expect(selectedDecorations.some((range) => range.hasWidget && range.isReplace)).toBe(false)
+
+    expect(layoutReplacements(selectedState)).toEqual([
+      { from: 0, to: 2, widgetWidthColumns: null },
+      { from: 2, to: 4, widgetWidthColumns: 2 },
+    ])
   })
 
   it('keeps active list layout replacements stable throughout IME composition', () => {
@@ -332,7 +456,7 @@ describe('meo performance guards', () => {
 
     expect(layoutReplacements()).toEqual([
       { from: 0, to: 2 },
-      { from: 2, to: 3 },
+      { from: 2, to: 4 },
     ])
 
     state = state.update({
@@ -348,7 +472,7 @@ describe('meo performance guards', () => {
     expect(shouldRefreshLiveDecorationsForTransaction(compositionTransaction)).toBe(false)
     expect(layoutReplacements()).toEqual([
       { from: 0, to: 2 },
-      { from: 2, to: 3 },
+      { from: 2, to: 4 },
     ])
   })
 

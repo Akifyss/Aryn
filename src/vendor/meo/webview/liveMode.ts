@@ -1280,31 +1280,8 @@ function isLineDecoration(value): boolean {
     && value.startSide === value.endSide;
 }
 
-function selectionTouchesListPrefix(state: EditorState, line, contentFrom: number): boolean {
-  return state.selection.ranges.some((range) => {
-    const from = Math.min(range.from, range.to);
-    const to = Math.max(range.from, range.to);
-    if (range.empty) {
-      return from >= line.from && from < contentFrom;
-    }
-    return from < contentFrom && to > line.from;
-  });
-}
-
-function shouldPreserveListLayoutDecoration(state: EditorState, from: number, value): boolean {
-  if (value.spec?.isMeoLiveListLayoutDecoration !== true) {
-    return false;
-  }
-
-  // Keep wrapping stable while editing list content, but expose a source-like
-  // prefix when the cursor or selection reaches syntax the user may edit.
-  const line = state.doc.lineAt(from);
-  const marker = listMarkerData(state.doc.sliceString(line.from, line.to));
-  if (!marker) {
-    return false;
-  }
-
-  return !selectionTouchesListPrefix(state, line, line.from + marker.toOffset);
+function isLiveListLayoutDecoration(value): boolean {
+  return value.spec?.isMeoLiveListLayoutDecoration === true;
 }
 
 function decorationTouchesSourceLikeLine(state: EditorState, from: number, to: number, value, sourceLikeLines: Set<number>): boolean {
@@ -1314,7 +1291,7 @@ function decorationTouchesSourceLikeLine(state: EditorState, from: number, to: n
   const touchesSourceLikeLine = to > from
     ? rangeTouchesActiveLine(state, from, to, sourceLikeLines)
     : pointTouchesActiveLine(state, from, sourceLikeLines);
-  return touchesSourceLikeLine && !shouldPreserveListLayoutDecoration(state, from, value);
+  return touchesSourceLikeLine && !isLiveListLayoutDecoration(value);
 }
 
 function filterDecorationsForSourceLikeLines(state: EditorState, decorations, sourceLikeLines: Set<number>) {
@@ -1564,7 +1541,7 @@ function addListLineDecorations(builder, state, indentSelectedLines, frontmatter
 
     builder.push(
       listLineDeco(
-        marker.contentOffsetColumns ?? marker.toOffset,
+        marker.renderedContentOffsetColumns ?? marker.contentOffsetColumns ?? marker.toOffset,
         marker.indentColumns ?? 0,
         style?.columns ?? 2,
         indentSelectedLines.has(lineNo),
@@ -1581,7 +1558,7 @@ function addStructuralListLineDecoration(builder, line) {
   builder.push(structuralListLineDeco.range(line.from));
 }
 
-function addStructuralMarkdownLineDecorations(builder, state, frontmatter = null) {
+function addStructuralMarkdownLineDecorations(builder, state, frontmatter = null, codeBlockLines = null) {
   const stylesByLine = detectListIndentStylesByLine(state);
   let fenceMarker: string | null = null;
   let currentAlertType: AlertType | null = null;
@@ -1611,6 +1588,13 @@ function addStructuralMarkdownLineDecorations(builder, state, frontmatter = null
     }
 
     if (inFrontmatter) {
+      currentAlertType = null;
+      continue;
+    }
+
+    if (codeBlockLines?.has(lineNo)) {
+      builder.push(structuralHeightHintDeco(24).range(line.from));
+      builder.push(lineStyleDecos.codeBlock.range(line.from));
       currentAlertType = null;
       continue;
     }
@@ -2033,6 +2017,8 @@ function safeBuildDecorations(state, fallback, context, extra = {}) {
 
 function buildStructuralMarkdownLineDecorations(state) {
   const ranges = [];
+  const tree = resolvedSyntaxTree(state);
+  const codeBlockLines = collectCodeBlockLines(state, tree, getMermaidColonBlocks(state));
   let frontmatter = null;
   try {
     frontmatter = parseFrontmatter(state);
@@ -2042,7 +2028,8 @@ function buildStructuralMarkdownLineDecorations(state) {
   addStructuralMarkdownLineDecorations(
     ranges,
     state,
-    frontmatter
+    frontmatter,
+    codeBlockLines
   );
   return Decoration.set(ranges, true);
 }
@@ -2871,7 +2858,9 @@ function collectDecorationDebugRanges(state, decorations) {
       isLiveListLayout: value.spec?.isMeoLiveListLayoutDecoration === true,
       hasWidget: Boolean(value.widget),
       estimatedHeight: value.widget?.estimatedHeight ?? null,
-      isReplace: Boolean(value.isReplace)
+      widgetWidthColumns: value.widget?.widthColumns ?? null,
+      isReplace: Boolean(value.isReplace),
+      style: value.spec?.attributes?.style ?? ''
     });
   });
   return ranges;
