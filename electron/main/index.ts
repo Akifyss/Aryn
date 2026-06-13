@@ -687,6 +687,22 @@ async function createWindow() {
     win.maximize()
   }
 
+  const sendRendererWindowEvent = (channel: 'window:devtools-opened' | 'window:devtools-closed') => {
+    if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
+      return
+    }
+
+    win.webContents.send(channel)
+  }
+
+  win.webContents.on('devtools-opened', () => {
+    sendRendererWindowEvent('window:devtools-opened')
+  })
+
+  win.webContents.on('devtools-closed', () => {
+    sendRendererWindowEvent('window:devtools-closed')
+  })
+
   if (VITE_DEV_SERVER_URL) { // #298
     win.loadURL(VITE_DEV_SERVER_URL)
     win.webContents.openDevTools({ mode: 'right' })

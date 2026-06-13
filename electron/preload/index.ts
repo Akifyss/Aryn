@@ -29,6 +29,20 @@ import type {
   PersistentClientStateSnapshot,
 } from '../../src/features/persistence/types'
 
+type WindowLifecycleChannel = 'window:close-requested' | 'window:devtools-closed' | 'window:devtools-opened'
+
+function subscribeWindowLifecycle(channel: WindowLifecycleChannel, listener: () => void) {
+  const wrappedListener = () => {
+    listener()
+  }
+
+  ipcRenderer.on(channel, wrappedListener)
+
+  return () => {
+    ipcRenderer.off(channel, wrappedListener)
+  }
+}
+
 contextBridge.exposeInMainWorld('appApi', {
   platform: process.platform,
   pickWorkspace: () => ipcRenderer.invoke('workspace:pick-directory') as Promise<string | null>,
@@ -162,17 +176,9 @@ contextBridge.exposeInMainWorld('appApi', {
       ipcRenderer.off('window:state-changed', wrappedListener)
     }
   },
-  onWindowCloseRequested: (listener: () => void) => {
-    const wrappedListener = () => {
-      listener()
-    }
-
-    ipcRenderer.on('window:close-requested', wrappedListener)
-
-    return () => {
-      ipcRenderer.off('window:close-requested', wrappedListener)
-    }
-  },
+  onWindowDevToolsOpened: (listener: () => void) => subscribeWindowLifecycle('window:devtools-opened', listener),
+  onWindowDevToolsClosed: (listener: () => void) => subscribeWindowLifecycle('window:devtools-closed', listener),
+  onWindowCloseRequested: (listener: () => void) => subscribeWindowLifecycle('window:close-requested', listener),
   onWorkspaceChanged: (listener: (event: WorkspaceChangeEvent) => void) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, payload: WorkspaceChangeEvent) => {
       listener(payload)

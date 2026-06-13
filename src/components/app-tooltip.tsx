@@ -36,6 +36,7 @@ type AppTooltipButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'chil
   isTooltipOpen?: boolean
   offset?: number
   placement?: ComponentProps<typeof Tooltip.Content>['placement']
+  preventFocusOnPress?: boolean
   tooltip?: ReactNode
 }
 

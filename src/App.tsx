@@ -91,6 +91,7 @@ import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
 import { useSettingsStore, type AppLayoutPreference, type AppTheme } from '@/hooks/use-settings-store'
+import { useDevToolsFocusSettlement } from '@/hooks/use-devtools-focus-settlement'
 import type {
   PersistedLayoutState,
   PersistedWorkspaceTabState,
@@ -997,6 +998,7 @@ function App() {
   const workspaceRefreshCoordinatorRef = useRef<ReturnType<typeof createWorkspaceRefreshCoordinator> | null>(null)
   currentPathRef.current = currentPath
   gitRepositoryStateRef.current = gitRepositoryState
+  useDevToolsFocusSettlement()
 
   if (!workspaceRefreshCoordinatorRef.current) {
     workspaceRefreshCoordinatorRef.current = createWorkspaceRefreshCoordinator({
@@ -5075,6 +5077,7 @@ function App() {
       className='panel-toggle-button left-chrome-search-button'
       aria-label='Open search'
       tooltip='搜索'
+      preventFocusOnPress
       onClick={handleOpenCommandPaletteFromChrome}
     >
       <Icon icon='lucide:search' width={16} height={16} aria-hidden='true' />
@@ -5095,6 +5098,7 @@ function App() {
         className='panel-toggle-button'
         aria-label={toggleAriaLabel}
         tooltip={toggleTooltip}
+        preventFocusOnPress
         onClick={() => {
           if (isLeftSidebarDrawer) {
             handleLeftDrawerOpenChange(!isLeftDrawerOpen)
@@ -5579,6 +5583,7 @@ function App() {
             className='agent-collapsed-tab-button'
             aria-label='Expand right sidebar and open Git'
             tooltip='更改'
+            preventFocusOnPress
             onClick={() => {
               handleCollapsedAgentFixedTabClick('git')
             }}
@@ -5590,6 +5595,7 @@ function App() {
             className='agent-collapsed-tab-button'
             aria-label='Expand right sidebar and open files'
             tooltip='文件'
+            preventFocusOnPress
             onClick={() => {
               handleCollapsedAgentFixedTabClick('file')
             }}
@@ -5615,6 +5621,7 @@ function App() {
             data-react-aria-top-layer={shellChromeOverlayState.rightControlsTopLayer ? 'true' : undefined}
             aria-label={rightSidebarToggleAriaLabel}
             tooltip={rightSidebarToggleTooltip}
+            preventFocusOnPress
             onClick={toggleAssistantSurface}
           >
             <span className='panel-toggle-icon' aria-hidden='true'>

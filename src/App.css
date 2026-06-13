@@ -273,11 +273,15 @@
   -webkit-app-region: no-drag;
 }
 
-.panel-toggle-button:hover,
-.panel-toggle-button:focus-visible {
+.panel-toggle-button:hover {
   color: var(--foreground);
   background: var(--surface-tertiary);
-  outline: none;
+}
+
+.panel-toggle-button:focus-visible {
+  color: var(--foreground);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .panel-toggle-button-overlay {
@@ -379,11 +383,15 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   -webkit-app-region: no-drag;
 }
 
-.agent-collapsed-tab-button:hover,
-.agent-collapsed-tab-button:focus-visible {
+.agent-collapsed-tab-button:hover {
   color: var(--foreground);
   background: var(--surface-tertiary);
-  outline: none;
+}
+
+.agent-collapsed-tab-button:focus-visible {
+  color: var(--foreground);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .agent-collapsed-tab-button svg {

@@ -140,6 +140,8 @@ declare global {
       isWindowMaximized: () => Promise<{ isFullScreen: boolean, isMaximized: boolean }>
       refreshWindowInteractionRegions: (mode?: 'soft' | 'hard') => Promise<{ ok: boolean }>
       onWindowStateChanged: (listener: (state: { isFullScreen: boolean, isMaximized: boolean }) => void) => () => void
+      onWindowDevToolsOpened: (listener: () => void) => () => void
+      onWindowDevToolsClosed: (listener: () => void) => () => void
       onWindowCloseRequested: (listener: () => void) => () => void
       onWorkspaceChanged: (listener: (event: WorkspaceChangeEvent) => void) => () => void
       onAgentEvent: (listener: (event: AgentClientEvent) => void) => () => void
