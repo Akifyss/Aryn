@@ -1,8 +1,8 @@
-import type { Dispatch, MouseEvent, ReactNode, SetStateAction } from 'react'
+import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { Icon } from '@iconify/react'
 import { FolderForbidLine } from '@mingcute/react'
 import { TreeItem, TreeItemActionButton, TreeScrollArea } from '@/components/tree'
-import { WorkspaceTree } from '@/features/workspace/components/workspace-tree'
+import { WorkspaceTree, type WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree'
 import type { GitChangeItem, GitRepositoryState } from '@/features/git/types'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 
@@ -28,7 +28,7 @@ type WorkspaceTreePanelProps = {
   onOpenDiff?: (change: GitChangeItem) => void
   onOpenInCodeEditor: (path: string) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
-  onSelectFile: (path: string, event: MouseEvent<HTMLElement>) => void
+  onSelectFile: (path: string, event: WorkspaceTreeActivationEvent) => void
   onToggleFileTreeExpansion: () => void
 }
 

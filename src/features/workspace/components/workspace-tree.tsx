@@ -1,4 +1,4 @@
-import { type Dispatch, type DragEvent, type FormEvent, type MouseEvent, type SetStateAction, useEffect, useRef, useState } from 'react'
+import { type Dispatch, type DragEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type SetStateAction, useEffect, useRef, useState } from 'react'
 import { Menu } from '@base-ui/react/menu'
 import { AlertDialog, Button, useOverlayState } from '@heroui/react'
 import {
@@ -39,6 +39,8 @@ import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 import type { GitChangeItem, GitDisplayChange, GitRepositoryState } from '@/features/git/types'
 
+export type WorkspaceTreeActivationEvent = Pick<MouseEvent<HTMLElement>, 'button' | 'ctrlKey' | 'metaKey'>
+
 type WorkspaceTreeProps = {
   activeFilePath: string | null
   iconTheme: WorkspaceIconTheme | null
@@ -46,7 +48,7 @@ type WorkspaceTreeProps = {
   expandedPaths: Set<string>
   setExpandedPaths: Dispatch<SetStateAction<Set<string>>>
   workspacePath: string | null
-  onSelectFile: (path: string, event: MouseEvent<HTMLElement>) => void
+  onSelectFile: (path: string, event: WorkspaceTreeActivationEvent) => void
   onOpenInCodeEditor: (path: string) => void
   onOpenDiff?: (change: GitChangeItem) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
@@ -313,7 +315,7 @@ function FileTreeItem({
   onOpenInCodeEditor: (path: string) => void
   onOpenDiff?: (change: GitChangeItem) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
-  onSelectFile: (path: string, event: MouseEvent<HTMLElement>) => void
+  onSelectFile: (path: string, event: WorkspaceTreeActivationEvent) => void
   onToggleDirectory: (path: string) => void
   gitRepositoryState?: GitRepositoryState | null
   menuPortalTarget?: HTMLElement | null
@@ -387,7 +389,7 @@ function FileTreeItem({
 
   const deleteModal = useOverlayState()
 
-  const handleSelectNode = (event: MouseEvent<HTMLElement>) => {
+  const handleActivateNode = (event: WorkspaceTreeActivationEvent) => {
     recordOpenFileProfile('workspace-tree:row-click', {
       button: event.button,
       kind: node.kind,
@@ -402,6 +404,23 @@ function FileTreeItem({
     }
 
     onSelectFile(node.path, event)
+  }
+
+  const handleSelectNode = (event: MouseEvent<HTMLElement>) => {
+    handleActivateNode(event)
+  }
+
+  const handleKeyDownNode = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return
+    }
+
+    event.preventDefault()
+    handleActivateNode({
+      button: 0,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+    })
   }
 
   const handleDelete = async (onClose: () => void) => {
@@ -603,19 +622,27 @@ function FileTreeItem({
       icon={!isEditing ? nodeIcon : undefined}
       label={!isEditing ? node.name : undefined}
       labelProps={!isEditing ? { style: { fontWeight: isFolder ? 600 : 500 } } : undefined}
-      mainButtonProps={!isEditing ? {
-        draggable: !isSubmitting,
-        title: node.path,
-        'aria-expanded': isFolder ? isExpanded : undefined,
-        onAuxClick: (event) => {
-          if (event.button === 1) {
-            handleSelectNode(event)
-          }
-        },
-        onClick: handleSelectNode,
-        onDragEnd: onDragEndNode,
-        onDragStart: (event) => onDragStartNode(node, event),
-      } : undefined}
+      renderMain={!isEditing ? (content, mainProps) => (
+        <TreeItemMain
+          {...mainProps}
+          aria-expanded={isFolder ? isExpanded : undefined}
+          draggable={!isSubmitting}
+          role='button'
+          tabIndex={0}
+          title={node.path}
+          onAuxClick={(event) => {
+            if (event.button === 1) {
+              handleSelectNode(event)
+            }
+          }}
+          onClick={handleSelectNode}
+          onDragEnd={onDragEndNode}
+          onDragStart={(event) => onDragStartNode(node, event)}
+          onKeyDown={handleKeyDownNode}
+        >
+          {content}
+        </TreeItemMain>
+      ) : undefined}
       actions={rowActions}
       actionsAlwaysVisible={isEditing || isRowMenuOpen}
       info={!isEditing && gitChange ? (

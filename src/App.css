@@ -2796,7 +2796,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   text-align: left;
 }
 
-.tree-item-main:is(button):focus-visible {
+.tree-item-main:is(button):focus-visible,
+.tree-item-main[role='button']:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
   border-radius: 6px;

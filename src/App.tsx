@@ -1,4 +1,4 @@
-import type { CSSProperties, FormEvent, MouseEvent, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Menu } from '@base-ui/react/menu'
@@ -58,6 +58,7 @@ import {
 } from '@/features/settings/components/settings-dialog'
 import { FileTabs } from '@/features/workspace/components/file-tabs'
 import { WorkspaceTreePanel } from '@/features/workspace/components/workspace-tree-panel'
+import type { WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree'
 import {
   createWorkspaceFileTabId,
   dedupeWorkspaceTabs,
@@ -3089,7 +3090,7 @@ function App() {
       title = '文件树',
     } = options
     const menuPortalTarget = surfaceMode === 'drawer' ? leftDrawerOverlayRoot : null
-    const handleSelectFile = (filePath: string, event: MouseEvent<HTMLElement>) => {
+    const handleSelectFile = (filePath: string, event: WorkspaceTreeActivationEvent) => {
       if (
         fileClickMode === 'replace-active-tab'
         && event.button === 0
