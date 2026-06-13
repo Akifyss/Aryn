@@ -5,13 +5,14 @@ import type {
   ConversationRecord,
   ConversationState,
   ConversationStatus,
+  ConversationTitleSource,
   CreateConversationWorkspaceRequest,
   UpdateConversationRequest,
 } from '../../src/features/conversations/types'
 import { AtomicJsonStore } from './json-file-store'
 import { ensureUsableFolderName } from './path-names'
 
-const CONVERSATION_INDEX_SCHEMA_VERSION = 1
+const CONVERSATION_INDEX_SCHEMA_VERSION = 2
 const DEFAULT_CONVERSATION_TITLE = '新对话'
 const DEFAULT_CONVERSATION_SLUG = 'conversation'
 
@@ -42,6 +43,34 @@ function readConversationStatus(value: unknown): ConversationStatus {
   return value === 'draft' || value === 'active' ? value : 'active'
 }
 
+function isConversationTitleSource(value: unknown): value is ConversationTitleSource {
+  return value === 'default' || value === 'prompt' || value === 'agent' || value === 'user'
+}
+
+function readConversationTitleSource(
+  value: unknown,
+  title: string,
+  lastMessagePreview: string | null,
+): ConversationTitleSource {
+  if (isConversationTitleSource(value)) {
+    return value
+  }
+
+  if (title === DEFAULT_CONVERSATION_TITLE) {
+    return 'default'
+  }
+
+  if (lastMessagePreview && title.trim() === lastMessagePreview.trim()) {
+    return 'prompt'
+  }
+
+  return 'user'
+}
+
+function readConversationTitleSourcePatch(value: unknown): ConversationTitleSource | null {
+  return isConversationTitleSource(value) ? value : null
+}
+
 function readConversationRecord(value: unknown): ConversationRecord | null {
   const candidate = value && typeof value === 'object'
     ? value as Record<string, unknown>
@@ -54,16 +83,19 @@ function readConversationRecord(value: unknown): ConversationRecord | null {
 
   const fallbackDate = new Date(0).toISOString()
   const createdAt = readDateString(candidate.createdAt, fallbackDate)
+  const title = readNullableString(candidate.title) ?? DEFAULT_CONVERSATION_TITLE
+  const lastMessagePreview = readNullableString(candidate.lastMessagePreview)
 
   return {
     id,
-    title: readNullableString(candidate.title) ?? DEFAULT_CONVERSATION_TITLE,
+    title,
+    titleSource: readConversationTitleSource(candidate.titleSource, title, lastMessagePreview),
     createdAt,
     updatedAt: readDateString(candidate.updatedAt, createdAt),
     status: readConversationStatus(candidate.status),
     workspacePath: readNullableString(candidate.workspacePath),
     agentSessionPath: readNullableString(candidate.agentSessionPath),
-    lastMessagePreview: readNullableString(candidate.lastMessagePreview),
+    lastMessagePreview,
   }
 }
 
@@ -152,6 +184,12 @@ async function createUniqueConversationPath(parentPath: string, folderName: stri
 }
 
 function normalizeConversationPatch(patch: UpdateConversationRequest = {}) {
+  const hasTitle = Object.prototype.hasOwnProperty.call(patch, 'title')
+  const normalizedTitle = hasTitle
+    ? readNullableString(patch.title) ?? DEFAULT_CONVERSATION_TITLE
+    : undefined
+  const normalizedTitleSource = readConversationTitleSourcePatch(patch.titleSource)
+
   return {
     ...(Object.prototype.hasOwnProperty.call(patch, 'agentSessionPath')
       ? { agentSessionPath: readNullableString(patch.agentSessionPath) }
@@ -160,9 +198,13 @@ function normalizeConversationPatch(patch: UpdateConversationRequest = {}) {
       ? { lastMessagePreview: readNullableString(patch.lastMessagePreview) }
       : {}),
     ...(patch.status === 'draft' || patch.status === 'active' ? { status: patch.status } : {}),
-    ...(Object.prototype.hasOwnProperty.call(patch, 'title')
-      ? { title: readNullableString(patch.title) ?? DEFAULT_CONVERSATION_TITLE }
+    ...(hasTitle
+      ? {
+          title: normalizedTitle,
+          titleSource: normalizedTitleSource ?? (normalizedTitle === DEFAULT_CONVERSATION_TITLE ? 'default' : 'user'),
+        }
       : {}),
+    ...(!hasTitle && normalizedTitleSource ? { titleSource: normalizedTitleSource } : {}),
   }
 }
 
@@ -196,6 +238,7 @@ export class ConversationStore {
     const record: ConversationRecord = {
       id: randomUUID(),
       title,
+      titleSource: title === DEFAULT_CONVERSATION_TITLE ? 'default' : 'prompt',
       createdAt,
       updatedAt: createdAt,
       status: 'draft',

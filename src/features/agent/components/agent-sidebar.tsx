@@ -82,7 +82,12 @@ import {
   type AgentProjectSessionRequest,
 } from '@/features/agent/lib/project-session-request'
 import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
-import type { ActiveWorkspaceContext, ConversationRecord, ConversationState } from '@/features/conversations/types'
+import type {
+  ActiveWorkspaceContext,
+  ConversationRecord,
+  ConversationState,
+  ConversationTitleSource,
+} from '@/features/conversations/types'
 import type { ProjectRecord, ProjectState, WorkspaceIconTheme } from '@/features/workspace/types'
 import {
   findLatestOpenableAgentFileChange,
@@ -120,6 +125,18 @@ type AgentProjectSwitchMenuOptions = {
 
 type AgentSurfaceMode = 'docked' | 'drawer'
 
+type ConversationSessionStartedPatch = {
+  agentSessionPath: string | null
+  lastMessagePreview?: string | null
+  title?: string | null
+  titleSource?: ConversationTitleSource
+}
+
+type ConversationTitleSuggestion = {
+  agentSessionPath: string
+  title: string
+}
+
 type AgentSidebarProps = {
   activeWorkspaceContext?: ActiveWorkspaceContext
   conversationState?: ConversationState
@@ -127,10 +144,8 @@ type AgentSidebarProps = {
   onExternalSessionRequestHandled?: (requestId: number) => void
   iconTheme?: WorkspaceIconTheme | null
   onConversationDraftFailed?: (conversationId: string) => Promise<void> | void
-  onConversationSessionStarted?: (
-    conversationId: string,
-    patch: { agentSessionPath: string | null; lastMessagePreview?: string | null; title?: string | null },
-  ) => Promise<void> | void
+  onConversationSessionStarted?: (conversationId: string, patch: ConversationSessionStartedPatch) => Promise<void> | void
+  onConversationTitleSuggested?: (conversationId: string, suggestion: ConversationTitleSuggestion) => Promise<void> | void
   onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
@@ -160,10 +175,8 @@ type AgentSurfaceProps = {
   onExternalSessionRequestHandled?: (requestId: number) => void
   iconTheme?: WorkspaceIconTheme | null
   onConversationDraftFailed?: (conversationId: string) => Promise<void> | void
-  onConversationSessionStarted?: (
-    conversationId: string,
-    patch: { agentSessionPath: string | null; lastMessagePreview?: string | null; title?: string | null },
-  ) => Promise<void> | void
+  onConversationSessionStarted?: (conversationId: string, patch: ConversationSessionStartedPatch) => Promise<void> | void
+  onConversationTitleSuggested?: (conversationId: string, suggestion: ConversationTitleSuggestion) => Promise<void> | void
   onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
@@ -405,7 +418,7 @@ const emptyProjectState: ProjectState = {
 }
 
 const emptyConversationState: ConversationState = {
-  version: 1,
+  version: 2,
   conversations: [],
 }
 
@@ -502,10 +515,8 @@ type AgentContextValue = {
   modelFieldRef: React.RefObject<HTMLDivElement | null>
   modelInputValue: string
   onConversationDraftFailed?: (conversationId: string) => Promise<void> | void
-  onConversationSessionStarted?: (
-    conversationId: string,
-    patch: { agentSessionPath: string | null; lastMessagePreview?: string | null; title?: string | null },
-  ) => Promise<void> | void
+  onConversationSessionStarted?: (conversationId: string, patch: ConversationSessionStartedPatch) => Promise<void> | void
+  onConversationTitleSuggested?: (conversationId: string, suggestion: ConversationTitleSuggestion) => Promise<void> | void
   onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
@@ -2507,6 +2518,7 @@ function AgentProvider({
   iconTheme,
   onConversationDraftFailed,
   onConversationSessionStarted,
+  onConversationTitleSuggested,
   onCreateConversationWorkspace,
   onOpenMessageFile,
   onOpenConversation,
@@ -2566,6 +2578,7 @@ function AgentProvider({
   const locallyEmittedWorkspaceStatesRef = useRef<WeakSet<AgentWorkspaceState>>(new WeakSet())
   const pendingExternalWorkspaceStateRef = useRef<AgentWorkspaceState | null>(null)
   const handledExternalSessionRequestRef = useRef<number | null>(null)
+  const lastConversationTitleSuggestionKeyRef = useRef<string | null>(null)
   const externalSessionRequestRef = useRef<AgentProjectSessionRequest | null>(externalSessionRequest ?? null)
   const activeSessionSelectionRef = useRef(activeSessionSelection)
   const workspacePathRef = useRef<string | null>(workspacePath)
@@ -3263,6 +3276,61 @@ function AgentProvider({
   const activeSession = activeSessionPath
     ? agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
     : null
+  useEffect(() => {
+    if (activeWorkspaceContext.kind !== 'conversation' || !onConversationTitleSuggested) {
+      return
+    }
+
+    const runtimeSessionTitle = agentState.activeSession?.sessionPath === activeSessionPath
+      ? agentState.activeSession.name
+      : null
+    const suggestedTitle = (runtimeSessionTitle ?? activeSession?.name ?? '').trim()
+    const suggestedSessionPath = activeSession?.path
+      ?? (agentState.activeSession?.sessionPath === activeSessionPath ? agentState.activeSession.sessionPath : null)
+
+    if (!suggestedTitle || !suggestedSessionPath) {
+      return
+    }
+
+    const conversation = conversationState.conversations.find((item) => (
+      item.id === activeWorkspaceContext.conversationId
+    )) ?? null
+
+    if (
+      !conversation
+      || conversation.agentSessionPath !== suggestedSessionPath
+      || conversation.titleSource === 'user'
+      || conversation.title.trim() === suggestedTitle
+    ) {
+      return
+    }
+
+    const suggestionKey = `${conversation.id}:${suggestedSessionPath}:${suggestedTitle}`
+    if (lastConversationTitleSuggestionKeyRef.current === suggestionKey) {
+      return
+    }
+    lastConversationTitleSuggestionKeyRef.current = suggestionKey
+
+    void Promise.resolve(onConversationTitleSuggested(conversation.id, {
+      agentSessionPath: suggestedSessionPath,
+      title: suggestedTitle,
+    })).catch((error) => {
+      if (lastConversationTitleSuggestionKeyRef.current === suggestionKey) {
+        lastConversationTitleSuggestionKeyRef.current = null
+      }
+      setPanelError(error instanceof Error ? error.message : 'Unable to update the conversation title.')
+    })
+  }, [
+    activeSession?.name,
+    activeSession?.path,
+    activeSessionPath,
+    activeWorkspaceContext,
+    agentState.activeSession?.name,
+    agentState.activeSession?.sessionPath,
+    conversationState.conversations,
+    onConversationTitleSuggested,
+  ])
+
   const isViewingActiveRuntime = Boolean(
     activeSessionPath
     && agentState.activeSession?.sessionPath === activeSessionPath,
@@ -3755,7 +3823,7 @@ function AgentProvider({
           await onConversationSessionStarted?.(conversationId, {
             agentSessionPath: nextSessionPath,
             lastMessagePreview: preview,
-            ...(createdConversation ? { title: preview } : {}),
+            ...(createdConversation ? { title: preview, titleSource: 'prompt' } : {}),
           })
         } catch (error) {
           setPanelError(error instanceof Error ? error.message : 'Unable to update the conversation index.')
@@ -4180,6 +4248,7 @@ function AgentProvider({
     modelInputValue,
     onConversationDraftFailed,
     onConversationSessionStarted,
+    onConversationTitleSuggested,
     onCreateConversationWorkspace,
     onOpenMessageFile,
     onOpenConversation,
@@ -4254,6 +4323,7 @@ function AgentProvider({
     modelInputValue,
     onConversationDraftFailed,
     onConversationSessionStarted,
+    onConversationTitleSuggested,
     onCreateConversationWorkspace,
     onOpenMessageFile,
     onOpenConversation,
@@ -5362,6 +5432,7 @@ function AgentChatSurface() {
     composerAttachments,
     composerState,
     configuredProviders,
+    conversationState,
     handleComposerKeyDown,
     handleDeleteSession,
     handleOpenSession,
@@ -5411,6 +5482,13 @@ function AgentChatSurface() {
   const activeProject = activeWorkspaceContext.kind === 'project'
     ? projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
     : null
+  const activeConversation = activeWorkspaceContext.kind === 'conversation'
+    ? conversationState.conversations.find((conversation) => conversation.id === activeWorkspaceContext.conversationId) ?? null
+    : null
+  const activeConversationTitle = activeConversation?.title.trim() ?? ''
+  const activeSessionSelectLabel = isNewConversation
+    ? '新对话'
+    : activeConversationTitle || formatSessionLabel(activeSession)
   const isViewingActiveRuntime = Boolean(
     activeSessionPath
     && agentState.activeSession?.sessionPath === activeSessionPath,
@@ -6592,7 +6670,7 @@ function AgentChatSurface() {
                   render={<button type='button' />}
                 >
                   <span className='agent-select-current'>
-                    {isNewConversation ? '新对话' : formatSessionLabel(activeSession)}
+                    {activeSessionSelectLabel}
                   </span>
                   <DownLine aria-hidden='true' className='agent-session-trigger-arrow' size={14} />
                 </Menu.Trigger>
@@ -6625,7 +6703,7 @@ function AgentChatSurface() {
             ) : (
               <span className='agent-session-static-label'>
                 <span className='agent-select-current'>
-                  {isNewConversation ? '新对话' : formatSessionLabel(activeSession)}
+                  {activeSessionSelectLabel}
                 </span>
               </span>
             )}

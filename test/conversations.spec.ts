@@ -38,6 +38,7 @@ describe('conversation store', () => {
     expect(workspacePath?.startsWith(path.join(documentsPath, 'Aryn', getLocalDateStamp()))).toBe(true)
     expect(path.basename(workspacePath!)).toBe('Review the storage design')
     expect(record.status).toBe('draft')
+    expect(record.titleSource).toBe('prompt')
     expect(record.agentSessionPath).toBeNull()
 
     const persisted = JSON.parse(await readFile(indexPath, 'utf8'))
@@ -45,8 +46,26 @@ describe('conversation store', () => {
     expect(persisted.conversations[0]).toMatchObject({
       id: record.id,
       status: 'draft',
+      titleSource: 'prompt',
       workspacePath,
     })
+  })
+
+  it('uses the default title source for blank projectless prompts', async () => {
+    const rootPath = await createTempDir()
+    const store = new ConversationStore(
+      path.join(rootPath, '.aryn', 'conversations', 'index.json'),
+      path.join(rootPath, 'Documents'),
+    )
+
+    const record = await store.createWorkspace({ initialPrompt: '   \n ' })
+
+    expect(record).toMatchObject({
+      title: '新对话',
+      titleSource: 'default',
+      lastMessagePreview: null,
+    })
+    expect(path.basename(record.workspacePath!)).toBe('新对话')
   })
 
   it('keeps conversation metadata in the index instead of rewriting the workspace path', async () => {
@@ -66,6 +85,7 @@ describe('conversation store', () => {
       lastMessagePreview: 'Updated preview',
       status: 'active',
       title: 'Updated title',
+      titleSource: 'agent',
     })
 
     expect(updated).toMatchObject({
@@ -74,9 +94,29 @@ describe('conversation store', () => {
       lastMessagePreview: 'Updated preview',
       status: 'active',
       title: 'Updated title',
+      titleSource: 'agent',
       workspacePath: record.workspacePath,
     })
     expect(path.basename(updated.workspacePath!)).toBe('Initial title')
+  })
+
+  it('treats title-only updates as user-authored renames', async () => {
+    const rootPath = await createTempDir()
+    const store = new ConversationStore(
+      path.join(rootPath, '.aryn', 'conversations', 'index.json'),
+      path.join(rootPath, 'Documents'),
+    )
+    const record = await store.createWorkspace({ initialPrompt: 'Initial prompt' })
+
+    const updated = await store.updateConversation(record.id, {
+      title: 'Manual title',
+    })
+
+    expect(updated).toMatchObject({
+      title: 'Manual title',
+      titleSource: 'user',
+      workspacePath: record.workspacePath,
+    })
   })
 
   it('refreshes an active conversation preview without rewriting its established title', async () => {
@@ -96,6 +136,7 @@ describe('conversation store', () => {
       lastMessagePreview: 'Later follow-up',
       status: 'active',
       title: 'Stable title',
+      titleSource: 'prompt',
     })
   })
 
@@ -247,7 +288,54 @@ describe('conversation store', () => {
 
     expect(state.conversations[0]).toMatchObject({
       createdAt: '1970-01-01T00:00:00.000Z',
+      titleSource: 'default',
       updatedAt: '1970-01-01T00:00:00.000Z',
+    })
+  })
+
+  it('infers title source for legacy persisted conversations conservatively', async () => {
+    const rootPath = await createTempDir()
+    const indexPath = path.join(rootPath, '.aryn', 'conversations', 'index.json')
+    await mkdir(path.dirname(indexPath), { recursive: true })
+    await writeFile(indexPath, JSON.stringify({
+      conversations: [
+        {
+          id: 'default-title',
+          title: '新对话',
+          createdAt: '2026-05-30T10:00:00.000Z',
+          updatedAt: '2026-05-30T10:00:00.000Z',
+          status: 'active',
+        },
+        {
+          id: 'prompt-title',
+          title: 'Original prompt',
+          lastMessagePreview: 'Original prompt',
+          createdAt: '2026-05-30T10:01:00.000Z',
+          updatedAt: '2026-05-30T10:01:00.000Z',
+          status: 'active',
+        },
+        {
+          id: 'custom-title',
+          title: 'Custom title',
+          lastMessagePreview: 'Original prompt',
+          createdAt: '2026-05-30T10:02:00.000Z',
+          updatedAt: '2026-05-30T10:02:00.000Z',
+          status: 'active',
+        },
+      ],
+    }), 'utf8')
+    const store = new ConversationStore(indexPath, path.join(rootPath, 'Documents'))
+
+    const state = await store.read()
+
+    expect(state.conversations.find((conversation) => conversation.id === 'default-title')).toMatchObject({
+      titleSource: 'default',
+    })
+    expect(state.conversations.find((conversation) => conversation.id === 'prompt-title')).toMatchObject({
+      titleSource: 'prompt',
+    })
+    expect(state.conversations.find((conversation) => conversation.id === 'custom-title')).toMatchObject({
+      titleSource: 'user',
     })
   })
 

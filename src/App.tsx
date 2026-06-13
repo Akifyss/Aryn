@@ -19,7 +19,12 @@ import {
   SearchLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
-import type { ActiveWorkspaceContext, ConversationRecord, ConversationState } from '@/features/conversations/types'
+import type {
+  ActiveWorkspaceContext,
+  ConversationRecord,
+  ConversationState,
+  ConversationTitleSource,
+} from '@/features/conversations/types'
 import type {
   ProjectRecord,
   ProjectState,
@@ -417,7 +422,7 @@ const emptyProjectState: ProjectState = {
 }
 
 const emptyConversationState: ConversationState = {
-  version: 1,
+  version: 2,
   conversations: [],
 }
 
@@ -2849,19 +2854,65 @@ function App() {
 
   async function handleConversationSessionStarted(
     conversationId: string,
-    patch: { agentSessionPath: string | null; lastMessagePreview?: string | null; title?: string | null },
+    patch: {
+      agentSessionPath: string | null
+      lastMessagePreview?: string | null
+      title?: string | null
+      titleSource?: ConversationTitleSource
+    },
   ) {
     const updatedConversation = await window.appApi.updateConversation(conversationId, {
       agentSessionPath: patch.agentSessionPath,
       lastMessagePreview: patch.lastMessagePreview ?? null,
       status: 'active',
       ...(patch.title !== undefined ? { title: patch.title } : {}),
+      ...(patch.titleSource !== undefined ? { titleSource: patch.titleSource } : {}),
     })
     setConversationState(await window.appApi.getConversationState())
     if (updatedConversation.workspacePath && updatedConversation.agentSessionPath) {
       await window.appApi.updateWorkspaceState(updatedConversation.workspacePath, {
         lastAgentSessionPath: updatedConversation.agentSessionPath,
       })
+    }
+  }
+
+  async function handleConversationTitleSuggested(
+    conversationId: string,
+    suggestion: { agentSessionPath: string; title: string },
+  ) {
+    const nextTitle = suggestion.title.trim()
+
+    if (!nextTitle) {
+      return
+    }
+
+    try {
+      const currentConversationState = await window.appApi.getConversationState()
+      const conversation = currentConversationState.conversations.find((item) => item.id === conversationId) ?? null
+
+      if (
+        !conversation
+        || conversation.agentSessionPath !== suggestion.agentSessionPath
+        || conversation.titleSource === 'user'
+        || conversation.title.trim() === nextTitle
+      ) {
+        setConversationState(currentConversationState)
+        return
+      }
+
+      const updatedConversation = await window.appApi.updateConversation(conversationId, {
+        title: nextTitle,
+        titleSource: 'agent',
+      })
+      setConversationState(await window.appApi.getConversationState())
+
+      if (activeWorkspaceContext.kind === 'conversation' && activeWorkspaceContext.conversationId === conversationId) {
+        setStatusMessage(updatedConversation.title)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to update the conversation title.'
+      setStatusMessage(message)
+      throw error
     }
   }
 
@@ -2949,6 +3000,7 @@ function App() {
     try {
       const updatedConversation = await window.appApi.updateConversation(conversation.id, {
         title: nextTitle,
+        titleSource: 'user',
       })
       setConversationState(await window.appApi.getConversationState())
 
@@ -5792,6 +5844,7 @@ function App() {
       iconTheme={iconTheme}
       onConversationDraftFailed={handleConversationDraftFailed}
       onConversationSessionStarted={handleConversationSessionStarted}
+      onConversationTitleSuggested={handleConversationTitleSuggested}
       onCreateConversationWorkspace={handleCreateConversationWorkspace}
       onOpenMessageFile={openAgentMessageFile}
       onOpenConversation={handleOpenConversation}

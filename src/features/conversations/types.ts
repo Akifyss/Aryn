@@ -5,9 +5,12 @@ export type ActiveWorkspaceContext =
 
 export type ConversationStatus = 'draft' | 'active'
 
+export type ConversationTitleSource = 'default' | 'prompt' | 'agent' | 'user'
+
 export type ConversationRecord = {
   id: string
   title: string
+  titleSource: ConversationTitleSource
   createdAt: string
   updatedAt: string
   status: ConversationStatus
@@ -30,4 +33,5 @@ export type UpdateConversationRequest = {
   lastMessagePreview?: string | null
   status?: ConversationStatus
   title?: string | null
+  titleSource?: ConversationTitleSource
 }
