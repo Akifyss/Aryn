@@ -4693,22 +4693,6 @@ function App() {
     }
   }, [activeResizePanel, isLeftSidebarVisible, isRightSidebarVisible])
 
-  const handleOpenSession = useCallback((sessionPath: string) => {
-    const currentProject = currentPath
-      ? projectState.projects.find((project) => normalizeFilePath(project.path) === normalizeFilePath(currentPath))
-      : null
-
-    if (currentPath && currentProject) {
-      agentProjectSessionRequestIdRef.current += 1
-      setPendingAgentProjectSessionRequest({
-        kind: 'session',
-        projectId: currentProject.id,
-        requestId: agentProjectSessionRequestIdRef.current,
-        sessionPath,
-      })
-    }
-  }, [currentPath, projectState.projects])
-
   const handleCloseCommandPalette = useCallback(() => setIsCommandPaletteOpen(false), [])
   const handleOpenCommandPaletteFromChrome = useCallback(() => {
     setIsLeftDrawerOpen(false)
@@ -4729,6 +4713,34 @@ function App() {
 
     setIsRightDrawerOpen(isOpen)
   }, [])
+  const revealEditorAssistantSurface = useCallback(() => {
+    if (isAgentLayout) {
+      return
+    }
+
+    if (isRightSidebarDrawer) {
+      handleRightDrawerOpenChange(true)
+      return
+    }
+
+    setIsEditorRightSidebarCollapsed(false)
+  }, [handleRightDrawerOpenChange, isAgentLayout, isRightSidebarDrawer])
+  const handleOpenSession = useCallback((sessionPath: string) => {
+    const currentProject = currentPath
+      ? projectState.projects.find((project) => normalizeFilePath(project.path) === normalizeFilePath(currentPath))
+      : null
+
+    if (currentPath && currentProject) {
+      agentProjectSessionRequestIdRef.current += 1
+      setPendingAgentProjectSessionRequest({
+        kind: 'session',
+        projectId: currentProject.id,
+        requestId: agentProjectSessionRequestIdRef.current,
+        sessionPath,
+      })
+      revealEditorAssistantSurface()
+    }
+  }, [currentPath, projectState.projects, revealEditorAssistantSurface])
   useEffect(() => {
     const openDrawerSide = isLeftDrawerOpen ? 'left' : isRightDrawerOpen ? 'right' : null
 
