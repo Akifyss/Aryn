@@ -5038,7 +5038,9 @@ function AgentProjectTree({
             ) : null}
             {isProjectSectionExpanded ? (
               <TreeList className='agent-project-list'>
-                {projectState.projects.map((project) => {
+                {projectState.projects.length === 0 ? (
+                  <TreeStatusItem>暂无项目</TreeStatusItem>
+                ) : projectState.projects.map((project) => {
             const bucket = projectSessions[project.id]
             const isExpanded = expandedProjectIds.has(project.id)
             const sessions = bucket?.sessions ?? []
