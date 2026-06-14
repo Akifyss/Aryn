@@ -117,6 +117,34 @@ describe('shell layout helpers', () => {
     expect(appCss).toContain('width: var(--window-control-button-width);')
   })
 
+  it('keeps docked sidebar expansion motion scoped and disableable', async () => {
+    const appCss = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
+
+    expect(appCss).toContain('--sidebar-layout-transition-duration: 180ms;')
+    expect(appCss).toContain('--sidebar-layout-transition-easing: cubic-bezier(0.16, 1, 0.3, 1);')
+    expect(appCss).toContain('transition: grid-template-columns var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);')
+    expect(appCss).toContain(`.app-shell[data-resizing='true'] {
+  transition: none;
+}`)
+    expect(appCss).toContain(`.app-shell[data-resizing='true'] .titlebar-spacer,
+.app-shell[data-resizing='true'] .left-chrome-actions {
+  transition: none;
+}`)
+    expect(appCss).toContain(`.app-shell[data-resizing='true'] .file-tabs-shell {
+  transition: none;
+}`)
+    expect(appCss).toContain(`@media (prefers-reduced-motion: reduce) {
+
+  .app-shell,
+  .titlebar-spacer,
+  .left-chrome-actions,
+  .panel-resize-slot,
+  .file-tabs-shell,
+  .agent-threadbar {
+    transition: none;
+  }`)
+  })
+
   it('keeps macOS fullscreen chrome aligned with the screen edge', () => {
     expect(getShellChromeVars('macos', { isFullScreen: true })).toMatchObject({
       '--left-chrome-edge-gap': '6px',
