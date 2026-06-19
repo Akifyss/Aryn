@@ -24,7 +24,7 @@ export type GitChangeItem = {
   statusCode: string
 }
 
-export type GitRecentPullItem = {
+export type GitFileChangeItem = {
   kind: Exclude<GitChangeKind, 'conflicted' | 'untracked'>
   originalPath: string | null
   path: string
@@ -32,7 +32,29 @@ export type GitRecentPullItem = {
   statusCode: string
 }
 
+export type GitRecentPullItem = GitFileChangeItem
+export type GitCommitFileChange = GitFileChangeItem
+
 export type GitDisplayChange = GitChangeItem | GitRecentPullItem
+
+export type GitCommitItem = {
+  authorEmail: string | null
+  authorName: string
+  authorTimeUnix: number
+  hash: string
+  shortHash: string
+  subject: string
+}
+
+export type GitCommitDetails = GitCommitItem & {
+  changes: GitCommitFileChange[]
+}
+
+export type GitCommitHistoryResult = {
+  commits: GitCommitItem[]
+  repositoryRootPath: string | null
+  workspacePath: string
+}
 
 export type GitRepositoryState = {
   ahead: number
@@ -93,6 +115,16 @@ export type GitFileDiffResult = {
   originalLabel: string
   repositoryRootPath: string
   selections: GitDiffSelection[]
+  source:
+    | {
+      kind: 'working-tree'
+    }
+    | {
+      commit: GitCommitItem
+      kind: 'commit'
+      parentHash: string | null
+      parentShortHash: string | null
+    }
 }
 
 export type GitDiffSelection = {

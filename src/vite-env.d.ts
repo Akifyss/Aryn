@@ -5,6 +5,8 @@ import type {
   GitBlameResult,
   GitChangeItem,
   GitChangeScope,
+  GitCommitDetails,
+  GitCommitHistoryResult,
   GitDiffBlockAction,
   GitDiffSelection,
   GitFileDiffResult,
@@ -91,7 +93,11 @@ declare global {
       commitAndSyncGitChanges: (workspacePath: string, message: string) => Promise<GitRepositoryState>
       pullGitChanges: (workspacePath: string) => Promise<GitRepositoryState>
       pushGitChanges: (workspacePath: string) => Promise<GitRepositoryState>
+      revertGitCommit: (workspacePath: string, commitHash: string) => Promise<GitRepositoryState>
       getGitFileDiff: (workspacePath: string, filePath: string, scope: GitChangeScope) => Promise<GitFileDiffResult>
+      getGitCommitHistory: (workspacePath: string, limit?: number) => Promise<GitCommitHistoryResult>
+      getGitCommitDetails: (workspacePath: string, commitHash: string) => Promise<GitCommitDetails>
+      getGitCommitFileDiff: (workspacePath: string, commitHash: string, filePath: string) => Promise<GitFileDiffResult>
       getGitBaseline: (workspacePath: string, filePath: string) => Promise<GitBaselinePayload>
       getGitLineBlame: (
         workspacePath: string,

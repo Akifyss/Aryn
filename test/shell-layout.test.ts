@@ -40,6 +40,16 @@ describe('shell layout helpers', () => {
       + px(vars, '--panel-toggle-gap')
   }
 
+  async function readAppCss() {
+    const appCss = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
+    return appCss.replace(/\r\n/g, '\n')
+  }
+
+  async function readTreeSource() {
+    const treeSource = await readFile(new URL('../src/components/tree.tsx', import.meta.url), 'utf8')
+    return treeSource.replace(/\r\n/g, '\n')
+  }
+
   it('derives the expected three layout modes from shell width', () => {
     expect(deriveLayoutMode(FULL_LAYOUT_BREAKPOINT + 1)).toBe('full')
     expect(deriveLayoutMode(FULL_LAYOUT_BREAKPOINT)).toBe('compact')
@@ -101,7 +111,7 @@ describe('shell layout helpers', () => {
   })
 
   it('scopes file tab action padding to expanded editor sidebars', async () => {
-    const appCss = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
+    const appCss = await readAppCss()
 
     expect(appCss).toContain(`.file-tabs-actions {
   display: flex;
@@ -117,8 +127,31 @@ describe('shell layout helpers', () => {
     expect(appCss).toContain('width: var(--window-control-button-width);')
   })
 
+  it('keeps the compact Git detail pane stretched when every section is collapsed', async () => {
+    const appCss = await readAppCss()
+
+    expect(appCss).toContain(`.git-panel-history-shell.is-compact .git-panel-detail-pane {
+  flex: 1;
+  width: 100%;
+}`)
+  })
+
+  it('keeps disabled tree action tooltips hoverable', async () => {
+    const [appCss, treeSource] = await Promise.all([
+      readAppCss(),
+      readTreeSource(),
+    ])
+
+    expect(treeSource).toContain('tooltip={disabled ? undefined : resolvedTooltip}')
+    expect(treeSource).toContain("triggerClassName='tree-item-action-tooltip-trigger'")
+    expect(appCss).toContain(`.tree-item-action-tooltip-trigger {
+  display: inline-flex;
+  flex-shrink: 0;
+}`)
+  })
+
   it('keeps docked sidebar expansion motion scoped and disableable', async () => {
-    const appCss = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
+    const appCss = await readAppCss()
 
     expect(appCss).toContain('--sidebar-layout-transition-duration: 180ms;')
     expect(appCss).toContain('--sidebar-layout-transition-easing: cubic-bezier(0.16, 1, 0.3, 1);')

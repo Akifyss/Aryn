@@ -10,12 +10,16 @@ import {
   discardAllGitChanges,
   commitGitChanges,
   getGitBaseline,
+  getGitCommitDetails,
+  getGitCommitFileDiff,
+  getGitCommitHistory,
   getGitFileDiff,
   getGitLineBlame,
   getGitRepositoryState,
   initializeGitRepository,
   pullGitChanges,
   pushGitChanges,
+  revertGitCommit,
   stageGitPaths,
 } from '../electron/main/git'
 
@@ -232,6 +236,219 @@ describe('git helpers', () => {
       indexText: 'alpha staged\nbeta\n',
       tracked: true,
     })
+  })
+
+  it('lists commit history and returns read-only file diffs for a selected commit', async () => {
+    const rootPath = await createTempWorkspace()
+    const draftPath = path.join(rootPath, 'draft.md')
+    const notesPath = path.join(rootPath, 'notes.md')
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(draftPath, 'alpha\n', 'utf8')
+    await stageGitPaths(rootPath, [draftPath])
+    await commitGitChanges(rootPath, 'initial commit')
+    await writeFile(draftPath, 'alpha changed\n', 'utf8')
+    await writeFile(notesPath, 'new note\n', 'utf8')
+    await stageGitPaths(rootPath, [draftPath, notesPath])
+    await commitGitChanges(rootPath, 'update docs')
+
+    const history = await getGitCommitHistory(rootPath)
+
+    expect(history.commits).toHaveLength(2)
+    expect(history.commits[0]).toMatchObject({
+      authorName: 'Codex Test',
+      subject: 'update docs',
+    })
+    await expect(getGitCommitHistory(rootPath, Number.NaN)).resolves.toMatchObject({
+      commits: expect.arrayContaining([
+        expect.objectContaining({ subject: 'update docs' }),
+      ]),
+    })
+
+    const details = await getGitCommitDetails(rootPath, history.commits[0].hash)
+
+    expect(details).toMatchObject({
+      hash: history.commits[0].hash,
+      subject: 'update docs',
+      changes: expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'modified',
+          relativePath: 'draft.md',
+        }),
+        expect.objectContaining({
+          kind: 'added',
+          relativePath: 'notes.md',
+        }),
+      ]),
+    })
+
+    await expect(getGitCommitFileDiff(rootPath, history.commits[0].hash, draftPath)).resolves.toMatchObject({
+      change: expect.objectContaining({
+        kind: 'modified',
+        relativePath: 'draft.md',
+        scope: 'staged',
+      }),
+      modifiedContent: 'alpha changed\n',
+      modifiedExists: true,
+      originalContent: 'alpha\n',
+      originalExists: true,
+      source: expect.objectContaining({
+        commit: expect.objectContaining({
+          hash: history.commits[0].hash,
+          subject: 'update docs',
+        }),
+        kind: 'commit',
+      }),
+    })
+
+    await expect(getGitCommitFileDiff(rootPath, history.commits[0].hash, notesPath)).resolves.toMatchObject({
+      change: expect.objectContaining({
+        kind: 'added',
+        relativePath: 'notes.md',
+      }),
+      modifiedContent: 'new note\n',
+      modifiedExists: true,
+      originalContent: '',
+      originalExists: false,
+      source: expect.objectContaining({
+        kind: 'commit',
+      }),
+    })
+  })
+
+  it('returns commit file diffs for renamed and deleted files', async () => {
+    const rootPath = await createTempWorkspace()
+    const originalPath = path.join(rootPath, 'original.md')
+    const renamedPath = path.join(rootPath, 'renamed.md')
+    const deletedPath = path.join(rootPath, 'deleted.md')
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(originalPath, 'rename me\n', 'utf8')
+    await writeFile(deletedPath, 'remove me\n', 'utf8')
+    await stageGitPaths(rootPath, [originalPath, deletedPath])
+    await commitGitChanges(rootPath, 'initial files')
+    await runGit(rootPath, ['mv', 'original.md', 'renamed.md'])
+    await runGit(rootPath, ['rm', 'deleted.md'])
+    await commitGitChanges(rootPath, 'rename and delete files')
+
+    const [targetCommit] = (await getGitCommitHistory(rootPath)).commits
+    const details = await getGitCommitDetails(rootPath, targetCommit.hash)
+
+    expect(details.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'deleted',
+        relativePath: 'deleted.md',
+      }),
+      expect.objectContaining({
+        kind: 'renamed',
+        relativePath: 'renamed.md',
+      }),
+    ]))
+
+    await expect(getGitCommitFileDiff(rootPath, targetCommit.hash, renamedPath)).resolves.toMatchObject({
+      change: expect.objectContaining({
+        kind: 'renamed',
+        originalPath,
+        path: renamedPath,
+        relativePath: 'renamed.md',
+      }),
+      modifiedContent: 'rename me\n',
+      modifiedExists: true,
+      originalContent: 'rename me\n',
+      originalExists: true,
+      source: expect.objectContaining({
+        kind: 'commit',
+      }),
+    })
+
+    await expect(getGitCommitFileDiff(rootPath, targetCommit.hash, deletedPath)).resolves.toMatchObject({
+      change: expect.objectContaining({
+        kind: 'deleted',
+        relativePath: 'deleted.md',
+      }),
+      modifiedContent: '',
+      modifiedExists: false,
+      originalContent: 'remove me\n',
+      originalExists: true,
+      source: expect.objectContaining({
+        kind: 'commit',
+      }),
+    })
+  })
+
+  it('reverts a commit by creating a new commit without rewriting history', async () => {
+    const rootPath = await createTempWorkspace()
+    const draftPath = path.join(rootPath, 'draft.md')
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(draftPath, 'alpha\n', 'utf8')
+    await stageGitPaths(rootPath, [draftPath])
+    await commitGitChanges(rootPath, 'initial commit')
+    await writeFile(draftPath, 'beta\n', 'utf8')
+    await stageGitPaths(rootPath, [draftPath])
+    await commitGitChanges(rootPath, 'update draft')
+
+    const historyBeforeRevert = await getGitCommitHistory(rootPath)
+    const revertedCommit = historyBeforeRevert.commits[0]
+    const nextState = await revertGitCommit(rootPath, revertedCommit.hash)
+    const historyAfterRevert = await getGitCommitHistory(rootPath)
+
+    expect(nextState.hasChanges).toBe(false)
+    expect(normalizeLineEndings(await readFile(draftPath, 'utf8'))).toBe('alpha\n')
+    expect(historyAfterRevert.commits).toHaveLength(3)
+    expect(historyAfterRevert.commits[0].subject).toBe('Revert "update draft"')
+    expect(historyAfterRevert.commits[1].hash).toBe(revertedCommit.hash)
+  })
+
+  it('refuses to revert while the working tree has uncommitted changes', async () => {
+    const rootPath = await createTempWorkspace()
+    const draftPath = path.join(rootPath, 'draft.md')
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(draftPath, 'alpha\n', 'utf8')
+    await stageGitPaths(rootPath, [draftPath])
+    await commitGitChanges(rootPath, 'initial commit')
+    await writeFile(draftPath, 'beta\n', 'utf8')
+    await stageGitPaths(rootPath, [draftPath])
+    await commitGitChanges(rootPath, 'update draft')
+
+    const [targetCommit] = (await getGitCommitHistory(rootPath)).commits
+    const headBeforeRevert = await runGit(rootPath, ['rev-parse', 'HEAD'])
+    await writeFile(draftPath, 'local change\n', 'utf8')
+
+    await expect(revertGitCommit(rootPath, targetCommit.hash)).rejects.toThrow(
+      'Commit or discard the current working tree changes before reverting a commit.',
+    )
+    await expect(runGit(rootPath, ['rev-parse', 'HEAD'])).resolves.toBe(headBeforeRevert)
+    await expect(readFile(draftPath, 'utf8')).resolves.toBe('local change\n')
+  })
+
+  it('aborts a conflicted revert and restores the repository state', async () => {
+    const rootPath = await createTempWorkspace()
+    const draftPath = path.join(rootPath, 'draft.md')
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(draftPath, 'alpha\n', 'utf8')
+    await stageGitPaths(rootPath, [draftPath])
+    await commitGitChanges(rootPath, 'initial commit')
+    await writeFile(draftPath, 'beta\n', 'utf8')
+    await stageGitPaths(rootPath, [draftPath])
+    await commitGitChanges(rootPath, 'target change')
+    const targetCommit = (await getGitCommitHistory(rootPath)).commits[0]
+    await writeFile(draftPath, 'gamma\n', 'utf8')
+    await stageGitPaths(rootPath, [draftPath])
+    await commitGitChanges(rootPath, 'later change')
+    const headBeforeRevert = await runGit(rootPath, ['rev-parse', 'HEAD'])
+
+    await expect(revertGitCommit(rootPath, targetCommit.hash)).rejects.toThrow()
+    await expect(runGit(rootPath, ['rev-parse', 'HEAD'])).resolves.toBe(headBeforeRevert)
+    await expect(runGit(rootPath, ['status', '--short'])).resolves.toBe('')
+    expect(normalizeLineEndings(await readFile(draftPath, 'utf8'))).toBe('gamma\n')
   })
 
   it('returns an empty baseline for tracked files that are not yet in HEAD', async () => {

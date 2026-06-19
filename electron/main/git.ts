@@ -8,8 +8,13 @@ import type {
   GitChangeItem,
   GitChangeKind,
   GitChangeScope,
+  GitCommitDetails,
+  GitCommitFileChange,
+  GitCommitHistoryResult,
+  GitCommitItem,
   GitDiffBlockAction,
   GitDiffSelection,
+  GitFileChangeItem,
   GitFileDiffResult,
   GitRecentPullItem,
   GitRepositoryState,
@@ -36,6 +41,9 @@ type EnsureUpstreamResult = 'ready' | 'pushed'
 
 const recentPullsByRepository = new Map<string, GitRecentPullItem[]>()
 const UNCOMMITTED_BLAME_HASH = /^0{40}$/
+const DEFAULT_COMMIT_HISTORY_LIMIT = 50
+const GIT_LOG_FIELD_SEPARATOR = '\x1f'
+const GIT_LOG_RECORD_SEPARATOR = '\x1e'
 
 type ParsedGitPatchHunk = GitDiffSelection & {
   bodyLines: string[]
@@ -453,7 +461,7 @@ function mapStatusCodeToKind(code: string, scope: GitChangeScope): GitChangeKind
   }
 }
 
-function mapNameStatusCodeToKind(code: string): GitRecentPullItem['kind'] | null {
+function mapNameStatusCodeToKind(code: string): GitFileChangeItem['kind'] | null {
   switch (code[0]) {
     case 'A':
       return 'added'
@@ -813,7 +821,7 @@ function parseNameStatusOutput(repositoryRootPath: string, diffOutput: string) {
     .split('\0')
     .map((entry) => entry.replace(/\r?\n/g, ''))
     .filter(Boolean)
-  const changes: GitRecentPullItem[] = []
+  const changes: GitFileChangeItem[] = []
 
   for (let index = 0; index < entries.length; index += 1) {
     const statusCode = entries[index]
@@ -865,6 +873,210 @@ function parseNameStatusOutput(repositoryRootPath: string, diffOutput: string) {
 
   changes.sort((left, right) => left.relativePath.localeCompare(right.relativePath))
   return changes
+}
+
+function parseGitCommitRecord(record: string): GitCommitItem | null {
+  const [
+    hash,
+    shortHash,
+    authorName,
+    authorEmail,
+    authorTime,
+    subject,
+  ] = record.split(GIT_LOG_FIELD_SEPARATOR)
+
+  if (!hash || !shortHash) {
+    return null
+  }
+
+  const parsedAuthorTime = Number.parseInt(authorTime ?? '', 10)
+
+  return {
+    authorEmail: authorEmail || null,
+    authorName: authorName || 'Unknown',
+    authorTimeUnix: Number.isFinite(parsedAuthorTime) ? parsedAuthorTime : 0,
+    hash,
+    shortHash,
+    subject: subject || '(no commit message)',
+  }
+}
+
+function parseGitLogOutput(output: string) {
+  return output
+    .split(GIT_LOG_RECORD_SEPARATOR)
+    .map((record) => record.trim())
+    .filter(Boolean)
+    .map(parseGitCommitRecord)
+    .filter((commit): commit is GitCommitItem => Boolean(commit))
+}
+
+async function resolveCommitHash(repositoryRootPath: string, revision: string) {
+  const normalizedRevision = revision.trim()
+
+  if (!normalizedRevision) {
+    throw new Error('Unable to resolve that Git commit.')
+  }
+
+  const stdout = await runGit(['rev-parse', '--verify', '--end-of-options', `${normalizedRevision}^{commit}`], {
+    cwd: repositoryRootPath,
+  })
+  const hash = (stdout ?? '').trim()
+
+  if (!hash) {
+    throw new Error('Unable to resolve that Git commit.')
+  }
+
+  return hash
+}
+
+async function readGitCommitItem(repositoryRootPath: string, commitHash: string) {
+  const format = `%H%x1f%h%x1f%an%x1f%ae%x1f%at%x1f%s`
+  const output = await runGit(['show', '-s', `--format=${format}`, commitHash], {
+    cwd: repositoryRootPath,
+  })
+  const commit = parseGitCommitRecord((output ?? '').trim())
+
+  if (!commit) {
+    throw new Error('Unable to read that Git commit.')
+  }
+
+  return commit
+}
+
+async function getCommitParentHashes(repositoryRootPath: string, commitHash: string) {
+  const output = await runGit(['rev-list', '--parents', '-n', '1', commitHash], {
+    cwd: repositoryRootPath,
+  })
+  const [, ...parentHashes] = (output ?? '').trim().split(/\s+/g)
+
+  return parentHashes.filter(Boolean)
+}
+
+async function getCommitFirstParentHash(repositoryRootPath: string, commitHash: string) {
+  const [firstParentHash] = await getCommitParentHashes(repositoryRootPath, commitHash)
+
+  return firstParentHash || null
+}
+
+async function getCommitChanges(
+  repositoryRootPath: string,
+  commitHash: string,
+  parentHash: string | null,
+): Promise<GitCommitFileChange[]> {
+  const args = parentHash
+    ? ['diff', '--find-renames', '--name-status', '-z', parentHash, commitHash]
+    : ['diff-tree', '--root', '--no-commit-id', '--name-status', '-r', '-z', commitHash]
+  const output = await runGit(args, {
+    cwd: repositoryRootPath,
+  })
+
+  return parseNameStatusOutput(repositoryRootPath, output ?? '')
+}
+
+async function getCommitPatchForChange(
+  repositoryRootPath: string,
+  commitHash: string,
+  parentHash: string | null,
+  change: GitCommitFileChange,
+) {
+  const relativePaths = [
+    change.originalPath ? toWorkspaceRelativePath(repositoryRootPath, change.originalPath) : null,
+    toWorkspaceRelativePath(repositoryRootPath, change.path),
+  ].filter((filePath): filePath is string => Boolean(filePath))
+  const uniqueRelativePaths = Array.from(new Set(relativePaths))
+  const args = parentHash
+    ? [
+      'diff',
+      '--no-ext-diff',
+      '--no-color',
+      '--find-renames',
+      '--unified=0',
+      parentHash,
+      commitHash,
+      '--',
+      ...uniqueRelativePaths,
+    ]
+    : [
+      'diff-tree',
+      '--root',
+      '--patch',
+      '--no-ext-diff',
+      '--no-color',
+      '--unified=0',
+      commitHash,
+      '--',
+      ...uniqueRelativePaths,
+    ]
+  const patch = await runGit(args, {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  })
+
+  return patch?.length ? patch : null
+}
+
+export async function getGitCommitHistory(
+  workspacePath: string,
+  limit = DEFAULT_COMMIT_HISTORY_LIMIT,
+): Promise<GitCommitHistoryResult> {
+  const repositoryRootPath = await resolveRepositoryRoot(workspacePath)
+
+  if (!repositoryRootPath) {
+    return {
+      commits: [],
+      repositoryRootPath: null,
+      workspacePath,
+    }
+  }
+
+  if (!(await repositoryHasCommits(repositoryRootPath))) {
+    return {
+      commits: [],
+      repositoryRootPath,
+      workspacePath,
+    }
+  }
+
+  const requestedLimit = Number.isFinite(limit) ? Math.floor(limit) : DEFAULT_COMMIT_HISTORY_LIMIT
+  const normalizedLimit = Math.max(1, Math.min(200, requestedLimit))
+  const format = `%H%x1f%h%x1f%an%x1f%ae%x1f%at%x1f%s%x1e`
+  const output = await runGit([
+    'log',
+    `--max-count=${normalizedLimit}`,
+    '--date=unix',
+    `--pretty=format:${format}`,
+  ], {
+    cwd: repositoryRootPath,
+  })
+
+  return {
+    commits: parseGitLogOutput(output ?? ''),
+    repositoryRootPath,
+    workspacePath,
+  }
+}
+
+export async function getGitCommitDetails(
+  workspacePath: string,
+  revision: string,
+): Promise<GitCommitDetails> {
+  const repositoryRootPath = await resolveRepositoryRoot(workspacePath)
+
+  if (!repositoryRootPath) {
+    throw new Error('Initialize Git in this workspace first.')
+  }
+
+  const commitHash = await resolveCommitHash(repositoryRootPath, revision)
+  const [commit, parentHash] = await Promise.all([
+    readGitCommitItem(repositoryRootPath, commitHash),
+    getCommitFirstParentHash(repositoryRootPath, commitHash),
+  ])
+  const changes = await getCommitChanges(repositoryRootPath, commitHash, parentHash)
+
+  return {
+    ...commit,
+    changes,
+  }
 }
 
 export async function getGitRepositoryState(workspacePath: string): Promise<GitRepositoryState> {
@@ -1145,6 +1357,53 @@ export async function commitGitChanges(workspacePath: string, message: string) {
   return getGitRepositoryState(workspacePath)
 }
 
+export async function revertGitCommit(workspacePath: string, revision: string) {
+  const repositoryState = await getGitRepositoryState(workspacePath)
+
+  if (!repositoryState.isRepository || !repositoryState.repositoryRootPath) {
+    throw new Error('Initialize Git in this workspace first.')
+  }
+
+  if (!repositoryState.hasCommits) {
+    throw new Error('There are no commits to revert.')
+  }
+
+  if (repositoryState.hasChanges) {
+    throw new Error('Commit or discard the current working tree changes before reverting a commit.')
+  }
+
+  const repositoryRootPath = repositoryState.repositoryRootPath
+  const commitHash = await resolveCommitHash(repositoryRootPath, revision)
+  const ancestorCheck = await runGit(['merge-base', '--is-ancestor', commitHash, 'HEAD'], {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  })
+
+  if (ancestorCheck === null) {
+    throw new Error('That commit is not part of the current branch history.')
+  }
+
+  const parentHashes = await getCommitParentHashes(repositoryRootPath, commitHash)
+
+  if (parentHashes.length > 1) {
+    throw new Error('Merge commits require a mainline parent and cannot be reverted here yet.')
+  }
+
+  try {
+    await runGit(['-c', 'commit.gpgsign=false', 'revert', '--no-edit', commitHash], {
+      cwd: repositoryRootPath,
+    })
+  } catch (error) {
+    await runGit(['revert', '--abort'], {
+      allowFailure: true,
+      cwd: repositoryRootPath,
+    })
+    throw error
+  }
+
+  return getGitRepositoryState(workspacePath)
+}
+
 export async function pullGitChanges(workspacePath: string) {
   const repositoryRootPath = await resolveRepositoryRoot(workspacePath)
 
@@ -1265,6 +1524,9 @@ export async function getGitFileDiff(
       originalLabel: 'HEAD',
       repositoryRootPath,
       selections,
+      source: {
+        kind: 'working-tree',
+      },
     }
   }
 
@@ -1286,6 +1548,84 @@ export async function getGitFileDiff(
     originalLabel: 'Index',
     repositoryRootPath,
     selections,
+    source: {
+      kind: 'working-tree',
+    },
+  }
+}
+
+export async function getGitCommitFileDiff(
+  workspacePath: string,
+  revision: string,
+  targetPath: string,
+): Promise<GitFileDiffResult> {
+  const repositoryRootPath = await resolveRepositoryRoot(workspacePath)
+
+  if (!repositoryRootPath) {
+    throw new Error('Initialize Git in this workspace first.')
+  }
+
+  const commitHash = await resolveCommitHash(repositoryRootPath, revision)
+  const [commit, parentHash] = await Promise.all([
+    readGitCommitItem(repositoryRootPath, commitHash),
+    getCommitFirstParentHash(repositoryRootPath, commitHash),
+  ])
+  const changes = await getCommitChanges(repositoryRootPath, commitHash, parentHash)
+  const matchingChange = changes.find((change) => (
+    isSameComparablePath(change.path, targetPath)
+    || (change.originalPath ? isSameComparablePath(change.originalPath, targetPath) : false)
+  ))
+
+  if (!matchingChange) {
+    throw new Error('That file was not changed in the selected commit.')
+  }
+
+  const relativePath = toWorkspaceRelativePath(repositoryRootPath, matchingChange.path)
+  const originalRelativePath = matchingChange.originalPath
+    ? toWorkspaceRelativePath(repositoryRootPath, matchingChange.originalPath)
+    : relativePath
+  const editorKind = getSupportedWorkspaceEditorKind(matchingChange.path) ?? 'code'
+  const patch = await getCommitPatchForChange(repositoryRootPath, commitHash, parentHash, matchingChange)
+  const parsedPatch = patch ? parseGitPatch(patch) : null
+  const selections = parsedPatch?.hunks.map((hunk) => ({
+    modifiedLineCount: hunk.modifiedLineCount,
+    modifiedStartLine: hunk.modifiedStartLine,
+    originalLineCount: hunk.originalLineCount,
+    originalStartLine: hunk.originalStartLine,
+  })) ?? []
+  const originalContent = !parentHash || matchingChange.kind === 'added'
+    ? null
+    : await readGitRevisionFile(repositoryRootPath, parentHash, originalRelativePath)
+  const modifiedContent = matchingChange.kind === 'deleted'
+    ? null
+    : await readGitRevisionFile(repositoryRootPath, commitHash, relativePath)
+  const change: GitChangeItem = {
+    kind: matchingChange.kind,
+    originalPath: matchingChange.originalPath,
+    path: matchingChange.path,
+    relativePath: matchingChange.relativePath,
+    scope: 'staged',
+    statusCode: matchingChange.statusCode,
+  }
+  const parentShortHash = parentHash ? parentHash.slice(0, 8) : null
+
+  return {
+    change,
+    editorKind,
+    modifiedContent: modifiedContent ?? '',
+    modifiedExists: modifiedContent !== null,
+    modifiedLabel: commit.shortHash,
+    originalContent: originalContent ?? '',
+    originalExists: originalContent !== null,
+    originalLabel: parentShortHash ?? '空树',
+    repositoryRootPath,
+    selections,
+    source: {
+      commit,
+      kind: 'commit',
+      parentHash,
+      parentShortHash,
+    },
   }
 }
 

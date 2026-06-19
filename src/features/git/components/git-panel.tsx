@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@heroui/react'
 import { Menu } from '@base-ui/react/menu'
 import { ScrollArea } from '@base-ui/react/scroll-area'
@@ -10,6 +10,8 @@ import {
   CheckLine,
   DownLine,
   FolderLine,
+  GitCommitFill,
+  GitCommitLine,
   MarkdownLine,
   Refresh2Line,
   Back2Line,
@@ -24,12 +26,18 @@ import {
   TreeItemActionButton,
   TreeItemChildren,
   TreeItem,
+  TreeItemIcon,
   TreeList,
   TreeScrollArea,
+  TreeStatusItem,
 } from '@/components/tree'
 import { AppTooltipButton } from '@/components/app-tooltip'
 import type {
   GitChangeItem,
+  GitCommitDetails,
+  GitCommitFileChange,
+  GitCommitHistoryResult,
+  GitCommitItem,
   GitPanelLayout,
   GitRecentPullItem,
   GitRepositoryState,
@@ -44,6 +52,7 @@ import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 type GitPanelProps = {
   busyLabel: string | null
   commitMessage: string
+  historyRefreshVersion: number
   isLoading: boolean
   layout: GitPanelLayout
   onCommit: () => void
@@ -53,12 +62,14 @@ type GitPanelProps = {
   onDiscardMany: (changes: GitChangeItem[]) => void
   onInitialize: () => void
   onLayoutChange: (layout: GitPanelLayout) => void
+  onOpenCommitFileDiff: (commitHash: string, change: GitCommitFileChange) => void
   onOpenDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   onOpenMeoDiff: (change: GitChangeItem) => void
   onPull: () => void
   onPush: () => void
   onRefresh: () => void
+  onRevertCommit: (commit: GitCommitItem) => void
   onStage: (filePaths: string[]) => void
   onUnstage: (filePaths: string[]) => void
   repositoryState: GitRepositoryState | null
@@ -67,9 +78,18 @@ type GitPanelProps = {
   menuPortalTarget?: HTMLElement | null
 }
 
-type GitPanelSectionKind = 'staged' | 'unstaged' | 'pulled'
+type GitPanelSectionKind = 'staged' | 'unstaged' | 'pulled' | 'commit'
 
-type GitDisplayChange = GitChangeItem | GitRecentPullItem
+type GitDisplayChange = GitChangeItem | GitRecentPullItem | GitCommitFileChange
+
+type GitHistorySelection =
+  | {
+    kind: 'working-tree'
+  }
+  | {
+    commitHash: string
+    kind: 'commit'
+  }
 
 type GitTreeNode = {
   children: GitTreeNode[]
@@ -83,10 +103,13 @@ type GitTreeNodeDraft = GitTreeNode & {
   childrenMap: Map<string, GitTreeNodeDraft>
 }
 
+const GIT_HISTORY_COMPACT_WIDTH_PX = 520
+
 type GitChangeRowsProps = {
   changes: GitDisplayChange[]
   onDiscardMany: (changes: GitChangeItem[]) => void
   onOpenDiff: (change: GitChangeItem) => void
+  onOpenCommitFileDiff?: (change: GitCommitFileChange) => void
   onOpenMeoDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   onStage: (filePaths: string[]) => void
@@ -119,6 +142,43 @@ function getDirectoryLabel(relativePath: string) {
   return segments.join(' / ')
 }
 
+function getCommitChangeCountLabel(count: number) {
+  return `${count} 个变更文件`
+}
+
+function formatCommitRelativeTime(authorTimeUnix: number) {
+  if (!authorTimeUnix) {
+    return '未知时间'
+  }
+
+  const diffSeconds = authorTimeUnix - Date.now() / 1000
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ['year', 60 * 60 * 24 * 365],
+    ['month', 60 * 60 * 24 * 30],
+    ['week', 60 * 60 * 24 * 7],
+    ['day', 60 * 60 * 24],
+    ['hour', 60 * 60],
+    ['minute', 60],
+  ]
+  const formatter = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' })
+
+  for (const [unit, secondsPerUnit] of units) {
+    if (Math.abs(diffSeconds) >= secondsPerUnit) {
+      return formatter.format(Math.round(diffSeconds / secondsPerUnit), unit)
+    }
+  }
+
+  return '刚刚'
+}
+
+function getCommitMeta(commit: GitCommitItem) {
+  return `${commit.authorName} · ${formatCommitRelativeTime(commit.authorTimeUnix)} · ${commit.shortHash}`
+}
+
+function getSelectedCommitHash(selection: GitHistorySelection) {
+  return selection.kind === 'commit' ? selection.commitHash : null
+}
+
 function getRepositoryHeading(repositoryState: GitRepositoryState) {
   const branchLabel = repositoryState.branch ?? '当前分支'
 
@@ -127,30 +187,6 @@ function getRepositoryHeading(repositoryState: GitRepositoryState) {
   }
 
   return repositoryState.branch ?? '分离 HEAD'
-}
-
-function getRepositoryMeta(repositoryState: GitRepositoryState, workspacePath: string) {
-  const parts = [
-    repositoryState.repositoryRootPath === workspacePath ? '工作区根 Git 仓库' : '嵌套 Git 仓库',
-  ]
-
-  if (repositoryState.ahead > 0) {
-    parts.push(`领先 ${repositoryState.ahead}`)
-  }
-
-  if (repositoryState.behind > 0) {
-    parts.push(`落后 ${repositoryState.behind}`)
-  }
-
-  if (repositoryState.unpushedCommits > 0) {
-    parts.push(`${repositoryState.unpushedCommits} 个待推送`)
-  }
-
-  if (repositoryState.hasChanges) {
-    parts.push(`${repositoryState.stagedChanges.length + repositoryState.unstagedChanges.length} 个更改`)
-  }
-
-  return parts.join(' / ')
 }
 
 function getRepositorySyncSummary(repositoryState: GitRepositoryState) {
@@ -377,6 +413,7 @@ function GitTreeFolder({
   node,
   onDiscardMany,
   onOpenDiff,
+  onOpenCommitFileDiff,
   onOpenMeoDiff,
   onOpenFile,
   onStage,
@@ -390,6 +427,7 @@ function GitTreeFolder({
   node: GitTreeNode
   onDiscardMany: (changes: GitChangeItem[]) => void
   onOpenDiff: (change: GitChangeItem) => void
+  onOpenCommitFileDiff?: (change: GitCommitFileChange) => void
   onOpenMeoDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   onStage: (filePaths: string[]) => void
@@ -421,6 +459,7 @@ function GitTreeFolder({
                 node={child}
                 onDiscardMany={onDiscardMany}
                 onOpenDiff={onOpenDiff}
+                onOpenCommitFileDiff={onOpenCommitFileDiff}
                 onOpenMeoDiff={onOpenMeoDiff}
                 onOpenFile={onOpenFile}
                 onStage={onStage}
@@ -436,6 +475,7 @@ function GitTreeFolder({
               kind={kind}
               onDiscardMany={onDiscardMany}
               onOpenDiff={onOpenDiff}
+              onOpenCommitFileDiff={onOpenCommitFileDiff}
               onOpenMeoDiff={onOpenMeoDiff}
               onOpenFile={onOpenFile}
               onStage={onStage}
@@ -471,6 +511,7 @@ function GitChangeRows({
   changes,
   onDiscardMany,
   onOpenDiff,
+  onOpenCommitFileDiff,
   onOpenMeoDiff,
   onOpenFile,
   onStage,
@@ -486,7 +527,7 @@ function GitChangeRows({
         const dirLabel = getDirectoryLabel(change.relativePath)
         const isChange = isScopedGitChange(change)
         const pathMeta = layout === 'list' ? dirLabel : ''
-        const changeKindLabel = isChange ? getGitChangeKindLabel(change.kind) : undefined
+        const changeKindLabel = getGitChangeKindLabel(change.kind)
         return (
           <TreeItem
             key={change.path}
@@ -497,6 +538,7 @@ function GitChangeRows({
               title: change.relativePath,
               onClick: () => {
                 if (isChange) onOpenDiff(change)
+                else if (kind === 'commit') onOpenCommitFileDiff?.(change)
                 else onOpenFile(change.path)
               },
             }}
@@ -511,12 +553,12 @@ function GitChangeRows({
                 onOpenMeoDiff={() => isChange && onOpenMeoDiff(change)}
               />
             )}
-            info={isChange ? (
+            info={(
               <FileChangeStatusBadge
                 kind={change.kind}
                 title={changeKindLabel}
               />
-            ) : undefined}
+            )}
             infoVariant='status'
           />
         )
@@ -547,6 +589,7 @@ function GitSection({
   onUnstage,
   onDiscardMany,
   onOpenDiff,
+  onOpenCommitFileDiff,
   onOpenMeoDiff,
   onOpenFile,
   iconTheme,
@@ -560,6 +603,7 @@ function GitSection({
   onUnstage: (filePaths: string[]) => void
   onDiscardMany: (changes: GitChangeItem[]) => void
   onOpenDiff: (change: GitChangeItem) => void
+  onOpenCommitFileDiff?: (change: GitCommitFileChange) => void
   onOpenMeoDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   iconTheme: WorkspaceIconTheme | null
@@ -606,6 +650,7 @@ function GitSection({
                   toggleNode={toggleNode}
                   onDiscardMany={onDiscardMany}
                   onOpenDiff={onOpenDiff}
+                  onOpenCommitFileDiff={onOpenCommitFileDiff}
                   onOpenMeoDiff={onOpenMeoDiff}
                   onOpenFile={onOpenFile}
                   onStage={onStage}
@@ -620,6 +665,7 @@ function GitSection({
                   kind={kind}
                   onDiscardMany={onDiscardMany}
                   onOpenDiff={onOpenDiff}
+                  onOpenCommitFileDiff={onOpenCommitFileDiff}
                   onOpenMeoDiff={onOpenMeoDiff}
                   onOpenFile={onOpenFile}
                   onStage={onStage}
@@ -635,6 +681,7 @@ function GitSection({
               kind={kind}
               onDiscardMany={onDiscardMany}
               onOpenDiff={onOpenDiff}
+              onOpenCommitFileDiff={onOpenCommitFileDiff}
               onOpenMeoDiff={onOpenMeoDiff}
               onOpenFile={onOpenFile}
               onStage={onStage}
@@ -760,6 +807,7 @@ function GitCommitActionMenu({
 export function GitPanel({
   busyLabel,
   commitMessage,
+  historyRefreshVersion,
   isLoading,
   layout,
   onCommit,
@@ -769,12 +817,14 @@ export function GitPanel({
   onDiscardMany,
   onInitialize,
   onLayoutChange,
+  onOpenCommitFileDiff,
   onOpenDiff,
   onOpenFile,
   onOpenMeoDiff,
   onPull,
   onPush,
   onRefresh,
+  onRevertCommit,
   onStage,
   onUnstage,
   repositoryState,
@@ -782,6 +832,19 @@ export function GitPanel({
   iconTheme,
   menuPortalTarget,
 }: GitPanelProps) {
+  const [historySelection, setHistorySelection] = useState<GitHistorySelection>({ kind: 'working-tree' })
+  const [commitHistory, setCommitHistory] = useState<GitCommitHistoryResult | null>(null)
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(true)
+  const [expandedCommitHashes, setExpandedCommitHashes] = useState<Record<string, boolean>>({})
+  const [commitDetailsByHash, setCommitDetailsByHash] = useState<Record<string, GitCommitDetails>>({})
+  const [loadingCommitHashes, setLoadingCommitHashes] = useState<Record<string, boolean>>({})
+  const [commitDetailsErrorsByHash, setCommitDetailsErrorsByHash] = useState<Record<string, string>>({})
+  const [historyShellElement, setHistoryShellElement] = useState<HTMLDivElement | null>(null)
+  const [isHistoryCompact, setIsHistoryCompact] = useState(false)
+  const latestHistoryRequestIdRef = useRef(0)
+  const commitDetailsWorkspaceRef = useRef<string | null>(workspacePath)
   const stagedPaths = useMemo(
     () => repositoryState?.stagedChanges.map((change) => change.path) ?? [],
     [repositoryState?.stagedChanges],
@@ -793,6 +856,182 @@ export function GitPanel({
   const canSubmitCommit = repositoryState
     ? repositoryState.hasChanges && commitMessage.trim().length > 0
     : false
+  const selectedCommitHash = getSelectedCommitHash(historySelection)
+  const selectedCommitDetails = selectedCommitHash ? commitDetailsByHash[selectedCommitHash] ?? null : null
+  const selectedCommitSummary = selectedCommitHash
+    ? selectedCommitDetails ?? commitHistory?.commits.find((commit) => commit.hash === selectedCommitHash) ?? null
+    : null
+  const workingTreeChangeCount = repositoryState
+    ? repositoryState.stagedChanges.length + repositoryState.unstagedChanges.length
+    : 0
+
+  useEffect(() => {
+    commitDetailsWorkspaceRef.current = workspacePath
+  }, [workspacePath])
+
+  useEffect(() => {
+    if (!historyShellElement) {
+      setIsHistoryCompact(false)
+      return
+    }
+
+    const updateCompactState = () => {
+      const nextIsCompact = historyShellElement.getBoundingClientRect().width < GIT_HISTORY_COMPACT_WIDTH_PX
+      setIsHistoryCompact((currentValue) => (
+        currentValue === nextIsCompact ? currentValue : nextIsCompact
+      ))
+    }
+
+    updateCompactState()
+
+    if (typeof ResizeObserver === 'undefined') {
+      return undefined
+    }
+
+    const observer = new ResizeObserver(updateCompactState)
+    observer.observe(historyShellElement)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [historyShellElement])
+
+  useEffect(() => {
+    const requestId = latestHistoryRequestIdRef.current + 1
+    latestHistoryRequestIdRef.current = requestId
+    setCommitDetailsByHash({})
+    setCommitDetailsErrorsByHash({})
+    setLoadingCommitHashes({})
+    setExpandedCommitHashes({})
+
+    if (!workspacePath || isLoading || !repositoryState?.isRepository || !repositoryState.hasCommits) {
+      setCommitHistory(null)
+      setHistoryError(null)
+      setIsHistoryLoading(false)
+      setHistorySelection({ kind: 'working-tree' })
+      return
+    }
+
+    setIsHistoryLoading(true)
+    setHistoryError(null)
+
+    window.appApi.getGitCommitHistory(workspacePath).then((nextHistory) => {
+      if (latestHistoryRequestIdRef.current !== requestId) {
+        return
+      }
+
+      setCommitHistory(nextHistory)
+      setHistorySelection((currentSelection) => {
+        if (currentSelection.kind !== 'commit') {
+          return currentSelection
+        }
+
+        return nextHistory.commits.some((commit) => commit.hash === currentSelection.commitHash)
+          ? currentSelection
+          : { kind: 'working-tree' }
+      })
+    }).catch((error) => {
+      if (latestHistoryRequestIdRef.current !== requestId) {
+        return
+      }
+
+      setCommitHistory(null)
+      setHistoryError(error instanceof Error ? error.message : 'Unable to load Git history.')
+    }).finally(() => {
+      if (latestHistoryRequestIdRef.current === requestId) {
+        setIsHistoryLoading(false)
+      }
+    })
+  }, [
+    isLoading,
+    historyRefreshVersion,
+    repositoryState?.ahead,
+    repositoryState?.behind,
+    repositoryState?.branch,
+    repositoryState?.hasCommits,
+    repositoryState?.isRepository,
+    repositoryState?.repositoryRootPath,
+    repositoryState?.unpushedCommits,
+    workspacePath,
+  ])
+
+  function loadCommitDetails(commitHash: string) {
+    if (!workspacePath || commitDetailsByHash[commitHash] || loadingCommitHashes[commitHash]) {
+      return
+    }
+
+    const requestWorkspacePath = workspacePath
+
+    setLoadingCommitHashes((currentLoading) => ({
+      ...currentLoading,
+      [commitHash]: true,
+    }))
+    setCommitDetailsErrorsByHash((currentErrors) => {
+      if (!currentErrors[commitHash]) {
+        return currentErrors
+      }
+
+      const nextErrors = { ...currentErrors }
+      delete nextErrors[commitHash]
+      return nextErrors
+    })
+
+    window.appApi.getGitCommitDetails(requestWorkspacePath, commitHash).then((details) => {
+      if (commitDetailsWorkspaceRef.current !== requestWorkspacePath) {
+        return
+      }
+
+      setCommitDetailsByHash((currentDetails) => ({
+        ...currentDetails,
+        [commitHash]: details,
+        [details.hash]: details,
+      }))
+    }).catch((error) => {
+      if (commitDetailsWorkspaceRef.current !== requestWorkspacePath) {
+        return
+      }
+
+      setCommitDetailsErrorsByHash((currentErrors) => ({
+        ...currentErrors,
+        [commitHash]: error instanceof Error ? error.message : 'Unable to load commit details.',
+      }))
+    }).finally(() => {
+      if (commitDetailsWorkspaceRef.current !== requestWorkspacePath) {
+        return
+      }
+
+      setLoadingCommitHashes((currentLoading) => {
+        if (!currentLoading[commitHash]) {
+          return currentLoading
+        }
+
+        const nextLoading = { ...currentLoading }
+        delete nextLoading[commitHash]
+        return nextLoading
+      })
+    })
+  }
+
+  function toggleHistoryCommit(commitHash: string) {
+    const shouldExpand = !expandedCommitHashes[commitHash]
+
+    setExpandedCommitHashes((currentExpanded) => {
+      if (shouldExpand) {
+        return {
+          ...currentExpanded,
+          [commitHash]: true,
+        }
+      }
+
+      const nextExpanded = { ...currentExpanded }
+      delete nextExpanded[commitHash]
+      return nextExpanded
+    })
+
+    if (shouldExpand) {
+      loadCommitDetails(commitHash)
+    }
+  }
 
   if (!workspacePath) {
     return (
@@ -821,23 +1060,349 @@ export function GitPanel({
     )
   }
 
-  const syncDisabledReason = !repositoryState.hasRemote
+  const currentRepositoryState = repositoryState
+
+  const syncDisabledReason = !currentRepositoryState.hasRemote
     ? '配置远程仓库后才能同步'
     : Boolean(busyLabel)
       ? busyLabel
       : null
-  const unpushedCommitCount = repositoryState.unpushedCommits
+  const unpushedCommitCount = currentRepositoryState.unpushedCommits
   const hasUnpushedCommits = unpushedCommitCount > 0
   const pushBadgeLabel = unpushedCommitCount > 99 ? '99+' : String(unpushedCommitCount)
   const pushAccessibleLabel = hasUnpushedCommits
     ? `推送 ${unpushedCommitCount} 个待推送提交`
     : '推送'
-  const hasVisibleChanges = repositoryState.hasChanges
-  const shouldShowCommitWorkflow = repositoryState.hasChanges
-  const cleanStateSubtext = getCleanStateSubtext(repositoryState)
-  const syncSummary = getRepositorySyncSummary(repositoryState)
+  const hasVisibleChanges = currentRepositoryState.hasChanges
+  const shouldShowCommitWorkflow = currentRepositoryState.hasChanges
+  const cleanStateSubtext = getCleanStateSubtext(currentRepositoryState)
+  const syncSummary = getRepositorySyncSummary(currentRepositoryState)
+  const historyCommits = commitHistory?.commits ?? []
+  const repositoryHeading = getRepositoryHeading(currentRepositoryState)
+  const repositoryMeta = currentRepositoryState.hasChanges
+    ? `${repositoryHeading} / ${workingTreeChangeCount} 个更改`
+    : repositoryHeading
+  const revertDisabledReason = currentRepositoryState.hasChanges
+    ? '请先提交或放弃当前工作树更改'
+    : null
 
-  return (
+  const selectWorkingTree = () => {
+    setHistorySelection({ kind: 'working-tree' })
+  }
+
+  const selectCommit = (commitHash: string) => {
+    setHistorySelection({ kind: 'commit', commitHash })
+    loadCommitDetails(commitHash)
+  }
+
+  const renderLayoutToggleAction = () => (
+    <TreeItemActionButton
+      aria-label={layout === 'tree' ? '切换到列表视图' : '切换到树状视图'}
+      title={layout === 'tree' ? '列表视图' : '树状视图'}
+      disabled={Boolean(busyLabel)}
+      onClick={() => {
+        onLayoutChange(layout === 'tree' ? 'list' : 'tree')
+      }}
+    >
+      {layout === 'tree' ? <ListCheckLine size={16} /> : <FolderLine size={16} />}
+    </TreeItemActionButton>
+  )
+
+  const noopChangeAction = () => {}
+  const noopPathAction = () => {}
+
+  const renderHistoryCommitActions = (commit: GitCommitItem) => (
+    <TreeItemActionButton
+      aria-label={`还原提交 ${commit.shortHash}`}
+      title={revertDisabledReason ?? busyLabel ?? '还原提交'}
+      disabled={Boolean(busyLabel) || Boolean(revertDisabledReason)}
+      onClick={(event) => {
+        event.stopPropagation()
+        onRevertCommit(commit)
+      }}
+    >
+      <Back2Line size={16} />
+    </TreeItemActionButton>
+  )
+
+  function renderHistoryList() {
+    return (
+      <TreeList className='git-history-list'>
+        <TreeItem
+          icon={(
+            <TreeItemIcon>
+              <Icon
+                icon={historySelection.kind === 'working-tree' ? 'octicon:dot-fill-16' : 'octicon:dot-16'}
+                width={16}
+                height={16}
+                aria-hidden='true'
+              />
+            </TreeItemIcon>
+          )}
+          isActive={historySelection.kind === 'working-tree'}
+          label='工作树'
+          description={repositoryMeta}
+          mainButtonProps={{
+            title: '工作树',
+            onClick: selectWorkingTree,
+          }}
+        />
+
+        {isHistoryLoading && historyCommits.length === 0 ? (
+          <TreeStatusItem>正在加载提交历史...</TreeStatusItem>
+        ) : null}
+
+        {historyError ? (
+          <TreeStatusItem tone='danger'>{historyError}</TreeStatusItem>
+        ) : null}
+
+        {!isHistoryLoading && !historyError && historyCommits.length === 0 ? (
+          <TreeStatusItem>暂无历史提交</TreeStatusItem>
+        ) : null}
+
+        {historyCommits.map((commit) => {
+          const isCommitSelected = selectedCommitHash === commit.hash
+
+          return (
+            <TreeItem
+              key={commit.hash}
+              icon={(
+                <TreeItemIcon>
+                  {isCommitSelected
+                    ? <GitCommitFill size={16} aria-hidden='true' />
+                    : <GitCommitLine size={16} aria-hidden='true' />}
+                </TreeItemIcon>
+              )}
+              isActive={isCommitSelected}
+              label={commit.subject}
+              description={getCommitMeta(commit)}
+              actions={renderHistoryCommitActions(commit)}
+              mainButtonProps={{
+                title: `${commit.subject}\n${getCommitMeta(commit)}\n${commit.hash}`,
+                onClick: () => selectCommit(commit.hash),
+              }}
+            />
+          )
+        })}
+      </TreeList>
+    )
+  }
+
+  function renderHistoryCommitChildren(commit: GitCommitItem) {
+    const details = commitDetailsByHash[commit.hash]
+    const isCommitLoading = Boolean(loadingCommitHashes[commit.hash])
+    const commitError = commitDetailsErrorsByHash[commit.hash]
+
+    if (isCommitLoading && !details) {
+      return <TreeStatusItem>正在加载提交文件...</TreeStatusItem>
+    }
+
+    if (commitError && !details) {
+      return <TreeStatusItem tone='danger'>{commitError}</TreeStatusItem>
+    }
+
+    if (!details) {
+      return <TreeStatusItem>展开后加载文件变更。</TreeStatusItem>
+    }
+
+    if (details.changes.length === 0) {
+      return <TreeStatusItem>这个提交没有文件变更。</TreeStatusItem>
+    }
+
+    return (
+      <GitChangeRows
+        changes={details.changes}
+        kind='commit'
+        layout='list'
+        iconTheme={iconTheme}
+        onDiscardMany={noopChangeAction}
+        onOpenCommitFileDiff={(change) => onOpenCommitFileDiff(details.hash, change)}
+        onOpenDiff={noopChangeAction}
+        onOpenMeoDiff={noopChangeAction}
+        onOpenFile={noopPathAction}
+        onStage={noopPathAction}
+        onUnstage={noopPathAction}
+      />
+    )
+  }
+
+  function renderHistorySection() {
+    return (
+      <div className='git-panel-section git-history-section'>
+        <TreeItem
+          variant='header'
+          itemClassName='git-panel-section-header'
+          label='历史'
+          isExpanded={isHistoryExpanded}
+          info={historyCommits.length}
+          onToggle={() => setIsHistoryExpanded((value) => !value)}
+        />
+
+        {isHistoryExpanded ? (
+          <div className='git-history-tree-shell'>
+            <TreeList className='git-history-tree-list'>
+              {isHistoryLoading && historyCommits.length === 0 ? (
+                <TreeStatusItem>正在加载提交历史...</TreeStatusItem>
+              ) : null}
+
+              {historyError ? (
+                <TreeStatusItem tone='danger'>{historyError}</TreeStatusItem>
+              ) : null}
+
+              {!isHistoryLoading && !historyError && historyCommits.length === 0 ? (
+                <TreeStatusItem>暂无历史提交</TreeStatusItem>
+              ) : null}
+
+              {historyCommits.map((commit) => {
+                const isCommitExpanded = Boolean(expandedCommitHashes[commit.hash])
+                const commitMeta = getCommitMeta(commit)
+
+                return (
+                  <TreeItem
+                    key={commit.hash}
+                    after={isCommitExpanded ? (
+                      <TreeItemChildren className='git-history-commit-children'>
+                        <TreeList className='git-history-file-list'>
+                          {renderHistoryCommitChildren(commit)}
+                        </TreeList>
+                      </TreeItemChildren>
+                    ) : null}
+                    icon={(
+                      <TreeItemIcon>
+                        {isCommitExpanded
+                          ? <GitCommitFill size={16} aria-hidden='true' />
+                          : <GitCommitLine size={16} aria-hidden='true' />}
+                      </TreeItemIcon>
+                    )}
+                    label={commit.subject}
+                    description={commitMeta}
+                    actions={renderHistoryCommitActions(commit)}
+                    mainButtonProps={{
+                      'aria-expanded': isCommitExpanded,
+                      title: `${commit.subject}\n${commitMeta}\n${commit.hash}`,
+                      onClick: () => toggleHistoryCommit(commit.hash),
+                    }}
+                  />
+                )
+              })}
+            </TreeList>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
+  function renderHistoryPane() {
+    return (
+      <aside className='git-history-pane' aria-label='Git 历史'>
+        <TreeScrollArea
+          className='git-history-scroll'
+          contentClassName='git-history-scroll-content'
+        >
+          {renderHistoryList()}
+        </TreeScrollArea>
+      </aside>
+    )
+  }
+
+  function renderCommitDetailsPane() {
+    if (!selectedCommitHash) {
+      return null
+    }
+
+    const selectedCommitError = commitDetailsErrorsByHash[selectedCommitHash] ?? null
+    const isSelectedCommitLoading = Boolean(loadingCommitHashes[selectedCommitHash])
+
+    const renderCommitDetailHeader = (commit: GitCommitItem, changeCount?: number) => (
+      <header className='git-commit-detail-header'>
+        <div className='git-commit-detail-title-area'>
+          <h3 className='git-commit-detail-title'>{commit.subject}</h3>
+          <p className='git-commit-detail-meta'>
+            <span>{commit.authorName}</span>
+            <span>{formatCommitRelativeTime(commit.authorTimeUnix)}</span>
+            <span>{commit.shortHash}</span>
+          </p>
+        </div>
+        <div className='git-commit-detail-actions'>
+          {typeof changeCount === 'number' ? (
+            <span className='git-commit-detail-count'>
+              {getCommitChangeCountLabel(changeCount)}
+            </span>
+          ) : null}
+          {renderHistoryCommitActions(commit)}
+          {renderLayoutToggleAction()}
+        </div>
+      </header>
+    )
+
+    if (isSelectedCommitLoading && !selectedCommitDetails) {
+      return (
+        <div className='git-commit-detail'>
+          {selectedCommitSummary ? renderCommitDetailHeader(selectedCommitSummary) : null}
+          <div className='git-commit-detail-state'>
+            <p>正在加载提交文件...</p>
+            {selectedCommitSummary ? <span>{selectedCommitSummary.subject}</span> : null}
+          </div>
+        </div>
+      )
+    }
+
+    if (selectedCommitError && !selectedCommitDetails) {
+      return (
+        <div className='git-commit-detail'>
+          {selectedCommitSummary ? renderCommitDetailHeader(selectedCommitSummary) : null}
+          <div className='git-commit-detail-state git-panel-error'>
+            <p>{selectedCommitError}</p>
+          </div>
+        </div>
+      )
+    }
+
+    if (!selectedCommitDetails) {
+      return (
+        <div className='git-commit-detail'>
+          {selectedCommitSummary ? renderCommitDetailHeader(selectedCommitSummary) : null}
+          <div className='git-commit-detail-state'>
+            <p>选择一个提交查看文件变更。</p>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className='git-commit-detail'>
+        {renderCommitDetailHeader(selectedCommitDetails, selectedCommitDetails.changes.length)}
+        <TreeScrollArea
+          className='git-panel-sections git-commit-detail-sections'
+          contentClassName='git-panel-sections-content'
+        >
+          {selectedCommitDetails.changes.length === 0 ? (
+            <div className='git-panel-empty-state git-commit-detail-state'>
+              <p>这个提交没有文件变更。</p>
+            </div>
+          ) : (
+            <GitSection
+              title='变更文件'
+              changes={selectedCommitDetails.changes}
+              kind='commit'
+              layout={layout}
+              iconTheme={iconTheme}
+              onDiscardMany={noopChangeAction}
+              onOpenCommitFileDiff={(change) => onOpenCommitFileDiff(selectedCommitDetails.hash, change)}
+              onOpenDiff={noopChangeAction}
+              onOpenMeoDiff={noopChangeAction}
+              onOpenFile={noopPathAction}
+              onStage={noopPathAction}
+              onUnstage={noopPathAction}
+            />
+          )}
+        </TreeScrollArea>
+      </div>
+    )
+  }
+
+  function renderWorkingTreeContent({ includeHistorySection }: { includeHistorySection: boolean }) {
+    return (
     <div className='git-panel'>
       {hasVisibleChanges ? (
         <header className='git-panel-header'>
@@ -871,16 +1436,7 @@ export function GitPanel({
                 >
                   <ArrowDownLine size={16} />
                 </TreeItemActionButton>
-                <TreeItemActionButton
-                  aria-label={layout === 'tree' ? '切换到列表视图' : '切换到树状视图'}
-                  title={layout === 'tree' ? '列表视图' : '树状视图'}
-                  disabled={Boolean(busyLabel)}
-                  onClick={() => {
-                    onLayoutChange(layout === 'tree' ? 'list' : 'tree')
-                  }}
-                >
-                  {layout === 'tree' ? <ListCheckLine size={16} /> : <FolderLine size={16} />}
-                </TreeItemActionButton>
+                {renderLayoutToggleAction()}
                 <TreeItemActionButton
                   aria-label='刷新 Git 状态'
                   title='刷新'
@@ -951,7 +1507,7 @@ export function GitPanel({
         className='git-panel-sections'
         contentClassName='git-panel-sections-content'
       >
-        {!repositoryState.hasChanges ? (
+        {!currentRepositoryState.hasChanges ? (
           <div className='git-panel-empty-state git-panel-clean-state'>
             <div className='git-empty-illustration'>
               <CheckLine size={28} />
@@ -970,7 +1526,7 @@ export function GitPanel({
                   <span>推送</span>
                 </AppTooltipButton>
               ) : null}
-              {repositoryState.behind > 0 ? (
+              {currentRepositoryState.behind > 0 ? (
                 <AppTooltipButton
                   type='button'
                   className='git-clean-action'
@@ -996,7 +1552,7 @@ export function GitPanel({
           <>
             <GitSection
               title='已暂存更改'
-              changes={repositoryState.stagedChanges}
+              changes={currentRepositoryState.stagedChanges}
               kind='staged'
               layout={layout}
               iconTheme={iconTheme}
@@ -1020,7 +1576,7 @@ export function GitPanel({
 
             <GitSection
               title='更改'
-              changes={repositoryState.unstagedChanges}
+              changes={currentRepositoryState.unstagedChanges}
               kind='unstaged'
               layout={layout}
               iconTheme={iconTheme}
@@ -1054,7 +1610,28 @@ export function GitPanel({
 
           </>
         )}
+        {includeHistorySection ? renderHistorySection() : null}
       </TreeScrollArea>
+    </div>
+  )
+  }
+
+  const workingTreeContent = renderWorkingTreeContent({ includeHistorySection: isHistoryCompact })
+
+  return (
+    <div
+      ref={setHistoryShellElement}
+      className={`git-panel-history-shell${isHistoryCompact ? ' is-compact' : ''}`}
+    >
+      {isHistoryCompact ? null : renderHistoryPane()}
+      <section
+        className='git-panel-detail-pane'
+        aria-label={isHistoryCompact || historySelection.kind === 'working-tree' ? '工作树变更' : '提交变更文件'}
+      >
+        {isHistoryCompact || historySelection.kind === 'working-tree'
+          ? workingTreeContent
+          : renderCommitDetailsPane()}
+      </section>
     </div>
   )
 }

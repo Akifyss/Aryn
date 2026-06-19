@@ -584,16 +584,34 @@ export const TreeItemActionButton = forwardRef<HTMLButtonElement, TreeItemAction
   },
   ref,
 ) {
-  return (
+  const resolvedTooltip = tooltip ?? title ?? ariaLabel
+  const button = (
     <AppTooltipButton
       ref={ref}
       type={type}
       className={treeClassNames.action(className)}
       aria-label={ariaLabel}
       disabled={disabled}
-      tooltip={tooltip ?? title ?? ariaLabel}
+      tooltip={disabled ? undefined : resolvedTooltip}
       {...props}
     />
+  )
+
+  if (disabled && resolvedTooltip !== undefined && resolvedTooltip !== null && resolvedTooltip !== false) {
+    return (
+      <AppTooltip
+        excludeFromTabOrder
+        tooltip={resolvedTooltip}
+        triggerClassName='tree-item-action-tooltip-trigger'
+        triggerMode='wrapper'
+      >
+        {button}
+      </AppTooltip>
+    )
+  }
+
+  return (
+    button
   )
 })
 

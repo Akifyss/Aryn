@@ -19,6 +19,7 @@
   --git-panel-height: 292px;
   --left-sidebar-width: 320px;
   --right-sidebar-width: 368px;
+  --fixed-panel-sidebar-width: clamp(216px, 22vw, 276px);
   --resize-handle-width: 12px;
   --resize-handle-hit-area: 100%;
   --resize-handle-line-width: 2px;
@@ -2015,7 +2016,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .editor-directory-sidebar {
   display: flex;
-  flex: 0 0 clamp(216px, 22vw, 276px);
+  flex: 0 0 var(--fixed-panel-sidebar-width);
   min-width: 0;
   min-height: 0;
   border-right: 1px solid var(--separator);
@@ -2270,6 +2271,11 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   height: 16px;
 }
 
+.tree-item-action-tooltip-trigger {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
 .tree-item-action:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
@@ -2362,6 +2368,185 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
+}
+
+.git-panel-history-shell {
+  display: grid;
+  grid-template-columns: var(--fixed-panel-sidebar-width) minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.git-panel-history-shell.is-compact {
+  display: flex;
+}
+
+.git-panel-history-shell.is-compact .git-panel-detail-pane {
+  flex: 1;
+  width: 100%;
+}
+
+.git-history-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--separator);
+  background: var(--surface);
+}
+
+.git-history-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.git-history-scroll-content {
+  --tree-scroll-content-inline-padding: 12px;
+  min-height: 100%;
+  padding-block: 12px;
+}
+
+.git-history-list {
+  --tree-item-row-description-min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.git-history-tree-shell {
+  padding-top: 2px;
+}
+
+.git-history-tree-list {
+  --tree-item-row-description-min-height: 42px;
+  --tree-nested-list-padding-left: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.git-history-file-list {
+  --tree-item-row-description-min-height: 40px;
+  --tree-item-row-height: 32px;
+}
+
+.git-history-commit-children {
+  margin-bottom: 4px;
+}
+
+.git-panel-detail-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.git-panel-detail-pane > .git-panel {
+  min-height: 0;
+}
+
+.git-commit-detail {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.git-commit-detail-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--separator);
+  background: var(--surface);
+}
+
+.git-commit-detail-title-area {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.git-commit-detail-title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-commit-detail-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  gap: 4px;
+}
+
+.git-commit-detail-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.git-commit-detail-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--separator);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.git-commit-detail-sections .git-panel-sections-content {
+  padding-top: 8px;
+}
+
+.git-commit-detail-state {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.git-commit-detail-state p {
+  margin: 0;
+}
+
+.git-commit-detail-state span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .git-panel-header {

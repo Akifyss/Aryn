@@ -51,6 +51,8 @@ import { GitPanel } from '@/features/git/components/git-panel'
 import type {
   GitChangeItem,
   GitChangeScope,
+  GitCommitFileChange,
+  GitCommitItem,
   GitDiffBlockAction,
   GitDiffSelection,
   GitFileDiffResult,
@@ -278,7 +280,12 @@ function isWorkspaceAutosaveTab(tab: WorkspaceDisplayTab | WorkspaceFileTab | nu
   return tab?.kind === 'file' && tab.viewMode !== 'preview'
 }
 
-function createDiffTabId(filePath: string, scope: GitChangeScope) {
+function createDiffTabId(diff: GitFileDiffResult) {
+  if (diff.source.kind === 'commit') {
+    return `git-commit-diff://${diff.source.commit.hash}/${encodeURIComponent(diff.change.path)}`
+  }
+
+  const { path: filePath, scope } = diff.change
   return `git-diff://${scope}/${encodeURIComponent(filePath)}`
 }
 
@@ -679,11 +686,10 @@ function toStoredWorkspaceTab(
 
 function createDiffTab(
   change: GitChangeItem,
-  scope: GitChangeScope,
-  diff: Awaited<ReturnType<typeof window.appApi.getGitFileDiff>>,
+  diff: GitFileDiffResult,
   navigationRequest?: WorkspaceDiffNavigationRequest | null,
 ): WorkspaceDiffTab {
-  const id = createDiffTabId(change.path, scope)
+  const id = createDiffTabId(diff)
   return {
     draftContent: null,
     diff,
@@ -693,7 +699,9 @@ function createDiffTab(
     isDirty: false,
     kind: 'diff',
     navigationRequest: navigationRequest ?? null,
-    title: getBaseName(change.path),
+    title: diff.source.kind === 'commit'
+      ? `${getBaseName(change.path)} @ ${diff.source.commit.shortHash}`
+      : getBaseName(change.path),
   }
 }
 
@@ -872,6 +880,7 @@ function App() {
   const [gitErrorMessage, setGitErrorMessage] = useState<string | null>(null)
   const [gitCommitMessage, setGitCommitMessage] = useState('')
   const [gitPanelLayout, setGitPanelLayout] = useState<GitPanelLayout>(() => readStoredGitPanelLayout())
+  const [gitHistoryRefreshVersion, setGitHistoryRefreshVersion] = useState(0)
   const [shellWidth, setShellWidth] = useState(() => (
     typeof window !== 'undefined' ? window.innerWidth : FULL_LAYOUT_BREAKPOINT + 1
   ))
@@ -1141,7 +1150,9 @@ function App() {
 
   function getDirtyWorkspaceTabsSnapshot() {
     return useWorkspaceStore.getState().openTabs.filter(
-      (tab) => tab.kind === 'diff' ? tab.isDirty : isWorkspaceAutosaveTab(tab) && tab.isDirty,
+      (tab) => tab.kind === 'diff'
+        ? tab.diff.source.kind === 'working-tree' && tab.isDirty
+        : isWorkspaceAutosaveTab(tab) && tab.isDirty,
     )
   }
 
@@ -1347,9 +1358,13 @@ function App() {
     const diffTabs = useWorkspaceStore.getState().openTabs.filter((tab): tab is WorkspaceDiffTab => tab.kind === 'diff')
 
     await Promise.all(diffTabs.map(async (tab) => {
+      if (tab.diff.source.kind === 'commit') {
+        return
+      }
+
       try {
         const nextDiff = await window.appApi.getGitFileDiff(workspacePath, tab.diff.change.path, tab.diff.change.scope)
-        openDiffTab(createDiffTab(nextDiff.change, nextDiff.change.scope, nextDiff), false)
+        openDiffTab(createDiffTab(nextDiff.change, nextDiff), false)
       } catch {
         if (!tab.isDirty) {
           closeTab(tab.id)
@@ -1390,7 +1405,12 @@ function App() {
   }
 
   async function flushDiffTab(tab: WorkspaceDiffTab, options: { announce?: boolean } = {}) {
-    if (!tab.isDirty || tab.diff.change.scope !== 'unstaged' || !tab.diff.modifiedExists) {
+    if (
+      tab.diff.source.kind !== 'working-tree'
+      || !tab.isDirty
+      || tab.diff.change.scope !== 'unstaged'
+      || !tab.diff.modifiedExists
+    ) {
       return false
     }
 
@@ -1418,6 +1438,7 @@ function App() {
     const dirtyDiffTabs = useWorkspaceStore.getState().openTabs.filter(
       (tab): tab is WorkspaceDiffTab => (
         tab.kind === 'diff'
+        && tab.diff.source.kind === 'working-tree'
         && tab.isDirty
         && (!normalizedTargets?.length || normalizedTargets.includes(normalizeFilePath(tab.diff.change.path)))
       ),
@@ -2416,7 +2437,7 @@ function App() {
           source: navigationSource,
         } satisfies WorkspaceDiffNavigationRequest
         : null
-      openDiffTab(createDiffTab(change, change.scope, diff, navigationRequest))
+      openDiffTab(createDiffTab(change, diff, navigationRequest))
       setIsAgentLayoutFixedTabActive(false)
 
       if (isLeftSidebarDrawer) {
@@ -2427,6 +2448,33 @@ function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to open the diff view.'
       toast.danger('Failed to open diff', {
+        description: message,
+      })
+      setStatusMessage(message)
+    }
+  }
+
+  async function openGitCommitFileDiff(commitHash: string, change: GitCommitFileChange) {
+    if (!currentPath) {
+      return
+    }
+
+    captureActiveMeoViewPosition()
+
+    try {
+      const diff = await window.appApi.getGitCommitFileDiff(currentPath, commitHash, change.path)
+
+      openDiffTab(createDiffTab(diff.change, diff))
+      setIsAgentLayoutFixedTabActive(false)
+
+      if (isLeftSidebarDrawer) {
+        setIsLeftDrawerOpen(false)
+      }
+
+      setStatusMessage(`已打开 ${getBaseName(change.path)} 的提交差异`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '无法打开该提交差异。'
+      toast.danger('打开提交差异失败', {
         description: message,
       })
       setStatusMessage(message)
@@ -3482,6 +3530,7 @@ function App() {
         <GitPanel
           busyLabel={gitBusyLabel}
           commitMessage={gitCommitMessage}
+          historyRefreshVersion={gitHistoryRefreshVersion}
           isLoading={isGitLoading}
           layout={gitPanelLayout}
           onCommit={() => {
@@ -3510,6 +3559,9 @@ function App() {
           onOpenMeoDiff={(change) => {
             void openGitDiff(change, { mode: 'split', view: 'meo' })
           }}
+          onOpenCommitFileDiff={(commitHash, change) => {
+            void openGitCommitFileDiff(commitHash, change)
+          }}
           onPull={() => {
             void handlePullGitChanges()
           }}
@@ -3521,10 +3573,16 @@ function App() {
               return
             }
 
-            void performWorkspaceRefresh(currentPath, {
-              gitSilent: false,
-              refreshGit: true,
-            })
+            void (async () => {
+              await performWorkspaceRefresh(currentPath, {
+                gitSilent: false,
+                refreshGit: true,
+              })
+              setGitHistoryRefreshVersion((version) => version + 1)
+            })()
+          }}
+          onRevertCommit={(commit) => {
+            void handleRevertGitCommit(commit)
           }}
           onStage={(filePaths) => {
             void handleStageGitPaths(filePaths)
@@ -3709,6 +3767,7 @@ function App() {
     const targetDiffTab = useWorkspaceStore.getState().openTabs.find(
       (tab): tab is WorkspaceDiffTab => (
         tab.kind === 'diff'
+        && tab.diff.source.kind === 'working-tree'
         && tab.diff.change.path === filePath
         && tab.isDirty
       ),
@@ -3972,6 +4031,7 @@ function App() {
     await runGitAction('正在创建提交...', async () => {
       const nextState = await window.appApi.commitGitChanges(currentPath, gitCommitMessage)
       setGitRepositoryState(nextState)
+      setGitHistoryRefreshVersion((version) => version + 1)
       setGitCommitMessage('')
       await syncOpenDiffTabs(currentPath)
       setStatusMessage('提交已创建')
@@ -3992,9 +4052,41 @@ function App() {
     await runGitAction('正在提交并同步...', async () => {
       const nextState = await window.appApi.commitAndSyncGitChanges(currentPath, gitCommitMessage)
       setGitRepositoryState(nextState)
+      setGitHistoryRefreshVersion((version) => version + 1)
       setGitCommitMessage('')
       await syncOpenDiffTabs(currentPath)
       setStatusMessage('提交并同步已完成')
+    })
+  }
+
+  async function handleRevertGitCommit(commit: GitCommitItem) {
+    if (!currentPath) {
+      return
+    }
+
+    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
+      actionLabel: '还原 Git 提交',
+    }))) {
+      return
+    }
+
+    const confirmed = await requestConfirm({
+      title: '还原提交',
+      message: `要还原提交“${commit.subject}”（${commit.shortHash}）吗？\n\n这会创建一个新提交来撤销它引入的更改，不会改写现有历史。`,
+      confirmLabel: '还原提交',
+    })
+
+    if (!confirmed) {
+      return
+    }
+
+    await runGitAction('正在还原提交...', async () => {
+      const nextState = await window.appApi.revertGitCommit(currentPath, commit.hash)
+      setGitRepositoryState(nextState)
+      setGitHistoryRefreshVersion((version) => version + 1)
+      await loadTree(currentPath)
+      await syncOpenDiffTabs(currentPath)
+      setStatusMessage(`提交 ${commit.shortHash} 已还原`)
     })
   }
 
@@ -4024,6 +4116,7 @@ function App() {
     await runGitAction('正在拉取更改...', async () => {
       const nextState = await window.appApi.pullGitChanges(currentPath)
       setGitRepositoryState(nextState)
+      setGitHistoryRefreshVersion((version) => version + 1)
       await loadTree(currentPath)
       await syncOpenDiffTabs(currentPath)
       setStatusMessage('Git 更改已拉取')
@@ -4250,6 +4343,7 @@ function App() {
 
     if (
       !activeDiffTab?.isDirty
+      || activeDiffTab.diff.source.kind !== 'working-tree'
       || activeDiffTab.diff.change.scope !== 'unstaged'
       || !activeDiffTab.diff.modifiedExists
       || isActiveEditorComposing
@@ -4274,6 +4368,7 @@ function App() {
     activeDiffTab?.diff.change.scope,
     activeDiffTab?.diff.modifiedContent,
     activeDiffTab?.diff.modifiedExists,
+    activeDiffTab?.diff.source.kind,
     activeDiffTab?.draftContent,
     activeDiffTab?.id,
     activeDiffTab?.isDirty,

@@ -154,7 +154,7 @@ describe('workspace icon theme import', () => {
     ])
   })
 
-  it('shares one complete VSIX extraction between concurrent catalog and theme imports', async () => {
+  it('loads a catalog alongside a theme import without duplicating cache entries', async () => {
     const fixture = await createFixtureVsix()
 
     const [
@@ -176,7 +176,7 @@ describe('workspace icon theme import', () => {
   it('re-extracts stale cache entries that only contain a manifest', async () => {
     const fixture = await createFixtureVsix()
 
-    await loadWorkspaceIconThemeCatalogFromVsix(fixture.vsixPath, fixture.cacheRootPath)
+    await importWorkspaceIconThemeFromVsix(fixture.vsixPath, fixture.cacheRootPath)
 
     const cacheEntries = await readdir(fixture.cacheRootPath)
     expect(cacheEntries).toHaveLength(1)
@@ -193,10 +193,10 @@ describe('workspace icon theme import', () => {
     expectDataUrl(theme.defaultFileIcon)
   })
 
-  it('re-extracts stale cache entries when icon files are missing after catalog load', async () => {
+  it('re-extracts stale cache entries when icon files are missing', async () => {
     const fixture = await createFixtureVsix()
 
-    await loadWorkspaceIconThemeCatalogFromVsix(fixture.vsixPath, fixture.cacheRootPath)
+    await importWorkspaceIconThemeFromVsix(fixture.vsixPath, fixture.cacheRootPath)
 
     const cacheEntries = await readdir(fixture.cacheRootPath)
     expect(cacheEntries).toHaveLength(1)

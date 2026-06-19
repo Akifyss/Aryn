@@ -12,12 +12,16 @@ import {
   discardAllGitChanges,
   discardGitChange,
   getGitBaseline,
+  getGitCommitDetails,
+  getGitCommitFileDiff,
+  getGitCommitHistory,
   getGitLineBlame,
   getGitFileDiff,
   getGitRepositoryState,
   initializeGitRepository,
   pullGitChanges,
   pushGitChanges,
+  revertGitCommit,
   stageGitPaths,
   unstageGitPaths,
 } from './git'
@@ -2038,8 +2042,24 @@ ipcMain.handle('git:push', async (_, workspacePath: string) => {
   return pushGitChanges(workspacePath)
 })
 
+ipcMain.handle('git:revert-commit', async (_, workspacePath: string, commitHash: string) => {
+  return revertGitCommit(workspacePath, commitHash)
+})
+
 ipcMain.handle('git:get-file-diff', async (_, workspacePath: string, filePath: string, scope: GitChangeScope) => {
   return getGitFileDiff(workspacePath, filePath, scope)
+})
+
+ipcMain.handle('git:get-commit-history', async (_, workspacePath: string, limit?: number) => {
+  return getGitCommitHistory(workspacePath, limit)
+})
+
+ipcMain.handle('git:get-commit-details', async (_, workspacePath: string, commitHash: string) => {
+  return getGitCommitDetails(workspacePath, commitHash)
+})
+
+ipcMain.handle('git:get-commit-file-diff', async (_, workspacePath: string, commitHash: string, filePath: string) => {
+  return getGitCommitFileDiff(workspacePath, commitHash, filePath)
 })
 
 ipcMain.handle(

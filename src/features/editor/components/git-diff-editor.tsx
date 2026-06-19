@@ -290,6 +290,9 @@ function MonacoDiffRenderer({
   const onSaveRef = useRef(onSave)
   const monacoTheme = resolveMonacoTheme(theme)
   const language = getCodeLanguage(diff.change.path)
+  const diffModelSourceKey = diff.source.kind === 'commit'
+    ? `commit-${diff.source.commit.hash}`
+    : diff.change.scope
 
   const emitDraftChange = useCallback((nextValue: string) => {
     if (nextValue === lastForwardedValueRef.current) {
@@ -515,7 +518,7 @@ function MonacoDiffRenderer({
         height='100%'
         modified={diff.modifiedContent}
         modifiedLanguage={language}
-        modifiedModelPath={`git-diff-modified://${diff.change.scope}/${encodeURIComponent(diff.change.path)}`}
+        modifiedModelPath={`git-diff-modified://${diffModelSourceKey}/${encodeURIComponent(diff.change.path)}`}
         onMount={handleMount}
         options={{
           ...DEFAULT_DIFF_OPTIONS,
@@ -523,7 +526,7 @@ function MonacoDiffRenderer({
         }}
         original={diff.originalContent}
         originalLanguage={language}
-        originalModelPath={`git-diff-original://${diff.change.scope}/${encodeURIComponent(diff.change.path)}`}
+        originalModelPath={`git-diff-original://${diffModelSourceKey}/${encodeURIComponent(diff.change.path)}`}
         theme={monacoTheme}
       />
     </div>
@@ -563,7 +566,8 @@ export function GitDiffEditor({
   const isSavingRef = useRef(false)
   const latestModifiedContentRef = useRef(diff.modifiedContent)
   const onDraftContentChangeRef = useRef(onDraftContentChange)
-  const isEditable = diff.change.scope === 'unstaged' && diff.modifiedExists
+  const isWorkingTreeDiff = diff.source.kind === 'working-tree'
+  const isEditable = isWorkingTreeDiff && diff.change.scope === 'unstaged' && diff.modifiedExists
   const gitActionsDisabledReason = getGitActionsDisabledReason({
     isComposing,
     isSaving,
@@ -641,8 +645,9 @@ export function GitDiffEditor({
           <h3 className='git-diff-header-title'>{diff.change.relativePath}</h3>
         </div>
 
-        <div className='git-diff-view-modes'>
-          {diff.change.scope === 'unstaged' ? (
+        {isWorkingTreeDiff ? (
+          <div className='git-diff-view-modes'>
+            {diff.change.scope === 'unstaged' ? (
             <>
               <AppTooltipButton
                 type='button'
@@ -669,7 +674,7 @@ export function GitDiffEditor({
                 <AddLine size={16} />
               </AppTooltipButton>
             </>
-          ) : (
+            ) : (
             <>
               <AppTooltipButton
                 type='button'
@@ -684,8 +689,9 @@ export function GitDiffEditor({
                 <Icon icon='mdi:minus' width={16} height={16} />
               </AppTooltipButton>
             </>
-          )}
-        </div>
+            )}
+          </div>
+        ) : null}
       </header>
 
       <MonacoDiffRenderer

@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { createWriteStream } from 'node:fs'
 import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import extractZip from 'extract-zip'
+import type { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
+import { open as openZip, type Entry, type ZipFile } from 'yauzl'
 import type {
   WorkspaceIconTheme,
   WorkspaceIconThemeOption,
@@ -49,6 +52,9 @@ const extractionCompleteFileName = '.aryn-extraction-complete'
 const packageFileName = 'package.json'
 const iconDataUrlCache = new Map<string, Promise<string>>()
 const vsixExtractionLocks = new Map<string, Promise<string>>()
+const zipDirectoryMode = 0o040000
+const zipFileTypeMask = 0o170000
+const zipSymlinkMode = 0o120000
 
 function stripJsonComments(source: string) {
   let result = ''
@@ -132,6 +138,236 @@ function parseJsonFile<T>(rawValue: string, filePath: string) {
       throw new Error(`Unable to parse icon theme file "${filePath}": ${message}`)
     }
   }
+}
+
+function openVsix(vsixPath: string) {
+  return new Promise<ZipFile>((resolve, reject) => {
+    openZip(vsixPath, { lazyEntries: true }, (error, zipFile) => {
+      if (error) {
+        reject(error)
+        return
+      }
+
+      if (!zipFile) {
+        reject(new Error('The VSIX package could not be opened.'))
+        return
+      }
+
+      resolve(zipFile)
+    })
+  })
+}
+
+function normalizeZipEntryName(entryName: string) {
+  return entryName.replace(/\\/g, '/').replace(/^\/+/, '')
+}
+
+function resolveSafeZipEntryPath(rootPath: string, entryName: string) {
+  const normalizedEntryName = normalizeZipEntryName(entryName)
+  const segments = normalizedEntryName.split('/').filter(Boolean)
+
+  if (
+    segments.length === 0
+    || path.isAbsolute(entryName)
+    || /^[A-Za-z]:/u.test(entryName)
+    || segments.includes('..')
+  ) {
+    throw new Error(`Unsafe path "${entryName}" found while processing VSIX package.`)
+  }
+
+  const destinationPath = path.resolve(rootPath, ...segments)
+  const relativePath = path.relative(rootPath, destinationPath)
+
+  if (relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+    throw new Error(`Out of bound path "${entryName}" found while processing VSIX package.`)
+  }
+
+  return destinationPath
+}
+
+function getZipEntryMode(entry: Entry) {
+  return (entry.externalFileAttributes >> 16) & 0xffff
+}
+
+function isZipEntryDirectory(entry: Entry) {
+  const mode = getZipEntryMode(entry)
+  const madeBy = entry.versionMadeBy >> 8
+
+  return (mode & zipFileTypeMask) === zipDirectoryMode
+    || entry.fileName.endsWith('/')
+    || (madeBy === 0 && entry.externalFileAttributes === 16)
+}
+
+function isZipEntrySymlink(entry: Entry) {
+  return (getZipEntryMode(entry) & zipFileTypeMask) === zipSymlinkMode
+}
+
+function openZipEntryReadStream(zipFile: ZipFile, entry: Entry) {
+  return new Promise<Readable>((resolve, reject) => {
+    zipFile.openReadStream(entry, (error, readStream) => {
+      if (error) {
+        reject(error)
+        return
+      }
+
+      resolve(readStream)
+    })
+  })
+}
+
+async function readZipEntryText(zipFile: ZipFile, entry: Entry) {
+  const readStream = await openZipEntryReadStream(zipFile, entry)
+  const chunks: Buffer[] = []
+
+  for await (const chunk of readStream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+
+  return Buffer.concat(chunks).toString('utf8')
+}
+
+function getPackageManifestEntryPriority(entryName: string) {
+  const normalizedEntryName = normalizeZipEntryName(entryName)
+
+  if (normalizedEntryName === packageFileName) {
+    return 0
+  }
+
+  if (normalizedEntryName === `extension/${packageFileName}`) {
+    return 1
+  }
+
+  if (/^[^/]+\/package\.json$/u.test(normalizedEntryName)) {
+    return 2
+  }
+
+  return null
+}
+
+async function readPackageManifestFromVsix(vsixPath: string) {
+  type Candidate = {
+    fileName: string
+    priority: number
+    source: string
+  }
+
+  const candidates: Candidate[] = []
+  const zipFile = await openVsix(vsixPath)
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+
+    const finish = () => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      resolve()
+    }
+
+    const fail = (error: unknown) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      zipFile.close()
+      reject(error)
+    }
+
+    zipFile.once('error', fail)
+    zipFile.once('end', finish)
+    zipFile.on('entry', (entry: Entry) => {
+      void (async () => {
+        const priority = getPackageManifestEntryPriority(entry.fileName)
+
+        if (priority !== null && !isZipEntryDirectory(entry)) {
+          candidates.push({
+            fileName: normalizeZipEntryName(entry.fileName),
+            priority,
+            source: await readZipEntryText(zipFile, entry),
+          })
+        }
+
+        zipFile.readEntry()
+      })().catch(fail)
+    })
+
+    zipFile.readEntry()
+  })
+
+  const selectedCandidate = candidates
+    .sort((left, right) => left.priority - right.priority)[0]
+
+  if (!selectedCandidate) {
+    throw new Error('The VSIX package does not contain a resolvable extension manifest.')
+  }
+
+  return parseJsonFile<ExtensionPackageManifest>(
+    selectedCandidate.source,
+    `${vsixPath}:${selectedCandidate.fileName}`,
+  )
+}
+
+async function extractVsix(vsixPath: string, destinationRootPath: string) {
+  await mkdir(destinationRootPath, { recursive: true })
+
+  const zipFile = await openVsix(vsixPath)
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+
+    const finish = () => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      resolve()
+    }
+
+    const fail = (error: unknown) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      zipFile.close()
+      reject(error)
+    }
+
+    zipFile.once('error', fail)
+    zipFile.once('end', finish)
+    zipFile.on('entry', (entry: Entry) => {
+      void (async () => {
+        if (entry.fileName.startsWith('__MACOSX/')) {
+          zipFile.readEntry()
+          return
+        }
+
+        const destinationPath = resolveSafeZipEntryPath(destinationRootPath, entry.fileName)
+
+        if (isZipEntryDirectory(entry)) {
+          await mkdir(destinationPath, { recursive: true })
+          zipFile.readEntry()
+          return
+        }
+
+        if (isZipEntrySymlink(entry)) {
+          throw new Error(`Symlink entries are not supported in VSIX packages: ${entry.fileName}`)
+        }
+
+        await mkdir(path.dirname(destinationPath), { recursive: true })
+
+        const readStream = await openZipEntryReadStream(zipFile, entry)
+        await pipeline(readStream, createWriteStream(destinationPath))
+        zipFile.readEntry()
+      })().catch(fail)
+    })
+
+    zipFile.readEntry()
+  })
 }
 
 function normalizeIdentifier(value: string) {
@@ -287,7 +523,7 @@ async function rebuildExtractedVsix(vsixPath: string, extractRootPath: string) {
 
   try {
     await mkdir(tempExtractRootPath, { recursive: true })
-    await extractZip(vsixPath, { dir: tempExtractRootPath })
+    await extractVsix(vsixPath, tempExtractRootPath)
     await resolveExtractedExtensionRoot(tempExtractRootPath)
     await writeFile(path.join(tempExtractRootPath, extractionCompleteFileName), '', 'utf8')
     clearIconDataUrlCacheForRoot(extractRootPath)
@@ -394,30 +630,25 @@ async function loadExtensionManifest(extensionRootPath: string) {
 
 export async function loadWorkspaceIconThemeCatalogFromVsix(
   vsixPath: string,
-  cacheRootPath: string,
+  _cacheRootPath: string,
   sourceKind: WorkspaceIconThemeSourceKind = 'external',
 ): Promise<WorkspaceIconThemeCatalog> {
   const resolvedVsixPath = path.resolve(vsixPath)
-  const loadCatalog = async (forceExtract = false) => {
-    const extensionRootPath = await ensureExtractedVsix(
-      resolvedVsixPath,
-      cacheRootPath,
-      { force: forceExtract },
-    )
-    const { iconThemes, manifest } = await loadExtensionManifest(extensionRootPath)
 
-    return {
-      extensionLabel: getExtensionLabel(manifest),
-      sourceKind,
-      sourceVsixPath: resolvedVsixPath,
-      themes: toThemeOptions(iconThemes),
-    }
+  // Catalogs only need package.json contributions; avoid full VSIX extraction
+  // here so theme menus stay cheap and do not populate partial extraction caches.
+  const manifest = await readPackageManifestFromVsix(resolvedVsixPath)
+  const iconThemes = manifest.contributes?.iconThemes ?? []
+
+  if (iconThemes.length === 0) {
+    throw new Error('The selected VSIX package does not contribute any icon themes.')
   }
 
-  try {
-    return await loadCatalog()
-  } catch {
-    return loadCatalog(true)
+  return {
+    extensionLabel: getExtensionLabel(manifest),
+    sourceKind,
+    sourceVsixPath: resolvedVsixPath,
+    themes: toThemeOptions(iconThemes),
   }
 }
 
