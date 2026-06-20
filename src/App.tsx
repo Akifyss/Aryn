@@ -730,7 +730,7 @@ function App() {
       const meta = window.document.querySelector('meta[name="theme-color"]')
       if (meta) {
         // Match official OKLCH background tokens
-        meta.setAttribute('content', t === 'dark' ? '#242526' : '#f5f6f8')
+        meta.setAttribute('content', t === 'dark' ? '#0a0a0b' : '#ffffff')
       }
     }
 
@@ -5656,7 +5656,7 @@ function App() {
   const appShell = (
     <div
       ref={appShellRef}
-      className="app-shell text-foreground bg-background"
+      className="app-shell"
       data-app-layout={appLayoutPreference}
       data-layout={layoutMode}
       data-platform={shellPlatform}
@@ -5917,7 +5917,7 @@ function App() {
               <AlertDialog.Heading>{confirmDialogOptions?.title}</AlertDialog.Heading>
             </AlertDialog.Header>
             <AlertDialog.Body>
-              <p className="text-[var(--foreground)] whitespace-pre-wrap">{confirmDialogOptions?.message}</p>
+              <p className="text-[var(--foreground-primary)] whitespace-pre-wrap">{confirmDialogOptions?.message}</p>
             </AlertDialog.Body>
             <AlertDialog.Footer>
               <Button variant="tertiary" onPress={() => confirmDialogOptions?.onCancel()}>

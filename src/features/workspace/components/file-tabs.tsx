@@ -330,7 +330,7 @@ export function FileTabs({
     preview.style.width = `${sourceRect.width}px`
     preview.style.height = `${sourceRect.height}px`
     preview.style.margin = '0'
-    preview.style.background = 'var(--surface)'
+    preview.style.background = 'var(--background-primary)'
     preview.style.opacity = '1'
     preview.style.pointerEvents = 'none'
     preview.style.zIndex = '9999'

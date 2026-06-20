@@ -1,36 +1,36 @@
 .meo-native-theme {
-  --editor-background: var(--surface);
-  --editor-foreground: var(--foreground);
-  --sideBar-background: var(--surface-secondary);
-  --sideBar-foreground: var(--muted);
-  --panel-border: var(--border);
-  --textCodeBlock-background: var(--surface-secondary);
+  --editor-background: var(--background-primary);
+  --editor-foreground: var(--foreground-primary);
+  --sideBar-background: var(--background-secondary);
+  --sideBar-foreground: var(--foreground-secondary);
+  --panel-border: var(--border-primary);
+  --textCodeBlock-background: var(--background-secondary);
   --editor-selectionBackground: color-mix(in oklch, var(--accent) 28%, transparent);
   --editorCursor-foreground: var(--accent);
-  --editorLineNumber-foreground: var(--muted);
-  --editorWidget-background: var(--surface);
-  --editorHoverWidget-background: var(--surface);
-  --meo-floating-toolbar-background: var(--surface);
+  --editorLineNumber-foreground: var(--foreground-secondary);
+  --editorWidget-background: var(--background-primary);
+  --editorHoverWidget-background: var(--background-primary);
+  --meo-floating-toolbar-background: var(--background-primary);
   --meo-floating-toolbar-z-index: 220;
-  --editorHoverWidget-foreground: var(--foreground);
+  --editorHoverWidget-foreground: var(--foreground-primary);
   --editor-findMatchBackground: color-mix(in oklch, var(--warning) 28%, transparent);
   --editor-findMatchBorder: color-mix(in oklch, var(--warning) 62%, transparent);
   --toolbar-hoverBackground: color-mix(in oklch, var(--accent) 12%, transparent);
-  --descriptionForeground: var(--muted);
+  --descriptionForeground: var(--foreground-secondary);
   --focusBorder: color-mix(in oklch, var(--focus) 48%, transparent);
   --input-background: var(--field-background);
   --input-foreground: var(--field-foreground);
-  --button-border: color-mix(in oklch, var(--foreground) 12%, transparent);
-  --button-secondaryBackground: var(--surface-tertiary);
-  --button-secondaryHoverBackground: color-mix(in oklch, var(--surface-tertiary) 80%, var(--foreground) 10%);
+  --button-border: color-mix(in oklch, var(--foreground-primary) 12%, transparent);
+  --button-secondaryBackground: var(--background-tertiary);
+  --button-secondaryHoverBackground: color-mix(in oklch, var(--background-tertiary) 80%, var(--foreground-primary) 10%);
   --list-hoverBackground: color-mix(in oklch, var(--accent) 10%, transparent);
   --list-activeSelectionBackground: color-mix(in oklch, var(--accent) 14%, transparent);
-  --list-activeSelectionForeground: var(--foreground);
+  --list-activeSelectionForeground: var(--foreground-primary);
   --app-scroll-area-scrollbar-thickness: 6px;
   --app-scroll-area-scrollbar-gap: 1px;
-  --app-scroll-area-thumb-color: color-mix(in srgb, var(--muted) 9%, transparent);
-  --app-scroll-area-thumb-hover-color: color-mix(in srgb, var(--foreground) 13%, transparent);
-  --app-scroll-area-thumb-active-color: color-mix(in srgb, var(--foreground) 18%, transparent);
+  --app-scroll-area-thumb-color: color-mix(in srgb, var(--foreground-secondary) 9%, transparent);
+  --app-scroll-area-thumb-hover-color: color-mix(in srgb, var(--foreground-primary) 13%, transparent);
+  --app-scroll-area-thumb-active-color: color-mix(in srgb, var(--foreground-primary) 18%, transparent);
   --meo-scroll-area-scrollbar-size: calc(var(--app-scroll-area-scrollbar-thickness) + (var(--app-scroll-area-scrollbar-gap) * 2));
   --meo-git-overview-ruler-right: calc(var(--app-scroll-area-scrollbar-thickness) + var(--app-scroll-area-scrollbar-gap) + 1px);
   --scrollbarSlider-background: var(--app-scroll-area-thumb-color,
@@ -53,9 +53,9 @@
   --font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --editor-font-size: 16px;
   --editor-font-weight: 400;
-  --git-added: var(--color-green-600);
-  --git-changed: var(--color-sky-600);
-  --git-deleted: var(--color-rose-600);
+  --git-added: var(--status-added);
+  --git-changed: var(--status-modified);
+  --git-deleted: var(--status-deleted);
 }
 
 .meo-editor-shell {
@@ -88,16 +88,16 @@
   --token-keyword-color: var(--color-rose-600);
   --token-identifier-color: var(--color-sky-600);
   --token-macroName-color: var(--color-cyan-600);
-  --token-variableName-color: var(--foreground);
+  --token-variableName-color: var(--foreground-primary);
   --token-propertyName-color: var(--color-green-600);
   --token-typeName-color: var(--color-cyan-600);
   --token-className-color: var(--color-green-600);
   --token-namespace-color: var(--color-sky-600);
-  --token-operator-color: var(--foreground);
+  --token-operator-color: var(--foreground-primary);
   --token-operatorKeyword-color: var(--color-rose-600);
-  --token-punctuation-color: var(--foreground);
+  --token-punctuation-color: var(--foreground-primary);
   --token-functionName-color: var(--color-cyan-600);
-  --token-labelName-color: var(--muted);
+  --token-labelName-color: var(--foreground-secondary);
   --token-definitionFunction-color: var(--color-cyan-600);
   --token-definedVariable-color: var(--color-sky-600);
   --token-number-color: var(--color-purple-600);
@@ -114,22 +114,22 @@
   --token-regexp-color: var(--color-amber-600);
   --token-string-color: var(--color-amber-600);
   --token-typeDefinition-color: var(--color-cyan-600);
-  --token-meta-color: var(--muted);
-  --token-comment-color: var(--muted);
+  --token-meta-color: var(--foreground-secondary);
+  --token-comment-color: var(--foreground-secondary);
   --token-tagName-color: var(--color-rose-600);
   --token-attributeName-color: var(--color-green-600);
-  --token-invalid-color: var(--foreground);
+  --token-invalid-color: var(--foreground-primary);
   --token-deleted-color: var(--color-rose-600);
-  --token-monospace-color: var(--muted);
-  --token-heading-color: var(--foreground);
-  --token-emphasis-color: var(--foreground);
-  --token-strong-color: var(--foreground);
-  --token-strikethrough-color: var(--foreground);
-  --token-quote-color: var(--foreground);
-  --token-contentSeparator-color: var(--muted);
+  --token-monospace-color: var(--foreground-secondary);
+  --token-heading-color: var(--foreground-primary);
+  --token-emphasis-color: var(--foreground-primary);
+  --token-strong-color: var(--foreground-primary);
+  --token-strikethrough-color: var(--foreground-primary);
+  --token-quote-color: var(--foreground-primary);
+  --token-contentSeparator-color: var(--foreground-secondary);
   --token-link-color: var(--color-sky-600);
   --token-url-color: var(--color-sky-600);
-  --token-processingInstruction-color: var(--muted);
+  --token-processingInstruction-color: var(--foreground-secondary);
   --active-line-bg: color-mix(in srgb, var(--editor-selectionBackground) 20%, transparent 80%);
   --selection-bg: var(--editor-selectionBackground);
   --code-block-active-line-bg-live: color-mix(in srgb, var(--textCodeBlock-background) 50%, transparent 50%);
@@ -160,9 +160,9 @@
   --line-height-source: 1.5;
   --active-editor-line-height: 1.5;
   --task-checkbox-size: 17px;
-  --git-added: var(--color-green-600);
-  --git-changed: var(--color-sky-600);
-  --git-deleted: var(--color-rose-600);
+  --git-added: var(--status-added);
+  --git-changed: var(--status-modified);
+  --git-deleted: var(--status-deleted);
 }
 
 .meo-native-root {
@@ -734,8 +734,8 @@
       -45deg,
       transparent 0,
       transparent 4px,
-      color-mix(in srgb, var(--muted) 26%, transparent) 4px,
-      color-mix(in srgb, var(--muted) 26%, transparent) 6px
+      color-mix(in srgb, var(--foreground-secondary) 26%, transparent) 4px,
+      color-mix(in srgb, var(--foreground-secondary) 26%, transparent) 6px
     );
 }
 
@@ -1391,7 +1391,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 8px 14px 8px 82px;
-  background-color: var(--surface);
+  background-color: var(--background-primary);
 }
 
 .meo-native-theme .editor-root:has(.cm-editor.meo-line-numbers-hidden) .mode-toolbar {
@@ -1750,11 +1750,11 @@
 }
 
 .meo-native-theme .format-button.toggle-button:not(.is-active) {
-  color: var(--muted);
+  color: var(--foreground-secondary);
 }
 
 .meo-native-theme .format-button.toggle-button:not(.is-active):hover {
-  color: var(--foreground);
+  color: var(--foreground-primary);
 }
 
 .meo-native-theme .heading-dropdown-option {
@@ -1793,7 +1793,7 @@
 .meo-native-theme .mode-button {
   min-width: 52px;
   cursor: pointer;
-  color: var(--foreground);
+  color: var(--foreground-primary);
   background: transparent;
 }
 
@@ -1815,7 +1815,7 @@
   z-index: 10;
   cursor: pointer;
   padding: 2px 8px;
-  color: var(--muted);
+  color: var(--foreground-secondary);
   background-color: transparent;
 }
 
@@ -1829,7 +1829,7 @@
   left: calc(2ch);
   z-index: 10;
   padding: 2px 5px;
-  color: var(--muted);
+  color: var(--foreground-secondary);
   background-color: transparent;
   pointer-events: none;
   cursor: default;
@@ -1839,7 +1839,7 @@
   font-family: var(--active-editor-font);
   font-weight: var(--active-editor-font-weight);
   font-size: var(--active-editor-font-size);
-  color: var(--foreground);
+  color: var(--foreground-primary);
   min-width: 0;
   position: relative;
 }
@@ -1866,7 +1866,7 @@
 .meo-native-root .cm-editor .cm-content,
 .meo-native-root .cm-editor .cm-line {
   font-family: var(--active-editor-font);
-  color: var(--foreground);
+  color: var(--foreground-primary);
   min-width: 0;
   min-height: 1.2em;
 }
@@ -2032,7 +2032,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-fold-toggle:not(.is-expanded) {
-  color: var(--foreground);
+  color: var(--foreground-primary);
 }
 
 .meo-native-root .cm-editor .meo-md-fold-toggle:not(.is-expanded) .meo-md-fold-chevron {
@@ -2062,7 +2062,7 @@
 
 .meo-native-root .cm-editor .meo-md-details-summary:hover,
 .meo-native-root .cm-editor .meo-md-details-summary:focus-visible {
-  color: var(--foreground);
+  color: var(--foreground-primary);
   outline: none;
 }
 
@@ -2161,7 +2161,7 @@
 
 .meo-native-root .cm-editor.meo-mode-source .meo-md-colon-fence-marker,
 .meo-native-root .cm-editor.meo-mode-source .meo-md-colon-fence-marker * {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-source .meo-md-colon-fence-code,
@@ -2250,7 +2250,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-strong {
-  color: var(--foreground);
+  color: var(--foreground-primary);
   font-weight: 600;
 }
 
@@ -2260,7 +2260,7 @@
 
 .meo-native-root .cm-editor .meo-md-strike-marker,
 .meo-native-root .cm-editor .meo-md-strike-marker-active {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
 }
 
 .meo-native-root .cm-editor .meo-md-link {
@@ -2271,8 +2271,8 @@
 }
 
 .meo-native-root .cm-editor .meo-md-url-boundary {
-  color: var(--foreground) !important;
-  -webkit-text-fill-color: var(--foreground) !important;
+  color: var(--foreground-primary) !important;
+  -webkit-text-fill-color: var(--foreground-primary) !important;
   text-decoration: none;
   text-decoration-color: transparent !important;
 }
@@ -2291,7 +2291,7 @@
 
 .meo-native-root .cm-editor .meo-md-link-marker,
 .meo-native-root .cm-editor .meo-md-link-marker-active {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
 }
 
 .meo-native-root .cm-editor .meo-md-link-label-bracket,
@@ -2300,8 +2300,8 @@
 .meo-native-root .cm-editor .meo-md-link-label-bracket-active *,
 .meo-native-root .cm-editor .meo-md-footnote-marker,
 .meo-native-root .cm-editor .meo-md-footnote-marker * {
-  color: var(--muted) !important;
-  -webkit-text-fill-color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
+  -webkit-text-fill-color: var(--foreground-secondary) !important;
 }
 
 .meo-native-root .cm-editor .meo-md-footnote-ref,
@@ -2363,12 +2363,12 @@
 .meo-native-root .cm-editor .meo-md-footnote-ref:focus-visible,
 .meo-native-root .cm-editor .meo-md-footnote-backref:hover,
 .meo-native-root .cm-editor .meo-md-footnote-backref:focus-visible {
-  color: var(--foreground);
+  color: var(--foreground-primary);
   outline: none;
 }
 
 .meo-native-root .cm-editor .cm-line.meo-md-footnote-line {
-  color: var(--foreground);
+  color: var(--foreground-primary);
 }
 
 .meo-native-root .cm-editor .cm-line.meo-md-footnote-continuation {
@@ -2382,7 +2382,7 @@
 
 .meo-native-root .cm-editor .meo-md-wiki-marker,
 .meo-native-root .cm-editor .meo-md-wiki-marker * {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .meo-md-wiki-empty-marker {
@@ -2400,7 +2400,7 @@
   padding: 0;
   border: 0;
   line-height: 0;
-  color: var(--muted);
+  color: var(--foreground-secondary);
   background: transparent;
   cursor: pointer;
   vertical-align: top;
@@ -2414,7 +2414,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-link-clear-btn:hover {
-  color: var(--foreground);
+  color: var(--foreground-primary);
 }
 
 .meo-native-root .cm-editor .meo-md-wiki-missing-icon {
@@ -2454,7 +2454,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-quote {
-  border-left: 3px solid var(--muted);
+  border-left: 3px solid var(--foreground-secondary);
   min-height: calc(var(--active-editor-line-height) * 1em);
   padding-left: 3ch;
   text-indent: -1ch;
@@ -2492,7 +2492,7 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: var(--border);
+  background: var(--border-primary);
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -2549,12 +2549,12 @@
   margin: 0 0.08em;
   padding: 0.04em 0.42em 0.1em;
   min-width: 1.3em;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-primary);
   border-radius: 0.35em;
   background: var(--sideBar-background);
   /* Keep fill out of the border area so the bottom edge stays crisp. */
   background-clip: padding-box;
-  color: var(--foreground);
+  color: var(--foreground-primary);
   font-size: 0.84em;
   font-weight: 600;
   line-height: 1.2;
@@ -2562,7 +2562,7 @@
   white-space: nowrap;
   text-indent: 0;
   /* Extra 1px inside stroke -> visual 2px bottom edge without changing line height. */
-  box-shadow: inset 0 -1px 0 var(--border);
+  box-shadow: inset 0 -1px 0 var(--border-primary);
 }
 
 .meo-native-root .cm-editor .meo-md-math {
@@ -2618,7 +2618,7 @@
 
 .meo-native-root .cm-editor.meo-mode-live .meo-md-code-marker-active,
 .meo-native-root .cm-editor.meo-mode-live .meo-md-code-marker-active * {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
 }
 
 .meo-native-root .cm-editor .meo-md-code-block,
@@ -2646,8 +2646,8 @@
   padding-left: var(--effective-list-hanging-indent);
   text-indent: calc(var(--effective-list-hanging-indent) * -1);
   background-image: repeating-linear-gradient(to right,
-      var(--border) 0,
-      var(--border) 1px,
+      var(--border-primary) 0,
+      var(--border-primary) 1px,
       transparent 1px,
       transparent var(--list-guide-step));
   background-size: var(--list-indent-columns) 100%;
@@ -2657,8 +2657,8 @@
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-list-line.meo-md-list-line-selected {
   background-image: repeating-linear-gradient(to right,
-      var(--border) 0,
-      var(--border) 1px,
+      var(--border-primary) 0,
+      var(--border-primary) 1px,
       transparent 1px,
       transparent var(--list-guide-step)),
     linear-gradient(to right,
@@ -2675,7 +2675,7 @@
 
 .meo-native-root .cm-editor .meo-md-list-marker {
   display: inline;
-  color: var(--muted);
+  color: var(--foreground-secondary);
 }
 
 .meo-native-root .cm-editor .meo-md-list-indent-spacer {
@@ -2684,7 +2684,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-list-prefix {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-source .meo-md-task-bracket,
@@ -2710,7 +2710,7 @@
   height: var(--task-checkbox-size);
   margin: 0;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-primary);
   border-radius: 4px;
   background: var(--sideBar-background);
   cursor: pointer;
@@ -2721,7 +2721,7 @@
 }
 
 .meo-native-root .cm-editor .meo-task-checkbox:hover {
-  border: 1px solid var(--foreground);
+  border: 1px solid var(--foreground-primary);
 }
 
 .meo-native-root .cm-editor .meo-task-checkbox.is-done::after {
@@ -2731,7 +2731,7 @@
   top: 2px;
   width: 4px;
   height: 7px;
-  border: solid var(--foreground);
+  border: solid var(--foreground-primary);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
@@ -2746,7 +2746,7 @@
   width: 7px;
   height: 7px;
   border-radius: 2px;
-  background: var(--foreground);
+  background: var(--foreground-primary);
   transform: translate(-50%, -50%);
 }
 
@@ -2756,13 +2756,13 @@
 
 .meo-native-root .cm-editor .meo-task-complete,
 .meo-native-root .cm-editor .meo-task-complete * {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
   text-decoration-color: currentColor !important;
 }
 
 .meo-native-root .cm-editor .meo-task-dropped,
 .meo-native-root .cm-editor .meo-task-dropped * {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
   text-decoration: line-through !important;
   text-decoration-color: currentColor !important;
 }
@@ -2774,7 +2774,7 @@
   width: var(--list-border-width);
   min-width: var(--list-border-width);
   height: 100%;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--border-primary);
 }
 
 .meo-native-root .cm-editor .meo-mermaid-block {
@@ -2861,7 +2861,7 @@
 .meo-mermaid-zoom-btn {
   font-size: 16px;
   line-height: 1;
-  color: var(--foreground);
+  color: var(--foreground-primary);
   background-color: var(--editor-background);
   pointer-events: auto;
 }
@@ -3315,7 +3315,7 @@
 }
 
 .meo-git-hover-overlay.is-empty {
-  background: var(--border);
+  background: var(--border-primary);
 }
 
 .meo-git-hover-overlay.is-added {
@@ -3398,14 +3398,14 @@
 .meo-native-root .cm-editor .cm-line.meo-merge-current,
 .meo-native-root .cm-editor .cm-line.meo-merge-base,
 .meo-native-root .cm-editor .cm-line.meo-merge-incoming {
-  color: var(--foreground);
+  color: var(--foreground-primary);
 }
 
 .meo-native-root .cm-editor .cm-line.meo-merge-current-header,
 .meo-native-root .cm-editor .cm-line.meo-merge-base-header,
 .meo-native-root .cm-editor .cm-line.meo-merge-separator,
 .meo-native-root .cm-editor .cm-line.meo-merge-incoming-header {
-  color: var(--muted);
+  color: var(--foreground-secondary);
 }
 
 .meo-native-root .cm-editor .cm-line.meo-merge-current-header *,
@@ -3428,7 +3428,7 @@
 .meo-native-root .cm-editor .meo-merge-action-btn {
   appearance: none;
   border: 1px solid var(--button-border, transparent);
-  background-color: var(--button-secondaryBackground, var(--surface-tertiary)) !important;
+  background-color: var(--button-secondaryBackground, var(--background-tertiary)) !important;
   color: var(--editor-foreground);
   border-radius: 4px;
   padding: 2px 8px;
@@ -3441,18 +3441,18 @@
 
 .meo-native-root .cm-editor .meo-merge-action-btn:hover,
 .meo-native-root .cm-editor .meo-merge-action-btn:focus-visible {
-  background-color: var(--button-secondaryHoverBackground, var(--surface-tertiary)) !important;
+  background-color: var(--button-secondaryHoverBackground, var(--background-tertiary)) !important;
   outline: none;
 }
 
 .meo-native-root .cm-editor .meo-merge-action-btn:active {
-  background-color: var(--button-secondaryHoverBackground, var(--surface-tertiary)) !important;
+  background-color: var(--button-secondaryHoverBackground, var(--background-tertiary)) !important;
 }
 
 .meo-native-root .cm-editor .meo-merge-action-labels {
   font-size: 11px;
   line-height: 1.35;
-  color: var(--muted);
+  color: var(--foreground-secondary);
   white-space: nowrap;
   user-select: none;
   -webkit-user-select: none;
@@ -3518,7 +3518,7 @@
   position: relative;
   overflow: visible;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-primary);
 }
 
 .meo-native-root .cm-editor .meo-md-html-table th.meo-md-html-table-cell-selected,
@@ -3575,7 +3575,7 @@
   box-sizing: border-box;
   min-height: 1lh;
   padding: 0.25em 0.5em;
-  color: var(--foreground);
+  color: var(--foreground-primary);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -3606,7 +3606,7 @@
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--foreground);
+  color: var(--foreground-primary);
   font: inherit;
   font-weight: inherit;
   font-style: inherit;
@@ -3673,7 +3673,7 @@
   min-height: 15px;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-primary);
   border-radius: 5px;
   background: var(--sideBar-background);
   color: var(--editor-foreground);
@@ -3786,7 +3786,7 @@
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-table-header-line .meo-md-table-cell *,
 .meo-native-root .cm-editor.meo-mode-source .meo-md-source-table-header-cell,
 .meo-native-root .cm-editor.meo-mode-source .meo-md-source-table-header-cell * {
-  color: var(--foreground) !important;
+  color: var(--foreground-primary) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .meo-md-table-line .meo-md-marker-active,
@@ -3818,7 +3818,7 @@
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-frontmatter-content .meo-md-list-marker,
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-content .meo-md-list-prefix,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-frontmatter-content .meo-md-list-prefix {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-boundary .meo-code-language-label {
@@ -3833,7 +3833,7 @@
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-content .meo-md-frontmatter-value,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-frontmatter-content .meo-md-frontmatter-value {
-  color: var(--foreground) !important;
+  color: var(--foreground-primary) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-frontmatter-content .meo-md-frontmatter-array-pills {
@@ -3850,8 +3850,8 @@
   min-height: 1.35em;
   padding: 0 6px;
   border-radius: 999px;
-  background: var(--surface-tertiary);
-  color: var(--foreground) !important;
+  background: var(--background-tertiary);
+  color: var(--foreground-primary) !important;
   font-size: 0.92em;
   line-height: 1.1;
   white-space: nowrap;
@@ -3897,7 +3897,7 @@
 }
 
 .meo-native-root .cm-editor .meo-md-alert-marker {
-  color: var(--muted);
+  color: var(--foreground-secondary);
 }
 
 .meo-native-root .cm-editor.meo-mode-live .meo-md-alert-marker-hidden {
@@ -3963,21 +3963,21 @@
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-strike-marker,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-list-prefix,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-alert-marker {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert .meo-md-wiki-marker,
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert .meo-md-wiki-marker *,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-wiki-marker,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-wiki-marker * {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert .meo-md-code-marker-active,
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert .meo-md-code-marker-active *,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-code-marker,
 .meo-native-root .cm-editor.meo-mode-source .cm-line.meo-md-alert .meo-md-code-marker * {
-  color: var(--muted) !important;
+  color: var(--foreground-secondary) !important;
 }
 
 .meo-native-root .cm-editor.meo-mode-live .cm-line.meo-md-alert .meo-md-hr-marker,
@@ -4015,7 +4015,7 @@
   width: 7px;
   height: 7px;
   border-radius: 2px;
-  background: var(--foreground);
+  background: var(--foreground-primary);
   transform: translate(-50%, -50%);
 }
 

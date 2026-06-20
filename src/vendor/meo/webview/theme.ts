@@ -36,7 +36,7 @@ const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'variableName',
     tags: t.variableName,
-    fallbackColor: 'var(--foreground)',
+    fallbackColor: 'var(--foreground-primary)',
     style: {}
   },
   {
@@ -66,7 +66,7 @@ const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'operator',
     tags: t.operator,
-    fallbackColor: 'var(--foreground)',
+    fallbackColor: 'var(--foreground-primary)',
     style: {}
   },
   {
@@ -78,7 +78,7 @@ const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'punctuation',
     tags: [t.bracket, t.brace, t.punctuation, t.squareBracket, t.angleBracket],
-    fallbackColor: 'var(--foreground)',
+    fallbackColor: 'var(--foreground-primary)',
     style: {}
   },
   {
@@ -90,7 +90,7 @@ const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'labelName',
     tags: t.labelName,
-    fallbackColor: 'var(--muted)',
+    fallbackColor: 'var(--foreground-secondary)',
     style: {}
   },
   {
@@ -192,13 +192,13 @@ const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'meta',
     tags: t.meta,
-    fallbackColor: 'var(--muted)',
+    fallbackColor: 'var(--foreground-secondary)',
     style: {}
   },
   {
     id: 'comment',
     tags: [t.comment, t.docComment],
-    fallbackColor: 'var(--muted)',
+    fallbackColor: 'var(--foreground-secondary)',
     style: { fontStyle: 'italic' }
   },
   {
@@ -216,7 +216,7 @@ const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'invalid',
     tags: t.invalid,
-    fallbackColor: 'var(--foreground)',
+    fallbackColor: 'var(--foreground-primary)',
     style: { textDecoration: 'underline wavy', borderBottom: '1px wavy #e06c75' }
   },
   {
@@ -228,43 +228,43 @@ const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'monospace',
     tags: t.monospace,
-    fallbackColor: 'var(--muted)',
+    fallbackColor: 'var(--foreground-secondary)',
     style: {}
   },
   {
     id: 'heading',
     tags: t.heading,
-    fallbackColor: 'var(--foreground)',
+    fallbackColor: 'var(--foreground-primary)',
     style: { fontWeight: '600' }
   },
   {
     id: 'emphasis',
     tags: t.emphasis,
-    fallbackColor: 'var(--foreground)',
+    fallbackColor: 'var(--foreground-primary)',
     style: { fontStyle: 'italic' }
   },
   {
     id: 'strong',
     tags: t.strong,
-    fallbackColor: 'var(--foreground)',
+    fallbackColor: 'var(--foreground-primary)',
     style: { fontWeight: '600' }
   },
   {
     id: 'strikethrough',
     tags: t.strikethrough,
-    fallbackColor: 'var(--foreground)',
+    fallbackColor: 'var(--foreground-primary)',
     style: { textDecoration: 'line-through' }
   },
   {
     id: 'quote',
     tags: t.quote,
-    fallbackColor: 'var(--foreground)',
+    fallbackColor: 'var(--foreground-primary)',
     style: {}
   },
   {
     id: 'contentSeparator',
     tags: t.contentSeparator,
-    fallbackColor: 'var(--muted)',
+    fallbackColor: 'var(--foreground-secondary)',
     style: {}
   },
   {
@@ -282,7 +282,7 @@ const SYNTAX_TAG_SPECS: readonly SyntaxTokenStyleSpec[] = [
   {
     id: 'processingInstruction',
     tags: t.processingInstruction,
-    fallbackColor: 'var(--muted)',
+    fallbackColor: 'var(--foreground-secondary)',
     style: {}
   }
 ] as const;

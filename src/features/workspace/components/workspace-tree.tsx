@@ -452,7 +452,7 @@ function FileTreeItem({
                 <AlertDialog.Heading>确认删除</AlertDialog.Heading>
               </AlertDialog.Header>
               <AlertDialog.Body>
-                <p className='text-[var(--foreground)]'>
+                <p className='text-[var(--foreground-primary)]'>
                   您确定要删除 <span style={{ fontWeight: 600 }}>{node.name}</span> 吗？
                   此操作将无法撤销。
                 </p>

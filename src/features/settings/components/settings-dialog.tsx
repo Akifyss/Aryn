@@ -340,7 +340,7 @@ function renderProviderLobeIcon(provider: string, size = 18) {
       return <Comp size={size} />;
     }
     const Comp = IconComponent;
-    return <Comp size={size} className="text-foreground" />;
+    return <Comp size={size} />;
   }
 
   const iconWrapper = (child: React.ReactNode) => (
@@ -407,7 +407,7 @@ function renderProviderLobeIcon(provider: string, size = 18) {
       return iconWrapper(renderIcon(Bedrock));
     default:
       return iconWrapper(
-        <Icon icon="mingcute:key-2-line" className="text-muted" style={{ fontSize: size * 0.7 }} />
+        <Icon icon="mingcute:key-2-line" style={{ fontSize: size * 0.7 }} />
       );
   }
 }
@@ -980,18 +980,16 @@ export function SettingsDialog({
     return (
       <div className='settings-providers-section flex flex-col gap-3 flex-1 min-h-0 overflow-hidden'>
         {authFlow && (
-          <section className='settings-provider-auth-flow p-5 rounded-2xl border border-blue-500/20 bg-blue-500/5 flex flex-col gap-4 relative overflow-hidden'>
-            <div className='absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl -mr-8 -mt-8' />
-            
+          <section className='settings-provider-auth-flow flex flex-col gap-4 relative overflow-hidden'>
             <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
               <div className='flex items-center gap-3'>
-                <div className='flex items-center justify-center w-9 h-9 rounded-xl bg-blue-500/10 text-blue-500 flex-shrink-0'>
+                <div className='settings-auth-flow-icon flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0'>
                   <Icon icon='mingcute:loading-3-line' className='w-5 h-5 animate-spin' />
                 </div>
                 <div className='flex flex-col min-w-0'>
-                  <span className='text-sm font-semibold text-foreground truncate'>{activeAuthProviderLabel} 登录中</span>
+                  <span className='text-sm font-semibold truncate'>{activeAuthProviderLabel} 登录中</span>
                   {authFlow.instructions && (
-                    <span className='text-xs text-muted mt-1 leading-relaxed'>{authFlow.instructions}</span>
+                    <span className='settings-auth-instructions mt-1'>{authFlow.instructions}</span>
                   )}
                 </div>
               </div>
@@ -1022,13 +1020,13 @@ export function SettingsDialog({
 
             {authFlow.prompt && (
               <form
-                className='settings-provider-prompt-form flex flex-col gap-3 p-4 rounded-xl bg-surface/60 border border-border/40 mt-2'
+                className='settings-provider-prompt-form mt-2'
                 onSubmit={(event) => {
                   event.preventDefault()
                   void handleSubmitAuthPrompt()
                 }}
               >
-                <label className='text-xs font-semibold text-foreground/80'>{authFlow.prompt.message}</label>
+                <label className='settings-auth-prompt-label'>{authFlow.prompt.message}</label>
                 <div className='flex items-center gap-2'>
                   <Input
                     aria-label={authFlow.prompt.message}
@@ -1057,11 +1055,11 @@ export function SettingsDialog({
             )}
 
             {authFlow.progress.length > 0 && (
-              <div className='settings-provider-progress flex flex-col gap-1.5 p-3 rounded-xl bg-surface/30 border border-border/20 text-xs text-muted font-mono mt-1'>
-                <div className='text-[10px] text-muted-foreground uppercase font-sans font-semibold tracking-wider border-b border-border/20 pb-1 mb-1'>连接日志</div>
+              <div className='settings-provider-progress mt-1'>
+                <div className='settings-provider-progress-title'>连接日志</div>
                 {authFlow.progress.slice(-4).map((message, index) => (
                   <div key={`${message}-${index}`} className='flex items-center gap-1.5'>
-                    <span className='w-1 h-1 rounded-full bg-blue-500/70' />
+                    <span className='settings-progress-dot w-1 h-1 rounded-full' />
                     <span>{message}</span>
                   </div>
                 ))}
@@ -1101,7 +1099,7 @@ export function SettingsDialog({
           </div>
           
           <div className='settings-search-wrapper relative w-full sm:w-56 flex items-center'>
-            <span className='absolute left-3 text-muted flex items-center justify-center pointer-events-none z-10'>
+            <span className='settings-secondary-icon absolute left-3 flex items-center justify-center pointer-events-none z-10'>
               <Icon icon="mingcute:search-line" className="w-4 h-4" />
             </span>
             <Input
@@ -1118,8 +1116,8 @@ export function SettingsDialog({
         <AppScrollArea className='flex-1 min-h-0' contentClassName='pr-2 pb-6'>
           <div className='flex flex-col gap-3'>
             {activeGroupMeta && (
-              <div className='settings-providers-group-desc p-3.5 rounded-xl border border-border/40 bg-surface-secondary/40'>
-                <p className='text-xs text-muted leading-relaxed'>{activeGroupMeta.description}</p>
+              <div className='settings-providers-group-desc'>
+                <p className='settings-group-desc-text'>{activeGroupMeta.description}</p>
               </div>
             )}
 
@@ -1143,11 +1141,7 @@ export function SettingsDialog({
                   return (
                     <div
                       key={provider.key}
-                      className={`provider-card flex flex-col rounded-2xl border transition-all duration-200 bg-surface-secondary/30 ${
-                        isExpanded 
-                          ? 'border-accent shadow-lg shadow-accent/5 ring-1 ring-accent/10' 
-                          : 'border-border/60 hover:border-border-hover hover:bg-surface-secondary/60 hover:shadow-md'
-                      }`}
+                      className={`provider-card ${isExpanded ? 'is-expanded' : ''}`}
                     >
                       <button
                         type='button'
@@ -1160,7 +1154,7 @@ export function SettingsDialog({
                           </div>
                           
                           <div className='flex flex-col min-w-0'>
-                            <span className='provider-title text-sm font-semibold text-foreground truncate'>
+                            <span className='text-sm font-semibold truncate'>
                               {provider.label}
                             </span>
                           </div>
@@ -1168,24 +1162,19 @@ export function SettingsDialog({
                         
                         <div className='flex items-center gap-2 flex-shrink-0'>
                           <span className={`provider-status-badge text-[10px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1.5 ${
-                            status.color === 'emerald' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
-                            status.color === 'amber' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' :
-                            status.color === 'blue' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' :
-                            'bg-muted-foreground/15 text-muted border border-border/40'
+                            status.color === 'emerald' ? 'provider-status-badge-success' :
+                            status.color === 'amber' ? 'provider-status-badge-warning' :
+                            status.color === 'blue' ? 'provider-status-badge-info' :
+                            'provider-status-badge-muted'
                           }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${
-                              status.color === 'emerald' ? 'bg-emerald-500' :
-                              status.color === 'amber' ? 'bg-amber-500' :
-                              status.color === 'blue' ? 'bg-blue-500' :
-                              'bg-current opacity-60'
-                            }`} />
+                            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />
                             {status.label}
                           </span>
                           
                           <Icon
                             icon='mingcute:down-line'
-                            className={`w-4 h-4 text-muted transition-transform duration-200 ${
-                              isExpanded ? 'rotate-180 text-foreground' : ''
+                            className={`settings-secondary-icon w-4 h-4 transition-transform duration-200 ${
+                              isExpanded ? 'rotate-180' : ''
                             }`}
                           />
                         </div>
@@ -1193,15 +1182,15 @@ export function SettingsDialog({
 
                       <div className={`provider-card-details-wrapper ${isExpanded ? 'is-expanded' : ''}`}>
                         <div className='provider-card-details-inner'>
-                          <div className='p-4 pt-0 border-t border-border/40 bg-surface-secondary/10 flex flex-col gap-4'>
+                          <div className='provider-card-details-body'>
                             <div className='provider-meta-info flex flex-col gap-2 mt-3'>
-                              <div className='text-xs text-foreground/80 leading-relaxed bg-surface/50 p-3 rounded-xl border border-border/30'>
-                                <p className='font-medium text-foreground mb-1'>当前配置状态：</p>
-                                <p className='text-muted'>{getProviderMeta(provider)}</p>
+                              <div className='provider-config-status'>
+                                <p className='font-medium mb-1'>当前配置状态：</p>
+                                <p className='settings-secondary-text'>{getProviderMeta(provider)}</p>
                               </div>
                               
                               {provider.setupHint && (
-                                <div className='provider-setup-hint flex gap-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-500/5 p-3 rounded-xl border border-blue-500/15'>
+                                <div className='provider-setup-hint flex gap-2 p-3 rounded-xl'>
                                   <Icon icon='mingcute:information-line' className='w-4 h-4 flex-shrink-0 mt-0.5' />
                                   <span>{provider.setupHint}</span>
                                 </div>
@@ -1210,9 +1199,9 @@ export function SettingsDialog({
 
                             {showsApiKeyActions && (
                               <div className='provider-apikey-form flex flex-col gap-2'>
-                                <label className='text-xs font-semibold text-foreground/80'>配置 API 密钥</label>
+                                <label className='provider-apikey-label'>配置 API 密钥</label>
                                 <div className='relative flex items-center w-full provider-apikey-input-container'>
-                                  <span className='absolute left-3 text-muted pointer-events-none flex items-center justify-center z-20'>
+                                  <span className='settings-secondary-icon absolute left-3 pointer-events-none flex items-center justify-center z-20'>
                                     <Icon icon='mingcute:key-2-line' className='w-4 h-4' />
                                   </span>
                                   <Input
@@ -1231,7 +1220,7 @@ export function SettingsDialog({
                                     aria-label={showPassword ? 'Hide API key' : 'Show API key'}
                                     tooltip={showPassword ? '隐藏 API 密钥' : '显示 API 密钥'}
                                     onClick={() => setShowPasswords(prev => ({ ...prev, [provider.key]: !showPassword }))}
-                                    className='absolute right-3 text-muted hover:text-foreground cursor-pointer transition-colors focus:outline-none flex items-center justify-center z-10'
+                                    className='settings-secondary-toggle absolute right-3 cursor-pointer transition-colors focus:outline-none flex items-center justify-center z-10'
                                   >
                                     <Icon
                                       icon={showPassword ? 'mingcute:eye-line' : 'mingcute:eye-close-line'}
@@ -1274,7 +1263,7 @@ export function SettingsDialog({
                                   isDisabled={isBusy || !canClearStoredCredential}
                                   size='sm'
                                   variant='ghost'
-                                  className='settings-action-button font-medium text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 gap-2'
+                                  className='settings-action-button settings-danger-button font-medium gap-2'
                                   onPress={() => void (showsOAuthActions
                                     ? handleLogoutProviderAuth(provider.key)
                                     : handleSaveProviderAuth(provider.key, null))}
@@ -1292,9 +1281,9 @@ export function SettingsDialog({
                 })}
               </div>
             ) : (
-              <div className='settings-empty-state flex flex-col items-center justify-center p-12 text-center border border-dashed border-border rounded-xl bg-surface-secondary/20'>
-                <Icon icon="mingcute:empty-box-line" className="w-12 h-12 text-muted mb-3" />
-                <p className="text-sm text-muted">未找到匹配的AI服务提供商</p>
+              <div className='settings-empty-state'>
+                <Icon icon="mingcute:empty-box-line" className="settings-secondary-icon w-12 h-12 mb-3" />
+                <p className="settings-secondary-text">未找到匹配的AI服务提供商</p>
               </div>
             )}
           </div>

@@ -8,92 +8,161 @@
   --font-heading: "Cormorant Garamond", serif;
 }
 
-
-/*
- * HeroUI Theme Customization
- * Add this to your global.css after importing @heroui/styles
- * Only includes base variables from variables.css
- * @see https://heroui.com/docs/react/getting-started/theming
- */
-
 :root,
 .light,
 .default,
 [data-theme="light"],
 [data-theme="default"] {
-  /* Theme Colors (Light Mode) */
-  --accent: oklch(62.04% 0.1950 253.83);
-  --accent-foreground: oklch(99.11% 0 0);
-  --background: oklch(97.02% 0.0000 253.83);
-  --border: oklch(90.00% 0.0000 253.83);
-  --danger: oklch(65.32% 0.2328 25.74);
-  --danger-foreground: oklch(99.11% 0 0);
-  --default: oklch(94.00% 0.0000 253.83);
-  --default-foreground: oklch(21.03% 0.0059 253.83);
-  --field-background: oklch(100.00% 0.0000 253.83);
-  --field-foreground: oklch(21.03% 0.0000 253.83);
-  --field-placeholder: oklch(55.17% 0.0000 253.83);
-  --focus: oklch(62.04% 0.1950 253.83);
-  --foreground: oklch(21.03% 0.0000 253.83);
-  --muted: oklch(55.17% 0.0000 253.83);
-  --overlay: oklch(100.00% 0.0000 253.83);
-  --overlay-foreground: oklch(21.03% 0.0000 253.83);
-  --scrollbar: oklch(87.10% 0.0000 253.83);
-  --segment: oklch(100.00% 0.0000 253.83);
-  --segment-foreground: oklch(21.03% 0.0000 253.83);
-  --separator: oklch(92.00% 0.0000 253.83);
-  --success: oklch(73.29% 0.1935 150.81);
-  --success-foreground: oklch(21.03% 0.0059 150.81);
-  --surface: oklch(100.00% 0.0000 253.83);
-  --surface-foreground: oklch(21.03% 0.0000 253.83);
-  --surface-secondary: oklch(95.24% 0.0000 253.83);
-  --surface-secondary-foreground: oklch(21.03% 0.0000 253.83);
-  --surface-tertiary: oklch(93.73% 0.0000 253.83);
-  --surface-tertiary-foreground: oklch(21.03% 0.0000 253.83);
-  --warning: oklch(78.19% 0.1585 72.33);
-  --warning-foreground: oklch(21.03% 0.0059 72.33);
+  /* Background */
+  --background-primary: var(--color-white);
+  --background-secondary: var(--color-gray-50);
+  --background-tertiary: var(--color-gray-100);
+  --background-quaternary: var(--color-gray-200);
 
-  /* Border Radius */
-  --radius: 0.5rem;
-  --field-radius: 0.75rem;
+  /* Foreground */
+  --foreground-primary: var(--color-gray-900);
+  --foreground-secondary: var(--color-gray-500);
+  --foreground-tertiary: var(--color-gray-400);
+  --foreground-on-accent: var(--color-white);
+  --foreground-on-danger: var(--color-white);
+  --foreground-on-success: var(--color-gray-900);
+  --foreground-on-warning: var(--color-gray-900);
+  --foreground-on-default: var(--color-gray-900);
+
+  /* Border */
+  --border-primary: var(--color-gray-300);
+  --border-secondary: var(--color-gray-200);
+
+  /* Accent */
+  --accent: var(--color-blue-500);
+  --accent-soft: color-mix(in oklch, var(--accent) 15%, transparent);
+
+  /* Status */
+  --danger: var(--color-red-500);
+  --success: var(--color-green-500);
+  --warning: var(--color-amber-500);
+  --default: var(--color-gray-100);
+
+  /* Git Status */
+  --status-added: var(--color-emerald-500);
+  --status-modified: var(--color-amber-500);
+  --status-deleted: var(--color-rose-500);
+
+  /* Misc */
+  --focus: var(--accent);
+  --scrollbar: color-mix(in oklch, var(--background-quaternary) 40%, transparent);
+  --scrollbar-hover: color-mix(in oklch, var(--background-quaternary) 60%, transparent);
+  --scrollbar-active: color-mix(in oklch, var(--background-quaternary) 80%, transparent);
+  --sidebar: var(--background-secondary);
+  --separator: var(--border-secondary);
+  --outline: var(--border-secondary);
+  --field-background: var(--background-primary);
+  --field-foreground: var(--foreground-primary);
+  --field-placeholder: var(--foreground-tertiary);
+  --overlay: var(--background-primary);
+  --overlay-foreground: var(--foreground-primary);
+  --segment: var(--background-primary);
+  --segment-foreground: var(--foreground-primary);
+  --hover: color-mix(in oklch, var(--background-quaternary) 50%, transparent);
+  --active: color-mix(in oklch, var(--background-quaternary) 75%, transparent);
+  --selected: color-mix(in oklch, var(--background-quaternary) 75%, transparent);
 
   /* Font Family */
-  /* Make sure to load Inter font in your app */
   --font-sans: var(--font-inter);
+
+  /* HeroUI Aliases */
+  --background: var(--background-primary);
+  --surface: var(--background-primary);
+  --surface-secondary: var(--background-secondary);
+  --surface-tertiary: var(--background-tertiary);
+  --foreground: var(--foreground-primary);
+  --surface-foreground: var(--foreground-primary);
+  --surface-secondary-foreground: var(--foreground-primary);
+  --surface-tertiary-foreground: var(--foreground-primary);
+  --muted: var(--foreground-secondary);
+  --accent-foreground: var(--foreground-on-accent);
+  --danger-foreground: var(--foreground-on-danger);
+  --success-foreground: var(--foreground-on-success);
+  --warning-foreground: var(--foreground-on-warning);
+  --default-foreground: var(--foreground-on-default);
+  --border: var(--border-primary);
 }
 
 .dark,
 [data-theme="dark"] {
   color-scheme: dark;
-  /* Theme Colors (Dark Mode) */
-  --accent: oklch(62.04% 0.1950 253.83);
-  --accent-foreground: oklch(99.11% 0 0);
-  --background: oklch(12.00% 0.0000 253.83);
-  --border: oklch(28.00% 0.0000 253.83);
-  --danger: oklch(59.40% 0.1967 24.63);
-  --danger-foreground: oklch(99.11% 0 0);
-  --default: oklch(27.40% 0.0000 253.83);
-  --default-foreground: oklch(99.11% 0 0);
-  --field-background: oklch(21.03% 0.0000 253.83);
-  --field-foreground: oklch(99.11% 0.0000 253.83);
-  --field-placeholder: oklch(70.50% 0.0000 253.83);
-  --focus: oklch(62.04% 0.1950 253.83);
-  --foreground: oklch(99.11% 0.0000 253.83);
-  --muted: oklch(70.50% 0.0000 253.83);
-  --overlay: oklch(21.03% 0.0000 253.83);
-  --overlay-foreground: oklch(99.11% 0.0000 253.83);
-  --scrollbar: oklch(70.50% 0.0000 253.83);
-  --segment: oklch(39.64% 0.0000 253.83);
-  --segment-foreground: oklch(99.11% 0.0000 253.83);
-  --separator: oklch(25.00% 0.0000 253.83);
-  --success: oklch(73.29% 0.1935 150.81);
-  --success-foreground: oklch(21.03% 0.0059 150.81);
-  --surface: oklch(21.03% 0.0000 253.83);
-  --surface-foreground: oklch(99.11% 0.0000 253.83);
-  --surface-secondary: oklch(25.70% 0.0000 253.83);
-  --surface-secondary-foreground: oklch(99.11% 0.0000 253.83);
-  --surface-tertiary: oklch(27.21% 0.0000 253.83);
-  --surface-tertiary-foreground: oklch(99.11% 0.0000 253.83);
-  --warning: oklch(82.03% 0.1388 76.34);
-  --warning-foreground: oklch(21.03% 0.0059 76.34);
+
+  /* Background */
+  --background-primary: var(--color-gray-950);
+  --background-secondary: var(--color-gray-900);
+  --background-tertiary: var(--color-gray-800);
+  --background-quaternary: var(--color-gray-700);
+
+  /* Foreground */
+  --foreground-primary: var(--color-gray-50);
+  --foreground-secondary: var(--color-gray-400);
+  --foreground-tertiary: var(--color-gray-500);
+  --foreground-on-accent: var(--color-white);
+  --foreground-on-danger: var(--color-white);
+  --foreground-on-success: var(--color-gray-900);
+  --foreground-on-warning: var(--color-gray-900);
+  --foreground-on-default: var(--color-gray-50);
+
+  /* Border */
+  --border-primary: var(--color-gray-600);
+  --border-secondary: var(--color-gray-800);
+
+  /* Accent */
+  --accent: var(--color-blue-500);
+  --accent-soft: color-mix(in oklch, var(--accent) 15%, transparent);
+
+  /* Status */
+  --danger: var(--color-red-600);
+  --success: var(--color-green-600);
+  --warning: var(--color-amber-500);
+  --default: var(--color-gray-800);
+
+  /* Git Status */
+  --status-added: var(--color-emerald-500);
+  --status-modified: var(--color-amber-500);
+  --status-deleted: var(--color-rose-500);
+
+  /* Misc */
+  --focus: var(--accent);
+  --scrollbar: color-mix(in oklch, var(--background-quaternary) 40%, transparent);
+  --scrollbar-hover: color-mix(in oklch, var(--background-quaternary) 60%, transparent);
+  --scrollbar-active: color-mix(in oklch, var(--background-quaternary) 80%, transparent);
+  --sidebar: var(--background-secondary);
+  --separator: var(--border-secondary);
+  --outline: var(--border-secondary);
+  --field-background: var(--background-primary);
+  --field-foreground: var(--foreground-primary);
+  --field-placeholder: var(--foreground-tertiary);
+  --overlay: var(--background-primary);
+  --overlay-foreground: var(--foreground-primary);
+  --segment: var(--background-primary);
+  --segment-foreground: var(--foreground-primary);
+  --hover: color-mix(in oklch, var(--background-quaternary) 50%, transparent);
+  --active: color-mix(in oklch, var(--background-quaternary) 75%, transparent);
+  --selected: color-mix(in oklch, var(--background-quaternary) 75%, transparent);
+
+  /* Font Family */
+  --font-sans: var(--font-inter);
+
+  /* HeroUI Aliases */
+  --background: var(--background-primary);
+  --surface: var(--background-primary);
+  --surface-secondary: var(--background-secondary);
+  --surface-tertiary: var(--background-tertiary);
+  --foreground: var(--foreground-primary);
+  --surface-foreground: var(--foreground-primary);
+  --surface-secondary-foreground: var(--foreground-primary);
+  --surface-tertiary-foreground: var(--foreground-primary);
+  --muted: var(--foreground-secondary);
+  --accent-foreground: var(--foreground-on-accent);
+  --danger-foreground: var(--foreground-on-danger);
+  --success-foreground: var(--foreground-on-success);
+  --warning-foreground: var(--foreground-on-warning);
+  --default-foreground: var(--foreground-on-default);
+  --border: var(--border-primary);
 }
