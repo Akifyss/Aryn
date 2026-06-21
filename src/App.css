@@ -52,15 +52,18 @@
   background: var(--background-primary);
   color: var(--foreground-primary);
   overflow: hidden;
+}
+
+.app-shell[data-sidebar-transition='true'] {
   transition: grid-template-columns var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
 }
 
-.app-shell[data-resizing='true'] {
+.app-shell[data-sidebar-transition='true'][data-resizing='true'] {
   transition: none;
 }
 
-.app-shell[data-resizing='true'] .titlebar-spacer,
-.app-shell[data-resizing='true'] .left-chrome-actions {
+.app-shell[data-resizing='true'] .titlebar-spacer[data-sidebar-transition='true'],
+.app-shell[data-resizing='true'] .left-chrome-actions[data-sidebar-transition='true'] {
   transition: none;
 }
 
@@ -255,10 +258,13 @@
   flex: 1;
   min-width: 0;
   margin-left: var(--titlebar-left-control-reserved-width);
-  transition: margin-left var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
   pointer-events: auto;
   app-region: drag;
   -webkit-app-region: drag;
+}
+
+.titlebar-spacer[data-sidebar-transition='true'] {
+  transition: margin-left var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
 }
 
 .titlebar-controls {
@@ -322,9 +328,12 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
   align-items: center;
   gap: var(--left-chrome-action-gap);
   pointer-events: auto;
-  transition: width var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+.left-chrome-actions[data-sidebar-transition='true'] {
+  transition: width var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
 }
 
 .left-chrome-actions[data-left-surface='collapsed'] {
@@ -510,13 +519,38 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   border-left: 1px solid var(--separator);
 }
 
+.panel-sidebar[data-sidebar-transition='true'],
+.panel-agent[data-sidebar-transition='true'] {
+  contain: layout paint;
+}
+
+.panel-sidebar > .workspace-sidebar-surface {
+  width: var(--left-sidebar-content-width);
+  min-width: var(--left-sidebar-content-width);
+}
+
+.panel-agent > .agent-shell,
+.panel-agent > .editor-frame {
+  width: var(--right-sidebar-content-width);
+  min-width: var(--right-sidebar-content-width);
+}
+
+.panel-sidebar > .workspace-sidebar-surface[data-sidebar-transition='true'] {
+  contain: layout paint;
+}
+
+.panel-agent > .agent-shell[data-sidebar-transition='true'],
+.panel-agent > .editor-frame[data-sidebar-transition='true'] {
+  contain: layout paint;
+}
+
 .panel-agent-drawer {
   border-left: 0;
 }
 
 .panel-sidebar.is-collapsed,
 .panel-agent.is-collapsed {
-  display: none;
+  border-color: transparent;
 }
 
 .workspace-sidebar-surface {
@@ -650,10 +684,13 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   width: var(--resize-handle-width);
   transform: translateX(-50%);
   z-index: var(--app-z-panel-resize);
+}
+
+.panel-resize-slot[data-sidebar-transition='true'] {
   transition: left var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
 }
 
-.app-shell[data-resizing='true'] .panel-resize-slot {
+.app-shell[data-resizing='true'] .panel-resize-slot[data-sidebar-transition='true'] {
   transition: none;
 }
 
@@ -1584,12 +1621,15 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   min-width: 0;
   min-height: var(--tabs-chrome-height);
   background-color: var(--background-primary);
+}
+
+.file-tabs-shell[data-sidebar-transition='true'] {
   transition:
     padding-left var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing),
     padding-right var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
 }
 
-.app-shell[data-resizing='true'] .file-tabs-shell {
+.app-shell[data-resizing='true'] .file-tabs-shell[data-sidebar-transition='true'] {
   transition: none;
 }
 
@@ -4170,12 +4210,15 @@ body.workspace-tree-dragging .tree-item-row {
   flex-shrink: 0;
   min-height: var(--chrome-height);
   padding: 0 var(--right-panel-content-inset) 0 6px;
+}
+
+.agent-threadbar[data-sidebar-transition='true'] {
   transition:
     padding-left var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing),
     padding-right var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
 }
 
-.app-shell[data-resizing='true'] .agent-threadbar {
+.app-shell[data-resizing='true'] .agent-threadbar[data-sidebar-transition='true'] {
   transition: none;
 }
 

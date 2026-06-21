@@ -1,4 +1,4 @@
-import type { CSSProperties, FormEvent, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, ReactNode, TransitionEvent as ReactTransitionEvent } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Menu } from '@base-ui/react/menu'
@@ -377,6 +377,19 @@ const MIN_GIT_PANEL_HEIGHT = 200
 const DEFAULT_GIT_PANEL_LAYOUT: GitPanelLayout = 'list'
 const DRAWER_INTERACTION_REFRESH_STABLE_FRAMES = 2
 const DRAWER_INTERACTION_REFRESH_MAX_FRAMES = 36
+const SIDEBAR_LAYOUT_TRANSITION_FALLBACK_MS = 1000
+const SIDEBAR_LAYOUT_TRANSITION_TARGET_SELECTOR = [
+  '.titlebar-spacer',
+  '.left-chrome-actions',
+  '.panel-sidebar',
+  '.panel-agent:not(.panel-agent-drawer)',
+  '.panel-sidebar > .workspace-sidebar-surface',
+  '.panel-agent:not(.panel-agent-drawer) > .agent-shell',
+  '.panel-agent:not(.panel-agent-drawer) > .editor-frame',
+  '.panel-resize-slot',
+  '.file-tabs-shell',
+  '.agent-threadbar',
+].join(',')
 const FIXED_FILE_TAB_ID = 'app://fixed/files'
 const FIXED_GIT_TAB_ID = 'app://fixed/git'
 const WORKSPACE_AUTO_SAVE_DELAY_MS = 1000
@@ -889,6 +902,8 @@ function App() {
   const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false)
   const [drawerDragRegion, setDrawerDragRegion] = useState<DrawerDragRegion | null>(null)
   const appShellRef = useRef<HTMLDivElement | null>(null)
+  const sidebarLayoutTransitionTimerRef = useRef<number | null>(null)
+  const sidebarLayoutTransitionTargetsRef = useRef<HTMLElement[]>([])
   const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
   const leftDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
   const [leftDrawerOverlayRoot, setLeftDrawerOverlayRoot] = useState<HTMLDivElement | null>(null)
@@ -897,6 +912,50 @@ function App() {
   const meoEditorHostRef = useRef<MeoEditorHostHandle | null>(null)
   const agentProjectSessionRequestIdRef = useRef(0)
   const editorEmptyWorkspaceTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const finishSidebarLayoutTransition = useCallback(() => {
+    if (sidebarLayoutTransitionTimerRef.current !== null) {
+      window.clearTimeout(sidebarLayoutTransitionTimerRef.current)
+      sidebarLayoutTransitionTimerRef.current = null
+    }
+
+    for (const target of sidebarLayoutTransitionTargetsRef.current) {
+      target.removeAttribute('data-sidebar-transition')
+    }
+
+    sidebarLayoutTransitionTargetsRef.current = []
+    appShellRef.current?.removeAttribute('data-sidebar-transition')
+  }, [])
+  const runSidebarLayoutTransition = useCallback((update: () => void) => {
+    const shell = appShellRef.current
+    if (!shell || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      finishSidebarLayoutTransition()
+      update()
+      return
+    }
+
+    finishSidebarLayoutTransition()
+    const transitionTargets = [
+      shell,
+      ...shell.querySelectorAll<HTMLElement>(SIDEBAR_LAYOUT_TRANSITION_TARGET_SELECTOR),
+    ]
+    sidebarLayoutTransitionTargetsRef.current = transitionTargets
+    for (const target of transitionTargets) {
+      target.dataset.sidebarTransition = 'true'
+    }
+
+    update()
+    sidebarLayoutTransitionTimerRef.current = window.setTimeout(() => {
+      finishSidebarLayoutTransition()
+    }, SIDEBAR_LAYOUT_TRANSITION_FALLBACK_MS)
+  }, [finishSidebarLayoutTransition])
+  const handleSidebarLayoutTransitionEnd = useCallback((event: ReactTransitionEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget && event.propertyName === 'grid-template-columns') {
+      finishSidebarLayoutTransition()
+    }
+  }, [finishSidebarLayoutTransition])
+  useEffect(() => {
+    return finishSidebarLayoutTransition
+  }, [finishSidebarLayoutTransition])
   const activeTabId = useWorkspaceStore((state) => state.activeTabId)
   const activateTab = useWorkspaceStore((state) => state.activateTab)
   const closeTab = useWorkspaceStore((state) => state.closeTab)
@@ -4625,6 +4684,14 @@ function App() {
   }, [isGitPanelResizing])
 
   useEffect(() => {
+    if (activeResizePanel || isGitPanelResizing) {
+      finishSidebarLayoutTransition()
+    }
+  }, [activeResizePanel, finishSidebarLayoutTransition, isGitPanelResizing])
+
+  useEffect(() => {
+    let syncFrameId: number | null = null
+
     function syncShellWidth() {
       const nextShellWidth = getShellWidth()
       setShellWidth((currentWidth) => (
@@ -4632,12 +4699,25 @@ function App() {
       ))
     }
 
+    function scheduleShellWidthSync() {
+      finishSidebarLayoutTransition()
+
+      if (syncFrameId !== null) {
+        return
+      }
+
+      syncFrameId = window.requestAnimationFrame(() => {
+        syncFrameId = null
+        syncShellWidth()
+      })
+    }
+
     syncShellWidth()
 
     const shell = appShellRef.current
     const resizeObserver = typeof ResizeObserver !== 'undefined' && shell
       ? new ResizeObserver(() => {
-        syncShellWidth()
+        scheduleShellWidthSync()
       })
       : null
 
@@ -4645,13 +4725,17 @@ function App() {
       resizeObserver.observe(shell)
     }
 
-    window.addEventListener('resize', syncShellWidth)
+    window.addEventListener('resize', scheduleShellWidthSync)
 
     return () => {
+      if (syncFrameId !== null) {
+        window.cancelAnimationFrame(syncFrameId)
+      }
+
       resizeObserver?.disconnect()
-      window.removeEventListener('resize', syncShellWidth)
+      window.removeEventListener('resize', scheduleShellWidthSync)
     }
-  }, [])
+  }, [finishSidebarLayoutTransition])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -5069,25 +5153,28 @@ function App() {
       return
     }
 
-    setIsRightSidebarCollapsed((currentValue) => {
-      if (currentValue && isAgentLayout) {
-        setAgentRightSidebarWidth(
-          agentRightSidebarWidthMode === 'max'
-            ? getAgentRightSidebarMaxWidth()
-            : clampRightWidth(agentRightSidebarWidth, getShellWidth(), effectiveLeftSidebarWidth),
-        )
-      }
+    runSidebarLayoutTransition(() => {
+      setIsRightSidebarCollapsed((currentValue) => {
+        if (currentValue) {
+          setRightSidebarWidth(
+            isAgentLayout && agentRightSidebarWidthMode === 'max'
+              ? getAgentRightSidebarMaxWidth()
+              : clampRightWidth(rightSidebarWidth, getShellWidth(), effectiveLeftSidebarWidth),
+          )
+        }
 
-      return !currentValue
+        return !currentValue
+      })
     })
   }, [
-    agentRightSidebarWidth,
     agentRightSidebarWidthMode,
     effectiveLeftSidebarWidth,
     handleRightDrawerOpenChange,
     isAgentLayout,
     isRightDrawerOpen,
     isRightSidebarDrawer,
+    rightSidebarWidth,
+    runSidebarLayoutTransition,
   ])
 
   function expandCollapsedAssistantSurface() {
@@ -5096,20 +5183,24 @@ function App() {
       return
     }
 
-    setIsRightSidebarCollapsed((currentValue) => {
-      if (!currentValue) {
-        return currentValue
-      }
+    if (!isRightSidebarCollapsed) {
+      return
+    }
 
-      if (isAgentLayout) {
-        setAgentRightSidebarWidth(
-          agentRightSidebarWidthMode === 'max'
+    runSidebarLayoutTransition(() => {
+      setIsRightSidebarCollapsed((currentValue) => {
+        if (!currentValue) {
+          return currentValue
+        }
+
+        setRightSidebarWidth(
+          isAgentLayout && agentRightSidebarWidthMode === 'max'
             ? getAgentRightSidebarMaxWidth()
-            : clampRightWidth(agentRightSidebarWidth, getShellWidth(), effectiveLeftSidebarWidth),
+            : clampRightWidth(rightSidebarWidth, getShellWidth(), effectiveLeftSidebarWidth),
         )
-      }
 
-      return false
+        return false
+      })
     })
   }
 
@@ -5207,12 +5298,17 @@ function App() {
             return
           }
 
-          if (isLeftSidebarVisible) {
-            setIsLeftSidebarCollapsed(true)
-            return
-          }
+          runSidebarLayoutTransition(() => {
+            setIsLeftSidebarCollapsed((currentValue) => {
+              const nextCollapsed = !currentValue
 
-          setIsLeftSidebarCollapsed(false)
+              if (isAgentLayout && agentRightSidebarWidthMode === 'max' && isRightSidebarVisible) {
+                setAgentRightSidebarWidth(getAgentRightSidebarMaxWidth(nextCollapsed ? 0 : leftSidebarWidth))
+              }
+
+              return nextCollapsed
+            })
+          })
         }}
       >
         <span className='panel-toggle-icon' aria-hidden='true'>
@@ -5667,10 +5763,13 @@ function App() {
       data-right-collapsed={isRightSidebarDrawer || !isRightSidebarVisible ? 'true' : 'false'}
       data-right-drawer-open={isRightDrawerOpen ? 'true' : 'false'}
       data-window-fullscreen={isWindowFullScreen ? 'true' : 'false'}
+      onTransitionEnd={handleSidebarLayoutTransitionEnd}
       style={
         {
           '--git-panel-height': `${gitPanelHeight}px`,
+          '--left-sidebar-content-width': `${leftSidebarWidth}px`,
           '--left-sidebar-width': `${effectiveLeftSidebarWidth}px`,
+          '--right-sidebar-content-width': `${rightSidebarWidth}px`,
           '--right-sidebar-width': `${effectiveRightSidebarWidth}px`,
           ...shellChromeVars,
         } as CSSProperties
@@ -5735,8 +5834,12 @@ function App() {
         )
       })() : null}
 
-      {isLeftSidebarVisible ? (
-        <aside className='panel panel-sidebar'>
+      {!isLeftSidebarDrawer ? (
+        <aside
+          className={`panel panel-sidebar${isLeftSidebarVisible ? '' : ' is-collapsed'}`}
+          aria-hidden={isLeftSidebarVisible ? undefined : true}
+          inert={isLeftSidebarVisible ? undefined : true}
+        >
           {renderWorkspaceSidebar('docked')}
         </aside>
       ) : null}
@@ -5780,8 +5883,12 @@ function App() {
         />
       </div>
 
-      {isRightSidebarVisible ? (
-        <aside className='panel panel-agent'>
+      {!isRightSidebarDrawer && shouldExposeAgentWorkspaceTools ? (
+        <aside
+          className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}
+          aria-hidden={isRightSidebarVisible ? undefined : true}
+          inert={isRightSidebarVisible ? undefined : true}
+        >
           {needsProjectBootstrap ? null : isAgentLayout ? renderEditorSurface() : renderAgentPanel()}
         </aside>
       ) : null}

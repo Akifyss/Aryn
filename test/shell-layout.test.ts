@@ -45,6 +45,11 @@ describe('shell layout helpers', () => {
     return appCss.replace(/\r\n/g, '\n')
   }
 
+  async function readAppSource() {
+    const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+    return appSource.replace(/\r\n/g, '\n')
+  }
+
   async function readTreeSource() {
     const treeSource = await readFile(new URL('../src/components/tree.tsx', import.meta.url), 'utf8')
     return treeSource.replace(/\r\n/g, '\n')
@@ -151,21 +156,88 @@ describe('shell layout helpers', () => {
   })
 
   it('keeps docked sidebar expansion motion scoped and disableable', async () => {
-    const appCss = await readAppCss()
+    const [appCss, appSource] = await Promise.all([
+      readAppCss(),
+      readAppSource(),
+    ])
+    const appShellRule = appCss.match(/\.app-shell \{([\s\S]*?)\n\}/)?.[1]
 
+    expect(appShellRule).toBeDefined()
+    expect(appShellRule).not.toContain('transition:')
     expect(appCss).toContain('--sidebar-layout-transition-duration: 180ms;')
     expect(appCss).toContain('--sidebar-layout-transition-easing: cubic-bezier(0.16, 1, 0.3, 1);')
-    expect(appCss).toContain('transition: grid-template-columns var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);')
-    expect(appCss).toContain(`.app-shell[data-resizing='true'] {
+    expect(appCss).toContain(`.app-shell[data-sidebar-transition='true'] {
+  transition: grid-template-columns var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
+}`)
+    expect(appCss).toContain(`.app-shell[data-sidebar-transition='true'][data-resizing='true'] {
   transition: none;
 }`)
-    expect(appCss).toContain(`.app-shell[data-resizing='true'] .titlebar-spacer,
-.app-shell[data-resizing='true'] .left-chrome-actions {
+    expect(appCss).toContain(`.panel-sidebar > .workspace-sidebar-surface {
+  width: var(--left-sidebar-content-width);
+  min-width: var(--left-sidebar-content-width);
+}`)
+    expect(appCss).toContain(`.panel-agent > .agent-shell,
+.panel-agent > .editor-frame {
+  width: var(--right-sidebar-content-width);
+  min-width: var(--right-sidebar-content-width);
+}`)
+    expect(appCss).toContain(`.panel-sidebar > .workspace-sidebar-surface[data-sidebar-transition='true'] {
+  contain: layout paint;
+}`)
+    expect(appCss).toContain(`.panel-agent > .agent-shell[data-sidebar-transition='true'],
+.panel-agent > .editor-frame[data-sidebar-transition='true'] {
+  contain: layout paint;
+}`)
+    expect(appCss).toContain(`.panel-sidebar.is-collapsed,
+.panel-agent.is-collapsed {
+  border-color: transparent;
+}`)
+    expect(appCss).not.toContain(`.panel-sidebar.is-collapsed,
+.panel-agent.is-collapsed {
+  display: none;
+}`)
+    expect(appCss).not.toContain(`.panel-sidebar.is-collapsed,
+.panel-agent.is-collapsed {
+  visibility: hidden;
+}`)
+    expect(appCss).not.toContain(`.panel-sidebar.is-collapsed,
+.panel-agent.is-collapsed {
+  opacity: 0;
+}`)
+    expect(appSource).toContain("className={`panel panel-sidebar${isLeftSidebarVisible ? '' : ' is-collapsed'}`}")
+    expect(appSource).toContain("className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}")
+    expect(appSource).toContain("'--left-sidebar-content-width': `${leftSidebarWidth}px`")
+    expect(appSource).toContain("'--right-sidebar-content-width': `${rightSidebarWidth}px`")
+    expect(appSource).toContain('inert={isLeftSidebarVisible ? undefined : true}')
+    expect(appSource).toContain('inert={isRightSidebarVisible ? undefined : true}')
+    expect(appCss).toContain(`.app-shell[data-resizing='true'] .titlebar-spacer[data-sidebar-transition='true'],
+.app-shell[data-resizing='true'] .left-chrome-actions[data-sidebar-transition='true'] {
   transition: none;
 }`)
-    expect(appCss).toContain(`.app-shell[data-resizing='true'] .file-tabs-shell {
+    expect(appCss).toContain(`.app-shell[data-resizing='true'] .file-tabs-shell[data-sidebar-transition='true'] {
   transition: none;
 }`)
+    expect(appCss).not.toMatch(/\.app-shell\[data-sidebar-transition='true'\]\s+\./)
+    expect(appSource).toContain('SIDEBAR_LAYOUT_TRANSITION_TARGET_SELECTOR')
+    expect(appSource).toContain('shell.querySelectorAll<HTMLElement>(SIDEBAR_LAYOUT_TRANSITION_TARGET_SELECTOR)')
+    expect(appSource).toContain("target.dataset.sidebarTransition = 'true'")
+    expect(appSource).toContain("target.removeAttribute('data-sidebar-transition')")
+    expect(appSource).toContain("appShellRef.current?.removeAttribute('data-sidebar-transition')")
+    expect(appSource).toContain("event.propertyName === 'grid-template-columns'")
+    expect(appSource).toContain('onTransitionEnd={handleSidebarLayoutTransitionEnd}')
+    expect(appSource).toContain('return finishSidebarLayoutTransition')
+    expect(appSource).toContain('if (activeResizePanel || isGitPanelResizing) {')
+    expect(appSource.match(/runSidebarLayoutTransition\(\(\) => \{/g)).toHaveLength(3)
+    expect(appSource).toContain('if (!isRightSidebarCollapsed) {')
+    expect(appSource).toContain('setRightSidebarWidth(')
+    expect(appSource).toContain("isAgentLayout && agentRightSidebarWidthMode === 'max'")
+    expect(appSource).toContain('getAgentRightSidebarMaxWidth(nextCollapsed ? 0 : leftSidebarWidth)')
+    expect(appSource).toContain('function scheduleShellWidthSync()')
+    expect(appSource).toContain(`function scheduleShellWidthSync() {
+      finishSidebarLayoutTransition()`)
+    expect(appSource).toContain('syncFrameId = window.requestAnimationFrame(() => {')
+    expect(appSource).toContain("window.addEventListener('resize', scheduleShellWidthSync)")
+    expect(appSource).toContain('window.cancelAnimationFrame(syncFrameId)')
     expect(appCss).toContain(`@media (prefers-reduced-motion: reduce) {
 
   .app-shell,
