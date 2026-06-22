@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   AppStateStore,
   APP_STATE_SCHEMA_VERSION,
+  DEFAULT_AGENT_CHAT_WIDTH,
   DEFAULT_AGENT_COMPOSER_HEIGHT,
   DEFAULT_WINDOW_HEIGHT,
   DEFAULT_WINDOW_WIDTH,
@@ -446,9 +447,8 @@ describe('app state persistence', () => {
     const state = normalizePersistedAppState({
       layout: {
         activeLeftSidebarTab: 'git',
+        agentChatWidth: 640,
         agentRightSidebarCollapsed: true,
-        agentRightSidebarWidth: 640,
-        agentRightSidebarWidthMode: 'fixed',
         editorRightSidebarCollapsed: true,
         editorRightSidebarWidth: 420,
         gitPanelHeight: 360,
@@ -489,9 +489,8 @@ describe('app state persistence', () => {
     })
     expect(state.layout).toEqual({
       activeLeftSidebarTab: 'git',
+      agentChatWidth: 640,
       agentRightSidebarCollapsed: true,
-      agentRightSidebarWidth: 640,
-      agentRightSidebarWidthMode: 'fixed',
       editorRightSidebarCollapsed: true,
       editorRightSidebarWidth: 420,
       gitPanelHeight: 360,
@@ -502,6 +501,19 @@ describe('app state persistence', () => {
     expect(state.migrations).toEqual({
       rendererLocalStorage: 2,
     })
+  })
+
+  it('drops retired Agent editor width preferences without reusing them for the chat width', () => {
+    const state = normalizePersistedAppState({
+      layout: {
+        agentRightSidebarWidth: 960,
+        agentRightSidebarWidthMode: 'fixed',
+      },
+    })
+
+    expect(state.layout.agentChatWidth).toBe(DEFAULT_AGENT_CHAT_WIDTH)
+    expect(state.layout).not.toHaveProperty('agentRightSidebarWidth')
+    expect(state.layout).not.toHaveProperty('agentRightSidebarWidthMode')
   })
 
   it('returns a default workspace entry when no state exists for that workspace', () => {

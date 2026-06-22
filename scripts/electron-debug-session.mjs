@@ -289,7 +289,6 @@ async function restoreWorkspace(page, fixture) {
         }))
         window.localStorage.setItem('aryn:left-sidebar-collapsed', 'true')
         window.localStorage.setItem('aryn:agent-right-sidebar-collapsed', 'true')
-        window.localStorage.setItem('aryn:agent-right-sidebar-width-mode', 'max')
       } else {
         window.localStorage.setItem('aryn:left-sidebar-collapsed', 'false')
         window.localStorage.setItem('aryn:right-sidebar-collapsed', 'false')

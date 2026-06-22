@@ -25,14 +25,12 @@ export type PersistedAppSettings = {
   theme: AppTheme
 }
 
-export type AgentRightSidebarWidthMode = 'max' | 'fixed'
 export type LeftSidebarTab = 'file' | 'git'
 
 export type PersistedLayoutState = {
   activeLeftSidebarTab: LeftSidebarTab
+  agentChatWidth: number
   agentRightSidebarCollapsed: boolean
-  agentRightSidebarWidth: number
-  agentRightSidebarWidthMode: AgentRightSidebarWidthMode
   editorRightSidebarCollapsed: boolean
   editorRightSidebarWidth: number
   gitPanelHeight: number

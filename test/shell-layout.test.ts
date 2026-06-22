@@ -1,12 +1,24 @@
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import {
+  AGENT_CHAT_MIN_WIDTH,
+  AGENT_EDITOR_MIN_WIDTH,
   COMPACT_LAYOUT_BREAKPOINT,
+  clampAgentChatWidth,
+  clampEditorRightSidebarWidth,
+  clampLeftSidebarWidth,
   deriveLayoutMode,
   deriveShellPlatform,
+  EDITOR_MAIN_MIN_WIDTH,
+  EDITOR_RIGHT_SIDEBAR_MAX_WIDTH,
+  EDITOR_RIGHT_SIDEBAR_MIN_WIDTH,
   FULL_LAYOUT_BREAKPOINT,
+  getAgentEditorWidth,
   getShellChromeVars,
   getShellChromeOverlayState,
+  LEFT_SIDEBAR_MAX_WIDTH,
+  LEFT_SIDEBAR_MIN_WIDTH,
+  resolveAgentLayoutWidths,
 } from '../src/features/layout/shell-layout'
 
 describe('shell layout helpers', () => {
@@ -61,6 +73,72 @@ describe('shell layout helpers', () => {
     expect(deriveLayoutMode(COMPACT_LAYOUT_BREAKPOINT + 1)).toBe('compact')
     expect(deriveLayoutMode(COMPACT_LAYOUT_BREAKPOINT)).toBe('focus')
     expect(deriveLayoutMode(960)).toBe('focus')
+  })
+
+  it('keeps the Agent chat resizable while reserving space for the fluid editor', () => {
+    expect(AGENT_CHAT_MIN_WIDTH).toBe(376)
+    expect(AGENT_EDITOR_MIN_WIDTH).toBe(520)
+    expect(clampAgentChatWidth(320, 1440, 320)).toBe(376)
+    expect(clampAgentChatWidth(500, 1440, 320)).toBe(500)
+    expect(clampAgentChatWidth(960, 1440, 320)).toBe(576)
+    expect(getAgentEditorWidth(1440, 320, 576)).toBe(544)
+    expect(resolveAgentLayoutWidths({
+      agentChatWidth: 500,
+      isEditorVisible: true,
+      leftSidebarWidth: 320,
+      shellWidth: 1440,
+    })).toEqual({
+      chatTrackWidth: 500,
+      chatWidth: 500,
+      editorTrackWidth: 620,
+    })
+    expect(resolveAgentLayoutWidths({
+      agentChatWidth: 500,
+      isEditorVisible: false,
+      leftSidebarWidth: 320,
+      shellWidth: 1440,
+    })).toEqual({
+      chatTrackWidth: 1120,
+      chatWidth: 500,
+      editorTrackWidth: 0,
+    })
+  })
+
+  it('clamps shell sidebars with explicit numeric layout constraints', () => {
+    expect(EDITOR_MAIN_MIN_WIDTH).toBe(480)
+    expect(LEFT_SIDEBAR_MIN_WIDTH).toBe(240)
+    expect(LEFT_SIDEBAR_MAX_WIDTH).toBe(520)
+    expect(EDITOR_RIGHT_SIDEBAR_MIN_WIDTH).toBe(300)
+    expect(EDITOR_RIGHT_SIDEBAR_MAX_WIDTH).toBe(560)
+
+    expect(clampLeftSidebarWidth({
+      centerMinWidth: EDITOR_MAIN_MIN_WIDTH,
+      nextWidth: 160,
+      rightSidebarWidth: 368,
+      shellWidth: 1440,
+    })).toBe(240)
+    expect(clampLeftSidebarWidth({
+      centerMinWidth: EDITOR_MAIN_MIN_WIDTH,
+      nextWidth: 620,
+      rightSidebarWidth: 368,
+      shellWidth: 1440,
+    })).toBe(520)
+    expect(clampLeftSidebarWidth({
+      centerMinWidth: 500,
+      nextWidth: 420,
+      rightSidebarWidth: AGENT_EDITOR_MIN_WIDTH,
+      shellWidth: 1320,
+    })).toBe(276)
+    expect(clampLeftSidebarWidth({
+      centerMinWidth: AGENT_CHAT_MIN_WIDTH,
+      nextWidth: 520,
+      rightSidebarWidth: 0,
+      shellWidth: 960,
+    })).toBe(520)
+
+    expect(clampEditorRightSidebarWidth(240, 1440, 320)).toBe(300)
+    expect(clampEditorRightSidebarWidth(640, 1440, 320)).toBe(560)
+    expect(clampEditorRightSidebarWidth(560, 1120, 320)).toBe(300)
   })
 
   it('maps darwin to macos and treats other platforms as windows chrome layout', () => {
@@ -176,10 +254,13 @@ describe('shell layout helpers', () => {
   width: var(--left-sidebar-content-width);
   min-width: var(--left-sidebar-content-width);
 }`)
-    expect(appCss).toContain(`.panel-agent > .agent-shell,
-.panel-agent > .editor-frame {
+    expect(appCss).toContain(`.panel-agent > .agent-shell {
   width: var(--right-sidebar-content-width);
   min-width: var(--right-sidebar-content-width);
+}`)
+    expect(appCss).toContain(`.panel-agent > .editor-frame {
+  width: 100%;
+  min-width: 0;
 }`)
     expect(appCss).toContain(`.panel-sidebar > .workspace-sidebar-surface[data-sidebar-transition='true'] {
   contain: layout paint;
@@ -206,8 +287,10 @@ describe('shell layout helpers', () => {
 }`)
     expect(appSource).toContain("className={`panel panel-sidebar${isLeftSidebarVisible ? '' : ' is-collapsed'}`}")
     expect(appSource).toContain("className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}")
-    expect(appSource).toContain("'--left-sidebar-content-width': `${leftSidebarWidth}px`")
-    expect(appSource).toContain("'--right-sidebar-content-width': `${rightSidebarWidth}px`")
+    expect(appSource).toContain("'--left-sidebar-content-width': `${renderedLeftSidebarWidth}px`")
+    expect(appSource).toContain("'--agent-chat-track-width': `${effectiveAgentChatTrackWidth}px`")
+    expect(appSource).toContain("'--agent-editor-track-width': `${effectiveAgentEditorTrackWidth}px`")
+    expect(appSource).toContain("'--right-sidebar-content-width': `${renderedEditorRightSidebarWidth}px`")
     expect(appSource).toContain('inert={isLeftSidebarVisible ? undefined : true}')
     expect(appSource).toContain('inert={isRightSidebarVisible ? undefined : true}')
     expect(appCss).toContain(`.app-shell[data-resizing='true'] .titlebar-spacer[data-sidebar-transition='true'],
@@ -229,9 +312,61 @@ describe('shell layout helpers', () => {
     expect(appSource).toContain('if (activeResizePanel || isGitPanelResizing) {')
     expect(appSource.match(/runSidebarLayoutTransition\(\(\) => \{/g)).toHaveLength(3)
     expect(appSource).toContain('if (!isRightSidebarCollapsed) {')
-    expect(appSource).toContain('setRightSidebarWidth(')
-    expect(appSource).toContain("isAgentLayout && agentRightSidebarWidthMode === 'max'")
-    expect(appSource).toContain('getAgentRightSidebarMaxWidth(nextCollapsed ? 0 : leftSidebarWidth)')
+    expect(appCss).toContain(`.app-shell[data-app-layout='agent'] {
+  --agent-chat-min-width: 376px;
+  --agent-chat-track-width: 376px;
+  --agent-editor-track-width: 520px;`)
+    expect(appCss).toContain(`.app-shell[data-app-layout='agent'][data-layout='full'] {
+  grid-template-columns:
+    var(--left-sidebar-width)
+    minmax(var(--agent-chat-min-width), var(--agent-chat-track-width))
+    minmax(0, var(--agent-editor-track-width));
+}`)
+    expect(appCss).not.toMatch(/\.app-shell\[data-app-layout='agent'\]\[data-right-collapsed='true'\][^{]*\{[^}]*grid-template-columns/)
+    expect(appSource).toContain('const [agentChatWidth, setAgentChatWidth] = useState(')
+    expect(appSource).toContain('clampAgentChatWidth,')
+    expect(appSource).toContain('preview.agentChatWidth = clampAgentChatWidth(nextWidth, session.width, effectiveLeftSidebarWidth)')
+    expect(appSource).not.toContain('agentRightSidebarWidthMode')
+    expect(appCss).not.toContain(".app-shell[data-resizing='true'] .panel-resize-handle::before")
+    expect(appSource).toContain('resizeSidebarRef.current(resizePanel, pointerClientX)')
+    expect(appSource).toContain('animationFrameId = window.requestAnimationFrame(() => {')
+    expect(appSource).toContain('window.cancelAnimationFrame(animationFrameId)')
+    expect(appSource).toContain('event.currentTarget.setPointerCapture(event.pointerId)')
+    expect(appSource).toContain('function applySidebarResizePreview(')
+    expect(appSource).toContain("shell.style.setProperty('--left-sidebar-width'")
+    expect(appSource).toContain('agentChatWidth: isRightSidebarVisible ? effectiveAgentChatWidth : agentChatWidth')
+    expect(appSource).toContain(`if (isRightSidebarVisible) {
+        preview.agentChatWidth = nextAgentLayoutWidths.chatWidth
+      }`)
+    expect(appSource).toContain('sidebarResizeSessionRef.current = {')
+    expect(appSource).toContain('finishSidebarResizeRef.current(resizePanel)')
+    expect(appSource).toContain(`if (isAgentLayout) {
+        if (isRightSidebarVisible) {
+          setAgentChatWidth(preview.agentChatWidth)
+        }
+      } else {
+        setEditorRightSidebarWidth(preview.editorRightSidebarWidth)
+      }`)
+    expect(appSource).toContain('function handleResizeKeyDown(panel: ResizePanel')
+    expect(appSource).toContain('tabIndex={0}')
+    expect(appSource).toContain("id='workspace-sidebar-panel'")
+    expect(appSource).toContain("id='assistant-sidebar-panel'")
+    expect(appSource).toContain('aria-valuemin={LEFT_SIDEBAR_MIN_WIDTH}')
+    expect(appSource).toContain("aria-controls='workspace-sidebar-panel'")
+    expect(appSource).toContain("aria-controls={isAgentLayout ? 'editor-main' : 'assistant-sidebar-panel'}")
+    expect(appSource).toContain('aria-label={isAgentLayout ? \'Resize Agent chat panel\' : \'Resize assistant sidebar\'}')
+    expect(appSource).toContain("event.key !== 'ArrowLeft'")
+    expect(appSource).toContain('notifySidebarResizeEnd()')
+    expect(appCss).toContain(`.panel-resize-handle {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}`)
     expect(appSource).toContain('function scheduleShellWidthSync()')
     expect(appSource).toContain(`function scheduleShellWidthSync() {
       finishSidebarLayoutTransition()`)

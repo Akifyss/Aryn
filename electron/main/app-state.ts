@@ -1,7 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type {
-  AgentRightSidebarWidthMode,
   AppLayoutPreference,
   AppTheme,
   LeftSidebarTab,
@@ -14,7 +13,7 @@ import type {
 import type { WorkspaceIconThemeMode } from '../../src/features/workspace/types'
 import { AtomicJsonStore, type AtomicJsonStoreMissingResult } from './json-file-store'
 
-export const APP_STATE_SCHEMA_VERSION = 2
+export const APP_STATE_SCHEMA_VERSION = 3
 export const DEFAULT_WINDOW_WIDTH = 1440
 export const DEFAULT_WINDOW_HEIGHT = 900
 export const MIN_WINDOW_WIDTH = 1080
@@ -22,7 +21,7 @@ export const MIN_WINDOW_HEIGHT = 720
 export const DEFAULT_AGENT_COMPOSER_HEIGHT = 172
 export const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
 export const DEFAULT_EDITOR_RIGHT_SIDEBAR_WIDTH = 368
-export const DEFAULT_AGENT_RIGHT_SIDEBAR_WIDTH = 520
+export const DEFAULT_AGENT_CHAT_WIDTH = 376
 export const DEFAULT_GIT_PANEL_HEIGHT = 292
 
 export type PersistedWorkspaceIconThemeSelection = {
@@ -123,9 +122,8 @@ function createDefaultWorkspaceIconThemeSelections(): PersistedWorkspaceIconThem
 
 const DEFAULT_LAYOUT_STATE: PersistedLayoutState = {
   activeLeftSidebarTab: 'file',
+  agentChatWidth: DEFAULT_AGENT_CHAT_WIDTH,
   agentRightSidebarCollapsed: false,
-  agentRightSidebarWidth: DEFAULT_AGENT_RIGHT_SIDEBAR_WIDTH,
-  agentRightSidebarWidthMode: 'max',
   editorRightSidebarCollapsed: false,
   editorRightSidebarWidth: DEFAULT_EDITOR_RIGHT_SIDEBAR_WIDTH,
   gitPanelHeight: DEFAULT_GIT_PANEL_HEIGHT,
@@ -215,10 +213,6 @@ function readMeoOutlinePosition(value: unknown): MeoOutlinePosition {
   return value === 'left' ? 'left' : DEFAULT_MEO_SETTINGS.outlinePosition
 }
 
-function readAgentRightSidebarWidthMode(value: unknown): AgentRightSidebarWidthMode {
-  return value === 'fixed' ? 'fixed' : DEFAULT_LAYOUT_STATE.agentRightSidebarWidthMode
-}
-
 function readLeftSidebarTab(value: unknown): LeftSidebarTab {
   return value === 'git' ? 'git' : DEFAULT_LAYOUT_STATE.activeLeftSidebarTab
 }
@@ -281,9 +275,8 @@ export function normalizeLayoutState(value: unknown): PersistedLayoutState {
 
   return {
     activeLeftSidebarTab: readLeftSidebarTab(candidate.activeLeftSidebarTab),
+    agentChatWidth: readNumber(candidate.agentChatWidth, DEFAULT_LAYOUT_STATE.agentChatWidth, 1),
     agentRightSidebarCollapsed: readBoolean(candidate.agentRightSidebarCollapsed, DEFAULT_LAYOUT_STATE.agentRightSidebarCollapsed),
-    agentRightSidebarWidth: readNumber(candidate.agentRightSidebarWidth, DEFAULT_LAYOUT_STATE.agentRightSidebarWidth, 1),
-    agentRightSidebarWidthMode: readAgentRightSidebarWidthMode(candidate.agentRightSidebarWidthMode),
     editorRightSidebarCollapsed: readBoolean(candidate.editorRightSidebarCollapsed, DEFAULT_LAYOUT_STATE.editorRightSidebarCollapsed),
     editorRightSidebarWidth: readNumber(candidate.editorRightSidebarWidth, DEFAULT_LAYOUT_STATE.editorRightSidebarWidth, 1),
     gitPanelHeight: readNumber(candidate.gitPanelHeight, DEFAULT_LAYOUT_STATE.gitPanelHeight, 1),

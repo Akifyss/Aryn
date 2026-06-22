@@ -89,17 +89,24 @@
 }
 
 .app-shell[data-app-layout='agent'] {
-  --agent-chat-min-width: 320px;
+  --agent-chat-min-width: 376px;
+  --agent-chat-track-width: 376px;
+  --agent-editor-track-width: 520px;
   --agent-collapsed-tab-actions-width: calc((var(--panel-toggle-size) * 2) + var(--panel-toggle-gap));
 }
 
 .app-shell[data-app-layout='agent'][data-layout='full'] {
-  grid-template-columns: var(--left-sidebar-width) minmax(var(--agent-chat-min-width), 1fr) var(--right-sidebar-width);
+  grid-template-columns:
+    var(--left-sidebar-width)
+    minmax(var(--agent-chat-min-width), var(--agent-chat-track-width))
+    minmax(0, var(--agent-editor-track-width));
 }
 
 .app-shell[data-app-layout='agent'][data-layout='compact'],
 .app-shell[data-app-layout='agent'][data-layout='focus'] {
-  grid-template-columns: minmax(var(--agent-chat-min-width), 1fr) var(--right-sidebar-width);
+  grid-template-columns:
+    minmax(var(--agent-chat-min-width), var(--agent-chat-track-width))
+    minmax(0, var(--agent-editor-track-width));
 }
 
 .app-shell[data-app-layout='agent'][data-layout='focus'] .panel-agent {
@@ -529,10 +536,14 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   min-width: var(--left-sidebar-content-width);
 }
 
-.panel-agent > .agent-shell,
-.panel-agent > .editor-frame {
+.panel-agent > .agent-shell {
   width: var(--right-sidebar-content-width);
   min-width: var(--right-sidebar-content-width);
+}
+
+.panel-agent > .editor-frame {
+  width: 100%;
+  min-width: 0;
 }
 
 .panel-sidebar > .workspace-sidebar-surface[data-sidebar-transition='true'] {
@@ -713,6 +724,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   height: 100%;
   padding: 0;
   cursor: col-resize;
+  touch-action: none;
+  user-select: none;
 }
 
 .panel-resize-handle:focus,
@@ -739,8 +752,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .panel-resize-handle:hover::before,
 .panel-resize-handle:focus-visible::before,
-.panel-resize-handle.is-active::before,
-.app-shell[data-resizing='true'] .panel-resize-handle::before {
+.panel-resize-handle.is-active::before {
   opacity: 1;
 }
 

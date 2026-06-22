@@ -56,6 +56,9 @@ describe('local storage migration', () => {
       },
     }))
     storage.setItem('aryn:left-sidebar-width', '348')
+    storage.setItem('aryn:agent-chat-width', '456')
+    storage.setItem('aryn:agent-right-sidebar-width', '960')
+    storage.setItem('aryn:agent-right-sidebar-width-mode', 'fixed')
     storage.setItem('writing-workspace:left-sidebar-width', '280')
     storage.setItem('aryn:right-sidebar-collapsed', 'true')
     storage.setItem('aryn:git-panel-layout', 'tree')
@@ -93,6 +96,7 @@ describe('local storage migration', () => {
       theme: 'dark',
     })
     expect(snapshot.migration.layout).toMatchObject({
+      agentChatWidth: 456,
       editorRightSidebarCollapsed: true,
       gitPanelLayout: 'tree',
       leftSidebarWidth: 348,
@@ -117,6 +121,9 @@ describe('local storage migration', () => {
     expect(storage.getItem('aryn:settings')).toBeNull()
     expect(storage.getItem('writing-workspace:settings')).toBeNull()
     expect(storage.getItem('aryn:left-sidebar-width')).toBeNull()
+    expect(storage.getItem('aryn:agent-chat-width')).toBeNull()
+    expect(storage.getItem('aryn:agent-right-sidebar-width')).toBeNull()
+    expect(storage.getItem('aryn:agent-right-sidebar-width-mode')).toBeNull()
     expect(storage.getItem('writing-workspace:left-sidebar-width')).toBeNull()
     expect(storage.getItem(`aryn:file-tabs:${encodeURIComponent(workspacePath)}`)).toBeNull()
     expect(storage.getItem(`writing-workspace:file-tabs:${encodeURIComponent(workspacePath)}`)).toBeNull()

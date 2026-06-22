@@ -40,9 +40,8 @@ const MEO_STATE_STORAGE_PREFIX = `${APP_STORAGE_PREFIX}:meo-state:`
 
 const LAYOUT_STORAGE_KEYS: Record<keyof PersistedLayoutState, string[]> = {
   activeLeftSidebarTab: [`${APP_STORAGE_PREFIX}:active-left-sidebar-tab`],
+  agentChatWidth: [`${APP_STORAGE_PREFIX}:agent-chat-width`],
   agentRightSidebarCollapsed: [`${APP_STORAGE_PREFIX}:agent-right-sidebar-collapsed`],
-  agentRightSidebarWidth: [`${APP_STORAGE_PREFIX}:agent-right-sidebar-width`],
-  agentRightSidebarWidthMode: [`${APP_STORAGE_PREFIX}:agent-right-sidebar-width-mode`],
   editorRightSidebarCollapsed: [`${APP_STORAGE_PREFIX}:editor-right-sidebar-collapsed`, `${APP_STORAGE_PREFIX}:right-sidebar-collapsed`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-collapsed`],
   editorRightSidebarWidth: [`${APP_STORAGE_PREFIX}:editor-right-sidebar-width`, `${APP_STORAGE_PREFIX}:right-sidebar-width`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-width`],
   gitPanelHeight: [`${APP_STORAGE_PREFIX}:git-panel-height`, `${LEGACY_APP_STORAGE_PREFIX}:git-panel-height`],
@@ -50,6 +49,11 @@ const LAYOUT_STORAGE_KEYS: Record<keyof PersistedLayoutState, string[]> = {
   leftSidebarCollapsed: [`${APP_STORAGE_PREFIX}:left-sidebar-collapsed`, `${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-collapsed`],
   leftSidebarWidth: [`${APP_STORAGE_PREFIX}:left-sidebar-width`, `${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-width`],
 }
+
+const RETIRED_LAYOUT_STORAGE_KEYS = [
+  `${APP_STORAGE_PREFIX}:agent-right-sidebar-width`,
+  `${APP_STORAGE_PREFIX}:agent-right-sidebar-width-mode`,
+]
 
 export type LocalStorageMigrationSnapshot = {
   keysToRemove: string[]
@@ -126,6 +130,12 @@ function collectLayout(storage: Storage, keysToRemove: Set<string>) {
         storageKeys.forEach((candidate) => keysToRemove.add(candidate))
         break
       }
+    }
+  }
+
+  for (const storageKey of RETIRED_LAYOUT_STORAGE_KEYS) {
+    if (storage.getItem(storageKey) !== null) {
+      keysToRemove.add(storageKey)
     }
   }
 

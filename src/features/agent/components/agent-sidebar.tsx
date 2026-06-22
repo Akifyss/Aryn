@@ -77,6 +77,7 @@ import {
   resolveAgentMessagesScrollStickiness,
 } from '@/features/agent/lib/message-scroll-stickiness'
 import { shouldRunAgentModelCascaderDelayedActivation } from '@/features/agent/lib/model-cascader-pointer-intent'
+import { SIDEBAR_RESIZE_END_EVENT } from '@/features/layout/shell-layout'
 import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
 import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
@@ -4278,6 +4279,8 @@ function AgentProvider({
     }
 
     let frameId: number | null = null
+    const appShellElement = scrollElement.closest<HTMLElement>('.app-shell')
+      ?? document.querySelector<HTMLElement>('.app-shell')
     const scrollToBottomIfSticky = () => {
       if (!shouldStickMessagesToBottomRef.current) {
         return
@@ -4288,6 +4291,10 @@ function AgentProvider({
     }
 
     const syncPinnedScrollAfterResize = () => {
+      if (appShellElement?.getAttribute('data-resizing') === 'true') {
+        return
+      }
+
       updateMessagesScrollStickiness(scrollElement, false)
 
       if (!shouldStickMessagesToBottomRef.current) {
@@ -4308,6 +4315,7 @@ function AgentProvider({
 
     const resizeObserver = new ResizeObserver(syncPinnedScrollAfterResize)
     resizeObserver.observe(scrollElement)
+    window.addEventListener(SIDEBAR_RESIZE_END_EVENT, syncPinnedScrollAfterResize)
 
     const contentElement = getAgentMessagesScrollContentElement(scrollElement)
     if (contentElement) {
@@ -4316,6 +4324,7 @@ function AgentProvider({
 
     return () => {
       resizeObserver.disconnect()
+      window.removeEventListener(SIDEBAR_RESIZE_END_EVENT, syncPinnedScrollAfterResize)
 
       if (frameId !== null) {
         window.cancelAnimationFrame(frameId)
