@@ -5599,10 +5599,8 @@ function AgentEmptyChat() {
           '新对话'
         )}
       </h2>
-      {((!workspacePath && !isStandaloneConversation) || !isNewConversation) ? (
-        <p className='agent-empty-subtitle'>
-          {workspacePath ? '在下方消息框中输入您的请求以开始对话' : '打开一个文件夹即可开始协同开发'}
-        </p>
+      {(workspacePath && !isNewConversation) ? (
+        <p className='agent-empty-subtitle'>在下方消息框中输入您的请求以开始对话</p>
       ) : null}
     </div>
   )
