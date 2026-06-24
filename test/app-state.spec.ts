@@ -522,6 +522,7 @@ describe('app state persistence', () => {
     expect(getWorkspaceEntry(state, 'C:/workspace')).toEqual({
       lastAgentSessionPath: null,
       lastFilePath: null,
+      prefersNewAgentSession: false,
     })
   })
 

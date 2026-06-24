@@ -1536,7 +1536,7 @@ function App() {
 
   async function updateWorkspaceState(
     workspacePath: string,
-    patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean },
+    patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean, prefersNewAgentSession?: boolean },
   ) {
     await window.appApi.updateWorkspaceState(workspacePath, patch)
   }

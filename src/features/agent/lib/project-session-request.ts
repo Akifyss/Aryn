@@ -14,9 +14,14 @@ export type AgentWorkspaceSessionRestore = {
   preferredSessionPath: string | null
 }
 
+export type AgentWorkspaceRestoreState = {
+  lastAgentSessionPath: string | null
+  prefersNewAgentSession?: boolean
+}
+
 export function resolveAgentWorkspaceSessionRestore(
   request: AgentProjectSessionRequest | null | undefined,
-  lastAgentSessionPath: string | null,
+  workspaceState: AgentWorkspaceRestoreState,
 ): AgentWorkspaceSessionRestore {
   if (request?.kind === 'new') {
     return {
@@ -31,7 +36,14 @@ export function resolveAgentWorkspaceSessionRestore(
     }
   }
 
+  if (workspaceState.prefersNewAgentSession) {
+    return {
+      options: { restoreSession: false },
+      preferredSessionPath: null,
+    }
+  }
+
   return {
-    preferredSessionPath: lastAgentSessionPath,
+    preferredSessionPath: workspaceState.lastAgentSessionPath,
   }
 }

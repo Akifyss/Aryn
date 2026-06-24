@@ -52,8 +52,8 @@ declare global {
       openPath: (path: string) => Promise<{ ok: boolean }>
       showItemInFolder: (path: string) => Promise<{ ok: boolean }>
       getWorkspaceRestoreState: () => Promise<{ workspacePath: string | null, filePath: string | null, agentSessionPath: string | null }>
-      getWorkspaceState: (workspacePath: string) => Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null }>
-      updateWorkspaceState: (workspacePath: string, patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean }) => Promise<{ ok: boolean }>
+      getWorkspaceState: (workspacePath: string) => Promise<{ lastFilePath: string | null, lastAgentSessionPath: string | null, prefersNewAgentSession: boolean }>
+      updateWorkspaceState: (workspacePath: string, patch: { lastFilePath?: string | null, lastAgentSessionPath?: string | null, markAsLastOpened?: boolean, prefersNewAgentSession?: boolean }) => Promise<{ ok: boolean }>
       initializePersistentState: (migration: LocalStorageStateMigration) => Promise<PersistentClientStateSnapshot>
       updateSettingsState: (patch: Partial<PersistedAppSettings>) => Promise<{ ok: boolean }>
       updateLayoutState: (patch: Partial<PersistedLayoutState>) => Promise<{ ok: boolean }>

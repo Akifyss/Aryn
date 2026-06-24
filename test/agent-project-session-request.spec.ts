@@ -13,7 +13,7 @@ describe('resolveAgentWorkspaceSessionRestore', () => {
       sessionPath: 'C:/sessions/third.jsonl',
     }
 
-    expect(resolveAgentWorkspaceSessionRestore(request, 'C:/sessions/first.jsonl')).toEqual({
+    expect(resolveAgentWorkspaceSessionRestore(request, { lastAgentSessionPath: 'C:/sessions/first.jsonl' })).toEqual({
       preferredSessionPath: 'C:/sessions/third.jsonl',
     })
   })
@@ -25,15 +25,47 @@ describe('resolveAgentWorkspaceSessionRestore', () => {
       requestId: 1,
     }
 
-    expect(resolveAgentWorkspaceSessionRestore(request, 'C:/sessions/first.jsonl')).toEqual({
+    expect(resolveAgentWorkspaceSessionRestore(request, { lastAgentSessionPath: 'C:/sessions/first.jsonl' })).toEqual({
       options: { restoreSession: false },
       preferredSessionPath: null,
     })
   })
 
   it('falls back to workspace state when no explicit project session is requested', () => {
-    expect(resolveAgentWorkspaceSessionRestore(null, 'C:/sessions/first.jsonl')).toEqual({
+    expect(resolveAgentWorkspaceSessionRestore(null, { lastAgentSessionPath: 'C:/sessions/first.jsonl' })).toEqual({
       preferredSessionPath: 'C:/sessions/first.jsonl',
+    })
+  })
+
+  it('skips session restore when the workspace prefers a new conversation draft', () => {
+    expect(resolveAgentWorkspaceSessionRestore(null, {
+      lastAgentSessionPath: 'C:/sessions/first.jsonl',
+      prefersNewAgentSession: true,
+    })).toEqual({
+      options: { restoreSession: false },
+      preferredSessionPath: null,
+    })
+  })
+
+  it('ignores the previous session preference when the user explicitly asks for a project session', () => {
+    const request: AgentProjectSessionRequest = {
+      kind: 'session',
+      projectId: 'project-1',
+      requestId: 1,
+      sessionPath: 'C:/sessions/third.jsonl',
+    }
+
+    expect(resolveAgentWorkspaceSessionRestore(request, {
+      lastAgentSessionPath: 'C:/sessions/first.jsonl',
+      prefersNewAgentSession: true,
+    })).toEqual({
+      preferredSessionPath: 'C:/sessions/third.jsonl',
+    })
+  })
+
+  it('treats an unset prefersNewAgentSession as false', () => {
+    expect(resolveAgentWorkspaceSessionRestore(null, { lastAgentSessionPath: null })).toEqual({
+      preferredSessionPath: null,
     })
   })
 })

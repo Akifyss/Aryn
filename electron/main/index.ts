@@ -364,6 +364,7 @@ async function upsertProject(projectPath: string, options: { name?: string, make
           [persistedWorkspacePath]: currentState.workspace.entries[persistedWorkspacePath] ?? {
             lastAgentSessionPath: null,
             lastFilePath: null,
+            prefersNewAgentSession: false,
           },
         },
         lastWorkspacePath: options.makeActive ? persistedWorkspacePath : currentState.workspace.lastWorkspacePath,
@@ -1314,6 +1315,7 @@ ipcMain.handle('workspace:set-active-context', async (_event, context: ActiveWor
             [nextWorkspacePath]: currentState.workspace.entries[nextWorkspacePath] ?? {
               lastAgentSessionPath: null,
               lastFilePath: null,
+              prefersNewAgentSession: false,
             },
           }
         : currentState.workspace.entries,
@@ -1479,6 +1481,7 @@ ipcMain.handle('conversation:create-workspace', async (_event, request?: CreateC
               [record.workspacePath]: currentState.workspace.entries[record.workspacePath] ?? {
                 lastAgentSessionPath: null,
                 lastFilePath: null,
+                prefersNewAgentSession: false,
               },
             }
           : {}),
@@ -1505,6 +1508,7 @@ ipcMain.handle('conversation:update', async (_event, conversationId: string, pat
           [workspacePath]: {
             ...getWorkspaceEntry(currentState, workspacePath),
             lastAgentSessionPath: agentSessionPath,
+            prefersNewAgentSession: false,
           },
         },
       },
@@ -1705,8 +1709,9 @@ ipcMain.handle('workspace:get-restore-state', async () => {
   }
 
   const workspaceEntry = getWorkspaceEntry(settings, restoreWorkspacePath)
-  const agentSessionPath = restoreAgentSessionPath ?? workspaceEntry.lastAgentSessionPath
   const lastFilePath = workspaceEntry.lastFilePath
+  const agentSessionPath = restoreAgentSessionPath
+    ?? (workspaceEntry.prefersNewAgentSession ? null : workspaceEntry.lastAgentSessionPath)
 
   if (!lastFilePath || !(await workspaceFileExists(restoreWorkspacePath, lastFilePath))) {
     if (lastFilePath) {
@@ -1744,6 +1749,7 @@ ipcMain.handle('workspace:get-state', async (_, workspacePath: string) => {
     return {
       lastAgentSessionPath: null,
       lastFilePath: null,
+      prefersNewAgentSession: false,
     }
   }
 
@@ -1758,14 +1764,16 @@ ipcMain.handle('workspace:update-state', async (
     lastAgentSessionPath?: string | null
     lastFilePath?: string | null
     markAsLastOpened?: boolean
+    prefersNewAgentSession?: boolean
   },
 ) => {
   const normalizedWorkspacePath = readRequiredPathArgument(workspacePath, 'Workspace path')
   const patchRecord = readRecord(patch)
   const hasLastAgentSessionPath = Object.prototype.hasOwnProperty.call(patchRecord, 'lastAgentSessionPath')
   const hasLastFilePath = Object.prototype.hasOwnProperty.call(patchRecord, 'lastFilePath')
+  const hasPrefersNewAgentSession = Object.prototype.hasOwnProperty.call(patchRecord, 'prefersNewAgentSession')
   const markAsLastOpened = patchRecord.markAsLastOpened === true
-  const entryPatch: { lastAgentSessionPath?: string | null; lastFilePath?: string | null } = {}
+  const entryPatch: { lastAgentSessionPath?: string | null; lastFilePath?: string | null; prefersNewAgentSession?: boolean } = {}
   let shouldPatchLastFilePath = false
 
   if (hasLastAgentSessionPath) {
@@ -1773,6 +1781,10 @@ ipcMain.handle('workspace:update-state', async (
     if (lastAgentSessionPatch.shouldApply) {
       entryPatch.lastAgentSessionPath = lastAgentSessionPatch.value
     }
+  }
+
+  if (hasPrefersNewAgentSession) {
+    entryPatch.prefersNewAgentSession = patchRecord.prefersNewAgentSession === true
   }
 
   if (hasLastFilePath) {

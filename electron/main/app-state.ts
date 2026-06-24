@@ -38,6 +38,7 @@ export type PersistedWorkspaceIconThemeSelections = Record<
 export type PersistedWorkspaceEntry = {
   lastAgentSessionPath: string | null
   lastFilePath: string | null
+  prefersNewAgentSession: boolean
 }
 
 export type PersistedProjectRecord = {
@@ -298,6 +299,7 @@ function readWorkspaceEntry(value: unknown): PersistedWorkspaceEntry {
   return {
     lastAgentSessionPath: readNullableString(candidate.lastAgentSessionPath),
     lastFilePath: readNullableString(candidate.lastFilePath),
+    prefersNewAgentSession: candidate.prefersNewAgentSession === true,
   }
 }
 
@@ -488,6 +490,7 @@ export function normalizePersistedAppState(value: unknown): PersistedAppState {
     entries[lastWorkspacePath] = readWorkspaceEntry({
       lastAgentSessionPath: null,
       lastFilePath: legacyLastFilePath,
+      prefersNewAgentSession: false,
     })
   }
 
@@ -652,5 +655,6 @@ export function getWorkspaceEntry(state: PersistedAppState, workspacePath: strin
     : {
       lastAgentSessionPath: null,
       lastFilePath: null,
+      prefersNewAgentSession: false,
     }
 }

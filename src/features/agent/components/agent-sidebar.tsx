@@ -3203,7 +3203,7 @@ function AgentProvider({
       .then((workspaceState) => {
         const sessionRestore = resolveAgentWorkspaceSessionRestore(
           matchingExternalRequest,
-          workspaceState.lastAgentSessionPath,
+          workspaceState,
         )
 
         return window.appApi.loadAgentWorkspace(
@@ -3256,10 +3256,18 @@ function AgentProvider({
       return
     }
 
-    void window.appApi.updateWorkspaceState(workspacePath, {
-      lastAgentSessionPath: restorableSessionPath ?? null,
-    })
-  }, [hasLoadedWorkspaceState, isLoading, restorableSessionPath, workspacePath])
+    const isDraftingNewAgentSession = activeSessionSelection.kind === 'new'
+    if (isDraftingNewAgentSession) {
+      void window.appApi.updateWorkspaceState(workspacePath, {
+        prefersNewAgentSession: true,
+      })
+    } else {
+      void window.appApi.updateWorkspaceState(workspacePath, {
+        lastAgentSessionPath: restorableSessionPath ?? null,
+        prefersNewAgentSession: false,
+      })
+    }
+  }, [activeSessionSelection, hasLoadedWorkspaceState, isLoading, restorableSessionPath, workspacePath])
 
   useEffect(() => {
     if (!workspacePath || activeWorkspaceContext.kind !== 'project') {
