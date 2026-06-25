@@ -4,6 +4,7 @@ import {
   type Dispatch,
   FormEvent,
   KeyboardEvent,
+  memo,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -1277,7 +1278,7 @@ function useAutoDisclosureState({
   return [isExpanded, handleExpandedChange] as const
 }
 
-function AgentMarkdown({
+const AgentMarkdown = memo(function AgentMarkdown({
   onOpenWorkspaceFile,
   text,
   workspacePath,
@@ -1320,7 +1321,7 @@ function AgentMarkdown({
       </ReactMarkdown>
     </div>
   )
-}
+})
 
 function formatDisclosureTitle(title: string) {
   return title.includes('_') || title.includes('-')
@@ -1441,20 +1442,22 @@ function AgentMessageDisclosure({
             ) : null}
           </div>
 
-          <Disclosure.Content>
-            <Disclosure.Body className={`agent-message-disclosure-body agent-message-disclosure-body-${kind}`}>
-              {shouldUseScrollArea ? (
-                <AppScrollArea
-                  className={`agent-message-disclosure-scroll agent-message-disclosure-scroll-${kind}`}
-                  contentClassName={`agent-message-disclosure-scroll-content agent-message-disclosure-scroll-content-${kind}`}
-                  viewportClassName={`agent-message-disclosure-scroll-viewport agent-message-disclosure-scroll-viewport-${kind}`}
-                  viewportRef={scrollViewportRef}
-                >
-                  {children}
-                </AppScrollArea>
-              ) : children}
-            </Disclosure.Body>
-          </Disclosure.Content>
+          {disclosureExpanded ? (
+            <Disclosure.Content>
+              <Disclosure.Body className={`agent-message-disclosure-body agent-message-disclosure-body-${kind}`}>
+                {shouldUseScrollArea ? (
+                  <AppScrollArea
+                    className={`agent-message-disclosure-scroll agent-message-disclosure-scroll-${kind}`}
+                    contentClassName={`agent-message-disclosure-scroll-content agent-message-disclosure-scroll-content-${kind}`}
+                    viewportClassName={`agent-message-disclosure-scroll-viewport agent-message-disclosure-scroll-viewport-${kind}`}
+                    viewportRef={scrollViewportRef}
+                  >
+                    {children}
+                  </AppScrollArea>
+                ) : children}
+              </Disclosure.Body>
+            </Disclosure.Content>
+          ) : null}
         </>
       )}
     </Disclosure>
@@ -1542,7 +1545,7 @@ function AgentFileCard({
   return card
 }
 
-function AgentMessageFileCards({
+const AgentMessageFileCards = memo(function AgentMessageFileCards({
   fileChanges,
   iconTheme,
   onOpenFile,
@@ -1603,7 +1606,7 @@ function AgentMessageFileCards({
       </div>
     </div>
   )
-}
+})
 
 function getAgentAttachmentFileCardProps({
   attachment,
@@ -1661,7 +1664,7 @@ function AgentMessageAttachments({
   )
 }
 
-function AgentMessageBubble({
+const AgentMessageBubble = memo(function AgentMessageBubble({
   iconTheme,
   message,
   onOpenWorkspaceFile,
@@ -1810,7 +1813,7 @@ function AgentMessageBubble({
       </div>
     </article>
   )
-}
+})
 
 type AgentSessionStatusTone = 'error' | 'running'
 
@@ -5682,6 +5685,9 @@ function AgentChatSurface() {
   const activeSessionSelectLabel = isNewConversation
     ? '新对话'
     : activeConversationTitle || formatSessionLabel(activeSession)
+  const handleOpenWorkspaceFileFromMessage = useCallback((filePath: string) => {
+    void onOpenMessageFile?.(filePath, 'updated')
+  }, [onOpenMessageFile])
   const isViewingActiveRuntime = Boolean(
     activeSessionPath
     && agentState.activeSession?.sessionPath === activeSessionPath,
@@ -6947,9 +6953,7 @@ function AgentChatSurface() {
                     <AgentMessageBubble
                       iconTheme={iconTheme}
                       message={message}
-                      onOpenWorkspaceFile={(filePath) => {
-                        void onOpenMessageFile?.(filePath, 'updated')
-                      }}
+                      onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
                       workspacePath={workspacePath}
                     />
                     {fileChanges.length > 0 ? (

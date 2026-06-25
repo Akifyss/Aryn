@@ -5113,6 +5113,8 @@ body.workspace-tree-dragging .tree-item-row {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 180px;
 }
 
 .agent-message-user {
