@@ -39,6 +39,10 @@ export function resolveAgentMessagesScrollStickiness(
     threshold?: number
   },
 ) {
+  if (currentShouldStick && !hasUserScrollIntent) {
+    return true
+  }
+
   if (shouldStickAgentMessagesToBottom(scrollElement, threshold)) {
     return true
   }

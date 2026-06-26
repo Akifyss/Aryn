@@ -117,6 +117,13 @@ function resolveDropPosition(event: ReactDragEvent<HTMLElement>, element: HTMLEl
   return event.clientX < left + width / 2 ? 'before' : 'after'
 }
 
+function isTabVisibleInScroller(tabElement: HTMLElement, scrollerElement: HTMLElement) {
+  const tabRect = tabElement.getBoundingClientRect()
+  const scrollerRect = scrollerElement.getBoundingClientRect()
+
+  return tabRect.left >= scrollerRect.left && tabRect.right <= scrollerRect.right
+}
+
 export function FileTabs({
   activeTabId,
   actions,
@@ -171,7 +178,14 @@ export function FileTabs({
       return
     }
 
-    tabRefs.current[activeTabId]?.scrollIntoView({
+    const activeTabElement = tabRefs.current[activeTabId]
+    const scrollerElement = scrollerRef.current
+
+    if (!activeTabElement || !scrollerElement || isTabVisibleInScroller(activeTabElement, scrollerElement)) {
+      return
+    }
+
+    activeTabElement.scrollIntoView({
       behavior: 'smooth',
       block: 'nearest',
       inline: 'nearest',

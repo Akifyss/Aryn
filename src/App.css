@@ -5113,8 +5113,20 @@ body.workspace-tree-dragging .tree-item-row {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.agent-messages:not(.agent-messages-virtual) .agent-message-stack {
   content-visibility: auto;
   contain-intrinsic-size: auto 180px;
+}
+
+.agent-messages-virtual {
+  gap: 0;
+}
+
+.agent-message-virtual-row,
+.agent-message-virtual-spacer {
+  flex: 0 0 auto;
 }
 
 .agent-message-user {
@@ -5408,7 +5420,7 @@ body.workspace-tree-dragging .tree-item-row {
 .agent-message-disclosure-scroll-viewport {
   height: auto;
   max-height: var(--agent-disclosure-content-max-height);
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
 }
 
 .agent-message-disclosure-scroll-tool {

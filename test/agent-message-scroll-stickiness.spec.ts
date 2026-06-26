@@ -43,6 +43,25 @@ describe('resolveAgentMessagesScrollStickiness', () => {
     })).toBe(true)
   })
 
+  it('keeps sticky without reading scroll metrics when there is no user intent', () => {
+    const scrollElement = {
+      get clientHeight(): number {
+        throw new Error('clientHeight should not be read')
+      },
+      get scrollHeight(): number {
+        throw new Error('scrollHeight should not be read')
+      },
+      get scrollTop(): number {
+        throw new Error('scrollTop should not be read')
+      },
+    }
+
+    expect(resolveAgentMessagesScrollStickiness(scrollElement, {
+      currentShouldStick: true,
+      hasUserScrollIntent: false,
+    })).toBe(true)
+  })
+
   it('disables sticky when the user intentionally scrolls away from the bottom', () => {
     expect(resolveAgentMessagesScrollStickiness({
       clientHeight: 600,

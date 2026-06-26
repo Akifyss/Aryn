@@ -77,6 +77,16 @@ import {
   isAgentMessagesScrollIntentKey,
   resolveAgentMessagesScrollStickiness,
 } from '@/features/agent/lib/message-scroll-stickiness'
+import {
+  startAgentMessagesBottomRestore,
+  type AgentMessagesBottomRestoreController,
+} from '@/features/agent/lib/message-scroll-restore'
+import {
+  AGENT_MESSAGE_VIRTUALIZATION_GAP_PX,
+  resolveAgentMessageVirtualItemTop,
+  resolveAgentMessageVirtualRange,
+  shouldRestoreAgentMessageVirtualAnchor,
+} from '@/features/agent/lib/message-virtualization'
 import { shouldRunAgentModelCascaderDelayedActivation } from '@/features/agent/lib/model-cascader-pointer-intent'
 import { SIDEBAR_RESIZE_END_EVENT } from '@/features/layout/shell-layout'
 import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
@@ -327,6 +337,9 @@ const AGENT_THINKING_AUTO_COLLAPSE_DELAY_MS = 140
 const AGENT_THINKING_MIN_EXPANDED_MS = 360
 const AGENT_THINKING_SCROLL_STICKY_THRESHOLD_PX = 24
 const AGENT_MESSAGES_TRANSIENT_SCROLL_INTENT_MS = 600
+const AGENT_MESSAGE_VIRTUALIZATION_MIN_ITEMS = 12
+const AGENT_MESSAGE_VIRTUALIZATION_INITIAL_VIEWPORT_HEIGHT = 900
+const AGENT_MESSAGE_VIRTUALIZATION_BOTTOM_ANCHOR_THRESHOLD_PX = 24
 const MAX_VISIBLE_MESSAGE_FILE_CARDS = 6
 const AGENT_MODEL_CASCADER_MARGIN_PX = 12
 const AGENT_MODEL_CASCADER_GAP_PX = 10
@@ -365,6 +378,10 @@ function getAgentMessagesScrollContentElement(scrollElement: HTMLElement) {
 
   const firstChildElement = scrollElement.firstElementChild
   return firstChildElement instanceof HTMLElement ? firstChildElement : null
+}
+
+function scrollAgentMessagesToBottom(scrollElement: HTMLElement) {
+  scrollElement.scrollTop = Number.MAX_SAFE_INTEGER
 }
 
 function getAgentMessagesEventTargetElement(event: Event) {
@@ -1815,6 +1832,353 @@ const AgentMessageBubble = memo(function AgentMessageBubble({
   )
 })
 
+type AgentVirtualMessageListItem =
+  | {
+      fileChanges: AgentMessageFileChange[]
+      key: string
+      kind: 'message'
+      message: AgentSidebarMessage
+    }
+  | {
+      key: string
+      kind: 'status'
+      status: AgentSessionStatus
+    }
+
+type AgentVirtualMessageAnchor = {
+  index: number
+  key: string
+  offset: number
+}
+
+function AgentMessageVirtualSpacer({ height }: { height: number }) {
+  if (height <= 0) {
+    return null
+  }
+
+  return (
+    <div
+      aria-hidden='true'
+      className='agent-message-virtual-spacer'
+      style={{ height }}
+    />
+  )
+}
+
+function AgentMessageVirtualRow({
+  children,
+  itemKey,
+  itemIndex,
+  isLast,
+  onHeightChange,
+}: {
+  children: ReactNode
+  itemKey: string
+  itemIndex: number
+  isLast: boolean
+  onHeightChange: (index: number, key: string, height: number) => void
+}) {
+  const rowRef = useRef<HTMLDivElement | null>(null)
+
+  useLayoutEffect(() => {
+    const rowElement = rowRef.current
+    if (!rowElement || typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const height = entries[0]?.contentRect.height
+      if (typeof height === 'number') {
+        onHeightChange(itemIndex, itemKey, height)
+      }
+    })
+
+    resizeObserver.observe(rowElement)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [itemIndex, itemKey, onHeightChange])
+
+  return (
+    <div
+      ref={rowRef}
+      className='agent-message-stack agent-message-virtual-row'
+      data-agent-message-index={itemIndex}
+      data-agent-message-key={itemKey}
+      style={{
+        marginBottom: isLast ? 0 : AGENT_MESSAGE_VIRTUALIZATION_GAP_PX,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function AgentVirtualMessageList({
+  activeSessionPath,
+  items,
+  messagesScrollElement,
+  iconTheme,
+  onOpenMessageFile,
+  onOpenWorkspaceFile,
+  workspacePath,
+}: {
+  activeSessionPath: string | null
+  items: AgentVirtualMessageListItem[]
+  messagesScrollElement: HTMLDivElement | null
+  iconTheme?: WorkspaceIconTheme | null
+  onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
+  onOpenWorkspaceFile?: (filePath: string) => void
+  workspacePath: string | null
+}) {
+  const [viewportState, setViewportState] = useState(() => ({
+    scrollTop: Number.MAX_SAFE_INTEGER,
+    viewportHeight: AGENT_MESSAGE_VIRTUALIZATION_INITIAL_VIEWPORT_HEIGHT,
+  }))
+  const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({})
+  const anchorRestorePendingRef = useRef(false)
+  const virtualAnchorRef = useRef<AgentVirtualMessageAnchor | null>(null)
+  const measuredHeightsRef = useRef<Record<string, number>>({})
+  const shouldVirtualize = items.length >= AGENT_MESSAGE_VIRTUALIZATION_MIN_ITEMS
+
+  useEffect(() => {
+    anchorRestorePendingRef.current = false
+    measuredHeightsRef.current = {}
+    virtualAnchorRef.current = null
+    setMeasuredHeights({})
+    setViewportState({
+      scrollTop: Number.MAX_SAFE_INTEGER,
+      viewportHeight: AGENT_MESSAGE_VIRTUALIZATION_INITIAL_VIEWPORT_HEIGHT,
+    })
+  }, [activeSessionPath])
+
+  const isScrollElementNearBottom = useCallback((scrollElement: HTMLElement) => (
+    scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
+      <= AGENT_MESSAGE_VIRTUALIZATION_BOTTOM_ANCHOR_THRESHOLD_PX
+  ), [])
+
+  const captureVisibleAnchor = useCallback((scrollElement: HTMLElement) => {
+    if (!shouldVirtualize || isScrollElementNearBottom(scrollElement)) {
+      virtualAnchorRef.current = null
+      return false
+    }
+
+    const viewportRect = scrollElement.getBoundingClientRect()
+    const rowElements = Array.from(scrollElement.querySelectorAll<HTMLElement>('.agent-message-virtual-row'))
+    let firstVisibleRow: HTMLElement | null = null
+    let firstVisibleRect: DOMRect | null = null
+    let topCrossingRow: HTMLElement | null = null
+    let topCrossingRect: DOMRect | null = null
+
+    for (const rowElement of rowElements) {
+      const rowRect = rowElement.getBoundingClientRect()
+      if (rowRect.bottom <= viewportRect.top || rowRect.top >= viewportRect.bottom) {
+        continue
+      }
+
+      if (!firstVisibleRow) {
+        firstVisibleRow = rowElement
+        firstVisibleRect = rowRect
+      }
+
+      if (rowRect.top <= viewportRect.top + 1 && rowRect.bottom > viewportRect.top + 1) {
+        topCrossingRow = rowElement
+        topCrossingRect = rowRect
+        break
+      }
+    }
+
+    const anchorRow = topCrossingRow ?? firstVisibleRow
+    const anchorRect = topCrossingRect ?? firstVisibleRect
+    const key = anchorRow?.dataset.agentMessageKey
+    const index = Number(anchorRow?.dataset.agentMessageIndex)
+    if (!anchorRow || !anchorRect || !key || !Number.isInteger(index) || index < 0) {
+      virtualAnchorRef.current = null
+      return false
+    }
+
+    virtualAnchorRef.current = {
+      index,
+      key,
+      offset: topCrossingRow ? Math.max(0, viewportRect.top - anchorRect.top) : 0,
+    }
+    return true
+  }, [isScrollElementNearBottom, shouldVirtualize])
+
+  const restoreVisibleAnchor = useCallback(() => {
+    const scrollElement = messagesScrollElement
+    const anchor = virtualAnchorRef.current
+    if (!scrollElement || !anchor || !shouldVirtualize || isScrollElementNearBottom(scrollElement)) {
+      return
+    }
+
+    const itemIndex = items.findIndex((item) => item.key === anchor.key)
+    if (itemIndex < 0) {
+      virtualAnchorRef.current = null
+      return
+    }
+
+    const nextScrollTop = Math.max(0, resolveAgentMessageVirtualItemTop({
+      count: items.length,
+      index: itemIndex,
+      measuredHeights: items.map((item) => measuredHeightsRef.current[item.key]),
+    }) + anchor.offset)
+
+    if (Math.abs(scrollElement.scrollTop - nextScrollTop) > 1) {
+      scrollElement.scrollTop = nextScrollTop
+      setViewportState({
+        scrollTop: scrollElement.scrollTop,
+        viewportHeight: scrollElement.clientHeight,
+      })
+    }
+  }, [isScrollElementNearBottom, items, messagesScrollElement, shouldVirtualize])
+
+  useLayoutEffect(() => {
+    if (!anchorRestorePendingRef.current) {
+      return
+    }
+
+    anchorRestorePendingRef.current = false
+    restoreVisibleAnchor()
+  }, [measuredHeights, restoreVisibleAnchor])
+
+  useLayoutEffect(() => {
+    const scrollElement = messagesScrollElement
+    if (!scrollElement || !shouldVirtualize) {
+      return
+    }
+
+    let frameId: number | null = null
+    const syncViewportState = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        setViewportState({
+          scrollTop: scrollElement.scrollTop,
+          viewportHeight: scrollElement.clientHeight,
+        })
+        captureVisibleAnchor(scrollElement)
+      })
+    }
+
+    syncViewportState()
+    scrollElement.addEventListener('scroll', syncViewportState, { passive: true })
+
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(syncViewportState)
+    resizeObserver?.observe(scrollElement)
+
+    return () => {
+      scrollElement.removeEventListener('scroll', syncViewportState)
+      resizeObserver?.disconnect()
+
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+    }
+  }, [captureVisibleAnchor, items.length, messagesScrollElement, shouldVirtualize])
+
+  const handleHeightChange = useCallback((index: number, key: string, height: number) => {
+    const currentHeights = measuredHeightsRef.current
+    if (Math.abs((currentHeights[key] ?? 0) - height) < 1) {
+      return
+    }
+
+    const itemIndex = items[index]?.key === key
+      ? index
+      : items.findIndex((item) => item.key === key)
+    if (itemIndex < 0) {
+      return
+    }
+
+    const scrollElement = messagesScrollElement
+    if (scrollElement && shouldVirtualize && captureVisibleAnchor(scrollElement)) {
+      const anchor = virtualAnchorRef.current
+      if (anchor && shouldRestoreAgentMessageVirtualAnchor({
+        anchorIndex: anchor.index,
+        changedIndex: itemIndex,
+      })) {
+        anchorRestorePendingRef.current = true
+      }
+    }
+
+    const nextHeights = {
+      ...currentHeights,
+      [key]: height,
+    }
+    measuredHeightsRef.current = nextHeights
+    setMeasuredHeights(nextHeights)
+  }, [captureVisibleAnchor, items, messagesScrollElement, shouldVirtualize])
+
+  const virtualRange = useMemo(() => {
+    if (!shouldVirtualize) {
+      return {
+        afterHeight: 0,
+        beforeHeight: 0,
+        endIndex: items.length,
+        startIndex: 0,
+        totalHeight: 0,
+      }
+    }
+
+    return resolveAgentMessageVirtualRange({
+      count: items.length,
+      measuredHeights: items.map((item) => measuredHeights[item.key]),
+      scrollTop: viewportState.scrollTop,
+      viewportHeight: viewportState.viewportHeight,
+    })
+  }, [items, measuredHeights, shouldVirtualize, viewportState.scrollTop, viewportState.viewportHeight])
+
+  const visibleItems = items.slice(virtualRange.startIndex, virtualRange.endIndex)
+
+  return (
+    <>
+      <AgentMessageVirtualSpacer height={virtualRange.beforeHeight} />
+      {visibleItems.map((item, visibleIndex) => {
+        const itemIndex = virtualRange.startIndex + visibleIndex
+        const isLast = itemIndex === items.length - 1
+
+        return (
+          <AgentMessageVirtualRow
+            key={item.key}
+            itemKey={item.key}
+            itemIndex={itemIndex}
+            isLast={isLast}
+            onHeightChange={handleHeightChange}
+          >
+            {item.kind === 'message' ? (
+              <>
+                <AgentMessageBubble
+                  iconTheme={iconTheme}
+                  message={item.message}
+                  onOpenWorkspaceFile={onOpenWorkspaceFile}
+                  workspacePath={workspacePath}
+                />
+                {item.fileChanges.length > 0 ? (
+                  <AgentMessageFileCards
+                    fileChanges={item.fileChanges}
+                    iconTheme={iconTheme}
+                    onOpenFile={onOpenMessageFile}
+                    workspacePath={workspacePath}
+                  />
+                ) : null}
+              </>
+            ) : (
+              <AgentSessionStatusBubble status={item.status} />
+            )}
+          </AgentMessageVirtualRow>
+        )
+      })}
+      <AgentMessageVirtualSpacer height={virtualRange.afterHeight} />
+    </>
+  )
+}
+
 type AgentSessionStatusTone = 'error' | 'running'
 
 type AgentSessionStatusIndicator =
@@ -2624,6 +2988,7 @@ function AgentProvider({
   const shouldStickMessagesToBottomRef = useRef(true)
   const messagesUserScrollIntentRef = useRef(false)
   const messagesUserScrollIntentTimeoutRef = useRef<number | null>(null)
+  const messagesBottomRestoreRef = useRef<AgentMessagesBottomRestoreController | null>(null)
   const locallyEmittedWorkspaceStatesRef = useRef<WeakSet<AgentWorkspaceState>>(new WeakSet())
   const pendingExternalWorkspaceStateRef = useRef<AgentWorkspaceState | null>(null)
   const handledExternalSessionRequestRef = useRef<number | null>(null)
@@ -4157,6 +4522,25 @@ function AgentProvider({
     })
   }
 
+  function cancelMessagesBottomRestore() {
+    messagesBottomRestoreRef.current?.cancel()
+    messagesBottomRestoreRef.current = null
+  }
+
+  function startMessagesBottomRestore(scrollElement: HTMLElement, scrollToBottom: () => void) {
+    cancelMessagesBottomRestore()
+
+    const scrollRootElement = scrollElement.closest('.agent-shell')
+      ?? scrollElement.closest('.agent-messages-scroll')
+      ?? scrollElement
+
+    messagesBottomRestoreRef.current = startAgentMessagesBottomRestore({
+      getScrollTop: () => scrollElement.scrollTop,
+      scrollRootElement,
+      scrollToBottom,
+    })
+  }
+
   useEffect(() => {
     if (!hasConfiguredProviders && activeComposerMenu === 'model-cascader') {
       setActiveComposerMenu(null)
@@ -4280,6 +4664,7 @@ function AgentProvider({
   }, [activeSessionPath])
 
   useEffect(() => () => {
+    cancelMessagesBottomRestore()
     clearMessagesUserScrollIntent()
   }, [])
 
@@ -4297,7 +4682,7 @@ function AgentProvider({
         return
       }
 
-      scrollElement.scrollTop = scrollElement.scrollHeight
+      scrollAgentMessagesToBottom(scrollElement)
       shouldStickMessagesToBottomRef.current = true
     }
 
@@ -4345,29 +4730,27 @@ function AgentProvider({
 
   useLayoutEffect(() => {
     const scrollElement = messagesScrollRef.current
+    const isSessionChanged = previousSessionPathRef.current !== activeSessionPath
+
+    if (isSessionChanged) {
+      cancelMessagesBottomRestore()
+    }
+
     if (!scrollElement) {
       return
     }
 
-    const isSessionChanged = previousSessionPathRef.current !== activeSessionPath
     previousSessionPathRef.current = activeSessionPath
 
     const forceScrollToBottom = () => {
-      scrollElement.scrollTop = scrollElement.scrollHeight
+      scrollAgentMessagesToBottom(scrollElement)
       shouldStickMessagesToBottomRef.current = true
     }
 
     if (isSessionChanged) {
       clearMessagesUserScrollIntent()
-      forceScrollToBottom()
-
-      const frameId = window.requestAnimationFrame(() => {
-        forceScrollToBottom()
-      })
-
-      return () => {
-        window.cancelAnimationFrame(frameId)
-      }
+      startMessagesBottomRestore(scrollElement, forceScrollToBottom)
+      return
     }
 
     updateMessagesScrollStickiness(scrollElement, false)
@@ -5672,6 +6055,7 @@ function AgentChatSurface() {
     workspacePath,
     workspaceTree,
   } = useAgentContext()
+  const [messagesScrollElement, setMessagesScrollElement] = useState<HTMLDivElement | null>(null)
   const hasEmptyChat = Boolean(workspacePath && renderedMessages.length === 0)
   const isNewConversation = activeSessionSelection.kind === 'new'
   const canOpenSessionMenu = Boolean(workspacePath && activeWorkspaceContext.kind === 'project')
@@ -5688,6 +6072,34 @@ function AgentChatSurface() {
   const handleOpenWorkspaceFileFromMessage = useCallback((filePath: string) => {
     void onOpenMessageFile?.(filePath, 'updated')
   }, [onOpenMessageFile])
+  const handleMessagesScrollViewportRef = useCallback((element: HTMLDivElement | null) => {
+    messagesScrollRef.current = element
+    setMessagesScrollElement((currentElement) => (
+      currentElement === element ? currentElement : element
+    ))
+  }, [messagesScrollRef])
+  const virtualMessageItems = useMemo<AgentVirtualMessageListItem[]>(() => {
+    const messageItems = renderedMessages.map((message) => ({
+      fileChanges: roundFileChangesByMessageId.get(message.id) ?? [],
+      key: `message:${message.id}`,
+      kind: 'message' as const,
+      message,
+    }))
+
+    if (!sessionStatus) {
+      return messageItems
+    }
+
+    return [
+      ...messageItems,
+      {
+        key: `status:${sessionStatus.label}:${sessionStatus.badges?.map((badge) => `${badge.kind}:${badge.label}`).join('|') ?? ''}`,
+        kind: 'status' as const,
+        status: sessionStatus,
+      },
+    ]
+  }, [renderedMessages, roundFileChangesByMessageId, sessionStatus])
+  const shouldVirtualizeMessages = virtualMessageItems.length >= AGENT_MESSAGE_VIRTUALIZATION_MIN_ITEMS
   const isViewingActiveRuntime = Boolean(
     activeSessionPath
     && agentState.activeSession?.sessionPath === activeSessionPath,
@@ -6940,36 +7352,57 @@ function AgentChatSurface() {
           <AppScrollArea
             className='agent-messages-scroll'
             contentClassName='agent-messages-scroll-content'
-            viewportRef={messagesScrollRef}
+            viewportClassName='agent-messages-scroll-viewport'
+            viewportRef={handleMessagesScrollViewportRef}
           >
-            <div className={`agent-messages${hasEmptyChat ? ' agent-messages-empty' : ''}`}>
+            <div
+              className={`agent-messages${hasEmptyChat ? ' agent-messages-empty' : ''}${!hasEmptyChat && shouldVirtualizeMessages ? ' agent-messages-virtual' : ''}`}
+              data-agent-virtual-enabled={hasEmptyChat
+                ? undefined
+                : (shouldVirtualizeMessages ? 'true' : 'false')}
+              data-agent-virtual-total-items={hasEmptyChat ? undefined : virtualMessageItems.length}
+            >
               {hasEmptyChat ? (
                 <AgentEmptyChat />
-              ) : renderedMessages.map((message) => {
-                const fileChanges = roundFileChangesByMessageId.get(message.id) ?? []
+              ) : shouldVirtualizeMessages ? (
+                <AgentVirtualMessageList
+                  activeSessionPath={activeSessionPath}
+                  iconTheme={iconTheme}
+                  items={virtualMessageItems}
+                  messagesScrollElement={messagesScrollElement}
+                  onOpenMessageFile={onOpenMessageFile}
+                  onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
+                  workspacePath={workspacePath}
+                />
+              ) : (
+                <>
+                  {renderedMessages.map((message) => {
+                    const fileChanges = roundFileChangesByMessageId.get(message.id) ?? []
 
-                return (
-                  <div key={message.id} className='agent-message-stack'>
-                    <AgentMessageBubble
-                      iconTheme={iconTheme}
-                      message={message}
-                      onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
-                      workspacePath={workspacePath}
-                    />
-                    {fileChanges.length > 0 ? (
-                      <AgentMessageFileCards
-                        fileChanges={fileChanges}
-                        iconTheme={iconTheme}
-                        onOpenFile={onOpenMessageFile}
-                        workspacePath={workspacePath}
-                      />
-                    ) : null}
-                  </div>
-                )
-              })}
-              {sessionStatus ? (
-                <AgentSessionStatusBubble status={sessionStatus} />
-              ) : null}
+                    return (
+                      <div key={message.id} className='agent-message-stack'>
+                        <AgentMessageBubble
+                          iconTheme={iconTheme}
+                          message={message}
+                          onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
+                          workspacePath={workspacePath}
+                        />
+                        {fileChanges.length > 0 ? (
+                          <AgentMessageFileCards
+                            fileChanges={fileChanges}
+                            iconTheme={iconTheme}
+                            onOpenFile={onOpenMessageFile}
+                            workspacePath={workspacePath}
+                          />
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                  {sessionStatus ? (
+                    <AgentSessionStatusBubble status={sessionStatus} />
+                  ) : null}
+                </>
+              )}
             </div>
           </AppScrollArea>
 
