@@ -3834,6 +3834,60 @@ function App() {
     )
   }
 
+  function renderSidebarWorkspaceTabs(options: {
+    surfaceMode: PanelSurfaceMode
+    tabListAction?: ReactNode
+    workspaceTreeOptions?: Parameters<typeof renderWorkspaceTreePanel>[0]
+  }) {
+    const {
+      surfaceMode,
+      tabListAction,
+      workspaceTreeOptions,
+    } = options
+
+    return (
+      <BaseTabs.Root
+        className='sidebar-workspace-tabs'
+        orientation='horizontal'
+        value={activeLeftSidebarTab}
+        onValueChange={(value) => {
+          if (value === 'file' || value === 'git') {
+            setActiveLeftSidebarTab(value)
+          }
+        }}
+      >
+        <div className='sidebar-workspace-tabs-list-container'>
+          <BaseTabs.List aria-label='工作区面板' className='sidebar-workspace-tabs-list'>
+            <BaseTabs.Tab value='file' className='sidebar-workspace-tab'>
+              <FolderLine size={16} className='sidebar-workspace-tab-icon' />
+              <span className='sidebar-workspace-tab-label'>文件</span>
+            </BaseTabs.Tab>
+            <BaseTabs.Tab value='git' className='sidebar-workspace-tab'>
+              <GitBranchLine size={16} className='sidebar-workspace-tab-icon' />
+              <span className='sidebar-workspace-tab-label'>更改</span>
+            </BaseTabs.Tab>
+            <BaseTabs.Indicator className='sidebar-workspace-tab-indicator' />
+          </BaseTabs.List>
+          {tabListAction ? (
+            <div className='sidebar-workspace-tabs-action'>
+              {tabListAction}
+            </div>
+          ) : null}
+        </div>
+
+        <BaseTabs.Panel value='file' className='sidebar-workspace-tab-panel'>
+          {renderWorkspaceTreePanel({
+            ...workspaceTreeOptions,
+            surfaceMode,
+          })}
+        </BaseTabs.Panel>
+        <BaseTabs.Panel value='git' className='sidebar-workspace-tab-panel'>
+          {renderGitPanel({ surfaceMode })}
+        </BaseTabs.Panel>
+      </BaseTabs.Root>
+    )
+  }
+
   async function handleSelectWorkspaceIconTheme(
     mode: WorkspaceIconThemeMode,
     selection: WorkspaceIconThemeSelection,
@@ -5598,39 +5652,7 @@ function App() {
               onRequestClose={isDrawerSurface ? () => setIsLeftDrawerOpen(false) : undefined}
             />
           ) : (
-            <>
-              <BaseTabs.Root
-                className='sidebar-workspace-tabs'
-                orientation='horizontal'
-                value={activeLeftSidebarTab}
-                onValueChange={(value) => {
-                  if (value === 'file' || value === 'git') {
-                    setActiveLeftSidebarTab(value)
-                  }
-                }}
-              >
-                <div className='sidebar-workspace-tabs-list-container'>
-                  <BaseTabs.List aria-label='工作区面板' className='sidebar-workspace-tabs-list'>
-                    <BaseTabs.Tab value='file' className='sidebar-workspace-tab'>
-                      <FolderLine size={16} className='sidebar-workspace-tab-icon' />
-                      <span className='sidebar-workspace-tab-label'>文件</span>
-                    </BaseTabs.Tab>
-                    <BaseTabs.Tab value='git' className='sidebar-workspace-tab'>
-                      <GitBranchLine size={16} className='sidebar-workspace-tab-icon' />
-                      <span className='sidebar-workspace-tab-label'>更改</span>
-                    </BaseTabs.Tab>
-                    <BaseTabs.Indicator className='sidebar-workspace-tab-indicator' />
-                  </BaseTabs.List>
-                </div>
-
-                <BaseTabs.Panel value='file' className='sidebar-workspace-tab-panel'>
-                  {renderWorkspaceTreePanel({ surfaceMode })}
-                </BaseTabs.Panel>
-                <BaseTabs.Panel value='git' className='sidebar-workspace-tab-panel'>
-                  {renderGitPanel({ surfaceMode })}
-                </BaseTabs.Panel>
-              </BaseTabs.Root>
-            </>
+            renderSidebarWorkspaceTabs({ surfaceMode })
           )}
         </div>
 
@@ -5691,16 +5713,34 @@ function App() {
     activeFileMode?: WorkspaceTreeActiveFileMode
     action?: ReactNode
     fileClickMode: WorkspaceTreeFileClickMode
+    showWorkspaceTabs?: boolean
   }) {
+    const {
+      activeFileMode,
+      action,
+      fileClickMode,
+      showWorkspaceTabs = true,
+    } = options
+
     return (
       <aside className='editor-directory-sidebar'>
-        {renderWorkspaceTreePanel({
-          activeFileMode: options.activeFileMode,
-          directoryHeaderAction: options.action,
-          fileClickMode: options.fileClickMode,
-          showDirectoryHeader: true,
-          title: workspaceLabel,
-        })}
+        {showWorkspaceTabs
+          ? renderSidebarWorkspaceTabs({
+              surfaceMode: 'docked',
+              tabListAction: action,
+              workspaceTreeOptions: {
+                activeFileMode,
+                fileClickMode,
+              },
+            })
+          : renderWorkspaceTreePanel({
+              activeFileMode,
+              directoryHeaderAction: action,
+              fileClickMode,
+              showDirectoryHeader: true,
+              surfaceMode: 'docked',
+              title: workspaceLabel,
+            })}
       </aside>
     )
   }
@@ -5768,7 +5808,7 @@ function App() {
   function renderFixedFilePanel() {
     return (
       <div className='editor-fixed-file-panel'>
-        {renderDirectorySidebar({ activeFileMode: 'none', fileClickMode: 'open-tab' })}
+        {renderDirectorySidebar({ activeFileMode: 'none', fileClickMode: 'open-tab', showWorkspaceTabs: false })}
         <div className='editor-fixed-file-empty-panel'>
           {renderEditorEmptyState()}
         </div>
