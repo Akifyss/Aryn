@@ -62,10 +62,13 @@ declare global {
       updateMeoFileState: (filePath: string, state: PersistedMeoStoredState) => Promise<{ ok: boolean }>
       workspacePathExists: (workspacePath: string) => Promise<{ exists: boolean }>
       loadWorkspaceTree: (rootPath: string) => Promise<WorkspaceNode[]>
-      resolveWorkspaceEditorKind: (filePath: string) => Promise<'prose' | 'code' | null>
+      loadWorkspaceDirectory: (rootPath: string, directoryPath?: string) => Promise<WorkspaceNode[]>
+      resolveWorkspaceEditorKind: (filePath: string) => Promise<'prose' | 'code' | 'file' | null>
       readWorkspaceFile: (filePath: string) => Promise<string>
       saveWorkspaceFile: (filePath: string, content: string) => Promise<{ ok: boolean }>
       workspaceFileExists: (rootPath: string, filePath: string) => Promise<{ exists: boolean }>
+      getWorkspaceFileUrl: (rootPath: string, filePath: string) => Promise<{ url: string }>
+      getWorkspaceFileDataUrl: (rootPath: string, filePath: string, contentType?: string) => Promise<{ url: string }>
       saveWorkspaceImage: (
         rootPath: string,
         relativeDirectoryPath: string,

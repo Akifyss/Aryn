@@ -1,6 +1,7 @@
 import type { AgentRunningPromptBehavior } from '@/features/agent/types'
 import type { LegacyWorkspaceFileViewMode } from '@/features/workspace/lib/file-types'
 import type { GitPanelLayout } from '@/features/git/types'
+import type { WorkspaceFileSystemState } from '@/features/workspace/types'
 
 export type AppTheme = 'light' | 'dark' | 'auto'
 export type AppLayoutPreference = 'agent' | 'editor'
@@ -45,6 +46,7 @@ export type PersistedWorkspaceTabState = {
     path: string
     viewMode?: LegacyWorkspaceFileViewMode
   }>
+  fileSystem?: WorkspaceFileSystemState
   paths: string[]
 }
 

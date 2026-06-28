@@ -233,6 +233,20 @@ describe('shell layout helpers', () => {
 }`)
   })
 
+  it('uses the workspace FileSystem for the Agent fixed file tab', async () => {
+    const [appCss, appSource] = await Promise.all([
+      readAppCss(),
+      readAppSource(),
+    ])
+
+    expect(appSource).toContain("? [getFixedPanelTab('git'), getFixedPanelTab('file')]")
+    expect(appSource).toContain("activeFixedPanelTab?.fixedTabKind === 'file-panel' ? renderFixedFilePanel() : null")
+    expect(appSource).toContain('<WorkspaceFileSystemPanel')
+    expect(appSource).not.toContain("getFixedPanelTab('file-system')")
+    expect(appSource).not.toContain("fixedTabKind === 'file-system-panel'")
+    expect(appCss).toContain('--agent-collapsed-tab-actions-width: calc((var(--panel-toggle-size) * 2) + var(--panel-toggle-gap));')
+  })
+
   it('keeps docked sidebar expansion motion scoped and disableable', async () => {
     const [appCss, appSource] = await Promise.all([
       readAppCss(),

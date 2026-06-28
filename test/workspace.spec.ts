@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   createWorkspaceFile,
   getGitMetadataWatchPaths,
+  loadWorkspaceDirectory,
   loadWorkspaceTree,
   moveWorkspaceEntry,
   resolveWorkspaceEditorKind,
@@ -45,9 +46,10 @@ describe('workspace helpers', () => {
 
     const tree = await loadWorkspaceTree(rootPath)
 
-    expect(tree).toEqual([
+    expect(tree).toMatchObject([
       {
         children: [],
+        hasChildren: false,
         kind: 'directory',
         name: 'assets',
         path: assetsPath,
@@ -60,6 +62,7 @@ describe('workspace helpers', () => {
             path: path.join(docsPath, 'notes.txt'),
           },
         ],
+        hasChildren: true,
         kind: 'directory',
         name: 'docs',
         path: docsPath,
@@ -75,6 +78,63 @@ describe('workspace helpers', () => {
         path: path.join(rootPath, 'image.png'),
       },
     ])
+  })
+
+  it('loads direct workspace directory children for lazy file system views', async () => {
+    const rootPath = await createTempWorkspace()
+    const docsPath = path.join(rootPath, 'docs')
+    const emptyPath = path.join(rootPath, 'empty')
+
+    await mkdir(path.join(docsPath, 'nested'), { recursive: true })
+    await mkdir(emptyPath, { recursive: true })
+    await mkdir(path.join(rootPath, 'node_modules', 'ignored-lib'), { recursive: true })
+    await writeFile(path.join(docsPath, 'notes.txt'), 'notes', 'utf8')
+    await writeFile(path.join(rootPath, 'README.md'), '# Readme', 'utf8')
+    await writeFile(path.join(rootPath, 'node_modules', 'ignored-lib', 'readme.md'), 'ignore me', 'utf8')
+
+    const rootChildren = await loadWorkspaceDirectory(rootPath)
+
+    expect(rootChildren).toHaveLength(3)
+    expect(rootChildren).toMatchObject([
+      {
+        hasChildren: true,
+        kind: 'directory',
+        name: 'docs',
+        path: docsPath,
+      },
+      {
+        hasChildren: false,
+        kind: 'directory',
+        name: 'empty',
+        path: emptyPath,
+      },
+      {
+        kind: 'file',
+        name: 'README.md',
+        path: path.join(rootPath, 'README.md'),
+      },
+    ])
+    expect(rootChildren[0]?.children).toBeUndefined()
+
+    await expect(loadWorkspaceDirectory(rootPath, 'docs')).resolves.toMatchObject([
+      {
+        hasChildren: false,
+        kind: 'directory',
+        name: 'nested',
+        path: path.join(docsPath, 'nested'),
+      },
+      {
+        kind: 'file',
+        name: 'notes.txt',
+        path: path.join(docsPath, 'notes.txt'),
+      },
+    ])
+    await expect(loadWorkspaceDirectory(rootPath, '../outside')).rejects.toThrow(
+      'File path must stay inside the current workspace.',
+    )
+    await expect(loadWorkspaceDirectory(rootPath, 'README.md')).rejects.toThrow(
+      'The selected folder no longer exists.',
+    )
   })
 
   it('creates and renames files while keeping them inside the workspace', async () => {
@@ -167,7 +227,7 @@ describe('workspace helpers', () => {
     ]))
   })
 
-  it('falls back unknown text extensions to code and keeps binary files closed', async () => {
+  it('falls back unknown text extensions to code and unknown binary files to file tabs', async () => {
     const rootPath = await createTempWorkspace()
     const textFilePath = path.join(rootPath, 'notes.custom')
     const binaryFilePath = path.join(rootPath, 'image.custombin')
@@ -176,7 +236,7 @@ describe('workspace helpers', () => {
     await writeFile(binaryFilePath, Buffer.from([0, 159, 146, 150, 0, 1, 2, 3]))
 
     await expect(resolveWorkspaceEditorKind(textFilePath)).resolves.toBe('code')
-    await expect(resolveWorkspaceEditorKind(binaryFilePath)).resolves.toBeNull()
+    await expect(resolveWorkspaceEditorKind(binaryFilePath)).resolves.toBe('file')
   })
 
   it('saves pasted images inside the workspace and avoids name collisions', async () => {

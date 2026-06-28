@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  normalizeWorkspaceTabState,
   normalizeWorkspaceUiState,
   WORKSPACE_STATE_SCHEMA_VERSION,
   WorkspaceStateStore,
@@ -115,6 +116,59 @@ describe('workspace UI state persistence', () => {
         ],
         paths: ['C:/legacy/a.md', 'C:/legacy/b.md'],
       },
+    })
+  })
+
+  it('preserves file system navigation, view, and selection state', () => {
+    expect(normalizeWorkspaceTabState({
+      activePath: 'C:\\workspace\\README.md',
+      entries: [{ path: 'C:\\workspace\\README.md', viewMode: 'meo' }],
+      fileSystem: {
+        navigation: {
+          index: 99,
+          stack: ['', 'src', 'src/components/'],
+        },
+        selectedPath: 'src/App.tsx',
+        view: 'columns',
+      },
+    })).toEqual({
+      activePath: 'C:\\workspace\\README.md',
+      entries: [{ path: 'C:\\workspace\\README.md', viewMode: 'meo' }],
+      fileSystem: {
+        navigation: {
+          index: 2,
+          stack: ['', 'src/', 'src/components/'],
+        },
+        selectedPath: 'src/App.tsx',
+        view: 'columns',
+      },
+      paths: ['C:\\workspace\\README.md'],
+    })
+  })
+
+  it('falls back invalid file system view values to icons', () => {
+    expect(normalizeWorkspaceTabState({
+      fileSystem: {
+        navigation: {
+          index: -1,
+          stack: [''],
+        },
+        selectedPath: '',
+        view: 'unknown',
+      },
+      paths: ['C:\\workspace\\README.md'],
+    })).toEqual({
+      activePath: null,
+      entries: [{ path: 'C:\\workspace\\README.md' }],
+      fileSystem: {
+        navigation: {
+          index: 0,
+          stack: [''],
+        },
+        selectedPath: null,
+        view: 'icons',
+      },
+      paths: ['C:\\workspace\\README.md'],
     })
   })
 

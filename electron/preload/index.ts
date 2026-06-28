@@ -77,10 +77,15 @@ contextBridge.exposeInMainWorld('appApi', {
   updateMeoFileState: (filePath: string, state: PersistedMeoStoredState) => ipcRenderer.invoke('meo-state:update', filePath, state) as Promise<{ ok: boolean }>,
   workspacePathExists: (workspacePath: string) => ipcRenderer.invoke('workspace:path-exists', workspacePath) as Promise<{ exists: boolean }>,
   loadWorkspaceTree: (rootPath: string) => ipcRenderer.invoke('workspace:load-tree', rootPath) as Promise<WorkspaceNode[]>,
-  resolveWorkspaceEditorKind: (filePath: string) => ipcRenderer.invoke('workspace:resolve-editor-kind', filePath) as Promise<'prose' | 'code' | null>,
+  loadWorkspaceDirectory: (rootPath: string, directoryPath?: string) => (
+    ipcRenderer.invoke('workspace:load-directory', rootPath, directoryPath) as Promise<WorkspaceNode[]>
+  ),
+  resolveWorkspaceEditorKind: (filePath: string) => ipcRenderer.invoke('workspace:resolve-editor-kind', filePath) as Promise<'prose' | 'code' | 'file' | null>,
   readWorkspaceFile: (filePath: string) => ipcRenderer.invoke('workspace:read-file', filePath) as Promise<string>,
   saveWorkspaceFile: (filePath: string, content: string) => ipcRenderer.invoke('workspace:save-file', filePath, content) as Promise<{ ok: boolean }>,
   workspaceFileExists: (rootPath: string, filePath: string) => ipcRenderer.invoke('workspace:file-exists', rootPath, filePath) as Promise<{ exists: boolean }>,
+  getWorkspaceFileUrl: (rootPath: string, filePath: string) => ipcRenderer.invoke('workspace:get-file-url', rootPath, filePath) as Promise<{ url: string }>,
+  getWorkspaceFileDataUrl: (rootPath: string, filePath: string, contentType?: string) => ipcRenderer.invoke('workspace:get-file-data-url', rootPath, filePath, contentType) as Promise<{ url: string }>,
   saveWorkspaceImage: (
     rootPath: string,
     relativeDirectoryPath: string,

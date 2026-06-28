@@ -75,15 +75,8 @@ function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab,
     return tab.diff.change.scope === 'staged' ? 'Staged diff' : 'Open Changes'
   }
 
-  const viewModeLabel = (
-    tab.viewMode === 'code' ? 'Code'
-      : tab.viewMode === 'preview' ? 'Preview'
-        : tab.viewMode === 'meo' ? null
-        : null
-  )
-
   if (!workspacePath || !hasDuplicateName) {
-    return viewModeLabel
+    return null
   }
 
   const relativePath = getRelativePath(workspacePath, tab.filePath)
@@ -92,7 +85,7 @@ function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab,
   const directoryLabel = segments.join(' / ')
 
   const locationLabel = directoryLabel || 'Workspace root'
-  return viewModeLabel ? `${viewModeLabel} · ${locationLabel}` : locationLabel
+  return locationLabel
 }
 
 function isReorderableTab(tab: WorkspaceDisplayTab): tab is WorkspaceTab {

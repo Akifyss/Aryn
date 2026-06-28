@@ -1,13 +1,21 @@
-import { access, readFile, readdir, mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
+import { access, readFile, readdir, mkdir, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import chokidar, { type FSWatcher } from 'chokidar'
-import { getSupportedWorkspaceEditorKind, type SupportedWorkspaceEditorKind } from '../../src/features/workspace/lib/file-types'
+import {
+  getWorkspaceEditorKind,
+  type WorkspaceFileTabEditorKind,
+} from '../../src/features/workspace/lib/file-types'
 
 export type WorkspaceNode = {
   name: string
   path: string
   kind: 'directory' | 'file'
   isOpenable?: boolean
+  hasChildren?: boolean
+  size?: number
+  createdAt?: string
+  updatedAt?: string
   children?: WorkspaceNode[]
 }
 
@@ -180,7 +188,11 @@ function isCreatableFile(entryName: string) {
 }
 
 function isInsideWorkspace(rootPath: string, targetPath: string) {
-  return targetPath === rootPath || targetPath.startsWith(rootPath + path.sep)
+  const normalizedRootPath = process.platform === 'win32' ? rootPath.toLowerCase() : rootPath
+  const normalizedTargetPath = process.platform === 'win32' ? targetPath.toLowerCase() : targetPath
+
+  return normalizedTargetPath === normalizedRootPath
+    || normalizedTargetPath.startsWith(normalizedRootPath + path.sep)
 }
 
 function isSamePathOrDescendant(targetPath: string, parentPath: string) {
@@ -264,18 +276,103 @@ function sortNodes(left: WorkspaceNode, right: WorkspaceNode) {
   return left.name.localeCompare(right.name)
 }
 
+function toWorkspaceNodeTimestamps(info: Awaited<ReturnType<typeof stat>>) {
+  return {
+    createdAt: info.birthtime.toISOString(),
+    updatedAt: info.mtime.toISOString(),
+  }
+}
+
+function assertWorkspaceFilePath(rootPath: string, filePath: string) {
+  const resolvedRootPath = path.resolve(rootPath)
+  const resolvedFilePath = path.isAbsolute(filePath)
+    ? path.resolve(filePath)
+    : path.resolve(resolvedRootPath, filePath)
+
+  if (!isInsideWorkspace(resolvedRootPath, resolvedFilePath)) {
+    throw new Error('File path must stay inside the current workspace.')
+  }
+
+  return resolvedFilePath
+}
+
+async function assertExistingWorkspacePath(rootPath: string, filePath: string) {
+  const resolvedPath = assertWorkspaceFilePath(rootPath, filePath)
+  const [realRootPath, realTargetPath] = await Promise.all([
+    realpath(path.resolve(rootPath)),
+    realpath(resolvedPath),
+  ])
+
+  if (!isInsideWorkspace(realRootPath, realTargetPath)) {
+    throw new Error('File path must stay inside the current workspace.')
+  }
+
+  return realTargetPath
+}
+
+async function directoryHasVisibleChildren(directoryPath: string) {
+  const entries = await readdir(directoryPath, { withFileTypes: true }).catch(() => [])
+
+  return entries.some((entry) => !shouldIgnore(entry.name))
+}
+
+async function loadWorkspaceDirectoryNodes(directoryPath: string): Promise<WorkspaceNode[]> {
+  const entries = await readdir(directoryPath, { withFileTypes: true }).catch(() => [])
+  const nodes: Array<WorkspaceNode | null> = await Promise.all(entries
+    .filter((entry) => !shouldIgnore(entry.name))
+    .map(async (entry) => {
+      const entryPath = path.join(directoryPath, entry.name)
+      const entryInfo = await stat(entryPath).catch(() => null)
+
+      if (!entryInfo) {
+        return null
+      }
+
+      if (entry.isDirectory()) {
+        return {
+          ...toWorkspaceNodeTimestamps(entryInfo),
+          hasChildren: await directoryHasVisibleChildren(entryPath),
+          name: entry.name,
+          path: entryPath,
+          kind: 'directory' as const,
+        }
+      }
+
+      if (!entryInfo.isFile()) {
+        return null
+      }
+
+      return {
+        ...toWorkspaceNodeTimestamps(entryInfo),
+        name: entry.name,
+        path: entryPath,
+        kind: 'file' as const,
+        size: entryInfo.size,
+      }
+    }))
+
+  return nodes.filter((node): node is WorkspaceNode => node !== null).sort(sortNodes)
+}
+
 export async function loadWorkspaceTree(rootPath: string): Promise<WorkspaceNode[]> {
   async function walk(currentPath: string): Promise<WorkspaceNode[]> {
-    const entries = await readdir(currentPath, { withFileTypes: true })
+    const entries = await readdir(currentPath, { withFileTypes: true }).catch(() => [])
     const nodes: Array<WorkspaceNode | null> = await Promise.all(entries
       .filter((entry) => !shouldIgnore(entry.name))
       .map(async (entry) => {
         const entryPath = path.join(currentPath, entry.name)
+        const entryInfo = await stat(entryPath).catch(() => null)
+
+        if (!entryInfo) {
+          return null
+        }
 
         if (entry.isDirectory()) {
           const children = await walk(entryPath)
 
           return {
+            ...toWorkspaceNodeTimestamps(entryInfo),
+            hasChildren: children.length > 0,
             name: entry.name,
             path: entryPath,
             kind: 'directory' as const,
@@ -283,10 +380,16 @@ export async function loadWorkspaceTree(rootPath: string): Promise<WorkspaceNode
           }
         }
 
+        if (!entryInfo.isFile()) {
+          return null
+        }
+
         return {
+          ...toWorkspaceNodeTimestamps(entryInfo),
           name: entry.name,
           path: entryPath,
           kind: 'file' as const,
+          size: entryInfo.size,
         }
       }))
 
@@ -294,6 +397,20 @@ export async function loadWorkspaceTree(rootPath: string): Promise<WorkspaceNode
   }
 
   return walk(rootPath)
+}
+
+export async function loadWorkspaceDirectory(rootPath: string, directoryPath = ''): Promise<WorkspaceNode[]> {
+  const resolvedRootPath = path.resolve(rootPath)
+  const resolvedDirectoryPath = directoryPath.trim()
+    ? await assertExistingWorkspacePath(resolvedRootPath, directoryPath)
+    : await realpath(resolvedRootPath)
+  const directoryInfo = await stat(resolvedDirectoryPath).catch(() => null)
+
+  if (!directoryInfo?.isDirectory()) {
+    throw new Error('The selected folder no longer exists.')
+  }
+
+  return loadWorkspaceDirectoryNodes(resolvedDirectoryPath)
 }
 
 export async function loadWorkspaceFile(filePath: string) {
@@ -331,16 +448,16 @@ function isProbablyUtf8Text(buffer: Buffer) {
   return suspiciousControlCount / buffer.length < 0.02
 }
 
-export async function resolveWorkspaceEditorKind(filePath: string): Promise<SupportedWorkspaceEditorKind | null> {
-  const knownKind = getSupportedWorkspaceEditorKind(filePath)
+export async function resolveWorkspaceEditorKind(filePath: string): Promise<WorkspaceFileTabEditorKind | null> {
+  const knownKind = getWorkspaceEditorKind(filePath)
 
-  if (knownKind) {
+  if (knownKind === 'prose' || knownKind === 'code' || knownKind === 'file') {
     return knownKind
   }
 
   try {
     const sample = await readFile(filePath)
-    return isProbablyUtf8Text(sample.subarray(0, 8192)) ? 'code' : null
+    return isProbablyUtf8Text(sample.subarray(0, 8192)) ? 'code' : 'file'
   } catch {
     return null
   }
@@ -356,10 +473,11 @@ export async function workspacePathExists(workspacePath: string) {
 }
 
 export async function workspaceFileExists(rootPath: string, filePath: string) {
-  const resolvedRootPath = path.resolve(rootPath)
-  const resolvedFilePath = path.resolve(filePath)
+  let resolvedFilePath: string
 
-  if (!isInsideWorkspace(resolvedRootPath, resolvedFilePath)) {
+  try {
+    resolvedFilePath = await assertExistingWorkspacePath(rootPath, filePath)
+  } catch {
     return false
   }
 
@@ -369,6 +487,32 @@ export async function workspaceFileExists(rootPath: string, filePath: string) {
   } catch {
     return false
   }
+}
+
+export async function getWorkspaceFileUrl(rootPath: string, filePath: string) {
+  const resolvedFilePath = await assertExistingWorkspacePath(rootPath, filePath)
+
+  const fileInfo = await stat(resolvedFilePath).catch(() => null)
+
+  if (!fileInfo?.isFile()) {
+    throw new Error('The selected item no longer exists.')
+  }
+
+  return pathToFileURL(resolvedFilePath).href
+}
+
+export async function getWorkspaceFileDataUrl(rootPath: string, filePath: string, contentType = 'application/octet-stream') {
+  const resolvedFilePath = await assertExistingWorkspacePath(rootPath, filePath)
+  const fileInfo = await stat(resolvedFilePath).catch(() => null)
+
+  if (!fileInfo?.isFile()) {
+    throw new Error('The selected item no longer exists.')
+  }
+
+  const normalizedContentType = contentType.trim() || 'application/octet-stream'
+  const buffer = await readFile(resolvedFilePath)
+
+  return `data:${normalizedContentType};base64,${buffer.toString('base64')}`
 }
 
 export async function saveWorkspaceImage(

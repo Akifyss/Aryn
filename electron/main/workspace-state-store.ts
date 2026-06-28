@@ -4,6 +4,11 @@ import type {
   PersistedMeoStoredViewPosition,
   PersistedWorkspaceTabState,
 } from '../../src/features/persistence/types'
+import type {
+  WorkspaceFileSystemNavigationState,
+  WorkspaceFileSystemState,
+  WorkspaceFileSystemView,
+} from '../../src/features/workspace/types'
 import { AtomicJsonStore } from './json-file-store'
 
 export const WORKSPACE_STATE_SCHEMA_VERSION = 1
@@ -21,6 +26,7 @@ const DEFAULT_WORKSPACE_UI_STATE: PersistedWorkspaceUiState = {
 }
 
 const MEO_STORED_MODES: PersistedMeoStoredMode[] = ['diff-split', 'diff-unified', 'live', 'source']
+const WORKSPACE_FILE_SYSTEM_VIEWS: WorkspaceFileSystemView[] = ['icons', 'list', 'columns', 'gallery']
 
 function cloneState(state: PersistedWorkspaceUiState) {
   return structuredClone(state)
@@ -42,6 +48,63 @@ function readMeoMode(value: unknown): PersistedMeoStoredMode | undefined {
   return MEO_STORED_MODES.includes(value as PersistedMeoStoredMode)
     ? value as PersistedMeoStoredMode
     : undefined
+}
+
+function readWorkspaceFileSystemView(value: unknown): WorkspaceFileSystemView | undefined {
+  return WORKSPACE_FILE_SYSTEM_VIEWS.includes(value as WorkspaceFileSystemView)
+    ? value as WorkspaceFileSystemView
+    : undefined
+}
+
+function normalizeWorkspaceFileSystemNavigationPath(value: string) {
+  const normalizedPath = value.trim().replace(/[\\/]+/g, '/').replace(/^\/+/, '')
+
+  if (!normalizedPath) {
+    return ''
+  }
+
+  return normalizedPath.endsWith('/') ? normalizedPath : `${normalizedPath}/`
+}
+
+function readWorkspaceFileSystemNavigationState(
+  value: unknown,
+): WorkspaceFileSystemNavigationState | null {
+  const candidate = value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {}
+  const stack = Array.isArray(candidate.stack)
+    ? candidate.stack
+      .filter((path): path is string => typeof path === 'string')
+      .map(normalizeWorkspaceFileSystemNavigationPath)
+      .filter((path, index, allPaths) => index === 0 || path !== allPaths[index - 1])
+    : []
+
+  if (stack.length === 0) {
+    return null
+  }
+
+  const rawIndex = readNumber(candidate.index)
+  const index = rawIndex === undefined
+    ? 0
+    : Math.min(Math.max(Math.trunc(rawIndex), 0), stack.length - 1)
+
+  return { index, stack }
+}
+
+function readWorkspaceFileSystemState(value: unknown): WorkspaceFileSystemState | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+
+  const candidate = value as Record<string, unknown>
+  const view = readWorkspaceFileSystemView(candidate.view)
+  const selectedPath = readNullableString(candidate.selectedPath)
+
+  return {
+    navigation: readWorkspaceFileSystemNavigationState(candidate.navigation),
+    selectedPath,
+    view: view ?? 'icons',
+  }
 }
 
 function readMeoViewPosition(value: unknown): PersistedMeoStoredViewPosition | undefined {
@@ -120,6 +183,7 @@ export function normalizeWorkspaceTabState(value: unknown): PersistedWorkspaceTa
 
         const viewMode = entryCandidate.viewMode === 'code'
           || entryCandidate.viewMode === 'default'
+          || entryCandidate.viewMode === 'file'
           || entryCandidate.viewMode === 'meo'
           || entryCandidate.viewMode === 'preview'
           ? entryCandidate.viewMode
@@ -138,10 +202,12 @@ export function normalizeWorkspaceTabState(value: unknown): PersistedWorkspaceTa
   const normalizedEntries = entries.length > 0
     ? entries
     : legacyPaths.map((entryPath) => ({ path: entryPath }))
+  const fileSystem = readWorkspaceFileSystemState(candidate.fileSystem)
 
   return {
     activePath: readNullableString(candidate.activePath),
     entries: normalizedEntries,
+    ...(fileSystem ? { fileSystem } : null),
     paths: normalizedEntries.map((entry) => entry.path),
   }
 }

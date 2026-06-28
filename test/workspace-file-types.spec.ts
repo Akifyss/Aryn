@@ -3,10 +3,15 @@ import {
   getCodeLanguage,
   getDefaultWorkspaceFileViewMode,
   getWorkspaceEditorKind,
+  getWorkspaceFileTabEditorKind,
   supportsAlternateCodeEditorView,
   supportsHtmlPreview,
   supportsMeoEditor,
 } from '../src/features/workspace/lib/file-types'
+import {
+  resolveWorkspaceFileRenderKind,
+  resolveWorkspaceFileRenderKindForEditorKind,
+} from '../src/features/workspace/lib/workspace-file-rendering'
 
 describe('workspace file types', () => {
   it('routes markdown and plain text files to the prose editor', () => {
@@ -23,9 +28,16 @@ describe('workspace file types', () => {
     expect(getWorkspaceEditorKind('C:/workspace/Dockerfile')).toBe('code')
   })
 
-  it('leaves unsupported files closed', () => {
-    expect(getWorkspaceEditorKind('C:/workspace/logo.png')).toBe('unsupported')
-    expect(getWorkspaceEditorKind('C:/workspace/archive.zip')).toBe('unsupported')
+  it('routes non-text files to file tabs and keeps unknown extensions content-sniffed by the main process', () => {
+    expect(getWorkspaceEditorKind('C:/workspace/logo.png')).toBe('file')
+    expect(getWorkspaceEditorKind('C:/workspace/spec.pdf')).toBe('file')
+    expect(getWorkspaceEditorKind('C:/workspace/report.docx')).toBe('file')
+    expect(getWorkspaceEditorKind('C:/workspace/slides.pptx')).toBe('file')
+    expect(getWorkspaceFileTabEditorKind('C:/workspace/logo.png')).toBe('file')
+    expect(getWorkspaceEditorKind('C:/workspace/archive.zip')).toBe('file')
+    expect(getWorkspaceFileTabEditorKind('C:/workspace/archive.zip')).toBe('file')
+    expect(getWorkspaceEditorKind('C:/workspace/blob.unknown')).toBe('unsupported')
+    expect(getWorkspaceFileTabEditorKind('C:/workspace/blob.unknown')).toBeNull()
   })
 
   it('maps known code files to monaco languages', () => {
@@ -43,6 +55,22 @@ describe('workspace file types', () => {
     expect(getDefaultWorkspaceFileViewMode('C:/workspace/main.ts', 'code')).toBe('code')
     expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.md', 'prose')).toBe('meo')
     expect(getDefaultWorkspaceFileViewMode('C:/workspace/notes.txt', 'prose')).toBe('code')
+    expect(getDefaultWorkspaceFileViewMode('C:/workspace/logo.png', 'file')).toBe('file')
+  })
+
+  it('keeps gallery file rendering aligned with tab default view modes', () => {
+    expect(resolveWorkspaceFileRenderKind('C:/workspace/AGENTS.md')).toBe('meo')
+    expect(resolveWorkspaceFileRenderKind('C:/workspace/notes.markdown')).toBe('meo')
+    expect(resolveWorkspaceFileRenderKind('C:/workspace/component.mdx')).toBe('meo')
+    expect(resolveWorkspaceFileRenderKind('C:/workspace/index.html')).toBe('html')
+    expect(resolveWorkspaceFileRenderKind('C:/workspace/notes.txt')).toBe('code')
+    expect(resolveWorkspaceFileRenderKind('C:/workspace/logo.png')).toBe('image')
+  })
+
+  it('keeps gallery rendering aligned when the main process resolves unknown extensions', () => {
+    expect(resolveWorkspaceFileRenderKindForEditorKind('C:/workspace/blob.unknown', 'code')).toBe('code')
+    expect(resolveWorkspaceFileRenderKindForEditorKind('C:/workspace/blob.unknown', 'file')).toBe('unsupported')
+    expect(resolveWorkspaceFileRenderKindForEditorKind('C:/workspace/blob.unknown', null)).toBe('unsupported')
   })
 
   it('exposes alternate Monaco entry points for MEO and HTML preview files', () => {

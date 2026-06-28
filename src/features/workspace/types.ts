@@ -3,7 +3,24 @@ export type WorkspaceNode = {
   path: string
   kind: 'directory' | 'file'
   isOpenable?: boolean
+  hasChildren?: boolean
+  size?: number
+  createdAt?: string
+  updatedAt?: string
   children?: WorkspaceNode[]
+}
+
+export type WorkspaceFileSystemView = 'icons' | 'list' | 'columns' | 'gallery'
+
+export type WorkspaceFileSystemNavigationState = {
+  index: number
+  stack: string[]
+}
+
+export type WorkspaceFileSystemState = {
+  navigation: WorkspaceFileSystemNavigationState | null
+  selectedPath: string | null
+  view: WorkspaceFileSystemView
 }
 
 export type WorkspaceChangeEvent = {

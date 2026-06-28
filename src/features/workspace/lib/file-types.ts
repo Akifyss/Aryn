@@ -1,6 +1,7 @@
-export type WorkspaceEditorKind = 'prose' | 'code' | 'unsupported'
-export type SupportedWorkspaceEditorKind = Exclude<WorkspaceEditorKind, 'unsupported'>
-export type WorkspaceFileViewMode = 'code' | 'meo' | 'preview'
+export type WorkspaceEditorKind = 'prose' | 'code' | 'file' | 'unsupported'
+export type SupportedWorkspaceEditorKind = 'prose' | 'code'
+export type WorkspaceFileTabEditorKind = SupportedWorkspaceEditorKind | 'file'
+export type WorkspaceFileViewMode = 'code' | 'file' | 'meo' | 'preview'
 export type LegacyWorkspaceFileViewMode = WorkspaceFileViewMode | 'default'
 
 const PROSE_EXTENSIONS = new Set([
@@ -105,6 +106,42 @@ const CODE_FILE_NAMES = new Set([
   'makefile',
 ])
 
+const FILE_TAB_EXTENSIONS = new Set([
+  '.7z',
+  '.apng',
+  '.avif',
+  '.bmp',
+  '.bz2',
+  '.doc',
+  '.docx',
+  '.dmg',
+  '.epub',
+  '.gif',
+  '.gz',
+  '.heic',
+  '.heif',
+  '.ico',
+  '.jpeg',
+  '.jpg',
+  '.odp',
+  '.ods',
+  '.odt',
+  '.pdf',
+  '.png',
+  '.ppt',
+  '.pptx',
+  '.rar',
+  '.rtf',
+  '.svg',
+  '.tar',
+  '.tif',
+  '.tiff',
+  '.webp',
+  '.xls',
+  '.xlsx',
+  '.zip',
+])
+
 function getBaseName(filePath: string) {
   return filePath.split(/[\\/]/).pop()?.toLowerCase() ?? filePath.toLowerCase()
 }
@@ -132,12 +169,26 @@ export function getWorkspaceEditorKind(filePath: string): WorkspaceEditorKind {
     return 'code'
   }
 
+  if (FILE_TAB_EXTENSIONS.has(extension)) {
+    return 'file'
+  }
+
   return 'unsupported'
 }
 
 export function getSupportedWorkspaceEditorKind(filePath: string): SupportedWorkspaceEditorKind | null {
   const editorKind = getWorkspaceEditorKind(filePath)
-  return editorKind === 'unsupported' ? null : editorKind
+  return editorKind === 'prose' || editorKind === 'code' ? editorKind : null
+}
+
+export function getWorkspaceFileTabEditorKind(filePath: string): WorkspaceFileTabEditorKind | null {
+  const editorKind = getWorkspaceEditorKind(filePath)
+
+  if (editorKind === 'prose' || editorKind === 'code' || editorKind === 'file') {
+    return editorKind
+  }
+
+  return null
 }
 
 export function supportsHtmlPreview(filePath: string) {
@@ -159,8 +210,12 @@ export function supportsMeoEditor(filePath: string, editorKind: SupportedWorkspa
 
 export function getDefaultWorkspaceFileViewMode(
   filePath: string,
-  editorKind: SupportedWorkspaceEditorKind,
+  editorKind: WorkspaceFileTabEditorKind,
 ): WorkspaceFileViewMode {
+  if (editorKind === 'file') {
+    return 'file'
+  }
+
   if (supportsMeoEditor(filePath, editorKind)) {
     return 'meo'
   }
@@ -174,9 +229,13 @@ export function getDefaultWorkspaceFileViewMode(
 
 export function normalizeWorkspaceFileViewMode(
   filePath: string,
-  editorKind: SupportedWorkspaceEditorKind,
+  editorKind: WorkspaceFileTabEditorKind,
   viewMode?: LegacyWorkspaceFileViewMode,
 ): WorkspaceFileViewMode {
+  if (editorKind === 'file') {
+    return 'file'
+  }
+
   if (viewMode === 'meo' && supportsMeoEditor(filePath, editorKind)) {
     return viewMode
   }

@@ -29,6 +29,9 @@ import {
   createWorkspaceDirectory,
   createWorkspaceFile,
   deleteWorkspaceFile,
+  getWorkspaceFileDataUrl,
+  getWorkspaceFileUrl,
+  loadWorkspaceDirectory,
   loadWorkspaceFile,
   loadWorkspaceTree,
   moveWorkspaceEntry,
@@ -1660,6 +1663,13 @@ ipcMain.handle('workspace:load-tree', async (_, rootPath: string) => {
   return loadWorkspaceTree(rootPath)
 })
 
+ipcMain.handle('workspace:load-directory', async (_, rootPath: string, directoryPath?: string) => {
+  return loadWorkspaceDirectory(
+    readRequiredPathArgument(rootPath, 'Workspace path'),
+    typeof directoryPath === 'string' ? directoryPath : '',
+  )
+})
+
 ipcMain.handle('workspace:get-restore-state', async () => {
   const settings = await appStateStore.read()
   const activeContext = settings.workspace.activeContext
@@ -1960,6 +1970,25 @@ ipcMain.handle('workspace:save-file', async (_, filePath: string, content: strin
 
 ipcMain.handle('workspace:file-exists', async (_, rootPath: string, filePath: string) => {
   return { exists: await workspaceFileExists(rootPath, filePath) }
+})
+
+ipcMain.handle('workspace:get-file-url', async (_, rootPath: string, filePath: string) => {
+  return {
+    url: await getWorkspaceFileUrl(
+      readRequiredPathArgument(rootPath, 'Workspace path'),
+      readRequiredPathArgument(filePath, 'File path'),
+    ),
+  }
+})
+
+ipcMain.handle('workspace:get-file-data-url', async (_, rootPath: string, filePath: string, contentType?: string) => {
+  return {
+    url: await getWorkspaceFileDataUrl(
+      readRequiredPathArgument(rootPath, 'Workspace path'),
+      readRequiredPathArgument(filePath, 'File path'),
+      typeof contentType === 'string' ? contentType : undefined,
+    ),
+  }
 })
 
 ipcMain.handle('workspace:path-exists', async (_, workspacePath: string) => {

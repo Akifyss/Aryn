@@ -2,16 +2,16 @@ import { create } from 'zustand'
 import type { GitChangeScope, GitFileDiffResult } from '@/features/git/types'
 import type { WorkspaceNode } from '@/features/workspace/types'
 import {
-  getSupportedWorkspaceEditorKind,
+  getWorkspaceFileTabEditorKind,
   normalizeWorkspaceFileViewMode,
   type LegacyWorkspaceFileViewMode,
-  type SupportedWorkspaceEditorKind,
+  type WorkspaceFileTabEditorKind,
   type WorkspaceFileViewMode,
 } from '@/features/workspace/lib/file-types'
 
 export type WorkspaceFileTab = {
   content: string
-  editorKind: SupportedWorkspaceEditorKind
+  editorKind: WorkspaceFileTabEditorKind
   exists: boolean
   filePath: string
   gitDiffRequest?: WorkspaceFileGitDiffRequest | null
@@ -81,7 +81,7 @@ type WorkspaceState = {
   openDiffTab: (tab: WorkspaceDiffTab, activate?: boolean) => void
   openTab: (tab: {
     content: string
-    editorKind: SupportedWorkspaceEditorKind
+    editorKind: WorkspaceFileTabEditorKind
     exists?: boolean
     filePath: string
     gitDiffRequest?: WorkspaceFileGitDiffRequest | null
@@ -89,7 +89,7 @@ type WorkspaceState = {
   }) => void
   replaceActiveFileTab: (tab: {
     content: string
-    editorKind: SupportedWorkspaceEditorKind
+    editorKind: WorkspaceFileTabEditorKind
     exists?: boolean
     filePath: string
     viewMode?: LegacyWorkspaceFileViewMode
@@ -109,7 +109,7 @@ export function createWorkspaceFileTabId(filePath: string, viewMode: WorkspaceFi
 }
 
 function isEditableWorkspaceFileViewMode(viewMode: WorkspaceFileViewMode) {
-  return viewMode !== 'preview'
+  return viewMode === 'code' || viewMode === 'meo'
 }
 
 function getNextActiveTabId(openTabs: WorkspaceTab[], activeTabId: string | null, closingId: string) {
@@ -423,7 +423,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         return tab
       }
 
-      const nextEditorKind = getSupportedWorkspaceEditorKind(nextPath) ?? tab.editorKind
+      const nextEditorKind = getWorkspaceFileTabEditorKind(nextPath) ?? tab.editorKind
       const nextViewMode = normalizeWorkspaceFileViewMode(nextPath, nextEditorKind, tab.viewMode)
 
       return {
@@ -443,7 +443,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         return nextTabs.some((tab) => tab.id === state.activeTabId) ? state.activeTabId : nextTabs[0]?.id ?? null
       }
 
-      const nextEditorKind = getSupportedWorkspaceEditorKind(nextPath) ?? activeTab.editorKind
+      const nextEditorKind = getWorkspaceFileTabEditorKind(nextPath) ?? activeTab.editorKind
       const nextViewMode = normalizeWorkspaceFileViewMode(nextPath, nextEditorKind, activeTab.viewMode)
       const requestedId = createWorkspaceFileTabId(nextPath, nextViewMode)
 

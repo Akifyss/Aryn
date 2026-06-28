@@ -38,6 +38,9 @@ import type {
   WorkspaceIconThemeMode,
   WorkspaceIconThemeSelection,
   WorkspaceIconThemesByMode,
+  WorkspaceFileSystemNavigationState,
+  WorkspaceFileSystemState,
+  WorkspaceFileSystemView,
   WorkspaceNode,
 } from '@/features/workspace/types'
 import { AppScrollArea } from '@/components/app-scroll-area'
@@ -70,6 +73,8 @@ import {
   type SettingsSectionId,
 } from '@/features/settings/components/settings-dialog'
 import { FileTabs } from '@/features/workspace/components/file-tabs'
+import { WorkspaceFileSystemPanel } from '@/features/workspace/components/workspace-file-system-panel'
+import { WorkspaceFilePreview } from '@/features/workspace/components/workspace-file-preview'
 import { WorkspaceTreePanel } from '@/features/workspace/components/workspace-tree-panel'
 import type { WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree'
 import {
@@ -187,13 +192,6 @@ function getBaseName(filePath: string) {
   return filePath.split(/[\\/]/).pop() ?? filePath
 }
 
-function hasWorkspaceFileNodes(nodes: WorkspaceNode[]): boolean {
-  return nodes.some((node) => (
-    node.kind === 'file'
-    || (node.children ? hasWorkspaceFileNodes(node.children) : false)
-  ))
-}
-
 function EditorLoadingState({ label = 'Loading editor...' }: { label?: string }) {
   useEffect(() => {
     recordOpenFileProfile('editor:fallback:mounted', { label })
@@ -295,7 +293,7 @@ function isWorkspaceFixedPanelTab(tab: WorkspaceDisplayTab | null | undefined): 
 }
 
 function isWorkspaceAutosaveTab(tab: WorkspaceDisplayTab | WorkspaceFileTab | null | undefined): tab is WorkspaceFileTab {
-  return tab?.kind === 'file' && tab.viewMode !== 'preview'
+  return tab?.kind === 'file' && (tab.viewMode === 'code' || tab.viewMode === 'meo')
 }
 
 function createDiffTabId(diff: GitFileDiffResult) {
@@ -377,6 +375,7 @@ type StoredTabState = {
     path: string
     viewMode?: LegacyWorkspaceFileViewMode
   }>
+  fileSystem?: WorkspaceFileSystemState | null
   paths: string[]
 }
 
@@ -405,6 +404,12 @@ const FIXED_GIT_TAB_ID = 'app://fixed/git'
 const WORKSPACE_AUTO_SAVE_DELAY_MS = 1000
 const INTERNAL_SAVE_EVENT_TTL_MS = 2500
 const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
+const DEFAULT_WORKSPACE_FILE_SYSTEM_STATE: WorkspaceFileSystemState = {
+  navigation: null,
+  selectedPath: null,
+  view: 'icons',
+}
+const WORKSPACE_FILE_SYSTEM_VIEWS: WorkspaceFileSystemView[] = ['icons', 'list', 'columns', 'gallery']
 
 type ResizePanel = 'left' | 'right'
 type SidebarResizePreview = {
@@ -644,6 +649,7 @@ function readStoredTabState(workspacePath: string): StoredTabState {
     return {
       activePath: storedState.activePath,
       entries: storedState.entries,
+      fileSystem: storedState.fileSystem ?? null,
       paths: storedState.paths,
     }
   }
@@ -655,16 +661,81 @@ function readStoredTabState(workspacePath: string): StoredTabState {
   }
 }
 
+function normalizeWorkspaceFileSystemNavigation(
+  navigation: WorkspaceFileSystemNavigationState | null | undefined,
+): WorkspaceFileSystemNavigationState | null {
+  if (!navigation || !Array.isArray(navigation.stack) || navigation.stack.length === 0) {
+    return null
+  }
+
+  const stack = navigation.stack
+    .filter((path): path is string => typeof path === 'string')
+    .map((path) => {
+      const normalizedPath = path.trim().replace(/[\\/]+/g, '/').replace(/^\/+/, '')
+
+      if (!normalizedPath) {
+        return ''
+      }
+
+      return normalizedPath.endsWith('/') ? normalizedPath : `${normalizedPath}/`
+    })
+    .filter((path, index, allPaths) => index === 0 || path !== allPaths[index - 1])
+
+  if (stack.length === 0) {
+    return null
+  }
+
+  const index = Number.isFinite(navigation.index)
+    ? clamp(Math.trunc(navigation.index), 0, stack.length - 1)
+    : 0
+
+  return { index, stack }
+}
+
+function normalizeWorkspaceFileSystemState(
+  state: WorkspaceFileSystemState | null | undefined,
+): WorkspaceFileSystemState {
+  if (!state) {
+    return DEFAULT_WORKSPACE_FILE_SYSTEM_STATE
+  }
+
+  return {
+    navigation: normalizeWorkspaceFileSystemNavigation(state.navigation),
+    selectedPath: state.selectedPath || null,
+    view: WORKSPACE_FILE_SYSTEM_VIEWS.includes(state.view) ? state.view : 'icons',
+  }
+}
+
 function writeStoredTabState(workspacePath: string, state: StoredTabState) {
   const entries = state.entries ?? state.paths.map((entryPath) => ({ path: entryPath }))
+  const previousState = persistedWorkspaceTabState.get(workspacePath)
+  const fileSystem = state.fileSystem === undefined
+    ? previousState?.fileSystem
+    : state.fileSystem ?? undefined
   const nextState: PersistedWorkspaceTabState = {
     activePath: state.activePath,
     entries,
+    ...(fileSystem ? { fileSystem } : null),
     paths: entries.map((entry) => entry.path),
   }
 
   persistedWorkspaceTabState.set(workspacePath, nextState)
   void window.appApi.updateWorkspaceTabState(workspacePath, nextState).catch(() => undefined)
+}
+
+function readStoredFileSystemState(workspacePath: string | null): WorkspaceFileSystemState {
+  if (!workspacePath) {
+    return DEFAULT_WORKSPACE_FILE_SYSTEM_STATE
+  }
+
+  return normalizeWorkspaceFileSystemState(persistedWorkspaceTabState.get(workspacePath)?.fileSystem)
+}
+
+function writeStoredFileSystemState(workspacePath: string, fileSystem: WorkspaceFileSystemState) {
+  writeStoredTabState(workspacePath, {
+    ...readStoredTabState(workspacePath),
+    fileSystem: normalizeWorkspaceFileSystemState(fileSystem),
+  })
 }
 
 function dedupeStoredEntries(entries: Array<{ path: string, viewMode?: LegacyWorkspaceFileViewMode }>) {
@@ -991,6 +1062,48 @@ function App() {
   const tree = useWorkspaceStore((state) => state.tree)
   const updateDiffTabDraft = useWorkspaceStore((state) => state.updateDiffTabDraft)
   const updateFileTabsContent = useWorkspaceStore((state) => state.updateFileTabsContent)
+  const [workspaceFileSystemStateVersion, setWorkspaceFileSystemStateVersion] = useState(0)
+  const workspaceFileSystemState = useMemo(
+    () => readStoredFileSystemState(currentPath),
+    [currentPath, workspaceFileSystemStateVersion],
+  )
+  const updateWorkspaceFileSystemState = useCallback(
+    (patch: Partial<WorkspaceFileSystemState>) => {
+      if (!currentPath) {
+        return
+      }
+
+      const previousState = readStoredFileSystemState(currentPath)
+      const hasNavigationPatch = Object.prototype.hasOwnProperty.call(patch, 'navigation')
+      const hasSelectedPathPatch = Object.prototype.hasOwnProperty.call(patch, 'selectedPath')
+      const nextState: WorkspaceFileSystemState = {
+        navigation: hasNavigationPatch ? patch.navigation ?? null : previousState.navigation,
+        selectedPath: hasSelectedPathPatch ? patch.selectedPath ?? null : previousState.selectedPath,
+        view: patch.view ?? previousState.view,
+      }
+      writeStoredFileSystemState(currentPath, nextState)
+      setWorkspaceFileSystemStateVersion((version) => version + 1)
+    },
+    [currentPath],
+  )
+  const handleWorkspaceFileSystemViewChange = useCallback(
+    (view: WorkspaceFileSystemView) => {
+      updateWorkspaceFileSystemState({ view })
+    },
+    [updateWorkspaceFileSystemState],
+  )
+  const handleWorkspaceFileSystemNavigationChange = useCallback(
+    (navigation: WorkspaceFileSystemNavigationState) => {
+      updateWorkspaceFileSystemState({ navigation })
+    },
+    [updateWorkspaceFileSystemState],
+  )
+  const handleWorkspaceFileSystemSelectionChange = useCallback(
+    (selectedPath: string | null) => {
+      updateWorkspaceFileSystemState({ selectedPath })
+    },
+    [updateWorkspaceFileSystemState],
+  )
   const loadTree = useCallback(async (rootPath: string) => {
     const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
     setTree(nextTree)
@@ -1105,7 +1218,6 @@ function App() {
     () => tree.filter((node) => node.kind === 'directory').map((node) => node.name),
     [tree],
   )
-  const hasWorkspaceFileContent = currentPath ? hasWorkspaceFileNodes(tree) : false
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
     : '选择工作目录'
@@ -1141,7 +1253,7 @@ function App() {
   }, [projectMenuSearch, projectState.projects])
   const shellPlatform: ShellPlatform = deriveShellPlatform(platform)
   const shellChromeVars = getShellChromeVars(shellPlatform, { isFullScreen: isWindowFullScreen }) as CSSProperties
-  const shouldExposeAgentWorkspaceTools = !isAgentLayout || hasWorkspaceFileContent
+  const shouldExposeAgentWorkspaceTools = !isAgentLayout || Boolean(currentPath)
   const layoutMode: LayoutMode = deriveLayoutMode(shellWidth)
   const isLeftSidebarDrawer = layoutMode !== 'full'
   const isRightSidebarDrawer = !isAgentLayout && layoutMode === 'focus'
@@ -2310,7 +2422,7 @@ function App() {
 
     if (!editorKind) {
       toast.warning(`Cannot open ${getBaseName(filePath)} yet`, {
-        description: 'Only text files can open in tabs right now. This file looks binary or unsupported.',
+        description: 'This file could not be opened from the workspace.',
       })
       setStatusMessage(`${getBaseName(filePath)} is not supported yet`)
       recordOpenFileProfile('app:open-file:unsupported:end', {
@@ -2363,13 +2475,20 @@ function App() {
         return
       }
 
-      const readStartedAt = performance.now()
-      recordOpenFileProfile('app:open-file:read-file:start', { filePath })
-      const fileContent = await window.appApi.readWorkspaceFile(filePath)
-      recordOpenFileProfile('app:open-file:read-file:end', {
-        chars: fileContent.length,
-        durationMs: getOpenFileProfileDuration(readStartedAt),
-      })
+      const fileContent = await (async () => {
+        if (editorKind === 'file') {
+          return ''
+        }
+
+        const readStartedAt = performance.now()
+        recordOpenFileProfile('app:open-file:read-file:start', { filePath })
+        const content = await window.appApi.readWorkspaceFile(filePath)
+        recordOpenFileProfile('app:open-file:read-file:end', {
+          chars: content.length,
+          durationMs: getOpenFileProfileDuration(readStartedAt),
+        })
+        return content
+      })()
       const openTabStartedAt = performance.now()
       recordOpenFileProfile('app:open-file:open-tab:start', {
         editorKind,
@@ -2475,7 +2594,7 @@ function App() {
     const editorKind = await window.appApi.resolveWorkspaceEditorKind(filePath)
     if (!editorKind) {
       toast.warning(`Cannot open ${getBaseName(filePath)} yet`, {
-        description: 'Only text files can open in tabs right now. This file looks binary or unsupported.',
+        description: 'This file could not be opened from the workspace.',
       })
       setStatusMessage(`${getBaseName(filePath)} is not supported yet`)
       recordOpenFileProfile('app:replace-active-file:unsupported:end', {
@@ -2494,7 +2613,9 @@ function App() {
       )
       const fileContent = existingTargetTab
         ? existingTargetTab.content
-        : await window.appApi.readWorkspaceFile(filePath)
+        : editorKind === 'file'
+          ? ''
+          : await window.appApi.readWorkspaceFile(filePath)
 
       replaceActiveFileTab({
         filePath,
@@ -2764,7 +2885,9 @@ function App() {
       }
 
       try {
-        const content = await window.appApi.readWorkspaceFile(filePath)
+        const content = editorKind === 'file'
+          ? ''
+          : await window.appApi.readWorkspaceFile(filePath)
         return toStoredWorkspaceTab(
           filePath,
           content,
@@ -4181,7 +4304,13 @@ function App() {
   }
 
   useEffect(() => {
-    if (isAgentLayout || displayActiveTabId !== FIXED_FILE_TAB_ID && displayActiveTabId !== FIXED_GIT_TAB_ID) {
+    if (
+      isAgentLayout
+      || (
+        displayActiveTabId !== FIXED_FILE_TAB_ID
+        && displayActiveTabId !== FIXED_GIT_TAB_ID
+      )
+    ) {
       return
     }
 
@@ -4727,7 +4856,9 @@ function App() {
         // The workspace may have changed before the debounced refresh executes.
       })
 
-      const affectedTab = useWorkspaceStore.getState().openTabs.find((tab) => tab.kind === 'file' && tab.filePath === event.path)
+      const affectedTab = useWorkspaceStore.getState().openTabs.find(
+        (tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.filePath === event.path,
+      )
 
       if (!affectedTab) {
         return
@@ -4752,6 +4883,11 @@ function App() {
           return
         }
 
+        if (affectedTab.viewMode === 'file') {
+          setStatusMessage(`${getBaseName(event.path)} is up to date`)
+          return
+        }
+
         const updatedContent = await window.appApi.readWorkspaceFile(event.path)
         syncFileTabsWithDisk(event.path, updatedContent)
         setStatusMessage(`${getBaseName(event.path)} reloaded`)
@@ -4761,6 +4897,11 @@ function App() {
       if (event.type === 'change') {
         if (affectedTab.isDirty) {
           setStatusMessage(`${getBaseName(event.path)} changed on disk. Kept your unsaved version.`)
+          return
+        }
+
+        if (affectedTab.viewMode === 'file') {
+          setStatusMessage(`${getBaseName(event.path)} changed on disk`)
           return
         }
 
@@ -5490,7 +5631,7 @@ function App() {
       return
     }
 
-    activateFileTab(displayActiveTab?.kind === 'file' ? displayActiveTab.id : FIXED_FILE_TAB_ID)
+    activateFileTab(FIXED_FILE_TAB_ID)
   }
 
   const isEditorLayoutSwitchDisabled = activeWorkspaceContext.kind === 'conversationDraft' && isAgentLayout
@@ -5807,12 +5948,23 @@ function App() {
 
   function renderFixedFilePanel() {
     return (
-      <div className='editor-fixed-file-panel'>
-        {renderDirectorySidebar({ activeFileMode: 'none', fileClickMode: 'open-tab', showWorkspaceTabs: false })}
-        <div className='editor-fixed-file-empty-panel'>
-          {renderEditorEmptyState()}
-        </div>
-      </div>
+      <WorkspaceFileSystemPanel
+        fileSystemState={workspaceFileSystemState}
+        gitRepositoryState={gitRepositoryState}
+        iconTheme={iconTheme}
+        meoSettings={meo}
+        nodes={tree}
+        theme={theme}
+        title={workspaceLabel}
+        workspacePath={currentPath}
+        workspaceUnavailableMessage={workspaceUnavailableMessage}
+        onOpenFile={(filePath) => {
+          void openFile(filePath)
+        }}
+        onFileSystemNavigationChange={handleWorkspaceFileSystemNavigationChange}
+        onFileSystemSelectionChange={handleWorkspaceFileSystemSelectionChange}
+        onFileSystemViewChange={handleWorkspaceFileSystemViewChange}
+      />
     )
   }
 
@@ -5825,7 +5977,8 @@ function App() {
       (currentEditorKind === 'code' && currentFileViewMode === 'code')
       || (currentEditorKind === 'prose' && currentFileViewMode === 'code')
     ))
-    const isPreviewEditorView = Boolean(activeFileTab && currentEditorKind === 'code' && currentFileViewMode === 'preview')
+    const isHtmlPreviewEditorView = Boolean(activeFileTab && currentEditorKind === 'code' && currentFileViewMode === 'preview')
+    const isFileSurfaceView = Boolean(activeFileTab && currentEditorKind === 'file' && currentFileViewMode === 'file')
 
     return (
       <div className='editor-frame'>
@@ -5971,7 +6124,7 @@ function App() {
             </div>
           ) : null}
 
-          {shouldRenderWorkspaceEditor && activeFileTab && isPreviewEditorView ? (
+          {shouldRenderWorkspaceEditor && activeFileTab && isHtmlPreviewEditorView ? (
             <div className='editor-view-shell'>
               {editorToolbarLeadingAction ? (
                 <div className='editor-plain-toolbar'>
@@ -5982,6 +6135,23 @@ function App() {
                 content={currentFileContent}
                 filePath={activeFileTab.filePath}
               />
+            </div>
+          ) : null}
+
+          {shouldRenderWorkspaceEditor && activeFileTab && isFileSurfaceView ? (
+            <div className='editor-view-shell'>
+              <Suspense fallback={<EditorLoadingState label='正在加载文件...' />}>
+                <WorkspaceFilePreview
+                  key={activeFileTab.id}
+                  filePath={activeFileTab.filePath}
+                  gitRepositoryState={gitRepositoryState}
+                  iconTheme={iconTheme}
+                  leadingToolbarActions={editorToolbarLeadingAction}
+                  meoSettings={meo}
+                  theme={theme}
+                  workspacePath={currentPath}
+                />
+              </Suspense>
             </div>
           ) : null}
         </div>
