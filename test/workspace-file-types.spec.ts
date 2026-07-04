@@ -32,6 +32,8 @@ describe('workspace file types', () => {
     expect(getWorkspaceEditorKind('C:/workspace/logo.png')).toBe('file')
     expect(getWorkspaceEditorKind('C:/workspace/spec.pdf')).toBe('file')
     expect(getWorkspaceEditorKind('C:/workspace/report.docx')).toBe('file')
+    expect(getWorkspaceEditorKind('C:/workspace/data.csv')).toBe('file')
+    expect(getWorkspaceEditorKind('C:/workspace/export.tsv')).toBe('file')
     expect(getWorkspaceEditorKind('C:/workspace/slides.pptx')).toBe('file')
     expect(getWorkspaceFileTabEditorKind('C:/workspace/logo.png')).toBe('file')
     expect(getWorkspaceEditorKind('C:/workspace/archive.zip')).toBe('file')
@@ -64,6 +66,8 @@ describe('workspace file types', () => {
     expect(resolveWorkspaceFileRenderKind('C:/workspace/component.mdx')).toBe('meo')
     expect(resolveWorkspaceFileRenderKind('C:/workspace/index.html')).toBe('html')
     expect(resolveWorkspaceFileRenderKind('C:/workspace/notes.txt')).toBe('code')
+    expect(resolveWorkspaceFileRenderKind('C:/workspace/data.csv')).toBe('csv')
+    expect(resolveWorkspaceFileRenderKind('C:/workspace/export.tsv')).toBe('csv')
     expect(resolveWorkspaceFileRenderKind('C:/workspace/logo.png')).toBe('image')
   })
 

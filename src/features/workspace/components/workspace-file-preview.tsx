@@ -27,6 +27,11 @@ const MeoEditorHost = lazy(async () => {
   return { default: module.MeoEditorHost }
 })
 
+const CsvViewer = lazy(async () => {
+  const module = await import('@/components/ui/csv-viewer')
+  return { default: module.CsvViewer }
+})
+
 const PDFViewer = lazy(async () => {
   const module = await import('@/components/ui/pdf-viewer')
   return { default: module.PDFViewer }
@@ -61,7 +66,12 @@ type WorkspaceFileRendererProps = WorkspaceFilePreviewProps & {
 type PreviewState =
   | { status: 'error'; message: string }
   | { status: 'loading' }
-  | { content?: string; kind: WorkspaceFileRenderKind; status: 'ready'; url: string | null }
+  | {
+      content?: string
+      kind: WorkspaceFileRenderKind
+      status: 'ready'
+      url: string | null
+    }
 
 const IMAGE_PREVIEW_WHEEL_STEP = 0.04
 const IMAGE_PREVIEW_CONTROL_STEP = 0.1
@@ -271,7 +281,7 @@ export function WorkspaceFileRenderer({
           return
         }
 
-        if (renderKind === 'code' || renderKind === 'html' || renderKind === 'meo') {
+        if (renderKind === 'code' || renderKind === 'html' || renderKind === 'meo' || renderKind === 'csv') {
           const content = await window.appApi.readWorkspaceFile(filePath)
           if (!isCurrent) return
 
@@ -280,6 +290,7 @@ export function WorkspaceFileRenderer({
         }
 
         const resolvedContentType = getWorkspaceFileSystemContentType(file)
+
         const { url } = shouldUseWorkspaceFileDataUrl(file)
           ? await window.appApi.getWorkspaceFileDataUrl(workspacePath, filePath, resolvedContentType)
           : await window.appApi.getWorkspaceFileUrl(workspacePath, filePath)
@@ -371,6 +382,25 @@ export function WorkspaceFileRenderer({
     )
   }
 
+  if (state.kind === 'csv' && state.content !== undefined) {
+    return (
+      <div className={cn('flex h-full min-h-0 flex-col bg-[var(--background-primary)]', className)}>
+        <Suspense fallback={<PreviewLoadingState />}>
+          <CsvViewer
+            className='h-full min-h-0'
+            data={state.content}
+            leadingToolbarActions={toolbarLeadingActions}
+            search={showToolbar}
+            showDownload={false}
+            showToolbar={showToolbar}
+            showUpload={false}
+            toolbarActions={toolbarTrailingActions}
+          />
+        </Suspense>
+      </div>
+    )
+  }
+
   if (state.kind === 'unsupported' || !state.url) {
     return (
       <div className={cn('flex h-full min-h-0 flex-col bg-[var(--background-primary)]', className)}>
@@ -390,7 +420,7 @@ export function WorkspaceFileRenderer({
     )
   }
 
-  if (state.kind === 'image') {
+  if (state.kind === 'image' && state.url) {
     return (
       <ImagePreviewViewer
         className={className}
@@ -411,32 +441,37 @@ export function WorkspaceFileRenderer({
             className='h-full min-h-0'
             fileName={fileName}
             leadingToolbarActions={toolbarLeadingActions}
+            showDownload={false}
             showToolbar={showToolbar}
             showUpload={false}
-            src={state.url}
+            src={state.url ?? undefined}
             toolbarActions={toolbarTrailingActions}
           />
         ) : null}
-        {state.kind === 'docx' ? (
+        {state.kind === 'docx' && state.url ? (
           <DocxViewerPreview
             className='h-full min-h-0'
             fileName={fileName}
             isDark={isDarkPreview}
             leadingToolbarActions={toolbarLeadingActions}
             onIsDarkChange={setIsDarkPreview}
+            showDownload={false}
+            showNightModeToggle={false}
             showToolbar={showToolbar}
             showUpload={false}
             src={state.url}
             toolbarActions={toolbarTrailingActions}
           />
         ) : null}
-        {state.kind === 'xlsx' ? (
+        {state.kind === 'xlsx' && state.url ? (
           <XlsxViewerPreview
             className='h-full min-h-0'
             fileName={fileName}
             isDark={isDarkPreview}
             leadingToolbarActions={toolbarLeadingActions}
             onIsDarkChange={setIsDarkPreview}
+            showDownload={false}
+            showNightModeToggle={false}
             showToolbar={showToolbar}
             showUpload={false}
             src={state.url}

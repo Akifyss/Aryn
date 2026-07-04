@@ -89,6 +89,9 @@ function getWorkspaceFileKind(fileName: string, contentType: string | undefined)
   ) {
     return '表格'
   }
+  if (contentType === 'text/csv' || contentType === 'text/tab-separated-values') {
+    return '表格'
+  }
   if (
     contentType === 'application/vnd.ms-powerpoint'
     || contentType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
@@ -144,7 +147,7 @@ export function isWorkspaceFileSystemPreviewable(file: Pick<FileSystemFileItem, 
 
   const name = (file.name ?? file.path).toLowerCase()
 
-  return /\.(avif|gif|jpe?g|png|svg|webp|pdf|docx|xlsx?|xls)$/.test(name)
+  return /\.(avif|gif|jpe?g|png|svg|webp|pdf|docx|xlsx?|xls|csv|tsv)$/.test(name)
 }
 
 export function isWorkspaceFileSystemDocx(file: Pick<FileSystemFileItem, 'contentType' | 'name' | 'path'>) {
@@ -164,6 +167,14 @@ export function isWorkspaceFileSystemSpreadsheet(file: Pick<FileSystemFileItem, 
   }
 
   return /\.(xlsx?|xls)$/.test((file.name ?? file.path).toLowerCase())
+}
+
+export function isWorkspaceFileSystemCsv(file: Pick<FileSystemFileItem, 'contentType' | 'name' | 'path'>) {
+  if (file.contentType === 'text/csv' || file.contentType === 'text/tab-separated-values') {
+    return true
+  }
+
+  return /\.(csv|tsv)$/.test((file.name ?? file.path).toLowerCase())
 }
 
 export function isWorkspaceFileSystemImage(file: Pick<FileSystemFileItem, 'contentType' | 'name' | 'path'>) {
@@ -196,13 +207,14 @@ function getWorkspacePreviewMetadata(file: Pick<FileSystemFileItem, 'contentType
     !isWorkspaceFileSystemImage(file)
     && !isWorkspaceFileSystemPdf(file)
     && !isWorkspaceFileSystemDocx(file)
+    && !isWorkspaceFileSystemCsv(file)
     && !isWorkspaceFileSystemSpreadsheet(file)
   ) {
     return null
   }
 
   return {
-    ...(isWorkspaceFileSystemSpreadsheet(file) ? { previewAspectRatio: 1.35 } : null),
+    ...(isWorkspaceFileSystemSpreadsheet(file) || isWorkspaceFileSystemCsv(file) ? { previewAspectRatio: 1.35 } : null),
     previewPageCount: 1,
   }
 }
@@ -216,7 +228,9 @@ export function shouldUseWorkspaceFileDataUrl(file: Pick<FileSystemFileItem, 'co
     || contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     || contentType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     || contentType === 'application/vnd.ms-excel'
-    || /\.(avif|bmp|gif|ico|jpe?g|png|svg|webp|pdf|docx|xlsx?|xls)$/.test(name)
+    || contentType === 'text/csv'
+    || contentType === 'text/tab-separated-values'
+    || /\.(avif|bmp|gif|ico|jpe?g|png|svg|webp|pdf|docx|xlsx?|xls|csv|tsv)$/.test(name)
 }
 
 type WorkspaceFileSystemItemsOptions = {

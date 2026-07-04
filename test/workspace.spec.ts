@@ -239,6 +239,13 @@ describe('workspace helpers', () => {
     await expect(resolveWorkspaceEditorKind(binaryFilePath)).resolves.toBe('file')
   })
 
+  it('routes delimited table files to file tabs', async () => {
+    const rootPath = await createTempWorkspace()
+
+    await expect(resolveWorkspaceEditorKind(path.join(rootPath, 'data.csv'))).resolves.toBe('file')
+    await expect(resolveWorkspaceEditorKind(path.join(rootPath, 'export.tsv'))).resolves.toBe('file')
+  })
+
   it('saves pasted images inside the workspace and avoids name collisions', async () => {
     const rootPath = await createTempWorkspace()
     const imageData = 'data:image/png;base64,aGVsbG8='

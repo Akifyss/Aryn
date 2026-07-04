@@ -4,6 +4,7 @@ import {
   __fileSystemTestHooks,
   type FileSystemItem,
 } from '../src/components/ui/file-system'
+import { __csvViewerTestHooks } from '../src/components/ui/csv-viewer'
 import { collectLazyFolderLoadCandidates } from '../src/components/ui/file-system-lazy-loading'
 import { __xlsxViewerTestHooks } from '../src/components/ui/xlsx-viewer'
 import { inferFileContentType } from '../src/lib/file-content-types'
@@ -193,5 +194,13 @@ describe('FileSystem local file data', () => {
       sheetIndex: 2,
       sheetName: 'Third',
     })
+  })
+
+  it('parses quoted CSV cells for the CSV viewer', () => {
+    expect(__csvViewerTestHooks.parseDelimitedText('name,note\n"Ada","hello, world"\n"Linus","uses ""quotes"""')).toEqual([
+      ['name', 'note'],
+      ['Ada', 'hello, world'],
+      ['Linus', 'uses "quotes"'],
+    ])
   })
 })

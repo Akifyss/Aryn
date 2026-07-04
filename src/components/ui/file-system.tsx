@@ -754,6 +754,11 @@ const LazyXlsxViewerPreview = React.lazy(() =>
     default: mod.XlsxViewerPreview,
   }))
 )
+const LazyCsvViewer = React.lazy(() =>
+  import("@/components/ui/csv-viewer").then((mod) => ({
+    default: mod.CsvViewer,
+  }))
+)
 
 export type FileSystemView = "icons" | "list" | "columns" | "gallery"
 
@@ -1381,7 +1386,7 @@ function fileTypeFilterGroup(mime: string): FileTypeFilterGroup {
   return "Archives & binary"
 }
 
-export type FileSystemViewerKind = "docx" | "image" | "pdf" | "xlsx"
+export type FileSystemViewerKind = "csv" | "docx" | "image" | "pdf" | "xlsx"
 
 function viewerKindForFile(
   file: FileSystemFileItem
@@ -1391,6 +1396,9 @@ function viewerKindForFile(
 
   if (contentType?.startsWith("image/")) return "image"
   if (contentType === "application/pdf") return "pdf"
+  if (contentType === "text/csv" || contentType === "text/tab-separated-values") {
+    return "csv"
+  }
   if (
     contentType ===
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -1408,6 +1416,7 @@ function viewerKindForFile(
   const name = (file.name ?? file.path).toLowerCase()
 
   if (name.endsWith(".pdf")) return "pdf"
+  if (name.endsWith(".csv") || name.endsWith(".tsv")) return "csv"
   if (name.endsWith(".docx")) return "docx"
   if (name.endsWith(".xls") || name.endsWith(".xlsx")) return "xlsx"
   if (/\.(avif|gif|jpe?g|png|svg|webp)$/.test(name)) return "image"
@@ -1418,6 +1427,7 @@ function viewerKindForFile(
 // PDF and DOCX pages want height; spreadsheets want width; images get a
 // roomy but contained frame.
 const VIEWER_DIALOG_CLASSNAMES: Record<FileSystemViewerKind, string> = {
+  csv: "h-[85vh] w-[min(96vw,88rem)] max-w-none",
   docx: "h-[88vh] w-[min(96vw,68rem)] max-w-none",
   image: "max-h-[88vh] w-fit max-w-[min(96vw,64rem)]",
   pdf: "h-[88vh] w-[min(96vw,68rem)] max-w-none",
@@ -1429,6 +1439,73 @@ function FileSystemViewerLoading() {
     <div className="grid h-full min-h-48 flex-1 place-items-center bg-[var(--background-primary)]">
       <Spinner className="size-4 text-[var(--foreground-secondary)]" />
     </div>
+  )
+}
+
+function FileSystemCsvViewerFromUrl({
+  className,
+  search,
+  showDownload,
+  showToolbar,
+  showUpload,
+  url,
+}: {
+  className?: string
+  search?: boolean
+  showDownload?: boolean
+  showToolbar?: boolean
+  showUpload?: boolean
+  url: string
+}) {
+  const [content, setContent] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    let isCurrent = true
+
+    setContent(null)
+    setError(null)
+    void fetch(url)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`\u65e0\u6cd5\u52a0\u8f7d CSV \u6587\u4ef6\uff08${response.status}\uff09`)
+        }
+        return response.text()
+      })
+      .then((text) => {
+        if (isCurrent) setContent(text)
+      })
+      .catch((reason) => {
+        if (!isCurrent) return
+        setError(reason instanceof Error ? reason.message : "\u65e0\u6cd5\u52a0\u8f7d CSV \u6587\u4ef6")
+      })
+
+    return () => {
+      isCurrent = false
+    }
+  }, [url])
+
+  if (error) {
+    return (
+      <div className="grid h-full place-items-center bg-[var(--background-primary)] p-4 text-sm text-[var(--danger)]">
+        {error}
+      </div>
+    )
+  }
+
+  if (content === null) {
+    return <FileSystemViewerLoading />
+  }
+
+  return (
+    <LazyCsvViewer
+      className={className}
+      data={content}
+      search={search}
+      showDownload={showDownload}
+      showToolbar={showToolbar}
+      showUpload={showUpload}
+    />
   )
 }
 
@@ -3720,7 +3797,7 @@ function FileSystemSearchField({
   const input = (
     <div
       className={cn(
-        "relative flex h-8 min-w-0 flex-1 items-center rounded-[8px] border border-[var(--border-primary)] bg-[var(--overlay)] text-sm text-[var(--foreground-primary)] shadow-xs/5 transition-shadow outline-none not-dark:bg-clip-padding before:pointer-events-none before:absolute before:inset-0 before:rounded-[7px] not-focus-within:before:shadow-[0_1px_--theme(--color-black/4%)] focus-within:ring-2 focus-within:ring-[var(--focus)] focus-within:ring-offset-1 focus-within:ring-offset-[var(--background-primary)] dark:bg-[color-mix(in_oklab,var(--border-primary)_32%,transparent)] dark:not-focus-within:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+        "relative flex h-8 min-w-0 flex-1 items-center rounded-[8px] border border-[var(--border-primary)] bg-[var(--overlay)] text-sm text-[var(--foreground-primary)] shadow-xs/5 transition-shadow outline-none not-dark:bg-clip-padding before:pointer-events-none before:absolute before:inset-0 before:rounded-[7px] not-focus-within:before:shadow-[0_1px_color-mix(in_oklab,var(--foreground-primary)_4%,transparent)] focus-within:ring-2 focus-within:ring-[var(--focus)] focus-within:ring-offset-1 focus-within:ring-offset-[var(--background-primary)] dark:bg-[color-mix(in_oklab,var(--border-primary)_32%,transparent)] dark:not-focus-within:before:shadow-[0_-1px_color-mix(in_oklab,var(--foreground-primary)_6%,transparent)]",
         isInline && "max-w-56"
       )}
     >
@@ -6310,10 +6387,7 @@ function FileSystemBuiltInGalleryStage({
     urlCache
   )
   const [isDark, setIsDark] = React.useState(false)
-  const viewerFrameClassName = cn(
-    "size-full",
-    !isDialog && "overflow-hidden rounded-lg border"
-  )
+  const viewerFrameClassName = cn("size-full", !isDialog && "overflow-hidden")
 
   if (viewerKind && isResolving) {
     return <Spinner className="size-6 text-[var(--foreground-secondary)]" />
@@ -6333,11 +6407,9 @@ function FileSystemBuiltInGalleryStage({
         <React.Suspense fallback={<FileSystemViewerLoading />}>
           <LazyPDFViewer
             src={url}
-            className={cn(
-              "h-full",
-              isDialog && "min-h-0 overflow-hidden rounded-2xl"
-            )}
+            className={cn("h-full", isDialog && "min-h-0 overflow-hidden")}
             fileName={file.name}
+            showDownload={false}
             showToolbar={isDialog}
             showUpload={false}
             toolbarActions={toolbarActions}
@@ -6354,14 +6426,29 @@ function FileSystemBuiltInGalleryStage({
             src={url}
             fileName={file.name}
             isDark={isDark}
-            className={cn(
-              "h-full min-h-0",
-              isDialog && "overflow-hidden rounded-2xl"
-            )}
+            className={cn("h-full min-h-0", isDialog && "overflow-hidden")}
             onIsDarkChange={setIsDark}
+            showDownload={false}
+            showNightModeToggle={false}
             showToolbar={isDialog}
             showUpload={false}
             toolbarActions={toolbarActions}
+          />
+        </React.Suspense>
+      </div>
+    )
+  }
+  if (viewerKind === "csv" && url) {
+    return (
+      <div className={viewerFrameClassName}>
+        <React.Suspense fallback={<FileSystemViewerLoading />}>
+          <FileSystemCsvViewerFromUrl
+            url={url}
+            className={cn("h-full min-h-0", isDialog && "overflow-hidden")}
+            search={isDialog}
+            showDownload={false}
+            showToolbar={isDialog}
+            showUpload={false}
           />
         </React.Suspense>
       </div>
@@ -6375,11 +6462,10 @@ function FileSystemBuiltInGalleryStage({
             src={url}
             fileName={file.name}
             isDark={isDark}
-            className={cn(
-              "h-full min-h-0",
-              isDialog && "overflow-hidden rounded-2xl"
-            )}
+            className={cn("h-full min-h-0", isDialog && "overflow-hidden")}
             onIsDarkChange={setIsDark}
+            showDownload={false}
+            showNightModeToggle={false}
             showToolbar={isDialog}
             showUpload={false}
             toolbarActions={toolbarActions}

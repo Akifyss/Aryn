@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   isWorkspaceFileSystemDocx,
+  isWorkspaceFileSystemCsv,
   isWorkspaceFileSystemImage,
   isWorkspaceFileSystemPdf,
   isWorkspaceFileSystemPreviewable,
@@ -286,6 +287,10 @@ describe('workspace file system preview support', () => {
       path: 'docs/legacy.xls',
     })).toBe(true)
     expect(isWorkspaceFileSystemPreviewable({
+      contentType: 'text/csv',
+      path: 'docs/export.csv',
+    })).toBe(true)
+    expect(isWorkspaceFileSystemPreviewable({
       contentType: 'image/heic',
       path: 'images/photo.heic',
     })).toBe(false)
@@ -316,6 +321,10 @@ describe('workspace file system preview support', () => {
       contentType: 'application/vnd.ms-excel',
       path: 'docs/legacy.xls',
     })).toBe(true)
+    expect(isWorkspaceFileSystemCsv({
+      contentType: undefined,
+      path: 'docs/export.tsv',
+    })).toBe(true)
     expect(shouldUseWorkspaceFileDataUrl({
       contentType: 'application/pdf',
       path: 'docs/spec.pdf',
@@ -329,6 +338,10 @@ describe('workspace file system preview support', () => {
       path: 'images/photo.png',
     })).toBe(true)
     expect(shouldUseWorkspaceFileDataUrl({
+      contentType: 'text/csv',
+      path: 'docs/export.csv',
+    })).toBe(true)
+    expect(shouldUseWorkspaceFileDataUrl({
       contentType: undefined,
       path: 'images/photo.jpeg',
     })).toBe(true)
@@ -336,5 +349,25 @@ describe('workspace file system preview support', () => {
       contentType: 'image/heic',
       path: 'images/photo.heic',
     })).toBe(false)
+  })
+
+  it('adds preview metadata for delimited table files', () => {
+    expect(workspaceNodesToFileSystemItems([
+      {
+        contentType: 'text/csv',
+        kind: 'file',
+        name: 'export.csv',
+        path: 'C:\\workspace\\export.csv',
+      },
+    ], 'C:\\workspace')).toEqual([
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          Extension: 'CSV',
+          Kind: '表格',
+        }),
+        previewAspectRatio: 1.35,
+        previewPageCount: 1,
+      }),
+    ])
   })
 })

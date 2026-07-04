@@ -5,28 +5,35 @@ import {
   type WorkspaceFileTabEditorKind,
 } from '@/features/workspace/lib/file-types'
 import {
+  isWorkspaceFileSystemCsv,
   isWorkspaceFileSystemDocx,
   isWorkspaceFileSystemImage,
   isWorkspaceFileSystemPdf,
   isWorkspaceFileSystemSpreadsheet,
 } from '@/features/workspace/lib/workspace-file-system'
 
-export type WorkspaceFileRenderKind = 'code' | 'docx' | 'html' | 'image' | 'meo' | 'pdf' | 'unsupported' | 'xlsx'
+export type WorkspaceFileRenderKind = 'code' | 'csv' | 'docx' | 'html' | 'image' | 'meo' | 'pdf' | 'unsupported' | 'xlsx'
 
 function getBaseName(filePath: string) {
   return filePath.split(/[\\/]/).pop() ?? filePath
 }
 
 function resolveBinaryFileRenderKind(filePath: string): WorkspaceFileRenderKind {
+  const fileName = getBaseName(filePath)
+  const normalizedFileName = fileName.toLowerCase()
+
+  if (/\.(csv|tsv)$/.test(normalizedFileName)) return 'csv'
+
   const file = {
     contentType: inferFileContentType(filePath),
-    name: getBaseName(filePath),
+    name: fileName,
     path: filePath,
   }
 
   if (isWorkspaceFileSystemImage(file)) return 'image'
   if (isWorkspaceFileSystemPdf(file)) return 'pdf'
   if (isWorkspaceFileSystemDocx(file)) return 'docx'
+  if (isWorkspaceFileSystemCsv(file)) return 'csv'
   if (isWorkspaceFileSystemSpreadsheet(file)) return 'xlsx'
 
   return 'unsupported'

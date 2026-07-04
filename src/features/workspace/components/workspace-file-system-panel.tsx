@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/file-system'
 import {
   getWorkspaceFileSystemContentType,
+  isWorkspaceFileSystemCsv,
   isWorkspaceFileSystemDocx,
   isWorkspaceFileSystemImage,
   isWorkspaceFileSystemPdf,
@@ -270,12 +271,23 @@ export function WorkspaceFileSystemPanel({
 
       if (isWorkspaceFileSystemPdf(file)) {
         const url = await getPreviewSourceUrl(file, 'application/pdf')
-        const { renderPdfPageToDataUrlWithPageCount } = await import('@/components/ui/pdf-viewer')
-        return renderPdfPageToDataUrlWithPageCount(url, {
-          maxWidth: 320,
-          pageNumber: pageIndex + 1,
-          pixelRatio: 1,
-        })
+        const { loadPdfDocument, renderPdfThumbnailUrl } = await import('@/components/pdf-thumbnail-utils')
+        const document = await loadPdfDocument(url)
+        const page = document.pages[pageIndex]
+        const thumbnailUrl = page
+          ? await renderPdfThumbnailUrl({
+              dpr: 1,
+              pageIndex,
+              url,
+              width: 320,
+            })
+          : null
+
+        return {
+          pageCount: document.pageCount,
+          previewAspectRatio: page ? page.size.width / page.size.height : null,
+          url: thumbnailUrl,
+        }
       }
 
       if (isWorkspaceFileSystemDocx(file)) {
@@ -283,7 +295,7 @@ export function WorkspaceFileSystemPanel({
           file,
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         )
-        const { renderDocxPageToDataUrlWithPageCount } = await import('@/components/ui/docx-viewer')
+        const { renderDocxPageToDataUrlWithPageCount } = await import('@/components/docx-thumbnail-utils')
 
         return renderDocxPageToDataUrlWithPageCount(url, {
           maxWidth: 320,
@@ -304,6 +316,17 @@ export function WorkspaceFileSystemPanel({
           maxWidth: 360,
           pixelRatio: 1,
           sheetIndex: pageIndex,
+        })
+      }
+
+      if (isWorkspaceFileSystemCsv(file)) {
+        const content = await window.appApi.readWorkspaceFile(resolveFilePath(file))
+        const { renderCsvToDataUrlWithRowCount } = await import('@/components/ui/csv-viewer')
+
+        return renderCsvToDataUrlWithRowCount(content, {
+          maxHeight: 260,
+          maxWidth: 360,
+          pixelRatio: 1,
         })
       }
 

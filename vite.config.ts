@@ -128,10 +128,16 @@ export default defineConfig(({ command }) => {
         },
         // Ployfill the Electron and Node.js API for Renderer process.
         // If you want use Node.js in Renderer process, the `nodeIntegration` needs to be enabled in the Main process.
-        // See 👉 https://github.com/electron-vite/vite-plugin-electron-renderer
+        // See: https://github.com/electron-vite/vite-plugin-electron-renderer
         renderer: {},
       }),
     ],
+    optimizeDeps: {
+      // Extend DOCX/XLSX resolve package-local worker assets. Keep these
+      // entries out of Vite's dep cache so worker URLs remain valid.
+      exclude: ['@extend-ai/react-docx', '@extend-ai/react-xlsx'],
+      include: ['react-dom/server', 'regl', 'utif'],
+    },
     server: {
       ...devServerOptions,
       watch: {
@@ -146,6 +152,11 @@ export default defineConfig(({ command }) => {
       },
     },
     clearScreen: false,
+    worker: {
+      // Extend XLSX ships a split worker bundle; Vite's default iife worker
+      // format fails Rollup's code-splitting build.
+      format: 'es',
+    },
     build: {
       cssMinify: false,
     },
