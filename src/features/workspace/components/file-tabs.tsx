@@ -1,7 +1,7 @@
 import { type DragEvent as ReactDragEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { CloseLine, FolderLine, GitBranchLine, GitCompareLine } from '@mingcute/react'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
-import { AppTooltipButton } from '@/components/app-tooltip'
+import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import {
   reorderWorkspaceTabs,
   type TabDropPosition,
@@ -478,98 +478,102 @@ export function FileTabs({
               data-reorderable={isReorderableTab(tab) ? 'true' : 'false'}
               data-tab-id={tab.id}
             >
-              <AppTooltipButton
-                ref={(element) => {
-                  tabRefs.current[tab.id] = element
-                }}
-                type='button'
-                draggable={isReorderableTab(tab)}
-                role='tab'
-                aria-selected={isActive}
-                aria-controls='editor-content-panel'
-                aria-grabbed={draggingTabId === tab.id}
-                className='file-tab-trigger'
-                isTooltipOpen={labelTooltip?.tabId === tab.id}
+              <AppTooltip
+                isOpen={labelTooltip?.tabId === tab.id}
                 tooltip={labelTooltip?.tabId === tab.id ? labelTooltip.text : baseName}
-                onClick={() => {
-                  onActivate(tab.id)
-                }}
-                onPointerEnter={(event) => {
-                  scheduleLabelTooltip(tab.id, event.currentTarget)
-                }}
-                onPointerLeave={closeLabelTooltip}
-                onFocus={(event) => {
-                  scheduleLabelTooltip(tab.id, event.currentTarget)
-                }}
-                onBlur={closeLabelTooltip}
-                onDragStart={(event) => {
-                  if (!isReorderableTab(tab)) {
-                    event.preventDefault()
-                    return
-                  }
-
-                  closeLabelTooltip()
-                  setDraggingTabId(tab.id)
-                  setDragTarget(null)
-                  event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData('text/plain', tab.id)
-                  const preview = createDragPreview(tab.id)
-                  if (preview) {
-                    event.dataTransfer.setDragImage(preview, 24, Math.max(12, preview.clientHeight / 2))
-                  }
-                }}
-                onDragEnd={() => {
-                  setDraggingTabId(null)
-                  setDragTarget(null)
-                  cleanupDragPreview()
-                }}
-                onAuxClick={(event) => {
-                  if (isPinned) {
-                    return
-                  }
-
-                  if (event.button !== 1) {
-                    return
-                  }
-
-                  event.preventDefault()
-                  onClose(tab.id)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'ArrowRight') {
-                    event.preventDefault()
-                    focusTabAtIndex((index + 1) % tabs.length)
-                    return
-                  }
-
-                  if (event.key === 'ArrowLeft') {
-                    event.preventDefault()
-                    focusTabAtIndex((index - 1 + tabs.length) % tabs.length)
-                    return
-                  }
-
-                  if (event.key === 'Home') {
-                    event.preventDefault()
-                    focusTabAtIndex(0)
-                    return
-                  }
-
-                  if (event.key === 'End') {
-                    event.preventDefault()
-                    focusTabAtIndex(tabs.length - 1)
-                  }
-                }}
+                triggerMode='focusable'
               >
-                {tab.kind === 'fixed-panel' ? (
-                  tab.fixedTabKind === 'file-panel'
-                    ? <FolderLine size={16} className='file-tab-leading-icon' />
-                    : <GitBranchLine size={16} className='file-tab-leading-icon' />
-                ) : fileIconName ? (
-                  <WorkspaceFileIcon fileName={fileIconName} iconTheme={iconTheme} />
-                ) : null}
-                <span className='file-tab-label'>{baseName}</span>
-                {metaLabel ? <span className='file-tab-meta'>{metaLabel}</span> : null}
-              </AppTooltipButton>
+                <button
+                  ref={(element) => {
+                    tabRefs.current[tab.id] = element
+                  }}
+                  type='button'
+                  draggable={isReorderableTab(tab)}
+                  role='tab'
+                  aria-selected={isActive}
+                  aria-controls='editor-content-panel'
+                  aria-grabbed={draggingTabId === tab.id}
+                  className='file-tab-trigger'
+                  onClick={() => {
+                    onActivate(tab.id)
+                  }}
+                  onPointerEnter={(event) => {
+                    scheduleLabelTooltip(tab.id, event.currentTarget)
+                  }}
+                  onPointerLeave={closeLabelTooltip}
+                  onFocus={(event) => {
+                    scheduleLabelTooltip(tab.id, event.currentTarget)
+                  }}
+                  onBlur={closeLabelTooltip}
+                  onDragStart={(event) => {
+                    if (!isReorderableTab(tab)) {
+                      event.preventDefault()
+                      return
+                    }
+
+                    closeLabelTooltip()
+                    setDraggingTabId(tab.id)
+                    setDragTarget(null)
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('text/plain', tab.id)
+                    const preview = createDragPreview(tab.id)
+                    if (preview) {
+                      event.dataTransfer.setDragImage(preview, 24, Math.max(12, preview.clientHeight / 2))
+                    }
+                  }}
+                  onDragEnd={() => {
+                    setDraggingTabId(null)
+                    setDragTarget(null)
+                    cleanupDragPreview()
+                  }}
+                  onAuxClick={(event) => {
+                    if (isPinned) {
+                      return
+                    }
+
+                    if (event.button !== 1) {
+                      return
+                    }
+
+                    event.preventDefault()
+                    onClose(tab.id)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowRight') {
+                      event.preventDefault()
+                      focusTabAtIndex((index + 1) % tabs.length)
+                      return
+                    }
+
+                    if (event.key === 'ArrowLeft') {
+                      event.preventDefault()
+                      focusTabAtIndex((index - 1 + tabs.length) % tabs.length)
+                      return
+                    }
+
+                    if (event.key === 'Home') {
+                      event.preventDefault()
+                      focusTabAtIndex(0)
+                      return
+                    }
+
+                    if (event.key === 'End') {
+                      event.preventDefault()
+                      focusTabAtIndex(tabs.length - 1)
+                    }
+                  }}
+                >
+                  {tab.kind === 'fixed-panel' ? (
+                    tab.fixedTabKind === 'file-panel'
+                      ? <FolderLine size={16} className='file-tab-leading-icon' />
+                      : <GitBranchLine size={16} className='file-tab-leading-icon' />
+                  ) : fileIconName ? (
+                    <WorkspaceFileIcon fileName={fileIconName} iconTheme={iconTheme} />
+                  ) : null}
+                  <span className='file-tab-label'>{baseName}</span>
+                  {metaLabel ? <span className='file-tab-meta'>{metaLabel}</span> : null}
+                </button>
+              </AppTooltip>
 
               {!isPinned ? (
                 <div className='file-tab-actions'>

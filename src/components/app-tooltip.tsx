@@ -28,7 +28,28 @@ type AppTooltipProps = {
   triggerRole?: ComponentProps<typeof Tooltip.Trigger>['role']
 }
 
-type AppTooltipButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & {
+type UnsupportedTooltipButtonNativeProps =
+  // React Aria Button filters native drag/drop props; use AppTooltip with a
+  // native button when the button itself must participate in HTML drag/drop.
+  | 'draggable'
+  | 'onDrag'
+  | 'onDragCapture'
+  | 'onDragEnd'
+  | 'onDragEndCapture'
+  | 'onDragEnter'
+  | 'onDragEnterCapture'
+  | 'onDragExit'
+  | 'onDragExitCapture'
+  | 'onDragLeave'
+  | 'onDragLeaveCapture'
+  | 'onDragOver'
+  | 'onDragOverCapture'
+  | 'onDragStart'
+  | 'onDragStartCapture'
+  | 'onDrop'
+  | 'onDropCapture'
+
+type AppTooltipButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | UnsupportedTooltipButtonNativeProps> & {
   children?: ReactNode
   closeDelay?: number
   delay?: number

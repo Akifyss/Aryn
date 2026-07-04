@@ -67,6 +67,11 @@ describe('shell layout helpers', () => {
     return treeSource.replace(/\r\n/g, '\n')
   }
 
+  async function readFileTabsSource() {
+    const fileTabsSource = await readFile(new URL('../src/features/workspace/components/file-tabs.tsx', import.meta.url), 'utf8')
+    return fileTabsSource.replace(/\r\n/g, '\n')
+  }
+
   it('derives the expected three layout modes from shell width', () => {
     expect(deriveLayoutMode(FULL_LAYOUT_BREAKPOINT + 1)).toBe('full')
     expect(deriveLayoutMode(FULL_LAYOUT_BREAKPOINT)).toBe('compact')
@@ -231,6 +236,18 @@ describe('shell layout helpers', () => {
   display: inline-flex;
   flex-shrink: 0;
 }`)
+  })
+
+  it('keeps file tab drag events on the native tab trigger', async () => {
+    const fileTabsSource = await readFileTabsSource()
+    const tabTooltipBlock = fileTabsSource.match(/<AppTooltip\s+isOpen=\{labelTooltip\?\.tabId === tab\.id\}[\s\S]*?<\/AppTooltip>/)?.[0]
+
+    expect(tabTooltipBlock).toBeDefined()
+    expect(tabTooltipBlock).toContain("triggerMode='focusable'")
+    expect(tabTooltipBlock).toContain('<button')
+    expect(tabTooltipBlock).toContain('draggable={isReorderableTab(tab)}')
+    expect(tabTooltipBlock).toContain('onDragStart={(event) => {')
+    expect(tabTooltipBlock).not.toContain('<AppTooltipButton')
   })
 
   it('uses the workspace FileSystem for the Agent fixed file tab', async () => {
