@@ -37,6 +37,7 @@ import {
   ViewerMenuRoot as DropdownMenu,
   ViewerMenuSeparator as DropdownMenuSeparator,
   ViewerMenuTrigger as DropdownMenuTrigger,
+  ViewerPageNumberControl,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
@@ -442,83 +443,16 @@ function DocxPageNumberControl({
   pageCount: number;
 }) {
   const activePage = useDocxActivePage(activePageStore);
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const displayPage = pageCount ? activePage : 1;
-  const pageInputWidth = `${Math.max(2, String(pageCount || displayPage).length) + 2}ch`;
-  const [isEditing, setIsEditing] = React.useState(false);
-  const [draftPage, setDraftPage] = React.useState(() => String(displayPage));
-
-  React.useEffect(() => {
-    if (!isEditing) {
-      setDraftPage(String(displayPage));
-    }
-  }, [displayPage, isEditing]);
-
-  React.useEffect(() => {
-    if (!isEditing) return;
-
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }, [isEditing]);
-
-  const applyPageDraft = React.useCallback(
-    (value: string) => {
-      const trimmedValue = value.trim();
-
-      if (!trimmedValue) return;
-
-      const parsedPage = Number(trimmedValue);
-
-      if (!Number.isInteger(parsedPage)) return;
-
-      onPageChange(Math.min(Math.max(parsedPage, 1), Math.max(pageCount, 1)));
-    },
-    [onPageChange, pageCount],
-  );
 
   return (
-    <div className="flex items-center gap-1.5 text-sm whitespace-nowrap text-[var(--foreground-secondary)]">
-      <span>{VIEWER_COPY.page}</span>
-      {isEditing ? (
-        <input
-          ref={inputRef}
-          aria-label={VIEWER_COPY.pageNumber}
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={draftPage}
-          style={{ width: pageInputWidth }}
-          className="h-7 min-w-10 rounded-md border border-[var(--border-primary)] bg-[var(--background-primary)] px-1.5 text-center text-sm font-medium tabular-nums text-[var(--foreground-primary)] shadow-xs/5 outline-none focus-visible:border-[var(--focus)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--focus)_24%,transparent)]"
-          onBlur={() => setIsEditing(false)}
-          onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-            const nextValue = event.target.value;
-
-            setDraftPage(nextValue);
-            applyPageDraft(nextValue);
-          }}
-          onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
-            if (event.key === "Enter" || event.key === "Escape") {
-              event.currentTarget.blur();
-            }
-          }}
-        />
-      ) : (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 min-w-7 px-1.5 font-medium tabular-nums text-[var(--foreground-primary)]"
-          aria-label={`${VIEWER_COPY.currentPageEdit}：${displayPage}`}
-          disabled={controlsDisabled || !pageCount}
-          onClick={() => {
-            setDraftPage(String(displayPage));
-            setIsEditing(true);
-          }}
-        >
-          {displayPage}
-        </Button>
-      )}
-      <span>/ {pageCount || "-"}</span>
-    </div>
+    <ViewerPageNumberControl
+      activePage={activePage}
+      controlsDisabled={controlsDisabled}
+      currentPageEditLabel={VIEWER_COPY.currentPageEdit}
+      onPageChange={onPageChange}
+      pageCount={pageCount}
+      pageNumberLabel={VIEWER_COPY.pageNumber}
+    />
   );
 }
 

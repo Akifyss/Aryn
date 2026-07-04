@@ -37,6 +37,7 @@ import {
   ViewerPopoverContent as PopoverContent,
   ViewerPopoverRoot as Popover,
   ViewerPopoverTrigger as PopoverTrigger,
+  ViewerPageNumberControl,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
@@ -326,9 +327,6 @@ function PptxToolbar({
   toolbarActions?: React.ReactNode;
   zoomPercent: number;
 }) {
-  const canGoPrevious = !controlsDisabled && activeSlideIndex > 0;
-  const canGoNext = !controlsDisabled && activeSlideIndex < slideCount - 1;
-
   return (
     <div className="viewer-toolbar justify-between">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -340,35 +338,14 @@ function PptxToolbar({
             <Separator className="mx-1" />
           </>
         ) : null}
-        <div className="flex flex-none items-center gap-1">
-          <ToolbarTooltip label="上一张幻灯片">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="上一张幻灯片"
-              disabled={!canGoPrevious}
-              onClick={() => onGoToSlide(activeSlideIndex - 1)}
-            >
-              <LeftLine className="size-4" />
-            </Button>
-          </ToolbarTooltip>
-          <span className="viewer-toolbar-status">
-            {slideCount ? activeSlideIndex + 1 : "-"} / {slideCount || "-"}
-          </span>
-          <ToolbarTooltip label="下一张幻灯片">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="下一张幻灯片"
-              disabled={!canGoNext}
-              onClick={() => onGoToSlide(activeSlideIndex + 1)}
-            >
-              <RightLine className="size-4" />
-            </Button>
-          </ToolbarTooltip>
-        </div>
+        <ViewerPageNumberControl
+          activePage={activeSlideIndex + 1}
+          controlsDisabled={controlsDisabled}
+          currentPageEditLabel={VIEWER_COPY.currentPageEdit}
+          onPageChange={(pageNumber) => onGoToSlide(pageNumber - 1)}
+          pageCount={slideCount}
+          pageNumberLabel={VIEWER_COPY.pageNumber}
+        />
       </div>
       <div className="viewer-toolbar-title text-center">{fileName}</div>
       <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">

@@ -2529,12 +2529,62 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   cursor: default;
 }
 
-.viewer-toolbar-status {
-  min-width: 56px;
+.viewer-toolbar-page-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 32px;
+  gap: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--background-primary);
   color: var(--foreground-secondary);
-  font-size: 12px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
-  text-align: center;
+  line-height: 1;
+  white-space: nowrap;
+  outline: none;
+  transition:
+    background-color 140ms ease,
+    opacity 140ms ease;
+}
+
+.viewer-toolbar-page-control:is(button) {
+  cursor: pointer;
+}
+
+.viewer-toolbar-page-control:is(button):hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.viewer-toolbar-page-control:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.viewer-toolbar-page-current,
+.viewer-toolbar-page-input {
+  color: var(--foreground-primary);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.viewer-toolbar-page-input {
+  min-width: 2ch;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+}
+
+.viewer-toolbar-page-divider,
+.viewer-toolbar-page-total {
+  color: var(--foreground-secondary);
 }
 
 .viewer-toolbar-separator {

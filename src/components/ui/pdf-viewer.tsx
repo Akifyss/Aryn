@@ -93,6 +93,7 @@ import {
   ViewerPopoverContent as PopoverContent,
   ViewerPopoverRoot as Popover,
   ViewerPopoverTrigger as PopoverTrigger,
+  ViewerPageNumberControl,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
@@ -608,91 +609,6 @@ function PDFViewerFileActionsMenu({
         </DropdownMenuContent>
       </DropdownMenu>
     </>
-  );
-}
-
-function PDFViewerPageNumberControl({
-  activePage,
-  controlsDisabled,
-  numPages,
-  onPageChange,
-}: {
-  activePage: number;
-  controlsDisabled: boolean;
-  numPages: number;
-  onPageChange: (pageNumber: number) => void;
-}) {
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const displayPage = numPages ? activePage : 1;
-  const pageInputWidth = `${Math.max(2, String(numPages || displayPage).length) + 2}ch`;
-  const [isEditing, setIsEditing] = React.useState(false);
-  const [draftPage, setDraftPage] = React.useState(() => String(displayPage));
-
-  React.useEffect(() => {
-    if (!isEditing) return;
-
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }, [isEditing]);
-
-  const applyPageDraft = React.useCallback(
-    (value: string) => {
-      const trimmedValue = value.trim();
-
-      if (!trimmedValue) return;
-
-      const parsedPage = Number(trimmedValue);
-
-      if (!Number.isInteger(parsedPage)) return;
-
-      onPageChange(Math.min(Math.max(parsedPage, 1), Math.max(numPages, 1)));
-    },
-    [numPages, onPageChange],
-  );
-
-  return (
-    <div className="flex items-center gap-1.5 text-sm whitespace-nowrap text-[var(--foreground-secondary)]">
-      <span>{VIEWER_COPY.page}</span>
-      {isEditing ? (
-        <input
-          ref={inputRef}
-          aria-label={VIEWER_COPY.pageNumber}
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={draftPage}
-          style={{ width: pageInputWidth }}
-          className="h-7 min-w-10 rounded-md border border-[var(--border-primary)] bg-[var(--background-primary)] px-1.5 text-center text-sm font-medium tabular-nums text-[var(--foreground-primary)] shadow-xs/5 outline-none focus-visible:border-[var(--focus)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--focus)_24%,transparent)]"
-          onBlur={() => setIsEditing(false)}
-          onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-            const nextValue = event.target.value;
-
-            setDraftPage(nextValue);
-            applyPageDraft(nextValue);
-          }}
-          onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
-            if (event.key === "Enter" || event.key === "Escape") {
-              event.currentTarget.blur();
-            }
-          }}
-        />
-      ) : (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 min-w-7 px-1.5 font-medium tabular-nums text-[var(--foreground-primary)]"
-          aria-label={`${VIEWER_COPY.currentPageEdit}：${displayPage}`}
-          disabled={controlsDisabled || !numPages}
-          onClick={() => {
-            setDraftPage(String(displayPage));
-            setIsEditing(true);
-          }}
-        >
-          {displayPage}
-        </Button>
-      )}
-      <span>/ {numPages || "-"}</span>
-    </div>
   );
 }
 
@@ -2266,11 +2182,13 @@ function PDFViewerInner({
                 <LayoutLeftLine className="size-4" />
               </Button>
             </ToolbarTooltip>
-            <PDFViewerPageNumberControl
+            <ViewerPageNumberControl
               activePage={activePage}
               controlsDisabled={controlsDisabled}
-              numPages={numPages}
+              currentPageEditLabel={VIEWER_COPY.currentPageEdit}
               onPageChange={scrollToPage}
+              pageCount={numPages}
+              pageNumberLabel={VIEWER_COPY.pageNumber}
             />
           </div>
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">

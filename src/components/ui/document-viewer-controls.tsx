@@ -74,6 +74,149 @@ export function ViewerToolbarSeparator({ className }: { className?: string }) {
   );
 }
 
+export function ViewerPageNumberControl({
+  activePage,
+  className,
+  controlsDisabled = false,
+  currentPageEditLabel,
+  onPageChange,
+  pageCount,
+  pageNumberLabel,
+}: {
+  activePage: number;
+  className?: string;
+  controlsDisabled?: boolean;
+  currentPageEditLabel: string;
+  onPageChange: (pageNumber: number) => void;
+  pageCount: number;
+  pageNumberLabel: string;
+}) {
+  const normalizedPageCount = Number.isFinite(pageCount)
+    ? Math.max(0, Math.floor(pageCount))
+    : 0;
+  const normalizedActivePage = Number.isFinite(activePage) ? activePage : 1;
+  const displayPage = normalizedPageCount
+    ? clampPageNumber(normalizedActivePage, normalizedPageCount)
+    : 1;
+  const disabled = controlsDisabled || !normalizedPageCount;
+  const pageNumberWidth = `${Math.max(2, String(Math.max(normalizedPageCount, displayPage)).length)}ch`;
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [draftPage, setDraftPage] = React.useState(() => String(displayPage));
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (!isEditing) {
+      setDraftPage(String(displayPage));
+    }
+  }, [displayPage, isEditing]);
+
+  React.useEffect(() => {
+    if (!isEditing) return;
+
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [isEditing]);
+
+  React.useEffect(() => {
+    if (disabled && isEditing) {
+      setIsEditing(false);
+    }
+  }, [disabled, isEditing]);
+
+  const applyPageDraft = React.useCallback(
+    (value: string) => {
+      if (!normalizedPageCount) return;
+
+      const trimmedValue = value.trim();
+      if (!/^\d+$/.test(trimmedValue)) return;
+
+      const parsedPage = Number(trimmedValue);
+      if (!Number.isInteger(parsedPage)) return;
+
+      onPageChange(clampPageNumber(parsedPage, normalizedPageCount));
+    },
+    [normalizedPageCount, onPageChange],
+  );
+
+  const editLabel = `${currentPageEditLabel}：${displayPage}`;
+  const totalLabel = normalizedPageCount ? String(normalizedPageCount) : "-";
+
+  if (isEditing) {
+    return (
+      <form
+        aria-label={pageNumberLabel}
+        className={cn("viewer-toolbar-page-control", className)}
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          applyPageDraft(draftPage);
+          setIsEditing(false);
+        }}
+      >
+        <input
+          ref={inputRef}
+          aria-label={pageNumberLabel}
+          className="viewer-toolbar-page-input"
+          disabled={disabled}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          style={{ width: pageNumberWidth }}
+          value={draftPage}
+          onBlur={() => setIsEditing(false)}
+          onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+            const nextValue = event.target.value;
+
+            setDraftPage(nextValue);
+            applyPageDraft(nextValue);
+          }}
+          onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setDraftPage(String(displayPage));
+              setIsEditing(false);
+              return;
+            }
+
+            if (event.key === "Enter") {
+              event.preventDefault();
+              applyPageDraft(event.currentTarget.value);
+              setIsEditing(false);
+            }
+          }}
+        />
+        <span aria-hidden="true" className="viewer-toolbar-page-divider">
+          /
+        </span>
+        <span className="viewer-toolbar-page-total">{totalLabel}</span>
+      </form>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label={editLabel}
+      className={cn("viewer-toolbar-page-control", className)}
+      disabled={disabled}
+      onClick={() => {
+        setDraftPage(String(displayPage));
+        setIsEditing(true);
+      }}
+    >
+      <span
+        className="viewer-toolbar-page-current"
+        style={{ width: pageNumberWidth }}
+      >
+        {displayPage}
+      </span>
+      <span aria-hidden="true" className="viewer-toolbar-page-divider">
+        /
+      </span>
+      <span className="viewer-toolbar-page-total">{totalLabel}</span>
+    </button>
+  );
+}
+
 function ViewerZoomSelect({
   ariaLabel,
   className,
@@ -268,6 +411,10 @@ function getAdjacentZoomValue(
   }
 
   return null;
+}
+
+function clampPageNumber(pageNumber: number, pageCount: number) {
+  return Math.min(Math.max(pageNumber, 1), Math.max(pageCount, 1));
 }
 
 export const __documentViewerControlsTestHooks = {
