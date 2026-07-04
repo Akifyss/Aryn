@@ -10,6 +10,7 @@ import {
   XlsxViewerProvider,
   type XlsxCellAddress,
   type XlsxScrollerRenderProps,
+  type XlsxSheetThumbnail,
   type XlsxSheetData,
   type XlsxTableHeaderMenuRenderProps,
   type XlsxViewerController,
@@ -66,13 +67,17 @@ const XLSX_GRID_HEADER_HEIGHT = 24;
 const XLSX_GRID_ROW_HEADER_WIDTH = 40;
 const XLSX_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 const ZOOM_OPTIONS = [10, 25, 50, 75, 100, 125, 150, 175, 200, 400] as const;
+const XLSX_SHEET_TAB_PREVIEW_WIDTH = 220;
+const XLSX_SHEET_TAB_PREVIEW_HEIGHT = 140;
+const XLSX_SHEET_TAB_PREVIEW_GAP = 12;
+const XLSX_SHEET_TAB_PREVIEW_OPEN_DELAY_MS = 500;
 
 // Stable reference so the thumbnails memo isn't invalidated on every render
 // (e.g. by selection changes), which would recompute every sheet thumbnail.
 const XLSX_SHEET_TAB_THUMBNAIL_OPTIONS = {
   resolution: {
-    maxHeight: 360,
-    maxWidth: 560,
+    maxHeight: XLSX_SHEET_TAB_PREVIEW_HEIGHT,
+    maxWidth: XLSX_SHEET_TAB_PREVIEW_WIDTH,
   },
 } as const;
 
@@ -949,6 +954,31 @@ export function WorkbookSheetTabs({
   );
 }
 
+function WorkbookSheetPreviewCanvas({
+  sheetName,
+  thumbnail,
+}: {
+  sheetName: string;
+  thumbnail: XlsxSheetThumbnail;
+}) {
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+
+  React.useEffect(() => {
+    thumbnail.paint(canvasRef.current);
+  }, [thumbnail]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-label={`${sheetName} 预览`}
+      role="img"
+      className="block max-h-full max-w-full"
+      height={thumbnail.height}
+      width={thumbnail.width}
+    />
+  );
+}
+
 const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
   activeSheetIndex,
   onActiveSheetIndexChange,
@@ -965,9 +995,13 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
   const { thumbnails } = useXlsxViewerThumbnails(
     XLSX_SHEET_TAB_THUMBNAIL_OPTIONS,
   );
-  const [thumbnailUrls, setThumbnailUrls] = React.useState<
-    Record<number, string>
-  >({});
+  const thumbnailBySheetIndex = React.useMemo(
+    () =>
+      new Map(
+        thumbnails.map((thumbnail) => [thumbnail.sheetIndex, thumbnail]),
+      ),
+    [thumbnails],
+  );
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const itemRefs = React.useRef<Record<number, HTMLElement | null>>({});
   const openTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(
@@ -976,11 +1010,6 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
   const closeTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const previewWidth = 220;
-  const previewHeight = (previewWidth * 7) / 11;
-  const previewGap = 12;
-  const previewOpenDelayMs = 500;
-
   const clearOpenTimeout = React.useCallback(() => {
     if (openTimeoutRef.current) {
       clearTimeout(openTimeoutRef.current);
@@ -1004,15 +1033,23 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
 
       const itemRect = item.getBoundingClientRect();
       const centeredLeft =
-        itemRect.left + itemRect.width / 2 - previewWidth / 2;
+        itemRect.left + itemRect.width / 2 - XLSX_SHEET_TAB_PREVIEW_WIDTH / 2;
       const minLeft = 8;
-      const maxLeft = Math.max(minLeft, window.innerWidth - previewWidth - 8);
+      const maxLeft = Math.max(
+        minLeft,
+        window.innerWidth - XLSX_SHEET_TAB_PREVIEW_WIDTH - 8,
+      );
       const left = Math.max(minLeft, Math.min(centeredLeft, maxLeft));
-      const top = Math.max(8, itemRect.top - previewHeight - previewGap);
+      const top = Math.max(
+        8,
+        itemRect.top -
+          XLSX_SHEET_TAB_PREVIEW_HEIGHT -
+          XLSX_SHEET_TAB_PREVIEW_GAP,
+      );
 
       return { left, top };
     },
-    [previewHeight],
+    [],
   );
 
   const updatePreviewPosition = React.useCallback(
@@ -1038,7 +1075,7 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
       openTimeoutRef.current = setTimeout(() => {
         setPreviewPosition(nextPreviewPosition);
         setVisiblePreviewIndex(sheetIndex);
-      }, previewOpenDelayMs);
+      }, XLSX_SHEET_TAB_PREVIEW_OPEN_DELAY_MS);
     },
     [
       clearCloseTimeout,
@@ -1068,27 +1105,7 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
     clearCloseTimeout();
     setVisiblePreviewIndex(null);
     setPreviewPosition({ left: 0, top: 0 });
-    setThumbnailUrls({});
   }, [clearCloseTimeout, clearOpenTimeout, workbookIdentity]);
-
-  React.useEffect(() => {
-    thumbnails.forEach((thumbnail) => {
-      setThumbnailUrls((current) => {
-        if (current[thumbnail.sheetIndex]) return current;
-
-        const canvas = document.createElement("canvas");
-        canvas.width = thumbnail.width;
-        canvas.height = thumbnail.height;
-
-        if (!thumbnail.paint(canvas)) return current;
-
-        return {
-          ...current,
-          [thumbnail.sheetIndex]: canvas.toDataURL("image/png"),
-        };
-      });
-    });
-  }, [thumbnails]);
 
   React.useEffect(() => {
     if (visiblePreviewIndex === null) return;
@@ -1138,10 +1155,10 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
 
   const previewSheet =
     visiblePreviewIndex === null ? null : sheets[visiblePreviewIndex];
-  const previewUrl =
+  const previewThumbnail =
     visiblePreviewIndex === null
       ? null
-      : (thumbnailUrls[visiblePreviewIndex] ?? null);
+      : (thumbnailBySheetIndex.get(visiblePreviewIndex) ?? null);
 
   return (
     <div
@@ -1182,23 +1199,24 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
       {typeof document !== "undefined" &&
       previewSheet &&
       visiblePreviewIndex !== null &&
-      previewUrl
+      previewThumbnail
         ? createPortal(
             <div
               className="pointer-events-none fixed z-40 translate-y-0 overflow-hidden rounded-lg border bg-[color-mix(in_oklab,var(--background-primary)_95%,transparent)] opacity-100 shadow-xl backdrop-blur-md transition-[opacity,transform] duration-100"
               style={{
                 left: previewPosition.left,
                 top: previewPosition.top,
-                width: previewWidth,
+                width: XLSX_SHEET_TAB_PREVIEW_WIDTH,
               }}
             >
-              <div className="relative aspect-[11/7] w-full overflow-hidden bg-[color-mix(in_oklab,var(--background-secondary)_60%,transparent)]">
-                {/* eslint-disable-next-line @next/next/no-img-element -- Workbook sheet previews are generated runtime image URLs. */}
-                <img
-                  key={`${workbookIdentity}-${visiblePreviewIndex}-${previewUrl}`}
-                  src={previewUrl}
-                  alt={`${previewSheet.name} 预览`}
-                  className="absolute inset-0 h-full w-full object-cover object-left-top"
+              <div
+                className="flex w-full items-start justify-start overflow-hidden bg-[color-mix(in_oklab,var(--background-secondary)_60%,transparent)]"
+                style={{ height: XLSX_SHEET_TAB_PREVIEW_HEIGHT }}
+              >
+                <WorkbookSheetPreviewCanvas
+                  key={`${workbookIdentity}-${visiblePreviewIndex}-${previewSheet.workbookSheetIndex}`}
+                  sheetName={previewSheet.name}
+                  thumbnail={previewThumbnail}
                 />
               </div>
             </div>,
@@ -1663,7 +1681,10 @@ function XlsxWorkbookLoadedViewer({
         fileName,
         maxFileSizeBytes: XLSX_MAX_FILE_SIZE_BYTES,
         readOnly: true,
-        useWorker: true,
+        // Extend's thumbnail renderer reads cell values from controller.workbook.
+        // A worker-backed read-only controller intentionally keeps that workbook
+        // in the worker, so thumbnails contain headers/gridlines but no cell text.
+        useWorker: false,
       }),
       [fileName, workbookBuffer],
     ),
