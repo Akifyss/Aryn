@@ -79,7 +79,7 @@ export function DocumentViewerThumbnailSidebar({
       data-sidebar-mode={inline ? "inline" : "overlay"}
       data-sidebar-open={open ? "true" : "false"}
       className={cn(
-        "absolute inset-y-0 left-0 z-30 shrink-0 overflow-hidden border-r bg-[var(--sidebar)] shadow-lg",
+        "absolute inset-y-0 left-0 z-30 shrink-0 overflow-hidden border-r bg-[var(--background-primary)] shadow-lg",
         widthClassName,
         shouldAnimateSidebar
           ? "transition-[translate,margin-left,border-color] duration-200 ease-out"
@@ -110,7 +110,7 @@ export function DocumentViewerSidebarSkeleton({
   return (
     <div
       className={cn(
-        "w-40 shrink-0 border-r bg-[var(--sidebar)] p-4",
+        "w-40 shrink-0 border-r bg-[var(--background-primary)] p-4",
         className,
       )}
     >

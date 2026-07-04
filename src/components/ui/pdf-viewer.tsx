@@ -450,7 +450,7 @@ function PDFViewerLoadingSkeleton({
   sidebarInline: boolean;
 }) {
   return (
-    <div className="absolute inset-0 z-20 flex bg-[color-mix(in_oklab,var(--background-secondary)_30%,transparent)]">
+    <div className="absolute inset-0 z-20 flex bg-[var(--background-primary)]">
       {sidebarOpen ? (
         <DocumentViewerSidebarSkeleton
           className={THUMBNAIL_SIDEBAR_WIDTH_CLASS}
@@ -503,7 +503,7 @@ function PDFViewerFallbackShell({
           ) : null}
         </div>
       ) : null}
-      <div className="relative flex min-h-0 flex-1 overflow-hidden bg-[color-mix(in_oklab,var(--background-secondary)_30%,transparent)]">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden bg-[var(--background-primary)]">
         {state === "loading" ? (
           <PDFViewerLoadingSkeleton sidebarInline sidebarOpen={sidebarOpen} />
         ) : null}
@@ -2389,7 +2389,7 @@ function PDFViewerInner({
       ) : null}
       <div
         ref={viewerShellRef}
-        className="relative flex min-h-0 flex-1 overflow-hidden bg-[color-mix(in_oklab,var(--background-secondary)_30%,transparent)]"
+        className="relative flex min-h-0 flex-1 overflow-hidden bg-[var(--background-primary)]"
       >
         {isLoading ? (
           <PDFViewerLoadingSkeleton

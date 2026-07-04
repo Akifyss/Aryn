@@ -4,6 +4,8 @@ import * as React from "react";
 import type * as GlideDataGrid from "@glideapps/glide-data-grid";
 import type {
   DataEditorRef,
+  DrawCellCallback,
+  DrawHeaderCallback,
   GridCell,
   GridCellKind,
   GridColumn,
@@ -51,6 +53,43 @@ const ZOOM_OPTIONS = [0.75, 1, 1.25, 1.5, 2] as const;
 const CSV_SEARCH_BATCH_ROW_COUNT = 500;
 const CSV_SEARCH_DEBOUNCE_MS = 300;
 type GlideDataGridModule = typeof GlideDataGrid;
+
+function getCsvRowMarkerWidth(rowCount: number) {
+  // Match Glide's default number row marker sizing. The width is explicit
+  // because the custom separator needs the same sticky boundary coordinate.
+  return rowCount > 10_000
+    ? 48
+    : rowCount > 1000
+      ? 44
+      : rowCount > 100
+        ? 36
+        : 32;
+}
+
+function shouldDrawGlideCsvVerticalBorder(columnIndex: number) {
+  // DataEditor maps the row marker trailing edge to column 0 for vertical
+  // borders. We redraw that separator once below, outside Glide's sticky
+  // boundary overdraw path, so it stays visible without darkening on scroll.
+  return columnIndex !== 0;
+}
+
+function drawCsvRowMarkerSeparator(
+  ctx: CanvasRenderingContext2D,
+  rect: { x: number; y: number; width: number; height: number },
+  rowMarkerWidth: number,
+  color: string,
+) {
+  if (rect.x > rowMarkerWidth || rect.x + rect.width <= rowMarkerWidth) return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(rowMarkerWidth + 0.5, rect.y);
+  ctx.lineTo(rowMarkerWidth + 0.5, rect.y + rect.height);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+  ctx.restore();
+}
 
 type CsvViewerProps = {
   className?: string;
@@ -719,6 +758,35 @@ export function CsvViewer({
       })),
     [columnCount, parsed.headers, scale],
   );
+  const rowMarkerWidth = getCsvRowMarkerWidth(parsed.rows.length);
+  const rowMarkers = React.useMemo(
+    () => ({ kind: "number" as const, width: rowMarkerWidth }),
+    [rowMarkerWidth],
+  );
+  const drawHeader = React.useCallback<DrawHeaderCallback>(
+    (args, drawContent) => {
+      drawContent();
+      drawCsvRowMarkerSeparator(
+        args.ctx,
+        args.rect,
+        rowMarkerWidth,
+        args.theme.borderColor,
+      );
+    },
+    [rowMarkerWidth],
+  );
+  const drawCell = React.useCallback<DrawCellCallback>(
+    (args, drawContent) => {
+      drawContent();
+      drawCsvRowMarkerSeparator(
+        args.ctx,
+        args.rect,
+        rowMarkerWidth,
+        args.theme.borderColor,
+      );
+    },
+    [rowMarkerWidth],
+  );
 
   const getCellContent = React.useCallback(
     ([col, row]: Item): GridCell => {
@@ -914,7 +982,7 @@ export function CsvViewer({
             columns={columns}
             rows={parsed.rows.length}
             getCellContent={getCellContent}
-            rowMarkers="number"
+            rowMarkers={rowMarkers}
             rowSelectionMode="multi"
             gridSelection={search ? gridSelection : undefined}
             onGridSelectionChange={
@@ -928,6 +996,9 @@ export function CsvViewer({
             width="100%"
             height="100%"
             theme={theme}
+            drawHeader={drawHeader}
+            drawCell={drawCell}
+            verticalBorder={shouldDrawGlideCsvVerticalBorder}
             rowHeight={scale(34)}
             headerHeight={scale(36)}
           />
