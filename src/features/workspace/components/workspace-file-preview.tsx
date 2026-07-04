@@ -1,8 +1,9 @@
-﻿import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Fullscreen2Line, ZoomInLine, ZoomOutLine } from '@mingcute/react'
+﻿import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fullscreen2Line } from '@mingcute/react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
 import { AppTooltipButton } from '@/components/app-tooltip'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
+import { ViewerZoomControls } from '@/components/ui/document-viewer-controls'
 import { HtmlPreview } from '@/features/editor/components/html-preview'
 import { inferFileContentType } from '@/lib/file-content-types'
 import type { GitRepositoryState } from '@/features/git/types'
@@ -79,12 +80,55 @@ type PreviewState =
     }
 
 const IMAGE_PREVIEW_WHEEL_STEP = 0.04
-const IMAGE_PREVIEW_CONTROL_STEP = 0.1
 const IMAGE_PREVIEW_DOUBLE_CLICK_STEP = 0.4
 const IMAGE_PREVIEW_ZOOM_ANIMATION_MS = 140
+const IMAGE_PREVIEW_DEFAULT_ZOOM_PERCENT = 100
+const IMAGE_PREVIEW_ZOOM_OPTIONS = [10, 25, 50, 75, 100, 125, 150, 175, 200, 400, 800] as const
+const IMAGE_PREVIEW_MIN_SCALE = IMAGE_PREVIEW_ZOOM_OPTIONS[0] / 100
+const IMAGE_PREVIEW_MAX_SCALE = IMAGE_PREVIEW_ZOOM_OPTIONS[IMAGE_PREVIEW_ZOOM_OPTIONS.length - 1] / 100
+
+type ImagePreviewTransformState = {
+  positionX: number
+  positionY: number
+  scale: number
+}
 
 function cn(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(' ')
+}
+
+function calculateImagePreviewCenteredZoomTransform({
+  currentTransformState,
+  nextScale,
+  viewportHeight,
+  viewportWidth,
+}: {
+  currentTransformState: ImagePreviewTransformState
+  nextScale: number
+  viewportHeight: number
+  viewportWidth: number
+}): ImagePreviewTransformState {
+  if (!viewportWidth || !viewportHeight || currentTransformState.scale === 0) {
+    return {
+      ...currentTransformState,
+      scale: nextScale,
+    }
+  }
+
+  const viewportCenterX = viewportWidth / 2
+  const viewportCenterY = viewportHeight / 2
+  const contentCenterX = (viewportCenterX - currentTransformState.positionX) / currentTransformState.scale
+  const contentCenterY = (viewportCenterY - currentTransformState.positionY) / currentTransformState.scale
+
+  return {
+    positionX: viewportCenterX - contentCenterX * nextScale,
+    positionY: viewportCenterY - contentCenterY * nextScale,
+    scale: nextScale,
+  }
+}
+
+export const __workspaceFilePreviewTestHooks = {
+  calculateImagePreviewCenteredZoomTransform,
 }
 
 function getBaseName(filePath: string) {
@@ -156,6 +200,32 @@ function ImagePreviewViewer({
   src: string
   toolbarActions?: ReactNode
 }) {
+  const transformStateRef = useRef({
+    positionX: 0,
+    positionY: 0,
+    scale: IMAGE_PREVIEW_DEFAULT_ZOOM_PERCENT / 100,
+  })
+  const zoomSurfaceRef = useRef<HTMLDivElement | null>(null)
+  const [imageZoomPercent, setImageZoomPercentState] = useState(IMAGE_PREVIEW_DEFAULT_ZOOM_PERCENT)
+
+  useEffect(() => {
+    transformStateRef.current = {
+      positionX: 0,
+      positionY: 0,
+      scale: IMAGE_PREVIEW_DEFAULT_ZOOM_PERCENT / 100,
+    }
+    setImageZoomPercentState(IMAGE_PREVIEW_DEFAULT_ZOOM_PERCENT)
+  }, [src])
+
+  function syncImageTransformState(transformState: ImagePreviewTransformState) {
+    transformStateRef.current = transformState
+    const nextZoomPercent = Math.round(transformState.scale * 100)
+
+    setImageZoomPercentState((currentZoomPercent) =>
+      currentZoomPercent === nextZoomPercent ? currentZoomPercent : nextZoomPercent
+    )
+  }
+
   return (
     <TransformWrapper
       key={src}
@@ -167,67 +237,82 @@ function ImagePreviewViewer({
         step: IMAGE_PREVIEW_DOUBLE_CLICK_STEP,
       }}
       limitToBounds={false}
-      maxScale={8}
-      minScale={0.1}
+      maxScale={IMAGE_PREVIEW_MAX_SCALE}
+      minScale={IMAGE_PREVIEW_MIN_SCALE}
+      onInit={(ref) => syncImageTransformState(ref.state)}
+      onTransform={(_, transformState) => syncImageTransformState(transformState)}
       panning={{ velocityDisabled: true }}
       smooth={false}
       wheel={{ step: IMAGE_PREVIEW_WHEEL_STEP }}
     >
-      {({ resetTransform, zoomIn, zoomOut }) => (
-        <div className={cn('flex h-full min-h-0 flex-col bg-[var(--background-primary)]', className)}>
-          {showToolbar ? (
-            <PreviewToolbar
-              fileName={fileName}
-              leadingActions={leadingToolbarActions}
-              trailingActions={(
-                <>
-                  <AppTooltipButton
-                    type='button'
-                    aria-label='缩小'
-                    className='viewer-toolbar-icon-button'
-                    tooltip='缩小'
-                    onClick={() => zoomOut(IMAGE_PREVIEW_CONTROL_STEP, IMAGE_PREVIEW_ZOOM_ANIMATION_MS, 'easeOut')}
-                  >
-                    <ZoomOutLine aria-hidden='true' />
-                  </AppTooltipButton>
-                  <AppTooltipButton
-                    type='button'
-                    aria-label='适应窗口'
-                    className='viewer-toolbar-icon-button'
-                    tooltip='适应窗口'
-                    onClick={() => resetTransform(IMAGE_PREVIEW_ZOOM_ANIMATION_MS, 'easeOut')}
-                  >
-                    <Fullscreen2Line aria-hidden='true' />
-                  </AppTooltipButton>
-                  <AppTooltipButton
-                    type='button'
-                    aria-label='放大'
-                    className='viewer-toolbar-icon-button'
-                    tooltip='放大'
-                    onClick={() => zoomIn(IMAGE_PREVIEW_CONTROL_STEP, IMAGE_PREVIEW_ZOOM_ANIMATION_MS, 'easeOut')}
-                  >
-                    <ZoomInLine aria-hidden='true' />
-                  </AppTooltipButton>
-                  {toolbarActions}
-                </>
-              )}
-            />
-          ) : null}
-          <div className='image-preview-zoom-surface'>
-            <TransformComponent
-              wrapperClass='image-preview-transform-wrapper'
-              contentClass='image-preview-transform-content'
-            >
-              <img
-                alt={fileName}
-                className='image-preview-image'
-                draggable={false}
-                src={src}
+      {({ resetTransform, setTransform }) => {
+        const setImageZoomPercent = (nextZoomPercent: number) => {
+          const currentTransformState = transformStateRef.current
+          const nextScale = nextZoomPercent / 100
+          const zoomSurfaceElement = zoomSurfaceRef.current
+          const nextTransformState = calculateImagePreviewCenteredZoomTransform({
+            currentTransformState,
+            nextScale,
+            viewportHeight: zoomSurfaceElement?.clientHeight ?? 0,
+            viewportWidth: zoomSurfaceElement?.clientWidth ?? 0,
+          })
+
+          setImageZoomPercentState(nextZoomPercent)
+          setTransform(
+            nextTransformState.positionX,
+            nextTransformState.positionY,
+            nextTransformState.scale,
+            IMAGE_PREVIEW_ZOOM_ANIMATION_MS,
+            'easeOut',
+          )
+        }
+
+        return (
+          <div className={cn('flex h-full min-h-0 flex-col bg-[var(--background-primary)]', className)}>
+            {showToolbar ? (
+              <PreviewToolbar
+                fileName={fileName}
+                leadingActions={leadingToolbarActions}
+                trailingActions={(
+                  <>
+                    <ViewerZoomControls
+                      ariaLabel='缩放比例'
+                      onValueChange={setImageZoomPercent}
+                      options={IMAGE_PREVIEW_ZOOM_OPTIONS}
+                      value={imageZoomPercent}
+                      zoomInLabel='放大'
+                      zoomOutLabel='缩小'
+                    />
+                    <AppTooltipButton
+                      type='button'
+                      aria-label='适应窗口'
+                      className='viewer-toolbar-icon-button'
+                      tooltip='适应窗口'
+                      onClick={() => resetTransform(IMAGE_PREVIEW_ZOOM_ANIMATION_MS, 'easeOut')}
+                    >
+                      <Fullscreen2Line aria-hidden='true' />
+                    </AppTooltipButton>
+                    {toolbarActions}
+                  </>
+                )}
               />
-            </TransformComponent>
+            ) : null}
+            <div ref={zoomSurfaceRef} className='image-preview-zoom-surface'>
+              <TransformComponent
+                wrapperClass='image-preview-transform-wrapper'
+                contentClass='image-preview-transform-content'
+              >
+                <img
+                  alt={fileName}
+                  className='image-preview-image'
+                  draggable={false}
+                  src={src}
+                />
+              </TransformComponent>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }}
     </TransformWrapper>
   )
 }

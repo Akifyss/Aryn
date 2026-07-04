@@ -16,8 +16,6 @@ import {
   RightLine,
   SearchLine,
   UploadLine,
-  ZoomInLine,
-  ZoomOutLine,
 } from "@mingcute/react";
 import { Spinner } from "@heroui/react";
 
@@ -40,8 +38,9 @@ import {
   ViewerPopoverRoot as Popover,
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerToolbarSeparator as Separator,
-  ViewerZoomSelect,
+  ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
+import { VIEWER_COPY } from "@/components/ui/viewer-copy";
 
 const PPTX_LOADING_INDICATOR_DELAY_MS = 300;
 const DEFAULT_FIT_MODE: FitMode = "contain";
@@ -108,16 +107,6 @@ function formatPptxLoadError(error: unknown) {
   }
 
   return "无法渲染此 PPTX 文件。";
-}
-
-function getNextZoomScale(currentZoomScale: number, direction: 1 | -1) {
-  if (direction > 0) {
-    return ZOOM_OPTIONS.find((value) => value > currentZoomScale)
-      ?? ZOOM_OPTIONS[ZOOM_OPTIONS.length - 1];
-  }
-
-  return ZOOM_OPTIONS.findLast((value) => value < currentZoomScale)
-    ?? ZOOM_OPTIONS[0];
 }
 
 function useDelayedLoadingIndicator(isLoading: boolean, delayMs: number) {
@@ -339,8 +328,6 @@ function PptxToolbar({
 }) {
   const canGoPrevious = !controlsDisabled && activeSlideIndex > 0;
   const canGoNext = !controlsDisabled && activeSlideIndex < slideCount - 1;
-  const canZoomIn = zoomPercent < ZOOM_OPTIONS[ZOOM_OPTIONS.length - 1];
-  const canZoomOut = zoomPercent > ZOOM_OPTIONS[0];
 
   return (
     <div className="viewer-toolbar justify-between">
@@ -395,37 +382,15 @@ function PptxToolbar({
           searchResultCount={searchResultCount}
         />
         <Separator className="mx-1" />
-        <ToolbarTooltip label="缩小">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="缩小"
-            disabled={controlsDisabled || !canZoomOut}
-            onClick={() => onSetZoom(getNextZoomScale(zoomPercent, -1))}
-          >
-            <ZoomOutLine className="size-4" />
-          </Button>
-        </ToolbarTooltip>
-        <ViewerZoomSelect
-          ariaLabel="缩放比例"
-          value={zoomPercent}
+        <ViewerZoomControls
+          ariaLabel={VIEWER_COPY.zoomLevel}
+          disabled={controlsDisabled}
           onValueChange={onSetZoom}
           options={ZOOM_OPTIONS}
-          disabled={controlsDisabled}
+          value={zoomPercent}
+          zoomInLabel={VIEWER_COPY.zoomIn}
+          zoomOutLabel={VIEWER_COPY.zoomOut}
         />
-        <ToolbarTooltip label="放大">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="放大"
-            disabled={controlsDisabled || !canZoomIn}
-            onClick={() => onSetZoom(getNextZoomScale(zoomPercent, 1))}
-          >
-            <ZoomInLine className="size-4" />
-          </Button>
-        </ToolbarTooltip>
         <ToolbarTooltip label={fitMode === "contain" ? "原始尺寸" : "适应宽度"}>
           <Button
             type="button"
@@ -936,7 +901,3 @@ export function PptxViewerPreview({
     </div>
   );
 }
-
-export const __pptxViewerTestHooks = {
-  getNextZoomScale,
-};

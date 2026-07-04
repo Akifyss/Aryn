@@ -22,8 +22,6 @@ import {
   MoonLine,
   More2Line,
   UploadLine,
-  ZoomInLine,
-  ZoomOutLine,
 } from "@mingcute/react";
 import { Spinner } from "@heroui/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -40,7 +38,7 @@ import {
   ViewerMenuSeparator as DropdownMenuSeparator,
   ViewerMenuTrigger as DropdownMenuTrigger,
   ViewerToolbarSeparator as Separator,
-  ViewerZoomSelect,
+  ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
 import {
   DocumentViewerThumbnailSidebar,
@@ -210,34 +208,6 @@ async function downloadDocxFile({
   }
 
   downloadBlob(await response.blob(), ensureDocxExtension(fileName));
-}
-
-function getNextZoomScale(currentZoomScale: number, direction: 1 | -1) {
-  const currentIndex = ZOOM_OPTIONS.indexOf(
-    currentZoomScale as (typeof ZOOM_OPTIONS)[number],
-  );
-  let fallbackIndex = -1;
-
-  if (direction > 0) {
-    fallbackIndex = ZOOM_OPTIONS.findIndex((value) => value > currentZoomScale);
-  } else {
-    for (let index = ZOOM_OPTIONS.length - 1; index >= 0; index -= 1) {
-      if (ZOOM_OPTIONS[index] < currentZoomScale) {
-        fallbackIndex = index;
-        break;
-      }
-    }
-  }
-
-  const resolvedIndex = currentIndex >= 0 ? currentIndex : fallbackIndex;
-  if (resolvedIndex < 0) return currentZoomScale;
-
-  const nextIndex = Math.min(
-    Math.max(resolvedIndex + direction, 0),
-    ZOOM_OPTIONS.length - 1,
-  );
-
-  return ZOOM_OPTIONS[nextIndex] ?? currentZoomScale;
 }
 
 function normalizeDocxZoomScale(value: number | undefined): number {
@@ -597,8 +567,6 @@ function DocxToolbar({
   toolbarActions?: React.ReactNode;
   zoomScale: number;
 }) {
-  const canZoomIn = zoomScale < ZOOM_OPTIONS[ZOOM_OPTIONS.length - 1];
-  const canZoomOut = zoomScale > ZOOM_OPTIONS[0];
   const shouldShowFileActionsMenu =
     showDownloadButton || showUploadButton || showNightRenderToggle;
 
@@ -633,47 +601,15 @@ function DocxToolbar({
         />
       </div>
       <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
-        <div className="flex flex-none items-center gap-1">
-          <ToolbarTooltip label={VIEWER_COPY.zoomOut}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              disabled={controlsDisabled || !canZoomOut}
-              aria-label={VIEWER_COPY.zoomOut}
-              onClick={() =>
-                setZoomScale((currentZoomScale) =>
-                  getNextZoomScale(currentZoomScale, -1),
-                )
-              }
-            >
-              <ZoomOutLine className="size-4" />
-            </Button>
-          </ToolbarTooltip>
-          <ViewerZoomSelect
-            ariaLabel={VIEWER_COPY.zoomLevel}
-            value={zoomScale}
-            onValueChange={setZoomScale}
-            options={ZOOM_OPTIONS}
-            disabled={controlsDisabled}
-          />
-          <ToolbarTooltip label={VIEWER_COPY.zoomIn}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              disabled={controlsDisabled || !canZoomIn}
-              aria-label={VIEWER_COPY.zoomIn}
-              onClick={() =>
-                setZoomScale((currentZoomScale) =>
-                  getNextZoomScale(currentZoomScale, 1),
-                )
-              }
-            >
-              <ZoomInLine className="size-4" />
-            </Button>
-          </ToolbarTooltip>
-        </div>
+        <ViewerZoomControls
+          ariaLabel={VIEWER_COPY.zoomLevel}
+          disabled={controlsDisabled}
+          onValueChange={setZoomScale}
+          options={ZOOM_OPTIONS}
+          value={zoomScale}
+          zoomInLabel={VIEWER_COPY.zoomIn}
+          zoomOutLabel={VIEWER_COPY.zoomOut}
+        />
         {toolbarActions ? (
           <>
             <Separator className="mx-1" />

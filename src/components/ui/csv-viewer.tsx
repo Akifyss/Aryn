@@ -27,8 +27,6 @@ import {
   RightLine,
   SearchLine,
   UploadLine,
-  ZoomInLine,
-  ZoomOutLine,
 } from "@mingcute/react";
 import { Input, Spinner } from "@heroui/react";
 import Papa from "papaparse";
@@ -45,7 +43,7 @@ import {
   ViewerPopoverRoot as Popover,
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerToolbarSeparator as Separator,
-  ViewerZoomSelect,
+  ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
 import { VIEWER_COPY } from "@/components/ui/viewer-copy";
 
@@ -827,15 +825,6 @@ export function CsvViewer({
     }
   }
 
-  function stepZoom(direction: -1 | 1) {
-    const index = ZOOM_OPTIONS.indexOf(zoom);
-    const nextIndex = Math.min(
-      ZOOM_OPTIONS.length - 1,
-      Math.max(0, index + direction),
-    );
-    setZoom(ZOOM_OPTIONS[nextIndex]);
-  }
-
   function handleDownload() {
     const text = Papa.unparse({
       fields: parsed.headers,
@@ -865,38 +854,16 @@ export function CsvViewer({
             </div>
           ) : null}
           <div className="ml-auto flex min-w-0 items-center justify-end gap-1">
-            <div className="flex flex-none items-center gap-1">
-              <ToolbarTooltip label={VIEWER_COPY.zoomOut}>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={VIEWER_COPY.zoomOut}
-                  disabled={zoom <= ZOOM_OPTIONS[0]}
-                  onClick={() => stepZoom(-1)}
-                >
-                  <ZoomOutLine className="size-4" />
-                </Button>
-              </ToolbarTooltip>
-              <ViewerZoomSelect
-                ariaLabel={VIEWER_COPY.zoomLevel}
-                value={zoom}
-                onValueChange={(value) =>
-                  setZoom(value as (typeof ZOOM_OPTIONS)[number])
-                }
-                options={ZOOM_OPTIONS}
-              />
-              <ToolbarTooltip label={VIEWER_COPY.zoomIn}>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={VIEWER_COPY.zoomIn}
-                  disabled={zoom >= ZOOM_OPTIONS[ZOOM_OPTIONS.length - 1]}
-                  onClick={() => stepZoom(1)}
-                >
-                  <ZoomInLine className="size-4" />
-                </Button>
-              </ToolbarTooltip>
-            </div>
+            <ViewerZoomControls
+              ariaLabel={VIEWER_COPY.zoomLevel}
+              onValueChange={(value) =>
+                setZoom(value as (typeof ZOOM_OPTIONS)[number])
+              }
+              options={ZOOM_OPTIONS}
+              value={zoom}
+              zoomInLabel={VIEWER_COPY.zoomIn}
+              zoomOutLabel={VIEWER_COPY.zoomOut}
+            />
             {search ? (
               <>
                 <Separator className="mx-1" />

@@ -5,10 +5,11 @@ import {
   type FileSystemItem,
 } from '../src/components/ui/file-system'
 import { __csvViewerTestHooks } from '../src/components/ui/csv-viewer'
+import { __documentViewerControlsTestHooks } from '../src/components/ui/document-viewer-controls'
 import { collectLazyFolderLoadCandidates } from '../src/components/ui/file-system-lazy-loading'
-import { __pptxViewerTestHooks } from '../src/components/ui/pptx-viewer'
 import { __xlsxViewerTestHooks } from '../src/components/ui/xlsx-viewer'
 import { inferFileContentType } from '../src/lib/file-content-types'
+import { __workspaceFilePreviewTestHooks } from '../src/features/workspace/components/workspace-file-preview'
 import {
   isPptxContentType,
   isPptxFileName,
@@ -204,12 +205,46 @@ describe('FileSystem local file data', () => {
     })).toBeNull()
   })
 
-  it('moves PPTX zoom by one preset even from an intermediate value', () => {
-    expect(__pptxViewerTestHooks.getNextZoomScale(100, 1)).toBe(125)
-    expect(__pptxViewerTestHooks.getNextZoomScale(110, 1)).toBe(125)
-    expect(__pptxViewerTestHooks.getNextZoomScale(110, -1)).toBe(100)
-    expect(__pptxViewerTestHooks.getNextZoomScale(10, -1)).toBe(10)
-    expect(__pptxViewerTestHooks.getNextZoomScale(400, 1)).toBe(400)
+  it('moves viewer zoom controls by one preset even from an intermediate value', () => {
+    const zoomOptions = [10, 25, 50, 75, 100, 125, 150, 175, 200, 400] as const
+
+    expect(__documentViewerControlsTestHooks.getAdjacentZoomValue(zoomOptions, 100, 1)).toBe(125)
+    expect(__documentViewerControlsTestHooks.getAdjacentZoomValue(zoomOptions, 110, 1)).toBe(125)
+    expect(__documentViewerControlsTestHooks.getAdjacentZoomValue(zoomOptions, 110, -1)).toBe(100)
+    expect(__documentViewerControlsTestHooks.getAdjacentZoomValue(zoomOptions, 10, -1)).toBeNull()
+    expect(__documentViewerControlsTestHooks.getAdjacentZoomValue(zoomOptions, 400, 1)).toBeNull()
+  })
+
+  it('keeps the image preview viewport center anchored when selecting zoom', () => {
+    const viewportWidth = 1000
+    const viewportHeight = 800
+    const currentTransformState = {
+      positionX: 40,
+      positionY: -20,
+      scale: 1,
+    }
+    const contentCenterBefore = {
+      x: (viewportWidth / 2 - currentTransformState.positionX) / currentTransformState.scale,
+      y: (viewportHeight / 2 - currentTransformState.positionY) / currentTransformState.scale,
+    }
+    const nextTransformState =
+      __workspaceFilePreviewTestHooks.calculateImagePreviewCenteredZoomTransform({
+        currentTransformState,
+        nextScale: 2,
+        viewportHeight,
+        viewportWidth,
+      })
+    const contentCenterAfter = {
+      x: (viewportWidth / 2 - nextTransformState.positionX) / nextTransformState.scale,
+      y: (viewportHeight / 2 - nextTransformState.positionY) / nextTransformState.scale,
+    }
+
+    expect(contentCenterAfter).toEqual(contentCenterBefore)
+    expect(nextTransformState).toEqual({
+      positionX: -420,
+      positionY: -440,
+      scale: 2,
+    })
   })
 
   it('maps the requested thumbnail page to the matching workbook sheet', () => {

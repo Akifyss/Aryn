@@ -24,8 +24,6 @@ import {
   RightLine,
   SearchLine,
   UploadLine,
-  ZoomInLine,
-  ZoomOutLine,
 } from "@mingcute/react";
 import { Input, Spinner } from "@heroui/react";
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
@@ -48,7 +46,7 @@ import {
   ViewerPopoverRoot as Popover,
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerToolbarSeparator as Separator,
-  ViewerZoomSelect,
+  ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
 import { VIEWER_COPY } from "@/components/ui/viewer-copy";
 
@@ -863,8 +861,7 @@ function WorkbookToolbar({
   viewportRef: React.RefObject<HTMLDivElement | null>;
   workbookIdentity: string;
 }) {
-  const { canZoomIn, canZoomOut, setZoomScale, zoomIn, zoomOut, zoomScale } =
-    useXlsxViewerZoom();
+  const { setZoomScale, zoomScale } = useXlsxViewerZoom();
   const currentZoom = Math.round(zoomScale);
 
   React.useEffect(() => {
@@ -879,38 +876,14 @@ function WorkbookToolbar({
         </div>
       ) : null}
       <div className="ml-auto flex min-w-0 items-center justify-end gap-1">
-        <div className="flex flex-none items-center gap-1">
-          <ToolbarTooltip label={VIEWER_COPY.zoomOut}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              disabled={!canZoomOut}
-              aria-label={VIEWER_COPY.zoomOut}
-              onClick={zoomOut}
-            >
-              <ZoomOutLine className="size-4" />
-            </Button>
-          </ToolbarTooltip>
-          <ViewerZoomSelect
-            ariaLabel={VIEWER_COPY.zoomLevel}
-            value={currentZoom}
-            onValueChange={setZoomScale}
-            options={ZOOM_OPTIONS}
-          />
-          <ToolbarTooltip label={VIEWER_COPY.zoomIn}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              disabled={!canZoomIn}
-              aria-label={VIEWER_COPY.zoomIn}
-              onClick={zoomIn}
-            >
-              <ZoomInLine className="size-4" />
-            </Button>
-          </ToolbarTooltip>
-        </div>
+        <ViewerZoomControls
+          ariaLabel={VIEWER_COPY.zoomLevel}
+          onValueChange={setZoomScale}
+          options={ZOOM_OPTIONS}
+          value={currentZoom}
+          zoomInLabel={VIEWER_COPY.zoomIn}
+          zoomOutLabel={VIEWER_COPY.zoomOut}
+        />
         <Separator className="mx-1" />
         <WorkbookSearchPopover
           viewportRef={viewportRef}

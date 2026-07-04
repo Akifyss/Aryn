@@ -74,8 +74,6 @@ import {
   RightLine,
   SearchLine,
   UploadLine,
-  ZoomInLine,
-  ZoomOutLine,
 } from "@mingcute/react";
 import { Input, Spinner } from "@heroui/react";
 import { flushSync } from "react-dom";
@@ -96,7 +94,7 @@ import {
   ViewerPopoverRoot as Popover,
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerToolbarSeparator as Separator,
-  ViewerZoomSelect,
+  ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
 import { VIEWER_COPY } from "@/components/ui/viewer-copy";
 import { cn } from "@/components/ui/viewer-utils";
@@ -2307,58 +2305,15 @@ function PDFViewerInner({
                 <Separator className="mx-1 h-4 self-center" />
               </>
             ) : null}
-            <div className="flex flex-none items-center gap-1">
-              <ToolbarTooltip label={VIEWER_COPY.zoomOut}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={VIEWER_COPY.zoomOut}
-                  disabled={
-                    controlsDisabled || currentZoomLevel <= ZOOM_OPTIONS[0]
-                  }
-                  onClick={() => {
-                    const nextZoom = [...ZOOM_OPTIONS]
-                      .reverse()
-                      .find((option) => option < currentZoomLevel);
-
-                    zoom?.requestZoom(nextZoom ?? ZOOM_OPTIONS[0]);
-                  }}
-                >
-                  <ZoomOutLine className="size-4" />
-                </Button>
-              </ToolbarTooltip>
-              <ViewerZoomSelect
-                ariaLabel={VIEWER_COPY.zoomLevel}
-                disabled={controlsDisabled}
-                onValueChange={(value) => zoom?.requestZoom(value)}
-                options={ZOOM_OPTIONS}
-                value={currentZoomLevel}
-              />
-              <ToolbarTooltip label={VIEWER_COPY.zoomIn}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={VIEWER_COPY.zoomIn}
-                  disabled={
-                    controlsDisabled ||
-                    currentZoomLevel >= ZOOM_OPTIONS[ZOOM_OPTIONS.length - 1]
-                  }
-                  onClick={() => {
-                    const nextZoom = ZOOM_OPTIONS.find(
-                      (option) => option > currentZoomLevel,
-                    );
-
-                    zoom?.requestZoom(
-                      nextZoom ?? ZOOM_OPTIONS[ZOOM_OPTIONS.length - 1],
-                    );
-                  }}
-                >
-                  <ZoomInLine className="size-4" />
-                </Button>
-              </ToolbarTooltip>
-            </div>
+            <ViewerZoomControls
+              ariaLabel={VIEWER_COPY.zoomLevel}
+              disabled={controlsDisabled}
+              onValueChange={(value) => zoom?.requestZoom(value)}
+              options={ZOOM_OPTIONS}
+              value={currentZoomLevel}
+              zoomInLabel={VIEWER_COPY.zoomIn}
+              zoomOutLabel={VIEWER_COPY.zoomOut}
+            />
             <Separator className="mx-1 h-4 self-center" />
             <PDFViewerSearchControl
               key={documentId}
