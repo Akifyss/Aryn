@@ -41,6 +41,12 @@ import {
   LAZY_SCOPE_LOAD_CONCURRENCY,
 } from "@/components/ui/file-system-lazy-loading"
 import { inferFileContentType } from "@/lib/file-content-types"
+import {
+  isPptxContentType,
+  isPptxFileName,
+  PPTX_CONTENT_TYPES,
+  PPTX_FILE_EXTENSIONS,
+} from "@/lib/pptx-file-types"
 
 function cn(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ")
@@ -754,6 +760,11 @@ const LazyXlsxViewerPreview = React.lazy(() =>
     default: mod.XlsxViewerPreview,
   }))
 )
+const LazyPptxViewerPreview = React.lazy(() =>
+  import("@/components/ui/pptx-viewer").then((mod) => ({
+    default: mod.PptxViewerPreview,
+  }))
+)
 const LazyCsvViewer = React.lazy(() =>
   import("@/components/ui/csv-viewer").then((mod) => ({
     default: mod.CsvViewer,
@@ -861,7 +872,7 @@ export type FileSystemProps = {
   /**
    * Called on file open (double-click). Return `false` to let the built-in
    * behavior continue after the app has inspected the file.
-   * By default PDF, DOCX, XLSX, and image files open in a viewer dialog and
+   * By default PDF, DOCX, PPTX, XLSX, and image files open in a viewer dialog and
    * other files open their resolved URL in a new tab.
    */
   onFileOpen?: (file: FileSystemFileItem, url: string | null) => boolean | void
@@ -1021,8 +1032,10 @@ const FILE_KIND_LABELS: Record<string, string> = {
   pdf: "PDF 文档",
   php: "PHP 源码",
   png: "PNG 图片",
+  ...Object.fromEntries(
+    PPTX_FILE_EXTENSIONS.map((extension) => [extension, "PowerPoint 演示文稿"]),
+  ),
   ppt: "PowerPoint 演示文稿",
-  pptx: "PowerPoint 演示文稿",
   psd: "Photoshop 文档",
   py: "Python 脚本",
   rar: "RAR 压缩包",
@@ -1234,12 +1247,13 @@ const MIME_TYPE_LABELS: Record<string, string> = {
   "application/vnd.ms-excel": "Excel 表格（旧版）",
   "application/vnd.ms-fontobject": "嵌入式 OpenType 字体",
   "application/vnd.ms-powerpoint": "PowerPoint（旧版）",
+  ...Object.fromEntries(
+    PPTX_CONTENT_TYPES.map((contentType) => [contentType, "PowerPoint"]),
+  ),
   "application/vnd.oasis.opendocument.presentation": "OpenDocument 演示文稿",
   "application/vnd.oasis.opendocument.spreadsheet": "OpenDocument 表格",
   "application/vnd.oasis.opendocument.text": "OpenDocument 文本文档",
   "application/vnd.rar": "RAR 压缩包",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation":
-    "PowerPoint",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
     "Excel 表格",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -1320,10 +1334,9 @@ function fileTypeFilterGroup(mime: string): FileTypeFilterGroup {
     mime === "application/msword" ||
     mime === "application/rtf" ||
     mime === "application/vnd.ms-powerpoint" ||
+    isPptxContentType(mime) ||
     mime === "application/vnd.oasis.opendocument.presentation" ||
     mime === "application/vnd.oasis.opendocument.text" ||
-    mime ===
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
     mime ===
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ) {
@@ -1386,7 +1399,13 @@ function fileTypeFilterGroup(mime: string): FileTypeFilterGroup {
   return "Archives & binary"
 }
 
-export type FileSystemViewerKind = "csv" | "docx" | "image" | "pdf" | "xlsx"
+export type FileSystemViewerKind =
+  | "csv"
+  | "docx"
+  | "image"
+  | "pdf"
+  | "pptx"
+  | "xlsx"
 
 function viewerKindForFile(
   file: FileSystemFileItem
@@ -1405,6 +1424,7 @@ function viewerKindForFile(
   ) {
     return "docx"
   }
+  if (isPptxContentType(contentType)) return "pptx"
   if (
     contentType === "application/vnd.ms-excel" ||
     contentType ===
@@ -1418,19 +1438,21 @@ function viewerKindForFile(
   if (name.endsWith(".pdf")) return "pdf"
   if (name.endsWith(".csv") || name.endsWith(".tsv")) return "csv"
   if (name.endsWith(".docx")) return "docx"
+  if (isPptxFileName(name)) return "pptx"
   if (name.endsWith(".xls") || name.endsWith(".xlsx")) return "xlsx"
   if (/\.(avif|gif|jpe?g|png|svg|webp)$/.test(name)) return "image"
 
   return null
 }
 
-// PDF and DOCX pages want height; spreadsheets want width; images get a
-// roomy but contained frame.
+// Document pages want height; spreadsheets want width; images get a roomy but
+// contained frame.
 const VIEWER_DIALOG_CLASSNAMES: Record<FileSystemViewerKind, string> = {
   csv: "h-[85vh] w-[min(96vw,88rem)] max-w-none",
   docx: "h-[88vh] w-[min(96vw,68rem)] max-w-none",
   image: "max-h-[88vh] w-fit max-w-[min(96vw,64rem)]",
   pdf: "h-[88vh] w-[min(96vw,68rem)] max-w-none",
+  pptx: "h-[88vh] w-[min(96vw,86rem)] max-w-none",
   xlsx: "h-[85vh] w-[min(96vw,100rem)] max-w-none",
 }
 
@@ -6438,6 +6460,23 @@ function FileSystemBuiltInGalleryStage({
       </div>
     )
   }
+  if (viewerKind === "pptx" && url) {
+    return (
+      <div className={viewerFrameClassName}>
+        <React.Suspense fallback={<FileSystemViewerLoading />}>
+          <LazyPptxViewerPreview
+            src={url}
+            fileName={file.name}
+            className={cn("h-full min-h-0", isDialog && "overflow-hidden")}
+            showDownload={false}
+            showToolbar={isDialog}
+            showUpload={false}
+            toolbarActions={toolbarActions}
+          />
+        </React.Suspense>
+      </div>
+    )
+  }
   if (viewerKind === "csv" && url) {
     return (
       <div className={viewerFrameClassName}>
@@ -6765,4 +6804,5 @@ export const __fileSystemTestHooks = {
   normalizeNavigationState,
   normalizePreviewImageLoadResult,
   normalizeSearchQuery,
+  viewerKindForFile,
 }

@@ -1,5 +1,6 @@
 import type { FileSystemFileItem, FileSystemItem } from '@/components/ui/file-system'
 import { inferFileContentType } from '@/lib/file-content-types'
+import { isPptxContentType, isPptxFile } from '@/lib/pptx-file-types'
 import type { WorkspaceNode } from '@/features/workspace/types'
 
 const CODE_CONTENT_TYPES = new Set([
@@ -94,7 +95,7 @@ function getWorkspaceFileKind(fileName: string, contentType: string | undefined)
   }
   if (
     contentType === 'application/vnd.ms-powerpoint'
-    || contentType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    || isPptxContentType(contentType)
     || contentType === 'application/vnd.oasis.opendocument.presentation'
   ) return '演示文稿'
   if (contentType === 'application/epub+zip') return 'EPUB 文档'
@@ -145,6 +146,10 @@ export function isWorkspaceFileSystemPreviewable(file: Pick<FileSystemFileItem, 
     return true
   }
 
+  if (isWorkspaceFileSystemPptx(file)) {
+    return true
+  }
+
   const name = (file.name ?? file.path).toLowerCase()
 
   return /\.(avif|gif|jpe?g|png|svg|webp|pdf|docx|xlsx?|xls|csv|tsv)$/.test(name)
@@ -156,6 +161,10 @@ export function isWorkspaceFileSystemDocx(file: Pick<FileSystemFileItem, 'conten
   }
 
   return /\.docx$/.test((file.name ?? file.path).toLowerCase())
+}
+
+export function isWorkspaceFileSystemPptx(file: Pick<FileSystemFileItem, 'contentType' | 'name' | 'path'>) {
+  return isPptxFile(file)
 }
 
 export function isWorkspaceFileSystemSpreadsheet(file: Pick<FileSystemFileItem, 'contentType' | 'name' | 'path'>) {
@@ -207,6 +216,7 @@ function getWorkspacePreviewMetadata(file: Pick<FileSystemFileItem, 'contentType
     !isWorkspaceFileSystemImage(file)
     && !isWorkspaceFileSystemPdf(file)
     && !isWorkspaceFileSystemDocx(file)
+    && !isWorkspaceFileSystemPptx(file)
     && !isWorkspaceFileSystemCsv(file)
     && !isWorkspaceFileSystemSpreadsheet(file)
   ) {
@@ -215,6 +225,7 @@ function getWorkspacePreviewMetadata(file: Pick<FileSystemFileItem, 'contentType
 
   return {
     ...(isWorkspaceFileSystemSpreadsheet(file) || isWorkspaceFileSystemCsv(file) ? { previewAspectRatio: 1.35 } : null),
+    ...(isWorkspaceFileSystemPptx(file) ? { previewAspectRatio: 16 / 9 } : null),
     previewPageCount: 1,
   }
 }
@@ -228,6 +239,7 @@ export function shouldUseWorkspaceFileDataUrl(file: Pick<FileSystemFileItem, 'co
     || contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     || contentType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     || contentType === 'application/vnd.ms-excel'
+    || isPptxFile(file)
     || contentType === 'text/csv'
     || contentType === 'text/tab-separated-values'
     || /\.(avif|bmp|gif|ico|jpe?g|png|svg|webp|pdf|docx|xlsx?|xls|csv|tsv)$/.test(name)

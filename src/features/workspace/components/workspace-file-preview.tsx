@@ -47,6 +47,11 @@ const XlsxViewerPreview = lazy(async () => {
   return { default: module.XlsxViewerPreview }
 })
 
+const PptxViewerPreview = lazy(async () => {
+  const module = await import('@/components/ui/pptx-viewer')
+  return { default: module.PptxViewerPreview }
+})
+
 type WorkspaceFilePreviewProps = {
   filePath: string
   gitRepositoryState: GitRepositoryState | null
@@ -472,6 +477,18 @@ export function WorkspaceFileRenderer({
             onIsDarkChange={setIsDarkPreview}
             showDownload={false}
             showNightModeToggle={false}
+            showToolbar={showToolbar}
+            showUpload={false}
+            src={state.url}
+            toolbarActions={toolbarTrailingActions}
+          />
+        ) : null}
+        {state.kind === 'pptx' && state.url ? (
+          <PptxViewerPreview
+            className='h-full min-h-0'
+            fileName={fileName}
+            leadingToolbarActions={toolbarLeadingActions}
+            showDownload={false}
             showToolbar={showToolbar}
             showUpload={false}
             src={state.url}

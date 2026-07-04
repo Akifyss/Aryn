@@ -11,6 +11,7 @@ import {
   isWorkspaceFileSystemDocx,
   isWorkspaceFileSystemImage,
   isWorkspaceFileSystemPdf,
+  isWorkspaceFileSystemPptx,
   isWorkspaceFileSystemSpreadsheet,
   shouldUseWorkspaceFileDataUrl,
   workspaceNodesToFileSystemItems,
@@ -300,6 +301,20 @@ export function WorkspaceFileSystemPanel({
         return renderDocxPageToDataUrlWithPageCount(url, {
           maxWidth: 320,
           pageNumber: pageIndex + 1,
+        })
+      }
+
+      if (isWorkspaceFileSystemPptx(file)) {
+        const url = await getPreviewSourceUrl(
+          file,
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        )
+        const { renderPptxSlideToDataUrlWithSlideCount } = await import('@/components/pptx-thumbnail-utils')
+
+        return renderPptxSlideToDataUrlWithSlideCount(url, {
+          maxHeight: 220,
+          maxWidth: 360,
+          slideNumber: pageIndex + 1,
         })
       }
 

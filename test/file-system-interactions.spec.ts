@@ -6,8 +6,14 @@ import {
 } from '../src/components/ui/file-system'
 import { __csvViewerTestHooks } from '../src/components/ui/csv-viewer'
 import { collectLazyFolderLoadCandidates } from '../src/components/ui/file-system-lazy-loading'
+import { __pptxViewerTestHooks } from '../src/components/ui/pptx-viewer'
 import { __xlsxViewerTestHooks } from '../src/components/ui/xlsx-viewer'
 import { inferFileContentType } from '../src/lib/file-content-types'
+import {
+  isPptxContentType,
+  isPptxFileName,
+  PPTX_CONTENT_TYPE_BY_EXTENSION,
+} from '../src/lib/pptx-file-types'
 
 const manifest: FileSystemItem[] = [
   { kind: 'folder', path: 'docs/' },
@@ -175,6 +181,35 @@ describe('FileSystem local file data', () => {
     expect(inferFileContentType('bundle.7z')).toBe('application/x-7z-compressed')
     expect(inferFileContentType('font.woff2')).toBe('font/woff2')
     expect(inferFileContentType('Component.vue')).toBe('text/x-vue')
+  })
+
+  it('keeps every supported OpenXML presentation variant aligned', () => {
+    for (const [extension, contentType] of Object.entries(PPTX_CONTENT_TYPE_BY_EXTENSION)) {
+      expect(inferFileContentType(`slides.${extension}`)).toBe(contentType)
+      expect(isPptxFileName(`SLIDES.${extension.toUpperCase()}`)).toBe(true)
+      expect(isPptxContentType(`${contentType}; charset=binary`)).toBe(true)
+      expect(__fileSystemTestHooks.viewerKindForFile({
+        contentType,
+        kind: 'file',
+        path: `slides.${extension}`,
+      })).toBe('pptx')
+    }
+
+    expect(isPptxFileName('legacy.ppt')).toBe(false)
+    expect(isPptxContentType('application/vnd.ms-powerpoint')).toBe(false)
+    expect(__fileSystemTestHooks.viewerKindForFile({
+      contentType: 'application/vnd.ms-powerpoint',
+      kind: 'file',
+      path: 'legacy.ppt',
+    })).toBeNull()
+  })
+
+  it('moves PPTX zoom by one preset even from an intermediate value', () => {
+    expect(__pptxViewerTestHooks.getNextZoomScale(100, 1)).toBe(125)
+    expect(__pptxViewerTestHooks.getNextZoomScale(110, 1)).toBe(125)
+    expect(__pptxViewerTestHooks.getNextZoomScale(110, -1)).toBe(100)
+    expect(__pptxViewerTestHooks.getNextZoomScale(10, -1)).toBe(10)
+    expect(__pptxViewerTestHooks.getNextZoomScale(400, 1)).toBe(400)
   })
 
   it('maps the requested thumbnail page to the matching workbook sheet', () => {

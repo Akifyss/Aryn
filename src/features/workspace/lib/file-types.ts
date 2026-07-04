@@ -1,3 +1,5 @@
+import { PPTX_FILE_EXTENSIONS } from '../../../lib/pptx-file-types'
+
 export type WorkspaceEditorKind = 'prose' | 'code' | 'file' | 'unsupported'
 export type SupportedWorkspaceEditorKind = 'prose' | 'code'
 export type WorkspaceFileTabEditorKind = SupportedWorkspaceEditorKind | 'file'
@@ -128,8 +130,8 @@ const FILE_TAB_EXTENSIONS = new Set([
   '.odt',
   '.pdf',
   '.png',
+  ...PPTX_FILE_EXTENSIONS.map((extension) => `.${extension}`),
   '.ppt',
-  '.pptx',
   '.rar',
   '.rtf',
   '.svg',

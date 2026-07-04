@@ -9,10 +9,11 @@ import {
   isWorkspaceFileSystemDocx,
   isWorkspaceFileSystemImage,
   isWorkspaceFileSystemPdf,
+  isWorkspaceFileSystemPptx,
   isWorkspaceFileSystemSpreadsheet,
 } from '@/features/workspace/lib/workspace-file-system'
 
-export type WorkspaceFileRenderKind = 'code' | 'csv' | 'docx' | 'html' | 'image' | 'meo' | 'pdf' | 'unsupported' | 'xlsx'
+export type WorkspaceFileRenderKind = 'code' | 'csv' | 'docx' | 'html' | 'image' | 'meo' | 'pdf' | 'pptx' | 'unsupported' | 'xlsx'
 
 function getBaseName(filePath: string) {
   return filePath.split(/[\\/]/).pop() ?? filePath
@@ -33,6 +34,7 @@ function resolveBinaryFileRenderKind(filePath: string): WorkspaceFileRenderKind 
   if (isWorkspaceFileSystemImage(file)) return 'image'
   if (isWorkspaceFileSystemPdf(file)) return 'pdf'
   if (isWorkspaceFileSystemDocx(file)) return 'docx'
+  if (isWorkspaceFileSystemPptx(file)) return 'pptx'
   if (isWorkspaceFileSystemCsv(file)) return 'csv'
   if (isWorkspaceFileSystemSpreadsheet(file)) return 'xlsx'
 

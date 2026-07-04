@@ -32,6 +32,7 @@
     "perf:meo:full": "npm run typecheck && npm test -- test/meo-performance.spec.ts test/meo-git-diff-gutter.spec.ts test/git-diff-navigation.spec.ts"
   },
   "dependencies": {
+    "@aiden0z/pptx-renderer": "^1.2.3",
     "@aryn/codemirror-merge": "file:src/vendor/codemirror-merge",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-cpp": "^6.0.3",

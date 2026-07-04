@@ -4,6 +4,7 @@ import {
   isWorkspaceFileSystemCsv,
   isWorkspaceFileSystemImage,
   isWorkspaceFileSystemPdf,
+  isWorkspaceFileSystemPptx,
   isWorkspaceFileSystemPreviewable,
   isWorkspaceFileSystemSpreadsheet,
   shouldUseWorkspaceFileDataUrl,
@@ -142,6 +143,11 @@ describe('workspace file system manifest', () => {
         name: 'deck.pdf',
         path: 'C:\\workspace\\deck.pdf',
       },
+      {
+        kind: 'file',
+        name: 'slides.pptx',
+        path: 'C:\\workspace\\slides.pptx',
+      },
     ]
 
     expect(workspaceNodesToFileSystemItems(nodes, 'C:\\workspace')).toMatchObject([
@@ -180,6 +186,16 @@ describe('workspace file system manifest', () => {
           Kind: 'PDF 文档',
         },
         path: 'deck.pdf',
+        previewPageCount: 1,
+      },
+      {
+        contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        metadata: {
+          Extension: 'PPTX',
+          Kind: '演示文稿',
+        },
+        path: 'slides.pptx',
+        previewAspectRatio: 16 / 9,
         previewPageCount: 1,
       },
     ])
@@ -291,6 +307,10 @@ describe('workspace file system preview support', () => {
       path: 'docs/export.csv',
     })).toBe(true)
     expect(isWorkspaceFileSystemPreviewable({
+      contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      path: 'docs/slides',
+    })).toBe(true)
+    expect(isWorkspaceFileSystemPreviewable({
       contentType: 'image/heic',
       path: 'images/photo.heic',
     })).toBe(false)
@@ -325,6 +345,10 @@ describe('workspace file system preview support', () => {
       contentType: undefined,
       path: 'docs/export.tsv',
     })).toBe(true)
+    expect(isWorkspaceFileSystemPptx({
+      contentType: undefined,
+      path: 'docs/slides.pptx',
+    })).toBe(true)
     expect(shouldUseWorkspaceFileDataUrl({
       contentType: 'application/pdf',
       path: 'docs/spec.pdf',
@@ -340,6 +364,10 @@ describe('workspace file system preview support', () => {
     expect(shouldUseWorkspaceFileDataUrl({
       contentType: 'text/csv',
       path: 'docs/export.csv',
+    })).toBe(true)
+    expect(shouldUseWorkspaceFileDataUrl({
+      contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      path: 'docs/slides',
     })).toBe(true)
     expect(shouldUseWorkspaceFileDataUrl({
       contentType: undefined,

@@ -1,3 +1,5 @@
+import { PPTX_CONTENT_TYPE_BY_EXTENSION } from '@/lib/pptx-file-types'
+
 const EXTENSION_CONTENT_TYPES: Readonly<Record<string, string>> = {
   '3g2': 'video/3gpp2',
   '3gp': 'video/3gpp',
@@ -65,7 +67,7 @@ const EXTENSION_CONTENT_TYPES: Readonly<Record<string, string>> = {
   php: 'application/x-httpd-php',
   png: 'image/png',
   ppt: 'application/vnd.ms-powerpoint',
-  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  ...PPTX_CONTENT_TYPE_BY_EXTENSION,
   ps: 'application/postscript',
   psd: 'image/vnd.adobe.photoshop',
   py: 'text/x-python',

@@ -35,6 +35,8 @@ describe('workspace file types', () => {
     expect(getWorkspaceEditorKind('C:/workspace/data.csv')).toBe('file')
     expect(getWorkspaceEditorKind('C:/workspace/export.tsv')).toBe('file')
     expect(getWorkspaceEditorKind('C:/workspace/slides.pptx')).toBe('file')
+    expect(getWorkspaceEditorKind('C:/workspace/slides.pptm')).toBe('file')
+    expect(getWorkspaceEditorKind('C:/workspace/slides.ppsx')).toBe('file')
     expect(getWorkspaceFileTabEditorKind('C:/workspace/logo.png')).toBe('file')
     expect(getWorkspaceEditorKind('C:/workspace/archive.zip')).toBe('file')
     expect(getWorkspaceFileTabEditorKind('C:/workspace/archive.zip')).toBe('file')
@@ -69,6 +71,9 @@ describe('workspace file types', () => {
     expect(resolveWorkspaceFileRenderKind('C:/workspace/data.csv')).toBe('csv')
     expect(resolveWorkspaceFileRenderKind('C:/workspace/export.tsv')).toBe('csv')
     expect(resolveWorkspaceFileRenderKind('C:/workspace/logo.png')).toBe('image')
+    expect(resolveWorkspaceFileRenderKind('C:/workspace/slides.pptx')).toBe('pptx')
+    expect(resolveWorkspaceFileRenderKind('C:/workspace/slides.pptm')).toBe('pptx')
+    expect(resolveWorkspaceFileRenderKind('C:/workspace/legacy.ppt')).toBe('unsupported')
   })
 
   it('keeps gallery rendering aligned when the main process resolves unknown extensions', () => {
