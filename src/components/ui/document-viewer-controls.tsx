@@ -5,7 +5,16 @@ import { Menu } from "@base-ui/react/menu";
 import { Popover } from "@base-ui/react/popover";
 import { ScrollArea } from "@base-ui/react/scroll-area";
 import { Select } from "@base-ui/react/select";
-import { CheckLine, DownLine, ZoomInLine, ZoomOutLine } from "@mingcute/react";
+import {
+  CheckLine,
+  CloseLine,
+  DownLine,
+  LeftLine,
+  RightLine,
+  SearchLine,
+  ZoomInLine,
+  ZoomOutLine,
+} from "@mingcute/react";
 
 import { AppTooltipButton } from "@/components/app-tooltip";
 import { cn } from "@/components/ui/viewer-utils";
@@ -214,6 +223,139 @@ export function ViewerPageNumberControl({
       </span>
       <span className="viewer-toolbar-page-total">{totalLabel}</span>
     </button>
+  );
+}
+
+export function ViewerSearchPanel({
+  canClear,
+  clearLabel,
+  detailLabel,
+  hasResults,
+  inputLabel,
+  isSearching = false,
+  nextResultLabel,
+  onClear,
+  onInputKeyDown,
+  onNextResult,
+  onPreviousResult,
+  onValueChange,
+  placeholder,
+  previousResultLabel,
+  resultLabel,
+  value,
+}: {
+  canClear: boolean;
+  clearLabel: string;
+  detailLabel?: React.ReactNode;
+  hasResults: boolean;
+  inputLabel: string;
+  isSearching?: boolean;
+  nextResultLabel: string;
+  onClear: () => void;
+  onInputKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+  onNextResult: () => void;
+  onPreviousResult: () => void;
+  onValueChange: (value: string) => void;
+  placeholder: string;
+  previousResultLabel: string;
+  resultLabel: React.ReactNode;
+  value: string;
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const navigationDisabled = isSearching || !hasResults;
+  const showFooter =
+    isSearching || hasResults || canClear || Boolean(detailLabel);
+  const handleInputKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      onInputKeyDown?.(event);
+      if (event.defaultPrevented || event.key !== "Enter" || !hasResults) {
+        return;
+      }
+
+      event.preventDefault();
+      if (event.shiftKey) {
+        onPreviousResult();
+      } else {
+        onNextResult();
+      }
+    },
+    [hasResults, onInputKeyDown, onNextResult, onPreviousResult],
+  );
+  const handleClear = React.useCallback(() => {
+    onClear();
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  }, [onClear]);
+
+  return (
+    <div className="viewer-search-panel" role="search">
+      <div className="viewer-search-field">
+        <SearchLine aria-hidden="true" className="viewer-search-field-icon" />
+        <input
+          ref={inputRef}
+          autoFocus
+          aria-label={inputLabel}
+          autoComplete="off"
+          className="viewer-search-input"
+          enterKeyHint="search"
+          inputMode="search"
+          name="viewer-search"
+          placeholder={placeholder}
+          spellCheck={false}
+          type="search"
+          value={value}
+          onChange={(event) => onValueChange(event.currentTarget.value)}
+          onKeyDown={handleInputKeyDown}
+        />
+        {hasResults || canClear ? (
+          <div className="viewer-search-inline-actions">
+            {hasResults ? (
+              <>
+                <button
+                  type="button"
+                  aria-label={previousResultLabel}
+                  className="viewer-search-inline-button"
+                  disabled={navigationDisabled}
+                  onClick={onPreviousResult}
+                >
+                  <LeftLine aria-hidden="true" className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={nextResultLabel}
+                  className="viewer-search-inline-button"
+                  disabled={navigationDisabled}
+                  onClick={onNextResult}
+                >
+                  <RightLine aria-hidden="true" className="size-4" />
+                </button>
+              </>
+            ) : null}
+            {canClear ? (
+              <button
+                type="button"
+                aria-label={clearLabel}
+                className="viewer-search-inline-button"
+                onClick={handleClear}
+              >
+                <CloseLine aria-hidden="true" className="size-4" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      {showFooter ? (
+        <div className="viewer-search-footer">
+          <div className="viewer-search-result">
+            <div className="viewer-search-result-label" aria-live="polite">
+              {resultLabel}
+            </div>
+            {detailLabel ? (
+              <div className="viewer-search-result-detail">{detailLabel}</div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

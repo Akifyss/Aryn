@@ -11,9 +11,7 @@ import {
 import {
   DownloadLine,
   Fullscreen2Line,
-  LeftLine,
   More2Line,
-  RightLine,
   SearchLine,
   UploadLine,
 } from "@mingcute/react";
@@ -38,6 +36,7 @@ import {
   ViewerPopoverRoot as Popover,
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerPageNumberControl,
+  ViewerSearchPanel,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
@@ -220,63 +219,55 @@ function PptxSearchPopover({
 }) {
   const hasQuery = Boolean(searchDraft.trim());
   const hasResults = searchResultCount > 0;
+  const searchLabel = "搜索 PPTX 文本";
   const resultLabel = !hasQuery
-    ? "未搜索"
+    ? VIEWER_COPY.noSearch
     : hasResults
       ? `${activeSearchIndex + 1} / ${searchResultCount}`
-      : "无结果";
+      : VIEWER_COPY.noResults;
 
   return (
     <Popover>
-      <PopoverTrigger>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="搜索 PPTX 文本"
-          disabled={controlsDisabled}
-        >
-          <SearchLine className="size-4" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-3">
-        <div className="flex min-w-0 flex-col gap-2">
-          <input
-            autoFocus
-            aria-label="搜索 PPTX 文本"
-            className="h-9 min-w-0 rounded-md border border-[var(--border-primary)] bg-[var(--background-primary)] px-3 text-sm text-[var(--foreground-primary)] outline-none placeholder:text-[var(--foreground-secondary)] focus-visible:border-[var(--focus)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_oklab,var(--focus)_24%,transparent)]"
-            placeholder="搜索幻灯片文本"
-            value={searchDraft}
-            onChange={(event) => onSearchDraftChange(event.currentTarget.value)}
-          />
-          <div className="flex items-center justify-between gap-2">
-            <span className="min-w-0 text-xs text-[var(--foreground-secondary)]">
-              {resultLabel}
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="上一个结果"
-                disabled={!hasResults}
-                onClick={onPreviousResult}
-              >
-                <LeftLine className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="下一个结果"
-                disabled={!hasResults}
-                onClick={onNextResult}
-              >
-                <RightLine className="size-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
+      <ToolbarTooltip label={searchLabel}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={searchLabel}
+            disabled={controlsDisabled}
+          >
+            <SearchLine aria-hidden="true" className="size-4" />
+          </Button>
+        </PopoverTrigger>
+      </ToolbarTooltip>
+      <PopoverContent align="end" className="viewer-search-popover">
+        <ViewerSearchPanel
+          canClear={hasQuery}
+          clearLabel={VIEWER_COPY.clear}
+          hasResults={hasResults}
+          inputLabel={searchLabel}
+          nextResultLabel={VIEWER_COPY.nextResult}
+          onClear={() => onSearchDraftChange("")}
+          onNextResult={onNextResult}
+          onPreviousResult={onPreviousResult}
+          onValueChange={onSearchDraftChange}
+          placeholder="搜索幻灯片文本"
+          previousResultLabel={VIEWER_COPY.previousResult}
+          resultLabel={
+            hasResults ? (
+              <>
+                <span className="viewer-search-result-current">
+                  {activeSearchIndex + 1}
+                </span>
+                {` / ${searchResultCount}`}
+              </>
+            ) : (
+              resultLabel
+            )
+          }
+          value={searchDraft}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -349,16 +340,6 @@ function PptxToolbar({
       </div>
       <div className="viewer-toolbar-title text-center">{fileName}</div>
       <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
-        <PptxSearchPopover
-          activeSearchIndex={activeSearchIndex}
-          controlsDisabled={controlsDisabled}
-          onNextResult={onNextSearchResult}
-          onPreviousResult={onPreviousSearchResult}
-          onSearchDraftChange={onSearchDraftChange}
-          searchDraft={searchDraft}
-          searchResultCount={searchResultCount}
-        />
-        <Separator className="mx-1" />
         <ViewerZoomControls
           ariaLabel={VIEWER_COPY.zoomLevel}
           disabled={controlsDisabled}
@@ -377,9 +358,19 @@ function PptxToolbar({
             disabled={controlsDisabled}
             onClick={onFitModeToggle}
           >
-            <Fullscreen2Line className="size-4" />
+            <Fullscreen2Line aria-hidden="true" className="size-4" />
           </Button>
         </ToolbarTooltip>
+        <Separator className="mx-1" />
+        <PptxSearchPopover
+          activeSearchIndex={activeSearchIndex}
+          controlsDisabled={controlsDisabled}
+          onNextResult={onNextSearchResult}
+          onPreviousResult={onPreviousSearchResult}
+          onSearchDraftChange={onSearchDraftChange}
+          searchDraft={searchDraft}
+          searchResultCount={searchResultCount}
+        />
         <PptxFileActionsMenu
           downloadDisabled={controlsDisabled}
           onDownload={onDownload}

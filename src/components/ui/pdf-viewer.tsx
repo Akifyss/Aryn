@@ -69,13 +69,11 @@ import {
   ClockwiseLine,
   DownloadLine,
   LayoutLeftLine,
-  LeftLine,
   More2Line,
-  RightLine,
   SearchLine,
   UploadLine,
 } from "@mingcute/react";
-import { Input, Spinner } from "@heroui/react";
+import { Spinner } from "@heroui/react";
 import { flushSync } from "react-dom";
 
 import { AppScrollArea } from "@/components/app-scroll-area";
@@ -94,6 +92,7 @@ import {
   ViewerPopoverRoot as Popover,
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerPageNumberControl,
+  ViewerSearchPanel,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
@@ -732,9 +731,7 @@ function PDFViewerSearchControl({
   }, [runSearch, searchDraft]);
 
   const handleSearchDraftChange = React.useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const nextDraft = event.target.value;
-
+    (nextDraft: string) => {
       setSearchDraft(nextDraft);
 
       if (nextDraft.trim()) {
@@ -781,79 +778,50 @@ function PDFViewerSearchControl({
             aria-label={VIEWER_COPY.searchText}
             disabled={controlsDisabled}
           >
-            <SearchLine className="size-4" />
+            <SearchLine aria-hidden="true" className="size-4" />
           </Button>
         </PopoverTrigger>
       </ToolbarTooltip>
-      <PopoverContent align="end" className="w-72">
-        <div className="space-y-3">
-          <Input
-            aria-label={VIEWER_COPY.searchText}
-            placeholder={VIEWER_COPY.searchText}
-            value={searchDraft}
-            onChange={handleSearchDraftChange}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter") return;
+      <PopoverContent align="end" className="viewer-search-popover">
+        <ViewerSearchPanel
+          canClear={Boolean(searchDraft.trim() || searchQuery.trim())}
+          clearLabel={VIEWER_COPY.clear}
+          hasResults={state.total > 0}
+          inputLabel={VIEWER_COPY.searchText}
+          isSearching={isSearching}
+          nextResultLabel={VIEWER_COPY.nextResult}
+          onClear={clearSearch}
+          onInputKeyDown={(event) => {
+            if (event.key !== "Enter") return;
 
-              event.preventDefault();
-              if (event.shiftKey && state.total) {
-                navigate(-1);
-              } else if (state.total) {
-                navigate(1);
-              } else if (searchDraft.trim()) {
-                runSearch(searchDraft);
-              }
-            }}
-          />
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 text-xs text-[var(--foreground-secondary)]">
-              <div className="truncate">
-                {state.total ? (
-                  <>
-                    <span className="text-[var(--accent)]">
-                      {state.activeResultIndex + 1}
-                    </span>
-                    {` / ${state.total}`}
-                  </>
-                ) : (
-                  resultLabel
-                )}
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                aria-label={VIEWER_COPY.previousResult}
-                disabled={isSearching || state.total === 0}
-                onClick={() => navigate(-1)}
-              >
-                <LeftLine className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                aria-label={VIEWER_COPY.nextResult}
-                disabled={isSearching || state.total === 0}
-                onClick={() => navigate(1)}
-              >
-                <RightLine className="size-4" />
-              </Button>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={clearSearch}
-            >
-              {VIEWER_COPY.clear}
-            </Button>
-          </div>
-        </div>
+            event.preventDefault();
+            if (event.shiftKey && state.total) {
+              navigate(-1);
+            } else if (state.total) {
+              navigate(1);
+            } else if (searchDraft.trim()) {
+              runSearch(searchDraft);
+            }
+          }}
+          onNextResult={() => navigate(1)}
+          onPreviousResult={() => navigate(-1)}
+          onValueChange={handleSearchDraftChange}
+          placeholder={VIEWER_COPY.searchText}
+          previousResultLabel={VIEWER_COPY.previousResult}
+          resultLabel={
+            state.total ? (
+              <>
+                <span className="viewer-search-result-current">
+                  {state.activeResultIndex + 1}
+                </span>
+                {` / ${state.total}`}
+              </>
+            ) : (
+              resultLabel
+            )
+          }
+          value={searchDraft}
+        />
       </PopoverContent>
     </Popover>
   );
