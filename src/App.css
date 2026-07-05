@@ -2075,6 +2075,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 .editor-content-shell {
   --editor-surface-header-height: 44px;
   --editor-toolbar-inline-padding: 6px;
+  --editor-fixed-panel-block-start-gap: var(--editor-toolbar-inline-padding);
   --editor-toolbar-gap: 8px;
   --editor-toolbar-control-gap: 4px;
   --editor-directory-toggle-left: var(--editor-toolbar-inline-padding);
@@ -2088,6 +2089,11 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   min-height: 0;
   overflow: hidden;
   background: var(--background-primary);
+}
+
+.app-shell[data-app-layout='agent'] .editor-content-shell > .sidebar-git-pane .git-panel-detail-pane > .git-panel > .git-panel-header,
+.app-shell[data-app-layout='agent'] .editor-content-shell > .sidebar-git-pane .git-panel-detail-pane > .git-commit-detail > .git-commit-detail-header {
+  margin-block-start: var(--editor-fixed-panel-block-start-gap);
 }
 
 .editor-directory-sidebar {

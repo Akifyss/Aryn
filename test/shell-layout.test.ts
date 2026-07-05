@@ -224,6 +224,18 @@ describe('shell layout helpers', () => {
 }`)
   })
 
+  it('keeps the Agent fixed Git panel clear of the tab bar edge', async () => {
+    const appCss = await readAppCss()
+
+    expect(appCss).toContain('--editor-fixed-panel-block-start-gap: var(--editor-toolbar-inline-padding);')
+    expect(appCss).toContain(`.app-shell[data-app-layout='agent'] .editor-content-shell > .sidebar-git-pane .git-panel-detail-pane > .git-panel > .git-panel-header,
+.app-shell[data-app-layout='agent'] .editor-content-shell > .sidebar-git-pane .git-panel-detail-pane > .git-commit-detail > .git-commit-detail-header {
+  margin-block-start: var(--editor-fixed-panel-block-start-gap);
+}`)
+    expect(appCss).not.toMatch(/\.editor-content-shell\s*>\s*\.sidebar-git-pane\s*\{\s*padding-(?:top|block-start):/)
+    expect(appCss).not.toMatch(/\.editor-content-shell\s*>\s*\.sidebar-git-pane\s+\.git-panel-detail-pane\s*\{\s*padding-(?:top|block-start):/)
+  })
+
   it('keeps disabled tree action tooltips hoverable', async () => {
     const [appCss, treeSource] = await Promise.all([
       readAppCss(),
