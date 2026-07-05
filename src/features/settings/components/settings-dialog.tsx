@@ -117,6 +117,8 @@ const OUTLINE_POSITION_OPTIONS: SettingsSelectOption[] = [
   { label: '左侧', value: 'left' },
 ]
 
+const DEFAULT_WORKSPACE_ICON_THEME_OPTION_KEY = '__aryn-default-workspace-icon-theme__'
+
 type SettingsSelectProps = {
   ariaLabel: string
   className?: string
@@ -549,16 +551,22 @@ export function SettingsDialog({
 
   const activeIconThemeKeys = useMemo(
     () => ({
-      dark: resolveActiveWorkspaceIconThemeKey(iconThemes.dark, iconThemeOptions),
-      light: resolveActiveWorkspaceIconThemeKey(iconThemes.light, iconThemeOptions),
+      dark: resolveActiveWorkspaceIconThemeKey(iconThemes.dark, iconThemeOptions) ?? DEFAULT_WORKSPACE_ICON_THEME_OPTION_KEY,
+      light: resolveActiveWorkspaceIconThemeKey(iconThemes.light, iconThemeOptions) ?? DEFAULT_WORKSPACE_ICON_THEME_OPTION_KEY,
     }),
     [iconThemes.dark, iconThemes.light, iconThemeOptions],
   )
   const iconThemeSelectOptions = useMemo(
-    () => iconThemeOptions.map((option) => ({
-      label: option.label,
-      value: option.key,
-    })),
+    () => [
+      {
+        label: '默认',
+        value: DEFAULT_WORKSPACE_ICON_THEME_OPTION_KEY,
+      },
+      ...iconThemeOptions.map((option) => ({
+        label: option.label,
+        value: option.key,
+      })),
+    ],
     [iconThemeOptions],
   )
 
@@ -747,6 +755,14 @@ export function SettingsDialog({
   }
 
   function handleIconThemeSelect(mode: WorkspaceIconThemeMode, value: string) {
+    if (value === DEFAULT_WORKSPACE_ICON_THEME_OPTION_KEY) {
+      void onSelectIconTheme(mode, {
+        sourceVsixPath: null,
+        themeId: null,
+      })
+      return
+    }
+
     const selectedOption = iconThemeOptions.find((option) => option.key === value)
 
     if (selectedOption) {
@@ -799,7 +815,7 @@ export function SettingsDialog({
               <SettingsSelect
                 ariaLabel='浅色模式文件图标主题'
                 className='flex-1'
-                disabled={isIconThemeBusy || iconThemeOptions.length === 0}
+                disabled={isIconThemeBusy}
                 options={iconThemeSelectOptions}
                 placeholder='选择浅色图标主题'
                 value={activeIconThemeKeys.light}
@@ -819,7 +835,7 @@ export function SettingsDialog({
               <SettingsSelect
                 ariaLabel='暗色模式文件图标主题'
                 className='flex-1'
-                disabled={isIconThemeBusy || iconThemeOptions.length === 0}
+                disabled={isIconThemeBusy}
                 options={iconThemeSelectOptions}
                 placeholder='选择暗色图标主题'
                 value={activeIconThemeKeys.dark}

@@ -14,7 +14,6 @@ const bundledIconThemePackageOrder = [
   'pkief.material-icon-theme',
   'miguelsolorio.symbols',
   'teabyii.ayu',
-  'pierrecomputer.pierre-vscode-icons',
 ]
 
 type BundledWorkspaceIconThemeCandidate = {

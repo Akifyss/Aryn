@@ -1,12 +1,12 @@
 import {
-  FileLine,
-  FolderLine,
-} from '@mingcute/react'
-import {
   resolveWorkspaceDirectoryIconUrl,
   resolveWorkspaceFileIconUrl,
 } from '@/features/workspace/lib/icon-theme'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
+import {
+  DefaultWorkspaceFileTypeIcon,
+  DefaultWorkspaceFolderGlyph,
+} from './workspace-file-icons'
 import {
   TreeItemIcon,
   TreeItemStatusDot,
@@ -70,9 +70,12 @@ export function WorkspaceFileIcon({
       {iconUrl ? (
         <img alt='' className='tree-item-icon-image' draggable='false' src={iconUrl} />
       ) : isFolder ? (
-        <FolderLine size={16} />
+        <DefaultWorkspaceFolderGlyph className='tree-item-icon-image' />
       ) : (
-        <FileLine size={16} className='tree-item-icon-fallback' />
+        <DefaultWorkspaceFileTypeIcon
+          className='tree-item-icon-image tree-item-icon-fallback'
+          fileName={fileName ?? ''}
+        />
       )}
     </TreeItemIcon>
   )

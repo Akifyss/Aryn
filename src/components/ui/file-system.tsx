@@ -26,8 +26,6 @@ import { Select as BaseSelect } from "@base-ui/react/select"
 import { Tabs as BaseTabs } from "@base-ui/react/tabs"
 import { Modal } from "@heroui/react"
 import {
-  createFileTreeIconResolver,
-  getBuiltInSpriteSheet,
   prepareFileTreeInput,
   type FileTreeSortComparator,
   type FileTreeSortEntry,
@@ -36,6 +34,13 @@ import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
 import { createPortal } from "react-dom"
 import { AppScrollArea } from "@/components/app-scroll-area"
 import { AppTooltip, AppTooltipButton } from "@/components/app-tooltip"
+import {
+  DEFAULT_WORKSPACE_FOLDER_GLYPH_DATA_URL as FOLDER_GLYPH_DATA_URL,
+  DefaultWorkspaceFileIconAssets as FileSystemIconSpriteSheet,
+  DefaultWorkspaceFileTypeIcon as FileTypeIcon,
+  DefaultWorkspaceFileTypePreview as FileSystemFileTypePreview,
+  DefaultWorkspaceFolderGlyph as FileSystemFolderGlyph,
+} from "@/components/workspace-file-icons"
 import {
   ViewerToolbar,
   ViewerToolbarGroup,
@@ -2018,193 +2023,12 @@ function folderHasChildren(index: FileSystemIndex, folder: FolderEntry) {
   )
 }
 
-// A single SVG source so the same glyph renders as a React element, inside the
-// @pierre/trees shadow DOM (via CSS url()), and stays pixel-identical in both.
-const FOLDER_GLYPH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 50" width="64" height="50"><defs><linearGradient id="fs-folder-back" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3dabf5"/><stop offset="1" stop-color="#1d84dd"/></linearGradient><linearGradient id="fs-folder-front" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#7accfb"/><stop offset="1" stop-color="#37a0ef"/></linearGradient></defs><path d="M5 10c0-3.31 2.69-6 6-6h10.9c1.6 0 3.13.7 4.18 1.9l1.5 1.73a3.5 3.5 0 0 0 2.64 1.22H54c2.76 0 5 2.24 5 5V40c0 3.87-3.13 7-7 7H12c-3.87 0-7-3.13-7-7V10Z" fill="url(#fs-folder-back)"/><path d="M5 15.5h54V40c0 3.87-3.13 7-7 7H12c-3.87 0-7-3.13-7-7V15.5Z" fill="url(#fs-folder-front)"/></svg>`
-
-const FOLDER_GLYPH_DATA_URL = `data:image/svg+xml,${encodeURIComponent(FOLDER_GLYPH_SVG)}`
-
-function FileSystemFolderGlyph({ className }: { className?: string }) {
-  return (
-    <img
-      src={FOLDER_GLYPH_DATA_URL}
-      alt=""
-      aria-hidden="true"
-      draggable={false}
-      className={className}
-    />
-  )
-}
-
 function escapeXmlAttribute(value: string) {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
-}
-
-// The @pierre/trees "complete" set — the full, colored suite with brand and
-// framework glyphs — ships as an SVG sprite. The list view tree consumes it
-// natively inside its shadow DOM; the icon, column, and gallery views render
-// the same sprite from the light DOM so every view falls back to the same
-// file-type icon when a file has no thumbnail.
-const FILE_ICON_SPRITE_SHEET = getBuiltInSpriteSheet("complete")
-
-const { resolveIcon: resolveFileIcon } = createFileTreeIconResolver({
-  colored: true,
-  set: "complete",
-})
-
-// Per-token light/dark colors mirroring the palette the tree applies inside
-// its shadow DOM. Tokens without an entry (font, nextjs, stylelint) stay
-// muted-foreground there too.
-const FILE_ICON_COLORS: Record<string, [light: string, dark: string]> = {
-  astro: ["#a631be", "#d568ea"],
-  babel: ["#d5a910", "#ffd452"],
-  bash: ["#199f43", "#5ecc71"],
-  biome: ["#1a85d4", "#69b1ff"],
-  bootstrap: ["#693acf", "#9d6afb"],
-  browserslist: ["#d5a910", "#ffd452"],
-  bun: ["#594c5b", "#79697b"],
-  c: ["#1a85d4", "#69b1ff"],
-  claude: ["#d47628", "#ffa359"],
-  cpp: ["#1a85d4", "#69b1ff"],
-  css: ["#693acf", "#9d6afb"],
-  database: ["#a631be", "#d568ea"],
-  default: ["#84848a", "#adadb1"],
-  docker: ["#1a85d4", "#69b1ff"],
-  eslint: ["#693acf", "#9d6afb"],
-  git: ["#ff8c5b", "#d5512f"],
-  go: ["#1ca1c7", "#68cdf2"],
-  graphql: ["#d32a61", "#ff678d"],
-  html: ["#d47628", "#ffa359"],
-  image: ["#d32a61", "#ff678d"],
-  javascript: ["#d5a910", "#ffd452"],
-  json: ["#d47628", "#ffa359"],
-  markdown: ["#199f43", "#5ecc71"],
-  mcp: ["#17a5af", "#64d1db"],
-  npm: ["#d52c36", "#ff6762"],
-  oxc: ["#1ca1c7", "#68cdf2"],
-  postcss: ["#d52c36", "#ff6762"],
-  prettier: ["#17a5af", "#64d1db"],
-  python: ["#1a85d4", "#69b1ff"],
-  react: ["#1ca1c7", "#68cdf2"],
-  ruby: ["#d52c36", "#ff6762"],
-  rust: ["#d47628", "#ffa359"],
-  sass: ["#d32a61", "#ff678d"],
-  svelte: ["#d52c36", "#ff6762"],
-  svg: ["#d47628", "#ffa359"],
-  svgo: ["#199f43", "#5ecc71"],
-  swift: ["#d47628", "#ffa359"],
-  table: ["#17a5af", "#64d1db"],
-  tailwind: ["#1ca1c7", "#68cdf2"],
-  terraform: ["#693acf", "#9d6afb"],
-  text: ["#84848a", "#adadb1"],
-  typescript: ["#1a85d4", "#69b1ff"],
-  vite: ["#a631be", "#d568ea"],
-  vscode: ["#1a85d4", "#69b1ff"],
-  vue: ["#199f43", "#5ecc71"],
-  wasm: ["#693acf", "#9d6afb"],
-  webpack: ["#1a85d4", "#69b1ff"],
-  yml: ["#d52c36", "#ff6762"],
-  zig: ["#d47628", "#ffa359"],
-  zip: ["#d47628", "#ffa359"],
-}
-
-function fileIconColorVariables(mode: 0 | 1) {
-  return Object.entries(FILE_ICON_COLORS)
-    .map(([token, colors]) => `--fs-file-icon-${token}: ${colors[mode]};`)
-    .join(" ")
-}
-
-// The variables live on :root rather than the component root because the
-// filter menus and dialogs portal outside it; the --fs-file-icon-*
-// namespace keeps them collision-free. Thumbnail tiles keep a light
-// (paper) surface in dark mode, so icons inside them revert to the light
-// palette ([data-file-system-on-light]); selected rows sit on the primary
-// surface — the opposite of the mode's background — so icons there swap to
-// the opposite palette ([data-file-system-on-primary] in the light DOM,
-// --fs-selected-color-scheme for the tree's light-dark() colors inside its
-// shadow DOM).
-const FILE_ICON_COLOR_CSS = `
-:root { ${fileIconColorVariables(0)} --fs-selected-color-scheme: dark; }
-.dark { ${fileIconColorVariables(1)} --fs-selected-color-scheme: light; }
-.dark [data-file-system-on-light] { ${fileIconColorVariables(0)} }
-[data-file-system-on-primary] { ${fileIconColorVariables(1)} }
-.dark [data-file-system-on-primary] { ${fileIconColorVariables(0)} }
-`
-
-function FileSystemIconSpriteSheet() {
-  return (
-    <>
-      <span
-        aria-hidden="true"
-        className="hidden"
-        dangerouslySetInnerHTML={{ __html: FILE_ICON_SPRITE_SHEET }}
-      />
-      <style>{FILE_ICON_COLOR_CSS}</style>
-    </>
-  )
-}
-
-function FileTypeIcon({
-  fileName,
-  className,
-}: {
-  fileName: string
-  className?: string
-}) {
-  const icon = resolveFileIcon("file-tree-icon-file", fileName)
-
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox={icon.viewBox ?? "0 0 16 16"}
-      className={cn("shrink-0 text-[var(--foreground-secondary)]", className)}
-      style={
-        icon.token
-          ? {
-              color: `var(--fs-file-icon-${icon.token}, var(--foreground-secondary))`,
-            }
-          : undefined
-      }
-    >
-      <use href={`#${icon.name}`} />
-    </svg>
-  )
-}
-
-function FileSystemFileTypePreview({
-  className,
-  fileName,
-  iconClassName,
-}: {
-  className?: string
-  fileName: string
-  iconClassName?: string
-}) {
-  const extension = fileExtension(fileName)
-
-  return (
-    <div
-      data-file-system-on-light=""
-      className={cn(
-        "flex size-full flex-col items-center justify-center gap-1.5 bg-white text-neutral-400 dark:bg-neutral-100",
-        className
-      )}
-    >
-      <FileTypeIcon
-        fileName={fileName}
-        className={cn("size-1/3 min-h-4 min-w-4", iconClassName)}
-      />
-      {extension ? (
-        <span className="text-[min(0.625rem,18cqw)] font-semibold tracking-wide uppercase">
-          {extension}
-        </span>
-      ) : null}
-    </div>
-  )
 }
 
 function FileGenericPreview({ file }: { file: FileEntry }) {

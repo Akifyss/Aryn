@@ -32,12 +32,12 @@ function createDefaultWorkspaceIconThemeSelections() {
   return {
     dark: {
       activeThemeId: null,
-      sourceKind: 'bundled',
+      sourceKind: null,
       sourceVsixPath: null,
     },
     light: {
       activeThemeId: null,
-      sourceKind: 'bundled',
+      sourceKind: null,
       sourceVsixPath: null,
     },
   }
@@ -884,7 +884,7 @@ describe('app state persistence', () => {
     expect(state.ui.workspaceIconThemes).toEqual({
       dark: {
         activeThemeId: null,
-        sourceKind: 'bundled',
+        sourceKind: null,
         sourceVsixPath: null,
       },
       light: {
@@ -893,6 +893,27 @@ describe('app state persistence', () => {
         sourceVsixPath: null,
       },
     })
+  })
+
+  it('normalizes empty workspace icon theme selections to the default icon set', () => {
+    const state = normalizePersistedAppState({
+      ui: {
+        workspaceIconThemes: {
+          dark: {
+            activeThemeId: null,
+            sourceKind: 'bundled',
+            sourceVsixPath: null,
+          },
+          light: {
+            activeThemeId: '',
+            sourceKind: 'external',
+            sourceVsixPath: '',
+          },
+        },
+      },
+    })
+
+    expect(state.ui.workspaceIconThemes).toEqual(createDefaultWorkspaceIconThemeSelections())
   })
 
   it('normalizes invalid external workspace icon theme selections to bundled per mode', () => {

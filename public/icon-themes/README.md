@@ -30,11 +30,6 @@ Bundled packages:
   - Source: https://github.com/ayu-theme/vscode-ayu
   - License: MIT
   - SHA256: `A702EF8A4DC644C2F2AFA19E4E6661D4CAE4807D4C81BCA87A66CD990C60E08D`
-- Pierre VS Code Icons 0.0.9
-  - File: `pierrecomputer.pierre-vscode-icons-0.0.9.vsix`
-  - Source: https://github.com/pierrecomputer/vscode-icons
-  - License: MIT
-  - SHA256: `9B66D6C0A965350E3E686EE750709DFBB2D35E04344264816711EF1B72378B60`
 
 Each VSIX includes its own license file under `extension/`. Keep this list in sync when
 adding, removing, or updating bundled icon theme packages.

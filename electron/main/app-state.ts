@@ -109,7 +109,7 @@ const DEFAULT_APP_SETTINGS: PersistedAppSettings = {
 function createDefaultWorkspaceIconThemeSelection(): PersistedWorkspaceIconThemeSelection {
   return {
     activeThemeId: null,
-    sourceKind: 'bundled',
+    sourceKind: null,
     sourceVsixPath: null,
   }
 }
@@ -413,12 +413,15 @@ function readWorkspaceIconThemeSelection(value: unknown): PersistedWorkspaceIcon
     ? candidate.sourceKind
     : null
   const sourceVsixPath = readNullableString(candidate.sourceVsixPath)
-  const normalizedSourceKind = sourceKind === 'external' && !sourceVsixPath
-    ? 'bundled'
-    : sourceKind ?? (sourceVsixPath ? null : 'bundled')
+  const activeThemeId = readNullableString(candidate.activeThemeId)
+  const normalizedSourceKind = !activeThemeId && !sourceVsixPath
+    ? null
+    : sourceKind === 'external' && !sourceVsixPath
+      ? 'bundled'
+      : sourceKind ?? (sourceVsixPath ? null : 'bundled')
 
   return {
-    activeThemeId: readNullableString(candidate.activeThemeId),
+    activeThemeId,
     sourceKind: normalizedSourceKind,
     sourceVsixPath: normalizedSourceKind === 'bundled' ? null : sourceVsixPath,
   }

@@ -894,11 +894,18 @@ async function getEffectiveWorkspaceIconThemeSelection(
   mode: WorkspaceIconThemeMode = 'light',
 ): Promise<{
   activeThemeId: string | null
-  sourceVsixPath: string
+  sourceVsixPath: string | null
 }> {
   const state = await appStateStore.read()
   const persistedSelection = state.ui.workspaceIconThemes[mode]
   const persistedVsixPath = persistedSelection.sourceVsixPath
+
+  if (!persistedSelection.activeThemeId && !persistedVsixPath) {
+    return {
+      activeThemeId: null,
+      sourceVsixPath: null,
+    }
+  }
 
   if (persistedSelection.sourceKind === 'bundled' || !persistedVsixPath) {
     const selection = await resolveBundledWorkspaceIconThemeSelection(persistedSelection.activeThemeId, mode)
@@ -961,7 +968,9 @@ async function getWorkspaceIconThemeCatalog() {
   const importedVsixPaths = new Set(
     selections
       .map((selection) => selection.sourceVsixPath)
-      .filter((sourceVsixPath) => !isBundledWorkspaceIconTheme(sourceVsixPath)),
+      .filter((sourceVsixPath): sourceVsixPath is string => (
+        typeof sourceVsixPath === 'string' && !isBundledWorkspaceIconTheme(sourceVsixPath)
+      )),
   )
 
   for (const sourceVsixPath of importedVsixPaths) {
@@ -2149,6 +2158,11 @@ ipcMain.handle('workspace-icons:get-theme', async (_, modeValue?: unknown) => {
   const state = await appStateStore.read()
   const persistedSourceSelection = state.ui.workspaceIconThemes[mode]
   const persistedSelection = await getEffectiveWorkspaceIconThemeSelection(mode)
+
+  if (!persistedSelection.sourceVsixPath || !persistedSelection.activeThemeId) {
+    return null
+  }
+
   const theme = await importWorkspaceIconTheme(
     persistedSelection.sourceVsixPath,
     persistedSelection.activeThemeId,
@@ -2177,18 +2191,14 @@ ipcMain.handle('workspace-icons:get-theme', async (_, modeValue?: unknown) => {
             ...currentState.ui.workspaceIconThemes,
             [mode]: {
               activeThemeId: null,
-              sourceKind: 'bundled',
+              sourceKind: null,
               sourceVsixPath: null,
             },
           },
         },
       }))
 
-      try {
-        return await loadBundledWorkspaceIconTheme(null, mode)
-      } catch {
-        throw error
-      }
+      return null
     })
 
   return theme
@@ -2234,11 +2244,21 @@ ipcMain.handle('workspace-icons:set-active-theme', async (_, modeValue: unknown,
     throw new Error('Icon theme id is required.')
   }
 
-  const selection = await getEffectiveWorkspaceIconThemeSelection(mode)
-  const nextSelection = isBundledWorkspaceIconTheme(selection.sourceVsixPath)
+  const currentSelection = await getEffectiveWorkspaceIconThemeSelection(mode)
+  const shouldResolveBundledTheme = !currentSelection.sourceVsixPath
+    || isBundledWorkspaceIconTheme(currentSelection.sourceVsixPath)
+  const nextSelection = shouldResolveBundledTheme
     ? await resolveBundledWorkspaceIconThemeSelection(themeId, mode)
-    : selection
-  const theme = await importWorkspaceIconTheme(nextSelection.sourceVsixPath, nextSelection.activeThemeId ?? themeId)
+    : currentSelection
+
+  if (!nextSelection.sourceVsixPath) {
+    throw new Error('Icon theme VSIX path is required.')
+  }
+
+  const nextThemeId = shouldResolveBundledTheme
+    ? nextSelection.activeThemeId ?? themeId
+    : themeId
+  const theme = await importWorkspaceIconTheme(nextSelection.sourceVsixPath, nextThemeId)
 
   await updatePersistedWorkspaceIconTheme(mode, theme)
 
@@ -2258,10 +2278,35 @@ ipcMain.handle('workspace-icons:select-theme', async (
   const mode = hasExplicitMode ? readWorkspaceIconThemeMode(modeOrSelection) : 'light'
   const selection = hasExplicitMode ? selectionValue : modeOrSelection
   const selectionRecord = readRecord(selection)
-  const sourceVsixPath = readRequiredPathArgument(selectionRecord.sourceVsixPath, 'Icon theme VSIX path')
+  const sourceVsixPath = typeof selectionRecord.sourceVsixPath === 'string' && selectionRecord.sourceVsixPath.trim()
+    ? readRequiredPathArgument(selectionRecord.sourceVsixPath, 'Icon theme VSIX path')
+    : null
   const themeId = typeof selectionRecord.themeId === 'string' && selectionRecord.themeId.trim()
     ? selectionRecord.themeId.trim()
     : null
+
+  if (!sourceVsixPath && !themeId) {
+    await appStateStore.update((currentState) => ({
+      ...currentState,
+      ui: {
+        ...currentState.ui,
+        workspaceIconThemes: {
+          ...currentState.ui.workspaceIconThemes,
+          [mode]: {
+            activeThemeId: null,
+            sourceKind: null,
+            sourceVsixPath: null,
+          },
+        },
+      },
+    }))
+
+    return null
+  }
+
+  if (!sourceVsixPath) {
+    throw new Error('Icon theme VSIX path is required.')
+  }
 
   if (!themeId) {
     throw new Error('Icon theme id is required.')

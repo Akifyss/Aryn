@@ -64,8 +64,8 @@ export type WorkspaceIconTheme = {
 }
 
 export type WorkspaceIconThemeSelection = {
-  sourceVsixPath: string
-  themeId: string
+  sourceVsixPath: string | null
+  themeId: string | null
 }
 
 export type WorkspaceIconThemesByMode = Record<WorkspaceIconThemeMode, WorkspaceIconTheme | null>

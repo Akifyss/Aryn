@@ -4016,9 +4016,11 @@ function App() {
     selection: WorkspaceIconThemeSelection,
   ) {
     const currentIconTheme = iconThemes[mode]
+    const isDefaultSelection = !selection.themeId && !selection.sourceVsixPath
 
     if (
-      currentIconTheme?.activeThemeId === selection.themeId
+      !isDefaultSelection
+      && currentIconTheme?.activeThemeId === selection.themeId
       && currentIconTheme.sourceVsixPath === selection.sourceVsixPath
     ) {
       return
@@ -4028,16 +4030,14 @@ function App() {
       setIsApplyingIconTheme(true)
       const nextIconTheme = await window.appApi.setWorkspaceIconTheme(mode, selection)
 
-      if (!nextIconTheme) {
-        return
-      }
-
       setIconThemes((currentValue) => ({
         ...currentValue,
         [mode]: nextIconTheme,
       }))
       setIconThemeOptions(await window.appApi.getWorkspaceIconThemeCatalog())
-      setStatusMessage(`${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`)
+      setStatusMessage(nextIconTheme
+        ? `${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`
+        : '文件图标主题：默认')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to switch the icon theme.'
       setStatusMessage(message)
