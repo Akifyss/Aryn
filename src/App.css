@@ -2226,6 +2226,19 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   font-size: 12px;
 }
 
+.file-system-file-type-scroll.app-scroll-area {
+  height: auto;
+  max-height: 256px;
+  --app-scroll-area-scrollbar-gap: 2px;
+}
+
+.file-system-file-type-scroll .app-scroll-area-viewport {
+  height: auto;
+  max-height: 256px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .file-system-status-bar {
   display: flex;
   align-items: center;

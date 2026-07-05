@@ -34,6 +34,7 @@ import {
 } from "@pierre/trees"
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
 import { createPortal } from "react-dom"
+import { AppScrollArea } from "@/components/app-scroll-area"
 import { AppTooltip, AppTooltipButton } from "@/components/app-tooltip"
 import {
   ViewerToolbar,
@@ -4018,7 +4019,7 @@ function FileSystemFileTypeCommand({
       />
       <CommandList className="max-h-none">
         <CommandEmpty>{FILE_SYSTEM_COPY.empty.noFileTypes}</CommandEmpty>
-        <ScrollArea orientation="vertical" className="h-auto max-h-64">
+        <AppScrollArea className="file-system-file-type-scroll">
           {FILE_TYPE_FILTER_GROUPS.map((group) => {
             const groupOptions = options.filter(
               (option) => option.group === group
@@ -4056,7 +4057,7 @@ function FileSystemFileTypeCommand({
               </CommandGroup>
             )
           })}
-        </ScrollArea>
+        </AppScrollArea>
       </CommandList>
     </Command>
   )
