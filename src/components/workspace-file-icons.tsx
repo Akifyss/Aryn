@@ -5,8 +5,9 @@ function cn(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(' ')
 }
 
-// A single SVG source so the same folder glyph can render in the workspace
-// tree, the File System light DOM, and @pierre/trees shadow DOM CSS.
+// The File System owns this folder visual. Its list view injects the same SVG
+// into Pierre tree rows via unsafeCSS, and incomplete third-party icon themes
+// use it as a stable folder fallback.
 const DEFAULT_WORKSPACE_FOLDER_GLYPH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 50" width="64" height="50"><defs><linearGradient id="fs-folder-back" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3dabf5"/><stop offset="1" stop-color="#1d84dd"/></linearGradient><linearGradient id="fs-folder-front" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#7accfb"/><stop offset="1" stop-color="#37a0ef"/></linearGradient></defs><path d="M5 10c0-3.31 2.69-6 6-6h10.9c1.6 0 3.13.7 4.18 1.9l1.5 1.73a3.5 3.5 0 0 0 2.64 1.22H54c2.76 0 5 2.24 5 5V40c0 3.87-3.13 7-7 7H12c-3.87 0-7-3.13-7-7V10Z" fill="url(#fs-folder-back)"/><path d="M5 15.5h54V40c0 3.87-3.13 7-7 7H12c-3.87 0-7-3.13-7-7V15.5Z" fill="url(#fs-folder-front)"/></svg>`
 
 export const DEFAULT_WORKSPACE_FOLDER_GLYPH_DATA_URL =
@@ -131,6 +132,37 @@ export function DefaultWorkspaceFileIconAssets() {
 
 export function resolveDefaultWorkspaceFileTypeIcon(fileName: string) {
   return resolveDefaultWorkspaceFileIcon('file-tree-icon-file', fileName)
+}
+
+export function resolveDefaultWorkspaceDirectoryIcon() {
+  return resolveDefaultWorkspaceFileIcon('file-tree-icon-chevron')
+}
+
+export function DefaultWorkspaceDirectoryIcon({
+  className,
+  isExpanded,
+}: {
+  className?: string
+  isExpanded: boolean
+}) {
+  useDefaultWorkspaceFileIconAssets()
+
+  const icon = resolveDefaultWorkspaceDirectoryIcon()
+
+  return (
+    <svg
+      aria-hidden='true'
+      viewBox={icon.viewBox ?? '0 0 16 16'}
+      data-icon-name={icon.name}
+      className={cn(
+        'shrink-0 text-[var(--foreground-secondary)]',
+        !isExpanded && '-rotate-90',
+        className,
+      )}
+    >
+      <use href={`#${icon.name}`} />
+    </svg>
+  )
 }
 
 export function DefaultWorkspaceFileTypeIcon({

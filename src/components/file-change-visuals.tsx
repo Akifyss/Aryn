@@ -4,6 +4,7 @@ import {
 } from '@/features/workspace/lib/icon-theme'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
 import {
+  DefaultWorkspaceDirectoryIcon,
   DefaultWorkspaceFileTypeIcon,
   DefaultWorkspaceFolderGlyph,
 } from './workspace-file-icons'
@@ -69,6 +70,11 @@ export function WorkspaceFileIcon({
     <TreeItemIcon>
       {iconUrl ? (
         <img alt='' className='tree-item-icon-image' draggable='false' src={iconUrl} />
+      ) : isFolder && iconTheme === null ? (
+        <DefaultWorkspaceDirectoryIcon
+          className='tree-item-icon-image tree-item-icon-fallback'
+          isExpanded={!isClosed}
+        />
       ) : isFolder ? (
         <DefaultWorkspaceFolderGlyph className='tree-item-icon-image' />
       ) : (
