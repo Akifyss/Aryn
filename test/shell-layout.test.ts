@@ -26,8 +26,10 @@ describe('shell layout helpers', () => {
     'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))'
   const rightPanelToggleAnchor =
     'calc(var(--right-window-controls-width) + var(--right-chrome-edge-gap))'
-  const rightPanelContentInset =
+  const rightPanelControlInset =
     'calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap))'
+  const rightPanelContentInset =
+    'calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--right-chrome-content-gap))'
   const rightWindowControlsWidth =
     'calc(var(--window-control-button-width) * var(--window-control-button-count))'
 
@@ -47,6 +49,12 @@ describe('shell layout helpers', () => {
   }
 
   function rightPanelContentInsetPx(vars: Record<string, string>) {
+    return rightPanelToggleAnchorPx(vars)
+      + px(vars, '--panel-toggle-size')
+      + px(vars, '--right-chrome-content-gap')
+  }
+
+  function rightPanelControlInsetPx(vars: Record<string, string>) {
     return rightPanelToggleAnchorPx(vars)
       + px(vars, '--panel-toggle-size')
       + px(vars, '--panel-toggle-gap')
@@ -158,6 +166,7 @@ describe('shell layout helpers', () => {
       '--left-chrome-action-gap': '2px',
       '--left-chrome-content-gap': '2px',
       '--left-chrome-edge-gap': '6px',
+      '--right-chrome-content-gap': '6px',
       '--right-chrome-edge-gap': '6px',
       '--window-control-button-width': '48px',
       '--window-control-button-count': '0',
@@ -166,6 +175,7 @@ describe('shell layout helpers', () => {
       '--layout-mode-switch-width': '62px',
       '--left-panel-toggle-anchor': '84px',
       '--right-panel-toggle-anchor': rightPanelToggleAnchor,
+      '--right-panel-control-inset': rightPanelControlInset,
       '--left-panel-content-inset': leftPanelContentInset,
       '--right-panel-content-inset': rightPanelContentInset,
     })
@@ -175,6 +185,7 @@ describe('shell layout helpers', () => {
       '--left-chrome-action-gap': '2px',
       '--left-chrome-content-gap': '2px',
       '--left-chrome-edge-gap': '6px',
+      '--right-chrome-content-gap': '6px',
       '--right-chrome-edge-gap': '6px',
       '--window-control-button-width': '48px',
       '--window-control-button-count': '3',
@@ -183,6 +194,7 @@ describe('shell layout helpers', () => {
       '--layout-mode-switch-width': '62px',
       '--left-panel-toggle-anchor': '6px',
       '--right-panel-toggle-anchor': rightPanelToggleAnchor,
+      '--right-panel-control-inset': rightPanelControlInset,
       '--left-panel-content-inset': leftPanelContentInset,
       '--right-panel-content-inset': rightPanelContentInset,
     })
@@ -193,26 +205,104 @@ describe('shell layout helpers', () => {
     const windowsVars = getShellChromeVars('windows')
 
     expect(rightPanelToggleAnchorPx(macosVars)).toBe(6)
-    expect(rightPanelContentInsetPx(macosVars)).toBe(40)
+    expect(rightPanelControlInsetPx(macosVars)).toBe(40)
+    expect(rightPanelContentInsetPx(macosVars)).toBe(44)
     expect(rightPanelToggleAnchorPx(windowsVars)).toBe(150)
-    expect(rightPanelContentInsetPx(windowsVars)).toBe(184)
+    expect(rightPanelControlInsetPx(windowsVars)).toBe(184)
+    expect(rightPanelContentInsetPx(windowsVars)).toBe(188)
   })
 
-  it('scopes file tab action padding to expanded editor sidebars', async () => {
+  it('keeps file tab chrome edges from doubling against adjacent panels', async () => {
     const appCss = await readAppCss()
 
     expect(appCss).toContain(`.file-tabs-actions {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0;`)
+  padding: 0 0 0 6px;`)
     expect(appCss).toContain(`.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-actions {
-  padding: 0 6px 0 0;
+  padding: 0 6px;
 }`)
+    expect(appCss).toContain(`.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-drag-spacer {
+  min-width: var(--panel-toggle-size);
+}`)
+    expect(appCss).toContain(`.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroll-edge-left,
+.app-shell[data-app-layout='editor'][data-left-collapsed='false'] .file-tabs-scroll-edge-left,
+.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-shell[data-has-actions='false'] .file-tabs-scroll-edge-right {
+  display: none;
+}`)
+    expect(appCss).not.toContain(".app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroll-edge-right")
+    expect(appCss).toContain(`.file-tabs-scroll-frame[data-can-scroll-left='true'] .file-tabs-scroll-edge-left,
+.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroll-edge-right {
+  opacity: 1;
+}`)
+    expect(appCss).toContain(`.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroller {
+  clip-path: inset(0 1px 0 0);
+}`)
+    expect(appCss).toContain(`.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tab:last-child {
+  border-right-color: transparent;
+}`)
+    expect(appCss).toContain(`.file-tabs-shell {
+  --file-tabs-right-panel-inset: var(--right-panel-control-inset);`)
+    expect(appCss).toContain(`.file-tabs-shell[data-has-actions='false'] {
+  --file-tabs-right-panel-inset: var(--right-panel-content-inset);
+}`)
+    expect(appCss).toContain(`.app-shell[data-right-collapsed='true'] .file-tabs-shell {
+  padding-right: var(--file-tabs-right-panel-inset);
+}`)
+    expect(appCss).toContain(`.app-shell[data-right-collapsed='true'] .file-tabs-shell::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: var(--file-tabs-right-panel-inset);
+  border-bottom: 1px solid var(--separator);
+  z-index: 1;
+}`)
+    expect(appCss).not.toContain(".app-shell[data-right-collapsed='true'] .file-tabs-shell[data-has-actions='false']")
+    expect(appCss).not.toContain('.file-tabs-scroll-edge::before')
+    expect(appCss).not.toContain('.file-tabs-scroll-edge::after')
     expect(appCss).toContain('--right-window-controls-width: calc(var(--window-control-button-width) * var(--window-control-button-count));')
     expect(appCss).toContain('--right-panel-toggle-anchor: calc(var(--right-window-controls-width) + var(--right-chrome-edge-gap));')
-    expect(appCss).toContain('--right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));')
+    expect(appCss).toContain('--right-panel-control-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));')
+    expect(appCss).toContain('--right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--right-chrome-content-gap));')
+    expect(appCss).toContain('right: var(--right-panel-control-inset);')
     expect(appCss).toContain('width: var(--window-control-button-width);')
+  })
+
+  it('keeps file tab edge separators independent from scroll-end state', async () => {
+    const fileTabsSource = await readFileTabsSource()
+
+    expect(fileTabsSource).toContain('const hasScrollOverflow = maxScrollLeft > FILE_TAB_SCROLL_EDGE_EPSILON')
+    expect(fileTabsSource).toContain('hasScrollOverflow,')
+    expect(fileTabsSource).toContain("data-has-actions={hasFileTabActions ? 'true' : 'false'}")
+    expect(fileTabsSource).toContain("data-has-scroll-overflow={scrollEdgeState.hasScrollOverflow ? 'true' : 'false'}")
+    expect(fileTabsSource).not.toContain('canScrollRight')
+    expect(fileTabsSource).not.toContain('rightEdgeTabId')
+    expect(fileTabsSource).not.toContain('data-scroll-edge-right')
+    expect(fileTabsSource).not.toContain('const settleTimeoutId = window.setTimeout')
+  })
+
+  it('keeps file tab actions visible for keyboard focus', async () => {
+    const appCss = await readAppCss()
+
+    expect(appCss).toContain(`.file-tab:hover .file-tab-actions,
+.file-tab:focus-within .file-tab-actions,
+.file-tab.is-dirty .file-tab-actions {
+  opacity: 1;
+  pointer-events: auto;
+}`)
+    expect(appCss).toContain(`.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-close svg {
+  opacity: 0;
+  pointer-events: none;
+}`)
+    expect(appCss).toContain(`.file-tab-close:focus-visible,
+.file-tabs-toolbar-button:focus-visible {
+  color: var(--foreground-primary);
+  background: var(--hover);
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}`)
   })
 
   it('keeps the compact Git detail pane stretched when every section is collapsed', async () => {
@@ -423,18 +513,29 @@ describe('shell layout helpers', () => {
   .left-chrome-actions,
   .panel-resize-slot,
   .file-tabs-shell,
+  .file-tabs-scroll-edge,
   .agent-threadbar {
     transition: none;
   }`)
   })
 
   it('keeps macOS fullscreen chrome aligned with the screen edge', () => {
-    expect(getShellChromeVars('macos', { isFullScreen: true })).toMatchObject({
+    const fullscreenVars = getShellChromeVars('macos', { isFullScreen: true })
+
+    expect(fullscreenVars).toMatchObject({
       '--left-chrome-edge-gap': '6px',
+      '--right-chrome-content-gap': '6px',
+      '--right-chrome-edge-gap': '6px',
       '--layout-mode-switch-width': '62px',
       '--left-panel-toggle-anchor': '6px',
+      '--right-panel-toggle-anchor': rightPanelToggleAnchor,
+      '--right-panel-control-inset': rightPanelControlInset,
       '--left-panel-content-inset': leftPanelContentInset,
+      '--right-panel-content-inset': rightPanelContentInset,
     })
+    expect(rightPanelToggleAnchorPx(fullscreenVars)).toBe(6)
+    expect(rightPanelControlInsetPx(fullscreenVars)).toBe(40)
+    expect(rightPanelContentInsetPx(fullscreenVars)).toBe(44)
   })
 
   it('places left chrome controls below the backdrop while the right drawer is open', () => {

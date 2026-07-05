@@ -30,6 +30,7 @@
   --left-chrome-action-gap: 2px;
   --left-chrome-content-gap: 2px;
   --left-chrome-edge-gap: 6px;
+  --right-chrome-content-gap: 6px;
   --right-chrome-edge-gap: 6px;
   --window-control-button-width: 48px;
   --window-control-button-count: 0;
@@ -38,8 +39,9 @@
   --file-tabs-collapsed-left-extra-gap: 0px;
   --left-panel-toggle-anchor: 84px;
   --right-panel-toggle-anchor: calc(var(--right-window-controls-width) + var(--right-chrome-edge-gap));
+  --right-panel-control-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
   --left-panel-content-inset: calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap));
-  --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));
+  --right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--right-chrome-content-gap));
   --sidebar-icon-x: 20px;
   --sidebar-layout-transition-duration: 180ms;
   --sidebar-layout-transition-easing: cubic-bezier(0.16, 1, 0.3, 1);
@@ -137,7 +139,7 @@
 }
 
 .app-shell[data-app-layout='agent'] .panel-agent .file-tabs-shell {
-  padding-right: var(--right-panel-content-inset);
+  padding-right: var(--file-tabs-right-panel-inset);
 }
 
 .app-shell[data-app-layout='agent'] .panel-agent .file-tabs-shell::after {
@@ -145,13 +147,13 @@
   position: absolute;
   right: 0;
   bottom: 0;
-  width: var(--right-panel-content-inset);
+  width: var(--file-tabs-right-panel-inset);
   border-bottom: 1px solid var(--separator);
   z-index: 1;
 }
 
 .app-shell[data-app-layout='agent'] .panel-agent .file-tabs-drag-spacer {
-  min-width: 64px;
+  min-width: var(--panel-toggle-size);
 }
 
 .app-shell[data-app-layout='agent'] .panel-agent-drawer .file-tabs-shell {
@@ -377,7 +379,7 @@ body:has([data-slot='alert-dialog-backdrop']) .left-chrome-actions {
 .agent-collapsed-tab-actions {
   position: absolute;
   top: calc((var(--chrome-height) - var(--panel-toggle-size)) / 2);
-  right: var(--right-panel-content-inset);
+  right: var(--right-panel-control-inset);
   z-index: var(--app-z-panel-toggle);
   display: inline-flex;
   align-items: center;
@@ -1644,6 +1646,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .file-tabs-shell {
+  --file-tabs-right-panel-inset: var(--right-panel-control-inset);
+
   position: relative;
   display: flex;
   align-items: stretch;
@@ -1651,6 +1655,10 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   min-width: 0;
   min-height: var(--tabs-chrome-height);
   background-color: var(--background-primary);
+}
+
+.file-tabs-shell[data-has-actions='false'] {
+  --file-tabs-right-panel-inset: var(--right-panel-content-inset);
 }
 
 .file-tabs-shell[data-sidebar-transition='true'] {
@@ -1689,7 +1697,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   position: absolute;
   right: 0;
   bottom: 0;
-  width: var(--right-panel-content-inset);
+  width: var(--file-tabs-right-panel-inset);
   border-bottom: 1px solid var(--separator);
   z-index: 1;
 }
@@ -1707,7 +1715,17 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .app-shell[data-right-collapsed='true'] .file-tabs-shell {
-  padding-right: var(--right-panel-content-inset);
+  padding-right: var(--file-tabs-right-panel-inset);
+}
+
+.file-tabs-scroll-frame {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: stretch;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .file-tabs-scroller {
@@ -1723,6 +1741,45 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   scrollbar-width: none;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+}
+
+.file-tabs-scroll-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in oklch, var(--foreground-primary) 9%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+  z-index: 6;
+}
+
+.file-tabs-scroll-edge-left {
+  left: 0;
+}
+
+.file-tabs-scroll-edge-right {
+  right: 0;
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroll-edge-left,
+.app-shell[data-app-layout='editor'][data-left-collapsed='false'] .file-tabs-scroll-edge-left,
+.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-shell[data-has-actions='false'] .file-tabs-scroll-edge-right {
+  display: none;
+}
+
+.file-tabs-scroll-frame[data-can-scroll-left='true'] .file-tabs-scroll-edge-left,
+.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroll-edge-right {
+  opacity: 1;
+}
+
+.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroller {
+  clip-path: inset(0 1px 0 0);
+}
+
+.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tab:last-child {
+  border-right-color: transparent;
 }
 
 .file-tabs-scroller[data-dragging='true'] {
@@ -1761,14 +1818,14 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0;
+  padding: 0 0 0 6px;
   border-bottom: 1px solid var(--separator);
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
 .app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-actions {
-  padding: 0 6px 0 0;
+  padding: 0 6px;
 }
 
 .file-tabs-scroller::-webkit-scrollbar {
@@ -1931,13 +1988,14 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .file-tab:hover .file-tab-actions,
+.file-tab:focus-within .file-tab-actions,
 .file-tab.is-dirty .file-tab-actions {
   opacity: 1;
   pointer-events: auto;
 }
 
 /* When dirty but NOT hovered, hide the functional icons to show the dot */
-.file-tab.is-dirty:not(:hover) .file-tab-close svg {
+.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-close svg {
   opacity: 0;
   pointer-events: none;
 }
@@ -2017,6 +2075,14 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 .file-tabs-toolbar-button:hover {
   color: var(--foreground-primary);
   background: var(--hover);
+}
+
+.file-tab-close:focus-visible,
+.file-tabs-toolbar-button:focus-visible {
+  color: var(--foreground-primary);
+  background: var(--hover);
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 
 .file-tab-close svg,
@@ -7491,6 +7557,7 @@ body.workspace-tree-dragging .tree-item-row {
   .left-chrome-actions,
   .panel-resize-slot,
   .file-tabs-shell,
+  .file-tabs-scroll-edge,
   .agent-threadbar {
     transition: none;
   }

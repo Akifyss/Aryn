@@ -1,4 +1,4 @@
-import { type DragEvent as ReactDragEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type DragEvent as ReactDragEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CloseLine, FolderLine, GitBranchLine, GitCompareLine } from '@mingcute/react'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
@@ -33,8 +33,18 @@ type FileTabLabelTooltip = {
   text: string
 }
 
+type FileTabsScrollEdgeState = {
+  canScrollLeft: boolean
+  hasScrollOverflow: boolean
+}
+
 const FILE_TAB_LABEL_TOOLTIP_DELAY = 500
 const FILE_TAB_TEXT_OVERFLOW_EPSILON = 1
+const FILE_TAB_SCROLL_EDGE_EPSILON = 1
+const EMPTY_FILE_TAB_SCROLL_EDGE_STATE: FileTabsScrollEdgeState = {
+  canScrollLeft: false,
+  hasScrollOverflow: false,
+}
 
 function getBaseName(tab: WorkspaceDisplayTab) {
   if (tab.kind === 'fixed-panel') {
@@ -117,6 +127,16 @@ function isTabVisibleInScroller(tabElement: HTMLElement, scrollerElement: HTMLEl
   return tabRect.left >= scrollerRect.left && tabRect.right <= scrollerRect.right
 }
 
+function getFileTabsScrollEdgeState(scrollerElement: HTMLElement): FileTabsScrollEdgeState {
+  const maxScrollLeft = Math.max(0, scrollerElement.scrollWidth - scrollerElement.clientWidth)
+  const hasScrollOverflow = maxScrollLeft > FILE_TAB_SCROLL_EDGE_EPSILON
+
+  return {
+    canScrollLeft: scrollerElement.scrollLeft > FILE_TAB_SCROLL_EDGE_EPSILON,
+    hasScrollOverflow,
+  }
+}
+
 export function FileTabs({
   activeTabId,
   actions,
@@ -138,6 +158,7 @@ export function FileTabs({
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null)
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null)
   const [labelTooltip, setLabelTooltip] = useState<FileTabLabelTooltip | null>(null)
+  const [scrollEdgeState, setScrollEdgeState] = useState<FileTabsScrollEdgeState>(EMPTY_FILE_TAB_SCROLL_EDGE_STATE)
   const reorderableTabs = useMemo(
     () => tabs.filter(isReorderableTab),
     [tabs],
@@ -151,6 +172,7 @@ export function FileTabs({
     && onOpenDiff
     && getHasDiff?.(activeFileTab.filePath),
   )
+  const hasFileTabActions = canOpenActiveDiff || Boolean(actions)
   const duplicateNameSet = useMemo(() => {
     const counts = new Map<string, number>()
 
@@ -166,7 +188,21 @@ export function FileTabs({
     )
   }, [tabs])
 
-  useEffect(() => {
+  const syncScrollEdgeState = useCallback(() => {
+    const scrollerElement = scrollerRef.current
+    const nextState = scrollerElement
+      ? getFileTabsScrollEdgeState(scrollerElement)
+      : EMPTY_FILE_TAB_SCROLL_EDGE_STATE
+
+    setScrollEdgeState((currentState) => (
+      currentState.canScrollLeft === nextState.canScrollLeft
+      && currentState.hasScrollOverflow === nextState.hasScrollOverflow
+        ? currentState
+        : nextState
+    ))
+  }, [])
+
+  useLayoutEffect(() => {
     if (!activeTabId) {
       return
     }
@@ -174,16 +210,53 @@ export function FileTabs({
     const activeTabElement = tabRefs.current[activeTabId]
     const scrollerElement = scrollerRef.current
 
-    if (!activeTabElement || !scrollerElement || isTabVisibleInScroller(activeTabElement, scrollerElement)) {
+    if (!activeTabElement || !scrollerElement) {
+      syncScrollEdgeState()
       return
     }
 
-    activeTabElement.scrollIntoView({
-      behavior: 'smooth',
-      block: 'nearest',
-      inline: 'nearest',
-    })
-  }, [activeTabId])
+    if (!isTabVisibleInScroller(activeTabElement, scrollerElement)) {
+      activeTabElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'nearest',
+      })
+    }
+
+    syncScrollEdgeState()
+  }, [activeTabId, syncScrollEdgeState])
+
+  useEffect(() => {
+    const scrollerElement = scrollerRef.current
+    if (!scrollerElement || typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    const resizeObserver = new ResizeObserver(syncScrollEdgeState)
+    resizeObserver.observe(scrollerElement)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [syncScrollEdgeState])
+
+  useLayoutEffect(() => {
+    const currentTabIds = new Set(tabs.map((tab) => tab.id))
+
+    for (const tabId of Object.keys(tabRefs.current)) {
+      if (!currentTabIds.has(tabId)) {
+        delete tabRefs.current[tabId]
+      }
+    }
+
+    for (const tabId of Object.keys(tabContainerRefs.current)) {
+      if (!currentTabIds.has(tabId)) {
+        delete tabContainerRefs.current[tabId]
+      }
+    }
+
+    syncScrollEdgeState()
+  }, [syncScrollEdgeState, tabs])
 
   useEffect(() => {
     if (draggingTabId && !reorderableTabs.some((tab) => tab.id === draggingTabId)) {
@@ -304,11 +377,13 @@ export function FileTabs({
 
     if (clientX <= rect.left + edgeThreshold) {
       scroller.scrollLeft -= scrollStep
+      requestAnimationFrame(syncScrollEdgeState)
       return
     }
 
     if (clientX >= rect.right - edgeThreshold) {
       scroller.scrollLeft += scrollStep
+      requestAnimationFrame(syncScrollEdgeState)
     }
   }
 
@@ -376,90 +451,98 @@ export function FileTabs({
       className='file-tabs-shell'
       data-empty={tabs.length === 0}
       data-dragging={draggingTabId ? 'true' : 'false'}
+      data-has-actions={hasFileTabActions ? 'true' : 'false'}
     >
       <div
-        ref={scrollerRef}
-        className='file-tabs-scroller'
-        data-dragging={draggingTabId ? 'true' : 'false'}
-        role='tablist'
-        aria-label='Open files'
-        onDragOver={(event) => {
-          if (!draggingTabId) {
-            return
-          }
+        className='file-tabs-scroll-frame'
+        data-can-scroll-left={scrollEdgeState.canScrollLeft ? 'true' : 'false'}
+        data-has-scroll-overflow={scrollEdgeState.hasScrollOverflow ? 'true' : 'false'}
+      >
+        <div
+          ref={scrollerRef}
+          className='file-tabs-scroller'
+          data-dragging={draggingTabId ? 'true' : 'false'}
+          role='tablist'
+          aria-label='Open files'
+          onScroll={syncScrollEdgeState}
+          onDragOver={(event) => {
+            if (!draggingTabId) {
+              return
+            }
 
-          event.preventDefault()
-          event.dataTransfer.dropEffect = 'move'
-          autoScrollDuringDrag(event.clientX)
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'move'
+            autoScrollDuringDrag(event.clientX)
 
-          const dragOverElement = event.target instanceof HTMLElement
-            ? event.target.closest<HTMLElement>('[data-tab-id][data-reorderable="true"]')
-            : null
+            const dragOverElement = event.target instanceof HTMLElement
+              ? event.target.closest<HTMLElement>('[data-tab-id][data-reorderable="true"]')
+              : null
 
-          if (dragOverElement) {
-            const targetId = dragOverElement.dataset.tabId
-            if (!targetId) {
+            if (dragOverElement) {
+              const targetId = dragOverElement.dataset.tabId
+              if (!targetId) {
+                setDragTarget(null)
+                return
+              }
+
+              setNextDragTarget(targetId, resolveDropPosition(event, dragOverElement))
+              return
+            }
+
+            const boundaryTarget = getBoundaryDragTarget(event.clientX)
+            if (!boundaryTarget) {
               setDragTarget(null)
               return
             }
 
-            setNextDragTarget(targetId, resolveDropPosition(event, dragOverElement))
-            return
-          }
+            setNextDragTarget(boundaryTarget.targetId, boundaryTarget.position)
+          }}
+          onDrop={(event) => {
+            if (!draggingTabId) {
+              return
+            }
 
-          const boundaryTarget = getBoundaryDragTarget(event.clientX)
-          if (!boundaryTarget) {
-            setDragTarget(null)
-            return
-          }
+            event.preventDefault()
 
-          setNextDragTarget(boundaryTarget.targetId, boundaryTarget.position)
-        }}
-        onDrop={(event) => {
-          if (!draggingTabId) {
-            return
-          }
-
-          event.preventDefault()
-
-          const target = dragTarget ?? getBoundaryDragTarget(event.clientX)
-          if (target && wouldMoveChangeOrder(target.targetId, target.position)) {
-            onMoveTab(draggingTabId, target.targetId, target.position)
-            requestAnimationFrame(() => {
-              tabRefs.current[draggingTabId]?.focus()
-              tabRefs.current[draggingTabId]?.scrollIntoView({
-                behavior: 'smooth',
-                block: 'nearest',
-                inline: 'nearest',
+            const target = dragTarget ?? getBoundaryDragTarget(event.clientX)
+            if (target && wouldMoveChangeOrder(target.targetId, target.position)) {
+              onMoveTab(draggingTabId, target.targetId, target.position)
+              requestAnimationFrame(() => {
+                tabRefs.current[draggingTabId]?.focus()
+                tabRefs.current[draggingTabId]?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'nearest',
+                  inline: 'nearest',
+                })
               })
-            })
-          }
+            }
 
-          setDraggingTabId(null)
-          setDragTarget(null)
-          cleanupDragPreview()
-        }}
-        onDragLeave={(event) => {
-          if (!draggingTabId || !scrollerRef.current) {
-            return
-          }
+            setDraggingTabId(null)
+            setDragTarget(null)
+            cleanupDragPreview()
+          }}
+          onDragLeave={(event) => {
+            if (!draggingTabId || !scrollerRef.current) {
+              return
+            }
 
-          const nextTarget = event.relatedTarget
-          if (nextTarget instanceof Node && scrollerRef.current.contains(nextTarget)) {
-            return
-          }
+            const nextTarget = event.relatedTarget
+            if (nextTarget instanceof Node && scrollerRef.current.contains(nextTarget)) {
+              return
+            }
 
-          setDragTarget(null)
-        }}
-        onWheel={(event) => {
-          if (!scrollerRef.current || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
-            return
-          }
+            setDragTarget(null)
+          }}
+          onWheel={(event) => {
+            if (!scrollerRef.current || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+              return
+            }
 
-          scrollerRef.current.scrollLeft += event.deltaY
-          event.preventDefault()
-        }}
-      >
+            scrollerRef.current.scrollLeft += event.deltaY
+            requestAnimationFrame(syncScrollEdgeState)
+            event.preventDefault()
+          }}
+        >
         {tabs.length > 0 && tabs.map((tab, index) => {
           const baseName = getBaseName(tab)
           const fileIconName = getFileIconName(tab)
@@ -596,6 +679,9 @@ export function FileTabs({
           )
         })}
 
+        </div>
+        <div className='file-tabs-scroll-edge file-tabs-scroll-edge-left' aria-hidden='true' />
+        <div className='file-tabs-scroll-edge file-tabs-scroll-edge-right' aria-hidden='true' />
       </div>
 
       <div
@@ -652,7 +738,7 @@ export function FileTabs({
           style={{ left: `${dropIndicatorOffset}px` }}
         />
       )}
-      {(canOpenActiveDiff || actions) ? (
+      {hasFileTabActions ? (
         <div className='file-tabs-actions'>
           {canOpenActiveDiff && activeFileTab ? (
             <AppTooltipButton
