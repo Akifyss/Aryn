@@ -36,6 +36,10 @@ import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
 import { createPortal } from "react-dom"
 import { AppTooltip, AppTooltipButton } from "@/components/app-tooltip"
 import {
+  ViewerToolbar,
+  ViewerToolbarGroup,
+} from "@/components/ui/document-viewer-controls"
+import {
   canRequestFolderChildren,
   collectLazyFolderLoadCandidates,
   LAZY_SCOPE_LOAD_CONCURRENCY,
@@ -1470,6 +1474,7 @@ function FileSystemCsvViewerFromUrl({
   showDownload,
   showToolbar,
   showUpload,
+  toolbarActions,
   url,
 }: {
   className?: string
@@ -1477,6 +1482,7 @@ function FileSystemCsvViewerFromUrl({
   showDownload?: boolean
   showToolbar?: boolean
   showUpload?: boolean
+  toolbarActions?: React.ReactNode
   url: string
 }) {
   const [content, setContent] = React.useState<string | null>(null)
@@ -1507,27 +1513,46 @@ function FileSystemCsvViewerFromUrl({
     }
   }, [url])
 
-  if (error) {
-    return (
-      <div className="grid h-full place-items-center bg-[var(--background-primary)] p-4 text-sm text-[var(--danger)]">
-        {error}
+  const renderFallback = (message?: string) => (
+    <div className={cn("flex h-full min-h-0 flex-col bg-[var(--background-primary)]", className)}>
+      {showToolbar ? (
+        <ViewerToolbar>
+          {toolbarActions ? (
+            <ViewerToolbarGroup align="end">{toolbarActions}</ViewerToolbarGroup>
+          ) : null}
+        </ViewerToolbar>
+      ) : null}
+      <div
+        className={cn(
+          "grid min-h-0 flex-1 place-items-center p-4 text-sm",
+          message ? "text-[var(--danger)]" : "text-[var(--foreground-secondary)]"
+        )}
+      >
+        {message ?? <Spinner className="size-4" />}
       </div>
-    )
+    </div>
+  )
+
+  if (error) {
+    return renderFallback(error)
   }
 
   if (content === null) {
-    return <FileSystemViewerLoading />
+    return renderFallback()
   }
 
   return (
-    <LazyCsvViewer
-      className={className}
-      data={content}
-      search={search}
-      showDownload={showDownload}
-      showToolbar={showToolbar}
-      showUpload={showUpload}
-    />
+    <React.Suspense fallback={renderFallback()}>
+      <LazyCsvViewer
+        className={className}
+        data={content}
+        search={search}
+        showDownload={showDownload}
+        showToolbar={showToolbar}
+        showUpload={showUpload}
+        toolbarActions={toolbarActions}
+      />
+    </React.Suspense>
   )
 }
 
@@ -6488,6 +6513,7 @@ function FileSystemBuiltInGalleryStage({
             showDownload={false}
             showToolbar={isDialog}
             showUpload={false}
+            toolbarActions={toolbarActions}
           />
         </React.Suspense>
       </div>

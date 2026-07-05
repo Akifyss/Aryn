@@ -38,6 +38,8 @@ import {
   ViewerMenuSeparator as DropdownMenuSeparator,
   ViewerMenuTrigger as DropdownMenuTrigger,
   ViewerPageNumberControl,
+  ViewerToolbar,
+  ViewerToolbarGroup,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
@@ -368,7 +370,7 @@ function DocxFileActionsMenu({
           size="icon-sm"
           aria-label={VIEWER_COPY.openDocxActions}
         >
-          <More2Line className="size-4" />
+          <More2Line aria-hidden="true" className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
@@ -380,7 +382,7 @@ function DocxFileActionsMenu({
               onCheckedChange={(checked) => onIsDarkChange(checked === true)}
             >
               <span className="flex min-w-0 items-center gap-2">
-                <MoonLine className="size-4" />
+                <MoonLine aria-hidden="true" className="size-4" />
                 {VIEWER_COPY.darkMode}
               </span>
             </DropdownMenuCheckboxItem>
@@ -393,7 +395,7 @@ function DocxFileActionsMenu({
           onCheckedChange={(checked) => onShowCommentsChange(checked === true)}
         >
           <span className="flex min-w-0 items-center gap-2">
-            <CommentLine className="size-4" />
+            <CommentLine aria-hidden="true" className="size-4" />
             {VIEWER_COPY.showComments}
           </span>
         </DropdownMenuCheckboxItem>
@@ -405,7 +407,7 @@ function DocxFileActionsMenu({
           }
         >
           <span className="flex min-w-0 items-center gap-2">
-            <GitCompareLine className="size-4" />
+            <GitCompareLine aria-hidden="true" className="size-4" />
             {VIEWER_COPY.showTrackedChanges}
           </span>
         </DropdownMenuCheckboxItem>
@@ -413,16 +415,16 @@ function DocxFileActionsMenu({
         {showDownloadButton ? (
           <DropdownMenuItem disabled={downloadDisabled} onClick={onDownload}>
             {isPreparingDownload ? (
-              <Spinner className="size-4" />
+              <Spinner aria-hidden="true" className="size-4" />
             ) : (
-              <DownloadLine className="size-4" />
+              <DownloadLine aria-hidden="true" className="size-4" />
             )}
             {VIEWER_COPY.download}
           </DropdownMenuItem>
         ) : null}
         {showUploadButton ? (
           <DropdownMenuItem onClick={onUploadClick}>
-            <UploadLine className="size-4" />
+            <UploadLine aria-hidden="true" className="size-4" />
             {VIEWER_COPY.upload}
           </DropdownMenuItem>
         ) : null}
@@ -505,14 +507,12 @@ function DocxToolbar({
     showDownloadButton || showUploadButton || showNightRenderToggle;
 
   return (
-    <div className="viewer-toolbar justify-between">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <ViewerToolbar>
+      <ViewerToolbarGroup>
         {leadingToolbarActions ? (
           <>
-            <div className="flex min-w-0 items-center gap-1">
-              {leadingToolbarActions}
-            </div>
-            <Separator className="mx-1" />
+            {leadingToolbarActions}
+            <Separator />
           </>
         ) : null}
         <ToolbarTooltip label={VIEWER_COPY.toggleThumbnails}>
@@ -524,7 +524,7 @@ function DocxToolbar({
             disabled={controlsDisabled}
             onClick={onToggleSidebar}
           >
-            <LayoutLeftLine className="size-4" />
+            <LayoutLeftLine aria-hidden="true" className="size-4" />
           </Button>
         </ToolbarTooltip>
         <DocxPageNumberControl
@@ -533,8 +533,8 @@ function DocxToolbar({
           onPageChange={onPageChange}
           pageCount={pageCount}
         />
-      </div>
-      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
+      </ViewerToolbarGroup>
+      <ViewerToolbarGroup align="end">
         <ViewerZoomControls
           ariaLabel={VIEWER_COPY.zoomLevel}
           disabled={controlsDisabled}
@@ -546,13 +546,13 @@ function DocxToolbar({
         />
         {toolbarActions ? (
           <>
-            <Separator className="mx-1" />
+            <Separator />
             {toolbarActions}
           </>
         ) : null}
         {shouldShowFileActionsMenu ? (
           <>
-            <Separator className="mx-1" />
+            <Separator />
             <DocxFileActionsMenu
               controlsDisabled={controlsDisabled}
               downloadDisabled={controlsDisabled || isPreparingDownload}
@@ -571,8 +571,8 @@ function DocxToolbar({
             />
           </>
         ) : null}
-      </div>
-    </div>
+      </ViewerToolbarGroup>
+    </ViewerToolbar>
   );
 }
 
@@ -1421,7 +1421,7 @@ function DocxViewerContent({
                   className="mt-4"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <UploadLine className="size-4" />
+                  <UploadLine aria-hidden="true" className="size-4" />
                   {VIEWER_COPY.uploadDocx}
                 </Button>
               </div>

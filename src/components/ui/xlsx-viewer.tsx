@@ -45,6 +45,8 @@ import {
   ViewerPopoverRoot as Popover,
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerSearchPanel,
+  ViewerToolbar,
+  ViewerToolbarGroup,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
@@ -494,7 +496,7 @@ function WorkbookFileActionsMenu({
           size="icon-sm"
           aria-label={VIEWER_COPY.openWorkbookActions}
         >
-          <More2Line className="size-4" />
+          <More2Line aria-hidden="true" className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -508,7 +510,7 @@ function WorkbookFileActionsMenu({
               onCheckedChange={(checked) => onIsDarkChange?.(checked === true)}
             >
               <span className="flex min-w-0 items-center gap-2">
-                <MoonLine className="size-4" />
+                <MoonLine aria-hidden="true" className="size-4" />
                 {VIEWER_COPY.darkMode}
               </span>
             </DropdownMenuCheckboxItem>
@@ -517,13 +519,13 @@ function WorkbookFileActionsMenu({
         ) : null}
         {showDownloadButton && onDownload ? (
           <DropdownMenuItem onClick={onDownload}>
-            <DownloadLine className="size-4" />
+            <DownloadLine aria-hidden="true" className="size-4" />
             {VIEWER_COPY.download}
           </DropdownMenuItem>
         ) : null}
         {showUploadButton ? (
           <DropdownMenuItem onClick={onUploadClick}>
-            <UploadLine className="size-4" />
+            <UploadLine aria-hidden="true" className="size-4" />
             {VIEWER_COPY.upload}
           </DropdownMenuItem>
         ) : null}
@@ -567,7 +569,7 @@ export function WorkbookTableHeaderMenu({
           className={cn("size-6 rounded-sm", triggerProps.className)}
           aria-label="列菜单"
         >
-          {triggerIcon ? triggerIcon : <More2Line className="size-3.5" />}
+          {triggerIcon ? triggerIcon : <More2Line aria-hidden="true" className="size-3.5" />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -845,13 +847,11 @@ function WorkbookToolbar({
   }, [setZoomScale, workbookIdentity]);
 
   return (
-    <div className="viewer-toolbar justify-between">
+    <ViewerToolbar>
       {leadingToolbarActions ? (
-        <div className="flex min-w-0 items-center gap-1">
-          {leadingToolbarActions}
-        </div>
+        <ViewerToolbarGroup>{leadingToolbarActions}</ViewerToolbarGroup>
       ) : null}
-      <div className="ml-auto flex min-w-0 items-center justify-end gap-1">
+      <ViewerToolbarGroup align="end">
         <ViewerZoomControls
           ariaLabel={VIEWER_COPY.zoomLevel}
           onValueChange={setZoomScale}
@@ -860,14 +860,14 @@ function WorkbookToolbar({
           zoomInLabel={VIEWER_COPY.zoomIn}
           zoomOutLabel={VIEWER_COPY.zoomOut}
         />
-        <Separator className="mx-1" />
+        <Separator />
         <WorkbookSearchPopover
           viewportRef={viewportRef}
           workbookIdentity={workbookIdentity}
         />
         {toolbarActions ? (
           <>
-            <Separator className="mx-1" />
+            <Separator />
             {toolbarActions}
           </>
         ) : null}
@@ -875,7 +875,7 @@ function WorkbookToolbar({
         showUploadButton ||
         showNightRenderToggle ? (
           <>
-            <Separator className="mx-1" />
+            <Separator />
             <WorkbookFileActionsMenu
               isDark={isDark}
               onDownload={onDownload}
@@ -887,8 +887,8 @@ function WorkbookToolbar({
             />
           </>
         ) : null}
-      </div>
-    </div>
+      </ViewerToolbarGroup>
+    </ViewerToolbar>
   );
 }
 
@@ -902,12 +902,12 @@ function WorkbookStandaloneToolbar({
   toolbarActions?: React.ReactNode;
 }) {
   return (
-    <div className="viewer-toolbar justify-end">
-      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
+    <ViewerToolbar>
+      <ViewerToolbarGroup align="end">
         {toolbarActions ? <>{toolbarActions}</> : null}
         {showUploadButton ? (
           <>
-            {toolbarActions ? <Separator className="mx-1" /> : null}
+            {toolbarActions ? <Separator /> : null}
             <WorkbookFileActionsMenu
               onUploadClick={onUploadClick}
               showDownloadButton={false}
@@ -915,8 +915,8 @@ function WorkbookStandaloneToolbar({
             />
           </>
         ) : null}
-      </div>
-    </div>
+      </ViewerToolbarGroup>
+    </ViewerToolbar>
   );
 }
 
@@ -1525,7 +1525,7 @@ function XlsxViewerContent({
               className="mt-4"
               onClick={() => fileInputRef.current?.click()}
             >
-              <UploadLine className="size-4" />
+              <UploadLine aria-hidden="true" className="size-4" />
               {VIEWER_COPY.uploadXlsx}
             </Button>
           </div>
@@ -1568,7 +1568,7 @@ function XlsxViewerContent({
               className="mt-4"
               onClick={() => fileInputRef.current?.click()}
             >
-              <UploadLine className="size-4" />
+              <UploadLine aria-hidden="true" className="size-4" />
               {VIEWER_COPY.uploadXlsx}
             </Button>
           </div>

@@ -37,6 +37,8 @@ import {
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerPageNumberControl,
   ViewerSearchPanel,
+  ViewerToolbar,
+  ViewerToolbarGroup,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
@@ -178,20 +180,20 @@ function PptxFileActionsMenu({
           size="icon-sm"
           aria-label="打开 PPTX 操作菜单"
         >
-          <More2Line className="size-4" />
+          <More2Line aria-hidden="true" className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
         {showDownloadButton ? (
           <DropdownMenuItem disabled={downloadDisabled} onClick={onDownload}>
-            <DownloadLine className="size-4" />
+            <DownloadLine aria-hidden="true" className="size-4" />
             下载
           </DropdownMenuItem>
         ) : null}
         {showDownloadButton && showUploadButton ? <DropdownMenuSeparator /> : null}
         {showUploadButton ? (
           <DropdownMenuItem onClick={onUploadClick}>
-            <UploadLine className="size-4" />
+            <UploadLine aria-hidden="true" className="size-4" />
             上传
           </DropdownMenuItem>
         ) : null}
@@ -277,7 +279,6 @@ function PptxToolbar({
   activeSearchIndex,
   activeSlideIndex,
   controlsDisabled,
-  fileName,
   fitMode,
   leadingToolbarActions,
   onDownload,
@@ -299,7 +300,6 @@ function PptxToolbar({
   activeSearchIndex: number;
   activeSlideIndex: number;
   controlsDisabled: boolean;
-  fileName: string;
   fitMode: FitMode;
   leadingToolbarActions?: React.ReactNode;
   onDownload: () => void;
@@ -319,14 +319,12 @@ function PptxToolbar({
   zoomPercent: number;
 }) {
   return (
-    <div className="viewer-toolbar justify-between">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <ViewerToolbar>
+      <ViewerToolbarGroup>
         {leadingToolbarActions ? (
           <>
-            <div className="flex min-w-0 items-center gap-1">
-              {leadingToolbarActions}
-            </div>
-            <Separator className="mx-1" />
+            {leadingToolbarActions}
+            <Separator />
           </>
         ) : null}
         <ViewerPageNumberControl
@@ -337,9 +335,8 @@ function PptxToolbar({
           pageCount={slideCount}
           pageNumberLabel={VIEWER_COPY.pageNumber}
         />
-      </div>
-      <div className="viewer-toolbar-title text-center">{fileName}</div>
-      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
+      </ViewerToolbarGroup>
+      <ViewerToolbarGroup align="end">
         <ViewerZoomControls
           ariaLabel={VIEWER_COPY.zoomLevel}
           disabled={controlsDisabled}
@@ -361,7 +358,7 @@ function PptxToolbar({
             <Fullscreen2Line aria-hidden="true" className="size-4" />
           </Button>
         </ToolbarTooltip>
-        <Separator className="mx-1" />
+        <Separator />
         <PptxSearchPopover
           activeSearchIndex={activeSearchIndex}
           controlsDisabled={controlsDisabled}
@@ -371,16 +368,26 @@ function PptxToolbar({
           searchDraft={searchDraft}
           searchResultCount={searchResultCount}
         />
-        <PptxFileActionsMenu
-          downloadDisabled={controlsDisabled}
-          onDownload={onDownload}
-          onUploadClick={onUploadClick}
-          showDownloadButton={showDownloadButton}
-          showUploadButton={showUploadButton}
-        />
-        {toolbarActions}
-      </div>
-    </div>
+        {showDownloadButton || showUploadButton ? (
+          <>
+            <Separator />
+            <PptxFileActionsMenu
+              downloadDisabled={controlsDisabled}
+              onDownload={onDownload}
+              onUploadClick={onUploadClick}
+              showDownloadButton={showDownloadButton}
+              showUploadButton={showUploadButton}
+            />
+          </>
+        ) : null}
+        {toolbarActions ? (
+          <>
+            <Separator />
+            {toolbarActions}
+          </>
+        ) : null}
+      </ViewerToolbarGroup>
+    </ViewerToolbar>
   );
 }
 
@@ -406,7 +413,7 @@ function PptxEmptyState({
             className="mt-4"
             onClick={onUploadClick}
           >
-            <UploadLine className="size-4" />
+            <UploadLine aria-hidden="true" className="size-4" />
             上传 PPTX
           </Button>
         ) : null}
@@ -804,7 +811,6 @@ export function PptxViewerPreview({
           activeSearchIndex={activeSearchIndex}
           activeSlideIndex={activeSlideIndex}
           controlsDisabled={controlsDisabled}
-          fileName={displayFileName}
           fitMode={fitMode}
           leadingToolbarActions={leadingToolbarActions}
           onDownload={handleDownload}

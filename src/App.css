@@ -2074,10 +2074,12 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .editor-content-shell {
   --editor-surface-header-height: 44px;
-  --editor-directory-toggle-left: 8px;
+  --editor-toolbar-inline-padding: 6px;
+  --editor-toolbar-gap: 8px;
+  --editor-toolbar-control-gap: 4px;
+  --editor-directory-toggle-left: var(--editor-toolbar-inline-padding);
   --editor-directory-toggle-top: 6px;
   --editor-directory-toggle-size: 32px;
-  --editor-directory-toolbar-gap: 8px;
 
   position: relative;
   display: flex;
@@ -2424,7 +2426,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 .editor-plain-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--editor-directory-toolbar-gap);
+  gap: var(--editor-toolbar-gap);
   flex: 0 0 var(--editor-surface-header-height);
   height: var(--editor-surface-header-height);
   padding: 0 14px 0 var(--editor-directory-toggle-left);
@@ -2435,29 +2437,25 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 .viewer-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--editor-directory-toolbar-gap, 8px);
+  gap: var(--editor-toolbar-gap, 8px);
   flex: 0 0 var(--editor-surface-header-height, 44px);
   height: var(--editor-surface-header-height, 44px);
-  padding: 0 14px 0 var(--editor-directory-toggle-left, 8px);
+  padding: 0 var(--editor-toolbar-inline-padding, 6px);
   border-bottom: 1px solid var(--separator);
   background: var(--background-primary);
 }
 
-.viewer-toolbar-leading,
-.viewer-toolbar-actions,
 .viewer-toolbar-control-group {
   display: flex;
+  min-width: 0;
   align-items: center;
+  gap: var(--editor-toolbar-control-gap, 4px);
   flex: 0 0 auto;
 }
 
-.viewer-toolbar-leading {
-  min-width: var(--editor-directory-toggle-size, 32px);
-}
-
-.viewer-toolbar-actions,
-.viewer-toolbar-control-group {
-  gap: 4px;
+.viewer-toolbar-control-group[data-align="end"] {
+  margin-left: auto;
+  justify-content: flex-end;
 }
 
 .viewer-toolbar-title {
@@ -2480,7 +2478,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   height: 32px;
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   color: var(--foreground-secondary);
   cursor: pointer;
@@ -2534,21 +2532,25 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  height: 32px;
   gap: 4px;
+  color: var(--foreground-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    opacity 140ms ease;
+}
+
+.viewer-toolbar-page-control,
+.viewer-toolbar-select {
+  height: 32px;
   padding: 0 8px;
   border: 1px solid var(--border-primary);
   border-radius: 8px;
   background: var(--background-primary);
-  color: var(--foreground-secondary);
   font-size: 14px;
-  font-variant-numeric: tabular-nums;
   line-height: 1;
-  white-space: nowrap;
   outline: none;
-  transition:
-    background-color 140ms ease,
-    opacity 140ms ease;
 }
 
 .viewer-toolbar-page-control:is(button) {
@@ -2740,10 +2742,10 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 .viewer-toolbar-subbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--editor-toolbar-gap, 8px);
   flex: 0 0 40px;
   min-height: 40px;
-  padding: 0 14px;
+  padding: 0 var(--editor-toolbar-inline-padding, 6px);
   border-bottom: 1px solid var(--separator);
   background: var(--background-primary);
 }
@@ -2755,16 +2757,10 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 }
 
 .viewer-toolbar-select {
-  height: 32px;
-  min-width: 144px;
-  padding: 0 8px;
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
-  background: var(--background-primary);
+  width: 84px;
+  min-width: 84px;
   color: var(--foreground-primary);
-  font-size: 14px;
   cursor: pointer;
-  outline: none;
   transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
@@ -2878,8 +2874,8 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 0 20px;
+  gap: var(--editor-toolbar-gap, 8px);
+  padding: 0 20px 0 var(--editor-directory-toggle-left, 6px);
   flex: 0 0 var(--editor-surface-header-height, 44px);
   height: var(--editor-surface-header-height, 44px);
   min-height: var(--editor-surface-header-height, 44px);
@@ -4332,7 +4328,7 @@ body.workspace-tree-dragging .tree-item-row {
   }
 
   .git-diff-header {
-    padding-inline: 16px;
+    padding-right: 16px;
   }
 
   .git-panel-header {
@@ -7481,6 +7477,20 @@ body.workspace-tree-dragging .tree-item-row {
   .window-button {
     transition: none;
   }
+
+  .viewer-toolbar-icon-button,
+  .viewer-toolbar-text-button,
+  .viewer-toolbar-page-control,
+  .viewer-toolbar-select,
+  .viewer-search-inline-button {
+    transition: none;
+  }
+
+  .viewer-toolbar-icon-button:active:not(:disabled),
+  .viewer-toolbar-text-button:active:not(:disabled),
+  .viewer-search-inline-button:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 [data-command-active='true'] {
@@ -7785,9 +7795,9 @@ body.workspace-tree-dragging .tree-item-row {
 
 .meo-editor-shell[data-leading-toolbar-inset='true'] {
   --meo-directory-toolbar-inset: calc(
-    var(--editor-directory-toggle-left, 8px)
+    var(--editor-directory-toggle-left, 6px)
     + var(--editor-directory-toggle-size, 32px)
-    + var(--editor-directory-toolbar-gap, 8px)
+    + var(--editor-toolbar-gap, 8px)
   );
 }
 

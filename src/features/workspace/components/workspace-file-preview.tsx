@@ -1,9 +1,14 @@
 ﻿import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Fullscreen2Line } from '@mingcute/react'
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch'
-import { AppTooltipButton } from '@/components/app-tooltip'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
-import { ViewerZoomControls } from '@/components/ui/document-viewer-controls'
+import {
+  ViewerToolbar,
+  ViewerToolbarButton,
+  ViewerToolbarGroup,
+  ViewerToolbarSeparator,
+  ViewerZoomControls,
+} from '@/components/ui/document-viewer-controls'
 import { HtmlPreview } from '@/features/editor/components/html-preview'
 import { inferFileContentType } from '@/lib/file-content-types'
 import type { GitRepositoryState } from '@/features/git/types'
@@ -145,11 +150,13 @@ function PreviewToolbar({
   trailingActions?: ReactNode
 }) {
   return (
-    <div className='viewer-toolbar'>
-      {leadingActions ? <div className='viewer-toolbar-leading'>{leadingActions}</div> : null}
+    <ViewerToolbar>
+      {leadingActions ? <ViewerToolbarGroup>{leadingActions}</ViewerToolbarGroup> : null}
       <div className='viewer-toolbar-title'>{fileName}</div>
-      {trailingActions ? <div className='viewer-toolbar-actions'>{trailingActions}</div> : null}
-    </div>
+      {trailingActions ? (
+        <ViewerToolbarGroup align='end'>{trailingActions}</ViewerToolbarGroup>
+      ) : null}
+    </ViewerToolbar>
   )
 }
 
@@ -283,16 +290,19 @@ function ImagePreviewViewer({
                       zoomInLabel='放大'
                       zoomOutLabel='缩小'
                     />
-                    <AppTooltipButton
+                    <ViewerToolbarButton
                       type='button'
-                      aria-label='适应窗口'
-                      className='viewer-toolbar-icon-button'
-                      tooltip='适应窗口'
+                      label='适应窗口'
                       onClick={() => resetTransform(IMAGE_PREVIEW_ZOOM_ANIMATION_MS, 'easeOut')}
                     >
                       <Fullscreen2Line aria-hidden='true' />
-                    </AppTooltipButton>
-                    {toolbarActions}
+                    </ViewerToolbarButton>
+                    {toolbarActions ? (
+                      <>
+                        <ViewerToolbarSeparator />
+                        {toolbarActions}
+                      </>
+                    ) : null}
                   </>
                 )}
               />

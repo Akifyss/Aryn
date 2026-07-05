@@ -74,6 +74,29 @@ export function ViewerToolbarButton({
   );
 }
 
+export function ViewerToolbar({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return <div {...props} className={cn("viewer-toolbar", className)} />;
+}
+
+export function ViewerToolbarGroup({
+  align = "start",
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & {
+  align?: "start" | "end";
+}) {
+  return (
+    <div
+      {...props}
+      className={cn("viewer-toolbar-control-group", className)}
+      data-align={align}
+    />
+  );
+}
+
 export function ViewerToolbarSeparator({ className }: { className?: string }) {
   return (
     <span
@@ -165,9 +188,11 @@ export function ViewerPageNumberControl({
         <input
           ref={inputRef}
           aria-label={pageNumberLabel}
+          autoComplete="off"
           className="viewer-toolbar-page-input"
           disabled={disabled}
           inputMode="numeric"
+          name="viewer-page-number"
           pattern="[0-9]*"
           style={{ width: pageNumberWidth }}
           value={draftPage}
@@ -395,10 +420,9 @@ function ViewerZoomSelect({
         type="button"
         aria-label={ariaLabel}
         className={cn(
-          "viewer-toolbar-select inline-flex min-w-0 shrink-0 items-center justify-between gap-1 shadow-xs tabular-nums disabled:pointer-events-none disabled:cursor-default disabled:opacity-50",
+          "viewer-toolbar-select inline-flex shrink-0 items-center justify-between gap-1 shadow-xs tabular-nums disabled:pointer-events-none disabled:cursor-default disabled:opacity-50",
           className,
         )}
-        style={{ minWidth: 84, width: 84 }}
       >
         <Select.Value className="min-w-0 flex-1 text-center">
           {() => formatZoomOption(value)}
@@ -640,7 +664,7 @@ export function ViewerMenuCheckboxItem({
     >
       <span className="pointer-events-none absolute left-2 grid size-4 place-items-center">
         <Menu.CheckboxItemIndicator>
-          <CheckLine className="size-4" />
+          <CheckLine aria-hidden="true" className="size-4" />
         </Menu.CheckboxItemIndicator>
       </span>
       {children}

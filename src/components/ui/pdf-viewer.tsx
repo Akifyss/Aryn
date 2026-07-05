@@ -93,6 +93,8 @@ import {
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerPageNumberControl,
   ViewerSearchPanel,
+  ViewerToolbar,
+  ViewerToolbarGroup,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
@@ -490,16 +492,16 @@ function PDFViewerFallbackShell({
       )}
     >
       {showToolbar ? (
-        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b bg-[var(--background-primary)] px-3 py-1.5">
+        <ViewerToolbar>
           {leadingToolbarActions ? (
-            <div className="flex min-w-0 items-center gap-1">
-              {leadingToolbarActions}
-            </div>
+            <ViewerToolbarGroup>{leadingToolbarActions}</ViewerToolbarGroup>
           ) : null}
           {showUpload && onUploadFile ? (
-            <PDFViewerFileActionsMenu onUploadFile={onUploadFile} showUpload />
+            <ViewerToolbarGroup align="end">
+              <PDFViewerFileActionsMenu onUploadFile={onUploadFile} showUpload />
+            </ViewerToolbarGroup>
           ) : null}
-        </div>
+        </ViewerToolbar>
       ) : null}
       <div className="relative flex min-h-0 flex-1 overflow-hidden bg-[var(--background-primary)]">
         {state === "loading" ? (
@@ -585,23 +587,23 @@ function PDFViewerFileActionsMenu({
             size="icon-sm"
             aria-label={VIEWER_COPY.openPdfActions}
           >
-            <More2Line className="size-4" />
+            <More2Line aria-hidden="true" className="size-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
           {showDownload && onDownload ? (
             <DropdownMenuItem disabled={downloadDisabled} onClick={onDownload}>
               {isPreparingDownload ? (
-                <Spinner size="sm" />
+                <Spinner aria-hidden="true" size="sm" />
               ) : (
-                <DownloadLine className="size-4" />
+                <DownloadLine aria-hidden="true" className="size-4" />
               )}
               {VIEWER_COPY.download}
             </DropdownMenuItem>
           ) : null}
           {showUpload && onUploadFile ? (
             <DropdownMenuItem onClick={() => inputRef.current?.click()}>
-              <UploadLine className="size-4" />
+              <UploadLine aria-hidden="true" className="size-4" />
               {VIEWER_COPY.upload}
             </DropdownMenuItem>
           ) : null}
@@ -2128,14 +2130,12 @@ function PDFViewerInner({
       )}
     >
       {showToolbar ? (
-        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b bg-[var(--background-primary)] px-3 py-1.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <ViewerToolbar>
+          <ViewerToolbarGroup>
             {leadingToolbarActions ? (
               <>
-                <div className="flex min-w-0 items-center gap-1">
-                  {leadingToolbarActions}
-                </div>
-                <Separator className="mx-1 h-4 self-center" />
+                {leadingToolbarActions}
+                <Separator />
               </>
             ) : null}
             <ToolbarTooltip label={VIEWER_COPY.toggleThumbnails}>
@@ -2147,7 +2147,7 @@ function PDFViewerInner({
                 disabled={controlsDisabled}
                 onClick={() => setSidebarOpen((open) => !open)}
               >
-                <LayoutLeftLine className="size-4" />
+                <LayoutLeftLine aria-hidden="true" className="size-4" />
               </Button>
             </ToolbarTooltip>
             <ViewerPageNumberControl
@@ -2158,37 +2158,35 @@ function PDFViewerInner({
               pageCount={numPages}
               pageNumberLabel={VIEWER_COPY.pageNumber}
             />
-          </div>
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
+          </ViewerToolbarGroup>
+          <ViewerToolbarGroup align="end">
             {showRotateControls ? (
               <>
-                <div className="flex flex-none items-center gap-1">
-                  <ToolbarTooltip label={VIEWER_COPY.rotateCounterclockwise}>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={VIEWER_COPY.rotateCounterclockwise}
-                      disabled={controlsDisabled}
-                      onClick={() => rotateSelectedPages(-1)}
-                    >
-                      <AnticlockwiseLine className="size-4" />
-                    </Button>
-                  </ToolbarTooltip>
-                  <ToolbarTooltip label={VIEWER_COPY.rotateClockwise}>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={VIEWER_COPY.rotateClockwise}
-                      disabled={controlsDisabled}
-                      onClick={() => rotateSelectedPages(1)}
-                    >
-                      <ClockwiseLine className="size-4" />
-                    </Button>
-                  </ToolbarTooltip>
-                </div>
-                <Separator className="mx-1 h-4 self-center" />
+                <ToolbarTooltip label={VIEWER_COPY.rotateCounterclockwise}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={VIEWER_COPY.rotateCounterclockwise}
+                    disabled={controlsDisabled}
+                    onClick={() => rotateSelectedPages(-1)}
+                  >
+                    <AnticlockwiseLine aria-hidden="true" className="size-4" />
+                  </Button>
+                </ToolbarTooltip>
+                <ToolbarTooltip label={VIEWER_COPY.rotateClockwise}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={VIEWER_COPY.rotateClockwise}
+                    disabled={controlsDisabled}
+                    onClick={() => rotateSelectedPages(1)}
+                  >
+                    <ClockwiseLine aria-hidden="true" className="size-4" />
+                  </Button>
+                </ToolbarTooltip>
+                <Separator />
               </>
             ) : null}
             <ViewerZoomControls
@@ -2200,7 +2198,7 @@ function PDFViewerInner({
               zoomInLabel={VIEWER_COPY.zoomIn}
               zoomOutLabel={VIEWER_COPY.zoomOut}
             />
-            <Separator className="mx-1 h-4 self-center" />
+            <Separator />
             <PDFViewerSearchControl
               key={documentId}
               documentId={documentId}
@@ -2208,13 +2206,13 @@ function PDFViewerInner({
             />
             {toolbarActions ? (
               <>
-                <Separator className="mx-1 h-4 self-center" />
+                <Separator />
                 {toolbarActions}
               </>
             ) : null}
             {showDownload || showUpload ? (
               <>
-                <Separator className="mx-1 h-4 self-center" />
+                <Separator />
                 <PDFViewerFileActionsMenu
                   downloadDisabled={downloadDisabled}
                   isPreparingDownload={isPreparingDownload}
@@ -2225,8 +2223,8 @@ function PDFViewerInner({
                 />
               </>
             ) : null}
-          </div>
-        </div>
+          </ViewerToolbarGroup>
+        </ViewerToolbar>
       ) : null}
       <div
         ref={viewerShellRef}
@@ -2480,7 +2478,7 @@ export const PDFViewer = React.forwardRef<PDFViewerHandle, PDFViewerProps>(
           )}
         >
           {showToolbar ? (
-            <div className="min-h-11 border-b bg-[var(--background-primary)]" />
+            <ViewerToolbar aria-hidden="true" />
           ) : null}
           <div className="relative min-h-0 flex-1">
             <PDFViewerLoadingSkeleton sidebarInline sidebarOpen={false} />

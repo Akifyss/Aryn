@@ -41,6 +41,8 @@ import {
   ViewerPopoverRoot as Popover,
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerSearchPanel,
+  ViewerToolbar,
+  ViewerToolbarGroup,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
 } from "@/components/ui/document-viewer-controls";
@@ -315,22 +317,22 @@ function CsvFileActionsMenu({
           aria-label={VIEWER_COPY.openCsvActions}
           disabled={isPending}
         >
-          <More2Line className="size-4" />
+          <More2Line aria-hidden="true" className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         {showDownload ? (
           <DropdownMenuItem disabled={downloadDisabled} onClick={onDownload}>
-            <DownloadLine className="size-4" />
+            <DownloadLine aria-hidden="true" className="size-4" />
             {VIEWER_COPY.download}
           </DropdownMenuItem>
         ) : null}
         {showUpload ? (
           <DropdownMenuItem disabled={isPending} onClick={onUploadClick}>
             {isPending ? (
-              <Spinner className="size-4" />
+              <Spinner aria-hidden="true" className="size-4" />
             ) : (
-              <UploadLine className="size-4" />
+              <UploadLine aria-hidden="true" className="size-4" />
             )}
             {VIEWER_COPY.upload}
           </DropdownMenuItem>
@@ -820,13 +822,11 @@ export function CsvViewer({
       )}
     >
       {showToolbar ? (
-        <div className="viewer-toolbar justify-between">
+        <ViewerToolbar>
           {leadingToolbarActions ? (
-            <div className="flex min-w-0 items-center gap-1">
-              {leadingToolbarActions}
-            </div>
+            <ViewerToolbarGroup>{leadingToolbarActions}</ViewerToolbarGroup>
           ) : null}
-          <div className="ml-auto flex min-w-0 items-center justify-end gap-1">
+          <ViewerToolbarGroup align="end">
             <ViewerZoomControls
               ariaLabel={VIEWER_COPY.zoomLevel}
               onValueChange={(value) =>
@@ -839,7 +839,7 @@ export function CsvViewer({
             />
             {search ? (
               <>
-                <Separator className="mx-1" />
+                <Separator />
                 <CsvSearchPopover
                   headers={parsed.headers}
                   rows={parsed.rows}
@@ -852,7 +852,7 @@ export function CsvViewer({
             ) : null}
             {toolbarActions ? (
               <>
-                <Separator className="mx-1" />
+                <Separator />
                 {toolbarActions}
               </>
             ) : null}
@@ -864,21 +864,24 @@ export function CsvViewer({
               onChange={handleUpload}
             />
             {showDownload || showUpload ? (
-              <CsvFileActionsMenu
-                showDownload={showDownload}
-                showUpload={showUpload}
-                downloadDisabled={
-                  Boolean(parsed.error) ||
-                  isPending ||
-                  (parsed.headers.length === 0 && parsed.rows.length === 0)
-                }
-                isPending={isPending}
-                onDownload={handleDownload}
-                onUploadClick={() => inputRef.current?.click()}
-              />
+              <>
+                <Separator />
+                <CsvFileActionsMenu
+                  showDownload={showDownload}
+                  showUpload={showUpload}
+                  downloadDisabled={
+                    Boolean(parsed.error) ||
+                    isPending ||
+                    (parsed.headers.length === 0 && parsed.rows.length === 0)
+                  }
+                  isPending={isPending}
+                  onDownload={handleDownload}
+                  onUploadClick={() => inputRef.current?.click()}
+                />
+              </>
             ) : null}
-          </div>
-        </div>
+          </ViewerToolbarGroup>
+        </ViewerToolbar>
       ) : null}
       <div className="min-h-0 flex-1">
         {parsed.error ? (
@@ -904,7 +907,7 @@ export function CsvViewer({
                   {isPending ? (
                     <Spinner className="size-4" />
                   ) : (
-                    <UploadLine className="size-4" />
+                    <UploadLine aria-hidden="true" className="size-4" />
                   )}
                   {VIEWER_COPY.uploadCsv}
                 </Button>
