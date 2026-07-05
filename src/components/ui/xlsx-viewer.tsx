@@ -1162,7 +1162,7 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
 
   return (
     <div
-      className="border-t bg-[color-mix(in_oklab,var(--background-secondary)_40%,transparent)] px-3 py-2"
+      className="border-t bg-[var(--background-primary)] px-3 py-2"
       onMouseLeave={handleContainerLeave}
     >
       <BaseTabs.Root
