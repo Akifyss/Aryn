@@ -607,15 +607,18 @@ function Select({
 function SelectTrigger({
   className,
   size: _size,
+  variant = "default",
   children,
   ...props
 }: React.ComponentPropsWithoutRef<typeof BaseSelect.Trigger> & {
   size?: "default" | "sm"
+  variant?: "default" | "icon"
 }) {
   return (
     <BaseSelect.Trigger
       className={cn(
-        "flex h-8 min-w-24 cursor-pointer items-center justify-between gap-1 rounded-[8px] border bg-[var(--background-primary)] px-2 text-sm shadow-xs outline-none transition-colors hover:bg-[var(--hover)] focus-visible:ring-2 focus-visible:ring-[var(--focus)] data-[popup-open]:bg-[var(--hover)] disabled:pointer-events-none disabled:cursor-default disabled:opacity-50",
+        "flex h-8 cursor-pointer items-center gap-1 rounded-[8px] border bg-[var(--background-primary)] text-sm shadow-xs outline-none transition-colors hover:bg-[var(--hover)] focus-visible:ring-2 focus-visible:ring-[var(--focus)] data-[popup-open]:bg-[var(--hover)] disabled:pointer-events-none disabled:cursor-default disabled:opacity-50",
+        variant === "icon" ? "w-auto min-w-0 justify-between px-2" : "min-w-24 justify-between px-2",
         className as string | undefined
       )}
       {...props}
@@ -3464,10 +3467,11 @@ export function FileSystem({
         <AppTooltip tooltip={FILE_SYSTEM_COPY.toolbar.view} triggerMode="focusable">
           <SelectTrigger
             size="sm"
+            variant="icon"
             aria-label={FILE_SYSTEM_COPY.toolbar.view}
             // Icon-only like the sort select: sheds the base min-width to
             // hug icon + chevron at the toolbar button's 32px height.
-            className="h-8 min-h-8 w-auto min-w-0 [&_svg]:size-4"
+            className="h-8 min-h-8 [&_svg]:size-4"
           >
             <SelectValue>
               {activeViewOption ? (
@@ -3949,8 +3953,9 @@ function FileSystemSortSelect({
       <AppTooltip tooltip={FILE_SYSTEM_COPY.sort.by} triggerMode="focusable">
         <SelectTrigger
           size="sm"
+          variant={layout === "full" && showLabel ? "default" : "icon"}
           aria-label={FILE_SYSTEM_COPY.sort.by}
-          className="h-8 min-h-8 w-auto min-w-0 shrink-0 [&_svg]:size-4"
+          className="h-8 min-h-8 shrink-0 [&_svg]:size-4"
         >
           <SelectValue>
             <span className="flex items-center gap-1.5">
