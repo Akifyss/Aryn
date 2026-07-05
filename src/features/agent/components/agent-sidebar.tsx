@@ -39,7 +39,6 @@ import {
   EyeglassLine,
   EditLine,
   ExternalLinkLine,
-  FolderLine,
   More1Line,
   Pencil2Line,
   PicLine,
@@ -54,6 +53,7 @@ import remarkGfm from 'remark-gfm'
 import spinners, { type BrailleSpinnerName } from 'unicode-animations'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
+import { ProjectIcon } from '@/components/project-icon'
 import {
   TreeItemActionButton,
   TreeItemChildren,
@@ -5518,7 +5518,6 @@ function AgentProjectTree({
     projectState,
     isProjectAddMenuOpen: contextIsProjectAddMenuOpen,
     workspacePath,
-    iconTheme,
   } = useAgentContext()
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set())
   const [isProjectSectionExpanded, setIsProjectSectionExpanded] = useState(true)
@@ -5702,14 +5701,7 @@ function AgentProjectTree({
               || Boolean(bucket?.hasLoaded)
             )
 
-            const projectIcon = (
-              <WorkspaceFileIcon
-                iconTheme={iconTheme ?? null}
-                isClosed={!isExpanded}
-                isFolder
-                nodeLabel={project.name}
-              />
-            )
+            const projectIcon = <ProjectIcon />
             const renderProjectMain: TreeItemMainRenderer = (content, mainProps) => {
               const { className, hasDescription } = mainProps
 
@@ -5919,13 +5911,11 @@ function AgentNewSessionIllustration() {
 function AgentProjectSwitchTrigger({
   activeProject,
   className,
-  iconTheme,
   onOpenProjectSwitchMenu,
   placeholder,
 }: {
   activeProject: ProjectRecord | null
   className?: string
-  iconTheme?: WorkspaceIconTheme | null
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   placeholder?: string
 }) {
@@ -5945,20 +5935,15 @@ function AgentProjectSwitchTrigger({
         onOpenProjectSwitchMenu?.(event.currentTarget.getBoundingClientRect(), { startNewSession: true })
       }}
     >
-      <WorkspaceFileIcon
-        iconTheme={iconTheme ?? null}
-        isFolder
-        isClosed
-        nodeLabel={activeProject?.name}
-      />
+      <ProjectIcon />
       <span className='agent-project-switch-trigger-label'>{label}</span>
-      <DownLine aria-hidden='true' size={14} />
+      <DownLine className='agent-project-switch-chevron' aria-hidden='true' size={14} />
     </AppTooltipButton>
   )
 }
 
 function AgentEmptyChat() {
-  const { activeSessionSelection, activeWorkspaceContext, iconTheme, onOpenProjectSwitchMenu, projectState, workspacePath } = useAgentContext()
+  const { activeSessionSelection, activeWorkspaceContext, onOpenProjectSwitchMenu, projectState, workspacePath } = useAgentContext()
   const activeProject = activeWorkspaceContext.kind === 'project'
     ? projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
     : null
@@ -5976,7 +5961,6 @@ function AgentEmptyChat() {
             <span>今天在</span>
             <AgentProjectSwitchTrigger
               activeProject={activeProject}
-              iconTheme={iconTheme}
               onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
             />
             <span>里处理什么？</span>
@@ -6888,7 +6872,6 @@ function AgentChatSurface() {
     <div className='agent-new-project-bar'>
       <AgentProjectSwitchTrigger
         activeProject={activeWorkspaceContext.kind === 'project' ? activeProject : null}
-        iconTheme={iconTheme}
         onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
         placeholder={activeWorkspaceContext.kind === 'conversationDraft' ? '选择工作目录' : undefined}
       />

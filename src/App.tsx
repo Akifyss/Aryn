@@ -46,7 +46,7 @@ import type {
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import { AppTitlebar } from '@/components/app-titlebar'
-import { WorkspaceFileIcon } from '@/components/file-change-visuals'
+import { ProjectIcon } from '@/components/project-icon'
 import {
   AgentChatSurface,
   AgentProvider,
@@ -3759,12 +3759,7 @@ function App() {
                             void handleSelectProject(project)
                           }}
                         >
-                          <WorkspaceFileIcon
-                            iconTheme={iconTheme}
-                            isFolder
-                            isClosed
-                            nodeLabel={project.name}
-                          />
+                          <ProjectIcon />
                           <span className='project-menu-project-name'>{project.name}</span>
                           {isActive ? <CheckLine className='project-menu-project-check' size={16} /> : null}
                         </Menu.Item>
@@ -5750,12 +5745,7 @@ function App() {
         className={className}
         aria-label={isPickingWorkspace ? 'Opening workspace' : '选择或切换工作目录'}
       >
-        <WorkspaceFileIcon
-          iconTheme={iconTheme}
-          isFolder
-          isClosed
-          nodeLabel={editorWorkspaceSwitchLabel}
-        />
+        <ProjectIcon />
         <span className='section-title-label'>{editorWorkspaceSwitchLabel}</span>
         {showDropdownIcon ? (
           <DownLine className='editor-workspace-switch-chevron' size={16} aria-hidden='true' />

@@ -4165,6 +4165,14 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   color: currentColor;
 }
 
+.project-icon {
+  display: block;
+  flex: 0 0 auto;
+  width: var(--project-icon-size, 16px);
+  height: var(--project-icon-size, 16px);
+  color: var(--project-icon-color, currentColor);
+}
+
 .tree-item-status-dot {
   --tree-item-status-dot-color: var(--foreground-secondary);
   display: inline-flex;
@@ -5612,19 +5620,16 @@ body.workspace-tree-dragging .tree-item-row {
   white-space: nowrap;
 }
 
-.agent-project-switch-trigger .tree-item-icon,
-.agent-project-switch-trigger .tree-item-icon img,
-.agent-project-switch-trigger .tree-item-icon-image {
-  width: 18px;
-  height: 18px;
+.agent-project-switch-trigger .project-icon {
+  --project-icon-size: 18px;
 }
 
-.agent-project-switch-trigger > svg {
+.agent-project-switch-trigger .agent-project-switch-chevron {
   width: 16px;
   height: 16px;
 }
 
-.agent-shell.is-new-conversation .agent-empty-chat h2 .agent-project-switch-trigger > svg {
+.agent-shell.is-new-conversation .agent-empty-chat h2 .agent-project-switch-trigger .agent-project-switch-chevron {
   display: none;
 }
 
@@ -5636,14 +5641,11 @@ body.workspace-tree-dragging .tree-item-row {
   font-size: 13px;
 }
 
-.agent-new-project-bar .agent-project-switch-trigger .tree-item-icon,
-.agent-new-project-bar .agent-project-switch-trigger .tree-item-icon img,
-.agent-new-project-bar .agent-project-switch-trigger .tree-item-icon-image {
-  width: 16px;
-  height: 16px;
+.agent-new-project-bar .agent-project-switch-trigger .project-icon {
+  --project-icon-size: 16px;
 }
 
-.agent-new-project-bar .agent-project-switch-trigger > svg {
+.agent-new-project-bar .agent-project-switch-trigger .agent-project-switch-chevron {
   width: 14px;
   height: 14px;
 }
