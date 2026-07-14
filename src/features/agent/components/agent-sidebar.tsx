@@ -444,6 +444,7 @@ type AgentTreeMenuItemComponent = typeof Menu.Item
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
   runtime: {
+    agentId: 'builtin-pi',
     auth: {},
     availableModelInputs: {},
     availableModels: [],
@@ -464,6 +465,8 @@ const emptyAgentState: AgentWorkspaceState = {
     retryMaxAttempts: null,
     selectedModel: null,
     setupHint: null,
+    supportedRunningPromptBehaviors: ['steer', 'followUp'],
+    supportsQueuedMessageEditing: true,
     supportsThinking: false,
     steeringMessageCount: 0,
     steeringMessages: [],
@@ -480,7 +483,7 @@ const emptyProjectState: ProjectState = {
 }
 
 const emptyConversationState: ConversationState = {
-  version: 2,
+  version: 3,
   conversations: [],
 }
 

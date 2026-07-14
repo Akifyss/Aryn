@@ -9,6 +9,12 @@
     "dist-electron",
     "dist"
   ],
+  "extraResources": [
+    {
+      "from": "resources/agent-extensions",
+      "to": "agent-extensions"
+    }
+  ],
   "mac": {
     "icon": "build/icon.icns",
     "artifactName": "${productName}_${version}.${ext}",

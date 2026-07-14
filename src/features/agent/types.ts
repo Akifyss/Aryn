@@ -1,3 +1,44 @@
+import type { AgentId } from '@/features/agent/agent-definition'
+import type {
+  Event as OpenCodeEvent,
+  Message as OpenCodeMessage,
+  Part as OpenCodePart,
+  SnapshotFileDiff as OpenCodeSnapshotFileDiff,
+} from '@opencode-ai/sdk/v2'
+
+export type PiWebAgentId = 'builtin-pi' | 'pi'
+
+export type PiWebAgentMessage = {
+  role: string
+  content?: unknown
+  timestamp?: number
+  [key: string]: unknown
+}
+
+export type PiWebNativeSessionSnapshot = {
+  agentId: PiWebAgentId
+  entryIds: string[]
+  isStreaming: boolean
+  messages: PiWebAgentMessage[]
+  modelNames: Record<string, string>
+  sessionId: string
+}
+
+export type OpenCodeSurfaceRequest =
+  | { method: 'app.agents' }
+  | { method: 'provider.list' }
+  | { method: 'session.get'; sessionID: string }
+  | { method: 'session.messages'; before?: string; limit: number; sessionID: string }
+  | { method: 'session.message'; messageID: string; sessionID: string }
+  | { method: 'session.diff'; sessionID: string }
+  | { method: 'session.todo'; sessionID: string }
+  | { method: 'session.status'; sessionID: string }
+
+export type OpenCodeSurfaceResponse = {
+  data: unknown
+  nextCursor?: string
+}
+
 export type AgentSidebarMessageKind = 'assistant' | 'custom' | 'system' | 'tool' | 'user'
 export type AgentSidebarMessageStatus = 'done' | 'error' | 'running'
 
@@ -12,6 +53,11 @@ export type AgentPromptAttachment = {
   mimeType?: string
   path?: string
   size?: number
+}
+
+export type AgentPromptSendOptions = {
+  clientMessageId?: string
+  clientPartIds?: string[]
 }
 
 export type AgentMessageAttachment = {
@@ -61,9 +107,49 @@ export type AgentSessionListItem = {
 export type AgentThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 export type AgentRunningPromptBehavior = 'steer' | 'followUp'
 
+export type AgentSessionExecutionState =
+  | { type: 'idle' }
+  | { type: 'busy' }
+  | {
+      type: 'retry'
+      action?: {
+        label: string
+        link?: string
+        message: string
+        provider: string
+        reason: string
+        title: string
+      }
+      attempt: number
+      message: string
+      next: number
+    }
+
+export type OpenCodeNativeMessageRecord = {
+  info: OpenCodeMessage
+  parts: OpenCodePart[]
+}
+
+export type OpenCodeNativeSessionSnapshot = {
+  agentId: 'opencode'
+  diffs: OpenCodeSnapshotFileDiff[]
+  messages: OpenCodeNativeMessageRecord[]
+  parentSessionId: string | null
+  status: AgentSessionExecutionState
+}
+
+export type AgentNativeSessionSnapshot = OpenCodeNativeSessionSnapshot | PiWebNativeSessionSnapshot
+
+export type AgentRequestScope = {
+  agentId: AgentId
+  sessionPath?: string | null
+  workspacePath: string | null
+}
+
 export type AgentQueuedMessageKind = AgentRunningPromptBehavior
 
 export type AgentSessionCreateOptions = {
+  agentId?: AgentId
   modelKey?: string | null
   name?: string
   thinkingLevel?: AgentThinkingLevel
@@ -92,6 +178,7 @@ export type AgentQueuedMessageUpdate =
     }
 
 export type AgentRuntimeState = {
+  agentId: AgentId
   auth: Record<string, AgentProviderAuthState>
   workspacePath: string | null
   hasConfiguredModels: boolean
@@ -106,6 +193,7 @@ export type AgentRuntimeState = {
   isCompacting: boolean
   defaultModel: string | null
   defaultThinkingLevel: AgentThinkingLevel
+  executionState?: AgentSessionExecutionState
   preferredModelByProvider: Record<string, string>
   selectedModel: string | null
   isStreaming: boolean
@@ -113,6 +201,8 @@ export type AgentRuntimeState = {
   retryAttempt: number
   retryMaxAttempts: number | null
   setupHint: string | null
+  supportedRunningPromptBehaviors: AgentRunningPromptBehavior[]
+  supportsQueuedMessageEditing: boolean
   supportsThinking: boolean
   steeringMessageCount: number
   steeringMessages: string[]
@@ -161,8 +251,52 @@ export type AgentProviderAuthUiEvent =
       message?: string
     }
 
+export type AgentInteractionKind = 'permission' | 'question'
+
+export type AgentInteractionOption = {
+  description?: string
+  id: string
+  label: string
+}
+
+export type AgentInteractionField = {
+  allowsCustomAnswer?: boolean
+  id: string
+  isSecret?: boolean
+  label: string
+  message?: string
+  multiline?: boolean
+  options?: AgentInteractionOption[]
+}
+
+export type AgentInteractionRequest = {
+  agentId: AgentId
+  fields?: AgentInteractionField[]
+  id: string
+  kind: AgentInteractionKind
+  message: string
+  options: AgentInteractionOption[]
+  sessionId: string
+  title: string
+  workspacePath: string
+}
+
+export type AgentInteractionResponse = {
+  agentId: AgentId
+  answers?: Record<string, string[]>
+  optionId: string
+  requestId: string
+  sessionId: string
+  values?: string[]
+}
+
+export function getAgentInteractionKey(sessionId: string, requestId: string) {
+  return `${sessionId}\n${requestId}`
+}
+
 export type AgentSessionSnapshot = {
   annotations: AgentSessionAnnotations
+  native?: AgentNativeSessionSnapshot
   sessionId: string
   sessionPath: string | null
   name: string | null
@@ -176,7 +310,32 @@ export type AgentWorkspaceState = {
   runtime: AgentRuntimeState
 }
 
-export type AgentClientEvent =
+export type AgentClientEventPayload =
+  | {
+      type: 'opencode_native_event'
+      event: OpenCodeEvent
+      workspacePath: string
+    }
+  | {
+      type: 'pi_native_event'
+      event: { type: string; [key: string]: unknown }
+      sessionId: string
+    }
+  | {
+      type: 'opencode_surface_refresh'
+      sessionId: string
+      workspacePath: string
+    }
+  | {
+      type: 'interaction_requested'
+      request: AgentInteractionRequest
+    }
+  | {
+      type: 'interaction_resolved'
+      requestId: string
+      resumeRun: boolean
+      sessionId: string
+    }
   | {
       type: 'assistant_message_started'
       sessionId: string
@@ -223,6 +382,12 @@ export type AgentClientEvent =
       annotations: AgentSessionAnnotations
     }
   | {
+      type: 'session_snapshot_updated'
+      executionState: AgentSessionExecutionState
+      session: AgentSessionSnapshot
+      sessionId: string
+    }
+  | {
       type: 'workspace_state'
       state: AgentWorkspaceState
     }
@@ -231,3 +396,7 @@ export type AgentClientEvent =
       sessionId: string | null
       message: string
     }
+
+type WithAgentId<T> = T extends unknown ? T & { agentId: AgentId } : never
+
+export type AgentClientEvent = WithAgentId<AgentClientEventPayload>

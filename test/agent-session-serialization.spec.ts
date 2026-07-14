@@ -4,7 +4,13 @@ import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { getModel } from '@earendil-works/pi-ai'
 import { SessionManager, type SessionEntry } from '@earendil-works/pi-coding-agent'
-import { getArynPiSessionDir, getThinkingLevelsByModel, PiAgentManager, serializeSessionEntries } from '../electron/main/agent'
+import {
+  getArynPiSessionDir,
+  getThinkingLevelsByModel,
+  PiAgentManager,
+  serializePiWebSessionEntries,
+  serializeSessionEntries,
+} from '../electron/main/agent'
 
 function appendTestAssistantMessage(sessionManager: SessionManager, text: string, timestamp: number) {
   sessionManager.appendMessage({
@@ -40,7 +46,60 @@ function getLegacyArynPiSessionDirForTest(cwd: string, agentDir: string) {
   return path.join(agentDir, 'sessions', safePath)
 }
 
+function getPiWebSnapshotTexts(snapshot: Awaited<ReturnType<PiAgentManager['readSession']>>) {
+  if (snapshot.native?.agentId !== 'builtin-pi') return []
+  return snapshot.native.messages.map((message) => {
+    if (typeof message.content === 'string') return message.content
+    if (!Array.isArray(message.content)) return ''
+    return message.content.flatMap((part) => (
+      part && typeof part === 'object'
+        && (part as { type?: unknown }).type === 'text'
+        && typeof (part as { text?: unknown }).text === 'string'
+        ? [(part as { text: string }).text]
+        : []
+    )).join('\n')
+  })
+}
+
 describe('agent session serialization', () => {
+  it('preserves native pi messages and full-branch summary entries for pi-web', () => {
+    const entries = [
+      {
+        id: 'user-entry',
+        parentId: null,
+        timestamp: '2026-04-08T17:05:00.000Z',
+        type: 'message',
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: 'Inspect the project.' }],
+          timestamp: 1775667900000,
+        },
+      },
+      {
+        id: 'compaction-entry',
+        parentId: 'user-entry',
+        timestamp: '2026-04-08T17:06:00.000Z',
+        type: 'compaction',
+        summary: 'Earlier context.',
+        firstKeptEntryId: 'user-entry',
+        tokensBefore: 1200,
+      },
+    ] as SessionEntry[]
+
+    expect(serializePiWebSessionEntries(entries)).toEqual({
+      entryIds: ['user-entry', 'compaction-entry'],
+      messages: [
+        entries[0].message,
+        expect.objectContaining({
+          role: 'custom',
+          customType: 'compaction',
+          content: 'Earlier context.',
+          display: true,
+        }),
+      ],
+    })
+  })
+
   it('updates application-level provider auth without creating a workspace', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-agent-draft-'))
     const agentDir = path.join(tempRoot, 'agent')
@@ -320,7 +379,7 @@ describe('agent session serialization', () => {
 
       expect(abort).not.toHaveBeenCalled()
       expect((manager as unknown as { activeRuntime: unknown }).activeRuntime).toBe(activeRuntime)
-      expect(snapshot.messages.map((message) => message.text)).toEqual([
+      expect(getPiWebSnapshotTexts(snapshot)).toEqual([
         'Show me the plan.',
         'Here is the plan.',
       ])
@@ -347,7 +406,7 @@ describe('agent session serialization', () => {
       const snapshot = await manager.readSession(workspacePath, sessionManager.getSessionFile() ?? '')
 
       expect(snapshot.sessionPath).toBe(sessionManager.getSessionFile())
-      expect(snapshot.messages.map((message) => message.text)).toEqual([
+      expect(getPiWebSnapshotTexts(snapshot)).toEqual([
         'Read the legacy session.',
         'Legacy session loaded.',
       ])
@@ -375,7 +434,7 @@ describe('agent session serialization', () => {
       const snapshot = await manager.readSession(workspacePath, sessionManager.getSessionFile() ?? '')
 
       expect(snapshot.sessionPath).toBe(sessionManager.getSessionFile())
-      expect(snapshot.messages.map((message) => message.text)).toEqual([
+      expect(getPiWebSnapshotTexts(snapshot)).toEqual([
         'Read the legacy app-level session.',
         'Legacy app-level session loaded.',
       ])

@@ -19,7 +19,7 @@ import { clampThinkingLevel, complete, getEnvApiKey, getSupportedThinkingLevels,
 import type {
   AgentMessageAttachment,
   AgentMessageFileChange,
-  AgentClientEvent,
+  AgentClientEventPayload,
   AgentPromptAttachment,
   AgentProviderAuthState,
   AgentQueuedMessageUpdate,
@@ -30,6 +30,7 @@ import type {
   AgentSessionSnapshot,
   AgentSidebarMessage,
   AgentWorkspaceState,
+  PiWebAgentMessage,
 } from '../../src/features/agent/types'
 import {
   AGENT_PROVIDER_AUTH_CONFIGS,
@@ -977,6 +978,57 @@ function parseEntryTimestamp(value: string) {
   return Number.isNaN(parsed) ? Date.now() : parsed
 }
 
+/**
+ * Preserve pi's native message model for the vendored pi-web renderer. This is
+ * the same full-branch UI conversion used by pi-web's session-reader: unlike
+ * buildSessionContext it intentionally keeps history before compaction.
+ */
+export function serializePiWebSessionEntries(entries: SessionEntry[]) {
+  const messages: PiWebAgentMessage[] = []
+  const entryIds: string[] = []
+
+  for (const entry of entries) {
+    let message: PiWebAgentMessage | null = null
+    if (entry.type === 'message') {
+      message = entry.message as unknown as PiWebAgentMessage
+    } else if (entry.type === 'compaction') {
+      message = {
+        role: 'custom',
+        customType: 'compaction',
+        content: entry.summary,
+        display: true,
+        details: {
+          tokensBefore: entry.tokensBefore,
+          firstKeptEntryId: entry.firstKeptEntryId,
+        },
+        timestamp: parseEntryTimestamp(entry.timestamp),
+      }
+    } else if (entry.type === 'branch_summary' && entry.summary) {
+      message = {
+        role: 'user',
+        content: `*The conversation briefly explored another branch and returned with this summary:*\n\n${entry.summary}`,
+        timestamp: parseEntryTimestamp(entry.timestamp),
+      }
+    } else if (entry.type === 'custom_message') {
+      message = {
+        role: 'custom',
+        customType: entry.customType,
+        content: entry.content,
+        display: entry.display,
+        details: entry.details,
+        timestamp: parseEntryTimestamp(entry.timestamp),
+      }
+    }
+
+    if (message) {
+      messages.push(message)
+      entryIds.push(entry.id)
+    }
+  }
+
+  return { entryIds, messages }
+}
+
 function pushSerializedMessage(
   messages: SerializedBranchMessage[],
   entryMessages: Map<string, SerializedBranchMessage>,
@@ -1152,7 +1204,7 @@ export class PiAgentManager {
   private readonly modelRegistry: ModelRegistry
 
   constructor(
-    private readonly emitEvent: (event: AgentClientEvent) => void,
+    private readonly emitEvent: (event: AgentClientEventPayload) => void,
     private readonly options: PiAgentManagerOptions,
   ) {
     this.authStorage = AuthStorage.create(path.join(options.agentDir, 'auth.json'))
@@ -1264,7 +1316,11 @@ export class PiAgentManager {
     return this.broadcastWorkspaceState(cwd)
   }
 
-  async deleteSession(cwd: string, sessionPath: string): Promise<AgentWorkspaceState> {
+  async deleteSession(
+    cwd: string,
+    sessionPath: string,
+    options: { restoreFallback?: boolean } = {},
+  ): Promise<AgentWorkspaceState> {
     const resolvedSessionPath = await this.resolveSessionFileForCwd(cwd, sessionPath)
     const runtime = this.activeRuntime
     const isDeletingActiveSession = Boolean(
@@ -1291,7 +1347,7 @@ export class PiAgentManager {
 
     await this.annotationStore.delete(resolvedSessionPath)
 
-    if (isDeletingActiveSession) {
+    if (isDeletingActiveSession && options.restoreFallback !== false) {
       const remainingSessions = await this.listSessions(cwd)
 
       if (remainingSessions.length > 0) {
@@ -1803,6 +1859,12 @@ export class PiAgentManager {
 
     const runtime = this.activeRuntime
 
+    this.emitEvent({
+      type: 'pi_native_event',
+      event: event as unknown as { type: string; [key: string]: unknown },
+      sessionId: session.sessionId,
+    })
+
     if (event.type === 'compaction_start') {
       runtime.status.compactionReason = event.reason
     }
@@ -2094,6 +2156,7 @@ export class PiAgentManager {
     const followUpMessageCount = followUpMessages.length
 
     return {
+      agentId: 'builtin-pi',
       auth: this.getProviderAuthStates(availableModels.map((model) => model.provider)),
       availableModels: availableModels.map((model) => `${model.provider}/${model.id}`),
       availableModelInputs: getInputsByModel(availableModels),
@@ -2114,6 +2177,8 @@ export class PiAgentManager {
       retryMaxAttempts: activeRuntimeForCwd?.status.retryMaxAttempts ?? null,
       selectedModel,
       setupHint: availableModels.length > 0 ? null : AUTH_SETUP_HINT,
+      supportedRunningPromptBehaviors: ['steer', 'followUp'],
+      supportsQueuedMessageEditing: true,
       supportsThinking: Boolean(selectedModelValue?.reasoning),
       steeringMessageCount,
       steeringMessages,
@@ -2126,16 +2191,23 @@ export class PiAgentManager {
   private async serializeSession(session: AgentSession): Promise<AgentSessionSnapshot> {
     const workspacePath = this.activeRuntime?.cwd ?? session.sessionManager.getCwd()
 
-    return this.serializeSessionManager(workspacePath, session.sessionManager, session.sessionId)
+    return this.serializeSessionManager(
+      workspacePath,
+      session.sessionManager,
+      session.sessionId,
+      session.isStreaming,
+    )
   }
 
   private async serializeSessionManager(
     cwd: string,
     sessionManager: SessionManager,
     sessionId = sessionManager.getSessionId(),
+    isStreaming = false,
   ): Promise<AgentSessionSnapshot> {
     const branchEntries = sessionManager.getBranch()
     const messages = serializeSessionEntries(branchEntries)
+    const nativeMessages = serializePiWebSessionEntries(branchEntries)
     const sessionPath = sessionManager.getSessionFile() ?? null
     const annotations = sessionPath
       ? filterAnnotationsByDirectToolPaths(
@@ -2146,7 +2218,18 @@ export class PiAgentManager {
 
     return {
       annotations,
+      // Keep the legacy projection during the renderer migration so this
+      // backend commit remains compatible with clients that do not consume
+      // the native PI snapshot yet.
       messages,
+      native: {
+        agentId: 'builtin-pi',
+        entryIds: nativeMessages.entryIds,
+        isStreaming,
+        messages: nativeMessages.messages,
+        modelNames: {},
+        sessionId,
+      },
       name: sessionManager.getSessionName() ?? null,
       sessionId,
       sessionPath,

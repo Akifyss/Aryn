@@ -43,7 +43,8 @@ import {
   workspaceFileExists,
   workspacePathExists,
 } from './workspace'
-import { PiAgentManager } from './agent'
+import { AgentManager } from './agent-manager'
+import { discoverAgentCatalog } from './agent-cli-discovery'
 import {
   AppStateStore,
   getWorkspaceEntry,
@@ -62,7 +63,7 @@ import {
   WorkspaceStateStore,
 } from './workspace-state-store'
 import type { ActiveWorkspaceContext, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../../src/features/conversations/types'
-import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions } from '../../src/features/agent/types'
+import type { AgentClientEvent, AgentInteractionResponse, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, OpenCodeSurfaceRequest } from '../../src/features/agent/types'
 import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
 import type { LocalStorageStateMigration } from '../../src/features/persistence/types'
 import type {
@@ -415,7 +416,7 @@ function emitWindowThemeState(state: WindowThemeState) {
   win.webContents.send('window:theme-changed', state)
 }
 
-const agentManager = new PiAgentManager(
+const agentManager = new AgentManager(
   (event: AgentClientEvent) => {
     if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
       return
@@ -425,6 +426,32 @@ const agentManager = new PiAgentManager(
   },
   { agentDir },
 )
+let legacyBuiltinAgentScope: AgentRequestScope | null = null
+
+function normalizeAgentIpcScope(scopeOrWorkspacePath: AgentRequestScope | string): AgentRequestScope {
+  if (typeof scopeOrWorkspacePath !== 'string') return scopeOrWorkspacePath
+  return {
+    agentId: 'builtin-pi',
+    sessionPath: null,
+    workspacePath: scopeOrWorkspacePath,
+  }
+}
+
+function rememberLegacyBuiltinScope(scope: AgentRequestScope, state: Awaited<ReturnType<AgentManager['loadWorkspaceState']>>) {
+  if (scope.agentId !== 'builtin-pi' || !scope.workspacePath) return
+  legacyBuiltinAgentScope = {
+    agentId: 'builtin-pi',
+    sessionPath: state.activeSession?.sessionPath ?? null,
+    workspacePath: scope.workspacePath,
+  }
+}
+
+function requireLegacyBuiltinScope() {
+  if (!legacyBuiltinAgentScope?.workspacePath || !legacyBuiltinAgentScope.sessionPath) {
+    throw new Error('No embedded PI session is active for this legacy Agent request.')
+  }
+  return legacyBuiltinAgentScope
+}
 
 type PendingProviderAuthPrompt = {
   flowId: string
@@ -1478,6 +1505,7 @@ ipcMain.handle('conversation:get-state', async () => {
 
 ipcMain.handle('conversation:create-workspace', async (_event, request?: CreateConversationWorkspaceRequest) => {
   const record = await conversationStore.createWorkspace({
+    agentId: request?.agentId,
     initialPrompt: typeof request?.initialPrompt === 'string' ? request.initialPrompt : null,
   })
 
@@ -2319,45 +2347,68 @@ ipcMain.handle('workspace-icons:select-theme', async (
   return theme
 })
 
+ipcMain.handle('agent:get-catalog', async (_event, options?: { force?: boolean }) => {
+  return discoverAgentCatalog({ force: options?.force === true })
+})
+
 ipcMain.handle('agent:load-workspace', async (
   _event,
-  rootPath: string,
+  scopeOrWorkspacePath: AgentRequestScope | string,
   preferredSessionPath?: string | null,
   options?: { restoreSession?: boolean },
 ) => {
-  return agentManager.loadWorkspaceState(rootPath, preferredSessionPath ?? null, options)
+  const scope = normalizeAgentIpcScope(scopeOrWorkspacePath)
+  const state = await agentManager.loadWorkspaceState(scope, preferredSessionPath ?? null, options)
+  rememberLegacyBuiltinScope(scope, state)
+  return state
 })
 
-ipcMain.handle('agent:load-draft-state', async () => {
-  return agentManager.loadDraftState()
+ipcMain.handle('agent:load-draft-state', async (_event, agentId?: AgentRequestScope['agentId']) => {
+  return agentManager.loadDraftState(agentId)
 })
 
-ipcMain.handle('agent:list-sessions', async (_event, rootPath: string) => {
-  return agentManager.listSessionItems(rootPath)
+ipcMain.handle('agent:list-sessions', async (_event, scopeOrWorkspacePath: AgentRequestScope | string) => {
+  return agentManager.listSessionItems(normalizeAgentIpcScope(scopeOrWorkspacePath))
 })
 
-ipcMain.handle('agent:read-session', async (_event, rootPath: string, sessionPath: string) => {
-  return agentManager.readSession(rootPath, sessionPath)
+ipcMain.handle('agent:read-session', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, sessionPath: string) => {
+  return agentManager.readSession(normalizeAgentIpcScope(scopeOrWorkspacePath), sessionPath)
 })
 
-ipcMain.handle('agent:session-exists', async (_event, rootPath: string, sessionPath: string) => {
-  return { exists: await agentManager.sessionExists(rootPath, sessionPath) }
+ipcMain.handle('agent:opencode-surface-request', async (_event, scope: AgentRequestScope, request: OpenCodeSurfaceRequest) => {
+  return agentManager.requestOpenCodeSurface(scope, request)
 })
 
-ipcMain.handle('agent:create-session', async (_event, rootPath: string, options?: string | AgentSessionCreateOptions) => {
-  return agentManager.createSession(rootPath, options)
+ipcMain.handle('agent:session-exists', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, sessionPath: string) => {
+  return { exists: await agentManager.sessionExists(normalizeAgentIpcScope(scopeOrWorkspacePath), sessionPath) }
 })
 
-ipcMain.handle('agent:open-session', async (_event, rootPath: string, sessionPath: string) => {
-  return agentManager.openSession(rootPath, sessionPath)
+ipcMain.handle('agent:create-session', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, options?: string | AgentSessionCreateOptions) => {
+  const scope = normalizeAgentIpcScope(scopeOrWorkspacePath)
+  const state = await agentManager.createSession(scope, options)
+  rememberLegacyBuiltinScope(scope, state)
+  return state
 })
 
-ipcMain.handle('agent:delete-session', async (_event, rootPath: string, sessionPath: string) => {
-  return agentManager.deleteSession(rootPath, sessionPath)
+ipcMain.handle('agent:open-session', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, sessionPath: string) => {
+  const scope = normalizeAgentIpcScope(scopeOrWorkspacePath)
+  const state = await agentManager.openSession(scope, sessionPath)
+  rememberLegacyBuiltinScope(scope, state)
+  return state
 })
 
-ipcMain.handle('agent:rename-session', async (_event, rootPath: string, sessionPath: string, name: string) => {
-  return agentManager.renameSession(rootPath, sessionPath, name)
+ipcMain.handle('agent:delete-session', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, sessionPath: string) => {
+  const scope = normalizeAgentIpcScope(scopeOrWorkspacePath)
+  const state = await agentManager.deleteSession(scope, sessionPath)
+  rememberLegacyBuiltinScope(scope, state)
+  return state
+})
+
+ipcMain.handle('agent:rename-session', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, sessionPath: string, name: string) => {
+  const scope = normalizeAgentIpcScope(scopeOrWorkspacePath)
+  const state = await agentManager.renameSession(scope, sessionPath, name)
+  rememberLegacyBuiltinScope(scope, state)
+  return state
 })
 
 ipcMain.handle('agent:pick-attachments', async () => {
@@ -2404,20 +2455,56 @@ ipcMain.handle('agent:pick-attachments', async () => {
   }))
 })
 
-ipcMain.handle('agent:send-prompt', async (_event, prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments?: AgentPromptAttachment[]) => {
-  return agentManager.sendPrompt(prompt, streamingBehavior, attachments)
+ipcMain.handle('agent:send-prompt', async (
+  _event,
+  scopeOrPrompt: AgentRequestScope | string,
+  promptOrStreamingBehavior?: string | AgentRunningPromptBehavior,
+  streamingBehaviorOrAttachments?: AgentRunningPromptBehavior | AgentPromptAttachment[],
+  attachmentsOrOptions?: AgentPromptAttachment[] | AgentPromptSendOptions,
+  options?: AgentPromptSendOptions,
+) => {
+  if (typeof scopeOrPrompt !== 'string') {
+    return agentManager.sendPrompt(
+      scopeOrPrompt,
+      String(promptOrStreamingBehavior ?? ''),
+      streamingBehaviorOrAttachments as AgentRunningPromptBehavior | undefined,
+      attachmentsOrOptions as AgentPromptAttachment[] | undefined,
+      options,
+    )
+  }
+  return agentManager.sendPrompt(
+    requireLegacyBuiltinScope(),
+    scopeOrPrompt,
+    promptOrStreamingBehavior as AgentRunningPromptBehavior | undefined,
+    streamingBehaviorOrAttachments as AgentPromptAttachment[] | undefined,
+  )
 })
 
-ipcMain.handle('agent:update-queued-message', async (_event, update: AgentQueuedMessageUpdate) => {
-  return agentManager.updateQueuedMessage(update)
+ipcMain.handle('agent:update-queued-message', async (
+  _event,
+  scopeOrUpdate: AgentRequestScope | AgentQueuedMessageUpdate,
+  maybeUpdate?: AgentQueuedMessageUpdate,
+) => {
+  return scopeOrUpdate && typeof scopeOrUpdate === 'object' && 'agentId' in scopeOrUpdate
+    ? agentManager.updateQueuedMessage(scopeOrUpdate, maybeUpdate as AgentQueuedMessageUpdate)
+    : agentManager.updateQueuedMessage(requireLegacyBuiltinScope(), scopeOrUpdate)
 })
 
-ipcMain.handle('agent:select-model', async (_event, modelKey: string) => {
-  return agentManager.selectModel(modelKey)
+ipcMain.handle('agent:select-model', async (_event, scopeOrModelKey: AgentRequestScope | string, maybeModelKey?: string) => {
+  return typeof scopeOrModelKey === 'string'
+    ? agentManager.selectModel(requireLegacyBuiltinScope(), scopeOrModelKey)
+    : agentManager.selectModel(scopeOrModelKey, String(maybeModelKey ?? ''))
 })
 
-ipcMain.handle('agent:select-thinking-level', async (_event, level: string, modelKey?: string) => {
-  return agentManager.selectThinkingLevel(level, modelKey)
+ipcMain.handle('agent:select-thinking-level', async (
+  _event,
+  scopeOrLevel: AgentRequestScope | string,
+  levelOrModelKey?: string,
+  maybeModelKey?: string,
+) => {
+  return typeof scopeOrLevel === 'string'
+    ? agentManager.selectThinkingLevel(requireLegacyBuiltinScope(), scopeOrLevel, levelOrModelKey)
+    : agentManager.selectThinkingLevel(scopeOrLevel, String(levelOrModelKey ?? ''), maybeModelKey)
 })
 
 ipcMain.handle('agent:update-provider-auth', async (_event, rootPath: string | null, provider: string, apiKey: string | null) => {
@@ -2496,8 +2583,12 @@ ipcMain.handle('agent:respond-provider-auth-prompt', async (_event, requestId: s
   return { ok: true }
 })
 
-ipcMain.handle('agent:abort', async () => {
-  return agentManager.abortActivePrompt()
+ipcMain.handle('agent:abort', async (_event, scope?: AgentRequestScope) => {
+  return agentManager.abortActivePrompt(scope ?? requireLegacyBuiltinScope())
+})
+
+ipcMain.handle('agent:respond-interaction', async (_event, response: AgentInteractionResponse) => {
+  return { ok: await agentManager.respondToInteraction(response) }
 })
 
 ipcMain.handle('window:minimize', () => {

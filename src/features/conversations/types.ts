@@ -1,3 +1,5 @@
+import type { AgentId } from '@/features/agent/agent-definition'
+
 export type ActiveWorkspaceContext =
   | { kind: 'project'; projectId: string }
   | { kind: 'conversation'; conversationId: string }
@@ -8,6 +10,7 @@ export type ConversationStatus = 'draft' | 'active'
 export type ConversationTitleSource = 'default' | 'prompt' | 'agent' | 'user'
 
 export type ConversationRecord = {
+  agentId: AgentId
   id: string
   title: string
   titleSource: ConversationTitleSource
@@ -25,6 +28,7 @@ export type ConversationState = {
 }
 
 export type CreateConversationWorkspaceRequest = {
+  agentId?: AgentId
   initialPrompt?: string | null
 }
 

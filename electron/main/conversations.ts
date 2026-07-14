@@ -9,10 +9,11 @@ import type {
   CreateConversationWorkspaceRequest,
   UpdateConversationRequest,
 } from '../../src/features/conversations/types'
+import { DEFAULT_AGENT_ID, normalizeAgentId } from '../../src/features/agent/agent-definition'
 import { AtomicJsonStore } from './json-file-store'
 import { ensureUsableFolderName } from './path-names'
 
-const CONVERSATION_INDEX_SCHEMA_VERSION = 2
+const CONVERSATION_INDEX_SCHEMA_VERSION = 3
 const DEFAULT_CONVERSATION_TITLE = '新对话'
 const DEFAULT_CONVERSATION_SLUG = 'conversation'
 
@@ -87,6 +88,7 @@ function readConversationRecord(value: unknown): ConversationRecord | null {
   const lastMessagePreview = readNullableString(candidate.lastMessagePreview)
 
   return {
+    agentId: normalizeAgentId(candidate.agentId),
     id,
     title,
     titleSource: readConversationTitleSource(candidate.titleSource, title, lastMessagePreview),
@@ -236,6 +238,7 @@ export class ConversationStore {
     const workspacePath = await createUniqueConversationPath(parentPath, folderName)
 
     const record: ConversationRecord = {
+      agentId: normalizeAgentId(request.agentId ?? DEFAULT_AGENT_ID),
       id: randomUUID(),
       title,
       titleSource: title === DEFAULT_CONVERSATION_TITLE ? 'default' : 'prompt',

@@ -293,6 +293,48 @@ describe('conversation store', () => {
     })
   })
 
+  it('migrates legacy conversations to the embedded PI Agent without changing their session link', async () => {
+    const rootPath = await createTempDir()
+    const indexPath = path.join(rootPath, '.aryn', 'conversations', 'index.json')
+    const legacySessionPath = path.join(rootPath, 'legacy-session.jsonl')
+    await mkdir(path.dirname(indexPath), { recursive: true })
+    await writeFile(indexPath, JSON.stringify({
+      version: 2,
+      conversations: [{
+        id: 'legacy-conversation',
+        title: 'Legacy conversation',
+        createdAt: '2026-05-30T10:00:00.000Z',
+        updatedAt: '2026-05-30T10:01:00.000Z',
+        status: 'active',
+        workspacePath: rootPath,
+        agentSessionPath: legacySessionPath,
+      }],
+    }), 'utf8')
+    const store = new ConversationStore(indexPath, path.join(rootPath, 'Documents'))
+
+    const state = await store.read()
+
+    expect(state.version).toBe(3)
+    expect(state.conversations[0]).toMatchObject({
+      agentId: 'builtin-pi',
+      agentSessionPath: legacySessionPath,
+      id: 'legacy-conversation',
+    })
+  })
+
+  it('keeps the Agent immutable after a conversation is created', async () => {
+    const rootPath = await createTempDir()
+    const store = new ConversationStore(
+      path.join(rootPath, '.aryn', 'conversations', 'index.json'),
+      path.join(rootPath, 'Documents'),
+    )
+    const record = await store.createWorkspace({ agentId: 'pi', initialPrompt: 'Keep the adapter stable' })
+
+    const updated = await store.updateConversation(record.id, { agentId: 'codex' } as never)
+
+    expect(updated.agentId).toBe('pi')
+  })
+
   it('infers title source for legacy persisted conversations conservatively', async () => {
     const rootPath = await createTempDir()
     const indexPath = path.join(rootPath, '.aryn', 'conversations', 'index.json')
