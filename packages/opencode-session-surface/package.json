@@ -1,0 +1,38 @@
+{
+  "name": "@aryn/opencode-session-surface",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist",
+    "index.d.ts",
+    "LICENSE",
+    "UPSTREAM.md"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "1.17.18",
+    "@opencode-ai/ui": "1.17.18",
+    "@solidjs/meta": "0.29.4",
+    "@solidjs/router": "0.15.4",
+    "solid-js": "1.9.14"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2",
+    "vite": "^5.4.11",
+    "vite-plugin-solid": "^2.11.8"
+  }
+}

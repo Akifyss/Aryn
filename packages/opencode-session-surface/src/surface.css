@@ -1,0 +1,177 @@
+@import "./upstream/ui/styles/index.css";
+@import "./upstream/ui/v2/styles/tailwind.css";
+@import "./upstream/ui/v2/components/icon-button-v2.css";
+@import "./upstream/ui/v2/components/tooltip-v2.css";
+@import "./upstream/session-ui/styles/index.css";
+@import "./upstream/session-ui/v2/components/session-progress-indicator-v2.css";
+
+.aryn-opencode-session-surface {
+  width: 100%;
+  min-width: 0;
+  color: var(--foreground-primary, var(--text-base));
+  font-family: var(--font-sans, var(--font-family-sans));
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.aryn-opencode-session-surface,
+body > .aryn-opencode-portal-theme {
+  --background-base: var(--background-primary, transparent);
+  --background-weak: var(--background-secondary, #f6f6f6);
+  --background-strong: var(--background-primary, #fff);
+  --background-stronger: var(--background-secondary, #f6f6f6);
+  --surface-base: var(--background-secondary, #f6f6f6);
+  --surface-weak: var(--background-tertiary, #ededed);
+  --surface-base-hover: var(--background-tertiary, #ededed);
+  --text-base: var(--foreground-primary, currentColor);
+  --text-weak: var(--foreground-secondary, color-mix(in srgb, currentColor 70%, transparent));
+  --text-weaker: var(--foreground-tertiary, color-mix(in srgb, currentColor 55%, transparent));
+  --text-strong: var(--foreground-primary, currentColor);
+  --text-stronger: var(--foreground-primary, currentColor);
+  --text-interactive-base: var(--accent, #3b82f6);
+  --text-link-base: var(--accent, #3b82f6);
+  --icon-base: var(--foreground-secondary, currentColor);
+  --icon-weak: var(--foreground-tertiary, currentColor);
+  --icon-weaker: var(--foreground-tertiary, currentColor);
+  --icon-strong-base: var(--foreground-primary, currentColor);
+  --border-base: var(--border-primary, color-mix(in srgb, currentColor 18%, transparent));
+  --border-weak-base: var(--border-secondary, color-mix(in srgb, currentColor 10%, transparent));
+  --border-weaker-base: var(--border-secondary, color-mix(in srgb, currentColor 8%, transparent));
+
+  /* OpenCode v2 semantic tokens. Keep the official component hierarchy while
+     making its colors follow Aryn's resolved light/dark theme instead of the
+     operating-system media query. */
+  --v2-background-bg-base: var(--background-primary);
+  --v2-background-bg-deep: var(--background-secondary);
+  --v2-background-bg-layer-01: var(--background-secondary);
+  --v2-background-bg-layer-02: var(--background-tertiary);
+  --v2-background-bg-layer-03: var(--background-quaternary);
+  --v2-background-bg-layer-04: var(--background-quaternary);
+  --v2-background-bg-button-neutral: var(--background-primary);
+  --v2-text-text-base: var(--foreground-primary);
+  --v2-text-text-muted: var(--foreground-secondary);
+  --v2-text-text-faint: var(--foreground-tertiary);
+  --v2-text-text-accent: var(--accent);
+  --v2-text-text-accent-hover: var(--accent);
+  --v2-text-text-code-accent: var(--accent);
+  --v2-icon-icon-base: var(--foreground-secondary);
+  --v2-icon-icon-muted: var(--foreground-tertiary);
+  --v2-icon-icon-accent: var(--accent);
+  --v2-icon-icon-accent-hover: var(--accent);
+  --v2-border-border-muted: var(--border-secondary);
+  --v2-border-border-base: var(--border-secondary);
+  --v2-border-border-strong: var(--border-primary);
+  --v2-border-border-focus: var(--focus, var(--accent));
+  --v2-overlay-simple-overlay-hover: color-mix(in oklch, var(--foreground-primary) 4%, transparent);
+  --v2-overlay-simple-overlay-pressed: color-mix(in oklch, var(--foreground-primary) 8%, transparent);
+  --v2-state-fg-danger: var(--danger);
+  --v2-state-fg-success: var(--success);
+  --v2-state-fg-warning: var(--warning);
+}
+
+body > .aryn-opencode-portal-theme {
+  color-scheme: inherit;
+}
+
+.aryn-opencode-session-surface,
+.aryn-opencode-session-surface *,
+.aryn-opencode-session-surface *::before,
+.aryn-opencode-session-surface *::after {
+  box-sizing: border-box;
+}
+
+.aryn-opencode-session-surface button,
+.aryn-opencode-session-surface input,
+.aryn-opencode-session-surface textarea {
+  font: inherit;
+}
+
+.aryn-opencode-session-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px 20px 36px;
+}
+
+.aryn-opencode-turn {
+  width: 100%;
+  min-width: 0;
+}
+
+.aryn-opencode-turn-root {
+  min-width: 0;
+  width: 100%;
+  position: relative;
+  height: auto;
+}
+
+.aryn-opencode-turn-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: visible !important;
+  height: auto !important;
+}
+
+.aryn-opencode-turn-container {
+  width: 100%;
+}
+
+.aryn-opencode-surface-state {
+  display: flex;
+  min-height: 160px;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: var(--foreground-secondary, var(--text-weak));
+  text-align: center;
+}
+
+.aryn-opencode-surface-state[data-error='true'] {
+  color: var(--danger, var(--text-critical-base));
+}
+
+.aryn-opencode-surface-retry,
+.aryn-opencode-history-button {
+  border: 0;
+  background: transparent;
+  color: var(--foreground-secondary, var(--text-weak));
+  cursor: pointer;
+}
+
+.aryn-opencode-surface-retry:hover,
+.aryn-opencode-history-button:hover {
+  color: var(--foreground-primary, var(--text-base));
+}
+
+.aryn-opencode-surface-retry:focus-visible,
+.aryn-opencode-history-button:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 2px;
+}
+
+.aryn-opencode-history-button {
+  align-self: center;
+  margin-bottom: 12px;
+  padding: 6px 10px;
+}
+
+.aryn-opencode-history-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+@media (max-width: 720px) {
+  .aryn-opencode-session-list {
+    padding-inline: 16px;
+  }
+}
+
+@media (min-width: 1536px) {
+  .aryn-opencode-session-list {
+    max-width: 1000px;
+  }
+}

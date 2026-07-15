@@ -6,6 +6,7 @@ dist/
 dist-ssr/
 dist-electron/
 release/
+/public/opencode-session-surface/
 !vendor/meo-runtime/
 !vendor/meo-runtime/**
 !vendor/meo-runtime/webview/

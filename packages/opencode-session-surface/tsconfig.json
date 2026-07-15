@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@opencode-ai/core/util/binary": ["src/upstream/core/util/binary.ts"],
+      "@opencode-ai/core/util/encode": ["src/upstream/core/util/encode.ts"],
+      "@opencode-ai/core/util/path": ["src/upstream/core/util/path.ts"],
+      "@opencode-ai/core/util/retry": ["src/upstream/core/util/retry.ts"],
+      "@/context/global-sync/session-cache": ["src/upstream/app/context/global-sync/session-cache.ts"],
+      "@/utils/diffs": ["src/upstream/app/utils/diffs.ts"],
+      "@/utils/server-errors": ["src/upstream/app/utils/server-errors.ts"],
+      "@/utils/session-route": ["src/adapters/root-session.ts"]
+    },
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "skipLibCheck": true,
+    "strict": true,
+    "types": ["vite/client"]
+  },
+  "include": ["src", "vite.config.ts"]
+}

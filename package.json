@@ -17,12 +17,15 @@
   },
   "type": "module",
   "scripts": {
+    "predev": "npm run build:opencode-surface",
     "dev": "vite",
     "postinstall": "node scripts/patch-pi-coding-agent-loader.mjs",
-    "typecheck": "tsc --noEmit",
-    "build": "tsc && vite build && electron-builder",
+    "build:opencode-surface": "npm --prefix packages/opencode-session-surface run build && node scripts/verify-opencode-session-surface-css.mjs && node scripts/sync-opencode-session-surface.mjs",
+    "typecheck:opencode-surface": "npm --prefix packages/opencode-session-surface run typecheck",
+    "typecheck": "npm run typecheck:opencode-surface && tsc --noEmit",
+    "build": "npm run build:opencode-surface && tsc && vite build && electron-builder",
     "preview": "vite preview",
-    "pretest": "vite build --mode=test",
+    "pretest": "npm run build:opencode-surface && vite build --mode=test",
     "test": "vitest run",
     "debug:electron": "node scripts/electron-debug-session.mjs",
     "debug:electron:build": "npm run pretest && npm run debug:electron",
@@ -32,6 +35,7 @@
     "perf:meo:full": "npm run typecheck && npm test -- test/meo-performance.spec.ts test/meo-git-diff-gutter.spec.ts test/git-diff-navigation.spec.ts"
   },
   "dependencies": {
+    "@aryn/opencode-session-surface": "file:packages/opencode-session-surface",
     "@aiden0z/pptx-renderer": "^1.2.3",
     "@aryn/codemirror-merge": "file:src/vendor/codemirror-merge",
     "@codemirror/commands": "^6.10.3",
