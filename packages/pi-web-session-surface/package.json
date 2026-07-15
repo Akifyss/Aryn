@@ -1,0 +1,54 @@
+{
+  "name": "@aryn/pi-web-session-surface",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./session-state": {
+      "types": "./session-state.d.ts",
+      "import": "./dist/session-state.js"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist",
+    "index.d.ts",
+    "session-state.d.ts",
+    "LICENSE",
+    "UPSTREAM.md"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "katex": "0.16.47",
+    "mermaid": "11.14.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-markdown": "10.1.0",
+    "react-syntax-highlighter": "16.1.1",
+    "rehype-katex": "7.0.1",
+    "rehype-raw": "7.0.0",
+    "rehype-sanitize": "6.0.0",
+    "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/react-syntax-highlighter": "15.5.13",
+    "@vitejs/plugin-react": "4.3.3",
+    "typescript": "~5.6.2",
+    "vite": "5.4.11",
+    "vitest": "2.1.9"
+  }
+}

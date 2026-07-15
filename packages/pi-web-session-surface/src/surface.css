@@ -1,0 +1,40 @@
+.aryn-pi-web-session-surface {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  min-width: 0;
+  color: var(--text);
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+}
+
+.aryn-pi-web-session-surface__timeline {
+  width: min(820px, 100%);
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.aryn-pi-web-session-surface__phase {
+  padding: 8px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.aryn-pi-web-session-surface__phase > span {
+  animation: aryn-pi-web-pulse 1.5s infinite;
+}
+
+.aryn-pi-web-session-surface__process-toggle:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aryn-pi-web-session-surface__phase > span {
+    animation: none;
+  }
+
+  .aryn-pi-web-session-surface__process-toggle-icon {
+    transition: none !important;
+  }
+}
