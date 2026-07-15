@@ -1,4 +1,5 @@
-import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState } from '@/features/agent/types'
+import type { AgentClientEvent, AgentInteractionResponse, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState, OpenCodeSurfaceRequest, OpenCodeSurfaceResponse } from '@/features/agent/types'
+import type { AgentAvailability } from '@/features/agent/agent-definition'
 import type { ActiveWorkspaceContext, ConversationRecord, ConversationState, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '@/features/conversations/types'
 import type {
   GitBaselinePayload,
@@ -36,6 +37,7 @@ declare global {
   interface Window {
     appApi: {
       platform: NodeJS.Platform
+      getAgentCatalog: (options?: { force?: boolean }) => Promise<AgentAvailability[]>
       pickWorkspace: () => Promise<string | null>
       getProjectState: () => Promise<ProjectState>
       getActiveWorkspaceContext: () => Promise<ActiveWorkspaceContext>
@@ -116,27 +118,29 @@ declare global {
       updateUiState: (patch: { agentComposerHeight?: number }) => Promise<{ ok: boolean }>
       startWorkspaceWatch: (rootPath: string) => Promise<{ ok: boolean }>
       stopWorkspaceWatch: () => Promise<{ ok: boolean }>
-      loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null, options?: { restoreSession?: boolean }) => Promise<AgentWorkspaceState>
-      loadAgentDraftState: () => Promise<AgentWorkspaceState>
-      listAgentSessions: (rootPath: string) => Promise<AgentWorkspaceState['sessions']>
-      readAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentSessionSnapshot>
-      agentSessionExists: (rootPath: string, sessionPath: string) => Promise<{ exists: boolean }>
-      createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => Promise<AgentWorkspaceState>
-      openAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
-      deleteAgentSession: (rootPath: string, sessionPath: string) => Promise<AgentWorkspaceState>
-      renameAgentSession: (rootPath: string, sessionPath: string, name: string) => Promise<AgentWorkspaceState>
+      loadAgentWorkspace: (scope: AgentRequestScope, preferredSessionPath?: string | null, options?: { restoreSession?: boolean }) => Promise<AgentWorkspaceState>
+      loadAgentDraftState: (agentId?: AgentRequestScope['agentId']) => Promise<AgentWorkspaceState>
+      listAgentSessions: (scope: AgentRequestScope) => Promise<AgentWorkspaceState['sessions']>
+      readAgentSession: (scope: AgentRequestScope, sessionPath: string) => Promise<AgentSessionSnapshot>
+      requestOpenCodeSurface: (scope: AgentRequestScope, request: OpenCodeSurfaceRequest) => Promise<OpenCodeSurfaceResponse>
+      agentSessionExists: (scope: AgentRequestScope, sessionPath: string) => Promise<{ exists: boolean }>
+      createAgentSession: (scope: AgentRequestScope, options?: string | AgentSessionCreateOptions) => Promise<AgentWorkspaceState>
+      openAgentSession: (scope: AgentRequestScope, sessionPath: string) => Promise<AgentWorkspaceState>
+      deleteAgentSession: (scope: AgentRequestScope, sessionPath: string) => Promise<AgentWorkspaceState>
+      renameAgentSession: (scope: AgentRequestScope, sessionPath: string, name: string) => Promise<AgentWorkspaceState>
       pickAgentAttachments: () => Promise<AgentPromptAttachment[]>
       getFilePath: (file: File) => string
-      sendAgentPrompt: (prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments?: AgentPromptAttachment[]) => Promise<{ ok: boolean }>
-      updateAgentQueuedMessage: (update: AgentQueuedMessageUpdate) => Promise<AgentWorkspaceState>
-      selectAgentModel: (modelKey: string) => Promise<AgentWorkspaceState>
-      selectAgentThinkingLevel: (level: AgentThinkingLevel, modelKey?: string) => Promise<AgentWorkspaceState>
+      sendAgentPrompt: (scope: AgentRequestScope, prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments?: AgentPromptAttachment[], options?: AgentPromptSendOptions) => Promise<{ ok: boolean }>
+      updateAgentQueuedMessage: (scope: AgentRequestScope, update: AgentQueuedMessageUpdate) => Promise<AgentWorkspaceState>
+      selectAgentModel: (scope: AgentRequestScope, modelKey: string) => Promise<AgentWorkspaceState>
+      selectAgentThinkingLevel: (scope: AgentRequestScope, level: AgentThinkingLevel, modelKey?: string) => Promise<AgentWorkspaceState>
       updateAgentProviderAuth: (rootPath: string | null, provider: string, apiKey: string | null) => Promise<AgentWorkspaceState>
       loginAgentProviderAuth: (rootPath: string | null, provider: string) => Promise<AgentWorkspaceState>
       logoutAgentProviderAuth: (rootPath: string | null, provider: string) => Promise<AgentWorkspaceState>
       cancelAgentProviderAuth: (provider: string) => Promise<{ ok: boolean }>
       respondAgentProviderAuthPrompt: (requestId: string, value: string | null) => Promise<{ ok: boolean }>
-      abortAgentPrompt: () => Promise<AgentWorkspaceState>
+      abortAgentPrompt: (scope: AgentRequestScope) => Promise<AgentWorkspaceState>
+      respondAgentInteraction: (response: AgentInteractionResponse) => Promise<{ ok: boolean }>
       notifyRendererReady: () => void
       openExternalLink: (href: string) => Promise<{ ok: boolean }>
       setWindowTheme: (

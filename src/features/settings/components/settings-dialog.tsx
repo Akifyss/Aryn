@@ -494,7 +494,7 @@ export function SettingsDialog({
 
     let isDisposed = false
 
-    void window.appApi.loadAgentDraftState()
+    void window.appApi.loadAgentDraftState('builtin-pi')
       .then((nextState) => {
         if (!isDisposed) {
           onAgentStateChange(nextState)

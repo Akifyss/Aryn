@@ -23,6 +23,12 @@ import { ContextMenu } from '@base-ui/react/context-menu'
 import { Menu } from '@base-ui/react/menu'
 import { Button, Disclosure, ScrollShadow } from '@heroui/react'
 import { Icon } from '@iconify/react'
+import type { OpenCodeOptimisticUserMessage } from '@aryn/opencode-session-surface'
+import type {
+  PiWebAgentMessage,
+  PiWebNativeSessionSnapshot,
+  PiWebOptimisticUserMessage,
+} from '@aryn/pi-web-session-surface'
 import {
   AiLine,
   AddLine,
@@ -58,6 +64,7 @@ import {
   TreeItemActionButton,
   TreeItemChildren,
   TreeItem,
+  TreeItemIcon,
   TreeList,
   TreeSection,
   TreeStatusItem,
@@ -68,10 +75,19 @@ import {
 } from '@/components/tree'
 import { getAgentProviderOrder } from '@/features/agent/provider-auth'
 import {
+  DEFAULT_AGENT_ID,
+  getAgentDefinition,
+  type AgentAvailability,
+  type AgentId,
+} from '@/features/agent/agent-definition'
+import {
   FileChangeStatusBadge,
   WorkspaceFileIcon,
 } from '@/components/file-change-visuals'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
+import { AgentBrandIcon } from '@/features/agent/components/agent-brand-icon'
+import { OpenCodeSessionTimeline } from '@/features/agent/components/opencode-session-timeline'
+import { PiWebSessionTimeline } from '@/features/agent/components/pi-web-session-timeline'
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
 import {
   isAgentMessagesScrollIntentKey,
@@ -94,9 +110,31 @@ import type { ComposerMentionToken } from '@/features/agent/lib/composer-mention
 import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
 import {
   resolveAgentWorkspaceSessionRestore,
+  shouldApplyAgentSessionOperationResult,
+  shouldApplyAgentWorkspaceState,
+  shouldPersistAgentWorkspaceSelection,
   type AgentProjectSessionRequest,
+  type AgentSessionSelection,
 } from '@/features/agent/lib/project-session-request'
+import {
+  flattenAgentProjectSessions,
+  getAgentSessionTreeKey,
+  invalidateAgentProjectSessionBuckets,
+  SESSION_TREE_AGENT_IDS,
+  summarizeAgentProjectSessionBucket,
+  type AgentProjectSessionBucket,
+  type AgentSessionTreeItem,
+} from '@/features/agent/lib/session-tree'
 import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
+import {
+  getOpenCodeNativeRenderKey,
+  getOpenCodeUserMessageText,
+} from '@/features/agent/lib/opencode-timeline'
+import {
+  createOpenCodeMessageId,
+  createOpenCodePartId,
+} from '@/features/agent/lib/opencode-message-id'
+import { getAgentInteractionKey } from '@/features/agent/types'
 import type {
   ActiveWorkspaceContext,
   ConversationRecord,
@@ -111,6 +149,7 @@ import {
   type AgentFileAutoOpenState,
 } from '@/features/agent/auto-open-file'
 import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-changes'
+import { mergeFileChangesByPath } from '@/features/agent/file-change-utils'
 import {
   AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS,
   getAlternateRunningPromptBehavior,
@@ -119,11 +158,13 @@ import {
 } from '@/hooks/use-settings-store'
 import type {
   AgentClientEvent,
+  AgentInteractionRequest,
   AgentMessageAttachment,
   AgentMessageFileChange,
   AgentPromptAttachment,
   AgentQueuedMessageKind,
   AgentQueuedMessageUpdate,
+  AgentRunningPromptBehavior,
   AgentSessionListItem,
   AgentSessionAnnotations,
   AgentSessionSnapshot,
@@ -131,6 +172,7 @@ import type {
   AgentSidebarMessageStatus,
   AgentThinkingLevel,
   AgentWorkspaceState,
+  OpenCodeNativeSessionSnapshot,
 } from '@/features/agent/types'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
 
@@ -152,6 +194,19 @@ type ConversationTitleSuggestion = {
   title: string
 }
 
+function getPiWebUserMessageText(message: PiWebAgentMessage) {
+  if (typeof message.content === 'string') return message.content
+  if (!Array.isArray(message.content)) return ''
+  return message.content.flatMap((part) => (
+    part
+      && typeof part === 'object'
+      && (part as { type?: unknown }).type === 'text'
+      && typeof (part as { text?: unknown }).text === 'string'
+      ? [(part as { text: string }).text]
+      : []
+  )).join('\n')
+}
+
 type AgentSidebarProps = {
   activeWorkspaceContext?: ActiveWorkspaceContext
   conversationState?: ConversationState
@@ -161,7 +216,7 @@ type AgentSidebarProps = {
   onConversationDraftFailed?: (conversationId: string) => Promise<void> | void
   onConversationSessionStarted?: (conversationId: string, patch: ConversationSessionStartedPatch) => Promise<void> | void
   onConversationTitleSuggested?: (conversationId: string, suggestion: ConversationTitleSuggestion) => Promise<void> | void
-  onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
+  onCreateConversationWorkspace?: (request: { agentId?: AgentId, initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
   onRenameConversation?: (conversation: ConversationRecord, title: string) => Promise<void> | void
@@ -170,7 +225,7 @@ type AgentSidebarProps = {
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
-  onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
+  onOpenProjectSession?: (project: ProjectRecord, agentId: AgentId, sessionPath: string) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
   onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
@@ -192,7 +247,7 @@ type AgentSurfaceProps = {
   onConversationDraftFailed?: (conversationId: string) => Promise<void> | void
   onConversationSessionStarted?: (conversationId: string, patch: ConversationSessionStartedPatch) => Promise<void> | void
   onConversationTitleSuggested?: (conversationId: string, suggestion: ConversationTitleSuggestion) => Promise<void> | void
-  onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
+  onCreateConversationWorkspace?: (request: { agentId?: AgentId, initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
   onRenameConversation?: (conversation: ConversationRecord, title: string) => Promise<void> | void
@@ -201,7 +256,7 @@ type AgentSurfaceProps = {
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
-  onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
+  onOpenProjectSession?: (project: ProjectRecord, agentId: AgentId, sessionPath: string) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
   onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
@@ -221,13 +276,6 @@ type AgentSessionTreeProps = {
   isFloating?: boolean
   isProjectAddMenuOpen?: boolean
   menuPortalTarget?: HTMLElement | null
-}
-
-type AgentProjectSessionBucket = {
-  error: string | null
-  hasLoaded: boolean
-  isLoading: boolean
-  sessions: AgentSessionListItem[]
 }
 
 type AgentProviderProps = AgentSurfaceProps & {
@@ -328,7 +376,6 @@ type AgentModelPickerPendingActivation = {
   version: number
 }
 
-type AgentSessionSelection = { kind: 'new' } | { kind: 'session', sessionPath: string }
 type OptimisticComposerClearToken = { id: number; revision: number }
 
 const MARKDOWN_PLUGINS = [remarkGfm]
@@ -539,6 +586,7 @@ const IMAGE_ATTACHMENT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/w
 const MAX_COMPOSER_ATTACHMENTS = 12
 
 type AgentContextValue = {
+  agentCatalog: AgentAvailability[]
   activeWorkspaceContext: ActiveWorkspaceContext
   activeComposerMenu: AgentComposerMenu
   activeOverlayPanel: 'sessions' | null
@@ -558,9 +606,9 @@ type AgentContextValue = {
   conversationState: ConversationState
   deletingSessionPath: string | null
   handleComposerKeyDown: (event: KeyboardEvent<HTMLElement>) => void
-  handleDeleteSession: (sessionPath: string) => Promise<void>
-  handleOpenSession: (sessionPath: string) => Promise<void>
-  handleRenameSession: (rootPath: string, sessionPath: string, name: string) => Promise<void>
+  handleDeleteSession: (rootPath: string, agentId: AgentId, sessionPath: string) => Promise<void>
+  handleOpenSession: (agentId: AgentId, sessionPath: string) => Promise<void>
+  handleRenameSession: (rootPath: string, agentId: AgentId, sessionPath: string, name: string) => Promise<void>
   handleSelectModel: (modelKey: string) => Promise<void>
   handleThinkingLevelSelection: (level: AgentThinkingLevel, modelKey?: string) => Promise<void>
   handlePickComposerAttachments: () => Promise<void>
@@ -582,7 +630,7 @@ type AgentContextValue = {
   onConversationDraftFailed?: (conversationId: string) => Promise<void> | void
   onConversationSessionStarted?: (conversationId: string, patch: ConversationSessionStartedPatch) => Promise<void> | void
   onConversationTitleSuggested?: (conversationId: string, suggestion: ConversationTitleSuggestion) => Promise<void> | void
-  onCreateConversationWorkspace?: (request: { initialPrompt?: string | null }) => Promise<ConversationRecord>
+  onCreateConversationWorkspace?: (request: { agentId?: AgentId, initialPrompt?: string | null }) => Promise<ConversationRecord>
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void
   onRenameConversation?: (conversation: ConversationRecord, title: string) => Promise<void> | void
@@ -591,23 +639,41 @@ type AgentContextValue = {
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
-  onOpenProjectSession?: (project: ProjectRecord, sessionPath: string) => Promise<void> | void
+  onOpenProjectSession?: (project: ProjectRecord, agentId: AgentId, sessionPath: string) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
   onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
+  openCodeNativeSession: OpenCodeNativeSessionSnapshot | null
+  openCodeOptimisticUserMessages: OpenCodeOptimisticUserMessage[]
+  piWebFileChanges: AgentMessageFileChange[]
+  piWebNativeSession: PiWebNativeSessionSnapshot | null
+  piWebOptimisticUserMessages: PiWebOptimisticUserMessage[]
+  piWebStreamingStatus: AgentSessionStatus | null
   panelError: string | null
+  pendingInteraction: AgentInteractionRequest | null
   loadProjectSessions: (project: ProjectRecord) => Promise<void>
   projectSessions: Record<string, AgentProjectSessionBucket>
   projectState: ProjectState
+  refreshAgentCatalog: () => Promise<void>
   renderedMessages: AgentSidebarMessage[]
   resolvedSelectedProviderValue: string
   roundFileChangesByMessageId: Map<string, AgentMessageFileChange[]>
+  sessionActivityById: Record<string, 'running' | 'waiting'>
+  sessionTreeAgentIds: readonly AgentId[]
   removeComposerAttachment: (attachmentId: string) => void
+  respondToInteraction: (
+    requestId: string,
+    optionId: string,
+    values?: string[],
+    answers?: Record<string, string[]>,
+  ) => Promise<void>
   sessionStatus: AgentSessionStatus | null
   setActiveComposerMenu: React.Dispatch<React.SetStateAction<AgentComposerMenu>>
   setActiveOverlayPanel: React.Dispatch<React.SetStateAction<'sessions' | null>>
   setComposerState: React.Dispatch<React.SetStateAction<ComposerState>>
   setPanelError: React.Dispatch<React.SetStateAction<string | null>>
+  selectedAgentId: AgentId
+  setSelectedAgentId: (agentId: AgentId) => void
   statusMessage: string | null
   surfaceMode: AgentSurfaceMode
   streamingShortcutModifierLabel: string
@@ -726,6 +792,17 @@ function getAgentModelDraftKey(draft: AgentModelDraft) {
 
 function normalizeAgentProjectPath(filePath: string) {
   return filePath.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
+type OptimisticAgentUserMessage = {
+  agentId: AgentId
+  message: AgentSidebarMessage
+  nativePartIds?: string[]
+  sessionPath: string
+}
+
+function getAgentSessionActivityKey(agentId: AgentId, sessionKey: string) {
+  return `${agentId}\n${sessionKey}`
 }
 
 function normalizeAgentModelDraft(
@@ -1152,7 +1229,12 @@ function mergeSessionAnnotationsState(
     ...state,
     activeSession: {
       ...state.activeSession,
-      annotations,
+      annotations: {
+        fileChangesByEntryId: {
+          ...state.activeSession.annotations.fileChangesByEntryId,
+          ...annotations.fileChangesByEntryId,
+        },
+      },
     },
   }
 }
@@ -2259,6 +2341,7 @@ type AgentSessionQueueCounts = Pick<
 
 function deriveAgentSessionPhase({
   draftAssistant,
+  hasVisibleRunningContent,
   isStreaming,
   isThinkingStreaming,
   panelError,
@@ -2269,6 +2352,7 @@ function deriveAgentSessionPhase({
   workspacePath,
 }: {
   draftAssistant: string
+  hasVisibleRunningContent: boolean
   isStreaming: boolean
   isThinkingStreaming: boolean
   panelError: string | null
@@ -2287,6 +2371,30 @@ function deriveAgentSessionPhase({
       message: panelError,
       type: 'error',
     }
+  }
+
+  if (runtime.agentId !== DEFAULT_AGENT_ID) {
+    if (runtime.executionState?.type === 'retry') {
+      return { type: 'auto_retry' }
+    }
+
+    if (isStreaming) {
+      if (
+        hasVisibleRunningContent
+        || runningTools.length > 0
+        || draftAssistant.trim()
+        || isThinkingStreaming
+      ) {
+        return null
+      }
+      return { type: 'thinking' }
+    }
+
+    if (pendingMessageCount > 0) {
+      return { type: 'queued' }
+    }
+
+    return runtime.hasConfiguredModels ? { type: 'idle' } : null
   }
 
   if (runningTools.length > 0) {
@@ -2626,10 +2734,12 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
 }
 
 function AgentQueuedComposerTray({
+  canEdit,
   menuPortalTarget,
   messages,
   onUpdate,
 }: {
+  canEdit: boolean
   menuPortalTarget?: HTMLElement | null
   messages: AgentQueuedComposerMessage[]
   onUpdate: (update: AgentQueuedMessageUpdate) => Promise<void>
@@ -2743,7 +2853,7 @@ function AgentQueuedComposerTray({
               <span className={`agent-queued-kind agent-queued-kind-${message.kind}`}>
                 {isFollowUp ? '排队' : '引导'}
               </span>
-              {isEditing ? (
+              {!canEdit ? null : isEditing ? (
                 <input
                   ref={editingInputRef}
                   className='agent-queued-edit-input'
@@ -2959,6 +3069,10 @@ function AgentProvider({
   const workspaceTree = useWorkspaceStore((state) => state.tree)
   const defaultModelSelection = parseModelSelection(null)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
+  const [agentCatalog, setAgentCatalog] = useState<AgentAvailability[]>([])
+  const [agentAvailabilityFailures, setAgentAvailabilityFailures] = useState<Partial<Record<AgentId, string>>>({})
+  const [agentCatalogRefreshRevision, setAgentCatalogRefreshRevision] = useState(0)
+  const [selectedAgentIdValue, setSelectedAgentIdValue] = useState<AgentId>(DEFAULT_AGENT_ID)
   const [viewedSessionSnapshot, setViewedSessionSnapshot] = useState<AgentSessionSnapshot | null>(null)
   const [composerState, setComposerStateValue] = useState<ComposerState>(emptyComposerState)
   const [composerAttachments, setComposerAttachmentsValue] = useState<ComposerAttachment[]>([])
@@ -2981,13 +3095,22 @@ function AgentProvider({
   const [isSwitchingThinkingLevel, setIsSwitchingThinkingLevel] = useState(false)
   const [isSubmittingComposerPrompt, setIsSubmittingComposerPrompt] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
+  const [pendingInteractions, setPendingInteractions] = useState<AgentInteractionRequest[]>([])
+  const [optimisticUserMessages, setOptimisticUserMessages] = useState<OptimisticAgentUserMessage[]>([])
+  const [sessionActivityById, setSessionActivityById] = useState<Record<string, 'running' | 'waiting'>>({})
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
   const [projectSessions, setProjectSessions] = useState<Record<string, AgentProjectSessionBucket>>({})
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
+  const activeRuntimeSessionRef = useRef<AgentWorkspaceState['activeSession']>(null)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
   const loadAgentStateRequestIdRef = useRef(0)
   const openSessionRequestIdRef = useRef(0)
   const previousSessionPathRef = useRef<string | null>(null)
+  const projectSessionRequestsRef = useRef<Set<string>>(new Set())
+  const projectSessionRequestGenerationRef = useRef(0)
+  const projectSessionsRef = useRef(projectSessions)
+  const projectStateRef = useRef(projectState)
+  const sessionPathByIdRef = useRef<Map<string, string>>(new Map())
   const shouldStickMessagesToBottomRef = useRef(true)
   const messagesUserScrollIntentRef = useRef(false)
   const messagesUserScrollIntentTimeoutRef = useRef<number | null>(null)
@@ -3006,6 +3129,160 @@ function AgentProvider({
   const isSubmittingComposerPromptRef = useRef(false)
   const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
   const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
+  const activeConversation = activeWorkspaceContext.kind === 'conversation'
+    ? conversationState.conversations.find((conversation) => conversation.id === activeWorkspaceContext.conversationId) ?? null
+    : null
+  const requestedProjectAgentId = externalSessionRequest?.kind === 'session'
+    && activeWorkspaceContext.kind === 'project'
+    && externalSessionRequest.projectId === activeWorkspaceContext.projectId
+    ? externalSessionRequest.agentId
+    : null
+  const selectedAgentId = activeConversation?.agentId
+    ?? requestedProjectAgentId
+    ?? (activeSessionSelection.kind === 'session' ? activeSessionSelection.agentId : selectedAgentIdValue)
+  const selectedAgentIdRef = useRef(selectedAgentId)
+  const resolvedAgentCatalog = useMemo(() => agentCatalog.map((availability) => {
+    const failureReason = agentAvailabilityFailures[availability.definition.id]
+    return failureReason
+      ? { ...availability, available: false, reason: failureReason }
+      : availability
+  }), [agentAvailabilityFailures, agentCatalog])
+  const sessionTreeAgentIds = SESSION_TREE_AGENT_IDS
+  const effectiveRunningPromptEnterBehavior = resolveSupportedRunningPromptBehavior(
+    agentState.runtime.supportedRunningPromptBehaviors,
+    runningPromptEnterBehavior,
+  )
+  activeRuntimeSessionRef.current = agentState.activeSession
+  selectedAgentIdRef.current = selectedAgentId
+  projectSessionsRef.current = projectSessions
+  projectStateRef.current = projectState
+  const pendingInteraction = pendingInteractions.find((request) => (
+    request.agentId === selectedAgentId
+    && request.sessionId === agentState.activeSession?.sessionId
+    && (!workspacePath || normalizeAgentProjectPath(request.workspacePath) === normalizeAgentProjectPath(workspacePath))
+  )) ?? null
+
+  const updateSessionActivity = useCallback((
+    agentId: AgentId,
+    sessionKeys: Array<string | null | undefined>,
+    activity: 'running' | 'waiting' | null,
+    forceClear = false,
+  ) => {
+    const keys = Array.from(new Set(
+      sessionKeys
+        .filter((key): key is string => Boolean(key))
+        .map((key) => getAgentSessionActivityKey(agentId, key)),
+    ))
+    if (keys.length === 0) return
+    setSessionActivityById((current) => {
+      const next = { ...current }
+      for (const key of keys) {
+        if (activity) next[key] = activity
+        else if (forceClear || next[key] !== 'waiting') delete next[key]
+      }
+      return next
+    })
+  }, [])
+
+  const setSelectedAgentId = useCallback((agentId: AgentId) => {
+    if (activeConversation) {
+      return
+    }
+
+    const availability = resolvedAgentCatalog.find((item) => item.definition.id === agentId)
+    if (availability && !availability.available) {
+      return
+    }
+
+    setSelectedAgentIdValue(agentId)
+  }, [activeConversation, resolvedAgentCatalog])
+
+  const storeProjectAgentSessions = useCallback((
+    targetWorkspacePath: string,
+    agentId: AgentId,
+    sessions: AgentSessionListItem[],
+  ) => {
+    const matchingProjectIds = projectStateRef.current.projects
+      .filter((project) => normalizeAgentProjectPath(project.path) === normalizeAgentProjectPath(targetWorkspacePath))
+      .map((project) => project.id)
+    if (matchingProjectIds.length === 0) return
+
+    setProjectSessions((currentValue) => {
+      const nextValue = { ...currentValue }
+      for (const projectId of matchingProjectIds) {
+        nextValue[projectId] = {
+          ...nextValue[projectId],
+          [agentId]: {
+            error: null,
+            hasLoaded: true,
+            isLoading: false,
+            sessions,
+          },
+        }
+      }
+      return nextValue
+    })
+  }, [])
+
+  const refreshAgentCatalog = useCallback(async () => {
+    try {
+      const catalog = await window.appApi.getAgentCatalog({ force: true })
+      projectSessionRequestGenerationRef.current += 1
+      projectSessionRequestsRef.current.clear()
+      setAgentCatalog(catalog)
+      setAgentAvailabilityFailures({})
+      setProjectSessions(invalidateAgentProjectSessionBuckets)
+      setAgentCatalogRefreshRevision((revision) => revision + 1)
+      setSelectedAgentIdValue((currentAgentId) => (
+        catalog.some((item) => item.definition.id === currentAgentId && item.available)
+          ? currentAgentId
+          : DEFAULT_AGENT_ID
+      ))
+      setPanelError(null)
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : '无法重新检测 Agent。')
+    }
+  }, [])
+
+  const markAgentUnavailable = useCallback((agentId: AgentId, reason: string) => {
+    if (agentId === DEFAULT_AGENT_ID) return
+    setAgentAvailabilityFailures((current) => ({ ...current, [agentId]: reason }))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    try {
+      const storedAgentId = window.localStorage.getItem('aryn:last-new-conversation-agent')
+      if (storedAgentId === 'builtin-pi' || storedAgentId === 'pi' || storedAgentId === 'opencode' || storedAgentId === 'codex') {
+        setSelectedAgentIdValue(storedAgentId)
+      }
+    } catch {
+      // The default remains usable when localStorage is unavailable.
+    }
+
+    void window.appApi.getAgentCatalog()
+      .then((catalog) => {
+        if (cancelled) {
+          return
+        }
+
+        setAgentCatalog(catalog)
+        setSelectedAgentIdValue((currentAgentId) => (
+          catalog.some((item) => item.definition.id === currentAgentId && item.available)
+            ? currentAgentId
+            : DEFAULT_AGENT_ID
+        ))
+      })
+      .catch(() => {
+        // Built-in PI remains available even if external CLI discovery fails.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const restorableSessionPath = agentState.activeSession?.sessionPath
     && agentState.sessions.some((session) => session.path === agentState.activeSession?.sessionPath)
     ? agentState.activeSession.sessionPath
@@ -3093,63 +3370,88 @@ function AgentProvider({
   }
 
   const loadProjectSessions = useCallback(async (project: ProjectRecord) => {
-    setProjectSessions((currentValue) => {
-      const existingBucket = currentValue[project.id]
-      if (existingBucket?.isLoading || existingBucket?.hasLoaded) {
-        return currentValue
-      }
+    const requestGeneration = projectSessionRequestGenerationRef.current
+    await Promise.all(sessionTreeAgentIds.map(async (requestAgentId) => {
+      const requestKey = `${requestGeneration}\n${requestAgentId}\n${project.id}`
+      if (projectSessionRequestsRef.current.has(requestKey)) return
+      const existingSource = projectSessionsRef.current[project.id]?.[requestAgentId]
+      if (existingSource?.isLoading || existingSource?.hasLoaded) return
 
-      return {
-        ...currentValue,
-        [project.id]: {
-          error: null,
-          hasLoaded: false,
-          isLoading: true,
-          sessions: existingBucket?.sessions ?? [],
-        },
-      }
-    })
-
-    try {
-      const sessions = await window.appApi.listAgentSessions(project.path)
+      projectSessionRequestsRef.current.add(requestKey)
       setProjectSessions((currentValue) => ({
         ...currentValue,
         [project.id]: {
-          error: null,
-          hasLoaded: true,
-          isLoading: false,
-          sessions,
+          ...currentValue[project.id],
+          [requestAgentId]: {
+            error: null,
+            hasLoaded: false,
+            isLoading: true,
+            sessions: currentValue[project.id]?.[requestAgentId]?.sessions ?? [],
+          },
         },
       }))
-    } catch (error) {
-      setProjectSessions((currentValue) => ({
-        ...currentValue,
-        [project.id]: {
-          error: error instanceof Error ? error.message : 'Unable to load conversations.',
-          hasLoaded: true,
-          isLoading: false,
-          sessions: currentValue[project.id]?.sessions ?? [],
-        },
-      }))
-    }
-  }, [])
+
+      try {
+        const sessions = await window.appApi.listAgentSessions({
+          agentId: requestAgentId,
+          workspacePath: project.path,
+        })
+        if (projectSessionRequestGenerationRef.current !== requestGeneration) return
+        setProjectSessions((currentValue) => ({
+          ...currentValue,
+          [project.id]: {
+            ...currentValue[project.id],
+            [requestAgentId]: {
+              error: null,
+              hasLoaded: true,
+              isLoading: false,
+              sessions,
+            },
+          },
+        }))
+      } catch (error) {
+        if (projectSessionRequestGenerationRef.current !== requestGeneration) return
+        setProjectSessions((currentValue) => ({
+          ...currentValue,
+          [project.id]: {
+            ...currentValue[project.id],
+            [requestAgentId]: {
+              error: error instanceof Error ? error.message : 'Unable to load conversations.',
+              hasLoaded: true,
+              isLoading: false,
+              sessions: currentValue[project.id]?.[requestAgentId]?.sessions ?? [],
+            },
+          },
+        }))
+      } finally {
+        projectSessionRequestsRef.current.delete(requestKey)
+      }
+    }))
+  }, [agentCatalogRefreshRevision, sessionTreeAgentIds])
 
   async function ensureSelectedAgentSessionActive(selection = activeSessionSelectionRef.current) {
-    if (!workspacePath || selection.kind !== 'session') {
+    if (!workspacePath || selection.kind !== 'session' || selection.agentId !== selectedAgentId) {
       return null
     }
 
-    if (agentState.activeSession?.sessionPath === selection.sessionPath) {
+    if (
+      agentState.runtime.agentId === selection.agentId
+      && agentState.activeSession?.sessionPath === selection.sessionPath
+    ) {
       setViewedSessionSnapshot(null)
       return agentState
     }
 
     const requestId = openSessionRequestIdRef.current
-    const nextState = await window.appApi.openAgentSession(workspacePath, selection.sessionPath)
+    const nextState = await window.appApi.openAgentSession({
+      agentId: selectedAgentId,
+      workspacePath,
+    }, selection.sessionPath)
 
     if (
       requestId !== openSessionRequestIdRef.current
       || activeSessionSelectionRef.current.kind !== 'session'
+      || activeSessionSelectionRef.current.agentId !== selection.agentId
       || activeSessionSelectionRef.current.sessionPath !== selection.sessionPath
     ) {
       return null
@@ -3159,6 +3461,19 @@ function AgentProvider({
     setViewedSessionSnapshot(null)
     syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
     return nextState
+  }
+
+  function isAgentSessionOperationCurrent(
+    agentId: AgentId,
+    sessionPath: string,
+    operationWorkspacePath: string,
+  ) {
+    return selectedAgentIdRef.current === agentId
+      && shouldApplyAgentSessionOperationResult(
+        activeSessionSelectionRef.current,
+        workspacePathRef.current,
+        { agentId, sessionPath, workspacePath: operationWorkspacePath },
+      )
   }
 
   function getRuntimePreferredModelId(provider: string) {
@@ -3261,33 +3576,116 @@ function AgentProvider({
   workspacePathRef.current = workspacePath
 
   useEffect(() => {
-    const activeProject = projectState.projects.find((project) => project.id === projectState.lastProjectId)
     const agentWorkspacePath = agentState.runtime.workspacePath
-
-    if (
-      !activeProject
-      || !workspacePath
-      || !agentWorkspacePath
-      || normalizeAgentProjectPath(activeProject.path) !== normalizeAgentProjectPath(workspacePath)
-      || normalizeAgentProjectPath(agentWorkspacePath) !== normalizeAgentProjectPath(workspacePath)
-    ) {
-      return
-    }
-
-    setProjectSessions((currentValue) => ({
-      ...currentValue,
-      [activeProject.id]: {
-        error: null,
-        hasLoaded: true,
-        isLoading: false,
-        sessions: agentState.sessions,
-      },
-    }))
-  }, [agentState.runtime.workspacePath, agentState.sessions, projectState.lastProjectId, projectState.projects, workspacePath])
+    if (!agentWorkspacePath) return
+    storeProjectAgentSessions(agentWorkspacePath, agentState.runtime.agentId, agentState.sessions)
+  }, [agentState.runtime.agentId, agentState.runtime.workspacePath, agentState.sessions, storeProjectAgentSessions])
 
   useEffect(() => {
     const unsubscribe = window.appApi.onAgentEvent((event: AgentClientEvent) => {
+      if (event.type === 'assistant_message_started') {
+        updateSessionActivity(event.agentId, [
+          event.sessionId,
+          sessionPathByIdRef.current.get(getAgentSessionActivityKey(event.agentId, event.sessionId)),
+        ], 'running')
+      } else if (event.type === 'assistant_thinking_finished') {
+        updateSessionActivity(event.agentId, [
+          event.sessionId,
+          event.sessionId
+            ? sessionPathByIdRef.current.get(getAgentSessionActivityKey(event.agentId, event.sessionId))
+            : null,
+        ], null)
+      } else if (event.type === 'error') {
+        updateSessionActivity(event.agentId, [
+          event.sessionId,
+          event.sessionId
+            ? sessionPathByIdRef.current.get(getAgentSessionActivityKey(event.agentId, event.sessionId))
+            : null,
+        ], null, true)
+      }
+
+      if (event.type === 'interaction_requested') {
+        setPendingInteractions((currentRequests) => [
+          ...currentRequests.filter((request) => !(
+            request.agentId === event.agentId
+            && getAgentInteractionKey(request.sessionId, request.id) === getAgentInteractionKey(event.request.sessionId, event.request.id)
+          )),
+          event.request,
+        ])
+        updateSessionActivity(event.agentId, [event.request.sessionId], 'waiting')
+        return
+      }
+
+      if (event.type === 'interaction_resolved') {
+        setPendingInteractions((currentRequests) => currentRequests.filter((request) => !(
+          request.agentId === event.agentId
+          && getAgentInteractionKey(request.sessionId, request.id) === getAgentInteractionKey(event.sessionId, event.requestId)
+        )))
+        updateSessionActivity(event.agentId, [event.sessionId], event.resumeRun ? 'running' : null, !event.resumeRun)
+        return
+      }
+
+      if (event.type === 'session_snapshot_updated') {
+        const isRunning = event.executionState.type !== 'idle'
+        updateSessionActivity(event.agentId, [
+          event.sessionId,
+          event.session.sessionPath,
+        ], isRunning ? 'running' : null, !isRunning)
+        if (event.agentId !== selectedAgentId) return
+        const expectedWorkspacePath = workspacePathRef.current
+        if (
+          !expectedWorkspacePath
+          || normalizeAgentProjectPath(event.session.workspacePath) !== normalizeAgentProjectPath(expectedWorkspacePath)
+        ) {
+          return
+        }
+        const currentSelection = activeSessionSelectionRef.current
+        if (
+          currentSelection.kind !== 'session'
+          || currentSelection.agentId !== event.agentId
+          || currentSelection.sessionPath !== event.session.sessionPath
+        ) {
+          return
+        }
+        activeRuntimeSessionRef.current = event.session
+        setAgentState((currentState) => ({
+          ...currentState,
+          activeSession: event.session,
+          runtime: {
+            ...currentState.runtime,
+            executionState: event.executionState,
+            isStreaming: isRunning,
+          },
+        }))
+        setViewedSessionSnapshot(null)
+        setDraftAssistant('')
+        setDraftThinking('')
+        setIsThinkingStreaming(false)
+        setLiveTools([])
+        return
+      }
+
       if (event.type === 'workspace_state') {
+        if (event.state.runtime.workspacePath) {
+          storeProjectAgentSessions(
+            event.state.runtime.workspacePath,
+            event.agentId,
+            event.state.sessions,
+          )
+        }
+        if (event.state.activeSession?.sessionId && event.state.activeSession.sessionPath) {
+          sessionPathByIdRef.current.set(
+            getAgentSessionActivityKey(event.agentId, event.state.activeSession.sessionId),
+            event.state.activeSession.sessionPath,
+          )
+        }
+        updateSessionActivity(event.agentId, [
+          event.state.activeSession?.sessionId,
+          event.state.activeSession?.sessionPath,
+        ], event.state.runtime.isStreaming ? 'running' : null)
+        if (event.state.runtime.agentId !== selectedAgentId) {
+          return
+        }
         const eventWorkspacePath = event.state.runtime.workspacePath
         const expectedWorkspacePath = workspacePathRef.current
         if (
@@ -3298,11 +3696,23 @@ function AgentProvider({
           return
         }
 
-        setAgentState(event.state)
         const nextSessionPath = event.state.activeSession?.sessionPath ?? null
         const currentSelection = activeSessionSelectionRef.current
         const isViewingEventRuntimeSession = currentSelection.kind === 'session'
+          && currentSelection.agentId === event.agentId
           && currentSelection.sessionPath === nextSessionPath
+        const shouldApplyFullState = shouldApplyAgentWorkspaceState(currentSelection, event.agentId, nextSessionPath)
+
+        if (!shouldApplyFullState) {
+          setAgentState((currentState) => ({
+            ...currentState,
+            sessions: event.state.sessions,
+          }))
+          return
+        }
+
+        activeRuntimeSessionRef.current = event.state.activeSession
+        setAgentState(event.state)
 
         if (isViewingEventRuntimeSession) {
           setViewedSessionSnapshot(null)
@@ -3332,6 +3742,8 @@ function AgentProvider({
         return
       }
 
+      if (event.agentId !== selectedAgentId) return
+
       if (event.type === 'session_annotations_updated') {
         setAgentState((currentState) => mergeSessionAnnotationsState(currentState, event.sessionId, event.annotations))
         return
@@ -3339,8 +3751,9 @@ function AgentProvider({
 
       if (
         event.type === 'assistant_message_started'
-        && event.sessionId === agentState.activeSession?.sessionId
+        && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
+        updateSessionActivity(event.agentId, [event.sessionId, activeRuntimeSessionRef.current?.sessionPath], 'running')
         setDraftAssistant('')
         setDraftThinking('')
         setIsThinkingStreaming(false)
@@ -3349,7 +3762,7 @@ function AgentProvider({
 
       if (
         event.type === 'assistant_thinking_delta'
-        && event.sessionId === agentState.activeSession?.sessionId
+        && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
         setIsThinkingStreaming(true)
         setDraftThinking((currentValue) => currentValue + event.delta)
@@ -3358,15 +3771,16 @@ function AgentProvider({
 
       if (
         event.type === 'assistant_thinking_finished'
-        && event.sessionId === agentState.activeSession?.sessionId
+        && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
+        updateSessionActivity(event.agentId, [event.sessionId, activeRuntimeSessionRef.current?.sessionPath], null)
         setIsThinkingStreaming(false)
         return
       }
 
       if (
         event.type === 'assistant_message_delta'
-        && event.sessionId === agentState.activeSession?.sessionId
+        && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
         setDraftAssistant((currentValue) => currentValue + event.delta)
         return
@@ -3374,7 +3788,7 @@ function AgentProvider({
 
       if (
         event.type === 'tool_execution_started'
-        && event.sessionId === agentState.activeSession?.sessionId
+        && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
         setLiveTools((currentTools) => [
           ...currentTools.filter((tool) => tool.id !== event.toolCallId),
@@ -3390,7 +3804,7 @@ function AgentProvider({
 
       if (
         event.type === 'tool_execution_updated'
-        && event.sessionId === agentState.activeSession?.sessionId
+        && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
         setLiveTools((currentTools) => {
           const existingTool = currentTools.find((tool) => tool.id === event.toolCallId)
@@ -3424,7 +3838,7 @@ function AgentProvider({
 
       if (
         event.type === 'tool_execution_finished'
-        && event.sessionId === agentState.activeSession?.sessionId
+        && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
         setLiveTools((currentTools) => {
           const existingTool = currentTools.find((tool) => tool.id === event.toolCallId)
@@ -3461,18 +3875,23 @@ function AgentProvider({
       if (
         event.type === 'error'
         && activeSessionSelectionRef.current.kind === 'session'
-        && activeSessionSelectionRef.current.sessionPath === agentState.activeSession?.sessionPath
-        && (!event.sessionId || event.sessionId === agentState.activeSession?.sessionId)
+        && activeSessionSelectionRef.current.sessionPath === activeRuntimeSessionRef.current?.sessionPath
+        && (!event.sessionId || event.sessionId === activeRuntimeSessionRef.current?.sessionId)
       ) {
+        updateSessionActivity(event.agentId, [event.sessionId, activeRuntimeSessionRef.current?.sessionPath], null)
         setPanelError(event.message)
       }
     })
 
     return unsubscribe
-  }, [agentState.activeSession?.sessionId, agentState.activeSession?.sessionPath, workspacePath])
+  }, [agentState.activeSession?.sessionId, agentState.activeSession?.sessionPath, selectedAgentId, storeProjectAgentSessions, updateSessionActivity, workspacePath])
 
   useEffect(() => {
-    if (!workspacePath || !workspaceState || workspaceState.runtime.workspacePath !== workspacePath) {
+    if (
+      !workspacePath
+      || !workspaceState
+      || !shouldPersistAgentWorkspaceSelection(workspaceState.runtime, selectedAgentId, workspacePath)
+    ) {
       return
     }
 
@@ -3480,27 +3899,46 @@ function AgentProvider({
       return
     }
 
+    const currentSelection = activeSessionSelectionRef.current
+    const nextSessionPath = workspaceState.activeSession?.sessionPath ?? null
+    const shouldApplyFullState = shouldApplyAgentWorkspaceState(
+      currentSelection,
+      workspaceState.runtime.agentId,
+      nextSessionPath,
+    )
+
     setAgentState((currentState) => {
-      if (currentState === workspaceState) {
-        return currentState
+      if (shouldApplyFullState) {
+        if (currentState === workspaceState) return currentState
+        pendingExternalWorkspaceStateRef.current = workspaceState
+        return workspaceState
       }
 
-      pendingExternalWorkspaceStateRef.current = workspaceState
-      return workspaceState
+      return currentState.sessions === workspaceState.sessions
+        ? currentState
+        : { ...currentState, sessions: workspaceState.sessions }
     })
+    if (!shouldApplyFullState) {
+      setHasLoadedWorkspaceState(true)
+      return
+    }
+
     const defaultDraft = getRuntimeDefaultModelDraft(workspaceState.runtime)
     const nextDraft = normalizeAgentModelDraft(newSessionModelDraftRef.current.provider || newSessionModelDraftRef.current.modelId
       ? newSessionModelDraftRef.current
       : defaultDraft, workspaceState.runtime, defaultDraft)
     syncNewSessionModelDraft(nextDraft)
-    const currentSelection = activeSessionSelectionRef.current
-    if (currentSelection.kind === 'session' && currentSelection.sessionPath === workspaceState.activeSession?.sessionPath) {
+    if (
+      currentSelection.kind === 'session'
+      && currentSelection.agentId === workspaceState.runtime.agentId
+      && currentSelection.sessionPath === workspaceState.activeSession?.sessionPath
+    ) {
       syncModelDraft(getRuntimeSelectedModelDraft(workspaceState.runtime))
     } else if (currentSelection.kind === 'new') {
       syncModelDraft(nextDraft)
     }
     setHasLoadedWorkspaceState(true)
-  }, [workspacePath, workspaceState])
+  }, [selectedAgentId, workspacePath, workspaceState])
 
   useEffect(() => {
     const requestId = loadAgentStateRequestIdRef.current + 1
@@ -3525,12 +3963,15 @@ function AgentProvider({
       syncActiveSessionSelection({ kind: 'new' })
       setIsLoading(true)
 
-      void window.appApi.loadAgentDraftState()
+      void window.appApi.loadAgentDraftState(selectedAgentId)
         .then((nextState) => {
           if (loadAgentStateRequestIdRef.current !== requestId) {
             return
           }
 
+          if (!nextState.runtime.hasConfiguredModels) {
+            markAgentUnavailable(selectedAgentId, nextState.runtime.setupHint ?? '当前 Agent 没有可用模型。')
+          }
           setAgentState(nextState)
           const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
           const nextDraft = normalizeAgentModelDraft(defaultDraft, nextState.runtime, defaultDraft)
@@ -3541,7 +3982,9 @@ function AgentProvider({
         })
         .catch((error) => {
           if (loadAgentStateRequestIdRef.current === requestId) {
-            setPanelError(error instanceof Error ? error.message : 'Unable to load provider settings.')
+            const message = error instanceof Error ? error.message : 'Unable to load provider settings.'
+            markAgentUnavailable(selectedAgentId, message)
+            setPanelError(message)
           }
         })
         .finally(() => {
@@ -3572,22 +4015,47 @@ function AgentProvider({
 
     void window.appApi.getWorkspaceState(workspacePath)
       .then((workspaceState) => {
-        const sessionRestore = resolveAgentWorkspaceSessionRestore(
-          matchingExternalRequest,
-          workspaceState,
-        )
+        const currentSelection = activeSessionSelectionRef.current
+        const selectedSessionPath = currentSelection.kind === 'session'
+          && currentSelection.agentId === selectedAgentId
+          ? currentSelection.sessionPath
+          : null
+        const matchingRequestForAgent = matchingExternalRequest?.kind === 'session'
+          && matchingExternalRequest.agentId !== selectedAgentId
+          ? null
+          : matchingExternalRequest
+        const sessionRestore = selectedSessionPath
+          ? { preferredSessionPath: selectedSessionPath }
+          : resolveAgentWorkspaceSessionRestore(matchingRequestForAgent, workspaceState)
 
         return window.appApi.loadAgentWorkspace(
-          workspacePath,
+          { agentId: selectedAgentId, workspacePath },
           sessionRestore.preferredSessionPath,
           sessionRestore.options,
         )
       })
-      .then((nextState) => {
+      .then(async (nextState) => {
         if (loadAgentStateRequestIdRef.current !== requestId) {
           return
         }
 
+        const nativeRestoredSessionPath = nextState.activeSession?.sessionPath ?? null
+        if (
+          activeWorkspaceContext.kind === 'conversation'
+          && activeConversation
+          && nativeRestoredSessionPath
+          && activeConversation.agentSessionPath !== nativeRestoredSessionPath
+          && onConversationSessionStarted
+        ) {
+          await onConversationSessionStarted(activeConversation.id, {
+            agentSessionPath: nativeRestoredSessionPath,
+            lastMessagePreview: activeConversation.lastMessagePreview,
+          })
+          if (loadAgentStateRequestIdRef.current !== requestId) return
+        }
+        if (!nextState.runtime.hasConfiguredModels) {
+          markAgentUnavailable(selectedAgentId, nextState.runtime.setupHint ?? '当前 Agent 没有可用模型。')
+        }
         setAgentState(nextState)
         setViewedSessionSnapshot(null)
         const nextActiveSessionPath = nextState.activeSession?.sessionPath
@@ -3599,7 +4067,7 @@ function AgentProvider({
         const nextSelection = shouldStartNewSession
           ? { kind: 'new' as const }
           : restoredSessionPath
-            ? { kind: 'session' as const, sessionPath: restoredSessionPath }
+            ? { agentId: selectedAgentId, kind: 'session' as const, sessionPath: restoredSessionPath }
             : { kind: 'new' as const }
         syncActiveSessionSelection(nextSelection)
         const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
@@ -3612,7 +4080,8 @@ function AgentProvider({
       })
       .catch((error) => {
         if (loadAgentStateRequestIdRef.current === requestId) {
-          setPanelError(error instanceof Error ? error.message : 'Unable to load Pi Agent sessions.')
+          const message = error instanceof Error ? error.message : 'Unable to load Agent sessions.'
+          setPanelError(message)
         }
       })
       .finally(() => {
@@ -3620,10 +4089,15 @@ function AgentProvider({
           setIsLoading(false)
         }
       })
-  }, [workspacePath])
+  }, [agentCatalogRefreshRevision, markAgentUnavailable, selectedAgentId, workspacePath])
 
   useEffect(() => {
-    if (!workspacePath || isLoading || !hasLoadedWorkspaceState) {
+    if (
+      !workspacePath
+      || isLoading
+      || !hasLoadedWorkspaceState
+      || !shouldPersistAgentWorkspaceSelection(agentState.runtime, selectedAgentId, workspacePath)
+    ) {
       return
     }
 
@@ -3638,7 +4112,16 @@ function AgentProvider({
         prefersNewAgentSession: false,
       })
     }
-  }, [activeSessionSelection, hasLoadedWorkspaceState, isLoading, restorableSessionPath, workspacePath])
+  }, [
+    activeSessionSelection,
+    agentState.runtime.agentId,
+    agentState.runtime.workspacePath,
+    hasLoadedWorkspaceState,
+    isLoading,
+    restorableSessionPath,
+    selectedAgentId,
+    workspacePath,
+  ])
 
   useEffect(() => {
     if (!workspacePath || activeWorkspaceContext.kind !== 'project') {
@@ -3698,9 +4181,60 @@ function AgentProvider({
   }, [activeComposerMenu])
 
   const activeSessionPath = activeSessionSelection.kind === 'session' ? activeSessionSelection.sessionPath : null
-  const activeSession = activeSessionPath
+  const activeSession = activeSessionPath && agentState.runtime.agentId === selectedAgentId
     ? agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
     : null
+  useEffect(() => {
+    const snapshot = agentState.activeSession
+    if (!snapshot) return
+    const persistedUsers = snapshot.native?.agentId === 'opencode'
+      ? snapshot.native.messages.flatMap((record): AgentSidebarMessage[] => (
+          record.info.role === 'user'
+            ? [{
+                id: record.info.id,
+                kind: 'user',
+                text: getOpenCodeUserMessageText(record),
+                timestamp: record.info.time.created,
+              }]
+            : []
+        ))
+      : snapshot.native?.agentId === 'pi' || snapshot.native?.agentId === 'builtin-pi'
+        ? snapshot.native.messages.flatMap((message, index): AgentSidebarMessage[] => (
+            message.role === 'user'
+              ? [{
+                  id: typeof message.id === 'string' ? message.id : `pi-user-${index}`,
+                  kind: 'user',
+                  text: getPiWebUserMessageText(message),
+                  timestamp: typeof message.timestamp === 'number' ? message.timestamp : 0,
+                }]
+              : []
+          ))
+        : snapshot.messages.filter((message) => message.kind === 'user')
+    if (persistedUsers.length === 0) return
+    setOptimisticUserMessages((current) => {
+      const usedPersistedIds = new Set<string>()
+      return current.filter((entry) => {
+        if (
+          entry.agentId !== agentState.runtime.agentId
+          || entry.sessionPath !== snapshot.sessionPath
+        ) return true
+        const match = persistedUsers.find((message) => (
+          !usedPersistedIds.has(message.id)
+          && (
+            message.id === entry.message.id
+            || (
+              message.text === entry.message.text
+              && Math.abs(message.timestamp - entry.message.timestamp) <= 60_000
+            )
+          )
+        ))
+        if (!match) return true
+        usedPersistedIds.add(match.id)
+        return false
+      })
+    })
+  }, [agentState.activeSession, agentState.runtime.agentId])
+
   useEffect(() => {
     if (activeWorkspaceContext.kind !== 'conversation' || !onConversationTitleSuggested) {
       return
@@ -3758,6 +4292,7 @@ function AgentProvider({
 
   const isViewingActiveRuntime = Boolean(
     activeSessionPath
+    && agentState.runtime.agentId === selectedAgentId
     && agentState.activeSession?.sessionPath === activeSessionPath,
   )
   const viewedSessionForSelection = viewedSessionSnapshot?.sessionPath === activeSessionPath
@@ -3782,10 +4317,81 @@ function AgentProvider({
         }
   ), [agentState.runtime, isViewingActiveRuntime])
   const visiblePersistedMessages = visibleSessionSnapshot?.messages ?? []
+  const openCodeNativeSession = visibleSessionSnapshot?.native?.agentId === 'opencode'
+    ? visibleSessionSnapshot.native
+    : null
+  const piWebNativeSession = visibleSessionSnapshot?.native?.agentId === 'pi'
+    || visibleSessionSnapshot?.native?.agentId === 'builtin-pi'
+    ? visibleSessionSnapshot.native
+    : null
+  const isOpenCodeChildSession = Boolean(openCodeNativeSession?.parentSessionId)
+  const visibleOptimisticUserMessageEntries = useMemo(() => (
+    activeSessionSelection.kind === 'session'
+      ? optimisticUserMessages
+        .filter((entry) => (
+          entry.agentId === activeSessionSelection.agentId
+          && entry.sessionPath === activeSessionSelection.sessionPath
+        ))
+      : []
+  ), [activeSessionSelection, optimisticUserMessages])
+  const visibleOptimisticUserMessages = useMemo(
+    () => visibleOptimisticUserMessageEntries.map((entry) => entry.message),
+    [visibleOptimisticUserMessageEntries],
+  )
+  const openCodeOptimisticUserMessages = useMemo(() => (
+    visibleOptimisticUserMessageEntries.map((entry) => {
+      const message = entry.message
+      return {
+        attachments: message.attachments?.flatMap((attachment, index) => {
+          const url = attachment.data ?? (attachment.path
+            ? encodeURI(`file:///${attachment.path.replaceAll('\\', '/')}`)
+            : '')
+          return url
+            ? [{
+                fileName: attachment.fileName,
+                mimeType: attachment.mimeType,
+                partId: entry.nativePartIds?.[index + 1] ?? `${message.id}-file-${String(index).padStart(4, '0')}`,
+                url,
+              }]
+            : []
+        }),
+        id: message.id,
+        text: message.text,
+        textPartId: entry.nativePartIds?.[0] ?? `${message.id}-text`,
+        timestamp: message.timestamp,
+      }
+    })
+  ), [visibleOptimisticUserMessageEntries])
+  const piWebOptimisticUserMessages = useMemo(() => (
+    visibleOptimisticUserMessageEntries.map((entry): PiWebOptimisticUserMessage => {
+      const imageBlocks = entry.message.attachments?.flatMap((attachment) => {
+        if (attachment.kind !== 'image' || !attachment.data) return []
+        const match = attachment.data.match(/^data:([^;]+);base64,(.+)$/)
+        if (!match) return []
+        return [{
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: match[1],
+            data: match[2],
+          },
+        }]
+      }) ?? []
+      return {
+        content: imageBlocks.length > 0
+          ? [
+              ...(entry.message.text ? [{ type: 'text', text: entry.message.text }] : []),
+              ...imageBlocks,
+            ]
+          : entry.message.text,
+        timestamp: entry.message.timestamp,
+      }
+    })
+  ), [visibleOptimisticUserMessageEntries])
 
   const renderedMessages = useMemo(() => {
     const persistedMessages = visiblePersistedMessages
-    const nextMessages = [...persistedMessages]
+    const nextMessages = [...persistedMessages, ...visibleOptimisticUserMessages]
     const toolMessageIndices = new Map<string, number>()
 
     nextMessages.forEach((message, index) => {
@@ -3835,7 +4441,7 @@ function AgentProvider({
     }
 
     return nextMessages
-  }, [draftAssistant, draftThinking, isThinkingStreaming, isViewingActiveRuntime, liveTools, visiblePersistedMessages])
+  }, [draftAssistant, draftThinking, isThinkingStreaming, isViewingActiveRuntime, liveTools, visibleOptimisticUserMessages, visiblePersistedMessages])
 
   function handleStartNewSession() {
     openSessionRequestIdRef.current += 1
@@ -3854,16 +4460,18 @@ function AgentProvider({
     setActiveOverlayPanel(null)
   }
 
-  async function handleOpenSession(sessionPath: string) {
+  async function handleOpenSession(agentId: AgentId, sessionPath: string) {
     if (!workspacePath) {
       return
     }
 
-    syncActiveSessionSelection({ kind: 'session', sessionPath })
+    setSelectedAgentIdValue(agentId)
+    syncActiveSessionSelection({ agentId, kind: 'session', sessionPath })
+    setViewedSessionSnapshot(null)
     const requestId = openSessionRequestIdRef.current + 1
     openSessionRequestIdRef.current = requestId
 
-    if (agentState.activeSession?.sessionPath === sessionPath) {
+    if (agentState.runtime.agentId === agentId && agentState.activeSession?.sessionPath === sessionPath) {
       setViewedSessionSnapshot(null)
       syncModelDraft(getRuntimeSelectedModelDraft(agentState.runtime))
       setPanelError(null)
@@ -3873,10 +4481,14 @@ function AgentProvider({
 
     try {
       setPanelError(null)
-      const nextSnapshot = await window.appApi.readAgentSession(workspacePath, sessionPath)
+      const nextSnapshot = await window.appApi.readAgentSession({
+        agentId,
+        workspacePath,
+      }, sessionPath)
       if (
         requestId !== openSessionRequestIdRef.current
         || activeSessionSelectionRef.current.kind !== 'session'
+        || activeSessionSelectionRef.current.agentId !== agentId
         || activeSessionSelectionRef.current.sessionPath !== sessionPath
       ) {
         return
@@ -3888,6 +4500,7 @@ function AgentProvider({
       if (
         requestId !== openSessionRequestIdRef.current
         || activeSessionSelectionRef.current.kind !== 'session'
+        || activeSessionSelectionRef.current.agentId !== agentId
         || activeSessionSelectionRef.current.sessionPath !== sessionPath
       ) {
         return
@@ -3925,7 +4538,7 @@ function AgentProvider({
       return
     }
 
-    void handleOpenSession(externalSessionRequest.sessionPath)
+    void handleOpenSession(externalSessionRequest.agentId, externalSessionRequest.sessionPath)
   }, [
     externalSessionRequest,
     hasLoadedWorkspaceState,
@@ -3935,23 +4548,44 @@ function AgentProvider({
     workspacePath,
   ])
 
-  async function handleDeleteSession(sessionPath: string) {
-    if (!workspacePath) {
+  async function handleDeleteSession(rootPath: string, agentId: AgentId, sessionPath: string) {
+    if (!rootPath) {
       return
     }
 
+    const deletingKey = getAgentSessionTreeKey(agentId, sessionPath)
     try {
-      setDeletingSessionPath(sessionPath)
+      setDeletingSessionPath(deletingKey)
       setPanelError(null)
-      const nextState = await window.appApi.deleteAgentSession(workspacePath, sessionPath)
-      setAgentState(nextState)
+      const nextState = await window.appApi.deleteAgentSession({
+        agentId,
+        workspacePath: rootPath,
+      }, sessionPath)
+      storeProjectAgentSessions(rootPath, agentId, nextState.sessions)
       const currentSelection = activeSessionSelectionRef.current
-      if (currentSelection.kind === 'session' && currentSelection.sessionPath === sessionPath) {
+      const currentWorkspacePath = workspacePathRef.current
+      const isCurrentWorkspaceAgent = Boolean(
+        currentWorkspacePath
+        && selectedAgentIdRef.current === agentId
+        && normalizeAgentProjectPath(rootPath) === normalizeAgentProjectPath(currentWorkspacePath),
+      )
+      const isDeletingCurrentSession = Boolean(
+        isCurrentWorkspaceAgent
+        && currentSelection.kind === 'session'
+        && currentSelection.agentId === agentId
+        && currentSelection.sessionPath === sessionPath
+      )
+      if (isCurrentWorkspaceAgent) {
+        setAgentState((currentState) => isDeletingCurrentSession
+          ? nextState
+          : { ...currentState, sessions: nextState.sessions })
+      }
+      if (isDeletingCurrentSession) {
         setViewedSessionSnapshot(null)
         const nextActiveSessionPath = nextState.activeSession?.sessionPath
         const nextSelection = nextActiveSessionPath
           && nextState.sessions.some((session) => session.path === nextActiveSessionPath)
-          ? { kind: 'session' as const, sessionPath: nextActiveSessionPath }
+          ? { agentId, kind: 'session' as const, sessionPath: nextActiveSessionPath }
           : { kind: 'new' as const }
         syncActiveSessionSelection(nextSelection)
         syncModelDraft(nextSelection.kind === 'session'
@@ -3961,11 +4595,11 @@ function AgentProvider({
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to delete that session.')
     } finally {
-      setDeletingSessionPath(null)
+      setDeletingSessionPath((currentKey) => currentKey === deletingKey ? null : currentKey)
     }
   }
 
-  async function handleRenameSession(rootPath: string, sessionPath: string, name: string) {
+  async function handleRenameSession(rootPath: string, agentId: AgentId, sessionPath: string, name: string) {
     const nextName = name.trim()
 
     if (!nextName) {
@@ -3974,45 +4608,31 @@ function AgentProvider({
 
     try {
       setPanelError(null)
-      const nextState = await window.appApi.renameAgentSession(rootPath, sessionPath, nextName)
+      const nextState = await window.appApi.renameAgentSession({
+        agentId,
+        workspacePath: rootPath,
+      }, sessionPath, nextName)
+      const currentSelection = activeSessionSelectionRef.current
+      const currentWorkspacePath = workspacePathRef.current
       const isCurrentWorkspace = Boolean(
-        workspacePath
-        && normalizeAgentProjectPath(rootPath) === normalizeAgentProjectPath(workspacePath),
+        currentWorkspacePath
+        && selectedAgentIdRef.current === agentId
+        && normalizeAgentProjectPath(rootPath) === normalizeAgentProjectPath(currentWorkspacePath),
       )
 
       if (isCurrentWorkspace) {
-        setAgentState(nextState)
+        setAgentState((currentState) => ({ ...currentState, sessions: nextState.sessions }))
         setViewedSessionSnapshot((currentSnapshot) => (
-          currentSnapshot?.sessionPath === sessionPath
+          currentSelection.kind === 'session'
+          && currentSelection.agentId === agentId
+          && currentSelection.sessionPath === sessionPath
+          && currentSnapshot?.sessionPath === sessionPath
             ? { ...currentSnapshot, name: nextName }
             : currentSnapshot
         ))
       }
 
-      const matchingProject = projectState.projects.find((project) => (
-        normalizeAgentProjectPath(project.path) === normalizeAgentProjectPath(rootPath)
-      ))
-
-      if (matchingProject) {
-        setProjectSessions((currentValue) => {
-          const currentBucket = currentValue[matchingProject.id]
-
-          if (!currentBucket) {
-            return currentValue
-          }
-
-          return {
-            ...currentValue,
-            [matchingProject.id]: {
-              ...currentBucket,
-              error: null,
-              hasLoaded: true,
-              isLoading: false,
-              sessions: nextState.sessions,
-            },
-          }
-        })
-      }
+      storeProjectAgentSessions(rootPath, agentId, nextState.sessions)
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : 'Unable to rename that session.')
       throw error
@@ -4024,10 +4644,15 @@ function AgentProvider({
       return
     }
 
+    const requestAgentId = selectedAgentId
+    const requestWorkspacePath = workspacePath
+    const requestSelection = activeSessionSelectionRef.current
+    let requestSessionPath: string | null = null
+
     try {
       setIsSwitchingModel(true)
       setPanelError(null)
-      const isNewSelection = activeSessionSelection.kind === 'new'
+      const isNewSelection = requestSelection.kind === 'new'
       const nextDraft = normalizeAgentModelDraft(
         createAgentModelDraft(modelKey, selectedThinkingLevel),
         agentState.runtime,
@@ -4040,17 +4665,39 @@ function AgentProvider({
         return
       }
 
-      const activeState = await ensureSelectedAgentSessionActive()
+      const activeState = await ensureSelectedAgentSessionActive(requestSelection)
       if (!activeState?.activeSession) {
-        setPanelError('Open a session before switching the model.')
-        setActiveComposerMenu(null)
+        if (
+          requestWorkspacePath
+          && requestSelection.kind === 'session'
+          && isAgentSessionOperationCurrent(requestAgentId, requestSelection.sessionPath, requestWorkspacePath)
+        ) {
+          setPanelError('Open a session before switching the model.')
+          setActiveComposerMenu(null)
+        }
         return
       }
 
-      const nextState = await window.appApi.selectAgentModel(modelKey)
+      if (!requestWorkspacePath) {
+        setPanelError('Open a workspace before switching the model.')
+        return
+      }
+
+      const activeWorkspacePath = requestWorkspacePath
+      const activeSessionPath = activeState.activeSession.sessionPath
+      if (!activeSessionPath) {
+        setPanelError('The active session does not have a native session identifier.')
+        return
+      }
+      requestSessionPath = activeSessionPath
+      const nextState = await window.appApi.selectAgentModel({
+        agentId: requestAgentId,
+        sessionPath: activeSessionPath,
+        workspacePath: activeWorkspacePath,
+      }, modelKey)
       if (
-        activeSessionSelectionRef.current.kind !== 'session'
-        || activeSessionSelectionRef.current.sessionPath !== nextState.activeSession?.sessionPath
+        !isAgentSessionOperationCurrent(requestAgentId, activeSessionPath, activeWorkspacePath)
+        || nextState.activeSession?.sessionPath !== activeSessionPath
       ) {
         return
       }
@@ -4059,7 +4706,13 @@ function AgentProvider({
       syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
       setActiveComposerMenu(null)
     } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to switch the model.')
+      if (
+        !requestSessionPath
+        || !requestWorkspacePath
+        || isAgentSessionOperationCurrent(requestAgentId, requestSessionPath, requestWorkspacePath)
+      ) {
+        setPanelError(error instanceof Error ? error.message : 'Unable to switch the model.')
+      }
     } finally {
       setIsSwitchingModel(false)
     }
@@ -4079,10 +4732,15 @@ function AgentProvider({
       return
     }
 
+    const requestAgentId = selectedAgentId
+    const requestWorkspacePath = workspacePath
+    const requestSelection = activeSessionSelectionRef.current
+    let requestSessionPath: string | null = null
+
     try {
       setIsSwitchingThinkingLevel(true)
       setPanelError(null)
-      const isNewSelection = activeSessionSelection.kind === 'new'
+      const isNewSelection = requestSelection.kind === 'new'
       const nextDraft = normalizeAgentModelDraft(
         createAgentModelDraft(nextModelKey, level),
         agentState.runtime,
@@ -4095,17 +4753,39 @@ function AgentProvider({
         return
       }
 
-      const activeState = await ensureSelectedAgentSessionActive()
+      const activeState = await ensureSelectedAgentSessionActive(requestSelection)
       if (!activeState?.activeSession) {
-        setPanelError('Open a session before changing the thinking level.')
-        setActiveComposerMenu(null)
+        if (
+          requestWorkspacePath
+          && requestSelection.kind === 'session'
+          && isAgentSessionOperationCurrent(requestAgentId, requestSelection.sessionPath, requestWorkspacePath)
+        ) {
+          setPanelError('Open a session before changing the thinking level.')
+          setActiveComposerMenu(null)
+        }
         return
       }
 
-      const nextState = await window.appApi.selectAgentThinkingLevel(level, nextModelKey)
+      if (!requestWorkspacePath) {
+        setPanelError('Open a workspace before changing the thinking level.')
+        return
+      }
+
+      const activeWorkspacePath = requestWorkspacePath
+      const activeSessionPath = activeState.activeSession.sessionPath
+      if (!activeSessionPath) {
+        setPanelError('The active session does not have a native session identifier.')
+        return
+      }
+      requestSessionPath = activeSessionPath
+      const nextState = await window.appApi.selectAgentThinkingLevel({
+        agentId: requestAgentId,
+        sessionPath: activeSessionPath,
+        workspacePath: activeWorkspacePath,
+      }, level, nextModelKey)
       if (
-        activeSessionSelectionRef.current.kind !== 'session'
-        || activeSessionSelectionRef.current.sessionPath !== nextState.activeSession?.sessionPath
+        !isAgentSessionOperationCurrent(requestAgentId, activeSessionPath, activeWorkspacePath)
+        || nextState.activeSession?.sessionPath !== activeSessionPath
       ) {
         return
       }
@@ -4114,7 +4794,13 @@ function AgentProvider({
       syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
       setActiveComposerMenu(null)
     } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to switch the thinking level.')
+      if (
+        !requestSessionPath
+        || !requestWorkspacePath
+        || isAgentSessionOperationCurrent(requestAgentId, requestSessionPath, requestWorkspacePath)
+      ) {
+        setPanelError(error instanceof Error ? error.message : 'Unable to switch the thinking level.')
+      }
     } finally {
       setIsSwitchingThinkingLevel(false)
     }
@@ -4125,6 +4811,14 @@ function AgentProvider({
     const submittedComposerAttachments = composerAttachmentsRef.current
     const serializedPrompt = serializeComposerText(submittedComposerState.value, submittedComposerState.mentions)
     const trimmedPrompt = serializedPrompt.trim()
+
+    if (
+      agentState.activeSession?.native?.agentId === 'opencode'
+      && agentState.activeSession.native.parentSessionId
+    ) {
+      setPanelError('OpenCode 子会话由父会话中的子 Agent 管理，请返回父会话继续输入。')
+      return
+    }
 
     if (!trimmedPrompt && submittedComposerAttachments.length === 0) {
       return
@@ -4155,6 +4849,9 @@ function AgentProvider({
     isSubmittingComposerPromptRef.current = true
     setIsSubmittingComposerPrompt(true)
 
+    const requestAgentId = selectedAgentId
+    const requestSelection = activeSessionSelectionRef.current
+    let expectedNavigationRevision = openSessionRequestIdRef.current
     let createdConversation: ConversationRecord | null = null
     let runtimeForSubmit = agentState.runtime
     const draftBeforeWorkspaceCreation = newSessionModelDraftRef.current
@@ -4164,7 +4861,40 @@ function AgentProvider({
     }
     const optimisticClearId = clearComposerOptimistically()
     let didSendPromptToAgent = false
+    let didPersistConversationBinding = false
+    let optimisticUserMessageId: string | null = null
+    let nextSessionPath: string | null = null
     let fallbackErrorMessage = 'Unable to send your prompt.'
+
+    const isSubmissionViewCurrent = (sessionPath?: string | null) => {
+      const currentWorkspacePath = workspacePathRef.current
+      const isCurrentWorkspace = targetWorkspacePath
+        ? Boolean(
+            currentWorkspacePath
+            && normalizeAgentProjectPath(targetWorkspacePath) === normalizeAgentProjectPath(currentWorkspacePath),
+          )
+        : currentWorkspacePath === null
+      if (
+        expectedNavigationRevision !== openSessionRequestIdRef.current
+        || selectedAgentIdRef.current !== requestAgentId
+        || !isCurrentWorkspace
+      ) {
+        return false
+      }
+
+      const currentSelection = activeSessionSelectionRef.current
+      if (sessionPath) {
+        return currentSelection.kind === 'session'
+          && currentSelection.agentId === requestAgentId
+          && currentSelection.sessionPath === sessionPath
+      }
+
+      return requestSelection.kind === 'new'
+        ? currentSelection.kind === 'new'
+        : currentSelection.kind === 'session'
+          && currentSelection.agentId === requestSelection.agentId
+          && currentSelection.sessionPath === requestSelection.sessionPath
+    }
 
     try {
       setActiveComposerMenu(null)
@@ -4177,7 +4907,10 @@ function AgentProvider({
           if (!createConversationWorkspace) {
             throw new Error('Unable to create a conversation workspace.')
           }
-          createdConversation = await createConversationWorkspace({ initialPrompt: trimmedPrompt })
+          createdConversation = await createConversationWorkspace({
+            agentId: requestAgentId,
+            initialPrompt: trimmedPrompt,
+          })
           targetWorkspacePath = createdConversation.workspacePath
           workspacePathRef.current = targetWorkspacePath
 
@@ -4185,15 +4918,20 @@ function AgentProvider({
             throw new Error('Conversation workspace was not created.')
           }
 
-          const nextState = await window.appApi.loadAgentWorkspace(targetWorkspacePath, null, { restoreSession: false })
+          const nextState = await window.appApi.loadAgentWorkspace({
+            agentId: requestAgentId,
+            workspacePath: targetWorkspacePath,
+          }, null, { restoreSession: false })
           runtimeForSubmit = nextState.runtime
-          setAgentState(nextState)
-          setViewedSessionSnapshot(null)
-          setHasLoadedWorkspaceState(true)
           const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
           const nextNewSessionDraft = normalizeAgentModelDraft(draftBeforeWorkspaceCreation, nextState.runtime, defaultDraft)
           syncNewSessionModelDraft(nextNewSessionDraft)
-          syncModelDraft(nextNewSessionDraft)
+          if (isSubmissionViewCurrent()) {
+            setAgentState(nextState)
+            setViewedSessionSnapshot(null)
+            setHasLoadedWorkspaceState(true)
+            syncModelDraft(nextNewSessionDraft)
+          }
         } finally {
           setIsLoading(false)
         }
@@ -4203,11 +4941,12 @@ function AgentProvider({
         throw new Error('Open a workspace before sending your prompt.')
       }
 
-      let nextSessionPath = agentState.activeSession?.sessionPath ?? null
+      nextSessionPath = requestSelection.kind === 'session' ? requestSelection.sessionPath : null
 
-      if (activeSessionSelection.kind === 'new') {
+      if (requestSelection.kind === 'new') {
         fallbackErrorMessage = 'Unable to create an agent session.'
         openSessionRequestIdRef.current += 1
+        expectedNavigationRevision = openSessionRequestIdRef.current
         const nextDraft = normalizeAgentModelDraft(
           newSessionModelDraftRef.current,
           runtimeForSubmit,
@@ -4215,17 +4954,27 @@ function AgentProvider({
         )
         syncNewSessionModelDraft(nextDraft)
         const draftModelKey = getAgentModelDraftKey(nextDraft)
-        const nextState = await window.appApi.createAgentSession(targetWorkspacePath, {
+        const nextState = await window.appApi.createAgentSession({
+          agentId: requestAgentId,
+          workspacePath: targetWorkspacePath,
+        }, {
+          agentId: requestAgentId,
           ...(draftModelKey && runtimeForSubmit.availableModels.includes(draftModelKey) ? { modelKey: draftModelKey } : {}),
           thinkingLevel: nextDraft.thinkingLevel,
         })
-        setAgentState(nextState)
-        setViewedSessionSnapshot(null)
         nextSessionPath = nextState.activeSession?.sessionPath ?? null
-        syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
+        if (isSubmissionViewCurrent()) {
+          activeRuntimeSessionRef.current = nextState.activeSession
+          setAgentState(nextState)
+          setViewedSessionSnapshot(null)
+          if (nextSessionPath) {
+            syncActiveSessionSelection({ agentId: requestAgentId, kind: 'session', sessionPath: nextSessionPath })
+          }
+          syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
+        }
       } else {
         fallbackErrorMessage = 'Open a session before sending your prompt.'
-        const activeState = await ensureSelectedAgentSessionActive()
+        const activeState = await ensureSelectedAgentSessionActive(requestSelection)
         if (!activeState?.activeSession) {
           throw new Error('Open a session before sending your prompt.')
         }
@@ -4233,39 +4982,103 @@ function AgentProvider({
       }
 
       fallbackErrorMessage = 'Unable to send your prompt.'
-      const promptAttachments = submittedComposerAttachments.map(({ id: _id, ...attachment }) => attachment)
-      await window.appApi.sendAgentPrompt(trimmedPrompt, streamingBehavior, promptAttachments)
-      didSendPromptToAgent = true
-      invalidateOptimisticComposerClear(optimisticClearId)
-      if (nextSessionPath) {
-        syncActiveSessionSelection({ kind: 'session', sessionPath: nextSessionPath })
+      if (!nextSessionPath) {
+        throw new Error('Agent session did not return a native session identifier.')
       }
+      const promptSessionPath = nextSessionPath
       const conversationId = createdConversation?.id
         ?? (activeWorkspaceContext.kind === 'conversation' ? activeWorkspaceContext.conversationId : null)
-      if (conversationId) {
+      const persistedSessionPath = createdConversation?.agentSessionPath ?? activeConversation?.agentSessionPath ?? null
+      if (conversationId && persistedSessionPath !== promptSessionPath) {
+        if (!onConversationSessionStarted) {
+          throw new Error('Unable to persist the conversation Agent session binding.')
+        }
+        fallbackErrorMessage = 'Unable to update the conversation index.'
+        const preview = formatConversationPreview(trimmedPrompt)
+        await onConversationSessionStarted(conversationId, {
+          agentSessionPath: promptSessionPath,
+          lastMessagePreview: createdConversation ? preview : activeConversation?.lastMessagePreview ?? null,
+          ...(createdConversation ? { title: preview, titleSource: 'prompt' } : {}),
+        })
+        didPersistConversationBinding = true
+      }
+
+      fallbackErrorMessage = 'Unable to send your prompt.'
+      const promptAttachments = submittedComposerAttachments.map(({ id: _id, ...attachment }) => attachment)
+      const isOpenCodePrompt = requestAgentId === 'opencode'
+      const nextOptimisticUserMessageId = isOpenCodePrompt
+        ? createOpenCodeMessageId()
+        : `optimistic-user-${crypto.randomUUID()}`
+      const nativePartIds = isOpenCodePrompt
+        ? Array.from({ length: submittedComposerAttachments.length + 1 }, createOpenCodePartId)
+        : undefined
+      optimisticUserMessageId = nextOptimisticUserMessageId
+      const optimisticAttachments: AgentMessageAttachment[] = submittedComposerAttachments.map(({ id: _id, ...attachment }) => ({
+        ...attachment,
+        status: attachment.kind === 'image' ? 'sent' : 'referenced',
+      }))
+      setOptimisticUserMessages((current) => [...current, {
+        agentId: requestAgentId,
+        message: {
+          ...(optimisticAttachments.length > 0 ? { attachments: optimisticAttachments } : {}),
+          id: nextOptimisticUserMessageId,
+          kind: 'user',
+          text: trimmedPrompt,
+          timestamp: Date.now(),
+        },
+        ...(nativePartIds ? { nativePartIds } : {}),
+        sessionPath: promptSessionPath,
+      }])
+      await window.appApi.sendAgentPrompt({
+        agentId: requestAgentId,
+        sessionPath: promptSessionPath,
+        workspacePath: targetWorkspacePath,
+      }, trimmedPrompt, streamingBehavior, promptAttachments, nativePartIds ? {
+        clientMessageId: nextOptimisticUserMessageId,
+        clientPartIds: nativePartIds,
+      } : undefined)
+      didSendPromptToAgent = true
+      try {
+        window.localStorage.setItem('aryn:last-new-conversation-agent', requestAgentId)
+      } catch {
+        // Persisting this preference is best effort. Conversation records remain authoritative.
+      }
+      invalidateOptimisticComposerClear(optimisticClearId)
+      if (isSubmissionViewCurrent(promptSessionPath)) {
+        syncActiveSessionSelection({ agentId: requestAgentId, kind: 'session', sessionPath: promptSessionPath })
+      }
+      if (conversationId && !createdConversation) {
         const preview = formatConversationPreview(trimmedPrompt)
         try {
           await onConversationSessionStarted?.(conversationId, {
-            agentSessionPath: nextSessionPath,
+            agentSessionPath: promptSessionPath,
             lastMessagePreview: preview,
-            ...(createdConversation ? { title: preview, titleSource: 'prompt' } : {}),
           })
         } catch (error) {
-          setPanelError(error instanceof Error ? error.message : 'Unable to update the conversation index.')
+          if (isSubmissionViewCurrent(promptSessionPath)) {
+            setPanelError(error instanceof Error ? error.message : 'Unable to update the conversation index.')
+          }
         }
       }
-      if (!streamingBehavior) {
+      if (!streamingBehavior && isSubmissionViewCurrent(promptSessionPath)) {
         setDraftAssistant('')
         setLiveTools([])
       }
     } catch (error) {
-      if (createdConversation && !didSendPromptToAgent) {
+      if (createdConversation && !didSendPromptToAgent && !didPersistConversationBinding) {
         void onConversationDraftFailed?.(createdConversation.id)
       }
       if (!didSendPromptToAgent) {
-        restoreOptimisticallyClearedComposer(optimisticClearId, composerSnapshot)
+        if (optimisticUserMessageId) {
+          setOptimisticUserMessages((current) => current.filter((entry) => entry.message.id !== optimisticUserMessageId))
+        }
+        if (isSubmissionViewCurrent(nextSessionPath)) {
+          restoreOptimisticallyClearedComposer(optimisticClearId, composerSnapshot)
+        }
       }
-      setPanelError(error instanceof Error ? error.message : fallbackErrorMessage)
+      if (isSubmissionViewCurrent(nextSessionPath)) {
+        setPanelError(error instanceof Error ? error.message : fallbackErrorMessage)
+      }
     } finally {
       isSubmittingComposerPromptRef.current = false
       setIsSubmittingComposerPrompt(false)
@@ -4273,33 +5086,104 @@ function AgentProvider({
   }
 
   async function handleQueuedMessageUpdate(update: AgentQueuedMessageUpdate) {
+    const sessionPath = agentState.activeSession?.sessionPath
+    const requestAgentId = selectedAgentId
+    const requestWorkspacePath = workspacePath
+    if (!sessionPath || !requestWorkspacePath) {
+      setPanelError('Open a session before editing queued messages.')
+      return
+    }
     try {
       setActiveComposerMenu(null)
       setPanelError(null)
-      const nextState = await window.appApi.updateAgentQueuedMessage(update)
+      const nextState = await window.appApi.updateAgentQueuedMessage({
+        agentId: requestAgentId,
+        sessionPath,
+        workspacePath: requestWorkspacePath,
+      }, update)
+      if (
+        !isAgentSessionOperationCurrent(requestAgentId, sessionPath, requestWorkspacePath)
+        || nextState.activeSession?.sessionPath !== sessionPath
+      ) {
+        return
+      }
       setAgentState(nextState)
     } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to update queued message.')
+      if (isAgentSessionOperationCurrent(requestAgentId, sessionPath, requestWorkspacePath)) {
+        setPanelError(error instanceof Error ? error.message : 'Unable to update queued message.')
+      }
       throw error
     }
   }
 
   async function stopActivePrompt() {
-    if (!workspacePath || !isViewingActiveRuntime || !agentState.runtime.isStreaming) {
+    const sessionPath = agentState.activeSession?.sessionPath
+    const requestAgentId = selectedAgentId
+    const requestWorkspacePath = workspacePath
+    if (!requestWorkspacePath || !sessionPath || !isViewingActiveRuntime || !agentState.runtime.isStreaming) {
       return
     }
 
     try {
       setActiveComposerMenu(null)
       setPanelError(null)
-      const nextState = await window.appApi.abortAgentPrompt()
+      const nextState = await window.appApi.abortAgentPrompt({
+        agentId: requestAgentId,
+        sessionPath,
+        workspacePath: requestWorkspacePath,
+      })
+      if (
+        !isAgentSessionOperationCurrent(requestAgentId, sessionPath, requestWorkspacePath)
+        || nextState.activeSession?.sessionPath !== sessionPath
+      ) {
+        return
+      }
       setAgentState(nextState)
       setDraftAssistant('')
       setDraftThinking('')
       setIsThinkingStreaming(false)
       setLiveTools([])
     } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to stop the current run.')
+      if (isAgentSessionOperationCurrent(requestAgentId, sessionPath, requestWorkspacePath)) {
+        setPanelError(error instanceof Error ? error.message : 'Unable to stop the current run.')
+      }
+    }
+  }
+
+  async function respondToInteraction(
+    requestId: string,
+    optionId: string,
+    values?: string[],
+    answers?: Record<string, string[]>,
+  ) {
+    try {
+      setPanelError(null)
+      const request = pendingInteractions.find((candidate) => (
+        candidate.agentId === selectedAgentId
+        && candidate.id === requestId
+        && candidate.sessionId === agentState.activeSession?.sessionId
+      ))
+      if (!request) {
+        throw new Error('这个请求已经失效，请等待 Agent 更新状态。')
+      }
+      const result = await window.appApi.respondAgentInteraction({
+        agentId: request.agentId,
+        answers,
+        optionId,
+        requestId,
+        sessionId: request.sessionId,
+        values,
+      })
+      if (!result.ok) {
+        throw new Error('这个请求已经失效，请等待 Agent 更新状态。')
+      }
+      setPendingInteractions((currentRequests) => currentRequests.filter((candidate) => !(
+        candidate.agentId === request.agentId
+        && candidate.id === requestId
+        && candidate.sessionId === request.sessionId
+      )))
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : 'Unable to respond to Agent request.')
     }
   }
 
@@ -4314,7 +5198,7 @@ function AgentProvider({
         return
       }
 
-      await submitComposerPrompt(runningPromptEnterBehavior)
+      await submitComposerPrompt(effectiveRunningPromptEnterBehavior)
       return
     }
 
@@ -4330,10 +5214,14 @@ function AgentProvider({
       }
 
       if (isViewingActiveRuntime && agentState.runtime.isStreaming) {
-        const streamingBehavior = getStreamingPromptBehaviorForShortcut(
+        const requestedStreamingBehavior = getStreamingPromptBehaviorForShortcut(
           event,
           window.appApi.platform,
-          runningPromptEnterBehavior,
+          effectiveRunningPromptEnterBehavior,
+        )
+        const streamingBehavior = resolveSupportedRunningPromptBehavior(
+          agentState.runtime.supportedRunningPromptBehaviors,
+          requestedStreamingBehavior,
         )
         void submitComposerPrompt(streamingBehavior)
         return
@@ -4382,6 +5270,7 @@ function AgentProvider({
   const canUseComposerWithoutWorkspace = Boolean(!workspacePath && canCreateConversationWorkspace)
   const canSend = Boolean(
     hasComposerPayload
+    && !isOpenCodeChildSession
     && !isSubmittingComposerPrompt
     && (
       (workspacePath && agentState.runtime.hasConfiguredModels)
@@ -4390,6 +5279,7 @@ function AgentProvider({
   )
   const canStopActivePrompt = Boolean(
     workspacePath
+    && !isOpenCodeChildSession
     && isViewingActiveRuntime
     && agentState.runtime.isStreaming
     && !isLoading
@@ -4409,7 +5299,11 @@ function AgentProvider({
   const attachmentCapabilityMessage = hasImageComposerAttachments && !selectedModelSupportsImages
     ? '当前模型不支持图片输入，图片不会作为视觉内容发送。'
     : null
-  const statusMessage = !workspacePath
+  const statusMessage = isOpenCodeChildSession
+    ? 'OpenCode 子会话由父会话中的子 Agent 管理，请返回父会话继续输入。'
+    : hasLoadedWorkspaceState && !agentState.runtime.hasConfiguredModels
+    ? (agentState.runtime.setupHint ?? '请先配置可用模型。')
+    : !workspacePath
     ? (
         isConversationDraftContext
           ? null
@@ -4417,21 +5311,30 @@ function AgentProvider({
             ? '该对话的工作目录不可用。'
             : '打开工作区以开始。'
       )
-    : !agentState.runtime.hasConfiguredModels
-      ? (agentState.runtime.setupHint ?? 'Configure a model first.')
-      : null
+    : null
   const runningTools = liveTools.filter((tool) => tool.status === 'running')
-  const sessionPhase = useMemo(() => deriveAgentSessionPhase({
-    draftAssistant,
-    isStreaming: visibleRuntime.isStreaming,
-    isThinkingStreaming,
-    panelError,
-    pendingMessageCount: visibleRuntime.pendingMessageCount,
-    retryAttempt: visibleRuntime.retryAttempt,
-    runningTools: isViewingActiveRuntime ? runningTools : [],
-    runtime: visibleRuntime,
-    workspacePath,
-  }), [
+  const hasVisibleRunningContent = visiblePersistedMessages.some((message) => (
+    message.status === 'running'
+    && (
+      message.kind === 'tool'
+      || Boolean(message.text.trim())
+      || Boolean(message.thinkingText?.trim())
+    )
+  ))
+  const sessionPhase = useMemo(() => visibleRuntime.agentId === 'opencode'
+    ? null
+    : deriveAgentSessionPhase({
+        draftAssistant,
+        hasVisibleRunningContent,
+        isStreaming: visibleRuntime.isStreaming,
+        isThinkingStreaming,
+        panelError,
+        pendingMessageCount: visibleRuntime.pendingMessageCount,
+        retryAttempt: visibleRuntime.retryAttempt,
+        runningTools: isViewingActiveRuntime ? runningTools : [],
+        runtime: visibleRuntime,
+        workspacePath,
+      }), [
     agentState.runtime.compactionReason,
     agentState.runtime.isCompacting,
     agentState.runtime.hasConfiguredModels,
@@ -4440,6 +5343,7 @@ function AgentProvider({
     agentState.runtime.retryAttempt,
     draftAssistant,
     draftThinking,
+    hasVisibleRunningContent,
     isThinkingStreaming,
     isViewingActiveRuntime,
     panelError,
@@ -4460,6 +5364,38 @@ function AgentProvider({
       visibleRuntime.steeringMessageCount,
     ],
   )
+  const piWebStreamingStatus = useMemo(() => {
+    if (
+      !piWebNativeSession
+      || !isViewingActiveRuntime
+      || !visibleRuntime.isStreaming
+      || runningTools.length > 0
+    ) {
+      return null
+    }
+
+    const phase: AgentSessionPhase | null = isThinkingStreaming && !draftAssistant.trim()
+      ? { type: 'thinking' }
+      : draftAssistant.trim()
+        ? { type: 'streaming' }
+        : null
+
+    return phase ? formatAgentSessionStatus(phase, {
+      followUpMessageCount: visibleRuntime.followUpMessageCount,
+      pendingMessageCount: visibleRuntime.pendingMessageCount,
+      steeringMessageCount: visibleRuntime.steeringMessageCount,
+    }) : null
+  }, [
+    draftAssistant,
+    isThinkingStreaming,
+    isViewingActiveRuntime,
+    piWebNativeSession,
+    runningTools.length,
+    visibleRuntime.followUpMessageCount,
+    visibleRuntime.isStreaming,
+    visibleRuntime.pendingMessageCount,
+    visibleRuntime.steeringMessageCount,
+  ])
   const roundFileChangesByMessageId = useMemo(() => {
     const hasInFlightRound = isViewingActiveRuntime && (liveTools.length > 0
       || Boolean(draftAssistant.trim() || draftThinking.trim())
@@ -4480,6 +5416,9 @@ function AgentProvider({
     visibleSessionSnapshot?.annotations,
     visiblePersistedMessages,
   ])
+  const piWebFileChanges = useMemo(() => mergeFileChangesByPath(
+    Object.values(visibleSessionSnapshot?.annotations.fileChangesByEntryId ?? {}).flat(),
+  ), [visibleSessionSnapshot?.annotations.fileChangesByEntryId])
   const sessionStatusKey = sessionStatus
     ? `${sessionStatus.label}:${sessionStatus.badges?.map((badge) => `${badge.kind}:${badge.label}`).join('|') ?? ''}`
     : 'none'
@@ -4487,6 +5426,10 @@ function AgentProvider({
     .flatMap(([messageId, changes]) => changes.map((change) => `${messageId}:${change.kind}:${change.filePath}`))
     .join('|')
   const renderedMessageCount = renderedMessages.length
+  const openCodeNativeRenderKey = getOpenCodeNativeRenderKey(openCodeNativeSession)
+  const piWebNativeRenderKey = piWebNativeSession
+    ? `${piWebNativeSession.messages.length}:${piWebNativeSession.entryIds.at(-1) ?? ''}`
+    : 'none'
   const latestAutoOpenFileChange = useMemo(() => (
     findLatestOpenableAgentFileChange(visiblePersistedMessages, roundFileChangesByMessageId)
   ), [visiblePersistedMessages, roundFileChangesByMessageId])
@@ -4773,7 +5716,7 @@ function AgentProvider({
     return () => {
       window.cancelAnimationFrame(frameId)
     }
-  }, [activeSessionPath, draftAssistant, draftThinking, fileChangesKey, liveTools, renderedMessageCount, sessionStatusKey])
+  }, [activeSessionPath, draftAssistant, draftThinking, fileChangesKey, liveTools, openCodeNativeRenderKey, piWebNativeRenderKey, renderedMessageCount, sessionStatusKey])
 
   useEffect(() => {
     const result = resolveNextAgentFileAutoOpen(fileAutoOpenStateRef.current, {
@@ -4789,6 +5732,7 @@ function AgentProvider({
   }, [activeSessionPath, isViewingActiveRuntime, latestAutoOpenFileChange, onOpenMessageFile])
 
   const contextValue = useMemo<AgentContextValue>(() => ({
+    agentCatalog: resolvedAgentCatalog,
     activeComposerMenu,
     activeOverlayPanel,
     activeSession,
@@ -4846,18 +5790,31 @@ function AgentProvider({
     onRemoveProject,
     onStartStandaloneConversation,
     onStartProjectSession,
+    openCodeNativeSession,
+    openCodeOptimisticUserMessages,
+    piWebFileChanges,
+    piWebNativeSession,
+    piWebOptimisticUserMessages,
+    piWebStreamingStatus,
     panelError,
+    pendingInteraction,
     projectSessions,
     projectState,
+    refreshAgentCatalog,
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
+    sessionActivityById,
+    sessionTreeAgentIds,
     removeComposerAttachment,
+    respondToInteraction,
     sessionStatus,
     setActiveComposerMenu,
     setActiveOverlayPanel,
     setComposerState,
     setPanelError,
+    selectedAgentId,
+    setSelectedAgentId,
     statusMessage,
     surfaceMode,
     streamingShortcutModifierLabel,
@@ -4867,6 +5824,7 @@ function AgentProvider({
     workspaceTree,
   }), [
     activeWorkspaceContext,
+    resolvedAgentCatalog,
     activeComposerMenu,
     activeOverlayPanel,
     activeSession,
@@ -4921,14 +5879,27 @@ function AgentProvider({
     onRemoveProject,
     onStartStandaloneConversation,
     onStartProjectSession,
+    openCodeNativeSession,
+    piWebFileChanges,
+    piWebNativeSession,
+    piWebStreamingStatus,
     panelError,
+    pendingInteraction,
     projectSessions,
     projectState,
+    refreshAgentCatalog,
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
+    sessionActivityById,
+    sessionTreeAgentIds,
     removeComposerAttachment,
+    respondToInteraction,
     sessionStatus,
+    openCodeOptimisticUserMessages,
+    piWebOptimisticUserMessages,
+    selectedAgentId,
+    setSelectedAgentId,
     statusMessage,
     surfaceMode,
     streamingShortcutModifierLabel,
@@ -5159,6 +6130,8 @@ function AgentProjectContextMenuPopup({
 }
 
 function AgentSessionTreeRow({
+  activity,
+  agentId,
   isActive,
   isDeleting,
   isRenaming,
@@ -5174,6 +6147,8 @@ function AgentSessionTreeRow({
   onRename,
   onRequestRename,
 }: {
+  activity?: 'running' | 'waiting'
+  agentId?: AgentId
   isActive: boolean
   isDeleting: boolean
   isRenaming: boolean
@@ -5197,6 +6172,7 @@ function AgentSessionTreeRow({
   const rowRef = useRef<HTMLDivElement | null>(null)
   const renameInputRef = useRef<HTMLInputElement | null>(null)
   const isMenuOpen = isActionMenuOpen || isContextMenuOpen
+  const accessibleLabel = agentId ? `${label}，${getAgentDefinition(agentId).label}` : label
 
   useEffect(() => {
     if (!isRenaming) {
@@ -5287,8 +6263,9 @@ function AgentSessionTreeRow({
       return (
         <ContextMenu.Root onOpenChange={setIsContextMenuOpen}>
           <ContextMenu.Trigger
-            render={<TreeItemMainButton className={className} hasDescription={hasDescription} />}
-            title={label}
+            aria-label={accessibleLabel}
+            render={<TreeItemMainButton className={className} hasDescription={hasDescription} role='button' />}
+            title={accessibleLabel}
             onClick={onOpen}
           >
             {content}
@@ -5324,7 +6301,7 @@ function AgentSessionTreeRow({
   ) : (
     <Menu.Root modal={false} onOpenChange={setIsActionMenuOpen}>
       <Menu.Trigger
-        aria-label={`Open ${label} menu`}
+        aria-label={`Open ${accessibleLabel} menu`}
         disabled={isDeleting}
         render={<TreeItemActionButton />}
         title={menuTitle}
@@ -5349,9 +6326,22 @@ function AgentSessionTreeRow({
       isEditing={isRenaming}
       isMenuOpen={isMenuOpen}
       after={error ? <p className='tree-error agent-session-rename-error'>{error}</p> : null}
+      icon={agentId ? (
+        <TreeItemIcon>
+          <AgentBrandIcon agentId={agentId} className='agent-brand-icon' size={16} />
+        </TreeItemIcon>
+      ) : undefined}
       main={rowMain}
       label={!isRenaming ? label : undefined}
       labelClassName={!isRenaming ? 'agent-project-session-label' : undefined}
+      labelSuffix={!isRenaming && activity ? (
+        <span
+          aria-label={activity === 'waiting' ? '等待操作' : '运行中'}
+          className={`agent-session-activity is-${activity}`}
+          role='status'
+          title={activity === 'waiting' ? '等待操作' : '运行中'}
+        />
+      ) : undefined}
       renderMain={renderSessionMain}
       actions={rowActions}
       actionsAlwaysVisible={isRenaming}
@@ -5379,9 +6369,30 @@ function FlatAgentSessionTree({
     handleOpenSession,
     handleRenameSession,
     handleStartNewSession,
+    loadProjectSessions,
+    projectSessions,
+    projectState,
+    selectedAgentId,
+    sessionActivityById,
+    sessionTreeAgentIds,
     workspacePath,
   } = useAgentContext()
   const [renamingSessionPath, setRenamingSessionPath] = useState<string | null>(null)
+  const currentProject = workspacePath
+    ? projectState.projects.find((project) => (
+        normalizeAgentProjectPath(project.path) === normalizeAgentProjectPath(workspacePath)
+      )) ?? null
+    : null
+  const currentProjectBucket = currentProject ? projectSessions[currentProject.id] : undefined
+  const sessions = currentProject
+    ? flattenAgentProjectSessions(currentProjectBucket)
+    : agentState.sessions.map((session): AgentSessionTreeItem => ({ ...session, agentId: selectedAgentId }))
+  const loadSummary = summarizeAgentProjectSessionBucket(currentProjectBucket, sessionTreeAgentIds)
+  const isSessionListLoading = Boolean(currentProject && (!loadSummary.hasLoaded || loadSummary.isLoading))
+
+  useEffect(() => {
+    if (currentProject) void loadProjectSessions(currentProject)
+  }, [currentProject, loadProjectSessions])
 
   return (
     <div className={`agent-session-tree-shell${className ? ` ${className}` : ''}`}>
@@ -5407,34 +6418,41 @@ function FlatAgentSessionTree({
         viewportClassName='agent-session-tree-scroll-viewport'
       >
         <TreeList id={id} className='agent-project-list agent-flat-session-list' aria-label='Agent sessions'>
-          {agentState.sessions.length === 0 ? (
+          {isSessionListLoading ? <TreeStatusItem>加载中</TreeStatusItem> : null}
+          {loadSummary.errors.length > 0 ? <TreeStatusItem tone='danger'>部分 Agent 无法加载</TreeStatusItem> : null}
+          {!isSessionListLoading && sessions.length === 0 ? (
             <TreeStatusItem>暂无对话</TreeStatusItem>
-          ) : agentState.sessions.map((session) => {
+          ) : sessions.map((session) => {
             const label = formatSessionLabel(session)
-            const isActiveSession = activeSessionSelection.kind === 'session' && activeSessionPath === session.path
+            const sessionKey = getAgentSessionTreeKey(session.agentId, session.path)
+            const isActiveSession = activeSessionSelection.kind === 'session'
+              && activeSessionSelection.agentId === session.agentId
+              && activeSessionPath === session.path
 
             return (
               <AgentSessionTreeRow
-                key={session.path}
+                activity={sessionActivityById[getAgentSessionActivityKey(session.agentId, session.path)]}
+                agentId={session.agentId}
+                key={sessionKey}
                 isActive={isActiveSession}
-                isDeleting={deletingSessionPath === session.path}
-                isRenaming={renamingSessionPath === session.path}
+                isDeleting={deletingSessionPath === sessionKey}
+                isRenaming={renamingSessionPath === sessionKey}
                 label={label}
                 menuPortalTarget={menuPortalTarget}
                 onCancelRename={() => setRenamingSessionPath(null)}
                 onDelete={() => {
-                  void handleDeleteSession(session.path)
+                  if (workspacePath) void handleDeleteSession(workspacePath, session.agentId, session.path)
                 }}
                 onOpen={() => {
                   setRenamingSessionPath(null)
-                  void handleOpenSession(session.path).then(() => {
+                  void handleOpenSession(session.agentId, session.path).then(() => {
                     onRequestClose?.()
                   })
                 }}
                 onRename={(name) => workspacePath
-                  ? handleRenameSession(workspacePath, session.path, name)
+                  ? handleRenameSession(workspacePath, session.agentId, session.path, name)
                   : Promise.resolve()}
-                onRequestRename={() => setRenamingSessionPath(session.path)}
+                onRequestRename={() => setRenamingSessionPath(sessionKey)}
               />
             )
           })}
@@ -5446,6 +6464,7 @@ function FlatAgentSessionTree({
 }
 
 function AgentConversationRow({
+  activity,
   conversation,
   isDeleting,
   isRenaming,
@@ -5457,6 +6476,7 @@ function AgentConversationRow({
   onRename,
   onRequestRename,
 }: {
+  activity?: 'running' | 'waiting'
   conversation: ConversationRecord
   isDeleting: boolean
   isRenaming: boolean
@@ -5472,6 +6492,8 @@ function AgentConversationRow({
 
   return (
     <AgentSessionTreeRow
+      activity={activity}
+      agentId={conversation.agentId}
       isActive={isActive}
       isDeleting={isDeleting}
       isRenaming={isRenaming}
@@ -5519,6 +6541,8 @@ function AgentProjectTree({
     onStartProjectSession,
     projectSessions,
     projectState,
+    sessionActivityById,
+    sessionTreeAgentIds,
     isProjectAddMenuOpen: contextIsProjectAddMenuOpen,
     workspacePath,
   } = useAgentContext()
@@ -5529,6 +6553,8 @@ function AgentProjectTree({
   const [renamingSessionPath, setRenamingSessionPath] = useState<string | null>(null)
   const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null)
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
+  const projectRecordsRef = useRef(projectState.projects)
+  projectRecordsRef.current = projectState.projects
   const isProjectAddMenuOpen = isProjectAddMenuOpenOverride ?? contextIsProjectAddMenuOpen
   const activeSessionProjectId = useMemo(() => {
     if (activeSessionSelection.kind !== 'session' || !activeSessionPath) {
@@ -5536,18 +6562,28 @@ function AgentProjectTree({
     }
 
     for (const [projectId, bucket] of Object.entries(projectSessions)) {
-      if (bucket.sessions.some((session) => session.path === activeSessionPath)) {
+      if (flattenAgentProjectSessions(bucket).some((session) => (
+        session.agentId === activeSessionSelection.agentId
+        && session.path === activeSessionPath
+      ))) {
         return projectId
       }
     }
 
     return null
-  }, [activeSessionPath, activeSessionSelection.kind, projectSessions])
+  }, [activeSessionPath, activeSessionSelection, projectSessions])
   const visibleConversations = useMemo(() => (
     conversationState.conversations
       .filter((conversation) => conversation.status === 'active')
       .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
   ), [conversationState.conversations])
+
+  useEffect(() => {
+    for (const projectId of expandedProjectIds) {
+      const project = projectRecordsRef.current.find((candidate) => candidate.id === projectId)
+      if (project) void loadProjectSessions(project)
+    }
+  }, [expandedProjectIds, loadProjectSessions])
   const activeProject = useMemo(() => {
     if (activeWorkspaceContext.kind === 'project') {
       return projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
@@ -5696,12 +6732,13 @@ function AgentProjectTree({
                 ) : projectState.projects.map((project) => {
             const bucket = projectSessions[project.id]
             const isExpanded = expandedProjectIds.has(project.id)
-            const sessions = bucket?.sessions ?? []
+            const sessions = flattenAgentProjectSessions(bucket)
+            const loadSummary = summarizeAgentProjectSessionBucket(bucket, sessionTreeAgentIds)
             const showChildren = isExpanded && (
               sessions.length > 0
-              || Boolean(bucket?.isLoading)
-              || Boolean(bucket?.error)
-              || Boolean(bucket?.hasLoaded)
+              || loadSummary.isLoading
+              || loadSummary.errors.length > 0
+              || loadSummary.hasLoaded
             )
 
             const projectIcon = <ProjectIcon />
@@ -5712,7 +6749,7 @@ function AgentProjectTree({
                 <ContextMenu.Root onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
                   <ContextMenu.Trigger
                     aria-expanded={isExpanded}
-                    render={<TreeItemMainButton className={className} hasDescription={hasDescription} />}
+                    render={<TreeItemMainButton className={className} hasDescription={hasDescription} role='button' />}
                     title={project.path}
                     onClick={() => toggleProject(project)}
                   >
@@ -5773,13 +6810,16 @@ function AgentProjectTree({
                 after={showChildren ? (
                   <TreeItemChildren className='agent-project-session-children'>
                     <TreeList className='agent-project-session-list'>
-                      {bucket?.isLoading ? <TreeStatusItem>加载中</TreeStatusItem> : null}
-                      {bucket?.error ? <TreeStatusItem tone='danger'>无法加载对话</TreeStatusItem> : null}
-                      {!bucket?.isLoading && !bucket?.error && bucket?.hasLoaded && sessions.length === 0 ? (
+                      {loadSummary.isLoading ? <TreeStatusItem>加载中</TreeStatusItem> : null}
+                      {loadSummary.errors.length > 0 ? <TreeStatusItem tone='danger'>部分 Agent 无法加载</TreeStatusItem> : null}
+                      {!loadSummary.isLoading && loadSummary.errors.length === 0 && loadSummary.hasLoaded && sessions.length === 0 ? (
                         <TreeStatusItem>暂无对话</TreeStatusItem>
                       ) : null}
                       {sessions.map((session) => {
-                        const isActiveSession = activeSessionSelection.kind === 'session' && activeSessionPath === session.path
+                        const sessionKey = getAgentSessionTreeKey(session.agentId, session.path)
+                        const isActiveSession = activeSessionSelection.kind === 'session'
+                          && activeSessionSelection.agentId === session.agentId
+                          && activeSessionPath === session.path
                         const isCurrentActiveProject = Boolean(
                           activeWorkspaceContext.kind === 'project'
                           && activeWorkspaceContext.projectId === project.id
@@ -5791,29 +6831,31 @@ function AgentProjectTree({
 
                         return (
                           <AgentSessionTreeRow
-                            key={session.path}
+                            activity={sessionActivityById[getAgentSessionActivityKey(session.agentId, session.path)]}
+                            agentId={session.agentId}
+                            key={sessionKey}
                             isActive={isActiveSession}
-                            isDeleting={deletingSessionPath === session.path}
-                            isRenaming={renamingSessionPath === session.path}
+                            isDeleting={deletingSessionPath === sessionKey}
+                            isRenaming={renamingSessionPath === sessionKey}
                             label={label}
                             menuPortalTarget={menuPortalTarget}
                             onCancelRename={() => setRenamingSessionPath(null)}
                             relativeTime={relativeTime}
                             onDelete={() => {
-                              void handleDeleteSession(session.path)
+                              void handleDeleteSession(project.path, session.agentId, session.path)
                             }}
                             onOpen={() => {
                               setRenamingSessionPath(null)
                               setRenamingConversationId(null)
                               const openSession = isCurrentActiveProject
-                                ? handleOpenSession(session.path)
-                                : onOpenProjectSession?.(project, session.path)
+                                ? handleOpenSession(session.agentId, session.path)
+                                : onOpenProjectSession?.(project, session.agentId, session.path)
                               void Promise.resolve(openSession).then(() => {
                                 onRequestClose?.()
                               })
                             }}
-                            onRename={(name) => handleRenameSession(project.path, session.path, name)}
-                            onRequestRename={() => setRenamingSessionPath(session.path)}
+                            onRename={(name) => handleRenameSession(project.path, session.agentId, session.path, name)}
+                            onRequestRename={() => setRenamingSessionPath(sessionKey)}
                           />
                         )
                       })}
@@ -5859,6 +6901,9 @@ function AgentProjectTree({
                   <TreeStatusItem>暂无对话</TreeStatusItem>
                 ) : visibleConversations.map((conversation) => (
                   <AgentConversationRow
+                    activity={conversation.agentSessionPath
+                      ? sessionActivityById[getAgentSessionActivityKey(conversation.agentId, conversation.agentSessionPath)]
+                      : undefined}
                     key={conversation.id}
                     conversation={conversation}
                     isDeleting={deletingConversationId === conversation.id}
@@ -5945,6 +6990,118 @@ function AgentProjectSwitchTrigger({
   )
 }
 
+function resolveSupportedRunningPromptBehavior(
+  supportedBehaviors: AgentRunningPromptBehavior[],
+  requestedBehavior: AgentRunningPromptEnterBehavior,
+): AgentRunningPromptEnterBehavior {
+  return supportedBehaviors.includes(requestedBehavior)
+    ? requestedBehavior
+    : supportedBehaviors[0] ?? 'followUp'
+}
+
+function AgentTypeSwitchTrigger() {
+  const {
+    activeSessionSelection,
+    activeWorkspaceContext,
+    agentCatalog,
+    refreshAgentCatalog,
+    selectedAgentId,
+    setSelectedAgentId,
+  } = useAgentContext()
+  const selectedAvailability = agentCatalog.find((item) => item.definition.id === selectedAgentId) ?? null
+  const selectedDefinition = selectedAvailability?.definition ?? getAgentDefinition(selectedAgentId)
+  const isLocked = activeWorkspaceContext.kind === 'conversation' || activeSessionSelection.kind === 'session'
+
+  return (
+    <Menu.Root modal={false}>
+      <Menu.Trigger
+        aria-label={`选择 Agent，当前：${selectedDefinition.label}`}
+        className='agent-type-switch-trigger'
+        disabled={isLocked}
+        render={<button type='button' />}
+      >
+        <AgentBrandIcon agentId={selectedAgentId} className='agent-brand-icon' size={16} />
+        <span className='agent-type-switch-label'>{selectedDefinition.label}</span>
+        <DownLine aria-hidden='true' className='agent-type-switch-chevron' size={14} />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner align='start' sideOffset={6}>
+          <Menu.Popup className='agent-type-switch-menu' aria-label='选择用于新会话的 Agent'>
+            {(agentCatalog.length > 0
+              ? agentCatalog
+              : [{
+                  available: true,
+                  command: null,
+                  definition: getAgentDefinition(DEFAULT_AGENT_ID),
+                  reason: null,
+                  version: null,
+                }]
+            ).map((availability) => {
+              const isSelected = availability.definition.id === selectedAgentId
+
+              return (
+                <Menu.Item
+                  key={availability.definition.id}
+                  nativeButton
+                  className={({ highlighted }) => (
+                    `agent-type-switch-option${highlighted ? ' is-highlighted' : ''}${isSelected ? ' is-selected' : ''}`
+                  )}
+                  disabled={!availability.available}
+                  label={availability.definition.label}
+                  render={<button
+                    type='button'
+                    title={!availability.available ? availability.reason ?? '当前不可用' : undefined}
+                  />}
+                  onClick={() => {
+                    setSelectedAgentId(availability.definition.id)
+                  }}
+                >
+                  <span className='agent-type-switch-option-icon'>
+                    <AgentBrandIcon
+                      agentId={availability.definition.id}
+                      className='agent-brand-icon'
+                      size={16}
+                    />
+                  </span>
+                  <span className='agent-type-switch-option-copy'>
+                    <span className='agent-type-switch-option-title'>
+                      {availability.definition.label}
+                    </span>
+                    <span className='agent-type-switch-option-description'>
+                      {availability.available
+                        ? availability.version ?? availability.definition.description
+                        : `${availability.reason ?? '当前不可用'} · 请先安装、登录或检查配置`}
+                    </span>
+                  </span>
+                  {isSelected ? <CheckLine aria-hidden='true' size={16} /> : null}
+                </Menu.Item>
+              )
+            })}
+            <div className='agent-type-switch-separator' role='separator' />
+            <Menu.Item
+              nativeButton
+              className={({ highlighted }) => (
+                `agent-type-switch-option${highlighted ? ' is-highlighted' : ''}`
+              )}
+              label='重新检测 Agent'
+              render={<button type='button' />}
+              onClick={() => void refreshAgentCatalog()}
+            >
+              <span className='agent-type-switch-option-icon'>
+                <Icon aria-hidden='true' icon='mingcute:refresh-2-line' width={17} />
+              </span>
+              <span className='agent-type-switch-option-copy'>
+                <span className='agent-type-switch-option-title'>重新检测 Agent</span>
+                <span className='agent-type-switch-option-description'>安装、登录或修改配置后刷新状态</span>
+              </span>
+            </Menu.Item>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
+  )
+}
+
 function AgentEmptyChat() {
   const { activeSessionSelection, activeWorkspaceContext, onOpenProjectSwitchMenu, projectState, workspacePath } = useAgentContext()
   const activeProject = activeWorkspaceContext.kind === 'project'
@@ -5957,8 +7114,12 @@ function AgentEmptyChat() {
     <div className='agent-empty-chat'>
       <AgentNewSessionIllustration />
       <h2>
-        {isStandaloneConversation ? (
-          '今天要处理些什么？'
+        {isStandaloneConversation && isNewConversation ? (
+          <>
+            <span>今天使用</span>
+            <AgentTypeSwitchTrigger />
+            <span>处理些什么？</span>
+          </>
         ) : isNewConversation && activeProject ? (
           <>
             <span>今天在</span>
@@ -5966,6 +7127,8 @@ function AgentEmptyChat() {
               activeProject={activeProject}
               onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
             />
+            <span>使用</span>
+            <AgentTypeSwitchTrigger />
             <span>里处理什么？</span>
           </>
         ) : (
@@ -5976,6 +7139,158 @@ function AgentEmptyChat() {
         <p className='agent-empty-subtitle'>在下方消息框中输入您的请求以开始对话</p>
       ) : null}
     </div>
+  )
+}
+
+function AgentInteractionPanel({
+  onRespond,
+  request,
+}: {
+  onRespond: (
+    requestId: string,
+    optionId: string,
+    values?: string[],
+    answers?: Record<string, string[]>,
+  ) => Promise<void>
+  request: AgentInteractionRequest
+}) {
+  const [answer, setAnswer] = useState('')
+  const [fieldAnswers, setFieldAnswers] = useState<Record<string, string>>({})
+  const selectableOptions = request.options.filter((option) => option.id !== 'reject' && option.id !== 'deny')
+  const fields = request.fields ?? []
+  const needsTextAnswer = request.kind === 'question' && fields.length === 0 && selectableOptions.length === 0
+  const canSubmitFields = fields.length > 0 && fields.every((field) => Boolean(fieldAnswers[field.id]?.trim()))
+
+  useEffect(() => {
+    setAnswer('')
+    setFieldAnswers({})
+  }, [request.id])
+
+  return (
+    <section className='agent-interaction-panel' aria-label={request.title} aria-live='polite'>
+      <div className='agent-interaction-icon' aria-hidden='true'>
+        <ToolLine size={17} />
+      </div>
+      <div className='agent-interaction-copy'>
+        <strong>{request.title}</strong>
+        <span>{request.message}</span>
+      </div>
+      <div className='agent-interaction-actions'>
+        {fields.length > 0 ? (
+          <div className='agent-interaction-fields'>
+            {fields.map((field) => {
+              const options = field.options ?? []
+              const selectedAnswer = fieldAnswers[field.id] ?? ''
+              return (
+                <div className='agent-interaction-field' key={field.id}>
+                  <div className='agent-interaction-field-copy'>
+                    <strong>{field.label}</strong>
+                    {field.message ? <span>{field.message}</span> : null}
+                  </div>
+                  {options.length > 0 ? (
+                    <div className='agent-interaction-field-options'>
+                      {options.map((option) => (
+                        <button
+                          aria-pressed={selectedAnswer === option.label}
+                          className={`agent-interaction-field-option${selectedAnswer === option.label ? ' is-selected' : ''}`}
+                          key={option.id}
+                          type='button'
+                          onClick={() => {
+                            setFieldAnswers((current) => ({ ...current, [field.id]: option.label }))
+                          }}
+                        >
+                          <span>{option.label}</span>
+                          {option.description ? <small>{option.description}</small> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {(options.length === 0 || field.allowsCustomAnswer) ? (
+                    field.multiline ? (
+                      <textarea
+                        aria-label={field.label}
+                        className='agent-interaction-input is-multiline'
+                        placeholder='输入回答'
+                        rows={4}
+                        value={selectedAnswer}
+                        onChange={(event) => {
+                          setFieldAnswers((current) => ({ ...current, [field.id]: event.target.value }))
+                        }}
+                      />
+                    ) : (
+                      <input
+                        aria-label={field.label}
+                        className='agent-interaction-input'
+                        placeholder='输入回答'
+                        type={field.isSecret ? 'password' : 'text'}
+                        value={selectedAnswer}
+                        onChange={(event) => {
+                          setFieldAnswers((current) => ({ ...current, [field.id]: event.target.value }))
+                        }}
+                      />
+                    )
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
+        {needsTextAnswer ? (
+          <input
+            aria-label='回答 Agent 问题'
+            className='agent-interaction-input'
+            placeholder='输入回答'
+            value={answer}
+            onChange={(event) => {
+              setAnswer(event.target.value)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && answer.trim()) {
+                event.preventDefault()
+                void onRespond(request.id, 'answer', [answer.trim()])
+              }
+            }}
+          />
+        ) : null}
+        {request.options.map((option) => (
+          <Button
+            key={option.id}
+            size='sm'
+            variant={option.id.startsWith('allow') ? 'primary' : 'tertiary'}
+            onPress={() => {
+              void onRespond(request.id, option.id)
+            }}
+          >
+            {option.label}
+          </Button>
+        ))}
+        {fields.length > 0 ? (
+          <Button
+            size='sm'
+            variant='primary'
+            isDisabled={!canSubmitFields}
+            onPress={() => {
+              const answers = Object.fromEntries(fields.map((field) => [field.id, [fieldAnswers[field.id].trim()]]))
+              void onRespond(request.id, 'answer', undefined, answers)
+            }}
+          >
+            提交
+          </Button>
+        ) : null}
+        {needsTextAnswer ? (
+          <Button
+            size='sm'
+            variant='primary'
+            isDisabled={!answer.trim()}
+            onPress={() => {
+              void onRespond(request.id, 'answer', [answer.trim()])
+            }}
+          >
+            提交
+          </Button>
+        ) : null}
+      </div>
+    </section>
   )
 }
 
@@ -6023,17 +7338,26 @@ function AgentChatSurface() {
     onOpenProviderSettings,
     onOpenProjectSwitchMenu,
     onStartStandaloneConversation,
+    openCodeNativeSession,
+    openCodeOptimisticUserMessages,
+    piWebFileChanges,
+    piWebNativeSession,
+    piWebOptimisticUserMessages,
+    piWebStreamingStatus,
     panelError,
+    pendingInteraction,
     projectState,
     renderedMessages,
     resolvedSelectedProviderValue,
     roundFileChangesByMessageId,
     removeComposerAttachment,
+    respondToInteraction,
     sessionStatus,
     setActiveComposerMenu,
     setActiveOverlayPanel,
     setComposerState,
     setPanelError,
+    selectedAgentId,
     statusMessage,
     surfaceMode,
     streamingShortcutModifierLabel,
@@ -6043,7 +7367,20 @@ function AgentChatSurface() {
     workspaceTree,
   } = useAgentContext()
   const [messagesScrollElement, setMessagesScrollElement] = useState<HTMLDivElement | null>(null)
-  const hasEmptyChat = Boolean(workspacePath && renderedMessages.length === 0)
+  const effectiveRunningPromptEnterBehavior = resolveSupportedRunningPromptBehavior(
+    agentState.runtime.supportedRunningPromptBehaviors,
+    runningPromptEnterBehavior,
+  )
+  const alternateRunningPromptBehavior = getAlternateRunningPromptBehavior(effectiveRunningPromptEnterBehavior)
+  const supportsAlternateRunningPromptBehavior = agentState.runtime.supportedRunningPromptBehaviors
+    .includes(alternateRunningPromptBehavior)
+  const hasEmptyChat = Boolean(
+    workspacePath
+    && !openCodeNativeSession
+    && !piWebNativeSession
+    && renderedMessages.length === 0,
+  )
+  const isOpenCodeChildSession = Boolean(openCodeNativeSession?.parentSessionId)
   const isNewConversation = activeSessionSelection.kind === 'new'
   const canOpenSessionMenu = Boolean(workspacePath && activeWorkspaceContext.kind === 'project')
   const activeProject = activeWorkspaceContext.kind === 'project'
@@ -6807,7 +8144,9 @@ function AgentChatSurface() {
   const composerActionTitle = composerAction === 'stop'
     ? '停止当前运行'
     : agentState.runtime.isStreaming && hasComposerPayload
-      ? `Enter ${AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[runningPromptEnterBehavior]}，${streamingShortcutModifierLabel} ${AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[getAlternateRunningPromptBehavior(runningPromptEnterBehavior)]}`
+      ? supportsAlternateRunningPromptBehavior
+        ? `Enter ${AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[effectiveRunningPromptEnterBehavior]}，${streamingShortcutModifierLabel} ${AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[alternateRunningPromptBehavior]}`
+        : `Enter ${AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[effectiveRunningPromptEnterBehavior]}`
       : '发送消息'
 
   const composerHeader = composerAttachments.length > 0 || attachmentCapabilityMessage ? (
@@ -6860,6 +8199,7 @@ function AgentChatSurface() {
   ) : null
   const composerQueuedTray = queuedComposerMessages.length > 0 ? (
     <AgentQueuedComposerTray
+      canEdit={agentState.runtime.supportsQueuedMessageEditing}
       menuPortalTarget={surfaceMode === 'drawer' ? localOverlayRoot : undefined}
       messages={queuedComposerMessages}
       onUpdate={handleQueuedMessageUpdate}
@@ -6867,9 +8207,14 @@ function AgentChatSurface() {
   ) : null
   const composerHeaderContent = composerQueuedTray || composerHeader ? (
     <>
+      {pendingInteraction ? (
+        <AgentInteractionPanel request={pendingInteraction} onRespond={respondToInteraction} />
+      ) : null}
       {composerQueuedTray}
       {composerHeader}
     </>
+  ) : pendingInteraction ? (
+    <AgentInteractionPanel request={pendingInteraction} onRespond={respondToInteraction} />
   ) : null
   const projectSwitchBar = isNewConversation && activeWorkspaceContext.kind !== 'conversation' ? (
     <div className='agent-new-project-bar'>
@@ -6895,7 +8240,8 @@ function AgentChatSurface() {
               aria-label={modelPickerTriggerTitle}
               className='agent-model-cascader-trigger'
               disabled={
-                (!workspacePath && !canUseDraftRuntimeWithoutWorkspace)
+                isOpenCodeChildSession
+                || (!workspacePath && !canUseDraftRuntimeWithoutWorkspace)
                 || !agentState.runtime.hasConfiguredModels
                 || isSwitchingModel
                 || isSwitchingThinkingLevel
@@ -6937,7 +8283,7 @@ function AgentChatSurface() {
             type='button'
             aria-label='附加文件'
             className='agent-composer-attach-button'
-            disabled={(!workspacePath && !canUseComposerWithoutWorkspace) || isLoading}
+            disabled={isOpenCodeChildSession || (!workspacePath && !canUseComposerWithoutWorkspace) || isLoading}
             tooltip='附加文件'
             onClick={() => {
               void handlePickComposerAttachments()
@@ -7190,8 +8536,8 @@ function AgentChatSurface() {
     >
       <div className={`agent-composer-shell${isNewConversation ? ' has-project-bar' : ''}`}>
         <AgentComposerMentionInput
-          aria-label='Prompt Pi Agent'
-          disabled={(!workspacePath && !canUseComposerWithoutWorkspace) || isLoading}
+          aria-label={`向 ${getAgentDefinition(selectedAgentId).label} 发送消息`}
+          disabled={isOpenCodeChildSession || (!workspacePath && !canUseComposerWithoutWorkspace) || isLoading}
           iconTheme={iconTheme}
           mentions={composerState.mentions}
           onChange={setComposerState}
@@ -7343,13 +8689,49 @@ function AgentChatSurface() {
           >
             <div
               className={`agent-messages${hasEmptyChat ? ' agent-messages-empty' : ''}${!hasEmptyChat && shouldVirtualizeMessages ? ' agent-messages-virtual' : ''}`}
-              data-agent-virtual-enabled={hasEmptyChat
+              data-agent-virtual-enabled={hasEmptyChat || openCodeNativeSession || piWebNativeSession
                 ? undefined
                 : (shouldVirtualizeMessages ? 'true' : 'false')}
-              data-agent-virtual-total-items={hasEmptyChat ? undefined : virtualMessageItems.length}
+              data-agent-virtual-total-items={hasEmptyChat || openCodeNativeSession || piWebNativeSession ? undefined : virtualMessageItems.length}
             >
               {hasEmptyChat ? (
                 <AgentEmptyChat />
+              ) : openCodeNativeSession ? (
+                <OpenCodeSessionTimeline
+                  sessionID={activeSessionPath!}
+                  workspacePath={workspacePath!}
+                  optimisticUserMessages={openCodeOptimisticUserMessages}
+                  onNavigateToSession={(sessionID) => void handleOpenSession('opencode', sessionID)}
+                  onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
+                />
+              ) : piWebNativeSession ? (
+                <>
+                  <div
+                    className={`agent-pi-web-session-stack${piWebStreamingStatus ? ' has-streaming-status' : ''}`}
+                  >
+                    <PiWebSessionTimeline
+                      snapshot={piWebNativeSession}
+                      workspacePath={workspacePath!}
+                      optimisticUserMessages={piWebOptimisticUserMessages}
+                      onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
+                    />
+                    {piWebStreamingStatus ? (
+                      <div className='agent-pi-web-session-status'>
+                        <AgentSessionStatusBubble status={piWebStreamingStatus} />
+                      </div>
+                    ) : null}
+                  </div>
+                  {piWebFileChanges.length > 0 ? (
+                    <div className='agent-message-stack agent-native-surface-addon'>
+                      <AgentMessageFileCards
+                        fileChanges={piWebFileChanges}
+                        iconTheme={iconTheme}
+                        onOpenFile={onOpenMessageFile}
+                        workspacePath={workspacePath}
+                      />
+                    </div>
+                  ) : null}
+                </>
               ) : shouldVirtualizeMessages ? (
                 <AgentVirtualMessageList
                   activeSessionPath={activeSessionPath}

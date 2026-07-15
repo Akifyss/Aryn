@@ -1,5 +1,6 @@
 import { ipcRenderer, contextBridge, webUtils } from 'electron'
-import type { AgentClientEvent, AgentPromptAttachment, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState } from '../../src/features/agent/types'
+import type { AgentClientEvent, AgentInteractionResponse, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState, OpenCodeSurfaceRequest, OpenCodeSurfaceResponse } from '../../src/features/agent/types'
+import type { AgentAvailability } from '../../src/features/agent/agent-definition'
 import type { ActiveWorkspaceContext, ConversationRecord, ConversationState, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../../src/features/conversations/types'
 import type {
   GitBaselinePayload,
@@ -47,6 +48,9 @@ function subscribeWindowLifecycle(channel: WindowLifecycleChannel, listener: () 
 
 contextBridge.exposeInMainWorld('appApi', {
   platform: process.platform,
+  getAgentCatalog: (options?: { force?: boolean }) => (
+    ipcRenderer.invoke('agent:get-catalog', options) as Promise<AgentAvailability[]>
+  ),
   pickWorkspace: () => ipcRenderer.invoke('workspace:pick-directory') as Promise<string | null>,
   getProjectState: () => ipcRenderer.invoke('project:get-state') as Promise<ProjectState>,
   getActiveWorkspaceContext: () => ipcRenderer.invoke('workspace:get-active-context') as Promise<ActiveWorkspaceContext>,
@@ -136,29 +140,33 @@ contextBridge.exposeInMainWorld('appApi', {
   updateUiState: (patch: { agentComposerHeight?: number }) => ipcRenderer.invoke('ui:update-state', patch) as Promise<{ ok: boolean }>,
   startWorkspaceWatch: (rootPath: string) => ipcRenderer.invoke('workspace:start-watch', rootPath) as Promise<{ ok: boolean }>,
   stopWorkspaceWatch: () => ipcRenderer.invoke('workspace:stop-watch') as Promise<{ ok: boolean }>,
-  loadAgentWorkspace: (rootPath: string, preferredSessionPath?: string | null, options?: { restoreSession?: boolean }) => ipcRenderer.invoke('agent:load-workspace', rootPath, preferredSessionPath, options) as Promise<AgentWorkspaceState>,
-  loadAgentDraftState: () => ipcRenderer.invoke('agent:load-draft-state') as Promise<AgentWorkspaceState>,
-  listAgentSessions: (rootPath: string) => ipcRenderer.invoke('agent:list-sessions', rootPath) as Promise<AgentWorkspaceState['sessions']>,
-  readAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:read-session', rootPath, sessionPath) as Promise<AgentSessionSnapshot>,
-  agentSessionExists: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:session-exists', rootPath, sessionPath) as Promise<{ exists: boolean }>,
-  createAgentSession: (rootPath: string, options?: string | AgentSessionCreateOptions) => ipcRenderer.invoke('agent:create-session', rootPath, options) as Promise<AgentWorkspaceState>,
-  openAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:open-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,
-  deleteAgentSession: (rootPath: string, sessionPath: string) => ipcRenderer.invoke('agent:delete-session', rootPath, sessionPath) as Promise<AgentWorkspaceState>,
-  renameAgentSession: (rootPath: string, sessionPath: string, name: string) => (
-    ipcRenderer.invoke('agent:rename-session', rootPath, sessionPath, name) as Promise<AgentWorkspaceState>
+  loadAgentWorkspace: (scope: AgentRequestScope, preferredSessionPath?: string | null, options?: { restoreSession?: boolean }) => ipcRenderer.invoke('agent:load-workspace', scope, preferredSessionPath, options) as Promise<AgentWorkspaceState>,
+  loadAgentDraftState: (agentId?: AgentRequestScope['agentId']) => ipcRenderer.invoke('agent:load-draft-state', agentId) as Promise<AgentWorkspaceState>,
+  listAgentSessions: (scope: AgentRequestScope) => ipcRenderer.invoke('agent:list-sessions', scope) as Promise<AgentWorkspaceState['sessions']>,
+  readAgentSession: (scope: AgentRequestScope, sessionPath: string) => ipcRenderer.invoke('agent:read-session', scope, sessionPath) as Promise<AgentSessionSnapshot>,
+  requestOpenCodeSurface: (scope: AgentRequestScope, request: OpenCodeSurfaceRequest) => (
+    ipcRenderer.invoke('agent:opencode-surface-request', scope, request) as Promise<OpenCodeSurfaceResponse>
+  ),
+  agentSessionExists: (scope: AgentRequestScope, sessionPath: string) => ipcRenderer.invoke('agent:session-exists', scope, sessionPath) as Promise<{ exists: boolean }>,
+  createAgentSession: (scope: AgentRequestScope, options?: string | AgentSessionCreateOptions) => ipcRenderer.invoke('agent:create-session', scope, options) as Promise<AgentWorkspaceState>,
+  openAgentSession: (scope: AgentRequestScope, sessionPath: string) => ipcRenderer.invoke('agent:open-session', scope, sessionPath) as Promise<AgentWorkspaceState>,
+  deleteAgentSession: (scope: AgentRequestScope, sessionPath: string) => ipcRenderer.invoke('agent:delete-session', scope, sessionPath) as Promise<AgentWorkspaceState>,
+  renameAgentSession: (scope: AgentRequestScope, sessionPath: string, name: string) => (
+    ipcRenderer.invoke('agent:rename-session', scope, sessionPath, name) as Promise<AgentWorkspaceState>
   ),
   pickAgentAttachments: () => ipcRenderer.invoke('agent:pick-attachments') as Promise<AgentPromptAttachment[]>,
   getFilePath: (file: File) => webUtils.getPathForFile(file),
-  sendAgentPrompt: (prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments?: AgentPromptAttachment[]) => ipcRenderer.invoke('agent:send-prompt', prompt, streamingBehavior, attachments) as Promise<{ ok: boolean }>,
-  updateAgentQueuedMessage: (update: AgentQueuedMessageUpdate) => ipcRenderer.invoke('agent:update-queued-message', update) as Promise<AgentWorkspaceState>,
-  selectAgentModel: (modelKey: string) => ipcRenderer.invoke('agent:select-model', modelKey) as Promise<AgentWorkspaceState>,
-  selectAgentThinkingLevel: (level: AgentThinkingLevel, modelKey?: string) => ipcRenderer.invoke('agent:select-thinking-level', level, modelKey) as Promise<AgentWorkspaceState>,
+  sendAgentPrompt: (scope: AgentRequestScope, prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments?: AgentPromptAttachment[], options?: AgentPromptSendOptions) => ipcRenderer.invoke('agent:send-prompt', scope, prompt, streamingBehavior, attachments, options) as Promise<{ ok: boolean }>,
+  updateAgentQueuedMessage: (scope: AgentRequestScope, update: AgentQueuedMessageUpdate) => ipcRenderer.invoke('agent:update-queued-message', scope, update) as Promise<AgentWorkspaceState>,
+  selectAgentModel: (scope: AgentRequestScope, modelKey: string) => ipcRenderer.invoke('agent:select-model', scope, modelKey) as Promise<AgentWorkspaceState>,
+  selectAgentThinkingLevel: (scope: AgentRequestScope, level: AgentThinkingLevel, modelKey?: string) => ipcRenderer.invoke('agent:select-thinking-level', scope, level, modelKey) as Promise<AgentWorkspaceState>,
   updateAgentProviderAuth: (rootPath: string | null, provider: string, apiKey: string | null) => ipcRenderer.invoke('agent:update-provider-auth', rootPath, provider, apiKey) as Promise<AgentWorkspaceState>,
   loginAgentProviderAuth: (rootPath: string | null, provider: string) => ipcRenderer.invoke('agent:login-provider-auth', rootPath, provider) as Promise<AgentWorkspaceState>,
   logoutAgentProviderAuth: (rootPath: string | null, provider: string) => ipcRenderer.invoke('agent:logout-provider-auth', rootPath, provider) as Promise<AgentWorkspaceState>,
   cancelAgentProviderAuth: (provider: string) => ipcRenderer.invoke('agent:cancel-provider-auth', provider) as Promise<{ ok: boolean }>,
   respondAgentProviderAuthPrompt: (requestId: string, value: string | null) => ipcRenderer.invoke('agent:respond-provider-auth-prompt', requestId, value) as Promise<{ ok: boolean }>,
-  abortAgentPrompt: () => ipcRenderer.invoke('agent:abort') as Promise<AgentWorkspaceState>,
+  abortAgentPrompt: (scope: AgentRequestScope) => ipcRenderer.invoke('agent:abort', scope) as Promise<AgentWorkspaceState>,
+  respondAgentInteraction: (response: AgentInteractionResponse) => ipcRenderer.invoke('agent:respond-interaction', response) as Promise<{ ok: boolean }>,
   notifyRendererReady: () => {
     ipcRenderer.send('app:renderer-ready')
   },

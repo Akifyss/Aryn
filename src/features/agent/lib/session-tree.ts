@@ -1,0 +1,85 @@
+import { AGENT_DEFINITIONS, type AgentId } from '@/features/agent/agent-definition'
+import type { AgentSessionListItem } from '@/features/agent/types'
+
+export type AgentSessionSourceState = {
+  error: string | null
+  hasLoaded: boolean
+  isLoading: boolean
+  sessions: AgentSessionListItem[]
+}
+
+export type AgentProjectSessionBucket = Partial<Record<AgentId, AgentSessionSourceState>>
+
+export type AgentSessionTreeItem = AgentSessionListItem & {
+  agentId: AgentId
+}
+
+/**
+ * Session history is an aggregate of every supported Agent, not a projection
+ * of the currently runnable Agent catalog. CLI discovery can fail transiently
+ * (or the CLI can be removed after sessions were created), but that must not
+ * make another Agent's history disappear from the project tree.
+ */
+export const SESSION_TREE_AGENT_IDS: readonly AgentId[] = Object.freeze(
+  AGENT_DEFINITIONS.map((definition) => definition.id),
+)
+
+const AGENT_ORDER = new Map(AGENT_DEFINITIONS.map((definition, index) => [definition.id, index]))
+
+function getSortableTimestamp(value: string) {
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+export function getAgentSessionTreeKey(agentId: AgentId, sessionPath: string) {
+  return `${agentId}\n${sessionPath}`
+}
+
+export function flattenAgentProjectSessions(bucket: AgentProjectSessionBucket | undefined) {
+  if (!bucket) return []
+
+  return Object.entries(bucket)
+    .flatMap(([agentId, source]) => (
+      source?.sessions.map((session): AgentSessionTreeItem => ({
+        ...session,
+        agentId: agentId as AgentId,
+      })) ?? []
+    ))
+    .sort((left, right) => {
+      const modifiedDifference = getSortableTimestamp(right.modifiedAt) - getSortableTimestamp(left.modifiedAt)
+      if (modifiedDifference !== 0) return modifiedDifference
+      const agentDifference = (AGENT_ORDER.get(left.agentId) ?? 0) - (AGENT_ORDER.get(right.agentId) ?? 0)
+      return agentDifference !== 0 ? agentDifference : left.path.localeCompare(right.path)
+    })
+}
+
+export function summarizeAgentProjectSessionBucket(
+  bucket: AgentProjectSessionBucket | undefined,
+  agentIds: readonly AgentId[],
+) {
+  const sources = agentIds.map((agentId) => bucket?.[agentId]).filter(Boolean)
+  return {
+    errors: sources.flatMap((source) => source?.error ? [source.error] : []),
+    hasLoaded: agentIds.length > 0 && agentIds.every((agentId) => bucket?.[agentId]?.hasLoaded),
+    isLoading: agentIds.some((agentId) => bucket?.[agentId]?.isLoading),
+  }
+}
+
+export function invalidateAgentProjectSessionBuckets(
+  buckets: Record<string, AgentProjectSessionBucket>,
+) {
+  return Object.fromEntries(Object.entries(buckets).map(([projectId, bucket]) => [
+    projectId,
+    Object.fromEntries(Object.entries(bucket).map(([agentId, source]) => [
+      agentId,
+      source
+        ? {
+            error: null,
+            hasLoaded: false,
+            isLoading: false,
+            sessions: source.sessions,
+          }
+        : source,
+    ])) as AgentProjectSessionBucket,
+  ])) as Record<string, AgentProjectSessionBucket>
+}

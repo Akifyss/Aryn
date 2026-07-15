@@ -30,6 +30,7 @@ import type {
   ConversationRecord,
   ConversationState,
   ConversationTitleSource,
+  CreateConversationWorkspaceRequest,
 } from '@/features/conversations/types'
 import type {
   ProjectRecord,
@@ -53,6 +54,7 @@ import {
   AgentSessionTree,
 } from '@/features/agent/components/agent-sidebar'
 import type { AgentProjectSessionRequest } from '@/features/agent/lib/project-session-request'
+import { DEFAULT_AGENT_ID, type AgentId } from '@/features/agent/agent-definition'
 import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
 import { isLineWithinVisualDiff } from '@/features/editor/lib/git-diff-navigation'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host'
@@ -3144,13 +3146,14 @@ function App() {
 
   async function requestAgentProjectSession(
     project: ProjectRecord,
-    request: { kind: 'new' } | { kind: 'session', sessionPath: string },
+    request: { kind: 'new' } | { agentId: AgentId, kind: 'session', sessionPath: string },
   ) {
     agentProjectSessionRequestIdRef.current += 1
     const requestId = agentProjectSessionRequestIdRef.current
     const nextRequest = request.kind === 'session'
       ? {
           kind: 'session' as const,
+          agentId: request.agentId,
           projectId: project.id,
           requestId,
           sessionPath: request.sessionPath,
@@ -3187,8 +3190,8 @@ function App() {
     }
   }
 
-  async function handleOpenProjectSession(project: ProjectRecord, sessionPath: string) {
-    await requestAgentProjectSession(project, { kind: 'session', sessionPath })
+  async function handleOpenProjectSession(project: ProjectRecord, agentId: AgentId, sessionPath: string) {
+    await requestAgentProjectSession(project, { agentId, kind: 'session', sessionPath })
   }
 
   async function handleStartProjectSession(project: ProjectRecord) {
@@ -3238,7 +3241,7 @@ function App() {
     await enterConversationDraft()
   }
 
-  async function handleCreateConversationWorkspace(request: { initialPrompt?: string | null }) {
+  async function handleCreateConversationWorkspace(request: CreateConversationWorkspaceRequest) {
     let record: ConversationRecord | null = null
 
     try {
@@ -3385,7 +3388,10 @@ function App() {
         })
       }
       const sessionExists = conversation.agentSessionPath
-        ? (await window.appApi.agentSessionExists(targetWorkspacePath, conversation.agentSessionPath)).exists
+        ? (await window.appApi.agentSessionExists({
+            agentId: conversation.agentId,
+            workspacePath: targetWorkspacePath,
+          }, conversation.agentSessionPath)).exists
         : false
       await connectWorkspace(targetWorkspacePath)
       await restoreWorkspaceTabs(targetWorkspacePath)
@@ -4652,7 +4658,10 @@ function App() {
             })
           }
           const sessionExists = activeConversation.agentSessionPath
-            ? (await window.appApi.agentSessionExists(activeConversation.workspacePath, activeConversation.agentSessionPath)).exists
+            ? (await window.appApi.agentSessionExists({
+                agentId: activeConversation.agentId,
+                workspacePath: activeConversation.workspacePath,
+              }, activeConversation.agentSessionPath)).exists
             : false
           await connectWorkspace(activeConversation.workspacePath)
           if (!cancelled) {
@@ -5338,6 +5347,7 @@ function App() {
     if (currentPath && currentProject) {
       agentProjectSessionRequestIdRef.current += 1
       setPendingAgentProjectSessionRequest({
+        agentId: agentWorkspaceState?.runtime.agentId ?? DEFAULT_AGENT_ID,
         kind: 'session',
         projectId: currentProject.id,
         requestId: agentProjectSessionRequestIdRef.current,
@@ -5345,7 +5355,7 @@ function App() {
       })
       revealEditorAssistantSurface()
     }
-  }, [currentPath, projectState.projects, revealEditorAssistantSurface])
+  }, [agentWorkspaceState?.runtime.agentId, currentPath, projectState.projects, revealEditorAssistantSurface])
   useEffect(() => {
     const openDrawerSide = isLeftDrawerOpen ? 'left' : isRightDrawerOpen ? 'right' : null
 
