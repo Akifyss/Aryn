@@ -14,8 +14,10 @@ const logPath = path.join(artifactRoot, 'electron-debug-session.log')
 const reportPath = path.join(artifactRoot, 'electron-debug-session-report.json')
 const screenshotPath = path.join(artifactRoot, 'electron-debug-session.png')
 const appDataRoot = path.join(runRoot, 'appdata')
+const homeRoot = path.join(runRoot, 'home')
 const localAppDataRoot = path.join(runRoot, 'localappdata')
 const tempRoot = path.join(runRoot, 'temp')
+const userDataRoot = path.join(runRoot, 'user-data')
 const defaultWorkspacePath = path.join(runRoot, 'workspace')
 const defaultFilePath = path.join(defaultWorkspacePath, 'debug.md')
 
@@ -35,7 +37,7 @@ function readViewMode(value) {
 }
 
 function readDebugScenario(value) {
-  return ['agent-attachments', 'agent-mention-menu'].includes(value ?? '') ? value : null
+  return ['agent-attachments', 'agent-mention-menu', 'opencode-surface'].includes(value ?? '') ? value : null
 }
 
 function compactText(value, maxLength = 1200) {
@@ -167,11 +169,15 @@ async function resetArtifactRoots() {
   fsSync.mkdirSync(artifactRoot, { recursive: true })
   fsSync.writeFileSync(logPath, '', 'utf8')
   await fs.rm(appDataRoot, { force: true, recursive: true })
+  await fs.rm(homeRoot, { force: true, recursive: true })
   await fs.rm(localAppDataRoot, { force: true, recursive: true })
   await fs.rm(tempRoot, { force: true, recursive: true })
+  await fs.rm(userDataRoot, { force: true, recursive: true })
   await fs.mkdir(appDataRoot, { recursive: true })
+  await fs.mkdir(path.join(homeRoot, 'Documents'), { recursive: true })
   await fs.mkdir(localAppDataRoot, { recursive: true })
   await fs.mkdir(tempRoot, { recursive: true })
+  await fs.mkdir(userDataRoot, { recursive: true })
 }
 
 function attachProcessCapture(app, report) {
@@ -266,14 +272,20 @@ async function restoreWorkspace(page, fixture) {
   })
 
   await page.evaluate(
-    ({ debugScenario, filePath, storageKey, viewMode, workspacePath }) => {
+    async ({ debugScenario, filePath, storageKey, viewMode, workspacePath }) => {
       window.localStorage.setItem(storageKey, JSON.stringify({
         activePath: filePath,
         entries: [{ path: filePath, viewMode }],
         paths: [filePath],
       }))
 
-      if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu') {
+      if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu' || debugScenario === 'opencode-surface') {
+        // Keep the legacy Agent fixtures deterministic now that new
+        // conversations remember the last successfully used adapter.
+        window.localStorage.setItem(
+          'aryn:last-new-conversation-agent',
+          debugScenario === 'opencode-surface' ? 'opencode' : 'builtin-pi',
+        )
         window.localStorage.setItem('aryn:settings', JSON.stringify({
           state: {
             layoutPreference: 'agent',
@@ -294,10 +306,31 @@ async function restoreWorkspace(page, fixture) {
         window.localStorage.setItem('aryn:right-sidebar-collapsed', 'false')
       }
 
-      return window.appApi.updateWorkspaceState(workspacePath, {
+      const workspaceState = await window.appApi.updateWorkspaceState(workspacePath, {
         lastFilePath: filePath,
         markAsLastOpened: true,
       })
+      if (debugScenario === 'opencode-surface') {
+        const projectState = await window.appApi.getProjectState()
+        const project = projectState.projects.find((item) => item.path === workspacePath)
+        if (!project) throw new Error('OpenCode surface debug project was not registered.')
+        await window.appApi.setActiveProject(project.id)
+        await window.appApi.setActiveWorkspaceContext({ kind: 'project', projectId: project.id })
+        const agentState = await window.appApi.createAgentSession(
+          { agentId: 'opencode', workspacePath },
+          { name: 'OpenCode surface debug' },
+        )
+        const sessionPath = agentState.activeSession?.sessionPath
+        if (!sessionPath) {
+          throw new Error('OpenCode surface debug session was created without an active session path.')
+        }
+        await window.appApi.updateWorkspaceState(workspacePath, {
+          lastAgentSessionPath: sessionPath,
+          markAsLastOpened: true,
+          prefersNewAgentSession: false,
+        })
+      }
+      return workspaceState
     },
     {
       debugScenario,
@@ -310,7 +343,7 @@ async function restoreWorkspace(page, fixture) {
 
   await page.reload({ waitUntil: 'domcontentloaded', timeout: timeoutMs })
   await waitForAppShell(page)
-  if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu') {
+  if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu' || debugScenario === 'opencode-surface') {
     await page.waitForSelector('.agent-composer-editor', { timeout: timeoutMs })
   } else {
     await page.waitForFunction(() => {
@@ -321,12 +354,427 @@ async function restoreWorkspace(page, fixture) {
 }
 
 async function applyDebugScenario(page) {
-  if (debugScenario !== 'agent-attachments' && debugScenario !== 'agent-mention-menu') {
+  if (debugScenario !== 'agent-attachments' && debugScenario !== 'agent-mention-menu' && debugScenario !== 'opencode-surface') {
     return null
   }
 
   log('applying debug scenario', { debugScenario })
   await page.waitForSelector('.agent-composer-editor', { timeout: timeoutMs })
+
+  if (debugScenario === 'opencode-surface') {
+    const diagnostics = await page.evaluate(async () => {
+      const context = await window.appApi.getActiveWorkspaceContext()
+      const projects = await window.appApi.getProjectState()
+      const project = context.kind === 'project'
+        ? projects.projects.find((item) => item.id === context.projectId) ?? null
+        : null
+      if (!project) {
+        return { context, project, workspaceState: null, agentState: null }
+      }
+      const workspaceState = await window.appApi.getWorkspaceState(project.path)
+      const agentState = await window.appApi.loadAgentWorkspace(
+        { agentId: 'opencode', workspacePath: project.path },
+        workspaceState.lastAgentSessionPath,
+      )
+      return {
+        context,
+        project,
+        workspaceState,
+        agentState: {
+          activeSessionPath: agentState.activeSession?.sessionPath ?? null,
+          sessionPaths: agentState.sessions.map((session) => session.path),
+        },
+      }
+    })
+    log('OpenCode surface diagnostics', diagnostics)
+    if (!await page.$('.opencode-session-surface-host .aryn-opencode-session-surface')) {
+      const sessionRow = page.locator('.agent-project-list').getByText('OpenCode surface debug', { exact: true }).first()
+      await sessionRow.waitFor({ state: 'visible', timeout: Math.min(timeoutMs, 10_000) })
+      await sessionRow.click()
+    }
+    try {
+      await page.waitForSelector('.opencode-session-surface-host .aryn-opencode-session-surface', {
+        state: 'attached',
+        timeout: Math.min(timeoutMs, 10_000),
+      })
+    } catch {
+      throw new Error(`OpenCode surface did not mount: ${JSON.stringify(diagnostics)}`)
+    }
+    await page.waitForFunction(() => {
+      const surface = document.querySelector('.opencode-session-surface-host .aryn-opencode-session-surface')
+      return surface && !surface.textContent?.includes('正在加载会话')
+    }, null, { timeout: timeoutMs })
+    await page.evaluate(() => {
+      window.__arynDebugOpenCodeSessionList = document.querySelector(
+        '.opencode-session-surface-host .aryn-opencode-session-list',
+      )
+    })
+    await page.click('.agent-composer-editor')
+    await page.keyboard.type('surface-remount-check')
+    await page.waitForTimeout(100)
+    const surfaceStayedMounted = await page.evaluate(() => (
+      window.__arynDebugOpenCodeSessionList !== null
+      && window.__arynDebugOpenCodeSessionList === document.querySelector(
+        '.opencode-session-surface-host .aryn-opencode-session-list',
+      )
+    ))
+    await page.keyboard.press('Control+A')
+    await page.keyboard.press('Backspace')
+    await page.evaluate(() => {
+      delete window.__arynDebugOpenCodeSessionList
+    })
+    if (!surfaceStayedMounted) {
+      throw new Error('OpenCode surface remounted after an unrelated composer render.')
+    }
+    const syntheticTurn = await page.evaluate(async () => {
+      const sessionID = 'ses_debug_surface'
+      const userMessageID = 'msg_01_debug_user'
+      const assistantMessageID = 'msg_02_debug_assistant'
+      const optimisticMessageID = 'msg_0123456789abABCDEFGHIJKLMN'
+      const optimisticTextPartID = 'prt_0123456789acABCDEFGHIJKLMN'
+      const created = Date.now()
+      const workspacePath = 'C:\\debug-workspace'
+      const moduleUrl = new URL('./opencode-session-surface/index.js', document.baseURI).href
+      const surfaceModule = await import(moduleUrl)
+      const container = document.createElement('div')
+      container.dataset.debugOpenCodeTurn = 'true'
+      Object.assign(container.style, {
+        background: 'var(--background-primary)',
+        bottom: '120px',
+        left: '280px',
+        overflow: 'auto',
+        position: 'fixed',
+        right: '24px',
+        top: '48px',
+        zIndex: '9999',
+      })
+      document.body.append(container)
+      const navigatedSessionIDs = []
+      const openedExternalLinks = []
+      const requests = []
+      let surfaceEventListener = null
+
+      const session = {
+        id: sessionID,
+        slug: 'debug-surface',
+        projectID: 'debug-project',
+        directory: workspacePath,
+        title: 'Debug surface',
+        version: '1.17.18',
+        time: { created, updated: created },
+      }
+      const userMessage = {
+        id: userMessageID,
+        sessionID,
+        role: 'user',
+        time: { created },
+        agent: 'build',
+        model: { providerID: 'debug', modelID: 'debug-model' },
+      }
+      const assistantMessage = {
+        id: assistantMessageID,
+        sessionID,
+        role: 'assistant',
+        time: { created: created + 1, completed: created + 2 },
+        parentID: userMessageID,
+        modelID: 'debug-model',
+        providerID: 'debug',
+        mode: 'build',
+        agent: 'build',
+        path: { cwd: workspacePath, root: workspacePath },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: 'stop',
+      }
+      const messages = [
+        {
+          info: userMessage,
+          parts: [{
+            id: 'prt_01_debug_user_text',
+            sessionID,
+            messageID: userMessageID,
+            type: 'text',
+            text: 'Synthetic user message',
+          }],
+        },
+        {
+          info: assistantMessage,
+          parts: [{
+            id: 'prt_02_01_debug_bash',
+            sessionID,
+            messageID: assistantMessageID,
+            type: 'tool',
+            callID: 'call_debug_bash',
+            tool: 'bash',
+            state: {
+              status: 'completed',
+              input: { command: 'echo official-shell' },
+              output: 'official-shell',
+              title: 'Shell',
+              metadata: {},
+              time: { start: created + 1, end: created + 2 },
+            },
+          }, {
+            id: 'prt_02_02_debug_webfetch',
+            sessionID,
+            messageID: assistantMessageID,
+            type: 'tool',
+            callID: 'call_debug_webfetch',
+            tool: 'webfetch',
+            state: {
+              status: 'completed',
+              input: { url: 'https://example.com/debug' },
+              output: 'Synthetic tool output that must stay hidden in the official compact rendering.',
+              title: 'Fetch URL',
+              metadata: {},
+              time: { start: created + 1, end: created + 2 },
+            },
+          }, {
+            id: 'prt_02_03_debug_assistant_text',
+            sessionID,
+            messageID: assistantMessageID,
+            type: 'text',
+            text: 'Synthetic assistant response',
+          }],
+        },
+      ]
+      // Simulate the legacy/HMR failure mode where an older surface left its
+      // portal scope class on body. Mounting the current surface must heal it
+      // before any official selector can continue matching the Aryn shell.
+      document.body.classList.add('aryn-opencode-portal-theme')
+      const mounted = surfaceModule.mountOpenCodeSessionSurface(container, {
+        sessionID,
+        workspacePath,
+        onNavigateToSession: (nextSessionID) => navigatedSessionIDs.push(nextSessionID),
+        bridge: {
+          openExternal: (href) => openedExternalLinks.push(href),
+          request: async (_rootPath, request) => {
+            requests.push(request.method)
+            switch (request.method) {
+              case 'app.agents': return { data: [{ name: 'build', mode: 'primary' }] }
+              case 'provider.list': return {
+                data: {
+                  all: [{ id: 'debug', name: 'Debug Provider', models: {} }],
+                  connected: ['debug'],
+                  default: { debug: 'debug-model' },
+                },
+              }
+              case 'session.get': return { data: session }
+              case 'session.messages': return { data: messages }
+              case 'session.message': return {
+                data: messages.find((item) => item.info.id === request.messageID),
+              }
+              case 'session.status': return { data: { type: 'idle' } }
+              case 'session.diff':
+              case 'session.todo': return { data: [] }
+              default: throw new Error(`Unhandled synthetic surface request: ${request.method}`)
+            }
+          },
+          subscribe: (listener) => {
+            surfaceEventListener = listener
+            return () => {
+              if (surfaceEventListener === listener) surfaceEventListener = null
+            }
+          },
+        },
+      })
+      mounted.setOptimisticUserMessages([{
+        id: optimisticMessageID,
+        text: 'Synthetic optimistic user message',
+        textPartId: optimisticTextPartID,
+        timestamp: created + 3,
+      }])
+
+      try {
+        const deadline = Date.now() + 10_000
+        let rendered = false
+        while (Date.now() < deadline) {
+          const text = container.textContent ?? ''
+          const toolPartCount = container.querySelectorAll('[data-component="tool-part-wrapper"]').length
+          const detailedToolOutputCount = container.querySelectorAll('[data-component="tool-output"]').length
+          if (
+            text.includes('Synthetic user message')
+            && text.includes('Synthetic assistant response')
+            && text.includes('Synthetic optimistic user message')
+            && text.includes('Shell')
+            && text.includes('echo official-shell')
+            && text.includes('https://example.com/debug')
+            && toolPartCount === 2
+            && detailedToolOutputCount === 0
+          ) {
+            rendered = true
+            break
+          }
+          const error = container.querySelector('[data-error="true"]')?.textContent?.trim()
+          if (error) return { error, rendered: false, requests, text: text.trim() }
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        }
+        if (!rendered) return {
+          detailedToolOutputCount: container.querySelectorAll('[data-component="tool-output"]').length,
+          rendered: false,
+          requests,
+          text: container.textContent?.trim() ?? '',
+          toolPartCount: container.querySelectorAll('[data-component="tool-part-wrapper"]').length,
+        }
+
+        surfaceEventListener?.({
+          event: {
+            type: 'message.updated',
+            properties: {
+              info: {
+                ...userMessage,
+                id: optimisticMessageID,
+                time: { created: created + 3 },
+              },
+            },
+          },
+          type: 'event',
+          workspacePath,
+        })
+        surfaceEventListener?.({
+          event: {
+            type: 'message.part.updated',
+            properties: {
+              part: {
+                id: optimisticTextPartID,
+                messageID: optimisticMessageID,
+                sessionID,
+                type: 'text',
+                text: 'Synthetic optimistic user message',
+              },
+            },
+          },
+          type: 'event',
+          workspacePath,
+        })
+        const reconciliationDeadline = Date.now() + 2_000
+        let reconciledUserMessageCount = 0
+        while (Date.now() < reconciliationDeadline) {
+          reconciledUserMessageCount = Array.from(container.querySelectorAll('[data-component="user-message"]'))
+            .filter((element) => element.textContent?.includes('Synthetic optimistic user message'))
+            .length
+          if (reconciledUserMessageCount === 1) break
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        }
+
+        container.querySelector('a[href="https://example.com/debug"]')?.click()
+        const sessionLink = document.createElement('a')
+        sessionLink.href = '/session/ses_debug_child'
+        sessionLink.textContent = 'Synthetic child session'
+        container.append(sessionLink)
+        sessionLink.click()
+        sessionLink.remove()
+
+        mounted.setOptimisticUserMessages([])
+        const removalDeadline = Date.now() + 2_000
+        while (
+          Array.from(container.querySelectorAll('[data-component="user-message"]'))
+            .filter((element) => element.textContent?.includes('Synthetic optimistic user message'))
+            .length !== 1
+          && Date.now() < removalDeadline
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        }
+        const confirmedUserMessageCount = Array.from(container.querySelectorAll('[data-component="user-message"]'))
+          .filter((element) => element.textContent?.includes('Synthetic optimistic user message'))
+          .length
+
+        const textColorProbe = document.createElement('span')
+        textColorProbe.style.color = 'var(--foreground-primary)'
+        container.append(textColorProbe)
+        const expectedTextColor = getComputedStyle(textColorProbe).color
+        textColorProbe.remove()
+        const markdownColor = getComputedStyle(container.querySelector('[data-component="markdown"]')).color
+        const userMessageColor = getComputedStyle(container.querySelector('[data-component="user-message"]')).color
+        const toolTrigger = container.querySelector('[data-component="tool-trigger"]')
+        const toolInfoMain = container.querySelector('[data-slot="basic-tool-tool-info-main"]')
+        const assistantContent = container.querySelector('[data-slot="session-turn-assistant-content"]')
+        const sessionList = container.querySelector('.aryn-opencode-session-list')
+        const toolTriggerStyle = getComputedStyle(toolTrigger)
+        const toolInfoMainStyle = getComputedStyle(toolInfoMain)
+        const assistantContentStyle = getComputedStyle(assistantContent)
+        const sessionListStyle = getComputedStyle(sessionList)
+        const outsideToolTrigger = document.createElement('div')
+        outsideToolTrigger.dataset.component = 'tool-trigger'
+        document.body.append(outsideToolTrigger)
+        const outsideToolTriggerDisplay = getComputedStyle(outsideToolTrigger).display
+        outsideToolTrigger.remove()
+
+        const portalMarker = document.createElement('span')
+        container.append(portalMarker)
+        const ownedPortalRoot = document.createElement('div')
+        Object.defineProperty(ownedPortalRoot, '_$host', { get: () => portalMarker })
+        document.body.append(ownedPortalRoot)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        const ownedPortalThemed = ownedPortalRoot.classList.contains('aryn-opencode-portal-theme')
+        ownedPortalRoot.remove()
+        portalMarker.remove()
+
+        return {
+          bodyNewLayoutEnabled: document.body.hasAttribute('data-new-layout'),
+          bodyPortalThemeEnabled: document.body.classList.contains('aryn-opencode-portal-theme'),
+          legacyBodyPortalThemeRemoved: !document.body.classList.contains('aryn-opencode-portal-theme'),
+          detailedToolOutputCount: container.querySelectorAll('[data-component="tool-output"]').length,
+          expectedTextColor,
+          markdownColor,
+          navigatedSessionIDs,
+          openedExternalLinks,
+          optimisticReconciled: reconciledUserMessageCount === 1,
+          optimisticNativeRetained: confirmedUserMessageCount === 1,
+          outsideToolTriggerDisplay,
+          ownedPortalThemed,
+          rootOpenCodeToken: getComputedStyle(document.documentElement).getPropertyValue('--gray-dark-1').trim(),
+          rendered: true,
+          requests,
+          expectedSessionListMaxWidth: window.matchMedia('(min-width: 1536px)').matches ? '1000px' : '800px',
+          text: container.textContent?.trim() ?? '',
+          toolPartCount: container.querySelectorAll('[data-component="tool-part-wrapper"]').length,
+          toolInfoMainDisplay: toolInfoMainStyle.display,
+          toolInfoMainGap: toolInfoMainStyle.gap,
+          toolTriggerDisplay: toolTriggerStyle.display,
+          assistantContentDisplay: assistantContentStyle.display,
+          assistantContentGap: assistantContentStyle.gap,
+          sessionListMaxWidth: sessionListStyle.maxWidth,
+          userMessageColor,
+        }
+      } finally {
+        window.__arynDebugOpenCodeSyntheticDispose = () => {
+          mounted.dispose()
+          container.remove()
+          delete window.__arynDebugOpenCodeSyntheticDispose
+        }
+      }
+    })
+    if (
+      !syntheticTurn.rendered
+      || !syntheticTurn.optimisticReconciled
+      || !syntheticTurn.optimisticNativeRetained
+      || !syntheticTurn.bodyNewLayoutEnabled
+      || syntheticTurn.bodyPortalThemeEnabled
+      || !syntheticTurn.legacyBodyPortalThemeRemoved
+      || syntheticTurn.markdownColor !== syntheticTurn.expectedTextColor
+      || syntheticTurn.userMessageColor !== syntheticTurn.expectedTextColor
+      || syntheticTurn.rootOpenCodeToken !== ''
+      || syntheticTurn.toolTriggerDisplay !== 'flex'
+      || syntheticTurn.toolInfoMainDisplay !== 'flex'
+      || syntheticTurn.toolInfoMainGap !== '8px'
+      || syntheticTurn.assistantContentDisplay !== 'flex'
+      || syntheticTurn.assistantContentGap !== '12px'
+      || syntheticTurn.sessionListMaxWidth !== syntheticTurn.expectedSessionListMaxWidth
+      || syntheticTurn.outsideToolTriggerDisplay !== 'block'
+      || !syntheticTurn.ownedPortalThemed
+      || syntheticTurn.openedExternalLinks?.[0] !== 'https://example.com/debug'
+      || syntheticTurn.navigatedSessionIDs?.[0] !== 'ses_debug_child'
+    ) {
+      throw new Error(`OpenCode synthetic message state flow failed: ${JSON.stringify(syntheticTurn)}`)
+    }
+    const surfaceDiagnostics = await page.evaluate(() => ({
+      legacyToolDetails: document.querySelectorAll('.opencode-tool, .opencode-native-timeline').length,
+      officialSurfaceCount: document.querySelectorAll('.opencode-session-surface-host .aryn-opencode-session-surface').length,
+      surfaceText: document.querySelector('.opencode-session-surface-host')?.textContent?.trim() ?? '',
+    }))
+    return { ...surfaceDiagnostics, surfaceStayedMounted, syntheticTurn }
+  }
 
   if (debugScenario === 'agent-mention-menu') {
     await page.click('.agent-composer-editor')
@@ -353,16 +801,23 @@ async function applyDebugScenario(page) {
         }
       }
 
+      const editor = document.querySelector('.agent-composer-editor')
       const menu = document.querySelector('.agent-composer-mention-menu')
       const field = document.querySelector('.agent-composer-field')
+      const listbox = menu?.querySelector('[role="listbox"]')
 
       return {
-        editorText: document.querySelector('.agent-composer-editor')?.textContent ?? '',
+        editor: {
+          focused: !!(editor && (document.activeElement === editor || editor.contains(document.activeElement))),
+        },
+        editorText: editor?.textContent ?? '',
         field: {
           rect: readRect('.agent-composer-field'),
         },
         menu: {
-          isInField: !!(menu && field?.contains(menu)),
+          activeItemCount: menu?.querySelectorAll('.agent-composer-mention-option.is-active[data-active="true"]').length ?? 0,
+          hasListbox: !!listbox,
+          isPortalled: !!(menu && field && !field.contains(menu)),
           itemCount: document.querySelectorAll('.agent-composer-mention-option').length,
           rect: readRect('.agent-composer-mention-menu'),
         },
@@ -433,7 +888,7 @@ async function applyDebugScenario(page) {
   })
 
   await page.waitForFunction(() => {
-    return document.querySelectorAll('.agent-composer-attachments .agent-attachment-item').length >= 2
+    return document.querySelectorAll('.agent-composer-attachments .agent-file-card').length >= 2
   }, null, { timeout: timeoutMs })
   await page.click('.agent-composer-editor')
   await page.keyboard.type('Myprompt')
@@ -463,10 +918,10 @@ async function applyDebugScenario(page) {
 
     return {
       attachments: {
-        count: document.querySelectorAll('.agent-composer-attachments .agent-attachment-item').length,
-        imagePreviewCount: document.querySelectorAll('.agent-composer-attachments .agent-attachment-preview.has-image img').length,
+        count: document.querySelectorAll('.agent-composer-attachments .agent-file-card').length,
+        imagePreviewCount: document.querySelectorAll('.agent-composer-attachments .agent-file-card-preview.has-image img').length,
         imageItemStyle: (() => {
-          const item = document.querySelector('.agent-composer-attachments .agent-attachment-item.is-image')
+          const item = document.querySelector('.agent-composer-attachments .agent-file-card.is-image')
           const style = item ? getComputedStyle(item) : null
           return style
             ? {
@@ -507,6 +962,74 @@ async function applyDebugScenario(page) {
       },
     }
   })
+}
+
+function assertDebugScenarioResult(result) {
+  if (!debugScenario) return
+  if (!result) {
+    throw new Error(`Debug scenario "${debugScenario}" did not return diagnostics.`)
+  }
+
+  if (debugScenario === 'agent-mention-menu') {
+    const fieldRect = result.field?.rect
+    const menuRect = result.menu?.rect
+    const textShellRect = result.textShell?.rect
+    const horizontalOverlap = menuRect && fieldRect
+      ? Math.max(0, Math.min(menuRect.right, fieldRect.right) - Math.max(menuRect.left, fieldRect.left))
+      : 0
+    const isAnchoredAboveComposer = !!(
+      menuRect
+      && textShellRect
+      && menuRect.top < textShellRect.top
+      && menuRect.bottom <= textShellRect.top + 8
+      && horizontalOverlap >= Math.min(menuRect.width, fieldRect?.width ?? 0) / 2
+    )
+    if (
+      !result.editorText.includes('@')
+      || !result.editor?.focused
+      || !result.menu?.hasListbox
+      || result.menu.activeItemCount !== 1
+      || result.menu.itemCount < 1
+      || !menuRect
+      || menuRect.width <= 0
+      || menuRect.height <= 0
+      || !isAnchoredAboveComposer
+    ) {
+      throw new Error(`Agent mention menu scenario failed: ${JSON.stringify(result)}`)
+    }
+    return
+  }
+
+  if (debugScenario === 'agent-attachments') {
+    if (
+      result.attachments?.count !== 2
+      || result.attachments.imagePreviewCount !== 2
+      || !result.editorText.includes('Myprompt')
+    ) {
+      throw new Error(`Agent attachment scenario failed: ${JSON.stringify(result)}`)
+    }
+    return
+  }
+
+  if (
+    !result.surfaceStayedMounted
+    || result.officialSurfaceCount !== 1
+    || result.legacyToolDetails !== 0
+  ) {
+    throw new Error(`OpenCode surface scenario failed: ${JSON.stringify(result)}`)
+  }
+}
+
+async function cleanupDebugScenario(page) {
+  if (debugScenario !== 'opencode-surface') return
+  try {
+    await page.evaluate(() => {
+      window.__arynDebugOpenCodeSyntheticDispose?.()
+    })
+    log('cleaned up OpenCode synthetic surface')
+  } catch (error) {
+    log('failed to clean up OpenCode synthetic surface', serializeError(error))
+  }
 }
 
 async function snapshotPage(page) {
@@ -619,12 +1142,14 @@ async function main() {
     paths: {
       appDataRoot,
       artifactRoot,
+      homeRoot,
       localAppDataRoot,
       mainEntry,
       rendererEntry,
       rootDir,
       runRoot,
       tempRoot,
+      userDataRoot,
     },
     process: {
       pid: null,
@@ -655,11 +1180,13 @@ async function main() {
   try {
     log('launching electron app root', { rootDir })
     app = await electron.launch({
-      args: [rootDir],
+      args: [`--user-data-dir=${userDataRoot}`, rootDir],
       env: {
         ...process.env,
         APPDATA: appDataRoot,
         ARYN_ELECTRON_DEBUG: '1',
+        ARYN_ELECTRON_DEBUG_HOME: homeRoot,
+        ARYN_ELECTRON_DEBUG_WORKSPACE: fixture.workspacePath,
         ELECTRON_ENABLE_LOGGING: '1',
         LOCALAPPDATA: localAppDataRoot,
         TEMP: tempRoot,
@@ -676,6 +1203,13 @@ async function main() {
     await restoreWorkspace(page, fixture)
     report.snapshot.afterRestore = await snapshotPage(page)
     report.snapshot.afterScenario = await applyDebugScenario(page)
+    assertDebugScenarioResult(report.snapshot.afterScenario)
+    if (debugScenario && (report.renderer.crashed || report.renderer.pageErrors.length > 0)) {
+      throw new Error(`Renderer failed during "${debugScenario}": ${JSON.stringify({
+        crashed: report.renderer.crashed,
+        pageErrors: report.renderer.pageErrors,
+      })}`)
+    }
     await page.screenshot({ path: screenshotPath, fullPage: false })
 
     report.ok = true
@@ -712,6 +1246,9 @@ async function main() {
     await fs.writeFile(reportPath, JSON.stringify(report, null, 2), 'utf8')
     process.exitCode = 1
   } finally {
+    if (page) {
+      await cleanupDebugScenario(page)
+    }
     if (app && !keepOpen) {
       await closeElectronApp(app)
     }

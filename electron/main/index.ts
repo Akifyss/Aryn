@@ -131,8 +131,18 @@ function getOptionalAppPath(name: Parameters<typeof app.getPath>[0]) {
 
 const preload = path.join(MAIN_DIST, 'preload', 'index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
-const homeDir = os.homedir() || getOptionalAppPath('home') || process.cwd()
-const documentsDir = getOptionalAppPath('documents') ?? path.join(homeDir, 'Documents')
+const configuredDebugHomeDir = process.env.ARYN_ELECTRON_DEBUG === '1'
+  ? process.env.ARYN_ELECTRON_DEBUG_HOME?.trim() || null
+  : null
+const configuredDebugWorkspaceDir = process.env.ARYN_ELECTRON_DEBUG === '1'
+  ? process.env.ARYN_ELECTRON_DEBUG_WORKSPACE?.trim() || null
+  : null
+const debugHomeDir = configuredDebugHomeDir ? path.resolve(configuredDebugHomeDir) : null
+const debugWorkspaceDir = configuredDebugWorkspaceDir ? path.resolve(configuredDebugWorkspaceDir) : null
+const homeDir = debugHomeDir ?? (os.homedir() || getOptionalAppPath('home') || process.cwd())
+const documentsDir = debugHomeDir
+  ? path.join(debugHomeDir, 'Documents')
+  : getOptionalAppPath('documents') ?? path.join(homeDir, 'Documents')
 const tempDir = getOptionalAppPath('temp') ?? os.tmpdir()
 const legacyUserDataDir = getOptionalAppPath('userData')
 const arynPaths = createArynPaths({
@@ -1229,6 +1239,10 @@ async function startApplication() {
   Menu.setApplicationMenu(null)
   applyDefaultAppIcon()
   await cleanupArynDataDirectoryTempFiles()
+
+  if (debugWorkspaceDir) {
+    await upsertProject(debugWorkspaceDir, { makeActive: true })
+  }
 
   try {
     const cleanupResult = await conversationStore.cleanupDrafts()

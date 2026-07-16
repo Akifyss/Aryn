@@ -39,11 +39,17 @@ Per-run files:
 
 - `runs/<run-id>/workspace/debug.md`: generated debug workspace file.
 - `runs/<run-id>/appdata`: isolated Electron `APPDATA`.
+- `runs/<run-id>/home`: isolated Aryn home and documents root.
 - `runs/<run-id>/localappdata`: isolated Electron `LOCALAPPDATA`.
 - `runs/<run-id>/temp`: isolated temp directory.
+- `runs/<run-id>/user-data`: isolated Electron/Chromium profile and cache.
 
 Each run uses its own `runs/<run-id>/` directory so a failed previous run does
-not reuse the same app data or single-instance lock.
+not reuse the same app data or single-instance lock. The debug process also
+overrides Aryn's home/documents roots, so `~/.aryn`, conversation workspaces,
+and external-Agent ownership indexes remain isolated from real user data. The
+generated fixture is registered through Aryn's normal project state before the
+window is created, so scenarios do not depend on projects from a real profile.
 
 ## Report Fields
 
@@ -70,7 +76,7 @@ npm.cmd run debug:electron
 Choose the file view mode. Default is `meo`.
 
 ```powershell
-$env:ARYN_ELECTRON_DEBUG_VIEW_MODE="default" # default | code | preview | meo
+$env:ARYN_ELECTRON_DEBUG_VIEW_MODE="code" # code | preview | meo
 npm.cmd run debug:electron
 ```
 
@@ -100,6 +106,27 @@ Run the Agent composer attachment scenario:
 
 ```powershell
 $env:ARYN_ELECTRON_DEBUG_SCENARIO="agent-attachments"
+npm.cmd run debug:electron
+```
+
+Run the Agent composer mention-menu scenario:
+
+```powershell
+$env:ARYN_ELECTRON_DEBUG_SCENARIO="agent-mention-menu"
+npm.cmd run debug:electron
+```
+
+Run the OpenCode official session-surface scenario. This creates an empty,
+isolated Aryn-owned OpenCode session without sending a provider prompt, verifies
+that the prebuilt official surface loads through the Electron IPC bridge, and
+mounts a synthetic user/assistant turn through the same production bundle. The
+scenario only passes when the text parts and compact official web-fetch tool are
+rendered, the tool's raw output remains hidden, optimistic messages reconcile
+without duplication, and composer updates do not remount the surface. OpenCode
+CLI must be installed, but this scenario does not require a configured model.
+
+```powershell
+$env:ARYN_ELECTRON_DEBUG_SCENARIO="opencode-surface"
 npm.cmd run debug:electron
 ```
 
