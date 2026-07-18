@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "useDefineForClassFields": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@t3tools/contracts": ["src/compat/contracts.ts"],
+      "@t3tools/contracts/settings": ["src/compat/contracts.ts"],
+      "@t3tools/client-runtime/environment": ["src/compat/environment.ts"],
+      "@t3tools/shared/chatList": ["src/compat/chat-list.ts"],
+      "@pierre/diffs/react": ["src/compat/pierre-diffs-react.tsx"],
+      "effect/Equal": ["src/compat/effect-equal.ts"],
+      "~/*": ["src/*"]
+    }
+  },
+  "include": ["src", "*.ts"]
+}
