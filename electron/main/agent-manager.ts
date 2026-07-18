@@ -295,7 +295,9 @@ export class AgentManager {
       return this.openCodeManager.sendPrompt(cwd, sessionPath, prompt, streamingBehavior, attachments, options)
     }
     if (scope.agentId === 'pi') return this.piCliManager.sendPrompt(cwd, sessionPath, prompt, streamingBehavior, attachments)
-    if (scope.agentId === 'codex') return this.codexManager.sendPrompt(cwd, sessionPath, prompt, streamingBehavior, attachments)
+    if (scope.agentId === 'codex') {
+      return this.codexManager.sendPrompt(cwd, sessionPath, prompt, streamingBehavior, attachments, options)
+    }
     return this.getBuiltinSessionManager(cwd, sessionPath).sendPrompt(prompt, streamingBehavior, attachments)
   }
 

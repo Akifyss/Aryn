@@ -1,21 +1,33 @@
+import { copyFile, rm } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
+import type { ServerNotification } from '../../src/features/agent/codex-protocol/generated/ServerNotification'
+import type { ServerRequest } from '../../src/features/agent/codex-protocol/generated/ServerRequest'
+import type { Model } from '../../src/features/agent/codex-protocol/generated/v2/Model'
+import type { ModelListResponse } from '../../src/features/agent/codex-protocol/generated/v2/ModelListResponse'
+import type { McpServerElicitationRequestResponse } from '../../src/features/agent/codex-protocol/generated/v2/McpServerElicitationRequestResponse'
+import type { PermissionsRequestApprovalResponse } from '../../src/features/agent/codex-protocol/generated/v2/PermissionsRequestApprovalResponse'
+import type { RequestPermissionProfile } from '../../src/features/agent/codex-protocol/generated/v2/RequestPermissionProfile'
+import type { Thread } from '../../src/features/agent/codex-protocol/generated/v2/Thread'
+import type { UserInput } from '../../src/features/agent/codex-protocol/generated/v2/UserInput'
 import { getAgentInteractionKey } from '../../src/features/agent/types'
 import type {
   AgentClientEventPayload,
   AgentInteractionResponse,
-  AgentMessageAttachment,
   AgentMessageFileChange,
   AgentPromptAttachment,
+  AgentPromptSendOptions,
   AgentRunningPromptBehavior,
   AgentSessionCreateOptions,
   AgentSessionSnapshot,
-  AgentSidebarMessage,
   AgentThinkingLevel,
   AgentWorkspaceState,
+  CodexNativeSessionSnapshot,
 } from '../../src/features/agent/types'
 import { AtomicJsonStore } from './json-file-store'
 import { prepareExternalCliEnvironment } from './external-cli-environment'
-import { JsonLineProcess } from './json-line-process'
+import { CodexRpcClient } from './codex-rpc-client'
+import { CodexSessionStore } from './codex-session-store'
 
 type JsonRecord = Record<string, unknown>
 
@@ -36,32 +48,26 @@ type CodexThreadIndex = {
   version: 1
 }
 
-type CodexModel = {
-  defaultReasoningEffort?: string
-  displayName?: string
-  hidden?: boolean
-  id: string
-  inputModalities?: string[]
-  isDefault?: boolean
-  model?: string
-  supportedReasoningEfforts?: Array<{ reasoningEffort?: string }>
+type QueuedCodexPrompt = {
+  attachments: AgentPromptAttachment[]
+  options?: AgentPromptSendOptions
+  prompt: string
 }
 
 type CodexBinding = {
   activeTurnId: string | null
   isStreaming: boolean
-  lastError: string | null
-  queuedPrompts: Array<{ attachments: AgentPromptAttachment[], prompt: string }>
+  queuedPrompts: QueuedCodexPrompt[]
   record: CodexThreadRecord
 }
 
 type PendingCodexInteraction = {
   approvalProtocol?: 'legacy' | 'v2'
   kind: 'approval' | 'permissions' | 'question'
-  originalId: unknown
-  requestedPermissions?: JsonRecord
+  originalId: ServerRequest['id']
   questionIds?: string[]
   requestId: string
+  requestedPermissions?: RequestPermissionProfile
   sessionId: string
 }
 
@@ -72,32 +78,27 @@ type CodexAgentManagerOptions = {
 
 const DEFAULT_INDEX: CodexThreadIndex = { threads: [], version: 1 }
 const THINKING_LEVELS: AgentThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
+const SNAPSHOT_COALESCE_MS = 16
 
 function workspaceIdentity(cwd: string) {
   const resolved = path.resolve(cwd)
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved
 }
 
-function nullableString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
+function isRecoverableModelsCacheError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  const explicitSchemaFailure = message.includes('failed to load models cache:')
+    && /missing field|unknown field|invalid type|expected .+ at line|EOF while parsing/i.test(message)
+  // Some Codex versions only write an incompatible-cache diagnostic to their
+  // own log stream and leave model/list pending. In that case the RPC client
+  // can only observe the timeout. Recovery remains bounded to one attempt and
+  // recoverModelsCache() is a no-op unless a cache file actually exists.
+  const modelListTimeout = /codex request ["']model\/list["'] timed out/i.test(message)
+  return explicitSchemaFailure || modelListTimeout
 }
 
-function codexErrorMessage(value: unknown): string | null {
-  if (value && typeof value === 'object') {
-    const error = value as JsonRecord
-    return codexErrorMessage(error.message) ?? codexErrorMessage(error.error)
-  }
-
-  const message = nullableString(value)
-  if (!message) return null
-  if (message.startsWith('{') || message.startsWith('[')) {
-    try {
-      return codexErrorMessage(JSON.parse(message)) ?? message
-    } catch {
-      // Some providers return plain text that happens to start with punctuation.
-    }
-  }
-  return message
+function nullableString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function reasoningEffort(value: unknown): AgentThinkingLevel {
@@ -111,9 +112,9 @@ function codexReasoningEffort(value: AgentThinkingLevel) {
   return value === 'off' ? 'none' : value
 }
 
-function codexModelThinkingLevels(model: CodexModel): AgentThinkingLevel[] {
-  const levels = (model.supportedReasoningEfforts ?? [])
-    .map((effort) => reasoningEffort(effort.reasoningEffort))
+function codexModelThinkingLevels(model: Model): AgentThinkingLevel[] {
+  const levels = model.supportedReasoningEfforts
+    .map((option) => reasoningEffort(option.reasoningEffort))
     .filter((effort, index, values) => values.indexOf(effort) === index)
   return levels.length > 0 ? levels : ['low', 'medium', 'high']
 }
@@ -143,82 +144,9 @@ function normalizeIndex(value: unknown): CodexThreadIndex {
   return { threads, version: 1 }
 }
 
-function resultData(response: JsonRecord) {
-  const result = response.result
-  if (!result || typeof result !== 'object') {
-    throw new Error('Codex App Server returned no result.')
-  }
-  return result as JsonRecord
-}
-
-function contentText(value: unknown) {
-  if (typeof value === 'string') return value
-  if (!Array.isArray(value)) return ''
-  return value.flatMap((item) => {
-    if (typeof item === 'string') return [item]
-    if (!item || typeof item !== 'object') return []
-    const part = item as JsonRecord
-    return typeof part.text === 'string' ? [part.text] : []
-  }).join('\n\n')
-}
-
 function isTransientThreadReadError(message: string) {
   return message.includes('is not materialized yet')
     || (message.includes('failed to load rollout') && message.includes('is empty'))
-}
-
-function contentAttachments(value: unknown): AgentMessageAttachment[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap((item, index): AgentMessageAttachment[] => {
-    if (!item || typeof item !== 'object') return []
-    const part = item as JsonRecord
-    if (part.type === 'image' && typeof part.url === 'string' && part.url) {
-      const mimeType = part.url.match(/^data:([^;,]+)/)?.[1]
-      return [{
-        data: part.url,
-        fileName: `image-${index + 1}`,
-        kind: 'image',
-        ...(mimeType ? { mimeType } : {}),
-        status: 'sent',
-      }]
-    }
-    if (part.type === 'localImage' && typeof part.path === 'string' && part.path) {
-      return [{
-        fileName: path.basename(part.path),
-        kind: 'image',
-        path: part.path,
-        status: 'referenced',
-      }]
-    }
-    return []
-  })
-}
-
-function toolStatus(value: unknown): 'done' | 'error' | 'running' {
-  const status = String(value ?? '').toLowerCase()
-  if (status.includes('fail') || status.includes('error') || status.includes('declin')) return 'error'
-  if (status.includes('complete') || status.includes('success')) return 'done'
-  return 'running'
-}
-
-function projectCodexFileChanges(value: unknown): AgentMessageFileChange[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap((entry): AgentMessageFileChange[] => {
-    const change = entry && typeof entry === 'object' ? entry as JsonRecord : {}
-    const filePath = nullableString(change.path)
-    if (!filePath) return []
-    const rawKind = change.kind && typeof change.kind === 'object'
-      ? String((change.kind as JsonRecord).type ?? '')
-      : String(change.kind ?? '')
-    return [{
-      filePath,
-      kind: rawKind === 'add' || rawKind === 'added'
-        ? 'created'
-        : rawKind === 'delete' || rawKind === 'deleted'
-          ? 'deleted'
-          : 'updated',
-    }]
-  })
 }
 
 function isServiceTierCompatibilityError(error: unknown) {
@@ -229,13 +157,47 @@ function isServiceTierCompatibilityError(error: unknown) {
   )
 }
 
+function fileChangesFromThread(thread: Thread) {
+  const fileChangesByEntryId: Record<string, AgentMessageFileChange[]> = {}
+  for (const turn of thread.turns) {
+    for (const item of turn.items) {
+      if (item.type !== 'fileChange') continue
+      fileChangesByEntryId[item.id] = item.changes.map((change) => ({
+        filePath: change.path,
+        kind: change.kind.type === 'add'
+          ? 'created'
+          : change.kind.type === 'delete'
+            ? 'deleted'
+            : 'updated',
+      }))
+    }
+  }
+  return fileChangesByEntryId
+}
+
+function countThreadMessages(thread: Thread) {
+  return thread.turns.reduce((count, turn) => count + turn.items.filter((item) => (
+    item.type === 'userMessage' || item.type === 'agentMessage'
+  )).length, 0)
+}
+
 export function buildCodexPermissionApprovalResult(
-  requestedPermissions: JsonRecord,
+  requestedPermissions: RequestPermissionProfile,
   optionId: string,
-) {
+): PermissionsRequestApprovalResponse {
   const approved = optionId === 'allow_once' || optionId === 'allow_always'
+  const permissions: PermissionsRequestApprovalResponse['permissions'] = approved
+    ? {
+        ...(requestedPermissions.fileSystem
+          ? { fileSystem: structuredClone(requestedPermissions.fileSystem) }
+          : {}),
+        ...(requestedPermissions.network
+          ? { network: structuredClone(requestedPermissions.network) }
+          : {}),
+      }
+    : {}
   return {
-    permissions: approved ? requestedPermissions : {},
+    permissions,
     scope: optionId === 'allow_always' ? 'session' : 'turn',
   }
 }
@@ -259,107 +221,36 @@ export function buildCodexApprovalResult(optionId: string, protocol: 'legacy' | 
   }
 }
 
-export function projectCodexThread(thread: JsonRecord, record: CodexThreadRecord): AgentSessionSnapshot {
-  const messages: AgentSidebarMessage[] = []
-  const fileChangesByEntryId: Record<string, AgentMessageFileChange[]> = {}
-  const turns = Array.isArray(thread.turns) ? thread.turns as JsonRecord[] : []
-  let timestamp = Date.parse(record.createdAt)
-
-  for (const turn of turns) {
-    const items = Array.isArray(turn.items) ? turn.items as JsonRecord[] : []
-    for (const item of items) {
-      timestamp += 1
-      const id = String(item.id ?? `${record.id}-${timestamp}`)
-      const type = String(item.type ?? '')
-      if (type === 'userMessage') {
-        const attachments = contentAttachments(item.content)
-        messages.push({
-          ...(attachments.length > 0 ? { attachments } : {}),
-          id,
-          kind: 'user',
-          text: contentText(item.content),
-          timestamp,
-        })
-      } else if (type === 'agentMessage') {
-        messages.push({ id, kind: 'assistant', status: 'done', text: String(item.text ?? ''), timestamp })
-      } else if (type === 'reasoning') {
-        const thinkingText = [contentText(item.summary), contentText(item.content)].filter(Boolean).join('\n\n')
-        if (thinkingText) messages.push({ id, kind: 'assistant', status: 'done', text: '', thinkingText, timestamp })
-      } else if (type === 'plan') {
-        messages.push({ id, kind: 'custom', label: 'Plan', text: String(item.text ?? ''), timestamp })
-      } else if (type === 'commandExecution') {
-        const status = toolStatus(item.status)
-        messages.push({
-          id,
-          isError: status === 'error',
-          kind: 'tool',
-          status,
-          text: String(item.aggregatedOutput ?? item.command ?? ''),
-          timestamp,
-          title: 'Terminal',
-        })
-      } else if (type === 'fileChange') {
-        const status = toolStatus(item.status)
-        const fileChanges = projectCodexFileChanges(item.changes)
-        if (fileChanges.length > 0) fileChangesByEntryId[id] = fileChanges
-        messages.push({
-          id,
-          isError: status === 'error',
-          kind: 'tool',
-          sessionEntryId: id,
-          status,
-          text: JSON.stringify(item.changes ?? []),
-          timestamp,
-          title: 'File changes',
-        })
-      } else if (type === 'mcpToolCall' || type === 'dynamicToolCall' || type === 'collabAgentToolCall' || type === 'webSearch') {
-        const status = toolStatus(item.status ?? 'completed')
-        messages.push({
-          id,
-          isError: status === 'error',
-          kind: 'tool',
-          status,
-          text: String(item.result ?? item.query ?? JSON.stringify(item.arguments ?? {})),
-          timestamp,
-          title: String(item.tool ?? item.server ?? type),
-        })
-      }
-    }
-    const turnErrorMessage = codexErrorMessage(turn.error)
-    if (String(turn.status ?? '') === 'failed' && turnErrorMessage) {
-      timestamp += 1
-      messages.push({
-        id: `${String(turn.id ?? record.id)}-error`,
-        isError: true,
-        kind: 'assistant',
-        status: 'error',
-        text: turnErrorMessage,
-        timestamp,
-      })
+export function buildCodexUserInputs(
+  prompt: string,
+  attachments: AgentPromptAttachment[],
+): UserInput[] {
+  const inputs: UserInput[] = prompt ? [{ type: 'text', text: prompt, text_elements: [] }] : []
+  for (const attachment of attachments) {
+    if (attachment.kind === 'file' && attachment.path) {
+      inputs.push({ type: 'mention', name: attachment.fileName, path: attachment.path })
+    } else if (attachment.kind === 'image') {
+      if (attachment.data) inputs.push({ type: 'image', url: attachment.data })
+      else if (attachment.path) inputs.push({ type: 'localImage', path: attachment.path })
     }
   }
-
-  return {
-    annotations: { fileChangesByEntryId },
-    messages,
-    name: record.name,
-    sessionId: record.id,
-    sessionPath: record.id,
-    workspacePath: record.cwd,
-  }
+  if (inputs.length === 0) throw new Error('Codex prompt must include text or an attachment.')
+  return inputs
 }
 
 export class CodexAgentManager {
   private readonly bindingStarts = new Map<string, Promise<CodexBinding>>()
   private readonly bindings = new Map<string, CodexBinding>()
-  private connection: JsonLineProcess | null = null
-  private connectionPromise: Promise<JsonLineProcess> | null = null
+  private client: CodexRpcClient | null = null
+  private clientPromise: Promise<CodexRpcClient> | null = null
   private disposed = false
   private readonly index: AtomicJsonStore<CodexThreadIndex>
-  private models: CodexModel[] = []
+  private models: Model[] = []
   private readonly pendingInteractions = new Map<string, PendingCodexInteraction>()
   private readonly recordReplacements = new Map<string, Promise<CodexThreadRecord>>()
   private serviceTierCompatibilityOverride = false
+  private readonly snapshotTimers = new Map<string, NodeJS.Timeout>()
+  private readonly sessionStore = new CodexSessionStore()
   private readonly workspaceActiveThreads = new Map<string, string>()
 
   constructor(private readonly options: CodexAgentManagerOptions) {
@@ -371,247 +262,256 @@ export class CodexAgentManager {
   }
 
   async loadDraftState(): Promise<AgentWorkspaceState> {
-    await this.ensureConnection()
+    await this.ensureClient()
     return { activeSession: null, runtime: this.serializeRuntime(null, null), sessions: [] }
   }
 
   async loadWorkspaceState(cwd: string, preferredSessionPath: string | null, options: { restoreSession?: boolean } = {}) {
-    await this.ensureConnection()
+    await this.ensureClient()
     const records = await this.listRecords(cwd)
-    let activeID = options.restoreSession === false
+    let activeId = options.restoreSession === false
       ? null
       : [preferredSessionPath, this.workspaceActiveThreads.get(workspaceIdentity(cwd)), records[0]?.id]
           .find((candidate): candidate is string => Boolean(candidate && records.some((record) => record.id === candidate)))
         ?? null
-    if (activeID) {
-      const record = await this.ensureOpenableRecord(cwd, activeID)
-      activeID = record.id
-      await this.requireBinding(cwd, activeID)
-      this.workspaceActiveThreads.set(workspaceIdentity(cwd), activeID)
+    if (activeId) {
+      const record = await this.ensureOpenableRecord(cwd, activeId)
+      activeId = record.id
+      await this.requireBinding(cwd, activeId)
+      this.workspaceActiveThreads.set(workspaceIdentity(cwd), activeId)
     }
-    return this.buildWorkspaceState(cwd, activeID)
+    return this.buildWorkspaceState(cwd, activeId)
   }
 
   async listSessionItems(cwd: string) {
-    return (await this.listRecords(cwd)).map((record) => ({
-      createdAt: record.createdAt,
-      id: record.id,
-      messageCount: 0,
-      modifiedAt: record.updatedAt,
-      name: record.name,
-      path: record.id,
-      preview: record.name ?? 'Codex thread',
-    }))
+    return (await this.listRecords(cwd)).map((record) => this.createSessionListItem(record))
   }
 
-  async readSession(cwd: string, threadID: string) {
-    const record = await this.requireRecord(cwd, threadID)
-    if (!record.materialized && !this.bindings.has(threadID)) {
-      return projectCodexThread({ turns: [] }, record)
+  async readSession(cwd: string, threadId: string) {
+    const record = await this.requireRecord(cwd, threadId)
+    if (!record.materialized) {
+      const snapshot = this.sessionStore.get(threadId)
+      if (!snapshot) throw new Error('Codex thread is not materialized and has no in-memory state.')
+      return this.createSessionSnapshot(record, snapshot)
     }
-    if (record.materialized) await this.requireBinding(cwd, threadID)
-    const connection = await this.ensureConnection()
-    let response: JsonRecord
+    await this.requireBinding(cwd, threadId)
+    const checkpoint = this.sessionStore.beginHydration(threadId)
     try {
-      response = await connection.request({ type: undefined, method: 'thread/read', params: { threadId: threadID, includeTurns: true } })
+      const response = await (await this.ensureClient()).request('thread/read', {
+        includeTurns: true,
+        threadId,
+      })
+      const native = this.sessionStore.hydrate(response.thread, checkpoint)
+      return this.createSessionSnapshot(record, native)
     } catch (error) {
+      this.sessionStore.cancelHydration(checkpoint)
+      const current = this.sessionStore.get(threadId)
       const message = error instanceof Error ? error.message : String(error)
-      const binding = this.bindings.get(threadID)
-      if (isTransientThreadReadError(message) && (!record.materialized || binding?.isStreaming)) {
-        return projectCodexThread({ turns: [] }, record)
+      // A newly materialized rollout can be observable through app-server
+      // notifications before thread/read can parse the on-disk JSONL. The
+      // in-memory snapshot is therefore the authoritative fallback for this
+      // narrowly classified transient failure, even if the turn has already
+      // flipped back to idle by the time this read races it.
+      if (current && isTransientThreadReadError(message)) {
+        return this.createSessionSnapshot(record, current)
       }
       throw error
     }
-    const thread = resultData(response).thread
-    if (!thread || typeof thread !== 'object') throw new Error('Codex thread could not be read.')
-    return projectCodexThread(thread as JsonRecord, record)
   }
 
-  async sessionExists(cwd: string, threadID: string) {
-    return (await this.listRecords(cwd)).some((record) => record.id === threadID)
+  async sessionExists(cwd: string, threadId: string) {
+    return (await this.listRecords(cwd)).some((record) => record.id === threadId)
   }
 
   async createSession(cwd: string, options?: string | AgentSessionCreateOptions) {
-    const connection = await this.ensureConnection()
+    const client = await this.ensureClient()
     const normalized = typeof options === 'string' ? { name: options } : options
     const defaultModel = this.defaultModel()
-    const defaultModelKey = defaultModel ? `openai/${defaultModel.model ?? defaultModel.id}` : null
+    const defaultModelKey = defaultModel ? `openai/${defaultModel.model}` : null
     const modelExplicit = Boolean(normalized?.modelKey && normalized.modelKey !== defaultModelKey)
-    const model = modelExplicit && normalized?.modelKey
-      ? this.resolveModelKey(normalized.modelKey)
-      : null
-    const effort = normalized?.thinkingLevel ?? this.defaultModel()?.defaultReasoningEffort ?? 'medium'
-    if (normalized?.modelKey) {
-      const selected = this.requireModel(normalized.modelKey)
-      if (!codexModelThinkingLevels(selected).includes(reasoningEffort(effort))) {
-        throw new Error(`Codex thinking level "${effort}" is not supported by "${normalized.modelKey}".`)
+    const selectedModel = normalized?.modelKey ? this.requireModel(normalized.modelKey) : defaultModel
+    const model = selectedModel?.model ?? null
+    const effort = reasoningEffort(normalized?.thinkingLevel ?? selectedModel?.defaultReasoningEffort)
+    if (selectedModel) {
+      if (!codexModelThinkingLevels(selectedModel).includes(effort)) {
+        const selectedModelKey = normalized?.modelKey ?? defaultModelKey ?? selectedModel.model
+        throw new Error(`Codex thinking level "${effort}" is not supported by "${selectedModelKey}".`)
       }
     }
-    const { result, threadID } = await this.startNativeThread(connection, cwd, model)
+
+    const result = await this.startNativeThread(client, cwd, model)
     const now = new Date().toISOString()
     const record: CodexThreadRecord = {
       createdAt: now,
       cwd,
-      id: threadID,
+      id: result.thread.id,
       materialized: false,
-      model: nullableString(result.model) ?? model,
+      model: result.model || model,
       modelExplicit,
       name: normalized?.name?.trim() || null,
-      reasoningEffort: reasoningEffort(effort),
+      reasoningEffort: effort,
       updatedAt: now,
     }
+    this.sessionStore.install(result.thread)
     try {
       await this.index.update((state) => ({ ...state, threads: [record, ...state.threads] }))
     } catch (error) {
-      await this.archiveThread(connection, threadID).catch(() => undefined)
+      this.sessionStore.delete(record.id)
       throw error
     }
-    this.bindings.set(threadID, { activeTurnId: null, isStreaming: false, lastError: null, queuedPrompts: [], record })
-    this.workspaceActiveThreads.set(workspaceIdentity(cwd), threadID)
-    if (record.name) await this.setThreadName(connection, record).catch(() => undefined)
-    return this.broadcastWorkspaceState(cwd, threadID)
+    this.bindings.set(record.id, { activeTurnId: null, isStreaming: false, queuedPrompts: [], record })
+    this.workspaceActiveThreads.set(workspaceIdentity(cwd), record.id)
+    return this.broadcastWorkspaceState(cwd, record.id)
   }
 
-  async openSession(cwd: string, threadID: string) {
-    const record = await this.ensureOpenableRecord(cwd, threadID)
+  async openSession(cwd: string, threadId: string) {
+    const record = await this.ensureOpenableRecord(cwd, threadId)
     await this.requireBinding(cwd, record.id)
     this.workspaceActiveThreads.set(workspaceIdentity(cwd), record.id)
     return this.broadcastWorkspaceState(cwd, record.id)
   }
 
-  async deleteSession(cwd: string, threadID: string) {
-    await this.requireRecord(cwd, threadID)
-    await this.bindingStarts.get(threadID)?.catch(() => undefined)
-    const connection = await this.ensureConnection()
-    const binding = this.bindings.get(threadID)
-    if (binding?.activeTurnId) {
-      await connection.request({
-        type: undefined,
-        method: 'turn/interrupt',
-        params: { threadId: threadID, turnId: binding.activeTurnId },
+  async deleteSession(cwd: string, threadId: string) {
+    const originalThreadId = threadId
+    let record = await this.requireRecord(cwd, threadId)
+    const replacement = this.recordReplacements.get(threadId)
+    if (replacement) record = await replacement
+    threadId = record.id
+    await this.bindingStarts.get(threadId)?.catch(() => undefined)
+    const binding = this.bindings.get(threadId)
+    if (record.materialized || binding) {
+      const client = await this.ensureClient()
+      if (binding?.activeTurnId) {
+        await client.request('turn/interrupt', { threadId, turnId: binding.activeTurnId })
+      }
+      await client.request('thread/delete', { threadId }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!message.includes('no rollout found') && !message.includes('not found')) throw error
       })
     }
-    await this.archiveThread(connection, threadID)
-    await this.index.update((state) => ({
-      ...state,
-      threads: state.threads.filter((record) => record.id !== threadID),
-    }))
-    this.bindings.delete(threadID)
-    this.clearPendingInteractions((pending) => pending.sessionId === threadID)
+    await this.removeRecord(threadId)
+    this.dropThreadRuntime(threadId)
+    if (originalThreadId !== threadId) this.dropThreadRuntime(originalThreadId)
     const identity = workspaceIdentity(cwd)
-    const activeThreadID = this.workspaceActiveThreads.get(identity) ?? null
-    if (activeThreadID === threadID) {
-      this.workspaceActiveThreads.delete(identity)
-    }
-    return this.broadcastWorkspaceState(cwd, activeThreadID === threadID ? null : activeThreadID)
+    const activeId = this.workspaceActiveThreads.get(identity) ?? null
+    const deletedActiveThread = activeId === threadId || activeId === originalThreadId
+    if (deletedActiveThread) this.workspaceActiveThreads.delete(identity)
+    return this.broadcastWorkspaceState(cwd, deletedActiveThread ? null : activeId)
   }
 
-  async renameSession(cwd: string, threadID: string, name: string) {
-    const record = await this.requireRecord(cwd, threadID)
-    record.name = name.trim() || null
-    record.updatedAt = new Date().toISOString()
+  async renameSession(cwd: string, threadId: string, name: string) {
+    let record = await this.requireRecord(cwd, threadId)
+    const replacement = this.recordReplacements.get(threadId)
+    if (replacement) record = await replacement
+    threadId = record.id
+    const normalizedName = name.trim()
+    if (!normalizedName) throw new Error('Codex 会话名称不能为空。')
+    record.name = normalizedName
     await this.updateRecord(record)
-    await this.setThreadName(await this.ensureConnection(), record)
-    const binding = this.bindings.get(threadID)
+    if (record.materialized) await this.setThreadName(await this.ensureClient(), record)
+    const binding = this.bindings.get(threadId)
     if (binding) binding.record = record
     return this.broadcastWorkspaceState(cwd, this.workspaceActiveThreads.get(workspaceIdentity(cwd)) ?? null)
   }
 
-  async sendPrompt(cwd: string, threadID: string, prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments: AgentPromptAttachment[] = []) {
-    const binding = await this.requireBinding(cwd, threadID)
+  async sendPrompt(
+    cwd: string,
+    threadId: string,
+    prompt: string,
+    streamingBehavior?: AgentRunningPromptBehavior,
+    attachments: AgentPromptAttachment[] = [],
+    options?: AgentPromptSendOptions,
+  ) {
+    const binding = await this.requireBinding(cwd, threadId)
     if (binding.isStreaming) {
       if (streamingBehavior === 'steer' && binding.activeTurnId) {
-        await (await this.ensureConnection()).request({
-          type: undefined,
-          method: 'turn/steer',
-          params: {
-            expectedTurnId: binding.activeTurnId,
-            input: this.buildInputs(prompt, attachments),
-            threadId: threadID,
-          },
+        await (await this.ensureClient()).request('turn/steer', {
+          ...(options?.clientMessageId ? { clientUserMessageId: options.clientMessageId } : {}),
+          expectedTurnId: binding.activeTurnId,
+          input: this.buildInputs(prompt, attachments),
+          threadId,
         })
-        await this.broadcastWorkspaceState(cwd, threadID).catch(() => undefined)
         return { ok: true }
       }
-      binding.queuedPrompts.push({ attachments, prompt })
-      await this.broadcastWorkspaceState(cwd, threadID).catch(() => undefined)
+      binding.queuedPrompts.push({ attachments, options, prompt })
       return { ok: true }
     }
-    await this.startTurn(binding, prompt, attachments)
-    await this.broadcastWorkspaceState(cwd, threadID).catch(() => undefined)
+    await this.startTurn(binding, prompt, attachments, options)
     return { ok: true }
   }
 
-  async selectModel(cwd: string, threadID: string, modelKey: string) {
-    const binding = await this.requireBinding(cwd, threadID)
+  async selectModel(cwd: string, threadId: string, modelKey: string) {
+    const binding = await this.requireBinding(cwd, threadId)
     const model = this.requireModel(modelKey)
-    binding.record.model = model.model ?? model.id
+    binding.record.model = model.model
     binding.record.modelExplicit = true
     const levels = codexModelThinkingLevels(model)
     if (!levels.includes(binding.record.reasoningEffort)) {
       binding.record.reasoningEffort = levels.includes('medium') ? 'medium' : levels[0]
     }
     await this.updateRecord(binding.record)
-    await this.resumeThread(binding.record)
-    return this.broadcastWorkspaceState(cwd, binding.record.id)
+    return this.broadcastWorkspaceState(cwd, threadId)
   }
 
-  async selectThinkingLevel(cwd: string, threadID: string, level: string, modelKey?: string) {
-    const binding = await this.requireBinding(cwd, threadID)
-    if (!THINKING_LEVELS.includes(level as AgentThinkingLevel)) {
-      throw new Error(`Codex thinking level "${level}" is invalid.`)
-    }
+  async selectThinkingLevel(cwd: string, threadId: string, level: string, modelKey?: string) {
+    const binding = await this.requireBinding(cwd, threadId)
+    const nextLevel = reasoningEffort(level)
+    if (!THINKING_LEVELS.includes(level as AgentThinkingLevel)) throw new Error(`Codex thinking level "${level}" is invalid.`)
     const model = modelKey
       ? this.requireModel(modelKey)
-      : this.models.find((candidate) => (candidate.model ?? candidate.id) === binding.record.model)
-    if (model && !codexModelThinkingLevels(model).includes(reasoningEffort(level))) {
-      throw new Error(`Codex thinking level "${level}" is not supported by "openai/${model.model ?? model.id}".`)
+      : this.models.find((candidate) => candidate.model === binding.record.model)
+    if (model && !codexModelThinkingLevels(model).includes(nextLevel)) {
+      throw new Error(`Codex thinking level "${level}" is not supported by "openai/${model.model}".`)
     }
-    binding.record.reasoningEffort = reasoningEffort(level)
-    if (modelKey && model) binding.record.model = model.model ?? model.id
-    if (modelKey && model) binding.record.modelExplicit = true
+    binding.record.reasoningEffort = nextLevel
+    if (modelKey && model) {
+      binding.record.model = model.model
+      binding.record.modelExplicit = true
+    }
     await this.updateRecord(binding.record)
-    return this.broadcastWorkspaceState(cwd, binding.record.id)
+    return this.broadcastWorkspaceState(cwd, threadId)
   }
 
-  async abortActivePrompt(cwd: string, threadID: string) {
-    const binding = await this.requireBinding(cwd, threadID)
+  async abortActivePrompt(cwd: string, threadId: string) {
+    const binding = await this.requireBinding(cwd, threadId)
     if (binding.activeTurnId) {
-      await (await this.ensureConnection()).request({
-        type: undefined,
-        method: 'turn/interrupt',
-        params: { threadId: binding.record.id, turnId: binding.activeTurnId },
+      await (await this.ensureClient()).request('turn/interrupt', {
+        threadId,
+        turnId: binding.activeTurnId,
       })
     }
-    binding.activeTurnId = null
-    binding.isStreaming = false
-    return this.broadcastWorkspaceState(cwd, binding.record.id)
+    // turn/interrupt only acknowledges the request. The turn remains active
+    // until App Server publishes its authoritative completion/status event.
+    return this.broadcastWorkspaceState(cwd, threadId)
   }
 
   respondToInteraction(response: AgentInteractionResponse) {
-    const interactionKey = getAgentInteractionKey(response.sessionId, response.requestId)
-    const pending = this.pendingInteractions.get(interactionKey)
-    if (!pending || !this.connection) return false
+    const key = getAgentInteractionKey(response.sessionId, response.requestId)
+    const pending = this.pendingInteractions.get(key)
+    if (!pending || !this.client) return false
     let result: JsonRecord
     if (pending.kind === 'question' && pending.questionIds) {
       result = {
         answers: Object.fromEntries(pending.questionIds.map((questionId, index) => {
-          const directAnswers = response.answers?.[questionId]
-          const fallbackAnswer = index === 0
+          const direct = response.answers?.[questionId]
+          const fallback = index === 0
             ? response.optionId.startsWith('answer:')
               ? response.optionId.slice('answer:'.length)
               : response.values?.[0] ?? ''
             : ''
-          return [questionId, { answers: directAnswers ?? (fallbackAnswer ? [fallbackAnswer] : []) }]
+          return [questionId, { answers: direct ?? (fallback ? [fallback] : []) }]
         })),
       }
     } else if (pending.kind === 'permissions') {
-      result = buildCodexPermissionApprovalResult(pending.requestedPermissions ?? {}, response.optionId)
+      result = buildCodexPermissionApprovalResult(
+        pending.requestedPermissions ?? { fileSystem: null, network: null },
+        response.optionId,
+      )
     } else {
       result = buildCodexApprovalResult(response.optionId, pending.approvalProtocol ?? 'v2')
     }
-    this.connection.notify({ id: pending.originalId, result })
-    this.pendingInteractions.delete(interactionKey)
+    this.client.respond(pending.originalId, result)
+    this.pendingInteractions.delete(key)
     this.options.emitEvent({
       type: 'interaction_resolved',
       requestId: response.requestId,
@@ -623,25 +523,32 @@ export class CodexAgentManager {
 
   async releaseWorkspaceRuntime(cwd: string) {
     const identity = workspaceIdentity(cwd)
-    const recordIds = new Set((await this.listRecords(cwd)).map((record) => record.id))
-    await Promise.all([...recordIds].map((threadID) => this.recordReplacements.get(threadID)?.catch(() => undefined)))
-    await Promise.all([...recordIds].map((threadID) => this.bindingStarts.get(threadID)?.catch(() => undefined)))
+    const ids = new Set((await this.listRecords(cwd)).map((record) => record.id))
+    await Promise.all([...ids].map((id) => this.recordReplacements.get(id)?.catch(() => undefined)))
+    await Promise.all([...ids].map((id) => this.bindingStarts.get(id)?.catch(() => undefined)))
     const bindings = [...this.bindings.values()].filter((binding) => workspaceIdentity(binding.record.cwd) === identity)
-    let failures: unknown[] = []
-    if (this.connection) {
-      const interruptResults = await Promise.allSettled(bindings.flatMap((binding) => binding.activeTurnId
-        ? [this.connection!.request({
-            type: undefined,
-            method: 'turn/interrupt',
-            params: { threadId: binding.record.id, turnId: binding.activeTurnId },
-          })]
-        : []))
-      failures = interruptResults.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
-    }
-    const threadIds = new Set(bindings.map((binding) => binding.record.id))
-    for (const threadID of threadIds) this.bindings.delete(threadID)
-    this.clearPendingInteractions((pending) => threadIds.has(pending.sessionId))
+    const client = this.client
+    const results = client
+      ? await Promise.allSettled(bindings.map(async (binding) => {
+          const failures: unknown[] = []
+          if (binding.activeTurnId) {
+            await client.request('turn/interrupt', {
+              threadId: binding.record.id,
+              turnId: binding.activeTurnId,
+            }).catch((error) => failures.push(error))
+          }
+          await client.request('thread/unsubscribe', {
+            threadId: binding.record.id,
+          }).catch((error) => failures.push(error))
+          if (failures.length === 1) throw failures[0]
+          if (failures.length > 1) {
+            throw new AggregateError(failures, `Codex thread ${binding.record.id} could not be released.`)
+          }
+        }))
+      : []
+    for (const binding of bindings) this.dropThreadRuntime(binding.record.id)
     this.workspaceActiveThreads.delete(identity)
+    const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
     if (failures.length > 0) throw new AggregateError(failures, 'One or more Codex turns could not be interrupted.')
   }
 
@@ -650,152 +557,231 @@ export class CodexAgentManager {
     if (records.length === 0) return
     await Promise.all(records.map((record) => this.recordReplacements.get(record.id)?.catch(() => undefined)))
     records = await this.listRecords(cwd)
-    await Promise.all(records.map((record) => this.bindingStarts.get(record.id)?.catch(() => undefined)))
-    const connection = await this.ensureConnection()
-    const archivedIds: string[] = []
+    const client = records.some((record) => record.materialized) ? await this.ensureClient() : null
+    const archived = new Set<string>()
     let firstError: unknown = null
     for (const record of records) {
       try {
-        await this.archiveThread(connection, record.id)
-        archivedIds.push(record.id)
-        this.bindings.delete(record.id)
-        this.clearPendingInteractions((pending) => pending.sessionId === record.id)
+        if (record.materialized && client) await this.archiveThread(client, record.id)
+        archived.add(record.id)
+        this.dropThreadRuntime(record.id)
       } catch (error) {
         firstError ??= error
       }
     }
-    if (archivedIds.length > 0) {
-      const archived = new Set(archivedIds)
+    if (archived.size > 0) {
       await this.index.update((state) => ({
         ...state,
         threads: state.threads.filter((record) => !archived.has(record.id)),
       }))
     }
-    if (archivedIds.length === records.length) this.workspaceActiveThreads.delete(workspaceIdentity(cwd))
+    if (archived.size === records.length) this.workspaceActiveThreads.delete(workspaceIdentity(cwd))
     if (firstError) throw firstError
   }
 
   dispose() {
     this.disposed = true
-    this.connection?.stop()
-    this.connection = null
-    this.connectionPromise = null
+    for (const timer of this.snapshotTimers.values()) clearTimeout(timer)
+    this.snapshotTimers.clear()
+    this.client?.stop()
+    this.client = null
+    this.clientPromise = null
     this.bindingStarts.clear()
     this.bindings.clear()
     this.pendingInteractions.clear()
     this.recordReplacements.clear()
+    this.sessionStore.clear()
     this.workspaceActiveThreads.clear()
   }
 
-  private async ensureConnection() {
+  private async ensureClient() {
     if (this.disposed) throw new Error('Codex manager has been disposed.')
-    if (!this.connectionPromise) {
-      if (this.connection) return this.connection
-      this.connectionPromise = this.startConnection()
+    if (!this.clientPromise) {
+      if (this.client) return this.client
+      this.clientPromise = this.startClient()
     }
     try {
-      return await this.connectionPromise
+      return await this.clientPromise
     } catch (error) {
-      ;(this.connection as JsonLineProcess | null)?.stop()
-      this.connection = null
-      this.connectionPromise = null
+      this.client = null
+      this.clientPromise = null
       throw error
     }
   }
 
-  private async startConnection() {
-    try {
-      return await this.initializeConnection(['app-server'])
-    } catch (error) {
-      if (this.disposed) throw error
-      if (!isServiceTierCompatibilityError(error)) throw error
-      this.serviceTierCompatibilityOverride = true
-      this.connection?.stop()
-      this.connection = null
-      return this.initializeConnection(['app-server', '-c', 'service_tier=fast'])
+  private async startClient() {
+    let cacheRecoveryAttempted = false
+    for (;;) {
+      const args = this.serviceTierCompatibilityOverride
+        ? ['app-server', '-c', 'service_tier=fast']
+        : ['app-server']
+      try {
+        return await this.initializeClient(args)
+      } catch (error) {
+        if (this.disposed) throw error
+        if (!cacheRecoveryAttempted && isRecoverableModelsCacheError(error)) {
+          cacheRecoveryAttempted = true
+          if (await this.recoverModelsCache()) continue
+        }
+        if (!this.serviceTierCompatibilityOverride && isServiceTierCompatibilityError(error)) {
+          this.serviceTierCompatibilityOverride = true
+          continue
+        }
+        throw error
+      }
     }
   }
 
-  private async initializeConnection(args: string[]) {
+  private async recoverModelsCache() {
+    const configuredHome = process.env.CODEX_HOME?.trim()
+    const codexHome = configuredHome ? path.resolve(configuredHome) : path.join(os.homedir(), '.codex')
+    const cachePath = path.join(codexHome, 'models_cache.json')
+    const backupPath = path.join(codexHome, 'models_cache.aryn-incompatible.json')
+    try {
+      await copyFile(cachePath, backupPath)
+      await rm(cachePath, { force: true })
+      console.warn(`[codex app-server] Rebuilt an incompatible models cache. The previous cache is preserved at ${backupPath}.`)
+      return true
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error
+        ? String((error as NodeJS.ErrnoException).code)
+        : null
+      if (code !== 'ENOENT') {
+        console.warn(`[codex app-server] Could not preserve and rebuild the incompatible models cache: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      return false
+    }
+  }
+
+  private async initializeClient(args: string[]) {
     await prepareExternalCliEnvironment()
     if (this.disposed) throw new Error('Codex manager has been disposed.')
-    let connection: JsonLineProcess
+    let client!: CodexRpcClient
     let eventChain = Promise.resolve()
-    connection = new JsonLineProcess({
+    client = new CodexRpcClient({
       args,
-      command: 'codex',
-      onEvent: (message) => {
+      onExit: (error) => this.handleConnectionExit(client, error),
+      onNotification: (notification) => {
         eventChain = eventChain
-          .then(() => this.handleMessage(message))
-          .catch((error) => {
-            const params = message.params && typeof message.params === 'object' ? message.params as JsonRecord : {}
-            this.options.emitEvent({
-              type: 'error',
-              message: `Codex 事件处理失败：${error instanceof Error ? error.message : String(error)}`,
-              sessionId: nullableString(params.threadId) ?? nullableString(params.conversationId),
-            })
-          })
+          .then(() => this.handleNotification(notification))
+          .catch((error) => this.options.emitEvent({
+            type: 'error',
+            message: `Codex event handling failed: ${error instanceof Error ? error.message : String(error)}`,
+            sessionId: 'threadId' in notification.params ? String(notification.params.threadId) : null,
+          }))
       },
-      onExit: (error) => {
-        this.handleConnectionExit(connection, error)
-      },
+      onProtocolWarning: (message) => console.warn(`[codex app-server] ${message}`),
+      onRequest: (request) => this.handleServerRequest(request),
     })
-    this.connection = connection
-    connection.start()
-    await connection.request({
-      type: undefined,
-      method: 'initialize',
-      params: {
-        capabilities: { experimentalApi: false },
+    this.client = client
+    client.start()
+    try {
+      await client.request('initialize', {
+        capabilities: {
+          experimentalApi: false,
+          requestAttestation: false,
+        },
         clientInfo: { name: 'aryn', title: 'Aryn', version: '0.1.0' },
-      },
-    })
-    connection.notify({ method: 'initialized', params: {} })
-    const modelsResponse = await connection.request({ type: undefined, method: 'model/list', params: { includeHidden: false, limit: 100 } }, 30_000)
-    const models = resultData(modelsResponse).data
-    if (this.disposed) {
-      connection.stop()
-      throw new Error('Codex manager was disposed during App Server initialization.')
+      })
+      client.notifyInitialized()
+      const [models] = await Promise.all([
+        this.loadModels(client),
+        client.request('account/read', { refreshToken: false }).catch(() => null),
+      ])
+      if (this.disposed) throw new Error('Codex manager was disposed during App Server initialization.')
+      this.models = models
+      return client
+    } catch (error) {
+      if (this.client === client) this.client = null
+      client.stop()
+      throw error
     }
-    this.models = Array.isArray(models) ? models as CodexModel[] : []
-    return connection
   }
 
-  private async handleMessage(message: JsonRecord) {
-    const method = String(message.method ?? '')
-    const params = message.params && typeof message.params === 'object' ? message.params as JsonRecord : {}
-    const threadID = nullableString(params.threadId) ?? nullableString(params.conversationId)
+  private async handleNotification(notification: ServerNotification) {
+    const native = this.sessionStore.apply(notification)
+    const threadId = native?.thread.id
+      ?? (notification.method === 'thread/started' ? notification.params.thread.id : null)
+      ?? ('threadId' in notification.params && typeof notification.params.threadId === 'string'
+        ? notification.params.threadId
+        : null)
+    if (!threadId) return
+    const binding = this.bindings.get(threadId)
 
-    if ('id' in message && (
-      method === 'item/commandExecution/requestApproval'
-      || method === 'item/fileChange/requestApproval'
-      || method === 'item/permissions/requestApproval'
-      || method === 'applyPatchApproval'
-      || method === 'execCommandApproval'
-    )) {
-      if (!threadID) {
-        this.rejectServerRequest(message, `${method} did not include a thread identifier.`)
-        return
-      }
-      const requestId = `codex:${String(message.id)}`
-      const detailValue = params.command ?? params.reason ?? params.grantRoot ?? params.fileChanges
-      const detail = Array.isArray(detailValue)
-        ? detailValue.map(String).join(' ')
-        : detailValue && typeof detailValue === 'object'
-          ? JSON.stringify(detailValue)
-          : String(detailValue ?? 'Codex 请求执行受保护操作。')
-      const isPermissionProfileRequest = method === 'item/permissions/requestApproval'
-      const isLegacyApproval = method === 'applyPatchApproval' || method === 'execCommandApproval'
-      const requestedPermissions = params.permissions && typeof params.permissions === 'object'
-        ? params.permissions as JsonRecord
-        : {}
-      this.pendingInteractions.set(getAgentInteractionKey(threadID, requestId), {
-        approvalProtocol: isLegacyApproval ? 'legacy' : 'v2',
-        kind: isPermissionProfileRequest ? 'permissions' : 'approval',
-        originalId: message.id,
+    if (notification.method === 'turn/started' && binding) {
+      binding.activeTurnId = notification.params.turn.id
+      binding.isStreaming = true
+    } else if (notification.method === 'turn/completed' && binding) {
+      binding.activeTurnId = null
+      binding.isStreaming = false
+      if (native) this.scheduleSessionSnapshot(threadId)
+      await this.touchRecord(binding.record).catch(() => undefined)
+      await this.startNextQueuedPrompt(binding)
+    } else if (notification.method === 'thread/name/updated' && binding) {
+      binding.record.name = notification.params.threadName?.trim() || null
+      if (native) this.scheduleSessionSnapshot(threadId)
+      await this.updateRecord(binding.record).catch(() => undefined)
+    } else if (notification.method === 'thread/status/changed' && binding) {
+      binding.isStreaming = notification.params.status.type === 'active'
+    } else if (notification.method === 'thread/closed' && binding) {
+      binding.activeTurnId = null
+      binding.isStreaming = false
+    } else if (notification.method === 'serverRequest/resolved') {
+      this.clearPendingInteractions((pending) => (
+        pending.sessionId === threadId
+        && String(pending.originalId) === String(notification.params.requestId)
+      ))
+    } else if (notification.method === 'error' && !notification.params.willRetry) {
+      this.options.emitEvent({
+        type: 'error',
+        message: notification.params.error.message,
+        sessionId: threadId,
+      })
+    }
+
+    if (binding && native) this.scheduleSessionSnapshot(threadId)
+  }
+
+  private handleServerRequest(request: ServerRequest) {
+    if (
+      request.method === 'account/chatgptAuthTokens/refresh'
+      || request.method === 'attestation/generate'
+    ) {
+      this.client?.respondError(request.id, -32601, `Unsupported Codex server request: ${request.method}.`)
+      return
+    }
+    const threadId = 'threadId' in request.params
+      ? request.params.threadId
+      : 'conversationId' in request.params
+        ? String(request.params.conversationId)
+        : null
+    if (!threadId) {
+      this.client?.respondError(request.id, -32602, `${request.method} did not include a thread identifier.`)
+      return
+    }
+
+    if (
+      request.method === 'item/commandExecution/requestApproval'
+      || request.method === 'item/fileChange/requestApproval'
+      || request.method === 'item/permissions/requestApproval'
+      || request.method === 'applyPatchApproval'
+      || request.method === 'execCommandApproval'
+    ) {
+      const params = request.params as unknown as JsonRecord
+      const isPermissions = request.method === 'item/permissions/requestApproval'
+      const isLegacy = request.method === 'applyPatchApproval' || request.method === 'execCommandApproval'
+      const requestedPermissions = isPermissions
+        ? request.params.permissions
+        : null
+      const detail = this.describeApproval(request)
+      const requestId = `codex:${String(request.id)}`
+      this.pendingInteractions.set(getAgentInteractionKey(threadId, requestId), {
+        approvalProtocol: isLegacy ? 'legacy' : 'v2',
+        kind: isPermissions ? 'permissions' : 'approval',
+        originalId: request.id,
         requestId,
-        ...(isPermissionProfileRequest ? { requestedPermissions } : {}),
-        sessionId: threadID,
+        ...(requestedPermissions ? { requestedPermissions } : {}),
+        sessionId: threadId,
       })
       this.options.emitEvent({
         type: 'interaction_requested',
@@ -803,240 +789,135 @@ export class CodexAgentManager {
           agentId: 'codex',
           id: requestId,
           kind: 'permission',
-          message: isPermissionProfileRequest
-            ? this.describeRequestedPermissions(requestedPermissions, detail)
-            : detail,
+          message: requestedPermissions ? this.describeRequestedPermissions(requestedPermissions, detail) : detail,
           options: [
             { id: 'deny', label: '拒绝' },
             { id: 'allow_once', label: '允许本次' },
             { id: 'allow_always', label: '本会话始终允许' },
           ],
-          sessionId: threadID,
-          title: isPermissionProfileRequest
+          sessionId: threadId,
+          title: isPermissions
             ? 'Codex 请求扩展权限'
-            : method.includes('fileChange') || method === 'applyPatchApproval'
+            : request.method.includes('fileChange') || request.method === 'applyPatchApproval'
               ? 'Codex 请求修改文件'
               : 'Codex 请求执行命令',
-          workspacePath: this.bindings.get(threadID)?.record.cwd ?? String(params.cwd ?? ''),
+          workspacePath: this.bindings.get(threadId)?.record.cwd ?? String(params.cwd ?? ''),
         },
       })
       return
     }
 
-    if ('id' in message && method === 'item/tool/requestUserInput') {
-      const questions = Array.isArray(params.questions) ? params.questions as JsonRecord[] : []
-      if (!threadID || questions.length === 0) {
-        this.rejectServerRequest(message, 'Codex user-input request was missing its thread or questions.')
+    if (request.method === 'item/tool/requestUserInput') {
+      const questions = request.params.questions
+      if (questions.length === 0) {
+        this.client?.respondError(request.id, -32602, 'Codex user-input request contained no questions.')
         return
       }
-      const requestId = `codex:${String(message.id)}`
-      const questionIds = questions.map((question, index) => String(question.id ?? `answer-${index + 1}`))
-      const fields = questions.map((question, index) => ({
-        allowsCustomAnswer: question.isOther === true || !Array.isArray(question.options) || question.options.length === 0,
-        id: questionIds[index],
-        isSecret: question.isSecret === true,
-        label: String(question.header ?? `问题 ${index + 1}`),
-        message: String(question.question ?? ''),
-        options: Array.isArray(question.options)
-          ? (question.options as JsonRecord[]).map((option) => ({
-              description: nullableString(option.description) ?? undefined,
-              id: String(option.label ?? ''),
-              label: String(option.label ?? '选择'),
-            }))
-          : [],
-      }))
-      this.pendingInteractions.set(getAgentInteractionKey(threadID, requestId), {
+      const requestId = `codex:${String(request.id)}`
+      const questionIds = questions.map((question) => question.id)
+      this.pendingInteractions.set(getAgentInteractionKey(threadId, requestId), {
         kind: 'question',
-        originalId: message.id,
+        originalId: request.id,
         questionIds,
         requestId,
-        sessionId: threadID,
+        sessionId: threadId,
       })
       this.options.emitEvent({
         type: 'interaction_requested',
         request: {
           agentId: 'codex',
-          fields,
+          fields: questions.map((question) => ({
+            allowsCustomAnswer: question.isOther || !question.options?.length,
+            id: question.id,
+            isSecret: question.isSecret,
+            label: question.header,
+            message: question.question,
+            options: question.options?.map((option) => ({
+              description: option.description,
+              id: option.label,
+              label: option.label,
+            })) ?? [],
+          })),
           id: requestId,
           kind: 'question',
-          message: questions.length === 1
-            ? String(questions[0].question ?? 'Codex 需要你的回答。')
-            : `Codex 有 ${questions.length} 个问题需要回答。`,
+          message: questions.length === 1 ? questions[0].question : `Codex 有 ${questions.length} 个问题需要回答。`,
           options: [{ id: 'deny', label: '取消' }],
-          sessionId: threadID,
-          title: questions.length === 1 ? String(questions[0].header ?? 'Codex 提问') : 'Codex 提问',
-          workspacePath: this.bindings.get(threadID)?.record.cwd ?? '',
+          sessionId: threadId,
+          title: questions.length === 1 ? questions[0].header : 'Codex 提问',
+          workspacePath: this.bindings.get(threadId)?.record.cwd ?? '',
         },
       })
       return
     }
 
-    if ('id' in message && method === 'mcpServer/elicitation/request') {
-      this.connection?.notify({ id: message.id, result: { action: 'decline' } })
-      this.options.emitEvent({
-        type: 'error',
-        message: `MCP 服务 ${nullableString(params.serverName) ?? ''} 请求了当前版本尚未支持的交互表单，已安全拒绝。`.replace(/\s+/g, ' ').trim(),
-        sessionId: threadID,
+    if (request.method === 'mcpServer/elicitation/request') {
+      const response: McpServerElicitationRequestResponse = {
+        _meta: null,
+        action: 'decline',
+        content: null,
+      }
+      this.client?.respond(request.id, response)
+      console.warn(`[codex app-server] Declined unsupported MCP elicitation from ${request.params.serverName}.`)
+      return
+    }
+    if (request.method === 'item/tool/call') {
+      this.client?.respond(request.id, {
+        contentItems: [{ type: 'inputText', text: 'Aryn did not register this dynamic tool.' }],
+        success: false,
       })
       return
     }
+    const unsupportedRequest = request as unknown as { id: string | number, method: string }
+    this.client?.respondError(
+      unsupportedRequest.id,
+      -32601,
+      `Unsupported Codex server request: ${unsupportedRequest.method}.`,
+    )
+  }
 
-    if ('id' in message && method === 'item/tool/call') {
-      this.connection?.notify({
-        id: message.id,
-        result: {
-          contentItems: [{ type: 'inputText', text: 'Aryn did not register this dynamic tool.' }],
-          success: false,
-        },
-      })
-      return
-    }
-
-    if ('id' in message && method === 'account/chatgptAuthTokens/refresh') {
-      this.rejectServerRequest(message, 'Aryn delegates authentication to the installed Codex CLI and cannot refresh client-managed tokens.')
-      return
-    }
-
-    if ('id' in message) {
-      this.rejectServerRequest(message, `Unsupported Codex server request: ${method || 'unknown'}.`)
-      return
-    }
-
-    if (!threadID) return
-    const binding = this.bindings.get(threadID)
-    if (!binding) return
-
-    if (method === 'turn/started') {
-      const turn = params.turn as JsonRecord | undefined
-      binding.activeTurnId = nullableString(turn?.id)
-      binding.isStreaming = true
-      binding.lastError = null
-      this.options.emitEvent({ type: 'assistant_message_started', sessionId: threadID })
-      return
-    }
-    if (method === 'item/agentMessage/delta' && typeof params.delta === 'string') {
-      this.options.emitEvent({ type: 'assistant_message_delta', delta: params.delta, sessionId: threadID })
-      return
-    }
-    if ((method === 'item/reasoning/summaryTextDelta' || method === 'item/reasoning/textDelta') && typeof params.delta === 'string') {
-      this.options.emitEvent({ type: 'assistant_thinking_delta', delta: params.delta, sessionId: threadID })
-      return
-    }
-    if (method === 'item/started' || method === 'item/completed') {
-      const item = params.item as JsonRecord | undefined
-      if (!item) return
-      const itemType = String(item.type ?? '')
-      if (['commandExecution', 'fileChange', 'mcpToolCall', 'dynamicToolCall', 'collabAgentToolCall', 'webSearch'].includes(itemType)) {
-        const toolName = String(item.tool ?? item.server ?? itemType)
-        const summary = String(item.command ?? item.query ?? item.aggregatedOutput ?? JSON.stringify(item.changes ?? item.arguments ?? {}))
-        this.options.emitEvent(method === 'item/started'
-          ? { type: 'tool_execution_started', sessionId: threadID, summary, toolCallId: String(item.id), toolName }
-          : {
-              type: 'tool_execution_finished',
-              isError: toolStatus(item.status) === 'error',
-              sessionId: threadID,
-              summary,
-              toolCallId: String(item.id),
-              toolName,
-            })
-        if (method === 'item/completed' && itemType === 'fileChange') {
-          const fileChanges = projectCodexFileChanges(item.changes)
-          if (fileChanges.length > 0) {
-            this.options.emitEvent({
-              type: 'session_annotations_updated',
-              annotations: { fileChangesByEntryId: { [String(item.id)]: fileChanges } },
-              sessionId: threadID,
-            })
-          }
-        }
-      }
-      return
-    }
-    if (method === 'turn/completed') {
-      const turn = params.turn && typeof params.turn === 'object' ? params.turn as JsonRecord : {}
-      const turnStatus = String(turn.status ?? '')
-      const finalError = codexErrorMessage(turn.error) ?? codexErrorMessage(binding.lastError)
-      binding.activeTurnId = null
-      binding.isStreaming = false
-      binding.lastError = null
-      if (turnStatus === 'failed' && finalError) {
-        this.options.emitEvent({ type: 'error', message: finalError, sessionId: threadID })
-      }
-      this.options.emitEvent({ type: 'assistant_thinking_finished', sessionId: threadID })
-      await this.touchRecord(binding.record).catch((error) => {
-        this.options.emitEvent({
-          type: 'error',
-          message: `Codex 会话索引更新失败：${error instanceof Error ? error.message : String(error)}`,
-          sessionId: threadID,
-        })
-      })
-      await this.broadcastWorkspaceState(binding.record.cwd, threadID).catch((error) => {
-        this.options.emitEvent({
-          type: 'error',
-          message: `Codex 会话状态刷新失败：${error instanceof Error ? error.message : String(error)}`,
-          sessionId: threadID,
-        })
-      })
-      const nextPrompt = binding.queuedPrompts.shift()
-      if (nextPrompt) {
-        try {
-          await this.startTurn(binding, nextPrompt.prompt, nextPrompt.attachments)
-          await this.broadcastWorkspaceState(binding.record.cwd, threadID).catch(() => undefined)
-        } catch (error) {
-          binding.activeTurnId = null
-          binding.isStreaming = false
-          binding.queuedPrompts.unshift(nextPrompt)
-          this.options.emitEvent({
-            type: 'error',
-            message: `Codex 排队消息启动失败：${error instanceof Error ? error.message : String(error)}`,
-            sessionId: threadID,
-          })
-        }
-      }
-      return
-    }
-    if (method === 'error') {
-      const error = params.error && typeof params.error === 'object' ? params.error as JsonRecord : {}
-      if (params.willRetry !== true) {
-        binding.lastError = codexErrorMessage(error) ?? 'Codex turn failed.'
-      }
+  private describeApproval(request: ServerRequest) {
+    switch (request.method) {
+      case 'item/commandExecution/requestApproval':
+        return request.params.command ?? request.params.reason ?? 'Codex 请求执行受保护的命令。'
+      case 'item/fileChange/requestApproval':
+        return request.params.reason ?? request.params.grantRoot ?? 'Codex 请求修改工作区文件。'
+      case 'item/permissions/requestApproval':
+        return request.params.reason ?? 'Codex 请求扩展当前权限。'
+      case 'execCommandApproval':
+        return request.params.command.join(' ')
+      case 'applyPatchApproval':
+        return request.params.reason ?? Object.keys(request.params.fileChanges).join('\n')
+      default:
+        return 'Codex 请求批准操作。'
     }
   }
 
-  private rejectServerRequest(message: JsonRecord, reason: string) {
-    if (!('id' in message)) return
-    this.connection?.notify({
-      error: { code: -32601, message: reason },
-      id: message.id,
-    })
-  }
-
-  private describeRequestedPermissions(permissions: JsonRecord, fallback: string) {
-    const fileSystem = permissions.fileSystem && typeof permissions.fileSystem === 'object'
-      ? permissions.fileSystem as JsonRecord
-      : null
-    const network = permissions.network && typeof permissions.network === 'object'
-      ? permissions.network as JsonRecord
-      : null
+  private describeRequestedPermissions(permissions: RequestPermissionProfile, fallback: string) {
+    const fileSystem = permissions.fileSystem
+    const network = permissions.network
     const lines: string[] = []
-    if (Array.isArray(fileSystem?.read) && fileSystem.read.length > 0) {
-      lines.push(`读取：${fileSystem.read.map(String).join('\n')}`)
-    }
-    if (Array.isArray(fileSystem?.write) && fileSystem.write.length > 0) {
-      lines.push(`写入：${fileSystem.write.map(String).join('\n')}`)
-    }
-    if (network?.enabled === true) {
-      lines.push('网络：允许访问')
-    }
+    if (Array.isArray(fileSystem?.read) && fileSystem.read.length > 0) lines.push(`读取：${fileSystem.read.map(String).join('\n')}`)
+    if (Array.isArray(fileSystem?.write) && fileSystem.write.length > 0) lines.push(`写入：${fileSystem.write.map(String).join('\n')}`)
+    if (network?.enabled === true) lines.push('网络：允许访问')
     return lines.join('\n\n') || fallback
   }
 
-  private handleConnectionExit(connection: JsonLineProcess, error: Error) {
-    if (this.connection !== connection) return
-    this.connection = null
-    this.connectionPromise = null
+  private handleConnectionExit(client: CodexRpcClient, error: Error) {
+    if (this.client !== client) return
+    this.client = null
+    this.clientPromise = null
     this.models = []
     for (const binding of this.bindings.values()) {
+      this.clearScheduledSnapshot(binding.record.id)
+      const native = this.sessionStore.markDisconnected(binding.record.id, error.message)
+      if (native) {
+        this.options.emitEvent({
+          type: 'session_snapshot_updated',
+          executionState: native.status,
+          session: this.createSessionSnapshot(binding.record, native),
+          sessionId: binding.record.id,
+        })
+      }
       if (binding.isStreaming) {
         this.options.emitEvent({
           type: 'error',
@@ -1049,144 +930,153 @@ export class CodexAgentManager {
     this.clearPendingInteractions(() => true)
   }
 
-  private clearPendingInteractions(predicate: (pending: PendingCodexInteraction) => boolean) {
-    for (const [interactionKey, pending] of this.pendingInteractions) {
-      if (!predicate(pending)) continue
-      this.pendingInteractions.delete(interactionKey)
-      this.options.emitEvent({
-        type: 'interaction_resolved',
-        requestId: pending.requestId,
-        resumeRun: false,
-        sessionId: pending.sessionId,
+  private async loadModels(client: CodexRpcClient) {
+    const models: Model[] = []
+    const seenCursors = new Set<string>()
+    let cursor: string | null = null
+    do {
+      const response: ModelListResponse = await client.request('model/list', {
+        cursor,
+        includeHidden: false,
+        limit: 100,
       })
-    }
-  }
-
-  private buildInputs(prompt: string, attachments: AgentPromptAttachment[]) {
-    const inputs: JsonRecord[] = [{ type: 'text', text: prompt, text_elements: [] }]
-    for (const attachment of attachments) {
-      if (attachment.kind === 'image' && attachment.data) {
-        inputs.push({ type: 'image', url: attachment.data })
-      } else if (attachment.kind === 'image' && attachment.path) {
-        inputs.push({ type: 'localImage', path: attachment.path })
-      } else if (attachment.path) {
-        inputs[0].text = `${String(inputs[0].text)}\n\nAttached file: ${attachment.path}`
+      models.push(...response.data)
+      const nextCursor = response.nextCursor ?? null
+      if (nextCursor && seenCursors.has(nextCursor)) {
+        throw new Error(`Codex model/list returned the repeated cursor "${nextCursor}".`)
       }
-    }
-    return inputs
+      if (nextCursor) seenCursors.add(nextCursor)
+      cursor = nextCursor
+    } while (cursor)
+    return models
   }
 
-  private async startNativeThread(connection: JsonLineProcess, cwd: string, model: string | null) {
-    const startThread = () => connection.request({
-      type: undefined,
-      method: 'thread/start',
-      params: {
-        approvalPolicy: 'on-request',
-        ...(this.serviceTierCompatibilityOverride ? { config: { service_tier: 'fast' }, serviceTier: 'fast' } : {}),
-        cwd,
-        ...(model ? { model } : {}),
-        sandbox: 'workspace-write',
-        serviceName: 'Aryn',
-        experimentalRawEvents: false,
-        persistExtendedHistory: true,
-      },
-    }, 30_000)
-    let response: JsonRecord
-    try {
-      response = await startThread()
-    } catch (error) {
-      if (!isServiceTierCompatibilityError(error) || this.serviceTierCompatibilityOverride) throw error
-      this.serviceTierCompatibilityOverride = true
-      response = await startThread()
-    }
-    const result = resultData(response)
-    const thread = result.thread as JsonRecord | undefined
-    const threadID = nullableString(thread?.id)
-    if (!threadID) throw new Error('Codex did not return a thread ID.')
-    return { result, threadID }
+  private buildInputs(prompt: string, attachments: AgentPromptAttachment[]): UserInput[] {
+    return buildCodexUserInputs(prompt, attachments)
   }
 
-  private async startTurn(binding: CodexBinding, prompt: string, attachments: AgentPromptAttachment[]) {
-    const response = await (await this.ensureConnection()).request({
-      type: undefined,
-      method: 'turn/start',
-      params: {
-        effort: codexReasoningEffort(binding.record.reasoningEffort),
-        input: this.buildInputs(prompt, attachments),
-        ...(binding.record.modelExplicit && binding.record.model ? { model: binding.record.model } : {}),
-        ...(this.serviceTierCompatibilityOverride ? { serviceTier: 'fast' } : {}),
-        threadId: binding.record.id,
-      },
-    }, 30_000)
-    const turn = resultData(response).turn as JsonRecord | undefined
-    binding.activeTurnId = nullableString(turn?.id)
-    binding.isStreaming = true
+  private async startNativeThread(client: CodexRpcClient, cwd: string, model: string | null) {
+    return client.request('thread/start', {
+      approvalPolicy: 'on-request',
+      ...(this.serviceTierCompatibilityOverride ? { config: { service_tier: 'fast' }, serviceTier: 'fast' } : {}),
+      cwd,
+      ...(model ? { model } : {}),
+      sandbox: 'workspace-write',
+      serviceName: 'Aryn',
+      threadSource: 'aryn',
+    })
+  }
+
+  private async startTurn(
+    binding: CodexBinding,
+    prompt: string,
+    attachments: AgentPromptAttachment[],
+    options?: AgentPromptSendOptions,
+  ) {
+    const client = await this.ensureClient()
+    const response = await client.request('turn/start', {
+      ...(options?.clientMessageId ? { clientUserMessageId: options.clientMessageId } : {}),
+      effort: codexReasoningEffort(binding.record.reasoningEffort),
+      input: this.buildInputs(prompt, attachments),
+      ...(binding.record.modelExplicit && binding.record.model ? { model: binding.record.model } : {}),
+      ...(this.serviceTierCompatibilityOverride ? { serviceTier: 'fast' } : {}),
+      threadId: binding.record.id,
+    })
+    binding.activeTurnId = response.turn.id
+    const observedTurn = this.sessionStore.get(binding.record.id)?.thread.turns
+      .find((turn) => turn.id === response.turn.id)
+    const completedBeforeResponse = Boolean(observedTurn && observedTurn.status !== 'inProgress')
+    binding.isStreaming = !completedBeforeResponse
+    if (completedBeforeResponse) binding.activeTurnId = null
     if (!binding.record.materialized) {
       binding.record.materialized = true
       await this.updateRecord(binding.record).catch((error) => {
+        console.warn(`[codex app-server] Turn started, but its thread metadata could not be persisted: ${error instanceof Error ? error.message : String(error)}`)
+      })
+      if (binding.record.name) {
+        void this.setThreadName(client, binding.record).catch((error) => {
+          console.warn(`[codex app-server] Failed to persist thread name: ${error instanceof Error ? error.message : String(error)}`)
+        })
+      }
+    }
+  }
+
+  private async startNextQueuedPrompt(binding: CodexBinding) {
+    while (!binding.isStreaming) {
+      const next = binding.queuedPrompts.shift()
+      if (!next) return
+      try {
+        await this.startTurn(binding, next.prompt, next.attachments, next.options)
+      } catch (error) {
         this.options.emitEvent({
           type: 'error',
-          message: `Codex 会话索引更新失败：${error instanceof Error ? error.message : String(error)}`,
+          message: `Codex queued prompt failed to start: ${error instanceof Error ? error.message : String(error)}`,
           sessionId: binding.record.id,
         })
-      })
+      }
     }
   }
 
   private async resumeThread(record: CodexThreadRecord) {
-    const connection = await this.ensureConnection()
-    await connection.request({
-      type: undefined,
-      method: 'thread/resume',
-      params: {
+    const checkpoint = this.sessionStore.beginHydration(record.id)
+    let response
+    try {
+      response = await (await this.ensureClient()).request('thread/resume', {
         approvalPolicy: 'on-request',
         ...(this.serviceTierCompatibilityOverride ? { config: { service_tier: 'fast' }, serviceTier: 'fast' } : {}),
         cwd: record.cwd,
         ...(record.modelExplicit && record.model ? { model: record.model } : {}),
         sandbox: 'workspace-write',
         threadId: record.id,
-      },
-    }, 30_000)
+      })
+      this.sessionStore.hydrate(response.thread, checkpoint)
+    } catch (error) {
+      this.sessionStore.cancelHydration(checkpoint)
+      throw error
+    }
+    if (!record.modelExplicit) record.model = response.model || record.model
     const existing = this.bindings.get(record.id)
-    this.bindings.set(record.id, existing ?? { activeTurnId: null, isStreaming: false, lastError: null, queuedPrompts: [], record })
+    this.bindings.set(record.id, existing ?? {
+      activeTurnId: null,
+      isStreaming: response.thread.status.type === 'active',
+      queuedPrompts: [],
+      record,
+    })
   }
 
   private defaultModel() {
     return this.models.find((model) => model.isDefault) ?? this.models[0] ?? null
   }
 
-  private resolveModelKey(modelKey: string) {
-    const match = this.requireModel(modelKey)
-    return match.model ?? match.id
-  }
-
   private requireModel(modelKey: string) {
     const normalized = modelKey.trim()
-    const match = this.models.find((model) => `openai/${model.model ?? model.id}` === normalized)
+    const match = this.models.find((model) => `openai/${model.model}` === normalized)
     if (!match) throw new Error(`Codex model "${modelKey}" is not available.`)
     return match
   }
 
   private serializeRuntime(cwd: string | null, binding: CodexBinding | null): AgentWorkspaceState['runtime'] {
     const models = this.models.filter((model) => !model.hidden)
-    const availableModels = models.map((model) => `openai/${model.model ?? model.id}`)
+    const availableModels = models.map((model) => `openai/${model.model}`)
     const levelsByModel: Record<string, AgentThinkingLevel[]> = Object.fromEntries(models.map((model) => [
-      `openai/${model.model ?? model.id}`,
+      `openai/${model.model}`,
       codexModelThinkingLevels(model),
     ]))
     const defaultModel = this.defaultModel()
-    const defaultModelKey = defaultModel ? `openai/${defaultModel.model ?? defaultModel.id}` : null
+    const defaultModelKey = defaultModel ? `openai/${defaultModel.model}` : null
     const selectedModel = binding?.record.model ? `openai/${binding.record.model}` : defaultModelKey
     const levels: AgentThinkingLevel[] = selectedModel
       ? levelsByModel[selectedModel] ?? ['low', 'medium', 'high']
       : ['low', 'medium', 'high']
+    const native = binding ? this.sessionStore.get(binding.record.id) : null
+    const executionState = native?.status ?? (binding?.isStreaming ? { type: 'busy' as const } : { type: 'idle' as const })
 
     return {
       agentId: 'codex',
       auth: {},
       availableModelInputs: Object.fromEntries(models.map((model) => [
-        `openai/${model.model ?? model.id}`,
-        model.inputModalities?.includes('image') ? ['text', 'image'] : ['text'],
+        `openai/${model.model}`,
+        model.inputModalities.includes('image') ? ['text', 'image'] : ['text'],
       ])),
       availableModels,
       availableThinkingLevels: levels,
@@ -1194,51 +1084,102 @@ export class CodexAgentManager {
       compactionReason: null,
       defaultModel: defaultModelKey,
       defaultThinkingLevel: reasoningEffort(defaultModel?.defaultReasoningEffort),
+      executionState,
       followUpMessageCount: binding?.queuedPrompts.length ?? 0,
-      followUpMessages: binding?.queuedPrompts.map((prompt) => prompt.prompt) ?? [],
+      followUpMessages: binding?.queuedPrompts.map((queued) => queued.prompt) ?? [],
       followUpMode: 'one-at-a-time',
       hasConfiguredModels: availableModels.length > 0,
       isCompacting: false,
       isStreaming: binding?.isStreaming ?? false,
       pendingMessageCount: binding?.queuedPrompts.length ?? 0,
-      preferredModelByProvider: defaultModel ? { openai: defaultModel.model ?? defaultModel.id } : {},
-      retryAttempt: 0,
+      preferredModelByProvider: defaultModelKey ? { openai: defaultModelKey } : {},
+      retryAttempt: executionState.type === 'retry' ? executionState.attempt : 0,
       retryMaxAttempts: null,
       selectedModel,
       setupHint: availableModels.length > 0 ? null : 'Codex 当前没有可用模型，请先通过 Codex CLI 完成登录。',
       supportedRunningPromptBehaviors: ['steer', 'followUp'],
       supportsQueuedMessageEditing: false,
+      supportsThinking: levels.some((level) => level !== 'off'),
       steeringMessageCount: 0,
       steeringMessages: [],
       steeringMode: 'one-at-a-time',
-      supportsThinking: levels.some((level) => level !== 'off'),
       thinkingLevel: binding?.record.reasoningEffort ?? reasoningEffort(defaultModel?.defaultReasoningEffort),
       workspacePath: cwd,
     }
   }
 
-  private async buildWorkspaceState(cwd: string, activeThreadID: string | null): Promise<AgentWorkspaceState> {
-    const records = await this.listRecords(cwd)
-    const binding = activeThreadID ? await this.requireBinding(cwd, activeThreadID) : null
+  private createSessionSnapshot(record: CodexThreadRecord, native: CodexNativeSessionSnapshot): AgentSessionSnapshot {
     return {
-      activeSession: binding ? await this.readSession(cwd, binding.record.id) : null,
-      runtime: this.serializeRuntime(cwd, binding),
-      sessions: records.map((record) => ({
-        createdAt: record.createdAt,
-        id: record.id,
-        messageCount: 0,
-        modifiedAt: record.updatedAt,
-        name: record.name,
-        path: record.id,
-        preview: record.name ?? 'Codex thread',
-      })),
+      annotations: { fileChangesByEntryId: fileChangesFromThread(native.thread) },
+      messages: [],
+      name: record.name ?? native.thread.name,
+      native,
+      sessionId: record.id,
+      sessionPath: record.id,
+      workspacePath: record.cwd,
     }
   }
 
-  private async broadcastWorkspaceState(cwd: string, activeThreadID: string | null) {
-    const state = await this.buildWorkspaceState(cwd, activeThreadID)
+  private createSessionListItem(record: CodexThreadRecord) {
+    const native = this.sessionStore.get(record.id)
+    return {
+      createdAt: record.createdAt,
+      id: record.id,
+      messageCount: native ? countThreadMessages(native.thread) : 0,
+      modifiedAt: record.updatedAt,
+      name: record.name ?? native?.thread.name ?? null,
+      path: record.id,
+      preview: record.name ?? native?.thread.preview ?? 'Codex thread',
+    }
+  }
+
+  private async buildWorkspaceState(cwd: string, activeThreadId: string | null): Promise<AgentWorkspaceState> {
+    const records = await this.listRecords(cwd)
+    const binding = activeThreadId ? await this.requireBinding(cwd, activeThreadId) : null
+    const native = binding ? this.sessionStore.get(binding.record.id) : null
+    return {
+      activeSession: binding
+        ? native
+          ? this.createSessionSnapshot(binding.record, native)
+          : await this.readSession(cwd, binding.record.id)
+        : null,
+      runtime: this.serializeRuntime(cwd, binding),
+      sessions: records.map((record) => this.createSessionListItem(record)),
+    }
+  }
+
+  private async broadcastWorkspaceState(cwd: string, activeThreadId: string | null) {
+    const state = await this.buildWorkspaceState(cwd, activeThreadId)
     this.options.emitEvent({ type: 'workspace_state', state })
     return state
+  }
+
+  private emitSessionSnapshot(threadId: string) {
+    this.clearScheduledSnapshot(threadId)
+    const binding = this.bindings.get(threadId)
+    const native = this.sessionStore.get(threadId)
+    if (!binding || !native) return
+    this.options.emitEvent({
+      type: 'session_snapshot_updated',
+      executionState: native.status,
+      session: this.createSessionSnapshot(binding.record, native),
+      sessionId: threadId,
+    })
+  }
+
+  private scheduleSessionSnapshot(threadId: string) {
+    if (this.snapshotTimers.has(threadId)) return
+    this.snapshotTimers.set(threadId, setTimeout(() => {
+      this.snapshotTimers.delete(threadId)
+      this.emitSessionSnapshot(threadId)
+    }, SNAPSHOT_COALESCE_MS))
+  }
+
+  private clearScheduledSnapshot(threadId: string) {
+    const timer = this.snapshotTimers.get(threadId)
+    if (!timer) return
+    clearTimeout(timer)
+    this.snapshotTimers.delete(threadId)
   }
 
   private async listRecords(cwd: string) {
@@ -1248,77 +1189,64 @@ export class CodexAgentManager {
       .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
   }
 
-  private async requireRecord(cwd: string, threadID: string) {
-    const record = (await this.listRecords(cwd)).find((candidate) => candidate.id === threadID)
+  private async requireRecord(cwd: string, threadId: string) {
+    const record = (await this.listRecords(cwd)).find((candidate) => candidate.id === threadId)
     if (!record) throw new Error('Codex thread not found for this Aryn workspace.')
     return record
   }
 
-  private async ensureOpenableRecord(cwd: string, threadID: string) {
-    const record = await this.requireRecord(cwd, threadID)
-    if (record.materialized || this.bindings.has(threadID)) return record
-    const pending = this.recordReplacements.get(threadID)
+  private async ensureOpenableRecord(cwd: string, threadId: string) {
+    const record = await this.requireRecord(cwd, threadId)
+    if (record.materialized || this.bindings.has(threadId)) return record
+    const pending = this.recordReplacements.get(threadId)
     if (pending) return pending
     const start = (async () => {
-      const connection = await this.ensureConnection()
-      const { result, threadID: replacementID } = await this.startNativeThread(
-        connection,
-        cwd,
-        record.modelExplicit ? record.model : null,
-      )
+      const client = await this.ensureClient()
+      const result = await this.startNativeThread(client, cwd, record.modelExplicit ? record.model : null)
       const replacement: CodexThreadRecord = {
         ...record,
-        id: replacementID,
-        model: nullableString(result.model) ?? record.model,
+        id: result.thread.id,
+        model: result.model || record.model,
         updatedAt: new Date().toISOString(),
       }
-      try {
-        await this.index.update((state) => ({
-          ...state,
-          threads: state.threads.map((candidate) => candidate.id === threadID ? replacement : candidate),
-        }))
-      } catch (error) {
-        await this.archiveThread(connection, replacementID).catch(() => undefined)
-        throw error
-      }
-      this.bindings.delete(threadID)
-      this.clearPendingInteractions((candidate) => candidate.sessionId === threadID)
-      this.bindings.set(replacementID, {
+      await this.index.update((state) => ({
+        ...state,
+        threads: state.threads.map((candidate) => candidate.id === threadId ? replacement : candidate),
+      }))
+      this.dropThreadRuntime(threadId)
+      this.sessionStore.install(result.thread)
+      this.bindings.set(replacement.id, {
         activeTurnId: null,
         isStreaming: false,
-        lastError: null,
         queuedPrompts: [],
         record: replacement,
       })
       const identity = workspaceIdentity(cwd)
-      if (this.workspaceActiveThreads.get(identity) === threadID) {
-        this.workspaceActiveThreads.set(identity, replacementID)
-      }
-      if (replacement.name) await this.setThreadName(connection, replacement).catch(() => undefined)
+      if (this.workspaceActiveThreads.get(identity) === threadId) this.workspaceActiveThreads.set(identity, replacement.id)
       return replacement
     })().finally(() => {
-      if (this.recordReplacements.get(threadID) === start) this.recordReplacements.delete(threadID)
+      if (this.recordReplacements.get(threadId) === start) this.recordReplacements.delete(threadId)
     })
-    this.recordReplacements.set(threadID, start)
+    this.recordReplacements.set(threadId, start)
     return start
   }
 
-  private async requireBinding(cwd: string, threadID: string) {
-    const existing = this.bindings.get(threadID)
+  private async requireBinding(cwd: string, threadId: string) {
+    const existing = this.bindings.get(threadId)
     if (existing) return this.requireBindingWorkspace(existing, cwd)
-    const pending = this.bindingStarts.get(threadID)
+    const pending = this.bindingStarts.get(threadId)
     if (pending) return this.requireBindingWorkspace(await pending, cwd)
-    const start = this.requireRecord(cwd, threadID)
+    const start = this.requireRecord(cwd, threadId)
       .then(async (record) => {
         await this.resumeThread(record)
-        const binding = this.bindings.get(threadID)
+        const binding = this.bindings.get(threadId)
         if (!binding) throw new Error('Codex thread resumed without creating a runtime binding.')
         return binding
       })
       .finally(() => {
-        if (this.bindingStarts.get(threadID) === start) this.bindingStarts.delete(threadID)
+        if (this.bindingStarts.get(threadId) === start) this.bindingStarts.delete(threadId)
       })
-    this.bindingStarts.set(threadID, start)
+    this.bindingStarts.set(threadId, start)
     return start
   }
 
@@ -1329,15 +1257,15 @@ export class CodexAgentManager {
     return binding
   }
 
-  private async setThreadName(connection: JsonLineProcess, record: CodexThreadRecord) {
+  private async setThreadName(client: CodexRpcClient, record: CodexThreadRecord) {
     if (!record.name) return
-    await connection.request({ type: undefined, method: 'thread/name/set', params: { threadId: record.id, name: record.name } })
+    await client.request('thread/name/set', { name: record.name, threadId: record.id })
   }
 
-  private async archiveThread(connection: JsonLineProcess, threadID: string) {
-    await connection.request({ type: undefined, method: 'thread/archive', params: { threadId: threadID } }).catch((error) => {
+  private async archiveThread(client: CodexRpcClient, threadId: string) {
+    await client.request('thread/archive', { threadId }).catch((error) => {
       const message = error instanceof Error ? error.message : String(error)
-      if (!message.includes('no rollout found')) throw error
+      if (!message.includes('no rollout found') && !message.includes('not found')) throw error
     })
   }
 
@@ -1351,5 +1279,32 @@ export class CodexAgentManager {
 
   private async touchRecord(record: CodexThreadRecord) {
     await this.updateRecord(record)
+  }
+
+  private async removeRecord(threadId: string) {
+    await this.index.update((state) => ({
+      ...state,
+      threads: state.threads.filter((record) => record.id !== threadId),
+    }))
+  }
+
+  private dropThreadRuntime(threadId: string) {
+    this.clearScheduledSnapshot(threadId)
+    this.bindings.delete(threadId)
+    this.sessionStore.delete(threadId)
+    this.clearPendingInteractions((pending) => pending.sessionId === threadId)
+  }
+
+  private clearPendingInteractions(predicate: (pending: PendingCodexInteraction) => boolean) {
+    for (const [key, pending] of this.pendingInteractions) {
+      if (!predicate(pending)) continue
+      this.pendingInteractions.delete(key)
+      this.options.emitEvent({
+        type: 'interaction_resolved',
+        requestId: pending.requestId,
+        resumeRun: false,
+        sessionId: pending.sessionId,
+      })
+    }
   }
 }

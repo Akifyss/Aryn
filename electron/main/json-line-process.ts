@@ -22,6 +22,17 @@ type PendingRequest = {
   timeout: NodeJS.Timeout
 }
 
+export class JsonRpcRequestError extends Error {
+  constructor(
+    message: string,
+    readonly code: number | null,
+    readonly data: unknown,
+  ) {
+    super(message)
+    this.name = 'JsonRpcRequestError'
+  }
+}
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
 const DEFAULT_MAX_PROTOCOL_LINE_LENGTH = 64 * 1024 * 1024
 
@@ -131,7 +142,7 @@ export class JsonLineProcess {
     return new Promise<T>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id)
-        reject(new Error(`${this.options.command} request "${String(message.type ?? 'unknown')}" timed out.`))
+        reject(new Error(`${this.options.command} request "${String(message.method ?? message.type ?? 'unknown')}" timed out.`))
       }, timeoutMs)
       this.pendingRequests.set(id, {
         reject,
@@ -222,7 +233,14 @@ export class JsonLineProcess {
         this.pendingRequests.delete(id)
         clearTimeout(pending.timeout)
         if (message.success === false || ('error' in message && message.error != null)) {
-          pending.reject(new Error(formatProtocolError(message.error, `${this.options.command} request failed.`)))
+          const error = message.error && typeof message.error === 'object'
+            ? message.error as JsonRecord
+            : null
+          pending.reject(new JsonRpcRequestError(
+            formatProtocolError(message.error, `${this.options.command} request failed.`),
+            typeof error?.code === 'number' ? error.code : null,
+            error?.data,
+          ))
         } else {
           pending.resolve(message)
         }

@@ -5,6 +5,9 @@ import type {
   Part as OpenCodePart,
   SnapshotFileDiff as OpenCodeSnapshotFileDiff,
 } from '@opencode-ai/sdk/v2'
+import type { Thread as CodexThread } from '@/features/agent/codex-protocol/generated/v2/Thread'
+import type { ThreadTokenUsage as CodexThreadTokenUsage } from '@/features/agent/codex-protocol/generated/v2/ThreadTokenUsage'
+import type { TurnPlanStep as CodexTurnPlanStep } from '@/features/agent/codex-protocol/generated/v2/TurnPlanStep'
 
 export type PiWebAgentId = 'builtin-pi' | 'pi'
 
@@ -138,7 +141,43 @@ export type OpenCodeNativeSessionSnapshot = {
   status: AgentSessionExecutionState
 }
 
-export type AgentNativeSessionSnapshot = OpenCodeNativeSessionSnapshot | PiWebNativeSessionSnapshot
+export type CodexNativeItemRuntime = {
+  output: string
+  progress: string[]
+  terminalInput: string
+}
+
+export type CodexNativeTurnRuntime = {
+  diff: string | null
+  plan: {
+    explanation: string | null
+    steps: CodexTurnPlanStep[]
+  } | null
+}
+
+export type CodexNativeNotice = {
+  id: string
+  kind: 'error' | 'warning'
+  message: string
+  turnId: string | null
+  willRetry?: boolean
+}
+
+export type CodexNativeSessionSnapshot = {
+  agentId: 'codex'
+  itemRuntime: Record<string, CodexNativeItemRuntime>
+  notices: CodexNativeNotice[]
+  sequence: number
+  status: AgentSessionExecutionState
+  thread: CodexThread
+  tokenUsage: CodexThreadTokenUsage | null
+  turnRuntime: Record<string, CodexNativeTurnRuntime>
+}
+
+export type AgentNativeSessionSnapshot =
+  | CodexNativeSessionSnapshot
+  | OpenCodeNativeSessionSnapshot
+  | PiWebNativeSessionSnapshot
 
 export type AgentRequestScope = {
   agentId: AgentId

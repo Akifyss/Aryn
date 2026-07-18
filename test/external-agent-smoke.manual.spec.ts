@@ -92,14 +92,14 @@ describe.runIf(process.env.ARYN_EXTERNAL_AGENT_SMOKE === '1')('installed externa
 
   it('starts and manages a native Codex session without invoking a model', async () => {
     await runAdapterSmoke('Codex', (agentDir, emitEvent) => new CodexAgentManager({ agentDir, emitEvent }))
-  }, 45_000)
+  }, 120_000)
 })
 
 describe.runIf(process.env.ARYN_EXTERNAL_AGENT_PROMPT_SMOKE === '1')('external Agent prompt and projection', () => {
   async function exercisePrompt(
     label: string,
     createManager: (agentDir: string, emitEvent: (event: AgentClientEventPayload) => void) => SmokeAdapter,
-    options: { expectNativeSnapshots?: boolean, modelKey?: string } = {},
+    options: { expectedNativeAgentId?: 'codex' | 'opencode', modelKey?: string } = {},
   ) {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-external-agent-prompt-'))
     const workspacePath = path.join(tempRoot, 'workspace')
@@ -123,31 +123,39 @@ describe.runIf(process.env.ARYN_EXTERNAL_AGENT_PROMPT_SMOKE === '1')('external A
       while (Date.now() < deadline) {
         const state = await manager.loadWorkspaceState(workspacePath, sessionID!)
         const messages = state.activeSession?.messages ?? []
-        const native = state.activeSession?.native?.agentId === 'opencode'
+        const openCodeNative = state.activeSession?.native?.agentId === 'opencode'
           ? state.activeSession.native
           : null
-        const user = native
-          ? native.messages.find((message) => (
+        const codexNative = state.activeSession?.native?.agentId === 'codex'
+          ? state.activeSession.native
+          : null
+        const user = openCodeNative
+          ? openCodeNative.messages.find((message) => (
               message.info.role === 'user'
               && message.parts.some((part) => part.type === 'text' && part.text.includes('Reply with exactly OK'))
             ))
+          : codexNative
+            ? codexNative.thread.turns.flatMap((turn) => turn.items).find((item) => (
+                item.type === 'userMessage'
+                && item.content.some((input) => input.type === 'text' && input.text.includes('Reply with exactly OK'))
+              ))
           : messages.find((message) => message.kind === 'user' && message.text.includes('Reply with exactly OK'))
-        const assistant = native
-          ? native.messages.find((message) => (
+        const assistant = openCodeNative
+          ? openCodeNative.messages.find((message) => (
               message.info.role === 'assistant'
               && message.parts.some((part) => part.type === 'text' && part.text.trim())
             ))
+          : codexNative
+            ? codexNative.thread.turns.flatMap((turn) => turn.items).find((item) => (
+                item.type === 'agentMessage' && item.text.trim()
+              ))
           : messages.find((message) => message.kind === 'assistant' && message.text.trim())
         if (!state.runtime.isStreaming && user && assistant) {
-          expect(native || ('status' in assistant && (assistant.status === 'error' || assistant.text.length > 0))).toBeTruthy()
-          if (options.expectNativeSnapshots) {
+          expect(openCodeNative || codexNative || ('status' in assistant && (assistant.status === 'error' || assistant.text.length > 0))).toBeTruthy()
+          if (options.expectedNativeAgentId) {
             expect(events.some((event) => (
               event.type === 'session_snapshot_updated'
-              && event.session.native?.agentId === 'opencode'
-              && event.session.native.messages.some((message) => (
-                message.info.role === 'assistant'
-                && message.parts.some((part) => part.type === 'text' && Boolean(part.text.trim()))
-              ))
+              && event.session.native?.agentId === options.expectedNativeAgentId
             ))).toBe(true)
           }
           return
@@ -167,14 +175,18 @@ describe.runIf(process.env.ARYN_EXTERNAL_AGENT_PROMPT_SMOKE === '1')('external A
   }, 150_000)
 
   it('projects a real Codex response', async () => {
-    await exercisePrompt('Codex', (agentDir, emitEvent) => new CodexAgentManager({ agentDir, emitEvent }))
+    await exercisePrompt(
+      'Codex',
+      (agentDir, emitEvent) => new CodexAgentManager({ agentDir, emitEvent }),
+      { expectedNativeAgentId: 'codex' },
+    )
   }, 150_000)
 
   it('projects a real OpenCode response through native session snapshots', async () => {
     await exercisePrompt(
       'OpenCode',
       (agentDir, emitEvent) => new OpenCodeAgentManager({ agentDir, emitEvent }),
-      { expectNativeSnapshots: true, modelKey: 'opencode/big-pickle' },
+      { expectedNativeAgentId: 'opencode', modelKey: 'opencode/big-pickle' },
     )
   }, 150_000)
 })

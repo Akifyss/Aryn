@@ -125,7 +125,26 @@ describe('AgentManager native-session routing', () => {
       workspacePath: 'C:/workspace',
     }, 'hello')
 
-    expect(calls.codexPrompts).toEqual([['C:/workspace', 'thread-a', 'hello', undefined, undefined]])
+    expect(calls.codexPrompts).toEqual([['C:/workspace', 'thread-a', 'hello', undefined, undefined, undefined]])
+    manager.dispose()
+  })
+
+  it('passes Codex client message IDs through for exact optimistic reconciliation', async () => {
+    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    await manager.sendPrompt({
+      agentId: 'codex',
+      sessionPath: 'thread-a',
+      workspacePath: 'C:/workspace',
+    }, 'hello', undefined, undefined, { clientMessageId: 'client-user-1' })
+
+    expect(calls.codexPrompts.at(-1)).toEqual([
+      'C:/workspace',
+      'thread-a',
+      'hello',
+      undefined,
+      undefined,
+      { clientMessageId: 'client-user-1' },
+    ])
     manager.dispose()
   })
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { JsonLineProcess } from '../electron/main/json-line-process'
+import { JsonLineProcess, JsonRpcRequestError } from '../electron/main/json-line-process'
 
 describe('JsonLineProcess', () => {
   it('correlates split JSONL responses while delivering unrelated events', async () => {
@@ -55,6 +55,29 @@ describe('JsonLineProcess', () => {
     try {
       await expect(processClient.request({ type: 'ping' })).resolves.toMatchObject({ success: true })
       expect(events).toEqual([expect.objectContaining({ type: 'protocol_error' })])
+    } finally {
+      processClient.stop()
+    }
+  })
+
+  it('preserves JSON-RPC error codes and data for adapter-level recovery', async () => {
+    const childScript = [
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.once('data', (chunk) => {",
+      '  const request = JSON.parse(chunk.trim());',
+      "  process.stdout.write(JSON.stringify({ id: request.id, error: { code: -32001, message: 'busy', data: { retry: true } } }) + '\\n');",
+      '});',
+    ].join('\n')
+    const processClient = new JsonLineProcess({
+      args: ['-e', childScript],
+      command: process.execPath,
+      onEvent: () => undefined,
+    })
+
+    try {
+      const error = await processClient.request({ method: 'turn/start' }).catch((reason) => reason)
+      expect(error).toBeInstanceOf(JsonRpcRequestError)
+      expect(error).toMatchObject({ code: -32001, data: { retry: true }, message: 'busy' })
     } finally {
       processClient.stop()
     }
