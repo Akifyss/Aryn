@@ -86,6 +86,10 @@ import {
 } from '@/components/file-change-visuals'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
 import { AgentBrandIcon } from '@/features/agent/components/agent-brand-icon'
+import {
+  CodexSessionTimeline,
+  isCodexSessionSurfaceEmpty,
+} from '@/features/agent/components/codex-session-timeline'
 import { OpenCodeSessionTimeline } from '@/features/agent/components/opencode-session-timeline'
 import { PiWebSessionTimeline } from '@/features/agent/components/pi-web-session-timeline'
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
@@ -172,6 +176,7 @@ import type {
   AgentSidebarMessageStatus,
   AgentThinkingLevel,
   AgentWorkspaceState,
+  CodexNativeSessionSnapshot,
   OpenCodeNativeSessionSnapshot,
 } from '@/features/agent/types'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
@@ -643,6 +648,8 @@ type AgentContextValue = {
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
   onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
+  codexNativeSession: CodexNativeSessionSnapshot | null
+  codexOptimisticUserMessages: AgentSidebarMessage[]
   openCodeNativeSession: OpenCodeNativeSessionSnapshot | null
   openCodeOptimisticUserMessages: OpenCodeOptimisticUserMessage[]
   piWebFileChanges: AgentMessageFileChange[]
@@ -3312,6 +3319,38 @@ function AgentProvider({
     setActiveSessionSelection(selection)
   }
 
+  function syncActiveRuntimeSessionSnapshot(agentId: AgentId, snapshot: AgentSessionSnapshot) {
+    const currentSelection = activeSessionSelectionRef.current
+    const currentWorkspacePath = workspacePathRef.current
+    if (
+      selectedAgentIdRef.current !== agentId
+      || !currentWorkspacePath
+      || normalizeAgentProjectPath(snapshot.workspacePath) !== normalizeAgentProjectPath(currentWorkspacePath)
+      || currentSelection.kind !== 'session'
+      || currentSelection.agentId !== agentId
+      || currentSelection.sessionPath !== snapshot.sessionPath
+      || activeRuntimeSessionRef.current?.sessionPath !== snapshot.sessionPath
+    ) {
+      return
+    }
+
+    activeRuntimeSessionRef.current = snapshot
+    setAgentState((currentState) => {
+      if (
+        currentState.runtime.agentId !== agentId
+        || currentState.activeSession?.sessionPath !== snapshot.sessionPath
+      ) {
+        return currentState
+      }
+
+      return {
+        ...currentState,
+        activeSession: snapshot,
+      }
+    })
+    setViewedSessionSnapshot(null)
+  }
+
   const setComposerState = useCallback<Dispatch<SetStateAction<ComposerState>>>((nextState) => {
     const resolvedState = typeof nextState === 'function'
       ? nextState(composerStateRef.current)
@@ -3631,7 +3670,7 @@ function AgentProvider({
           event.sessionId,
           event.session.sessionPath,
         ], isRunning ? 'running' : null, !isRunning)
-        if (event.agentId !== selectedAgentId) return
+        if (event.agentId !== selectedAgentIdRef.current) return
         const expectedWorkspacePath = workspacePathRef.current
         if (
           !expectedWorkspacePath
@@ -3647,16 +3686,25 @@ function AgentProvider({
         ) {
           return
         }
+        if (activeRuntimeSessionRef.current?.sessionPath !== event.session.sessionPath) return
         activeRuntimeSessionRef.current = event.session
-        setAgentState((currentState) => ({
-          ...currentState,
-          activeSession: event.session,
-          runtime: {
-            ...currentState.runtime,
-            executionState: event.executionState,
-            isStreaming: isRunning,
-          },
-        }))
+        setAgentState((currentState) => {
+          if (
+            currentState.runtime.agentId !== event.agentId
+            || currentState.activeSession?.sessionPath !== event.session.sessionPath
+          ) {
+            return currentState
+          }
+          return {
+            ...currentState,
+            activeSession: event.session,
+            runtime: {
+              ...currentState.runtime,
+              executionState: event.executionState,
+              isStreaming: isRunning,
+            },
+          }
+        })
         setViewedSessionSnapshot(null)
         setDraftAssistant('')
         setDraftThinking('')
@@ -3683,7 +3731,7 @@ function AgentProvider({
           event.state.activeSession?.sessionId,
           event.state.activeSession?.sessionPath,
         ], event.state.runtime.isStreaming ? 'running' : null)
-        if (event.state.runtime.agentId !== selectedAgentId) {
+        if (event.state.runtime.agentId !== selectedAgentIdRef.current) {
           return
         }
         const eventWorkspacePath = event.state.runtime.workspacePath
@@ -3742,7 +3790,7 @@ function AgentProvider({
         return
       }
 
-      if (event.agentId !== selectedAgentId) return
+      if (event.agentId !== selectedAgentIdRef.current) return
 
       if (event.type === 'session_annotations_updated') {
         setAgentState((currentState) => mergeSessionAnnotationsState(currentState, event.sessionId, event.annotations))
@@ -4187,8 +4235,20 @@ function AgentProvider({
   useEffect(() => {
     const snapshot = agentState.activeSession
     if (!snapshot) return
-    const persistedUsers = snapshot.native?.agentId === 'opencode'
-      ? snapshot.native.messages.flatMap((record): AgentSidebarMessage[] => (
+    const native = snapshot.native
+    const persistedUsers = native?.agentId === 'codex'
+      ? native.thread.turns.flatMap((turn): AgentSidebarMessage[] => (
+          turn.items.flatMap((item): AgentSidebarMessage[] => item.type === 'userMessage'
+            ? [{
+                id: item.clientId ?? item.id,
+                kind: 'user',
+                text: item.content.flatMap((input) => input.type === 'text' ? [input.text] : []).join('\n\n'),
+                timestamp: (turn.startedAt ?? native.thread.createdAt) * 1_000,
+              }]
+            : [])
+        ))
+      : native?.agentId === 'opencode'
+      ? native.messages.flatMap((record): AgentSidebarMessage[] => (
           record.info.role === 'user'
             ? [{
                 id: record.info.id,
@@ -4198,8 +4258,8 @@ function AgentProvider({
               }]
             : []
         ))
-      : snapshot.native?.agentId === 'pi' || snapshot.native?.agentId === 'builtin-pi'
-        ? snapshot.native.messages.flatMap((message, index): AgentSidebarMessage[] => (
+      : native?.agentId === 'pi' || native?.agentId === 'builtin-pi'
+        ? native.messages.flatMap((message, index): AgentSidebarMessage[] => (
             message.role === 'user'
               ? [{
                   id: typeof message.id === 'string' ? message.id : `pi-user-${index}`,
@@ -4211,6 +4271,13 @@ function AgentProvider({
           ))
         : snapshot.messages.filter((message) => message.kind === 'user')
     if (persistedUsers.length === 0) return
+    const contentFallbackUserIds = native?.agentId === 'codex'
+      ? new Set(native.thread.turns.flatMap((turn) => turn.items.flatMap((item) => (
+          item.type === 'userMessage' && !item.clientId ? [item.id] : []
+        ))))
+      : native?.agentId === 'opencode'
+        ? new Set<string>()
+        : new Set(persistedUsers.map((message) => message.id))
     setOptimisticUserMessages((current) => {
       const usedPersistedIds = new Set<string>()
       return current.filter((entry) => {
@@ -4221,11 +4288,11 @@ function AgentProvider({
         const match = persistedUsers.find((message) => (
           !usedPersistedIds.has(message.id)
           && (
-            message.id === entry.message.id
-            || (
-              message.text === entry.message.text
+             message.id === entry.message.id
+             || (contentFallbackUserIds.has(message.id) && (
+               message.text === entry.message.text
               && Math.abs(message.timestamp - entry.message.timestamp) <= 60_000
-            )
+            ))
           )
         ))
         if (!match) return true
@@ -4317,6 +4384,12 @@ function AgentProvider({
         }
   ), [agentState.runtime, isViewingActiveRuntime])
   const visiblePersistedMessages = visibleSessionSnapshot?.messages ?? []
+  const codexNativeSession = workspacePath
+    && visibleSessionSnapshot
+    && normalizeAgentProjectPath(visibleSessionSnapshot.workspacePath) === normalizeAgentProjectPath(workspacePath)
+    && visibleSessionSnapshot.native?.agentId === 'codex'
+    ? visibleSessionSnapshot.native
+    : null
   const openCodeNativeSession = visibleSessionSnapshot?.native?.agentId === 'opencode'
     ? visibleSessionSnapshot.native
     : null
@@ -4362,6 +4435,7 @@ function AgentProvider({
       }
     })
   ), [visibleOptimisticUserMessageEntries])
+  const codexOptimisticUserMessages = visibleOptimisticUserMessages
   const piWebOptimisticUserMessages = useMemo(() => (
     visibleOptimisticUserMessageEntries.map((entry): PiWebOptimisticUserMessage => {
       const imageBlocks = entry.message.attachments?.flatMap((attachment) => {
@@ -4471,7 +4545,9 @@ function AgentProvider({
     const requestId = openSessionRequestIdRef.current + 1
     openSessionRequestIdRef.current = requestId
 
-    if (agentState.runtime.agentId === agentId && agentState.activeSession?.sessionPath === sessionPath) {
+    const isActiveRuntimeSession = agentState.runtime.agentId === agentId
+      && agentState.activeSession?.sessionPath === sessionPath
+    if (isActiveRuntimeSession && agentId !== 'codex') {
       setViewedSessionSnapshot(null)
       syncModelDraft(getRuntimeSelectedModelDraft(agentState.runtime))
       setPanelError(null)
@@ -4494,7 +4570,16 @@ function AgentProvider({
         return
       }
 
-      setViewedSessionSnapshot(nextSnapshot)
+      const shouldRefreshActiveRuntime = isActiveRuntimeSession || (
+        selectedAgentIdRef.current === agentId
+        && activeRuntimeSessionRef.current?.sessionPath === sessionPath
+      )
+      if (shouldRefreshActiveRuntime) {
+        syncActiveRuntimeSessionSnapshot(agentId, nextSnapshot)
+        syncModelDraft(getRuntimeSelectedModelDraft(agentState.runtime))
+      } else {
+        setViewedSessionSnapshot(nextSnapshot)
+      }
       setActiveOverlayPanel(null)
     } catch (error) {
       if (
@@ -4866,7 +4951,7 @@ function AgentProvider({
     let nextSessionPath: string | null = null
     let fallbackErrorMessage = 'Unable to send your prompt.'
 
-    const isSubmissionViewCurrent = (sessionPath?: string | null) => {
+    const isSubmissionContextCurrent = () => {
       const currentWorkspacePath = workspacePathRef.current
       const isCurrentWorkspace = targetWorkspacePath
         ? Boolean(
@@ -4879,6 +4964,14 @@ function AgentProvider({
         || selectedAgentIdRef.current !== requestAgentId
         || !isCurrentWorkspace
       ) {
+        return false
+      }
+
+      return true
+    }
+
+    const isSubmissionViewCurrent = (sessionPath?: string | null) => {
+      if (!isSubmissionContextCurrent()) {
         return false
       }
 
@@ -4963,7 +5056,7 @@ function AgentProvider({
           thinkingLevel: nextDraft.thinkingLevel,
         })
         nextSessionPath = nextState.activeSession?.sessionPath ?? null
-        if (isSubmissionViewCurrent()) {
+        if (isSubmissionContextCurrent()) {
           activeRuntimeSessionRef.current = nextState.activeSession
           setAgentState(nextState)
           setViewedSessionSnapshot(null)
@@ -5006,6 +5099,7 @@ function AgentProvider({
       fallbackErrorMessage = 'Unable to send your prompt.'
       const promptAttachments = submittedComposerAttachments.map(({ id: _id, ...attachment }) => attachment)
       const isOpenCodePrompt = requestAgentId === 'opencode'
+      const supportsClientMessageId = isOpenCodePrompt || requestAgentId === 'codex'
       const nextOptimisticUserMessageId = isOpenCodePrompt
         ? createOpenCodeMessageId()
         : `optimistic-user-${crypto.randomUUID()}`
@@ -5033,9 +5127,9 @@ function AgentProvider({
         agentId: requestAgentId,
         sessionPath: promptSessionPath,
         workspacePath: targetWorkspacePath,
-      }, trimmedPrompt, streamingBehavior, promptAttachments, nativePartIds ? {
+      }, trimmedPrompt, streamingBehavior, promptAttachments, supportsClientMessageId ? {
         clientMessageId: nextOptimisticUserMessageId,
-        clientPartIds: nativePartIds,
+        ...(nativePartIds ? { clientPartIds: nativePartIds } : {}),
       } : undefined)
       didSendPromptToAgent = true
       try {
@@ -5427,6 +5521,7 @@ function AgentProvider({
     .join('|')
   const renderedMessageCount = renderedMessages.length
   const openCodeNativeRenderKey = getOpenCodeNativeRenderKey(openCodeNativeSession)
+  const codexNativeRenderKey = codexNativeSession ? String(codexNativeSession.sequence) : 'none'
   const piWebNativeRenderKey = piWebNativeSession
     ? `${piWebNativeSession.messages.length}:${piWebNativeSession.entryIds.at(-1) ?? ''}`
     : 'none'
@@ -5716,7 +5811,7 @@ function AgentProvider({
     return () => {
       window.cancelAnimationFrame(frameId)
     }
-  }, [activeSessionPath, draftAssistant, draftThinking, fileChangesKey, liveTools, openCodeNativeRenderKey, piWebNativeRenderKey, renderedMessageCount, sessionStatusKey])
+  }, [activeSessionPath, codexNativeRenderKey, draftAssistant, draftThinking, fileChangesKey, liveTools, openCodeNativeRenderKey, piWebNativeRenderKey, renderedMessageCount, sessionStatusKey])
 
   useEffect(() => {
     const result = resolveNextAgentFileAutoOpen(fileAutoOpenStateRef.current, {
@@ -5790,6 +5885,8 @@ function AgentProvider({
     onRemoveProject,
     onStartStandaloneConversation,
     onStartProjectSession,
+    codexNativeSession,
+    codexOptimisticUserMessages,
     openCodeNativeSession,
     openCodeOptimisticUserMessages,
     piWebFileChanges,
@@ -5879,6 +5976,7 @@ function AgentProvider({
     onRemoveProject,
     onStartStandaloneConversation,
     onStartProjectSession,
+    codexNativeSession,
     openCodeNativeSession,
     piWebFileChanges,
     piWebNativeSession,
@@ -5896,6 +5994,7 @@ function AgentProvider({
     removeComposerAttachment,
     respondToInteraction,
     sessionStatus,
+    codexOptimisticUserMessages,
     openCodeOptimisticUserMessages,
     piWebOptimisticUserMessages,
     selectedAgentId,
@@ -7338,6 +7437,8 @@ function AgentChatSurface() {
     onOpenProviderSettings,
     onOpenProjectSwitchMenu,
     onStartStandaloneConversation,
+    codexNativeSession,
+    codexOptimisticUserMessages,
     openCodeNativeSession,
     openCodeOptimisticUserMessages,
     piWebFileChanges,
@@ -7376,6 +7477,10 @@ function AgentChatSurface() {
     .includes(alternateRunningPromptBehavior)
   const hasEmptyChat = Boolean(
     workspacePath
+    && (!codexNativeSession || isCodexSessionSurfaceEmpty(
+      codexNativeSession,
+      codexOptimisticUserMessages.length,
+    ))
     && !openCodeNativeSession
     && !piWebNativeSession
     && renderedMessages.length === 0,
@@ -8681,98 +8786,109 @@ function AgentChatSurface() {
             </div>
           ) : null}
 
-          <AppScrollArea
-            className='agent-messages-scroll'
-            contentClassName='agent-messages-scroll-content'
-            viewportClassName='agent-messages-scroll-viewport'
-            viewportRef={handleMessagesScrollViewportRef}
-          >
-            <div
-              className={`agent-messages${hasEmptyChat ? ' agent-messages-empty' : ''}${!hasEmptyChat && shouldVirtualizeMessages ? ' agent-messages-virtual' : ''}`}
-              data-agent-virtual-enabled={hasEmptyChat || openCodeNativeSession || piWebNativeSession
-                ? undefined
-                : (shouldVirtualizeMessages ? 'true' : 'false')}
-              data-agent-virtual-total-items={hasEmptyChat || openCodeNativeSession || piWebNativeSession ? undefined : virtualMessageItems.length}
+          {workspacePath && codexNativeSession && !hasEmptyChat ? (
+            <div className='agent-codex-surface-stage'>
+              <CodexSessionTimeline
+                snapshot={codexNativeSession}
+                optimisticUserMessages={codexOptimisticUserMessages}
+                onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
+                workspacePath={workspacePath}
+              />
+            </div>
+          ) : (
+            <AppScrollArea
+              className='agent-messages-scroll'
+              contentClassName='agent-messages-scroll-content'
+              viewportClassName='agent-messages-scroll-viewport'
+              viewportRef={handleMessagesScrollViewportRef}
             >
-              {hasEmptyChat ? (
-                <AgentEmptyChat />
-              ) : openCodeNativeSession ? (
-                <OpenCodeSessionTimeline
-                  sessionID={activeSessionPath!}
-                  workspacePath={workspacePath!}
-                  optimisticUserMessages={openCodeOptimisticUserMessages}
-                  onNavigateToSession={(sessionID) => void handleOpenSession('opencode', sessionID)}
-                  onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
-                />
-              ) : piWebNativeSession ? (
-                <>
-                  <div
-                    className={`agent-pi-web-session-stack${piWebStreamingStatus ? ' has-streaming-status' : ''}`}
-                  >
-                    <PiWebSessionTimeline
-                      snapshot={piWebNativeSession}
-                      workspacePath={workspacePath!}
-                      optimisticUserMessages={piWebOptimisticUserMessages}
-                      onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
-                    />
-                    {piWebStreamingStatus ? (
-                      <div className='agent-pi-web-session-status'>
-                        <AgentSessionStatusBubble status={piWebStreamingStatus} />
-                      </div>
-                    ) : null}
-                  </div>
-                  {piWebFileChanges.length > 0 ? (
-                    <div className='agent-message-stack agent-native-surface-addon'>
-                      <AgentMessageFileCards
-                        fileChanges={piWebFileChanges}
-                        iconTheme={iconTheme}
-                        onOpenFile={onOpenMessageFile}
-                        workspacePath={workspacePath}
+              <div
+                className={`agent-messages${hasEmptyChat ? ' agent-messages-empty' : ''}${!hasEmptyChat && shouldVirtualizeMessages ? ' agent-messages-virtual' : ''}`}
+                data-agent-virtual-enabled={hasEmptyChat || openCodeNativeSession || piWebNativeSession
+                  ? undefined
+                  : (shouldVirtualizeMessages ? 'true' : 'false')}
+                data-agent-virtual-total-items={hasEmptyChat || openCodeNativeSession || piWebNativeSession ? undefined : virtualMessageItems.length}
+              >
+                {hasEmptyChat ? (
+                  <AgentEmptyChat />
+                ) : openCodeNativeSession ? (
+                  <OpenCodeSessionTimeline
+                    sessionID={activeSessionPath!}
+                    workspacePath={workspacePath!}
+                    optimisticUserMessages={openCodeOptimisticUserMessages}
+                    onNavigateToSession={(sessionID) => void handleOpenSession('opencode', sessionID)}
+                    onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
+                  />
+                ) : piWebNativeSession ? (
+                  <>
+                    <div
+                      className={`agent-pi-web-session-stack${piWebStreamingStatus ? ' has-streaming-status' : ''}`}
+                    >
+                      <PiWebSessionTimeline
+                        snapshot={piWebNativeSession}
+                        workspacePath={workspacePath!}
+                        optimisticUserMessages={piWebOptimisticUserMessages}
+                        onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
                       />
+                      {piWebStreamingStatus ? (
+                        <div className='agent-pi-web-session-status'>
+                          <AgentSessionStatusBubble status={piWebStreamingStatus} />
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
-                </>
-              ) : shouldVirtualizeMessages ? (
-                <AgentVirtualMessageList
-                  activeSessionPath={activeSessionPath}
-                  iconTheme={iconTheme}
-                  items={virtualMessageItems}
-                  messagesScrollElement={messagesScrollElement}
-                  onOpenMessageFile={onOpenMessageFile}
-                  onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
-                  workspacePath={workspacePath}
-                />
-              ) : (
-                <>
-                  {renderedMessages.map((message) => {
-                    const fileChanges = roundFileChangesByMessageId.get(message.id) ?? []
-
-                    return (
-                      <div key={message.id} className='agent-message-stack'>
-                        <AgentMessageBubble
+                    {piWebFileChanges.length > 0 ? (
+                      <div className='agent-message-stack agent-native-surface-addon'>
+                        <AgentMessageFileCards
+                          fileChanges={piWebFileChanges}
                           iconTheme={iconTheme}
-                          message={message}
-                          onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
+                          onOpenFile={onOpenMessageFile}
                           workspacePath={workspacePath}
                         />
-                        {fileChanges.length > 0 ? (
-                          <AgentMessageFileCards
-                            fileChanges={fileChanges}
+                      </div>
+                    ) : null}
+                  </>
+                ) : shouldVirtualizeMessages ? (
+                  <AgentVirtualMessageList
+                    activeSessionPath={activeSessionPath}
+                    iconTheme={iconTheme}
+                    items={virtualMessageItems}
+                    messagesScrollElement={messagesScrollElement}
+                    onOpenMessageFile={onOpenMessageFile}
+                    onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
+                    workspacePath={workspacePath}
+                  />
+                ) : (
+                  <>
+                    {renderedMessages.map((message) => {
+                      const fileChanges = roundFileChangesByMessageId.get(message.id) ?? []
+
+                      return (
+                        <div key={message.id} className='agent-message-stack'>
+                          <AgentMessageBubble
                             iconTheme={iconTheme}
-                            onOpenFile={onOpenMessageFile}
+                            message={message}
+                            onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
                             workspacePath={workspacePath}
                           />
-                        ) : null}
-                      </div>
-                    )
-                  })}
-                  {sessionStatus ? (
-                    <AgentSessionStatusBubble status={sessionStatus} />
-                  ) : null}
-                </>
-              )}
-            </div>
-          </AppScrollArea>
+                          {fileChanges.length > 0 ? (
+                            <AgentMessageFileCards
+                              fileChanges={fileChanges}
+                              iconTheme={iconTheme}
+                              onOpenFile={onOpenMessageFile}
+                              workspacePath={workspacePath}
+                            />
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                    {sessionStatus ? (
+                      <AgentSessionStatusBubble status={sessionStatus} />
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </AppScrollArea>
+          )}
 
           {composerForm}
         </>
