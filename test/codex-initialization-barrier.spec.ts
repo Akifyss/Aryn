@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const processState = vi.hoisted(() => ({
   initializeGate: null as Promise<void> | null,
+  initializeRequests: [] as Array<Record<string, unknown>>,
   initializeStarted: 0,
   instances: 0,
   stopped: 0,
@@ -19,8 +20,9 @@ vi.mock('../electron/main/json-line-process', () => ({
 
     notify() {}
 
-    async request(message: { method?: string }) {
+    async request(message: { method?: string, params?: Record<string, unknown> }) {
       if (message.method === 'initialize') {
+        processState.initializeRequests.push(message.params ?? {})
         processState.initializeStarted += 1
         await processState.initializeGate
         return { result: {} }
@@ -42,6 +44,7 @@ import { CodexAgentManager } from '../electron/main/codex-agent'
 describe('Codex App Server initialization', () => {
   beforeEach(() => {
     processState.initializeGate = null
+    processState.initializeRequests = []
     processState.initializeStarted = 0
     processState.instances = 0
     processState.stopped = 0
@@ -70,6 +73,22 @@ describe('Codex App Server initialization', () => {
       await Promise.all([firstLoad, secondLoad])
       expect(processState.initializeStarted).toBe(1)
       expect(processState.instances).toBe(1)
+    } finally {
+      manager.dispose()
+    }
+  })
+
+  it('negotiates the same stable protocol surface used by the generated types', async () => {
+    const manager = new CodexAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
+
+    try {
+      await manager.loadDraftState()
+      expect(processState.initializeRequests).toHaveLength(1)
+      expect(processState.initializeRequests[0]).toMatchObject({
+        capabilities: {
+          experimentalApi: false,
+        },
+      })
     } finally {
       manager.dispose()
     }

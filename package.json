@@ -22,6 +22,7 @@
     "postinstall": "node scripts/patch-pi-coding-agent-loader.mjs",
     "build:opencode-surface": "npm --prefix packages/opencode-session-surface run build && node scripts/verify-opencode-session-surface-css.mjs && node scripts/sync-opencode-session-surface.mjs",
     "build:pi-web-surface": "npm --prefix packages/pi-web-session-surface run build && node scripts/verify-pi-web-session-surface.mjs && node scripts/sync-pi-web-session-surface.mjs",
+    "verify:codex-protocol": "node scripts/verify-codex-protocol-types.mjs",
     "build:agent-surfaces": "npm run build:opencode-surface && npm run build:pi-web-surface",
     "typecheck:opencode-surface": "npm --prefix packages/opencode-session-surface run typecheck",
     "typecheck:pi-web-surface": "npm --prefix packages/pi-web-session-surface run typecheck",

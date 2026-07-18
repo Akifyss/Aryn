@@ -746,7 +746,7 @@ export class CodexAgentManager {
       type: undefined,
       method: 'initialize',
       params: {
-        capabilities: { experimentalApi: true },
+        capabilities: { experimentalApi: false },
         clientInfo: { name: 'aryn', title: 'Aryn', version: '0.1.0' },
       },
     })
