@@ -90,16 +90,6 @@ export function toCodexSurfaceOptimisticMessages(messages: AgentSidebarMessage[]
   }))
 }
 
-export function isCodexSessionSurfaceEmpty(
-  snapshot: CodexNativeSessionSnapshot,
-  optimisticUserMessageCount = 0,
-) {
-  return snapshot.status.type === 'idle'
-    && snapshot.thread.turns.every((turn) => turn.items.length === 0)
-    && optimisticUserMessageCount === 0
-    && snapshot.notices.length === 0
-}
-
 type CodexSessionTimelineProps = {
   onOpenWorkspaceFile?: (filePath: string) => void
   optimisticUserMessages?: AgentSidebarMessage[]

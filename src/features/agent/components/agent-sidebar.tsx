@@ -86,10 +86,7 @@ import {
 } from '@/components/file-change-visuals'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
 import { AgentBrandIcon } from '@/features/agent/components/agent-brand-icon'
-import {
-  CodexSessionTimeline,
-  isCodexSessionSurfaceEmpty,
-} from '@/features/agent/components/codex-session-timeline'
+import { CodexSessionTimeline } from '@/features/agent/components/codex-session-timeline'
 import { OpenCodeSessionTimeline } from '@/features/agent/components/opencode-session-timeline'
 import { PiWebSessionTimeline } from '@/features/agent/components/pi-web-session-timeline'
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
@@ -120,6 +117,7 @@ import {
   type AgentProjectSessionRequest,
   type AgentSessionSelection,
 } from '@/features/agent/lib/project-session-request'
+import { shouldShowAgentNewConversationPrompt } from '@/features/agent/lib/agent-surface-state'
 import {
   flattenAgentProjectSessions,
   getAgentSessionTreeKey,
@@ -7071,18 +7069,6 @@ function AgentSessionTree(props: AgentSessionTreeProps) {
   return props.isFloating ? <FlatAgentSessionTree {...props} /> : <AgentProjectTree {...props} />
 }
 
-function AgentBrandLogo() {
-  return (
-    <div className='agent-brand-logo' aria-hidden='true'>
-      <img className='agent-empty-logo' src='./branding/logo.svg' alt='' />
-    </div>
-  )
-}
-
-function AgentNewSessionIllustration() {
-  return <AgentBrandLogo />
-}
-
 function AgentProjectSwitchTrigger({
   activeProject,
   className,
@@ -7229,25 +7215,16 @@ function AgentTypeSwitchTrigger() {
   )
 }
 
-function AgentEmptyChat() {
-  const { activeSessionSelection, activeWorkspaceContext, onOpenProjectSwitchMenu, projectState, workspacePath } = useAgentContext()
+function AgentNewConversationPrompt() {
+  const { activeWorkspaceContext, onOpenProjectSwitchMenu, projectState } = useAgentContext()
   const activeProject = activeWorkspaceContext.kind === 'project'
     ? projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
     : null
-  const isNewConversation = activeSessionSelection.kind === 'new'
-  const isStandaloneConversation = activeWorkspaceContext.kind !== 'project'
 
   return (
-    <div className='agent-empty-chat'>
-      <AgentNewSessionIllustration />
+    <div className='agent-new-conversation-prompt'>
       <h2>
-        {isStandaloneConversation && isNewConversation ? (
-          <>
-            <span>今天使用</span>
-            <AgentTypeSwitchTrigger />
-            <span>处理些什么？</span>
-          </>
-        ) : isNewConversation && activeProject ? (
+        {activeProject ? (
           <>
             <span>今天在</span>
             <AgentProjectSwitchTrigger
@@ -7256,15 +7233,16 @@ function AgentEmptyChat() {
             />
             <span>使用</span>
             <AgentTypeSwitchTrigger />
-            <span>里处理什么？</span>
+            <span>处理什么？</span>
           </>
         ) : (
-          '新对话'
+          <>
+            <span>今天使用</span>
+            <AgentTypeSwitchTrigger />
+            <span>处理些什么？</span>
+          </>
         )}
       </h2>
-      {(workspacePath && !isNewConversation) ? (
-        <p className='agent-empty-subtitle'>在下方消息框中输入您的请求以开始对话</p>
-      ) : null}
     </div>
   )
 }
@@ -7504,18 +7482,8 @@ function AgentChatSurface() {
   const alternateRunningPromptBehavior = getAlternateRunningPromptBehavior(effectiveRunningPromptEnterBehavior)
   const supportsAlternateRunningPromptBehavior = agentState.runtime.supportedRunningPromptBehaviors
     .includes(alternateRunningPromptBehavior)
-  const hasEmptyChat = Boolean(
-    workspacePath
-    && (!codexNativeSession || isCodexSessionSurfaceEmpty(
-      codexNativeSession,
-      codexOptimisticUserMessages.length,
-    ))
-    && !openCodeNativeSession
-    && !piWebNativeSession
-    && renderedMessages.length === 0,
-  )
   const isOpenCodeChildSession = Boolean(openCodeNativeSession?.parentSessionId)
-  const isNewConversation = activeSessionSelection.kind === 'new'
+  const isNewConversation = shouldShowAgentNewConversationPrompt(activeWorkspaceContext, activeSessionSelection)
   const canOpenSessionMenu = Boolean(workspacePath && activeWorkspaceContext.kind === 'project')
   const activeProject = activeWorkspaceContext.kind === 'project'
     ? projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
@@ -8804,7 +8772,7 @@ function AgentChatSurface() {
               </div>
             ) : null}
             <div className='agent-new-conversation-content'>
-              <AgentEmptyChat />
+              <AgentNewConversationPrompt />
             </div>
           </div>
           {composerForm}
@@ -8817,7 +8785,7 @@ function AgentChatSurface() {
             </div>
           ) : null}
 
-          {workspacePath && codexNativeSession && !hasEmptyChat ? (
+          {workspacePath && codexNativeSession ? (
             <div className='agent-codex-surface-stage'>
               <CodexSessionTimeline
                 snapshot={codexNativeSession}
@@ -8834,15 +8802,13 @@ function AgentChatSurface() {
               viewportRef={handleMessagesScrollViewportRef}
             >
               <div
-                className={`agent-messages${hasEmptyChat ? ' agent-messages-empty' : ''}${!hasEmptyChat && shouldVirtualizeMessages ? ' agent-messages-virtual' : ''}`}
-                data-agent-virtual-enabled={hasEmptyChat || openCodeNativeSession || piWebNativeSession
+                className={`agent-messages${shouldVirtualizeMessages ? ' agent-messages-virtual' : ''}`}
+                data-agent-virtual-enabled={openCodeNativeSession || piWebNativeSession
                   ? undefined
                   : (shouldVirtualizeMessages ? 'true' : 'false')}
-                data-agent-virtual-total-items={hasEmptyChat || openCodeNativeSession || piWebNativeSession ? undefined : virtualMessageItems.length}
+                data-agent-virtual-total-items={openCodeNativeSession || piWebNativeSession ? undefined : virtualMessageItems.length}
               >
-                {hasEmptyChat ? (
-                  <AgentEmptyChat />
-                ) : openCodeNativeSession ? (
+                {openCodeNativeSession ? (
                   <OpenCodeSessionTimeline
                     sessionID={activeSessionPath!}
                     workspacePath={workspacePath!}

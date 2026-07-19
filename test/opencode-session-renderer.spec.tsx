@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import {
   CodexSessionTimeline,
-  isCodexSessionSurfaceEmpty,
   toCodexSurfaceOptimisticMessages,
 } from '../src/features/agent/components/codex-session-timeline'
 import { OpenCodeSessionTimeline } from '../src/features/agent/components/opencode-session-timeline'
@@ -39,27 +38,6 @@ describe('Codex T3 session surface host', () => {
     expect(html).toContain('aria-busy="true"')
     expect(html).not.toContain('Working')
     expect(html).not.toContain('reasoning')
-  })
-
-  it('keeps a running or retrying thread on the native surface before its first item arrives', () => {
-    const emptySnapshot = {
-      agentId: 'codex',
-      itemRuntime: {},
-      notices: [],
-      sequence: 0,
-      status: { type: 'idle' },
-      thread: { id: 'thread-1', createdAt: 1, cwd: 'C:\\workspace', turns: [], updatedAt: 1 },
-      tokenUsage: null,
-      turnRuntime: {},
-    } as CodexNativeSessionSnapshot
-
-    expect(isCodexSessionSurfaceEmpty(emptySnapshot)).toBe(true)
-    expect(isCodexSessionSurfaceEmpty({ ...emptySnapshot, status: { type: 'busy' } })).toBe(false)
-    expect(isCodexSessionSurfaceEmpty({
-      ...emptySnapshot,
-      status: { attempt: 1, message: 'Retrying', next: 2, type: 'retry' },
-    })).toBe(false)
-    expect(isCodexSessionSurfaceEmpty(emptySnapshot, 1)).toBe(false)
   })
 
   it('preserves optimistic image data for an immediate preview', () => {
