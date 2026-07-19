@@ -122,6 +122,168 @@ describe('Codex unmaterialized sessions', () => {
     }
   })
 
+  it('opens, renames, and deletes an official thread created outside Aryn across manager restarts', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-official-lifecycle-'))
+    const agentDir = path.join(tempRoot, 'agent-data')
+    const workspace = path.join(tempRoot, 'workspace')
+    const threadId = 'official-cli-thread'
+    const requests: Array<{ method: string, params: Record<string, unknown> }> = []
+    let nativeThread: Thread | null = emptyThread(workspace, {
+      id: threadId,
+      name: 'Created outside Aryn',
+      path: path.join(tempRoot, 'official.jsonl'),
+      preview: 'Created by Codex CLI',
+      source: 'cli',
+      updatedAt: 2,
+    })
+
+    const installClient = (manager: CodexAgentManager) => {
+      const internals = manager as unknown as {
+        client: {
+          request: (method: string, params: Record<string, unknown>) => Promise<unknown>
+          stop: () => void
+        }
+      }
+      internals.client = {
+        request: async (method, params) => {
+          requests.push({ method, params })
+          if (method === 'thread/list') {
+            return { data: nativeThread ? [structuredClone(nativeThread)] : [], nextCursor: null }
+          }
+          if (method === 'thread/resume') {
+            if (!nativeThread || params.threadId !== nativeThread.id) throw new Error('thread not found')
+            return {
+              approvalPolicy: 'on-request',
+              approvalsReviewer: 'user',
+              cwd: workspace,
+              instructionSources: [],
+              model: 'gpt-5.6-codex',
+              modelProvider: 'openai',
+              reasoningEffort: 'high',
+              sandbox: { type: 'workspaceWrite' },
+              serviceTier: null,
+              thread: structuredClone(nativeThread),
+            }
+          }
+          if (method === 'thread/read') {
+            if (!nativeThread || params.threadId !== nativeThread.id) throw new Error('thread not found')
+            return { thread: structuredClone(nativeThread) }
+          }
+          if (method === 'thread/name/set') {
+            if (!nativeThread || params.threadId !== nativeThread.id) throw new Error('thread not found')
+            nativeThread = { ...nativeThread, name: String(params.name), updatedAt: nativeThread.updatedAt + 1 }
+            return {}
+          }
+          if (method === 'thread/delete') {
+            if (!nativeThread || params.threadId !== nativeThread.id) throw new Error('thread not found')
+            nativeThread = null
+            return {}
+          }
+          throw new Error(`Unexpected Codex request: ${method}`)
+        },
+        stop: () => undefined,
+      }
+    }
+
+    const firstManager = new CodexAgentManager({ agentDir, emitEvent: () => undefined })
+    installClient(firstManager)
+    try {
+      await expect(firstManager.openSession(workspace, threadId)).resolves.toMatchObject({
+        activeSession: { name: 'Created outside Aryn', sessionId: threadId },
+      })
+      await expect(firstManager.readSession(workspace, threadId)).resolves.toMatchObject({
+        name: 'Created outside Aryn',
+        sessionId: threadId,
+      })
+      await expect(firstManager.renameSession(workspace, threadId, 'Renamed in Aryn')).resolves.toMatchObject({
+        sessions: [expect.objectContaining({ id: threadId, name: 'Renamed in Aryn' })],
+      })
+    } finally {
+      firstManager.dispose()
+    }
+
+    const restoredManager = new CodexAgentManager({ agentDir, emitEvent: () => undefined })
+    installClient(restoredManager)
+    try {
+      await expect(restoredManager.listSessionItems(workspace)).resolves.toEqual([
+        expect.objectContaining({ id: threadId, name: 'Renamed in Aryn' }),
+      ])
+      await expect(restoredManager.openSession(workspace, threadId)).resolves.toMatchObject({
+        activeSession: { name: 'Renamed in Aryn', sessionId: threadId },
+      })
+      await expect(restoredManager.deleteSession(workspace, threadId)).resolves.toMatchObject({
+        activeSession: null,
+        sessions: [],
+      })
+      await expect(restoredManager.sessionExists(workspace, threadId)).resolves.toBe(false)
+      expect(requests).toEqual(expect.arrayContaining([
+        expect.objectContaining({ method: 'thread/resume', params: expect.objectContaining({ cwd: workspace, threadId }) }),
+        expect.objectContaining({ method: 'thread/read', params: expect.objectContaining({ includeTurns: true, threadId }) }),
+        expect.objectContaining({ method: 'thread/name/set', params: { name: 'Renamed in Aryn', threadId } }),
+        expect.objectContaining({ method: 'thread/delete', params: { threadId } }),
+      ]))
+    } finally {
+      restoredManager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('does not update the Aryn index when native Codex rename fails', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-rename-failure-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const threadId = 'aryn-owned-materialized-thread'
+    const manager = new CodexAgentManager({ agentDir: path.join(tempRoot, 'agent-data'), emitEvent: () => undefined })
+    const indexedRecord = {
+      createdAt: new Date(1_000).toISOString(),
+      cwd: workspace,
+      id: threadId,
+      materialized: true,
+      model: null,
+      modelExplicit: false,
+      name: 'Original name',
+      preview: 'Original name',
+      reasoningEffort: 'medium' as const,
+      updatedAt: new Date(2_000).toISOString(),
+    }
+    const nativeThread = emptyThread(workspace, {
+      id: threadId,
+      name: indexedRecord.name,
+      path: path.join(tempRoot, 'owned.jsonl'),
+      preview: indexedRecord.preview,
+      updatedAt: 2,
+    })
+    const internals = manager as unknown as {
+      client: {
+        request: (method: string) => Promise<unknown>
+        stop: () => void
+      }
+      index: {
+        read: () => Promise<{ threads: typeof indexedRecord[] }>
+        update: (updater: (state: { threads: typeof indexedRecord[], version: 1 }) => { threads: typeof indexedRecord[], version: 1 }) => Promise<void>
+      }
+    }
+    internals.client = {
+      request: async (method) => {
+        if (method === 'thread/list') return { data: [nativeThread], nextCursor: null }
+        if (method === 'thread/name/set') throw new Error('native rename rejected')
+        throw new Error(`Unexpected Codex request: ${method}`)
+      },
+      stop: () => undefined,
+    }
+
+    try {
+      await internals.index.update(() => ({ threads: [indexedRecord], version: 1 }))
+
+      await expect(manager.renameSession(workspace, threadId, 'Must not persist')).rejects.toThrow('native rename rejected')
+      await expect(internals.index.read()).resolves.toMatchObject({
+        threads: [expect.objectContaining({ id: threadId, name: 'Original name' })],
+      })
+    } finally {
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
   it('uses the thread/start snapshot until the first turn creates a rollout', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-unmaterialized-'))
     const workspace = path.join(tempRoot, 'workspace')

@@ -414,8 +414,8 @@ export class CodexAgentManager {
     const normalizedName = name.trim()
     if (!normalizedName) throw new Error('Codex 会话名称不能为空。')
     record.name = normalizedName
-    await this.updateRecord(record)
     if (record.materialized) await this.setThreadName(await this.ensureClient(), record)
+    await this.updateRecord(record)
     const binding = this.bindings.get(threadId)
     if (binding) binding.record = record
     return this.broadcastWorkspaceState(cwd, this.workspaceActiveThreads.get(workspaceIdentity(cwd)) ?? null)
