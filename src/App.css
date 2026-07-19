@@ -3779,7 +3779,6 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   height: 100%;
   min-width: 0;
   font-size: 13px;
-  font-weight: 500;
   line-height: 1.5;
   gap: 8px;
   color: var(--foreground-primary);
@@ -3847,7 +3846,6 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .tree-item-row .tree-item-label {
   font-size: 13px;
-  font-weight: 500;
   line-height: inherit;
   color: var(--foreground-primary);
 }
@@ -3888,6 +3886,10 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
 
 .tree-item-info-count {
   font-weight: 600;
+}
+
+.tree-item-info-text {
+  padding-inline: 6px;
 }
 
 .tree-item-info-status {
@@ -4329,6 +4331,7 @@ body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
   width: 0;
   min-width: 0;
   max-width: 0;
+  padding-inline: 0;
   opacity: 0;
   pointer-events: none;
   transform: translateX(4px);
@@ -5411,8 +5414,7 @@ body.workspace-tree-dragging .tree-item-row {
   margin: 0;
   border-bottom: 0;
   color: var(--foreground-secondary);
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 13px;
   letter-spacing: 0;
   text-transform: none;
   flex-shrink: 0;
@@ -5427,7 +5429,6 @@ body.workspace-tree-dragging .tree-item-row {
   color: inherit;
   cursor: default;
   font-size: inherit;
-  font-weight: inherit;
 }
 
 .tree-header > .tree-item-row:hover,
@@ -5438,7 +5439,6 @@ body.workspace-tree-dragging .tree-item-row {
 .tree-header > .tree-item-row > .tree-item-main {
   gap: 0;
   color: inherit;
-  font: inherit;
   letter-spacing: 0;
   text-transform: none;
 }
@@ -5451,7 +5451,6 @@ body.workspace-tree-dragging .tree-item-row {
 .tree-header > .tree-item-row .tree-item-label {
   flex: 0 1 auto;
   color: inherit;
-  font: inherit;
   letter-spacing: 0;
   text-transform: none;
   user-select: none;
@@ -5510,13 +5509,24 @@ body.workspace-tree-dragging .tree-item-row {
   font-size: 13px;
 }
 
+.agent-inline-spinner {
+  flex: 0 0 auto;
+}
+
 .agent-session-activity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 8px;
   height: 8px;
   flex: 0 0 auto;
   border-radius: 999px;
   background: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 16%, transparent);
+}
+
+.agent-session-running-spinner {
+  color: var(--accent);
 }
 
 .agent-session-activity.is-waiting {

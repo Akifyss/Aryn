@@ -21,7 +21,7 @@ import {
 import { createPortal } from 'react-dom'
 import { ContextMenu } from '@base-ui/react/context-menu'
 import { Menu } from '@base-ui/react/menu'
-import { Button, Disclosure, ScrollShadow } from '@heroui/react'
+import { Button, Disclosure, ScrollShadow, Spinner } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import type { OpenCodeOptimisticUserMessage } from '@aryn/opencode-session-surface'
 import type {
@@ -667,6 +667,7 @@ type AgentContextValue = {
   roundFileChangesByMessageId: Map<string, AgentMessageFileChange[]>
   sessionActivityById: Record<string, 'running' | 'waiting'>
   sessionTreeAgentIds: readonly AgentId[]
+  shouldShowComposerSendSpinner: boolean
   removeComposerAttachment: (attachmentId: string) => void
   respondToInteraction: (
     requestId: string,
@@ -2687,6 +2688,17 @@ function UnicodeSpinner({
     <span aria-hidden='true' className={className}>
       {spinner.frames[frameIndex] ?? spinner.frames[0]}
     </span>
+  )
+}
+
+function AgentInlineSpinner({ className }: { className?: string }) {
+  return (
+    <Spinner
+      aria-hidden='true'
+      className={`agent-inline-spinner size-4${className ? ` ${className}` : ''}`}
+      color='current'
+      size='sm'
+    />
   )
 }
 
@@ -5384,6 +5396,9 @@ function AgentProvider({
   const canPerformComposerAction = composerAction === 'stop'
     ? canStopActivePrompt
     : canSend
+  const shouldShowComposerSendSpinner = composerAction === 'send'
+    && isSubmittingComposerPrompt
+    && activeSessionSelection.kind === 'new'
   const streamingShortcutModifierLabel = window.appApi.platform === 'darwin' ? '⌘↵' : 'Ctrl+Enter'
   const selectedModelInputs = composerModelKey && hasAvailableComposerModel
     ? agentState.runtime.availableModelInputs[composerModelKey] ?? ['text']
@@ -5903,6 +5918,7 @@ function AgentProvider({
     roundFileChangesByMessageId,
     sessionActivityById,
     sessionTreeAgentIds,
+    shouldShowComposerSendSpinner,
     removeComposerAttachment,
     respondToInteraction,
     sessionStatus,
@@ -5991,6 +6007,7 @@ function AgentProvider({
     roundFileChangesByMessageId,
     sessionActivityById,
     sessionTreeAgentIds,
+    shouldShowComposerSendSpinner,
     removeComposerAttachment,
     respondToInteraction,
     sessionStatus,
@@ -6272,6 +6289,12 @@ function AgentSessionTreeRow({
   const renameInputRef = useRef<HTMLInputElement | null>(null)
   const isMenuOpen = isActionMenuOpen || isContextMenuOpen
   const accessibleLabel = agentId ? `${label}，${getAgentDefinition(agentId).label}` : label
+  const activityLabel = activity === 'waiting' ? '等待操作' : '运行中'
+  const sessionInfo = !isRenaming
+    ? activity === 'running'
+      ? <AgentInlineSpinner className='agent-session-running-spinner' />
+      : relativeTime
+    : undefined
 
   useEffect(() => {
     if (!isRenaming) {
@@ -6433,20 +6456,25 @@ function AgentSessionTreeRow({
       main={rowMain}
       label={!isRenaming ? label : undefined}
       labelClassName={!isRenaming ? 'agent-project-session-label' : undefined}
-      labelSuffix={!isRenaming && activity ? (
+      labelSuffix={!isRenaming && activity === 'waiting' ? (
         <span
-          aria-label={activity === 'waiting' ? '等待操作' : '运行中'}
+          aria-label={activityLabel}
           className={`agent-session-activity is-${activity}`}
           role='status'
-          title={activity === 'waiting' ? '等待操作' : '运行中'}
+          title={activityLabel}
         />
       ) : undefined}
       renderMain={renderSessionMain}
       actions={rowActions}
       actionsAlwaysVisible={isRenaming}
       actionsClassName={isRenaming ? 'agent-session-rename-actions' : undefined}
-      info={!isRenaming && relativeTime ? relativeTime : undefined}
-      infoVariant='text'
+      info={sessionInfo}
+      infoProps={activity === 'running' ? {
+        'aria-label': activityLabel,
+        role: 'status',
+        title: activityLabel,
+      } : undefined}
+      infoVariant={activity === 'running' ? 'status' : 'text'}
     />
   )
 
@@ -7454,6 +7482,7 @@ function AgentChatSurface() {
     removeComposerAttachment,
     respondToInteraction,
     sessionStatus,
+    shouldShowComposerSendSpinner,
     setActiveComposerMenu,
     setActiveOverlayPanel,
     setComposerState,
@@ -8409,6 +8438,8 @@ function AgentChatSurface() {
             >
               {composerAction === 'stop' ? (
                 <StopFill size={16} />
+              ) : shouldShowComposerSendSpinner ? (
+                <AgentInlineSpinner />
               ) : (
                 <ArrowUpLine size={16} />
               )}
