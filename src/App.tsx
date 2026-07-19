@@ -30,7 +30,6 @@ import type {
   WorkspaceIconThemeMode,
   WorkspaceIconThemeSelection,
   WorkspaceIconThemesByMode,
-  WorkspaceNode,
 } from '@/features/workspace/types'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import { AppTitlebar } from '@/components/app-titlebar'
@@ -89,14 +88,9 @@ import {
 } from '@/features/workspace/store/use-workspace-store'
 import {
   getBaseName,
-  getDirectoryRelativePath,
-  getNextUntitledDirectoryName,
-  getNextUntitledFileName,
-  getRelativePath,
-  hasPathPrefix,
   normalizeFilePath,
-  rebasePathPrefix,
 } from '@/features/workspace/lib/workspace-paths'
+import { getWorkspaceFileTabIdsForPath } from '@/features/workspace/lib/workspace-file-operation-state'
 import {
   createDiffTab,
   FIXED_FILE_TAB_ID,
@@ -106,6 +100,7 @@ import {
 import { useWorkspaceChangeSubscription } from '@/features/workspace/hooks/use-workspace-change-subscription'
 import { useWorkspaceDocumentNavigation } from '@/features/workspace/hooks/use-workspace-document-navigation'
 import { useWorkspaceDocumentPersistence } from '@/features/workspace/hooks/use-workspace-document-persistence'
+import { useWorkspaceFileOperations } from '@/features/workspace/hooks/use-workspace-file-operations'
 import { useWorkspaceFileSystemState } from '@/features/workspace/hooks/use-workspace-file-system-state'
 import { useWorkspaceTabPersistence } from '@/features/workspace/hooks/use-workspace-tab-persistence'
 import { useWorkspaceTabViewState } from '@/features/workspace/hooks/use-workspace-tab-view-state'
@@ -412,9 +407,6 @@ function App() {
   const iconTheme = useMemo(() => iconThemes[resolvedTheme], [iconThemes, resolvedTheme])
   const [, setStatusMessage] = useState('Open a folder to start.')
   const [workspaceUnavailableMessage, setWorkspaceUnavailableMessage] = useState<string | null>(null)
-  const [isCreatingFile, setIsCreatingFile] = useState(false)
-  const [isCreatingDirectory, setIsCreatingDirectory] = useState(false)
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [activeAgentLayoutFixedTab, setActiveAgentLayoutFixedTab] = useState<AgentLayoutFixedTab>('file')
@@ -516,7 +508,6 @@ function App() {
   const moveTab = useWorkspaceStore((state) => state.moveTab)
   const openDiffTab = useWorkspaceStore((state) => state.openDiffTab)
   const openTabs = useWorkspaceStore((state) => state.openTabs)
-  const renameTab = useWorkspaceStore((state) => state.renameTab)
   const resetOpenTabs = useWorkspaceStore((state) => state.resetOpenTabs)
   const setCurrentPath = useWorkspaceStore((state) => state.setCurrentPath)
   const setTree = useWorkspaceStore((state) => state.setTree)
@@ -614,14 +605,6 @@ function App() {
 
     meoEditorHostRef.current?.captureViewPosition()
   }, [])
-  const rootFileNames = useMemo(
-    () => tree.filter((node) => node.kind === 'file').map((node) => node.name),
-    [tree],
-  )
-  const rootDirNames = useMemo(
-    () => tree.filter((node) => node.kind === 'directory').map((node) => node.name),
-    [tree],
-  )
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
     : '选择工作目录'
@@ -990,59 +973,6 @@ function App() {
     setGitPanelHeight(clampGitHeight(nextHeight))
   }
 
-  function rebaseExpandedTreePaths(currentNodePath: string, nextNodePath: string) {
-    setExpandedPaths((currentExpandedPaths) => {
-      const nextExpandedPaths = new Set<string>()
-
-      currentExpandedPaths.forEach((expandedPath) => {
-        if (hasPathPrefix(expandedPath, currentNodePath)) {
-          nextExpandedPaths.add(rebasePathPrefix(expandedPath, currentNodePath, nextNodePath))
-          return
-        }
-
-        nextExpandedPaths.add(expandedPath)
-      })
-
-      return nextExpandedPaths
-    })
-  }
-
-  function updateOpenTabsForMovedNode(currentNodePath: string, nextNodePath: string) {
-    const currentTabs = [...useWorkspaceStore.getState().openTabs]
-
-    currentTabs.forEach((tab) => {
-      if (tab.kind === 'file' && hasPathPrefix(tab.filePath, currentNodePath)) {
-        renameTab(tab.filePath, rebasePathPrefix(tab.filePath, currentNodePath, nextNodePath))
-        return
-      }
-
-      if (tab.kind === 'diff' && hasPathPrefix(tab.diff.change.path, currentNodePath)) {
-        closeTab(tab.id)
-      }
-    })
-  }
-
-  function closeTabsForNode(nodePath: string) {
-    const currentTabs = [...useWorkspaceStore.getState().openTabs]
-
-    currentTabs.forEach((tab) => {
-      const targetPath = tab.kind === 'diff' ? tab.diff.change.path : tab.filePath
-      if (hasPathPrefix(targetPath, nodePath)) {
-        closeTab(tab.id)
-      }
-    })
-  }
-
-  function closeFileTabsForPath(filePath: string) {
-    const currentTabs = useWorkspaceStore.getState().openTabs
-
-    currentTabs.forEach((tab) => {
-      if (tab.kind === 'file' && tab.filePath === filePath) {
-        closeTab(tab.id)
-      }
-    })
-  }
-
   const syncOpenDiffTabs = useCallback(async (workspacePath: string) => {
     if (!isActiveWorkspacePath(workspacePath)) {
       return
@@ -1086,7 +1016,12 @@ function App() {
       syncFileTabsWithDisk(filePath, nextContent)
     } catch {
       if (isActiveWorkspacePath(workspacePath)) {
-        closeFileTabsForPath(filePath)
+        for (const tabId of getWorkspaceFileTabIdsForPath(
+          useWorkspaceStore.getState().openTabs,
+          filePath,
+        )) {
+          closeTab(tabId)
+        }
       }
     }
   }
@@ -1147,69 +1082,6 @@ function App() {
     await performWorkspaceRefresh(request.rootPath, request)
   }
 
-  async function connectWorkspace(nextPath: string) {
-    if (currentPath && normalizeFilePath(currentPath) === normalizeFilePath(nextPath)) {
-      return
-    }
-
-    await flushWorkspaceAutosave()
-    await flushDiffAutosave()
-    await window.appApi.stopWorkspaceWatch()
-
-    try {
-      await loadTree(nextPath)
-      setWorkspaceUnavailableMessage(null)
-      currentPathRef.current = nextPath
-      setCurrentPath(nextPath)
-      resetOpenTabs()
-      setIsAgentLayoutFixedTabActive(false)
-      prepareGitWorkspace(nextPath)
-      await refreshGitState(nextPath, { silent: false })
-      await window.appApi.startWorkspaceWatch(nextPath)
-      await window.appApi.updateWorkspaceState(nextPath, { markAsLastOpened: true })
-    } catch (error) {
-      await window.appApi.stopWorkspaceWatch().catch(() => undefined)
-      resetWorkspaceSurface({ unavailableMessage: '无法访问当前工作目录。' })
-      throw error
-    }
-  }
-
-  function resetWorkspaceSurface(options: { unavailableMessage?: string | null } = {}) {
-    currentPathRef.current = null
-    setCurrentPath(null)
-    setTree([])
-    setExpandedPaths(new Set())
-    resetOpenTabs()
-    setIsAgentLayoutFixedTabActive(false)
-    resetGitWorkspaceState()
-    setAgentWorkspaceState(null)
-    setPendingAgentProjectSessionRequest(null)
-    setWorkspaceUnavailableMessage(options.unavailableMessage ?? null)
-  }
-
-  async function disconnectWorkspaceSurface(options: { unavailableMessage?: string | null } = {}) {
-    await window.appApi.stopWorkspaceWatch()
-    resetWorkspaceSurface(options)
-  }
-
-  async function handleRequestWindowClose() {
-    if (windowCloseRequestInFlightRef.current) {
-      return
-    }
-
-    windowCloseRequestInFlightRef.current = true
-
-    try {
-      if (!(await confirmDiscardDirtyTabs('close'))) {
-        return
-      }
-
-      await window.appApi.closeWindow()
-    } finally {
-      windowCloseRequestInFlightRef.current = false
-    }
-  }
-
   const expandAgentEditorSurface = useCallback(() => {
     if (!isAgentLayout) {
       return
@@ -1249,6 +1121,93 @@ function App() {
     setIsRightDrawerOpen,
     setStatusMessage,
   })
+
+  const {
+    createDirectory: handleCreateDirectory,
+    createFile: handleCreateFile,
+    deleteNode: handleDeleteNode,
+    expandedPaths,
+    isCreatingDirectory,
+    isCreatingFile,
+    moveNode: handleMoveNode,
+    renameNode: handleRenameNode,
+    resetExpandedPaths,
+    setExpandedPaths,
+    toggleTreeExpansion: handleToggleFileTreeExpansion,
+  } = useWorkspaceFileOperations({
+    currentPath,
+    ensureWorkspaceTabsSavedBeforeNodeMutation,
+    flushWorkspaceTabsForNode,
+    openFile,
+    performWorkspaceRefresh,
+    requestConfirmation: requestConfirm,
+    setStatusMessage,
+    syncPersistedActiveFile,
+    tree,
+  })
+
+  async function connectWorkspace(nextPath: string) {
+    if (currentPath && normalizeFilePath(currentPath) === normalizeFilePath(nextPath)) {
+      return
+    }
+
+    await flushWorkspaceAutosave()
+    await flushDiffAutosave()
+    await window.appApi.stopWorkspaceWatch()
+
+    try {
+      await loadTree(nextPath)
+      setWorkspaceUnavailableMessage(null)
+      currentPathRef.current = nextPath
+      setCurrentPath(nextPath)
+      resetOpenTabs()
+      setIsAgentLayoutFixedTabActive(false)
+      prepareGitWorkspace(nextPath)
+      await refreshGitState(nextPath, { silent: false })
+      await window.appApi.startWorkspaceWatch(nextPath)
+      await window.appApi.updateWorkspaceState(nextPath, { markAsLastOpened: true })
+    } catch (error) {
+      await window.appApi.stopWorkspaceWatch().catch(() => undefined)
+      resetWorkspaceSurface({ unavailableMessage: '无法访问当前工作目录。' })
+      throw error
+    }
+  }
+
+  function resetWorkspaceSurface(options: { unavailableMessage?: string | null } = {}) {
+    currentPathRef.current = null
+    setCurrentPath(null)
+    setTree([])
+    resetExpandedPaths()
+    resetOpenTabs()
+    setIsAgentLayoutFixedTabActive(false)
+    resetGitWorkspaceState()
+    setAgentWorkspaceState(null)
+    setPendingAgentProjectSessionRequest(null)
+    setWorkspaceUnavailableMessage(options.unavailableMessage ?? null)
+  }
+
+  async function disconnectWorkspaceSurface(options: { unavailableMessage?: string | null } = {}) {
+    await window.appApi.stopWorkspaceWatch()
+    resetWorkspaceSurface(options)
+  }
+
+  async function handleRequestWindowClose() {
+    if (windowCloseRequestInFlightRef.current) {
+      return
+    }
+
+    windowCloseRequestInFlightRef.current = true
+
+    try {
+      if (!(await confirmDiscardDirtyTabs('close'))) {
+        return
+      }
+
+      await window.appApi.closeWindow()
+    } finally {
+      windowCloseRequestInFlightRef.current = false
+    }
+  }
 
   async function switchActiveWorkspace(
     project: ProjectRecord,
@@ -1846,72 +1805,6 @@ function App() {
     }
   }
 
-  async function handleCreateFile() {
-    if (!currentPath) {
-      return
-    }
-
-    const nextRelativePath = getNextUntitledFileName(rootFileNames)
-
-    try {
-      setIsCreatingFile(true)
-      const { filePath } = await window.appApi.createWorkspaceFile(currentPath, nextRelativePath)
-      await performWorkspaceRefresh(currentPath, {
-        refreshGit: true,
-        refreshTree: true,
-      })
-      await openFile(filePath)
-      setStatusMessage(`${nextRelativePath} created`)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to create file.'
-      setStatusMessage(message)
-    } finally {
-      setIsCreatingFile(false)
-    }
-  }
-
-  async function handleCreateDirectory() {
-    if (!currentPath) {
-      return
-    }
-
-    const nextRelativePath = getNextUntitledDirectoryName(rootDirNames)
-
-    try {
-      setIsCreatingDirectory(true)
-      await window.appApi.createWorkspaceDirectory(currentPath, nextRelativePath)
-      await performWorkspaceRefresh(currentPath, {
-        refreshTree: true,
-      })
-      setStatusMessage(`${nextRelativePath} created`)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to create directory.'
-      setStatusMessage(message)
-    } finally {
-      setIsCreatingDirectory(false)
-    }
-  }
-
-  function handleToggleFileTreeExpansion() {
-    if (expandedPaths.size > 0) {
-      setExpandedPaths(new Set())
-      setStatusMessage('All folders collapsed')
-    } else {
-      const allDirs = new Set<string>()
-      const collect = (items: WorkspaceNode[]) => {
-        for (const node of items) {
-          if (node.kind === 'directory') {
-            allDirs.add(node.path)
-            if (node.children) collect(node.children)
-          }
-        }
-      }
-      collect(tree)
-      setExpandedPaths(allDirs)
-      setStatusMessage('All folders expanded')
-    }
-  }
-
   function renderWorkspaceTreePanel(options: {
     activeFileMode?: WorkspaceTreeActiveFileMode
     directoryHeaderAction?: ReactNode
@@ -2118,94 +2011,6 @@ function App() {
     } finally {
       setIsApplyingIconTheme(false)
     }
-  }
-
-  async function handleMoveWorkspaceNode(node: WorkspaceNode, nextRelativePath: string, successMessage: string) {
-    if (!currentPath) {
-      throw new Error('Open a workspace first.')
-    }
-
-    if (!(await ensureWorkspaceTabsSavedBeforeNodeMutation({
-      actionLabel: `moving ${node.kind === 'directory' ? 'this folder' : 'this file'}`,
-      nodePath: node.path,
-    }))) {
-      return
-    }
-
-    const { filePath: nextFilePath } = await window.appApi.moveWorkspaceEntry(currentPath, node.path, nextRelativePath)
-    await performWorkspaceRefresh(currentPath, {
-      refreshGit: true,
-      refreshTree: true,
-    })
-    updateOpenTabsForMovedNode(node.path, nextFilePath)
-    rebaseExpandedTreePaths(node.path, nextFilePath)
-    await syncPersistedActiveFile(currentPath)
-    setStatusMessage(successMessage)
-  }
-
-  async function handleRenameNode(node: WorkspaceNode, nextName: string) {
-    if (!currentPath) {
-      throw new Error('Open a workspace first.')
-    }
-
-    const trimmedName = nextName.trim()
-    if (!trimmedName) {
-      throw new Error(`${node.kind === 'directory' ? 'Folder' : 'File'} name is required.`)
-    }
-
-    const currentBaseName = getBaseName(node.path)
-    const currentExtensionMatch = currentBaseName.match(/(\.[^./\\]+)$/)
-    const nextBaseName = node.kind === 'file' && currentExtensionMatch && !/\.[^./\\]+$/.test(trimmedName)
-      ? `${trimmedName}${currentExtensionMatch[1]}`
-      : trimmedName
-    const parentDirectory = getDirectoryRelativePath(currentPath, node.path)
-    const nextRelativePath = parentDirectory ? `${parentDirectory}/${nextBaseName}` : nextBaseName
-
-    await handleMoveWorkspaceNode(node, nextRelativePath, `${nextBaseName} renamed`)
-  }
-
-  async function handleMoveNode(node: WorkspaceNode, targetDirectoryPath: string) {
-    if (!currentPath) {
-      throw new Error('Open a workspace first.')
-    }
-
-    const targetRelativePath = getRelativePath(currentPath, targetDirectoryPath)
-    const nextRelativePath = targetRelativePath ? `${targetRelativePath}/${node.name}` : node.name
-
-    await handleMoveWorkspaceNode(node, nextRelativePath, `${node.name} moved`)
-  }
-
-  async function handleDeleteNode(node: WorkspaceNode) {
-    if (!currentPath) {
-      throw new Error('Open a workspace first.')
-    }
-
-    const hasDirtyTabs = (await flushWorkspaceTabsForNode(node.path)).length > 0
-
-    if (hasDirtyTabs) {
-      const targetLabel = node.kind === 'directory'
-        ? `"${node.name}" contains unsaved editor tabs.\n\nDelete the folder and discard those changes?`
-        : `"${node.name}" has unsaved changes in an editor tab.\n\nDelete the file and discard those changes?`
-      const confirmed = await requestConfirm({
-        title: node.kind === 'directory' ? 'Delete Folder' : 'Delete File',
-        message: targetLabel,
-        confirmLabel: 'Delete',
-        isDanger: true,
-      })
-
-      if (!confirmed) {
-        return
-      }
-    }
-
-    await window.appApi.deleteWorkspaceFile(currentPath, node.path)
-    await performWorkspaceRefresh(currentPath, {
-      refreshGit: true,
-      refreshTree: true,
-    })
-    closeTabsForNode(node.path)
-    await syncPersistedActiveFile(currentPath)
-    setStatusMessage(`${node.name} deleted`)
   }
 
   useEffect(() => {
