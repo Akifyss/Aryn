@@ -68,6 +68,7 @@ type PiRuntime = {
 type PiCliAgentManagerOptions = {
   agentDir: string
   emitEvent: (event: AgentClientEventPayload) => void
+  removeSessionFile?: (sessionPath: string) => Promise<void>
 }
 
 const DEFAULT_INDEX: PiCliSessionIndex = { sessions: [], version: 1 }
@@ -319,11 +320,14 @@ export class PiCliAgentManager {
     this.runtimes.get(sessionID)?.process.stop()
     this.runtimes.delete(sessionID)
     this.clearPendingInteractions((pending) => pending.sessionId === sessionID)
+    if (record.sessionPath) {
+      if (this.options.removeSessionFile) await this.options.removeSessionFile(record.sessionPath)
+      else await rm(record.sessionPath, { force: true })
+    }
     await this.index.update((state) => ({
       ...state,
       sessions: state.sessions.filter((session) => session.id !== sessionID),
     }))
-    if (record.sessionPath) await rm(record.sessionPath, { force: true })
     const identity = workspaceIdentity(cwd)
     const activeSessionID = this.workspaceActiveSessions.get(identity) ?? null
     if (activeSessionID === sessionID) this.workspaceActiveSessions.delete(identity)
@@ -331,17 +335,18 @@ export class PiCliAgentManager {
   }
 
   async renameSession(cwd: string, sessionID: string, name: string) {
-    const nextName = name.trim() || null
+    const nextName = name.trim()
+    if (!nextName) throw new Error('PI CLI 会话名称不能为空。')
     await this.requireRecord(cwd, sessionID)
+    const runtime = await this.requireRuntime(cwd, sessionID)
+    await runtime.process.request({ type: 'set_session_name', name: nextName })
+    runtime.record.name = nextName
     await this.index.update((state) => ({
       ...state,
       sessions: state.sessions.map((record) => record.id === sessionID
         ? { ...record, name: nextName, updatedAt: new Date().toISOString() }
         : record),
     }))
-    const runtime = await this.requireRuntime(cwd, sessionID)
-    runtime.record.name = nextName
-    await runtime.process.request({ type: 'set_session_name', name: nextName ?? '' })
     return this.broadcastWorkspaceState(cwd, this.workspaceActiveSessions.get(workspaceIdentity(cwd)) ?? null)
   }
 
