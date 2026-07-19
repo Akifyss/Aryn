@@ -21,12 +21,12 @@ describe('external Agent workspace ownership', () => {
       record: { cwd: 'C:/workspace-a', id: 'thread-a' },
     }
     const internals = manager as unknown as {
-      bindings: Map<string, typeof binding>
-      requireBinding: (cwd: string, threadID: string) => Promise<typeof binding>
+      installBinding: (record: typeof binding.record, isStreaming: boolean) => Promise<unknown>
+      withBinding: (cwd: string, threadID: string, operation: (value: typeof binding) => unknown) => Promise<unknown>
     }
-    internals.bindings.set('thread-a', binding)
+    await internals.installBinding(binding.record, false)
 
-    await expect(internals.requireBinding('C:/workspace-b', 'thread-a'))
+    await expect(internals.withBinding('C:/workspace-b', 'thread-a', () => undefined))
       .rejects.toThrow('not found for this workspace')
     manager.dispose()
   })
@@ -80,9 +80,10 @@ describe('external Agent workspace ownership', () => {
     const opencode = new OpenCodeAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
     const pi = new PiCliAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
     const codexInternals = codex as unknown as {
-      bindingStarts: Map<string, Promise<never>>
-      bindingStartWorkspaces: Map<string, string>
       listIndexedRecords: () => Promise<unknown[]>
+      runtimeCoordinator: {
+        ensure: (key: string, start: (lease: SessionRuntimeLease) => Promise<unknown>) => Promise<unknown>
+      }
     }
     const opencodeInternals = opencode as unknown as {
       sessionBindingStarts: Map<string, Promise<never>>
@@ -97,9 +98,24 @@ describe('external Agent workspace ownership', () => {
         ensure: (key: string, start: (lease: SessionRuntimeLease) => Promise<unknown>) => Promise<unknown>
       }
     }
+    let resolveCodexStart!: () => void
+    const codexStart = new Promise<void>((resolve) => {
+      resolveCodexStart = resolve
+    })
     codexInternals.listIndexedRecords = async () => []
-    codexInternals.bindingStarts.set('thread-b', never)
-    codexInternals.bindingStartWorkspaces.set('thread-b', otherWorkspace)
+    const codexStarting = codexInternals.runtimeCoordinator.ensure(
+      `${otherWorkspace}\0thread-b`,
+      async (lease) => {
+        await codexStart
+        return {
+          activeTurnId: null,
+          isStreaming: false,
+          lease,
+          queuedPrompts: [],
+          record: { cwd: 'C:/workspace-b', id: 'thread-b' },
+        }
+      },
+    )
     opencodeInternals.sessionBindingStarts.set('session-b', never)
     opencodeInternals.sessionBindingStartWorkspaces.set('session-b', otherWorkspace)
     const piStarting = piInternals.runtimeCoordinator.ensure(
@@ -117,7 +133,9 @@ describe('external Agent workspace ownership', () => {
         pi.releaseWorkspaceRuntime('C:/workspace-a'),
       ])).resolves.toEqual([undefined, undefined, undefined])
     } finally {
+      resolveCodexStart()
       resolvePiStart({ process: { stop: () => undefined } })
+      await codexStarting
       await piStarting
       codex.dispose()
       opencode.dispose()

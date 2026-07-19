@@ -91,6 +91,12 @@ export class SessionRuntimeCoordinator<TRuntime> {
     })
   }
 
+  /** Serializes key-scoped work that does not require a runtime to exist. */
+  async run<TResult>(key: string, operation: () => MaybePromise<TResult>): Promise<TResult> {
+    this.assertUsable()
+    return this.runLifecycle(this.getOrCreateEntry(key), operation)
+  }
+
   async retire(key: string) {
     return this.retireAndRun(key, () => undefined)
   }
@@ -106,6 +112,25 @@ export class SessionRuntimeCoordinator<TRuntime> {
       const retired = this.invalidateCurrent(entry)
       if (retired) await this.options.stopRuntime(retired.runtime)
       return operation(retired)
+    })
+  }
+
+  /**
+   * Commits provider work before retiring the runtime in the same lifecycle
+   * critical section. If the provider work fails, the current runtime remains
+   * available for a retry.
+   */
+  async runAndRetire<TResult>(
+    key: string,
+    operation: (current: SessionRuntimeHandle<TRuntime> | null) => MaybePromise<TResult>,
+  ): Promise<TResult> {
+    this.assertUsable()
+    const entry = this.getOrCreateEntry(key)
+    return this.runLifecycle(entry, async () => {
+      const result = await operation(entry.current)
+      const retired = this.invalidateCurrent(entry)
+      if (retired) await this.options.stopRuntime(retired.runtime)
+      return result
     })
   }
 
@@ -127,6 +152,35 @@ export class SessionRuntimeCoordinator<TRuntime> {
     const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
     if (failures.length > 0) {
       throw new AggregateError(failures, 'One or more session runtimes could not be retired.')
+    }
+  }
+
+  /**
+   * Invalidates matching generations immediately, then stops current runtimes.
+   * This is reserved for an external owner that has already terminated; normal
+   * release paths should use `retire*` so provider cleanup stays serialized.
+   * A runtime still being initialized will observe its stale lease and stop as
+   * soon as initialization returns.
+   */
+  async invalidateWhere(predicate: (key: string) => boolean) {
+    this.assertUsable()
+    const entries = [...this.entries.values()].filter((entry) => predicate(entry.key))
+    const retired = entries.flatMap((entry) => {
+      const handle = this.invalidateCurrent(entry)
+      return handle ? [handle] : []
+    })
+    const stops = retired.map((handle) => {
+      try {
+        return Promise.resolve(this.options.stopRuntime(handle.runtime))
+      } catch (error) {
+        return Promise.reject(error)
+      }
+    })
+    const results = await Promise.allSettled(stops)
+    for (const entry of entries) this.cleanupEntry(entry)
+    const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'One or more session runtimes could not be invalidated.')
     }
   }
 

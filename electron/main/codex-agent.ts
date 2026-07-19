@@ -30,6 +30,10 @@ import { AtomicJsonStore } from './json-file-store'
 import { prepareExternalCliEnvironment } from './external-cli-environment'
 import { CodexRpcClient } from './codex-rpc-client'
 import { CodexSessionStore } from './codex-session-store'
+import {
+  SessionRuntimeCoordinator,
+  type SessionRuntimeLease,
+} from './session-runtime-coordinator'
 
 type JsonRecord = Record<string, unknown>
 
@@ -60,13 +64,16 @@ type QueuedCodexPrompt = {
 type CodexBinding = {
   activeTurnId: string | null
   isStreaming: boolean
+  lease: SessionRuntimeLease
   queuedPrompts: QueuedCodexPrompt[]
   record: CodexThreadRecord
 }
 
 type PendingCodexInteraction = {
   approvalProtocol?: 'legacy' | 'v2'
+  client: CodexRpcClient
   kind: 'approval' | 'permissions' | 'question'
+  lease: SessionRuntimeLease
   originalId: ServerRequest['id']
   questionIds?: string[]
   requestId: string
@@ -79,6 +86,29 @@ type CodexAgentManagerOptions = {
   emitEvent: (event: AgentClientEventPayload) => void
 }
 
+type WorkspaceActivation = {
+  identity: string
+  revision: number
+}
+
+type WorkspaceActivationState = {
+  revision: number
+  targetThreadId?: string | null
+}
+
+type WorkspaceOperation = {
+  identity: string
+  revision: number
+}
+
+type WorkspaceStateContext = {
+  activation?: WorkspaceActivation
+  providedBinding?: CodexBinding
+  sourceLease?: SessionRuntimeLease
+  state?: AgentWorkspaceState
+  workspaceOperation?: WorkspaceOperation
+}
+
 const DEFAULT_INDEX: CodexThreadIndex = { threads: [], version: 1 }
 const THINKING_LEVELS: AgentThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
 const SNAPSHOT_COALESCE_MS = 16
@@ -87,6 +117,22 @@ const TOP_LEVEL_THREAD_SOURCE_KINDS: ThreadSourceKind[] = ['cli', 'vscode', 'exe
 function workspaceIdentity(cwd: string) {
   const resolved = path.resolve(cwd)
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
+
+function runtimeKey(cwd: string, threadId: string) {
+  return `${workspaceIdentity(cwd)}\0${threadId}`
+}
+
+function workspaceRuntimeKeyPrefix(cwd: string) {
+  return `${workspaceIdentity(cwd)}\0`
+}
+
+function notificationThreadId(notification: ServerNotification) {
+  return notification.method === 'thread/started'
+    ? notification.params.thread.id
+    : 'threadId' in notification.params && typeof notification.params.threadId === 'string'
+      ? notification.params.threadId
+      : null
 }
 
 function isRecoverableModelsCacheError(error: unknown) {
@@ -244,8 +290,7 @@ export function buildCodexUserInputs(
 }
 
 export class CodexAgentManager {
-  private readonly bindingStarts = new Map<string, Promise<CodexBinding>>()
-  private readonly bindingStartWorkspaces = new Map<string, string>()
+  private readonly bindingLeases = new Map<string, SessionRuntimeLease>()
   private readonly bindings = new Map<string, CodexBinding>()
   private client: CodexRpcClient | null = null
   private clientPromise: Promise<CodexRpcClient> | null = null
@@ -254,16 +299,27 @@ export class CodexAgentManager {
   private models: Model[] = []
   private readonly pendingInteractions = new Map<string, PendingCodexInteraction>()
   private readonly recordReplacements = new Map<string, Promise<CodexThreadRecord>>()
+  private readonly runtimeCoordinator: SessionRuntimeCoordinator<CodexBinding>
   private serviceTierCompatibilityOverride = false
   private readonly snapshotTimers = new Map<string, NodeJS.Timeout>()
   private readonly sessionStore = new CodexSessionStore()
+  // Activation revisions preserve the latest foreground selection. Operation
+  // revisions are invalidated by release/discard; state revisions suppress an
+  // older asynchronous snapshot that completes after a newer one.
+  private readonly workspaceActivations = new Map<string, WorkspaceActivationState>()
   private readonly workspaceActiveThreads = new Map<string, string>()
+  private readonly workspaceOperationRevisions = new Map<string, number>()
+  private readonly workspaceStateRevisions = new Map<string, number>()
+  private readonly workspaceTeardownCounts = new Map<string, number>()
 
   constructor(private readonly options: CodexAgentManagerOptions) {
     this.index = new AtomicJsonStore({
       defaultState: () => structuredClone(DEFAULT_INDEX),
       filePath: path.join(options.agentDir, 'external', 'codex', 'threads.json'),
       normalize: normalizeIndex,
+    })
+    this.runtimeCoordinator = new SessionRuntimeCoordinator({
+      stopRuntime: (binding) => this.dropThreadRuntime(binding.record.id, binding),
     })
   }
 
@@ -273,20 +329,57 @@ export class CodexAgentManager {
   }
 
   async loadWorkspaceState(cwd: string, preferredSessionPath: string | null, options: { restoreSession?: boolean } = {}) {
+    const workspaceOperation = this.captureWorkspaceOperation(cwd)
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
+    const activation = this.beginWorkspaceActivation(cwd)
     await this.ensureClient()
     const records = await this.listRecords(cwd)
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
     let activeId = options.restoreSession === false
       ? null
-      : [preferredSessionPath, this.workspaceActiveThreads.get(workspaceIdentity(cwd)), records[0]?.id]
+      : [preferredSessionPath, this.workspaceActiveThreads.get(activation.identity), records[0]?.id]
           .find((candidate): candidate is string => Boolean(candidate && records.some((record) => record.id === candidate)))
         ?? null
-    if (activeId) {
-      const record = await this.ensureOpenableRecord(cwd, activeId)
-      activeId = record.id
-      await this.requireBinding(cwd, activeId)
-      this.workspaceActiveThreads.set(workspaceIdentity(cwd), activeId)
+    if (!this.setWorkspaceActivationTarget(activation, activeId)) {
+      throw new Error('Codex workspace activation was superseded.')
     }
-    return this.buildWorkspaceState(cwd, activeId)
+    if (activeId) {
+      const record = await this.ensureOpenableRecord(cwd, activeId, workspaceOperation)
+      activeId = record.id
+      if (!this.setWorkspaceActivationTarget(activation, activeId)) {
+        throw new Error('Codex workspace activation was superseded.')
+      }
+      let sourceLease!: SessionRuntimeLease
+      const state = await this.withBinding(cwd, activeId, async (binding) => {
+        sourceLease = binding.lease
+        this.requireWorkspaceOperationCurrent(workspaceOperation)
+        const nextState = await this.buildWorkspaceState(cwd, activeId, binding, () => (
+          this.isWorkspaceOperationCurrent(workspaceOperation)
+          && this.isWorkspaceActivationCurrent(activation)
+          && binding.lease.isCurrent()
+        ))
+        if (!this.commitWorkspaceActivation(activation, activeId)) {
+          throw new Error('Codex workspace activation was superseded.')
+        }
+        return nextState
+      }, workspaceOperation)
+      if (
+        !sourceLease.isCurrent()
+        || !this.isWorkspaceOperationCurrent(workspaceOperation)
+        || !this.isWorkspaceActivationCurrent(activation)
+      ) {
+        throw new Error('Codex workspace state request was superseded.')
+      }
+      return state
+    }
+    const state = await this.buildWorkspaceState(cwd, null, undefined, () => (
+      this.isWorkspaceOperationCurrent(workspaceOperation)
+      && this.isWorkspaceActivationCurrent(activation)
+    ))
+    if (!this.commitWorkspaceActivation(activation, null)) {
+      throw new Error('Codex workspace activation was superseded.')
+    }
+    return state
   }
 
   async listSessionItems(cwd: string) {
@@ -294,23 +387,41 @@ export class CodexAgentManager {
   }
 
   async readSession(cwd: string, threadId: string) {
+    const workspaceOperation = this.captureWorkspaceOperation(cwd)
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
     const record = await this.requireRecord(cwd, threadId)
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
     if (!record.materialized) {
       const snapshot = this.sessionStore.get(threadId)
       if (!snapshot) throw new Error('Codex thread is not materialized and has no in-memory state.')
       return this.createSessionSnapshot(record, snapshot)
     }
-    await this.requireBinding(cwd, threadId)
+    return this.withBinding(cwd, threadId, (binding) => this.readBoundSession(binding), workspaceOperation)
+  }
+
+  private async readBoundSession(binding: CodexBinding) {
+    const { record } = binding
+    const threadId = record.id
+    if (!binding.lease.isCurrent()) {
+      throw new Error('Codex thread binding was superseded.')
+    }
     const checkpoint = this.sessionStore.beginHydration(threadId)
     try {
       const response = await (await this.ensureClient()).request('thread/read', {
         includeTurns: true,
         threadId,
       })
+      if (!binding.lease.isCurrent()) {
+        this.sessionStore.cancelHydration(checkpoint)
+        throw new Error('Codex thread binding was superseded.')
+      }
       const native = this.sessionStore.hydrate(response.thread, checkpoint)
       return this.createSessionSnapshot(record, native)
     } catch (error) {
       this.sessionStore.cancelHydration(checkpoint)
+      if (!binding.lease.isCurrent()) {
+        throw new Error('Codex thread binding was superseded.')
+      }
       const current = this.sessionStore.get(threadId)
       const message = error instanceof Error ? error.message : String(error)
       // A newly materialized rollout can be observable through app-server
@@ -330,6 +441,9 @@ export class CodexAgentManager {
   }
 
   async createSession(cwd: string, options?: string | AgentSessionCreateOptions) {
+    const workspaceOperation = this.captureWorkspaceOperation(cwd)
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
+    const activation = this.beginWorkspaceActivation(cwd)
     const client = await this.ensureClient()
     const normalized = typeof options === 'string' ? { name: options } : options
     const defaultModel = this.defaultModel()
@@ -359,66 +473,134 @@ export class CodexAgentManager {
       reasoningEffort: effort,
       updatedAt: now,
     }
+    const activationTargetAccepted = this.setWorkspaceActivationTarget(activation, record.id)
     this.sessionStore.install(result.thread)
     try {
       await this.index.update((state) => ({ ...state, threads: [record, ...state.threads] }))
     } catch (error) {
       this.sessionStore.delete(record.id)
+      await client.request('thread/unsubscribe', { threadId: record.id }).catch((unsubscribeError) => {
+        console.warn(`[codex app-server] Failed to unsubscribe a thread after its ownership index update failed: ${unsubscribeError instanceof Error ? unsubscribeError.message : String(unsubscribeError)}`)
+      })
       throw error
     }
-    this.bindings.set(record.id, { activeTurnId: null, isStreaming: false, queuedPrompts: [], record })
-    this.workspaceActiveThreads.set(workspaceIdentity(cwd), record.id)
-    return this.broadcastWorkspaceState(cwd, record.id)
+    if (!this.isWorkspaceOperationCurrent(workspaceOperation)) {
+      this.sessionStore.delete(record.id)
+      await client.request('thread/unsubscribe', { threadId: record.id }).catch((error) => {
+        console.warn(`[codex app-server] Failed to unsubscribe a superseded new thread: ${error instanceof Error ? error.message : String(error)}`)
+      })
+      throw new Error('Codex workspace operation was superseded.')
+    }
+    await this.installBinding(record, result.thread.status.type === 'active')
+    if (!activationTargetAccepted || !this.isWorkspaceActivationCurrent(activation)) {
+      throw new Error('Codex workspace activation was superseded.')
+    }
+    let sourceLease!: SessionRuntimeLease
+    const state = await this.withBinding(cwd, record.id, async (binding) => {
+      sourceLease = binding.lease
+      this.requireWorkspaceOperationCurrent(workspaceOperation)
+      const nextState = await this.buildWorkspaceState(cwd, record.id, binding, () => (
+        this.isWorkspaceOperationCurrent(workspaceOperation)
+        && this.isWorkspaceActivationCurrent(activation)
+        && binding.lease.isCurrent()
+      ))
+      if (!this.commitWorkspaceActivation(activation, record.id)) {
+        throw new Error('Codex workspace activation was superseded.')
+      }
+      return nextState
+    }, workspaceOperation)
+    return this.broadcastWorkspaceState(cwd, record.id, {
+      activation,
+      sourceLease,
+      state,
+      workspaceOperation,
+    })
   }
 
   async openSession(cwd: string, threadId: string) {
-    const record = await this.ensureOpenableRecord(cwd, threadId)
-    await this.requireBinding(cwd, record.id)
-    this.workspaceActiveThreads.set(workspaceIdentity(cwd), record.id)
-    return this.broadcastWorkspaceState(cwd, record.id)
+    const workspaceOperation = this.captureWorkspaceOperation(cwd)
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
+    const activation = this.beginWorkspaceActivation(cwd, threadId)
+    const record = await this.ensureOpenableRecord(cwd, threadId, workspaceOperation)
+    if (!this.setWorkspaceActivationTarget(activation, record.id)) {
+      throw new Error('Codex workspace activation was superseded.')
+    }
+    let sourceLease!: SessionRuntimeLease
+    const state = await this.withBinding(cwd, record.id, async (binding) => {
+      sourceLease = binding.lease
+      this.requireWorkspaceOperationCurrent(workspaceOperation)
+      const nextState = await this.buildWorkspaceState(cwd, record.id, binding, () => (
+        this.isWorkspaceOperationCurrent(workspaceOperation)
+        && this.isWorkspaceActivationCurrent(activation)
+        && binding.lease.isCurrent()
+      ))
+      if (!this.commitWorkspaceActivation(activation, record.id)) {
+        throw new Error('Codex workspace activation was superseded.')
+      }
+      return nextState
+    }, workspaceOperation)
+    return this.broadcastWorkspaceState(cwd, record.id, {
+      activation,
+      sourceLease,
+      state,
+      workspaceOperation,
+    })
   }
 
   async deleteSession(cwd: string, threadId: string) {
+    const workspaceOperation = this.captureWorkspaceOperation(cwd)
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
     const originalThreadId = threadId
+    this.invalidateWorkspaceActivationForThread(workspaceIdentity(cwd), originalThreadId)
     let record = await this.requireRecord(cwd, threadId)
     const replacement = this.recordReplacements.get(threadId)
     if (replacement) record = await replacement
     threadId = record.id
-    await this.bindingStarts.get(threadId)?.catch(() => undefined)
-    const binding = this.bindings.get(threadId)
-    if (record.materialized || binding) {
-      const client = await this.ensureClient()
-      if (binding?.activeTurnId) {
-        await client.request('turn/interrupt', { threadId, turnId: binding.activeTurnId })
+    const nextActiveThreadId = await this.runtimeCoordinator.runAndRetire(
+      runtimeKey(cwd, threadId),
+      async (current) => {
+        const binding = current?.runtime ?? null
+        if (record.materialized || binding) {
+          await this.deleteNativeThread(await this.ensureClient(), threadId, binding)
+        }
+        await this.removeRecord(threadId)
+        const identity = workspaceIdentity(cwd)
+        const activeId = this.workspaceActiveThreads.get(identity) ?? null
+        const deletedActiveThread = activeId === threadId || activeId === originalThreadId
+        if (deletedActiveThread) this.workspaceActiveThreads.delete(identity)
+        return deletedActiveThread ? null : activeId
       }
-      await client.request('thread/delete', { threadId }).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error)
-        if (!message.includes('no rollout found') && !message.includes('not found')) throw error
-      })
+    )
+    if (originalThreadId !== threadId) {
+      await this.runtimeCoordinator.retire(runtimeKey(cwd, originalThreadId))
+      this.dropThreadRuntime(originalThreadId)
     }
-    await this.removeRecord(threadId)
-    this.dropThreadRuntime(threadId)
-    if (originalThreadId !== threadId) this.dropThreadRuntime(originalThreadId)
-    const identity = workspaceIdentity(cwd)
-    const activeId = this.workspaceActiveThreads.get(identity) ?? null
-    const deletedActiveThread = activeId === threadId || activeId === originalThreadId
-    if (deletedActiveThread) this.workspaceActiveThreads.delete(identity)
-    return this.broadcastWorkspaceState(cwd, deletedActiveThread ? null : activeId)
+    return this.broadcastWorkspaceState(cwd, nextActiveThreadId, { workspaceOperation })
   }
 
   async renameSession(cwd: string, threadId: string, name: string) {
+    const workspaceOperation = this.captureWorkspaceOperation(cwd)
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
     let record = await this.requireRecord(cwd, threadId)
     const replacement = this.recordReplacements.get(threadId)
     if (replacement) record = await replacement
     threadId = record.id
     const normalizedName = name.trim()
     if (!normalizedName) throw new Error('Codex 会话名称不能为空。')
-    record.name = normalizedName
-    if (record.materialized) await this.setThreadName(await this.ensureClient(), record)
-    await this.updateRecord(record)
-    const binding = this.bindings.get(threadId)
-    if (binding) binding.record = record
-    return this.broadcastWorkspaceState(cwd, this.workspaceActiveThreads.get(workspaceIdentity(cwd)) ?? null)
+    await this.runtimeCoordinator.run(runtimeKey(cwd, threadId), async () => {
+      this.requireWorkspaceOperationCurrent(workspaceOperation)
+      const nextRecord = { ...record, name: normalizedName }
+      if (nextRecord.materialized) await this.setThreadName(await this.ensureClient(), nextRecord)
+      await this.updateRecord(nextRecord)
+      record = nextRecord
+      const binding = this.bindings.get(threadId)
+      if (binding?.lease.isCurrent()) binding.record = nextRecord
+    })
+    return this.broadcastWorkspaceState(
+      cwd,
+      this.workspaceActiveThreads.get(workspaceIdentity(cwd)) ?? null,
+      { workspaceOperation },
+    )
   }
 
   async sendPrompt(
@@ -429,73 +611,110 @@ export class CodexAgentManager {
     attachments: AgentPromptAttachment[] = [],
     options?: AgentPromptSendOptions,
   ) {
-    const binding = await this.requireBinding(cwd, threadId)
-    if (binding.isStreaming) {
-      if (streamingBehavior === 'steer' && binding.activeTurnId) {
-        await (await this.ensureClient()).request('turn/steer', {
-          ...(options?.clientMessageId ? { clientUserMessageId: options.clientMessageId } : {}),
-          expectedTurnId: binding.activeTurnId,
-          input: this.buildInputs(prompt, attachments),
-          threadId,
-        })
+    return this.withBinding(cwd, threadId, async (binding) => {
+      if (binding.isStreaming) {
+        if (streamingBehavior === 'steer' && binding.activeTurnId) {
+          await (await this.ensureClient()).request('turn/steer', {
+            ...(options?.clientMessageId ? { clientUserMessageId: options.clientMessageId } : {}),
+            expectedTurnId: binding.activeTurnId,
+            input: this.buildInputs(prompt, attachments),
+            threadId,
+          })
+          return { ok: true }
+        }
+        binding.queuedPrompts.push({ attachments, options, prompt })
         return { ok: true }
       }
-      binding.queuedPrompts.push({ attachments, options, prompt })
+      await this.startTurn(binding, prompt, attachments, options)
       return { ok: true }
-    }
-    await this.startTurn(binding, prompt, attachments, options)
-    return { ok: true }
+    })
   }
 
   async selectModel(cwd: string, threadId: string, modelKey: string) {
-    const binding = await this.requireBinding(cwd, threadId)
-    const model = this.requireModel(modelKey)
-    binding.record.model = model.model
-    binding.record.modelExplicit = true
-    const levels = codexModelThinkingLevels(model)
-    if (!levels.includes(binding.record.reasoningEffort)) {
-      binding.record.reasoningEffort = levels.includes('medium') ? 'medium' : levels[0]
-    }
-    await this.updateRecord(binding.record)
-    return this.broadcastWorkspaceState(cwd, threadId)
+    const workspaceOperation = this.captureWorkspaceOperation(cwd)
+    let sourceLease!: SessionRuntimeLease
+    await this.withBinding(cwd, threadId, async (binding) => {
+      this.requireWorkspaceOperationCurrent(workspaceOperation)
+      sourceLease = binding.lease
+      const model = this.requireModel(modelKey)
+      const nextRecord = {
+        ...binding.record,
+        model: model.model,
+        modelExplicit: true,
+      }
+      const levels = codexModelThinkingLevels(model)
+      if (!levels.includes(nextRecord.reasoningEffort)) {
+        nextRecord.reasoningEffort = levels.includes('medium') ? 'medium' : levels[0]
+      }
+      await this.updateRecord(nextRecord)
+      binding.record = nextRecord
+    }, workspaceOperation)
+    return this.broadcastWorkspaceState(
+      cwd,
+      threadId,
+      { sourceLease, workspaceOperation },
+    )
   }
 
   async selectThinkingLevel(cwd: string, threadId: string, level: string, modelKey?: string) {
-    const binding = await this.requireBinding(cwd, threadId)
-    const nextLevel = reasoningEffort(level)
-    if (!THINKING_LEVELS.includes(level as AgentThinkingLevel)) throw new Error(`Codex thinking level "${level}" is invalid.`)
-    const model = modelKey
-      ? this.requireModel(modelKey)
-      : this.models.find((candidate) => candidate.model === binding.record.model)
-    if (model && !codexModelThinkingLevels(model).includes(nextLevel)) {
-      throw new Error(`Codex thinking level "${level}" is not supported by "openai/${model.model}".`)
-    }
-    binding.record.reasoningEffort = nextLevel
-    if (modelKey && model) {
-      binding.record.model = model.model
-      binding.record.modelExplicit = true
-    }
-    await this.updateRecord(binding.record)
-    return this.broadcastWorkspaceState(cwd, threadId)
+    const workspaceOperation = this.captureWorkspaceOperation(cwd)
+    let sourceLease!: SessionRuntimeLease
+    await this.withBinding(cwd, threadId, async (binding) => {
+      this.requireWorkspaceOperationCurrent(workspaceOperation)
+      sourceLease = binding.lease
+      const nextLevel = reasoningEffort(level)
+      if (!THINKING_LEVELS.includes(level as AgentThinkingLevel)) throw new Error(`Codex thinking level "${level}" is invalid.`)
+      const model = modelKey
+        ? this.requireModel(modelKey)
+        : this.models.find((candidate) => candidate.model === binding.record.model)
+      if (model && !codexModelThinkingLevels(model).includes(nextLevel)) {
+        throw new Error(`Codex thinking level "${level}" is not supported by "openai/${model.model}".`)
+      }
+      const nextRecord = { ...binding.record, reasoningEffort: nextLevel }
+      if (modelKey && model) {
+        nextRecord.model = model.model
+        nextRecord.modelExplicit = true
+      }
+      await this.updateRecord(nextRecord)
+      binding.record = nextRecord
+    }, workspaceOperation)
+    return this.broadcastWorkspaceState(
+      cwd,
+      threadId,
+      { sourceLease, workspaceOperation },
+    )
   }
 
   async abortActivePrompt(cwd: string, threadId: string) {
-    const binding = await this.requireBinding(cwd, threadId)
-    if (binding.activeTurnId) {
-      await (await this.ensureClient()).request('turn/interrupt', {
-        threadId,
-        turnId: binding.activeTurnId,
-      })
-    }
+    const workspaceOperation = this.captureWorkspaceOperation(cwd)
+    let sourceLease!: SessionRuntimeLease
+    await this.withBinding(cwd, threadId, async (binding) => {
+      this.requireWorkspaceOperationCurrent(workspaceOperation)
+      sourceLease = binding.lease
+      if (binding.activeTurnId) {
+        await (await this.ensureClient()).request('turn/interrupt', {
+          threadId,
+          turnId: binding.activeTurnId,
+        })
+      }
+    }, workspaceOperation)
     // turn/interrupt only acknowledges the request. The turn remains active
     // until App Server publishes its authoritative completion/status event.
-    return this.broadcastWorkspaceState(cwd, threadId)
+    return this.broadcastWorkspaceState(
+      cwd,
+      threadId,
+      { sourceLease, workspaceOperation },
+    )
   }
 
   respondToInteraction(response: AgentInteractionResponse) {
     const key = getAgentInteractionKey(response.sessionId, response.requestId)
     const pending = this.pendingInteractions.get(key)
-    if (!pending || !this.client) return false
+    if (
+      !pending
+      || pending.client !== this.client
+      || !pending.lease.isCurrent()
+    ) return false
     let result: JsonRecord
     if (pending.kind === 'question' && pending.questionIds) {
       result = {
@@ -517,7 +736,7 @@ export class CodexAgentManager {
     } else {
       result = buildCodexApprovalResult(response.optionId, pending.approvalProtocol ?? 'v2')
     }
-    this.client.respond(pending.originalId, result)
+    pending.client.respond(pending.originalId, result)
     this.pendingInteractions.delete(key)
     this.options.emitEvent({
       type: 'interaction_resolved',
@@ -530,69 +749,69 @@ export class CodexAgentManager {
 
   async releaseWorkspaceRuntime(cwd: string) {
     const identity = workspaceIdentity(cwd)
-    const ids = new Set((await this.listIndexedRecords(cwd)).map((record) => record.id))
-    await Promise.all([...ids].map((id) => this.recordReplacements.get(id)?.catch(() => undefined)))
-    // Official threads discovered outside Aryn have no ownership-index entry.
-    // Track pending bindings by workspace so release catches them without
-    // blocking unrelated workspaces that are starting in parallel.
-    const pendingStarts = [...this.bindingStarts.entries()]
-      .filter(([threadId]) => this.bindingStartWorkspaces.get(threadId) === identity)
-      .map(([, start]) => start.catch(() => undefined))
-    await Promise.all(pendingStarts)
-    const bindings = [...this.bindings.values()].filter((binding) => workspaceIdentity(binding.record.cwd) === identity)
-    const client = this.client
-    const results = client
-      ? await Promise.allSettled(bindings.map(async (binding) => {
-          const failures: unknown[] = []
-          if (binding.activeTurnId) {
-            await client.request('turn/interrupt', {
-              threadId: binding.record.id,
-              turnId: binding.activeTurnId,
-            }).catch((error) => failures.push(error))
-          }
-          await client.request('thread/unsubscribe', {
-            threadId: binding.record.id,
-          }).catch((error) => failures.push(error))
-          if (failures.length === 1) throw failures[0]
-          if (failures.length > 1) {
-            throw new AggregateError(failures, `Codex thread ${binding.record.id} could not be released.`)
-          }
-        }))
-      : []
-    for (const binding of bindings) this.dropThreadRuntime(binding.record.id)
-    this.workspaceActiveThreads.delete(identity)
-    const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
-    if (failures.length > 0) throw new AggregateError(failures, 'One or more Codex turns could not be interrupted.')
+    return this.withWorkspaceTeardown(identity, async () => {
+      this.invalidateWorkspaceActivation(identity)
+      this.invalidateWorkspaceOperations(identity)
+      this.workspaceActiveThreads.delete(identity)
+      this.invalidateWorkspaceState(identity)
+      const ids = new Set((await this.listIndexedRecords(cwd)).map((record) => record.id))
+      await Promise.all([...ids].map((id) => this.recordReplacements.get(id)?.catch(() => undefined)))
+      const keys = this.runtimeCoordinator.keys().filter((key) => key.startsWith(workspaceRuntimeKeyPrefix(cwd)))
+      const client = this.client
+      const results = await Promise.allSettled(keys.map((key) => this.runtimeCoordinator.retireAndRun(
+        key,
+        async (retired) => {
+          if (!retired || !client) return
+          await this.releaseNativeBinding(client, retired.runtime)
+        },
+      )))
+      const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+      if (failures.length > 0) throw new AggregateError(failures, 'One or more Codex thread bindings could not be released.')
+    })
   }
 
   async discardWorkspaceSessions(cwd: string) {
     // Only sessions recorded in Aryn's ownership manifest are eligible for
     // draft cleanup. Official Codex threads discovered in the same workspace
     // belong to the user and must not be archived here.
-    let records = await this.listIndexedRecords(cwd)
-    if (records.length === 0) return
-    await Promise.all(records.map((record) => this.recordReplacements.get(record.id)?.catch(() => undefined)))
-    records = await this.listIndexedRecords(cwd)
-    const client = records.some((record) => record.materialized) ? await this.ensureClient() : null
-    const archived = new Set<string>()
-    let firstError: unknown = null
-    for (const record of records) {
-      try {
-        if (record.materialized && client) await this.archiveThread(client, record.id)
-        archived.add(record.id)
-        this.dropThreadRuntime(record.id)
-      } catch (error) {
-        firstError ??= error
+    const identity = workspaceIdentity(cwd)
+    return this.withWorkspaceTeardown(identity, async () => {
+      this.invalidateWorkspaceActivation(identity)
+      this.invalidateWorkspaceOperations(identity)
+      this.invalidateWorkspaceState(identity)
+      let records = await this.listIndexedRecords(cwd)
+      if (records.length === 0) return
+      await Promise.all(records.map((record) => this.recordReplacements.get(record.id)?.catch(() => undefined)))
+      records = await this.listIndexedRecords(cwd)
+      const client = records.some((record) => record.materialized)
+        ? await this.ensureClient()
+        : this.client
+      const archived = new Set<string>()
+      const results = await Promise.allSettled(records.map((record) => this.runtimeCoordinator.runAndRetire(
+        runtimeKey(cwd, record.id),
+        async (current) => {
+        if (record.materialized && client) {
+          await this.archiveThread(client, record.id)
+        } else if (current && client) {
+          await this.releaseNativeBinding(client, current.runtime)
+        }
+          archived.add(record.id)
+        },
+      )))
+      if (archived.size > 0) {
+        await this.index.update((state) => ({
+          ...state,
+          threads: state.threads.filter((record) => !archived.has(record.id)),
+        }))
       }
-    }
-    if (archived.size > 0) {
-      await this.index.update((state) => ({
-        ...state,
-        threads: state.threads.filter((record) => !archived.has(record.id)),
-      }))
-    }
-    if (archived.size === records.length) this.workspaceActiveThreads.delete(workspaceIdentity(cwd))
-    if (firstError) throw firstError
+      const activeThreadId = this.workspaceActiveThreads.get(identity)
+      if (activeThreadId && archived.has(activeThreadId)) this.workspaceActiveThreads.delete(identity)
+      const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+      if (failures.length === 1) throw failures[0]
+      if (failures.length > 1) {
+        throw new AggregateError(failures, 'One or more Codex sessions could not be discarded.')
+      }
+    })
   }
 
   dispose() {
@@ -602,13 +821,21 @@ export class CodexAgentManager {
     this.client?.stop()
     this.client = null
     this.clientPromise = null
-    this.bindingStarts.clear()
-    this.bindingStartWorkspaces.clear()
+    void this.runtimeCoordinator.dispose()
+    this.bindingLeases.clear()
     this.bindings.clear()
     this.pendingInteractions.clear()
     this.recordReplacements.clear()
     this.sessionStore.clear()
+    this.workspaceActivations.clear()
     this.workspaceActiveThreads.clear()
+    this.workspaceOperationRevisions.clear()
+    this.workspaceStateRevisions.clear()
+    this.workspaceTeardownCounts.clear()
+  }
+
+  drainSessionEvents(cwd: string, threadId: string) {
+    return this.runtimeCoordinator.drain(runtimeKey(cwd, threadId))
   }
 
   private async ensureClient() {
@@ -679,16 +906,39 @@ export class CodexAgentManager {
       args,
       onExit: (error) => this.handleConnectionExit(client, error),
       onNotification: (notification) => {
-        eventChain = eventChain
-          .then(() => this.handleNotification(notification))
-          .catch((error) => this.options.emitEvent({
+        if (this.client !== client || this.disposed) return
+        const threadId = notificationThreadId(notification)
+        const lease = threadId ? this.bindingLeases.get(threadId) : null
+        const reportError = (error: Error) => {
+          if (this.client !== client || (lease && !lease.isCurrent())) return
+          this.options.emitEvent({
             type: 'error',
-            message: `Codex event handling failed: ${error instanceof Error ? error.message : String(error)}`,
-            sessionId: 'threadId' in notification.params ? String(notification.params.threadId) : null,
-          }))
+            message: `Codex event handling failed: ${error.message}`,
+            sessionId: threadId,
+          })
+        }
+        const handle = () => {
+          if (this.client !== client || this.disposed || (lease && !lease.isCurrent())) return
+          return this.handleNotification(notification, lease ?? undefined)
+        }
+        if (lease) {
+          lease.enqueue(handle, reportError)
+        } else {
+          eventChain = eventChain.then(handle).catch((error) => {
+            reportError(error instanceof Error ? error : new Error(String(error)))
+          })
+        }
       },
       onProtocolWarning: (message) => console.warn(`[codex app-server] ${message}`),
-      onRequest: (request) => this.handleServerRequest(request),
+      onRequest: (request) => {
+        if (this.client !== client || this.disposed) return
+        const threadId = 'threadId' in request.params
+          ? request.params.threadId
+          : 'conversationId' in request.params
+            ? String(request.params.conversationId)
+            : null
+        this.handleServerRequest(request, client, threadId ? this.bindingLeases.get(threadId) : undefined)
+      },
     })
     this.client = client
     client.start()
@@ -715,15 +965,13 @@ export class CodexAgentManager {
     }
   }
 
-  private async handleNotification(notification: ServerNotification) {
+  private async handleNotification(notification: ServerNotification, sourceLease?: SessionRuntimeLease) {
+    if (sourceLease && !sourceLease.isCurrent()) return
     const native = this.sessionStore.apply(notification)
-    const threadId = native?.thread.id
-      ?? (notification.method === 'thread/started' ? notification.params.thread.id : null)
-      ?? ('threadId' in notification.params && typeof notification.params.threadId === 'string'
-        ? notification.params.threadId
-        : null)
+    const threadId = native?.thread.id ?? notificationThreadId(notification)
     if (!threadId) return
     const binding = this.bindings.get(threadId)
+    if (sourceLease && binding?.lease !== sourceLease) return
 
     if (notification.method === 'turn/started' && binding) {
       binding.activeTurnId = notification.params.turn.id
@@ -731,12 +979,13 @@ export class CodexAgentManager {
     } else if (notification.method === 'turn/completed' && binding) {
       binding.activeTurnId = null
       binding.isStreaming = false
-      if (native) this.scheduleSessionSnapshot(threadId)
+      if (native) this.scheduleSessionSnapshot(threadId, sourceLease ?? binding.lease)
       await this.touchRecord(binding.record).catch(() => undefined)
+      if (sourceLease && !sourceLease.isCurrent()) return
       await this.startNextQueuedPrompt(binding)
     } else if (notification.method === 'thread/name/updated' && binding) {
       binding.record.name = notification.params.threadName?.trim() || null
-      if (native) this.scheduleSessionSnapshot(threadId)
+      if (native) this.scheduleSessionSnapshot(threadId, sourceLease ?? binding.lease)
       await this.updateRecord(binding.record).catch(() => undefined)
     } else if (notification.method === 'thread/status/changed' && binding) {
       binding.isStreaming = notification.params.status.type === 'active'
@@ -747,6 +996,7 @@ export class CodexAgentManager {
       this.clearPendingInteractions((pending) => (
         pending.sessionId === threadId
         && String(pending.originalId) === String(notification.params.requestId)
+        && (!sourceLease || pending.lease === sourceLease)
       ))
     } else if (notification.method === 'error' && !notification.params.willRetry) {
       this.options.emitEvent({
@@ -756,15 +1006,22 @@ export class CodexAgentManager {
       })
     }
 
-    if (binding && native) this.scheduleSessionSnapshot(threadId)
+    if (binding && native && (!sourceLease || sourceLease.isCurrent())) {
+      this.scheduleSessionSnapshot(threadId, sourceLease ?? binding.lease)
+    }
   }
 
-  private handleServerRequest(request: ServerRequest) {
+  private handleServerRequest(
+    request: ServerRequest,
+    sourceClient: CodexRpcClient | null = this.client,
+    sourceLease?: SessionRuntimeLease,
+  ) {
+    if (!sourceClient || sourceClient !== this.client || this.disposed) return
     if (
       request.method === 'account/chatgptAuthTokens/refresh'
       || request.method === 'attestation/generate'
     ) {
-      this.client?.respondError(request.id, -32601, `Unsupported Codex server request: ${request.method}.`)
+      sourceClient.respondError(request.id, -32601, `Unsupported Codex server request: ${request.method}.`)
       return
     }
     const threadId = 'threadId' in request.params
@@ -773,9 +1030,11 @@ export class CodexAgentManager {
         ? String(request.params.conversationId)
         : null
     if (!threadId) {
-      this.client?.respondError(request.id, -32602, `${request.method} did not include a thread identifier.`)
+      sourceClient.respondError(request.id, -32602, `${request.method} did not include a thread identifier.`)
       return
     }
+
+    const lease = sourceLease ?? this.bindingLeases.get(threadId)
 
     if (
       request.method === 'item/commandExecution/requestApproval'
@@ -784,6 +1043,10 @@ export class CodexAgentManager {
       || request.method === 'applyPatchApproval'
       || request.method === 'execCommandApproval'
     ) {
+      if (!lease?.isCurrent()) {
+        sourceClient.respondError(request.id, -32000, 'Codex thread binding is no longer active.')
+        return
+      }
       const params = request.params as unknown as JsonRecord
       const isPermissions = request.method === 'item/permissions/requestApproval'
       const isLegacy = request.method === 'applyPatchApproval' || request.method === 'execCommandApproval'
@@ -794,7 +1057,9 @@ export class CodexAgentManager {
       const requestId = `codex:${String(request.id)}`
       this.pendingInteractions.set(getAgentInteractionKey(threadId, requestId), {
         approvalProtocol: isLegacy ? 'legacy' : 'v2',
+        client: sourceClient,
         kind: isPermissions ? 'permissions' : 'approval',
+        lease,
         originalId: request.id,
         requestId,
         ...(requestedPermissions ? { requestedPermissions } : {}),
@@ -825,15 +1090,21 @@ export class CodexAgentManager {
     }
 
     if (request.method === 'item/tool/requestUserInput') {
+      if (!lease?.isCurrent()) {
+        sourceClient.respondError(request.id, -32000, 'Codex thread binding is no longer active.')
+        return
+      }
       const questions = request.params.questions
       if (questions.length === 0) {
-        this.client?.respondError(request.id, -32602, 'Codex user-input request contained no questions.')
+        sourceClient.respondError(request.id, -32602, 'Codex user-input request contained no questions.')
         return
       }
       const requestId = `codex:${String(request.id)}`
       const questionIds = questions.map((question) => question.id)
       this.pendingInteractions.set(getAgentInteractionKey(threadId, requestId), {
+        client: sourceClient,
         kind: 'question',
+        lease,
         originalId: request.id,
         questionIds,
         requestId,
@@ -873,19 +1144,19 @@ export class CodexAgentManager {
         action: 'decline',
         content: null,
       }
-      this.client?.respond(request.id, response)
+      sourceClient.respond(request.id, response)
       console.warn(`[codex app-server] Declined unsupported MCP elicitation from ${request.params.serverName}.`)
       return
     }
     if (request.method === 'item/tool/call') {
-      this.client?.respond(request.id, {
+      sourceClient.respond(request.id, {
         contentItems: [{ type: 'inputText', text: 'Aryn did not register this dynamic tool.' }],
         success: false,
       })
       return
     }
     const unsupportedRequest = request as unknown as { id: string | number, method: string }
-    this.client?.respondError(
+    sourceClient.respondError(
       unsupportedRequest.id,
       -32601,
       `Unsupported Codex server request: ${unsupportedRequest.method}.`,
@@ -924,7 +1195,9 @@ export class CodexAgentManager {
     this.client = null
     this.clientPromise = null
     this.models = []
-    for (const binding of this.bindings.values()) {
+    if (this.disposed) return
+    const bindings = [...this.bindings.values()]
+    for (const binding of bindings) {
       this.clearScheduledSnapshot(binding.record.id)
       const native = this.sessionStore.markDisconnected(binding.record.id, error.message)
       if (native) {
@@ -943,8 +1216,10 @@ export class CodexAgentManager {
         })
       }
     }
-    this.bindings.clear()
-    this.clearPendingInteractions(() => true)
+    this.clearPendingInteractions((pending) => pending.client === client)
+    void this.runtimeCoordinator.invalidateWhere(() => true).catch((retirementError) => {
+      console.warn(`[codex app-server] Failed to invalidate disconnected thread bindings: ${retirementError instanceof Error ? retirementError.message : String(retirementError)}`)
+    })
   }
 
   private async loadModels(client: CodexRpcClient) {
@@ -990,6 +1265,7 @@ export class CodexAgentManager {
     attachments: AgentPromptAttachment[],
     options?: AgentPromptSendOptions,
   ) {
+    if (!binding.lease.isCurrent()) return
     const client = await this.ensureClient()
     const response = await client.request('turn/start', {
       ...(options?.clientMessageId ? { clientUserMessageId: options.clientMessageId } : {}),
@@ -999,6 +1275,7 @@ export class CodexAgentManager {
       ...(this.serviceTierCompatibilityOverride ? { serviceTier: 'fast' } : {}),
       threadId: binding.record.id,
     })
+    if (!binding.lease.isCurrent()) return
     binding.activeTurnId = response.turn.id
     const observedTurn = this.sessionStore.get(binding.record.id)?.thread.turns
       .find((turn) => turn.id === response.turn.id)
@@ -1019,24 +1296,32 @@ export class CodexAgentManager {
   }
 
   private async startNextQueuedPrompt(binding: CodexBinding) {
-    while (!binding.isStreaming) {
-      const next = binding.queuedPrompts.shift()
-      if (!next) return
-      try {
-        await this.startTurn(binding, next.prompt, next.attachments, next.options)
-      } catch (error) {
-        this.options.emitEvent({
-          type: 'error',
-          message: `Codex queued prompt failed to start: ${error instanceof Error ? error.message : String(error)}`,
-          sessionId: binding.record.id,
-        })
+    const startQueuedPrompts = async () => {
+      while (binding.lease.isCurrent() && !binding.isStreaming) {
+        const next = binding.queuedPrompts.shift()
+        if (!next) return
+        try {
+          await this.startTurn(binding, next.prompt, next.attachments, next.options)
+        } catch (error) {
+          if (!binding.lease.isCurrent()) return
+          this.options.emitEvent({
+            type: 'error',
+            message: `Codex queued prompt failed to start: ${error instanceof Error ? error.message : String(error)}`,
+            sessionId: binding.record.id,
+          })
+        }
       }
     }
+    return this.runtimeCoordinator.run(binding.lease.key, async () => {
+      if (!binding.lease.isCurrent()) return
+      await startQueuedPrompts()
+    })
   }
 
-  private async resumeThread(record: CodexThreadRecord) {
+  private async resumeThread(record: CodexThreadRecord, lease?: SessionRuntimeLease) {
     const checkpoint = this.sessionStore.beginHydration(record.id)
     let response
+    let native
     try {
       response = await (await this.ensureClient()).request('thread/resume', {
         approvalPolicy: 'on-request',
@@ -1046,7 +1331,11 @@ export class CodexAgentManager {
         sandbox: 'workspace-write',
         threadId: record.id,
       })
-      this.sessionStore.hydrate(response.thread, checkpoint)
+      if (lease && !lease.isCurrent()) {
+        this.sessionStore.cancelHydration(checkpoint)
+        throw new Error('Codex thread binding was superseded during resume.')
+      }
+      native = this.sessionStore.hydrate(response.thread, checkpoint)
     } catch (error) {
       this.sessionStore.cancelHydration(checkpoint)
       throw error
@@ -1055,13 +1344,7 @@ export class CodexAgentManager {
     record.reasoningEffort = reasoningEffort(response.reasoningEffort)
     record.name = response.thread.name ?? record.name
     record.preview = response.thread.preview || record.preview || null
-    const existing = this.bindings.get(record.id)
-    this.bindings.set(record.id, existing ?? {
-      activeTurnId: null,
-      isStreaming: response.thread.status.type === 'active',
-      queuedPrompts: [],
-      record,
-    })
+    return { isStreaming: native.status.type === 'busy', record }
   }
 
   private defaultModel() {
@@ -1153,32 +1436,75 @@ export class CodexAgentManager {
     }
   }
 
-  private async buildWorkspaceState(cwd: string, activeThreadId: string | null): Promise<AgentWorkspaceState> {
+  private async buildWorkspaceState(
+    cwd: string,
+    activeThreadId: string | null,
+    providedBinding?: CodexBinding,
+    isRequestCurrent: () => boolean = () => true,
+  ): Promise<AgentWorkspaceState> {
     const records = await this.listRecords(cwd)
-    const binding = activeThreadId ? await this.requireBinding(cwd, activeThreadId) : null
+    if (!isRequestCurrent()) throw new Error('Codex workspace state request was superseded.')
+    if (activeThreadId && !providedBinding) {
+      return this.withBinding(cwd, activeThreadId, (binding) => (
+        this.buildWorkspaceState(cwd, activeThreadId, binding, isRequestCurrent)
+      ))
+    }
+    const binding = activeThreadId && providedBinding
+      ? this.requireBindingWorkspace(providedBinding, cwd)
+      : null
+    if (binding && binding.record.id !== activeThreadId) {
+      throw new Error('Codex workspace state binding does not match the active thread.')
+    }
     const native = binding ? this.sessionStore.get(binding.record.id) : null
+    const activeSession = binding
+      ? native
+        ? this.createSessionSnapshot(binding.record, native)
+        : await this.readBoundSession(binding)
+      : null
+    if (!isRequestCurrent()) throw new Error('Codex workspace state request was superseded.')
     return {
-      activeSession: binding
-        ? native
-          ? this.createSessionSnapshot(binding.record, native)
-          : await this.readSession(cwd, binding.record.id)
-        : null,
+      activeSession,
       runtime: this.serializeRuntime(cwd, binding),
       sessions: records.map((record) => this.createSessionListItem(record)),
     }
   }
 
-  private async broadcastWorkspaceState(cwd: string, activeThreadId: string | null) {
-    const state = await this.buildWorkspaceState(cwd, activeThreadId)
-    this.options.emitEvent({ type: 'workspace_state', state })
+  private async broadcastWorkspaceState(
+    cwd: string,
+    requestedActiveThreadId: string | null,
+    context: WorkspaceStateContext = {},
+  ) {
+    const identity = workspaceIdentity(cwd)
+    if (!this.isWorkspaceStateContextCurrent(context)) {
+      if (context.state) return context.state
+      throw new Error('Codex workspace state request was superseded.')
+    }
+    const activeThreadId = context.sourceLease
+      ? this.workspaceActiveThreads.get(identity) ?? requestedActiveThreadId
+      : requestedActiveThreadId
+    const revision = (this.workspaceStateRevisions.get(identity) ?? 0) + 1
+    this.workspaceStateRevisions.set(identity, revision)
+    const state = context.state ?? await this.buildWorkspaceState(
+      cwd,
+      activeThreadId,
+      context.providedBinding,
+      () => this.isWorkspaceStateContextCurrent(context),
+    )
+    if (
+      this.workspaceStateRevisions.get(identity) === revision
+      && this.isWorkspaceStateContextCurrent(context)
+    ) {
+      this.options.emitEvent({ type: 'workspace_state', state })
+    }
     return state
   }
 
-  private emitSessionSnapshot(threadId: string) {
+  private emitSessionSnapshot(threadId: string, expectedLease?: SessionRuntimeLease) {
     this.clearScheduledSnapshot(threadId)
+    if (expectedLease && !expectedLease.isCurrent()) return
     const binding = this.bindings.get(threadId)
     const native = this.sessionStore.get(threadId)
-    if (!binding || !native) return
+    if (!binding || !native || (expectedLease && binding.lease !== expectedLease)) return
     this.options.emitEvent({
       type: 'session_snapshot_updated',
       executionState: native.status,
@@ -1187,11 +1513,11 @@ export class CodexAgentManager {
     })
   }
 
-  private scheduleSessionSnapshot(threadId: string) {
+  private scheduleSessionSnapshot(threadId: string, expectedLease?: SessionRuntimeLease) {
     if (this.snapshotTimers.has(threadId)) return
     this.snapshotTimers.set(threadId, setTimeout(() => {
       this.snapshotTimers.delete(threadId)
-      this.emitSessionSnapshot(threadId)
+      this.emitSessionSnapshot(threadId, expectedLease)
     }, SNAPSHOT_COALESCE_MS))
   }
 
@@ -1200,6 +1526,100 @@ export class CodexAgentManager {
     if (!timer) return
     clearTimeout(timer)
     this.snapshotTimers.delete(threadId)
+  }
+
+  private beginWorkspaceActivation(cwd: string, targetThreadId?: string | null): WorkspaceActivation {
+    const identity = workspaceIdentity(cwd)
+    const current = this.workspaceActivations.get(identity)
+    const reuseCurrent = targetThreadId !== undefined
+      && current !== undefined
+      && current.targetThreadId === targetThreadId
+    const revision = reuseCurrent ? current.revision : (current?.revision ?? 0) + 1
+    if (!reuseCurrent) this.workspaceActivations.set(identity, { revision, targetThreadId })
+    return {
+      identity,
+      revision,
+    }
+  }
+
+  private setWorkspaceActivationTarget(activation: WorkspaceActivation, threadId: string | null) {
+    if (!this.isWorkspaceActivationCurrent(activation)) return false
+    this.workspaceActivations.set(activation.identity, {
+      revision: activation.revision,
+      targetThreadId: threadId,
+    })
+    return true
+  }
+
+  private commitWorkspaceActivation(activation: WorkspaceActivation, threadId: string | null) {
+    if (!this.isWorkspaceActivationCurrent(activation)) return false
+    if (threadId) this.workspaceActiveThreads.set(activation.identity, threadId)
+    else this.workspaceActiveThreads.delete(activation.identity)
+    return true
+  }
+
+  private isWorkspaceActivationCurrent(activation: WorkspaceActivation) {
+    return this.workspaceActivations.get(activation.identity)?.revision === activation.revision
+  }
+
+  private invalidateWorkspaceActivation(identity: string) {
+    this.workspaceActivations.set(identity, {
+      revision: (this.workspaceActivations.get(identity)?.revision ?? 0) + 1,
+    })
+  }
+
+  private invalidateWorkspaceActivationForThread(identity: string, threadId: string) {
+    const activation = this.workspaceActivations.get(identity)
+    if (
+      activation?.targetThreadId !== threadId
+      && this.workspaceActiveThreads.get(identity) !== threadId
+    ) return
+    this.invalidateWorkspaceActivation(identity)
+  }
+
+  private captureWorkspaceOperation(cwd: string): WorkspaceOperation {
+    const identity = workspaceIdentity(cwd)
+    return {
+      identity,
+      revision: this.workspaceOperationRevisions.get(identity) ?? 0,
+    }
+  }
+
+  private isWorkspaceOperationCurrent(operation: WorkspaceOperation) {
+    return !this.disposed
+      && !this.workspaceTeardownCounts.has(operation.identity)
+      && (this.workspaceOperationRevisions.get(operation.identity) ?? 0) === operation.revision
+  }
+
+  private requireWorkspaceOperationCurrent(operation: WorkspaceOperation) {
+    if (!this.isWorkspaceOperationCurrent(operation)) {
+      throw new Error('Codex workspace operation was superseded.')
+    }
+  }
+
+  private invalidateWorkspaceOperations(identity: string) {
+    this.workspaceOperationRevisions.set(identity, (this.workspaceOperationRevisions.get(identity) ?? 0) + 1)
+  }
+
+  private invalidateWorkspaceState(identity: string) {
+    this.workspaceStateRevisions.set(identity, (this.workspaceStateRevisions.get(identity) ?? 0) + 1)
+  }
+
+  private async withWorkspaceTeardown<TResult>(identity: string, operation: () => Promise<TResult>) {
+    this.workspaceTeardownCounts.set(identity, (this.workspaceTeardownCounts.get(identity) ?? 0) + 1)
+    try {
+      return await operation()
+    } finally {
+      const remaining = (this.workspaceTeardownCounts.get(identity) ?? 1) - 1
+      if (remaining > 0) this.workspaceTeardownCounts.set(identity, remaining)
+      else this.workspaceTeardownCounts.delete(identity)
+    }
+  }
+
+  private isWorkspaceStateContextCurrent(context: WorkspaceStateContext) {
+    return (!context.sourceLease || context.sourceLease.isCurrent())
+      && (!context.activation || this.isWorkspaceActivationCurrent(context.activation))
+      && (!context.workspaceOperation || this.isWorkspaceOperationCurrent(context.workspaceOperation))
   }
 
   private async listRecords(cwd: string) {
@@ -1279,7 +1699,11 @@ export class CodexAgentManager {
     return record
   }
 
-  private async ensureOpenableRecord(cwd: string, threadId: string) {
+  private async ensureOpenableRecord(
+    cwd: string,
+    threadId: string,
+    workspaceOperation?: WorkspaceOperation,
+  ) {
     const record = await this.requireRecord(cwd, threadId)
     if (record.materialized || this.bindings.has(threadId)) return record
     const pending = this.recordReplacements.get(threadId)
@@ -1293,20 +1717,27 @@ export class CodexAgentManager {
         model: result.model || record.model,
         updatedAt: new Date().toISOString(),
       }
-      await this.index.update((state) => ({
-        ...state,
-        threads: state.threads.map((candidate) => candidate.id === threadId ? replacement : candidate),
-      }))
+      try {
+        await this.index.update((state) => ({
+          ...state,
+          threads: state.threads.map((candidate) => candidate.id === threadId ? replacement : candidate),
+        }))
+      } catch (error) {
+        await client.request('thread/unsubscribe', { threadId: replacement.id }).catch((unsubscribeError) => {
+          console.warn(`[codex app-server] Failed to unsubscribe a replacement thread after its index update failed: ${unsubscribeError instanceof Error ? unsubscribeError.message : String(unsubscribeError)}`)
+        })
+        throw error
+      }
+      if (workspaceOperation && !this.isWorkspaceOperationCurrent(workspaceOperation)) {
+        await client.request('thread/unsubscribe', { threadId: replacement.id }).catch(() => undefined)
+        throw new Error('Codex workspace operation was superseded.')
+      }
+      await this.runtimeCoordinator.retire(runtimeKey(cwd, threadId))
       this.dropThreadRuntime(threadId)
       this.sessionStore.install(result.thread)
-      this.bindings.set(replacement.id, {
-        activeTurnId: null,
-        isStreaming: false,
-        queuedPrompts: [],
-        record: replacement,
-      })
       const identity = workspaceIdentity(cwd)
       if (this.workspaceActiveThreads.get(identity) === threadId) this.workspaceActiveThreads.set(identity, replacement.id)
+      await this.installBinding(replacement, result.thread.status.type === 'active')
       return replacement
     })().finally(() => {
       if (this.recordReplacements.get(threadId) === start) this.recordReplacements.delete(threadId)
@@ -1315,27 +1746,70 @@ export class CodexAgentManager {
     return start
   }
 
-  private async requireBinding(cwd: string, threadId: string) {
+  private async withBinding<TResult>(
+    cwd: string,
+    threadId: string,
+    operation: (binding: CodexBinding) => Promise<TResult> | TResult,
+    workspaceOperation: WorkspaceOperation = this.captureWorkspaceOperation(cwd),
+  ) {
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
     const existing = this.bindings.get(threadId)
-    if (existing) return this.requireBindingWorkspace(existing, cwd)
-    const pending = this.bindingStarts.get(threadId)
-    if (pending) return this.requireBindingWorkspace(await pending, cwd)
-    const start = this.requireRecord(cwd, threadId)
-      .then(async (record) => {
-        await this.resumeThread(record)
-        const binding = this.bindings.get(threadId)
-        if (!binding) throw new Error('Codex thread resumed without creating a runtime binding.')
-        return binding
-      })
-      .finally(() => {
-        if (this.bindingStarts.get(threadId) === start) {
-          this.bindingStarts.delete(threadId)
-          this.bindingStartWorkspaces.delete(threadId)
-        }
-      })
-    this.bindingStarts.set(threadId, start)
-    this.bindingStartWorkspaces.set(threadId, workspaceIdentity(cwd))
-    return start
+    if (existing) this.requireBindingWorkspace(existing, cwd)
+    return this.runtimeCoordinator.use(
+      runtimeKey(cwd, threadId),
+      (lease) => {
+        this.requireWorkspaceOperationCurrent(workspaceOperation)
+        return this.startBinding(cwd, threadId, lease)
+      },
+      ({ runtime }) => {
+        this.requireWorkspaceOperationCurrent(workspaceOperation)
+        return operation(this.requireBindingWorkspace(runtime, cwd))
+      },
+    )
+  }
+
+  private async startBinding(cwd: string, threadId: string, lease: SessionRuntimeLease) {
+    this.bindingLeases.set(threadId, lease)
+    try {
+      const record = await this.requireRecord(cwd, threadId)
+      const resumed = await this.resumeThread(record, lease)
+      const binding: CodexBinding = {
+        activeTurnId: null,
+        isStreaming: resumed.isStreaming,
+        lease,
+        queuedPrompts: [],
+        record: resumed.record,
+      }
+      this.bindings.set(threadId, binding)
+      return binding
+    } catch (error) {
+      if (this.bindingLeases.get(threadId) === lease) this.bindingLeases.delete(threadId)
+      if (!lease.isCurrent()) {
+        this.clearScheduledSnapshot(threadId)
+        this.sessionStore.delete(threadId)
+        this.clearPendingInteractions((pending) => pending.sessionId === threadId && pending.lease === lease)
+      }
+      throw error
+    }
+  }
+
+  private async installBinding(record: CodexThreadRecord, isStreaming: boolean) {
+    const handle = await this.runtimeCoordinator.ensure(runtimeKey(record.cwd, record.id), async (lease) => {
+      const existing = this.bindings.get(record.id)
+      const binding: CodexBinding = existing ?? {
+        activeTurnId: null,
+        isStreaming,
+        lease,
+        queuedPrompts: [],
+        record,
+      }
+      binding.lease = lease
+      binding.record = record
+      this.bindingLeases.set(record.id, lease)
+      this.bindings.set(record.id, binding)
+      return binding
+    })
+    return handle.runtime
   }
 
   private requireBindingWorkspace(binding: CodexBinding, cwd: string) {
@@ -1343,6 +1817,37 @@ export class CodexAgentManager {
       throw new Error('Codex thread not found for this workspace.')
     }
     return binding
+  }
+
+  private async releaseNativeBinding(client: CodexRpcClient, binding: CodexBinding) {
+    const failures: unknown[] = []
+    if (binding.activeTurnId) {
+      await client.request('turn/interrupt', {
+        threadId: binding.record.id,
+        turnId: binding.activeTurnId,
+      }).catch((error) => failures.push(error))
+    }
+    await client.request('thread/unsubscribe', {
+      threadId: binding.record.id,
+    }).catch((error) => failures.push(error))
+    if (failures.length === 1) throw failures[0]
+    if (failures.length > 1) {
+      throw new AggregateError(failures, `Codex thread ${binding.record.id} could not be released.`)
+    }
+  }
+
+  private async deleteNativeThread(
+    client: CodexRpcClient,
+    threadId: string,
+    binding: CodexBinding | null,
+  ) {
+    if (binding?.activeTurnId) {
+      await client.request('turn/interrupt', { threadId, turnId: binding.activeTurnId })
+    }
+    await client.request('thread/delete', { threadId }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!message.includes('no rollout found') && !message.includes('not found')) throw error
+    })
   }
 
   private async setThreadName(client: CodexRpcClient, record: CodexThreadRecord) {
@@ -1376,9 +1881,14 @@ export class CodexAgentManager {
     }))
   }
 
-  private dropThreadRuntime(threadId: string) {
+  private dropThreadRuntime(threadId: string, expectedBinding?: CodexBinding) {
+    const binding = this.bindings.get(threadId)
+    if (expectedBinding && binding !== expectedBinding) return
     this.clearScheduledSnapshot(threadId)
     this.bindings.delete(threadId)
+    if (!expectedBinding || this.bindingLeases.get(threadId) === expectedBinding.lease) {
+      this.bindingLeases.delete(threadId)
+    }
     this.sessionStore.delete(threadId)
     this.clearPendingInteractions((pending) => pending.sessionId === threadId)
   }

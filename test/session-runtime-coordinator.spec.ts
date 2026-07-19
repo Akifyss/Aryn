@@ -88,6 +88,77 @@ describe('SessionRuntimeCoordinator', () => {
     await coordinator.dispose()
   })
 
+  it('keeps a runtime current when pre-retirement provider work fails', async () => {
+    const stopRuntime = vi.fn()
+    const coordinator = new SessionRuntimeCoordinator<{ id: string }>({ stopRuntime })
+    const handle = await coordinator.ensure('session-a', async () => ({ id: 'runtime-a' }))
+
+    await expect(coordinator.runAndRetire('session-a', async (current) => {
+      expect(current).toBe(handle)
+      throw new Error('provider cleanup failed')
+    })).rejects.toThrow('provider cleanup failed')
+
+    expect(coordinator.current('session-a')).toBe(handle)
+    expect(stopRuntime).not.toHaveBeenCalled()
+    await coordinator.dispose()
+  })
+
+  it('prevents later users from entering before pre-retirement work completes', async () => {
+    const cleanupEntered = deferred()
+    const allowCleanup = deferred()
+    const coordinator = new SessionRuntimeCoordinator<{ id: string }>({ stopRuntime: () => undefined })
+    await coordinator.ensure('session-a', async () => ({ id: 'runtime-a' }))
+
+    const retirement = coordinator.runAndRetire('session-a', async () => {
+      cleanupEntered.resolve()
+      await allowCleanup.promise
+    })
+    await cleanupEntered.promise
+    let restarted = false
+    const laterUse = coordinator.use(
+      'session-a',
+      async () => {
+        restarted = true
+        return { id: 'runtime-b' }
+      },
+      ({ runtime }) => runtime.id,
+    )
+    await Promise.resolve()
+    expect(restarted).toBe(false)
+
+    allowCleanup.resolve()
+    await retirement
+    await expect(laterUse).resolves.toBe('runtime-b')
+    await coordinator.dispose()
+  })
+
+  it('invalidates an externally terminated generation without waiting for initialization', async () => {
+    const startEntered = deferred()
+    const allowStart = deferred()
+    const stopRuntime = vi.fn()
+    const coordinator = new SessionRuntimeCoordinator<{ id: string }>({ stopRuntime })
+    let startingLease!: SessionRuntimeLease
+    const starting = coordinator.ensure('session-a', async (lease) => {
+      startingLease = lease
+      startEntered.resolve()
+      await allowStart.promise
+      return { id: 'runtime-a' }
+    }).then(
+      () => null,
+      (error: unknown) => error,
+    )
+    await startEntered.promise
+
+    await coordinator.invalidateWhere((key) => key === 'session-a')
+    expect(startingLease.isCurrent()).toBe(false)
+    allowStart.resolve()
+    await expect(starting).resolves.toMatchObject({
+      message: expect.stringContaining('invalidated during initialization'),
+    })
+    expect(stopRuntime).toHaveBeenCalledWith({ id: 'runtime-a' })
+    await coordinator.dispose()
+  })
+
   it('drops queued and newly arriving events from a retired generation', async () => {
     const firstEventEntered = deferred()
     const allowFirstEvent = deferred()

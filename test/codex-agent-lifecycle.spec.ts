@@ -126,30 +126,24 @@ describe('Codex App Server lifecycle', () => {
     }
   })
 
-  it('settles an active session when the App Server connection exits', () => {
+  it('settles an active session when the App Server connection exits', async () => {
     const events: unknown[] = []
     const manager = new CodexAgentManager({ agentDir: 'C:/agent-data', emitEvent: (event) => events.push(event) })
     const currentRecord = record()
     const fakeClient = { stop: () => undefined }
     const internals = manager as unknown as {
-      bindings: Map<string, {
-        activeTurnId: string | null
-        isStreaming: boolean
-        queuedPrompts: unknown[]
-        record: CodexThreadRecord
-      }>
       client: unknown
       handleConnectionExit: (client: unknown, error: Error) => void
+      installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
+        activeTurnId: string | null
+        isStreaming: boolean
+      }>
       sessionStore: CodexSessionStore
     }
     internals.client = fakeClient
     internals.sessionStore.install(thread({ type: 'active', activeFlags: [] }))
-    internals.bindings.set('thread-1', {
-      activeTurnId: 'turn-1',
-      isStreaming: true,
-      queuedPrompts: [],
-      record: currentRecord,
-    })
+    const binding = await internals.installBinding(currentRecord, true)
+    binding.activeTurnId = 'turn-1'
 
     internals.handleConnectionExit(fakeClient, new Error('connection lost'))
 
@@ -178,23 +172,16 @@ describe('Codex App Server lifecycle', () => {
       stop: () => undefined,
     }
     const internals = manager as unknown as {
-      bindings: Map<string, {
-        activeTurnId: string | null
-        isStreaming: boolean
-        queuedPrompts: unknown[]
-        record: CodexThreadRecord
-      }>
       client: unknown
       index: { read: () => Promise<{ threads: CodexThreadRecord[], version: 1 }> }
+      installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
+        activeTurnId: string | null
+      }>
     }
     internals.client = fakeClient
     internals.index = { read: async () => ({ threads: [currentRecord], version: 1 }) }
-    internals.bindings.set('thread-1', {
-      activeTurnId: 'turn-1',
-      isStreaming: true,
-      queuedPrompts: [],
-      record: currentRecord,
-    })
+    const binding = await internals.installBinding(currentRecord, true)
+    binding.activeTurnId = 'turn-1'
 
     try {
       await manager.releaseWorkspaceRuntime('C:/workspace')
@@ -229,16 +216,13 @@ describe('Codex App Server lifecycle', () => {
       },
       stop: () => undefined,
     }
-    const binding = {
-      activeTurnId: null,
-      isStreaming: false,
-      queuedPrompts: [],
-      record: currentRecord,
-    }
     const internals = manager as unknown as {
-      bindings: Map<string, typeof binding>
       client: unknown
       index: { update: () => Promise<never> }
+      installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
+        activeTurnId: string | null
+        isStreaming: boolean
+      }>
       models: Model[]
       sessionStore: CodexSessionStore
     }
@@ -246,7 +230,7 @@ describe('Codex App Server lifecycle', () => {
     internals.index = { update: async () => { throw new Error('disk full') } }
     internals.models = [model()]
     internals.sessionStore.install(thread())
-    internals.bindings.set('thread-1', binding)
+    const binding = await internals.installBinding(currentRecord, false)
 
     try {
       await expect(manager.sendPrompt('C:/workspace', 'thread-1', 'hello')).resolves.toEqual({ ok: true })
@@ -304,23 +288,18 @@ describe('Codex App Server lifecycle', () => {
     const manager = new CodexAgentManager({ agentDir: 'C:/agent-data', emitEvent: (event) => events.push(event) })
     const currentRecord = record()
     const requests: string[] = []
-    const binding = {
-      activeTurnId: 'turn-current' as string | null,
-      isStreaming: true,
-      queuedPrompts: [
-        { attachments: [], prompt: 'invalid prompt' },
-        { attachments: [], prompt: 'valid prompt' },
-      ],
-      record: currentRecord,
-    }
     const internals = manager as unknown as {
-      bindings: Map<string, typeof binding>
       client: unknown
       handleNotification: (notification: {
         method: 'turn/completed'
         params: { threadId: string, turn: Thread['turns'][number] }
       }) => Promise<void>
       index: { update: (updater: (state: { threads: CodexThreadRecord[], version: 1 }) => unknown) => Promise<unknown> }
+      installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
+        activeTurnId: string | null
+        isStreaming: boolean
+        queuedPrompts: Array<{ attachments: [], prompt: string }>
+      }>
       sessionStore: CodexSessionStore
     }
     internals.client = {
@@ -348,7 +327,12 @@ describe('Codex App Server lifecycle', () => {
       update: async (updater) => updater({ threads: [currentRecord], version: 1 }),
     }
     internals.sessionStore.install(thread({ type: 'active', activeFlags: [] }))
-    internals.bindings.set('thread-1', binding)
+    const binding = await internals.installBinding(currentRecord, true)
+    binding.activeTurnId = 'turn-current'
+    binding.queuedPrompts.push(
+      { attachments: [], prompt: 'invalid prompt' },
+      { attachments: [], prompt: 'valid prompt' },
+    )
 
     try {
       await internals.handleNotification({
@@ -384,16 +368,13 @@ describe('Codex App Server lifecycle', () => {
     const manager = new CodexAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
     const currentRecord = record()
     const requests: Array<{ method: string, params: unknown }> = []
-    const binding = {
-      activeTurnId: 'turn-current' as string | null,
-      isStreaming: true,
-      queuedPrompts: [],
-      record: currentRecord,
-    }
     const internals = manager as unknown as {
-      bindings: Map<string, typeof binding>
       client: unknown
       index: { read: () => Promise<{ threads: CodexThreadRecord[], version: 1 }> }
+      installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
+        activeTurnId: string | null
+        isStreaming: boolean
+      }>
       sessionStore: CodexSessionStore
     }
     internals.client = {
@@ -409,7 +390,8 @@ describe('Codex App Server lifecycle', () => {
     internals.index = { read: async () => ({ threads: [currentRecord], version: 1 }) }
     const activeThread = thread({ type: 'active', activeFlags: [] })
     internals.sessionStore.install(activeThread)
-    internals.bindings.set('thread-1', binding)
+    const binding = await internals.installBinding(currentRecord, true)
+    binding.activeTurnId = 'turn-current'
 
     try {
       const state = await manager.abortActivePrompt('C:/workspace', 'thread-1')
