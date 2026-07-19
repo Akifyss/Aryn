@@ -111,7 +111,7 @@ export class SessionRuntimeCoordinator<TRuntime> {
 
   async retireLease(lease: SessionRuntimeLease) {
     const entry = this.entries.get(lease.key)
-    if (!entry || this.disposed) return null
+    if (!entry || this.disposed || !lease.isCurrent()) return null
     return this.runLifecycle(entry, async () => {
       if (!this.isLeaseCurrent(entry, lease)) return null
       const retired = this.invalidateCurrent(entry)

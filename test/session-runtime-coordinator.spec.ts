@@ -120,6 +120,31 @@ describe('SessionRuntimeCoordinator', () => {
     await coordinator.dispose()
   })
 
+  it('ignores a retired lease without waiting for a replacement that is still starting', async () => {
+    const replacementStarted = deferred()
+    const allowReplacement = deferred()
+    const stopRuntime = vi.fn()
+    const coordinator = new SessionRuntimeCoordinator<{ id: string }>({ stopRuntime })
+    const retiredHandle = await coordinator.ensure('session-a', async () => ({ id: 'retired' }))
+
+    await coordinator.retire('session-a')
+    const replacement = coordinator.ensure('session-a', async () => {
+      replacementStarted.resolve()
+      await allowReplacement.promise
+      return { id: 'replacement' }
+    })
+    await replacementStarted.promise
+
+    await expect(coordinator.retireLease(retiredHandle.lease)).resolves.toBeNull()
+    allowReplacement.resolve()
+
+    await expect(replacement).resolves.toMatchObject({ runtime: { id: 'replacement' } })
+    expect(coordinator.current('session-a')?.runtime).toEqual({ id: 'replacement' })
+    expect(stopRuntime).toHaveBeenCalledTimes(1)
+    expect(stopRuntime).toHaveBeenCalledWith({ id: 'retired' })
+    await coordinator.dispose()
+  })
+
   it('reports event failures without poisoning the ordered lane', async () => {
     const coordinator = new SessionRuntimeCoordinator<{ id: string }>({ stopRuntime: () => undefined })
     const handle = await coordinator.ensure('session-a', async () => ({ id: 'runtime-a' }))

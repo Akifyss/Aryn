@@ -16,6 +16,7 @@ type FakeProcessInstance = {
 const rpcState = vi.hoisted(() => ({
   getMessagesGate: null as Promise<void> | null,
   getStateGate: null as Promise<void> | null,
+  getStateGates: new Map<string, Promise<void>>(),
   instances: [] as FakeProcessInstance[],
   onGetMessages: null as ((sessionID: string | null) => void) | null,
   onGetState: null as ((sessionID: string | null) => void) | null,
@@ -63,7 +64,7 @@ vi.mock('../electron/main/json-line-process', () => {
       if (message.type === 'get_available_models') return { data: { models: [] } }
       if (message.type === 'get_state') {
         rpcState.onGetState?.(this.sessionID)
-        await rpcState.getStateGate
+        await ((this.sessionID ? rpcState.getStateGates.get(this.sessionID) : null) ?? rpcState.getStateGate)
         return { data: { isStreaming: false, thinkingLevel: 'medium' } }
       }
       if (message.type === 'get_messages') {
@@ -133,6 +134,7 @@ describe('PI CLI runtime coordination', () => {
   beforeEach(() => {
     rpcState.getMessagesGate = null
     rpcState.getStateGate = null
+    rpcState.getStateGates.clear()
     rpcState.instances = []
     rpcState.onGetMessages = null
     rpcState.onGetState = null
@@ -169,6 +171,13 @@ describe('PI CLI runtime coordination', () => {
       expect(processA.stopCount).toBe(0)
 
       events.length = 0
+      await manager.sendPrompt(workspace, sessionA, 'continue in the background')
+      expect(events.findLast((event) => event.type === 'workspace_state')).toMatchObject({
+        state: { activeSession: { sessionId: sessionB } },
+        type: 'workspace_state',
+      })
+
+      events.length = 0
       processA.emit({ type: 'queue_update', followUp: ['background work'], steering: [] })
       await manager.drainSessionEvents(workspace, sessionA)
       const stateEvent = events.findLast((event) => event.type === 'workspace_state')
@@ -178,6 +187,48 @@ describe('PI CLI runtime coordination', () => {
       })
       expect(processA.stopCount).toBe(0)
     } finally {
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('keeps the latest activation when an earlier session finishes opening later', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-runtime-activation-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const sessionDir = path.join(tempRoot, 'sessions')
+    process.env.PI_CODING_AGENT_SESSION_DIR = sessionDir
+    await mkdir(workspace, { recursive: true })
+    const sessionA = createOfficialSession(workspace, sessionDir, 'Slow session A')
+    const sessionB = createOfficialSession(workspace, sessionDir, 'Latest session B')
+    const slowStartEntered = deferred()
+    const allowSlowStart = deferred()
+    rpcState.getStateGates.set(sessionA, allowSlowStart.promise)
+    rpcState.onGetState = (candidate) => {
+      if (candidate === sessionA) slowStartEntered.resolve()
+    }
+    const events: AgentClientEventPayload[] = []
+    const manager = new PiCliAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: (event) => events.push(event),
+    })
+
+    try {
+      const earlierOpen = manager.openSession(workspace, sessionA)
+      await slowStartEntered.promise
+      await manager.openSession(workspace, sessionB)
+      allowSlowStart.resolve()
+      await expect(earlierOpen).rejects.toThrow('workspace activation was superseded')
+
+      events.length = 0
+      processInstances(sessionB)[0]!.emit({ type: 'queue_update', followUp: ['latest work'], steering: [] })
+      await manager.drainSessionEvents(workspace, sessionB)
+
+      expect(events.findLast((event) => event.type === 'workspace_state')).toMatchObject({
+        state: { activeSession: { sessionId: sessionB } },
+        type: 'workspace_state',
+      })
+    } finally {
+      allowSlowStart.resolve()
       manager.dispose()
       await rm(tempRoot, { force: true, recursive: true })
     }
@@ -210,7 +261,7 @@ describe('PI CLI runtime coordination', () => {
 
       const [openResult, deleteResult] = await Promise.allSettled([opening, deletion])
       expect(openResult).toMatchObject({
-        reason: expect.objectContaining({ message: expect.stringContaining('not found for this workspace') }),
+        reason: expect.objectContaining({ message: expect.stringContaining('workspace activation was superseded') }),
         status: 'rejected',
       })
       expect(deleteResult).toEqual({ status: 'fulfilled', value: expect.any(Object) })
@@ -296,6 +347,7 @@ describe('PI CLI runtime coordination', () => {
       await Promise.all([opening, release])
 
       expect(events.filter((event) => event.type === 'workspace_state')).toEqual([])
+      expect(processInstances(sessionID)).toHaveLength(1)
       expect(processInstances(sessionID)[0]?.stopCount).toBeGreaterThan(0)
     } finally {
       manager.dispose()
