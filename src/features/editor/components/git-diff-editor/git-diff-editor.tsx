@@ -13,6 +13,7 @@ import {
   type MonacoThemePreference,
 } from '@/features/editor/lib/monaco'
 import type { WorkspaceDiffNavigationRequest } from '@/features/workspace/store/use-workspace-store'
+import './styles.css'
 
 type DiffNavigationSide = 'modified' | 'original'
 
@@ -659,7 +660,7 @@ export function GitDiffEditor({
                   onDiscardChange(diff.change)
                 }}
               >
-                <Back2Line size={16} />
+                <Back2Line size={16} aria-hidden='true' />
               </AppTooltipButton>
               <AppTooltipButton
                 type='button'
@@ -671,7 +672,7 @@ export function GitDiffEditor({
                   onStageChange(diff.change)
                 }}
               >
-                <AddLine size={16} />
+                <AddLine size={16} aria-hidden='true' />
               </AppTooltipButton>
             </>
             ) : (
@@ -686,7 +687,7 @@ export function GitDiffEditor({
                   onUnstageChange(diff.change)
                 }}
               >
-                <Icon icon='mdi:minus' width={16} height={16} />
+                <Icon icon='mdi:minus' width={16} height={16} aria-hidden='true' />
               </AppTooltipButton>
             </>
             )}

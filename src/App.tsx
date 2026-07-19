@@ -43,18 +43,14 @@ import type { AgentProjectSessionRequest } from '@/features/agent/lib/project-se
 import { DEFAULT_AGENT_ID, type AgentId } from '@/features/agent/agent-definition'
 import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host'
-import { GitPanel } from '@/features/git/components/git-panel'
+import { GitPanel } from '@/features/git/components/git-panel/git-panel'
 import type {
   GitChangeItem,
-  GitChangeScope,
   GitCommitFileChange,
-  GitCommitItem,
-  GitDiffBlockAction,
-  GitDiffSelection,
   GitFileDiffResult,
-  GitPanelLayout,
-  GitRepositoryState,
 } from '@/features/git/types'
+import { useGitWorkspaceController } from '@/features/git/hooks/use-git-workspace-controller'
+import { findGitChangeByFilePath } from '@/features/git/lib/repository-state'
 import {
   SettingsDialog,
   type SettingsSectionId,
@@ -151,7 +147,6 @@ import { CommandPalette } from '@/features/command-palette/components/command-pa
 import { useSettingsStore, type AppLayoutPreference, type AppTheme } from '@/hooks/use-settings-store'
 import { useDevToolsFocusSettlement } from '@/hooks/use-devtools-focus-settlement'
 import {
-  readStoredGitPanelLayout,
   readStoredLayoutBoolean,
   readStoredLayoutNumber,
   readStoredLeftSidebarTab,
@@ -192,7 +187,7 @@ const CodeEditor = lazy(async () => {
 const GitDiffEditor = lazy(async () => {
   const startedAt = performance.now()
   recordOpenFileProfile('lazy:git-diff-editor:start')
-  const module = await import('@/features/editor/components/git-diff-editor')
+  const module = await import('@/features/editor/components/git-diff-editor/git-diff-editor')
   recordOpenFileProfile('lazy:git-diff-editor:end', { durationMs: getOpenFileProfileDuration(startedAt) })
   return { default: module.GitDiffEditor }
 })
@@ -256,7 +251,6 @@ const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
 const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
 const DEFAULT_GIT_PANEL_HEIGHT = 292
 const MIN_GIT_PANEL_HEIGHT = 200
-const DEFAULT_GIT_PANEL_LAYOUT: GitPanelLayout = 'list'
 const DRAWER_INTERACTION_REFRESH_STABLE_FRAMES = 2
 const DRAWER_INTERACTION_REFRESH_MAX_FRAMES = 36
 const SIDEBAR_LAYOUT_TRANSITION_FALLBACK_MS = 1000
@@ -477,15 +471,6 @@ function App() {
   const [activeResizePanel, setActiveResizePanel] = useState<ResizePanel | null>(null)
   const [isGitPanelResizing, setIsGitPanelResizing] = useState(false)
   const [activeLeftSidebarTab, setActiveLeftSidebarTab] = useState<WorkspaceSidebarTab>(() => readStoredLeftSidebarTab())
-  const [gitRepositoryState, setGitRepositoryState] = useState<GitRepositoryState | null>(null)
-  const [isGitLoading, setIsGitLoading] = useState(false)
-  const [gitBusyLabel, setGitBusyLabel] = useState<string | null>(null)
-  const [gitErrorMessage, setGitErrorMessage] = useState<string | null>(null)
-  const [gitCommitMessage, setGitCommitMessage] = useState('')
-  const [gitPanelLayout, setGitPanelLayout] = useState<GitPanelLayout>(
-    () => readStoredGitPanelLayout(DEFAULT_GIT_PANEL_LAYOUT),
-  )
-  const [gitHistoryRefreshVersion, setGitHistoryRefreshVersion] = useState(0)
   const [shellWidth, setShellWidth] = useState(() => (
     typeof window !== 'undefined' ? window.innerWidth : FULL_LAYOUT_BREAKPOINT + 1
   ))
@@ -577,10 +562,6 @@ function App() {
     handleWorkspaceFileSystemViewChange,
     workspaceFileSystemState,
   } = useWorkspaceFileSystemState(currentPath)
-  const loadTree = useCallback(async (rootPath: string) => {
-    const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
-    setTree(nextTree)
-  }, [setTree])
   const appLayoutPreference: AppLayoutPreference = layoutPreference
   const isAgentLayout = appLayoutPreference === 'agent'
   const isRightSidebarCollapsed = isAgentLayout ? isAgentRightSidebarCollapsed : isEditorRightSidebarCollapsed
@@ -622,13 +603,31 @@ function App() {
   const internalWorkspaceSaveTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const windowCloseRequestInFlightRef = useRef(false)
   const currentPathRef = useRef<string | null>(currentPath)
-  const gitRepositoryStateRef = useRef<GitRepositoryState | null>(gitRepositoryState)
-  const latestGitRefreshRequestIdRef = useRef(0)
-  const latestVisibleGitRefreshRequestIdRef = useRef<number | null>(null)
   const performWorkspaceRefreshRef = useRef<(request: Required<WorkspaceRefreshRequest>) => Promise<void>>(async () => {})
   const workspaceRefreshCoordinatorRef = useRef<ReturnType<typeof createWorkspaceRefreshCoordinator> | null>(null)
   currentPathRef.current = currentPath
-  gitRepositoryStateRef.current = gitRepositoryState
+  const isActiveWorkspacePath = useCallback((rootPath: string) => {
+    const activePath = currentPathRef.current
+    return Boolean(
+      activePath
+      && normalizeFilePath(activePath) === normalizeFilePath(rootPath),
+    )
+  }, [])
+  const loadTree = useCallback(async (
+    rootPath: string,
+    options: { onlyIfCurrent?: boolean } = {},
+  ) => {
+    const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
+
+    if (options.onlyIfCurrent && !isActiveWorkspacePath(rootPath)) {
+      return
+    }
+
+    setTree(nextTree)
+  }, [isActiveWorkspacePath, setTree])
+  const reloadActiveWorkspaceTree = useCallback(async (rootPath: string) => {
+    await loadTree(rootPath, { onlyIfCurrent: true })
+  }, [loadTree])
   useDevToolsFocusSettlement()
 
   if (!workspaceRefreshCoordinatorRef.current) {
@@ -733,38 +732,6 @@ function App() {
   )
   const isDirectorySidebarVisible = isDirectorySidebarAvailable && isDirectorySidebarOpen
   const isDirectoryToggleSlotVisible = isDirectorySidebarAvailable && !isDirectorySidebarVisible
-  const canAttemptOpenCurrentDiff = Boolean(
-    activeFileTab
-    && currentPath
-    && gitRepositoryState?.isRepository
-  )
-
-  function findGitChangeByFilePath(
-    repositoryState: GitRepositoryState | null,
-    filePath: string,
-    preferredScopes: GitChangeScope[] = ['unstaged', 'staged'],
-  ) {
-    if (!repositoryState?.isRepository) {
-      return null
-    }
-
-    const targetPath = normalizeFilePath(filePath)
-
-    const changesByScope: Record<GitChangeScope, GitChangeItem[]> = {
-      staged: repositoryState.stagedChanges,
-      unstaged: repositoryState.unstagedChanges,
-    }
-
-    for (const scope of preferredScopes) {
-      const matchingChange = changesByScope[scope].find((change) => normalizeFilePath(change.path) === targetPath)
-
-      if (matchingChange) {
-        return matchingChange
-      }
-    }
-
-    return null
-  }
 
   function getPersistedActiveFilePath() {
     const { activeTabId, openTabs } = useWorkspaceStore.getState()
@@ -1134,6 +1101,10 @@ function App() {
   }
 
   const syncOpenDiffTabs = useCallback(async (workspacePath: string) => {
+    if (!isActiveWorkspacePath(workspacePath)) {
+      return
+    }
+
     const diffTabs = useWorkspaceStore.getState().openTabs.filter((tab): tab is WorkspaceDiffTab => tab.kind === 'diff')
 
     await Promise.all(diffTabs.map(async (tab) => {
@@ -1143,14 +1114,19 @@ function App() {
 
       try {
         const nextDiff = await window.appApi.getGitFileDiff(workspacePath, tab.diff.change.path, tab.diff.change.scope)
+
+        if (!isActiveWorkspacePath(workspacePath)) {
+          return
+        }
+
         openDiffTab(createDiffTab(nextDiff), false)
       } catch {
-        if (!tab.isDirty) {
+        if (isActiveWorkspacePath(workspacePath) && !tab.isDirty) {
           closeTab(tab.id)
         }
       }
     }))
-  }, [closeTab, openDiffTab])
+  }, [closeTab, isActiveWorkspacePath, openDiffTab])
 
   async function persistDiffTabContent(
     tabId: string,
@@ -1402,67 +1378,83 @@ function App() {
     return false
   }
 
-  const refreshGitState = useCallback(async (workspacePath: string | null, options: { silent?: boolean } = {}) => {
-    if (!workspacePath) {
-      latestGitRefreshRequestIdRef.current += 1
-      setGitRepositoryState(null)
-      return null
-    }
-
-    const requestId = latestGitRefreshRequestIdRef.current + 1
-    latestGitRefreshRequestIdRef.current = requestId
-
-    if (!options.silent) {
-      latestVisibleGitRefreshRequestIdRef.current = requestId
-      setIsGitLoading(true)
+  async function reconcileWorkspaceFileAfterGitDiscard(workspacePath: string, filePath: string) {
+    if (!isActiveWorkspacePath(workspacePath)) {
+      return
     }
 
     try {
-      const nextState = await window.appApi.getGitRepositoryState(workspacePath)
+      const nextContent = await window.appApi.readWorkspaceFile(filePath)
 
-      // Multiple refreshes can overlap during saves and external FS events.
-      // Only the latest completed request is allowed to update UI state.
-      if (latestGitRefreshRequestIdRef.current === requestId) {
-        setGitRepositoryState(nextState)
-        setGitErrorMessage(null)
-        await syncOpenDiffTabs(workspacePath)
+      if (!isActiveWorkspacePath(workspacePath)) {
+        return
       }
 
-      return nextState
-    } catch (error) {
-      if (latestGitRefreshRequestIdRef.current !== requestId) {
-        return gitRepositoryStateRef.current
-      }
-
-      const message = error instanceof Error ? error.message : 'Unable to load Git status.'
-      setGitErrorMessage(message)
-      return null
-    } finally {
-      if (!options.silent && latestVisibleGitRefreshRequestIdRef.current === requestId) {
-        setIsGitLoading(false)
-        latestVisibleGitRefreshRequestIdRef.current = null
+      syncFileTabsWithDisk(filePath, nextContent)
+    } catch {
+      if (isActiveWorkspacePath(workspacePath)) {
+        closeFileTabsForPath(filePath)
       }
     }
-  }, [syncOpenDiffTabs])
+  }
+
+  const {
+    applyDiffSelection: handleApplyGitDiffSelection,
+    busyLabel: gitBusyLabel,
+    commit: handleCommitGitChanges,
+    commitAndSync: handleCommitAndSyncGitChanges,
+    commitMessage: gitCommitMessage,
+    discardAll: handleDiscardAllGitChanges,
+    discardChange: handleDiscardGitChange,
+    discardChanges: handleDiscardGitChanges,
+    historyRefreshVersion: gitHistoryRefreshVersion,
+    initializeRepository: handleInitializeGit,
+    isLoading: isGitLoading,
+    panelLayout: gitPanelLayout,
+    prepareGitWorkspace,
+    pull: handlePullGitChanges,
+    push: handlePushGitChanges,
+    refreshGitState,
+    refreshPanel: refreshGitPanel,
+    repositoryState: gitRepositoryState,
+    resetGitWorkspaceState,
+    revertCommit: handleRevertGitCommit,
+    setCommitMessage: setGitCommitMessage,
+    setPanelLayout: setGitPanelLayout,
+    stagePaths: handleStageGitPaths,
+    unstagePaths: handleUnstageGitPaths,
+  } = useGitWorkspaceController({
+    ensureWorkspaceTabsSaved: ensureWorkspaceTabsSavedBeforeGitAction,
+    loadWorkspaceTree: reloadActiveWorkspaceTree,
+    reconcileDiscardedFile: reconcileWorkspaceFileAfterGitDiscard,
+    requestConfirmation: requestConfirm,
+    setStatusMessage,
+    syncOpenDiffTabs,
+    workspacePath: currentPath,
+  })
+
+  const canAttemptOpenCurrentDiff = Boolean(
+    activeFileTab
+    && currentPath
+    && gitRepositoryState?.isRepository
+  )
 
   const performWorkspaceRefresh = useCallback(async (
     rootPath: string,
     options: Omit<WorkspaceRefreshRequest, 'rootPath'> = {},
   ) => {
-    const activeWorkspacePath = currentPathRef.current
-
-    if (!activeWorkspacePath || activeWorkspacePath !== rootPath) {
+    if (!isActiveWorkspacePath(rootPath)) {
       return
     }
 
     if (options.refreshTree) {
-      await loadTree(rootPath)
+      await reloadActiveWorkspaceTree(rootPath)
     }
 
     if (options.refreshGit) {
       await refreshGitState(rootPath, { silent: options.gitSilent ?? true })
     }
-  }, [loadTree, refreshGitState])
+  }, [isActiveWorkspacePath, refreshGitState, reloadActiveWorkspaceTree])
 
   performWorkspaceRefreshRef.current = async (request) => {
     await performWorkspaceRefresh(request.rootPath, request)
@@ -1474,24 +1466,6 @@ function App() {
   ) => {
     return workspaceRefreshCoordinatorRef.current?.request(request, mode) ?? Promise.resolve()
   }, [])
-
-  async function runGitAction<T>(label: string, action: () => Promise<T>) {
-    setGitBusyLabel(label)
-    setGitErrorMessage(null)
-
-    try {
-      return await action()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Git action failed.'
-      setGitErrorMessage(message)
-      toast.danger('Git action failed', {
-        description: message,
-      })
-      throw error
-    } finally {
-      setGitBusyLabel(null)
-    }
-  }
 
   const clearInternalWorkspaceSaveMarker = useCallback((filePath: string) => {
     internalWorkspaceSavePathsRef.current.delete(filePath)
@@ -1724,9 +1698,8 @@ function App() {
       setCurrentPath(nextPath)
       resetOpenTabs()
       setIsAgentLayoutFixedTabActive(false)
-      setGitCommitMessage('')
-      setGitErrorMessage(null)
-      await refreshGitState(nextPath, { silent: true })
+      prepareGitWorkspace(nextPath)
+      await refreshGitState(nextPath, { silent: false })
       await window.appApi.startWorkspaceWatch(nextPath)
       await updateWorkspaceState(nextPath, { markAsLastOpened: true })
     } catch (error) {
@@ -1737,16 +1710,13 @@ function App() {
   }
 
   function resetWorkspaceSurface(options: { unavailableMessage?: string | null } = {}) {
-    latestGitRefreshRequestIdRef.current += 1
     currentPathRef.current = null
     setCurrentPath(null)
     setTree([])
     setExpandedPaths(new Set())
     resetOpenTabs()
     setIsAgentLayoutFixedTabActive(false)
-    setGitCommitMessage('')
-    setGitErrorMessage(null)
-    setGitRepositoryState(null)
+    resetGitWorkspaceState()
     setAgentWorkspaceState(null)
     setPendingAgentProjectSessionRequest(null)
     setWorkspaceUnavailableMessage(options.unavailableMessage ?? null)
@@ -3080,22 +3050,12 @@ function App() {
           historyRefreshVersion={gitHistoryRefreshVersion}
           isLoading={isGitLoading}
           layout={gitPanelLayout}
-          onCommit={() => {
-            void handleCommitGitChanges()
-          }}
-          onCommitAndSync={() => {
-            void handleCommitAndSyncGitChanges()
-          }}
+          onCommit={handleCommitGitChanges}
+          onCommitAndSync={handleCommitAndSyncGitChanges}
           onCommitMessageChange={setGitCommitMessage}
-          onDiscardAll={() => {
-            void handleDiscardAllGitChanges()
-          }}
-          onDiscardMany={(changes) => {
-            void handleDiscardGitChanges(changes)
-          }}
-          onInitialize={() => {
-            void handleInitializeGit()
-          }}
+          onDiscardAll={handleDiscardAllGitChanges}
+          onDiscardMany={handleDiscardGitChanges}
+          onInitialize={handleInitializeGit}
           onLayoutChange={setGitPanelLayout}
           onOpenFile={(filePath) => {
             void openFile(filePath)
@@ -3109,34 +3069,12 @@ function App() {
           onOpenCommitFileDiff={(commitHash, change) => {
             void openGitCommitFileDiff(commitHash, change)
           }}
-          onPull={() => {
-            void handlePullGitChanges()
-          }}
-          onPush={() => {
-            void handlePushGitChanges()
-          }}
-          onRefresh={() => {
-            if (!currentPath) {
-              return
-            }
-
-            void (async () => {
-              await performWorkspaceRefresh(currentPath, {
-                gitSilent: false,
-                refreshGit: true,
-              })
-              setGitHistoryRefreshVersion((version) => version + 1)
-            })()
-          }}
-          onRevertCommit={(commit) => {
-            void handleRevertGitCommit(commit)
-          }}
-          onStage={(filePaths) => {
-            void handleStageGitPaths(filePaths)
-          }}
-          onUnstage={(filePaths) => {
-            void handleUnstageGitPaths(filePaths)
-          }}
+          onPull={handlePullGitChanges}
+          onPush={handlePushGitChanges}
+          onRefresh={refreshGitPanel}
+          onRevertCommit={handleRevertGitCommit}
+          onStage={handleStageGitPaths}
+          onUnstage={handleUnstageGitPaths}
           repositoryState={gitRepositoryState}
           workspacePath={currentPath}
           iconTheme={iconTheme}
@@ -3375,57 +3313,6 @@ function App() {
     await handleSave()
   }
 
-  async function handleApplyGitDiffSelection(
-    change: GitChangeItem,
-    selection: GitDiffSelection,
-    action: GitDiffBlockAction,
-  ) {
-    if (!currentPath) {
-      return
-    }
-
-    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: action === 'stage'
-        ? '暂存这个差异块'
-        : action === 'unstage'
-          ? '取消暂存这个差异块'
-          : '放弃这个差异块',
-      filePaths: [change.path],
-    }))) {
-      return
-    }
-
-    const statusMessage = action === 'stage'
-      ? 'Git 差异块已暂存'
-      : action === 'unstage'
-        ? 'Git 差异块已取消暂存'
-        : 'Git 差异块已还原'
-    const busyLabel = action === 'stage'
-      ? '正在暂存差异块...'
-      : action === 'unstage'
-        ? '正在取消暂存差异块...'
-        : '正在还原差异块...'
-
-    await runGitAction(busyLabel, async () => {
-      const nextState = await window.appApi.applyGitDiffSelection(currentPath, change.path, change.scope, selection, action)
-      setGitRepositoryState(nextState)
-
-      if (action === 'discard') {
-        await loadTree(currentPath)
-
-        try {
-          const nextContent = await window.appApi.readWorkspaceFile(change.path)
-          syncFileTabsWithDisk(change.path, nextContent)
-        } catch {
-          closeFileTabsForPath(change.path)
-        }
-      }
-
-      await syncOpenDiffTabs(currentPath)
-      setStatusMessage(statusMessage)
-    })
-  }
-
   function activateFileTab(tabId: string) {
     if (tabId !== displayActiveTabId) {
       captureActiveMeoViewPosition()
@@ -3477,261 +3364,6 @@ function App() {
     setIsAgentLayoutFixedTabActive(false)
     setActiveAgentLayoutFixedTab('file')
   }, [displayActiveTabId, isAgentLayout])
-
-  async function handleInitializeGit() {
-    if (!currentPath) {
-      return
-    }
-
-    await runGitAction('正在初始化仓库...', async () => {
-      const nextState = await window.appApi.initializeGitRepository(currentPath)
-      setGitRepositoryState(nextState)
-      setStatusMessage('Git 仓库已初始化')
-    })
-  }
-
-  async function handleStageGitPaths(filePaths: string[]) {
-    if (!currentPath || filePaths.length === 0) {
-      return
-    }
-
-    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: '暂存更改',
-      filePaths,
-    }))) {
-      return
-    }
-
-    await runGitAction('正在暂存更改...', async () => {
-      const nextState = await window.appApi.stageGitPaths(currentPath, filePaths)
-      setGitRepositoryState(nextState)
-      await syncOpenDiffTabs(currentPath)
-      setStatusMessage('Git 更改已暂存')
-    })
-  }
-
-  async function handleUnstageGitPaths(filePaths: string[]) {
-    if (!currentPath || filePaths.length === 0) {
-      return
-    }
-
-    await runGitAction('正在取消暂存...', async () => {
-      const nextState = await window.appApi.unstageGitPaths(currentPath, filePaths)
-      setGitRepositoryState(nextState)
-      await syncOpenDiffTabs(currentPath)
-      setStatusMessage('Git 更改已取消暂存')
-    })
-  }
-
-  async function handleDiscardGitChange(change: GitChangeItem) {
-    if (!currentPath) {
-      return
-    }
-
-    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: '放弃 Git 更改',
-      filePaths: [change.path],
-    }))) {
-      return
-    }
-
-    const confirmed = await requestConfirm({
-      title: '放弃更改',
-      message: `要放弃 "${change.relativePath}" 当前的${change.scope === 'staged' ? '已暂存' : '未暂存'}更改吗？`,
-      confirmLabel: '放弃',
-      isDanger: true,
-    })
-
-    if (!confirmed) {
-      return
-    }
-
-    await runGitAction('正在放弃更改...', async () => {
-      const nextState = await window.appApi.discardGitChange(currentPath, change)
-      setGitRepositoryState(nextState)
-      await loadTree(currentPath)
-      await syncOpenDiffTabs(currentPath)
-      setStatusMessage(`${change.relativePath} 已还原`)
-    })
-  }
-
-  async function handleDiscardGitChanges(changes: GitChangeItem[]) {
-    if (!currentPath || changes.length === 0) {
-      return
-    }
-
-    if (changes.length === 1) {
-      await handleDiscardGitChange(changes[0])
-      return
-    }
-
-    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: '放弃 Git 更改',
-      filePaths: changes.map((change) => change.path),
-    }))) {
-      return
-    }
-
-    const confirmed = await requestConfirm({
-      title: '放弃更改',
-      message: `要放弃 ${changes.length} 个工作区更改吗？`,
-      confirmLabel: '全部放弃',
-      isDanger: true,
-    })
-
-    if (!confirmed) {
-      return
-    }
-
-    await runGitAction('正在放弃更改...', async () => {
-      await Promise.all(changes.map(async (change) => {
-        await window.appApi.discardGitChange(currentPath, change)
-      }))
-      await performWorkspaceRefresh(currentPath, {
-        refreshGit: true,
-        refreshTree: true,
-      })
-      setStatusMessage(`${changes.length} 个更改已放弃`)
-    })
-  }
-
-  async function handleCommitGitChanges() {
-    if (!currentPath) {
-      return
-    }
-
-    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: '创建提交',
-    }))) {
-      return
-    }
-
-    await runGitAction('正在创建提交...', async () => {
-      const nextState = await window.appApi.commitGitChanges(currentPath, gitCommitMessage)
-      setGitRepositoryState(nextState)
-      setGitHistoryRefreshVersion((version) => version + 1)
-      setGitCommitMessage('')
-      await syncOpenDiffTabs(currentPath)
-      setStatusMessage('提交已创建')
-    })
-  }
-
-  async function handleCommitAndSyncGitChanges() {
-    if (!currentPath) {
-      return
-    }
-
-    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: '提交并同步',
-    }))) {
-      return
-    }
-
-    await runGitAction('正在提交并同步...', async () => {
-      const nextState = await window.appApi.commitAndSyncGitChanges(currentPath, gitCommitMessage)
-      setGitRepositoryState(nextState)
-      setGitHistoryRefreshVersion((version) => version + 1)
-      setGitCommitMessage('')
-      await syncOpenDiffTabs(currentPath)
-      setStatusMessage('提交并同步已完成')
-    })
-  }
-
-  async function handleRevertGitCommit(commit: GitCommitItem) {
-    if (!currentPath) {
-      return
-    }
-
-    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: '还原 Git 提交',
-    }))) {
-      return
-    }
-
-    const confirmed = await requestConfirm({
-      title: '还原提交',
-      message: `要还原提交“${commit.subject}”（${commit.shortHash}）吗？\n\n这会创建一个新提交来撤销它引入的更改，不会改写现有历史。`,
-      confirmLabel: '还原提交',
-    })
-
-    if (!confirmed) {
-      return
-    }
-
-    await runGitAction('正在还原提交...', async () => {
-      const nextState = await window.appApi.revertGitCommit(currentPath, commit.hash)
-      setGitRepositoryState(nextState)
-      setGitHistoryRefreshVersion((version) => version + 1)
-      await loadTree(currentPath)
-      await syncOpenDiffTabs(currentPath)
-      setStatusMessage(`提交 ${commit.shortHash} 已还原`)
-    })
-  }
-
-  async function handlePushGitChanges() {
-    if (!currentPath) {
-      return
-    }
-
-    await runGitAction('正在推送更改...', async () => {
-      const nextState = await window.appApi.pushGitChanges(currentPath)
-      setGitRepositoryState(nextState)
-      setStatusMessage('Git 更改已推送')
-    })
-  }
-
-  async function handlePullGitChanges() {
-    if (!currentPath) {
-      return
-    }
-
-    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: '拉取 Git 更改',
-    }))) {
-      return
-    }
-
-    await runGitAction('正在拉取更改...', async () => {
-      const nextState = await window.appApi.pullGitChanges(currentPath)
-      setGitRepositoryState(nextState)
-      setGitHistoryRefreshVersion((version) => version + 1)
-      await loadTree(currentPath)
-      await syncOpenDiffTabs(currentPath)
-      setStatusMessage('Git 更改已拉取')
-    })
-  }
-
-  async function handleDiscardAllGitChanges() {
-    if (!currentPath || !gitRepositoryState?.unstagedChanges.length) {
-      return
-    }
-
-    if (!(await ensureWorkspaceTabsSavedBeforeGitAction({
-      actionLabel: '放弃所有 Git 更改',
-      filePaths: gitRepositoryState.unstagedChanges.map((change) => change.path),
-    }))) {
-      return
-    }
-
-    const confirmed = await requestConfirm({
-      title: '放弃所有更改',
-      message: '要放弃所有工作区更改吗？\n\n这会还原已跟踪文件，并删除未跟踪文件。',
-      confirmLabel: '全部放弃',
-      isDanger: true,
-    })
-
-    if (!confirmed) {
-      return
-    }
-
-    await runGitAction('正在放弃所有工作区更改...', async () => {
-      const nextState = await window.appApi.discardAllGitChanges(currentPath)
-      setGitRepositoryState(nextState)
-      await loadTree(currentPath)
-      await syncOpenDiffTabs(currentPath)
-      setStatusMessage('工作区更改已放弃')
-    })
-  }
 
   useEffect(() => {
     let cancelled = false

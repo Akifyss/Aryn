@@ -1,0 +1,124 @@
+.git-diff-editor {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.git-diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--editor-toolbar-gap, 8px);
+  padding: 0 20px 0 var(--editor-directory-toggle-left, 6px);
+  flex: 0 0 var(--editor-surface-header-height, 44px);
+  height: var(--editor-surface-header-height, 44px);
+  min-height: var(--editor-surface-header-height, 44px);
+  border-bottom: 1px solid var(--separator);
+  background: var(--background-primary);
+}
+
+.git-diff-header-leading-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--editor-directory-toggle-size, 32px);
+  width: var(--editor-directory-toggle-size, 32px);
+  height: var(--editor-directory-toggle-size, 32px);
+}
+
+.git-diff-header-title-area {
+  flex: 1;
+  min-width: 0;
+}
+
+.git-diff-header-title {
+  margin: 0;
+  color: var(--foreground-primary);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-diff-view-modes {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.git-diff-view-mode {
+  border: 0;
+  background: transparent;
+  color: var(--foreground-secondary);
+}
+
+.git-diff-view-mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.git-diff-view-mode-icon-only {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+}
+
+.git-diff-view-mode:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--foreground-primary);
+}
+
+.git-diff-view-mode:disabled {
+  cursor: not-allowed;
+  color: var(--foreground-secondary);
+  opacity: 0.5;
+}
+
+.git-diff-monaco-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  background: var(--background-primary);
+}
+
+.git-diff-monaco-shell .monaco-diff-editor,
+.git-diff-monaco-shell .monaco-editor,
+.git-diff-monaco-shell .overflow-guard {
+  width: 100%;
+  height: 100%;
+}
+
+.git-diff-monaco-navigation-line {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+@media (max-width: 860px) {
+  .git-diff-header {
+    padding-right: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .git-diff-view-mode {
+    transition: none;
+  }
+}

@@ -95,6 +95,11 @@ describe('shell layout helpers', () => {
     return fileTabsCss.replace(/\r\n/g, '\n')
   }
 
+  async function readGitPanelCss() {
+    const gitPanelCss = await readFile(new URL('../src/features/git/components/git-panel/styles.css', import.meta.url), 'utf8')
+    return gitPanelCss.replace(/\r\n/g, '\n')
+  }
+
   async function readWorkspaceEditorSurfaceCss() {
     const editorSurfaceCss = await readFile(new URL('../src/features/workspace/components/workspace-editor-surface/styles.css', import.meta.url), 'utf8')
     return editorSurfaceCss.replace(/\r\n/g, '\n')
@@ -335,9 +340,9 @@ describe('shell layout helpers', () => {
   })
 
   it('keeps the compact Git detail pane stretched when every section is collapsed', async () => {
-    const appCss = await readAppCss()
+    const gitPanelCss = await readGitPanelCss()
 
-    expect(appCss).toContain(`.git-panel-history-shell.is-compact .git-panel-detail-pane {
+    expect(gitPanelCss).toContain(`.git-panel-history-shell.is-compact .git-panel-detail-pane {
   flex: 1;
   width: 100%;
 }`)

@@ -48,6 +48,7 @@ import {
   supportsMeoEditor,
 } from '@/features/workspace/lib/file-types'
 import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
+import './styles.css'
 
 type GitPanelProps = {
   busyLabel: string | null
@@ -351,7 +352,7 @@ function GitRowActions({
               onOpenFile?.()
             }}
           >
-            <Icon icon='material-symbols:file-export-outline-rounded' width={16} height={16} />
+            <Icon icon='material-symbols:file-export-outline-rounded' width={16} height={16} aria-hidden='true' />
           </TreeItemActionButton>
         )}
         {showMeoDiff && (
@@ -363,7 +364,7 @@ function GitRowActions({
               onOpenMeoDiff?.()
             }}
           >
-            <MarkdownLine size={16} />
+            <MarkdownLine size={16} aria-hidden='true' />
           </TreeItemActionButton>
         )}
 
@@ -376,7 +377,7 @@ function GitRowActions({
               onUnstage?.()
             }}
           >
-            <Icon icon='mdi:minus' width={16} height={16} />
+            <Icon icon='mdi:minus' width={16} height={16} aria-hidden='true' />
           </TreeItemActionButton>
         )}
 
@@ -390,7 +391,7 @@ function GitRowActions({
                 onDiscard?.()
               }}
             >
-              <Back2Line size={16} />
+              <Back2Line size={16} aria-hidden='true' />
             </TreeItemActionButton>
             <TreeItemActionButton
               aria-label='暂存'
@@ -400,7 +401,7 @@ function GitRowActions({
                 onStage?.()
               }}
             >
-              <AddLine size={16} />
+              <AddLine size={16} aria-hidden='true' />
             </TreeItemActionButton>
           </>
         )}
@@ -755,7 +756,7 @@ function GitCommitActionMenu({
         disabled={menuDisabled}
         render={<AppTooltipButton tooltip='提交选项' />}
       >
-        <DownLine size={12} />
+        <DownLine size={12} aria-hidden='true' />
       </Menu.Trigger>
       <Menu.Portal
         className='git-commit-menu-portal'
@@ -783,7 +784,7 @@ function GitCommitActionMenu({
               label='提交'
               onClick={(event) => runCommitMenuAction(event, onCommit)}
             >
-              <CheckLine size={16} className='git-commit-menu-icon' />
+              <CheckLine size={16} className='git-commit-menu-icon' aria-hidden='true' />
               <span>提交</span>
             </Menu.Item>
             <Menu.Item
@@ -794,7 +795,7 @@ function GitCommitActionMenu({
               label='提交并同步'
               onClick={(event) => runCommitMenuAction(event, onCommitAndSync)}
             >
-              <ArrowUpCircleLine size={16} className='git-commit-menu-icon' />
+              <ArrowUpCircleLine size={16} className='git-commit-menu-icon' aria-hidden='true' />
               <span>提交并同步</span>
             </Menu.Item>
           </Menu.Popup>
@@ -1104,7 +1105,9 @@ export function GitPanel({
         onLayoutChange(layout === 'tree' ? 'list' : 'tree')
       }}
     >
-      {layout === 'tree' ? <ListCheckLine size={16} /> : <FolderLine size={16} />}
+      {layout === 'tree'
+        ? <ListCheckLine size={16} aria-hidden='true' />
+        : <FolderLine size={16} aria-hidden='true' />}
     </TreeItemActionButton>
   )
 
@@ -1121,7 +1124,7 @@ export function GitPanel({
         onRevertCommit(commit)
       }}
     >
-      <Back2Line size={16} />
+      <Back2Line size={16} aria-hidden='true' />
     </TreeItemActionButton>
   )
 
@@ -1425,7 +1428,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPush}
                 >
-                  <ArrowUpLine size={16} />
+                  <ArrowUpLine size={16} aria-hidden='true' />
                   {hasUnpushedCommits ? <span className='git-push-action-badge'>{pushBadgeLabel}</span> : null}
                 </TreeItemActionButton>
                 <TreeItemActionButton
@@ -1434,7 +1437,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPull}
                 >
-                  <ArrowDownLine size={16} />
+                  <ArrowDownLine size={16} aria-hidden='true' />
                 </TreeItemActionButton>
                 {renderLayoutToggleAction()}
                 <TreeItemActionButton
@@ -1443,7 +1446,7 @@ export function GitPanel({
                   disabled={Boolean(busyLabel)}
                   onClick={onRefresh}
                 >
-                  <Refresh2Line size={16} />
+                  <Refresh2Line size={16} aria-hidden='true' />
                 </TreeItemActionButton>
               </>
             )}
@@ -1483,7 +1486,7 @@ export function GitPanel({
                     disabled={!canSubmitCommit || Boolean(busyLabel)}
                     onClick={onCommit}
                   >
-                    <CheckLine size={16} />
+                    <CheckLine size={16} aria-hidden='true' />
                     <span>提交</span>
                   </AppTooltipButton>
                   <GitCommitActionMenu
@@ -1510,7 +1513,7 @@ export function GitPanel({
         {!currentRepositoryState.hasChanges ? (
           <div className='git-panel-empty-state git-panel-clean-state'>
             <div className='git-empty-illustration'>
-              <CheckLine size={28} />
+              <CheckLine size={28} aria-hidden='true' />
             </div>
             <p>工作区干净</p>
             <span className='git-empty-subtext'>{cleanStateSubtext}</span>
@@ -1522,7 +1525,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPush}
                 >
-                  <ArrowUpLine size={16} />
+                  <ArrowUpLine size={16} aria-hidden='true' />
                   <span>推送</span>
                 </AppTooltipButton>
               ) : null}
@@ -1533,7 +1536,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPull}
                 >
-                  <ArrowDownLine size={16} />
+                  <ArrowDownLine size={16} aria-hidden='true' />
                   <span>拉取</span>
                 </AppTooltipButton>
               ) : null}
@@ -1543,7 +1546,7 @@ export function GitPanel({
                 disabled={Boolean(busyLabel)}
                 onClick={onRefresh}
               >
-                <Refresh2Line size={16} />
+                <Refresh2Line size={16} aria-hidden='true' />
                 <span>刷新</span>
               </AppTooltipButton>
             </div>
@@ -1569,7 +1572,7 @@ export function GitPanel({
                   disabled={Boolean(busyLabel)}
                   onClick={() => onUnstage(stagedPaths)}
                 >
-                  <Icon icon='mdi:minus' width={16} height={16} />
+                  <Icon icon='mdi:minus' width={16} height={16} aria-hidden='true' />
                 </TreeItemActionButton>
               }
             />
@@ -1594,7 +1597,7 @@ export function GitPanel({
                     disabled={Boolean(busyLabel)}
                     onClick={onDiscardAll}
                   >
-                    <Back2Line size={16} />
+                    <Back2Line size={16} aria-hidden='true' />
                   </TreeItemActionButton>
                   <TreeItemActionButton
                     aria-label='全部暂存'
@@ -1602,7 +1605,7 @@ export function GitPanel({
                     disabled={Boolean(busyLabel)}
                     onClick={() => onStage(unstagedPaths)}
                   >
-                    <AddLine size={16} />
+                    <AddLine size={16} aria-hidden='true' />
                   </TreeItemActionButton>
                 </>
               }
