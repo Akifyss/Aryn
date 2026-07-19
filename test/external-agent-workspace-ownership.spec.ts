@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { CodexAgentManager } from '../electron/main/codex-agent'
 import { OpenCodeAgentManager } from '../electron/main/opencode-agent'
 import { PiCliAgentManager } from '../electron/main/pi-cli-agent'
+import type { SessionRuntimeLease } from '../electron/main/session-runtime-coordinator'
 
 function workspaceIdentity(cwd: string) {
   const resolved = path.resolve(cwd)
@@ -32,17 +33,28 @@ describe('external Agent workspace ownership', () => {
 
   it('does not reuse a cached PI CLI runtime from another workspace', async () => {
     const manager = new PiCliAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
-    const runtime = {
-      process: { stop: () => undefined },
-      record: { cwd: 'C:/workspace-a', id: 'session-a' },
-    }
     const internals = manager as unknown as {
-      requireRuntime: (cwd: string, sessionID: string) => Promise<typeof runtime>
-      runtimes: Map<string, typeof runtime>
+      runtimeCoordinator: {
+        ensure: (
+          key: string,
+          start: (lease: SessionRuntimeLease) => Promise<unknown>,
+        ) => Promise<unknown>
+      }
+      withRuntime: (cwd: string, sessionID: string, operation: (runtime: unknown) => unknown) => Promise<unknown>
     }
-    internals.runtimes.set('session-a', runtime)
+    await internals.runtimeCoordinator.ensure(
+      `${workspaceIdentity('C:/workspace-a')}\0session-a`,
+      async (lease) => ({
+        isStreaming: false,
+        lease,
+        models: [],
+        process: { stop: () => undefined },
+        record: { cwd: 'C:/workspace-a', id: 'session-a' },
+        state: {},
+      }),
+    )
 
-    await expect(internals.requireRuntime('C:/workspace-b', 'session-a'))
+    await expect(internals.withRuntime('C:/workspace-b', 'session-a', () => undefined))
       .rejects.toThrow('not found for this workspace')
     manager.dispose()
   })
@@ -76,17 +88,27 @@ describe('external Agent workspace ownership', () => {
       sessionBindingStarts: Map<string, Promise<never>>
       sessionBindingStartWorkspaces: Map<string, string>
     }
+    let resolvePiStart!: (runtime: { process: { stop: () => void } }) => void
+    const piStart = new Promise<{ process: { stop: () => void } }>((resolve) => {
+      resolvePiStart = resolve
+    })
     const piInternals = pi as unknown as {
-      runtimeStarts: Map<string, Promise<never>>
-      runtimeStartWorkspaces: Map<string, string>
+      runtimeCoordinator: {
+        ensure: (key: string, start: (lease: SessionRuntimeLease) => Promise<unknown>) => Promise<unknown>
+      }
     }
     codexInternals.listIndexedRecords = async () => []
     codexInternals.bindingStarts.set('thread-b', never)
     codexInternals.bindingStartWorkspaces.set('thread-b', otherWorkspace)
     opencodeInternals.sessionBindingStarts.set('session-b', never)
     opencodeInternals.sessionBindingStartWorkspaces.set('session-b', otherWorkspace)
-    piInternals.runtimeStarts.set('session-b', never)
-    piInternals.runtimeStartWorkspaces.set('session-b', otherWorkspace)
+    const piStarting = piInternals.runtimeCoordinator.ensure(
+      `${otherWorkspace}\0session-b`,
+      async (lease) => {
+        const runtime = await piStart
+        return { ...runtime, lease }
+      },
+    )
 
     try {
       await expect(Promise.all([
@@ -95,6 +117,8 @@ describe('external Agent workspace ownership', () => {
         pi.releaseWorkspaceRuntime('C:/workspace-a'),
       ])).resolves.toEqual([undefined, undefined, undefined])
     } finally {
+      resolvePiStart({ process: { stop: () => undefined } })
+      await piStarting
       codex.dispose()
       opencode.dispose()
       pi.dispose()

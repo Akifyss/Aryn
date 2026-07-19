@@ -9,7 +9,6 @@ import {
   SettingsManager,
   type SessionInfo,
 } from '@earendil-works/pi-coding-agent'
-import { getAgentInteractionKey } from '../../src/features/agent/types'
 import type {
   AgentClientEventPayload,
   AgentInteractionResponse,
@@ -25,6 +24,10 @@ import type {
 import { AtomicJsonStore } from './json-file-store'
 import { prepareExternalCliEnvironment } from './external-cli-environment'
 import { JsonLineProcess } from './json-line-process'
+import {
+  SessionRuntimeCoordinator,
+  type SessionRuntimeLease,
+} from './session-runtime-coordinator'
 
 type JsonRecord = Record<string, unknown>
 
@@ -57,8 +60,8 @@ type PiRpcModel = {
 }
 
 type PiRuntime = {
-  eventChain: Promise<void>
   isStreaming: boolean
+  lease: SessionRuntimeLease
   models: PiRpcModel[]
   process: JsonLineProcess
   record: PiCliSessionRecord
@@ -77,6 +80,18 @@ const THINKING_LEVELS: AgentThinkingLevel[] = ['off', 'minimal', 'low', 'medium'
 function workspaceIdentity(cwd: string) {
   const resolved = path.resolve(cwd)
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
+
+function runtimeKey(cwd: string, sessionID: string) {
+  return `${workspaceIdentity(cwd)}\0${sessionID}`
+}
+
+function workspaceRuntimeKeyPrefix(cwd: string) {
+  return `${workspaceIdentity(cwd)}\0`
+}
+
+function pendingInteractionKey(runtimeKeyValue: string, requestID: string) {
+  return `${runtimeKeyValue}\0${requestID}`
 }
 
 function normalizeNullableString(value: unknown) {
@@ -213,18 +228,20 @@ function summarizeToolPayload(message: JsonRecord, resultKey: 'partialResult' | 
 export class PiCliAgentManager {
   private readonly index: AtomicJsonStore<PiCliSessionIndex>
   private readonly pendingInteractions = new Map<string, {
+    lease: SessionRuntimeLease
     method: 'confirm' | 'editor' | 'input' | 'select'
     optionValues?: Record<string, string>
     process: JsonLineProcess
     requestId: string
+    runtimeKey: string
     sessionId: string
   }>()
   private disposed = false
+  private readonly initializingProcesses = new Set<JsonLineProcess>()
   private readonly legacyMigrations = new Map<string, Promise<void>>()
-  private readonly runtimeStarts = new Map<string, Promise<PiRuntime>>()
-  private readonly runtimeStartWorkspaces = new Map<string, string>()
-  private readonly runtimes = new Map<string, PiRuntime>()
+  private readonly runtimeCoordinator: SessionRuntimeCoordinator<PiRuntime>
   private readonly workspaceActiveSessions = new Map<string, string>()
+  private readonly workspaceStateRevisions = new Map<string, number>()
 
   constructor(private readonly options: PiCliAgentManagerOptions) {
     this.index = new AtomicJsonStore({
@@ -232,14 +249,17 @@ export class PiCliAgentManager {
       filePath: path.join(options.agentDir, 'external', 'pi', 'sessions.json'),
       normalize: normalizeIndex,
     })
+    this.runtimeCoordinator = new SessionRuntimeCoordinator({
+      stopRuntime: (runtime) => runtime.process.stop(),
+    })
   }
 
   async loadDraftState(): Promise<AgentWorkspaceState> {
-    const runtime = await this.createEphemeralRuntime()
+    const runtime = await this.createEphemeralRuntime(process.cwd())
     try {
       return { activeSession: null, runtime: this.serializeRuntime(null, runtime), sessions: [] }
     } finally {
-      runtime.process.stop()
+      await this.runtimeCoordinator.retireLease(runtime.lease)
     }
   }
 
@@ -251,8 +271,12 @@ export class PiCliAgentManager {
       : [preferredSessionPath, this.workspaceActiveSessions.get(identity), records[0]?.id]
           .find((candidate): candidate is string => Boolean(candidate && records.some((record) => record.id === candidate)))
         ?? null
-    if (activeID) this.workspaceActiveSessions.set(identity, activeID)
-    return this.buildWorkspaceState(cwd, activeID)
+    if (!activeID) return this.buildWorkspaceState(cwd, null)
+    return this.withRuntime(cwd, activeID, async (runtime) => {
+      const state = await this.buildWorkspaceState(cwd, activeID, runtime)
+      this.workspaceActiveSessions.set(identity, activeID)
+      return state
+    })
   }
 
   async listSessionItems(cwd: string) {
@@ -268,8 +292,7 @@ export class PiCliAgentManager {
   }
 
   async readSession(cwd: string, sessionID: string) {
-    const runtime = await this.requireRuntime(cwd, sessionID)
-    return this.serializeSession(runtime)
+    return this.withRuntime(cwd, sessionID, (runtime) => this.serializeSession(runtime))
   }
 
   async sessionExists(cwd: string, sessionID: string) {
@@ -291,15 +314,15 @@ export class PiCliAgentManager {
     }
     await this.index.update((state) => ({ ...state, sessions: [record, ...state.sessions] }))
     try {
-      const runtime = await this.requireRuntime(cwd, record.id, { allowCreate: true })
-      if (record.name) await runtime.process.request({ type: 'set_session_name', name: record.name })
-      if (record.modelKey) await this.setRuntimeModel(runtime, record.modelKey)
-      await runtime.process.request({ type: 'set_thinking_level', level: record.thinkingLevel })
-      this.workspaceActiveSessions.set(workspaceIdentity(cwd), record.id)
-      return this.broadcastWorkspaceState(cwd, record.id)
+      await this.withRuntime(cwd, record.id, async (runtime) => {
+        if (record.name) await runtime.process.request({ type: 'set_session_name', name: record.name })
+        if (record.modelKey) await this.setRuntimeModel(runtime, record.modelKey)
+        await runtime.process.request({ type: 'set_thinking_level', level: record.thinkingLevel })
+        this.workspaceActiveSessions.set(workspaceIdentity(cwd), record.id)
+      }, { allowCreate: true })
+      return await this.broadcastWorkspaceState(cwd, record.id)
     } catch (error) {
-      this.runtimes.get(record.id)?.process.stop()
-      this.runtimes.delete(record.id)
+      await this.runtimeCoordinator.retire(runtimeKey(cwd, record.id)).catch(() => undefined)
       await this.index.update((state) => ({
         ...state,
         sessions: state.sessions.filter((session) => session.id !== record.id),
@@ -309,119 +332,135 @@ export class PiCliAgentManager {
   }
 
   async openSession(cwd: string, sessionID: string) {
-    await this.requireRuntime(cwd, sessionID)
-    this.workspaceActiveSessions.set(workspaceIdentity(cwd), sessionID)
+    await this.withRuntime(cwd, sessionID, () => {
+      this.workspaceActiveSessions.set(workspaceIdentity(cwd), sessionID)
+    })
     return this.broadcastWorkspaceState(cwd, sessionID)
   }
 
   async deleteSession(cwd: string, sessionID: string) {
-    const record = await this.requireRecord(cwd, sessionID)
-    await this.runtimeStarts.get(sessionID)?.catch(() => undefined)
-    this.runtimes.get(sessionID)?.process.stop()
-    this.runtimes.delete(sessionID)
-    this.clearPendingInteractions((pending) => pending.sessionId === sessionID)
-    if (record.sessionPath) {
-      if (this.options.removeSessionFile) await this.options.removeSessionFile(record.sessionPath)
-      else await rm(record.sessionPath, { force: true })
-    }
-    await this.index.update((state) => ({
-      ...state,
-      sessions: state.sessions.filter((session) => session.id !== sessionID),
-    }))
-    const identity = workspaceIdentity(cwd)
-    const activeSessionID = this.workspaceActiveSessions.get(identity) ?? null
-    if (activeSessionID === sessionID) this.workspaceActiveSessions.delete(identity)
-    return this.broadcastWorkspaceState(cwd, activeSessionID === sessionID ? null : activeSessionID)
+    const nextActiveSessionID = await this.runtimeCoordinator.retireAndRun(runtimeKey(cwd, sessionID), async (retired) => {
+      const record = retired
+        ? this.requireRuntimeWorkspace(retired.runtime, cwd).record
+        : await this.requireRecord(cwd, sessionID)
+      this.clearPendingInteractions((pending) => pending.runtimeKey === runtimeKey(cwd, sessionID))
+      if (record.sessionPath) {
+        if (this.options.removeSessionFile) await this.options.removeSessionFile(record.sessionPath)
+        else await rm(record.sessionPath, { force: true })
+      }
+      await this.index.update((state) => ({
+        ...state,
+        sessions: state.sessions.filter((session) => session.id !== sessionID),
+      }))
+      const identity = workspaceIdentity(cwd)
+      const activeSessionID = this.workspaceActiveSessions.get(identity) ?? null
+      if (activeSessionID === sessionID) this.workspaceActiveSessions.delete(identity)
+      return activeSessionID === sessionID ? null : activeSessionID
+    })
+    return this.broadcastWorkspaceState(cwd, nextActiveSessionID)
   }
 
   async renameSession(cwd: string, sessionID: string, name: string) {
     const nextName = name.trim()
     if (!nextName) throw new Error('PI CLI 会话名称不能为空。')
-    await this.requireRecord(cwd, sessionID)
-    const runtime = await this.requireRuntime(cwd, sessionID)
-    await runtime.process.request({ type: 'set_session_name', name: nextName })
-    runtime.record.name = nextName
-    await this.index.update((state) => ({
-      ...state,
-      sessions: state.sessions.map((record) => record.id === sessionID
-        ? { ...record, name: nextName, updatedAt: new Date().toISOString() }
-        : record),
-    }))
-    return this.broadcastWorkspaceState(cwd, this.workspaceActiveSessions.get(workspaceIdentity(cwd)) ?? null)
+    await this.withRuntime(cwd, sessionID, async (runtime) => {
+      await this.requireRecord(cwd, sessionID)
+      await runtime.process.request({ type: 'set_session_name', name: nextName })
+      runtime.record.name = nextName
+      await this.index.update((state) => ({
+        ...state,
+        sessions: state.sessions.map((record) => record.id === sessionID
+          ? { ...record, name: nextName, updatedAt: new Date().toISOString() }
+          : record),
+      }))
+    })
+    return this.broadcastWorkspaceState(
+      cwd,
+      this.workspaceActiveSessions.get(workspaceIdentity(cwd)) ?? null,
+    )
   }
 
   async sendPrompt(cwd: string, sessionID: string, prompt: string, streamingBehavior?: AgentRunningPromptBehavior, attachments: AgentPromptAttachment[] = []) {
-    const runtime = await this.requireRuntime(cwd, sessionID)
-    const images = attachments.flatMap((attachment) => {
-      if (attachment.kind !== 'image' || !attachment.data) return []
-      const match = attachment.data.match(/^data:([^;]+);base64,(.+)$/)
-      return match ? [{ type: 'image', data: match[2], mimeType: match[1] }] : []
-    })
-    const fileReferences = attachments
-      .filter((attachment) => attachment.path && !(attachment.kind === 'image' && attachment.data))
-      .map((attachment) => `\n\nAttached file: ${attachment.path}`)
-      .join('')
-    runtime.isStreaming = true
-    try {
-      await runtime.process.request({
-        type: 'prompt',
-        message: `${prompt}${fileReferences}`,
-        ...(images.length > 0 ? { images } : {}),
-        ...(streamingBehavior ? { streamingBehavior } : {}),
+    const result = await this.withRuntime(cwd, sessionID, async (runtime) => {
+      const images = attachments.flatMap((attachment) => {
+        if (attachment.kind !== 'image' || !attachment.data) return []
+        const match = attachment.data.match(/^data:([^;]+);base64,(.+)$/)
+        return match ? [{ type: 'image', data: match[2], mimeType: match[1] }] : []
       })
-      if (!runtime.record.materialized) {
-        runtime.record.materialized = true
-        await this.updateRecord(runtime.record).catch((error) => {
-          this.options.emitEvent({
-            type: 'error',
-            message: `PI CLI 会话索引更新失败：${error instanceof Error ? error.message : String(error)}`,
-            sessionId: runtime.record.id,
-          })
+      const fileReferences = attachments
+        .filter((attachment) => attachment.path && !(attachment.kind === 'image' && attachment.data))
+        .map((attachment) => `\n\nAttached file: ${attachment.path}`)
+        .join('')
+      runtime.isStreaming = true
+      try {
+        await runtime.process.request({
+          type: 'prompt',
+          message: `${prompt}${fileReferences}`,
+          ...(images.length > 0 ? { images } : {}),
+          ...(streamingBehavior ? { streamingBehavior } : {}),
         })
+        if (!runtime.record.materialized) {
+          runtime.record.materialized = true
+          await this.updateRecord(runtime.record).catch((error) => {
+            this.options.emitEvent({
+              type: 'error',
+              message: `PI CLI 会话索引更新失败：${error instanceof Error ? error.message : String(error)}`,
+              sessionId: runtime.record.id,
+            })
+          })
+        }
+        await this.touchRecord(runtime).catch(() => undefined)
+        return { ok: true }
+      } catch (error) {
+        runtime.isStreaming = false
+        throw error
       }
-      await this.touchRecord(sessionID).catch(() => undefined)
-      await this.broadcastWorkspaceState(cwd, sessionID).catch(() => undefined)
-      return { ok: true }
-    } catch (error) {
-      runtime.isStreaming = false
-      throw error
-    }
+    })
+    await this.broadcastWorkspaceState(cwd, sessionID).catch(() => undefined)
+    return result
   }
 
   async selectModel(cwd: string, sessionID: string, modelKey: string) {
-    const runtime = await this.requireRuntime(cwd, sessionID)
-    await this.setRuntimeModel(runtime, modelKey)
-    runtime.record.modelKey = modelKey
-    await this.updateRecord(runtime.record)
-    return this.broadcastWorkspaceState(cwd, runtime.record.id)
+    await this.withRuntime(cwd, sessionID, async (runtime) => {
+      await this.setRuntimeModel(runtime, modelKey)
+      runtime.record.modelKey = modelKey
+      await this.updateRecord(runtime.record)
+    })
+    return this.broadcastWorkspaceState(cwd, sessionID)
   }
 
   async selectThinkingLevel(cwd: string, sessionID: string, level: string, modelKey?: string) {
     const thinkingLevel = normalizeThinkingLevel(level)
-    const runtime = await this.requireRuntime(cwd, sessionID)
-    if (modelKey) {
-      await this.setRuntimeModel(runtime, modelKey)
-      runtime.record.modelKey = modelKey
-    }
-    await runtime.process.request({ type: 'set_thinking_level', level: thinkingLevel })
-    runtime.record.thinkingLevel = thinkingLevel
-    await this.updateRecord(runtime.record)
-    await this.refreshRuntime(runtime)
-    return this.broadcastWorkspaceState(cwd, runtime.record.id)
+    await this.withRuntime(cwd, sessionID, async (runtime) => {
+      if (modelKey) {
+        await this.setRuntimeModel(runtime, modelKey)
+        runtime.record.modelKey = modelKey
+      }
+      await runtime.process.request({ type: 'set_thinking_level', level: thinkingLevel })
+      runtime.record.thinkingLevel = thinkingLevel
+      await this.updateRecord(runtime.record)
+      await this.refreshRuntime(runtime)
+    })
+    return this.broadcastWorkspaceState(cwd, sessionID)
   }
 
   async abortActivePrompt(cwd: string, sessionID: string) {
-    const runtime = await this.requireRuntime(cwd, sessionID)
-    await runtime.process.request({ type: 'abort' })
-    runtime.isStreaming = false
-    await this.refreshRuntime(runtime)
-    return this.broadcastWorkspaceState(cwd, runtime.record.id)
+    await this.withRuntime(cwd, sessionID, async (runtime) => {
+      await runtime.process.request({ type: 'abort' })
+      runtime.isStreaming = false
+      await this.refreshRuntime(runtime)
+    })
+    return this.broadcastWorkspaceState(cwd, sessionID)
   }
 
   respondToInteraction(response: AgentInteractionResponse) {
-    const interactionKey = getAgentInteractionKey(response.sessionId, response.requestId)
-    const pending = this.pendingInteractions.get(interactionKey)
-    if (!pending) return false
+    const matches = [...this.pendingInteractions.entries()].filter(([, pending]) => (
+      pending.sessionId === response.sessionId
+      && pending.requestId === response.requestId
+      && pending.lease.isCurrent()
+    ))
+    if (matches.length !== 1) return false
+    const [interactionKey, pending] = matches[0]
     const cancelled = response.optionId === 'deny' || response.optionId === 'reject'
     const value = pending.method === 'select'
       ? pending.optionValues?.[response.optionId]
@@ -451,60 +490,59 @@ export class PiCliAgentManager {
 
   async releaseWorkspaceRuntime(cwd: string) {
     const identity = workspaceIdentity(cwd)
-    const pendingStarts = [...this.runtimeStarts.entries()]
-      .filter(([sessionID]) => this.runtimeStartWorkspaces.get(sessionID) === identity)
-      .map(([, start]) => start.catch(() => undefined))
-    await Promise.all(pendingStarts)
-    const runtimes = [...this.runtimes.values()].filter((runtime) => workspaceIdentity(runtime.record.cwd) === identity)
-    const recordIds = new Set(runtimes.map((runtime) => runtime.record.id))
-    for (const runtime of runtimes) {
-      runtime.process.stop()
-      this.runtimes.delete(runtime.record.id)
-    }
-    this.clearPendingInteractions((pending) => recordIds.has(pending.sessionId))
+    const prefix = workspaceRuntimeKeyPrefix(cwd)
     this.workspaceActiveSessions.delete(identity)
+    this.invalidateWorkspaceState(identity)
+    try {
+      await this.runtimeCoordinator.retireWhere((key) => key.startsWith(prefix))
+    } finally {
+      this.clearPendingInteractions((pending) => pending.runtimeKey.startsWith(prefix))
+    }
   }
 
   async discardWorkspaceSessions(cwd: string) {
     // Draft cleanup is restricted to sessions created by Aryn. Sessions found
     // only in PI's official store remain untouched.
     const records = await this.listOwnedRecords(cwd)
-    const recordIds = new Set(records.map((record) => record.id))
-    await Promise.all(records.map((record) => this.runtimeStarts.get(record.id)?.catch(() => undefined)))
-    for (const record of records) {
-      this.runtimes.get(record.id)?.process.stop()
-      this.runtimes.delete(record.id)
-    }
-    this.clearPendingInteractions((pending) => recordIds.has(pending.sessionId))
     const officialRecords = await this.listRecords(cwd)
     const officialById = new Map(officialRecords.map((record) => [record.id, record]))
-    await Promise.all(records.map((record) => {
-      const sessionPath = officialById.get(record.id)?.sessionPath
-      return sessionPath ? rm(sessionPath, { force: true }) : Promise.resolve()
-    }))
+    await Promise.all(records.map((record) => this.runtimeCoordinator.retireAndRun(
+      runtimeKey(cwd, record.id),
+      async () => {
+        this.clearPendingInteractions((pending) => pending.runtimeKey === runtimeKey(cwd, record.id))
+        const sessionPath = officialById.get(record.id)?.sessionPath
+        if (sessionPath) await rm(sessionPath, { force: true })
+      },
+    )))
     await this.index.update((state) => ({
       ...state,
       sessions: state.sessions.filter((record) => workspaceIdentity(record.cwd) !== workspaceIdentity(cwd)),
     }))
-    this.workspaceActiveSessions.delete(workspaceIdentity(cwd))
+    const identity = workspaceIdentity(cwd)
+    this.workspaceActiveSessions.delete(identity)
+    this.invalidateWorkspaceState(identity)
   }
 
   dispose() {
     this.disposed = true
-    for (const runtime of this.runtimes.values()) runtime.process.stop()
-    this.runtimes.clear()
-    this.runtimeStarts.clear()
+    for (const processHandle of this.initializingProcesses) processHandle.stop()
+    this.initializingProcesses.clear()
+    void this.runtimeCoordinator.dispose()
     this.pendingInteractions.clear()
     this.legacyMigrations.clear()
-    this.runtimeStartWorkspaces.clear()
     this.workspaceActiveSessions.clear()
+    this.workspaceStateRevisions.clear()
   }
 
-  private async createEphemeralRuntime() {
+  drainSessionEvents(cwd: string, sessionID: string) {
+    return this.runtimeCoordinator.drain(runtimeKey(cwd, sessionID))
+  }
+
+  private async createEphemeralRuntime(cwd: string) {
     const now = new Date().toISOString()
     const record: PiCliSessionRecord = {
       createdAt: now,
-      cwd: process.cwd(),
+      cwd,
       id: randomUUID(),
       materialized: false,
       modelKey: null,
@@ -512,15 +550,20 @@ export class PiCliAgentManager {
       thinkingLevel: 'medium',
       updatedAt: now,
     }
-    return this.startRuntime(record, true)
+    return this.runtimeCoordinator.use(
+      runtimeKey(record.cwd, record.id),
+      (lease) => this.startRuntime(record, lease, true),
+      ({ runtime }) => runtime,
+    )
   }
 
-  private async startRuntime(record: PiCliSessionRecord, ephemeral = false, allowCreate = false) {
+  private async startRuntime(
+    record: PiCliSessionRecord,
+    lease: SessionRuntimeLease,
+    ephemeral = false,
+    allowCreate = false,
+  ) {
     await prepareExternalCliEnvironment()
-    if (!ephemeral) {
-      const existing = this.runtimes.get(record.id)
-      if (existing) return existing
-    }
     const args = [
       '--mode', 'rpc',
       '--no-approve',
@@ -538,15 +581,16 @@ export class PiCliAgentManager {
       cwd: record.cwd,
       onEvent: (message) => {
         if (!runtime) return
-        runtime.eventChain = runtime.eventChain
-          .then(() => this.handleEvent(runtime, message))
-          .catch((error) => {
+        lease.enqueue(
+          () => this.handleEvent(runtime, message),
+          (error) => {
             this.options.emitEvent({
               type: 'error',
               message: `PI CLI 事件处理失败：${error instanceof Error ? error.message : String(error)}`,
               sessionId: runtime.record.id,
             })
-          })
+          },
+        )
       },
       ...(!ephemeral ? {
         onExit: (error: Error) => {
@@ -554,19 +598,21 @@ export class PiCliAgentManager {
         },
       } : {}),
     })
-    runtime = { eventChain: Promise.resolve(), isStreaming: false, models: [], process: processHandle, record, state: {} }
-    processHandle.start()
+    runtime = { isStreaming: false, lease, models: [], process: processHandle, record, state: {} }
+    this.initializingProcesses.add(processHandle)
     try {
+      processHandle.start()
       await this.refreshRuntime(runtime)
     } catch (error) {
       processHandle.stop()
       throw error
+    } finally {
+      this.initializingProcesses.delete(processHandle)
     }
-    if (this.disposed) {
+    if (this.disposed || !lease.isCurrent()) {
       processHandle.stop()
-      throw new Error('PI CLI manager was disposed during session initialization.')
+      throw new Error('PI CLI runtime was invalidated during session initialization.')
     }
-    if (!ephemeral) this.runtimes.set(record.id, runtime)
     return runtime
   }
 
@@ -651,10 +697,12 @@ export class PiCliAgentManager {
     }
     if (type === 'agent_end') {
       runtime.isStreaming = false
-      this.clearPendingInteractions((pending) => pending.sessionId === sessionId)
+      this.clearPendingInteractions((pending) => pending.lease === runtime.lease)
       await this.refreshRuntime(runtime).catch(() => undefined)
-      await this.touchRecord(sessionId)
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId)
+      if (!runtime.lease.isCurrent()) return
+      await this.touchRecord(runtime)
+      if (!runtime.lease.isCurrent()) return
+      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, runtime, runtime.lease)
       return
     }
     if (type === 'queue_update') {
@@ -662,31 +710,31 @@ export class PiCliAgentManager {
       runtime.state.followUp = Array.isArray(message.followUp) ? message.followUp.map(String) : []
       runtime.state.pendingMessageCount = (runtime.state.steering as string[]).length
         + (runtime.state.followUp as string[]).length
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId)
+      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, runtime, runtime.lease)
       return
     }
     if (type === 'compaction_start') {
       runtime.state.isCompacting = true
       runtime.state.compactionReason = message.reason
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId)
+      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, runtime, runtime.lease)
       return
     }
     if (type === 'compaction_end') {
       runtime.state.isCompacting = false
       runtime.state.compactionReason = null
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId)
+      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, runtime, runtime.lease)
       return
     }
     if (type === 'auto_retry_start') {
       runtime.state.retryAttempt = typeof message.attempt === 'number' ? message.attempt : 0
       runtime.state.retryMaxAttempts = typeof message.maxAttempts === 'number' ? message.maxAttempts : null
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId)
+      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, runtime, runtime.lease)
       return
     }
     if (type === 'auto_retry_end') {
       runtime.state.retryAttempt = 0
       runtime.state.retryMaxAttempts = null
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId)
+      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, runtime, runtime.lease)
       return
     }
     if (
@@ -699,11 +747,13 @@ export class PiCliAgentManager {
         ? message.options.map(String)
         : []
       const optionValues = Object.fromEntries(selectOptions.map((option, index) => [`select:${index}`, option]))
-      this.pendingInteractions.set(getAgentInteractionKey(sessionId, requestId), {
+      this.pendingInteractions.set(pendingInteractionKey(runtime.lease.key, requestId), {
+        lease: runtime.lease,
         method,
         ...(selectOptions.length > 0 ? { optionValues } : {}),
         process: runtime.process,
         requestId,
+        runtimeKey: runtime.lease.key,
         sessionId,
       })
       this.options.emitEvent({
@@ -748,22 +798,31 @@ export class PiCliAgentManager {
 
   private handleRuntimeExit(runtime: PiRuntime, error: Error) {
     runtime.isStreaming = false
-    if (this.runtimes.get(runtime.record.id) === runtime) {
-      this.runtimes.delete(runtime.record.id)
-    }
-    this.clearPendingInteractions((pending) => pending.process === runtime.process)
-    this.options.emitEvent({
-      type: 'error',
-      message: `PI CLI 会话进程已退出：${error.message}`,
-      sessionId: runtime.record.id,
+    void this.runtimeCoordinator.retireLease(runtime.lease).then((retired) => {
+      if (!retired || this.disposed) return
+      this.clearPendingInteractions((pending) => pending.lease === runtime.lease)
+      this.options.emitEvent({
+        type: 'error',
+        message: `PI CLI 会话进程已退出：${error.message}`,
+        sessionId: runtime.record.id,
+      })
+    }).catch((retireError) => {
+      if (this.disposed) return
+      this.options.emitEvent({
+        type: 'error',
+        message: `PI CLI 退出清理失败：${retireError instanceof Error ? retireError.message : String(retireError)}`,
+        sessionId: runtime.record.id,
+      })
     })
   }
 
   private clearPendingInteractions(predicate: (pending: {
+    lease: SessionRuntimeLease
     method: 'confirm' | 'editor' | 'input' | 'select'
     optionValues?: Record<string, string>
     process: JsonLineProcess
     requestId: string
+    runtimeKey: string
     sessionId: string
   }) => boolean) {
     for (const [interactionKey, pending] of this.pendingInteractions) {
@@ -880,10 +939,23 @@ export class PiCliAgentManager {
     }
   }
 
-  private async buildWorkspaceState(cwd: string, activeSessionID: string | null): Promise<AgentWorkspaceState> {
+  private async buildWorkspaceState(
+    cwd: string,
+    activeSessionID: string | null,
+    providedRuntime?: PiRuntime,
+  ): Promise<AgentWorkspaceState> {
     const records = await this.listRecords(cwd)
-    const activeRuntime = activeSessionID ? await this.requireRuntime(cwd, activeSessionID) : null
-    const draftRuntime = activeRuntime ?? await this.createEphemeralRuntime()
+    if (activeSessionID && providedRuntime?.record.id !== activeSessionID) {
+      return this.withRuntime(
+        cwd,
+        activeSessionID,
+        (runtime) => this.buildWorkspaceState(cwd, activeSessionID, runtime),
+      )
+    }
+    const activeRuntime = activeSessionID && providedRuntime
+      ? this.requireRuntimeWorkspace(providedRuntime, cwd)
+      : null
+    const draftRuntime = activeRuntime ?? await this.createEphemeralRuntime(cwd)
     try {
       return {
         activeSession: activeRuntime ? await this.serializeSession(activeRuntime) : null,
@@ -899,14 +971,34 @@ export class PiCliAgentManager {
         })),
       }
     } finally {
-      if (!activeRuntime) draftRuntime.process.stop()
+      if (!activeRuntime) await this.runtimeCoordinator.retireLease(draftRuntime.lease)
     }
   }
 
-  private async broadcastWorkspaceState(cwd: string, activeSessionID: string | null) {
-    const state = await this.buildWorkspaceState(cwd, activeSessionID)
-    this.options.emitEvent({ type: 'workspace_state', state })
+  private async broadcastWorkspaceState(
+    cwd: string,
+    requestedActiveSessionID: string | null,
+    providedRuntime?: PiRuntime,
+    sourceLease?: SessionRuntimeLease,
+  ) {
+    const identity = workspaceIdentity(cwd)
+    const activeSessionID = sourceLease
+      ? this.workspaceActiveSessions.get(identity) ?? null
+      : requestedActiveSessionID
+    const revision = (this.workspaceStateRevisions.get(identity) ?? 0) + 1
+    this.workspaceStateRevisions.set(identity, revision)
+    const state = await this.buildWorkspaceState(cwd, activeSessionID, providedRuntime)
+    if (
+      this.workspaceStateRevisions.get(identity) === revision
+      && (!sourceLease || sourceLease.isCurrent())
+    ) {
+      this.options.emitEvent({ type: 'workspace_state', state })
+    }
     return state
+  }
+
+  private invalidateWorkspaceState(identity: string) {
+    this.workspaceStateRevisions.set(identity, (this.workspaceStateRevisions.get(identity) ?? 0) + 1)
   }
 
   private async listRecords(cwd: string) {
@@ -917,7 +1009,7 @@ export class PiCliAgentManager {
     const officialIds = new Set(officialRecords.map((record) => record.id))
     const liveOrUnmaterializedDrafts = indexedRecords.filter((record) => (
       !officialIds.has(record.id)
-      && (!record.materialized || this.runtimes.has(record.id))
+      && (!record.materialized || Boolean(this.runtimeCoordinator.current(runtimeKey(record.cwd, record.id))))
     ))
     return [...officialRecords, ...liveOrUnmaterializedDrafts]
       .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
@@ -1033,22 +1125,25 @@ export class PiCliAgentManager {
     return record
   }
 
-  private async requireRuntime(cwd: string, sessionID: string, options: { allowCreate?: boolean } = {}) {
-    const existing = this.runtimes.get(sessionID)
-    if (existing) return this.requireRuntimeWorkspace(existing, cwd)
-    const pending = this.runtimeStarts.get(sessionID)
-    if (pending) return this.requireRuntimeWorkspace(await pending, cwd)
-    const start = this.requireRecord(cwd, sessionID)
-      .then((record) => this.startRuntime(record, false, options.allowCreate === true || !record.materialized))
-      .finally(() => {
-        if (this.runtimeStarts.get(sessionID) === start) {
-          this.runtimeStarts.delete(sessionID)
-          this.runtimeStartWorkspaces.delete(sessionID)
-        }
-      })
-    this.runtimeStarts.set(sessionID, start)
-    this.runtimeStartWorkspaces.set(sessionID, workspaceIdentity(cwd))
-    return start
+  private withRuntime<TResult>(
+    cwd: string,
+    sessionID: string,
+    operation: (runtime: PiRuntime) => Promise<TResult> | TResult,
+    options: { allowCreate?: boolean } = {},
+  ) {
+    return this.runtimeCoordinator.use(
+      runtimeKey(cwd, sessionID),
+      async (lease) => {
+        const record = await this.requireRecord(cwd, sessionID)
+        return this.startRuntime(
+          record,
+          lease,
+          false,
+          options.allowCreate === true || !record.materialized,
+        )
+      },
+      ({ runtime }) => operation(this.requireRuntimeWorkspace(runtime, cwd)),
+    )
   }
 
   private requireRuntimeWorkspace(runtime: PiRuntime, cwd: string) {
@@ -1088,8 +1183,7 @@ export class PiCliAgentManager {
     }))
   }
 
-  private async touchRecord(sessionID: string) {
-    const runtime = this.runtimes.get(sessionID)
-    if (runtime) await this.updateRecord(runtime.record)
+  private async touchRecord(runtime: PiRuntime) {
+    if (runtime.lease.isCurrent()) await this.updateRecord(runtime.record)
   }
 }
