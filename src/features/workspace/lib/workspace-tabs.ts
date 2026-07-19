@@ -1,6 +1,6 @@
 import { isLineWithinVisualDiff } from '@/features/editor/lib/git-diff-navigation'
 import type { GitChangeItem, GitFileDiffResult } from '@/features/git/types'
-import { getBaseName } from '@/features/workspace/lib/workspace-paths'
+import { getBaseName, normalizeFilePath } from '@/features/workspace/lib/workspace-paths'
 import type {
   WorkspaceDiffNavigationRequest,
   WorkspaceDiffTab,
@@ -8,12 +8,21 @@ import type {
   WorkspaceFileGitDiffRequest,
   WorkspaceFileTab,
   WorkspaceFixedPanelTab,
+  WorkspaceTab,
 } from '@/features/workspace/store/use-workspace-store'
 
 export const FIXED_FILE_TAB_ID = 'app://fixed/files'
 export const FIXED_GIT_TAB_ID = 'app://fixed/git'
 
 export type AgentLayoutFixedTab = 'file' | 'git'
+
+export type WorkspaceTabViewStateOptions = {
+  activeAgentLayoutFixedTab: AgentLayoutFixedTab
+  activeTabId: string | null
+  isAgentLayout: boolean
+  isAgentLayoutFixedTabActive: boolean
+  openTabs: WorkspaceTab[]
+}
 
 export function isWorkspaceFileTab(tab: WorkspaceDisplayTab | null | undefined): tab is WorkspaceFileTab {
   return tab?.kind === 'file'
@@ -102,6 +111,58 @@ export function getFixedPanelTab(tab: AgentLayoutFixedTab): WorkspaceFixedPanelT
     isDirty: false,
     kind: 'fixed-panel',
     savedContent: '',
+  }
+}
+
+export function getActiveWorkspaceFilePath(
+  openTabs: WorkspaceTab[],
+  activeTabId: string | null,
+) {
+  const activeTab = openTabs.find((tab) => tab.id === activeTabId)
+  return activeTab?.kind === 'file' ? activeTab.filePath : null
+}
+
+export function deriveWorkspaceTabViewState({
+  activeAgentLayoutFixedTab,
+  activeTabId,
+  isAgentLayout,
+  isAgentLayoutFixedTabActive,
+  openTabs,
+}: WorkspaceTabViewStateOptions) {
+  const activeTab = openTabs.find((tab) => tab.id === activeTabId) ?? null
+  const activeFileTab = isWorkspaceFileTab(activeTab) ? activeTab : null
+  const activeDiffTab = isWorkspaceDiffTab(activeTab) ? activeTab : null
+  const activeDiffDraftContent = activeDiffTab?.draftContent ?? activeDiffTab?.diff.modifiedContent ?? ''
+  const activeDiffPath = activeDiffTab ? normalizeFilePath(activeDiffTab.diff.change.path) : null
+  const activeDiffHasDirtyRelatedFileTab = activeDiffPath !== null && openTabs.some((tab) => (
+    isWorkspaceAutosaveTab(tab)
+    && tab.isDirty
+    && normalizeFilePath(tab.filePath) === activeDiffPath
+  ))
+  const fixedTabs: WorkspaceDisplayTab[] = isAgentLayout
+    ? [getFixedPanelTab('git'), getFixedPanelTab('file')]
+    : []
+  const displayTabs: WorkspaceDisplayTab[] = [...fixedTabs, ...openTabs]
+  const displayActiveTabId = isAgentLayout && (isAgentLayoutFixedTabActive || !activeTabId)
+    ? (activeAgentLayoutFixedTab === 'git' ? FIXED_GIT_TAB_ID : FIXED_FILE_TAB_ID)
+    : activeTabId
+  const displayActiveTab = displayTabs.find((tab) => tab.id === displayActiveTabId) ?? null
+  const activeFixedPanelTab = isWorkspaceFixedPanelTab(displayActiveTab) ? displayActiveTab : null
+
+  return {
+    activeDiffDraftContent,
+    activeDiffHasDirtyRelatedFileTab,
+    activeDiffTab,
+    activeFileTab,
+    activeFixedPanelTab,
+    activeWorkspaceAutosaveTab: isWorkspaceAutosaveTab(activeFileTab) ? activeFileTab : null,
+    currentEditorKind: activeFileTab?.editorKind ?? null,
+    currentFileContent: activeFileTab?.content ?? '',
+    currentFilePath: activeFileTab?.filePath ?? null,
+    currentFileViewMode: activeFileTab?.viewMode ?? null,
+    displayActiveTabId,
+    displayTabs,
+    shouldRenderWorkspaceEditor: !activeFixedPanelTab,
   }
 }
 

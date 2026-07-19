@@ -90,6 +90,11 @@ describe('shell layout helpers', () => {
     return fileTabsSource.replace(/\r\n/g, '\n')
   }
 
+  async function readWorkspaceTabsSource() {
+    const workspaceTabsSource = await readFile(new URL('../src/features/workspace/lib/workspace-tabs.ts', import.meta.url), 'utf8')
+    return workspaceTabsSource.replace(/\r\n/g, '\n')
+  }
+
   it('derives the expected three layout modes from shell width', () => {
     expect(deriveLayoutMode(FULL_LAYOUT_BREAKPOINT + 1)).toBe('full')
     expect(deriveLayoutMode(FULL_LAYOUT_BREAKPOINT)).toBe('compact')
@@ -364,16 +369,18 @@ describe('shell layout helpers', () => {
   })
 
   it('uses the workspace FileSystem for the Agent fixed file tab', async () => {
-    const [appCss, appSource] = await Promise.all([
+    const [appCss, appSource, workspaceTabsSource] = await Promise.all([
       readAppCss(),
       readAppSource(),
+      readWorkspaceTabsSource(),
     ])
 
-    expect(appSource).toContain("? [getFixedPanelTab('git'), getFixedPanelTab('file')]")
+    expect(appSource).toContain('useWorkspaceTabViewState({')
+    expect(workspaceTabsSource).toContain("? [getFixedPanelTab('git'), getFixedPanelTab('file')]")
     expect(appSource).toContain("activeFixedPanelTab?.fixedTabKind === 'file-panel' ? renderFixedFilePanel() : null")
     expect(appSource).toContain('<WorkspaceFileSystemPanel')
-    expect(appSource).not.toContain("getFixedPanelTab('file-system')")
-    expect(appSource).not.toContain("fixedTabKind === 'file-system-panel'")
+    expect(`${appSource}\n${workspaceTabsSource}`).not.toContain("getFixedPanelTab('file-system')")
+    expect(`${appSource}\n${workspaceTabsSource}`).not.toContain("fixedTabKind === 'file-system-panel'")
     expect(appCss).toContain('--agent-collapsed-tab-actions-width: calc((var(--panel-toggle-size) * 2) + var(--panel-toggle-gap));')
   })
 

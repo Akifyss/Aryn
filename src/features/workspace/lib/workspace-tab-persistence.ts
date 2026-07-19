@@ -11,6 +11,7 @@ import {
 import {
   createWorkspaceFileTabId,
   type WorkspaceFileTab,
+  type WorkspaceTab,
 } from '@/features/workspace/store/use-workspace-store'
 import type {
   WorkspaceFileSystemNavigationState,
@@ -104,6 +105,20 @@ export function normalizeWorkspaceFileSystemState(
   }
 }
 
+export function mergeWorkspaceFileSystemState(
+  previousState: WorkspaceFileSystemState,
+  patch: Partial<WorkspaceFileSystemState>,
+): WorkspaceFileSystemState {
+  const hasNavigationPatch = Object.prototype.hasOwnProperty.call(patch, 'navigation')
+  const hasSelectedPathPatch = Object.prototype.hasOwnProperty.call(patch, 'selectedPath')
+
+  return {
+    navigation: hasNavigationPatch ? patch.navigation ?? null : previousState.navigation,
+    selectedPath: hasSelectedPathPatch ? patch.selectedPath ?? null : previousState.selectedPath,
+    view: patch.view ?? previousState.view,
+  }
+}
+
 export function writeStoredTabState(workspacePath: string, state: StoredTabState) {
   const entries = state.entries ?? state.paths.map((entryPath) => ({ path: entryPath }))
   const previousState = getPersistedWorkspaceTabState(workspacePath)
@@ -133,6 +148,24 @@ export function writeStoredFileSystemState(workspacePath: string, fileSystem: Wo
     ...readStoredTabState(workspacePath),
     fileSystem: normalizeWorkspaceFileSystemState(fileSystem),
   })
+}
+
+export function createStoredWorkspaceTabState(
+  activePath: string | null,
+  openTabs: WorkspaceTab[],
+): StoredTabState {
+  const entries = openTabs
+    .filter((tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.exists)
+    .map((tab) => ({
+      path: tab.filePath,
+      viewMode: tab.viewMode,
+    }))
+
+  return {
+    activePath,
+    entries,
+    paths: entries.map((entry) => entry.path),
+  }
 }
 
 export function dedupeStoredEntries(entries: Array<{ path: string, viewMode?: LegacyWorkspaceFileViewMode }>) {

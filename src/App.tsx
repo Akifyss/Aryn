@@ -38,9 +38,6 @@ import type {
   WorkspaceIconThemeMode,
   WorkspaceIconThemeSelection,
   WorkspaceIconThemesByMode,
-  WorkspaceFileSystemNavigationState,
-  WorkspaceFileSystemState,
-  WorkspaceFileSystemView,
   WorkspaceNode,
 } from '@/features/workspace/types'
 import { AppScrollArea } from '@/components/app-scroll-area'
@@ -84,10 +81,8 @@ import {
   useWorkspaceStore,
   type WorkspaceDiffTab,
   type WorkspaceDiffNavigationRequest,
-  type WorkspaceDisplayTab,
   type WorkspaceFileGitDiffRequest,
   type WorkspaceFileTab,
-  type WorkspaceTab,
 } from '@/features/workspace/store/use-workspace-store'
 import {
   normalizeWorkspaceFileViewMode,
@@ -107,26 +102,24 @@ import {
 } from '@/features/workspace/lib/workspace-paths'
 import {
   dedupeStoredEntries,
-  readStoredFileSystemState,
   readStoredTabState,
   toStoredWorkspaceTab,
-  writeStoredFileSystemState,
-  writeStoredTabState,
 } from '@/features/workspace/lib/workspace-tab-persistence'
 import {
   createDiffTab,
   createWorkspaceFileGitDiffRequest,
   FIXED_FILE_TAB_ID,
   FIXED_GIT_TAB_ID,
-  getFixedPanelTab,
+  getActiveWorkspaceFilePath,
   getWorkspaceTabSourcePath,
   isWorkspaceAutosaveTab,
-  isWorkspaceDiffTab,
-  isWorkspaceFileTab,
-  isWorkspaceFixedPanelTab,
   shouldOpenGitDiffForLine,
   type AgentLayoutFixedTab,
 } from '@/features/workspace/lib/workspace-tabs'
+import { useWorkspaceChangeSubscription } from '@/features/workspace/hooks/use-workspace-change-subscription'
+import { useWorkspaceFileSystemState } from '@/features/workspace/hooks/use-workspace-file-system-state'
+import { useWorkspaceTabPersistence } from '@/features/workspace/hooks/use-workspace-tab-persistence'
+import { useWorkspaceTabViewState } from '@/features/workspace/hooks/use-workspace-tab-view-state'
 import {
   resolveWorkspaceTreeActiveFilePath,
   type WorkspaceTreeActiveFileMode,
@@ -692,7 +685,6 @@ function App() {
   const closeTab = useWorkspaceStore((state) => state.closeTab)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
   const markDiffTabSaved = useWorkspaceStore((state) => state.markDiffTabSaved)
-  const markFileTabsMissing = useWorkspaceStore((state) => state.markFileTabsMissing)
   const markFileTabsSaved = useWorkspaceStore((state) => state.markFileTabsSaved)
   const moveTab = useWorkspaceStore((state) => state.moveTab)
   const openDiffTab = useWorkspaceStore((state) => state.openDiffTab)
@@ -708,118 +700,43 @@ function App() {
   const tree = useWorkspaceStore((state) => state.tree)
   const updateDiffTabDraft = useWorkspaceStore((state) => state.updateDiffTabDraft)
   const updateFileTabsContent = useWorkspaceStore((state) => state.updateFileTabsContent)
-  const [workspaceFileSystemStateVersion, setWorkspaceFileSystemStateVersion] = useState(0)
-  const workspaceFileSystemState = useMemo(
-    () => readStoredFileSystemState(currentPath),
-    [currentPath, workspaceFileSystemStateVersion],
-  )
-  const updateWorkspaceFileSystemState = useCallback(
-    (patch: Partial<WorkspaceFileSystemState>) => {
-      if (!currentPath) {
-        return
-      }
-
-      const previousState = readStoredFileSystemState(currentPath)
-      const hasNavigationPatch = Object.prototype.hasOwnProperty.call(patch, 'navigation')
-      const hasSelectedPathPatch = Object.prototype.hasOwnProperty.call(patch, 'selectedPath')
-      const nextState: WorkspaceFileSystemState = {
-        navigation: hasNavigationPatch ? patch.navigation ?? null : previousState.navigation,
-        selectedPath: hasSelectedPathPatch ? patch.selectedPath ?? null : previousState.selectedPath,
-        view: patch.view ?? previousState.view,
-      }
-      writeStoredFileSystemState(currentPath, nextState)
-      setWorkspaceFileSystemStateVersion((version) => version + 1)
-    },
-    [currentPath],
-  )
-  const handleWorkspaceFileSystemViewChange = useCallback(
-    (view: WorkspaceFileSystemView) => {
-      updateWorkspaceFileSystemState({ view })
-    },
-    [updateWorkspaceFileSystemState],
-  )
-  const handleWorkspaceFileSystemNavigationChange = useCallback(
-    (navigation: WorkspaceFileSystemNavigationState) => {
-      updateWorkspaceFileSystemState({ navigation })
-    },
-    [updateWorkspaceFileSystemState],
-  )
-  const handleWorkspaceFileSystemSelectionChange = useCallback(
-    (selectedPath: string | null) => {
-      updateWorkspaceFileSystemState({ selectedPath })
-    },
-    [updateWorkspaceFileSystemState],
-  )
+  const {
+    handleWorkspaceFileSystemNavigationChange,
+    handleWorkspaceFileSystemSelectionChange,
+    handleWorkspaceFileSystemViewChange,
+    workspaceFileSystemState,
+  } = useWorkspaceFileSystemState(currentPath)
   const loadTree = useCallback(async (rootPath: string) => {
     const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
     setTree(nextTree)
   }, [setTree])
-  const activeTab = useMemo(
-    () => openTabs.find((tab) => tab.id === activeTabId) ?? null,
-    [activeTabId, openTabs],
-  )
-  const activeFileTab = isWorkspaceFileTab(activeTab) ? activeTab : null
-  const activeDiffTab = isWorkspaceDiffTab(activeTab) ? activeTab : null
-  const activeDiffDraftContent = activeDiffTab?.draftContent ?? activeDiffTab?.diff.modifiedContent ?? ''
-  const activeDiffHasDirtyRelatedFileTab = useMemo(() => {
-    if (!activeDiffTab) {
-      return false
-    }
-
-    const diffPath = normalizeFilePath(activeDiffTab.diff.change.path)
-
-    return openTabs.some((tab: WorkspaceTab) => (
-      isWorkspaceAutosaveTab(tab)
-      && tab.isDirty
-      && normalizeFilePath(tab.filePath) === diffPath
-    ))
-  }, [activeDiffTab?.diff.change.path, openTabs])
   const appLayoutPreference: AppLayoutPreference = layoutPreference
   const isAgentLayout = appLayoutPreference === 'agent'
   const isRightSidebarCollapsed = isAgentLayout ? isAgentRightSidebarCollapsed : isEditorRightSidebarCollapsed
   const setIsRightSidebarCollapsed = isAgentLayout ? setIsAgentRightSidebarCollapsed : setIsEditorRightSidebarCollapsed
-  const displayTabs = useMemo<WorkspaceDisplayTab[]>(
-    () => {
-      const fixedTabs = isAgentLayout
-        ? [getFixedPanelTab('git'), getFixedPanelTab('file')]
-        : []
-
-      return [
-        ...fixedTabs,
-        ...openTabs,
-      ]
-    },
-    [isAgentLayout, openTabs],
-  )
-  const displayActiveTabId = isAgentLayout && (isAgentLayoutFixedTabActive || !activeTabId)
-    ? (activeAgentLayoutFixedTab === 'git' ? FIXED_GIT_TAB_ID : FIXED_FILE_TAB_ID)
-    : activeTabId
-  const displayActiveTab = useMemo(
-    () => displayTabs.find((tab) => tab.id === displayActiveTabId) ?? null,
-    [displayActiveTabId, displayTabs],
-  )
-  const activeFixedPanelTab = isWorkspaceFixedPanelTab(displayActiveTab) ? displayActiveTab : null
-  const shouldRenderWorkspaceEditor = !activeFixedPanelTab
-  const currentFileContent = activeFileTab?.content ?? ''
-  const currentEditorKind = activeFileTab?.editorKind ?? null
-  const currentFileViewMode = activeFileTab?.viewMode ?? null
-  const currentFilePath = activeFileTab?.filePath ?? null
+  const {
+    activeDiffDraftContent,
+    activeDiffHasDirtyRelatedFileTab,
+    activeDiffTab,
+    activeFileTab,
+    activeFixedPanelTab,
+    activeWorkspaceAutosaveTab,
+    currentEditorKind,
+    currentFileContent,
+    currentFilePath,
+    currentFileViewMode,
+    displayActiveTabId,
+    displayTabs,
+    shouldRenderWorkspaceEditor,
+  } = useWorkspaceTabViewState({
+    activeAgentLayoutFixedTab,
+    activeTabId,
+    isAgentLayout,
+    isAgentLayoutFixedTabActive,
+    openTabs,
+  })
   const isActiveMeoEditorMountedRef = useRef(false)
   isActiveMeoEditorMountedRef.current = currentEditorKind === 'prose' && currentFileViewMode === 'meo'
-  useEffect(() => {
-    if (!activeFileTab) {
-      return
-    }
-
-    recordOpenFileProfile('app:active-file-tab:committed', {
-      chars: activeFileTab.content.length,
-      editorKind: activeFileTab.editorKind,
-      filePath: activeFileTab.filePath,
-      tabId: activeFileTab.id,
-      viewMode: activeFileTab.viewMode,
-    })
-  }, [activeFileTab?.id])
-  const activeWorkspaceAutosaveTab = isWorkspaceAutosaveTab(activeFileTab) ? activeFileTab : null
   const [isActiveEditorComposing, setIsActiveEditorComposing] = useState(false)
   const workspaceAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const workspaceAutosaveTargetRef = useRef<{ content: string, filePath: string } | null>(null)
@@ -991,9 +908,8 @@ function App() {
   }
 
   function getPersistedActiveFilePath() {
-    const activeTabId = useWorkspaceStore.getState().activeTabId
-    const tab = useWorkspaceStore.getState().openTabs.find((candidate) => candidate.id === activeTabId)
-    return tab?.kind === 'file' ? tab.filePath : null
+    const { activeTabId, openTabs } = useWorkspaceStore.getState()
+    return getActiveWorkspaceFilePath(openTabs, activeTabId)
   }
 
   function getDirtyWorkspaceTabsSnapshot() {
@@ -4484,83 +4400,12 @@ function App() {
     internalWorkspaceSavePathsRef.current.clear()
   }, [clearDiffAutosaveTimer, clearWorkspaceAutosaveTimer, flushDiffAutosave, flushWorkspaceAutosave])
 
-  useEffect(() => {
-    const unsubscribe = window.appApi.onWorkspaceChanged(async (event) => {
-      if (!currentPath || event.rootPath !== currentPath) {
-        return
-      }
-
-      if ((event.type === 'add' || event.type === 'change') && consumeInternalWorkspaceSave(event.path)) {
-        return
-      }
-
-      const isGitMetadataChange = normalizeFilePath(event.path).endsWith('/.git/index')
-
-      void requestWorkspaceRefresh({
-        refreshGit: true,
-        refreshTree: !isGitMetadataChange,
-        rootPath: currentPath,
-      }, 'debounced').catch(() => {
-        // The workspace may have changed before the debounced refresh executes.
-      })
-
-      const affectedTab = useWorkspaceStore.getState().openTabs.find(
-        (tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.filePath === event.path,
-      )
-
-      if (!affectedTab) {
-        return
-      }
-
-      if (event.type === 'unlink') {
-        if (affectedTab.isDirty) {
-          markFileTabsMissing(event.path)
-          setStatusMessage(`${getBaseName(event.path)} was removed externally. Save to recreate it.`)
-          return
-        }
-
-        closeFileTabsForPath(event.path)
-        await syncPersistedActiveFile(currentPath)
-        setStatusMessage(`${getBaseName(event.path)} was removed`)
-        return
-      }
-
-      if (event.type === 'add') {
-        if (affectedTab.isDirty) {
-          setStatusMessage(`${getBaseName(event.path)} returned on disk. Kept your unsaved version.`)
-          return
-        }
-
-        if (affectedTab.viewMode === 'file') {
-          setStatusMessage(`${getBaseName(event.path)} is up to date`)
-          return
-        }
-
-        const updatedContent = await window.appApi.readWorkspaceFile(event.path)
-        syncFileTabsWithDisk(event.path, updatedContent)
-        setStatusMessage(`${getBaseName(event.path)} reloaded`)
-        return
-      }
-
-      if (event.type === 'change') {
-        if (affectedTab.isDirty) {
-          setStatusMessage(`${getBaseName(event.path)} changed on disk. Kept your unsaved version.`)
-          return
-        }
-
-        if (affectedTab.viewMode === 'file') {
-          setStatusMessage(`${getBaseName(event.path)} changed on disk`)
-          return
-        }
-
-        const updatedContent = await window.appApi.readWorkspaceFile(event.path)
-        syncFileTabsWithDisk(event.path, updatedContent)
-        setStatusMessage('Synced with external edits')
-      }
-    })
-
-    return unsubscribe
-  }, [consumeInternalWorkspaceSave, currentPath, markFileTabsMissing, requestWorkspaceRefresh, syncFileTabsWithDisk])
+  useWorkspaceChangeSubscription({
+    consumeInternalWorkspaceSave,
+    currentPath,
+    requestWorkspaceRefresh,
+    setStatusMessage,
+  })
 
   useEffect(() => {
     const unsubscribe = window.appApi.onWindowCloseRequested(() => {
@@ -4616,24 +4461,7 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeProject, isShortcutBlockingLayerOpen, platform])
 
-  useEffect(() => {
-    if (!currentPath) {
-      return
-    }
-
-    const storedEntries = openTabs
-      .filter((tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.exists)
-      .map((tab) => ({
-        path: tab.filePath,
-        viewMode: tab.viewMode,
-      }))
-
-    writeStoredTabState(currentPath, {
-      activePath: useWorkspaceStore.getState().activeTabId,
-      entries: storedEntries,
-      paths: storedEntries.map((entry) => entry.path),
-    })
-  }, [activeTabId, currentPath, openTabs])
+  useWorkspaceTabPersistence(currentPath, activeTabId, openTabs)
 
   useEffect(() => {
     if (!activeResizePanel) {

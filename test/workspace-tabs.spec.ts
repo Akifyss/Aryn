@@ -4,8 +4,10 @@ import {
   createDiffTab,
   createDiffTabId,
   createWorkspaceFileGitDiffRequest,
+  deriveWorkspaceTabViewState,
   FIXED_FILE_TAB_ID,
   FIXED_GIT_TAB_ID,
+  getActiveWorkspaceFilePath,
   getFixedPanelTab,
   getWorkspaceTabSourcePath,
   isWorkspaceAutosaveTab,
@@ -46,7 +48,10 @@ function createDiff(source: GitFileDiffResult['source'] = { kind: 'working-tree'
   }
 }
 
-function createFileTab(viewMode: WorkspaceFileTab['viewMode']): WorkspaceFileTab {
+function createFileTab(
+  viewMode: WorkspaceFileTab['viewMode'],
+  overrides: Partial<WorkspaceFileTab> = {},
+): WorkspaceFileTab {
   return {
     content: '# Readme',
     editorKind: 'prose',
@@ -57,6 +62,7 @@ function createFileTab(viewMode: WorkspaceFileTab['viewMode']): WorkspaceFileTab
     kind: 'file',
     savedContent: '# Readme',
     viewMode,
+    ...overrides,
   }
 }
 
@@ -105,6 +111,60 @@ describe('workspace tab helpers', () => {
     })
     expect(isWorkspaceFixedPanelTab(filePanel)).toBe(true)
     expect(isWorkspaceFileTab(filePanel)).toBe(false)
+  })
+
+  it('derives fixed and file tab view state for each layout', () => {
+    const fileTab = createFileTab('meo')
+    const agentState = deriveWorkspaceTabViewState({
+      activeAgentLayoutFixedTab: 'file',
+      activeTabId: fileTab.id,
+      isAgentLayout: true,
+      isAgentLayoutFixedTabActive: true,
+      openTabs: [fileTab],
+    })
+
+    expect(agentState.displayTabs.map((tab) => tab.id)).toEqual([
+      FIXED_GIT_TAB_ID,
+      FIXED_FILE_TAB_ID,
+      fileTab.id,
+    ])
+    expect(agentState.displayActiveTabId).toBe(FIXED_FILE_TAB_ID)
+    expect(agentState.activeFixedPanelTab?.fixedTabKind).toBe('file-panel')
+    expect(agentState.shouldRenderWorkspaceEditor).toBe(false)
+
+    const editorState = deriveWorkspaceTabViewState({
+      activeAgentLayoutFixedTab: 'git',
+      activeTabId: fileTab.id,
+      isAgentLayout: false,
+      isAgentLayoutFixedTabActive: false,
+      openTabs: [fileTab],
+    })
+
+    expect(editorState.activeFileTab).toBe(fileTab)
+    expect(editorState.currentFileContent).toBe('# Readme')
+    expect(editorState.activeWorkspaceAutosaveTab).toBe(fileTab)
+    expect(editorState.shouldRenderWorkspaceEditor).toBe(true)
+  })
+
+  it('detects dirty file tabs related to the active diff across path formats', () => {
+    const diffTab = createDiffTab(createDiff())
+    const dirtyFileTab = createFileTab('code', {
+      filePath: 'c:\\WORKSPACE\\docs\\readme.md',
+      isDirty: true,
+    })
+    const state = deriveWorkspaceTabViewState({
+      activeAgentLayoutFixedTab: 'file',
+      activeTabId: diffTab.id,
+      isAgentLayout: false,
+      isAgentLayoutFixedTabActive: false,
+      openTabs: [dirtyFileTab, diffTab],
+    })
+
+    expect(state.activeDiffTab).toBe(diffTab)
+    expect(state.activeDiffDraftContent).toBe(diffTab.diff.modifiedContent)
+    expect(state.activeDiffHasDirtyRelatedFileTab).toBe(true)
+    expect(getActiveWorkspaceFilePath([dirtyFileTab, diffTab], dirtyFileTab.id)).toBe(dirtyFileTab.filePath)
+    expect(getActiveWorkspaceFilePath([dirtyFileTab, diffTab], diffTab.id)).toBeNull()
   })
 
   it('creates diff tabs and exposes their underlying source path', () => {

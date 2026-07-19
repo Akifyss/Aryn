@@ -9,6 +9,8 @@ import {
 } from '../src/features/persistence/renderer-state'
 import type { PersistentClientStateSnapshot } from '../src/features/persistence/types'
 import {
+  createStoredWorkspaceTabState,
+  mergeWorkspaceFileSystemState,
   normalizeWorkspaceFileSystemNavigation,
   normalizeWorkspaceFileSystemState,
   readStoredFileSystemState,
@@ -150,6 +152,24 @@ describe('renderer persistence helpers', () => {
     })
   })
 
+  it('merges partial file-system updates without clearing omitted values', () => {
+    expect(mergeWorkspaceFileSystemState(persistedFileSystem, {
+      view: 'gallery',
+    })).toEqual({
+      ...persistedFileSystem,
+      view: 'gallery',
+    })
+
+    expect(mergeWorkspaceFileSystemState(persistedFileSystem, {
+      navigation: undefined,
+      selectedPath: null,
+    })).toEqual({
+      navigation: null,
+      selectedPath: null,
+      view: 'list',
+    })
+  })
+
   it('preserves file-system state when writing tab-only changes', () => {
     writeStoredTabState(workspacePath, {
       activePath: 'C:/workspace/guide.md',
@@ -200,6 +220,20 @@ describe('renderer persistence helpers', () => {
       kind: 'file',
       savedContent: '# Readme',
       viewMode: 'meo',
+    })
+  })
+
+  it('creates a restorable snapshot from file tabs that still exist', () => {
+    const existingTab = toStoredWorkspaceTab('C:/workspace/readme.md', '# Readme', 'prose', 'meo')
+    const missingTab = {
+      ...toStoredWorkspaceTab('C:/workspace/missing.ts', 'const missing = true', 'code', 'code'),
+      exists: false,
+    }
+
+    expect(createStoredWorkspaceTabState(existingTab.id, [existingTab, missingTab])).toEqual({
+      activePath: existingTab.id,
+      entries: [{ path: existingTab.filePath, viewMode: 'meo' }],
+      paths: [existingTab.filePath],
     })
   })
 })
