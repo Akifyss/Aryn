@@ -71,8 +71,13 @@ describe('shell layout helpers', () => {
   }
 
   async function readTreeSource() {
-    const treeSource = await readFile(new URL('../src/components/tree.tsx', import.meta.url), 'utf8')
+    const treeSource = await readFile(new URL('../src/components/tree/tree.tsx', import.meta.url), 'utf8')
     return treeSource.replace(/\r\n/g, '\n')
+  }
+
+  async function readTreeCss() {
+    const treeCss = await readFile(new URL('../src/components/tree/styles.css', import.meta.url), 'utf8')
+    return treeCss.replace(/\r\n/g, '\n')
   }
 
   async function readFileTabsSource() {
@@ -327,14 +332,14 @@ describe('shell layout helpers', () => {
   })
 
   it('keeps disabled tree action tooltips hoverable', async () => {
-    const [appCss, treeSource] = await Promise.all([
-      readAppCss(),
+    const [treeCss, treeSource] = await Promise.all([
+      readTreeCss(),
       readTreeSource(),
     ])
 
     expect(treeSource).toContain('tooltip={disabled ? undefined : resolvedTooltip}')
     expect(treeSource).toContain("triggerClassName='tree-item-action-tooltip-trigger'")
-    expect(appCss).toContain(`.tree-item-action-tooltip-trigger {
+    expect(treeCss).toContain(`.tree-item-action-tooltip-trigger {
   display: inline-flex;
   flex-shrink: 0;
 }`)
