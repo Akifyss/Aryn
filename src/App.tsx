@@ -11,7 +11,6 @@ import { Menu } from '@base-ui/react/menu'
 import { Tabs as BaseTabs } from '@base-ui/react/tabs'
 import { Button, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
 import {
-  FileLine,
   FolderLine,
   FolderForbidLine,
   FolderOpenLine,
@@ -47,6 +46,7 @@ import type {
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import { AppTitlebar } from '@/components/app-titlebar'
+import { EmptyState } from '@/components/empty-state'
 import { ProjectIcon } from '@/components/project-icon'
 import {
   AgentChatSurface,
@@ -5916,33 +5916,7 @@ function App() {
         </div>
       </div>
     ) : (
-      <div className='editor-empty-state'>
-        <div className='editor-empty-content'>
-          <div className='editor-empty-logo-shell' aria-hidden='true'>
-            <img className='editor-empty-logo' src='./branding/logo.svg' alt='' />
-          </div>
-          <div className='editor-empty-copy'>
-            <h3>打开文件开始编辑</h3>
-            <p>从左侧文件树选择一个文件，或使用搜索快速打开内容。</p>
-          </div>
-          <div className='editor-empty-actions'>
-            <Button variant='outline' onPress={() => setIsCommandPaletteOpen(true)}>
-              <SearchLine className='mr-2' size={16} />
-              搜索
-            </Button>
-            <Button
-              variant='outline'
-              onPress={() => {
-                void handleCreateFile()
-              }}
-              isDisabled={isCreatingFile}
-            >
-              <FileLine className='mr-2' size={16} />
-              新建文件
-            </Button>
-          </div>
-        </div>
-      </div>
+      <EmptyState fill title='未打开文件' />
     )
   }
 

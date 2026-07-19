@@ -4468,16 +4468,6 @@ body.workspace-tree-dragging .tree-item-row {
   color: var(--accent);
 }
 
-.editor-empty-logo {
-  display: block;
-  width: 46px;
-  height: 46px;
-  object-fit: contain;
-  filter: drop-shadow(0 10px 20px color-mix(in srgb, var(--accent) 12%, transparent));
-  user-select: none;
-  -webkit-user-drag: none;
-}
-
 .editor-empty-folder-icon {
   width: 30px;
   height: 30px;
