@@ -1,7 +1,13 @@
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { CodexAgentManager } from '../electron/main/codex-agent'
 import { OpenCodeAgentManager } from '../electron/main/opencode-agent'
 import { PiCliAgentManager } from '../electron/main/pi-cli-agent'
+
+function workspaceIdentity(cwd: string) {
+  const resolved = path.resolve(cwd)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
 
 describe('external Agent workspace ownership', () => {
   it('does not reuse a cached Codex binding from another workspace', async () => {
@@ -53,5 +59,45 @@ describe('external Agent workspace ownership', () => {
     await expect(internals.requireBinding({}, 'C:/workspace-b', 'session-a'))
       .rejects.toThrow('not found for this Aryn workspace')
     manager.dispose()
+  })
+
+  it('releases a workspace without waiting for another workspace to finish starting', async () => {
+    const otherWorkspace = workspaceIdentity('C:/workspace-b')
+    const never = new Promise<never>(() => undefined)
+    const codex = new CodexAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
+    const opencode = new OpenCodeAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
+    const pi = new PiCliAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
+    const codexInternals = codex as unknown as {
+      bindingStarts: Map<string, Promise<never>>
+      bindingStartWorkspaces: Map<string, string>
+      listIndexedRecords: () => Promise<unknown[]>
+    }
+    const opencodeInternals = opencode as unknown as {
+      sessionBindingStarts: Map<string, Promise<never>>
+      sessionBindingStartWorkspaces: Map<string, string>
+    }
+    const piInternals = pi as unknown as {
+      runtimeStarts: Map<string, Promise<never>>
+      runtimeStartWorkspaces: Map<string, string>
+    }
+    codexInternals.listIndexedRecords = async () => []
+    codexInternals.bindingStarts.set('thread-b', never)
+    codexInternals.bindingStartWorkspaces.set('thread-b', otherWorkspace)
+    opencodeInternals.sessionBindingStarts.set('session-b', never)
+    opencodeInternals.sessionBindingStartWorkspaces.set('session-b', otherWorkspace)
+    piInternals.runtimeStarts.set('session-b', never)
+    piInternals.runtimeStartWorkspaces.set('session-b', otherWorkspace)
+
+    try {
+      await expect(Promise.all([
+        codex.releaseWorkspaceRuntime('C:/workspace-a'),
+        opencode.releaseWorkspaceRuntime('C:/workspace-a'),
+        pi.releaseWorkspaceRuntime('C:/workspace-a'),
+      ])).resolves.toEqual([undefined, undefined, undefined])
+    } finally {
+      codex.dispose()
+      opencode.dispose()
+      pi.dispose()
+    }
   })
 })

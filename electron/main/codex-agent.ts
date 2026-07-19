@@ -9,6 +9,8 @@ import type { McpServerElicitationRequestResponse } from '../../src/features/age
 import type { PermissionsRequestApprovalResponse } from '../../src/features/agent/codex-protocol/generated/v2/PermissionsRequestApprovalResponse'
 import type { RequestPermissionProfile } from '../../src/features/agent/codex-protocol/generated/v2/RequestPermissionProfile'
 import type { Thread } from '../../src/features/agent/codex-protocol/generated/v2/Thread'
+import type { ThreadListResponse } from '../../src/features/agent/codex-protocol/generated/v2/ThreadListResponse'
+import type { ThreadSourceKind } from '../../src/features/agent/codex-protocol/generated/v2/ThreadSourceKind'
 import type { UserInput } from '../../src/features/agent/codex-protocol/generated/v2/UserInput'
 import { getAgentInteractionKey } from '../../src/features/agent/types'
 import type {
@@ -39,6 +41,7 @@ export type CodexThreadRecord = {
   model: string | null
   modelExplicit: boolean
   name: string | null
+  preview?: string | null
   reasoningEffort: AgentThinkingLevel
   updatedAt: string
 }
@@ -79,6 +82,7 @@ type CodexAgentManagerOptions = {
 const DEFAULT_INDEX: CodexThreadIndex = { threads: [], version: 1 }
 const THINKING_LEVELS: AgentThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
 const SNAPSHOT_COALESCE_MS = 16
+const TOP_LEVEL_THREAD_SOURCE_KINDS: ThreadSourceKind[] = ['cli', 'vscode', 'exec', 'appServer', 'unknown']
 
 function workspaceIdentity(cwd: string) {
   const resolved = path.resolve(cwd)
@@ -136,6 +140,7 @@ function normalizeIndex(value: unknown): CodexThreadIndex {
           model: nullableString(thread.model),
           modelExplicit: thread.modelExplicit === true,
           name: nullableString(thread.name),
+          preview: nullableString(thread.preview),
           reasoningEffort: reasoningEffort(thread.reasoningEffort),
           updatedAt: nullableString(thread.updatedAt) ?? createdAt,
         }]
@@ -240,6 +245,7 @@ export function buildCodexUserInputs(
 
 export class CodexAgentManager {
   private readonly bindingStarts = new Map<string, Promise<CodexBinding>>()
+  private readonly bindingStartWorkspaces = new Map<string, string>()
   private readonly bindings = new Map<string, CodexBinding>()
   private client: CodexRpcClient | null = null
   private clientPromise: Promise<CodexRpcClient> | null = null
@@ -349,6 +355,7 @@ export class CodexAgentManager {
       model: result.model || model,
       modelExplicit,
       name: normalized?.name?.trim() || null,
+      preview: normalized?.name?.trim() || null,
       reasoningEffort: effort,
       updatedAt: now,
     }
@@ -523,9 +530,15 @@ export class CodexAgentManager {
 
   async releaseWorkspaceRuntime(cwd: string) {
     const identity = workspaceIdentity(cwd)
-    const ids = new Set((await this.listRecords(cwd)).map((record) => record.id))
+    const ids = new Set((await this.listIndexedRecords(cwd)).map((record) => record.id))
     await Promise.all([...ids].map((id) => this.recordReplacements.get(id)?.catch(() => undefined)))
-    await Promise.all([...ids].map((id) => this.bindingStarts.get(id)?.catch(() => undefined)))
+    // Official threads discovered outside Aryn have no ownership-index entry.
+    // Track pending bindings by workspace so release catches them without
+    // blocking unrelated workspaces that are starting in parallel.
+    const pendingStarts = [...this.bindingStarts.entries()]
+      .filter(([threadId]) => this.bindingStartWorkspaces.get(threadId) === identity)
+      .map(([, start]) => start.catch(() => undefined))
+    await Promise.all(pendingStarts)
     const bindings = [...this.bindings.values()].filter((binding) => workspaceIdentity(binding.record.cwd) === identity)
     const client = this.client
     const results = client
@@ -553,10 +566,13 @@ export class CodexAgentManager {
   }
 
   async discardWorkspaceSessions(cwd: string) {
-    let records = await this.listRecords(cwd)
+    // Only sessions recorded in Aryn's ownership manifest are eligible for
+    // draft cleanup. Official Codex threads discovered in the same workspace
+    // belong to the user and must not be archived here.
+    let records = await this.listIndexedRecords(cwd)
     if (records.length === 0) return
     await Promise.all(records.map((record) => this.recordReplacements.get(record.id)?.catch(() => undefined)))
-    records = await this.listRecords(cwd)
+    records = await this.listIndexedRecords(cwd)
     const client = records.some((record) => record.materialized) ? await this.ensureClient() : null
     const archived = new Set<string>()
     let firstError: unknown = null
@@ -587,6 +603,7 @@ export class CodexAgentManager {
     this.client = null
     this.clientPromise = null
     this.bindingStarts.clear()
+    this.bindingStartWorkspaces.clear()
     this.bindings.clear()
     this.pendingInteractions.clear()
     this.recordReplacements.clear()
@@ -1035,6 +1052,9 @@ export class CodexAgentManager {
       throw error
     }
     if (!record.modelExplicit) record.model = response.model || record.model
+    record.reasoningEffort = reasoningEffort(response.reasoningEffort)
+    record.name = response.thread.name ?? record.name
+    record.preview = response.thread.preview || record.preview || null
     const existing = this.bindings.get(record.id)
     this.bindings.set(record.id, existing ?? {
       activeTurnId: null,
@@ -1129,7 +1149,7 @@ export class CodexAgentManager {
       modifiedAt: record.updatedAt,
       name: record.name ?? native?.thread.name ?? null,
       path: record.id,
-      preview: record.name ?? native?.thread.preview ?? 'Codex thread',
+      preview: record.name ?? native?.thread.preview ?? record.preview ?? 'Codex thread',
     }
   }
 
@@ -1183,6 +1203,70 @@ export class CodexAgentManager {
   }
 
   private async listRecords(cwd: string) {
+    const [nativeThreads, indexedRecords] = await Promise.all([
+      this.listNativeThreads(cwd),
+      this.listIndexedRecords(cwd),
+    ])
+    const indexedById = new Map(indexedRecords.map((record) => [record.id, record]))
+    const nativeIds = new Set(nativeThreads.map((thread) => thread.id))
+    const officialRecords = nativeThreads.map((thread): CodexThreadRecord => {
+      const indexed = indexedById.get(thread.id)
+      return {
+        createdAt: new Date(thread.createdAt * 1_000).toISOString(),
+        cwd: thread.cwd,
+        id: thread.id,
+        materialized: true,
+        model: indexed?.model ?? null,
+        modelExplicit: indexed?.modelExplicit ?? false,
+        name: thread.name,
+        preview: thread.preview || null,
+        reasoningEffort: indexed?.reasoningEffort ?? 'medium',
+        updatedAt: new Date(thread.updatedAt * 1_000).toISOString(),
+      }
+    })
+    // thread/start can produce a real App Server thread before Codex writes a
+    // rollout. Preserve those live drafts, but never revive stale materialized
+    // index entries that are absent from the official thread list.
+    const liveOrUnmaterializedDrafts = indexedRecords.filter((record) => (
+      !nativeIds.has(record.id)
+      && (!record.materialized || this.bindings.has(record.id) || this.sessionStore.get(record.id))
+    ))
+    return [...officialRecords, ...liveOrUnmaterializedDrafts]
+      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+  }
+
+  private async listNativeThreads(cwd: string) {
+    const client = await this.ensureClient()
+    const threads: Thread[] = []
+    const seenCursors = new Set<string>()
+    const seenThreadIds = new Set<string>()
+    let cursor: string | null = null
+    do {
+      const response: ThreadListResponse = await client.request('thread/list', {
+        archived: false,
+        cursor,
+        cwd,
+        limit: 100,
+        sortDirection: 'desc',
+        sortKey: 'updated_at',
+        sourceKinds: TOP_LEVEL_THREAD_SOURCE_KINDS,
+      })
+      for (const thread of response.data) {
+        if (thread.ephemeral || thread.parentThreadId || seenThreadIds.has(thread.id)) continue
+        seenThreadIds.add(thread.id)
+        threads.push(thread)
+      }
+      const nextCursor = response.nextCursor ?? null
+      if (nextCursor && seenCursors.has(nextCursor)) {
+        throw new Error(`Codex thread/list returned the repeated cursor "${nextCursor}".`)
+      }
+      if (nextCursor) seenCursors.add(nextCursor)
+      cursor = nextCursor
+    } while (cursor)
+    return threads
+  }
+
+  private async listIndexedRecords(cwd: string) {
     const identity = workspaceIdentity(cwd)
     return (await this.index.read()).threads
       .filter((record) => workspaceIdentity(record.cwd) === identity)
@@ -1191,7 +1275,7 @@ export class CodexAgentManager {
 
   private async requireRecord(cwd: string, threadId: string) {
     const record = (await this.listRecords(cwd)).find((candidate) => candidate.id === threadId)
-    if (!record) throw new Error('Codex thread not found for this Aryn workspace.')
+    if (!record) throw new Error('Codex thread not found for this workspace.')
     return record
   }
 
@@ -1244,9 +1328,13 @@ export class CodexAgentManager {
         return binding
       })
       .finally(() => {
-        if (this.bindingStarts.get(threadId) === start) this.bindingStarts.delete(threadId)
+        if (this.bindingStarts.get(threadId) === start) {
+          this.bindingStarts.delete(threadId)
+          this.bindingStartWorkspaces.delete(threadId)
+        }
       })
     this.bindingStarts.set(threadId, start)
+    this.bindingStartWorkspaces.set(threadId, workspaceIdentity(cwd))
     return start
   }
 

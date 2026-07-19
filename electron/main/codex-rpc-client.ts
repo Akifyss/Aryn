@@ -6,6 +6,7 @@ import type { GetAccountResponse } from '../../src/features/agent/codex-protocol
 import type { ModelListResponse } from '../../src/features/agent/codex-protocol/generated/v2/ModelListResponse'
 import type { ThreadArchiveResponse } from '../../src/features/agent/codex-protocol/generated/v2/ThreadArchiveResponse'
 import type { ThreadDeleteResponse } from '../../src/features/agent/codex-protocol/generated/v2/ThreadDeleteResponse'
+import type { ThreadListResponse } from '../../src/features/agent/codex-protocol/generated/v2/ThreadListResponse'
 import type { ThreadReadResponse } from '../../src/features/agent/codex-protocol/generated/v2/ThreadReadResponse'
 import type { ThreadResumeResponse } from '../../src/features/agent/codex-protocol/generated/v2/ThreadResumeResponse'
 import type { ThreadSetNameResponse } from '../../src/features/agent/codex-protocol/generated/v2/ThreadSetNameResponse'
@@ -27,6 +28,7 @@ type CodexResponseMap = {
   'model/list': ModelListResponse
   'thread/archive': ThreadArchiveResponse
   'thread/delete': ThreadDeleteResponse
+  'thread/list': ThreadListResponse
   'thread/name/set': ThreadSetNameResponse
   'thread/read': ThreadReadResponse
   'thread/resume': ThreadResumeResponse

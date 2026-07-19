@@ -116,6 +116,7 @@ const OPEN_CODE_START_TIMEOUT_MS = 15_000
 const OPEN_CODE_SNAPSHOT_COALESCE_MS = 16
 const OPEN_CODE_EVENT_RECONNECT_MAX_MS = 3_000
 const OPEN_CODE_EVENT_RECONNECT_MIN_MS = 250
+const ARYN_SESSION_METADATA_KEY = 'aryn'
 
 function waitForAbortableDelay(delay: number, signal: AbortSignal) {
   if (signal.aborted) return Promise.resolve()
@@ -326,6 +327,33 @@ function normalizeSessionIndex(value: unknown): OpenCodeSessionIndex {
   return { sessions, version: 1 }
 }
 
+function sessionConfigurationFromMetadata(session: Session) {
+  const metadata = session.metadata?.[ARYN_SESSION_METADATA_KEY]
+  if (!metadata || typeof metadata !== 'object') return null
+  const record = metadata as JsonRecord
+  const modelKey = normalizeNullableText(record.modelKey) ?? null
+  const thinkingLevel = typeof record.thinkingLevel === 'string'
+    && ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(record.thinkingLevel)
+    ? record.thinkingLevel as AgentThinkingLevel
+    : null
+  if (!modelKey && !thinkingLevel) return null
+  return { modelKey, thinkingLevel }
+}
+
+function withSessionConfigurationMetadata(
+  session: Session,
+  modelKey: string | null,
+  thinkingLevel: AgentThinkingLevel,
+) {
+  return {
+    ...(session.metadata ?? {}),
+    [ARYN_SESSION_METADATA_KEY]: {
+      modelKey,
+      thinkingLevel,
+    },
+  }
+}
+
 function sessionListItem(session: Session): AgentSessionListItem {
   const title = session.title?.trim() || null
   return {
@@ -339,18 +367,6 @@ function sessionListItem(session: Session): AgentSessionListItem {
   }
 }
 
-function indexedSessionListItem(record: OpenCodeSessionRecord): AgentSessionListItem {
-  return {
-    createdAt: record.createdAt,
-    id: record.id,
-    messageCount: 0,
-    modifiedAt: record.createdAt,
-    name: null,
-    path: record.id,
-    preview: 'OpenCode session',
-  }
-}
-
 export class OpenCodeAgentManager {
   private client: OpencodeClient | null = null
   private disposed = false
@@ -361,8 +377,10 @@ export class OpenCodeAgentManager {
   private readonly pendingInteractions = new Map<string, PendingOpenCodeInteraction>()
   private readonly sessionDiffs = new Map<string, SnapshotFileDiff[]>()
   private readonly sessionBindingStarts = new Map<string, Promise<SessionBinding>>()
+  private readonly sessionBindingStartWorkspaces = new Map<string, string>()
   private readonly sessionBindings = new Map<string, SessionBinding>()
   private readonly sessionSnapshotTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly knownWorkspaces = new Map<string, string>()
   private readonly workspaceActiveSessions = new Map<string, string>()
   private server: OpenCodeServer | null = null
   private serverExitUnsubscribe: (() => void) | null = null
@@ -427,13 +445,7 @@ export class OpenCodeAgentManager {
   }
 
   async listSessionItems(cwd: string) {
-    try {
-      return (await this.listSessions(await this.ensureClient(), cwd)).map(sessionListItem)
-    } catch (error) {
-      const indexedSessions = await this.listRecords(cwd)
-      if (indexedSessions.length === 0) throw error
-      return indexedSessions.map(indexedSessionListItem)
-    }
+    return (await this.listSessions(await this.ensureClient(), cwd)).map(sessionListItem)
   }
 
   async readSession(cwd: string, sessionID: string) {
@@ -521,6 +533,12 @@ export class OpenCodeAgentManager {
     const response = await client.session.create({
       directory: cwd,
       ...(normalizedOptions?.name?.trim() ? { title: normalizedOptions.name.trim() } : {}),
+      metadata: {
+        [ARYN_SESSION_METADATA_KEY]: {
+          modelKey: selectedModel ? `${selectedModel.providerID}/${selectedModel.modelID}` : null,
+          thinkingLevel,
+        },
+      },
       ...(selectedModel
         ? {
             model: {
@@ -570,7 +588,7 @@ export class OpenCodeAgentManager {
 
   async deleteSession(cwd: string, sessionID: string) {
     const client = await this.ensureClient()
-    await this.requireOwnedRecord(cwd, sessionID)
+    await this.requireSession(client, cwd, sessionID)
     const ownedSessionIds = new Set(
       [...this.sessionBindings.entries()]
         .filter(([, binding]) => binding.rootSessionId === sessionID)
@@ -596,7 +614,7 @@ export class OpenCodeAgentManager {
 
   async renameSession(cwd: string, sessionID: string, name: string) {
     const client = await this.ensureClient()
-    await this.requireOwnedRecord(cwd, sessionID)
+    await this.requireSession(client, cwd, sessionID)
     await client.session.update({ directory: cwd, sessionID, title: name.trim() }, { throwOnError: true })
     const binding = this.sessionBindings.get(sessionID)
     if (binding) {
@@ -792,8 +810,10 @@ export class OpenCodeAgentManager {
 
   async releaseWorkspaceRuntime(cwd: string) {
     const identity = workspaceIdentity(cwd)
-    const recordIds = new Set((await this.listRecords(cwd)).map((record) => record.id))
-    await Promise.all([...recordIds].map((sessionID) => this.sessionBindingStarts.get(sessionID)?.catch(() => undefined)))
+    const pendingStarts = [...this.sessionBindingStarts.entries()]
+      .filter(([sessionID]) => this.sessionBindingStartWorkspaces.get(sessionID) === identity)
+      .map(([, start]) => start.catch(() => undefined))
+    await Promise.all(pendingStarts)
     const bindings = [...this.sessionBindings.entries()].filter(([, binding]) => workspaceIdentity(binding.cwd) === identity)
     let failures: unknown[] = []
     if (this.client) {
@@ -805,11 +825,15 @@ export class OpenCodeAgentManager {
     const sessionIds = new Set(bindings.map(([sessionID]) => sessionID))
     this.clearSessionRuntimeState(sessionIds)
     this.workspaceActiveSessions.delete(identity)
+    this.knownWorkspaces.delete(identity)
     if (failures.length > 0) throw new AggregateError(failures, 'One or more OpenCode sessions could not be stopped.')
   }
 
   async discardWorkspaceSessions(cwd: string) {
-    const records = await this.listRecords(cwd)
+    // Draft cleanup is deliberately limited to the Aryn ownership manifest.
+    // Official OpenCode sessions discovered for the workspace must never be
+    // deleted merely because an Aryn draft is discarded.
+    const records = await this.listOwnedRecords(cwd)
     if (records.length === 0) return
     await Promise.all(records.map((record) => this.sessionBindingStarts.get(record.id)?.catch(() => undefined)))
     const client = await this.ensureClient()
@@ -858,7 +882,9 @@ export class OpenCodeAgentManager {
     this.pendingInteractions.clear()
     this.sessionDiffs.clear()
     this.sessionBindingStarts.clear()
+    this.sessionBindingStartWorkspaces.clear()
     this.sessionBindings.clear()
+    this.knownWorkspaces.clear()
     this.workspaceActiveSessions.clear()
   }
 
@@ -1301,6 +1327,7 @@ export class OpenCodeAgentManager {
   ) {
     const existing = this.sessionBindings.get(sessionID)
     const parentBinding = session?.parentID ? this.sessionBindings.get(session.parentID) : null
+    const officialConfiguration = session ? sessionConfigurationFromMetadata(session) : null
     this.sessionBindings.set(sessionID, {
       cwd,
       executionState: existing?.executionState ?? { type: 'idle' },
@@ -1312,9 +1339,11 @@ export class OpenCodeAgentManager {
         ?? parentBinding?.rootSessionId
         ?? sessionID,
       selectedModel: existing?.selectedModel
+        ?? officialConfiguration?.modelKey
         ?? record?.modelKey
         ?? (session?.model ? `${session.model.providerID}/${session.model.id}` : null),
       thinkingLevel: existing?.thinkingLevel
+        ?? officialConfiguration?.thinkingLevel
         ?? record?.thinkingLevel
         ?? (session?.model?.variant && ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(session.model.variant)
           ? session.model.variant as AgentThinkingLevel
@@ -1400,32 +1429,35 @@ export class OpenCodeAgentManager {
     const client = this.client
     if (!client) return null
     const records = (await this.index.read()).sessions
-    const workspaces = Array.from(new Set(records.map((record) => record.cwd)))
+    const workspaces = Array.from(new Map([
+      ...records.map((record) => [workspaceIdentity(record.cwd), record.cwd] as const),
+      ...this.knownWorkspaces.entries(),
+    ]).values())
     for (const cwd of workspaces) {
       try {
         await this.requireSession(client, cwd, sessionID)
         return this.sessionBindings.get(sessionID) ?? null
       } catch {
-        // The dedicated OpenCode server may also emit events for sessions not
-        // created by Aryn. Only descendants of an indexed root are accepted.
+        // The dedicated OpenCode server can emit events for another workspace.
+        // Keep looking until the official root list confirms ownership.
       }
     }
     return null
   }
 
   private async listSessions(client: OpencodeClient, cwd: string) {
+    this.knownWorkspaces.set(workspaceIdentity(cwd), cwd)
     const [response, records] = await Promise.all([
       client.session.list({ directory: cwd, roots: true }, { throwOnError: true }),
-      this.listRecords(cwd),
+      this.listOwnedRecords(cwd),
     ])
-    const ownedIds = new Set(records.map((record) => record.id))
-    const sessions = unwrapSdkResult<Session[]>(response, 'list sessions')
-      .filter((session) => (
-        ownedIds.has(session.id)
-        && !session.parentID
-      ))
-      .sort((left, right) => right.time.updated - left.time.updated)
     const recordsById = new Map(records.map((record) => [record.id, record]))
+    const officialSessions = unwrapSdkResult<Session[]>(response, 'list sessions')
+      .filter((session) => !session.parentID)
+      .sort((left, right) => right.time.updated - left.time.updated)
+    const sessions = await Promise.all(officialSessions.map((session) => (
+      this.migrateIndexedSessionConfiguration(client, cwd, session, recordsById.get(session.id))
+    )))
     for (const session of sessions) {
       this.bindSession(session.id, cwd, session, recordsById.get(session.id))
     }
@@ -1433,13 +1465,12 @@ export class OpenCodeAgentManager {
   }
 
   private async requireSession(client: OpencodeClient, cwd: string, sessionID: string) {
+    this.knownWorkspaces.set(workspaceIdentity(cwd), cwd)
     const response = await client.session.get({ directory: cwd, sessionID }, { throwOnError: true })
     const session = unwrapSdkResult<Session>(response, 'read session')
-    const records = await this.listRecords(cwd)
-    const directRecord = records.find((candidate) => candidate.id === sessionID)
     let root = session
     const seen = new Set([root.id])
-    while (!directRecord && root.parentID) {
+    while (root.parentID) {
       if (seen.has(root.parentID)) throw new Error(`OpenCode session parent cycle: ${root.parentID}`)
       seen.add(root.parentID)
       const parentResponse = await client.session.get({
@@ -1448,14 +1479,12 @@ export class OpenCodeAgentManager {
       }, { throwOnError: true })
       root = unwrapSdkResult<Session>(parentResponse, 'read parent session')
     }
-    const rootRecord = directRecord ?? records.find((candidate) => candidate.id === root.id)
-    if (!rootRecord) throw new Error('OpenCode session not found for this Aryn workspace.')
-    // OpenCode 1.17.x can return a lossy `directory` value for Windows paths
-    // containing non-ASCII characters. The Aryn-owned index is the authority:
-    // the root ownership record already matches both the root ID and original
-    // cwd. Descendant sessions inherit that ownership without becoming
-    // top-level entries in Aryn's session tree.
-    this.bindSession(sessionID, cwd, session, directRecord, root.id)
+    const rootsResponse = await client.session.list({ directory: cwd, roots: true }, { throwOnError: true })
+    const belongsToWorkspace = unwrapSdkResult<Session[]>(rootsResponse, 'list workspace sessions')
+      .some((candidate) => candidate.id === root.id)
+    if (!belongsToWorkspace) throw new Error('OpenCode session not found for this workspace.')
+    const rootRecord = (await this.listOwnedRecords(cwd)).find((candidate) => candidate.id === root.id)
+    this.bindSession(sessionID, cwd, session, rootRecord, root.id)
     return session
   }
 
@@ -1477,14 +1506,26 @@ export class OpenCodeAgentManager {
         return binding
       })
       .finally(() => {
-        if (this.sessionBindingStarts.get(sessionID) === start) this.sessionBindingStarts.delete(sessionID)
+        if (this.sessionBindingStarts.get(sessionID) === start) {
+          this.sessionBindingStarts.delete(sessionID)
+          this.sessionBindingStartWorkspaces.delete(sessionID)
+        }
       })
     this.sessionBindingStarts.set(sessionID, start)
+    this.sessionBindingStartWorkspaces.set(sessionID, workspaceIdentity(cwd))
     return start
   }
 
   private async updateSessionConfiguration(cwd: string, sessionID: string, binding: SessionBinding) {
-    await this.requireOwnedRecord(cwd, sessionID)
+    const client = await this.ensureClient()
+    const session = await this.requireSession(client, cwd, sessionID)
+    await client.session.update({
+      directory: cwd,
+      metadata: withSessionConfigurationMetadata(session, binding.selectedModel, binding.thinkingLevel),
+      sessionID,
+    }, { throwOnError: true })
+    // Keep the old ownership record in sync while it still exists, but never
+    // create one for a session that originated in the official client.
     await this.index.update((state) => ({
       ...state,
       sessions: state.sessions.map((record) => record.id === sessionID
@@ -1497,15 +1538,33 @@ export class OpenCodeAgentManager {
     }))
   }
 
-  private async listRecords(cwd: string) {
-    const identity = workspaceIdentity(cwd)
-    return (await this.index.read()).sessions.filter((record) => workspaceIdentity(record.cwd) === identity)
+  private async migrateIndexedSessionConfiguration(
+    client: OpencodeClient,
+    cwd: string,
+    session: Session,
+    record: OpenCodeSessionRecord | undefined,
+  ) {
+    if (!record || sessionConfigurationFromMetadata(session)) return session
+    const metadata = withSessionConfigurationMetadata(session, record.modelKey, record.thinkingLevel)
+    try {
+      await client.session.update({
+        directory: cwd,
+        metadata,
+        sessionID: session.id,
+      }, { throwOnError: true })
+      return { ...session, metadata }
+    } catch (error) {
+      // Configuration migration is supplementary. A transient write failure
+      // or an older OpenCode server must not hide otherwise valid official
+      // sessions from the tree; the ownership index remains the read fallback.
+      console.warn(`[opencode] Failed to migrate Aryn session metadata for ${session.id}: ${formatError(error)}`)
+      return session
+    }
   }
 
-  private async requireOwnedRecord(cwd: string, sessionID: string) {
-    const record = (await this.listRecords(cwd)).find((candidate) => candidate.id === sessionID)
-    if (!record) throw new Error('OpenCode session not found for this Aryn workspace.')
-    return record
+  private async listOwnedRecords(cwd: string) {
+    const identity = workspaceIdentity(cwd)
+    return (await this.index.read()).sessions.filter((record) => workspaceIdentity(record.cwd) === identity)
   }
 
   private async requireAvailableModel(client: OpencodeClient, cwd: string, modelKey: string) {

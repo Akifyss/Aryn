@@ -22,6 +22,7 @@ const sdkState = vi.hoisted(() => ({
   promptedRequests: [] as Array<Record<string, any>>,
   promptedSessionIds: [] as string[],
   sessions: [] as Array<Record<string, any>>,
+  updateFails: false,
 }))
 
 vi.mock('@opencode-ai/sdk/v2', () => {
@@ -104,14 +105,16 @@ vi.mock('@opencode-ai/sdk/v2', () => {
         if (sdkState.abortFails) throw new Error('abort failed')
         return {}
       },
-      create: async ({ directory, title }: { directory: string, title?: string }) => {
+      create: async ({ directory, metadata, title }: { directory: string, metadata?: Record<string, unknown>, title?: string }) => {
         const now = Date.now()
         const session = {
           directory,
           id: `aryn-owned-session-${++sdkState.createCount}`,
+          metadata,
           parentID: undefined,
           time: { created: now, updated: now },
           title,
+          workspaceDirectory: directory,
         }
         sdkState.sessions.push(session)
         return session
@@ -123,7 +126,10 @@ vi.mock('@opencode-ai/sdk/v2', () => {
       },
       diff: async () => [],
       get: async ({ sessionID }: { sessionID: string }) => sdkState.sessions.find((session) => session.id === sessionID),
-      list: async () => sdkState.sessions,
+      list: async ({ directory, roots }: { directory: string, roots?: boolean }) => sdkState.sessions.filter((session) => (
+        (session.workspaceDirectory ?? session.directory) === directory
+        && (!roots || !session.parentID)
+      )),
       message: async ({ messageID, sessionID }: { messageID: string, sessionID: string }) => ({
         info: { id: messageID, role: 'user', sessionID, time: { created: 1 } },
         parts: [],
@@ -144,7 +150,19 @@ vi.mock('@opencode-ai/sdk/v2', () => {
         session.runtimeStatus ?? { type: 'idle' },
       ])),
       todo: async () => [],
-      update: async () => ({}),
+      update: async ({ metadata, sessionID, title }: {
+        metadata?: Record<string, unknown>
+        sessionID: string
+        title?: string
+      }) => {
+        if (sdkState.updateFails) throw new Error('metadata update unavailable')
+        const session = sdkState.sessions.find((candidate) => candidate.id === sessionID)
+        if (!session) throw new Error(`Session not found: ${sessionID}`)
+        if (metadata !== undefined) session.metadata = metadata
+        if (title !== undefined) session.title = title
+        session.time.updated = Date.now()
+        return session
+      },
     },
     v2: {
       session: {
@@ -211,7 +229,9 @@ describe('OpenCode Aryn session ownership', () => {
       parentID: undefined,
       time: { created: now - 1_000, updated: now - 1_000 },
       title: 'Created outside Aryn',
+      workspaceDirectory: workspacePath,
     }]
+    sdkState.updateFails = false
   })
 
   it('rejects an incompatible OpenCode server and closes it without starting the event stream', async () => {
@@ -319,7 +339,7 @@ describe('OpenCode Aryn session ownership', () => {
     await rm(agentDir, { force: true, recursive: true })
   })
 
-  it('lists and deletes only sessions registered as Aryn-owned', async () => {
+  it('lists every official workspace session while discarding only Aryn-owned sessions', async () => {
     const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
     const manager = new OpenCodeAgentManager({ agentDir, emitEvent: () => undefined, startServer })
     try {
@@ -330,9 +350,10 @@ describe('OpenCode Aryn session ownership', () => {
 
     const restoredManager = new OpenCodeAgentManager({ agentDir, emitEvent: () => undefined, startServer })
     try {
-      await expect(restoredManager.listSessionItems(workspacePath)).resolves.toEqual([
+      await expect(restoredManager.listSessionItems(workspacePath)).resolves.toEqual(expect.arrayContaining([
         expect.objectContaining({ id: 'aryn-owned-session-1', name: 'Aryn session' }),
-      ])
+        expect.objectContaining({ id: 'foreign-native-session', name: 'Created outside Aryn' }),
+      ]))
 
       await restoredManager.discardWorkspaceSessions(workspacePath)
       expect(sdkState.deletedSessionIds).toEqual(['aryn-owned-session-1'])
@@ -375,7 +396,7 @@ describe('OpenCode Aryn session ownership', () => {
     }
   })
 
-  it('keeps indexed OpenCode history visible when the CLI is temporarily unavailable', async () => {
+  it('does not present private index data as official history when the CLI is unavailable', async () => {
     const indexDirectory = path.join(agentDir, 'external', 'opencode')
     await mkdir(indexDirectory, { recursive: true })
     await writeFile(path.join(indexDirectory, 'sessions.json'), JSON.stringify({
@@ -395,15 +416,36 @@ describe('OpenCode Aryn session ownership', () => {
     })
 
     try {
-      await expect(manager.listSessionItems(workspacePath)).resolves.toEqual([{
+      await expect(manager.listSessionItems(workspacePath)).rejects.toThrow('OpenCode CLI unavailable')
+    } finally {
+      manager.dispose()
+    }
+  })
+
+  it('keeps official sessions visible when legacy configuration metadata cannot be migrated', async () => {
+    const indexDirectory = path.join(agentDir, 'external', 'opencode')
+    await mkdir(indexDirectory, { recursive: true })
+    await writeFile(path.join(indexDirectory, 'sessions.json'), JSON.stringify({
+      sessions: [{
         createdAt: '2026-07-12T00:00:00.000Z',
-        id: 'offline-owned-session',
-        messageCount: 0,
-        modifiedAt: '2026-07-12T00:00:00.000Z',
-        name: null,
-        path: 'offline-owned-session',
-        preview: 'OpenCode session',
-      }])
+        cwd: workspacePath,
+        id: 'foreign-native-session',
+        modelKey: 'test/model',
+        thinkingLevel: 'high',
+      }],
+      version: 1,
+    }))
+    sdkState.updateFails = true
+    const manager = new OpenCodeAgentManager({
+      agentDir,
+      emitEvent: () => undefined,
+      startServer: async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' }),
+    })
+
+    try {
+      await expect(manager.listSessionItems(workspacePath)).resolves.toEqual([
+        expect.objectContaining({ id: 'foreign-native-session', name: 'Created outside Aryn' }),
+      ])
     } finally {
       manager.dispose()
     }
@@ -645,7 +687,7 @@ describe('OpenCode Aryn session ownership', () => {
           native: { agentId: 'opencode', parentSessionId: rootSessionID },
           sessionId: childSessionID,
         },
-        sessions: [expect.objectContaining({ id: rootSessionID })],
+        sessions: expect.arrayContaining([expect.objectContaining({ id: rootSessionID })]),
       })
       await expect(manager.requestSurfaceData(workspacePath, {
         method: 'session.get',

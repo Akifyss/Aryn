@@ -399,6 +399,9 @@ describe('Codex App Server lifecycle', () => {
     internals.client = {
       request: async (method: string, params: unknown) => {
         requests.push({ method, params })
+        if (method === 'thread/list') {
+          return { data: [thread({ type: 'active', activeFlags: [] })], nextCursor: null }
+        }
         return {}
       },
       stop: () => undefined,
@@ -410,10 +413,11 @@ describe('Codex App Server lifecycle', () => {
 
     try {
       const state = await manager.abortActivePrompt('C:/workspace', 'thread-1')
-      expect(requests).toEqual([{
+      expect(requests).toContainEqual({
         method: 'turn/interrupt',
         params: { threadId: 'thread-1', turnId: 'turn-current' },
-      }])
+      })
+      expect(requests).toContainEqual(expect.objectContaining({ method: 'thread/list' }))
       expect(binding).toMatchObject({ activeTurnId: 'turn-current', isStreaming: true })
       expect(state.runtime).toMatchObject({ executionState: { type: 'busy' }, isStreaming: true })
     } finally {

@@ -1,7 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync } from 'node:fs'
-import { mkdir, readdir, rm } from 'node:fs/promises'
+import { constants, existsSync } from 'node:fs'
+import { copyFile, mkdir, readFile, readdir, rm } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
+import {
+  getAgentDir as getPiAgentDir,
+  SessionManager,
+  SettingsManager,
+  type SessionInfo,
+} from '@earendil-works/pi-coding-agent'
 import { getAgentInteractionKey } from '../../src/features/agent/types'
 import type {
   AgentClientEventPayload,
@@ -27,7 +34,10 @@ type PiCliSessionRecord = {
   id: string
   materialized: boolean
   modelKey: string | null
+  messageCount?: number
   name: string | null
+  preview?: string | null
+  sessionPath?: string | null
   thinkingLevel: AgentThinkingLevel
   updatedAt: string
 }
@@ -103,10 +113,29 @@ function normalizeIndex(value: unknown): PiCliSessionIndex {
   return { sessions, version: 1 }
 }
 
-function sessionDirectory(agentDir: string, cwd: string) {
+function legacySessionDirectory(agentDir: string, cwd: string) {
   const identity = workspaceIdentity(cwd)
   const hash = createHash('sha256').update(identity).digest('hex').slice(0, 20)
   return path.join(agentDir, 'external', 'pi', 'sessions', hash)
+}
+
+function resolvePiSessionDirectory(cwd: string) {
+  const environmentDirectory = normalizeNullableString(process.env.PI_CODING_AGENT_SESSION_DIR)
+  const configuredDirectory = environmentDirectory ?? SettingsManager.create(cwd, getPiAgentDir()).getSessionDir()
+  if (configuredDirectory) {
+    if (configuredDirectory === '~') return os.homedir()
+    if (configuredDirectory.startsWith('~/')) {
+      return path.join(os.homedir(), configuredDirectory.slice(2))
+    }
+    return path.isAbsolute(configuredDirectory)
+      ? configuredDirectory
+      : path.resolve(cwd, configuredDirectory)
+  }
+  // Keep this encoding byte-for-byte compatible with PI's official
+  // getDefaultSessionDir implementation (the helper is not part of the
+  // package's public export surface in 0.75.x).
+  const safePath = `--${cwd.replace(/^[/\\]/, '').replace(/[/\\:]/g, '-')}--`
+  return path.join(getPiAgentDir(), 'sessions', safePath)
 }
 
 function permissionExtensionPath() {
@@ -190,7 +219,9 @@ export class PiCliAgentManager {
     sessionId: string
   }>()
   private disposed = false
+  private readonly legacyMigrations = new Map<string, Promise<void>>()
   private readonly runtimeStarts = new Map<string, Promise<PiRuntime>>()
+  private readonly runtimeStartWorkspaces = new Map<string, string>()
   private readonly runtimes = new Map<string, PiRuntime>()
   private readonly workspaceActiveSessions = new Map<string, string>()
 
@@ -227,11 +258,11 @@ export class PiCliAgentManager {
     return (await this.listRecords(cwd)).map((record) => ({
       createdAt: record.createdAt,
       id: record.id,
-      messageCount: 0,
+      messageCount: record.messageCount ?? 0,
       modifiedAt: record.updatedAt,
       name: record.name,
       path: record.id,
-      preview: record.name ?? 'PI CLI session',
+      preview: record.name ?? record.preview ?? 'PI CLI session',
     }))
   }
 
@@ -292,11 +323,7 @@ export class PiCliAgentManager {
       ...state,
       sessions: state.sessions.filter((session) => session.id !== sessionID),
     }))
-    const directory = sessionDirectory(this.options.agentDir, record.cwd)
-    const files = await readdir(directory).catch(() => [])
-    await Promise.all(files.filter((file) => file.includes(sessionID)).map((file) => (
-      rm(path.join(directory, file), { force: true })
-    )))
+    if (record.sessionPath) await rm(record.sessionPath, { force: true })
     const identity = workspaceIdentity(cwd)
     const activeSessionID = this.workspaceActiveSessions.get(identity) ?? null
     if (activeSessionID === sessionID) this.workspaceActiveSessions.delete(identity)
@@ -419,9 +446,12 @@ export class PiCliAgentManager {
 
   async releaseWorkspaceRuntime(cwd: string) {
     const identity = workspaceIdentity(cwd)
-    const recordIds = new Set((await this.listRecords(cwd)).map((record) => record.id))
-    await Promise.all([...recordIds].map((sessionID) => this.runtimeStarts.get(sessionID)?.catch(() => undefined)))
+    const pendingStarts = [...this.runtimeStarts.entries()]
+      .filter(([sessionID]) => this.runtimeStartWorkspaces.get(sessionID) === identity)
+      .map(([, start]) => start.catch(() => undefined))
+    await Promise.all(pendingStarts)
     const runtimes = [...this.runtimes.values()].filter((runtime) => workspaceIdentity(runtime.record.cwd) === identity)
+    const recordIds = new Set(runtimes.map((runtime) => runtime.record.id))
     for (const runtime of runtimes) {
       runtime.process.stop()
       this.runtimes.delete(runtime.record.id)
@@ -431,7 +461,9 @@ export class PiCliAgentManager {
   }
 
   async discardWorkspaceSessions(cwd: string) {
-    const records = await this.listRecords(cwd)
+    // Draft cleanup is restricted to sessions created by Aryn. Sessions found
+    // only in PI's official store remain untouched.
+    const records = await this.listOwnedRecords(cwd)
     const recordIds = new Set(records.map((record) => record.id))
     await Promise.all(records.map((record) => this.runtimeStarts.get(record.id)?.catch(() => undefined)))
     for (const record of records) {
@@ -439,11 +471,16 @@ export class PiCliAgentManager {
       this.runtimes.delete(record.id)
     }
     this.clearPendingInteractions((pending) => recordIds.has(pending.sessionId))
+    const officialRecords = await this.listRecords(cwd)
+    const officialById = new Map(officialRecords.map((record) => [record.id, record]))
+    await Promise.all(records.map((record) => {
+      const sessionPath = officialById.get(record.id)?.sessionPath
+      return sessionPath ? rm(sessionPath, { force: true }) : Promise.resolve()
+    }))
     await this.index.update((state) => ({
       ...state,
       sessions: state.sessions.filter((record) => workspaceIdentity(record.cwd) !== workspaceIdentity(cwd)),
     }))
-    await rm(sessionDirectory(this.options.agentDir, cwd), { force: true, recursive: true })
     this.workspaceActiveSessions.delete(workspaceIdentity(cwd))
   }
 
@@ -451,7 +488,10 @@ export class PiCliAgentManager {
     this.disposed = true
     for (const runtime of this.runtimes.values()) runtime.process.stop()
     this.runtimes.clear()
+    this.runtimeStarts.clear()
     this.pendingInteractions.clear()
+    this.legacyMigrations.clear()
+    this.runtimeStartWorkspaces.clear()
     this.workspaceActiveSessions.clear()
   }
 
@@ -476,12 +516,9 @@ export class PiCliAgentManager {
       const existing = this.runtimes.get(record.id)
       if (existing) return existing
     }
-    const directory = sessionDirectory(this.options.agentDir, record.cwd)
-    await mkdir(directory, { recursive: true })
     const args = [
       '--mode', 'rpc',
       '--no-approve',
-      '--session-dir', directory,
       ...(ephemeral
         ? ['--no-session']
         : allowCreate
@@ -849,11 +886,11 @@ export class PiCliAgentManager {
         sessions: records.map((record) => ({
           createdAt: record.createdAt,
           id: record.id,
-          messageCount: 0,
+          messageCount: record.messageCount ?? 0,
           modifiedAt: record.updatedAt,
           name: record.name,
           path: record.id,
-          preview: record.name ?? 'PI CLI session',
+          preview: record.name ?? record.preview ?? 'PI CLI session',
         })),
       }
     } finally {
@@ -868,10 +905,121 @@ export class PiCliAgentManager {
   }
 
   private async listRecords(cwd: string) {
+    await this.ensureLegacySessionsMigrated(cwd)
+    const indexedRecords = await this.listOwnedRecords(cwd)
+    const indexedById = new Map(indexedRecords.map((record) => [record.id, record]))
+    const officialRecords = await this.listOfficialRecords(cwd, indexedById)
+    const officialIds = new Set(officialRecords.map((record) => record.id))
+    const liveOrUnmaterializedDrafts = indexedRecords.filter((record) => (
+      !officialIds.has(record.id)
+      && (!record.materialized || this.runtimes.has(record.id))
+    ))
+    return [...officialRecords, ...liveOrUnmaterializedDrafts]
+      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+  }
+
+  private async listOfficialRecords(
+    cwd: string,
+    indexedById: Map<string, PiCliSessionRecord>,
+  ) {
+    const sessionDir = resolvePiSessionDirectory(cwd)
+    const infos = await SessionManager.list(cwd, sessionDir)
+    return infos
+      .filter((info) => !info.cwd || workspaceIdentity(info.cwd) === workspaceIdentity(cwd))
+      .map((info) => this.officialSessionRecord(cwd, info, indexedById.get(info.id)))
+  }
+
+  private officialSessionRecord(
+    cwd: string,
+    info: SessionInfo,
+    indexed: PiCliSessionRecord | undefined,
+  ): PiCliSessionRecord {
+    return {
+      createdAt: info.created.toISOString(),
+      cwd: info.cwd || cwd,
+      id: info.id,
+      materialized: true,
+      messageCount: info.messageCount,
+      modelKey: indexed?.modelKey ?? null,
+      name: info.name?.trim() || null,
+      preview: info.firstMessage?.trim() || null,
+      sessionPath: info.path,
+      thinkingLevel: indexed?.thinkingLevel ?? 'medium',
+      updatedAt: info.modified.toISOString(),
+    }
+  }
+
+  private async listOwnedRecords(cwd: string) {
     const identity = workspaceIdentity(cwd)
     return (await this.index.read()).sessions
       .filter((record) => workspaceIdentity(record.cwd) === identity)
       .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+  }
+
+  private async ensureLegacySessionsMigrated(cwd: string) {
+    const identity = workspaceIdentity(cwd)
+    const existing = this.legacyMigrations.get(identity)
+    if (existing) return existing
+    const migration = this.migrateLegacySessions(cwd).catch((error) => {
+      this.legacyMigrations.delete(identity)
+      throw error
+    })
+    this.legacyMigrations.set(identity, migration)
+    return migration
+  }
+
+  private async migrateLegacySessions(cwd: string) {
+    const sourceDir = legacySessionDirectory(this.options.agentDir, cwd)
+    if (!existsSync(sourceDir)) return
+    const legacySessions = await SessionManager.list(cwd, sourceDir)
+    if (legacySessions.length === 0) return
+    const targetDir = resolvePiSessionDirectory(cwd)
+    await mkdir(targetDir, { recursive: true })
+    const officialById = new Map((await SessionManager.list(cwd, targetDir)).map((info) => [info.id, info]))
+
+    for (const legacy of legacySessions) {
+      const existingOfficial = officialById.get(legacy.id)
+      if (existingOfficial) {
+        const [legacyContent, officialContent] = await Promise.all([
+          readFile(legacy.path),
+          readFile(existingOfficial.path),
+        ])
+        if (legacyContent.equals(officialContent)) {
+          await rm(legacy.path, { force: true })
+        } else {
+          console.warn(`[pi cli] Legacy session ${legacy.id} conflicts with an official session and was left at ${legacy.path}.`)
+        }
+        continue
+      }
+
+      const targetPath = path.join(targetDir, path.basename(legacy.path))
+      let copiedByMigration = false
+      try {
+        await copyFile(legacy.path, targetPath, constants.COPYFILE_EXCL)
+        copiedByMigration = true
+      } catch (error) {
+        const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
+        if (code !== 'EEXIST') throw error
+        const [legacyContent, targetContent] = await Promise.all([readFile(legacy.path), readFile(targetPath)])
+        if (!legacyContent.equals(targetContent)) {
+          console.warn(`[pi cli] Legacy session target already exists with different content: ${targetPath}`)
+          continue
+        }
+      }
+
+      const migrated = (await SessionManager.list(cwd, targetDir)).find((info) => (
+        info.id === legacy.id && path.resolve(info.path) === path.resolve(targetPath)
+      ))
+      if (!migrated) {
+        if (copiedByMigration) await rm(targetPath, { force: true })
+        throw new Error(`PI CLI legacy session ${legacy.id} could not be verified in the official session directory.`)
+      }
+      officialById.set(migrated.id, migrated)
+      await rm(legacy.path, { force: true })
+    }
+
+    const remaining = await readdir(sourceDir).catch(() => [])
+    if (remaining.length === 0) await rm(sourceDir, { force: true, recursive: true })
   }
 
   private async requireRecord(cwd: string, sessionID: string) {
@@ -888,9 +1036,13 @@ export class PiCliAgentManager {
     const start = this.requireRecord(cwd, sessionID)
       .then((record) => this.startRuntime(record, false, options.allowCreate === true || !record.materialized))
       .finally(() => {
-        if (this.runtimeStarts.get(sessionID) === start) this.runtimeStarts.delete(sessionID)
+        if (this.runtimeStarts.get(sessionID) === start) {
+          this.runtimeStarts.delete(sessionID)
+          this.runtimeStartWorkspaces.delete(sessionID)
+        }
       })
     this.runtimeStarts.set(sessionID, start)
+    this.runtimeStartWorkspaces.set(sessionID, workspaceIdentity(cwd))
     return start
   }
 
@@ -916,7 +1068,18 @@ export class PiCliAgentManager {
     record.updatedAt = new Date().toISOString()
     await this.index.update((state) => ({
       ...state,
-      sessions: state.sessions.map((candidate) => candidate.id === record.id ? { ...record } : candidate),
+      sessions: state.sessions.map((candidate) => candidate.id === record.id
+        ? {
+            createdAt: record.createdAt,
+            cwd: record.cwd,
+            id: record.id,
+            materialized: record.materialized,
+            modelKey: record.modelKey,
+            name: record.name,
+            thinkingLevel: record.thinkingLevel,
+            updatedAt: record.updatedAt,
+          }
+        : candidate),
     }))
   }
 

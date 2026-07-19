@@ -6,7 +6,7 @@ import type { Model } from '../src/features/agent/codex-protocol/generated/v2/Mo
 import type { Thread } from '../src/features/agent/codex-protocol/generated/v2/Thread'
 import { CodexAgentManager } from '../electron/main/codex-agent'
 
-function emptyThread(cwd: string): Thread {
+function emptyThread(cwd: string, overrides: Partial<Thread> = {}): Thread {
   return {
     agentNickname: null,
     agentRole: null,
@@ -29,10 +29,99 @@ function emptyThread(cwd: string): Thread {
     threadSource: 'aryn',
     turns: [],
     updatedAt: 1,
+    ...overrides,
   }
 }
 
 describe('Codex unmaterialized sessions', () => {
+  it('paginates and lists official Codex threads that were created outside Aryn', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-official-list-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const requests: Array<{ method: string, params: Record<string, unknown> }> = []
+    const manager = new CodexAgentManager({ agentDir: path.join(tempRoot, 'agent-data'), emitEvent: () => undefined })
+    const internals = manager as unknown as {
+      client: {
+        request: (method: string, params: Record<string, unknown>) => Promise<unknown>
+        stop: () => void
+      }
+    }
+    internals.client = {
+      request: async (method, params) => {
+        requests.push({ method, params })
+        if (method !== 'thread/list') throw new Error(`Unexpected Codex request: ${method}`)
+        if (params.cursor === null) {
+          return {
+            data: [
+              emptyThread(workspace, {
+                id: 'official-cli-thread-1',
+                path: path.join(tempRoot, 'official-1.jsonl'),
+                preview: 'Created by Codex CLI',
+                source: 'cli',
+                updatedAt: 2,
+              }),
+              emptyThread(workspace, { id: 'subagent-thread', parentThreadId: 'official-cli-thread-1' }),
+              emptyThread(workspace, { ephemeral: true, id: 'ephemeral-thread' }),
+            ],
+            nextCursor: 'page-2',
+          }
+        }
+        return {
+          data: [
+            emptyThread(workspace, {
+              id: 'official-cli-thread-1',
+              path: path.join(tempRoot, 'official-1.jsonl'),
+              preview: 'Duplicate pagination entry',
+              source: 'cli',
+              updatedAt: 2,
+            }),
+            emptyThread(workspace, {
+              id: 'official-vscode-thread-2',
+              name: 'Named in another Codex client',
+              path: path.join(tempRoot, 'official-2.jsonl'),
+              preview: 'Created by the Codex extension',
+              source: 'vscode',
+              updatedAt: 3,
+            }),
+            emptyThread(workspace, {
+              id: 'official-exec-thread-3',
+              path: path.join(tempRoot, 'official-3.jsonl'),
+              preview: 'Created by codex exec',
+              source: 'exec',
+              updatedAt: 4,
+            }),
+          ],
+          nextCursor: null,
+        }
+      },
+      stop: () => undefined,
+    }
+
+    try {
+      await expect(manager.listSessionItems(workspace)).resolves.toEqual([
+        expect.objectContaining({ id: 'official-exec-thread-3', preview: 'Created by codex exec' }),
+        expect.objectContaining({ id: 'official-vscode-thread-2', name: 'Named in another Codex client' }),
+        expect.objectContaining({ id: 'official-cli-thread-1', preview: 'Created by Codex CLI' }),
+      ])
+      expect(requests).toEqual([
+        expect.objectContaining({
+          method: 'thread/list',
+          params: expect.objectContaining({
+            cursor: null,
+            cwd: workspace,
+            sourceKinds: ['cli', 'vscode', 'exec', 'appServer', 'unknown'],
+          }),
+        }),
+        expect.objectContaining({ method: 'thread/list', params: expect.objectContaining({ cursor: 'page-2', cwd: workspace }) }),
+      ])
+
+      await manager.discardWorkspaceSessions(workspace)
+      expect(requests.some((request) => request.method === 'thread/archive')).toBe(false)
+    } finally {
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
   it('uses the thread/start snapshot until the first turn creates a rollout', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-unmaterialized-'))
     const workspace = path.join(tempRoot, 'workspace')
@@ -61,6 +150,7 @@ describe('Codex unmaterialized sessions', () => {
             thread: emptyThread(workspace),
           }
         }
+        if (method === 'thread/list') return { data: [], nextCursor: null }
         if (method === 'thread/name/set') return {}
         if (method === 'thread/delete') return {}
         throw new Error(`Unexpected Codex request: ${method}`)
@@ -71,11 +161,12 @@ describe('Codex unmaterialized sessions', () => {
     try {
       const created = await manager.createSession(workspace, { name: 'Empty Codex thread' })
       expect(created.activeSession?.native?.agentId).toBe('codex')
-      expect(requestedMethods).toEqual(['thread/start'])
+      expect(requestedMethods[0]).toBe('thread/start')
+      expect(requestedMethods).toContain('thread/list')
       await expect(manager.readSession(workspace, 'thread-unmaterialized')).resolves.toBeTruthy()
       await manager.renameSession(workspace, 'thread-unmaterialized', 'Renamed before first turn')
       await manager.deleteSession(workspace, 'thread-unmaterialized')
-      expect(requestedMethods).toEqual(['thread/start', 'thread/delete'])
+      expect(requestedMethods).toContain('thread/delete')
     } finally {
       manager.dispose()
       await rm(tempRoot, { force: true, recursive: true })
@@ -115,6 +206,7 @@ describe('Codex unmaterialized sessions', () => {
         if (method === 'thread/read') {
           throw new Error('failed to load rollout: rollout file is empty')
         }
+        if (method === 'thread/list') return { data: [], nextCursor: null }
         throw new Error(`Unexpected Codex request: ${method}`)
       },
       stop: () => undefined,
@@ -184,6 +276,7 @@ describe('Codex unmaterialized sessions', () => {
             thread: emptyThread(workspace),
           }
         }
+        if (method === 'thread/list') return { data: [], nextCursor: null }
         throw new Error(`Unexpected Codex request: ${method}`)
       },
       stop: () => undefined,
@@ -192,12 +285,10 @@ describe('Codex unmaterialized sessions', () => {
     try {
       const created = await manager.createSession(workspace, { thinkingLevel: 'low' })
 
-      expect(requests).toEqual([
-        expect.objectContaining({
-          method: 'thread/start',
-          params: expect.objectContaining({ model: 'gpt-5.6-sol' }),
-        }),
-      ])
+      expect(requests.find((request) => request.method === 'thread/start')).toEqual(expect.objectContaining({
+        method: 'thread/start',
+        params: expect.objectContaining({ model: 'gpt-5.6-sol' }),
+      }))
       expect(created.runtime.defaultModel).toBe('openai/gpt-5.6-sol')
       expect(created.runtime.preferredModelByProvider).toEqual({ openai: 'openai/gpt-5.6-sol' })
     } finally {
@@ -244,6 +335,7 @@ describe('Codex unmaterialized sessions', () => {
     internals.models = [defaultModel, selectedModel]
     internals.client = {
       request: async (method, params) => {
+        if (method === 'thread/list') return { data: [], nextCursor: null }
         expect(method).toBe('thread/start')
         expect(params.model).toBe('gpt-selected')
         return {
