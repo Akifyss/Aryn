@@ -70,6 +70,30 @@ describe('shell layout helpers', () => {
     return appSource.replace(/\r\n/g, '\n')
   }
 
+  async function readShellLayoutControllerSource() {
+    const controllerSource = await readFile(
+      new URL('../src/features/layout/hooks/use-shell-layout-controller.ts', import.meta.url),
+      'utf8',
+    )
+    return controllerSource.replace(/\r\n/g, '\n')
+  }
+
+  async function readShellDrawerControllerSource() {
+    const controllerSource = await readFile(
+      new URL('../src/features/layout/hooks/use-shell-drawer-controller.ts', import.meta.url),
+      'utf8',
+    )
+    return controllerSource.replace(/\r\n/g, '\n')
+  }
+
+  async function readSidebarLayoutTransitionSource() {
+    const transitionSource = await readFile(
+      new URL('../src/features/layout/hooks/use-sidebar-layout-transition.ts', import.meta.url),
+      'utf8',
+    )
+    return transitionSource.replace(/\r\n/g, '\n')
+  }
+
   async function readAppTitlebarCss() {
     const titlebarCss = await readFile(new URL('../src/components/app-titlebar/styles.css', import.meta.url), 'utf8')
     return titlebarCss.replace(/\r\n/g, '\n')
@@ -403,11 +427,26 @@ describe('shell layout helpers', () => {
   })
 
   it('keeps docked sidebar expansion motion scoped and disableable', async () => {
-    const [appCss, appSource, fileTabsCss] = await Promise.all([
+    const [
+      appCss,
+      appSource,
+      fileTabsCss,
+      sidebarLayoutTransitionSource,
+      shellDrawerControllerSource,
+      shellLayoutControllerSource,
+    ] = await Promise.all([
       readAppCss(),
       readAppSource(),
       readFileTabsCss(),
+      readSidebarLayoutTransitionSource(),
+      readShellDrawerControllerSource(),
+      readShellLayoutControllerSource(),
     ])
+    const layoutSource = [
+      shellLayoutControllerSource,
+      shellDrawerControllerSource,
+      sidebarLayoutTransitionSource,
+    ].join('\n')
     const appShellRule = appCss.match(/\.app-shell \{([\s\S]*?)\n\}/)?.[1]
 
     expect(appShellRule).toBeDefined()
@@ -471,17 +510,24 @@ describe('shell layout helpers', () => {
   transition: none;
 }`)
     expect(appCss).not.toMatch(/\.app-shell\[data-sidebar-transition='true'\]\s+\./)
-    expect(appSource).toContain('SIDEBAR_LAYOUT_TRANSITION_TARGET_SELECTOR')
-    expect(appSource).toContain('shell.querySelectorAll<HTMLElement>(SIDEBAR_LAYOUT_TRANSITION_TARGET_SELECTOR)')
-    expect(appSource).toContain("target.dataset.sidebarTransition = 'true'")
-    expect(appSource).toContain("target.removeAttribute('data-sidebar-transition')")
-    expect(appSource).toContain("appShellRef.current?.removeAttribute('data-sidebar-transition')")
-    expect(appSource).toContain("event.propertyName === 'grid-template-columns'")
+    expect(appSource).toContain('useShellLayoutController({')
+    expect(appSource).not.toContain('function applySidebarResizePreview(')
+    expect(appSource).not.toContain("refreshWindowInteractionRegions('soft')")
+    expect(shellLayoutControllerSource).toContain('useShellDrawerController({')
+    expect(shellLayoutControllerSource).toContain('useSidebarLayoutTransition(activeResizePanel !== null)')
+    expect(shellDrawerControllerSource).toContain("refreshWindowInteractionRegions('soft')")
+    expect(shellDrawerControllerSource).toContain("refreshWindowInteractionRegions('hard')")
+    expect(layoutSource).toContain('SIDEBAR_LAYOUT_TRANSITION_TARGET_SELECTOR')
+    expect(layoutSource).toContain('shell.querySelectorAll<HTMLElement>(SIDEBAR_LAYOUT_TRANSITION_TARGET_SELECTOR)')
+    expect(layoutSource).toContain("target.dataset.sidebarTransition = 'true'")
+    expect(layoutSource).toContain("target.removeAttribute('data-sidebar-transition')")
+    expect(layoutSource).toContain("appShellRef.current?.removeAttribute('data-sidebar-transition')")
+    expect(layoutSource).toContain("event.propertyName === 'grid-template-columns'")
     expect(appSource).toContain('onTransitionEnd={handleSidebarLayoutTransitionEnd}')
-    expect(appSource).toContain('return finishSidebarLayoutTransition')
-    expect(appSource).toContain('if (activeResizePanel || isGitPanelResizing) {')
-    expect(appSource.match(/runSidebarLayoutTransition\(\(\) => \{/g)).toHaveLength(3)
-    expect(appSource).toContain('if (!isRightSidebarCollapsed) {')
+    expect(layoutSource).toContain('return finishSidebarLayoutTransition')
+    expect(layoutSource).toContain('if (activeResizePanel) {')
+    expect(layoutSource.match(/runSidebarLayoutTransition\(\(\) => \{/g)).toHaveLength(3)
+    expect(layoutSource).toContain('if (!isRightSidebarCollapsed) {')
     expect(appCss).toContain(`.app-shell[data-app-layout='agent'] {
   --agent-chat-min-width: 376px;
   --agent-chat-track-width: 376px;
@@ -493,40 +539,40 @@ describe('shell layout helpers', () => {
     minmax(0, var(--agent-editor-track-width));
 }`)
     expect(appCss).not.toMatch(/\.app-shell\[data-app-layout='agent'\]\[data-right-collapsed='true'\][^{]*\{[^}]*grid-template-columns/)
-    expect(appSource).toContain('const [agentChatWidth, setAgentChatWidth] = useState(')
-    expect(appSource).toContain('clampAgentChatWidth,')
-    expect(appSource).toContain('preview.agentChatWidth = clampAgentChatWidth(nextWidth, session.width, effectiveLeftSidebarWidth)')
-    expect(appSource).not.toContain('agentRightSidebarWidthMode')
+    expect(layoutSource).toContain('const [agentChatWidth, setAgentChatWidth] = useState(')
+    expect(layoutSource).toContain('clampAgentChatWidth,')
+    expect(layoutSource).toContain('preview.agentChatWidth = clampAgentChatWidth(')
+    expect(layoutSource).not.toContain('agentRightSidebarWidthMode')
     expect(appCss).not.toContain(".app-shell[data-resizing='true'] .panel-resize-handle::before")
-    expect(appSource).toContain('resizeSidebarRef.current(resizePanel, pointerClientX)')
-    expect(appSource).toContain('animationFrameId = window.requestAnimationFrame(() => {')
-    expect(appSource).toContain('window.cancelAnimationFrame(animationFrameId)')
+    expect(layoutSource).toContain('resizeSidebarRef.current(resizePanel, pointerClientX)')
+    expect(layoutSource).toContain('animationFrameId = window.requestAnimationFrame(() => {')
+    expect(layoutSource).toContain('window.cancelAnimationFrame(animationFrameId)')
     expect(appSource).toContain('event.currentTarget.setPointerCapture(event.pointerId)')
-    expect(appSource).toContain('function applySidebarResizePreview(')
-    expect(appSource).toContain("shell.style.setProperty('--left-sidebar-width'")
-    expect(appSource).toContain('agentChatWidth: isRightSidebarVisible ? effectiveAgentChatWidth : agentChatWidth')
-    expect(appSource).toContain(`if (isRightSidebarVisible) {
+    expect(layoutSource).toContain('function applySidebarResizePreview(')
+    expect(layoutSource).toContain("shell.style.setProperty('--left-sidebar-width'")
+    expect(layoutSource).toContain('agentChatWidth: isRightSidebarVisible ? effectiveAgentChatWidth : agentChatWidth')
+    expect(layoutSource).toContain(`if (isRightSidebarVisible) {
         preview.agentChatWidth = nextAgentLayoutWidths.chatWidth
       }`)
-    expect(appSource).toContain('sidebarResizeSessionRef.current = {')
-    expect(appSource).toContain('finishSidebarResizeRef.current(resizePanel)')
-    expect(appSource).toContain(`if (isAgentLayout) {
+    expect(layoutSource).toContain('sidebarResizeSessionRef.current = {')
+    expect(layoutSource).toContain('finishSidebarResizeRef.current(resizePanel)')
+    expect(layoutSource).toContain(`if (isAgentLayout) {
         if (isRightSidebarVisible) {
           setAgentChatWidth(preview.agentChatWidth)
         }
       } else {
         setEditorRightSidebarWidth(preview.editorRightSidebarWidth)
       }`)
-    expect(appSource).toContain('function handleResizeKeyDown(panel: ResizePanel')
+    expect(layoutSource).toContain('function handleResizeKeyDown(panel: ResizePanel')
     expect(appSource).toContain('tabIndex={0}')
     expect(appSource).toContain("id='workspace-sidebar-panel'")
     expect(appSource).toContain("id='assistant-sidebar-panel'")
-    expect(appSource).toContain('aria-valuemin={LEFT_SIDEBAR_MIN_WIDTH}')
+    expect(appSource).toContain('aria-valuemin={leftSidebarResizeBounds.min}')
     expect(appSource).toContain("aria-controls='workspace-sidebar-panel'")
     expect(appSource).toContain("aria-controls={isAgentLayout ? 'editor-main' : 'assistant-sidebar-panel'}")
     expect(appSource).toContain('aria-label={isAgentLayout ? \'Resize Agent chat panel\' : \'Resize assistant sidebar\'}')
-    expect(appSource).toContain("event.key !== 'ArrowLeft'")
-    expect(appSource).toContain('notifySidebarResizeEnd()')
+    expect(layoutSource).toContain("event.key !== 'ArrowLeft'")
+    expect(layoutSource).toContain('notifySidebarResizeEnd()')
     expect(appCss).toContain(`.panel-resize-handle {
   position: relative;
   display: block;
@@ -537,12 +583,12 @@ describe('shell layout helpers', () => {
   touch-action: none;
   user-select: none;
 }`)
-    expect(appSource).toContain('function scheduleShellWidthSync()')
-    expect(appSource).toContain(`function scheduleShellWidthSync() {
+    expect(layoutSource).toContain('function scheduleShellWidthSync()')
+    expect(layoutSource).toContain(`function scheduleShellWidthSync() {
       finishSidebarLayoutTransition()`)
-    expect(appSource).toContain('syncFrameId = window.requestAnimationFrame(() => {')
-    expect(appSource).toContain("window.addEventListener('resize', scheduleShellWidthSync)")
-    expect(appSource).toContain('window.cancelAnimationFrame(syncFrameId)')
+    expect(layoutSource).toContain('syncFrameId = window.requestAnimationFrame(() => {')
+    expect(layoutSource).toContain("window.addEventListener('resize', scheduleShellWidthSync)")
+    expect(layoutSource).toContain('window.cancelAnimationFrame(syncFrameId)')
     expect(appCss).toContain(`@media (prefers-reduced-motion: reduce) {
 
   .app-shell,

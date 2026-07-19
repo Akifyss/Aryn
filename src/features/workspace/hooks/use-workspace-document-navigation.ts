@@ -40,6 +40,8 @@ import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-fi
 
 type UseWorkspaceDocumentNavigationOptions = {
   captureActiveMeoViewPosition: () => void
+  closeLeftDrawer: () => void
+  closeRightDrawer: () => void
   currentPath: string | null
   displayActiveTabId: string | null
   displayTabs: WorkspaceDisplayTab[]
@@ -50,13 +52,13 @@ type UseWorkspaceDocumentNavigationOptions = {
   isRightSidebarDrawer: boolean
   setActiveAgentLayoutFixedTab: Dispatch<SetStateAction<AgentLayoutFixedTab>>
   setIsAgentLayoutFixedTabActive: Dispatch<SetStateAction<boolean>>
-  setIsLeftDrawerOpen: Dispatch<SetStateAction<boolean>>
-  setIsRightDrawerOpen: Dispatch<SetStateAction<boolean>>
   setStatusMessage: (message: string) => void
 }
 
 export function useWorkspaceDocumentNavigation({
   captureActiveMeoViewPosition,
+  closeLeftDrawer,
+  closeRightDrawer,
   currentPath,
   displayActiveTabId,
   displayTabs,
@@ -67,8 +69,6 @@ export function useWorkspaceDocumentNavigation({
   isRightSidebarDrawer,
   setActiveAgentLayoutFixedTab,
   setIsAgentLayoutFixedTabActive,
-  setIsLeftDrawerOpen,
-  setIsRightDrawerOpen,
   setStatusMessage,
 }: UseWorkspaceDocumentNavigationOptions) {
   const activateTab = useWorkspaceStore((state) => state.activateTab)
@@ -138,7 +138,7 @@ export function useWorkspaceDocumentNavigation({
         })
 
         if (isLeftSidebarDrawer) {
-          setIsLeftDrawerOpen(false)
+          closeLeftDrawer()
         }
 
         if (workspacePath) {
@@ -208,7 +208,7 @@ export function useWorkspaceDocumentNavigation({
     }
 
     if (isLeftSidebarDrawer) {
-      setIsLeftDrawerOpen(false)
+      closeLeftDrawer()
     }
 
     setStatusMessage(`${getBaseName(filePath)} opened`)
@@ -223,7 +223,7 @@ export function useWorkspaceDocumentNavigation({
     isLeftSidebarDrawer,
     openTab,
     setIsAgentLayoutFixedTabActive,
-    setIsLeftDrawerOpen,
+    closeLeftDrawer,
     setStatusMessage,
   ])
 
@@ -355,7 +355,7 @@ export function useWorkspaceDocumentNavigation({
       activateTab(existingFileTab.id)
 
       if (isRightSidebarDrawer) {
-        setIsRightDrawerOpen(false)
+        closeRightDrawer()
       }
 
       if (currentPath) {
@@ -377,7 +377,7 @@ export function useWorkspaceDocumentNavigation({
     await openFile(filePath)
 
     if (isRightSidebarDrawer) {
-      setIsRightDrawerOpen(false)
+      closeRightDrawer()
     }
   }, [
     activateTab,
@@ -387,7 +387,7 @@ export function useWorkspaceDocumentNavigation({
     isRightSidebarDrawer,
     openFile,
     setIsAgentLayoutFixedTabActive,
-    setIsRightDrawerOpen,
+    closeRightDrawer,
     setStatusMessage,
   ])
 
@@ -431,7 +431,7 @@ export function useWorkspaceDocumentNavigation({
     }
 
     if (isLeftSidebarDrawer) {
-      setIsLeftDrawerOpen(false)
+      closeLeftDrawer()
     }
 
     setStatusMessage(`${getBaseName(change.path)} diff opened`)
@@ -440,7 +440,7 @@ export function useWorkspaceDocumentNavigation({
     isLeftSidebarDrawer,
     openTab,
     setIsAgentLayoutFixedTabActive,
-    setIsLeftDrawerOpen,
+    closeLeftDrawer,
     setStatusMessage,
   ])
 
@@ -492,7 +492,7 @@ export function useWorkspaceDocumentNavigation({
       setIsAgentLayoutFixedTabActive(false)
 
       if (isLeftSidebarDrawer) {
-        setIsLeftDrawerOpen(false)
+        closeLeftDrawer()
       }
 
       setStatusMessage(`${getBaseName(change.path)} diff opened`)
@@ -508,7 +508,7 @@ export function useWorkspaceDocumentNavigation({
     openDiffTab,
     openMeoGitDiff,
     setIsAgentLayoutFixedTabActive,
-    setIsLeftDrawerOpen,
+    closeLeftDrawer,
     setStatusMessage,
   ])
 
@@ -529,7 +529,7 @@ export function useWorkspaceDocumentNavigation({
       setIsAgentLayoutFixedTabActive(false)
 
       if (isLeftSidebarDrawer) {
-        setIsLeftDrawerOpen(false)
+        closeLeftDrawer()
       }
 
       setStatusMessage(`已打开 ${getBaseName(change.path)} 的提交差异`)
@@ -544,7 +544,7 @@ export function useWorkspaceDocumentNavigation({
     isLeftSidebarDrawer,
     openDiffTab,
     setIsAgentLayoutFixedTabActive,
-    setIsLeftDrawerOpen,
+    closeLeftDrawer,
     setStatusMessage,
   ])
 

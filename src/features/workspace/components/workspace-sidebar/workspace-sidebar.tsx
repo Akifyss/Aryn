@@ -8,7 +8,6 @@ import './styles.css'
 export type WorkspaceSidebarSurfaceMode = 'docked' | 'drawer'
 
 type WorkspaceSidebarProps = {
-  bodyRef?: Ref<HTMLDivElement>
   children: ReactNode
   chromeStyle?: CSSProperties
   drawerHeaderActions?: ReactNode
@@ -26,7 +25,6 @@ type WorkspaceSidebarProps = {
 }
 
 export function WorkspaceSidebar({
-  bodyRef,
   children,
   chromeStyle,
   drawerHeaderActions,
@@ -72,7 +70,7 @@ export function WorkspaceSidebar({
         </div>
       ) : null}
 
-      <div ref={bodyRef} className='sidebar-stack'>
+      <div className='sidebar-stack'>
         {children}
       </div>
 

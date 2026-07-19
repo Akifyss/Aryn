@@ -11,7 +11,6 @@
 }
 
 .app-shell {
-  --git-panel-height: 292px;
   --left-sidebar-width: 320px;
   --right-sidebar-width: 368px;
   --fixed-panel-sidebar-width: clamp(216px, 22vw, 276px);

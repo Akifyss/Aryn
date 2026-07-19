@@ -1,8 +1,6 @@
 import type {
   CSSProperties,
-  KeyboardEvent as ReactKeyboardEvent,
   ReactNode,
-  TransitionEvent as ReactTransitionEvent,
 } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tabs as BaseTabs } from '@base-ui/react/tabs'
@@ -61,7 +59,6 @@ import {
 } from '@/features/workspace/components/workspace-sidebar/workspace-sidebar'
 import {
   WorkspaceSidebarTabs,
-  type WorkspaceSidebarTab,
 } from '@/features/workspace/components/workspace-sidebar-tabs/workspace-sidebar-tabs'
 import { NewProjectDialog } from '@/features/workspace/components/new-project-dialog/new-project-dialog'
 import { ProjectBootstrap } from '@/features/workspace/components/project-bootstrap/project-bootstrap'
@@ -107,35 +104,9 @@ import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-fi
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
 import { useSettingsStore, type AppLayoutPreference, type AppTheme } from '@/hooks/use-settings-store'
 import { useDevToolsFocusSettlement } from '@/hooks/use-devtools-focus-settlement'
-import {
-  readStoredLayoutBoolean,
-  readStoredLayoutNumber,
-  readStoredLeftSidebarTab,
-} from '@/features/persistence/renderer-state'
 import { HtmlPreview } from '@/features/editor/components/html-preview'
-import {
-  AGENT_CHAT_MIN_WIDTH,
-  AGENT_EDITOR_MIN_WIDTH,
-  COMPACT_LAYOUT_BREAKPOINT,
-  clampAgentChatWidth,
-  clampEditorRightSidebarWidth,
-  clampLeftSidebarWidth,
-  deriveLayoutMode,
-  deriveShellPlatform,
-  EDITOR_MAIN_MIN_WIDTH,
-  EDITOR_RIGHT_SIDEBAR_MAX_WIDTH,
-  EDITOR_RIGHT_SIDEBAR_MIN_WIDTH,
-  FULL_LAYOUT_BREAKPOINT,
-  getShellChromeVars,
-  getShellChromeOverlayState,
-  LEFT_SIDEBAR_MAX_WIDTH,
-  LEFT_SIDEBAR_MIN_WIDTH,
-  RIGHT_DRAWER_MAX_WIDTH,
-  resolveAgentLayoutWidths,
-  SIDEBAR_RESIZE_END_EVENT,
-  type LayoutMode,
-  type ShellPlatform,
-} from '@/features/layout/shell-layout'
+import { useShellLayoutController } from '@/features/layout/hooks/use-shell-layout-controller'
+import { getShellChromeOverlayState } from '@/features/layout/shell-layout'
 import './App.css'
 
 const CodeEditor = lazy(async () => {
@@ -208,48 +179,9 @@ function resolveAppTheme(theme: AppTheme): ResolvedAppTheme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
-const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
-const DEFAULT_GIT_PANEL_HEIGHT = 292
-const MIN_GIT_PANEL_HEIGHT = 200
-const DRAWER_INTERACTION_REFRESH_STABLE_FRAMES = 2
-const DRAWER_INTERACTION_REFRESH_MAX_FRAMES = 36
-const SIDEBAR_LAYOUT_TRANSITION_FALLBACK_MS = 1000
-const SIDEBAR_LAYOUT_TRANSITION_TARGET_SELECTOR = [
-  '.titlebar-spacer',
-  '.left-chrome-actions',
-  '.panel-sidebar',
-  '.panel-agent:not(.panel-agent-drawer)',
-  '.panel-sidebar > .workspace-sidebar-surface',
-  '.panel-agent:not(.panel-agent-drawer) > .agent-shell',
-  '.panel-agent:not(.panel-agent-drawer) > .editor-frame',
-  '.panel-resize-slot',
-  '.file-tabs-shell',
-  '.agent-threadbar',
-].join(',')
 const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
 
-type ResizePanel = 'left' | 'right'
-type SidebarResizePreview = {
-  agentChatWidth: number
-  editorRightSidebarWidth: number
-  leftSidebarWidth: number
-}
-type SidebarResizeSession = {
-  left: number
-  right: number
-  width: number
-}
 type WorkspaceTreeFileClickMode = 'open-tab' | 'replace-active-tab'
-type DrawerDragRegion = {
-  height: number
-  left: number
-  top: number
-  width: number
-}
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max)
-}
 
 function App() {
   const platform = window.appApi.platform
@@ -374,95 +306,7 @@ function App() {
   const [activeAgentLayoutFixedTab, setActiveAgentLayoutFixedTab] = useState<AgentLayoutFixedTab>('file')
   const [isAgentLayoutFixedTabActive, setIsAgentLayoutFixedTabActive] = useState(false)
   const [isDirectorySidebarOpen, setIsDirectorySidebarOpen] = useState(true)
-
-  const [leftSidebarWidth, setLeftSidebarWidth] = useState(
-    () => readStoredLayoutNumber('leftSidebarWidth', DEFAULT_LEFT_SIDEBAR_WIDTH),
-  )
-  const [editorRightSidebarWidth, setEditorRightSidebarWidth] = useState(
-    () => readStoredLayoutNumber('editorRightSidebarWidth', DEFAULT_RIGHT_SIDEBAR_WIDTH),
-  )
-  const [agentChatWidth, setAgentChatWidth] = useState(
-    () => readStoredLayoutNumber('agentChatWidth', AGENT_CHAT_MIN_WIDTH),
-  )
-  const [gitPanelHeight, setGitPanelHeight] = useState(
-    () => readStoredLayoutNumber('gitPanelHeight', DEFAULT_GIT_PANEL_HEIGHT),
-  )
-  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(
-    () => readStoredLayoutBoolean('leftSidebarCollapsed', false),
-  )
-  const [isEditorRightSidebarCollapsed, setIsEditorRightSidebarCollapsed] = useState(
-    () => readStoredLayoutBoolean('editorRightSidebarCollapsed', false),
-  )
-  const [isAgentRightSidebarCollapsed, setIsAgentRightSidebarCollapsed] = useState(
-    () => readStoredLayoutBoolean('agentRightSidebarCollapsed', false),
-  )
-  const [activeResizePanel, setActiveResizePanel] = useState<ResizePanel | null>(null)
-  const [isGitPanelResizing, setIsGitPanelResizing] = useState(false)
-  const [activeLeftSidebarTab, setActiveLeftSidebarTab] = useState<WorkspaceSidebarTab>(() => readStoredLeftSidebarTab())
-  const [shellWidth, setShellWidth] = useState(() => (
-    typeof window !== 'undefined' ? window.innerWidth : FULL_LAYOUT_BREAKPOINT + 1
-  ))
-  const [isWindowFullScreen, setIsWindowFullScreen] = useState(false)
-  const [isLeftDrawerOpen, setIsLeftDrawerOpen] = useState(false)
-  const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false)
-  const [drawerDragRegion, setDrawerDragRegion] = useState<DrawerDragRegion | null>(null)
-  const appShellRef = useRef<HTMLDivElement | null>(null)
-  const sidebarLayoutTransitionTimerRef = useRef<number | null>(null)
-  const sidebarLayoutTransitionTargetsRef = useRef<HTMLElement[]>([])
-  const resizeSidebarRef = useRef<(panel: ResizePanel, pointerClientX: number) => void>(() => undefined)
-  const finishSidebarResizeRef = useRef<(panel: ResizePanel) => void>(() => undefined)
-  const sidebarResizePreviewRef = useRef<SidebarResizePreview | null>(null)
-  const sidebarResizeSessionRef = useRef<SidebarResizeSession | null>(null)
-  const leftSidebarBodyRef = useRef<HTMLDivElement | null>(null)
-  const leftDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
-  const [leftDrawerOverlayRoot, setLeftDrawerOverlayRoot] = useState<HTMLDivElement | null>(null)
-  const rightDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
-  const [rightDrawerOverlayRoot, setRightDrawerOverlayRoot] = useState<HTMLDivElement | null>(null)
   const meoEditorHostRef = useRef<MeoEditorHostHandle | null>(null)
-  const finishSidebarLayoutTransition = useCallback(() => {
-    if (sidebarLayoutTransitionTimerRef.current !== null) {
-      window.clearTimeout(sidebarLayoutTransitionTimerRef.current)
-      sidebarLayoutTransitionTimerRef.current = null
-    }
-
-    for (const target of sidebarLayoutTransitionTargetsRef.current) {
-      target.removeAttribute('data-sidebar-transition')
-    }
-
-    sidebarLayoutTransitionTargetsRef.current = []
-    appShellRef.current?.removeAttribute('data-sidebar-transition')
-  }, [])
-  const runSidebarLayoutTransition = useCallback((update: () => void) => {
-    const shell = appShellRef.current
-    if (!shell || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      finishSidebarLayoutTransition()
-      update()
-      return
-    }
-
-    finishSidebarLayoutTransition()
-    const transitionTargets = [
-      shell,
-      ...shell.querySelectorAll<HTMLElement>(SIDEBAR_LAYOUT_TRANSITION_TARGET_SELECTOR),
-    ]
-    sidebarLayoutTransitionTargetsRef.current = transitionTargets
-    for (const target of transitionTargets) {
-      target.dataset.sidebarTransition = 'true'
-    }
-
-    update()
-    sidebarLayoutTransitionTimerRef.current = window.setTimeout(() => {
-      finishSidebarLayoutTransition()
-    }, SIDEBAR_LAYOUT_TRANSITION_FALLBACK_MS)
-  }, [finishSidebarLayoutTransition])
-  const handleSidebarLayoutTransitionEnd = useCallback((event: ReactTransitionEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget && event.propertyName === 'grid-template-columns') {
-      finishSidebarLayoutTransition()
-    }
-  }, [finishSidebarLayoutTransition])
-  useEffect(() => {
-    return finishSidebarLayoutTransition
-  }, [finishSidebarLayoutTransition])
   const activeTabId = useWorkspaceStore((state) => state.activeTabId)
   const closeTab = useWorkspaceStore((state) => state.closeTab)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
@@ -482,8 +326,7 @@ function App() {
   } = useWorkspaceFileSystemState(currentPath)
   const appLayoutPreference: AppLayoutPreference = layoutPreference
   const isAgentLayout = appLayoutPreference === 'agent'
-  const isRightSidebarCollapsed = isAgentLayout ? isAgentRightSidebarCollapsed : isEditorRightSidebarCollapsed
-  const setIsRightSidebarCollapsed = isAgentLayout ? setIsAgentRightSidebarCollapsed : setIsEditorRightSidebarCollapsed
+  const shouldExposeAgentWorkspaceTools = !isAgentLayout || Boolean(currentPath)
   const {
     activeDiffDraftContent,
     activeDiffHasDirtyRelatedFileTab,
@@ -567,39 +410,6 @@ function App() {
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
     : '选择工作目录'
-  const shellPlatform: ShellPlatform = deriveShellPlatform(platform)
-  const shellChromeVars = getShellChromeVars(shellPlatform, { isFullScreen: isWindowFullScreen }) as CSSProperties
-  const shouldExposeAgentWorkspaceTools = !isAgentLayout || Boolean(currentPath)
-  const layoutMode: LayoutMode = deriveLayoutMode(shellWidth)
-  const isLeftSidebarDrawer = layoutMode !== 'full'
-  const isRightSidebarDrawer = !isAgentLayout && layoutMode === 'focus'
-  const isRightDrawerFullWidth = shellWidth <= RIGHT_DRAWER_MAX_WIDTH
-  const isLeftSidebarVisible = !isLeftSidebarDrawer && !isLeftSidebarCollapsed
-  const isRightSidebarVisible = !isRightSidebarDrawer && !isRightSidebarCollapsed && shouldExposeAgentWorkspaceTools
-  const sidebarResizePreview = activeResizePanel ? sidebarResizePreviewRef.current : null
-  const renderedLeftSidebarWidth = sidebarResizePreview?.leftSidebarWidth ?? leftSidebarWidth
-  const renderedAgentChatWidth = sidebarResizePreview?.agentChatWidth ?? agentChatWidth
-  const renderedEditorRightSidebarWidth = sidebarResizePreview?.editorRightSidebarWidth ?? editorRightSidebarWidth
-  const effectiveLeftSidebarWidth = isLeftSidebarVisible ? renderedLeftSidebarWidth : 0
-  const agentLayoutWidths = isAgentLayout
-    ? resolveAgentLayoutWidths({
-      agentChatWidth: renderedAgentChatWidth,
-      isEditorVisible: isRightSidebarVisible,
-      leftSidebarWidth: effectiveLeftSidebarWidth,
-      shellWidth,
-    })
-    : null
-  const effectiveAgentChatWidth = agentLayoutWidths?.chatWidth ?? 0
-  const effectiveAgentChatTrackWidth = agentLayoutWidths?.chatTrackWidth ?? 0
-  const effectiveAgentEditorTrackWidth = agentLayoutWidths?.editorTrackWidth ?? 0
-  const effectiveRightSidebarWidth = isRightSidebarVisible
-    ? (isAgentLayout
-      ? effectiveAgentEditorTrackWidth
-      : renderedEditorRightSidebarWidth)
-    : 0
-  const rightSidebarWidthReservedForLeftClamp = isAgentLayout
-    ? (isRightSidebarVisible ? AGENT_EDITOR_MIN_WIDTH : 0)
-    : effectiveRightSidebarWidth
   const activeTreePath = activeFileTab?.filePath ?? activeDiffTab?.diff.change.path ?? null
   const isDirectorySidebarAvailable = Boolean(
     currentPath
@@ -637,264 +447,6 @@ function App() {
     requestConfirmation: requestConfirm,
     setStatusMessage,
   })
-
-  function getShellWidth() {
-    return appShellRef.current?.clientWidth ?? window.innerWidth
-  }
-
-  function getGitPanelMaxHeight() {
-    if (isAgentLayout) {
-      return 520
-    }
-
-    const containerHeight = leftSidebarBodyRef.current?.clientHeight ?? 0
-    return clamp(containerHeight - 180, MIN_GIT_PANEL_HEIGHT, 520)
-  }
-
-  function clampGitHeight(nextHeight: number) {
-    return clamp(nextHeight, MIN_GIT_PANEL_HEIGHT, getGitPanelMaxHeight())
-  }
-
-  function clampLeftWidth(nextWidth: number, shellWidth: number, currentRightWidth: number) {
-    const centerMinWidth = isAgentLayout && currentRightWidth > 0
-      ? effectiveAgentChatWidth
-      : (isAgentLayout ? AGENT_CHAT_MIN_WIDTH : EDITOR_MAIN_MIN_WIDTH)
-
-    return clampLeftSidebarWidth({
-      centerMinWidth,
-      nextWidth,
-      rightSidebarWidth: currentRightWidth,
-      shellWidth,
-    })
-  }
-
-  function clampEditorRightWidth(nextWidth: number, shellWidth: number, currentLeftWidth: number) {
-    return clampEditorRightSidebarWidth(nextWidth, shellWidth, currentLeftWidth)
-  }
-
-  function applySidebarResizePreview(preview: SidebarResizePreview, session: SidebarResizeSession) {
-    const shell = appShellRef.current
-
-    if (!shell) {
-      return
-    }
-
-    const nextLeftWidth = isLeftSidebarVisible ? preview.leftSidebarWidth : 0
-    shell.style.setProperty('--left-sidebar-width', `${nextLeftWidth}px`)
-    shell.style.setProperty('--left-sidebar-content-width', `${preview.leftSidebarWidth}px`)
-
-    if (isAgentLayout) {
-      const nextAgentLayoutWidths = resolveAgentLayoutWidths({
-        agentChatWidth: preview.agentChatWidth,
-        isEditorVisible: isRightSidebarVisible,
-        leftSidebarWidth: nextLeftWidth,
-        shellWidth: session.width,
-      })
-
-      if (isRightSidebarVisible) {
-        preview.agentChatWidth = nextAgentLayoutWidths.chatWidth
-      }
-
-      shell.style.setProperty('--agent-chat-track-width', `${nextAgentLayoutWidths.chatTrackWidth}px`)
-      shell.style.setProperty('--agent-editor-track-width', `${nextAgentLayoutWidths.editorTrackWidth}px`)
-      shell.style.setProperty('--right-sidebar-width', `${nextAgentLayoutWidths.editorTrackWidth}px`)
-      return
-    }
-
-    const nextRightWidth = isRightSidebarVisible
-      ? clampEditorRightWidth(preview.editorRightSidebarWidth, session.width, nextLeftWidth)
-      : 0
-
-    preview.editorRightSidebarWidth = nextRightWidth
-    shell.style.setProperty('--right-sidebar-content-width', `${nextRightWidth}px`)
-    shell.style.setProperty('--right-sidebar-width', `${nextRightWidth}px`)
-  }
-
-  function notifySidebarResizeEnd() {
-    window.requestAnimationFrame(() => {
-      window.dispatchEvent(new Event(SIDEBAR_RESIZE_END_EVENT))
-    })
-  }
-
-  function resizeSidebar(panel: ResizePanel, pointerClientX: number) {
-    if (
-      (panel === 'left' && !isLeftSidebarVisible)
-      || (panel === 'right' && !isRightSidebarVisible)
-    ) {
-      return
-    }
-
-    const preview = sidebarResizePreviewRef.current
-    const session = sidebarResizeSessionRef.current
-
-    if (!preview || !session) {
-      return
-    }
-
-    if (panel === 'left') {
-      const nextWidth = pointerClientX - session.left
-      preview.leftSidebarWidth = clampLeftWidth(nextWidth, session.width, rightSidebarWidthReservedForLeftClamp)
-      applySidebarResizePreview(preview, session)
-      return
-    }
-
-    if (isAgentLayout) {
-      const nextWidth = pointerClientX - session.left - effectiveLeftSidebarWidth
-      preview.agentChatWidth = clampAgentChatWidth(nextWidth, session.width, effectiveLeftSidebarWidth)
-      applySidebarResizePreview(preview, session)
-      return
-    }
-
-    const nextWidth = session.right - pointerClientX
-    preview.editorRightSidebarWidth = clampEditorRightWidth(nextWidth, session.width, effectiveLeftSidebarWidth)
-    applySidebarResizePreview(preview, session)
-  }
-
-  resizeSidebarRef.current = resizeSidebar
-
-  function finishSidebarResize(panel: ResizePanel) {
-    const preview = sidebarResizePreviewRef.current
-
-    sidebarResizePreviewRef.current = null
-    sidebarResizeSessionRef.current = null
-
-    if (!preview) {
-      setActiveResizePanel(null)
-      return
-    }
-
-    if (panel === 'left') {
-      setLeftSidebarWidth(preview.leftSidebarWidth)
-      if (isAgentLayout) {
-        if (isRightSidebarVisible) {
-          setAgentChatWidth(preview.agentChatWidth)
-        }
-      } else {
-        setEditorRightSidebarWidth(preview.editorRightSidebarWidth)
-      }
-    } else if (isAgentLayout) {
-      setAgentChatWidth(preview.agentChatWidth)
-    } else {
-      setEditorRightSidebarWidth(preview.editorRightSidebarWidth)
-    }
-
-    setActiveResizePanel(null)
-    notifySidebarResizeEnd()
-  }
-
-  finishSidebarResizeRef.current = finishSidebarResize
-
-  function handleResizeKeyDown(panel: ResizePanel, event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.defaultPrevented) {
-      return
-    }
-
-    if (
-      event.key !== 'ArrowLeft'
-      && event.key !== 'ArrowRight'
-      && event.key !== 'Home'
-      && event.key !== 'End'
-    ) {
-      return
-    }
-
-    if (
-      (panel === 'left' && !isLeftSidebarVisible)
-      || (panel === 'right' && !isRightSidebarVisible)
-    ) {
-      return
-    }
-
-    event.preventDefault()
-
-    const resizeStep = event.shiftKey ? 32 : 8
-    const currentShellWidth = getShellWidth()
-
-    if (panel === 'left') {
-      const nextWidth = event.key === 'Home'
-        ? LEFT_SIDEBAR_MIN_WIDTH
-        : event.key === 'End'
-          ? LEFT_SIDEBAR_MAX_WIDTH
-          : renderedLeftSidebarWidth + (event.key === 'ArrowLeft' ? -resizeStep : resizeStep)
-      const nextLeftSidebarWidth = clampLeftWidth(nextWidth, currentShellWidth, rightSidebarWidthReservedForLeftClamp)
-
-      setLeftSidebarWidth(nextLeftSidebarWidth)
-
-      if (isAgentLayout && isRightSidebarVisible) {
-        setAgentChatWidth((currentWidth) => (
-          clampAgentChatWidth(currentWidth, currentShellWidth, isLeftSidebarVisible ? nextLeftSidebarWidth : 0)
-        ))
-      } else if (isRightSidebarVisible) {
-        setEditorRightSidebarWidth((currentWidth) => (
-          clampEditorRightWidth(currentWidth, currentShellWidth, nextLeftSidebarWidth)
-        ))
-      }
-
-      notifySidebarResizeEnd()
-      return
-    }
-
-    if (isAgentLayout) {
-      const nextWidth = event.key === 'Home'
-        ? AGENT_CHAT_MIN_WIDTH
-        : event.key === 'End'
-          ? Number.POSITIVE_INFINITY
-          : effectiveAgentChatWidth + (event.key === 'ArrowLeft' ? -resizeStep : resizeStep)
-
-      setAgentChatWidth(clampAgentChatWidth(nextWidth, currentShellWidth, effectiveLeftSidebarWidth))
-      notifySidebarResizeEnd()
-      return
-    }
-
-    const nextWidth = event.key === 'Home'
-      ? EDITOR_RIGHT_SIDEBAR_MIN_WIDTH
-      : event.key === 'End'
-        ? EDITOR_RIGHT_SIDEBAR_MAX_WIDTH
-        : renderedEditorRightSidebarWidth + (event.key === 'ArrowLeft' ? resizeStep : -resizeStep)
-
-    setEditorRightSidebarWidth(clampEditorRightWidth(nextWidth, currentShellWidth, effectiveLeftSidebarWidth))
-    notifySidebarResizeEnd()
-  }
-
-  function handleResizeStart(panel: ResizePanel) {
-    if (
-      (panel === 'left' && !isLeftSidebarVisible)
-      || (panel === 'right' && !isRightSidebarVisible)
-    ) {
-      return
-    }
-
-    const shell = appShellRef.current
-
-    if (!shell) {
-      return
-    }
-
-    const shellRect = shell.getBoundingClientRect()
-    sidebarResizePreviewRef.current = {
-      agentChatWidth: isRightSidebarVisible ? effectiveAgentChatWidth : agentChatWidth,
-      editorRightSidebarWidth,
-      leftSidebarWidth,
-    }
-    sidebarResizeSessionRef.current = {
-      left: shellRect.left,
-      right: shellRect.right,
-      width: shellRect.width,
-    }
-    setActiveResizePanel(panel)
-  }
-
-  function handleGitPanelResize(pointerClientY: number) {
-    const container = leftSidebarBodyRef.current
-
-    if (!container) {
-      return
-    }
-
-    const rect = container.getBoundingClientRect()
-    const nextHeight = rect.bottom - pointerClientY
-    setGitPanelHeight(clampGitHeight(nextHeight))
-  }
 
   const syncOpenDiffTabs = useCallback(async (workspacePath: string) => {
     if (!isActiveWorkspacePath(workspacePath)) {
@@ -984,6 +536,57 @@ function App() {
     workspacePath: currentPath,
   })
 
+  const {
+    activeLeftSidebarTab,
+    activeResizePanel,
+    appShellRef,
+    closeDrawers,
+    closeLeftDrawer,
+    closeRightDrawer,
+    drawerDragRegion,
+    effectiveAgentChatTrackWidth,
+    effectiveAgentEditorTrackWidth,
+    effectiveLeftSidebarWidth,
+    effectiveRightSidebarWidth,
+    expandAgentEditorSurface,
+    expandCollapsedAssistantSurface,
+    handleLeftDrawerOpenChange,
+    handleResizeKeyDown,
+    handleResizeStart,
+    handleRightDrawerOpenChange,
+    handleSidebarLayoutTransitionEnd,
+    isLeftDrawerOpen,
+    isLeftSidebarDrawer,
+    isLeftSidebarVisible,
+    isRightDrawerFullWidth,
+    isRightDrawerOpen,
+    isRightSidebarDrawer,
+    isRightSidebarVisible,
+    isWindowFullScreen,
+    layoutMode,
+    leftDrawerOverlayRoot,
+    leftDrawerSurfaceRef,
+    leftSidebarResizeBounds,
+    renderedEditorRightSidebarWidth,
+    renderedLeftSidebarWidth,
+    revealEditorAssistantSurface,
+    rightDrawerOverlayRoot,
+    rightDrawerSurfaceRef,
+    rightSidebarResizeBounds,
+    setActiveLeftSidebarTab,
+    setLeftDrawerOverlayRoot,
+    setRightDrawerOverlayRoot,
+    shellChromeVars,
+    shellPlatform,
+    toggleAssistantSurface,
+    toggleWorkspaceSidebar,
+  } = useShellLayoutController({
+    gitPanelLayout,
+    isAgentLayout,
+    platform,
+    shouldExposeRightSidebar: shouldExposeAgentWorkspaceTools,
+  })
+
   const performWorkspaceRefresh = useCallback(async (
     rootPath: string,
     options: Omit<WorkspaceRefreshRequest, 'rootPath'> = {},
@@ -1004,20 +607,6 @@ function App() {
   performWorkspaceRefreshRef.current = async (request) => {
     await performWorkspaceRefresh(request.rootPath, request)
   }
-
-  const expandAgentEditorSurface = useCallback(() => {
-    if (!isAgentLayout) {
-      return
-    }
-
-    setIsAgentRightSidebarCollapsed((currentValue) => {
-      if (!currentValue) {
-        return currentValue
-      }
-
-      return false
-    })
-  }, [isAgentLayout])
 
   const {
     activateFileTab,
@@ -1040,8 +629,8 @@ function App() {
     isRightSidebarDrawer,
     setActiveAgentLayoutFixedTab,
     setIsAgentLayoutFixedTabActive,
-    setIsLeftDrawerOpen,
-    setIsRightDrawerOpen,
+    closeLeftDrawer,
+    closeRightDrawer,
     setStatusMessage,
   })
 
@@ -1536,25 +1125,6 @@ function App() {
   }, [handleRequestWindowClose])
 
   useEffect(() => {
-    let mounted = true
-
-    void window.appApi.isWindowMaximized().then(({ isFullScreen }) => {
-      if (mounted) {
-        setIsWindowFullScreen(isFullScreen)
-      }
-    })
-
-    const unsubscribe = window.appApi.onWindowStateChanged(({ isFullScreen }) => {
-      setIsWindowFullScreen(isFullScreen)
-    })
-
-    return () => {
-      mounted = false
-      unsubscribe()
-    }
-  }, [])
-
-  useEffect(() => {
     return () => {
       void window.appApi.stopWorkspaceWatch()
     }
@@ -1582,255 +1152,6 @@ function App() {
   }, [activeProject, isShortcutBlockingLayerOpen, platform])
 
   useWorkspaceTabPersistence(currentPath, activeTabId, openTabs)
-
-  useEffect(() => {
-    if (!activeResizePanel) {
-      return
-    }
-
-    const resizePanel = activeResizePanel
-    let animationFrameId: number | null = null
-    let latestPointerClientX: number | null = null
-
-    function applyLatestPointerPosition() {
-      if (latestPointerClientX === null) {
-        return
-      }
-
-      const pointerClientX = latestPointerClientX
-      latestPointerClientX = null
-      resizeSidebarRef.current(resizePanel, pointerClientX)
-    }
-
-    function handlePointerMove(event: PointerEvent) {
-      latestPointerClientX = event.clientX
-
-      if (animationFrameId !== null) {
-        return
-      }
-
-      animationFrameId = window.requestAnimationFrame(() => {
-        animationFrameId = null
-        applyLatestPointerPosition()
-      })
-    }
-
-    function stopResizing(event: PointerEvent) {
-      if (event.type === 'pointerup') {
-        latestPointerClientX = event.clientX
-      }
-
-      if (animationFrameId !== null) {
-        window.cancelAnimationFrame(animationFrameId)
-        animationFrameId = null
-      }
-
-      applyLatestPointerPosition()
-      finishSidebarResizeRef.current(resizePanel)
-    }
-
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', stopResizing)
-    window.addEventListener('pointercancel', stopResizing)
-
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-
-    return () => {
-      if (animationFrameId !== null) {
-        window.cancelAnimationFrame(animationFrameId)
-      }
-
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', stopResizing)
-      window.removeEventListener('pointercancel', stopResizing)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [activeResizePanel])
-
-  useEffect(() => {
-    if (!isGitPanelResizing) {
-      return
-    }
-
-    function handlePointerMove(event: PointerEvent) {
-      handleGitPanelResize(event.clientY)
-    }
-
-    function stopResizing() {
-      setIsGitPanelResizing(false)
-    }
-
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', stopResizing)
-    window.addEventListener('pointercancel', stopResizing)
-
-    document.body.style.cursor = 'row-resize'
-    document.body.style.userSelect = 'none'
-
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', stopResizing)
-      window.removeEventListener('pointercancel', stopResizing)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [isGitPanelResizing])
-
-  useEffect(() => {
-    if (activeResizePanel || isGitPanelResizing) {
-      finishSidebarLayoutTransition()
-    }
-  }, [activeResizePanel, finishSidebarLayoutTransition, isGitPanelResizing])
-
-  useEffect(() => {
-    let syncFrameId: number | null = null
-
-    function syncShellWidth() {
-      const nextShellWidth = getShellWidth()
-      setShellWidth((currentWidth) => (
-        currentWidth === nextShellWidth ? currentWidth : nextShellWidth
-      ))
-    }
-
-    function scheduleShellWidthSync() {
-      finishSidebarLayoutTransition()
-
-      if (syncFrameId !== null) {
-        return
-      }
-
-      syncFrameId = window.requestAnimationFrame(() => {
-        syncFrameId = null
-        syncShellWidth()
-      })
-    }
-
-    syncShellWidth()
-
-    const shell = appShellRef.current
-    const resizeObserver = typeof ResizeObserver !== 'undefined' && shell
-      ? new ResizeObserver(() => {
-        scheduleShellWidthSync()
-      })
-      : null
-
-    if (shell && resizeObserver) {
-      resizeObserver.observe(shell)
-    }
-
-    window.addEventListener('resize', scheduleShellWidthSync)
-
-    return () => {
-      if (syncFrameId !== null) {
-        window.cancelAnimationFrame(syncFrameId)
-      }
-
-      resizeObserver?.disconnect()
-      window.removeEventListener('resize', scheduleShellWidthSync)
-    }
-  }, [finishSidebarLayoutTransition])
-
-  useEffect(() => {
-    if (activeResizePanel) {
-      return
-    }
-
-    const timeout = window.setTimeout(() => {
-      void window.appApi.updateLayoutState({
-        activeLeftSidebarTab,
-        agentChatWidth,
-        agentRightSidebarCollapsed: isAgentRightSidebarCollapsed,
-        editorRightSidebarCollapsed: isEditorRightSidebarCollapsed,
-        editorRightSidebarWidth,
-        gitPanelHeight,
-        gitPanelLayout,
-        leftSidebarCollapsed: isLeftSidebarCollapsed,
-        leftSidebarWidth,
-      }).catch(() => undefined)
-    }, 180)
-
-    return () => window.clearTimeout(timeout)
-  }, [
-    activeLeftSidebarTab,
-    activeResizePanel,
-    agentChatWidth,
-    editorRightSidebarWidth,
-    gitPanelHeight,
-    gitPanelLayout,
-    isAgentRightSidebarCollapsed,
-    isEditorRightSidebarCollapsed,
-    isLeftSidebarCollapsed,
-    leftSidebarWidth,
-  ])
-
-  useEffect(() => {
-    if (activeResizePanel) {
-      return
-    }
-
-    const nextLeftWidth = clampLeftWidth(leftSidebarWidth, shellWidth, rightSidebarWidthReservedForLeftClamp)
-
-    if (nextLeftWidth !== leftSidebarWidth) {
-      setLeftSidebarWidth(nextLeftWidth)
-    }
-
-    if (isAgentLayout) {
-      if (!isRightSidebarVisible) {
-        return
-      }
-
-      const nextAgentChatWidth = clampAgentChatWidth(
-        agentChatWidth,
-        shellWidth,
-        isLeftSidebarVisible ? nextLeftWidth : 0,
-      )
-
-      if (nextAgentChatWidth !== agentChatWidth) {
-        setAgentChatWidth(nextAgentChatWidth)
-      }
-
-      return
-    }
-
-    if (!isRightSidebarVisible) {
-      return
-    }
-
-    const nextRightWidth = clampEditorRightWidth(
-      editorRightSidebarWidth,
-      shellWidth,
-      isLeftSidebarVisible ? nextLeftWidth : 0,
-    )
-    if (nextRightWidth !== editorRightSidebarWidth) {
-      setEditorRightSidebarWidth(nextRightWidth)
-    }
-  }, [
-    activeResizePanel,
-    agentChatWidth,
-    editorRightSidebarWidth,
-    isAgentLayout,
-    isLeftSidebarVisible,
-    isRightSidebarVisible,
-    leftSidebarWidth,
-    rightSidebarWidthReservedForLeftClamp,
-    shellWidth,
-  ])
-
-  useEffect(() => {
-    setGitPanelHeight((currentValue) => clampGitHeight(currentValue))
-  }, [leftSidebarWidth, isLeftSidebarVisible])
-
-  useEffect(() => {
-    if (!isLeftSidebarDrawer && isLeftDrawerOpen) {
-      setIsLeftDrawerOpen(false)
-    }
-
-    if (!isRightSidebarDrawer && isRightDrawerOpen) {
-      setIsRightDrawerOpen(false)
-    }
-  }, [isLeftDrawerOpen, isLeftSidebarDrawer, isRightDrawerOpen, isRightSidebarDrawer])
 
   useEffect(() => {
     if (!projectMenuMode) {
@@ -1885,52 +1206,11 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeydown)
   }, [closeEditorTab, cycleTabs, displayActiveTabId, handleSaveActiveTab])
 
-  useEffect(() => {
-    if (!isLeftSidebarVisible && activeResizePanel === 'left') {
-      sidebarResizePreviewRef.current = null
-      sidebarResizeSessionRef.current = null
-      setActiveResizePanel(null)
-    }
-
-    if (!isRightSidebarVisible && activeResizePanel === 'right') {
-      sidebarResizePreviewRef.current = null
-      sidebarResizeSessionRef.current = null
-      setActiveResizePanel(null)
-    }
-  }, [activeResizePanel, isLeftSidebarVisible, isRightSidebarVisible])
-
   const handleCloseCommandPalette = useCallback(() => setIsCommandPaletteOpen(false), [])
   const handleOpenCommandPaletteFromChrome = useCallback(() => {
-    setIsLeftDrawerOpen(false)
-    setIsRightDrawerOpen(false)
+    closeDrawers()
     setIsCommandPaletteOpen(true)
-  }, [])
-  const handleLeftDrawerOpenChange = useCallback((isOpen: boolean) => {
-    if (isOpen) {
-      setIsRightDrawerOpen(false)
-    }
-
-    setIsLeftDrawerOpen(isOpen)
-  }, [])
-  const handleRightDrawerOpenChange = useCallback((isOpen: boolean) => {
-    if (isOpen) {
-      setIsLeftDrawerOpen(false)
-    }
-
-    setIsRightDrawerOpen(isOpen)
-  }, [])
-  const revealEditorAssistantSurface = useCallback(() => {
-    if (isAgentLayout) {
-      return
-    }
-
-    if (isRightSidebarDrawer) {
-      handleRightDrawerOpenChange(true)
-      return
-    }
-
-    setIsEditorRightSidebarCollapsed(false)
-  }, [handleRightDrawerOpenChange, isAgentLayout, isRightSidebarDrawer])
+  }, [closeDrawers])
   const handleOpenSession = useCallback((sessionPath: string) => {
     if (queueCurrentProjectSession(
       sessionPath,
@@ -1939,278 +1219,6 @@ function App() {
       revealEditorAssistantSurface()
     }
   }, [agentWorkspaceState?.runtime.agentId, queueCurrentProjectSession, revealEditorAssistantSurface])
-  useEffect(() => {
-    const openDrawerSide = isLeftDrawerOpen ? 'left' : isRightDrawerOpen ? 'right' : null
-
-    if (!openDrawerSide) {
-      return
-    }
-
-    let cancelled = false
-    let rafId = 0
-    let frameCount = 0
-    let stableFrameCount = 0
-    let previousRectSignature = ''
-
-    // Fixed chrome elements sit outside the drawer tree, so we invalidate once
-    // immediately when the drawer mounts. That keeps the top controls clickable
-    // while the slide animation is still in flight.
-    void window.appApi.refreshWindowInteractionRegions('soft').catch(() => {})
-
-    const getDrawerSurface = () => (
-      openDrawerSide === 'left'
-        ? leftDrawerSurfaceRef.current
-        : rightDrawerSurfaceRef.current
-    )
-
-    const tick = () => {
-      if (cancelled) {
-        return
-      }
-
-      frameCount += 1
-
-      const drawerSurface = getDrawerSurface()
-      if (!drawerSurface) {
-        if (frameCount < DRAWER_INTERACTION_REFRESH_MAX_FRAMES) {
-          rafId = window.requestAnimationFrame(tick)
-        }
-        return
-      }
-
-      const rect = drawerSurface.getBoundingClientRect()
-      const rectSignature = [
-        Math.round(rect.x * 10) / 10,
-        Math.round(rect.y * 10) / 10,
-        Math.round(rect.width * 10) / 10,
-        Math.round(rect.height * 10) / 10,
-      ].join(':')
-
-      stableFrameCount = rectSignature === previousRectSignature ? stableFrameCount + 1 : 0
-      previousRectSignature = rectSignature
-
-      if (
-        stableFrameCount >= DRAWER_INTERACTION_REFRESH_STABLE_FRAMES
-        || frameCount >= DRAWER_INTERACTION_REFRESH_MAX_FRAMES
-      ) {
-        // Electron frameless hit-testing can lag behind drawer transforms until the
-        // animated bounds settle. Refreshing once here preserves clickability without
-        // nudging the window during the active slide animation.
-        void window.appApi.refreshWindowInteractionRegions('hard').catch(() => {})
-        return
-      }
-
-      rafId = window.requestAnimationFrame(tick)
-    }
-
-    rafId = window.requestAnimationFrame(tick)
-
-    return () => {
-      cancelled = true
-      window.cancelAnimationFrame(rafId)
-    }
-  }, [isLeftDrawerOpen, isRightDrawerOpen])
-
-  useEffect(() => {
-    const hasDrawerDragTarget = (isLeftDrawerOpen && isLeftSidebarDrawer)
-      || (isRightDrawerOpen && isRightSidebarDrawer)
-
-    if (!hasDrawerDragTarget) {
-      setDrawerDragRegion(null)
-      return
-    }
-
-    let cancelled = false
-    let rafId = 0
-    let frameCount = 0
-    let stableFrameCount = 0
-    let previousRectSignature = ''
-    let resizeObserver: ResizeObserver | null = null
-    let observedDragSpacer: HTMLElement | null = null
-
-    const publishDragRegion = (rect: DOMRect) => {
-      setDrawerDragRegion((currentRegion) => {
-        const nextRegion = {
-          height: Math.round(rect.height),
-          left: Math.round(rect.left),
-          top: Math.round(rect.top),
-          width: Math.round(rect.width),
-        }
-
-        if (
-          currentRegion
-          && currentRegion.height === nextRegion.height
-          && currentRegion.left === nextRegion.left
-          && currentRegion.top === nextRegion.top
-          && currentRegion.width === nextRegion.width
-        ) {
-          return currentRegion
-        }
-
-        return nextRegion
-      })
-    }
-
-    const resolveDragSpacer = () => {
-      if (isLeftDrawerOpen && isLeftSidebarDrawer) {
-        return leftDrawerSurfaceRef.current?.querySelector<HTMLElement>('.section-title-drag-spacer') ?? null
-      }
-
-      if (isRightDrawerOpen && isRightSidebarDrawer) {
-        return rightDrawerSurfaceRef.current?.querySelector<HTMLElement>('.agent-threadbar-drag-spacer, .file-tabs-drag-spacer') ?? null
-      }
-
-      return null
-    }
-
-    const syncResizeObserver = (dragSpacer: HTMLElement) => {
-      if (typeof ResizeObserver === 'undefined' || observedDragSpacer === dragSpacer) {
-        return
-      }
-
-      resizeObserver?.disconnect()
-      resizeObserver = new ResizeObserver(() => {
-        publishDragRegion(dragSpacer.getBoundingClientRect())
-      })
-      resizeObserver.observe(dragSpacer)
-      observedDragSpacer = dragSpacer
-    }
-
-    const tick = () => {
-      if (cancelled) {
-        return
-      }
-
-      frameCount += 1
-
-      const dragSpacer = resolveDragSpacer()
-      if (!dragSpacer) {
-        if (frameCount < DRAWER_INTERACTION_REFRESH_MAX_FRAMES) {
-          rafId = window.requestAnimationFrame(tick)
-        }
-        return
-      }
-
-      const rect = dragSpacer.getBoundingClientRect()
-      if (rect.width <= 0 || rect.height <= 0) {
-        if (frameCount < DRAWER_INTERACTION_REFRESH_MAX_FRAMES) {
-          rafId = window.requestAnimationFrame(tick)
-        }
-        return
-      }
-
-      publishDragRegion(rect)
-      syncResizeObserver(dragSpacer)
-
-      const rectSignature = [
-        Math.round(rect.x * 10) / 10,
-        Math.round(rect.y * 10) / 10,
-        Math.round(rect.width * 10) / 10,
-        Math.round(rect.height * 10) / 10,
-      ].join(':')
-
-      stableFrameCount = rectSignature === previousRectSignature ? stableFrameCount + 1 : 0
-      previousRectSignature = rectSignature
-
-      if (
-        stableFrameCount >= DRAWER_INTERACTION_REFRESH_STABLE_FRAMES
-        || frameCount >= DRAWER_INTERACTION_REFRESH_MAX_FRAMES
-      ) {
-        return
-      }
-
-      rafId = window.requestAnimationFrame(tick)
-    }
-
-    rafId = window.requestAnimationFrame(tick)
-
-    return () => {
-      cancelled = true
-      window.cancelAnimationFrame(rafId)
-      resizeObserver?.disconnect()
-    }
-  }, [isLeftDrawerOpen, isLeftSidebarDrawer, isRightDrawerOpen, isRightSidebarDrawer, shellWidth])
-
-  useEffect(() => {
-    if (!isLeftDrawerOpen && !isRightDrawerOpen) {
-      return
-    }
-
-    const handleWindowKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.key !== 'Escape') {
-        return
-      }
-
-      if (isRightDrawerOpen) {
-        handleRightDrawerOpenChange(false)
-        return
-      }
-
-      if (isLeftDrawerOpen) {
-        handleLeftDrawerOpenChange(false)
-      }
-    }
-
-    window.addEventListener('keydown', handleWindowKeyDown)
-
-    return () => {
-      window.removeEventListener('keydown', handleWindowKeyDown)
-    }
-  }, [handleLeftDrawerOpenChange, handleRightDrawerOpenChange, isLeftDrawerOpen, isRightDrawerOpen])
-  const toggleAssistantSurface = useCallback(() => {
-    if (isRightSidebarDrawer) {
-      handleRightDrawerOpenChange(!isRightDrawerOpen)
-      return
-    }
-
-    runSidebarLayoutTransition(() => {
-      setIsRightSidebarCollapsed((currentValue) => {
-        if (currentValue && !isAgentLayout) {
-          setEditorRightSidebarWidth(
-            clampEditorRightWidth(editorRightSidebarWidth, getShellWidth(), effectiveLeftSidebarWidth),
-          )
-        }
-
-        return !currentValue
-      })
-    })
-  }, [
-    editorRightSidebarWidth,
-    effectiveLeftSidebarWidth,
-    handleRightDrawerOpenChange,
-    isAgentLayout,
-    isRightDrawerOpen,
-    isRightSidebarDrawer,
-    runSidebarLayoutTransition,
-  ])
-
-  function expandCollapsedAssistantSurface() {
-    if (isRightSidebarDrawer) {
-      handleRightDrawerOpenChange(true)
-      return
-    }
-
-    if (!isRightSidebarCollapsed) {
-      return
-    }
-
-    runSidebarLayoutTransition(() => {
-      setIsRightSidebarCollapsed((currentValue) => {
-        if (!currentValue) {
-          return currentValue
-        }
-
-        if (!isAgentLayout) {
-          setEditorRightSidebarWidth(
-            clampEditorRightWidth(editorRightSidebarWidth, getShellWidth(), effectiveLeftSidebarWidth),
-          )
-        }
-
-        return false
-      })
-    })
-  }
-
   function handleCollapsedAgentFixedTabClick(tab: AgentLayoutFixedTab) {
     expandCollapsedAssistantSurface()
 
@@ -2299,20 +1307,7 @@ function App() {
         aria-label={toggleAriaLabel}
         tooltip={toggleTooltip}
         preventFocusOnPress
-        onClick={() => {
-          if (isLeftSidebarDrawer) {
-            handleLeftDrawerOpenChange(!isLeftDrawerOpen)
-            return
-          }
-
-          runSidebarLayoutTransition(() => {
-            setIsLeftSidebarCollapsed((currentValue) => {
-              const nextCollapsed = !currentValue
-
-              return nextCollapsed
-            })
-          })
-        }}
+        onClick={toggleWorkspaceSidebar}
       >
         <span className='panel-toggle-icon' aria-hidden='true'>
           <LayoutLeftLine size={16} />
@@ -2326,7 +1321,6 @@ function App() {
 
     return (
       <WorkspaceSidebar
-        bodyRef={isDrawerSurface ? undefined : leftSidebarBodyRef}
         chromeStyle={shellChromeVars}
         drawerHeaderActions={isDrawerSurface ? (
           <>
@@ -2349,7 +1343,7 @@ function App() {
           setIsSettingsOpen(true)
 
           if (isDrawerSurface) {
-            setIsLeftDrawerOpen(false)
+            handleLeftDrawerOpenChange(false)
           }
         }}
         onOpenWorkspaceSwitch={(anchorRect) => {
@@ -2367,7 +1361,7 @@ function App() {
             onOpenProjectAddMenu={isDrawerSurface
               ? (anchorRect) => openProjectMenu('agent-add', anchorRect, { surface: 'left-drawer' })
               : undefined}
-            onRequestClose={isDrawerSurface ? () => setIsLeftDrawerOpen(false) : undefined}
+            onRequestClose={isDrawerSurface ? () => handleLeftDrawerOpenChange(false) : undefined}
           />
         ) : renderSidebarWorkspaceTabs({ surfaceMode })}
       </WorkspaceSidebar>
@@ -2672,14 +1666,13 @@ function App() {
       data-left-collapsed={isLeftSidebarDrawer || !isLeftSidebarVisible ? 'true' : 'false'}
       data-left-drawer-open={isLeftDrawerOpen ? 'true' : 'false'}
       data-modal-layer-open={isAppModalLayerOpen ? 'true' : 'false'}
-      data-resizing={activeResizePanel || isGitPanelResizing ? 'true' : 'false'}
+      data-resizing={activeResizePanel ? 'true' : 'false'}
       data-right-collapsed={isRightSidebarDrawer || !isRightSidebarVisible ? 'true' : 'false'}
       data-right-drawer-open={isRightDrawerOpen ? 'true' : 'false'}
       data-window-fullscreen={isWindowFullScreen ? 'true' : 'false'}
       onTransitionEnd={handleSidebarLayoutTransitionEnd}
       style={
         {
-          '--git-panel-height': `${gitPanelHeight}px`,
           '--agent-chat-track-width': `${effectiveAgentChatTrackWidth}px`,
           '--agent-editor-track-width': `${effectiveAgentEditorTrackWidth}px`,
           '--left-sidebar-content-width': `${renderedLeftSidebarWidth}px`,
@@ -2769,9 +1762,9 @@ function App() {
           aria-label='Resize workspace sidebar'
           aria-controls='workspace-sidebar-panel'
           aria-orientation='vertical'
-          aria-valuemin={LEFT_SIDEBAR_MIN_WIDTH}
-          aria-valuemax={Math.round(clampLeftWidth(LEFT_SIDEBAR_MAX_WIDTH, shellWidth, rightSidebarWidthReservedForLeftClamp))}
-          aria-valuenow={Math.round(renderedLeftSidebarWidth)}
+          aria-valuemin={leftSidebarResizeBounds.min}
+          aria-valuemax={leftSidebarResizeBounds.max}
+          aria-valuenow={leftSidebarResizeBounds.value}
           onKeyDown={(event) => handleResizeKeyDown('left', event)}
           onPointerDown={(event) => {
             if (event.button !== 0) {
@@ -2803,11 +1796,9 @@ function App() {
           aria-label={isAgentLayout ? 'Resize Agent chat panel' : 'Resize assistant sidebar'}
           aria-controls={isAgentLayout ? 'editor-main' : 'assistant-sidebar-panel'}
           aria-orientation='vertical'
-          aria-valuemin={isAgentLayout ? AGENT_CHAT_MIN_WIDTH : EDITOR_RIGHT_SIDEBAR_MIN_WIDTH}
-          aria-valuemax={Math.round(isAgentLayout
-            ? clampAgentChatWidth(Number.POSITIVE_INFINITY, shellWidth, effectiveLeftSidebarWidth)
-            : clampEditorRightWidth(EDITOR_RIGHT_SIDEBAR_MAX_WIDTH, shellWidth, effectiveLeftSidebarWidth))}
-          aria-valuenow={Math.round(isAgentLayout ? effectiveAgentChatWidth : renderedEditorRightSidebarWidth)}
+          aria-valuemin={rightSidebarResizeBounds.min}
+          aria-valuemax={rightSidebarResizeBounds.max}
+          aria-valuenow={rightSidebarResizeBounds.value}
           onKeyDown={(event) => handleResizeKeyDown('right', event)}
           onPointerDown={(event) => {
             if (event.button !== 0) {
@@ -3023,7 +2014,7 @@ function App() {
       onRemoveConversation={handleRemoveConversation}
       onOpenProviderSettings={() => {
         if (agentSurfaceMode === 'drawer') {
-          setIsRightDrawerOpen(false)
+          handleRightDrawerOpenChange(false)
         }
 
         setSettingsSection('providers')
