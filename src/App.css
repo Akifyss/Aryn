@@ -5652,8 +5652,7 @@ body.workspace-tree-dragging .tree-item-row {
   gap: 0;
   margin: 0;
   color: var(--foreground-primary);
-  font-size: 20px;
-  font-weight: 550;
+  font-size: 24px;
   line-height: 1.32;
   letter-spacing: 0;
 }
@@ -5697,7 +5696,7 @@ body.workspace-tree-dragging .tree-item-row {
 }
 
 .agent-project-switch-trigger .project-icon {
-  --project-icon-size: 18px;
+  --project-icon-size: 24px;
 }
 
 .agent-project-switch-trigger .agent-project-switch-chevron {
@@ -5763,10 +5762,6 @@ body.workspace-tree-dragging .tree-item-row {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.agent-type-switch-chevron {
-  flex: 0 0 auto;
 }
 
 .agent-type-switch-menu {

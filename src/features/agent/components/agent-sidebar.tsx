@@ -7128,8 +7128,8 @@ function AgentTypeSwitchTrigger() {
   return (
     <Menu.Root
       modal={false}
-      onOpenChange={(open) => {
-        if (open) void refreshAgentCatalog()
+      onOpenChange={() => {
+        void refreshAgentCatalog()
       }}
     >
       <Menu.Trigger
@@ -7138,9 +7138,8 @@ function AgentTypeSwitchTrigger() {
         disabled={isLocked}
         render={<button type='button' />}
       >
-        <AgentBrandIcon agentId={selectedAgentId} className='agent-brand-icon' size={16} />
+        <AgentBrandIcon agentId={selectedAgentId} className='agent-brand-icon' size={24} />
         <span className='agent-type-switch-label'>{selectedDefinition.label}</span>
-        <DownLine aria-hidden='true' className='agent-type-switch-chevron' size={14} />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner align='start' sideOffset={6}>
