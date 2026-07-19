@@ -24,30 +24,30 @@ export const DEFAULT_AGENT_ID: AgentId = 'builtin-pi'
 
 export const AGENT_DEFINITIONS: readonly AgentDefinition[] = [
   {
-    description: 'Aryn 内置的 PI Agent，无需另外安装 CLI',
+    description: 'Aryn 内置 Agent，无需额外安装',
     id: 'builtin-pi',
-    label: '内置 Agent（PI）',
+    label: 'Aryn',
     requiresCli: false,
     transport: 'embedded-sdk',
   },
   {
-    description: '使用电脑上安装并已配置的 PI CLI',
+    description: '使用本机已配置的 PI',
     id: 'pi',
-    label: 'PI CLI',
+    label: 'PI',
     requiresCli: true,
     transport: 'jsonl-rpc',
   },
   {
-    description: '使用电脑上安装并已配置的 OpenCode CLI',
+    description: '使用本机已配置的 OpenCode',
     id: 'opencode',
-    label: 'OpenCode CLI',
+    label: 'OpenCode',
     requiresCli: true,
     transport: 'http-server',
   },
   {
-    description: '使用电脑上安装并已登录的 Codex CLI',
+    description: '使用本机已登录的 Codex',
     id: 'codex',
-    label: 'Codex CLI',
+    label: 'Codex',
     requiresCli: true,
     transport: 'app-server',
   },

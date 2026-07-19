@@ -6448,7 +6448,7 @@ function AgentSessionTreeRow({
       after={error ? <p className='tree-error agent-session-rename-error'>{error}</p> : null}
       icon={agentId ? (
         <TreeItemIcon>
-          <AgentBrandIcon agentId={agentId} className='agent-brand-icon' size={16} />
+          <AgentBrandIcon agentId={agentId} className='agent-brand-icon' size={16} tone='muted' />
         </TreeItemIcon>
       ) : undefined}
       main={rowMain}
@@ -7126,7 +7126,12 @@ function AgentTypeSwitchTrigger() {
   const isLocked = activeWorkspaceContext.kind === 'conversation' || activeSessionSelection.kind === 'session'
 
   return (
-    <Menu.Root modal={false}>
+    <Menu.Root
+      modal={false}
+      onOpenChange={(open) => {
+        if (open) void refreshAgentCatalog()
+      }}
+    >
       <Menu.Trigger
         aria-label={`选择 Agent，当前：${selectedDefinition.label}`}
         className='agent-type-switch-trigger'
@@ -7151,6 +7156,7 @@ function AgentTypeSwitchTrigger() {
                 }]
             ).map((availability) => {
               const isSelected = availability.definition.id === selectedAgentId
+              const optionDescription = availability.available ? null : '需检查配置'
 
               return (
                 <Menu.Item
@@ -7180,34 +7186,16 @@ function AgentTypeSwitchTrigger() {
                     <span className='agent-type-switch-option-title'>
                       {availability.definition.label}
                     </span>
-                    <span className='agent-type-switch-option-description'>
-                      {availability.available
-                        ? availability.version ?? availability.definition.description
-                        : `${availability.reason ?? '当前不可用'} · 请先安装、登录或检查配置`}
-                    </span>
+                    {optionDescription ? (
+                      <span className='agent-type-switch-option-description'>
+                        {optionDescription}
+                      </span>
+                    ) : null}
                   </span>
                   {isSelected ? <CheckLine aria-hidden='true' size={16} /> : null}
                 </Menu.Item>
               )
             })}
-            <div className='agent-type-switch-separator' role='separator' />
-            <Menu.Item
-              nativeButton
-              className={({ highlighted }) => (
-                `agent-type-switch-option${highlighted ? ' is-highlighted' : ''}`
-              )}
-              label='重新检测 Agent'
-              render={<button type='button' />}
-              onClick={() => void refreshAgentCatalog()}
-            >
-              <span className='agent-type-switch-option-icon'>
-                <Icon aria-hidden='true' icon='mingcute:refresh-2-line' width={17} />
-              </span>
-              <span className='agent-type-switch-option-copy'>
-                <span className='agent-type-switch-option-title'>重新检测 Agent</span>
-                <span className='agent-type-switch-option-description'>安装、登录或修改配置后刷新状态</span>
-              </span>
-            </Menu.Item>
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>
@@ -8318,7 +8306,7 @@ function AgentChatSurface() {
   ) : pendingInteraction ? (
     <AgentInteractionPanel request={pendingInteraction} onRespond={respondToInteraction} />
   ) : null
-  const projectSwitchBar = isNewConversation && activeWorkspaceContext.kind !== 'conversation' ? (
+  const projectSwitchBar = isNewConversation ? (
     <div className='agent-new-project-bar'>
       <AgentProjectSwitchTrigger
         activeProject={activeWorkspaceContext.kind === 'project' ? activeProject : null}
@@ -8638,7 +8626,8 @@ function AgentChatSurface() {
         void handleSubmit(event)
       }}
     >
-      <div className={`agent-composer-shell${isNewConversation ? ' has-project-bar' : ''}`}>
+      <div className={`agent-composer-shell${projectSwitchBar ? ' has-project-bar' : ''}`}>
+        {projectSwitchBar}
         <AgentComposerMentionInput
           aria-label={`向 ${getAgentDefinition(selectedAgentId).label} 发送消息`}
           disabled={isOpenCodeChildSession || (!workspacePath && !canUseComposerWithoutWorkspace) || isLoading}
@@ -8657,7 +8646,6 @@ function AgentChatSurface() {
           header={composerHeaderContent}
           footer={composerFooter}
         />
-        {projectSwitchBar}
       </div>
     </form>
   )
