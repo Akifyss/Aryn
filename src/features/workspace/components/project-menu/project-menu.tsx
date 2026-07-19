@@ -20,12 +20,17 @@ import {
   type ProjectMenuAnchorRect,
   type ProjectMenuFrameRect,
   type ProjectMenuMode,
+  type ProjectMenuSurface,
 } from './project-menu-positioning'
 import './styles.css'
 
-export type ProjectMenuSurface = 'global' | 'left-drawer' | 'right-drawer'
 export { serializeProjectMenuAnchorRect } from './project-menu-positioning'
-export type { ProjectMenuAnchorRect, ProjectMenuFrameRect, ProjectMenuMode } from './project-menu-positioning'
+export type {
+  ProjectMenuAnchorRect,
+  ProjectMenuFrameRect,
+  ProjectMenuMode,
+  ProjectMenuSurface,
+} from './project-menu-positioning'
 
 type ProjectMenuProps = {
   activeProjectId: string | null

@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 
 export type ProjectMenuMode = 'agent-add' | 'agent-new-switch' | 'editor-switch'
+export type ProjectMenuSurface = 'global' | 'left-drawer' | 'right-drawer'
 export type ProjectMenuAnchorRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width' | 'height'>
 export type ProjectMenuFrameRect = Pick<DOMRect, 'top' | 'left' | 'width' | 'height'>
 export type ProjectMenuViewport = Pick<ProjectMenuFrameRect, 'width' | 'height'>

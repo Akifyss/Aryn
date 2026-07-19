@@ -5,7 +5,6 @@ import type {
   TransitionEvent as ReactTransitionEvent,
 } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
 import { Tabs as BaseTabs } from '@base-ui/react/tabs'
 import { Button, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
 import {
@@ -24,8 +23,6 @@ import type {
   CreateConversationWorkspaceRequest,
 } from '@/features/conversations/types'
 import type {
-  ProjectRecord,
-  ProjectState,
   WorkspaceIconThemeCatalogOption,
   WorkspaceIconThemeMode,
   WorkspaceIconThemeSelection,
@@ -38,8 +35,7 @@ import {
   AgentProvider,
   AgentSessionTree,
 } from '@/features/agent/components/agent-sidebar'
-import type { AgentProjectSessionRequest } from '@/features/agent/lib/project-session-request'
-import { DEFAULT_AGENT_ID, type AgentId } from '@/features/agent/agent-definition'
+import { DEFAULT_AGENT_ID } from '@/features/agent/agent-definition'
 import type { AgentWorkspaceState } from '@/features/agent/types'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host'
 import { GitPanel } from '@/features/git/components/git-panel/git-panel'
@@ -75,10 +71,7 @@ import { NewProjectDialog } from '@/features/workspace/components/new-project-di
 import { ProjectBootstrap } from '@/features/workspace/components/project-bootstrap/project-bootstrap'
 import {
   ProjectMenu,
-  serializeProjectMenuAnchorRect,
-  type ProjectMenuAnchorRect,
   type ProjectMenuFrameRect,
-  type ProjectMenuMode,
   type ProjectMenuSurface,
 } from '@/features/workspace/components/project-menu/project-menu'
 import type { WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree'
@@ -102,6 +95,7 @@ import { useWorkspaceDocumentNavigation } from '@/features/workspace/hooks/use-w
 import { useWorkspaceDocumentPersistence } from '@/features/workspace/hooks/use-workspace-document-persistence'
 import { useWorkspaceFileOperations } from '@/features/workspace/hooks/use-workspace-file-operations'
 import { useWorkspaceFileSystemState } from '@/features/workspace/hooks/use-workspace-file-system-state'
+import { useWorkspaceProjectController } from '@/features/workspace/hooks/use-workspace-project-controller'
 import { useWorkspaceTabPersistence } from '@/features/workspace/hooks/use-workspace-tab-persistence'
 import { useWorkspaceTabViewState } from '@/features/workspace/hooks/use-workspace-tab-view-state'
 import {
@@ -257,15 +251,6 @@ type DrawerDragRegion = {
   top: number
   width: number
 }
-type ProjectMenuOpenOptions = {
-  surface?: ProjectMenuSurface
-}
-
-const emptyProjectState: ProjectState = {
-  lastProjectId: null,
-  projects: [],
-}
-
 const emptyConversationState: ConversationState = {
   version: 2,
   conversations: [],
@@ -352,18 +337,8 @@ function App() {
     applyTheme(theme)
   }, [theme])
 
-  const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
-  const [projectState, setProjectState] = useState<ProjectState>(emptyProjectState)
   const [conversationState, setConversationState] = useState<ConversationState>(emptyConversationState)
   const [activeWorkspaceContext, setActiveWorkspaceContext] = useState<ActiveWorkspaceContext>(conversationDraftContext)
-  const [projectMenuMode, setProjectMenuMode] = useState<ProjectMenuMode | null>(null)
-  const [projectMenuSurface, setProjectMenuSurface] = useState<ProjectMenuSurface>('global')
-  const [projectMenuAnchorRect, setProjectMenuAnchorRect] = useState<ProjectMenuAnchorRect | null>(null)
-  const [isProjectActionBusy, setIsProjectActionBusy] = useState(false)
-  const [hasLoadedProjectState, setHasLoadedProjectState] = useState(false)
-  const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false)
-  const [shouldStartAgentSessionAfterProjectCreate, setShouldStartAgentSessionAfterProjectCreate] = useState(false)
-  const [pendingAgentProjectSessionRequest, setPendingAgentProjectSessionRequest] = useState<AgentProjectSessionRequest | null>(null)
 
   const [confirmDialogOptions, setConfirmDialogOptions] = useState<{
     isOpen: boolean
@@ -406,7 +381,6 @@ function App() {
   const [iconThemeOptions, setIconThemeOptions] = useState<WorkspaceIconThemeCatalogOption[]>([])
   const iconTheme = useMemo(() => iconThemes[resolvedTheme], [iconThemes, resolvedTheme])
   const [, setStatusMessage] = useState('Open a folder to start.')
-  const [workspaceUnavailableMessage, setWorkspaceUnavailableMessage] = useState<string | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [activeAgentLayoutFixedTab, setActiveAgentLayoutFixedTab] = useState<AgentLayoutFixedTab>('file')
@@ -457,7 +431,6 @@ function App() {
   const rightDrawerSurfaceRef = useRef<HTMLDivElement | null>(null)
   const [rightDrawerOverlayRoot, setRightDrawerOverlayRoot] = useState<HTMLDivElement | null>(null)
   const meoEditorHostRef = useRef<MeoEditorHostHandle | null>(null)
-  const agentProjectSessionRequestIdRef = useRef(0)
   const finishSidebarLayoutTransition = useCallback(() => {
     if (sidebarLayoutTransitionTimerRef.current !== null) {
       window.clearTimeout(sidebarLayoutTransitionTimerRef.current)
@@ -508,8 +481,6 @@ function App() {
   const moveTab = useWorkspaceStore((state) => state.moveTab)
   const openDiffTab = useWorkspaceStore((state) => state.openDiffTab)
   const openTabs = useWorkspaceStore((state) => state.openTabs)
-  const resetOpenTabs = useWorkspaceStore((state) => state.resetOpenTabs)
-  const setCurrentPath = useWorkspaceStore((state) => state.setCurrentPath)
   const setTree = useWorkspaceStore((state) => state.setTree)
   const syncFileTabsWithDisk = useWorkspaceStore((state) => state.syncFileTabsWithDisk)
   const tree = useWorkspaceStore((state) => state.tree)
@@ -608,24 +579,6 @@ function App() {
   const workspaceLabel = currentPath
     ? getBaseName(currentPath)
     : '选择工作目录'
-  const activeProject = useMemo(
-    () => {
-      if (activeWorkspaceContext.kind === 'project') {
-        return projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
-      }
-
-      return currentPath
-        ? projectState.projects.find((project) => normalizeFilePath(project.path) === normalizeFilePath(currentPath)) ?? null
-        : null
-    },
-    [activeWorkspaceContext, currentPath, projectState.projects],
-  )
-  const needsProjectBootstrap = hasLoadedProjectState
-    && !activeProject
-    && activeWorkspaceContext.kind === 'project'
-  const editorWorkspaceSwitchLabel = activeWorkspaceContext.kind === 'project' && activeProject
-    ? activeProject.name
-    : workspaceLabel
   const shellPlatform: ShellPlatform = deriveShellPlatform(platform)
   const shellChromeVars = getShellChromeVars(shellPlatform, { isFullScreen: isWindowFullScreen }) as CSSProperties
   const shouldExposeAgentWorkspaceTools = !isAgentLayout || Boolean(currentPath)
@@ -635,24 +588,6 @@ function App() {
   const isRightDrawerFullWidth = shellWidth <= RIGHT_DRAWER_MAX_WIDTH
   const isLeftSidebarVisible = !isLeftSidebarDrawer && !isLeftSidebarCollapsed
   const isRightSidebarVisible = !isRightSidebarDrawer && !isRightSidebarCollapsed && shouldExposeAgentWorkspaceTools
-  const isProjectMenuOpen = Boolean(projectMenuMode)
-  const isProjectAddMenuOpenForSurface = (surface: ProjectMenuSurface) => (
-    isProjectMenuOpen
-    && projectMenuMode === 'agent-add'
-    && projectMenuSurface === surface
-  )
-  const isGlobalProjectMenuOpen = isProjectMenuOpen && projectMenuSurface === 'global'
-  const isAppModalLayerOpen = isSettingsOpen
-    || isCommandPaletteOpen
-    || isNewProjectDialogOpen
-    || Boolean(confirmDialogOptions?.isOpen)
-    || isGlobalProjectMenuOpen
-  const isShortcutBlockingLayerOpen = isAppModalLayerOpen || isProjectMenuOpen
-  const shellChromeOverlayState = getShellChromeOverlayState({
-    isLeftDrawerOpen,
-    isModalLayerOpen: isAppModalLayerOpen,
-    isRightDrawerOpen,
-  })
   const sidebarResizePreview = activeResizePanel ? sidebarResizePreviewRef.current : null
   const renderedLeftSidebarWidth = sidebarResizePreview?.leftSidebarWidth ?? leftSidebarWidth
   const renderedAgentChatWidth = sidebarResizePreview?.agentChatWidth ?? agentChatWidth
@@ -1146,50 +1081,76 @@ function App() {
     tree,
   })
 
-  async function connectWorkspace(nextPath: string) {
-    if (currentPath && normalizeFilePath(currentPath) === normalizeFilePath(nextPath)) {
-      return
-    }
-
-    await flushWorkspaceAutosave()
-    await flushDiffAutosave()
-    await window.appApi.stopWorkspaceWatch()
-
-    try {
-      await loadTree(nextPath)
-      setWorkspaceUnavailableMessage(null)
-      currentPathRef.current = nextPath
-      setCurrentPath(nextPath)
-      resetOpenTabs()
-      setIsAgentLayoutFixedTabActive(false)
-      prepareGitWorkspace(nextPath)
-      await refreshGitState(nextPath, { silent: false })
-      await window.appApi.startWorkspaceWatch(nextPath)
-      await window.appApi.updateWorkspaceState(nextPath, { markAsLastOpened: true })
-    } catch (error) {
-      await window.appApi.stopWorkspaceWatch().catch(() => undefined)
-      resetWorkspaceSurface({ unavailableMessage: '无法访问当前工作目录。' })
-      throw error
-    }
-  }
-
-  function resetWorkspaceSurface(options: { unavailableMessage?: string | null } = {}) {
-    currentPathRef.current = null
-    setCurrentPath(null)
-    setTree([])
-    resetExpandedPaths()
-    resetOpenTabs()
-    setIsAgentLayoutFixedTabActive(false)
-    resetGitWorkspaceState()
-    setAgentWorkspaceState(null)
-    setPendingAgentProjectSessionRequest(null)
-    setWorkspaceUnavailableMessage(options.unavailableMessage ?? null)
-  }
-
-  async function disconnectWorkspaceSurface(options: { unavailableMessage?: string | null } = {}) {
-    await window.appApi.stopWorkspaceWatch()
-    resetWorkspaceSurface(options)
-  }
+  const {
+    activeProject,
+    addExistingProject: handleAddExistingProject,
+    clearPendingAgentProjectSessionRequest,
+    closeProjectMenu,
+    completeAgentProjectSessionRequest,
+    connectWorkspace,
+    createEmptyProject: handleCreateEmptyProject,
+    disconnectWorkspaceSurface,
+    enterProjectlessConversation,
+    handleNewProjectDialogOpenChange,
+    hydrateProjectState,
+    isNewProjectDialogOpen,
+    isPickingWorkspace,
+    isProjectActionBusy,
+    needsProjectBootstrap,
+    openNewProjectDialog,
+    openProjectMenu,
+    openProjectSession: handleOpenProjectSession,
+    pendingAgentProjectSessionRequest,
+    projectMenuAnchorRect,
+    projectMenuMode,
+    projectMenuSurface,
+    projectState,
+    queueCurrentProjectSession,
+    removeProject: handleRemoveProject,
+    selectProject: handleSelectProject,
+    showProjectInFolder: handleShowProjectInFolder,
+    startProjectSession: handleStartProjectSession,
+    workspaceUnavailableMessage,
+  } = useWorkspaceProjectController({
+    activeWorkspaceContext,
+    confirmDiscardDirtyTabs,
+    currentPathRef,
+    flushDiffAutosave,
+    flushWorkspaceAutosave,
+    isAgentLayout,
+    loadTree,
+    prepareGitWorkspace,
+    refreshGitState,
+    requestConfirmation: requestConfirm,
+    resetExpandedPaths,
+    resetGitWorkspaceState,
+    restoreWorkspaceTabs,
+    setActiveWorkspaceContext,
+    setAgentWorkspaceState,
+    setIsAgentLayoutFixedTabActive,
+    setStatusMessage,
+  })
+  const editorWorkspaceSwitchLabel = activeWorkspaceContext.kind === 'project' && activeProject
+    ? activeProject.name
+    : workspaceLabel
+  const isProjectMenuOpen = Boolean(projectMenuMode)
+  const isProjectAddMenuOpenForSurface = (surface: ProjectMenuSurface) => (
+    isProjectMenuOpen
+    && projectMenuMode === 'agent-add'
+    && projectMenuSurface === surface
+  )
+  const isGlobalProjectMenuOpen = isProjectMenuOpen && projectMenuSurface === 'global'
+  const isAppModalLayerOpen = isSettingsOpen
+    || isCommandPaletteOpen
+    || isNewProjectDialogOpen
+    || Boolean(confirmDialogOptions?.isOpen)
+    || isGlobalProjectMenuOpen
+  const isShortcutBlockingLayerOpen = isAppModalLayerOpen || isProjectMenuOpen
+  const shellChromeOverlayState = getShellChromeOverlayState({
+    isLeftDrawerOpen,
+    isModalLayerOpen: isAppModalLayerOpen,
+    isRightDrawerOpen,
+  })
 
   async function handleRequestWindowClose() {
     if (windowCloseRequestInFlightRef.current) {
@@ -1209,321 +1170,6 @@ function App() {
     }
   }
 
-  async function switchActiveWorkspace(
-    project: ProjectRecord,
-    options: { restoreTabs?: boolean, skipDirtyConfirm?: boolean } = {},
-  ) {
-    if (currentPath && normalizeFilePath(currentPath) === normalizeFilePath(project.path)) {
-      await window.appApi.setActiveProject(project.id)
-      setProjectState(await window.appApi.getProjectState())
-      setActiveWorkspaceContext({ kind: 'project', projectId: project.id })
-      return true
-    }
-
-    if (!options.skipDirtyConfirm && !(await confirmDiscardDirtyTabs('switch-workspace'))) {
-      return false
-    }
-
-    const nextProjectState = await window.appApi.setActiveProject(project.id)
-    setProjectState(nextProjectState)
-    setActiveWorkspaceContext({ kind: 'project', projectId: project.id })
-    await connectWorkspace(project.path)
-
-    if (options.restoreTabs !== false) {
-      await restoreWorkspaceTabs(project.path)
-    }
-
-    return true
-  }
-
-  async function handlePickWorkspace() {
-    if (!(await confirmDiscardDirtyTabs('switch-workspace'))) {
-      return
-    }
-
-    setIsPickingWorkspace(true)
-    try {
-      const nextProjectState = await window.appApi.addExistingProject()
-      if (nextProjectState) {
-        setProjectState(nextProjectState)
-        const nextActiveProject = nextProjectState.projects.find((project) => project.id === nextProjectState.lastProjectId)
-
-        if (nextActiveProject) {
-          await connectWorkspace(nextActiveProject.path)
-          await restoreWorkspaceTabs(nextActiveProject.path, nextActiveProject.lastFilePath)
-          setStatusMessage('项目已打开')
-        }
-      }
-    } finally {
-      setIsPickingWorkspace(false)
-    }
-  }
-
-  function openProjectMenu(
-    mode: ProjectMenuMode,
-    anchorRect?: ProjectMenuAnchorRect,
-    options: ProjectMenuOpenOptions = {},
-  ) {
-    setProjectMenuSurface(options.surface ?? 'global')
-    setProjectMenuAnchorRect(anchorRect ? serializeProjectMenuAnchorRect(anchorRect) : null)
-    setProjectMenuMode(mode)
-  }
-
-  function closeProjectMenu() {
-    setProjectMenuAnchorRect(null)
-    setProjectMenuMode(null)
-    setProjectMenuSurface('global')
-  }
-
-  function openNewProjectDialog() {
-    setShouldStartAgentSessionAfterProjectCreate(shouldStartNewAgentSessionForProjectMenu())
-    setIsNewProjectDialogOpen(true)
-    closeProjectMenu()
-  }
-
-  function handleNewProjectDialogOpenChange(isOpen: boolean) {
-    setIsNewProjectDialogOpen(isOpen)
-    if (!isOpen) {
-      setShouldStartAgentSessionAfterProjectCreate(false)
-    }
-  }
-
-  function shouldStartNewAgentSessionForProjectMenu() {
-    return projectMenuMode === 'agent-new-switch'
-      || (projectMenuMode === 'editor-switch' && !isAgentLayout)
-  }
-
-  async function activateProjectFromState(
-    nextProjectState: ProjectState,
-    options: { restoreTabs?: boolean, startAgentNewSession?: boolean } = {},
-  ) {
-    setProjectState(nextProjectState)
-    const nextActiveProject = nextProjectState.projects.find((project) => project.id === nextProjectState.lastProjectId)
-
-    if (!nextActiveProject) {
-      return false
-    }
-
-    setActiveWorkspaceContext({ kind: 'project', projectId: nextActiveProject.id })
-    let agentSessionRequestId: number | null = null
-
-    if (options.startAgentNewSession) {
-      agentProjectSessionRequestIdRef.current += 1
-      agentSessionRequestId = agentProjectSessionRequestIdRef.current
-      flushSync(() => {
-        setPendingAgentProjectSessionRequest({
-          kind: 'new',
-          projectId: nextActiveProject.id,
-          requestId: agentSessionRequestId!,
-        })
-      })
-    }
-
-    try {
-      await connectWorkspace(nextActiveProject.path)
-
-      if (options.restoreTabs !== false) {
-        await restoreWorkspaceTabs(nextActiveProject.path, nextActiveProject.lastFilePath)
-      }
-
-      return true
-    } catch (error) {
-      if (agentSessionRequestId !== null) {
-        setPendingAgentProjectSessionRequest((currentValue) => (
-          currentValue?.requestId === agentSessionRequestId ? null : currentValue
-        ))
-      }
-      throw error
-    }
-  }
-
-  async function handleCreateEmptyProject(projectName: string) {
-    const trimmedName = projectName.trim()
-
-    if (!trimmedName) {
-      return
-    }
-
-    if (!(await confirmDiscardDirtyTabs('switch-workspace'))) {
-      return
-    }
-
-    setIsProjectActionBusy(true)
-    try {
-      const nextProjectState = await window.appApi.createEmptyProject(trimmedName)
-      await activateProjectFromState(nextProjectState, {
-        startAgentNewSession: shouldStartAgentSessionAfterProjectCreate,
-      })
-      setIsNewProjectDialogOpen(false)
-      setShouldStartAgentSessionAfterProjectCreate(false)
-      setStatusMessage('项目已创建')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to create project.'
-      toast.danger('创建项目失败', { description: message })
-      setStatusMessage(message)
-    } finally {
-      setIsProjectActionBusy(false)
-    }
-  }
-
-  async function handleAddExistingProject() {
-    if (!(await confirmDiscardDirtyTabs('switch-workspace'))) {
-      return
-    }
-
-    setIsProjectActionBusy(true)
-    try {
-      const nextProjectState = await window.appApi.addExistingProject()
-
-      if (!nextProjectState) {
-        return
-      }
-
-      await activateProjectFromState(nextProjectState, {
-        startAgentNewSession: shouldStartNewAgentSessionForProjectMenu(),
-      })
-      closeProjectMenu()
-      setStatusMessage('项目已打开')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to open project.'
-      toast.danger('打开项目失败', { description: message })
-      setStatusMessage(message)
-    } finally {
-      setIsProjectActionBusy(false)
-    }
-  }
-
-  async function handleSelectProject(project: ProjectRecord) {
-    setIsProjectActionBusy(true)
-    try {
-      if (shouldStartNewAgentSessionForProjectMenu()) {
-        const didSwitch = await requestAgentProjectSession(project, { kind: 'new' })
-        if (didSwitch) {
-          closeProjectMenu()
-          setStatusMessage(`${project.name} 已激活`)
-        }
-        return
-      }
-
-      const didSwitch = await switchActiveWorkspace(project)
-      if (didSwitch) {
-        closeProjectMenu()
-        setStatusMessage(`${project.name} 已激活`)
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to switch project.'
-      toast.danger('切换项目失败', { description: message })
-      setStatusMessage(message)
-    } finally {
-      setIsProjectActionBusy(false)
-    }
-  }
-
-  async function handleRemoveProject(project: ProjectRecord) {
-    const confirmed = await requestConfirm({
-      title: '移除项目',
-      message: `要从项目列表移除“${project.name}”吗？\n\n这不会删除本地文件夹。`,
-      confirmLabel: '移除',
-      isDanger: true,
-    })
-
-    if (!confirmed) {
-      return
-    }
-
-    setIsProjectActionBusy(true)
-    try {
-      const wasActive = activeWorkspaceContext.kind === 'project'
-        && activeWorkspaceContext.projectId === project.id
-      const nextProjectState = await window.appApi.removeProject(project.id)
-      setProjectState(nextProjectState)
-
-      if (wasActive) {
-        const nextActiveProject = nextProjectState.projects.find((candidate) => candidate.id === nextProjectState.lastProjectId)
-        if (nextActiveProject) {
-          setActiveWorkspaceContext({ kind: 'project', projectId: nextActiveProject.id })
-          await connectWorkspace(nextActiveProject.path)
-          await restoreWorkspaceTabs(nextActiveProject.path, nextActiveProject.lastFilePath)
-        } else {
-          setActiveWorkspaceContext(conversationDraftContext)
-          await disconnectWorkspaceSurface()
-        }
-      }
-
-      setStatusMessage('项目已移除')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to remove project.'
-      toast.danger('移除项目失败', { description: message })
-      setStatusMessage(message)
-    } finally {
-      setIsProjectActionBusy(false)
-    }
-  }
-
-  async function handleShowProjectInFolder(project: ProjectRecord) {
-    try {
-      await window.appApi.openPath(project.path)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to open project folder.'
-      toast.danger('打开文件夹失败', { description: message })
-      setStatusMessage(message)
-    }
-  }
-
-  async function requestAgentProjectSession(
-    project: ProjectRecord,
-    request: { kind: 'new' } | { agentId: AgentId, kind: 'session', sessionPath: string },
-  ) {
-    agentProjectSessionRequestIdRef.current += 1
-    const requestId = agentProjectSessionRequestIdRef.current
-    const nextRequest = request.kind === 'session'
-      ? {
-          kind: 'session' as const,
-          agentId: request.agentId,
-          projectId: project.id,
-          requestId,
-          sessionPath: request.sessionPath,
-        }
-      : {
-          kind: 'new' as const,
-          projectId: project.id,
-          requestId,
-        }
-
-    flushSync(() => {
-      setPendingAgentProjectSessionRequest(nextRequest)
-    })
-
-    try {
-      const didSwitch = await switchActiveWorkspace(project)
-
-      if (!didSwitch) {
-        setPendingAgentProjectSessionRequest((currentValue) => (
-          currentValue?.requestId === requestId ? null : currentValue
-        ))
-        return false
-      }
-
-      return true
-    } catch (error) {
-      setPendingAgentProjectSessionRequest((currentValue) => (
-        currentValue?.requestId === requestId ? null : currentValue
-      ))
-      const message = error instanceof Error ? error.message : 'Unable to open project conversation.'
-      toast.danger('打开对话失败', { description: message })
-      setStatusMessage(message)
-      return false
-    }
-  }
-
-  async function handleOpenProjectSession(project: ProjectRecord, agentId: AgentId, sessionPath: string) {
-    await requestAgentProjectSession(project, { agentId, kind: 'session', sessionPath })
-  }
-
-  async function handleStartProjectSession(project: ProjectRecord) {
-    await requestAgentProjectSession(project, { kind: 'new' })
-  }
-
   async function handleStartContextualConversation() {
     if (activeProject) {
       await handleStartProjectSession(activeProject)
@@ -1534,19 +1180,7 @@ function App() {
   }
 
   async function handleUseNoProject() {
-    setIsProjectActionBusy(true)
-    try {
-      const didEnterDraft = await enterConversationDraft()
-      if (didEnterDraft) {
-        closeProjectMenu()
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to start a projectless conversation.'
-      toast.danger('进入普通对话失败', { description: message })
-      setStatusMessage(message)
-    } finally {
-      setIsProjectActionBusy(false)
-    }
+    await enterProjectlessConversation(enterConversationDraft)
   }
 
   async function enterConversationDraft(options: { skipDirtyConfirm?: boolean } = {}) {
@@ -1721,7 +1355,7 @@ function App() {
         : false
       await connectWorkspace(targetWorkspacePath)
       await restoreWorkspaceTabs(targetWorkspacePath)
-      setPendingAgentProjectSessionRequest(null)
+      clearPendingAgentProjectSessionRequest()
       setStatusMessage(conversation.title)
 
       if (!sessionExists) {
@@ -2070,10 +1704,9 @@ function App() {
         return
       }
 
-      setProjectState(nextProjectState)
+      hydrateProjectState(nextProjectState)
       setConversationState(nextConversationState)
       setActiveWorkspaceContext(nextActiveContext)
-      setHasLoadedProjectState(true)
       const activeProject = nextActiveContext.kind === 'project'
         ? nextProjectState.projects.find((project) => project.id === nextActiveContext.projectId) ?? null
         : nextProjectState.projects.find((project) => project.id === nextProjectState.lastProjectId) ?? null
@@ -2592,22 +2225,13 @@ function App() {
     setIsEditorRightSidebarCollapsed(false)
   }, [handleRightDrawerOpenChange, isAgentLayout, isRightSidebarDrawer])
   const handleOpenSession = useCallback((sessionPath: string) => {
-    const currentProject = currentPath
-      ? projectState.projects.find((project) => normalizeFilePath(project.path) === normalizeFilePath(currentPath))
-      : null
-
-    if (currentPath && currentProject) {
-      agentProjectSessionRequestIdRef.current += 1
-      setPendingAgentProjectSessionRequest({
-        agentId: agentWorkspaceState?.runtime.agentId ?? DEFAULT_AGENT_ID,
-        kind: 'session',
-        projectId: currentProject.id,
-        requestId: agentProjectSessionRequestIdRef.current,
-        sessionPath,
-      })
+    if (queueCurrentProjectSession(
+      sessionPath,
+      agentWorkspaceState?.runtime.agentId ?? DEFAULT_AGENT_ID,
+    )) {
       revealEditorAssistantSurface()
     }
-  }, [agentWorkspaceState?.runtime.agentId, currentPath, projectState.projects, revealEditorAssistantSurface])
+  }, [agentWorkspaceState?.runtime.agentId, queueCurrentProjectSession, revealEditorAssistantSurface])
   useEffect(() => {
     const openDrawerSide = isLeftDrawerOpen ? 'left' : isRightDrawerOpen ? 'right' : null
 
@@ -3680,11 +3304,7 @@ function App() {
       activeWorkspaceContext={activeWorkspaceContext}
       conversationState={conversationState}
       externalSessionRequest={pendingAgentProjectSessionRequest}
-      onExternalSessionRequestHandled={(requestId) => {
-        setPendingAgentProjectSessionRequest((currentValue) => (
-          currentValue?.requestId === requestId ? null : currentValue
-        ))
-      }}
+      onExternalSessionRequestHandled={completeAgentProjectSessionRequest}
       iconTheme={iconTheme}
       onConversationDraftFailed={handleConversationDraftFailed}
       onConversationSessionStarted={handleConversationSessionStarted}
