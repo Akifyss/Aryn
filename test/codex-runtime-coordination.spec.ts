@@ -16,9 +16,15 @@ type FakeClientInstance = {
 
 const rpcState = vi.hoisted(() => ({
   deleteErrors: [] as Error[],
+  initializeHook: null as ((clientIndex: number) => Promise<void>) | null,
   instances: [] as FakeClientInstance[],
+  listHook: null as (() => Promise<void>) | null,
   onResume: null as ((threadId: string) => void) | null,
+  readHook: null as ((threadId: string) => Promise<void>) | null,
   resumeGates: new Map<string, Promise<void>>(),
+  startHook: null as ((startIndex: number) => Promise<void>) | null,
+  startThreadIds: [] as string[],
+  starts: 0,
   threads: new Map<string, Thread>(),
   unsubscribeErrors: [] as Error[],
 }))
@@ -71,13 +77,36 @@ vi.mock('../electron/main/codex-rpc-client', () => ({
 
     async request(method: string, params: Record<string, unknown>) {
       this.requests.push({ method, params })
-      if (method === 'initialize') return {}
+      if (method === 'initialize') {
+        await rpcState.initializeHook?.(rpcState.instances.indexOf(this))
+        return {}
+      }
       if (method === 'account/read') return { account: null, requiresOpenaiAuth: false }
       if (method === 'model/list') return { data: [], nextCursor: null }
       if (method === 'thread/list') {
+        await rpcState.listHook?.()
         return {
           data: [...rpcState.threads.values()].filter((thread) => thread.cwd === params.cwd),
           nextCursor: null,
+        }
+      }
+      if (method === 'thread/start') {
+        const startIndex = rpcState.starts
+        rpcState.starts += 1
+        await rpcState.startHook?.(startIndex)
+        const id = rpcState.startThreadIds[startIndex] ?? `created-thread-${startIndex + 1}`
+        const created = thread(String(params.cwd), id)
+        return {
+          approvalPolicy: 'on-request',
+          approvalsReviewer: 'user',
+          cwd: created.cwd,
+          instructionSources: [],
+          model: 'gpt-test',
+          modelProvider: 'openai',
+          reasoningEffort: 'medium',
+          sandbox: { type: 'workspaceWrite' },
+          serviceTier: null,
+          thread: created,
         }
       }
       if (method === 'thread/resume') {
@@ -100,7 +129,9 @@ vi.mock('../electron/main/codex-rpc-client', () => ({
         }
       }
       if (method === 'thread/read') {
-        const current = rpcState.threads.get(String(params.threadId))
+        const threadId = String(params.threadId)
+        await rpcState.readHook?.(threadId)
+        const current = rpcState.threads.get(threadId)
         if (!current) throw new Error('thread not found')
         return { thread: structuredClone(current) }
       }
@@ -184,9 +215,15 @@ function resumeCount(threadId: string) {
 describe('Codex thread binding coordination', () => {
   beforeEach(() => {
     rpcState.deleteErrors = []
+    rpcState.initializeHook = null
     rpcState.instances = []
+    rpcState.listHook = null
     rpcState.onResume = null
+    rpcState.readHook = null
     rpcState.resumeGates.clear()
+    rpcState.startHook = null
+    rpcState.startThreadIds = []
+    rpcState.starts = 0
     rpcState.threads.clear()
     rpcState.unsubscribeErrors = []
   })
@@ -253,6 +290,155 @@ describe('Codex thread binding coordination', () => {
     }
   })
 
+  it('rolls back a newly created thread when a later creation wins activation', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-create-activation-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const firstStartEntered = deferred()
+    const allowFirstStart = deferred()
+    rpcState.startThreadIds = ['thread-a', 'thread-b']
+    rpcState.startHook = async (startIndex) => {
+      if (startIndex !== 0) return
+      firstStartEntered.resolve()
+      await allowFirstStart.promise
+    }
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+    const internals = manager as unknown as { bindings: Map<string, unknown> }
+
+    try {
+      const earlierCreation = manager.createSession(workspace)
+        .then(() => null, (error: unknown) => error)
+      await firstStartEntered.promise
+      await expect(manager.createSession(workspace)).resolves.toMatchObject({
+        activeSession: expect.objectContaining({ sessionId: 'thread-b' }),
+      })
+      allowFirstStart.resolve()
+
+      await expect(earlierCreation).resolves.toMatchObject({
+        message: expect.stringContaining('activation was superseded'),
+      })
+      await expect(manager.listSessionItems(workspace)).resolves.toEqual([
+        expect.objectContaining({ id: 'thread-b' }),
+      ])
+      expect(internals.bindings.has('thread-a')).toBe(false)
+      expect(internals.bindings.has('thread-b')).toBe(true)
+      expect(rpcState.instances[0]?.requests).toContainEqual({
+        method: 'thread/unsubscribe',
+        params: { threadId: 'thread-a' },
+      })
+    } finally {
+      allowFirstStart.resolve()
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('does not leave an indexed draft when creation is superseded by workspace release', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-create-release-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const startEntered = deferred()
+    const allowStart = deferred()
+    rpcState.startThreadIds = ['thread-created']
+    rpcState.startHook = async () => {
+      startEntered.resolve()
+      await allowStart.promise
+    }
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+
+    try {
+      const creation = manager.createSession(workspace)
+        .then(() => null, (error: unknown) => error)
+      await startEntered.promise
+      const release = manager.releaseWorkspaceRuntime(workspace)
+      allowStart.resolve()
+
+      await expect(creation).resolves.toMatchObject({
+        message: expect.stringContaining('was superseded'),
+      })
+      await expect(release).resolves.toBeUndefined()
+      await expect(manager.sessionExists(workspace, 'thread-created')).resolves.toBe(false)
+      expect(rpcState.instances[0]?.requests).toContainEqual({
+        method: 'thread/unsubscribe',
+        params: { threadId: 'thread-created' },
+      })
+    } finally {
+      allowStart.resolve()
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('does not bind a thread/start result from a disconnected App Server client', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-create-client-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    rpcState.startThreadIds = ['thread-stale']
+    rpcState.startHook = async () => {
+      rpcState.instances[0]!.exit(new Error('client exited after thread/start'))
+    }
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+    const internals = manager as unknown as { bindings: Map<string, unknown> }
+
+    try {
+      await expect(manager.createSession(workspace)).rejects.toThrow('connection was superseded')
+      expect(internals.bindings.has('thread-stale')).toBe(false)
+      await expect(manager.sessionExists(workspace, 'thread-stale')).resolves.toBe(false)
+    } finally {
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('retains ownership after failed rollback cleanup and lets discard retry it', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-create-cleanup-retry-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const startEntered = deferred()
+    const allowStart = deferred()
+    rpcState.startThreadIds = ['thread-owned']
+    rpcState.startHook = async () => {
+      startEntered.resolve()
+      await allowStart.promise
+    }
+    rpcState.unsubscribeErrors.push(new Error('temporary unsubscribe failure'))
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+
+    try {
+      const creation = manager.createSession(workspace)
+        .then(() => null, (error: unknown) => error)
+      await startEntered.promise
+      const release = manager.releaseWorkspaceRuntime(workspace)
+      allowStart.resolve()
+      await expect(creation).resolves.toBeInstanceOf(Error)
+      await release
+
+      await expect(manager.sessionExists(workspace, 'thread-owned')).resolves.toBe(true)
+      await expect(manager.discardWorkspaceSessions(workspace)).resolves.toBeUndefined()
+      await expect(manager.sessionExists(workspace, 'thread-owned')).resolves.toBe(false)
+      const unsubscribeRequests = rpcState.instances[0]!.requests.filter((request) => (
+        request.method === 'thread/unsubscribe'
+        && request.params.threadId === 'thread-owned'
+      ))
+      expect(unsubscribeRequests).toHaveLength(2)
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('temporary unsubscribe failure'))
+    } finally {
+      allowStart.resolve()
+      manager.dispose()
+      warning.mockRestore()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
   it('orders deletion behind an in-flight resume and does not resurrect the deleted thread', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-delete-'))
     const workspace = path.join(tempRoot, 'workspace')
@@ -310,6 +496,89 @@ describe('Codex thread binding coordination', () => {
       await expect(manager.sessionExists(workspace, 'thread-a')).resolves.toBe(false)
       expect(resumeCount('thread-a')).toBe(1)
     } finally {
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('cancels a deletion that was still discovering its record when workspace release began', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-delete-release-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    rpcState.threads.set('thread-a', thread(workspace, 'thread-a'))
+    const listEntered = deferred()
+    const allowList = deferred()
+    rpcState.listHook = async () => {
+      listEntered.resolve()
+      await allowList.promise
+    }
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+
+    try {
+      const deletion = manager.deleteSession(workspace, 'thread-a')
+        .then(() => null, (error: unknown) => error)
+      await listEntered.promise
+      await manager.releaseWorkspaceRuntime(workspace)
+      allowList.resolve()
+
+      await expect(deletion).resolves.toMatchObject({
+        message: expect.stringContaining('workspace operation was superseded'),
+      })
+      expect(rpcState.threads.has('thread-a')).toBe(true)
+      expect(rpcState.instances[0]?.requests).not.toContainEqual(expect.objectContaining({
+        method: 'thread/delete',
+      }))
+    } finally {
+      allowList.resolve()
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('does not reinstall a replacement binding after workspace release passes the index-swap point', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-replacement-release-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    rpcState.startThreadIds = ['draft-thread', 'replacement-thread']
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+    const internals = manager as unknown as {
+      bindings: Map<string, unknown>
+      runtimeCoordinator: { retire: (key: string) => Promise<unknown> }
+    }
+    const originalRetire = internals.runtimeCoordinator.retire.bind(internals.runtimeCoordinator)
+    const replacementReachedRetirement = deferred()
+    const allowReplacementRetirement = deferred()
+    internals.runtimeCoordinator.retire = async (key) => {
+      if (key.endsWith('\0draft-thread')) {
+        replacementReachedRetirement.resolve()
+        await allowReplacementRetirement.promise
+      }
+      return originalRetire(key)
+    }
+
+    try {
+      await manager.createSession(workspace)
+      await manager.releaseWorkspaceRuntime(workspace)
+      const opening = manager.openSession(workspace, 'draft-thread')
+        .then(() => null, (error: unknown) => error)
+      await replacementReachedRetirement.promise
+      const release = manager.releaseWorkspaceRuntime(workspace)
+      allowReplacementRetirement.resolve()
+
+      await expect(opening).resolves.toMatchObject({
+        message: expect.stringContaining('workspace operation was superseded'),
+      })
+      await expect(release).resolves.toBeUndefined()
+      expect(internals.bindings.has('replacement-thread')).toBe(false)
+      await expect(manager.listSessionItems(workspace)).resolves.toEqual([
+        expect.objectContaining({ id: 'draft-thread' }),
+      ])
+    } finally {
+      allowReplacementRetirement.resolve()
       manager.dispose()
       await rm(tempRoot, { force: true, recursive: true })
     }
@@ -437,6 +706,79 @@ describe('Codex thread binding coordination', () => {
         request: expect.objectContaining({ id: 'codex:7' }),
       }))
     } finally {
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('does not hydrate stale thread/read data after its App Server client exits', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-read-exit-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    rpcState.threads.set('thread-a', thread(workspace, 'thread-a'))
+    const readEntered = deferred()
+    const allowRead = deferred()
+    rpcState.readHook = async (threadId) => {
+      if (threadId !== 'thread-a') return
+      readEntered.resolve()
+      await allowRead.promise
+    }
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+    const internals = manager as unknown as {
+      bindings: Map<string, unknown>
+      sessionStore: { get: (threadId: string) => unknown }
+    }
+
+    try {
+      await manager.openSession(workspace, 'thread-a')
+      const reading = manager.readSession(workspace, 'thread-a')
+        .then(() => null, (error: unknown) => error)
+      await readEntered.promise
+      rpcState.instances[0]!.exit(new Error('connection lost during read'))
+      allowRead.resolve()
+
+      await expect(reading).resolves.toMatchObject({
+        message: expect.stringContaining('binding was superseded'),
+      })
+      expect(internals.bindings.has('thread-a')).toBe(false)
+      expect(internals.sessionStore.get('thread-a')).toBeNull()
+    } finally {
+      allowRead.resolve()
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('does not let a rejected old initialization clear a newer App Server client', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-client-race-'))
+    const firstInitializeEntered = deferred()
+    const allowFirstInitialize = deferred()
+    rpcState.initializeHook = async (clientIndex) => {
+      if (clientIndex !== 0) return
+      firstInitializeEntered.resolve()
+      await allowFirstInitialize.promise
+      throw new Error('old initialization failed')
+    }
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+
+    try {
+      const firstLoad = manager.loadDraftState().then(() => null, (error: unknown) => error)
+      await firstInitializeEntered.promise
+      rpcState.instances[0]!.exit(new Error('old client exited'))
+      await expect(manager.loadDraftState()).resolves.toMatchObject({ activeSession: null })
+      expect(rpcState.instances).toHaveLength(2)
+
+      allowFirstInitialize.resolve()
+      await expect(firstLoad).resolves.toMatchObject({ message: 'old initialization failed' })
+      await expect(manager.loadDraftState()).resolves.toMatchObject({ activeSession: null })
+      expect(rpcState.instances).toHaveLength(2)
+    } finally {
+      allowFirstInitialize.resolve()
       manager.dispose()
       await rm(tempRoot, { force: true, recursive: true })
     }

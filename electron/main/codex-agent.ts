@@ -109,6 +109,11 @@ type WorkspaceStateContext = {
   workspaceOperation?: WorkspaceOperation
 }
 
+type CodexRecordReplacement = {
+  promise: Promise<CodexThreadRecord>
+  workspaceIdentity: string
+}
+
 const DEFAULT_INDEX: CodexThreadIndex = { threads: [], version: 1 }
 const THINKING_LEVELS: AgentThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
 const SNAPSHOT_COALESCE_MS = 16
@@ -198,6 +203,11 @@ function normalizeIndex(value: unknown): CodexThreadIndex {
 function isTransientThreadReadError(message: string) {
   return message.includes('is not materialized yet')
     || (message.includes('failed to load rollout') && message.includes('is empty'))
+}
+
+function isMissingNativeThreadError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes('no rollout found') || message.includes('not found')
 }
 
 function isServiceTierCompatibilityError(error: unknown) {
@@ -294,11 +304,12 @@ export class CodexAgentManager {
   private readonly bindings = new Map<string, CodexBinding>()
   private client: CodexRpcClient | null = null
   private clientPromise: Promise<CodexRpcClient> | null = null
+  private clientStartRevision = 0
   private disposed = false
   private readonly index: AtomicJsonStore<CodexThreadIndex>
   private models: Model[] = []
   private readonly pendingInteractions = new Map<string, PendingCodexInteraction>()
-  private readonly recordReplacements = new Map<string, Promise<CodexThreadRecord>>()
+  private readonly recordReplacements = new Map<string, CodexRecordReplacement>()
   private readonly runtimeCoordinator: SessionRuntimeCoordinator<CodexBinding>
   private serviceTierCompatibilityOverride = false
   private readonly snapshotTimers = new Map<string, NodeJS.Timeout>()
@@ -308,6 +319,10 @@ export class CodexAgentManager {
   // older asynchronous snapshot that completes after a newer one.
   private readonly workspaceActivations = new Map<string, WorkspaceActivationState>()
   private readonly workspaceActiveThreads = new Map<string, string>()
+  // thread/start has no coordinator key until Codex returns an id. Teardown
+  // waits on these counters so a late creation cannot outlive the workspace.
+  private readonly workspaceCreationCounts = new Map<string, number>()
+  private readonly workspaceCreationWaiters = new Map<string, Set<() => void>>()
   private readonly workspaceOperationRevisions = new Map<string, number>()
   private readonly workspaceStateRevisions = new Map<string, number>()
   private readonly workspaceTeardownCounts = new Map<string, number>()
@@ -441,6 +456,13 @@ export class CodexAgentManager {
   }
 
   async createSession(cwd: string, options?: string | AgentSessionCreateOptions) {
+    return this.withWorkspaceCreation(
+      workspaceIdentity(cwd),
+      () => this.createSessionInside(cwd, options),
+    )
+  }
+
+  private async createSessionInside(cwd: string, options?: string | AgentSessionCreateOptions) {
     const workspaceOperation = this.captureWorkspaceOperation(cwd)
     this.requireWorkspaceOperationCurrent(workspaceOperation)
     const activation = this.beginWorkspaceActivation(cwd)
@@ -473,48 +495,65 @@ export class CodexAgentManager {
       reasoningEffort: effort,
       updatedAt: now,
     }
-    const activationTargetAccepted = this.setWorkspaceActivationTarget(activation, record.id)
-    this.sessionStore.install(result.thread)
+    let indexed = false
     try {
-      await this.index.update((state) => ({ ...state, threads: [record, ...state.threads] }))
-    } catch (error) {
-      this.sessionStore.delete(record.id)
-      await client.request('thread/unsubscribe', { threadId: record.id }).catch((unsubscribeError) => {
-        console.warn(`[codex app-server] Failed to unsubscribe a thread after its ownership index update failed: ${unsubscribeError instanceof Error ? unsubscribeError.message : String(unsubscribeError)}`)
-      })
-      throw error
-    }
-    if (!this.isWorkspaceOperationCurrent(workspaceOperation)) {
-      this.sessionStore.delete(record.id)
-      await client.request('thread/unsubscribe', { threadId: record.id }).catch((error) => {
-        console.warn(`[codex app-server] Failed to unsubscribe a superseded new thread: ${error instanceof Error ? error.message : String(error)}`)
-      })
-      throw new Error('Codex workspace operation was superseded.')
-    }
-    await this.installBinding(record, result.thread.status.type === 'active')
-    if (!activationTargetAccepted || !this.isWorkspaceActivationCurrent(activation)) {
-      throw new Error('Codex workspace activation was superseded.')
-    }
-    let sourceLease!: SessionRuntimeLease
-    const state = await this.withBinding(cwd, record.id, async (binding) => {
-      sourceLease = binding.lease
-      this.requireWorkspaceOperationCurrent(workspaceOperation)
-      const nextState = await this.buildWorkspaceState(cwd, record.id, binding, () => (
-        this.isWorkspaceOperationCurrent(workspaceOperation)
-        && this.isWorkspaceActivationCurrent(activation)
-        && binding.lease.isCurrent()
-      ))
-      if (!this.commitWorkspaceActivation(activation, record.id)) {
+      if (!this.setWorkspaceActivationTarget(activation, record.id)) {
         throw new Error('Codex workspace activation was superseded.')
       }
-      return nextState
-    }, workspaceOperation)
-    return this.broadcastWorkspaceState(cwd, record.id, {
-      activation,
-      sourceLease,
-      state,
-      workspaceOperation,
-    })
+      this.requireWorkspaceOperationCurrent(workspaceOperation)
+      this.sessionStore.install(result.thread)
+      await this.index.update((state) => ({ ...state, threads: [record, ...state.threads] }))
+      indexed = true
+      this.requireWorkspaceOperationCurrent(workspaceOperation)
+      await this.installBinding(record, result.thread.status.type === 'active', client)
+      if (!this.isWorkspaceActivationCurrent(activation)) {
+        throw new Error('Codex workspace activation was superseded.')
+      }
+      let sourceLease!: SessionRuntimeLease
+      const state = await this.withBinding(cwd, record.id, async (binding) => {
+        sourceLease = binding.lease
+        this.requireWorkspaceOperationCurrent(workspaceOperation)
+        const nextState = await this.buildWorkspaceState(cwd, record.id, binding, () => (
+          this.isWorkspaceOperationCurrent(workspaceOperation)
+          && this.isWorkspaceActivationCurrent(activation)
+          && binding.lease.isCurrent()
+        ))
+        if (!this.commitWorkspaceActivation(activation, record.id)) {
+          throw new Error('Codex workspace activation was superseded.')
+        }
+        return nextState
+      }, workspaceOperation)
+      return await this.broadcastWorkspaceState(cwd, record.id, {
+        activation,
+        sourceLease,
+        state,
+        workspaceOperation,
+      })
+    } catch (error) {
+      const identity = workspaceIdentity(cwd)
+      if (this.isWorkspaceActivationCurrent(activation)) {
+        this.invalidateWorkspaceActivation(identity)
+      }
+      if (this.workspaceActiveThreads.get(identity) === record.id) {
+        this.workspaceActiveThreads.delete(identity)
+      }
+      const released = await this.cleanupUncommittedThread(client, record.cwd, record.id, 'failed creation')
+      if (indexed && released) {
+        await this.removeRecord(record.id).catch((cleanupError) => {
+          console.warn(`[codex app-server] Failed to remove a rolled-back thread from the ownership index: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
+        })
+      } else if (!indexed && !released) {
+        await this.index.update((state) => ({
+          ...state,
+          threads: state.threads.some((candidate) => candidate.id === record.id)
+            ? state.threads
+            : [record, ...state.threads],
+        })).catch((cleanupError) => {
+          console.warn(`[codex app-server] Failed to retain ownership of a thread whose rollback cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
+        })
+      }
+      throw error
+    }
   }
 
   async openSession(cwd: string, threadId: string) {
@@ -552,16 +591,21 @@ export class CodexAgentManager {
     this.requireWorkspaceOperationCurrent(workspaceOperation)
     const originalThreadId = threadId
     this.invalidateWorkspaceActivationForThread(workspaceIdentity(cwd), originalThreadId)
-    let record = await this.requireRecord(cwd, threadId)
     const replacement = this.recordReplacements.get(threadId)
-    if (replacement) record = await replacement
+    const record = replacement
+      ? await this.requireReplacementWorkspace(replacement, cwd)
+      : await this.requireRecord(cwd, threadId)
     threadId = record.id
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
     const nextActiveThreadId = await this.runtimeCoordinator.runAndRetire(
       runtimeKey(cwd, threadId),
       async (current) => {
+        this.requireWorkspaceOperationCurrent(workspaceOperation)
         const binding = current?.runtime ?? null
         if (record.materialized || binding) {
           await this.deleteNativeThread(await this.ensureClient(), threadId, binding)
+        } else if (this.client) {
+          await this.unsubscribeThread(await this.ensureClient(), threadId)
         }
         await this.removeRecord(threadId)
         const identity = workspaceIdentity(cwd)
@@ -581,9 +625,10 @@ export class CodexAgentManager {
   async renameSession(cwd: string, threadId: string, name: string) {
     const workspaceOperation = this.captureWorkspaceOperation(cwd)
     this.requireWorkspaceOperationCurrent(workspaceOperation)
-    let record = await this.requireRecord(cwd, threadId)
     const replacement = this.recordReplacements.get(threadId)
-    if (replacement) record = await replacement
+    let record = replacement
+      ? await this.requireReplacementWorkspace(replacement, cwd)
+      : await this.requireRecord(cwd, threadId)
     threadId = record.id
     const normalizedName = name.trim()
     if (!normalizedName) throw new Error('Codex 会话名称不能为空。')
@@ -754,8 +799,10 @@ export class CodexAgentManager {
       this.invalidateWorkspaceOperations(identity)
       this.workspaceActiveThreads.delete(identity)
       this.invalidateWorkspaceState(identity)
-      const ids = new Set((await this.listIndexedRecords(cwd)).map((record) => record.id))
-      await Promise.all([...ids].map((id) => this.recordReplacements.get(id)?.catch(() => undefined)))
+      await Promise.all([
+        this.waitForWorkspaceCreations(identity),
+        this.waitForRecordReplacements(identity),
+      ])
       const keys = this.runtimeCoordinator.keys().filter((key) => key.startsWith(workspaceRuntimeKeyPrefix(cwd)))
       const client = this.client
       const results = await Promise.allSettled(keys.map((key) => this.runtimeCoordinator.retireAndRun(
@@ -779,22 +826,32 @@ export class CodexAgentManager {
       this.invalidateWorkspaceActivation(identity)
       this.invalidateWorkspaceOperations(identity)
       this.invalidateWorkspaceState(identity)
-      let records = await this.listIndexedRecords(cwd)
+      await Promise.all([
+        this.waitForWorkspaceCreations(identity),
+        this.waitForRecordReplacements(identity),
+      ])
+      const records = await this.listIndexedRecords(cwd)
       if (records.length === 0) return
-      await Promise.all(records.map((record) => this.recordReplacements.get(record.id)?.catch(() => undefined)))
-      records = await this.listIndexedRecords(cwd)
-      const client = records.some((record) => record.materialized)
+      const client = records.some((record) => record.materialized) || this.client
         ? await this.ensureClient()
-        : this.client
+        : null
+      const nativeThreadIds = client
+        ? new Set((await this.listNativeThreads(cwd)).map((thread) => thread.id))
+        : new Set<string>()
       const archived = new Set<string>()
       const results = await Promise.allSettled(records.map((record) => this.runtimeCoordinator.runAndRetire(
         runtimeKey(cwd, record.id),
         async (current) => {
-        if (record.materialized && client) {
-          await this.archiveThread(client, record.id)
-        } else if (current && client) {
-          await this.releaseNativeBinding(client, current.runtime)
-        }
+          const materialized = record.materialized
+            || nativeThreadIds.has(record.id)
+            || current?.runtime.record.materialized === true
+          if (materialized && client) {
+            await this.archiveThread(client, record.id)
+          } else if (current && client) {
+            await this.releaseNativeBinding(client, current.runtime)
+          } else if (client) {
+            await this.unsubscribeThread(client, record.id)
+          }
           archived.add(record.id)
         },
       )))
@@ -821,6 +878,7 @@ export class CodexAgentManager {
     this.client?.stop()
     this.client = null
     this.clientPromise = null
+    this.clientStartRevision += 1
     void this.runtimeCoordinator.dispose()
     this.bindingLeases.clear()
     this.bindings.clear()
@@ -829,6 +887,11 @@ export class CodexAgentManager {
     this.sessionStore.clear()
     this.workspaceActivations.clear()
     this.workspaceActiveThreads.clear()
+    this.workspaceCreationCounts.clear()
+    for (const waiters of this.workspaceCreationWaiters.values()) {
+      for (const resolve of waiters) resolve()
+    }
+    this.workspaceCreationWaiters.clear()
     this.workspaceOperationRevisions.clear()
     this.workspaceStateRevisions.clear()
     this.workspaceTeardownCounts.clear()
@@ -842,20 +905,27 @@ export class CodexAgentManager {
     if (this.disposed) throw new Error('Codex manager has been disposed.')
     if (!this.clientPromise) {
       if (this.client) return this.client
-      this.clientPromise = this.startClient()
+      this.clientStartRevision += 1
+      this.clientPromise = this.startClient(this.clientStartRevision)
     }
+    const clientPromise = this.clientPromise
     try {
-      return await this.clientPromise
+      return await clientPromise
     } catch (error) {
-      this.client = null
-      this.clientPromise = null
+      if (this.clientPromise === clientPromise) {
+        this.client = null
+        this.clientPromise = null
+      }
       throw error
     }
   }
 
-  private async startClient() {
+  private async startClient(startRevision: number) {
     let cacheRecoveryAttempted = false
     for (;;) {
+      if (startRevision !== this.clientStartRevision) {
+        throw new Error('Codex App Server startup was superseded.')
+      }
       const args = this.serviceTierCompatibilityOverride
         ? ['app-server', '-c', 'service_tier=fast']
         : ['app-server']
@@ -863,6 +933,7 @@ export class CodexAgentManager {
         return await this.initializeClient(args)
       } catch (error) {
         if (this.disposed) throw error
+        if (startRevision !== this.clientStartRevision) throw error
         if (!cacheRecoveryAttempted && isRecoverableModelsCacheError(error)) {
           cacheRecoveryAttempted = true
           if (await this.recoverModelsCache()) continue
@@ -956,6 +1027,7 @@ export class CodexAgentManager {
         client.request('account/read', { refreshToken: false }).catch(() => null),
       ])
       if (this.disposed) throw new Error('Codex manager was disposed during App Server initialization.')
+      if (this.client !== client) throw new Error('Codex App Server initialization was superseded.')
       this.models = models
       return client
     } catch (error) {
@@ -1192,6 +1264,7 @@ export class CodexAgentManager {
 
   private handleConnectionExit(client: CodexRpcClient, error: Error) {
     if (this.client !== client) return
+    this.clientStartRevision += 1
     this.client = null
     this.clientPromise = null
     this.models = []
@@ -1616,6 +1689,40 @@ export class CodexAgentManager {
     }
   }
 
+  private async withWorkspaceCreation<TResult>(identity: string, operation: () => Promise<TResult>) {
+    this.workspaceCreationCounts.set(identity, (this.workspaceCreationCounts.get(identity) ?? 0) + 1)
+    try {
+      return await operation()
+    } finally {
+      const remaining = (this.workspaceCreationCounts.get(identity) ?? 1) - 1
+      if (remaining > 0) {
+        this.workspaceCreationCounts.set(identity, remaining)
+      } else {
+        this.workspaceCreationCounts.delete(identity)
+        const waiters = this.workspaceCreationWaiters.get(identity)
+        if (waiters) {
+          for (const resolve of waiters) resolve()
+          this.workspaceCreationWaiters.delete(identity)
+        }
+      }
+    }
+  }
+
+  private waitForWorkspaceCreations(identity: string) {
+    if (!this.workspaceCreationCounts.has(identity)) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      const waiters = this.workspaceCreationWaiters.get(identity) ?? new Set<() => void>()
+      waiters.add(resolve)
+      this.workspaceCreationWaiters.set(identity, waiters)
+    })
+  }
+
+  private async waitForRecordReplacements(identity: string) {
+    const replacements = [...this.recordReplacements.values()]
+      .filter((replacement) => replacement.workspaceIdentity === identity)
+    await Promise.all(replacements.map((replacement) => replacement.promise.catch(() => undefined)))
+  }
+
   private isWorkspaceStateContextCurrent(context: WorkspaceStateContext) {
     return (!context.sourceLease || context.sourceLease.isCurrent())
       && (!context.activation || this.isWorkspaceActivationCurrent(context.activation))
@@ -1699,15 +1806,26 @@ export class CodexAgentManager {
     return record
   }
 
+  private requireReplacementWorkspace(replacement: CodexRecordReplacement, cwd: string) {
+    if (replacement.workspaceIdentity !== workspaceIdentity(cwd)) {
+      throw new Error('Codex thread not found for this workspace.')
+    }
+    return replacement.promise
+  }
+
   private async ensureOpenableRecord(
     cwd: string,
     threadId: string,
     workspaceOperation?: WorkspaceOperation,
   ) {
+    const identity = workspaceIdentity(cwd)
+    const existingReplacement = this.recordReplacements.get(threadId)
+    if (existingReplacement) return this.requireReplacementWorkspace(existingReplacement, cwd)
     const record = await this.requireRecord(cwd, threadId)
+    if (workspaceOperation) this.requireWorkspaceOperationCurrent(workspaceOperation)
     if (record.materialized || this.bindings.has(threadId)) return record
     const pending = this.recordReplacements.get(threadId)
-    if (pending) return pending
+    if (pending) return this.requireReplacementWorkspace(pending, cwd)
     const start = (async () => {
       const client = await this.ensureClient()
       const result = await this.startNativeThread(client, cwd, record.modelExplicit ? record.model : null)
@@ -1717,32 +1835,54 @@ export class CodexAgentManager {
         model: result.model || record.model,
         updatedAt: new Date().toISOString(),
       }
+      let replacementIndexed = false
       try {
         await this.index.update((state) => ({
           ...state,
           threads: state.threads.map((candidate) => candidate.id === threadId ? replacement : candidate),
         }))
+        replacementIndexed = true
+        if (workspaceOperation) this.requireWorkspaceOperationCurrent(workspaceOperation)
+        await this.runtimeCoordinator.retire(runtimeKey(cwd, threadId))
+        this.dropThreadRuntime(threadId)
+        if (workspaceOperation) this.requireWorkspaceOperationCurrent(workspaceOperation)
+        this.sessionStore.install(result.thread)
+        await this.installBinding(replacement, result.thread.status.type === 'active', client)
+        if (workspaceOperation) this.requireWorkspaceOperationCurrent(workspaceOperation)
+        if (this.workspaceActiveThreads.get(identity) === threadId) {
+          this.workspaceActiveThreads.set(identity, replacement.id)
+        }
+        return replacement
       } catch (error) {
-        await client.request('thread/unsubscribe', { threadId: replacement.id }).catch((unsubscribeError) => {
-          console.warn(`[codex app-server] Failed to unsubscribe a replacement thread after its index update failed: ${unsubscribeError instanceof Error ? unsubscribeError.message : String(unsubscribeError)}`)
-        })
+        const released = await this.cleanupUncommittedThread(
+          client,
+          replacement.cwd,
+          replacement.id,
+          'failed replacement',
+        )
+        if (replacementIndexed && released) {
+          await this.index.update((state) => ({
+            ...state,
+            threads: state.threads.map((candidate) => candidate.id === replacement.id ? record : candidate),
+          })).catch((cleanupError) => {
+            console.warn(`[codex app-server] Failed to restore a rolled-back draft in the ownership index: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
+          })
+        } else if (!replacementIndexed && !released) {
+          await this.index.update((state) => ({
+            ...state,
+            threads: state.threads.map((candidate) => candidate.id === threadId ? replacement : candidate),
+          })).catch((cleanupError) => {
+            console.warn(`[codex app-server] Failed to retain ownership of a replacement whose rollback cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
+          })
+        }
         throw error
       }
-      if (workspaceOperation && !this.isWorkspaceOperationCurrent(workspaceOperation)) {
-        await client.request('thread/unsubscribe', { threadId: replacement.id }).catch(() => undefined)
-        throw new Error('Codex workspace operation was superseded.')
-      }
-      await this.runtimeCoordinator.retire(runtimeKey(cwd, threadId))
-      this.dropThreadRuntime(threadId)
-      this.sessionStore.install(result.thread)
-      const identity = workspaceIdentity(cwd)
-      if (this.workspaceActiveThreads.get(identity) === threadId) this.workspaceActiveThreads.set(identity, replacement.id)
-      await this.installBinding(replacement, result.thread.status.type === 'active')
-      return replacement
     })().finally(() => {
-      if (this.recordReplacements.get(threadId) === start) this.recordReplacements.delete(threadId)
+      if (this.recordReplacements.get(threadId)?.promise === start) {
+        this.recordReplacements.delete(threadId)
+      }
     })
-    this.recordReplacements.set(threadId, start)
+    this.recordReplacements.set(threadId, { promise: start, workspaceIdentity: identity })
     return start
   }
 
@@ -1793,8 +1933,15 @@ export class CodexAgentManager {
     }
   }
 
-  private async installBinding(record: CodexThreadRecord, isStreaming: boolean) {
+  private async installBinding(
+    record: CodexThreadRecord,
+    isStreaming: boolean,
+    sourceClient?: CodexRpcClient,
+  ) {
     const handle = await this.runtimeCoordinator.ensure(runtimeKey(record.cwd, record.id), async (lease) => {
+      if (sourceClient && this.client !== sourceClient) {
+        throw new Error('Codex App Server connection was superseded before the thread could be bound.')
+      }
       const existing = this.bindings.get(record.id)
       const binding: CodexBinding = existing ?? {
         activeTurnId: null,
@@ -1819,6 +1966,24 @@ export class CodexAgentManager {
     return binding
   }
 
+  private async cleanupUncommittedThread(
+    client: CodexRpcClient,
+    cwd: string,
+    threadId: string,
+    context: string,
+  ) {
+    await this.runtimeCoordinator.retire(runtimeKey(cwd, threadId)).catch(() => undefined)
+    this.dropThreadRuntime(threadId)
+    if (this.client !== client) return true
+    try {
+      await this.unsubscribeThread(client, threadId)
+      return true
+    } catch (error) {
+      console.warn(`[codex app-server] Failed to unsubscribe a thread after ${context}: ${error instanceof Error ? error.message : String(error)}`)
+      return false
+    }
+  }
+
   private async releaseNativeBinding(client: CodexRpcClient, binding: CodexBinding) {
     const failures: unknown[] = []
     if (binding.activeTurnId) {
@@ -1827,13 +1992,17 @@ export class CodexAgentManager {
         turnId: binding.activeTurnId,
       }).catch((error) => failures.push(error))
     }
-    await client.request('thread/unsubscribe', {
-      threadId: binding.record.id,
-    }).catch((error) => failures.push(error))
+    await this.unsubscribeThread(client, binding.record.id).catch((error) => failures.push(error))
     if (failures.length === 1) throw failures[0]
     if (failures.length > 1) {
       throw new AggregateError(failures, `Codex thread ${binding.record.id} could not be released.`)
     }
+  }
+
+  private async unsubscribeThread(client: CodexRpcClient, threadId: string) {
+    await client.request('thread/unsubscribe', { threadId }).catch((error) => {
+      if (!isMissingNativeThreadError(error)) throw error
+    })
   }
 
   private async deleteNativeThread(
@@ -1845,8 +2014,7 @@ export class CodexAgentManager {
       await client.request('turn/interrupt', { threadId, turnId: binding.activeTurnId })
     }
     await client.request('thread/delete', { threadId }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error)
-      if (!message.includes('no rollout found') && !message.includes('not found')) throw error
+      if (!isMissingNativeThreadError(error)) throw error
     })
   }
 
@@ -1857,8 +2025,7 @@ export class CodexAgentManager {
 
   private async archiveThread(client: CodexRpcClient, threadId: string) {
     await client.request('thread/archive', { threadId }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error)
-      if (!message.includes('no rollout found') && !message.includes('not found')) throw error
+      if (!isMissingNativeThreadError(error)) throw error
     })
   }
 

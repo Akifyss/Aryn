@@ -159,6 +159,36 @@ describe('SessionRuntimeCoordinator', () => {
     await coordinator.dispose()
   })
 
+  it('invalidates a current lease before an in-flight user can commit after external termination', async () => {
+    const operationEntered = deferred()
+    const allowOperation = deferred()
+    const stopped: string[] = []
+    const coordinator = new SessionRuntimeCoordinator<{ id: string }>({
+      stopRuntime: ({ id }) => stopped.push(id),
+    })
+    const handle = await coordinator.ensure('session-a', async () => ({ id: 'runtime-a' }))
+    let committed = false
+    const operation = coordinator.use(
+      'session-a',
+      async () => ({ id: 'unexpected-restart' }),
+      async ({ lease }) => {
+        operationEntered.resolve()
+        await allowOperation.promise
+        if (lease.isCurrent()) committed = true
+      },
+    )
+    await operationEntered.promise
+
+    const invalidation = coordinator.invalidateWhere((key) => key === 'session-a')
+    expect(handle.lease.isCurrent()).toBe(false)
+    allowOperation.resolve()
+    await Promise.all([operation, invalidation])
+
+    expect(committed).toBe(false)
+    expect(stopped).toEqual(['runtime-a'])
+    await coordinator.dispose()
+  })
+
   it('drops queued and newly arriving events from a retired generation', async () => {
     const firstEventEntered = deferred()
     const allowFirstEvent = deferred()

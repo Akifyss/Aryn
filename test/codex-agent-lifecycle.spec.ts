@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { Model } from '../src/features/agent/codex-protocol/generated/v2/Model'
 import type { Thread } from '../src/features/agent/codex-protocol/generated/v2/Thread'
@@ -253,11 +254,26 @@ describe('Codex App Server lifecycle', () => {
     const updateStarted = new Promise<void>((resolve) => { signalUpdateStarted = resolve })
     const updateGate = new Promise<void>((resolve) => { releaseUpdate = resolve })
     const internals = manager as unknown as {
+      client: {
+        request: (method: string) => Promise<unknown>
+        stop: () => void
+      }
       index: {
         read: () => Promise<typeof state>
         update: (updater: (current: typeof state) => typeof state) => Promise<typeof state>
       }
-      recordReplacements: Map<string, Promise<CodexThreadRecord>>
+      recordReplacements: Map<string, {
+        promise: Promise<CodexThreadRecord>
+        workspaceIdentity: string
+      }>
+    }
+    internals.client = {
+      request: async (method) => {
+        if (method === 'thread/list') return { data: [], nextCursor: null }
+        if (method === 'thread/unsubscribe') return {}
+        throw new Error(`Unexpected Codex request: ${method}`)
+      },
+      stop: () => undefined,
     }
     internals.index = {
       read: async () => state,
@@ -268,7 +284,12 @@ describe('Codex App Server lifecycle', () => {
         return state
       },
     }
-    internals.recordReplacements.set('draft-thread', Promise.resolve(replacement))
+    internals.recordReplacements.set('draft-thread', {
+      promise: Promise.resolve(replacement),
+      workspaceIdentity: process.platform === 'win32'
+        ? path.resolve('C:/workspace').toLowerCase()
+        : path.resolve('C:/workspace'),
+    })
 
     try {
       const deletion = manager.deleteSession('C:/workspace', 'draft-thread')
@@ -279,6 +300,56 @@ describe('Codex App Server lifecycle', () => {
       expect(state.threads).toEqual([])
     } finally {
       releaseUpdate()
+      manager.dispose()
+    }
+  })
+
+  it('archives a materialized binding even when its persisted ownership flag is stale', async () => {
+    const manager = new CodexAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
+    const bindingRecord = record({ materialized: false })
+    let state = { threads: [{ ...bindingRecord }], version: 1 as const }
+    const requests: Array<{ method: string, params: unknown }> = []
+    const internals = manager as unknown as {
+      client: {
+        request: (method: string, params: unknown) => Promise<unknown>
+        stop: () => void
+      }
+      index: {
+        read: () => Promise<typeof state>
+        update: (updater: (current: typeof state) => typeof state) => Promise<typeof state>
+      }
+      installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
+        record: CodexThreadRecord
+      }>
+    }
+    internals.client = {
+      request: async (method, params) => {
+        requests.push({ method, params })
+        if (method === 'thread/list') return { data: [], nextCursor: null }
+        if (method === 'thread/archive') return {}
+        throw new Error(`Unexpected Codex request: ${method}`)
+      },
+      stop: () => undefined,
+    }
+    internals.index = {
+      read: async () => structuredClone(state),
+      update: async (updater) => {
+        state = updater(structuredClone(state))
+        return structuredClone(state)
+      },
+    }
+    const binding = await internals.installBinding(bindingRecord, false)
+    binding.record.materialized = true
+
+    try {
+      await manager.discardWorkspaceSessions('C:/workspace')
+      expect(requests).toContainEqual({
+        method: 'thread/archive',
+        params: { threadId: 'thread-1' },
+      })
+      expect(requests).not.toContainEqual(expect.objectContaining({ method: 'thread/unsubscribe' }))
+      expect(state.threads).toEqual([])
+    } finally {
       manager.dispose()
     }
   })
