@@ -1,27 +1,21 @@
 import type {
   CSSProperties,
-  FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   ReactNode,
   TransitionEvent as ReactTransitionEvent,
 } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { Menu } from '@base-ui/react/menu'
 import { Tabs as BaseTabs } from '@base-ui/react/tabs'
 import { Button, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
 import {
   FolderLine,
-  FolderForbidLine,
   FolderOpenLine,
   GitBranchLine,
   LayoutLeftLine,
   LayoutRightLine,
-  NewFolderLine,
   Chat3Line,
-  CheckLine,
   DownLine,
-  SearchLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import type {
@@ -40,7 +34,6 @@ import type {
   WorkspaceIconThemesByMode,
   WorkspaceNode,
 } from '@/features/workspace/types'
-import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { EmptyState } from '@/components/empty-state'
@@ -74,6 +67,16 @@ import { FileTabs } from '@/features/workspace/components/file-tabs'
 import { WorkspaceFileSystemPanel } from '@/features/workspace/components/workspace-file-system-panel'
 import { WorkspaceFilePreview } from '@/features/workspace/components/workspace-file-preview'
 import { WorkspaceTreePanel } from '@/features/workspace/components/workspace-tree-panel'
+import { NewProjectDialog } from '@/features/workspace/components/new-project-dialog/new-project-dialog'
+import { ProjectBootstrap } from '@/features/workspace/components/project-bootstrap/project-bootstrap'
+import {
+  ProjectMenu,
+  serializeProjectMenuAnchorRect,
+  type ProjectMenuAnchorRect,
+  type ProjectMenuFrameRect,
+  type ProjectMenuMode,
+  type ProjectMenuSurface,
+} from '@/features/workspace/components/project-menu/project-menu'
 import type { WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree'
 import {
   createWorkspaceFileTabId,
@@ -129,7 +132,6 @@ import {
   type WorkspaceRefreshRequest,
   type WorkspaceRefreshScheduleMode,
 } from '@/features/workspace/lib/workspace-refresh-coordinator'
-import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
 import { useSettingsStore, type AppLayoutPreference, type AppTheme } from '@/hooks/use-settings-store'
@@ -297,30 +299,9 @@ type DrawerDragRegion = {
   top: number
   width: number
 }
-type ProjectMenuMode = 'agent-add' | 'agent-new-switch' | 'editor-switch'
-type ProjectMenuSurface = 'global' | 'left-drawer' | 'right-drawer'
-type ProjectMenuAnchorRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width' | 'height'>
-type ProjectMenuFrameRect = Pick<DOMRect, 'top' | 'left' | 'width' | 'height'>
-type ProjectMenuStyle = CSSProperties & {
-  '--project-menu-list-max-height'?: string
-}
 type ProjectMenuOpenOptions = {
   surface?: ProjectMenuSurface
 }
-
-const PROJECT_MENU_MARGIN_PX = 8
-const PROJECT_MENU_GAP_PX = 8
-const PROJECT_MENU_AGENT_ADD_WIDTH_PX = 288
-const PROJECT_MENU_EDITOR_SWITCH_WIDTH_PX = 320
-const PROJECT_MENU_AGENT_ADD_ESTIMATED_HEIGHT_PX = 96
-const PROJECT_MENU_EDITOR_SWITCH_MAX_HEIGHT_PX = 520
-const PROJECT_MENU_EDITOR_SWITCH_MIN_HEIGHT_PX = 180
-const PROJECT_MENU_EDITOR_SWITCH_SEARCH_HEIGHT_PX = 36
-const PROJECT_MENU_EDITOR_SWITCH_ACTIONS_HEIGHT_PX = 72
-const PROJECT_MENU_AGENT_PROJECTLESS_ACTION_HEIGHT_PX = 39
-const PROJECT_MENU_PROJECT_ROW_HEIGHT_PX = 34
-const PROJECT_MENU_PROJECT_LIST_MAX_HEIGHT_PX = 320
-const PROJECT_MENU_EDITOR_SWITCH_VERTICAL_CHROME_PX = 24
 
 const emptyProjectState: ProjectState = {
   lastProjectId: null,
@@ -336,108 +317,6 @@ const conversationDraftContext: ActiveWorkspaceContext = { kind: 'conversationDr
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
-}
-
-function serializeProjectMenuAnchorRect(rect: ProjectMenuAnchorRect): ProjectMenuAnchorRect {
-  return {
-    bottom: rect.bottom,
-    height: rect.height,
-    left: rect.left,
-    right: rect.right,
-    top: rect.top,
-    width: rect.width,
-  }
-}
-
-function resolveProjectMenuStyle(
-  mode: ProjectMenuMode,
-  includesProjectlessAction = false,
-  frameRect: ProjectMenuFrameRect | null = null,
-): ProjectMenuStyle | undefined {
-  if (typeof window === 'undefined') {
-    return undefined
-  }
-
-  const viewportWidth = frameRect?.width ?? window.innerWidth
-  const viewportHeight = frameRect?.height ?? window.innerHeight
-  const maxWidth = Math.max(240, viewportWidth - (PROJECT_MENU_MARGIN_PX * 2))
-  const width = Math.min(
-    mode === 'agent-add' ? PROJECT_MENU_AGENT_ADD_WIDTH_PX : PROJECT_MENU_EDITOR_SWITCH_WIDTH_PX,
-    maxWidth,
-  )
-  const maxHeight = mode === 'agent-add'
-    ? PROJECT_MENU_AGENT_ADD_ESTIMATED_HEIGHT_PX
-    : PROJECT_MENU_EDITOR_SWITCH_MAX_HEIGHT_PX
-  const availableHeight = Math.max(
-    PROJECT_MENU_EDITOR_SWITCH_MIN_HEIGHT_PX,
-    viewportHeight - (PROJECT_MENU_MARGIN_PX * 2),
-  )
-  const menuMaxHeight = Math.min(maxHeight, availableHeight)
-  const fixedMenuHeight = PROJECT_MENU_EDITOR_SWITCH_SEARCH_HEIGHT_PX
-    + PROJECT_MENU_EDITOR_SWITCH_ACTIONS_HEIGHT_PX
-    + (includesProjectlessAction ? PROJECT_MENU_AGENT_PROJECTLESS_ACTION_HEIGHT_PX : 0)
-    + PROJECT_MENU_EDITOR_SWITCH_VERTICAL_CHROME_PX
-  const listMaxHeight = Math.max(
-    PROJECT_MENU_PROJECT_ROW_HEIGHT_PX,
-    Math.min(PROJECT_MENU_PROJECT_LIST_MAX_HEIGHT_PX, menuMaxHeight - fixedMenuHeight),
-  )
-
-  const style: ProjectMenuStyle = {
-    width: `${width}px`,
-  }
-
-  if (mode !== 'agent-add') {
-    style['--project-menu-list-max-height'] = `${listMaxHeight}px`
-  }
-
-  return style
-}
-
-function createProjectMenuVirtualAnchor(
-  anchorRect: ProjectMenuAnchorRect | null,
-  frameRect: ProjectMenuFrameRect | null = null,
-) {
-  const fallbackLeft = (frameRect?.left ?? 0) + PROJECT_MENU_MARGIN_PX
-  const fallbackTop = (frameRect?.top ?? 0) + PROJECT_MENU_MARGIN_PX
-  const rect = anchorRect ?? {
-    bottom: fallbackTop,
-    height: 0,
-    left: fallbackLeft,
-    right: fallbackLeft,
-    top: fallbackTop,
-    width: 0,
-  }
-
-  return {
-    getBoundingClientRect() {
-      return {
-        bottom: rect.bottom,
-        height: rect.height,
-        left: rect.left,
-        right: rect.right,
-        top: rect.top,
-        width: rect.width,
-        x: rect.left,
-        y: rect.top,
-        toJSON() {
-          return this
-        },
-      }
-    },
-  }
-}
-
-function resolveProjectMenuCollisionBoundary(frameRect: ProjectMenuFrameRect | null) {
-  if (!frameRect) {
-    return undefined
-  }
-
-  return {
-    height: frameRect.height,
-    width: frameRect.width,
-    x: frameRect.left,
-    y: frameRect.top,
-  }
 }
 
 function App() {
@@ -522,10 +401,8 @@ function App() {
   const [projectMenuMode, setProjectMenuMode] = useState<ProjectMenuMode | null>(null)
   const [projectMenuSurface, setProjectMenuSurface] = useState<ProjectMenuSurface>('global')
   const [projectMenuAnchorRect, setProjectMenuAnchorRect] = useState<ProjectMenuAnchorRect | null>(null)
-  const [projectMenuSearch, setProjectMenuSearch] = useState('')
   const [isProjectActionBusy, setIsProjectActionBusy] = useState(false)
   const [hasLoadedProjectState, setHasLoadedProjectState] = useState(false)
-  const [newProjectName, setNewProjectName] = useState('')
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false)
   const [shouldStartAgentSessionAfterProjectCreate, setShouldStartAgentSessionAfterProjectCreate] = useState(false)
   const [pendingAgentProjectSessionRequest, setPendingAgentProjectSessionRequest] = useState<AgentProjectSessionRequest | null>(null)
@@ -802,18 +679,6 @@ function App() {
   const editorWorkspaceSwitchLabel = activeWorkspaceContext.kind === 'project' && activeProject
     ? activeProject.name
     : workspaceLabel
-  const filteredProjectMenuProjects = useMemo(() => {
-    const query = projectMenuSearch.trim().toLowerCase()
-
-    if (!query) {
-      return projectState.projects
-    }
-
-    return projectState.projects.filter((project) => (
-      project.name.toLowerCase().includes(query)
-      || project.path.toLowerCase().includes(query)
-    ))
-  }, [projectMenuSearch, projectState.projects])
   const shellPlatform: ShellPlatform = deriveShellPlatform(platform)
   const shellChromeVars = getShellChromeVars(shellPlatform, { isFullScreen: isWindowFullScreen }) as CSSProperties
   const shouldExposeAgentWorkspaceTools = !isAgentLayout || Boolean(currentPath)
@@ -2502,7 +2367,6 @@ function App() {
   ) {
     setProjectMenuSurface(options.surface ?? 'global')
     setProjectMenuAnchorRect(anchorRect ? serializeProjectMenuAnchorRect(anchorRect) : null)
-    setProjectMenuSearch('')
     setProjectMenuMode(mode)
   }
 
@@ -2510,14 +2374,19 @@ function App() {
     setProjectMenuAnchorRect(null)
     setProjectMenuMode(null)
     setProjectMenuSurface('global')
-    setProjectMenuSearch('')
   }
 
   function openNewProjectDialog() {
     setShouldStartAgentSessionAfterProjectCreate(shouldStartNewAgentSessionForProjectMenu())
-    setNewProjectName('')
     setIsNewProjectDialogOpen(true)
     closeProjectMenu()
+  }
+
+  function handleNewProjectDialogOpenChange(isOpen: boolean) {
+    setIsNewProjectDialogOpen(isOpen)
+    if (!isOpen) {
+      setShouldStartAgentSessionAfterProjectCreate(false)
+    }
   }
 
   function shouldStartNewAgentSessionForProjectMenu() {
@@ -2569,9 +2438,8 @@ function App() {
     }
   }
 
-  async function handleCreateEmptyProject(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault()
-    const trimmedName = newProjectName.trim()
+  async function handleCreateEmptyProject(projectName: string) {
+    const trimmedName = projectName.trim()
 
     if (!trimmedName) {
       return
@@ -2589,7 +2457,6 @@ function App() {
       })
       setIsNewProjectDialogOpen(false)
       setShouldStartAgentSessionAfterProjectCreate(false)
-      setNewProjectName('')
       setStatusMessage('项目已创建')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to create project.'
@@ -3185,256 +3052,23 @@ function App() {
       return null
     }
 
-    const isSwitchMenu = projectMenuMode === 'editor-switch' || projectMenuMode === 'agent-new-switch'
-    const hasProjectMenuProjects = projectState.projects.length > 0
-    const renderedProjectMenuMode = isSwitchMenu && !hasProjectMenuProjects ? 'agent-add' : projectMenuMode
-    const showProjectlessAction = isAgentLayout
-      && renderedProjectMenuMode === 'agent-new-switch'
-      && activeWorkspaceContext.kind === 'project'
-    const menuStyle = resolveProjectMenuStyle(
-      renderedProjectMenuMode,
-      showProjectlessAction,
-      frameRect,
-    )
-    const menuAnchor = createProjectMenuVirtualAnchor(projectMenuAnchorRect, frameRect)
-    const collisionBoundary = resolveProjectMenuCollisionBoundary(frameRect)
-    const menuAlign = renderedProjectMenuMode === 'editor-switch' ? 'center' : 'start'
-    const projectMenuActions = (
-      <>
-        <div className='project-menu-actions'>
-          <Menu.Item
-            nativeButton
-            render={<button type='button' />}
-            className={({ highlighted }) => `project-menu-action${highlighted ? ' is-highlighted' : ''}`}
-            disabled={isProjectActionBusy}
-            label='新建空白项目'
-            onClick={openNewProjectDialog}
-          >
-            <NewFolderLine size={18} />
-            <span>新建空白项目</span>
-          </Menu.Item>
-          <Menu.Item
-            nativeButton
-            render={<button type='button' />}
-            className={({ highlighted }) => `project-menu-action${highlighted ? ' is-highlighted' : ''}`}
-            disabled={isProjectActionBusy}
-            label='使用现有文件夹'
-            onClick={() => {
-              void handleAddExistingProject()
-            }}
-          >
-            <FolderOpenLine size={18} />
-            <span>使用现有文件夹</span>
-          </Menu.Item>
-        </div>
-        {showProjectlessAction ? (
-          <div className='project-menu-actions project-menu-projectless-actions'>
-            <Menu.Item
-              nativeButton
-              render={<button type='button' />}
-              className={({ highlighted }) => `project-menu-action${highlighted ? ' is-highlighted' : ''}`}
-              disabled={isProjectActionBusy}
-              label='不使用项目'
-              onClick={() => {
-                void handleUseNoProject()
-              }}
-            >
-              <FolderForbidLine size={18} />
-              <span className='project-menu-action-spacer'>不使用项目</span>
-            </Menu.Item>
-          </div>
-        ) : null}
-      </>
-    )
-
     return (
-      <Menu.Root
-        modal={false}
-        open={isProjectMenuOpen}
-        onOpenChange={(open, details) => {
-          if (open) {
-            return
-          }
-
-          if (shouldCloseClickOpenedMenu(details)) {
-            closeProjectMenu()
-          } else {
-            details.cancel?.()
-          }
-        }}
-      >
-        <Menu.Portal
-          container={portalContainer ?? undefined}
-        >
-          <Menu.Backdrop
-            className={`project-menu-backdrop${surface === 'global' ? '' : ' is-local'}`}
-            onPointerDown={(event) => {
-              if (event.target === event.currentTarget) {
-                closeProjectMenu()
-              }
-            }}
-          />
-          <Menu.Positioner
-            align={menuAlign}
-            anchor={menuAnchor}
-            className={`project-menu-positioner${surface === 'global' ? '' : ' is-local'}`}
-            collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
-            collisionBoundary={collisionBoundary}
-            collisionPadding={PROJECT_MENU_MARGIN_PX}
-            positionMethod='fixed'
-            side='bottom'
-            sideOffset={PROJECT_MENU_GAP_PX}
-          >
-            <Menu.Popup
-              className={`project-menu project-menu-${renderedProjectMenuMode}`}
-              data-surface={surface}
-              aria-label={isSwitchMenu && hasProjectMenuProjects ? '切换项目' : '添加项目'}
-              finalFocus={false}
-              style={menuStyle}
-            >
-              {isSwitchMenu && hasProjectMenuProjects ? (
-                <>
-                  <label className='project-menu-search'>
-                    <SearchLine size={16} />
-                    <input
-                      autoFocus
-                      value={projectMenuSearch}
-                      placeholder='搜索项目'
-                      onChange={(event) => setProjectMenuSearch(event.target.value)}
-                    />
-                  </label>
-                  <AppScrollArea
-                    className='project-menu-list'
-                    contentClassName='project-menu-list-content'
-                  >
-                    {filteredProjectMenuProjects.map((project) => {
-                      const isActive = activeWorkspaceContext.kind === 'project'
-                        && project.id === activeWorkspaceContext.projectId
-
-                      return (
-                        <Menu.Item
-                          key={project.id}
-                          nativeButton
-                          render={<button type='button' />}
-                          className={({ highlighted }) => (
-                            `project-menu-project${isActive ? ' is-active' : ''}${highlighted ? ' is-highlighted' : ''}`
-                          )}
-                          disabled={isProjectActionBusy}
-                          label={project.name}
-                          onClick={() => {
-                            void handleSelectProject(project)
-                          }}
-                        >
-                          <ProjectIcon />
-                          <span className='project-menu-project-name'>{project.name}</span>
-                          {isActive ? <CheckLine className='project-menu-project-check' size={16} /> : null}
-                        </Menu.Item>
-                      )
-                    })}
-                    {filteredProjectMenuProjects.length === 0 ? (
-                      <div className='project-menu-empty'>没有匹配项目</div>
-                    ) : null}
-                  </AppScrollArea>
-                  {projectMenuActions}
-                </>
-              ) : projectMenuActions}
-            </Menu.Popup>
-          </Menu.Positioner>
-        </Menu.Portal>
-      </Menu.Root>
-    )
-  }
-
-  function renderNewProjectDialog() {
-    return (
-      <Modal.Backdrop
-        isOpen={isNewProjectDialogOpen}
-        onOpenChange={(isOpen) => {
-          setIsNewProjectDialogOpen(isOpen)
-          if (!isOpen) {
-            setShouldStartAgentSessionAfterProjectCreate(false)
-          }
-        }}
-      >
-        <Modal.Container className='project-create-modal-container'>
-          <Modal.Dialog
-            aria-label='新建空白项目'
-            className={`project-create-modal ${resolvedTheme === 'dark' ? 'dark' : ''}`}
-          >
-            <Modal.CloseTrigger className='project-create-modal-close' aria-label='关闭'>
-              <Icon icon='lucide:x' width={16} height={16} />
-            </Modal.CloseTrigger>
-            <Modal.Body>
-              <form className='project-create-form' onSubmit={(event) => void handleCreateEmptyProject(event)}>
-                <div className='project-create-heading'>
-                  <h2>新建空白项目</h2>
-                  <p>创建后会自动切换到这个项目。</p>
-                </div>
-                <label className='project-create-field'>
-                  <span>项目名称</span>
-                  <input
-                    autoFocus
-                    value={newProjectName}
-                    placeholder='Untitled Project'
-                    onChange={(event) => setNewProjectName(event.target.value)}
-                  />
-                </label>
-                <div className='project-create-footer'>
-                  <Button
-                    variant='tertiary'
-                    type='button'
-                    onPress={() => {
-                      setIsNewProjectDialogOpen(false)
-                      setShouldStartAgentSessionAfterProjectCreate(false)
-                    }}
-                  >
-                    取消
-                  </Button>
-                  <Button variant='primary' type='submit' isDisabled={!newProjectName.trim() || isProjectActionBusy}>
-                    创建
-                  </Button>
-                </div>
-              </form>
-            </Modal.Body>
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    )
-  }
-
-  function renderProjectBootstrap() {
-    return (
-      <div className='project-bootstrap'>
-        <div className='project-bootstrap-panel'>
-          <div className='project-bootstrap-logo' aria-hidden='true'>
-            <img src='./branding/logo.svg' alt='' />
-          </div>
-          <div className='project-bootstrap-copy'>
-            <h1>选择一个项目开始</h1>
-            <p>Aryn 会把编辑器、Git、文件树和 Agent 对话绑定到当前项目。</p>
-          </div>
-          <div className='project-bootstrap-actions'>
-            <Button
-              variant='primary'
-              onPress={openNewProjectDialog}
-              isDisabled={isProjectActionBusy}
-            >
-              <NewFolderLine className='mr-2' size={16} />
-              新建空白项目
-            </Button>
-            <Button
-              variant='outline'
-              onPress={() => {
-                void handleAddExistingProject()
-              }}
-              isDisabled={isProjectActionBusy}
-            >
-              <FolderOpenLine className='mr-2' size={16} />
-              使用现有文件夹
-            </Button>
-          </div>
-        </div>
-      </div>
+      <ProjectMenu
+        activeProjectId={activeWorkspaceContext.kind === 'project' ? activeWorkspaceContext.projectId : null}
+        anchorRect={projectMenuAnchorRect}
+        canUseNoProject={isAgentLayout && activeWorkspaceContext.kind === 'project'}
+        frameRect={frameRect}
+        isBusy={isProjectActionBusy}
+        mode={projectMenuMode}
+        portalContainer={portalContainer}
+        projects={projectState.projects}
+        surface={surface}
+        onAddExistingProject={handleAddExistingProject}
+        onClose={closeProjectMenu}
+        onCreateProject={openNewProjectDialog}
+        onSelectProject={handleSelectProject}
+        onUseNoProject={handleUseNoProject}
+      />
     )
   }
 
@@ -5749,7 +5383,13 @@ function App() {
       </div>
 
       <main className='panel panel-editor' id='editor-main'>
-        {needsProjectBootstrap ? renderProjectBootstrap() : isAgentLayout ? renderAgentPanel() : renderEditorSurface()}
+        {needsProjectBootstrap ? (
+          <ProjectBootstrap
+            isBusy={isProjectActionBusy}
+            onAddExistingProject={handleAddExistingProject}
+            onCreateProject={openNewProjectDialog}
+          />
+        ) : isAgentLayout ? renderAgentPanel() : renderEditorSurface()}
       </main>
 
       <div className={`panel-resize-slot panel-resize-slot-right${isRightSidebarVisible ? '' : ' is-hidden'}`}>
@@ -5865,7 +5505,13 @@ function App() {
       <Toast.Provider placement='bottom end' />
 
       {renderProjectMenu('global')}
-      {renderNewProjectDialog()}
+      <NewProjectDialog
+        isBusy={isProjectActionBusy}
+        isOpen={isNewProjectDialogOpen}
+        theme={resolvedTheme}
+        onCreate={handleCreateEmptyProject}
+        onOpenChange={handleNewProjectDialogOpenChange}
+      />
 
       <Modal.Backdrop
         isOpen={isSettingsOpen}

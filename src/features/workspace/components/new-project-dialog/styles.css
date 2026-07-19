@@ -1,0 +1,97 @@
+.project-create-modal-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.project-create-modal {
+  position: relative;
+  width: min(420px, calc(100vw - 48px));
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-primary);
+  border-radius: 16px;
+  background: var(--overlay);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.2);
+}
+
+.project-create-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--foreground-secondary);
+  cursor: pointer;
+}
+
+.project-create-modal-close:hover,
+.project-create-modal-close:focus-visible {
+  outline: none;
+  background: var(--hover);
+  color: var(--foreground-primary);
+}
+
+.project-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 26px;
+}
+
+.project-create-heading {
+  padding-right: 32px;
+}
+
+.project-create-heading h2 {
+  margin: 0;
+  color: var(--foreground-primary);
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.project-create-heading p {
+  margin: 6px 0 0;
+  color: var(--foreground-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.project-create-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--foreground-primary);
+  font-size: 13px;
+}
+
+.project-create-field input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  background: var(--background-primary);
+  color: var(--foreground-primary);
+  font: inherit;
+  font-size: 14px;
+}
+
+.project-create-field input:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.project-create-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

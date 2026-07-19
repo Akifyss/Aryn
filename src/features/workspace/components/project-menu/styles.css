@@ -1,0 +1,210 @@
+.project-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: transparent;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.project-menu-backdrop.is-local {
+  position: absolute;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+.project-menu-positioner {
+  z-index: 81;
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.project-menu-positioner.is-local {
+  z-index: 2;
+}
+
+.project-menu {
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(520px, calc(100vh - 72px));
+  overflow: hidden;
+  padding: 7px;
+  border: 1px solid var(--border-primary);
+  border-radius: 13px;
+  background: var(--overlay);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
+  --project-menu-list-max-height: 320px;
+}
+
+.project-menu-editor-switch,
+.project-menu-agent-new-switch {
+  padding: 8px;
+  border-radius: 13px;
+}
+
+.project-menu-agent-add {
+  width: 288px;
+}
+
+.project-menu-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.project-menu-editor-switch .project-menu-list + .project-menu-actions,
+.project-menu-agent-new-switch .project-menu-list + .project-menu-actions {
+  margin: 4px -8px 0;
+  padding: 4px 8px 0;
+  border-top: 1px solid var(--border-primary);
+}
+
+.project-menu-agent-new-switch .project-menu-projectless-actions {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.project-menu-action,
+.project-menu-project {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--foreground-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.project-menu-action {
+  min-height: 34px;
+}
+
+.project-menu-project {
+  min-height: 34px;
+}
+
+.project-menu-action > svg,
+.project-menu-project > svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+.project-menu-action-spacer,
+.project-menu-project-name {
+  min-width: 0;
+  flex: 1;
+}
+
+.project-menu-project-check {
+  flex: 0 0 auto;
+  color: var(--foreground-secondary);
+}
+
+.project-menu-action:hover,
+.project-menu-action:focus-visible,
+.project-menu-action.is-highlighted,
+.project-menu-project:hover,
+.project-menu-project:focus-visible,
+.project-menu-project.is-highlighted {
+  outline: none;
+  background: var(--hover);
+}
+
+.project-menu-project.is-active {
+  outline: none;
+  background: var(--selected);
+}
+
+.project-menu-action:disabled,
+.project-menu-project:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.project-menu-search {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  margin: 0 0 5px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--foreground-secondary);
+  background: var(--background-primary);
+}
+
+.project-menu-search > svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+.project-menu-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--foreground-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.project-menu-list {
+  flex: 0 1 auto;
+  max-height: var(--project-menu-list-max-height);
+  min-height: 0;
+  margin: 0 -8px 0 0;
+  padding-right: 8px;
+  overflow: hidden;
+  --app-scroll-area-scrollbar-gap: 0px;
+}
+
+.project-menu-list.app-scroll-area {
+  height: auto;
+  max-height: var(--project-menu-list-max-height);
+}
+
+.project-menu-list .app-scroll-area-viewport {
+  height: auto;
+  max-height: var(--project-menu-list-max-height);
+}
+
+.project-menu-list .app-scroll-area-scrollbar[data-orientation='vertical'] {
+  right: 0;
+}
+
+.project-menu-list-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-menu-project-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.project-menu-empty {
+  padding: 10px 9px;
+  color: var(--foreground-secondary);
+  font-size: 12px;
+}
