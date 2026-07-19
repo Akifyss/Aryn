@@ -12,12 +12,9 @@ import {
   isWorkspaceFileSystemPptx,
   isWorkspaceFileSystemSpreadsheet,
 } from '@/features/workspace/lib/workspace-file-system'
+import { getBaseName } from '@/features/workspace/lib/workspace-paths'
 
 export type WorkspaceFileRenderKind = 'code' | 'csv' | 'docx' | 'html' | 'image' | 'meo' | 'pdf' | 'pptx' | 'unsupported' | 'xlsx'
-
-function getBaseName(filePath: string) {
-  return filePath.split(/[\\/]/).pop() ?? filePath
-}
 
 function resolveBinaryFileRenderKind(filePath: string): WorkspaceFileRenderKind {
   const fileName = getBaseName(filePath)

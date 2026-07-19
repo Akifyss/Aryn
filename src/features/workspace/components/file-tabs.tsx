@@ -8,6 +8,7 @@ import {
   type WorkspaceDisplayTab,
   type WorkspaceTab,
 } from '@/features/workspace/store/use-workspace-store'
+import { getBaseName, getRelativePath } from '@/features/workspace/lib/workspace-paths'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
 
 type FileTabsProps = {
@@ -46,14 +47,14 @@ const EMPTY_FILE_TAB_SCROLL_EDGE_STATE: FileTabsScrollEdgeState = {
   hasScrollOverflow: false,
 }
 
-function getBaseName(tab: WorkspaceDisplayTab) {
+function getTabLabel(tab: WorkspaceDisplayTab) {
   if (tab.kind === 'fixed-panel') {
     return tab.fixedTabKind === 'file-panel' ? '文件' : '更改'
   }
 
   return tab.kind === 'diff'
     ? tab.title
-    : tab.filePath.split(/[\\/]/).pop() ?? tab.filePath
+    : getBaseName(tab.filePath)
 }
 
 function getFileIconName(tab: WorkspaceDisplayTab) {
@@ -61,19 +62,7 @@ function getFileIconName(tab: WorkspaceDisplayTab) {
     return null
   }
 
-  return tab.filePath.split(/[\\/]/).pop() ?? tab.filePath
-}
-
-function getRelativePath(rootPath: string, filePath: string) {
-  const normalizedRoot = rootPath.replace(/[\\/]+$/, '')
-  const normalizedFilePath = filePath.replace(/[\\/]+/g, '/')
-  const normalizedRootPath = normalizedRoot.replace(/[\\/]+/g, '/')
-
-  if (!normalizedFilePath.startsWith(normalizedRootPath)) {
-    return filePath.split(/[\\/]/).pop() ?? filePath
-  }
-
-  return normalizedFilePath.slice(normalizedRootPath.length).replace(/^\/+/, '')
+  return getBaseName(tab.filePath)
 }
 
 function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab, hasDuplicateName: boolean) {
@@ -177,7 +166,7 @@ export function FileTabs({
     const counts = new Map<string, number>()
 
     for (const tab of tabs) {
-      const baseName = getBaseName(tab)
+      const baseName = getTabLabel(tab)
       counts.set(baseName, (counts.get(baseName) ?? 0) + 1)
     }
 
@@ -544,7 +533,7 @@ export function FileTabs({
           }}
         >
         {tabs.length > 0 && tabs.map((tab, index) => {
-          const baseName = getBaseName(tab)
+          const baseName = getTabLabel(tab)
           const fileIconName = getFileIconName(tab)
           const metaLabel = getTabMetaLabel(workspacePath, tab, duplicateNameSet.has(baseName))
           const isActive = activeTabId === tab.id
@@ -744,7 +733,7 @@ export function FileTabs({
             <AppTooltipButton
               type='button'
               className='file-tabs-toolbar-button'
-              aria-label={`Open diff for ${getBaseName(activeFileTab)}`}
+              aria-label={`Open diff for ${getTabLabel(activeFileTab)}`}
               tooltip='查看 Git 差异'
               onClick={() => {
                 onOpenDiff?.(activeFileTab.filePath)

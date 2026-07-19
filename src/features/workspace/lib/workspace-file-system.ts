@@ -1,6 +1,7 @@
 import type { FileSystemFileItem, FileSystemItem } from '@/components/ui/file-system'
 import { inferFileContentType } from '@/lib/file-content-types'
 import { isPptxContentType, isPptxFile } from '@/lib/pptx-file-types'
+import { getRelativePath } from '@/features/workspace/lib/workspace-paths'
 import type { WorkspaceNode } from '@/features/workspace/types'
 
 const CODE_CONTENT_TYPES = new Set([
@@ -47,26 +48,8 @@ function normalizePathForManifest(filePath: string) {
   return filePath.replace(/[\\/]+/g, '/').replace(/^\/+/, '').replace(/\/+$/, '')
 }
 
-function normalizeRootPath(rootPath: string) {
-  return rootPath.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
-}
-
 function getRelativeWorkspacePath(rootPath: string, filePath: string) {
-  const normalizedRoot = normalizeRootPath(rootPath)
-  const normalizedFilePath = filePath.replace(/[\\/]+/g, '/')
-  const normalizedRootLower = normalizedRoot.toLowerCase()
-  const normalizedFilePathLower = normalizedFilePath.toLowerCase()
-  const rootPrefix = `${normalizedRoot}/`
-
-  if (normalizedFilePathLower === normalizedRootLower) {
-    return ''
-  }
-
-  if (!normalizedFilePathLower.startsWith(rootPrefix.toLowerCase())) {
-    return normalizePathForManifest(filePath.split(/[\\/]/).pop() ?? filePath)
-  }
-
-  return normalizePathForManifest(normalizedFilePath.slice(rootPrefix.length))
+  return normalizePathForManifest(getRelativePath(rootPath, filePath))
 }
 
 function getFileExtension(fileName: string) {

@@ -1,15 +1,14 @@
 import type { WorkspaceNode } from '@/features/workspace/types'
+import { normalizeFilePath } from '@/features/workspace/lib/workspace-paths'
 
-export function normalizeWorkspacePath(filePath: string) {
-  return filePath.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
-}
+export { normalizeFilePath as normalizeWorkspacePath }
 
 export function areSameWorkspacePaths(leftPath: string | null | undefined, rightPath: string | null | undefined) {
   if (!leftPath || !rightPath) {
     return false
   }
 
-  return normalizeWorkspacePath(leftPath) === normalizeWorkspacePath(rightPath)
+  return normalizeFilePath(leftPath) === normalizeFilePath(rightPath)
 }
 
 export function getParentDirectoryPath(filePath: string) {
@@ -24,8 +23,8 @@ export function getParentDirectoryPath(filePath: string) {
 }
 
 export function isSamePathOrDescendant(targetPath: string, parentPath: string) {
-  const normalizedTargetPath = normalizeWorkspacePath(targetPath)
-  const normalizedParentPath = normalizeWorkspacePath(parentPath)
+  const normalizedTargetPath = normalizeFilePath(targetPath)
+  const normalizedParentPath = normalizeFilePath(parentPath)
 
   return normalizedTargetPath === normalizedParentPath || normalizedTargetPath.startsWith(`${normalizedParentPath}/`)
 }

@@ -56,7 +56,6 @@ import {
 import type { AgentProjectSessionRequest } from '@/features/agent/lib/project-session-request'
 import { DEFAULT_AGENT_ID, type AgentId } from '@/features/agent/agent-definition'
 import type { AgentMessageFileChangeKind, AgentWorkspaceState } from '@/features/agent/types'
-import { isLineWithinVisualDiff } from '@/features/editor/lib/git-diff-navigation'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host'
 import { GitPanel } from '@/features/git/components/git-panel'
 import type {
@@ -83,7 +82,6 @@ import {
   createWorkspaceFileTabId,
   dedupeWorkspaceTabs,
   useWorkspaceStore,
-  type WorkspaceFixedPanelTab,
   type WorkspaceDiffTab,
   type WorkspaceDiffNavigationRequest,
   type WorkspaceDisplayTab,
@@ -98,6 +96,38 @@ import {
   type WorkspaceFileViewMode,
 } from '@/features/workspace/lib/file-types'
 import {
+  getBaseName,
+  getDirectoryRelativePath,
+  getNextUntitledDirectoryName,
+  getNextUntitledFileName,
+  getRelativePath,
+  hasPathPrefix,
+  normalizeFilePath,
+  rebasePathPrefix,
+} from '@/features/workspace/lib/workspace-paths'
+import {
+  dedupeStoredEntries,
+  readStoredFileSystemState,
+  readStoredTabState,
+  toStoredWorkspaceTab,
+  writeStoredFileSystemState,
+  writeStoredTabState,
+} from '@/features/workspace/lib/workspace-tab-persistence'
+import {
+  createDiffTab,
+  createWorkspaceFileGitDiffRequest,
+  FIXED_FILE_TAB_ID,
+  FIXED_GIT_TAB_ID,
+  getFixedPanelTab,
+  getWorkspaceTabSourcePath,
+  isWorkspaceAutosaveTab,
+  isWorkspaceDiffTab,
+  isWorkspaceFileTab,
+  isWorkspaceFixedPanelTab,
+  shouldOpenGitDiffForLine,
+  type AgentLayoutFixedTab,
+} from '@/features/workspace/lib/workspace-tabs'
+import {
   resolveWorkspaceTreeActiveFilePath,
   type WorkspaceTreeActiveFileMode,
 } from '@/features/workspace/lib/workspace-tree-active-file'
@@ -111,11 +141,12 @@ import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-fi
 import { CommandPalette } from '@/features/command-palette/components/command-palette'
 import { useSettingsStore, type AppLayoutPreference, type AppTheme } from '@/hooks/use-settings-store'
 import { useDevToolsFocusSettlement } from '@/hooks/use-devtools-focus-settlement'
-import type {
-  PersistedLayoutState,
-  PersistedWorkspaceTabState,
-  PersistentClientStateSnapshot,
-} from '@/features/persistence/types'
+import {
+  readStoredGitPanelLayout,
+  readStoredLayoutBoolean,
+  readStoredLayoutNumber,
+  readStoredLeftSidebarTab,
+} from '@/features/persistence/renderer-state'
 import { HtmlPreview } from '@/features/editor/components/html-preview'
 import {
   AGENT_CHAT_MIN_WIDTH,
@@ -190,10 +221,6 @@ const MeoEditorHost = lazy(async () => {
   return { default: module.MeoEditorHost }
 })
 
-function getBaseName(filePath: string) {
-  return filePath.split(/[\\/]/).pop() ?? filePath
-}
-
 function EditorLoadingState({ label = 'Loading editor...' }: { label?: string }) {
   useEffect(() => {
     recordOpenFileProfile('editor:fallback:mounted', { label })
@@ -233,154 +260,6 @@ function resolveAppTheme(theme: AppTheme): ResolvedAppTheme {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function getRelativePath(rootPath: string, filePath: string) {
-  const normalizedRoot = rootPath.replace(/[\\/]+$/, '')
-  const normalizedFilePath = filePath.replace(/[\\/]+/g, '/')
-  const normalizedRootPath = normalizedRoot.replace(/[\\/]+/g, '/')
-
-  if (!normalizedFilePath.startsWith(normalizedRootPath)) {
-    return getBaseName(filePath)
-  }
-
-  return normalizedFilePath.slice(normalizedRootPath.length).replace(/^\/+/, '')
-}
-
-function getDirectoryRelativePath(rootPath: string, filePath: string) {
-  const relativePath = getRelativePath(rootPath, filePath)
-  const segments = relativePath.split('/').filter(Boolean)
-  segments.pop()
-  return segments.join('/')
-}
-
-function getNextUntitledFileName(existingNames: string[]) {
-  const occupiedNames = new Set(existingNames.map((name) => name.toLowerCase()))
-
-  if (!occupiedNames.has('untitled.md')) {
-    return 'untitled.md'
-  }
-
-  let index = 2
-  while (occupiedNames.has(`untitled-${index}.md`)) {
-    index += 1
-  }
-
-  return `untitled-${index}.md`
-}
-
-function getNextUntitledDirectoryName(existingNames: string[]) {
-  const occupiedNames = new Set(existingNames.map((name) => name.toLowerCase()))
-
-  if (!occupiedNames.has('new-folder')) {
-    return 'new-folder'
-  }
-
-  let index = 1
-  while (occupiedNames.has(`new-folder-${index}`)) {
-    index += 1
-  }
-
-  return `new-folder-${index}`
-}
-
-function isWorkspaceFileTab(tab: WorkspaceDisplayTab | null | undefined): tab is WorkspaceFileTab {
-  return tab?.kind === 'file'
-}
-
-function isWorkspaceDiffTab(tab: WorkspaceDisplayTab | null | undefined): tab is WorkspaceDiffTab {
-  return tab?.kind === 'diff'
-}
-
-function isWorkspaceFixedPanelTab(tab: WorkspaceDisplayTab | null | undefined): tab is WorkspaceFixedPanelTab {
-  return tab?.kind === 'fixed-panel'
-}
-
-function isWorkspaceAutosaveTab(tab: WorkspaceDisplayTab | WorkspaceFileTab | null | undefined): tab is WorkspaceFileTab {
-  return tab?.kind === 'file' && (tab.viewMode === 'code' || tab.viewMode === 'meo')
-}
-
-function createDiffTabId(diff: GitFileDiffResult) {
-  if (diff.source.kind === 'commit') {
-    return `git-commit-diff://${diff.source.commit.hash}/${encodeURIComponent(diff.change.path)}`
-  }
-
-  const { path: filePath, scope } = diff.change
-  return `git-diff://${scope}/${encodeURIComponent(filePath)}`
-}
-
-function normalizeFilePath(filePath: string) {
-  return filePath.replace(/[\\/]+/g, '/').toLowerCase()
-}
-
-function hasPathPrefix(filePath: string, prefixPath: string) {
-  const normalizedFilePath = normalizeFilePath(filePath).replace(/\/+$/, '')
-  const normalizedPrefixPath = normalizeFilePath(prefixPath).replace(/\/+$/, '')
-
-  return normalizedFilePath === normalizedPrefixPath || normalizedFilePath.startsWith(`${normalizedPrefixPath}/`)
-}
-
-function getWorkspaceTabSourcePath(tab: WorkspaceDisplayTab | WorkspaceDiffTab | WorkspaceFileTab) {
-  return tab.kind === 'diff' ? tab.diff.change.path : tab.filePath
-}
-
-function getPathSeparator(filePath: string) {
-  return filePath.includes('\\') ? '\\' : '/'
-}
-
-function shouldOpenGitDiffForLine(
-  diff: GitFileDiffResult,
-  source: 'revision' | 'worktree',
-  lineNumber?: number,
-) {
-  if (typeof lineNumber !== 'number') {
-    return true
-  }
-
-  return isLineWithinVisualDiff(diff.originalContent, diff.modifiedContent, source, lineNumber)
-}
-
-function createWorkspaceFileGitDiffRequest(
-  change: GitChangeItem,
-  source: 'revision' | 'worktree',
-  lineNumber?: number,
-  mode: WorkspaceFileGitDiffRequest['mode'] = 'split',
-): WorkspaceFileGitDiffRequest {
-  return {
-    ...(typeof lineNumber === 'number' ? { lineNumber: Math.max(1, Math.floor(lineNumber)) } : null),
-    mode,
-    requestKey: `${change.scope}:${change.path}:${source}:${lineNumber ?? 'open'}:${Date.now()}`,
-    scope: change.scope,
-    source,
-  }
-}
-
-function joinPath(basePath: string, relativeSuffix: string) {
-  const separator = getPathSeparator(basePath)
-  const normalizedBasePath = basePath.replace(/[\\/]+$/, '')
-  const normalizedSuffix = relativeSuffix.replace(/[\\/]+/g, separator).replace(/^[\\/]+/, '')
-
-  return normalizedSuffix ? `${normalizedBasePath}${separator}${normalizedSuffix}` : normalizedBasePath
-}
-
-function rebasePathPrefix(filePath: string, currentPrefix: string, nextPrefix: string) {
-  const normalizedFilePath = filePath.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
-  const normalizedCurrentPrefix = currentPrefix.replace(/[\\/]+/g, '/').replace(/\/+$/, '')
-  const suffix = normalizedFilePath === normalizedCurrentPrefix
-    ? ''
-    : normalizedFilePath.slice(normalizedCurrentPrefix.length).replace(/^\/+/, '')
-
-  return joinPath(nextPrefix, suffix)
-}
-
-type StoredTabState = {
-  activePath: string | null
-  entries?: Array<{
-    path: string
-    viewMode?: LegacyWorkspaceFileViewMode
-  }>
-  fileSystem?: WorkspaceFileSystemState | null
-  paths: string[]
-}
-
 const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
 const DEFAULT_RIGHT_SIDEBAR_WIDTH = 368
 const DEFAULT_GIT_PANEL_HEIGHT = 292
@@ -401,17 +280,9 @@ const SIDEBAR_LAYOUT_TRANSITION_TARGET_SELECTOR = [
   '.file-tabs-shell',
   '.agent-threadbar',
 ].join(',')
-const FIXED_FILE_TAB_ID = 'app://fixed/files'
-const FIXED_GIT_TAB_ID = 'app://fixed/git'
 const WORKSPACE_AUTO_SAVE_DELAY_MS = 1000
 const INTERNAL_SAVE_EVENT_TTL_MS = 2500
 const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
-const DEFAULT_WORKSPACE_FILE_SYSTEM_STATE: WorkspaceFileSystemState = {
-  navigation: null,
-  selectedPath: null,
-  view: 'icons',
-}
-const WORKSPACE_FILE_SYSTEM_VIEWS: WorkspaceFileSystemView[] = ['icons', 'list', 'columns', 'gallery']
 
 type ResizePanel = 'left' | 'right'
 type SidebarResizePreview = {
@@ -427,7 +298,6 @@ type SidebarResizeSession = {
 type PanelSurfaceMode = 'docked' | 'drawer'
 type WorkspaceTreeFileClickMode = 'open-tab' | 'replace-active-tab'
 type LeftSidebarTab = 'file' | 'git'
-type AgentLayoutFixedTab = 'file' | 'git'
 type DrawerDragRegion = {
   height: number
   left: number
@@ -458,14 +328,6 @@ const PROJECT_MENU_AGENT_PROJECTLESS_ACTION_HEIGHT_PX = 39
 const PROJECT_MENU_PROJECT_ROW_HEIGHT_PX = 34
 const PROJECT_MENU_PROJECT_LIST_MAX_HEIGHT_PX = 320
 const PROJECT_MENU_EDITOR_SWITCH_VERTICAL_CHROME_PX = 24
-
-let initialLayoutState: PersistedLayoutState | null = null
-let persistedWorkspaceTabState = new Map<string, PersistedWorkspaceTabState>()
-
-export function initializeAppPersistentState(snapshot: PersistentClientStateSnapshot) {
-  initialLayoutState = snapshot.app.layout
-  persistedWorkspaceTabState = new Map(Object.entries(snapshot.workspace.workspaceTabs))
-}
 
 const emptyProjectState: ProjectState = {
   lastProjectId: null,
@@ -584,226 +446,6 @@ function resolveProjectMenuCollisionBoundary(frameRect: ProjectMenuFrameRect | n
     y: frameRect.top,
   }
 }
-
-function readStoredLayoutNumber(
-  key: keyof PersistedLayoutState,
-  fallback: number,
-) {
-  const value = initialLayoutState?.[key]
-  const parsedValue = typeof value === 'number' ? value : NaN
-
-  return Number.isFinite(parsedValue) ? parsedValue : fallback
-}
-
-function readStoredLayoutBoolean(
-  key: keyof PersistedLayoutState,
-  fallback: boolean,
-) {
-  const value = initialLayoutState?.[key]
-
-  return typeof value === 'boolean' ? value : fallback
-}
-
-function readStoredGitPanelLayout() {
-  const value = initialLayoutState?.gitPanelLayout
-
-  return value === 'list' || value === 'tree' ? value : DEFAULT_GIT_PANEL_LAYOUT
-}
-
-function readStoredLeftSidebarTab() {
-  const value = initialLayoutState?.activeLeftSidebarTab
-
-  return value === 'git' ? value : 'file'
-}
-
-function getFixedPanelTab(tab: AgentLayoutFixedTab): WorkspaceFixedPanelTab {
-  if (tab === 'git') {
-    return {
-      content: '',
-      editorKind: 'prose',
-      exists: true,
-      filePath: FIXED_GIT_TAB_ID,
-      fixedTabKind: 'git-panel',
-      id: FIXED_GIT_TAB_ID,
-      isDirty: false,
-      kind: 'fixed-panel',
-      savedContent: '',
-    }
-  }
-
-  return {
-    content: '',
-    editorKind: 'prose',
-    exists: true,
-    filePath: FIXED_FILE_TAB_ID,
-    fixedTabKind: 'file-panel',
-    id: FIXED_FILE_TAB_ID,
-    isDirty: false,
-    kind: 'fixed-panel',
-    savedContent: '',
-  }
-}
-
-function readStoredTabState(workspacePath: string): StoredTabState {
-  const storedState = persistedWorkspaceTabState.get(workspacePath)
-
-  if (storedState) {
-    return {
-      activePath: storedState.activePath,
-      entries: storedState.entries,
-      fileSystem: storedState.fileSystem ?? null,
-      paths: storedState.paths,
-    }
-  }
-
-  return {
-    activePath: null,
-    entries: [],
-    paths: [],
-  }
-}
-
-function normalizeWorkspaceFileSystemNavigation(
-  navigation: WorkspaceFileSystemNavigationState | null | undefined,
-): WorkspaceFileSystemNavigationState | null {
-  if (!navigation || !Array.isArray(navigation.stack) || navigation.stack.length === 0) {
-    return null
-  }
-
-  const stack = navigation.stack
-    .filter((path): path is string => typeof path === 'string')
-    .map((path) => {
-      const normalizedPath = path.trim().replace(/[\\/]+/g, '/').replace(/^\/+/, '')
-
-      if (!normalizedPath) {
-        return ''
-      }
-
-      return normalizedPath.endsWith('/') ? normalizedPath : `${normalizedPath}/`
-    })
-    .filter((path, index, allPaths) => index === 0 || path !== allPaths[index - 1])
-
-  if (stack.length === 0) {
-    return null
-  }
-
-  const index = Number.isFinite(navigation.index)
-    ? clamp(Math.trunc(navigation.index), 0, stack.length - 1)
-    : 0
-
-  return { index, stack }
-}
-
-function normalizeWorkspaceFileSystemState(
-  state: WorkspaceFileSystemState | null | undefined,
-): WorkspaceFileSystemState {
-  if (!state) {
-    return DEFAULT_WORKSPACE_FILE_SYSTEM_STATE
-  }
-
-  return {
-    navigation: normalizeWorkspaceFileSystemNavigation(state.navigation),
-    selectedPath: state.selectedPath || null,
-    view: WORKSPACE_FILE_SYSTEM_VIEWS.includes(state.view) ? state.view : 'icons',
-  }
-}
-
-function writeStoredTabState(workspacePath: string, state: StoredTabState) {
-  const entries = state.entries ?? state.paths.map((entryPath) => ({ path: entryPath }))
-  const previousState = persistedWorkspaceTabState.get(workspacePath)
-  const fileSystem = state.fileSystem === undefined
-    ? previousState?.fileSystem
-    : state.fileSystem ?? undefined
-  const nextState: PersistedWorkspaceTabState = {
-    activePath: state.activePath,
-    entries,
-    ...(fileSystem ? { fileSystem } : null),
-    paths: entries.map((entry) => entry.path),
-  }
-
-  persistedWorkspaceTabState.set(workspacePath, nextState)
-  void window.appApi.updateWorkspaceTabState(workspacePath, nextState).catch(() => undefined)
-}
-
-function readStoredFileSystemState(workspacePath: string | null): WorkspaceFileSystemState {
-  if (!workspacePath) {
-    return DEFAULT_WORKSPACE_FILE_SYSTEM_STATE
-  }
-
-  return normalizeWorkspaceFileSystemState(persistedWorkspaceTabState.get(workspacePath)?.fileSystem)
-}
-
-function writeStoredFileSystemState(workspacePath: string, fileSystem: WorkspaceFileSystemState) {
-  writeStoredTabState(workspacePath, {
-    ...readStoredTabState(workspacePath),
-    fileSystem: normalizeWorkspaceFileSystemState(fileSystem),
-  })
-}
-
-function dedupeStoredEntries(entries: Array<{ path: string, viewMode?: LegacyWorkspaceFileViewMode }>) {
-  const seen = new Set<string>()
-
-  return entries.filter((entry) => {
-    const key = `${entry.path}::${entry.viewMode ?? 'default'}`
-
-    if (seen.has(key)) {
-      return false
-    }
-
-    seen.add(key)
-    return true
-  })
-}
-
-function resolveWorkspaceFileViewMode(
-  filePath: string,
-  editorKind: WorkspaceFileTab['editorKind'],
-  preferredViewMode?: LegacyWorkspaceFileViewMode,
-) {
-  return normalizeWorkspaceFileViewMode(filePath, editorKind, preferredViewMode)
-}
-
-function toStoredWorkspaceTab(
-  filePath: string,
-  content: string,
-  editorKind: WorkspaceFileTab['editorKind'],
-  viewMode: WorkspaceFileViewMode,
-): WorkspaceFileTab {
-
-  return {
-    content,
-    editorKind,
-    exists: true,
-    filePath,
-    id: createWorkspaceFileTabId(filePath, viewMode),
-    isDirty: false,
-    kind: 'file',
-    savedContent: content,
-    viewMode,
-  }
-}
-
-function createDiffTab(
-  change: GitChangeItem,
-  diff: GitFileDiffResult,
-  navigationRequest?: WorkspaceDiffNavigationRequest | null,
-): WorkspaceDiffTab {
-  const id = createDiffTabId(diff)
-  return {
-    draftContent: null,
-    diff,
-    exists: true,
-    filePath: id,
-    id,
-    isDirty: false,
-    kind: 'diff',
-    navigationRequest: navigationRequest ?? null,
-    title: diff.source.kind === 'commit'
-      ? `${getBaseName(change.path)} @ ${diff.source.commit.shortHash}`
-      : getBaseName(change.path),
-  }
-}
-
 
 function App() {
   const platform = window.appApi.platform
@@ -975,7 +617,9 @@ function App() {
   const [gitBusyLabel, setGitBusyLabel] = useState<string | null>(null)
   const [gitErrorMessage, setGitErrorMessage] = useState<string | null>(null)
   const [gitCommitMessage, setGitCommitMessage] = useState('')
-  const [gitPanelLayout, setGitPanelLayout] = useState<GitPanelLayout>(() => readStoredGitPanelLayout())
+  const [gitPanelLayout, setGitPanelLayout] = useState<GitPanelLayout>(
+    () => readStoredGitPanelLayout(DEFAULT_GIT_PANEL_LAYOUT),
+  )
   const [gitHistoryRefreshVersion, setGitHistoryRefreshVersion] = useState(0)
   const [shellWidth, setShellWidth] = useState(() => (
     typeof window !== 'undefined' ? window.innerWidth : FULL_LAYOUT_BREAKPOINT + 1
@@ -1724,7 +1368,7 @@ function App() {
 
       try {
         const nextDiff = await window.appApi.getGitFileDiff(workspacePath, tab.diff.change.path, tab.diff.change.scope)
-        openDiffTab(createDiffTab(nextDiff.change, nextDiff), false)
+        openDiffTab(createDiffTab(nextDiff), false)
       } catch {
         if (!tab.isDirty) {
           closeTab(tab.id)
@@ -2436,7 +2080,7 @@ function App() {
     expandAgentEditorSurface()
 
     try {
-      const targetViewMode = resolveWorkspaceFileViewMode(filePath, editorKind, preferredViewMode)
+      const targetViewMode = normalizeWorkspaceFileViewMode(filePath, editorKind, preferredViewMode)
       recordOpenFileProfile('app:open-file:resolve-view-mode:end', {
         elapsedMs: getOpenFileProfileDuration(openStartedAt),
         targetViewMode,
@@ -2608,7 +2252,7 @@ function App() {
     expandAgentEditorSurface()
 
     try {
-      const targetViewMode = resolveWorkspaceFileViewMode(filePath, editorKind, currentActiveFileTab?.viewMode)
+      const targetViewMode = normalizeWorkspaceFileViewMode(filePath, editorKind, currentActiveFileTab?.viewMode)
       const targetTabId = createWorkspaceFileTabId(filePath, targetViewMode)
       const existingTargetTab = useWorkspaceStore.getState().openTabs.find(
         (tab): tab is WorkspaceFileTab => tab.kind === 'file' && tab.id === targetTabId,
@@ -2795,7 +2439,7 @@ function App() {
           source: navigationSource,
         } satisfies WorkspaceDiffNavigationRequest
         : null
-      openDiffTab(createDiffTab(change, diff, navigationRequest))
+      openDiffTab(createDiffTab(diff, navigationRequest))
       setIsAgentLayoutFixedTabActive(false)
 
       if (isLeftSidebarDrawer) {
@@ -2822,7 +2466,7 @@ function App() {
     try {
       const diff = await window.appApi.getGitCommitFileDiff(currentPath, commitHash, change.path)
 
-      openDiffTab(createDiffTab(diff.change, diff))
+      openDiffTab(createDiffTab(diff))
       setIsAgentLayoutFixedTabActive(false)
 
       if (isLeftSidebarDrawer) {
@@ -2894,7 +2538,7 @@ function App() {
           filePath,
           content,
           editorKind,
-          resolveWorkspaceFileViewMode(filePath, editorKind, viewMode),
+          normalizeWorkspaceFileViewMode(filePath, editorKind, viewMode),
         )
       } catch {
         return null

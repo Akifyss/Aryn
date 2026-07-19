@@ -20,6 +20,7 @@ import {
   resolveWorkspaceFileRenderKindForEditorKind,
   type WorkspaceFileRenderKind,
 } from '@/features/workspace/lib/workspace-file-rendering'
+import { getBaseName } from '@/features/workspace/lib/workspace-paths'
 import type { AppTheme, MeoSettings } from '@/hooks/use-settings-store'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
 
@@ -134,10 +135,6 @@ function calculateImagePreviewCenteredZoomTransform({
 
 export const __workspaceFilePreviewTestHooks = {
   calculateImagePreviewCenteredZoomTransform,
-}
-
-function getBaseName(filePath: string) {
-  return filePath.split(/[\\/]/).pop() ?? filePath
 }
 
 function PreviewToolbar({
