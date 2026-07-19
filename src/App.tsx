@@ -15,7 +15,6 @@ import {
   LayoutLeftLine,
   LayoutRightLine,
   Chat3Line,
-  DownLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import type {
@@ -37,7 +36,6 @@ import type {
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { EmptyState } from '@/components/empty-state'
-import { ProjectIcon } from '@/components/project-icon'
 import {
   AgentChatSurface,
   AgentProvider,
@@ -67,6 +65,14 @@ import { FileTabs } from '@/features/workspace/components/file-tabs'
 import { WorkspaceFileSystemPanel } from '@/features/workspace/components/workspace-file-system-panel'
 import { WorkspaceFilePreview } from '@/features/workspace/components/workspace-file-preview'
 import { WorkspaceTreePanel } from '@/features/workspace/components/workspace-tree-panel'
+import {
+  WorkspaceSidebar,
+  type WorkspaceSidebarSurfaceMode as PanelSurfaceMode,
+} from '@/features/workspace/components/workspace-sidebar/workspace-sidebar'
+import {
+  WorkspaceSidebarTabs,
+  type WorkspaceSidebarTab,
+} from '@/features/workspace/components/workspace-sidebar-tabs/workspace-sidebar-tabs'
 import { NewProjectDialog } from '@/features/workspace/components/new-project-dialog/new-project-dialog'
 import { ProjectBootstrap } from '@/features/workspace/components/project-bootstrap/project-bootstrap'
 import {
@@ -290,9 +296,7 @@ type SidebarResizeSession = {
   right: number
   width: number
 }
-type PanelSurfaceMode = 'docked' | 'drawer'
 type WorkspaceTreeFileClickMode = 'open-tab' | 'replace-active-tab'
-type LeftSidebarTab = 'file' | 'git'
 type DrawerDragRegion = {
   height: number
   left: number
@@ -481,7 +485,7 @@ function App() {
   )
   const [activeResizePanel, setActiveResizePanel] = useState<ResizePanel | null>(null)
   const [isGitPanelResizing, setIsGitPanelResizing] = useState(false)
-  const [activeLeftSidebarTab, setActiveLeftSidebarTab] = useState<LeftSidebarTab>(() => readStoredLeftSidebarTab())
+  const [activeLeftSidebarTab, setActiveLeftSidebarTab] = useState<WorkspaceSidebarTab>(() => readStoredLeftSidebarTab())
   const [gitRepositoryState, setGitRepositoryState] = useState<GitRepositoryState | null>(null)
   const [isGitLoading, setIsGitLoading] = useState(false)
   const [gitBusyLabel, setGitBusyLabel] = useState<string | null>(null)
@@ -3164,45 +3168,16 @@ function App() {
     } = options
 
     return (
-      <BaseTabs.Root
-        className='sidebar-workspace-tabs'
-        orientation='horizontal'
-        value={activeLeftSidebarTab}
-        onValueChange={(value) => {
-          if (value === 'file' || value === 'git') {
-            setActiveLeftSidebarTab(value)
-          }
-        }}
-      >
-        <div className='sidebar-workspace-tabs-list-container'>
-          <BaseTabs.List aria-label='工作区面板' className='sidebar-workspace-tabs-list'>
-            <BaseTabs.Tab value='file' className='sidebar-workspace-tab'>
-              <FolderLine size={16} className='sidebar-workspace-tab-icon' />
-              <span className='sidebar-workspace-tab-label'>文件</span>
-            </BaseTabs.Tab>
-            <BaseTabs.Tab value='git' className='sidebar-workspace-tab'>
-              <GitBranchLine size={16} className='sidebar-workspace-tab-icon' />
-              <span className='sidebar-workspace-tab-label'>更改</span>
-            </BaseTabs.Tab>
-            <BaseTabs.Indicator className='sidebar-workspace-tab-indicator' />
-          </BaseTabs.List>
-          {tabListAction ? (
-            <div className='sidebar-workspace-tabs-action'>
-              {tabListAction}
-            </div>
-          ) : null}
-        </div>
-
-        <BaseTabs.Panel value='file' className='sidebar-workspace-tab-panel'>
-          {renderWorkspaceTreePanel({
-            ...workspaceTreeOptions,
-            surfaceMode,
-          })}
-        </BaseTabs.Panel>
-        <BaseTabs.Panel value='git' className='sidebar-workspace-tab-panel'>
-          {renderGitPanel({ surfaceMode })}
-        </BaseTabs.Panel>
-      </BaseTabs.Root>
+      <WorkspaceSidebarTabs
+        activeTab={activeLeftSidebarTab}
+        filePanel={renderWorkspaceTreePanel({
+          ...workspaceTreeOptions,
+          surfaceMode,
+        })}
+        gitPanel={renderGitPanel({ surfaceMode })}
+        tabListAction={tabListAction}
+        onActiveTabChange={setActiveLeftSidebarTab}
+      />
     )
   }
 
@@ -4846,85 +4821,54 @@ function App() {
 
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
     const isDrawerSurface = surfaceMode === 'drawer'
-    const workspaceSwitchButtonClassName = `section-title-text editor-workspace-switch-button${currentPath ? '' : ' is-empty'}`
-    const renderWorkspaceSwitchButton = (className = 'section-title-text', showDropdownIcon = false) => (
-      <button
-        type='button'
-        onClick={(event) => {
+
+    return (
+      <WorkspaceSidebar
+        bodyRef={isDrawerSurface ? undefined : leftSidebarBodyRef}
+        chromeStyle={shellChromeVars}
+        drawerHeaderActions={isDrawerSurface ? (
+          <>
+            {renderLeftChromeSearchButton()}
+            {renderLeftSidebarToggleButton()}
+          </>
+        ) : undefined}
+        hasWorkspace={Boolean(currentPath)}
+        isPickingWorkspace={isPickingWorkspace}
+        overlay={isDrawerSurface
+          ? renderProjectMenu('left-drawer', leftDrawerOverlayRoot?.getBoundingClientRect() ?? null)
+          : undefined}
+        overlayRootRef={isDrawerSurface ? setLeftDrawerOverlayRoot : undefined}
+        platform={shellPlatform}
+        showWorkspaceSwitch={!isAgentLayout}
+        surfaceMode={surfaceMode}
+        surfaceRef={isDrawerSurface ? leftDrawerSurfaceRef : undefined}
+        workspaceLabel={editorWorkspaceSwitchLabel}
+        onOpenSettings={() => {
+          setIsSettingsOpen(true)
+
+          if (isDrawerSurface) {
+            setIsLeftDrawerOpen(false)
+          }
+        }}
+        onOpenWorkspaceSwitch={(anchorRect) => {
           openProjectMenu(
             'editor-switch',
-            event.currentTarget.getBoundingClientRect(),
+            anchorRect,
             { surface: isDrawerSurface ? 'left-drawer' : 'global' },
           )
         }}
-        disabled={isPickingWorkspace}
-        className={className}
-        aria-label={isPickingWorkspace ? 'Opening workspace' : '选择或切换工作目录'}
       >
-        <ProjectIcon />
-        <span className='section-title-label'>{editorWorkspaceSwitchLabel}</span>
-        {showDropdownIcon ? (
-          <DownLine className='editor-workspace-switch-chevron' size={16} aria-hidden='true' />
-        ) : null}
-      </button>
-    )
-
-    return (
-      <div
-        ref={isDrawerSurface ? leftDrawerSurfaceRef : undefined}
-        className={`workspace-sidebar-surface${isDrawerSurface ? ' is-drawer' : ''}`}
-        data-platform={shellPlatform}
-        style={isDrawerSurface ? shellChromeVars : undefined}
-      >
-        <div className={`section-title workspace-section-title${isDrawerSurface ? ' is-drawer-surface' : ''}`}>
-          <div className='section-title-drag-spacer' aria-hidden='true' />
-          {isDrawerSurface ? renderLeftChromeSearchButton() : null}
-          {isDrawerSurface ? renderLeftSidebarToggleButton() : null}
-        </div>
-
-        {!isAgentLayout ? (
-          <div className='editor-workspace-switch-row'>
-            {renderWorkspaceSwitchButton(workspaceSwitchButtonClassName, true)}
-          </div>
-        ) : null}
-
-        <div ref={isDrawerSurface ? undefined : leftSidebarBodyRef} className='sidebar-stack'>
-          {isAgentLayout ? (
-            <AgentSessionTree
-              isProjectAddMenuOpen={isProjectAddMenuOpenForSurface(isDrawerSurface ? 'left-drawer' : 'global')}
-              menuPortalTarget={isDrawerSurface ? leftDrawerOverlayRoot : null}
-              onOpenProjectAddMenu={isDrawerSurface
-                ? (anchorRect) => openProjectMenu('agent-add', anchorRect, { surface: 'left-drawer' })
-                : undefined}
-              onRequestClose={isDrawerSurface ? () => setIsLeftDrawerOpen(false) : undefined}
-            />
-          ) : (
-            renderSidebarWorkspaceTabs({ surfaceMode })
-          )}
-        </div>
-
-        <div className='sidebar-footer'>
-          <button
-            type='button'
-            className='sidebar-footer-item'
-            onClick={() => {
-              setIsSettingsOpen(true)
-
-              if (isDrawerSurface) {
-                setIsLeftDrawerOpen(false)
-              }
-            }}
-          >
-            <Icon icon='lucide:settings' width={16} height={16} />
-            <span>设置</span>
-          </button>
-        </div>
-        {isDrawerSurface ? (
-          <div ref={setLeftDrawerOverlayRoot} className='drawer-local-overlay-root'>
-            {renderProjectMenu('left-drawer', leftDrawerOverlayRoot?.getBoundingClientRect() ?? null)}
-          </div>
-        ) : null}
-      </div>
+        {isAgentLayout ? (
+          <AgentSessionTree
+            isProjectAddMenuOpen={isProjectAddMenuOpenForSurface(isDrawerSurface ? 'left-drawer' : 'global')}
+            menuPortalTarget={isDrawerSurface ? leftDrawerOverlayRoot : null}
+            onOpenProjectAddMenu={isDrawerSurface
+              ? (anchorRect) => openProjectMenu('agent-add', anchorRect, { surface: 'left-drawer' })
+              : undefined}
+            onRequestClose={isDrawerSurface ? () => setIsLeftDrawerOpen(false) : undefined}
+          />
+        ) : renderSidebarWorkspaceTabs({ surfaceMode })}
+      </WorkspaceSidebar>
     )
   }
 
