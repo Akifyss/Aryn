@@ -91,7 +91,7 @@ describe('workspace project controller ownership', () => {
     expect(appSource).not.toContain('async function switchActiveWorkspace')
     expect(appSource).not.toContain('agentProjectSessionRequestIdRef')
     expect(appSource).not.toContain('pickWorkspace: handlePickWorkspace')
-    expect(appSource).toContain('async function handleCreateConversationWorkspace')
+    expect(appSource).toContain('useConversationController({')
     expect(controllerSource).toContain('async function addExistingProject')
     expect(controllerSource).not.toContain('async function pickWorkspace')
     expect(controllerSource).toContain('const queueCurrentProjectSession = useCallback')
