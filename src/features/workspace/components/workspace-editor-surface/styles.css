@@ -1,0 +1,231 @@
+.editor-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--background-primary);
+  overflow: hidden;
+}
+
+.editor-content-shell {
+  --editor-surface-header-height: 44px;
+  --editor-toolbar-inline-padding: 6px;
+  --editor-fixed-panel-block-start-gap: var(--editor-toolbar-inline-padding);
+  --editor-toolbar-gap: 8px;
+  --editor-toolbar-control-gap: 4px;
+  --editor-directory-toggle-left: var(--editor-toolbar-inline-padding);
+  --editor-directory-toggle-top: 6px;
+  --editor-directory-toggle-size: 32px;
+
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--background-primary);
+}
+
+.app-shell[data-app-layout='agent'] .editor-content-shell > .sidebar-git-pane .git-panel-detail-pane > .git-panel > .git-panel-header,
+.app-shell[data-app-layout='agent'] .editor-content-shell > .sidebar-git-pane .git-panel-detail-pane > .git-commit-detail > .git-commit-detail-header {
+  margin-block-start: var(--editor-fixed-panel-block-start-gap);
+}
+
+.editor-directory-sidebar {
+  display: flex;
+  flex: 0 0 var(--fixed-panel-sidebar-width);
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--separator);
+  background: var(--background-primary);
+}
+
+.editor-directory-toggle-slot {
+  position: absolute;
+  top: var(--editor-directory-toggle-top);
+  left: var(--editor-directory-toggle-left);
+  z-index: 20;
+  display: flex;
+  width: var(--editor-directory-toggle-size);
+  height: var(--editor-directory-toggle-size);
+  pointer-events: none;
+}
+
+.editor-directory-toggle-slot .editor-directory-toggle {
+  pointer-events: auto;
+}
+
+.editor-directory-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--editor-directory-toggle-size);
+  height: var(--editor-directory-toggle-size);
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--foreground-secondary);
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.editor-directory-toggle:hover {
+  background: var(--hover);
+  color: var(--foreground-primary);
+}
+
+.editor-directory-toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  background: var(--hover);
+  color: var(--foreground-primary);
+}
+
+.editor-directory-toggle:active {
+  transform: scale(0.94);
+}
+
+.editor-directory-toggle.is-active {
+  background: transparent;
+  color: var(--foreground-primary);
+}
+
+.editor-directory-toggle.is-active:hover,
+.editor-directory-toggle.is-active:focus-visible {
+  background: var(--hover);
+}
+
+.editor-directory-toggle-spacer {
+  flex: 0 0 var(--editor-directory-toggle-size);
+  width: var(--editor-directory-toggle-size);
+  height: var(--editor-directory-toggle-size);
+}
+
+.editor-view-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.editor-plain-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--editor-toolbar-gap);
+  flex: 0 0 var(--editor-surface-header-height);
+  height: var(--editor-surface-header-height);
+  padding: 0 14px 0 var(--editor-directory-toggle-left);
+  border-bottom: 1px solid var(--separator);
+  background: var(--background-primary);
+}
+
+.editor-lazy-fallback {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--foreground-secondary);
+  font-size: 13px;
+}
+
+.editor-lazy-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid color-mix(in srgb, var(--foreground-secondary) 24%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  animation: editor-lazy-spin 700ms linear infinite;
+}
+
+@keyframes editor-lazy-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.editor-empty-state {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 32px;
+}
+
+.editor-empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: min(420px, 100%);
+  text-align: center;
+}
+
+.editor-empty-logo-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  aspect-ratio: 1;
+  border-radius: 18px;
+  color: var(--accent);
+}
+
+.editor-empty-folder-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.editor-empty-copy h3 {
+  margin: 0 0 8px;
+  color: var(--foreground-primary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.editor-empty-copy p {
+  max-width: 360px;
+  margin: 0;
+  color: var(--foreground-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.editor-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+@media (max-width: 860px) {
+  .editor-empty-actions {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-directory-toggle {
+    transition: none;
+  }
+
+  .editor-lazy-spinner {
+    animation: none;
+  }
+}

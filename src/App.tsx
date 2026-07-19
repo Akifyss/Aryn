@@ -10,7 +10,6 @@ import { Tabs as BaseTabs } from '@base-ui/react/tabs'
 import { Button, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
 import {
   FolderLine,
-  FolderOpenLine,
   GitBranchLine,
   LayoutLeftLine,
   LayoutRightLine,
@@ -35,7 +34,6 @@ import type {
 } from '@/features/workspace/types'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import { AppTitlebar } from '@/components/app-titlebar'
-import { EmptyState } from '@/components/empty-state'
 import {
   AgentChatSurface,
   AgentProvider,
@@ -61,9 +59,19 @@ import {
   SettingsDialog,
   type SettingsSectionId,
 } from '@/features/settings/components/settings-dialog'
-import { FileTabs } from '@/features/workspace/components/file-tabs'
+import { FileTabs } from '@/features/workspace/components/file-tabs/file-tabs'
 import { WorkspaceFileSystemPanel } from '@/features/workspace/components/workspace-file-system-panel'
 import { WorkspaceFilePreview } from '@/features/workspace/components/workspace-file-preview'
+import {
+  WorkspaceEditorDirectorySidebar,
+  WorkspaceEditorDirectoryToggle,
+  WorkspaceEditorDirectoryToggleSlot,
+  WorkspaceEditorDirectoryToggleSpacer,
+  WorkspaceEditorEmptyState,
+  WorkspaceEditorLoadingState,
+  WorkspaceEditorSurface,
+  WorkspaceEditorView,
+} from '@/features/workspace/components/workspace-editor-surface/workspace-editor-surface'
 import { WorkspaceTreePanel } from '@/features/workspace/components/workspace-tree-panel'
 import {
   WorkspaceSidebar,
@@ -221,23 +229,6 @@ const MeoEditorHost = lazy(async () => {
   recordOpenFileProfile('lazy:meo-editor-host:lazy-resolved', { durationMs: getOpenFileProfileDuration(startedAt) })
   return { default: module.MeoEditorHost }
 })
-
-function EditorLoadingState({ label = 'Loading editor...' }: { label?: string }) {
-  useEffect(() => {
-    recordOpenFileProfile('editor:fallback:mounted', { label })
-
-    return () => {
-      recordOpenFileProfile('editor:fallback:unmounted', { label })
-    }
-  }, [label])
-
-  return (
-    <div className='editor-lazy-fallback' role='status' aria-live='polite'>
-      <span className='editor-lazy-spinner' aria-hidden='true' />
-      <span>{label}</span>
-    </div>
-  )
-}
 
 type ResolvedAppTheme = 'light' | 'dark'
 type WindowAppearanceTheme = ResolvedAppTheme | 'system'
@@ -516,7 +507,6 @@ function App() {
   const [rightDrawerOverlayRoot, setRightDrawerOverlayRoot] = useState<HTMLDivElement | null>(null)
   const meoEditorHostRef = useRef<MeoEditorHostHandle | null>(null)
   const agentProjectSessionRequestIdRef = useRef(0)
-  const editorEmptyWorkspaceTriggerRef = useRef<HTMLButtonElement | null>(null)
   const finishSidebarLayoutTransition = useCallback(() => {
     if (sidebarLayoutTransitionTimerRef.current !== null) {
       window.clearTimeout(sidebarLayoutTransitionTimerRef.current)
@@ -4882,21 +4872,10 @@ function App() {
     }
 
     return (
-      <AppTooltipButton
-        type='button'
-        className={`editor-directory-toggle${isDirectorySidebarVisible ? ' is-active' : ''}`}
-        aria-label={isDirectorySidebarVisible ? '隐藏目录侧边栏' : '显示目录侧边栏'}
-        aria-pressed={isDirectorySidebarVisible}
-        onClick={() => setIsDirectorySidebarOpen((currentValue) => !currentValue)}
-        tooltip={isDirectorySidebarVisible ? '隐藏目录' : '显示目录'}
-      >
-        <Icon
-          icon={isDirectorySidebarVisible ? 'ri:menu-fold-line' : 'ri:menu-fold-2-line'}
-          width={16}
-          height={16}
-          aria-hidden='true'
-        />
-      </AppTooltipButton>
+      <WorkspaceEditorDirectoryToggle
+        isVisible={isDirectorySidebarVisible}
+        onToggle={() => setIsDirectorySidebarOpen((currentValue) => !currentValue)}
+      />
     )
   }
 
@@ -4914,7 +4893,7 @@ function App() {
     } = options
 
     return (
-      <aside className='editor-directory-sidebar'>
+      <WorkspaceEditorDirectorySidebar>
         {showWorkspaceTabs
           ? renderSidebarWorkspaceTabs({
               surfaceMode: 'docked',
@@ -4932,41 +4911,19 @@ function App() {
               surfaceMode: 'docked',
               title: workspaceLabel,
             })}
-      </aside>
+      </WorkspaceEditorDirectorySidebar>
     )
   }
 
   function renderEditorEmptyState() {
-    return !currentPath ? (
-      <div className='editor-empty-state is-workspace-missing'>
-        <div className='editor-empty-content'>
-          <div className='editor-empty-logo-shell' aria-hidden='true'>
-            <FolderOpenLine className='editor-empty-folder-icon' size={30} />
-          </div>
-          <div className='editor-empty-copy'>
-            <h3>选择工作目录</h3>
-            <p>当前对话会保留在右侧。连接一个文件夹后，可以在这里浏览、搜索和编辑文件。</p>
-          </div>
-          <div className='editor-empty-actions'>
-            <Button
-              ref={editorEmptyWorkspaceTriggerRef}
-              variant='primary'
-              onPress={() => {
-                openProjectMenu(
-                  'editor-switch',
-                  editorEmptyWorkspaceTriggerRef.current?.getBoundingClientRect(),
-                )
-              }}
-              isDisabled={isPickingWorkspace}
-            >
-              <FolderOpenLine className='mr-2' size={16} />
-              选择工作目录
-            </Button>
-          </div>
-        </div>
-      </div>
-    ) : (
-      <EmptyState fill title='未打开文件' />
+    return (
+      <WorkspaceEditorEmptyState
+        hasWorkspace={Boolean(currentPath)}
+        isPickingWorkspace={isPickingWorkspace}
+        onOpenWorkspaceSwitch={(anchorRect) => {
+          openProjectMenu('editor-switch', anchorRect)
+        }}
+      />
     )
   }
 
@@ -4995,7 +4952,7 @@ function App() {
   function renderEditorSurface() {
     const directorySidebarToggle = renderDirectorySidebarToggle()
     const editorToolbarLeadingAction = isDirectoryToggleSlotVisible
-      ? <span className='editor-directory-toggle-spacer' aria-hidden='true' />
+      ? <WorkspaceEditorDirectoryToggleSpacer />
       : null
     const isCodeEditorView = Boolean(activeFileTab && (
       (currentEditorKind === 'code' && currentFileViewMode === 'code')
@@ -5005,104 +4962,132 @@ function App() {
     const isFileSurfaceView = Boolean(activeFileTab && currentEditorKind === 'file' && currentFileViewMode === 'file')
 
     return (
-      <div className='editor-frame'>
-        <FileTabs
-          activeTabId={displayActiveTabId}
-          iconTheme={iconTheme}
-          tabs={displayTabs}
-          workspacePath={currentPath}
-          onActivate={activateFileTab}
-          onClose={(tabId) => {
-            void closeEditorTab(tabId)
-          }}
-          onMoveTab={(movingId, targetId, position) => {
-            moveTab(movingId, targetId, position)
-          }}
-          onOpenDiff={async (filePath) => {
-            const latestGitState = await refreshGitState(currentPath, { silent: true })
-            const nextChange = findGitChangeByFilePath(latestGitState, filePath)
-            if (nextChange) {
-              void openGitDiff(nextChange)
-            }
-          }}
-          getHasDiff={(filePath) => Boolean(findGitChangeByFilePath(gitRepositoryState, filePath))}
-        />
+      <WorkspaceEditorSurface
+        tabs={(
+          <FileTabs
+            activeTabId={displayActiveTabId}
+            iconTheme={iconTheme}
+            tabs={displayTabs}
+            workspacePath={currentPath}
+            onActivate={activateFileTab}
+            onClose={(tabId) => {
+              void closeEditorTab(tabId)
+            }}
+            onMoveTab={(movingId, targetId, position) => {
+              moveTab(movingId, targetId, position)
+            }}
+            onOpenDiff={async (filePath) => {
+              const latestGitState = await refreshGitState(currentPath, { silent: true })
+              const nextChange = findGitChangeByFilePath(latestGitState, filePath)
+              if (nextChange) {
+                void openGitDiff(nextChange)
+              }
+            }}
+            getHasDiff={(filePath) => Boolean(findGitChangeByFilePath(gitRepositoryState, filePath))}
+          />
+        )}
+      >
+        {activeFixedPanelTab?.fixedTabKind === 'file-panel' ? renderFixedFilePanel() : null}
+        {activeFixedPanelTab?.fixedTabKind === 'git-panel' ? renderGitPanel() : null}
+        {isDirectorySidebarVisible ? renderDirectorySidebar({
+          action: directorySidebarToggle,
+          fileClickMode: 'replace-active-tab',
+        }) : null}
+        {isDirectoryToggleSlotVisible ? (
+          <WorkspaceEditorDirectoryToggleSlot>
+            {directorySidebarToggle}
+          </WorkspaceEditorDirectoryToggleSlot>
+        ) : null}
+        {!activeFixedPanelTab && !activeFileTab && !activeDiffTab ? renderEditorEmptyState() : null}
 
-        <div className='editor-content-shell' id='editor-content-panel'>
-          {activeFixedPanelTab?.fixedTabKind === 'file-panel' ? renderFixedFilePanel() : null}
-          {activeFixedPanelTab?.fixedTabKind === 'git-panel' ? renderGitPanel() : null}
-          {isDirectorySidebarVisible ? renderDirectorySidebar({
-            action: directorySidebarToggle,
-            fileClickMode: 'replace-active-tab',
-          }) : null}
-          {isDirectoryToggleSlotVisible ? (
-            <div className='editor-directory-toggle-slot'>
-              {directorySidebarToggle}
-            </div>
-          ) : null}
-          {!activeFixedPanelTab && !activeFileTab && !activeDiffTab ? renderEditorEmptyState() : null}
+        {shouldRenderWorkspaceEditor && activeDiffTab ? (
+          <Suspense fallback={<WorkspaceEditorLoadingState label='Loading diff editor...' />}>
+            <GitDiffEditor
+              key={activeDiffTab.id}
+              diff={activeDiffTab.diff}
+              draftContent={activeDiffDraftContent}
+              navigationRequest={activeDiffTab.navigationRequest ?? null}
+              hasDirtyRelatedFileTab={activeDiffHasDirtyRelatedFileTab}
+              leadingToolbarAction={editorToolbarLeadingAction}
+              theme={theme}
+              onDiscardChange={(change) => {
+                void handleDiscardGitChange(change)
+              }}
+              onDraftChange={(nextValue) => {
+                updateDiffTabDraft(activeDiffTab.id, nextValue)
+              }}
+              onSaveEditedFile={handleSaveDiffFile}
+              onStageChange={(change) => {
+                void handleStageGitPaths([change.path])
+              }}
+              onUnstageChange={(change) => {
+                void handleUnstageGitPaths([change.path])
+              }}
+            />
+          </Suspense>
+        ) : null}
 
-          {shouldRenderWorkspaceEditor && activeDiffTab ? (
-            <Suspense fallback={<EditorLoadingState label='Loading diff editor...' />}>
-              <GitDiffEditor
-                key={activeDiffTab.id}
-                diff={activeDiffTab.diff}
-                draftContent={activeDiffDraftContent}
-                navigationRequest={activeDiffTab.navigationRequest ?? null}
-                hasDirtyRelatedFileTab={activeDiffHasDirtyRelatedFileTab}
-                leadingToolbarAction={editorToolbarLeadingAction}
-                theme={theme}
-                onDiscardChange={(change) => {
-                  void handleDiscardGitChange(change)
-                }}
-                onDraftChange={(nextValue) => {
-                  updateDiffTabDraft(activeDiffTab.id, nextValue)
-                }}
-                onSaveEditedFile={handleSaveDiffFile}
-                onStageChange={(change) => {
-                  void handleStageGitPaths([change.path])
-                }}
-                onUnstageChange={(change) => {
-                  void handleUnstageGitPaths([change.path])
-                }}
-              />
-            </Suspense>
-          ) : null}
+        {shouldRenderWorkspaceEditor && activeFileTab && currentEditorKind === 'prose' && currentFileViewMode === 'meo' ? (
+          <Suspense fallback={<WorkspaceEditorLoadingState />}>
+            <MeoEditorHost
+              key={activeFileTab.id}
+              ref={meoEditorHostRef}
+              filePath={activeFileTab.filePath}
+              gitDiffRequest={activeFileTab.gitDiffRequest ?? null}
+              hasLeadingToolbarInset={isDirectoryToggleSlotVisible}
+              onChange={(nextValue) => {
+                updateFileTabsContent(activeFileTab.filePath, nextValue)
+              }}
+              onCompositionChange={setIsActiveEditorComposing}
+              onOpenFile={(targetFilePath) => {
+                void openFile(targetFilePath, currentPath, 'meo')
+              }}
+              onOpenGitDiff={(targetFilePath, gitAction) => {
+                void (async () => {
+                  if (!currentPath) {
+                    return
+                  }
 
-          {shouldRenderWorkspaceEditor && activeFileTab && currentEditorKind === 'prose' && currentFileViewMode === 'meo' ? (
-            <Suspense fallback={<EditorLoadingState />}>
-              <MeoEditorHost
+                  const latestGitState = await refreshGitState(currentPath, { silent: true })
+                  const nextChange = findGitChangeByFilePath(
+                    latestGitState,
+                    targetFilePath,
+                    gitAction?.source === 'revision' ? ['staged', 'unstaged'] : ['unstaged', 'staged'],
+                  )
+
+                  if (nextChange) {
+                    await openGitDiff(nextChange, { ...gitAction, view: 'meo' })
+                  }
+                })()
+              }}
+              onApplyGitDiffSelection={handleApplyGitDiffSelection}
+              onSave={(content) => {
+                void handleSave({
+                  content,
+                  filePath: activeFileTab.filePath,
+                })
+              }}
+              value={currentFileContent}
+              savedValue={activeFileTab.savedContent}
+              theme={theme}
+              gitRepositoryState={gitRepositoryState}
+              meoSettings={meo}
+              workspacePath={currentPath}
+            />
+          </Suspense>
+        ) : null}
+
+        {shouldRenderWorkspaceEditor && activeFileTab && isCodeEditorView ? (
+          <WorkspaceEditorView leadingToolbarAction={editorToolbarLeadingAction}>
+            <Suspense fallback={<WorkspaceEditorLoadingState />}>
+              <CodeEditor
                 key={activeFileTab.id}
-                ref={meoEditorHostRef}
+                disabled={false}
                 filePath={activeFileTab.filePath}
-                gitDiffRequest={activeFileTab.gitDiffRequest ?? null}
-                hasLeadingToolbarInset={isDirectoryToggleSlotVisible}
                 onChange={(nextValue) => {
                   updateFileTabsContent(activeFileTab.filePath, nextValue)
                 }}
                 onCompositionChange={setIsActiveEditorComposing}
-                onOpenFile={(targetFilePath) => {
-                  void openFile(targetFilePath, currentPath, 'meo')
-                }}
-                onOpenGitDiff={(targetFilePath, gitAction) => {
-                  void (async () => {
-                    if (!currentPath) {
-                      return
-                    }
-
-                    const latestGitState = await refreshGitState(currentPath, { silent: true })
-                    const nextChange = findGitChangeByFilePath(
-                      latestGitState,
-                      targetFilePath,
-                      gitAction?.source === 'revision' ? ['staged', 'unstaged'] : ['unstaged', 'staged'],
-                    )
-
-                    if (nextChange) {
-                      await openGitDiff(nextChange, { ...gitAction, view: 'meo' })
-                    }
-                  })()
-                }}
-                onApplyGitDiffSelection={handleApplyGitDiffSelection}
                 onSave={(content) => {
                   void handleSave({
                     content,
@@ -5110,76 +5095,38 @@ function App() {
                   })
                 }}
                 value={currentFileContent}
-                savedValue={activeFileTab.savedContent}
                 theme={theme}
+              />
+            </Suspense>
+          </WorkspaceEditorView>
+        ) : null}
+
+        {shouldRenderWorkspaceEditor && activeFileTab && isHtmlPreviewEditorView ? (
+          <WorkspaceEditorView leadingToolbarAction={editorToolbarLeadingAction}>
+            <HtmlPreview
+              content={currentFileContent}
+              filePath={activeFileTab.filePath}
+            />
+          </WorkspaceEditorView>
+        ) : null}
+
+        {shouldRenderWorkspaceEditor && activeFileTab && isFileSurfaceView ? (
+          <WorkspaceEditorView>
+            <Suspense fallback={<WorkspaceEditorLoadingState label='正在加载文件...' />}>
+              <WorkspaceFilePreview
+                key={activeFileTab.id}
+                filePath={activeFileTab.filePath}
                 gitRepositoryState={gitRepositoryState}
+                iconTheme={iconTheme}
+                leadingToolbarActions={editorToolbarLeadingAction}
                 meoSettings={meo}
+                theme={theme}
                 workspacePath={currentPath}
               />
             </Suspense>
-          ) : null}
-
-          {shouldRenderWorkspaceEditor && activeFileTab && isCodeEditorView ? (
-            <div className='editor-view-shell'>
-              {editorToolbarLeadingAction ? (
-                <div className='editor-plain-toolbar'>
-                  {editorToolbarLeadingAction}
-                </div>
-              ) : null}
-              <Suspense fallback={<EditorLoadingState />}>
-                <CodeEditor
-                  key={activeFileTab.id}
-                  disabled={false}
-                  filePath={activeFileTab.filePath}
-                  onChange={(nextValue) => {
-                    updateFileTabsContent(activeFileTab.filePath, nextValue)
-                  }}
-                  onCompositionChange={setIsActiveEditorComposing}
-                  onSave={(content) => {
-                    void handleSave({
-                      content,
-                      filePath: activeFileTab.filePath,
-                    })
-                  }}
-                  value={currentFileContent}
-                  theme={theme}
-                />
-              </Suspense>
-            </div>
-          ) : null}
-
-          {shouldRenderWorkspaceEditor && activeFileTab && isHtmlPreviewEditorView ? (
-            <div className='editor-view-shell'>
-              {editorToolbarLeadingAction ? (
-                <div className='editor-plain-toolbar'>
-                  {editorToolbarLeadingAction}
-                </div>
-              ) : null}
-              <HtmlPreview
-                content={currentFileContent}
-                filePath={activeFileTab.filePath}
-              />
-            </div>
-          ) : null}
-
-          {shouldRenderWorkspaceEditor && activeFileTab && isFileSurfaceView ? (
-            <div className='editor-view-shell'>
-              <Suspense fallback={<EditorLoadingState label='正在加载文件...' />}>
-                <WorkspaceFilePreview
-                  key={activeFileTab.id}
-                  filePath={activeFileTab.filePath}
-                  gitRepositoryState={gitRepositoryState}
-                  iconTheme={iconTheme}
-                  leadingToolbarActions={editorToolbarLeadingAction}
-                  meoSettings={meo}
-                  theme={theme}
-                  workspacePath={currentPath}
-                />
-              </Suspense>
-            </div>
-          ) : null}
-        </div>
-      </div>
+          </WorkspaceEditorView>
+        ) : null}
+      </WorkspaceEditorSurface>
     )
   }
 

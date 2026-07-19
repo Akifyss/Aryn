@@ -10,6 +10,7 @@ import {
 } from '@/features/workspace/store/use-workspace-store'
 import { getBaseName, getRelativePath } from '@/features/workspace/lib/workspace-paths'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
+import './styles.css'
 
 type FileTabsProps = {
   activeTabId: string | null

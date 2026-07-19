@@ -1,0 +1,486 @@
+.file-tabs-shell {
+  --file-tabs-right-panel-inset: var(--right-panel-control-inset);
+
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: var(--tabs-chrome-height);
+  background-color: var(--background-primary);
+}
+
+.file-tabs-shell[data-has-actions='false'] {
+  --file-tabs-right-panel-inset: var(--right-panel-content-inset);
+}
+
+.file-tabs-shell[data-sidebar-transition='true'] {
+  transition:
+    padding-left var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing),
+    padding-right var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
+}
+
+.file-tabs-shell[data-empty='true'] .file-tabs-drag-spacer,
+.file-tabs-shell[data-empty='true'] .file-tabs-actions,
+.file-tabs-shell[data-empty='true']::before,
+.file-tabs-shell[data-empty='true']::after,
+.app-shell[data-left-collapsed='true'] .file-tabs-shell[data-empty='true']::before,
+.app-shell[data-right-collapsed='true'] .file-tabs-shell[data-empty='true']::after {
+  border-bottom-color: transparent !important;
+}
+
+/* When collapsed, fill the left padding area with a segment of the bottom line */
+.app-shell[data-left-collapsed='true'] .file-tabs-shell::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: calc(var(--left-panel-content-inset) + var(--file-tabs-collapsed-left-extra-gap));
+  border-bottom: 1px solid var(--separator);
+  z-index: 1;
+}
+
+/* When side-collapsed, fill the right padding area with a segment of the bottom line */
+.app-shell[data-right-collapsed='true'] .file-tabs-shell::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: var(--file-tabs-right-panel-inset);
+  border-bottom: 1px solid var(--separator);
+  z-index: 1;
+}
+
+.app-shell[data-left-collapsed='true'] .file-tabs-shell {
+  padding-left: calc(var(--left-panel-content-inset) + var(--file-tabs-collapsed-left-extra-gap));
+}
+
+.app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-agent .file-tabs-shell {
+  padding-left: 0;
+}
+
+.app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-agent .file-tabs-shell::before {
+  display: none;
+}
+
+.app-shell[data-right-collapsed='true'] .file-tabs-shell {
+  padding-right: var(--file-tabs-right-panel-inset);
+}
+
+.file-tabs-scroll-frame {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: stretch;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.file-tabs-scroller {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: stretch;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.file-tabs-scroll-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in oklch, var(--foreground-primary) 9%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+  z-index: 6;
+}
+
+.file-tabs-scroll-edge-left {
+  left: 0;
+}
+
+.file-tabs-scroll-edge-right {
+  right: 0;
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroll-edge-left,
+.app-shell[data-app-layout='editor'][data-left-collapsed='false'] .file-tabs-scroll-edge-left,
+.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-shell[data-has-actions='false'] .file-tabs-scroll-edge-right {
+  display: none;
+}
+
+.file-tabs-scroll-frame[data-can-scroll-left='true'] .file-tabs-scroll-edge-left,
+.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroll-edge-right {
+  opacity: 1;
+}
+
+.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroller {
+  clip-path: inset(0 1px 0 0);
+}
+
+.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tab:last-child {
+  border-right-color: transparent;
+}
+
+.file-tabs-scroller[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+/* Offset the 1px negative margin ONLY when the first tab is allowed to overlap (collapsed state) */
+.app-shell[data-left-collapsed='true'] .file-tabs-scroller {
+  padding-left: 1px;
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroller {
+  padding-left: 0;
+}
+
+.file-tabs-drag-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: stretch;
+  border-bottom: 1px solid var(--separator);
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+/*
+  Windows caption drag regions swallow HTML drag/drop events. Keep the spacer as
+  a window drag handle by default, but temporarily hand it back to the DOM while
+  a tab reorder is in progress so dropping after the last tab still works.
+*/
+.file-tabs-shell[data-dragging='true'] .file-tabs-drag-spacer {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.file-tabs-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 0 0 6px;
+  border-bottom: 1px solid var(--separator);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-actions {
+  padding: 0 6px;
+}
+
+.file-tabs-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.file-tab {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  min-width: 0;
+  max-width: min(288px, 42vw);
+  border-right: 1px solid var(--separator);
+  border-left: 1px solid transparent;
+  border-top: 1px solid transparent;
+  border-bottom: 1px solid var(--separator);
+  margin-left: -1px;
+  background: transparent;
+  transition: background-color 140ms ease, color 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.file-tab.is-pinned {
+  max-width: min(288px, 42vw);
+}
+
+.file-tab.is-pinned .file-tab-trigger {
+  padding-right: 12px;
+}
+
+.file-tab-leading-icon {
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
+.file-tab.is-drag-source {
+  opacity: 0.56;
+}
+
+.file-tabs-scroller[data-dragging='true'] .file-tab:hover .file-tab-trigger {
+  color: var(--foreground-secondary);
+}
+
+.file-tabs-scroller[data-dragging='true'] .file-tab.is-active .file-tab-trigger,
+.file-tabs-scroller[data-dragging='true'] .file-tab.is-active:hover .file-tab-trigger {
+  color: var(--foreground-primary);
+}
+
+.file-tabs-scroller[data-dragging='true'] .file-tab-actions,
+.file-tabs-scroller[data-dragging='true'] .file-tab:hover .file-tab-actions,
+.file-tabs-scroller[data-dragging='true'] .file-tab.is-dirty .file-tab-actions {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.file-tabs-scroller[data-dragging='true'] .file-tab-actions::before {
+  display: none;
+}
+
+.file-tabs-drop-indicator {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  pointer-events: none;
+  transform: translateX(-50%);
+  z-index: 7;
+}
+
+/* When sidebar is visible, the very first tab shouldn't have a left border or negative margin (to avoid redundant line with sidebar) */
+.app-shell[data-left-collapsed='false'] .file-tab:first-child {
+  border-left-width: 0;
+  margin-left: 0;
+}
+
+.app-shell[data-app-layout='agent'] .panel-agent .file-tab:first-child {
+  border-left-width: 0;
+  margin-left: 0;
+}
+
+.file-tab.is-active {
+  background-color: var(--background-primary);
+  border-top-color: var(--separator);
+  border-left-color: var(--separator);
+  border-bottom: 1px solid transparent;
+  z-index: 5;
+}
+
+.file-tab-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: var(--tabs-chrome-height);
+  padding: 0 24px 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--foreground-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition: color 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.file-tab.is-active .file-tab-trigger,
+.file-tab:hover .file-tab-trigger {
+  color: var(--foreground-primary);
+}
+
+.file-tab-actions {
+  position: absolute;
+  right: 4px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  opacity: 0;
+  pointer-events: none;
+  background: var(--background-primary);
+  transition: opacity 140ms ease, background-color 140ms ease;
+  z-index: 10;
+}
+
+.file-tab.is-dirty:not(:hover) .file-tab-actions {
+  background: transparent;
+}
+
+/* Background gradient to fade out text behind actions */
+.file-tab-actions::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  background: linear-gradient(to right, transparent, var(--background-primary));
+  pointer-events: none;
+}
+
+.file-tab.is-dirty:not(:hover) .file-tab-actions::before {
+  display: none;
+}
+
+.file-tab.is-active .file-tab-actions {
+  /* Match active background color */
+  background: var(--background-primary);
+}
+
+.file-tab.is-active .file-tab-actions::before {
+  background: linear-gradient(to right, transparent, var(--background-primary));
+}
+
+.file-tab:hover .file-tab-actions,
+.file-tab:focus-within .file-tab-actions,
+.file-tab.is-dirty .file-tab-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* When dirty but NOT hovered, hide the functional icons to show the dot */
+.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-close svg {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.file-tab-trigger:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.file-tab-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding-right: 4px;
+}
+
+.file-tab-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tab-meta {
+  flex: 0 0 auto;
+  min-width: max-content;
+  overflow: visible;
+  white-space: nowrap;
+  color: var(--foreground-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.file-tab.is-missing .file-tab-label,
+.file-tab.is-missing .file-tab-meta {
+  color: var(--danger);
+}
+
+.file-tab-close {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground-secondary);
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.file-tabs-toolbar-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--foreground-secondary);
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.file-tab-close:hover,
+.file-tabs-toolbar-button:hover {
+  color: var(--foreground-primary);
+  background: var(--hover);
+}
+
+.file-tab-close:focus-visible,
+.file-tabs-toolbar-button:focus-visible {
+  color: var(--foreground-primary);
+  background: var(--hover);
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.file-tab-close svg,
+.file-tabs-toolbar-button svg {
+  flex-shrink: 0;
+}
+
+.file-tab-dirty-indicator {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0;
+  transform: scale(0.9) translateX(6px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.file-tab.is-dirty .file-tab-dirty-indicator {
+  opacity: 1;
+  transform: scale(1) translateX(6px);
+}
+
+.file-tab.is-dirty:hover .file-tab-dirty-indicator,
+.file-tab.is-dirty.is-active:hover .file-tab-dirty-indicator,
+.file-tab.is-dirty .file-tab-close:hover .file-tab-dirty-indicator,
+.file-tab.is-dirty .file-tab-close:focus-visible .file-tab-dirty-indicator {
+  opacity: 0;
+}
+
+@media (max-width: 1120px) {
+  .file-tab {
+    max-width: min(224px, 52vw);
+  }
+
+  .file-tab-meta {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-tabs-shell,
+  .file-tabs-scroll-edge,
+  .file-tab,
+  .file-tab-trigger,
+  .file-tab-actions,
+  .file-tab-close,
+  .file-tabs-toolbar-button,
+  .file-tab-dirty-indicator {
+    transition: none;
+  }
+}

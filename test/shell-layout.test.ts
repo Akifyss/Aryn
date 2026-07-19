@@ -86,8 +86,18 @@ describe('shell layout helpers', () => {
   }
 
   async function readFileTabsSource() {
-    const fileTabsSource = await readFile(new URL('../src/features/workspace/components/file-tabs.tsx', import.meta.url), 'utf8')
+    const fileTabsSource = await readFile(new URL('../src/features/workspace/components/file-tabs/file-tabs.tsx', import.meta.url), 'utf8')
     return fileTabsSource.replace(/\r\n/g, '\n')
+  }
+
+  async function readFileTabsCss() {
+    const fileTabsCss = await readFile(new URL('../src/features/workspace/components/file-tabs/styles.css', import.meta.url), 'utf8')
+    return fileTabsCss.replace(/\r\n/g, '\n')
+  }
+
+  async function readWorkspaceEditorSurfaceCss() {
+    const editorSurfaceCss = await readFile(new URL('../src/features/workspace/components/workspace-editor-surface/styles.css', import.meta.url), 'utf8')
+    return editorSurfaceCss.replace(/\r\n/g, '\n')
   }
 
   async function readWorkspaceTabsSource() {
@@ -228,45 +238,48 @@ describe('shell layout helpers', () => {
   })
 
   it('keeps file tab chrome edges from doubling against adjacent panels', async () => {
-    const appCss = await readAppCss()
-    const titlebarCss = await readAppTitlebarCss()
+    const [appCss, fileTabsCss, titlebarCss] = await Promise.all([
+      readAppCss(),
+      readFileTabsCss(),
+      readAppTitlebarCss(),
+    ])
 
-    expect(appCss).toContain(`.file-tabs-actions {
+    expect(fileTabsCss).toContain(`.file-tabs-actions {
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 0 0 0 6px;`)
-    expect(appCss).toContain(`.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-actions {
+    expect(fileTabsCss).toContain(`.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-actions {
   padding: 0 6px;
 }`)
     expect(appCss).toContain(`.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-drag-spacer {
   min-width: var(--panel-toggle-size);
 }`)
-    expect(appCss).toContain(`.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroll-edge-left,
+    expect(fileTabsCss).toContain(`.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroll-edge-left,
 .app-shell[data-app-layout='editor'][data-left-collapsed='false'] .file-tabs-scroll-edge-left,
 .app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-shell[data-has-actions='false'] .file-tabs-scroll-edge-right {
   display: none;
 }`)
-    expect(appCss).not.toContain(".app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroll-edge-right")
-    expect(appCss).toContain(`.file-tabs-scroll-frame[data-can-scroll-left='true'] .file-tabs-scroll-edge-left,
+    expect(fileTabsCss).not.toContain(".app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroll-edge-right")
+    expect(fileTabsCss).toContain(`.file-tabs-scroll-frame[data-can-scroll-left='true'] .file-tabs-scroll-edge-left,
 .file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroll-edge-right {
   opacity: 1;
 }`)
-    expect(appCss).toContain(`.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroller {
+    expect(fileTabsCss).toContain(`.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroller {
   clip-path: inset(0 1px 0 0);
 }`)
-    expect(appCss).toContain(`.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tab:last-child {
+    expect(fileTabsCss).toContain(`.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tab:last-child {
   border-right-color: transparent;
 }`)
-    expect(appCss).toContain(`.file-tabs-shell {
+    expect(fileTabsCss).toContain(`.file-tabs-shell {
   --file-tabs-right-panel-inset: var(--right-panel-control-inset);`)
-    expect(appCss).toContain(`.file-tabs-shell[data-has-actions='false'] {
+    expect(fileTabsCss).toContain(`.file-tabs-shell[data-has-actions='false'] {
   --file-tabs-right-panel-inset: var(--right-panel-content-inset);
 }`)
-    expect(appCss).toContain(`.app-shell[data-right-collapsed='true'] .file-tabs-shell {
+    expect(fileTabsCss).toContain(`.app-shell[data-right-collapsed='true'] .file-tabs-shell {
   padding-right: var(--file-tabs-right-panel-inset);
 }`)
-    expect(appCss).toContain(`.app-shell[data-right-collapsed='true'] .file-tabs-shell::after {
+    expect(fileTabsCss).toContain(`.app-shell[data-right-collapsed='true'] .file-tabs-shell::after {
   content: "";
   position: absolute;
   right: 0;
@@ -275,9 +288,9 @@ describe('shell layout helpers', () => {
   border-bottom: 1px solid var(--separator);
   z-index: 1;
 }`)
-    expect(appCss).not.toContain(".app-shell[data-right-collapsed='true'] .file-tabs-shell[data-has-actions='false']")
-    expect(appCss).not.toContain('.file-tabs-scroll-edge::before')
-    expect(appCss).not.toContain('.file-tabs-scroll-edge::after')
+    expect(fileTabsCss).not.toContain(".app-shell[data-right-collapsed='true'] .file-tabs-shell[data-has-actions='false']")
+    expect(fileTabsCss).not.toContain('.file-tabs-scroll-edge::before')
+    expect(fileTabsCss).not.toContain('.file-tabs-scroll-edge::after')
     expect(appCss).toContain('--right-window-controls-width: calc(var(--window-control-button-width) * var(--window-control-button-count));')
     expect(appCss).toContain('--right-panel-toggle-anchor: calc(var(--right-window-controls-width) + var(--right-chrome-edge-gap));')
     expect(appCss).toContain('--right-panel-control-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));')
@@ -300,19 +313,19 @@ describe('shell layout helpers', () => {
   })
 
   it('keeps file tab actions visible for keyboard focus', async () => {
-    const appCss = await readAppCss()
+    const fileTabsCss = await readFileTabsCss()
 
-    expect(appCss).toContain(`.file-tab:hover .file-tab-actions,
+    expect(fileTabsCss).toContain(`.file-tab:hover .file-tab-actions,
 .file-tab:focus-within .file-tab-actions,
 .file-tab.is-dirty .file-tab-actions {
   opacity: 1;
   pointer-events: auto;
 }`)
-    expect(appCss).toContain(`.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-close svg {
+    expect(fileTabsCss).toContain(`.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-close svg {
   opacity: 0;
   pointer-events: none;
 }`)
-    expect(appCss).toContain(`.file-tab-close:focus-visible,
+    expect(fileTabsCss).toContain(`.file-tab-close:focus-visible,
 .file-tabs-toolbar-button:focus-visible {
   color: var(--foreground-primary);
   background: var(--hover);
@@ -331,15 +344,15 @@ describe('shell layout helpers', () => {
   })
 
   it('keeps the Agent fixed Git panel clear of the tab bar edge', async () => {
-    const appCss = await readAppCss()
+    const editorSurfaceCss = await readWorkspaceEditorSurfaceCss()
 
-    expect(appCss).toContain('--editor-fixed-panel-block-start-gap: var(--editor-toolbar-inline-padding);')
-    expect(appCss).toContain(`.app-shell[data-app-layout='agent'] .editor-content-shell > .sidebar-git-pane .git-panel-detail-pane > .git-panel > .git-panel-header,
+    expect(editorSurfaceCss).toContain('--editor-fixed-panel-block-start-gap: var(--editor-toolbar-inline-padding);')
+    expect(editorSurfaceCss).toContain(`.app-shell[data-app-layout='agent'] .editor-content-shell > .sidebar-git-pane .git-panel-detail-pane > .git-panel > .git-panel-header,
 .app-shell[data-app-layout='agent'] .editor-content-shell > .sidebar-git-pane .git-panel-detail-pane > .git-commit-detail > .git-commit-detail-header {
   margin-block-start: var(--editor-fixed-panel-block-start-gap);
 }`)
-    expect(appCss).not.toMatch(/\.editor-content-shell\s*>\s*\.sidebar-git-pane\s*\{\s*padding-(?:top|block-start):/)
-    expect(appCss).not.toMatch(/\.editor-content-shell\s*>\s*\.sidebar-git-pane\s+\.git-panel-detail-pane\s*\{\s*padding-(?:top|block-start):/)
+    expect(editorSurfaceCss).not.toMatch(/\.editor-content-shell\s*>\s*\.sidebar-git-pane\s*\{\s*padding-(?:top|block-start):/)
+    expect(editorSurfaceCss).not.toMatch(/\.editor-content-shell\s*>\s*\.sidebar-git-pane\s+\.git-panel-detail-pane\s*\{\s*padding-(?:top|block-start):/)
   })
 
   it('keeps disabled tree action tooltips hoverable', async () => {
@@ -385,9 +398,10 @@ describe('shell layout helpers', () => {
   })
 
   it('keeps docked sidebar expansion motion scoped and disableable', async () => {
-    const [appCss, appSource] = await Promise.all([
+    const [appCss, appSource, fileTabsCss] = await Promise.all([
       readAppCss(),
       readAppSource(),
+      readFileTabsCss(),
     ])
     const appShellRule = appCss.match(/\.app-shell \{([\s\S]*?)\n\}/)?.[1]
 
@@ -530,11 +544,12 @@ describe('shell layout helpers', () => {
   .titlebar-spacer,
   .left-chrome-actions,
   .panel-resize-slot,
-  .file-tabs-shell,
-  .file-tabs-scroll-edge,
   .agent-threadbar {
     transition: none;
   }`)
+    expect(fileTabsCss).toContain(`@media (prefers-reduced-motion: reduce) {
+  .file-tabs-shell,
+  .file-tabs-scroll-edge,`)
   })
 
   it('keeps macOS fullscreen chrome aligned with the screen edge', () => {
