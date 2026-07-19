@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import { Icon } from '@iconify/react'
-import './styles.css'
 
 export type EmptyStateProps = {
   title: ReactNode

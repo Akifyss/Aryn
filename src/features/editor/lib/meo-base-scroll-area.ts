@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ScrollArea } from '@base-ui/react/scroll-area'
-import '@/components/app-scroll-area.css'
+import '@/components/app-scroll-area/styles.css'
 
 type MeoBaseScrollAreaOptions = {
   className?: string

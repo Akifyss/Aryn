@@ -70,6 +70,11 @@ describe('shell layout helpers', () => {
     return appSource.replace(/\r\n/g, '\n')
   }
 
+  async function readAppTitlebarCss() {
+    const titlebarCss = await readFile(new URL('../src/components/app-titlebar/styles.css', import.meta.url), 'utf8')
+    return titlebarCss.replace(/\r\n/g, '\n')
+  }
+
   async function readTreeSource() {
     const treeSource = await readFile(new URL('../src/components/tree/tree.tsx', import.meta.url), 'utf8')
     return treeSource.replace(/\r\n/g, '\n')
@@ -219,6 +224,7 @@ describe('shell layout helpers', () => {
 
   it('keeps file tab chrome edges from doubling against adjacent panels', async () => {
     const appCss = await readAppCss()
+    const titlebarCss = await readAppTitlebarCss()
 
     expect(appCss).toContain(`.file-tabs-actions {
   display: flex;
@@ -272,7 +278,7 @@ describe('shell layout helpers', () => {
     expect(appCss).toContain('--right-panel-control-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));')
     expect(appCss).toContain('--right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--right-chrome-content-gap));')
     expect(appCss).toContain('right: var(--right-panel-control-inset);')
-    expect(appCss).toContain('width: var(--window-control-button-width);')
+    expect(titlebarCss).toContain('width: var(--window-control-button-width);')
   })
 
   it('keeps file tab edge separators independent from scroll-end state', async () => {

@@ -1,0 +1,7 @@
+.project-icon {
+  display: block;
+  flex: 0 0 auto;
+  width: var(--project-icon-size, 16px);
+  height: var(--project-icon-size, 16px);
+  color: var(--project-icon-color, currentColor);
+}

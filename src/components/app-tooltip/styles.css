@@ -1,0 +1,4 @@
+.app-tooltip {
+  z-index: var(--app-z-tooltip);
+  pointer-events: none;
+}

@@ -8,7 +8,6 @@ import {
   type RefCallback,
 } from 'react'
 import { ScrollArea } from '@base-ui/react/scroll-area'
-import './app-scroll-area.css'
 
 type AppScrollAreaProps = {
   children: ReactNode
