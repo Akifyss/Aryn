@@ -86,10 +86,15 @@
   transition: background-color 140ms ease, color 140ms ease;
 }
 
-.window-button:focus,
-.window-button:focus-visible {
+.window-button:focus {
   outline: none;
-  box-shadow: none;
+}
+
+.window-button:focus-visible {
+  background: var(--hover);
+  color: var(--foreground-primary);
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 
 .window-button:hover {

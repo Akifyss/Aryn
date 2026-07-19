@@ -125,6 +125,12 @@
   background: var(--hover);
 }
 
+.viewer-toolbar-page-control:is(button):focus-visible,
+.viewer-toolbar-page-control:not(button):focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
 .viewer-toolbar-page-control:disabled {
   opacity: 0.42;
   cursor: default;
@@ -173,6 +179,11 @@
   height: 28px;
   align-items: center;
   gap: 8px;
+}
+
+.viewer-search-field:focus-within {
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px var(--focus);
 }
 
 .viewer-search-field-icon {
