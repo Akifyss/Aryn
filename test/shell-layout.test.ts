@@ -86,6 +86,14 @@ describe('shell layout helpers', () => {
     return shellSource.replace(/\r\n/g, '\n')
   }
 
+  async function readAgentSidebarCss() {
+    const agentSidebarCss = await readFile(
+      new URL('../src/features/agent/components/agent-sidebar/styles.css', import.meta.url),
+      'utf8',
+    )
+    return agentSidebarCss.replace(/\r\n/g, '\n')
+  }
+
   async function readShellLayoutControllerSource() {
     const controllerSource = await readFile(
       new URL('../src/features/layout/hooks/use-shell-layout-controller.ts', import.meta.url),
@@ -445,6 +453,7 @@ describe('shell layout helpers', () => {
   it('keeps docked sidebar expansion motion scoped and disableable', async () => {
     const [
       appCss,
+      agentSidebarCss,
       appShellCss,
       appShellSource,
       appSource,
@@ -454,6 +463,7 @@ describe('shell layout helpers', () => {
       shellLayoutControllerSource,
     ] = await Promise.all([
       readAppCss(),
+      readAgentSidebarCss(),
       readAppShellCss(),
       readAppShellSource(),
       readAppSource(),
@@ -629,7 +639,7 @@ describe('shell layout helpers', () => {
   .panel-resize-slot {
     transition: none;
   }`)
-    expect(appCss).toContain(`@media (prefers-reduced-motion: reduce) {
+    expect(agentSidebarCss).toContain(`@media (prefers-reduced-motion: reduce) {
   .agent-threadbar {
     transition: none;
   }`)

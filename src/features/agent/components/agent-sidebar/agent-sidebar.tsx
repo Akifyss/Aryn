@@ -178,6 +178,7 @@ import type {
   OpenCodeNativeSessionSnapshot,
 } from '@/features/agent/types'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
+import './styles.css'
 
 type AgentProjectSwitchMenuOptions = {
   startNewSession?: boolean

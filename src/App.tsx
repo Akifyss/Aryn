@@ -23,7 +23,7 @@ import {
   AgentChatSurface,
   AgentProvider,
   AgentSessionTree,
-} from '@/features/agent/components/agent-sidebar'
+} from '@/features/agent/components/agent-sidebar/agent-sidebar'
 import { DEFAULT_AGENT_ID } from '@/features/agent/agent-definition'
 import type { AgentWorkspaceState } from '@/features/agent/types'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host'
