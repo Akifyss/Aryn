@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Select as BaseSelect } from '@base-ui/react/select'
 import { ScrollArea } from '@base-ui/react/scroll-area'
-import { Button, Input, Switch, Tabs } from '@heroui/react'
+import { Button, Input, Modal, Switch, Tabs } from '@heroui/react'
 import { Icon } from '@iconify/react'
-import { AppTooltipButton } from '@/components/app-tooltip'
+import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import {
   OpenAI,
   Claude,
@@ -49,6 +49,7 @@ import {
   isAgentRunningPromptEnterBehavior,
   useSettingsStore,
 } from '@/hooks/use-settings-store'
+import './styles.css'
 
 export type SettingsSectionId = 'appearance' | 'conversation' | 'editor' | 'providers'
 
@@ -66,24 +67,25 @@ type SettingsViewProps = {
   workspacePath: string | null
 }
 
-const SETTINGS_SECTIONS: Array<{ description: string, id: SettingsSectionId, label: string }> = [
+type SettingsDialogProps = SettingsViewProps & {
+  isOpen: boolean
+  onOpenChange: (isOpen: boolean) => void
+}
+
+const SETTINGS_SECTIONS: ReadonlyArray<{ id: SettingsSectionId, label: string }> = [
   {
-    description: '主题、图标与界面外观设置。',
     id: 'appearance',
     label: '外观',
   },
   {
-    description: '配置 Agent 对话输入与运行中快捷键行为。',
     id: 'conversation',
     label: '对话',
   },
   {
-    description: '编辑器行为与 Markdown 工作流设置。',
     id: 'editor',
     label: '编辑器',
   },
   {
-    description: 'AI 服务商与 API 密钥配置。',
     id: 'providers',
     label: '服务提供商',
   },
@@ -456,7 +458,7 @@ function getProviderStatus(
   }
 }
 
-export function SettingsDialog({
+function SettingsView({
   activeSection,
   agentState,
   iconThemes,
@@ -1120,7 +1122,7 @@ export function SettingsDialog({
             </span>
             <Input
               aria-label="搜索提供商"
-              placeholder="搜索提供商..."
+              placeholder="搜索提供商…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               variant="secondary"
@@ -1153,6 +1155,7 @@ export function SettingsDialog({
                     || (showsApiKeyActions && hasStoredApiKey)
                   )
                   const showPassword = showPasswords[provider.key] ?? false
+                  const detailsId = `settings-provider-${provider.key}-details`
 
                   return (
                     <div
@@ -1161,8 +1164,10 @@ export function SettingsDialog({
                     >
                       <button
                         type='button'
+                        aria-controls={detailsId}
+                        aria-expanded={isExpanded}
                         onClick={() => setExpandedProvider(isExpanded ? null : provider.key)}
-                        className='provider-card-header flex items-center justify-between p-4 w-full text-left font-inherit outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-t-2xl'
+                        className='provider-card-header flex items-center justify-between p-4 w-full text-left font-inherit rounded-t-2xl'
                       >
                         <div className='flex items-center gap-3 min-w-0'>
                           <div className='flex-shrink-0'>
@@ -1196,7 +1201,12 @@ export function SettingsDialog({
                         </div>
                       </button>
 
-                      <div className={`provider-card-details-wrapper ${isExpanded ? 'is-expanded' : ''}`}>
+                      <div
+                        id={detailsId}
+                        aria-hidden={!isExpanded}
+                        className={`provider-card-details-wrapper ${isExpanded ? 'is-expanded' : ''}`}
+                        inert={isExpanded ? undefined : true}
+                      >
                         <div className='provider-card-details-inner'>
                           <div className='provider-card-details-body'>
                             <div className='provider-meta-info flex flex-col gap-2 mt-3'>
@@ -1236,7 +1246,7 @@ export function SettingsDialog({
                                     aria-label={showPassword ? 'Hide API key' : 'Show API key'}
                                     tooltip={showPassword ? '隐藏 API 密钥' : '显示 API 密钥'}
                                     onClick={() => setShowPasswords(prev => ({ ...prev, [provider.key]: !showPassword }))}
-                                    className='settings-secondary-toggle absolute right-3 cursor-pointer transition-colors focus:outline-none flex items-center justify-center z-10'
+                                    className='settings-secondary-toggle absolute right-3 cursor-pointer transition-colors flex items-center justify-center z-10'
                                   >
                                     <Icon
                                       icon={showPassword ? 'mingcute:eye-line' : 'mingcute:eye-close-line'}
@@ -1320,6 +1330,7 @@ export function SettingsDialog({
             <button
               key={section.id}
               type='button'
+              aria-current={section.id === activeSection ? 'page' : undefined}
               className={`settings-nav-item ${section.id === activeSection ? 'is-active' : ''}`}
               onClick={() => onSectionChange(section.id)}
             >
@@ -1360,5 +1371,42 @@ export function SettingsDialog({
         </div>
       </section>
     </div>
+  )
+}
+
+export function SettingsDialog({
+  isOpen,
+  onOpenChange,
+  resolvedTheme,
+  ...viewProps
+}: SettingsDialogProps) {
+  return (
+    <Modal.Backdrop
+      isOpen={isOpen}
+      onOpenChange={onOpenChange}
+      variant='opaque'
+    >
+      <Modal.Container scroll='inside' className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'>
+        <Modal.Dialog
+          aria-label='Settings'
+          className={`settings-modal p-0 m-0 relative ${resolvedTheme === 'dark' ? 'dark' : ''}`}
+        >
+          <AppTooltip tooltip='关闭' triggerMode='context'>
+            <Modal.CloseTrigger
+              className='settings-modal-close'
+              aria-label='Close settings'
+            >
+              <Icon icon='lucide:x' width={16} height={16} />
+            </Modal.CloseTrigger>
+          </AppTooltip>
+          <Modal.Body className='p-0 m-0'>
+            <SettingsView
+              {...viewProps}
+              resolvedTheme={resolvedTheme}
+            />
+          </Modal.Body>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
   )
 }

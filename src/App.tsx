@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tabs as BaseTabs } from '@base-ui/react/tabs'
-import { Button, Toast, toast, Modal, AlertDialog } from '@heroui/react'
+import { Button, Toast, toast, AlertDialog } from '@heroui/react'
 import {
   FolderLine,
   GitBranchLine,
@@ -33,7 +33,7 @@ import { findGitChangeByFilePath } from '@/features/git/lib/repository-state'
 import {
   SettingsDialog,
   type SettingsSectionId,
-} from '@/features/settings/components/settings-dialog'
+} from '@/features/settings/components/settings-dialog/settings-dialog'
 import { FileTabs } from '@/features/workspace/components/file-tabs/file-tabs'
 import { WorkspaceFileSystemPanel } from '@/features/workspace/components/workspace-file-system-panel'
 import { WorkspaceFilePreview } from '@/features/workspace/components/workspace-file-preview'
@@ -1685,42 +1685,21 @@ function App() {
         onOpenChange={handleNewProjectDialogOpenChange}
       />
 
-      <Modal.Backdrop
+      <SettingsDialog
+        activeSection={settingsSection}
+        agentState={agentWorkspaceState}
+        iconThemes={iconThemes}
+        iconThemeOptions={iconThemeOptions}
+        isIconThemeBusy={isApplyingIconTheme}
         isOpen={isSettingsOpen}
+        resolvedTheme={resolvedTheme}
+        workspacePath={currentPath}
+        onAgentStateChange={setAgentWorkspaceState}
         onOpenChange={setIsSettingsOpen}
-        variant='opaque'
-      >
-        <Modal.Container scroll='inside' className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'>
-          <Modal.Dialog
-            aria-label='Settings'
-            className={`settings-modal p-0 m-0 relative ${resolvedTheme === 'dark' ? 'dark' : ''}`}
-          >
-            <AppTooltip tooltip='关闭' triggerMode='context'>
-              <Modal.CloseTrigger
-                className='settings-modal-close'
-                aria-label='Close settings'
-              >
-                <Icon icon='lucide:x' width={16} height={16} />
-              </Modal.CloseTrigger>
-            </AppTooltip>
-            <Modal.Body className='p-0 m-0'>
-              <SettingsDialog
-                activeSection={settingsSection}
-                agentState={agentWorkspaceState}
-                iconThemes={iconThemes}
-                iconThemeOptions={iconThemeOptions}
-                isIconThemeBusy={isApplyingIconTheme}
-                resolvedTheme={resolvedTheme}
-                workspacePath={currentPath}
-                onAgentStateChange={setAgentWorkspaceState}
-                onSectionChange={setSettingsSection}
-                onSelectIconTheme={handleSelectWorkspaceIconTheme}
-                onStatusMessage={setStatusMessage}
-              />
-            </Modal.Body>
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
+        onSectionChange={setSettingsSection}
+        onSelectIconTheme={handleSelectWorkspaceIconTheme}
+        onStatusMessage={setStatusMessage}
+      />
 
       <AlertDialog.Backdrop
         isOpen={confirmDialogOptions?.isOpen ?? false}
