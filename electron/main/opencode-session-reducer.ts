@@ -49,6 +49,13 @@ export function getOpenCodeEventSessionId(event: OpenCodeEvent) {
   const properties = eventProperties(event)
   const direct = properties.sessionID
   if (typeof direct === 'string' && direct) return direct
+  if (
+    event.type === 'session.created'
+    || event.type === 'session.updated'
+    || event.type === 'session.deleted'
+  ) {
+    return nestedString(properties.info, 'id')
+  }
   return nestedString(properties.info, 'sessionID')
     ?? nestedString(properties.part, 'sessionID')
 }

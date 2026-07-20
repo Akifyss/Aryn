@@ -61,21 +61,49 @@ describe('external Agent workspace ownership', () => {
 
   it('rechecks workspace ownership after an OpenCode binding start completes', async () => {
     const manager = new OpenCodeAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
-    const binding = { cwd: 'C:/workspace-a' }
+    const client = {}
     const internals = manager as unknown as {
-      requireBinding: (client: unknown, cwd: string, sessionID: string) => Promise<typeof binding>
-      sessionBindingStarts: Map<string, Promise<typeof binding>>
+      client: unknown
+      clientGeneration: number
+      requireBinding: (sourceClient: unknown, cwd: string, sessionID: string) => Promise<unknown>
+      runtimeCoordinator: {
+        ensure: (
+          key: string,
+          start: (lease: SessionRuntimeLease) => Promise<unknown>,
+        ) => Promise<unknown>
+      }
+      sessionBindings: Map<string, unknown>
     }
-    internals.sessionBindingStarts.set('session-a', Promise.resolve(binding))
+    internals.client = client
+    internals.clientGeneration = 1
+    const wrongWorkspaceKey = `${workspaceIdentity('C:/workspace-b')}\0session-a`
+    await internals.runtimeCoordinator.ensure(wrongWorkspaceKey, async (lease) => {
+      const binding = {
+        cwd: 'C:/workspace-a',
+        executionState: { type: 'idle' },
+        isStreaming: false,
+        lastAssistantMessageId: null,
+        lease,
+        ownerLease: lease,
+        parentLease: lease,
+        parentSessionId: null,
+        rootSessionId: 'session-a',
+        selectedModel: null,
+        sessionId: 'session-a',
+        thinkingLevel: 'medium',
+        title: null,
+      }
+      internals.sessionBindings.set(wrongWorkspaceKey, binding)
+      return binding
+    })
 
-    await expect(internals.requireBinding({}, 'C:/workspace-b', 'session-a'))
+    await expect(internals.requireBinding(client, 'C:/workspace-b', 'session-a'))
       .rejects.toThrow('not found for this Aryn workspace')
     manager.dispose()
   })
 
   it('releases a workspace without waiting for another workspace to finish starting', async () => {
     const otherWorkspace = workspaceIdentity('C:/workspace-b')
-    const never = new Promise<never>(() => undefined)
     const codex = new CodexAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
     const opencode = new OpenCodeAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
     const pi = new PiCliAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
@@ -86,9 +114,14 @@ describe('external Agent workspace ownership', () => {
       }
     }
     const opencodeInternals = opencode as unknown as {
-      sessionBindingStarts: Map<string, Promise<never>>
-      sessionBindingStartWorkspaces: Map<string, string>
+      runtimeCoordinator: {
+        ensure: (key: string, start: (lease: SessionRuntimeLease) => Promise<unknown>) => Promise<unknown>
+      }
     }
+    let resolveOpenCodeStart!: () => void
+    const openCodeStart = new Promise<void>((resolve) => {
+      resolveOpenCodeStart = resolve
+    })
     let resolvePiStart!: (runtime: { process: { stop: () => void } }) => void
     const piStart = new Promise<{ process: { stop: () => void } }>((resolve) => {
       resolvePiStart = resolve
@@ -116,8 +149,27 @@ describe('external Agent workspace ownership', () => {
         }
       },
     )
-    opencodeInternals.sessionBindingStarts.set('session-b', never)
-    opencodeInternals.sessionBindingStartWorkspaces.set('session-b', otherWorkspace)
+    const opencodeStarting = opencodeInternals.runtimeCoordinator.ensure(
+      `${otherWorkspace}\0session-b`,
+      async (lease) => {
+        await openCodeStart
+        return {
+          cwd: 'C:/workspace-b',
+          executionState: { type: 'idle' },
+          isStreaming: false,
+          lastAssistantMessageId: null,
+          lease,
+          ownerLease: lease,
+          parentLease: lease,
+          parentSessionId: null,
+          rootSessionId: 'session-b',
+          selectedModel: null,
+          sessionId: 'session-b',
+          thinkingLevel: 'medium',
+          title: null,
+        }
+      },
+    )
     const piStarting = piInternals.runtimeCoordinator.ensure(
       `${otherWorkspace}\0session-b`,
       async (lease) => {
@@ -134,8 +186,10 @@ describe('external Agent workspace ownership', () => {
       ])).resolves.toEqual([undefined, undefined, undefined])
     } finally {
       resolveCodexStart()
+      resolveOpenCodeStart()
       resolvePiStart({ process: { stop: () => undefined } })
       await codexStarting
+      await opencodeStarting
       await piStarting
       codex.dispose()
       opencode.dispose()

@@ -49,6 +49,14 @@ describe('OpenCode native session event reduction', () => {
       type: 'message.part.updated',
       properties: { part: textPart('part-session') },
     }))).toBe('part-session')
+    expect(getOpenCodeEventSessionId(event({
+      type: 'session.deleted',
+      properties: { info: { id: 'deleted-session' } },
+    }))).toBe('deleted-session')
+    expect(getOpenCodeEventSessionId(event({
+      type: 'message.updated',
+      properties: { info: { id: 'message-is-not-a-session' } },
+    }))).toBeNull()
   })
 
   it('accumulates message.part.delta into the native text part', () => {

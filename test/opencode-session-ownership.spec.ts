@@ -7,7 +7,15 @@ const sdkState = vi.hoisted(() => ({
   abortCount: 0,
   abortFails: false,
   createCount: 0,
+  createGate: null as Promise<void> | null,
+  createStarted: 0,
+  deleteFails: false,
+  deleteGate: null as Promise<void> | null,
+  deleteStarted: 0,
   deletedSessionIds: [] as string[],
+  getFailureSessionIds: [] as string[],
+  getGate: null as Promise<void> | null,
+  getStarted: 0,
   globalEventQueue: [] as Array<Record<string, any>>,
   globalEventSubscribeCount: 0,
   globalEventWaiters: [] as Array<(result: IteratorResult<Record<string, any>>) => void>,
@@ -19,6 +27,8 @@ const sdkState = vi.hoisted(() => ({
   messagesReadCount: 0,
   pendingPermissions: [] as Array<Record<string, any>>,
   pendingQuestions: [] as Array<Record<string, any>>,
+  permissionReplyCount: 0,
+  providerFails: false,
   promptedRequests: [] as Array<Record<string, any>>,
   promptedSessionIds: [] as string[],
   sessions: [] as Array<Record<string, any>>,
@@ -31,19 +41,22 @@ vi.mock('@opencode-ai/sdk/v2', () => {
       agents: async () => [{ mode: 'primary', name: 'build' }],
     },
     config: {
-      providers: async () => ({
-        default: { test: 'model' },
-        providers: [{
-          id: 'test',
-          models: {
-            model: {
-              capabilities: { input: { image: false }, reasoning: true },
-              id: 'model',
-              variants: { high: {} },
+      providers: async () => {
+        if (sdkState.providerFails) throw new Error('provider list failed')
+        return {
+          default: { test: 'model' },
+          providers: [{
+            id: 'test',
+            models: {
+              model: {
+                capabilities: { input: { image: false }, reasoning: true },
+                id: 'model',
+                variants: { high: {} },
+              },
             },
-          },
-        }],
-      }),
+          }],
+        }
+      },
     },
     event: {
       subscribe: async () => {
@@ -85,7 +98,10 @@ vi.mock('@opencode-ai/sdk/v2', () => {
     },
     permission: {
       list: async () => sdkState.pendingPermissions,
-      reply: async () => ({}),
+      reply: async () => {
+        sdkState.permissionReplyCount += 1
+        return {}
+      },
     },
     provider: {
       list: async () => ({
@@ -106,6 +122,8 @@ vi.mock('@opencode-ai/sdk/v2', () => {
         return {}
       },
       create: async ({ directory, metadata, title }: { directory: string, metadata?: Record<string, unknown>, title?: string }) => {
+        sdkState.createStarted += 1
+        await sdkState.createGate
         const now = Date.now()
         const session = {
           directory,
@@ -120,12 +138,22 @@ vi.mock('@opencode-ai/sdk/v2', () => {
         return session
       },
       delete: async ({ sessionID }: { sessionID: string }) => {
+        sdkState.deleteStarted += 1
+        await sdkState.deleteGate
+        if (sdkState.deleteFails) throw new Error('delete failed')
         sdkState.deletedSessionIds.push(sessionID)
         sdkState.sessions = sdkState.sessions.filter((session) => session.id !== sessionID)
         return true
       },
       diff: async () => [],
-      get: async ({ sessionID }: { sessionID: string }) => sdkState.sessions.find((session) => session.id === sessionID),
+      get: async ({ sessionID }: { sessionID: string }) => {
+        sdkState.getStarted += 1
+        await sdkState.getGate
+        if (sdkState.getFailureSessionIds.includes(sessionID)) {
+          throw new Error(`transient session lookup failure: ${sessionID}`)
+        }
+        return sdkState.sessions.find((session) => session.id === sessionID)
+      },
       list: async ({ directory, roots }: { directory: string, roots?: boolean }) => sdkState.sessions.filter((session) => (
         (session.workspaceDirectory ?? session.directory) === directory
         && (!roots || !session.parentID)
@@ -166,7 +194,12 @@ vi.mock('@opencode-ai/sdk/v2', () => {
     },
     v2: {
       session: {
-        permission: { reply: async () => ({}) },
+        permission: {
+          reply: async () => {
+            sdkState.permissionReplyCount += 1
+            return {}
+          },
+        },
         question: { reject: async () => ({}), reply: async () => ({}) },
       },
     },
@@ -178,6 +211,16 @@ vi.mock('@opencode-ai/sdk/v2', () => {
 })
 
 import { OpenCodeAgentManager } from '../electron/main/opencode-agent'
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, reject, resolve }
+}
 
 function emitGlobalEvent(directory: string, payload: Record<string, any>) {
   const envelope = { directory, payload }
@@ -208,7 +251,15 @@ describe('OpenCode Aryn session ownership', () => {
     const now = Date.now()
     sdkState.abortCount = 0
     sdkState.abortFails = false
+    sdkState.createGate = null
+    sdkState.createStarted = 0
+    sdkState.deleteFails = false
+    sdkState.deleteGate = null
+    sdkState.deleteStarted = 0
     sdkState.deletedSessionIds = []
+    sdkState.getFailureSessionIds = []
+    sdkState.getGate = null
+    sdkState.getStarted = 0
     sdkState.globalEventQueue = []
     sdkState.globalEventSubscribeCount = 0
     sdkState.globalEventWaiters = []
@@ -220,6 +271,8 @@ describe('OpenCode Aryn session ownership', () => {
     sdkState.messagesReadCount = 0
     sdkState.pendingPermissions = []
     sdkState.pendingQuestions = []
+    sdkState.permissionReplyCount = 0
+    sdkState.providerFails = false
     sdkState.promptedRequests = []
     sdkState.promptedSessionIds = []
     sdkState.createCount = 0
@@ -335,6 +388,60 @@ describe('OpenCode Aryn session ownership', () => {
     }
   })
 
+  it('keeps existing interactions when pending-session ownership can only be partially verified', async () => {
+    const events: Array<Record<string, any>> = []
+    const manager = new OpenCodeAgentManager({
+      agentDir,
+      emitEvent: (event) => events.push(event),
+      startServer: async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' }),
+    })
+    try {
+      const state = await manager.createSession(workspacePath, { name: 'Partial interaction sync' })
+      const sessionID = state.activeSession!.sessionId
+      emitGlobalEvent(workspacePath, {
+        type: 'permission.asked',
+        properties: {
+          id: 'permission-existing',
+          permission: 'bash',
+          sessionID,
+        },
+      })
+      await vi.waitFor(() => expect(events).toContainEqual(expect.objectContaining({
+        request: expect.objectContaining({ id: 'permission-existing' }),
+        type: 'interaction_requested',
+      })))
+
+      sdkState.getFailureSessionIds = ['session-with-transient-lookup-failure']
+      sdkState.pendingPermissions = [{
+        always: [],
+        id: 'permission-unverified',
+        metadata: {},
+        patterns: ['src/**'],
+        permission: 'edit',
+        sessionID: 'session-with-transient-lookup-failure',
+      }]
+      await manager.loadWorkspaceState(workspacePath, sessionID)
+
+      expect(events).not.toContainEqual(expect.objectContaining({
+        requestId: 'permission-existing',
+        type: 'interaction_resolved',
+      }))
+      await expect(manager.respondToInteraction({
+        agentId: 'opencode',
+        optionId: 'allow_once',
+        requestId: 'permission-existing',
+        sessionId: sessionID,
+      })).resolves.toBe(true)
+      expect(sdkState.permissionReplyCount).toBe(1)
+      expect(events).toContainEqual(expect.objectContaining({
+        message: expect.stringContaining('transient session lookup failure'),
+        type: 'error',
+      }))
+    } finally {
+      manager.dispose()
+    }
+  })
+
   afterEach(async () => {
     await rm(agentDir, { force: true, recursive: true })
   })
@@ -360,6 +467,98 @@ describe('OpenCode Aryn session ownership', () => {
       expect(sdkState.sessions.map((session) => session.id)).toEqual(['foreign-native-session'])
     } finally {
       restoredManager.dispose()
+    }
+  })
+
+  it('makes concurrent workspace discards idempotent per owned session', async () => {
+    const manager = new OpenCodeAgentManager({
+      agentDir,
+      emitEvent: () => undefined,
+      startServer: async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' }),
+    })
+    const allowDelete = deferred()
+    try {
+      await manager.createSession(workspacePath, { name: 'Discard once' })
+      sdkState.deleteGate = allowDelete.promise
+
+      const firstDiscard = manager.discardWorkspaceSessions(workspacePath)
+      const secondDiscard = manager.discardWorkspaceSessions(workspacePath)
+      await vi.waitFor(() => expect(sdkState.deleteStarted).toBe(1))
+      allowDelete.resolve()
+
+      await expect(Promise.all([firstDiscard, secondDiscard])).resolves.toEqual([undefined, undefined])
+      expect(sdkState.deletedSessionIds).toEqual(['aryn-owned-session-1'])
+    } finally {
+      allowDelete.resolve()
+      manager.dispose()
+    }
+  })
+
+  it('refreshes official session creation and deletion events without activating a background session', async () => {
+    const events: Array<Record<string, any>> = []
+    const manager = new OpenCodeAgentManager({
+      agentDir,
+      emitEvent: (event) => events.push(event),
+      startServer: async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' }),
+    })
+    try {
+      await manager.loadWorkspaceState(workspacePath, null, { restoreSession: false })
+      const unboundSession = sdkState.sessions.find((session) => session.id === 'foreign-native-session')!
+      sdkState.sessions = sdkState.sessions.filter((session) => session.id !== unboundSession.id)
+      emitGlobalEvent(workspacePath, {
+        type: 'session.deleted',
+        properties: { info: unboundSession },
+      })
+      await vi.waitFor(() => {
+        const state = events.filter((event) => event.type === 'workspace_state').at(-1)?.state
+        expect(state).toBeDefined()
+        expect(state?.sessions).not.toEqual(expect.arrayContaining([
+          expect.objectContaining({ id: unboundSession.id }),
+        ]))
+      })
+
+      const now = Date.now()
+      const externalSession = {
+        directory: workspacePath,
+        id: 'external-event-session',
+        parentID: undefined,
+        time: { created: now, updated: now },
+        title: 'Created from OpenCode',
+        workspaceDirectory: workspacePath,
+      }
+      sdkState.sessions.push(externalSession)
+      emitGlobalEvent(workspacePath, {
+        type: 'session.created',
+        properties: { info: externalSession },
+      })
+
+      await vi.waitFor(() => {
+        const state = events.filter((event) => event.type === 'workspace_state').at(-1)?.state
+        expect(state).toMatchObject({
+          activeSession: null,
+          sessions: expect.arrayContaining([
+            expect.objectContaining({ id: externalSession.id }),
+          ]),
+        })
+      })
+
+      sdkState.sessions = sdkState.sessions.filter((session) => session.id !== externalSession.id)
+      emitGlobalEvent(workspacePath, {
+        type: 'session.deleted',
+        properties: { info: externalSession },
+      })
+
+      await vi.waitFor(() => {
+        const state = events.filter((event) => event.type === 'workspace_state').at(-1)?.state
+        expect(state).toBeDefined()
+        expect(state?.activeSession).toBeNull()
+        expect(state?.sessions).not.toEqual(expect.arrayContaining([
+          expect.objectContaining({ id: externalSession.id }),
+        ]))
+      })
+      await expect(manager.sessionExists(workspacePath, externalSession.id)).resolves.toBe(false)
+    } finally {
+      manager.dispose()
     }
   })
 
@@ -795,6 +994,159 @@ describe('OpenCode Aryn session ownership', () => {
     }
   })
 
+  it('retires a deleted child subtree without resolving sibling interactions', async () => {
+    const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
+    const events: Array<Record<string, any>> = []
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: (event) => events.push(event), startServer })
+    try {
+      const created = await manager.createSession(workspacePath, { name: 'Parent' })
+      const rootSessionID = created.activeSession!.sessionId
+      const now = Date.now()
+      const firstChildSessionID = 'first-interactive-child'
+      const grandchildSessionID = 'nested-interactive-grandchild'
+      const secondChildSessionID = 'second-interactive-child'
+      sdkState.sessions.push(
+        {
+          directory: workspacePath,
+          id: grandchildSessionID,
+          parentID: firstChildSessionID,
+          time: { created: now, updated: now },
+          title: 'Nested grandchild',
+        },
+        {
+          directory: workspacePath,
+          id: firstChildSessionID,
+          parentID: rootSessionID,
+          time: { created: now, updated: now },
+          title: 'First child',
+        },
+        {
+          directory: workspacePath,
+          id: secondChildSessionID,
+          parentID: rootSessionID,
+          time: { created: now, updated: now },
+          title: 'Second child',
+        },
+      )
+
+      emitGlobalEvent(workspacePath, {
+        type: 'permission.asked',
+        properties: {
+          id: 'permission-grandchild',
+          permission: 'bash',
+          sessionID: grandchildSessionID,
+        },
+      })
+      emitGlobalEvent(workspacePath, {
+        type: 'permission.asked',
+        properties: {
+          id: 'permission-first-child',
+          permission: 'bash',
+          sessionID: firstChildSessionID,
+        },
+      })
+      emitGlobalEvent(workspacePath, {
+        type: 'permission.asked',
+        properties: {
+          id: 'permission-second-child',
+          permission: 'bash',
+          sessionID: secondChildSessionID,
+        },
+      })
+      await vi.waitFor(() => {
+        expect(events).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            request: expect.objectContaining({ id: 'permission-first-child', sessionId: rootSessionID }),
+            type: 'interaction_requested',
+          }),
+          expect.objectContaining({
+            request: expect.objectContaining({ id: 'permission-grandchild', sessionId: rootSessionID }),
+            type: 'interaction_requested',
+          }),
+          expect.objectContaining({
+            request: expect.objectContaining({ id: 'permission-second-child', sessionId: rootSessionID }),
+            type: 'interaction_requested',
+          }),
+        ]))
+      })
+
+      await manager.deleteSession(workspacePath, firstChildSessionID)
+
+      expect(events).toContainEqual(expect.objectContaining({
+        requestId: 'permission-grandchild',
+        resumeRun: false,
+        sessionId: rootSessionID,
+        type: 'interaction_resolved',
+      }))
+      expect(events).toContainEqual(expect.objectContaining({
+        requestId: 'permission-first-child',
+        resumeRun: false,
+        sessionId: rootSessionID,
+        type: 'interaction_resolved',
+      }))
+      expect(events).not.toContainEqual(expect.objectContaining({
+        requestId: 'permission-second-child',
+        type: 'interaction_resolved',
+      }))
+      await expect(manager.respondToInteraction({
+        agentId: 'opencode',
+        optionId: 'allow_once',
+        requestId: 'permission-grandchild',
+        sessionId: rootSessionID,
+      })).resolves.toBe(false)
+      await expect(manager.respondToInteraction({
+        agentId: 'opencode',
+        optionId: 'allow_once',
+        requestId: 'permission-second-child',
+        sessionId: rootSessionID,
+      })).resolves.toBe(true)
+    } finally {
+      manager.dispose()
+    }
+  })
+
+  it('does not revive a child binding that finishes loading after its root was deleted', async () => {
+    const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: () => undefined, startServer })
+    const allowChildRead = deferred()
+    try {
+      const created = await manager.createSession(workspacePath, { name: 'Root delete race' })
+      const rootSessionID = created.activeSession!.sessionId
+      const childSessionID = 'late-child-session'
+      const now = Date.now()
+      sdkState.sessions.push({
+        directory: workspacePath,
+        id: childSessionID,
+        parentID: rootSessionID,
+        time: { created: now, updated: now },
+        title: 'Late child',
+      })
+      sdkState.getGate = allowChildRead.promise
+      const opening = manager.openSession(workspacePath, childSessionID)
+        .then(
+          (state) => ({ state }),
+          (error: unknown) => ({ error }),
+        )
+      await vi.waitFor(() => expect(sdkState.getStarted).toBeGreaterThan(0))
+
+      await manager.deleteSession(workspacePath, rootSessionID)
+      allowChildRead.resolve()
+
+      await expect(opening).resolves.toMatchObject({
+        error: expect.objectContaining({ message: expect.stringMatching(/parent session not found|not found for this workspace/i) }),
+      })
+      await expect(manager.respondToInteraction({
+        agentId: 'opencode',
+        optionId: 'allow_once',
+        requestId: 'missing-child-request',
+        sessionId: rootSessionID,
+      })).resolves.toBe(false)
+    } finally {
+      allowChildRead.resolve()
+      manager.dispose()
+    }
+  })
+
   it('uses OpenCode official running-prompt semantics instead of advertising a client-side follow-up queue', async () => {
     const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
     const manager = new OpenCodeAgentManager({ agentDir, emitEvent: () => undefined, startServer })
@@ -887,6 +1239,420 @@ describe('OpenCode Aryn session ownership', () => {
       sdkState.abortFails = false
       await expect(manager.releaseWorkspaceRuntime(workspacePath)).resolves.toBeUndefined()
       expect(sdkState.abortCount).toBe(1)
+    } finally {
+      manager.dispose()
+    }
+  })
+
+  it('serializes a late open behind native deletion and never resurrects the deleted binding', async () => {
+    const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: () => undefined, startServer })
+    const allowDelete = deferred()
+    try {
+      const created = await manager.createSession(workspacePath, { name: 'Delete race' })
+      const sessionID = created.activeSession!.sessionId
+      sdkState.deleteGate = allowDelete.promise
+
+      const deletion = manager.deleteSession(workspacePath, sessionID)
+      await vi.waitFor(() => expect(sdkState.deleteStarted).toBe(1))
+      let openingSettled = false
+      const opening = manager.openSession(workspacePath, sessionID).finally(() => {
+        openingSettled = true
+      })
+
+      await Promise.resolve()
+      expect(openingSettled).toBe(false)
+      allowDelete.resolve()
+
+      await deletion
+      await expect(opening).rejects.toThrow()
+      expect(sdkState.sessions.some((session) => session.id === sessionID)).toBe(false)
+    } finally {
+      allowDelete.resolve()
+      manager.dispose()
+    }
+  })
+
+  it('waits for an in-flight workspace binding and prevents it from surviving release', async () => {
+    const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: () => undefined, startServer })
+    const allowGet = deferred()
+    try {
+      sdkState.getGate = allowGet.promise
+      const opening = manager.openSession(workspacePath, 'foreign-native-session')
+      await vi.waitFor(() => expect(sdkState.getStarted).toBeGreaterThan(0))
+      let releaseSettled = false
+      const release = manager.releaseWorkspaceRuntime(workspacePath).finally(() => {
+        releaseSettled = true
+      })
+
+      await Promise.resolve()
+      expect(releaseSettled).toBe(false)
+      allowGet.resolve()
+
+      await expect(opening).rejects.toThrow(/superseded|invalidated/i)
+      await release
+    } finally {
+      allowGet.resolve()
+      manager.dispose()
+    }
+  })
+
+  it('does not let a late global event recreate a released workspace binding', async () => {
+    const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
+    const events: Array<Record<string, any>> = []
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: (event) => events.push(event), startServer })
+    try {
+      const created = await manager.createSession(workspacePath, { name: 'Released event target' })
+      const sessionID = created.activeSession!.sessionId
+      await manager.releaseWorkspaceRuntime(workspacePath)
+      const requestsBeforeEvent = events.filter((event) => event.type === 'interaction_requested').length
+
+      emitGlobalEvent(workspacePath, {
+        type: 'permission.asked',
+        properties: {
+          id: 'permission-after-release',
+          permission: 'bash',
+          sessionID,
+        },
+      })
+      await new Promise((resolve) => setTimeout(resolve, 25))
+
+      expect(events.filter((event) => event.type === 'interaction_requested')).toHaveLength(requestsBeforeEvent)
+      await expect(manager.respondToInteraction({
+        agentId: 'opencode',
+        optionId: 'allow_once',
+        requestId: 'permission-after-release',
+        sessionId: sessionID,
+      })).resolves.toBe(false)
+    } finally {
+      manager.dispose()
+    }
+  })
+
+  it('does not let a slow session event block another session interaction', async () => {
+    const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
+    const events: Array<Record<string, any>> = []
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: (event) => events.push(event), startServer })
+    const allowSlowHistory = deferred<Array<Record<string, any>>>()
+    try {
+      const first = await manager.createSession(workspacePath, { name: 'Slow session' })
+      const second = await manager.createSession(workspacePath, { name: 'Independent session' })
+      const firstID = first.activeSession!.sessionId
+      const secondID = second.activeSession!.sessionId
+      const readsBeforeSlowEvent = sdkState.messagesReadCount
+      sdkState.messageResponses.push(allowSlowHistory.promise)
+
+      emitGlobalEvent(workspacePath, {
+        type: 'session.idle',
+        properties: { sessionID: firstID },
+      })
+      await vi.waitFor(() => expect(sdkState.messagesReadCount).toBe(readsBeforeSlowEvent + 1))
+      emitGlobalEvent(workspacePath, {
+        type: 'permission.asked',
+        properties: {
+          id: 'permission-independent',
+          permission: 'bash',
+          sessionID: secondID,
+        },
+      })
+
+      await vi.waitFor(() => expect(events).toContainEqual(expect.objectContaining({
+        request: expect.objectContaining({
+          id: 'permission-independent',
+          sessionId: secondID,
+        }),
+        type: 'interaction_requested',
+      })), { timeout: 250 })
+    } finally {
+      allowSlowHistory.resolve([])
+      manager.dispose()
+    }
+  })
+
+  it('suppresses an older workspace snapshot that completes after a newer session was opened', async () => {
+    const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
+    const events: Array<Record<string, any>> = []
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: (event) => events.push(event), startServer })
+    const allowFirstHistory = deferred<Array<Record<string, any>>>()
+    try {
+      const first = await manager.createSession(workspacePath, { name: 'First state' })
+      const second = await manager.createSession(workspacePath, { name: 'Second state' })
+      const firstID = first.activeSession!.sessionId
+      const secondID = second.activeSession!.sessionId
+      sdkState.messageResponses.push(allowFirstHistory.promise, [])
+
+      const firstOpen = manager.openSession(workspacePath, firstID)
+      await vi.waitFor(() => expect(sdkState.messageResponses).toHaveLength(1))
+      await manager.openSession(workspacePath, secondID)
+      allowFirstHistory.resolve([])
+      await firstOpen
+
+      const workspaceEvents = events.filter((event) => event.type === 'workspace_state')
+      expect(workspaceEvents.at(-1)?.state.activeSession?.sessionId).toBe(secondID)
+    } finally {
+      allowFirstHistory.resolve([])
+      manager.dispose()
+    }
+  })
+
+  it('suppresses a background snapshot assembled before a workspace load commits a new active session', async () => {
+    const events: Array<Record<string, any>> = []
+    const manager = new OpenCodeAgentManager({
+      agentDir,
+      emitEvent: (event) => events.push(event),
+      startServer: async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' }),
+    })
+    const allowBackgroundHistory = deferred<Array<Record<string, any>>>()
+    try {
+      const first = await manager.createSession(workspacePath, { name: 'Load target' })
+      const second = await manager.createSession(workspacePath, { name: 'Initially active' })
+      const firstID = first.activeSession!.sessionId
+      const secondID = second.activeSession!.sessionId
+      sdkState.messageResponses.push(allowBackgroundHistory.promise, [])
+
+      emitGlobalEvent(workspacePath, {
+        type: 'session.updated',
+        properties: {
+          info: sdkState.sessions.find((session) => session.id === secondID),
+        },
+      })
+      await vi.waitFor(() => expect(sdkState.messageResponses).toHaveLength(1))
+
+      await expect(manager.loadWorkspaceState(workspacePath, firstID)).resolves.toMatchObject({
+        activeSession: expect.objectContaining({ sessionId: firstID }),
+      })
+      const workspaceEventCount = events.filter((event) => event.type === 'workspace_state').length
+
+      allowBackgroundHistory.resolve([])
+      await new Promise((resolve) => setTimeout(resolve, 25))
+
+      expect(events.filter((event) => event.type === 'workspace_state')).toHaveLength(workspaceEventCount)
+    } finally {
+      allowBackgroundHistory.resolve([])
+      manager.dispose()
+    }
+  })
+
+  it('waits for an in-flight native creation and rolls it back when the workspace is released', async () => {
+    const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: () => undefined, startServer })
+    const allowCreate = deferred()
+    try {
+      sdkState.createGate = allowCreate.promise
+      const creation = manager.createSession(workspacePath, { name: 'Released while creating' })
+        .then(
+          (state) => ({ state }),
+          (error: unknown) => ({ error }),
+        )
+      await vi.waitFor(() => expect(sdkState.createStarted).toBe(1))
+
+      let releaseSettled = false
+      const release = manager.releaseWorkspaceRuntime(workspacePath).finally(() => {
+        releaseSettled = true
+      })
+      await Promise.resolve()
+      expect(releaseSettled).toBe(false)
+
+      allowCreate.resolve()
+      await expect(creation).resolves.toMatchObject({
+        error: expect.objectContaining({ message: expect.stringMatching(/superseded/i) }),
+      })
+      await release
+      expect(sdkState.sessions.map((session) => session.id)).toEqual(['foreign-native-session'])
+      expect(sdkState.deletedSessionIds).toEqual(['aryn-owned-session-1'])
+    } finally {
+      allowCreate.resolve()
+      manager.dispose()
+    }
+  })
+
+  it('rolls back a native creation whose foreground activation was superseded', async () => {
+    const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: () => undefined, startServer })
+    const allowCreate = deferred()
+    try {
+      sdkState.createGate = allowCreate.promise
+      const creation = manager.createSession(workspacePath, { name: 'Superseded creation' })
+        .then(
+          (state) => ({ state }),
+          (error: unknown) => ({ error }),
+        )
+      await vi.waitFor(() => expect(sdkState.createStarted).toBe(1))
+
+      await expect(manager.openSession(workspacePath, 'foreign-native-session')).resolves.toMatchObject({
+        activeSession: expect.objectContaining({ sessionId: 'foreign-native-session' }),
+      })
+      allowCreate.resolve()
+
+      await expect(creation).resolves.toMatchObject({
+        error: expect.objectContaining({ message: expect.stringMatching(/activation was superseded/i) }),
+      })
+      expect(sdkState.sessions.map((session) => session.id)).toEqual(['foreign-native-session'])
+      expect(sdkState.deletedSessionIds).toEqual(['aryn-owned-session-1'])
+    } finally {
+      allowCreate.resolve()
+      manager.dispose()
+    }
+  })
+
+  it('restores the previous active session when post-create state assembly fails', async () => {
+    const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: () => undefined, startServer })
+    try {
+      const previous = await manager.createSession(workspacePath, { name: 'Previous active' })
+      const previousSessionID = previous.activeSession!.sessionId
+      sdkState.providerFails = true
+
+      await expect(manager.createSession(workspacePath, { name: 'Incomplete creation' }))
+        .rejects.toThrow('provider list failed')
+      sdkState.providerFails = false
+
+      expect(sdkState.deletedSessionIds).toContain('aryn-owned-session-2')
+      await expect(manager.renameSession(workspacePath, previousSessionID, 'Previous restored'))
+        .resolves.toMatchObject({
+          activeSession: expect.objectContaining({
+            name: 'Previous restored',
+            sessionId: previousSessionID,
+          }),
+        })
+    } finally {
+      sdkState.providerFails = false
+      manager.dispose()
+    }
+  })
+
+  it('keeps the current binding and ownership when native deletion fails', async () => {
+    const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: () => undefined, startServer })
+    try {
+      const created = await manager.createSession(workspacePath, { name: 'Deletion retry' })
+      const sessionID = created.activeSession!.sessionId
+      sdkState.deleteFails = true
+
+      await expect(manager.deleteSession(workspacePath, sessionID)).rejects.toThrow('delete failed')
+      expect(sdkState.sessions.some((session) => session.id === sessionID)).toBe(true)
+
+      sdkState.deleteFails = false
+      await expect(manager.renameSession(workspacePath, sessionID, 'Still bound')).resolves.toMatchObject({
+        activeSession: expect.objectContaining({ name: 'Still bound', sessionId: sessionID }),
+      })
+      await manager.discardWorkspaceSessions(workspacePath)
+      expect(sdkState.deletedSessionIds).toContain(sessionID)
+    } finally {
+      manager.dispose()
+    }
+  })
+
+  it('refreshes a known workspace without an active binding after a server restart', async () => {
+    const events: Array<Record<string, any>> = []
+    let exitListener: ((error: Error) => void) | null = null
+    const startServer = async () => ({
+      close: () => undefined,
+      onExit: (listener: (error: Error) => void) => {
+        exitListener = listener
+        return () => {
+          if (exitListener === listener) exitListener = null
+        }
+      },
+      url: 'http://127.0.0.1:4096',
+    })
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: (event) => events.push(event), startServer })
+    try {
+      await expect(manager.loadWorkspaceState(
+        workspacePath,
+        null,
+        { restoreSession: false },
+      )).resolves.toMatchObject({ activeSession: null })
+      const now = Date.now()
+      sdkState.sessions.push({
+        directory: workspacePath,
+        id: 'session-discovered-after-restart',
+        parentID: undefined,
+        time: { created: now, updated: now },
+        title: 'Discovered after restart',
+        workspaceDirectory: workspacePath,
+      })
+
+      const terminate = exitListener
+      expect(terminate).not.toBeNull()
+      terminate!(new Error('server exited'))
+
+      await vi.waitFor(() => expect(events).toContainEqual(expect.objectContaining({
+        state: expect.objectContaining({
+          activeSession: null,
+          sessions: expect.arrayContaining([
+            expect.objectContaining({ id: 'session-discovered-after-restart' }),
+          ]),
+        }),
+        type: 'workspace_state',
+      })))
+    } finally {
+      manager.dispose()
+    }
+  })
+
+  it('rejects an old interaction and reconciles pending work after a server restart', async () => {
+    const events: Array<Record<string, any>> = []
+    let exitListener: ((error: Error) => void) | null = null
+    const startServer = async () => ({
+      close: () => undefined,
+      onExit: (listener: (error: Error) => void) => {
+        exitListener = listener
+        return () => {
+          if (exitListener === listener) exitListener = null
+        }
+      },
+      url: 'http://127.0.0.1:4096',
+    })
+    const manager = new OpenCodeAgentManager({ agentDir, emitEvent: (event) => events.push(event), startServer })
+    try {
+      const created = await manager.createSession(workspacePath, { name: 'Server generation' })
+      const sessionID = created.activeSession!.sessionId
+      emitGlobalEvent(workspacePath, {
+        type: 'permission.asked',
+        properties: {
+          id: 'permission-old-server',
+          permission: 'bash',
+          sessionID,
+        },
+      })
+      await vi.waitFor(() => expect(events).toContainEqual(expect.objectContaining({
+        request: expect.objectContaining({ id: 'permission-old-server' }),
+        type: 'interaction_requested',
+      })))
+
+      const terminate = exitListener
+      expect(terminate).not.toBeNull()
+      sdkState.pendingPermissions = [{
+        always: [],
+        id: 'permission-new-server',
+        metadata: {},
+        patterns: ['src/**'],
+        permission: 'edit',
+        sessionID,
+      }]
+      terminate!(new Error('server exited'))
+
+      await vi.waitFor(() => expect(events).toContainEqual(expect.objectContaining({
+        request: expect.objectContaining({ id: 'permission-new-server' }),
+        type: 'interaction_requested',
+      })))
+      await expect(manager.respondToInteraction({
+        agentId: 'opencode',
+        optionId: 'allow_once',
+        requestId: 'permission-old-server',
+        sessionId: sessionID,
+      })).resolves.toBe(false)
+      expect(sdkState.permissionReplyCount).toBe(0)
+      await expect(manager.respondToInteraction({
+        agentId: 'opencode',
+        optionId: 'allow_once',
+        requestId: 'permission-new-server',
+        sessionId: sessionID,
+      })).resolves.toBe(true)
+      expect(sdkState.permissionReplyCount).toBe(1)
+      await vi.waitFor(() => expect(sdkState.globalEventSubscribeCount).toBe(2))
     } finally {
       manager.dispose()
     }
