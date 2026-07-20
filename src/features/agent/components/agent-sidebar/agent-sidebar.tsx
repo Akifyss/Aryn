@@ -30,11 +30,8 @@ import {
   ArrowUpLine,
   CheckLine,
   CloseLine,
-  CornerUpLeftLine,
-  Delete2Line,
   DownLine,
   EditLine,
-  More1Line,
   RightLine,
   SearchLine,
   StopFill,
@@ -53,6 +50,10 @@ import {
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
 import { AgentBrandIcon } from '@/features/agent/components/agent-brand-icon/agent-brand-icon'
 import { AgentAttachmentFileCard } from '@/features/agent/components/agent-file-card/agent-file-card'
+import {
+  AgentQueuedComposerTray,
+  type AgentQueuedComposerMessage,
+} from '@/features/agent/components/agent-queued-composer-tray/agent-queued-composer-tray'
 import {
   AgentProjectSwitchTrigger,
   AgentSessionTreeView,
@@ -142,7 +143,6 @@ import type {
   AgentMessageAttachment,
   AgentMessageFileChange,
   AgentPromptAttachment,
-  AgentQueuedMessageKind,
   AgentQueuedMessageUpdate,
   AgentRunningPromptBehavior,
   AgentSessionListItem,
@@ -269,12 +269,6 @@ type ComposerAttachment = AgentPromptAttachment & {
 }
 
 type AgentComposerAction = 'send' | 'stop'
-type AgentQueuedComposerMessage = {
-  id: string
-  index: number
-  kind: AgentQueuedMessageKind
-  text: string
-}
 
 type AgentComposerMenu = 'model-cascader' | null
 
@@ -1854,307 +1848,6 @@ function AgentSessionStatusBubble({ status }: { status: AgentSessionStatus }) {
         </AppTooltip>
       ))}
     </article>
-  )
-}
-
-function AgentQueuedComposerTray({
-  canEdit,
-  menuPortalTarget,
-  messages,
-  onUpdate,
-}: {
-  canEdit: boolean
-  menuPortalTarget?: HTMLElement | null
-  messages: AgentQueuedComposerMessage[]
-  onUpdate: (update: AgentQueuedMessageUpdate) => Promise<void>
-}) {
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
-  const [editingText, setEditingText] = useState('')
-  const [openMenuMessageId, setOpenMenuMessageId] = useState<string | null>(null)
-  const [updatingMessageId, setUpdatingMessageId] = useState<string | null>(null)
-  const editingInputRef = useRef<HTMLInputElement | null>(null)
-  const canRenderMenuPortal = menuPortalTarget !== null
-
-  useEffect(() => {
-    if (!editingMessageId || messages.some((message) => message.id === editingMessageId)) {
-      return
-    }
-
-    setEditingMessageId(null)
-    setEditingText('')
-  }, [editingMessageId, messages])
-
-  useEffect(() => {
-    if (!openMenuMessageId || messages.some((message) => message.id === openMenuMessageId)) {
-      return
-    }
-
-    setOpenMenuMessageId(null)
-  }, [messages, openMenuMessageId])
-
-  useEffect(() => {
-    if (!editingMessageId) {
-      return
-    }
-
-    const frameId = window.requestAnimationFrame(() => {
-      editingInputRef.current?.focus()
-      editingInputRef.current?.select()
-    })
-
-    return () => {
-      window.cancelAnimationFrame(frameId)
-    }
-  }, [editingMessageId])
-
-  if (messages.length === 0) {
-    return null
-  }
-
-  function beginEdit(message: AgentQueuedComposerMessage) {
-    setOpenMenuMessageId(null)
-    setEditingMessageId(message.id)
-    setEditingText(message.text)
-  }
-
-  function cancelEdit() {
-    setEditingMessageId(null)
-    setEditingText('')
-  }
-
-  async function runUpdate(message: AgentQueuedComposerMessage, update: AgentQueuedMessageUpdate) {
-    try {
-      setUpdatingMessageId(message.id)
-      await onUpdate(update)
-      if (update.action === 'edit') {
-        cancelEdit()
-      }
-      setOpenMenuMessageId(null)
-    } catch {
-      // Parent state owns the visible error; keep the row open so the user can retry.
-    } finally {
-      setUpdatingMessageId(null)
-    }
-  }
-
-  async function saveEdit(message: AgentQueuedComposerMessage) {
-    const nextText = editingText.trim()
-
-    if (!nextText || nextText === message.text) {
-      cancelEdit()
-      return
-    }
-
-    await runUpdate(message, {
-      action: 'edit',
-      expectedText: message.text,
-      index: message.index,
-      kind: message.kind,
-      text: nextText,
-    })
-  }
-
-  return (
-    <div className='agent-queued-tray' aria-label='待处理的 Agent 消息'>
-      {messages.map((message) => {
-        const isEditing = editingMessageId === message.id
-        const isUpdating = updatingMessageId === message.id
-        const isMenuOpen = openMenuMessageId === message.id
-        const isFollowUp = message.kind === 'followUp'
-        const targetKind = isFollowUp ? 'steer' : 'followUp'
-
-        return (
-          <div
-            key={message.id}
-            className={`agent-queued-row agent-queued-row-${message.kind}${isEditing ? ' is-editing' : ''}`}
-          >
-            <div className='agent-queued-row-leading' aria-hidden='true'>
-              <span className='agent-queued-row-grip'>::</span>
-              <CornerUpLeftLine size={16} />
-            </div>
-
-            <div className='agent-queued-row-main'>
-              <span className={`agent-queued-kind agent-queued-kind-${message.kind}`}>
-                {isFollowUp ? '排队' : '引导'}
-              </span>
-              {!canEdit ? null : isEditing ? (
-                <input
-                  ref={editingInputRef}
-                  className='agent-queued-edit-input'
-                  value={editingText}
-                  disabled={isUpdating}
-                  aria-label='编辑待处理消息'
-                  onChange={(event) => {
-                    setEditingText(event.target.value)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') {
-                      event.preventDefault()
-                      cancelEdit()
-                    }
-
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      void saveEdit(message)
-                    }
-                  }}
-                />
-              ) : (
-                <AppTooltip
-                  excludeFromTabOrder
-                  tooltip={message.text}
-                  triggerClassName='agent-queued-text'
-                  triggerRole='note'
-                >
-                  <span>
-                    {message.text}
-                  </span>
-                </AppTooltip>
-              )}
-            </div>
-
-            <div className='agent-queued-actions'>
-              {isEditing ? (
-                <>
-                  <button
-                    type='button'
-                    className='agent-queued-action is-text'
-                    disabled={isUpdating || !editingText.trim()}
-                    onClick={() => {
-                      void saveEdit(message)
-                    }}
-                  >
-                    保存
-                  </button>
-                  <button
-                    type='button'
-                    className='agent-queued-action is-text'
-                    disabled={isUpdating}
-                    onClick={cancelEdit}
-                  >
-                    取消
-                  </button>
-                </>
-              ) : (
-                <>
-                  <AppTooltipButton
-                    type='button'
-                    className='agent-queued-action is-text'
-                    disabled={isUpdating}
-                    onClick={() => {
-                      void runUpdate(message, {
-                        action: 'move',
-                        expectedText: message.text,
-                        index: message.index,
-                        kind: message.kind,
-                        targetKind,
-                      })
-                    }}
-                  >
-                    {isFollowUp ? '引导' : '排队'}
-                  </AppTooltipButton>
-                  <AppTooltipButton
-                    type='button'
-                    className='agent-queued-action'
-                    disabled={isUpdating}
-                    aria-label='删除待处理消息'
-                    tooltip='删除'
-                    onClick={() => {
-                      void runUpdate(message, {
-                        action: 'delete',
-                        expectedText: message.text,
-                        index: message.index,
-                        kind: message.kind,
-                      })
-                    }}
-                  >
-                    <Delete2Line size={16} />
-                  </AppTooltipButton>
-                  <Menu.Root
-                    modal={false}
-                    open={isMenuOpen}
-                    onOpenChange={(open, details) => {
-                      if (open) {
-                        setOpenMenuMessageId(message.id)
-                        return
-                      }
-
-                      if (shouldCloseClickOpenedMenu(details)) {
-                        setOpenMenuMessageId((currentValue) => (
-                          currentValue === message.id ? null : currentValue
-                        ))
-                      } else {
-                        details.cancel()
-                      }
-                    }}
-                  >
-                    <div className='agent-queued-menu-anchor'>
-                      <Menu.Trigger
-                        className='agent-queued-action'
-                        disabled={isUpdating}
-                        aria-label='更多待处理消息操作'
-                        render={<AppTooltipButton tooltip='更多' />}
-                      >
-                        <More1Line size={16} />
-                      </Menu.Trigger>
-                      {canRenderMenuPortal ? (
-                        <Menu.Portal container={menuPortalTarget ?? undefined}>
-                          <Menu.Positioner
-                            align='end'
-                            className='agent-queued-menu-positioner'
-                            collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
-                            collisionPadding={8}
-                            positionMethod='fixed'
-                            side='bottom'
-                            sideOffset={6}
-                          >
-                            <Menu.Popup className='agent-queued-menu' finalFocus={false}>
-                              <Menu.Item
-                                nativeButton
-                                className={({ highlighted }) => (
-                                  `agent-queued-menu-item${highlighted ? ' is-highlighted' : ''}`
-                                )}
-                                label='编辑消息'
-                                render={<button type='button' />}
-                                onClick={() => {
-                                  beginEdit(message)
-                                }}
-                              >
-                                <EditLine size={16} />
-                                <span>编辑消息</span>
-                              </Menu.Item>
-                              <Menu.Item
-                                nativeButton
-                                className={({ highlighted }) => (
-                                  `agent-queued-menu-item${highlighted ? ' is-highlighted' : ''}`
-                                )}
-                                label={`关闭${isFollowUp ? '排队' : '引导'}`}
-                                render={<button type='button' />}
-                                onClick={() => {
-                                  void runUpdate(message, {
-                                    action: 'delete',
-                                    expectedText: message.text,
-                                    index: message.index,
-                                    kind: message.kind,
-                                  })
-                                }}
-                              >
-                                <CornerUpLeftLine size={16} />
-                                <span>关闭{isFollowUp ? '排队' : '引导'}</span>
-                              </Menu.Item>
-                            </Menu.Popup>
-                          </Menu.Positioner>
-                        </Menu.Portal>
-                      ) : null}
-                    </div>
-                  </Menu.Root>
-                </>
-              )}
-            </div>
-          </div>
-        )
-      })}
-    </div>
   )
 }
 
@@ -6325,7 +6018,7 @@ function AgentChatSurface() {
   ) : null
   const composerQueuedTray = queuedComposerMessages.length > 0 ? (
     <AgentQueuedComposerTray
-      canEdit={agentState.runtime.supportsQueuedMessageEditing}
+      canUpdate={agentState.runtime.supportsQueuedMessageEditing}
       menuPortalTarget={surfaceMode === 'drawer' ? localOverlayRoot : undefined}
       messages={queuedComposerMessages}
       onUpdate={handleQueuedMessageUpdate}
