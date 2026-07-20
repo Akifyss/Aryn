@@ -1,0 +1,501 @@
+.agent-message {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.agent-message-user {
+  align-self: flex-end;
+  max-width: 88%;
+}
+
+.agent-message-assistant {
+  padding: 0px 0px 0px 0;
+}
+
+.agent-message-system {
+  gap: 6px;
+  padding: 12px 13px;
+  border: 1px solid var(--separator);
+  border-radius: 15px;
+  background: var(--background-secondary);
+}
+
+.agent-message-custom {
+  gap: 6px;
+  padding: 12px 13px;
+  border: 1px solid var(--separator);
+  border-radius: 15px;
+  background: var(--background-secondary);
+}
+
+.agent-message-tool,
+.agent-message-disclosure-card {
+  gap: 0px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.agent-message-disclosure-card {
+  --agent-pill-height: 28px;
+  --agent-pill-x: 8px;
+  --agent-pill-gap: 6px;
+  --agent-pill-font-size: 11px;
+  --agent-pill-icon-size: 16px;
+  --agent-disclosure-content-max-height: min(360px, 40vh);
+}
+
+.agent-message.is-error {
+  border-color: var(--danger);
+}
+
+.agent-message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-message-role {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--foreground-secondary);
+}
+
+.agent-message-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 19px;
+  padding: 0px 7px;
+  border-radius: 999px;
+  color: var(--foreground-on-accent);
+  background: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.agent-message-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--agent-pill-gap);
+  max-width: 100%;
+  min-height: var(--agent-pill-height);
+  padding: 0 var(--agent-pill-x);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--foreground-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.agent-message-toggle:hover {
+  background: var(--hover);
+}
+
+.agent-message-toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.agent-message-disclosure-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.agent-disclosure-heading {
+  margin: 0;
+  min-width: 0;
+}
+
+.agent-message-disclosure-meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.agent-message-disclosure-meta .agent-message-label {
+  min-height: 18px;
+  padding: 0 7px;
+  color: var(--foreground-secondary);
+  background: var(--background-secondary);
+  font-size: 10px;
+}
+
+.agent-message-toggle-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--agent-pill-font-size);
+  font-weight: 500;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-message-toggle-icon,
+.agent-message-toggle-arrow {
+  width: var(--agent-pill-icon-size);
+  height: var(--agent-pill-icon-size);
+  flex: 0 0 auto;
+}
+
+.agent-message-toggle-icon {
+  color: var(--foreground-secondary);
+}
+
+.agent-message-toggle-trailing {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--agent-pill-icon-size);
+  height: var(--agent-pill-icon-size);
+  margin-left: 1px;
+  flex: 0 0 auto;
+}
+
+.agent-message-toggle-arrow {
+  position: absolute;
+  inset: 0;
+  width: var(--agent-pill-icon-size);
+  height: var(--agent-pill-icon-size);
+  color: var(--foreground-secondary);
+  opacity: 0;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.agent-message-toggle-arrow.is-open {
+  transform: rotate(90deg);
+  opacity: 1;
+}
+
+.agent-message-toggle-arrow.has-status {
+  opacity: 0;
+}
+
+.agent-message-toggle-arrow.is-open.has-status {
+  opacity: 1;
+}
+
+.agent-message-tool.is-error .agent-message-toggle,
+.agent-message-details.is-error .agent-message-toggle {
+  color: var(--danger);
+  background: var(--background-secondary);
+}
+
+.agent-message-toggle:hover .agent-message-toggle-arrow.has-status,
+.agent-message-toggle:focus-visible .agent-message-toggle-arrow.has-status {
+  opacity: 1;
+}
+
+.agent-message-toggle:hover .agent-message-toggle-arrow:not(.has-status),
+.agent-message-toggle:focus-visible .agent-message-toggle-arrow:not(.has-status) {
+  opacity: 1;
+}
+
+.agent-message-toggle-status-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--agent-pill-icon-size);
+  height: var(--agent-pill-icon-size);
+  transition: opacity 160ms ease;
+}
+
+.agent-message-toggle:hover .agent-message-toggle-status-slot,
+.agent-message-toggle:focus-visible .agent-message-toggle-status-slot {
+  opacity: 0;
+}
+
+.agent-message-status-icon {
+  width: var(--agent-pill-icon-size);
+  height: var(--agent-pill-icon-size);
+  color: var(--foreground-secondary);
+}
+
+.agent-message-status-icon.is-running,
+.agent-message-status-icon.is-done {
+  color: var(--foreground-secondary);
+}
+
+.agent-message-status-icon.is-error {
+  color: var(--danger);
+}
+
+.agent-message-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.agent-message-user .agent-message-body {
+  align-items: flex-end;
+}
+
+.agent-message-bubble {
+  min-width: 0;
+}
+
+.agent-message-user .agent-message-bubble {
+  padding: 13px 15px;
+  border: 1px solid var(--separator);
+  border-radius: 15px;
+  background: var(--background-tertiary);
+}
+
+.agent-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-message-user .agent-message-attachments {
+  justify-content: flex-end;
+}
+
+.agent-message-disclosure-body {
+  min-width: 0;
+  min-height: 0;
+  margin-left: 17px;
+  padding: 2px 0 4px 18px;
+  border-left: 1px solid color-mix(in oklab, var(--outline) 55%, transparent);
+}
+
+.agent-message-disclosure-body-thinking {
+  margin-left: 0;
+  padding: 0;
+  border-left: 0;
+}
+
+.agent-message-disclosure-body-tool {
+  margin-left: 0;
+  padding: 0;
+  border: 0;
+  color: var(--foreground-secondary);
+  overflow: hidden;
+}
+
+.agent-message-disclosure-scroll {
+  min-width: 0;
+  min-height: 0;
+}
+
+.agent-message-disclosure-scroll-viewport {
+  height: auto;
+  max-height: var(--agent-disclosure-content-max-height);
+  overscroll-behavior: auto;
+}
+
+.agent-message-disclosure-scroll-tool {
+  --app-scroll-area-scrollbar-gap: 0px;
+}
+
+.agent-message-disclosure-scroll-content {
+  min-width: 0;
+  padding-right: 8px;
+}
+
+.agent-message-disclosure-scroll-content-tool {
+  padding: 10px 12px 10px 12px;
+}
+
+.agent-message-thinking {
+  margin-bottom: 8px;
+}
+
+.agent-message-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in oklab, var(--outline) 50%, transparent);
+}
+
+.agent-message-files-heading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.agent-message-files-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground-secondary);
+}
+
+.agent-message-files-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--foreground-secondary);
+}
+
+.agent-message-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-message-file-card-status {
+  flex: 0 0 auto;
+}
+
+.agent-message-file-overflow-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 52px;
+  height: 52px;
+  padding: 0 14px;
+  border: 1px dashed color-mix(in oklab, var(--outline) 64%, transparent);
+  border-radius: 11px;
+  box-sizing: border-box;
+  background: color-mix(in oklab, var(--background-secondary) 70%, var(--field-background));
+  color: var(--foreground-secondary);
+}
+
+.agent-message-file-overflow-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.agent-markdown {
+  color: var(--foreground-primary);
+  font-size: 13px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.agent-markdown> :first-child {
+  margin-top: 0;
+}
+
+.agent-markdown> :last-child {
+  margin-bottom: 0;
+}
+
+.agent-markdown p,
+.agent-markdown ul,
+.agent-markdown ol,
+.agent-markdown blockquote,
+.agent-markdown pre,
+.agent-markdown table,
+.agent-markdown hr {
+  margin: 8px 0;
+}
+
+.agent-markdown ul,
+.agent-markdown ol {
+  padding-left: 18px;
+}
+
+.agent-markdown li+li {
+  margin-top: 3px;
+}
+
+.agent-markdown a {
+  color: var(--accent);
+  text-decoration: none;
+  text-underline-offset: 0.14em;
+}
+
+.agent-markdown a:hover {
+  text-decoration: underline;
+  opacity: 0.8;
+}
+
+.agent-markdown code {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  font-size: 0.78em;
+  font-family: var(--font-mono);
+}
+
+.agent-markdown pre {
+  overflow-x: auto;
+  padding: 12px 13px;
+  border: 1px solid var(--separator);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.agent-markdown pre::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.agent-markdown pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.agent-markdown pre::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.agent-markdown pre:hover {
+  scrollbar-color: var(--scrollbar) transparent;
+}
+
+.agent-markdown pre:hover::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+}
+
+.agent-markdown pre::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
+
+.agent-markdown pre::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbar-active);
+}
+
+.agent-markdown pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.agent-markdown blockquote {
+  padding-left: 13px;
+  border-left: 2px solid var(--separator);
+  color: var(--foreground-secondary);
+}
+
+.agent-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.agent-markdown th,
+.agent-markdown td {
+  padding: 6px 8px;
+  border: 1px solid var(--separator);
+  text-align: left;
+  vertical-align: top;
+}
+
+.agent-markdown th {
+  color: var(--foreground-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agent-markdown input[type="checkbox"] {
+  margin-right: 6px;
+}
