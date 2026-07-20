@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { getSystemFileManagerName } from '../src/features/agent/lib/system-file-manager'
 import {
   flattenAgentProjectSessions,
+  formatAgentSessionLabel,
+  formatAgentSessionRelativeTime,
+  getAgentSessionActivityKey,
   getAgentSessionTreeKey,
   invalidateAgentProjectSessionBuckets,
+  normalizeAgentProjectPath,
   SESSION_TREE_AGENT_IDS,
   summarizeAgentProjectSessionBucket,
   type AgentProjectSessionBucket,
@@ -12,6 +17,10 @@ import type { AgentSessionListItem } from '../src/features/agent/types'
 function source(sessions: AgentSessionListItem[]) {
   return { error: null, hasLoaded: true, isLoading: false, sessions }
 }
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 describe('Agent session tree aggregation', () => {
   it('loads history for every supported Agent independently of CLI availability', () => {
@@ -45,6 +54,22 @@ describe('Agent session tree aggregation', () => {
       expect.objectContaining({ agentId: 'pi', name: 'PI session', path: 'shared' }),
     ])
     expect(getAgentSessionTreeKey('codex', 'shared')).not.toBe(getAgentSessionTreeKey('pi', 'shared'))
+  })
+
+  it('normalizes native paths for stable labels, comparisons, and activity keys', () => {
+    const session: AgentSessionListItem = {
+      createdAt: '2026-07-11T00:00:00.000Z',
+      id: 'nested-session',
+      messageCount: 1,
+      modifiedAt: '2026-07-11T00:00:00.000Z',
+      name: 'folder\\nested/session',
+      path: 'nested-session',
+      preview: '',
+    }
+
+    expect(formatAgentSessionLabel(session)).toBe('folder nested session')
+    expect(normalizeAgentProjectPath('C:\\Workspace\\Project\\')).toBe('c:/workspace/project')
+    expect(getAgentSessionActivityKey('codex', 'nested-session')).toBe('codex\nnested-session')
   })
 
   it('reports partial loading and errors without hiding successfully loaded Agents', () => {
@@ -125,5 +150,24 @@ describe('Agent session tree aggregation', () => {
       sessions: [],
     })
     expect(buckets.project?.codex?.hasLoaded).toBe(true)
+  })
+})
+
+describe('Agent session tree presentation helpers', () => {
+  it('formats relative timestamps across supported display ranges', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-21T12:00:00.000Z'))
+
+    expect(formatAgentSessionRelativeTime('invalid')).toBe('')
+    expect(formatAgentSessionRelativeTime('2026-07-21T11:59:30.000Z')).toBe('刚刚')
+    expect(formatAgentSessionRelativeTime('2026-07-21T11:58:00.000Z')).toBe('2 分')
+    expect(formatAgentSessionRelativeTime('2026-07-21T09:00:00.000Z')).toBe('3 小时')
+    expect(formatAgentSessionRelativeTime('2026-07-19T12:00:00.000Z')).toBe('2 天')
+  })
+
+  it('uses the platform-native file manager name', () => {
+    expect(getSystemFileManagerName('darwin')).toBe('访达')
+    expect(getSystemFileManagerName('win32')).toBe('资源管理器')
+    expect(getSystemFileManagerName('linux')).toBe('文件管理器')
   })
 })

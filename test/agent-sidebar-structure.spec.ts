@@ -12,6 +12,10 @@ describe('agent sidebar structure', () => {
       appCss,
       sidebarSource,
       sidebarCss,
+      sessionTreeSource,
+      sessionTreeCss,
+      brandIconSource,
+      brandIconCss,
       messageSource,
       messageCss,
       fileCardSource,
@@ -21,6 +25,10 @@ describe('agent sidebar structure', () => {
       readSource('../src/App.css'),
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
       readSource('../src/features/agent/components/agent-sidebar/styles.css'),
+      readSource('../src/features/agent/components/agent-session-tree/agent-session-tree.tsx'),
+      readSource('../src/features/agent/components/agent-session-tree/styles.css'),
+      readSource('../src/features/agent/components/agent-brand-icon/agent-brand-icon.tsx'),
+      readSource('../src/features/agent/components/agent-brand-icon/styles.css'),
       readSource('../src/features/agent/components/agent-message/agent-message.tsx'),
       readSource('../src/features/agent/components/agent-message/styles.css'),
       readSource('../src/features/agent/components/agent-file-card/agent-file-card.tsx'),
@@ -37,6 +45,11 @@ describe('agent sidebar structure', () => {
     expect(sidebarSource).toContain(
       "from '@/features/agent/components/agent-file-card/agent-file-card'",
     )
+    expect(sidebarSource).toContain(
+      "from '@/features/agent/components/agent-session-tree/agent-session-tree'",
+    )
+    expect(sessionTreeSource).toContain("import './styles.css'")
+    expect(brandIconSource).toContain("import './styles.css'")
     expect(messageSource).toContain("import './styles.css'")
     expect(messageSource).toContain(
       "from '@/features/agent/components/agent-file-card/agent-file-card'",
@@ -47,11 +60,19 @@ describe('agent sidebar structure', () => {
     expect(sidebarCss).toContain('.agent-composer {')
     expect(sidebarCss).toContain('.opencode-session-surface-host {')
     expect(sidebarCss).toContain('.codex-session-surface-host {')
+    expect(sessionTreeCss).toContain('.agent-session-tree-shell {')
+    expect(sessionTreeCss).toContain('.agent-project-menu {')
+    expect(sessionTreeCss).toContain('.agent-project-switch-trigger {')
+    expect(brandIconCss).toContain('.agent-brand-icon {')
+    expect(brandIconCss).toContain('.agent-brand-icon-mask {')
     expect(messageCss).toContain('.agent-message {')
     expect(messageCss).toContain('.agent-markdown {')
     expect(fileCardCss).toContain('.agent-file-card {')
     expect(sidebarCss).not.toContain('.agent-message {')
     expect(sidebarCss).not.toContain('.agent-file-card {')
+    expect(sidebarCss).not.toContain('.agent-session-tree-shell {')
+    expect(sidebarCss).not.toContain('.agent-project-menu {')
+    expect(sidebarCss).not.toContain('.agent-brand-icon {')
     expect(messageCss).not.toContain('.agent-file-card {')
 
     const sidebarClassNames = new Set(
@@ -60,12 +81,20 @@ describe('agent sidebar structure', () => {
     const messageClassNames = new Set(
       Array.from(messageCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
     )
+    const sessionTreeClassNames = new Set(
+      Array.from(sessionTreeCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
+    )
+    const brandIconClassNames = new Set(
+      Array.from(brandIconCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
+    )
     const fileCardClassNames = new Set(
       Array.from(fileCardCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
     )
 
     const agentClassNames = new Set([
       ...sidebarClassNames,
+      ...sessionTreeClassNames,
+      ...brandIconClassNames,
       ...messageClassNames,
       ...fileCardClassNames,
     ])
@@ -80,8 +109,9 @@ describe('agent sidebar structure', () => {
   })
 
   it('keeps presentation implementations in their owning components', async () => {
-    const [sidebarSource, messageSource, fileCardSource] = await Promise.all([
+    const [sidebarSource, sessionTreeSource, messageSource, fileCardSource] = await Promise.all([
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+      readSource('../src/features/agent/components/agent-session-tree/agent-session-tree.tsx'),
       readSource('../src/features/agent/components/agent-message/agent-message.tsx'),
       readSource('../src/features/agent/components/agent-file-card/agent-file-card.tsx'),
     ])
@@ -91,7 +121,13 @@ describe('agent sidebar structure', () => {
     expect(sidebarSource).not.toContain('function AgentFileCard(')
     expect(sidebarSource).not.toContain('const AgentMessageBubble =')
     expect(sidebarSource).not.toContain('const AgentMessageFileCards =')
+    expect(sidebarSource).not.toContain('function AgentSessionTreeRow(')
+    expect(sidebarSource).not.toContain('function AgentProjectTree(')
+    expect(sidebarSource).not.toContain('function AgentProjectSwitchTrigger(')
 
+    expect(sessionTreeSource).toContain('export function AgentSessionTreeView(')
+    expect(sessionTreeSource).toContain('export function AgentProjectSwitchTrigger(')
+    expect(sessionTreeSource).not.toContain('agent-inline-spinner')
     expect(messageSource).not.toContain('function AgentFileCard(')
     expect(messageSource).not.toContain(
       'function getAgentAttachmentFileCardProps(',
@@ -105,13 +141,15 @@ describe('agent sidebar structure', () => {
   })
 
   it('keeps the extracted stylesheet scoped to Agent UI', async () => {
-    const [sidebarCss, messageCss, fileCardCss] = await Promise.all([
+    const [sidebarCss, sessionTreeCss, brandIconCss, messageCss, fileCardCss] = await Promise.all([
       readSource('../src/features/agent/components/agent-sidebar/styles.css'),
+      readSource('../src/features/agent/components/agent-session-tree/styles.css'),
+      readSource('../src/features/agent/components/agent-brand-icon/styles.css'),
       readSource('../src/features/agent/components/agent-message/styles.css'),
       readSource('../src/features/agent/components/agent-file-card/styles.css'),
     ])
 
-    for (const agentCss of [sidebarCss, messageCss, fileCardCss]) {
+    for (const agentCss of [sidebarCss, sessionTreeCss, brandIconCss, messageCss, fileCardCss]) {
       expect(agentCss).not.toContain('.tree-header.file-panel-header')
       expect(agentCss).not.toContain('[data-command-active=')
       expect(agentCss).not.toContain('[data-slot="backdrop"]')

@@ -31,6 +31,54 @@ function getSortableTimestamp(value: string) {
   return Number.isFinite(timestamp) ? timestamp : 0
 }
 
+export function sanitizeFlatAgentSessionPath(value: string) {
+  return value
+    .replace(/[\\/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function formatAgentSessionLabel(session: AgentSessionListItem | null) {
+  return session
+    ? sanitizeFlatAgentSessionPath(session.name ?? session.preview) || 'Untitled session'
+    : 'Session'
+}
+
+export function formatAgentSessionRelativeTime(timestamp: string) {
+  const value = Date.parse(timestamp)
+
+  if (!Number.isFinite(value)) {
+    return ''
+  }
+
+  const elapsedMs = Math.max(0, Date.now() - value)
+  const minute = 60_000
+  const hour = 60 * minute
+  const day = 24 * hour
+
+  if (elapsedMs < minute) {
+    return '刚刚'
+  }
+
+  if (elapsedMs < hour) {
+    return `${Math.max(1, Math.floor(elapsedMs / minute))} 分`
+  }
+
+  if (elapsedMs < day) {
+    return `${Math.floor(elapsedMs / hour)} 小时`
+  }
+
+  return `${Math.floor(elapsedMs / day)} 天`
+}
+
+export function normalizeAgentProjectPath(filePath: string) {
+  return filePath.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
+export function getAgentSessionActivityKey(agentId: AgentId, sessionKey: string) {
+  return `${agentId}\n${sessionKey}`
+}
+
 export function getAgentSessionTreeKey(agentId: AgentId, sessionPath: string) {
   return `${agentId}\n${sessionPath}`
 }

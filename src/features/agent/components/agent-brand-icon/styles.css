@@ -1,0 +1,21 @@
+.agent-brand-icon {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.agent-brand-icon-image {
+  display: block;
+  width: var(--agent-brand-icon-size, 16px);
+  height: var(--agent-brand-icon-size, 16px);
+  object-fit: contain;
+  user-select: none;
+}
+
+.agent-brand-icon-mask {
+  display: block;
+  width: var(--agent-brand-icon-size, 16px);
+  height: var(--agent-brand-icon-size, 16px);
+  background: currentColor;
+  mask: var(--agent-brand-icon-url) center / contain no-repeat;
+  -webkit-mask: var(--agent-brand-icon-url) center / contain no-repeat;
+}

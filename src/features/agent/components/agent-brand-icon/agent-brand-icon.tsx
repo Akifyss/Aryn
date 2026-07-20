@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { AgentId } from '@/features/agent/agent-definition'
+import './styles.css'
 
 type AgentBrandIconTone = 'brand' | 'muted'
 
