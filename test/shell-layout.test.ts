@@ -70,6 +70,22 @@ describe('shell layout helpers', () => {
     return appSource.replace(/\r\n/g, '\n')
   }
 
+  async function readAppShellCss() {
+    const shellCss = await readFile(
+      new URL('../src/features/layout/components/app-shell/styles.css', import.meta.url),
+      'utf8',
+    )
+    return shellCss.replace(/\r\n/g, '\n')
+  }
+
+  async function readAppShellSource() {
+    const shellSource = await readFile(
+      new URL('../src/features/layout/components/app-shell/app-shell.tsx', import.meta.url),
+      'utf8',
+    )
+    return shellSource.replace(/\r\n/g, '\n')
+  }
+
   async function readShellLayoutControllerSource() {
     const controllerSource = await readFile(
       new URL('../src/features/layout/hooks/use-shell-layout-controller.ts', import.meta.url),
@@ -267,8 +283,8 @@ describe('shell layout helpers', () => {
   })
 
   it('keeps file tab chrome edges from doubling against adjacent panels', async () => {
-    const [appCss, fileTabsCss, titlebarCss] = await Promise.all([
-      readAppCss(),
+    const [appShellCss, fileTabsCss, titlebarCss] = await Promise.all([
+      readAppShellCss(),
       readFileTabsCss(),
       readAppTitlebarCss(),
     ])
@@ -281,7 +297,7 @@ describe('shell layout helpers', () => {
     expect(fileTabsCss).toContain(`.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-actions {
   padding: 0 6px;
 }`)
-    expect(appCss).toContain(`.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-drag-spacer {
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-drag-spacer {
   min-width: var(--panel-toggle-size);
 }`)
     expect(fileTabsCss).toContain(`.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroll-edge-left,
@@ -320,11 +336,11 @@ describe('shell layout helpers', () => {
     expect(fileTabsCss).not.toContain(".app-shell[data-right-collapsed='true'] .file-tabs-shell[data-has-actions='false']")
     expect(fileTabsCss).not.toContain('.file-tabs-scroll-edge::before')
     expect(fileTabsCss).not.toContain('.file-tabs-scroll-edge::after')
-    expect(appCss).toContain('--right-window-controls-width: calc(var(--window-control-button-width) * var(--window-control-button-count));')
-    expect(appCss).toContain('--right-panel-toggle-anchor: calc(var(--right-window-controls-width) + var(--right-chrome-edge-gap));')
-    expect(appCss).toContain('--right-panel-control-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));')
-    expect(appCss).toContain('--right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--right-chrome-content-gap));')
-    expect(appCss).toContain('right: var(--right-panel-control-inset);')
+    expect(appShellCss).toContain('--right-window-controls-width: calc(var(--window-control-button-width) * var(--window-control-button-count));')
+    expect(appShellCss).toContain('--right-panel-toggle-anchor: calc(var(--right-window-controls-width) + var(--right-chrome-edge-gap));')
+    expect(appShellCss).toContain('--right-panel-control-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--panel-toggle-gap));')
+    expect(appShellCss).toContain('--right-panel-content-inset: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--right-chrome-content-gap));')
+    expect(appShellCss).toContain('right: var(--right-panel-control-inset);')
     expect(titlebarCss).toContain('width: var(--window-control-button-width);')
   })
 
@@ -411,8 +427,8 @@ describe('shell layout helpers', () => {
   })
 
   it('uses the workspace FileSystem for the Agent fixed file tab', async () => {
-    const [appCss, appSource, workspaceTabsSource] = await Promise.all([
-      readAppCss(),
+    const [appShellCss, appSource, workspaceTabsSource] = await Promise.all([
+      readAppShellCss(),
       readAppSource(),
       readWorkspaceTabsSource(),
     ])
@@ -423,12 +439,14 @@ describe('shell layout helpers', () => {
     expect(appSource).toContain('<WorkspaceFileSystemPanel')
     expect(`${appSource}\n${workspaceTabsSource}`).not.toContain("getFixedPanelTab('file-system')")
     expect(`${appSource}\n${workspaceTabsSource}`).not.toContain("fixedTabKind === 'file-system-panel'")
-    expect(appCss).toContain('--agent-collapsed-tab-actions-width: calc((var(--panel-toggle-size) * 2) + var(--panel-toggle-gap));')
+    expect(appShellCss).toContain('--agent-collapsed-tab-actions-width: calc((var(--panel-toggle-size) * 2) + var(--panel-toggle-gap));')
   })
 
   it('keeps docked sidebar expansion motion scoped and disableable', async () => {
     const [
       appCss,
+      appShellCss,
+      appShellSource,
       appSource,
       fileTabsCss,
       sidebarLayoutTransitionSource,
@@ -436,6 +454,8 @@ describe('shell layout helpers', () => {
       shellLayoutControllerSource,
     ] = await Promise.all([
       readAppCss(),
+      readAppShellCss(),
+      readAppShellSource(),
       readAppSource(),
       readFileTabsCss(),
       readSidebarLayoutTransitionSource(),
@@ -447,69 +467,82 @@ describe('shell layout helpers', () => {
       shellDrawerControllerSource,
       sidebarLayoutTransitionSource,
     ].join('\n')
-    const appShellRule = appCss.match(/\.app-shell \{([\s\S]*?)\n\}/)?.[1]
+    const appShellRule = appShellCss.match(/\.app-shell \{([\s\S]*?)\n\}/)?.[1]
 
+    expect(appSource).toContain('<AppShell')
+    expect(appSource).toContain('layout={shellLayout}')
+    expect(appSource).toContain('function renderRightPanel(surfaceMode: PanelSurfaceMode)')
+    expect(appSource).toContain("if (surfaceMode === 'docked' && needsProjectBootstrap)")
+    expect(appSource).not.toContain("className='app-shell'")
+    expect(appSource).not.toContain('className="app-shell"')
+    expect(appShellSource).toContain("className='app-shell'")
+    expect(appShellSource).toContain("{renderRightPanel('docked')}")
+    expect(appShellSource).toContain("{renderRightPanel('drawer')}")
+    expect(appShellSource).toContain('{isRightSidebarDrawer ? (')
+    expect(appShellSource).not.toContain('{isRightSidebarDrawer && shouldExposeRightPanelTools ? (')
+    expect(appCss).not.toContain('.app-shell {')
+    expect(appCss).not.toContain('.panel-resize-handle {')
     expect(appShellRule).toBeDefined()
     expect(appShellRule).not.toContain('transition:')
-    expect(appCss).toContain('--sidebar-layout-transition-duration: 180ms;')
-    expect(appCss).toContain('--sidebar-layout-transition-easing: cubic-bezier(0.16, 1, 0.3, 1);')
-    expect(appCss).toContain(`.app-shell[data-sidebar-transition='true'] {
+    expect(appShellCss).toContain('--sidebar-layout-transition-duration: 180ms;')
+    expect(appShellCss).toContain('--sidebar-layout-transition-easing: cubic-bezier(0.16, 1, 0.3, 1);')
+    expect(appShellCss).toContain(`.app-shell[data-sidebar-transition='true'] {
   transition: grid-template-columns var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
 }`)
-    expect(appCss).toContain(`.app-shell[data-sidebar-transition='true'][data-resizing='true'] {
+    expect(appShellCss).toContain(`.app-shell[data-sidebar-transition='true'][data-resizing='true'] {
   transition: none;
 }`)
-    expect(appCss).toContain(`.panel-sidebar > .workspace-sidebar-surface {
+    expect(appShellCss).toContain(`.panel-sidebar > .workspace-sidebar-surface {
   width: var(--left-sidebar-content-width);
   min-width: var(--left-sidebar-content-width);
 }`)
-    expect(appCss).toContain(`.panel-agent > .agent-shell {
+    expect(appShellCss).toContain(`.panel-agent > .agent-shell {
   width: var(--right-sidebar-content-width);
   min-width: var(--right-sidebar-content-width);
 }`)
-    expect(appCss).toContain(`.panel-agent > .editor-frame {
+    expect(appShellCss).toContain(`.panel-agent > .editor-frame {
   width: 100%;
   min-width: 0;
 }`)
-    expect(appCss).toContain(`.panel-sidebar > .workspace-sidebar-surface[data-sidebar-transition='true'] {
+    expect(appShellCss).toContain(`.panel-sidebar > .workspace-sidebar-surface[data-sidebar-transition='true'] {
   contain: layout paint;
 }`)
-    expect(appCss).toContain(`.panel-agent > .agent-shell[data-sidebar-transition='true'],
+    expect(appShellCss).toContain(`.panel-agent > .agent-shell[data-sidebar-transition='true'],
 .panel-agent > .editor-frame[data-sidebar-transition='true'] {
   contain: layout paint;
 }`)
-    expect(appCss).toContain(`.panel-sidebar.is-collapsed,
+    expect(appShellCss).toContain(`.panel-sidebar.is-collapsed,
 .panel-agent.is-collapsed {
   border-color: transparent;
 }`)
-    expect(appCss).not.toContain(`.panel-sidebar.is-collapsed,
+    expect(appShellCss).not.toContain(`.panel-sidebar.is-collapsed,
 .panel-agent.is-collapsed {
   display: none;
 }`)
-    expect(appCss).not.toContain(`.panel-sidebar.is-collapsed,
+    expect(appShellCss).not.toContain(`.panel-sidebar.is-collapsed,
 .panel-agent.is-collapsed {
   visibility: hidden;
 }`)
-    expect(appCss).not.toContain(`.panel-sidebar.is-collapsed,
+    expect(appShellCss).not.toContain(`.panel-sidebar.is-collapsed,
 .panel-agent.is-collapsed {
   opacity: 0;
 }`)
-    expect(appSource).toContain("className={`panel panel-sidebar${isLeftSidebarVisible ? '' : ' is-collapsed'}`}")
-    expect(appSource).toContain("className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}")
-    expect(appSource).toContain("'--left-sidebar-content-width': `${renderedLeftSidebarWidth}px`")
-    expect(appSource).toContain("'--agent-chat-track-width': `${effectiveAgentChatTrackWidth}px`")
-    expect(appSource).toContain("'--agent-editor-track-width': `${effectiveAgentEditorTrackWidth}px`")
-    expect(appSource).toContain("'--right-sidebar-content-width': `${renderedEditorRightSidebarWidth}px`")
-    expect(appSource).toContain('inert={isLeftSidebarVisible ? undefined : true}')
-    expect(appSource).toContain('inert={isRightSidebarVisible ? undefined : true}')
-    expect(appCss).toContain(`.app-shell[data-resizing='true'] .titlebar-spacer[data-sidebar-transition='true'],
+    expect(appShellSource).toContain("className={`panel panel-sidebar${isLeftSidebarVisible ? '' : ' is-collapsed'}`}")
+    expect(appShellSource).toContain("className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}")
+    expect(appShellSource).toContain("'--left-sidebar-content-width': `${renderedLeftSidebarWidth}px`")
+    expect(appShellSource).toContain("'--agent-chat-track-width': `${effectiveAgentChatTrackWidth}px`")
+    expect(appShellSource).toContain("'--agent-editor-track-width': `${effectiveAgentEditorTrackWidth}px`")
+    expect(appShellSource).toContain("'--right-sidebar-content-width': `${renderedEditorRightSidebarWidth}px`")
+    expect(appShellSource).toContain('inert={isLeftSidebarVisible ? undefined : true}')
+    expect(appShellSource).toContain('inert={isRightSidebarVisible ? undefined : true}')
+    expect(appShellCss).toContain(`.app-shell[data-resizing='true'] .titlebar-spacer[data-sidebar-transition='true'],
 .app-shell[data-resizing='true'] .left-chrome-actions[data-sidebar-transition='true'] {
   transition: none;
 }`)
-    expect(appCss).toContain(`.app-shell[data-resizing='true'] .file-tabs-shell[data-sidebar-transition='true'] {
+    expect(appShellCss).toContain(`.app-shell[data-resizing='true'] .file-tabs-shell[data-sidebar-transition='true'] {
   transition: none;
 }`)
-    expect(appCss).not.toMatch(/\.app-shell\[data-sidebar-transition='true'\]\s+\./)
+    expect(appShellCss).not.toMatch(/\.app-shell\[data-sidebar-transition='true'\]\s+\./)
     expect(appSource).toContain('useShellLayoutController({')
     expect(appSource).not.toContain('function applySidebarResizePreview(')
     expect(appSource).not.toContain("refreshWindowInteractionRegions('soft')")
@@ -523,31 +556,31 @@ describe('shell layout helpers', () => {
     expect(layoutSource).toContain("target.removeAttribute('data-sidebar-transition')")
     expect(layoutSource).toContain("appShellRef.current?.removeAttribute('data-sidebar-transition')")
     expect(layoutSource).toContain("event.propertyName === 'grid-template-columns'")
-    expect(appSource).toContain('onTransitionEnd={handleSidebarLayoutTransitionEnd}')
+    expect(appShellSource).toContain('onTransitionEnd={handleSidebarLayoutTransitionEnd}')
     expect(layoutSource).toContain('return finishSidebarLayoutTransition')
     expect(layoutSource).toContain('if (activeResizePanel) {')
     expect(layoutSource.match(/runSidebarLayoutTransition\(\(\) => \{/g)).toHaveLength(3)
     expect(layoutSource).toContain('if (!isRightSidebarCollapsed) {')
-    expect(appCss).toContain(`.app-shell[data-app-layout='agent'] {
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='agent'] {
   --agent-chat-min-width: 376px;
   --agent-chat-track-width: 376px;
   --agent-editor-track-width: 520px;`)
-    expect(appCss).toContain(`.app-shell[data-app-layout='agent'][data-layout='full'] {
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='agent'][data-layout='full'] {
   grid-template-columns:
     var(--left-sidebar-width)
     minmax(var(--agent-chat-min-width), var(--agent-chat-track-width))
     minmax(0, var(--agent-editor-track-width));
 }`)
-    expect(appCss).not.toMatch(/\.app-shell\[data-app-layout='agent'\]\[data-right-collapsed='true'\][^{]*\{[^}]*grid-template-columns/)
+    expect(appShellCss).not.toMatch(/\.app-shell\[data-app-layout='agent'\]\[data-right-collapsed='true'\][^{]*\{[^}]*grid-template-columns/)
     expect(layoutSource).toContain('const [agentChatWidth, setAgentChatWidth] = useState(')
     expect(layoutSource).toContain('clampAgentChatWidth,')
     expect(layoutSource).toContain('preview.agentChatWidth = clampAgentChatWidth(')
     expect(layoutSource).not.toContain('agentRightSidebarWidthMode')
-    expect(appCss).not.toContain(".app-shell[data-resizing='true'] .panel-resize-handle::before")
+    expect(appShellCss).not.toContain(".app-shell[data-resizing='true'] .panel-resize-handle::before")
     expect(layoutSource).toContain('resizeSidebarRef.current(resizePanel, pointerClientX)')
     expect(layoutSource).toContain('animationFrameId = window.requestAnimationFrame(() => {')
     expect(layoutSource).toContain('window.cancelAnimationFrame(animationFrameId)')
-    expect(appSource).toContain('event.currentTarget.setPointerCapture(event.pointerId)')
+    expect(appShellSource).toContain('event.currentTarget.setPointerCapture(event.pointerId)')
     expect(layoutSource).toContain('function applySidebarResizePreview(')
     expect(layoutSource).toContain("shell.style.setProperty('--left-sidebar-width'")
     expect(layoutSource).toContain('agentChatWidth: isRightSidebarVisible ? effectiveAgentChatWidth : agentChatWidth')
@@ -564,16 +597,16 @@ describe('shell layout helpers', () => {
         setEditorRightSidebarWidth(preview.editorRightSidebarWidth)
       }`)
     expect(layoutSource).toContain('function handleResizeKeyDown(panel: ResizePanel')
-    expect(appSource).toContain('tabIndex={0}')
-    expect(appSource).toContain("id='workspace-sidebar-panel'")
-    expect(appSource).toContain("id='assistant-sidebar-panel'")
-    expect(appSource).toContain('aria-valuemin={leftSidebarResizeBounds.min}')
-    expect(appSource).toContain("aria-controls='workspace-sidebar-panel'")
-    expect(appSource).toContain("aria-controls={isAgentLayout ? 'editor-main' : 'assistant-sidebar-panel'}")
-    expect(appSource).toContain('aria-label={isAgentLayout ? \'Resize Agent chat panel\' : \'Resize assistant sidebar\'}')
+    expect(appShellSource).toContain('tabIndex={0}')
+    expect(appShellSource).toContain("id='workspace-sidebar-panel'")
+    expect(appShellSource).toContain("id='assistant-sidebar-panel'")
+    expect(appShellSource).toContain('aria-valuemin={leftSidebarResizeBounds.min}')
+    expect(appShellSource).toContain("aria-controls='workspace-sidebar-panel'")
+    expect(appShellSource).toContain("aria-controls={isAgentLayout ? 'editor-main' : 'assistant-sidebar-panel'}")
+    expect(appShellSource).toContain('aria-label={isAgentLayout ? \'Resize Agent chat panel\' : \'Resize assistant sidebar\'}')
     expect(layoutSource).toContain("event.key !== 'ArrowLeft'")
     expect(layoutSource).toContain('notifySidebarResizeEnd()')
-    expect(appCss).toContain(`.panel-resize-handle {
+    expect(appShellCss).toContain(`.panel-resize-handle {
   position: relative;
   display: block;
   width: 100%;
@@ -589,12 +622,14 @@ describe('shell layout helpers', () => {
     expect(layoutSource).toContain('syncFrameId = window.requestAnimationFrame(() => {')
     expect(layoutSource).toContain("window.addEventListener('resize', scheduleShellWidthSync)")
     expect(layoutSource).toContain('window.cancelAnimationFrame(syncFrameId)')
-    expect(appCss).toContain(`@media (prefers-reduced-motion: reduce) {
-
+    expect(appShellCss).toContain(`@media (prefers-reduced-motion: reduce) {
   .app-shell,
   .titlebar-spacer,
   .left-chrome-actions,
-  .panel-resize-slot,
+  .panel-resize-slot {
+    transition: none;
+  }`)
+    expect(appCss).toContain(`@media (prefers-reduced-motion: reduce) {
   .agent-threadbar {
     transition: none;
   }`)

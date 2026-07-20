@@ -1,15 +1,11 @@
-import type {
-  CSSProperties,
-  ReactNode,
-} from 'react'
+import type { ReactNode } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tabs as BaseTabs } from '@base-ui/react/tabs'
-import { Button, Toast, toast, Modal, AlertDialog, Drawer } from '@heroui/react'
+import { Button, Toast, toast, Modal, AlertDialog } from '@heroui/react'
 import {
   FolderLine,
   GitBranchLine,
   LayoutLeftLine,
-  LayoutRightLine,
   Chat3Line,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
@@ -23,7 +19,6 @@ import type {
   WorkspaceIconThemesByMode,
 } from '@/features/workspace/types'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
-import { AppTitlebar } from '@/components/app-titlebar'
 import {
   AgentChatSurface,
   AgentProvider,
@@ -105,8 +100,8 @@ import { CommandPalette } from '@/features/command-palette/components/command-pa
 import { useSettingsStore, type AppLayoutPreference, type AppTheme } from '@/hooks/use-settings-store'
 import { useDevToolsFocusSettlement } from '@/hooks/use-devtools-focus-settlement'
 import { HtmlPreview } from '@/features/editor/components/html-preview'
+import { AppShell } from '@/features/layout/components/app-shell/app-shell'
 import { useShellLayoutController } from '@/features/layout/hooks/use-shell-layout-controller'
-import { getShellChromeOverlayState } from '@/features/layout/shell-layout'
 import './App.css'
 
 const CodeEditor = lazy(async () => {
@@ -536,56 +531,36 @@ function App() {
     workspacePath: currentPath,
   })
 
-  const {
-    activeLeftSidebarTab,
-    activeResizePanel,
-    appShellRef,
-    closeDrawers,
-    closeLeftDrawer,
-    closeRightDrawer,
-    drawerDragRegion,
-    effectiveAgentChatTrackWidth,
-    effectiveAgentEditorTrackWidth,
-    effectiveLeftSidebarWidth,
-    effectiveRightSidebarWidth,
-    expandAgentEditorSurface,
-    expandCollapsedAssistantSurface,
-    handleLeftDrawerOpenChange,
-    handleResizeKeyDown,
-    handleResizeStart,
-    handleRightDrawerOpenChange,
-    handleSidebarLayoutTransitionEnd,
-    isLeftDrawerOpen,
-    isLeftSidebarDrawer,
-    isLeftSidebarVisible,
-    isRightDrawerFullWidth,
-    isRightDrawerOpen,
-    isRightSidebarDrawer,
-    isRightSidebarVisible,
-    isWindowFullScreen,
-    layoutMode,
-    leftDrawerOverlayRoot,
-    leftDrawerSurfaceRef,
-    leftSidebarResizeBounds,
-    renderedEditorRightSidebarWidth,
-    renderedLeftSidebarWidth,
-    revealEditorAssistantSurface,
-    rightDrawerOverlayRoot,
-    rightDrawerSurfaceRef,
-    rightSidebarResizeBounds,
-    setActiveLeftSidebarTab,
-    setLeftDrawerOverlayRoot,
-    setRightDrawerOverlayRoot,
-    shellChromeVars,
-    shellPlatform,
-    toggleAssistantSurface,
-    toggleWorkspaceSidebar,
-  } = useShellLayoutController({
+  const shellLayout = useShellLayoutController({
     gitPanelLayout,
     isAgentLayout,
     platform,
     shouldExposeRightSidebar: shouldExposeAgentWorkspaceTools,
   })
+  const {
+    activeLeftSidebarTab,
+    closeDrawers,
+    closeLeftDrawer,
+    closeRightDrawer,
+    expandAgentEditorSurface,
+    expandCollapsedAssistantSurface,
+    handleLeftDrawerOpenChange,
+    handleRightDrawerOpenChange,
+    isLeftDrawerOpen,
+    isLeftSidebarDrawer,
+    isLeftSidebarVisible,
+    isRightDrawerOpen,
+    isRightSidebarDrawer,
+    leftDrawerOverlayRoot,
+    leftDrawerSurfaceRef,
+    revealEditorAssistantSurface,
+    rightDrawerOverlayRoot,
+    setActiveLeftSidebarTab,
+    setLeftDrawerOverlayRoot,
+    shellChromeVars,
+    shellPlatform,
+    toggleWorkspaceSidebar,
+  } = shellLayout
 
   const performWorkspaceRefresh = useCallback(async (
     rootPath: string,
@@ -750,11 +725,6 @@ function App() {
     || Boolean(confirmDialogOptions?.isOpen)
     || isGlobalProjectMenuOpen
   const isShortcutBlockingLayerOpen = isAppModalLayerOpen || isProjectMenuOpen
-  const shellChromeOverlayState = getShellChromeOverlayState({
-    isLeftDrawerOpen,
-    isModalLayerOpen: isAppModalLayerOpen,
-    isRightDrawerOpen,
-  })
 
   async function handleRequestWindowClose() {
     if (windowCloseRequestInFlightRef.current) {
@@ -1636,59 +1606,46 @@ function App() {
     )
   }
 
-  const leftChromeSurface = isLeftDrawerOpen ? 'drawer' : isLeftSidebarVisible ? 'docked' : 'collapsed'
+  function renderCenterPanel() {
+    if (needsProjectBootstrap) {
+      return (
+        <ProjectBootstrap
+          isBusy={isProjectActionBusy}
+          onAddExistingProject={handleAddExistingProject}
+          onCreateProject={openNewProjectDialog}
+        />
+      )
+    }
 
-  const leftChromeControls = (
-    <div
-      className='left-chrome-actions'
-      data-left-surface={leftChromeSurface}
-      data-overlay-elevated={shellChromeOverlayState.leftControlsElevated ? 'true' : 'false'}
-      data-react-aria-top-layer={shellChromeOverlayState.leftControlsTopLayer ? 'true' : undefined}
-    >
-      {renderLayoutModeSwitchButton()}
-      {!isLeftDrawerOpen ? (
-        <>
-          {isLeftSidebarVisible ? <div className='left-chrome-drag-spacer' aria-hidden='true' /> : null}
-          {renderLeftChromeSearchButton()}
-          {renderLeftSidebarToggleButton()}
-        </>
-      ) : null}
-    </div>
-  )
+    return isAgentLayout ? renderAgentPanel() : renderEditorSurface()
+  }
+
+  function renderRightPanel(surfaceMode: PanelSurfaceMode) {
+    if (surfaceMode === 'docked' && needsProjectBootstrap) {
+      return null
+    }
+
+    return isAgentLayout ? renderEditorSurface() : renderAgentPanel()
+  }
 
   const appShell = (
-    <div
-      ref={appShellRef}
-      className="app-shell"
-      data-app-layout={appLayoutPreference}
-      data-layout={layoutMode}
-      data-platform={shellPlatform}
-      data-left-collapsed={isLeftSidebarDrawer || !isLeftSidebarVisible ? 'true' : 'false'}
-      data-left-drawer-open={isLeftDrawerOpen ? 'true' : 'false'}
-      data-modal-layer-open={isAppModalLayerOpen ? 'true' : 'false'}
-      data-resizing={activeResizePanel ? 'true' : 'false'}
-      data-right-collapsed={isRightSidebarDrawer || !isRightSidebarVisible ? 'true' : 'false'}
-      data-right-drawer-open={isRightDrawerOpen ? 'true' : 'false'}
-      data-window-fullscreen={isWindowFullScreen ? 'true' : 'false'}
-      onTransitionEnd={handleSidebarLayoutTransitionEnd}
-      style={
-        {
-          '--agent-chat-track-width': `${effectiveAgentChatTrackWidth}px`,
-          '--agent-editor-track-width': `${effectiveAgentEditorTrackWidth}px`,
-          '--left-sidebar-content-width': `${renderedLeftSidebarWidth}px`,
-          '--left-sidebar-width': `${effectiveLeftSidebarWidth}px`,
-          '--right-sidebar-content-width': `${renderedEditorRightSidebarWidth}px`,
-          '--right-sidebar-width': `${effectiveRightSidebarWidth}px`,
-          ...shellChromeVars,
-        } as CSSProperties
-      }
-    >
-      {isAgentLayout && shouldExposeAgentWorkspaceTools && !isRightSidebarVisible ? (
-        <div
-          className='agent-collapsed-tab-actions'
-          data-overlay-elevated={shellChromeOverlayState.rightControlsElevated ? 'true' : 'false'}
-          data-react-aria-top-layer={shellChromeOverlayState.rightControlsTopLayer ? 'true' : undefined}
-        >
+    <AppShell
+      appLayout={appLayoutPreference}
+      isDarkTheme={resolvedTheme === 'dark'}
+      isModalLayerOpen={isAppModalLayerOpen}
+      layout={shellLayout}
+      layoutModeSwitch={renderLayoutModeSwitchButton()}
+      leftChromeSearchAction={renderLeftChromeSearchButton()}
+      leftChromeSidebarAction={renderLeftSidebarToggleButton()}
+      onRequestWindowClose={() => {
+        void handleRequestWindowClose()
+      }}
+      renderCenterPanel={renderCenterPanel}
+      renderLeftSidebar={renderWorkspaceSidebar}
+      renderRightDrawerOverlay={(frameRect) => renderProjectMenu('right-drawer', frameRect)}
+      renderRightPanel={renderRightPanel}
+      rightCollapsedActions={(
+        <>
           <AppTooltipButton
             type='button'
             className='agent-collapsed-tab-button'
@@ -1713,189 +1670,10 @@ function App() {
           >
             <FolderLine size={16} />
           </AppTooltipButton>
-        </div>
-      ) : null}
-
-      {shouldExposeAgentWorkspaceTools ? (() => {
-        const rightSidebarToggleAriaLabel = isRightSidebarDrawer
-          ? (isRightDrawerOpen ? 'Close assistant panel' : 'Open assistant panel')
-          : (isRightSidebarVisible ? 'Collapse assistant sidebar' : 'Expand assistant sidebar')
-        const rightSidebarToggleTooltip = isRightSidebarDrawer
-          ? (isRightDrawerOpen ? '关闭抽屉' : '打开抽屉')
-          : (isRightSidebarVisible ? '收起侧边栏' : '展开侧边栏')
-
-        return (
-          <AppTooltipButton
-            type='button'
-            className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
-            data-overlay-elevated={shellChromeOverlayState.rightControlsElevated ? 'true' : 'false'}
-            data-react-aria-top-layer={shellChromeOverlayState.rightControlsTopLayer ? 'true' : undefined}
-            aria-label={rightSidebarToggleAriaLabel}
-            tooltip={rightSidebarToggleTooltip}
-            preventFocusOnPress
-            onClick={toggleAssistantSurface}
-          >
-            <span className='panel-toggle-icon' aria-hidden='true'>
-              <LayoutRightLine size={16} />
-            </span>
-          </AppTooltipButton>
-        )
-      })() : null}
-
-      {!isLeftSidebarDrawer ? (
-        <aside
-          id='workspace-sidebar-panel'
-          className={`panel panel-sidebar${isLeftSidebarVisible ? '' : ' is-collapsed'}`}
-          aria-hidden={isLeftSidebarVisible ? undefined : true}
-          inert={isLeftSidebarVisible ? undefined : true}
-        >
-          {renderWorkspaceSidebar('docked')}
-        </aside>
-      ) : null}
-
-
-      <div className={`panel-resize-slot panel-resize-slot-left${isLeftSidebarVisible ? '' : ' is-hidden'}`}>
-        <div
-          role='separator'
-          tabIndex={0}
-          className={`panel-resize-handle${activeResizePanel === 'left' ? ' is-active' : ''}`}
-          aria-label='Resize workspace sidebar'
-          aria-controls='workspace-sidebar-panel'
-          aria-orientation='vertical'
-          aria-valuemin={leftSidebarResizeBounds.min}
-          aria-valuemax={leftSidebarResizeBounds.max}
-          aria-valuenow={leftSidebarResizeBounds.value}
-          onKeyDown={(event) => handleResizeKeyDown('left', event)}
-          onPointerDown={(event) => {
-            if (event.button !== 0) {
-              return
-            }
-
-            event.preventDefault()
-            event.currentTarget.setPointerCapture(event.pointerId)
-            handleResizeStart('left')
-          }}
-        />
-      </div>
-
-      <main className='panel panel-editor' id='editor-main'>
-        {needsProjectBootstrap ? (
-          <ProjectBootstrap
-            isBusy={isProjectActionBusy}
-            onAddExistingProject={handleAddExistingProject}
-            onCreateProject={openNewProjectDialog}
-          />
-        ) : isAgentLayout ? renderAgentPanel() : renderEditorSurface()}
-      </main>
-
-      <div className={`panel-resize-slot panel-resize-slot-right${isRightSidebarVisible ? '' : ' is-hidden'}`}>
-        <div
-          role='separator'
-          tabIndex={0}
-          className={`panel-resize-handle${activeResizePanel === 'right' ? ' is-active' : ''}`}
-          aria-label={isAgentLayout ? 'Resize Agent chat panel' : 'Resize assistant sidebar'}
-          aria-controls={isAgentLayout ? 'editor-main' : 'assistant-sidebar-panel'}
-          aria-orientation='vertical'
-          aria-valuemin={rightSidebarResizeBounds.min}
-          aria-valuemax={rightSidebarResizeBounds.max}
-          aria-valuenow={rightSidebarResizeBounds.value}
-          onKeyDown={(event) => handleResizeKeyDown('right', event)}
-          onPointerDown={(event) => {
-            if (event.button !== 0) {
-              return
-            }
-
-            event.preventDefault()
-            event.currentTarget.setPointerCapture(event.pointerId)
-            handleResizeStart('right')
-          }}
-        />
-      </div>
-
-      {!isRightSidebarDrawer && shouldExposeAgentWorkspaceTools ? (
-        <aside
-          id='assistant-sidebar-panel'
-          className={`panel panel-agent${isRightSidebarVisible ? '' : ' is-collapsed'}`}
-          aria-hidden={isRightSidebarVisible ? undefined : true}
-          inert={isRightSidebarVisible ? undefined : true}
-        >
-          {needsProjectBootstrap ? null : isAgentLayout ? renderEditorSurface() : renderAgentPanel()}
-        </aside>
-      ) : null}
-
-
-      {isLeftSidebarDrawer ? (
-        <Drawer
-          isOpen={isLeftDrawerOpen}
-          onOpenChange={handleLeftDrawerOpenChange}
-        >
-          <Drawer.Backdrop
-            className='panel-drawer-backdrop'
-            variant='opaque'
-          >
-            <Drawer.Content placement='left' className='panel-drawer panel-drawer-left' data-platform={shellPlatform}>
-              <Drawer.Dialog
-                aria-label='Workspace'
-                className={`panel-drawer-dialog ${resolvedTheme === 'dark' ? 'dark' : ''}`}
-              >
-                <Drawer.Body className='panel-drawer-body'>
-                  {renderWorkspaceSidebar('drawer')}
-                </Drawer.Body>
-              </Drawer.Dialog>
-            </Drawer.Content>
-          </Drawer.Backdrop>
-        </Drawer>
-      ) : null}
-
-      {isRightSidebarDrawer ? (
-        <Drawer
-          isOpen={isRightDrawerOpen}
-          onOpenChange={handleRightDrawerOpenChange}
-        >
-          <Drawer.Backdrop
-            className='panel-drawer-backdrop'
-            variant='opaque'
-          >
-            <Drawer.Content placement='right' className='panel-drawer panel-drawer-right' data-platform={shellPlatform}>
-              <Drawer.Dialog
-                aria-label='Assistant'
-                className={`panel-drawer-dialog ${resolvedTheme === 'dark' ? 'dark' : ''}`}
-              >
-                <Drawer.Body className='panel-drawer-body panel-drawer-body-agent'>
-                  <div
-                    ref={rightDrawerSurfaceRef}
-                    className='panel panel-agent panel-agent-drawer'
-                    data-agent-editor-surface={isAgentLayout ? 'true' : 'false'}
-                    data-full-width={isRightDrawerFullWidth ? 'true' : 'false'}
-                    data-platform={shellPlatform}
-                    style={shellChromeVars}
-                  >
-                    {isAgentLayout ? renderEditorSurface() : renderAgentPanel()}
-                    <div ref={setRightDrawerOverlayRoot} className='drawer-local-overlay-root'>
-                      {renderProjectMenu('right-drawer', rightDrawerOverlayRoot?.getBoundingClientRect() ?? null)}
-                    </div>
-                  </div>
-                </Drawer.Body>
-              </Drawer.Dialog>
-            </Drawer.Content>
-          </Drawer.Backdrop>
-        </Drawer>
-      ) : null}
-
-      {drawerDragRegion ? (
-        <div
-          aria-hidden='true'
-          className='drawer-window-drag-region'
-          data-react-aria-top-layer='true'
-          style={{
-            height: `${drawerDragRegion.height}px`,
-            left: `${drawerDragRegion.left}px`,
-            top: `${drawerDragRegion.top}px`,
-            width: `${drawerDragRegion.width}px`,
-          }}
-        />
-      ) : null}
-
+        </>
+      )}
+      shouldExposeRightPanelTools={shouldExposeAgentWorkspaceTools}
+    >
       <Toast.Provider placement='bottom end' />
 
       {renderProjectMenu('global')}
@@ -1984,14 +1762,7 @@ function App() {
         onOpenSession={handleOpenSession}
         theme={theme}
       />
-      <AppTitlebar onRequestClose={() => {
-        void handleRequestWindowClose()
-      }}
-        isDrawerOpen={isLeftDrawerOpen || isRightDrawerOpen}
-        isLeftDrawerOpen={isLeftDrawerOpen}
-        leftControls={leftChromeControls}
-      />
-    </div>
+    </AppShell>
   )
 
   const agentSurfaceMode = !isAgentLayout && isRightSidebarDrawer ? 'drawer' : 'docked'
