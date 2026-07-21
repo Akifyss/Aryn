@@ -6,13 +6,72 @@ async function readSource(relativePath: string) {
 }
 
 describe('agent sidebar structure', () => {
+  it('keeps the Agent message viewport and scroll controller in their component module', async () => {
+    const [
+      appCss,
+      sidebarSource,
+      sidebarCss,
+      viewportSource,
+      viewportCss,
+      virtualListSource,
+      scrollHookSource,
+      viewportDomSource,
+    ] = await Promise.all([
+      readSource('../src/App.css'),
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+      readSource('../src/features/agent/components/agent-sidebar/styles.css'),
+      readSource('../src/features/agent/components/agent-message-viewport/agent-message-viewport.tsx'),
+      readSource('../src/features/agent/components/agent-message-viewport/styles.css'),
+      readSource('../src/features/agent/components/agent-message-viewport/agent-virtual-message-list.tsx'),
+      readSource('../src/features/agent/components/agent-message-viewport/use-agent-message-viewport-scroll.ts'),
+      readSource('../src/features/agent/components/agent-message-viewport/agent-message-viewport-dom.ts'),
+    ])
+
+    expect(sidebarSource).toContain(
+      "from '@/features/agent/components/agent-message-viewport/agent-message-viewport'",
+    )
+    expect(sidebarSource).toContain(
+      "from '@/features/agent/components/agent-message-viewport/use-agent-message-viewport-scroll'",
+    )
+    expect(sidebarSource).not.toContain('function AgentVirtualMessageList(')
+    expect(sidebarSource).not.toContain('function getAgentMessagesScrollContentElement(')
+    expect(sidebarSource).not.toContain('resolveAgentMessagesScrollStickiness(')
+    expect(sidebarSource).not.toContain('startAgentMessagesBottomRestore(')
+    expect(viewportSource).toContain("import './styles.css'")
+    expect(viewportSource).toContain('export function AgentMessageViewport(')
+    expect(viewportSource).toContain("from './agent-virtual-message-list'")
+    expect(viewportSource).toContain('function AgentMessageViewportEntry(')
+    expect(virtualListSource).toContain('export function AgentVirtualMessageList(')
+    expect(virtualListSource).not.toContain('AgentMessageBubble')
+    expect(virtualListSource).not.toContain('AgentMessageFileCards')
+    expect(scrollHookSource).toContain('export function useAgentMessageViewportScroll(')
+    expect(scrollHookSource).toContain('resolveAgentMessagesScrollStickiness(')
+    expect(scrollHookSource).toContain('startAgentMessagesBottomRestore(')
+    expect(scrollHookSource).toContain("from './agent-message-viewport-dom'")
+    expect(viewportDomSource).toContain('export function isAgentMessageViewportScrollbarPointerEvent(')
+    expect(viewportCss).toContain('.agent-messages-scroll {')
+    expect(viewportCss).toContain('.agent-message-stack {')
+    expect(sidebarCss).not.toMatch(/^\.agent-messages(?:[\s.:-]|$)/m)
+    expect(sidebarCss).not.toMatch(/^\.agent-message-(?:stack|virtual)(?:[\s.:-]|$)/m)
+    expect(sidebarCss).toContain('.agent-codex-surface-stage {')
+
+    const viewportClassNames = new Set(
+      Array.from(viewportCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
+    )
+    expect(viewportClassNames.size).toBeGreaterThan(0)
+    viewportClassNames.forEach((className) => {
+      expect(appCss).not.toContain(`.${className}`)
+    })
+  })
+
   it('keeps Agent session status behavior and styles in its component module', async () => {
-    const [appCss, sidebarSource, sidebarCss, statusSource, statusCss] = await Promise.all([
+    const [appCss, sidebarSource, sidebarCss, statusSource, statusCss, viewportCss] = await Promise.all([
       readSource('../src/App.css'),
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
       readSource('../src/features/agent/components/agent-sidebar/styles.css'),
       readSource('../src/features/agent/components/agent-session-status/agent-session-status.tsx'),
       readSource('../src/features/agent/components/agent-session-status/styles.css'),
+      readSource('../src/features/agent/components/agent-message-viewport/styles.css'),
     ])
 
     expect(sidebarSource).toContain(
@@ -29,7 +88,7 @@ describe('agent sidebar structure', () => {
     expect(statusCss).toContain('.agent-session-status {')
     expect(statusCss).not.toContain('.agent-pi-web-session-status')
     expect(sidebarCss).not.toMatch(/^\.agent-session-status(?:[\s.-]|$)/m)
-    expect(sidebarCss).toContain('.agent-pi-web-session-status .agent-session-status {')
+    expect(viewportCss).toContain('.agent-pi-web-session-status .agent-session-status {')
 
     const statusClassNames = new Set(
       Array.from(statusCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
@@ -68,6 +127,8 @@ describe('agent sidebar structure', () => {
       appCss,
       sidebarSource,
       sidebarCss,
+      messageViewportSource,
+      messageViewportCss,
       sessionTreeSource,
       sessionTreeCss,
       brandIconSource,
@@ -85,6 +146,8 @@ describe('agent sidebar structure', () => {
       readSource('../src/App.css'),
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
       readSource('../src/features/agent/components/agent-sidebar/styles.css'),
+      readSource('../src/features/agent/components/agent-message-viewport/agent-message-viewport.tsx'),
+      readSource('../src/features/agent/components/agent-message-viewport/styles.css'),
       readSource('../src/features/agent/components/agent-session-tree/agent-session-tree.tsx'),
       readSource('../src/features/agent/components/agent-session-tree/styles.css'),
       readSource('../src/features/agent/components/agent-brand-icon/agent-brand-icon.tsx'),
@@ -104,7 +167,7 @@ describe('agent sidebar structure', () => {
     )
     expect(sidebarSource).toContain("import './styles.css'")
     expect(sidebarSource).toContain(
-      "from '@/features/agent/components/agent-message/agent-message'",
+      "from '@/features/agent/components/agent-message-viewport/agent-message-viewport'",
     )
     expect(sidebarSource).toContain(
       "from '@/features/agent/components/agent-file-card/agent-file-card'",
@@ -119,6 +182,10 @@ describe('agent sidebar structure', () => {
       "from '@/features/agent/components/agent-model-cascader/agent-model-cascader'",
     )
     expect(sessionTreeSource).toContain("import './styles.css'")
+    expect(messageViewportSource).toContain("import './styles.css'")
+    expect(messageViewportSource).toContain(
+      "from '@/features/agent/components/agent-message/agent-message'",
+    )
     expect(brandIconSource).toContain("import './styles.css'")
     expect(messageSource).toContain("import './styles.css'")
     expect(messageSource).toContain(
@@ -128,9 +195,9 @@ describe('agent sidebar structure', () => {
     expect(queuedTraySource).toContain("import './styles.css'")
     expect(modelCascaderSource).toContain("import './styles.css'")
     expect(sidebarCss).toContain('.agent-shell {')
-    expect(sidebarCss).toContain('.agent-message-stack {')
+    expect(messageViewportCss).toContain('.agent-message-stack {')
     expect(sidebarCss).toContain('.agent-composer {')
-    expect(sidebarCss).toContain('.opencode-session-surface-host {')
+    expect(messageViewportCss).toContain('.opencode-session-surface-host,')
     expect(sidebarCss).toContain('.codex-session-surface-host {')
     expect(sessionTreeCss).toContain('.agent-session-tree-shell {')
     expect(sessionTreeCss).toContain('.agent-project-menu {')
@@ -151,6 +218,7 @@ describe('agent sidebar structure', () => {
     expect(sidebarCss).not.toContain('.agent-brand-icon {')
     expect(sidebarCss).not.toContain('.agent-queued-')
     expect(sidebarCss).not.toContain('.agent-model-cascader')
+    expect(sidebarCss).not.toContain('.agent-message-stack {')
     expect(messageCss).not.toContain('.agent-file-card {')
 
     const sidebarClassNames = new Set(
@@ -158,6 +226,9 @@ describe('agent sidebar structure', () => {
     )
     const messageClassNames = new Set(
       Array.from(messageCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
+    )
+    const messageViewportClassNames = new Set(
+      Array.from(messageViewportCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
     )
     const sessionTreeClassNames = new Set(
       Array.from(sessionTreeCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
@@ -180,6 +251,7 @@ describe('agent sidebar structure', () => {
       ...sessionTreeClassNames,
       ...brandIconClassNames,
       ...messageClassNames,
+      ...messageViewportClassNames,
       ...fileCardClassNames,
       ...queuedTrayClassNames,
       ...modelCascaderClassNames,
@@ -249,6 +321,7 @@ describe('agent sidebar structure', () => {
       queuedTrayCss,
       modelCascaderCss,
       sessionStatusCss,
+      messageViewportCss,
     ] = await Promise.all([
       readSource('../src/features/agent/components/agent-sidebar/styles.css'),
       readSource('../src/features/agent/components/agent-session-tree/styles.css'),
@@ -258,6 +331,7 @@ describe('agent sidebar structure', () => {
       readSource('../src/features/agent/components/agent-queued-composer-tray/styles.css'),
       readSource('../src/features/agent/components/agent-model-cascader/styles.css'),
       readSource('../src/features/agent/components/agent-session-status/styles.css'),
+      readSource('../src/features/agent/components/agent-message-viewport/styles.css'),
     ])
 
     for (const agentCss of [
@@ -269,6 +343,7 @@ describe('agent sidebar structure', () => {
       queuedTrayCss,
       modelCascaderCss,
       sessionStatusCss,
+      messageViewportCss,
     ]) {
       expect(agentCss).not.toContain('.tree-header.file-panel-header')
       expect(agentCss).not.toContain('[data-command-active=')
