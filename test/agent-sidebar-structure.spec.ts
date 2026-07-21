@@ -6,6 +6,40 @@ async function readSource(relativePath: string) {
 }
 
 describe('agent sidebar structure', () => {
+  it('keeps Agent session status behavior and styles in its component module', async () => {
+    const [appCss, sidebarSource, sidebarCss, statusSource, statusCss] = await Promise.all([
+      readSource('../src/App.css'),
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+      readSource('../src/features/agent/components/agent-sidebar/styles.css'),
+      readSource('../src/features/agent/components/agent-session-status/agent-session-status.tsx'),
+      readSource('../src/features/agent/components/agent-session-status/styles.css'),
+    ])
+
+    expect(sidebarSource).toContain(
+      "from '@/features/agent/components/agent-session-status/agent-session-status'",
+    )
+    expect(sidebarSource).not.toContain('function deriveAgentSessionPhase(')
+    expect(sidebarSource).not.toContain('function formatAgentSessionStatus(')
+    expect(sidebarSource).not.toContain('function AgentSessionStatusBubble(')
+    expect(sidebarSource).not.toContain("from 'unicode-animations'")
+    expect(statusSource).toContain("import './styles.css'")
+    expect(statusSource).toContain('export function deriveAgentSessionPhase(')
+    expect(statusSource).toContain('export function formatAgentSessionStatus(')
+    expect(statusSource).toContain('export function AgentSessionStatusBubble(')
+    expect(statusCss).toContain('.agent-session-status {')
+    expect(statusCss).not.toContain('.agent-pi-web-session-status')
+    expect(sidebarCss).not.toMatch(/^\.agent-session-status(?:[\s.-]|$)/m)
+    expect(sidebarCss).toContain('.agent-pi-web-session-status .agent-session-status {')
+
+    const statusClassNames = new Set(
+      Array.from(statusCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
+    )
+    expect(statusClassNames.size).toBeGreaterThan(0)
+    statusClassNames.forEach((className) => {
+      expect(appCss).not.toContain(`.${className}`)
+    })
+  })
+
   it('keeps Agent catalog lifecycle state in its feature hook', async () => {
     const [sidebarSource, catalogHookSource] = await Promise.all([
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
@@ -214,6 +248,7 @@ describe('agent sidebar structure', () => {
       fileCardCss,
       queuedTrayCss,
       modelCascaderCss,
+      sessionStatusCss,
     ] = await Promise.all([
       readSource('../src/features/agent/components/agent-sidebar/styles.css'),
       readSource('../src/features/agent/components/agent-session-tree/styles.css'),
@@ -222,6 +257,7 @@ describe('agent sidebar structure', () => {
       readSource('../src/features/agent/components/agent-file-card/styles.css'),
       readSource('../src/features/agent/components/agent-queued-composer-tray/styles.css'),
       readSource('../src/features/agent/components/agent-model-cascader/styles.css'),
+      readSource('../src/features/agent/components/agent-session-status/styles.css'),
     ])
 
     for (const agentCss of [
@@ -232,6 +268,7 @@ describe('agent sidebar structure', () => {
       fileCardCss,
       queuedTrayCss,
       modelCascaderCss,
+      sessionStatusCss,
     ]) {
       expect(agentCss).not.toContain('.tree-header.file-panel-header')
       expect(agentCss).not.toContain('[data-command-active=')
