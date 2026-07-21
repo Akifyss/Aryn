@@ -1778,8 +1778,13 @@ function AgentProvider({
   const defaultModelSelection = parseModelSelection(null)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
   const [agentCatalog, setAgentCatalog] = useState<AgentAvailability[]>([])
-  const [agentAvailabilityFailures, setAgentAvailabilityFailures] = useState<Partial<Record<AgentId, string>>>({})
+  const [agentAvailabilityFailures, setAgentAvailabilityFailures] = useState<Partial<Record<AgentId, {
+    guidance: string
+    reason: string
+  }>>>({})
+  const [agentCatalogRefreshError, setAgentCatalogRefreshError] = useState<string | null>(null)
   const [agentCatalogRefreshRevision, setAgentCatalogRefreshRevision] = useState(0)
+  const [isAgentCatalogRefreshing, setIsAgentCatalogRefreshing] = useState(false)
   const [selectedAgentIdValue, setSelectedAgentIdValue] = useState<AgentId>(DEFAULT_AGENT_ID)
   const [viewedSessionSnapshot, setViewedSessionSnapshot] = useState<AgentSessionSnapshot | null>(null)
   const [composerState, setComposerStateValue] = useState<ComposerState>(emptyComposerState)
@@ -1935,33 +1940,66 @@ function AgentProvider({
     })
   }, [])
 
-  const refreshAgentCatalog = useCallback(async () => {
-    try {
-      const catalog = await window.appApi.getAgentCatalog({ force: true })
-      projectSessionRequestGenerationRef.current += 1
-      projectSessionRequestsRef.current.clear()
-      setAgentCatalog(catalog)
-      setAgentAvailabilityFailures({})
-      setProjectSessions(invalidateAgentProjectSessionBuckets)
-      setAgentCatalogRefreshRevision((revision) => revision + 1)
-      setSelectedAgentIdValue((currentAgentId) => (
-        catalog.some((item) => item.definition.id === currentAgentId && item.available)
-          ? currentAgentId
-          : DEFAULT_AGENT_ID
-      ))
-      setPanelError(null)
-    } catch (error) {
-      setPanelError(error instanceof Error ? error.message : '无法重新检测 Agent。')
+  useEffect(() => {
+    agentProviderMountedRef.current = true
+    return () => {
+      agentProviderMountedRef.current = false
+      agentCatalogRequestIdRef.current += 1
     }
   }, [])
 
-  const markAgentUnavailable = useCallback((agentId: AgentId, reason: string) => {
+  const refreshAgentCatalog = useCallback(() => {
+    if (agentCatalogRefreshRef.current) return agentCatalogRefreshRef.current
+
+    const requestId = agentCatalogRequestIdRef.current + 1
+    agentCatalogRequestIdRef.current = requestId
+    setIsAgentCatalogRefreshing(true)
+    setAgentCatalogRefreshError(null)
+    const refresh = window.appApi.getAgentCatalog({ force: true })
+      .then((catalog) => {
+        if (!agentProviderMountedRef.current || agentCatalogRequestIdRef.current !== requestId) return
+        projectSessionRequestGenerationRef.current += 1
+        projectSessionRequestsRef.current.clear()
+        setAgentCatalog(catalog)
+        setAgentAvailabilityFailures({})
+        setProjectSessions(invalidateAgentProjectSessionBuckets)
+        setAgentCatalogRefreshRevision((revision) => revision + 1)
+        setSelectedAgentIdValue((currentAgentId) => (
+          catalog.some((item) => item.definition.id === currentAgentId && item.available)
+            ? currentAgentId
+            : DEFAULT_AGENT_ID
+        ))
+      })
+      .catch((error) => {
+        if (!agentProviderMountedRef.current || agentCatalogRequestIdRef.current !== requestId) return
+        setAgentCatalogRefreshError(error instanceof Error ? error.message : '无法重新检测 Agent。')
+      })
+    agentCatalogRefreshRef.current = refresh
+    void refresh.then(() => {
+      if (agentCatalogRefreshRef.current === refresh) {
+        agentCatalogRefreshRef.current = null
+        if (agentProviderMountedRef.current) setIsAgentCatalogRefreshing(false)
+      }
+    })
+    return refresh
+  }, [])
+
+  const markAgentUnavailable = useCallback((
+    agentId: AgentId,
+    reason: string,
+    guidance = '完成该 Agent 的登录、模型或配置后，再重新检测。',
+  ) => {
     if (agentId === DEFAULT_AGENT_ID) return
-    setAgentAvailabilityFailures((current) => ({ ...current, [agentId]: reason }))
+    setAgentAvailabilityFailures((current) => ({
+      ...current,
+      [agentId]: { guidance, reason },
+    }))
   }, [])
 
   useEffect(() => {
     let cancelled = false
+    const requestId = agentCatalogRequestIdRef.current + 1
+    agentCatalogRequestIdRef.current = requestId
 
     try {
       const storedAgentId = window.localStorage.getItem('aryn:last-new-conversation-agent')
@@ -1974,7 +2012,7 @@ function AgentProvider({
 
     void window.appApi.getAgentCatalog()
       .then((catalog) => {
-        if (cancelled) {
+        if (cancelled || agentCatalogRequestIdRef.current !== requestId) {
           return
         }
 
@@ -1985,8 +2023,11 @@ function AgentProvider({
             : DEFAULT_AGENT_ID
         ))
       })
-      .catch(() => {
+      .catch((error) => {
         // Built-in PI remains available even if external CLI discovery fails.
+        if (!cancelled && agentCatalogRequestIdRef.current === requestId) {
+          setAgentCatalogRefreshError(error instanceof Error ? error.message : '无法检测外部 Agent。')
+        }
       })
 
     return () => {
@@ -4535,6 +4576,7 @@ function AgentProvider({
 
   const contextValue = useMemo<AgentContextValue>(() => ({
     agentCatalog: resolvedAgentCatalog,
+    agentCatalogRefreshError,
     activeComposerMenu,
     activeOverlayPanel,
     activeSession,
@@ -4567,6 +4609,7 @@ function AgentProvider({
     hasConfiguredProviders,
     iconTheme,
     isAgentLayout,
+    isAgentCatalogRefreshing,
     isProjectAddMenuOpen,
     isLoading,
     isSwitchingModel,
@@ -4630,6 +4673,7 @@ function AgentProvider({
   }), [
     activeWorkspaceContext,
     resolvedAgentCatalog,
+    agentCatalogRefreshError,
     activeComposerMenu,
     activeOverlayPanel,
     activeSession,
@@ -4661,6 +4705,7 @@ function AgentProvider({
     hasConfiguredProviders,
     iconTheme,
     isAgentLayout,
+    isAgentCatalogRefreshing,
     isProjectAddMenuOpen,
     isLoading,
     isSwitchingModel,
@@ -4743,88 +4788,24 @@ function AgentTypeSwitchTrigger() {
     activeSessionSelection,
     activeWorkspaceContext,
     agentCatalog,
+    agentCatalogRefreshError,
+    isAgentCatalogRefreshing,
     refreshAgentCatalog,
     selectedAgentId,
     setSelectedAgentId,
   } = useAgentContext()
-  const selectedAvailability = agentCatalog.find((item) => item.definition.id === selectedAgentId) ?? null
-  const selectedDefinition = selectedAvailability?.definition ?? getAgentDefinition(selectedAgentId)
   const isLocked = activeWorkspaceContext.kind === 'conversation' || activeSessionSelection.kind === 'session'
 
   return (
-    <Menu.Root
-      modal={false}
-      onOpenChange={() => {
-        void refreshAgentCatalog()
-      }}
-    >
-      <Menu.Trigger
-        aria-label={`选择 Agent，当前：${selectedDefinition.label}`}
-        className='agent-type-switch-trigger'
-        disabled={isLocked}
-        render={<button type='button' />}
-      >
-        <AgentBrandIcon agentId={selectedAgentId} className='agent-brand-icon' size={24} />
-        <span className='agent-type-switch-label'>{selectedDefinition.label}</span>
-      </Menu.Trigger>
-      <Menu.Portal>
-        <Menu.Positioner align='start' sideOffset={6}>
-          <Menu.Popup className='agent-type-switch-menu' aria-label='选择用于新会话的 Agent'>
-            {(agentCatalog.length > 0
-              ? agentCatalog
-              : [{
-                  available: true,
-                  command: null,
-                  definition: getAgentDefinition(DEFAULT_AGENT_ID),
-                  reason: null,
-                  version: null,
-                }]
-            ).map((availability) => {
-              const isSelected = availability.definition.id === selectedAgentId
-              const optionDescription = availability.available ? null : '需检查配置'
-
-              return (
-                <Menu.Item
-                  key={availability.definition.id}
-                  nativeButton
-                  className={({ highlighted }) => (
-                    `agent-type-switch-option${highlighted ? ' is-highlighted' : ''}${isSelected ? ' is-selected' : ''}`
-                  )}
-                  disabled={!availability.available}
-                  label={availability.definition.label}
-                  render={<button
-                    type='button'
-                    title={!availability.available ? availability.reason ?? '当前不可用' : undefined}
-                  />}
-                  onClick={() => {
-                    setSelectedAgentId(availability.definition.id)
-                  }}
-                >
-                  <span className='agent-type-switch-option-icon'>
-                    <AgentBrandIcon
-                      agentId={availability.definition.id}
-                      className='agent-brand-icon'
-                      size={16}
-                    />
-                  </span>
-                  <span className='agent-type-switch-option-copy'>
-                    <span className='agent-type-switch-option-title'>
-                      {availability.definition.label}
-                    </span>
-                    {optionDescription ? (
-                      <span className='agent-type-switch-option-description'>
-                        {optionDescription}
-                      </span>
-                    ) : null}
-                  </span>
-                  {isSelected ? <CheckLine aria-hidden='true' size={16} /> : null}
-                </Menu.Item>
-              )
-            })}
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
+    <AgentTypeSwitch
+      agentCatalog={agentCatalog}
+      isLocked={isLocked}
+      isRefreshing={isAgentCatalogRefreshing}
+      refreshError={agentCatalogRefreshError}
+      selectedAgentId={selectedAgentId}
+      onRefresh={refreshAgentCatalog}
+      onSelect={setSelectedAgentId}
+    />
   )
 }
 

@@ -2,7 +2,11 @@ import { spawnSync, type ChildProcess } from 'node:child_process'
 import path from 'node:path'
 
 type TerminateChildProcessOptions = {
+  // A detached group's leader can exit before its descendants. Only enable
+  // this for a short-lived escalation after signaling that same group.
+  allowExitedProcessGroup?: boolean
   detachedProcessGroup?: boolean
+  signal?: NodeJS.Signals
 }
 
 function ignoreMissingProcess(error: unknown) {
@@ -14,8 +18,11 @@ export function terminateChildProcessTree(
   child: ChildProcess | null | undefined,
   options: TerminateChildProcessOptions = {},
 ) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return
+  if (!child) return
+  const signal = options.signal ?? 'SIGTERM'
+  const childHasExited = child.exitCode !== null || child.signalCode !== null
   if (process.platform === 'win32' && child.pid) {
+    if (childHasExited) return
     const systemRoot = process.env.SystemRoot ?? process.env.WINDIR
     const taskkill = systemRoot
       ? path.join(systemRoot, 'System32', 'taskkill.exe')
@@ -29,16 +36,19 @@ export function terminateChildProcessTree(
   }
 
   if (process.platform !== 'win32' && options.detachedProcessGroup && child.pid) {
+    if (childHasExited && !options.allowExitedProcessGroup) return
     try {
-      process.kill(-child.pid, 'SIGTERM')
+      process.kill(-child.pid, signal)
       return
     } catch (error) {
       if (ignoreMissingProcess(error)) return
     }
   }
 
+  if (childHasExited) return
+
   try {
-    child.kill()
+    child.kill(signal)
   } catch {
     // Process cleanup is best-effort and must not crash the Electron main process.
   }

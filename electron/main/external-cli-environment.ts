@@ -5,11 +5,78 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 const LOGIN_PATH_MARKER = '__ARYN_LOGIN_PATH__='
-let loginShellPath: string | null = null
-let loginShellPathPromise: Promise<void> | null = null
+
+type LoginShellPathPreparationDependencies = {
+  loadPath: () => Promise<string>
+}
+
+type ActiveLoginShellPathLoad = {
+  promise: Promise<void>
+  refresh: boolean
+}
+
+export function createLoginShellPathPreparation(
+  dependencies: LoginShellPathPreparationDependencies,
+) {
+  let activeLoad: ActiveLoginShellPathLoad | null = null
+  let queuedRefresh: Promise<void> | null = null
+  let value: string | null = null
+
+  const startLoad = (refresh: boolean) => {
+    const promise = Promise.resolve()
+      .then(dependencies.loadPath)
+      .then((nextValue) => {
+        value = nextValue
+      })
+    const active = { promise, refresh }
+    activeLoad = active
+    void promise.then(
+      () => undefined,
+      () => undefined,
+    ).finally(() => {
+      if (activeLoad === active) activeLoad = null
+    })
+    return promise
+  }
+
+  const queueRefresh = () => {
+    if (queuedRefresh) return queuedRefresh
+    const queued = (async () => {
+      while (activeLoad) {
+        if (activeLoad.refresh) return activeLoad.promise
+        await activeLoad.promise.catch(() => undefined)
+      }
+      return startLoad(true)
+    })()
+    queuedRefresh = queued
+    void queued.then(
+      () => undefined,
+      () => undefined,
+    ).finally(() => {
+      if (queuedRefresh === queued) queuedRefresh = null
+    })
+    return queued
+  }
+
+  return {
+    getValue() {
+      return value
+    },
+    prepare(options: { force?: boolean } = {}) {
+      const force = options.force === true
+      if (queuedRefresh) return queuedRefresh
+      if (activeLoad) {
+        if (!force || activeLoad.refresh) return activeLoad.promise
+        return queueRefresh()
+      }
+      if (!force && value !== null) return Promise.resolve()
+      return startLoad(force)
+    },
+  }
+}
 
 function isDependencyBinaryPath(value: string) {
-  const normalized = path.normalize(value.trim()).replace(/[\\/]+$/, '')
+  const normalized = path.normalize(value.trim().replace(/^"|"$/g, '')).replace(/[\\/]+$/, '')
   if (!normalized) return false
   return path.basename(normalized).toLowerCase() === '.bin'
     && path.basename(path.dirname(normalized)).toLowerCase() === 'node_modules'
@@ -38,32 +105,32 @@ function mergePathValues(...values: Array<string | null | undefined>) {
   return entries.join(path.delimiter)
 }
 
-export async function prepareExternalCliEnvironment() {
-  if (process.platform === 'win32' || loginShellPath !== null) return
-  if (loginShellPathPromise) return loginShellPathPromise
-  loginShellPathPromise = (async () => {
-    const shell = process.env.SHELL?.trim() || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh')
-    try {
-      const { stdout } = await execFileAsync(shell, [
-        '-ilc',
-        `printf '\n${LOGIN_PATH_MARKER}%s\n' "$PATH"`,
-      ], {
-        encoding: 'utf8',
-        maxBuffer: 256 * 1024,
-        timeout: 4_000,
-        windowsHide: true,
-      })
-      const markedLine = stdout.split(/\r?\n/).reverse().find((line) => line.startsWith(LOGIN_PATH_MARKER))
-      loginShellPath = markedLine?.slice(LOGIN_PATH_MARKER.length).trim() || ''
-    } catch {
-      // GUI-launched apps can lack a usable login shell. The inherited PATH
-      // remains the safe fallback and CLI discovery will report a clear error.
-      loginShellPath = ''
-    }
-  })().finally(() => {
-    loginShellPathPromise = null
-  })
-  return loginShellPathPromise
+async function loadLoginShellPath() {
+  const shell = process.env.SHELL?.trim() || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh')
+  try {
+    const { stdout } = await execFileAsync(shell, [
+      '-ilc',
+      `printf '\n${LOGIN_PATH_MARKER}%s\n' "$PATH"`,
+    ], {
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024,
+      timeout: 4_000,
+      windowsHide: true,
+    })
+    const markedLine = stdout.split(/\r?\n/).reverse().find((line) => line.startsWith(LOGIN_PATH_MARKER))
+    return markedLine?.slice(LOGIN_PATH_MARKER.length).trim() || ''
+  } catch {
+    // GUI-launched apps can lack a usable login shell. The inherited PATH
+    // remains the safe fallback and CLI discovery will report a clear error.
+    return ''
+  }
+}
+
+const loginShellPathPreparation = createLoginShellPathPreparation({ loadPath: loadLoginShellPath })
+
+export function prepareExternalCliEnvironment(options: { force?: boolean } = {}) {
+  if (process.platform === 'win32') return Promise.resolve()
+  return loginShellPathPreparation.prepare(options)
 }
 
 export function createExternalCliEnvironment(overrides: Partial<NodeJS.ProcessEnv> = {}) {
@@ -77,7 +144,7 @@ export function createExternalCliEnvironment(overrides: Partial<NodeJS.ProcessEn
   const requestedPath = overridePathEntry?.[1] ?? inheritedPathEntry?.[1]
   environment[pathKey] = getExternalCliPath(overridePathEntry
     ? mergePathValues(requestedPath)
-    : mergePathValues(loginShellPath, requestedPath))
+    : mergePathValues(loginShellPathPreparation.getValue(), requestedPath))
   return environment
 }
 

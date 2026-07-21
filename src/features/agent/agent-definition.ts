@@ -16,6 +16,7 @@ export type AgentAvailability = {
   available: boolean
   command: string | null
   definition: AgentDefinition
+  guidance: string | null
   reason: string | null
   version: string | null
 }

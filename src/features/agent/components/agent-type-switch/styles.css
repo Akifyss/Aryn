@@ -1,0 +1,214 @@
+.agent-type-switch-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--foreground-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: inherit;
+  line-height: 1.2;
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.agent-type-switch-trigger:hover,
+.agent-type-switch-trigger:focus-visible,
+.agent-type-switch-trigger[data-popup-open] {
+  background: var(--hover);
+  color: var(--foreground-primary);
+}
+
+.agent-type-switch-trigger:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.agent-type-switch-trigger:disabled {
+  cursor: default;
+}
+
+.agent-type-switch-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-type-switch-menu {
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: min(320px, calc(100vw - 24px));
+  padding: 7px;
+  border: 1px solid var(--border-primary);
+  border-radius: 13px;
+  background: var(--overlay);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
+  color: var(--foreground-primary);
+}
+
+.agent-type-switch-options-scroll {
+  max-height: min(340px, calc(100vh - 160px));
+  min-height: 0;
+}
+
+.agent-type-switch-options-viewport {
+  overscroll-behavior: contain;
+}
+
+.agent-type-switch-options-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.agent-type-switch-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  text-align: left;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.agent-type-switch-option.is-highlighted {
+  background: var(--hover);
+}
+
+.agent-type-switch-option.is-selected {
+  background: var(--selected);
+}
+
+.agent-type-switch-option.is-unavailable {
+  cursor: default;
+  color: var(--foreground-secondary);
+}
+
+.agent-type-switch-option-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--foreground-secondary);
+}
+
+.agent-type-switch-option-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-type-switch-option-title {
+  overflow: hidden;
+  color: var(--foreground-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-type-switch-option-description,
+.agent-type-switch-option-guidance {
+  overflow-wrap: anywhere;
+  color: var(--foreground-secondary);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.agent-type-switch-option-guidance {
+  color: color-mix(in oklab, var(--foreground-secondary) 82%, transparent);
+}
+
+.agent-type-switch-option-state {
+  flex: 0 0 auto;
+  color: var(--foreground-secondary);
+}
+
+.agent-type-switch-option.is-unavailable .agent-type-switch-option-state {
+  color: var(--warning);
+}
+
+.agent-type-switch-menu-separator {
+  height: 1px;
+  margin: 4px 5px;
+  background: var(--separator);
+}
+
+.agent-type-switch-refresh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--foreground-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.agent-type-switch-refresh.is-highlighted {
+  background: var(--hover);
+  color: var(--foreground-primary);
+}
+
+.agent-type-switch-refresh:disabled {
+  cursor: default;
+  opacity: 0.68;
+}
+
+.agent-type-switch-refresh svg.is-spinning {
+  animation: agent-type-switch-spin 900ms linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.agent-type-switch-refresh-status {
+  margin: 1px 9px 3px;
+  overflow-wrap: anywhere;
+  color: var(--foreground-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.agent-type-switch-refresh-status.is-error {
+  color: var(--danger);
+}
+
+@keyframes agent-type-switch-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-type-switch-refresh svg.is-spinning {
+    animation: none;
+  }
+}
