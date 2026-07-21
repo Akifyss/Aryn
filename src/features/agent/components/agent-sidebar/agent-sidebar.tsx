@@ -4475,7 +4475,6 @@ function AgentTypeSwitchTrigger() {
     activeWorkspaceContext,
     agentCatalog,
     agentCatalogRefreshError,
-    isAgentCatalogRefreshing,
     refreshAgentCatalog,
     selectedAgentId,
     setSelectedAgentId,
@@ -4486,7 +4485,6 @@ function AgentTypeSwitchTrigger() {
     <AgentTypeSwitch
       agentCatalog={agentCatalog}
       isLocked={isLocked}
-      isRefreshing={isAgentCatalogRefreshing}
       refreshError={agentCatalogRefreshError}
       selectedAgentId={selectedAgentId}
       onRefresh={refreshAgentCatalog}

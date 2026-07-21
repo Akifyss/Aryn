@@ -1,10 +1,6 @@
 import { useId } from 'react'
 import { Menu } from '@base-ui/react/menu'
-import {
-  CheckLine,
-  Refresh2Line,
-  WarningLine,
-} from '@mingcute/react'
+import { CheckLine, WarningLine } from '@mingcute/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import {
   DEFAULT_AGENT_ID,
@@ -18,7 +14,6 @@ import './styles.css'
 type AgentTypeSwitchProps = {
   agentCatalog: readonly AgentAvailability[]
   isLocked: boolean
-  isRefreshing: boolean
   onRefresh: () => Promise<void>
   onSelect: (agentId: AgentId) => void
   refreshError: string | null
@@ -58,7 +53,6 @@ export function AgentTypeSwitchOptionCopy({
 export function AgentTypeSwitch({
   agentCatalog,
   isLocked,
-  isRefreshing,
   onRefresh,
   onSelect,
   refreshError,
@@ -166,35 +160,17 @@ export function AgentTypeSwitch({
               </Menu.RadioGroup>
             </AppScrollArea>
 
-            <div className='agent-type-switch-menu-separator' role='separator' />
-            <Menu.Item
-              nativeButton
-              className={({ highlighted }) => (
-                `agent-type-switch-refresh${highlighted ? ' is-highlighted' : ''}`
-              )}
-              closeOnClick={false}
-              disabled={isRefreshing}
-              label={isRefreshing ? '正在重新检测 Agent' : '重新检测 Agent'}
-              render={<button type='button' />}
-              onClick={() => {
-                void onRefresh()
-              }}
-            >
-              <Refresh2Line
-                aria-hidden='true'
-                className={isRefreshing ? 'is-spinning' : undefined}
-                size={16}
-              />
-              <span>{isRefreshing ? '正在检测…' : '重新检测'}</span>
-            </Menu.Item>
-            {isRefreshing || refreshError ? (
-              <p
-                className={`agent-type-switch-refresh-status${refreshError ? ' is-error' : ''}`}
-                role={refreshError ? 'alert' : 'status'}
-                aria-live={refreshError ? 'assertive' : 'polite'}
-              >
-                {refreshError ?? '正在检查本机 Agent CLI 和配置。'}
-              </p>
+            {refreshError ? (
+              <>
+                <div className='agent-type-switch-menu-separator' role='separator' />
+                <p
+                  className='agent-type-switch-error'
+                  role='alert'
+                  aria-live='assertive'
+                >
+                  {refreshError}
+                </p>
+              </>
             ) : null}
           </Menu.Popup>
         </Menu.Positioner>
