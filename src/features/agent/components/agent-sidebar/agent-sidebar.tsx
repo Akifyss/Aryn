@@ -1,11 +1,8 @@
 import {
-  type CSSProperties,
   createContext,
   type Dispatch,
   FormEvent,
   KeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type SetStateAction,
   useCallback,
@@ -16,7 +13,6 @@ import {
   useRef,
   useState,
 } from 'react'
-import { createPortal } from 'react-dom'
 import { Menu } from '@base-ui/react/menu'
 import { Button, ScrollShadow, Spinner } from '@heroui/react'
 import type { OpenCodeOptimisticUserMessage } from '@aryn/opencode-session-surface'
@@ -28,12 +24,8 @@ import type {
 import {
   AttachmentLine,
   ArrowUpLine,
-  CheckLine,
-  CloseLine,
   DownLine,
   EditLine,
-  RightLine,
-  SearchLine,
   StopFill,
   ToolLine,
 } from '@mingcute/react'
@@ -50,6 +42,8 @@ import {
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
 import { AgentBrandIcon } from '@/features/agent/components/agent-brand-icon/agent-brand-icon'
 import { AgentAttachmentFileCard } from '@/features/agent/components/agent-file-card/agent-file-card'
+import { AgentTypeSwitch } from '@/features/agent/components/agent-type-switch/agent-type-switch'
+import { AgentModelCascader } from '@/features/agent/components/agent-model-cascader/agent-model-cascader'
 import {
   AgentQueuedComposerTray,
   type AgentQueuedComposerMessage,
@@ -83,7 +77,6 @@ import {
   resolveAgentMessageVirtualRange,
   shouldRestoreAgentMessageVirtualAnchor,
 } from '@/features/agent/lib/message-virtualization'
-import { shouldRunAgentModelCascaderDelayedActivation } from '@/features/agent/lib/model-cascader-pointer-intent'
 import { SIDEBAR_RESIZE_END_EVENT } from '@/features/layout/shell-layout'
 import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
@@ -116,6 +109,18 @@ import {
   createOpenCodePartId,
 } from '@/features/agent/lib/opencode-message-id'
 import { getAgentInteractionKey } from '@/features/agent/types'
+import {
+  clampAgentThinkingLevel,
+  createAgentModelDraft,
+  formatThinkingLevelLabel,
+  getAgentModelDraftKey,
+  getAgentModelKey,
+  getRuntimeDefaultModelDraft,
+  getRuntimeSelectedModelDraft,
+  normalizeAgentModelDraft,
+  parseModelSelection,
+  type AgentModelDraft,
+} from '@/features/agent/lib/model-selection'
 import type {
   ActiveWorkspaceContext,
   ConversationRecord,
@@ -272,80 +277,12 @@ type AgentComposerAction = 'send' | 'stop'
 
 type AgentComposerMenu = 'model-cascader' | null
 
-type AgentModelPickerOption = {
-  key: string
-  modelId: string
-  provider: string
-  thinkingLevels: AgentThinkingLevel[]
-}
-type AgentModelDraft = {
-  modelId: string
-  provider: string
-  thinkingLevel: AgentThinkingLevel
-}
-type AgentModelPickerKeyboardColumn = 'provider' | 'model' | 'thinking'
-
-type AgentModelCascaderStyle = CSSProperties & {
-  '--agent-model-cascader-grid-height'?: string
-  '--agent-model-cascader-provider-width'?: string
-  '--agent-model-cascader-thinking-width'?: string
-}
-
-type AgentModelCascaderLayoutMetrics = {
-  panelWidth: number
-  positioningWidth: number
-  providerColumnWidth: number
-  thinkingColumnWidth: number
-}
-
-type AgentModelPickerPoint = {
-  x: number
-  y: number
-}
-
-type AgentModelPickerPointerPoint = AgentModelPickerPoint & {
-  time: number
-}
-
-type AgentModelPickerSafeTriangleTarget = 'model' | 'thinking'
-
-type AgentModelPickerPendingActivation = {
-  run: () => void
-  target: AgentModelPickerSafeTriangleTarget
-  timeoutId: number
-  version: number
-}
-
 type OptimisticComposerClearToken = { id: number; revision: number }
 
 const AGENT_MESSAGES_TRANSIENT_SCROLL_INTENT_MS = 600
 const AGENT_MESSAGE_VIRTUALIZATION_MIN_ITEMS = 12
 const AGENT_MESSAGE_VIRTUALIZATION_INITIAL_VIEWPORT_HEIGHT = 900
 const AGENT_MESSAGE_VIRTUALIZATION_BOTTOM_ANCHOR_THRESHOLD_PX = 24
-const AGENT_MODEL_CASCADER_MARGIN_PX = 12
-const AGENT_MODEL_CASCADER_GAP_PX = 10
-const AGENT_MODEL_CASCADER_MAX_WIDTH_PX = 680
-const AGENT_MODEL_CASCADER_MAX_HEIGHT_PX = 390
-const AGENT_MODEL_CASCADER_MIN_PANEL_HEIGHT_PX = 220
-const AGENT_MODEL_CASCADER_MIN_GRID_HEIGHT_PX = 172
-const AGENT_MODEL_CASCADER_MAX_GRID_HEIGHT_PX = 286
-const AGENT_MODEL_CASCADER_SEARCH_HEIGHT_PX = 39
-// Delay only when pointer intent is ambiguous inside the safety triangle.
-const AGENT_MODEL_CASCADER_SAFE_TRIANGLE_DELAY_MS = 180
-const AGENT_MODEL_CASCADER_SAFE_TRIANGLE_PADDING_PX = 18
-// Recent movement history used to draw the dynamic triangle. Keep short to avoid stale, oversized triangles.
-const AGENT_MODEL_CASCADER_POINTER_TRAIL_MS = 180
-const AGENT_MODEL_CASCADER_MIN_WIDTH_PX = 340
-const AGENT_MODEL_CASCADER_PROVIDER_MIN_WIDTH_PX = 132
-const AGENT_MODEL_CASCADER_PROVIDER_MAX_WIDTH_PX = 190
-const AGENT_MODEL_CASCADER_MODEL_MIN_WIDTH_PX = 176
-const AGENT_MODEL_CASCADER_MODEL_MAX_WIDTH_PX = 400
-const AGENT_MODEL_CASCADER_THINKING_WIDTH_PX = 128
-const AGENT_MODEL_CASCADER_SELECTOR = '[data-agent-model-cascader="true"]'
-const AGENT_MODEL_CASCADER_PROVIDER_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-provider`
-const AGENT_MODEL_CASCADER_MODEL_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-model`
-const AGENT_MODEL_CASCADER_RESULTS_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-results`
-const AGENT_MODEL_CASCADER_THINKING_COLUMN_SELECTOR = `${AGENT_MODEL_CASCADER_SELECTOR} .agent-model-cascader-column-thinking`
 
 function getAgentMessagesScrollContentElement(scrollElement: HTMLElement) {
   for (const childElement of Array.from(scrollElement.children)) {
@@ -512,6 +449,7 @@ const MAX_COMPOSER_ATTACHMENTS = 12
 
 type AgentContextValue = {
   agentCatalog: AgentAvailability[]
+  agentCatalogRefreshError: string | null
   activeWorkspaceContext: ActiveWorkspaceContext
   activeComposerMenu: AgentComposerMenu
   activeOverlayPanel: 'sessions' | null
@@ -544,6 +482,7 @@ type AgentContextValue = {
   hasConfiguredProviders: boolean
   iconTheme?: WorkspaceIconTheme | null
   isAgentLayout: boolean
+  isAgentCatalogRefreshing: boolean
   isProjectAddMenuOpen: boolean
   isLoading: boolean
   isSwitchingModel: boolean
@@ -630,54 +569,6 @@ function formatConversationPreview(prompt: string) {
     .find(Boolean)
 
   return firstLine ? firstLine.replace(/\s+/g, ' ').slice(0, 48) : '新对话'
-}
-
-function formatModelLabel(modelKey: string | null) {
-  if (!modelKey) {
-    return ''
-  }
-
-  const parts = modelKey.split('/')
-  return parts.length > 1 ? parts.slice(1).join('/') : modelKey
-}
-
-function parseModelSelection(modelKey: string | null): { modelId: string, provider: string } {
-  if (!modelKey) {
-    return {
-      modelId: '',
-      provider: '',
-    }
-  }
-
-  const [providerCandidate, ...modelIdParts] = modelKey.split('/')
-
-  return {
-    modelId: modelIdParts.length > 0 ? modelIdParts.join('/') : formatModelLabel(modelKey),
-    provider: modelIdParts.length > 0 ? providerCandidate : '',
-  }
-}
-
-function createAgentModelDraft(modelKey: string | null, thinkingLevel: AgentThinkingLevel): AgentModelDraft {
-  return {
-    ...parseModelSelection(modelKey),
-    thinkingLevel,
-  }
-}
-
-function getRuntimeSelectedModelDraft(runtime: AgentWorkspaceState['runtime']) {
-  return createAgentModelDraft(runtime.selectedModel, runtime.thinkingLevel)
-}
-
-function getRuntimeDefaultModelDraft(runtime: AgentWorkspaceState['runtime']) {
-  return createAgentModelDraft(runtime.defaultModel ?? runtime.selectedModel, runtime.defaultThinkingLevel)
-}
-
-function getAgentModelKey(provider: string, modelId: string) {
-  return `${provider}/${modelId}`
-}
-
-function getAgentModelDraftKey(draft: AgentModelDraft) {
-  return draft.provider && draft.modelId ? getAgentModelKey(draft.provider, draft.modelId) : null
 }
 
 type OptimisticAgentUserMessage = {
@@ -1919,6 +1810,9 @@ function AgentProvider({
   const [projectSessions, setProjectSessions] = useState<Record<string, AgentProjectSessionBucket>>({})
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const activeRuntimeSessionRef = useRef<AgentWorkspaceState['activeSession']>(null)
+  const agentCatalogRequestIdRef = useRef(0)
+  const agentCatalogRefreshRef = useRef<Promise<void> | null>(null)
+  const agentProviderMountedRef = useRef(false)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
   const loadAgentStateRequestIdRef = useRef(0)
   const openSessionRequestIdRef = useRef(0)
@@ -1961,7 +1855,7 @@ function AgentProvider({
   const resolvedAgentCatalog = useMemo(() => agentCatalog.map((availability) => {
     const failureReason = agentAvailabilityFailures[availability.definition.id]
     return failureReason
-      ? { ...availability, available: false, reason: failureReason }
+      ? { ...availability, available: false, ...failureReason }
       : availability
   }), [agentAvailabilityFailures, agentCatalog])
   const sessionTreeAgentIds = SESSION_TREE_AGENT_IDS

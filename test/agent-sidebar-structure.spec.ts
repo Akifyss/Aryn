@@ -22,6 +22,8 @@ describe('agent sidebar structure', () => {
       fileCardCss,
       queuedTraySource,
       queuedTrayCss,
+      modelCascaderSource,
+      modelCascaderCss,
     ] = await Promise.all([
       readSource('../src/App.tsx'),
       readSource('../src/App.css'),
@@ -37,6 +39,8 @@ describe('agent sidebar structure', () => {
       readSource('../src/features/agent/components/agent-file-card/styles.css'),
       readSource('../src/features/agent/components/agent-queued-composer-tray/agent-queued-composer-tray.tsx'),
       readSource('../src/features/agent/components/agent-queued-composer-tray/styles.css'),
+      readSource('../src/features/agent/components/agent-model-cascader/agent-model-cascader.tsx'),
+      readSource('../src/features/agent/components/agent-model-cascader/styles.css'),
     ])
 
     expect(appSource).toContain(
@@ -55,6 +59,9 @@ describe('agent sidebar structure', () => {
     expect(sidebarSource).toContain(
       "from '@/features/agent/components/agent-queued-composer-tray/agent-queued-composer-tray'",
     )
+    expect(sidebarSource).toContain(
+      "from '@/features/agent/components/agent-model-cascader/agent-model-cascader'",
+    )
     expect(sessionTreeSource).toContain("import './styles.css'")
     expect(brandIconSource).toContain("import './styles.css'")
     expect(messageSource).toContain("import './styles.css'")
@@ -63,6 +70,7 @@ describe('agent sidebar structure', () => {
     )
     expect(fileCardSource).toContain("import './styles.css'")
     expect(queuedTraySource).toContain("import './styles.css'")
+    expect(modelCascaderSource).toContain("import './styles.css'")
     expect(sidebarCss).toContain('.agent-shell {')
     expect(sidebarCss).toContain('.agent-message-stack {')
     expect(sidebarCss).toContain('.agent-composer {')
@@ -78,12 +86,15 @@ describe('agent sidebar structure', () => {
     expect(fileCardCss).toContain('.agent-file-card {')
     expect(queuedTrayCss).toContain('.agent-queued-tray {')
     expect(queuedTrayCss).toContain('.agent-queued-menu {')
+    expect(modelCascaderCss).toContain('.agent-model-cascader {')
+    expect(modelCascaderCss).toContain('.agent-model-cascader-trigger {')
     expect(sidebarCss).not.toContain('.agent-message {')
     expect(sidebarCss).not.toContain('.agent-file-card {')
     expect(sidebarCss).not.toContain('.agent-session-tree-shell {')
     expect(sidebarCss).not.toContain('.agent-project-menu {')
     expect(sidebarCss).not.toContain('.agent-brand-icon {')
     expect(sidebarCss).not.toContain('.agent-queued-')
+    expect(sidebarCss).not.toContain('.agent-model-cascader')
     expect(messageCss).not.toContain('.agent-file-card {')
 
     const sidebarClassNames = new Set(
@@ -104,6 +115,9 @@ describe('agent sidebar structure', () => {
     const queuedTrayClassNames = new Set(
       Array.from(queuedTrayCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
     )
+    const modelCascaderClassNames = new Set(
+      Array.from(modelCascaderCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
+    )
 
     const agentClassNames = new Set([
       ...sidebarClassNames,
@@ -112,6 +126,7 @@ describe('agent sidebar structure', () => {
       ...messageClassNames,
       ...fileCardClassNames,
       ...queuedTrayClassNames,
+      ...modelCascaderClassNames,
     ])
     expect(agentClassNames.size).toBeGreaterThan(0)
     agentClassNames.forEach((className) => {
@@ -130,12 +145,14 @@ describe('agent sidebar structure', () => {
       messageSource,
       fileCardSource,
       queuedTraySource,
+      modelCascaderSource,
     ] = await Promise.all([
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
       readSource('../src/features/agent/components/agent-session-tree/agent-session-tree.tsx'),
       readSource('../src/features/agent/components/agent-message/agent-message.tsx'),
       readSource('../src/features/agent/components/agent-file-card/agent-file-card.tsx'),
       readSource('../src/features/agent/components/agent-queued-composer-tray/agent-queued-composer-tray.tsx'),
+      readSource('../src/features/agent/components/agent-model-cascader/agent-model-cascader.tsx'),
     ])
 
     expect(sidebarSource).not.toContain('function AgentMarkdown(')
@@ -147,6 +164,7 @@ describe('agent sidebar structure', () => {
     expect(sidebarSource).not.toContain('function AgentProjectTree(')
     expect(sidebarSource).not.toContain('function AgentProjectSwitchTrigger(')
     expect(sidebarSource).not.toContain('function AgentQueuedComposerTray(')
+    expect(sidebarSource).not.toContain('function AgentModelCascader(')
 
     expect(sessionTreeSource).toContain('export function AgentSessionTreeView(')
     expect(sessionTreeSource).toContain('export function AgentProjectSwitchTrigger(')
@@ -162,6 +180,7 @@ describe('agent sidebar structure', () => {
       'export function AgentAttachmentFileCard(',
     )
     expect(queuedTraySource).toContain('export function AgentQueuedComposerTray(')
+    expect(modelCascaderSource).toContain('export function AgentModelCascader(')
   })
 
   it('keeps the extracted stylesheet scoped to Agent UI', async () => {
@@ -172,6 +191,7 @@ describe('agent sidebar structure', () => {
       messageCss,
       fileCardCss,
       queuedTrayCss,
+      modelCascaderCss,
     ] = await Promise.all([
       readSource('../src/features/agent/components/agent-sidebar/styles.css'),
       readSource('../src/features/agent/components/agent-session-tree/styles.css'),
@@ -179,6 +199,7 @@ describe('agent sidebar structure', () => {
       readSource('../src/features/agent/components/agent-message/styles.css'),
       readSource('../src/features/agent/components/agent-file-card/styles.css'),
       readSource('../src/features/agent/components/agent-queued-composer-tray/styles.css'),
+      readSource('../src/features/agent/components/agent-model-cascader/styles.css'),
     ])
 
     for (const agentCss of [
@@ -188,6 +209,7 @@ describe('agent sidebar structure', () => {
       messageCss,
       fileCardCss,
       queuedTrayCss,
+      modelCascaderCss,
     ]) {
       expect(agentCss).not.toContain('.tree-header.file-panel-header')
       expect(agentCss).not.toContain('[data-command-active=')
