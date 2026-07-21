@@ -13,8 +13,8 @@ import {
 import type {
   ActiveWorkspaceContext,
   ConversationRecord,
+  ConversationSessionStartedPatch,
   ConversationState,
-  ConversationTitleSource,
   CreateConversationWorkspaceRequest,
 } from '@/features/conversations/types'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
@@ -25,13 +25,6 @@ type ConfirmationOptions = {
   isDanger?: boolean
   message: string
   title: string
-}
-
-type ConversationSessionStartedPatch = {
-  agentSessionPath: string | null
-  lastMessagePreview?: string | null
-  title?: string | null
-  titleSource?: ConversationTitleSource
 }
 
 type ConversationTitleSuggestion = {

@@ -27,6 +27,13 @@ export type ConversationState = {
   conversations: ConversationRecord[]
 }
 
+export type ConversationSessionStartedPatch = {
+  agentSessionPath: string | null
+  lastMessagePreview?: string | null
+  title?: string | null
+  titleSource?: ConversationTitleSource
+}
+
 export type CreateConversationWorkspaceRequest = {
   agentId?: AgentId
   initialPrompt?: string | null

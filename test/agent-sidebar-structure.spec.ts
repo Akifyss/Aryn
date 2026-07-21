@@ -6,6 +6,42 @@ async function readSource(relativePath: string) {
 }
 
 describe('agent sidebar structure', () => {
+  it('keeps Composer draft, submission, and runtime commands in the Composer domain', async () => {
+    const [
+      sidebarSource,
+      draftSource,
+      submissionSource,
+      actionsSource,
+      conversationTypesSource,
+    ] = await Promise.all([
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+      readSource('../src/features/agent/composer/use-agent-composer-draft.ts'),
+      readSource('../src/features/agent/composer/use-agent-prompt-submission.ts'),
+      readSource('../src/features/agent/composer/use-agent-composer-actions.ts'),
+      readSource('../src/features/conversations/types.ts'),
+    ])
+
+    expect(sidebarSource).toContain("from '@/features/agent/composer/use-agent-composer-draft'")
+    expect(sidebarSource).toContain("from '@/features/agent/composer/use-agent-prompt-submission'")
+    expect(sidebarSource).toContain("from '@/features/agent/composer/use-agent-composer-actions'")
+    expect(sidebarSource).not.toContain('async function submitComposerPrompt(')
+    expect(sidebarSource).not.toContain('async function buildComposerAttachmentFromFile(')
+    expect(sidebarSource).not.toContain('async function stopActivePrompt(')
+    expect(sidebarSource).not.toContain('function getStreamingPromptBehaviorForShortcut(')
+    expect(draftSource).toContain('export function useAgentComposerDraft(')
+    expect(draftSource).toContain('function restoreOptimisticallyClearedComposer(')
+    expect(submissionSource).toContain('export function useAgentPromptSubmission(')
+    expect(submissionSource).toContain('async function submitComposerPrompt(')
+    expect(submissionSource).not.toContain('export type ConversationSessionStartedPatch')
+    expect(actionsSource).toContain('export function useAgentComposerActions(')
+    expect(actionsSource).toContain('async function stopActivePrompt(')
+    expect(actionsSource).toContain('export function resolveSupportedRunningPromptBehavior(')
+    expect(draftSource).not.toContain('agent-sidebar')
+    expect(submissionSource).not.toContain('agent-sidebar')
+    expect(actionsSource).not.toContain('agent-sidebar')
+    expect(conversationTypesSource).toContain('export type ConversationSessionStartedPatch')
+  })
+
   it('keeps the Agent message viewport and scroll controller in their component module', async () => {
     const [
       appCss,

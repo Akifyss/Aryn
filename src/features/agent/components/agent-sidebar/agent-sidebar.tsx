@@ -1,10 +1,8 @@
 import {
   createContext,
-  type Dispatch,
   FormEvent,
   KeyboardEvent,
   type ReactNode,
-  type SetStateAction,
   useCallback,
   useContext,
   useEffect,
@@ -36,6 +34,21 @@ import {
   type AgentId,
 } from '@/features/agent/agent-definition'
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog'
+import {
+  EMPTY_AGENT_COMPOSER_STATE,
+  hasAgentComposerPayload,
+  type AgentComposerAttachment,
+  type AgentComposerState,
+  useAgentComposerDraft,
+} from '@/features/agent/composer/use-agent-composer-draft'
+import {
+  useAgentComposerActions,
+  resolveSupportedRunningPromptBehavior,
+} from '@/features/agent/composer/use-agent-composer-actions'
+import {
+  type OptimisticAgentUserMessage,
+  useAgentPromptSubmission,
+} from '@/features/agent/composer/use-agent-prompt-submission'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
 import { AgentBrandIcon } from '@/features/agent/components/agent-brand-icon/agent-brand-icon'
 import { AgentAttachmentFileCard } from '@/features/agent/components/agent-file-card/agent-file-card'
@@ -63,7 +76,6 @@ import {
 import { CodexSessionTimeline } from '@/features/agent/components/codex-session-timeline'
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
 import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
-import type { ComposerMentionToken } from '@/features/agent/lib/composer-mentions'
 import {
   resolveAgentWorkspaceSessionRestore,
   shouldApplyAgentSessionOperationResult,
@@ -73,7 +85,6 @@ import {
   type AgentSessionSelection,
 } from '@/features/agent/lib/project-session-request'
 import { shouldShowAgentNewConversationPrompt } from '@/features/agent/lib/agent-surface-state'
-import { getSystemFileManagerName } from '@/features/agent/lib/system-file-manager'
 import {
   formatAgentSessionLabel,
   getAgentSessionActivityKey,
@@ -83,21 +94,15 @@ import {
   SESSION_TREE_AGENT_IDS,
   type AgentProjectSessionBucket,
 } from '@/features/agent/lib/session-tree'
-import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
 import {
   getOpenCodeNativeRenderKey,
   getOpenCodeUserMessageText,
 } from '@/features/agent/lib/opencode-timeline'
-import {
-  createOpenCodeMessageId,
-  createOpenCodePartId,
-} from '@/features/agent/lib/opencode-message-id'
 import { getAgentInteractionKey } from '@/features/agent/types'
 import {
   clampAgentThinkingLevel,
   createAgentModelDraft,
   formatThinkingLevelLabel,
-  getAgentModelDraftKey,
   getAgentModelKey,
   getRuntimeDefaultModelDraft,
   getRuntimeSelectedModelDraft,
@@ -108,8 +113,8 @@ import {
 import type {
   ActiveWorkspaceContext,
   ConversationRecord,
+  ConversationSessionStartedPatch,
   ConversationState,
-  ConversationTitleSource,
 } from '@/features/conversations/types'
 import type { ProjectRecord, ProjectState, WorkspaceIconTheme } from '@/features/workspace/types'
 import {
@@ -124,16 +129,12 @@ import {
   AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS,
   getAlternateRunningPromptBehavior,
   useSettingsStore,
-  type AgentRunningPromptEnterBehavior,
 } from '@/hooks/use-settings-store'
 import type {
   AgentClientEvent,
   AgentInteractionRequest,
-  AgentMessageAttachment,
   AgentMessageFileChange,
-  AgentPromptAttachment,
   AgentQueuedMessageUpdate,
-  AgentRunningPromptBehavior,
   AgentSessionListItem,
   AgentSessionAnnotations,
   AgentSessionSnapshot,
@@ -148,13 +149,6 @@ import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-stor
 import './styles.css'
 
 type AgentSurfaceMode = 'docked' | 'drawer'
-
-type ConversationSessionStartedPatch = {
-  agentSessionPath: string | null
-  lastMessagePreview?: string | null
-  title?: string | null
-  titleSource?: ConversationTitleSource
-}
 
 type ConversationTitleSuggestion = {
   agentSessionPath: string
@@ -248,20 +242,9 @@ type LiveToolState = {
   isError?: boolean
 }
 
-type ComposerState = {
-  mentions: ComposerMentionToken[]
-  value: string
-}
-
-type ComposerAttachment = AgentPromptAttachment & {
-  id: string
-}
-
 type AgentComposerAction = 'send' | 'stop'
 
 type AgentComposerMenu = 'model-cascader' | null
-
-type OptimisticComposerClearToken = { id: number; revision: number }
 
 const AGENT_SESSION_MENU_POSITIONER_PROPS = {
   className: 'agent-session-menu-positioner',
@@ -322,32 +305,6 @@ const defaultActiveWorkspaceContext: ActiveWorkspaceContext = {
   kind: 'conversationDraft',
 }
 
-const emptyComposerState: ComposerState = {
-  mentions: [],
-  value: '',
-}
-
-function getHasComposerPayload(
-  composerState: ComposerState,
-  composerAttachments: ComposerAttachment[],
-) {
-  return Boolean(
-    serializeComposerText(composerState.value, composerState.mentions).trim()
-    || composerAttachments.length > 0
-  )
-}
-
-function isComposerPristineEmpty(
-  composerState: ComposerState,
-  composerAttachments: ComposerAttachment[],
-) {
-  return (
-    composerState.value === ''
-    && composerState.mentions.length === 0
-    && composerAttachments.length === 0
-  )
-}
-
 function buildQueuedComposerMessages(runtime: AgentWorkspaceState['runtime']): AgentQueuedComposerMessage[] {
   return [
     ...runtime.steeringMessages.map((text, index) => ({
@@ -365,10 +322,6 @@ function buildQueuedComposerMessages(runtime: AgentWorkspaceState['runtime']): A
   ]
 }
 
-const IMAGE_ATTACHMENT_EXTENSIONS = /\.(?:png|jpe?g|webp|gif)$/i
-const IMAGE_ATTACHMENT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
-const MAX_COMPOSER_ATTACHMENTS = 12
-
 type AgentContextValue = {
   agentCatalog: AgentAvailability[]
   agentCatalogRefreshError: string | null
@@ -385,8 +338,8 @@ type AgentContextValue = {
   canUseDraftRuntimeWithoutWorkspace: boolean
   canUseComposerWithoutWorkspace: boolean
   composerAction: AgentComposerAction
-  composerAttachments: ComposerAttachment[]
-  composerState: ComposerState
+  composerAttachments: AgentComposerAttachment[]
+  composerState: AgentComposerState
   configuredProviders: string[]
   conversationState: ConversationState
   deletingSessionPath: string | null
@@ -459,7 +412,7 @@ type AgentContextValue = {
   sessionStatus: AgentSessionStatus | null
   setActiveComposerMenu: React.Dispatch<React.SetStateAction<AgentComposerMenu>>
   setActiveOverlayPanel: React.Dispatch<React.SetStateAction<'sessions' | null>>
-  setComposerState: React.Dispatch<React.SetStateAction<ComposerState>>
+  setComposerState: React.Dispatch<React.SetStateAction<AgentComposerState>>
   setPanelError: React.Dispatch<React.SetStateAction<string | null>>
   selectedAgentId: AgentId
   setSelectedAgentId: (agentId: AgentId) => void
@@ -484,32 +437,8 @@ function useAgentContext() {
   return context
 }
 
-function formatConversationPreview(prompt: string) {
-  const firstLine = prompt
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean)
-
-  return firstLine ? firstLine.replace(/\s+/g, ' ').slice(0, 48) : '新对话'
-}
-
-type OptimisticAgentUserMessage = {
-  agentId: AgentId
-  message: AgentSidebarMessage
-  nativePartIds?: string[]
-  sessionPath: string
-}
-
 function isAgentTreeMenuEventTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest('[data-agent-tree-menu-root="true"]'))
-}
-
-function isImageAttachment(fileName: string, mimeType?: string) {
-  return Boolean(
-    mimeType
-      ? IMAGE_ATTACHMENT_MIME_TYPES.has(mimeType.toLowerCase())
-      : IMAGE_ATTACHMENT_EXTENSIONS.test(fileName),
-  )
 }
 
 function mergeSessionAnnotationsState(
@@ -533,20 +462,6 @@ function mergeSessionAnnotationsState(
       },
     },
   }
-}
-
-function getStreamingPromptBehaviorForShortcut(
-  event: Pick<KeyboardEvent<HTMLElement>, 'ctrlKey' | 'metaKey'>,
-  platform: NodeJS.Platform,
-  defaultBehavior: AgentRunningPromptEnterBehavior,
-): AgentRunningPromptEnterBehavior {
-  const shouldUseAlternateBehavior = platform === 'darwin'
-    ? event.metaKey
-    : event.ctrlKey
-
-  return shouldUseAlternateBehavior
-    ? getAlternateRunningPromptBehavior(defaultBehavior)
-    : defaultBehavior
 }
 
 function AgentInlineSpinner({ className }: { className?: string }) {
@@ -596,8 +511,6 @@ function AgentProvider({
   const defaultModelSelection = parseModelSelection(null)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
   const [viewedSessionSnapshot, setViewedSessionSnapshot] = useState<AgentSessionSnapshot | null>(null)
-  const [composerState, setComposerStateValue] = useState<ComposerState>(emptyComposerState)
-  const [composerAttachments, setComposerAttachmentsValue] = useState<ComposerAttachment[]>([])
   const [modelInputValue, setModelInputValue] = useState(defaultModelSelection.modelId)
   const [selectedProviderValue, setSelectedProviderValue] = useState(defaultModelSelection.provider)
   const [selectedThinkingLevel, setSelectedThinkingLevel] = useState<AgentThinkingLevel>(emptyAgentState.runtime.defaultThinkingLevel)
@@ -615,13 +528,26 @@ function AgentProvider({
   const [deletingSessionPath, setDeletingSessionPath] = useState<string | null>(null)
   const [isSwitchingModel, setIsSwitchingModel] = useState(false)
   const [isSwitchingThinkingLevel, setIsSwitchingThinkingLevel] = useState(false)
-  const [isSubmittingComposerPrompt, setIsSubmittingComposerPrompt] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [pendingInteractions, setPendingInteractions] = useState<AgentInteractionRequest[]>([])
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<OptimisticAgentUserMessage[]>([])
   const [sessionActivityById, setSessionActivityById] = useState<Record<string, 'running' | 'waiting'>>({})
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
   const [projectSessions, setProjectSessions] = useState<Record<string, AgentProjectSessionBucket>>({})
+  const {
+    addComposerFiles,
+    clearComposerOptimistically,
+    composerAttachments,
+    composerAttachmentsRef,
+    composerState,
+    composerStateRef,
+    handlePickComposerAttachments,
+    invalidateOptimisticComposerClear,
+    removeComposerAttachment,
+    restoreOptimisticallyClearedComposer,
+    setComposerAttachments,
+    setComposerState,
+  } = useAgentComposerDraft({ onErrorChange: setPanelError })
   const activeRuntimeSessionRef = useRef<AgentWorkspaceState['activeSession']>(null)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
   const loadAgentStateRequestIdRef = useRef(0)
@@ -638,11 +564,6 @@ function AgentProvider({
   const externalSessionRequestRef = useRef<AgentProjectSessionRequest | null>(externalSessionRequest ?? null)
   const activeSessionSelectionRef = useRef(activeSessionSelection)
   const workspacePathRef = useRef<string | null>(workspacePath)
-  const composerStateRef = useRef<ComposerState>(emptyComposerState)
-  const composerAttachmentsRef = useRef<ComposerAttachment[]>([])
-  const composerRevisionRef = useRef(0)
-  const optimisticComposerClearIdRef = useRef(0)
-  const isSubmittingComposerPromptRef = useRef(false)
   const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
   const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
   const handleAgentCatalogRefreshed = useCallback(() => {
@@ -809,63 +730,6 @@ function AgentProvider({
     setViewedSessionSnapshot(null)
   }
 
-  const setComposerState = useCallback<Dispatch<SetStateAction<ComposerState>>>((nextState) => {
-    const resolvedState = typeof nextState === 'function'
-      ? nextState(composerStateRef.current)
-      : nextState
-    if (composerStateRef.current !== resolvedState) {
-      composerRevisionRef.current += 1
-    }
-    composerStateRef.current = resolvedState
-    setComposerStateValue(resolvedState)
-  }, [])
-
-  const setComposerAttachments = useCallback<Dispatch<SetStateAction<ComposerAttachment[]>>>((nextAttachments) => {
-    const resolvedAttachments = typeof nextAttachments === 'function'
-      ? nextAttachments(composerAttachmentsRef.current)
-      : nextAttachments
-    if (composerAttachmentsRef.current !== resolvedAttachments) {
-      composerRevisionRef.current += 1
-    }
-    composerAttachmentsRef.current = resolvedAttachments
-    setComposerAttachmentsValue(resolvedAttachments)
-  }, [])
-
-  function clearComposerOptimistically() {
-    const clearId = optimisticComposerClearIdRef.current + 1
-    optimisticComposerClearIdRef.current = clearId
-    setComposerState(emptyComposerState)
-    setComposerAttachments([])
-    return {
-      id: clearId,
-      revision: composerRevisionRef.current,
-    }
-  }
-
-  function invalidateOptimisticComposerClear(clearToken: OptimisticComposerClearToken | null) {
-    if (clearToken !== null && optimisticComposerClearIdRef.current === clearToken.id) {
-      optimisticComposerClearIdRef.current += 1
-    }
-  }
-
-  function restoreOptimisticallyClearedComposer(
-    clearToken: OptimisticComposerClearToken | null,
-    snapshot: { attachments: ComposerAttachment[]; state: ComposerState },
-  ) {
-    if (
-      clearToken === null
-      || optimisticComposerClearIdRef.current !== clearToken.id
-      || composerRevisionRef.current !== clearToken.revision
-      || !isComposerPristineEmpty(composerStateRef.current, composerAttachmentsRef.current)
-    ) {
-      return
-    }
-
-    invalidateOptimisticComposerClear(clearToken)
-    setComposerState(snapshot.state)
-    setComposerAttachments(snapshot.attachments)
-  }
-
   const loadProjectSessions = useCallback(async (project: ProjectRecord) => {
     const requestGeneration = projectSessionRequestGenerationRef.current
     await Promise.all(sessionTreeAgentIds.map(async (requestAgentId) => {
@@ -978,91 +842,6 @@ function AgentProvider({
     const preferredSelection = parseModelSelection(preferredModelKey ?? null)
 
     return preferredSelection.provider === provider ? preferredSelection.modelId : null
-  }
-
-  function readFileAsDataUrl(file: File) {
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onerror = () => {
-        reject(new Error(`Unable to read ${file.name}.`))
-      }
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          resolve(reader.result)
-          return
-        }
-
-        reject(new Error(`Unable to read ${file.name}.`))
-      }
-      reader.readAsDataURL(file)
-    })
-  }
-
-  async function buildComposerAttachmentFromFile(file: File): Promise<ComposerAttachment> {
-    const kind = isImageAttachment(file.name, file.type) ? 'image' : 'file'
-    const data = kind === 'image' ? await readFileAsDataUrl(file) : undefined
-    const filePath = window.appApi.getFilePath(file).trim()
-
-    if (kind !== 'image' && !filePath) {
-      throw new Error(`普通文件需要来自本地磁盘路径。请使用附件按钮选择文件，或从${getSystemFileManagerName(window.appApi.platform)}拖入文件。`)
-    }
-
-    return {
-      id: `${Date.now()}-${crypto.randomUUID()}`,
-      ...(data ? { data } : {}),
-      fileName: file.name,
-      kind,
-      ...(file.type ? { mimeType: file.type } : {}),
-      ...(filePath ? { path: filePath } : {}),
-      size: file.size,
-    }
-  }
-
-  function appendComposerAttachments(nextAttachments: ComposerAttachment[]) {
-    if (nextAttachments.length === 0) {
-      return
-    }
-
-    setComposerAttachments((currentAttachments) => {
-      const uniqueAttachments = nextAttachments.filter((attachment) => !currentAttachments.some((currentAttachment) => (
-        currentAttachment.fileName === attachment.fileName
-        && currentAttachment.size === attachment.size
-        && currentAttachment.path === attachment.path
-      )))
-
-      return [...currentAttachments, ...uniqueAttachments].slice(0, MAX_COMPOSER_ATTACHMENTS)
-    })
-  }
-
-  async function addComposerFiles(files: File[]) {
-    if (files.length === 0) {
-      return
-    }
-
-    try {
-      setPanelError(null)
-      const nextAttachments = await Promise.all(files.slice(0, MAX_COMPOSER_ATTACHMENTS).map(buildComposerAttachmentFromFile))
-      appendComposerAttachments(nextAttachments)
-    } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to attach the selected file.')
-    }
-  }
-
-  async function handlePickComposerAttachments() {
-    try {
-      setPanelError(null)
-      const pickedAttachments = await window.appApi.pickAgentAttachments()
-      appendComposerAttachments(pickedAttachments.map((attachment) => ({
-        ...attachment,
-        id: `${Date.now()}-${crypto.randomUUID()}`,
-      })))
-    } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to attach files.')
-    }
-  }
-
-  function removeComposerAttachment(attachmentId: string) {
-    setComposerAttachments((currentAttachments) => currentAttachments.filter((attachment) => attachment.id !== attachmentId))
   }
 
   useEffect(() => {
@@ -1453,7 +1232,7 @@ function AgentProvider({
     if (!workspacePath) {
       setAgentState(emptyAgentState)
       setViewedSessionSnapshot(null)
-      setComposerState(emptyComposerState)
+      setComposerState(EMPTY_AGENT_COMPOSER_STATE)
       setComposerAttachments([])
       syncNewSessionModelDraft(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
       syncModelDraft(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
@@ -1986,7 +1765,7 @@ function AgentProvider({
     syncActiveSessionSelection({ kind: 'new' })
     setViewedSessionSnapshot(null)
     syncModelDraft(nextDraft)
-    setComposerState(emptyComposerState)
+    setComposerState(EMPTY_AGENT_COMPOSER_STATE)
     setComposerAttachments([])
     setPanelError(null)
     setActiveOverlayPanel(null)
@@ -2349,439 +2128,78 @@ function AgentProvider({
     }
   }
 
-  async function submitComposerPrompt(streamingBehavior?: AgentRunningPromptEnterBehavior) {
-    const submittedComposerState = composerStateRef.current
-    const submittedComposerAttachments = composerAttachmentsRef.current
-    const serializedPrompt = serializeComposerText(submittedComposerState.value, submittedComposerState.mentions)
-    const trimmedPrompt = serializedPrompt.trim()
-
-    if (
-      agentState.activeSession?.native?.agentId === 'opencode'
-      && agentState.activeSession.native.parentSessionId
-    ) {
-      setPanelError('OpenCode 子会话由父会话中的子 Agent 管理，请返回父会话继续输入。')
-      return
-    }
-
-    if (!trimmedPrompt && submittedComposerAttachments.length === 0) {
-      return
-    }
-
-    if (!agentState.runtime.hasConfiguredModels) {
-      setPanelError(agentState.runtime.setupHint ?? 'Configure a model first.')
-      return
-    }
-
-    let targetWorkspacePath = workspacePath
-    const requiresConversationWorkspace = !targetWorkspacePath && activeWorkspaceContext.kind === 'conversationDraft'
-    const createConversationWorkspace = onCreateConversationWorkspace
-
-    if (requiresConversationWorkspace && !createConversationWorkspace) {
-      setPanelError('Unable to create a conversation workspace.')
-      return
-    }
-
-    if (!targetWorkspacePath && !requiresConversationWorkspace) {
-      return
-    }
-
-    if (isSubmittingComposerPromptRef.current) {
-      return
-    }
-
-    isSubmittingComposerPromptRef.current = true
-    setIsSubmittingComposerPrompt(true)
-
-    const requestAgentId = selectedAgentId
-    const requestSelection = activeSessionSelectionRef.current
-    let expectedNavigationRevision = openSessionRequestIdRef.current
-    let createdConversation: ConversationRecord | null = null
-    let runtimeForSubmit = agentState.runtime
-    const draftBeforeWorkspaceCreation = newSessionModelDraftRef.current
-    const composerSnapshot = {
-      attachments: submittedComposerAttachments,
-      state: submittedComposerState,
-    }
-    const optimisticClearId = clearComposerOptimistically()
-    let didSendPromptToAgent = false
-    let didPersistConversationBinding = false
-    let optimisticUserMessageId: string | null = null
-    let nextSessionPath: string | null = null
-    let fallbackErrorMessage = 'Unable to send your prompt.'
-
-    const isSubmissionContextCurrent = () => {
-      const currentWorkspacePath = workspacePathRef.current
-      const isCurrentWorkspace = targetWorkspacePath
-        ? Boolean(
-            currentWorkspacePath
-            && normalizeAgentProjectPath(targetWorkspacePath) === normalizeAgentProjectPath(currentWorkspacePath),
-          )
-        : currentWorkspacePath === null
-      if (
-        expectedNavigationRevision !== openSessionRequestIdRef.current
-        || selectedAgentIdRef.current !== requestAgentId
-        || !isCurrentWorkspace
-      ) {
-        return false
-      }
-
-      return true
-    }
-
-    const isSubmissionViewCurrent = (sessionPath?: string | null) => {
-      if (!isSubmissionContextCurrent()) {
-        return false
-      }
-
-      const currentSelection = activeSessionSelectionRef.current
-      if (sessionPath) {
-        return currentSelection.kind === 'session'
-          && currentSelection.agentId === requestAgentId
-          && currentSelection.sessionPath === sessionPath
-      }
-
-      return requestSelection.kind === 'new'
-        ? currentSelection.kind === 'new'
-        : currentSelection.kind === 'session'
-          && currentSelection.agentId === requestSelection.agentId
-          && currentSelection.sessionPath === requestSelection.sessionPath
-    }
-
-    try {
-      setActiveComposerMenu(null)
-      setPanelError(null)
-
-      if (requiresConversationWorkspace) {
-        fallbackErrorMessage = 'Unable to create a conversation workspace.'
-        setIsLoading(true)
-        try {
-          if (!createConversationWorkspace) {
-            throw new Error('Unable to create a conversation workspace.')
-          }
-          createdConversation = await createConversationWorkspace({
-            agentId: requestAgentId,
-            initialPrompt: trimmedPrompt,
-          })
-          targetWorkspacePath = createdConversation.workspacePath
-          workspacePathRef.current = targetWorkspacePath
-
-          if (!targetWorkspacePath) {
-            throw new Error('Conversation workspace was not created.')
-          }
-
-          const nextState = await window.appApi.loadAgentWorkspace({
-            agentId: requestAgentId,
-            workspacePath: targetWorkspacePath,
-          }, null, { restoreSession: false })
-          runtimeForSubmit = nextState.runtime
-          const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
-          const nextNewSessionDraft = normalizeAgentModelDraft(draftBeforeWorkspaceCreation, nextState.runtime, defaultDraft)
-          syncNewSessionModelDraft(nextNewSessionDraft)
-          if (isSubmissionViewCurrent()) {
-            setAgentState(nextState)
-            setViewedSessionSnapshot(null)
-            setHasLoadedWorkspaceState(true)
-            syncModelDraft(nextNewSessionDraft)
-          }
-        } finally {
-          setIsLoading(false)
-        }
-      }
-
-      if (!targetWorkspacePath) {
-        throw new Error('Open a workspace before sending your prompt.')
-      }
-
-      nextSessionPath = requestSelection.kind === 'session' ? requestSelection.sessionPath : null
-
-      if (requestSelection.kind === 'new') {
-        fallbackErrorMessage = 'Unable to create an agent session.'
-        openSessionRequestIdRef.current += 1
-        expectedNavigationRevision = openSessionRequestIdRef.current
-        const nextDraft = normalizeAgentModelDraft(
-          newSessionModelDraftRef.current,
-          runtimeForSubmit,
-          getRuntimeDefaultModelDraft(runtimeForSubmit),
-        )
-        syncNewSessionModelDraft(nextDraft)
-        const draftModelKey = getAgentModelDraftKey(nextDraft)
-        const nextState = await window.appApi.createAgentSession({
-          agentId: requestAgentId,
-          workspacePath: targetWorkspacePath,
-        }, {
-          agentId: requestAgentId,
-          ...(draftModelKey && runtimeForSubmit.availableModels.includes(draftModelKey) ? { modelKey: draftModelKey } : {}),
-          thinkingLevel: nextDraft.thinkingLevel,
-        })
-        nextSessionPath = nextState.activeSession?.sessionPath ?? null
-        if (isSubmissionContextCurrent()) {
-          activeRuntimeSessionRef.current = nextState.activeSession
-          setAgentState(nextState)
-          setViewedSessionSnapshot(null)
-          if (nextSessionPath) {
-            syncActiveSessionSelection({ agentId: requestAgentId, kind: 'session', sessionPath: nextSessionPath })
-          }
-          syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
-        }
-      } else {
-        fallbackErrorMessage = 'Open a session before sending your prompt.'
-        const activeState = await ensureSelectedAgentSessionActive(requestSelection)
-        if (!activeState?.activeSession) {
-          throw new Error('Open a session before sending your prompt.')
-        }
-        nextSessionPath = activeState.activeSession.sessionPath
-      }
-
-      fallbackErrorMessage = 'Unable to send your prompt.'
-      if (!nextSessionPath) {
-        throw new Error('Agent session did not return a native session identifier.')
-      }
-      const promptSessionPath = nextSessionPath
-      const conversationId = createdConversation?.id
-        ?? (activeWorkspaceContext.kind === 'conversation' ? activeWorkspaceContext.conversationId : null)
-      const persistedSessionPath = createdConversation?.agentSessionPath ?? activeConversation?.agentSessionPath ?? null
-      if (conversationId && persistedSessionPath !== promptSessionPath) {
-        if (!onConversationSessionStarted) {
-          throw new Error('Unable to persist the conversation Agent session binding.')
-        }
-        fallbackErrorMessage = 'Unable to update the conversation index.'
-        const preview = formatConversationPreview(trimmedPrompt)
-        await onConversationSessionStarted(conversationId, {
-          agentSessionPath: promptSessionPath,
-          lastMessagePreview: createdConversation ? preview : activeConversation?.lastMessagePreview ?? null,
-          ...(createdConversation ? { title: preview, titleSource: 'prompt' } : {}),
-        })
-        didPersistConversationBinding = true
-      }
-
-      fallbackErrorMessage = 'Unable to send your prompt.'
-      const promptAttachments = submittedComposerAttachments.map(({ id: _id, ...attachment }) => attachment)
-      const isOpenCodePrompt = requestAgentId === 'opencode'
-      const supportsClientMessageId = isOpenCodePrompt || requestAgentId === 'codex'
-      const nextOptimisticUserMessageId = isOpenCodePrompt
-        ? createOpenCodeMessageId()
-        : `optimistic-user-${crypto.randomUUID()}`
-      const nativePartIds = isOpenCodePrompt
-        ? Array.from({ length: submittedComposerAttachments.length + 1 }, createOpenCodePartId)
-        : undefined
-      optimisticUserMessageId = nextOptimisticUserMessageId
-      const optimisticAttachments: AgentMessageAttachment[] = submittedComposerAttachments.map(({ id: _id, ...attachment }) => ({
-        ...attachment,
-        status: attachment.kind === 'image' ? 'sent' : 'referenced',
-      }))
-      setOptimisticUserMessages((current) => [...current, {
-        agentId: requestAgentId,
-        message: {
-          ...(optimisticAttachments.length > 0 ? { attachments: optimisticAttachments } : {}),
-          id: nextOptimisticUserMessageId,
-          kind: 'user',
-          text: trimmedPrompt,
-          timestamp: Date.now(),
-        },
-        ...(nativePartIds ? { nativePartIds } : {}),
-        sessionPath: promptSessionPath,
-      }])
-      await window.appApi.sendAgentPrompt({
-        agentId: requestAgentId,
-        sessionPath: promptSessionPath,
-        workspacePath: targetWorkspacePath,
-      }, trimmedPrompt, streamingBehavior, promptAttachments, supportsClientMessageId ? {
-        clientMessageId: nextOptimisticUserMessageId,
-        ...(nativePartIds ? { clientPartIds: nativePartIds } : {}),
-      } : undefined)
-      didSendPromptToAgent = true
-      try {
-        window.localStorage.setItem('aryn:last-new-conversation-agent', requestAgentId)
-      } catch {
-        // Persisting this preference is best effort. Conversation records remain authoritative.
-      }
-      invalidateOptimisticComposerClear(optimisticClearId)
-      if (isSubmissionViewCurrent(promptSessionPath)) {
-        syncActiveSessionSelection({ agentId: requestAgentId, kind: 'session', sessionPath: promptSessionPath })
-      }
-      if (conversationId && !createdConversation) {
-        const preview = formatConversationPreview(trimmedPrompt)
-        try {
-          await onConversationSessionStarted?.(conversationId, {
-            agentSessionPath: promptSessionPath,
-            lastMessagePreview: preview,
-          })
-        } catch (error) {
-          if (isSubmissionViewCurrent(promptSessionPath)) {
-            setPanelError(error instanceof Error ? error.message : 'Unable to update the conversation index.')
-          }
-        }
-      }
-      if (!streamingBehavior && isSubmissionViewCurrent(promptSessionPath)) {
-        setDraftAssistant('')
-        setLiveTools([])
-      }
-    } catch (error) {
-      if (createdConversation && !didSendPromptToAgent && !didPersistConversationBinding) {
-        void onConversationDraftFailed?.(createdConversation.id)
-      }
-      if (!didSendPromptToAgent) {
-        if (optimisticUserMessageId) {
-          setOptimisticUserMessages((current) => current.filter((entry) => entry.message.id !== optimisticUserMessageId))
-        }
-        if (isSubmissionViewCurrent(nextSessionPath)) {
-          restoreOptimisticallyClearedComposer(optimisticClearId, composerSnapshot)
-        }
-      }
-      if (isSubmissionViewCurrent(nextSessionPath)) {
-        setPanelError(error instanceof Error ? error.message : fallbackErrorMessage)
-      }
-    } finally {
-      isSubmittingComposerPromptRef.current = false
-      setIsSubmittingComposerPrompt(false)
-    }
-  }
-
-  async function handleQueuedMessageUpdate(update: AgentQueuedMessageUpdate) {
-    const sessionPath = agentState.activeSession?.sessionPath
-    const requestAgentId = selectedAgentId
-    const requestWorkspacePath = workspacePath
-    if (!sessionPath || !requestWorkspacePath) {
-      setPanelError('Open a session before editing queued messages.')
-      return
-    }
-    try {
-      setActiveComposerMenu(null)
-      setPanelError(null)
-      const nextState = await window.appApi.updateAgentQueuedMessage({
-        agentId: requestAgentId,
-        sessionPath,
-        workspacePath: requestWorkspacePath,
-      }, update)
-      if (
-        !isAgentSessionOperationCurrent(requestAgentId, sessionPath, requestWorkspacePath)
-        || nextState.activeSession?.sessionPath !== sessionPath
-      ) {
-        return
-      }
-      setAgentState(nextState)
-    } catch (error) {
-      if (isAgentSessionOperationCurrent(requestAgentId, sessionPath, requestWorkspacePath)) {
-        setPanelError(error instanceof Error ? error.message : 'Unable to update queued message.')
-      }
-      throw error
-    }
-  }
-
-  async function stopActivePrompt() {
-    const sessionPath = agentState.activeSession?.sessionPath
-    const requestAgentId = selectedAgentId
-    const requestWorkspacePath = workspacePath
-    if (!requestWorkspacePath || !sessionPath || !isViewingActiveRuntime || !agentState.runtime.isStreaming) {
-      return
-    }
-
-    try {
-      setActiveComposerMenu(null)
-      setPanelError(null)
-      const nextState = await window.appApi.abortAgentPrompt({
-        agentId: requestAgentId,
-        sessionPath,
-        workspacePath: requestWorkspacePath,
-      })
-      if (
-        !isAgentSessionOperationCurrent(requestAgentId, sessionPath, requestWorkspacePath)
-        || nextState.activeSession?.sessionPath !== sessionPath
-      ) {
-        return
-      }
-      setAgentState(nextState)
+  const {
+    isSubmittingComposerPrompt,
+    submitComposerPrompt,
+  } = useAgentPromptSubmission({
+    composer: {
+      clearAssistantDraft: () => setDraftAssistant(''),
+      clearComposerOptimistically,
+      clearLiveTools: () => setLiveTools([]),
+      closeComposerMenu: () => setActiveComposerMenu(null),
+      composerAttachmentsRef,
+      composerStateRef,
+      invalidateOptimisticComposerClear,
+      restoreOptimisticallyClearedComposer,
+    },
+    conversation: {
+      activeConversation,
+      activeWorkspaceContext,
+      onConversationDraftFailed,
+      onConversationSessionStarted,
+      onCreateConversationWorkspace,
+    },
+    navigation: {
+      activeRuntimeSessionRef,
+      activeSessionSelectionRef,
+      ensureSelectedAgentSessionActive,
+      openSessionRequestIdRef,
+      selectedAgentId,
+      selectedAgentIdRef,
+      syncActiveSessionSelection,
+      workspacePath,
+      workspacePathRef,
+    },
+    state: {
+      agentState,
+      markWorkspaceStateLoaded: () => setHasLoadedWorkspaceState(true),
+      newSessionModelDraftRef,
+      setAgentState,
+      setLoading: setIsLoading,
+      setOptimisticUserMessages,
+      setPanelError,
+      setViewedSessionSnapshot,
+      syncModelDraft,
+      syncNewSessionModelDraft,
+    },
+  })
+  const {
+    handleComposerKeyDown,
+    handleQueuedMessageUpdate,
+    handleSubmit,
+    respondToInteraction,
+  } = useAgentComposerActions({
+    agentState,
+    closeComposerMenu: () => setActiveComposerMenu(null),
+    composerAttachmentsRef,
+    composerStateRef,
+    effectiveRunningPromptEnterBehavior,
+    isAgentSessionOperationCurrent,
+    isViewingActiveRuntime,
+    pendingInteractions,
+    resetRunDrafts: () => {
       setDraftAssistant('')
       setDraftThinking('')
       setIsThinkingStreaming(false)
       setLiveTools([])
-    } catch (error) {
-      if (isAgentSessionOperationCurrent(requestAgentId, sessionPath, requestWorkspacePath)) {
-        setPanelError(error instanceof Error ? error.message : 'Unable to stop the current run.')
-      }
-    }
-  }
-
-  async function respondToInteraction(
-    requestId: string,
-    optionId: string,
-    values?: string[],
-    answers?: Record<string, string[]>,
-  ) {
-    try {
-      setPanelError(null)
-      const request = pendingInteractions.find((candidate) => (
-        candidate.agentId === selectedAgentId
-        && candidate.id === requestId
-        && candidate.sessionId === agentState.activeSession?.sessionId
-      ))
-      if (!request) {
-        throw new Error('这个请求已经失效，请等待 Agent 更新状态。')
-      }
-      const result = await window.appApi.respondAgentInteraction({
-        agentId: request.agentId,
-        answers,
-        optionId,
-        requestId,
-        sessionId: request.sessionId,
-        values,
-      })
-      if (!result.ok) {
-        throw new Error('这个请求已经失效，请等待 Agent 更新状态。')
-      }
-      setPendingInteractions((currentRequests) => currentRequests.filter((candidate) => !(
-        candidate.agentId === request.agentId
-        && candidate.id === requestId
-        && candidate.sessionId === request.sessionId
-      )))
-    } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to respond to Agent request.')
-    }
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    const hasPayload = getHasComposerPayload(composerStateRef.current, composerAttachmentsRef.current)
-
-    if (isViewingActiveRuntime && agentState.runtime.isStreaming) {
-      if (!hasPayload) {
-        await stopActivePrompt()
-        return
-      }
-
-      await submitComposerPrompt(effectiveRunningPromptEnterBehavior)
-      return
-    }
-
-    await submitComposerPrompt()
-  }
-
-  function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault()
-
-      if (!getHasComposerPayload(composerStateRef.current, composerAttachmentsRef.current)) {
-        return
-      }
-
-      if (isViewingActiveRuntime && agentState.runtime.isStreaming) {
-        const requestedStreamingBehavior = getStreamingPromptBehaviorForShortcut(
-          event,
-          window.appApi.platform,
-          effectiveRunningPromptEnterBehavior,
-        )
-        const streamingBehavior = resolveSupportedRunningPromptBehavior(
-          agentState.runtime.supportedRunningPromptBehaviors,
-          requestedStreamingBehavior,
-        )
-        void submitComposerPrompt(streamingBehavior)
-        return
-      }
-
-      void submitComposerPrompt()
-    }
-  }
+    },
+    selectedAgentId,
+    setAgentState,
+    setPanelError,
+    setPendingInteractions,
+    submitComposerPrompt,
+    workspacePath,
+  })
 
   const configuredProviders = useMemo(() => (
     Array.from(new Set(
@@ -2816,7 +2234,7 @@ function AgentProvider({
     : []
   const thinkingLevel = clampAgentThinkingLevel(selectedThinkingLevel, composerThinkingLevels)
   const thinkingLevelLabel = formatThinkingLevelLabel(thinkingLevel)
-  const hasComposerPayload = getHasComposerPayload(composerState, composerAttachments)
+  const hasComposerPayload = hasAgentComposerPayload(composerState, composerAttachments)
   const isConversationDraftContext = activeWorkspaceContext.kind === 'conversationDraft'
   const canCreateConversationWorkspace = Boolean(isConversationDraftContext && onCreateConversationWorkspace)
   const canUseComposerWithoutWorkspace = Boolean(!workspacePath && canCreateConversationWorkspace)
@@ -3249,15 +2667,6 @@ function AgentProvider({
 function AgentSessionTree(props: AgentSessionTreeProps) {
   const controller = useAgentContext()
   return <AgentSessionTreeView {...props} controller={controller} />
-}
-
-function resolveSupportedRunningPromptBehavior(
-  supportedBehaviors: AgentRunningPromptBehavior[],
-  requestedBehavior: AgentRunningPromptEnterBehavior,
-): AgentRunningPromptEnterBehavior {
-  return supportedBehaviors.includes(requestedBehavior)
-    ? requestedBehavior
-    : supportedBehaviors[0] ?? 'followUp'
 }
 
 function AgentTypeSwitchTrigger() {
