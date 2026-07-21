@@ -49,6 +49,8 @@ describe('agent CLI discovery diagnostics', () => {
     })
     expect(result.guidance).toContain('codex --version')
     expect(result.guidance).toContain('重启 Aryn')
+    expect(result.guidance).toContain('重新打开 Agent 菜单')
+    expect(result.guidance).not.toContain('重新检测')
   })
 
   it('keeps version incompatibility separate from its recovery guidance', () => {
@@ -63,6 +65,8 @@ describe('agent CLI discovery diagnostics', () => {
     expect(result.available).toBe(false)
     expect(result.reason).toContain('1.16.9')
     expect(result.guidance).toContain('1.17.18')
+    expect(result.guidance).toContain('重新打开 Agent 菜单')
+    expect(result.guidance).not.toContain('重新检测')
     expect(result.version).toBe('opencode version 1.16.9')
   })
 

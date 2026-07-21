@@ -9,7 +9,7 @@ function availability(overrides: Partial<AgentAvailability> = {}): AgentAvailabi
     available: false,
     command: 'codex',
     definition: getAgentDefinition('codex'),
-    guidance: '完成登录后重新检测。',
+    guidance: '完成登录后重新打开 Agent 菜单。',
     reason: 'Codex 尚未登录',
     version: 'codex-cli 0.144.5',
     ...overrides,
@@ -27,7 +27,7 @@ describe('AgentTypeSwitch', () => {
     )
 
     expect(markup).toContain('Codex 尚未登录')
-    expect(markup).toContain('完成登录后重新检测。')
+    expect(markup).toContain('完成登录后重新打开 Agent 菜单。')
     expect(markup).toContain('id="codex-reason"')
     expect(markup).toContain('id="codex-guidance"')
     expect(markup).not.toContain('title=')
@@ -67,6 +67,8 @@ describe('AgentTypeSwitch', () => {
     expect(source).not.toContain('agent-type-switch-refresh')
     expect(source).not.toContain('Refresh2Line')
     expect(source).not.toContain('isRefreshing')
+    expect(source).not.toContain('重新检测')
+    expect(source).not.toContain('正在检测')
     expect(source).not.toContain('title={!availability.available')
   })
 })

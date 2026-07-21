@@ -95,7 +95,7 @@ export function createAgentAvailabilityFromProbe(
       available: false,
       command: result.command,
       definition,
-      guidance: `安装 ${definition.label} CLI，确认 ${commandLabel} 可在终端运行。若刚修改 PATH，请重启 Aryn 后再检测。`,
+      guidance: `安装 ${definition.label} CLI，确认 ${commandLabel} 可在终端运行。若刚修改 PATH，请重启 Aryn；然后重新打开 Agent 菜单。`,
       reason: '未在 PATH 中找到命令',
       version: null,
     }
@@ -106,7 +106,7 @@ export function createAgentAvailabilityFromProbe(
       available: false,
       command: result.command,
       definition,
-      guidance: `先在终端运行 ${commandLabel}，排查卡住的登录或配置，再重新检测。`,
+      guidance: `先在终端运行 ${commandLabel}，排查卡住的登录或配置，然后重新打开 Agent 菜单。`,
       reason: `检测超时（${PROBE_TIMEOUT_MS / 1000} 秒）`,
       version: null,
     }
@@ -117,7 +117,7 @@ export function createAgentAvailabilityFromProbe(
       available: false,
       command: result.command,
       definition,
-      guidance: `确认 ${commandLabel} 可在终端正常运行，再重新检测。`,
+      guidance: `确认 ${commandLabel} 可在终端正常运行，然后重新打开 Agent 菜单。`,
       reason: formatProbeFailure(result.error),
       version: null,
     }
@@ -145,7 +145,7 @@ export function createAgentAvailabilityFromProbe(
       available: false,
       command: result.command,
       definition,
-      guidance: `安装 ${OPENCODE_PROTOCOL_VERSION} 同一 minor 系列的 OpenCode CLI，再重新检测。`,
+      guidance: `安装 ${OPENCODE_PROTOCOL_VERSION} 同一 minor 系列的 OpenCode CLI，然后重新打开 Agent 菜单。`,
       reason: formatOpenCodeVersionCompatibilityError(version),
       version,
     }
@@ -155,7 +155,7 @@ export function createAgentAvailabilityFromProbe(
     available: false,
     command: result.command,
     definition,
-    guidance: `在终端运行 ${commandLabel}，处理命令报告的问题后再重新检测。`,
+    guidance: `在终端运行 ${commandLabel}，处理命令报告的问题，然后重新打开 Agent 菜单。`,
     reason: normalizeVersionOutput(result.stderr, result.stdout) ?? `命令退出码为 ${result.code ?? 'unknown'}`,
     version: null,
   }

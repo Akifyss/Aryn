@@ -82,7 +82,7 @@ export function useAgentCatalog({
       })
       .catch((error) => {
         if (!isMountedRef.current || catalogRequestIdRef.current !== requestId) return
-        setAgentCatalogRefreshError(error instanceof Error ? error.message : '无法重新检测 Agent。')
+        setAgentCatalogRefreshError(error instanceof Error ? error.message : '无法更新 Agent 可用性。')
       })
 
     catalogRefreshRef.current = refresh
@@ -97,7 +97,7 @@ export function useAgentCatalog({
   const markAgentUnavailable = useCallback((
     agentId: AgentId,
     reason: string,
-    guidance = '完成该 Agent 的登录、模型或配置后，再重新检测。',
+    guidance = '完成该 Agent 的登录、模型或配置后，重新打开 Agent 菜单。',
   ) => {
     if (agentId === DEFAULT_AGENT_ID) return
     setAgentAvailabilityFailures((current) => ({
