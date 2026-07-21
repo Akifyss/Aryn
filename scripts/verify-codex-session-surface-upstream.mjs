@@ -85,7 +85,11 @@ if (unclassifiedFiles.length > 0 || missingFiles.length > 0) {
 
 for (const [relativePath, expectedHash] of pinnedFiles) {
   const contents = await readFile(path.join(rootDir, relativePath))
-  const actualHash = createHash('sha256').update(contents).digest('hex').toUpperCase()
+  // Git may materialize these text files with CRLF when core.autocrlf is enabled.
+  // Hash their canonical LF representation so checkout policy cannot look like
+  // an upstream source change, while every other byte remains significant.
+  const canonicalContents = contents.toString('utf8').replaceAll('\r\n', '\n')
+  const actualHash = createHash('sha256').update(canonicalContents, 'utf8').digest('hex').toUpperCase()
 
   if (actualHash !== expectedHash) {
     throw new Error(
@@ -97,6 +101,6 @@ for (const [relativePath, expectedHash] of pinnedFiles) {
 }
 
 console.log(
-  `Verified ${pinnedFiles.size} byte-for-byte T3 Code files and ` +
+  `Verified ${pinnedFiles.size} canonical T3 Code files and ` +
     `${compatibilityShims.size} explicitly classified compatibility shims.`,
 )
