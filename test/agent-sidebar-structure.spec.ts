@@ -6,6 +6,28 @@ async function readSource(relativePath: string) {
 }
 
 describe('agent sidebar structure', () => {
+  it('keeps Agent catalog lifecycle state in its feature hook', async () => {
+    const [sidebarSource, catalogHookSource] = await Promise.all([
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+      readSource('../src/features/agent/hooks/use-agent-catalog.ts'),
+    ])
+
+    expect(sidebarSource).toContain(
+      "from '@/features/agent/hooks/use-agent-catalog'",
+    )
+    expect(sidebarSource).toContain(
+      'useAgentCatalog({ onCatalogRefreshed: handleAgentCatalogRefreshed })',
+    )
+    expect(sidebarSource).not.toContain('agentCatalogRequestIdRef')
+    expect(sidebarSource).not.toContain('agentCatalogRefreshRef')
+    expect(sidebarSource).not.toContain('setAgentAvailabilityFailures')
+    expect(sidebarSource).not.toContain('window.appApi.getAgentCatalog(')
+
+    expect(catalogHookSource).toContain('export function useAgentCatalog(')
+    expect(catalogHookSource).toContain('window.appApi.getAgentCatalog({ force: true })')
+    expect(catalogHookSource).toContain('window.appApi.getAgentCatalog()')
+  })
+
   it('keeps Agent UI styles with their owning Agent components', async () => {
     const [
       appSource,

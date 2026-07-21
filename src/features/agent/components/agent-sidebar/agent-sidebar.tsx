@@ -39,6 +39,7 @@ import {
   type AgentAvailability,
   type AgentId,
 } from '@/features/agent/agent-definition'
+import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
 import { AgentBrandIcon } from '@/features/agent/components/agent-brand-icon/agent-brand-icon'
 import { AgentAttachmentFileCard } from '@/features/agent/components/agent-file-card/agent-file-card'
@@ -482,7 +483,6 @@ type AgentContextValue = {
   hasConfiguredProviders: boolean
   iconTheme?: WorkspaceIconTheme | null
   isAgentLayout: boolean
-  isAgentCatalogRefreshing: boolean
   isProjectAddMenuOpen: boolean
   isLoading: boolean
   isSwitchingModel: boolean
@@ -1463,15 +1463,6 @@ function AgentProvider({
   const workspaceTree = useWorkspaceStore((state) => state.tree)
   const defaultModelSelection = parseModelSelection(null)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
-  const [agentCatalog, setAgentCatalog] = useState<AgentAvailability[]>([])
-  const [agentAvailabilityFailures, setAgentAvailabilityFailures] = useState<Partial<Record<AgentId, {
-    guidance: string
-    reason: string
-  }>>>({})
-  const [agentCatalogRefreshError, setAgentCatalogRefreshError] = useState<string | null>(null)
-  const [agentCatalogRefreshRevision, setAgentCatalogRefreshRevision] = useState(0)
-  const [isAgentCatalogRefreshing, setIsAgentCatalogRefreshing] = useState(false)
-  const [selectedAgentIdValue, setSelectedAgentIdValue] = useState<AgentId>(DEFAULT_AGENT_ID)
   const [viewedSessionSnapshot, setViewedSessionSnapshot] = useState<AgentSessionSnapshot | null>(null)
   const [composerState, setComposerStateValue] = useState<ComposerState>(emptyComposerState)
   const [composerAttachments, setComposerAttachmentsValue] = useState<ComposerAttachment[]>([])
@@ -1501,9 +1492,6 @@ function AgentProvider({
   const [projectSessions, setProjectSessions] = useState<Record<string, AgentProjectSessionBucket>>({})
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const activeRuntimeSessionRef = useRef<AgentWorkspaceState['activeSession']>(null)
-  const agentCatalogRequestIdRef = useRef(0)
-  const agentCatalogRefreshRef = useRef<Promise<void> | null>(null)
-  const agentProviderMountedRef = useRef(false)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
   const loadAgentStateRequestIdRef = useRef(0)
   const openSessionRequestIdRef = useRef(0)
@@ -1531,6 +1519,20 @@ function AgentProvider({
   const isSubmittingComposerPromptRef = useRef(false)
   const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
   const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
+  const handleAgentCatalogRefreshed = useCallback(() => {
+    projectSessionRequestGenerationRef.current += 1
+    projectSessionRequestsRef.current.clear()
+    setProjectSessions(invalidateAgentProjectSessionBuckets)
+  }, [])
+  const {
+    agentCatalog: resolvedAgentCatalog,
+    agentCatalogRefreshError,
+    agentCatalogRefreshRevision,
+    markAgentUnavailable,
+    refreshAgentCatalog,
+    selectedAgentIdValue,
+    setSelectedAgentIdValue,
+  } = useAgentCatalog({ onCatalogRefreshed: handleAgentCatalogRefreshed })
   const activeConversation = activeWorkspaceContext.kind === 'conversation'
     ? conversationState.conversations.find((conversation) => conversation.id === activeWorkspaceContext.conversationId) ?? null
     : null
@@ -1543,12 +1545,6 @@ function AgentProvider({
     ?? requestedProjectAgentId
     ?? (activeSessionSelection.kind === 'session' ? activeSessionSelection.agentId : selectedAgentIdValue)
   const selectedAgentIdRef = useRef(selectedAgentId)
-  const resolvedAgentCatalog = useMemo(() => agentCatalog.map((availability) => {
-    const failureReason = agentAvailabilityFailures[availability.definition.id]
-    return failureReason
-      ? { ...availability, available: false, ...failureReason }
-      : availability
-  }), [agentAvailabilityFailures, agentCatalog])
   const sessionTreeAgentIds = SESSION_TREE_AGENT_IDS
   const effectiveRunningPromptEnterBehavior = resolveSupportedRunningPromptBehavior(
     agentState.runtime.supportedRunningPromptBehaviors,
@@ -1624,101 +1620,6 @@ function AgentProvider({
       }
       return nextValue
     })
-  }, [])
-
-  useEffect(() => {
-    agentProviderMountedRef.current = true
-    return () => {
-      agentProviderMountedRef.current = false
-      agentCatalogRequestIdRef.current += 1
-    }
-  }, [])
-
-  const refreshAgentCatalog = useCallback(() => {
-    if (agentCatalogRefreshRef.current) return agentCatalogRefreshRef.current
-
-    const requestId = agentCatalogRequestIdRef.current + 1
-    agentCatalogRequestIdRef.current = requestId
-    setIsAgentCatalogRefreshing(true)
-    setAgentCatalogRefreshError(null)
-    const refresh = window.appApi.getAgentCatalog({ force: true })
-      .then((catalog) => {
-        if (!agentProviderMountedRef.current || agentCatalogRequestIdRef.current !== requestId) return
-        projectSessionRequestGenerationRef.current += 1
-        projectSessionRequestsRef.current.clear()
-        setAgentCatalog(catalog)
-        setAgentAvailabilityFailures({})
-        setProjectSessions(invalidateAgentProjectSessionBuckets)
-        setAgentCatalogRefreshRevision((revision) => revision + 1)
-        setSelectedAgentIdValue((currentAgentId) => (
-          catalog.some((item) => item.definition.id === currentAgentId && item.available)
-            ? currentAgentId
-            : DEFAULT_AGENT_ID
-        ))
-      })
-      .catch((error) => {
-        if (!agentProviderMountedRef.current || agentCatalogRequestIdRef.current !== requestId) return
-        setAgentCatalogRefreshError(error instanceof Error ? error.message : '无法重新检测 Agent。')
-      })
-    agentCatalogRefreshRef.current = refresh
-    void refresh.then(() => {
-      if (agentCatalogRefreshRef.current === refresh) {
-        agentCatalogRefreshRef.current = null
-        if (agentProviderMountedRef.current) setIsAgentCatalogRefreshing(false)
-      }
-    })
-    return refresh
-  }, [])
-
-  const markAgentUnavailable = useCallback((
-    agentId: AgentId,
-    reason: string,
-    guidance = '完成该 Agent 的登录、模型或配置后，再重新检测。',
-  ) => {
-    if (agentId === DEFAULT_AGENT_ID) return
-    setAgentAvailabilityFailures((current) => ({
-      ...current,
-      [agentId]: { guidance, reason },
-    }))
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    const requestId = agentCatalogRequestIdRef.current + 1
-    agentCatalogRequestIdRef.current = requestId
-
-    try {
-      const storedAgentId = window.localStorage.getItem('aryn:last-new-conversation-agent')
-      if (storedAgentId === 'builtin-pi' || storedAgentId === 'pi' || storedAgentId === 'opencode' || storedAgentId === 'codex') {
-        setSelectedAgentIdValue(storedAgentId)
-      }
-    } catch {
-      // The default remains usable when localStorage is unavailable.
-    }
-
-    void window.appApi.getAgentCatalog()
-      .then((catalog) => {
-        if (cancelled || agentCatalogRequestIdRef.current !== requestId) {
-          return
-        }
-
-        setAgentCatalog(catalog)
-        setSelectedAgentIdValue((currentAgentId) => (
-          catalog.some((item) => item.definition.id === currentAgentId && item.available)
-            ? currentAgentId
-            : DEFAULT_AGENT_ID
-        ))
-      })
-      .catch((error) => {
-        // Built-in PI remains available even if external CLI discovery fails.
-        if (!cancelled && agentCatalogRequestIdRef.current === requestId) {
-          setAgentCatalogRefreshError(error instanceof Error ? error.message : '无法检测外部 Agent。')
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
   }, [])
 
   const restorableSessionPath = agentState.activeSession?.sessionPath
@@ -4295,7 +4196,6 @@ function AgentProvider({
     hasConfiguredProviders,
     iconTheme,
     isAgentLayout,
-    isAgentCatalogRefreshing,
     isProjectAddMenuOpen,
     isLoading,
     isSwitchingModel,
@@ -4391,7 +4291,6 @@ function AgentProvider({
     hasConfiguredProviders,
     iconTheme,
     isAgentLayout,
-    isAgentCatalogRefreshing,
     isProjectAddMenuOpen,
     isLoading,
     isSwitchingModel,
