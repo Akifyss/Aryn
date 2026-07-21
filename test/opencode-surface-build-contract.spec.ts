@@ -16,10 +16,10 @@ describe('OpenCode official surface build contract', () => {
     expect(config.resolve?.dedupe).toContain('solid-js')
   })
 
-  it('pins the host and official UI to the same OpenCode release', () => {
-    expect(rootPackage.dependencies['@opencode-ai/sdk']).toBe('1.17.18')
+  it('shares one protocol SDK while versioning the embedded UI snapshot independently', () => {
+    expect(rootPackage.dependencies['@opencode-ai/sdk']).toBe('1.18.4')
     expect(surfacePackage.dependencies['@opencode-ai/sdk']).toBe(rootPackage.dependencies['@opencode-ai/sdk'])
-    expect(surfacePackage.dependencies['@opencode-ai/ui']).toBe(rootPackage.dependencies['@opencode-ai/sdk'])
+    expect(surfacePackage.dependencies['@opencode-ai/ui']).toBe('1.17.18')
   })
 
   it('namespaces official document CSS without retaining its legacy layout branch', () => {

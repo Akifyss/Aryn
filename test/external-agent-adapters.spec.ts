@@ -35,12 +35,15 @@ describe('Agent definitions', () => {
     expect(getAgentDefinition('codex')).toMatchObject({ requiresCli: true, transport: 'app-server' })
   })
 
-  it('accepts only the pinned OpenCode protocol minor series', () => {
+  it('accepts compatible OpenCode v1 updates at or above the protocol baseline', () => {
     expect(parseOpenCodeVersion('opencode 1.17.18')).toEqual({ major: 1, minor: 17, patch: 18 })
+    expect(isCompatibleOpenCodeVersion('1.17.17')).toBe(false)
     expect(isCompatibleOpenCodeVersion('1.17.22')).toBe(true)
-    expect(isCompatibleOpenCodeVersion('1.18.0')).toBe(false)
+    expect(isCompatibleOpenCodeVersion('1.18.4')).toBe(true)
+    expect(isCompatibleOpenCodeVersion('1.99.0')).toBe(true)
+    expect(isCompatibleOpenCodeVersion('2.0.0')).toBe(false)
     expect(isCompatibleOpenCodeVersion('unexpected output')).toBe(false)
-    expect(formatOpenCodeVersionCompatibilityError('1.18.0')).toContain('1.17.18')
+    expect(formatOpenCodeVersionCompatibilityError('2.0.0')).toContain('>=1.17.18 <2.0.0')
   })
 })
 

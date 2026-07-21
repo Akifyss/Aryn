@@ -11,9 +11,9 @@ import {
   type AgentDefinition,
 } from '../../src/features/agent/agent-definition'
 import {
+  OPENCODE_COMPATIBLE_VERSION_RANGE,
   formatOpenCodeVersionCompatibilityError,
   isCompatibleOpenCodeVersion,
-  OPENCODE_PROTOCOL_VERSION,
 } from '../../src/features/agent/lib/opencode-version'
 
 const DISCOVERY_CACHE_DURATION_MS = 15_000
@@ -145,7 +145,7 @@ export function createAgentAvailabilityFromProbe(
       available: false,
       command: result.command,
       definition,
-      guidance: `安装 ${OPENCODE_PROTOCOL_VERSION} 同一 minor 系列的 OpenCode CLI，然后重新打开 Agent 菜单。`,
+      guidance: `安装或更新至 ${OPENCODE_COMPATIBLE_VERSION_RANGE} 范围内的 OpenCode CLI，然后重新打开 Agent 菜单。`,
       reason: formatOpenCodeVersionCompatibilityError(version),
       version,
     }

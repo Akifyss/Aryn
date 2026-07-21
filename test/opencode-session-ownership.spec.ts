@@ -21,7 +21,7 @@ const sdkState = vi.hoisted(() => ({
   globalEventWaiters: [] as Array<(result: IteratorResult<Record<string, any>>) => void>,
   healthGate: null as Promise<void> | null,
   healthStarted: 0,
-  healthVersion: '1.17.18',
+  healthVersion: '1.18.4',
   instanceEventSubscribeCount: 0,
   messageResponses: [] as Array<Promise<Array<Record<string, any>>> | Array<Record<string, any>>>,
   messagesReadCount: 0,
@@ -265,7 +265,7 @@ describe('OpenCode Aryn session ownership', () => {
     sdkState.globalEventWaiters = []
     sdkState.healthGate = null
     sdkState.healthStarted = 0
-    sdkState.healthVersion = '1.17.18'
+    sdkState.healthVersion = '1.18.4'
     sdkState.instanceEventSubscribeCount = 0
     sdkState.messageResponses = []
     sdkState.messagesReadCount = 0
@@ -288,7 +288,7 @@ describe('OpenCode Aryn session ownership', () => {
   })
 
   it('rejects an incompatible OpenCode server and closes it without starting the event stream', async () => {
-    sdkState.healthVersion = '1.18.0'
+    sdkState.healthVersion = '2.0.0'
     const close = vi.fn()
     const manager = new OpenCodeAgentManager({
       agentDir,
@@ -298,7 +298,7 @@ describe('OpenCode Aryn session ownership', () => {
 
     try {
       await expect(manager.createSession(workspacePath, { name: 'Incompatible server' }))
-        .rejects.toThrow(/1\.17\.18/)
+        .rejects.toThrow(/>=1\.17\.18 <2\.0\.0/)
       expect(close).toHaveBeenCalledOnce()
       expect(sdkState.globalEventSubscribeCount).toBe(0)
     } finally {

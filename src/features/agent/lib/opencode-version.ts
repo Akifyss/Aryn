@@ -1,4 +1,6 @@
-export const OPENCODE_PROTOCOL_VERSION = '1.17.18'
+export const OPENCODE_MINIMUM_VERSION = '1.17.18'
+export const OPENCODE_SUPPORTED_MAJOR = 1
+export const OPENCODE_COMPATIBLE_VERSION_RANGE = `>=${OPENCODE_MINIMUM_VERSION} <${OPENCODE_SUPPORTED_MAJOR + 1}.0.0`
 
 type OpenCodeVersion = {
   major: number
@@ -20,14 +22,17 @@ export function parseOpenCodeVersion(value: string | null | undefined): OpenCode
 
 export function isCompatibleOpenCodeVersion(value: string | null | undefined) {
   const actual = parseOpenCodeVersion(value)
-  const expected = parseOpenCodeVersion(OPENCODE_PROTOCOL_VERSION)
+  const minimum = parseOpenCodeVersion(OPENCODE_MINIMUM_VERSION)
   return actual !== null
-    && expected !== null
-    && actual.major === expected.major
-    && actual.minor === expected.minor
+    && minimum !== null
+    && actual.major === OPENCODE_SUPPORTED_MAJOR
+    && (
+      actual.minor > minimum.minor
+      || (actual.minor === minimum.minor && actual.patch >= minimum.patch)
+    )
 }
 
 export function formatOpenCodeVersionCompatibilityError(value: string | null | undefined) {
   const actual = value?.trim() || '未知版本'
-  return `当前 OpenCode CLI（${actual}）与 Aryn 支持的协议版本 ${OPENCODE_PROTOCOL_VERSION} 不兼容；请安装 ${OPENCODE_PROTOCOL_VERSION} 同一 minor 系列的版本。`
+  return `当前 OpenCode CLI（${actual}）不在 Aryn 支持的协议范围 ${OPENCODE_COMPATIBLE_VERSION_RANGE} 内。`
 }

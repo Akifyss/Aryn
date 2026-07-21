@@ -59,15 +59,15 @@ describe('agent CLI discovery diagnostics', () => {
       command: 'opencode',
       kind: 'closed',
       stderr: '',
-      stdout: 'opencode version 1.16.9\n',
+      stdout: 'opencode version 2.0.0\n',
     })
 
     expect(result.available).toBe(false)
-    expect(result.reason).toContain('1.16.9')
-    expect(result.guidance).toContain('1.17.18')
+    expect(result.reason).toContain('2.0.0')
+    expect(result.guidance).toContain('>=1.17.18 <2.0.0')
     expect(result.guidance).toContain('重新打开 Agent 菜单')
     expect(result.guidance).not.toContain('重新检测')
-    expect(result.version).toBe('opencode version 1.16.9')
+    expect(result.version).toBe('opencode version 2.0.0')
   })
 
   it('sanitizes command diagnostics before presenting them', () => {

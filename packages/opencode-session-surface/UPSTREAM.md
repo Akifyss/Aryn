@@ -13,9 +13,11 @@ Source layout mapping:
 
 - `src/upstream/app` mirrors the retained files from `packages/app/src`.
 - `src/upstream/core` mirrors the retained files from `packages/core/src`.
-- `src/upstream/session-ui` mirrors the retained files from `packages/ui/src/session`.
+- `src/upstream/session-ui` mirrors the retained files from `packages/session-ui/src`.
 - `src/upstream/ui` mirrors the retained non-session UI styles from `packages/ui/src`.
 
 `test/opencode-upstream-provenance.spec.ts` pins both the complete 162-file
 snapshot and the state/message-rendering core. Updating OpenCode requires an
 intentional snapshot replacement and corresponding provenance hash update.
+The embedded UI snapshot is versioned independently from the protocol SDK so
+compatible CLI updates do not require an unrelated rendering-surface upgrade.
