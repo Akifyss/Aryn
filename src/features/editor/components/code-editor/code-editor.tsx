@@ -8,6 +8,7 @@ import {
   type MonacoEditorOptions,
   type MonacoThemePreference,
 } from '@/features/editor/lib/monaco'
+import './styles.css'
 
 type CodeEditorProps = {
   disabled?: boolean

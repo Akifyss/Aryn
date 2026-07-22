@@ -1,0 +1,97 @@
+.segmented-icon-tabs-root {
+  display: inline-flex;
+  flex: 0 0 auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.segmented-icon-tabs-control {
+  --segmented-icon-tabs-radius: 8px;
+  --segmented-icon-tabs-inner-radius: calc(var(--segmented-icon-tabs-radius) - 2px);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+  width: var(--segmented-icon-tabs-width, max-content);
+  min-height: 32px;
+  padding: 2px;
+  border-radius: var(--segmented-icon-tabs-radius);
+  background: var(--background-secondary);
+  box-shadow: inset 0 0 0 1px var(--border-secondary);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.segmented-icon-tabs-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--segmented-icon-tabs-inner-radius);
+  background: transparent;
+  color: var(--foreground-secondary);
+  cursor: pointer;
+  transition: background-color 120ms ease, box-shadow 120ms ease, color 120ms ease;
+  z-index: 1;
+}
+
+.segmented-icon-tabs-option:hover:not(:disabled):not([data-disabled]):not([aria-disabled='true']):not(.is-active),
+.segmented-icon-tabs-option:focus-visible:not(:disabled):not([data-disabled]):not([aria-disabled='true']):not(.is-active) {
+  outline: none;
+  color: var(--foreground-primary);
+}
+
+.segmented-icon-tabs-option:disabled,
+.segmented-icon-tabs-option[data-disabled],
+.segmented-icon-tabs-option[aria-disabled='true'] {
+  cursor: not-allowed;
+  color: var(--foreground-tertiary);
+  opacity: 0.5;
+}
+
+.segmented-icon-tabs-option:disabled:hover,
+.segmented-icon-tabs-option[data-disabled]:hover,
+.segmented-icon-tabs-option[aria-disabled='true']:hover {
+  cursor: not-allowed;
+  color: var(--foreground-tertiary);
+}
+
+.segmented-icon-tabs-option.is-active {
+  color: var(--accent);
+  cursor: default;
+}
+
+.segmented-icon-tabs-option.is-active:hover:not(:disabled):not([data-disabled]):not([aria-disabled='true']),
+.segmented-icon-tabs-option.is-active:focus-visible:not(:disabled):not([data-disabled]):not([aria-disabled='true']) {
+  outline: none;
+  color: var(--accent);
+}
+
+.segmented-icon-tabs-indicator {
+  position: absolute;
+  left: 0;
+  top: var(--active-tab-top);
+  width: var(--active-tab-width);
+  height: var(--active-tab-height);
+  border-radius: var(--segmented-icon-tabs-inner-radius);
+  background: var(--background-primary);
+  box-shadow:
+    0 1px 3px rgb(15 23 42 / 0.12),
+    inset 0 0 0 1px var(--border-secondary);
+  transform: translate3d(var(--active-tab-left), 0, 0);
+  transition: transform 160ms ease;
+  z-index: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segmented-icon-tabs-option,
+  .segmented-icon-tabs-indicator {
+    transition: none;
+  }
+}

@@ -1,0 +1,103 @@
+.workspace-tree-empty-state {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 224px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 16px 20px;
+  color: var(--foreground-secondary);
+}
+
+.workspace-tree-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: var(--background-secondary);
+  color: var(--accent);
+}
+
+.workspace-tree-menu-positioner {
+  z-index: 82;
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.workspace-tree-menu-portal {
+  pointer-events: auto;
+}
+
+.workspace-tree-menu {
+  min-width: 220px;
+  padding: 7px;
+  border: 1px solid var(--border-primary);
+  border-radius: 14px;
+  background: var(--overlay);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(22px);
+}
+
+.workspace-tree-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--foreground-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.workspace-tree-menu-item .workspace-tree-menu-icon {
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
+.workspace-tree-menu-item.is-danger {
+  color: var(--danger);
+}
+
+.workspace-tree-menu-item:hover,
+.workspace-tree-menu-item:focus-visible,
+.workspace-tree-menu-item.is-highlighted {
+  outline: none;
+  background: var(--app-menu-item-hover-background);
+}
+
+.workspace-tree-root.is-root-drop-target {
+  outline: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  outline-offset: -1px;
+}
+
+.workspace-tree-root {
+  display: flex;
+  flex: 1 0 auto;
+  min-height: 100%;
+  box-sizing: border-box;
+  flex-direction: column;
+}
+
+.workspace-tree-root.is-dragging .tree-item-row.is-drag-source .tree-item-main,
+body.workspace-tree-dragging .tree-item-row.is-drag-source .tree-item-main {
+  cursor: grabbing;
+}
+
+body.workspace-tree-dragging,
+body.workspace-tree-dragging .tree-item-main,
+body.workspace-tree-dragging .tree-item-row {
+  cursor: grabbing;
+}

@@ -1,24 +1,14 @@
 import type { ReactNode } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Tabs as BaseTabs } from '@base-ui/react/tabs'
 import { Button, Toast, toast, AlertDialog } from '@heroui/react'
 import {
   FolderLine,
   GitBranchLine,
-  LayoutLeftLine,
-  Chat3Line,
 } from '@mingcute/react'
-import { Icon } from '@iconify/react'
 import type { ActiveWorkspaceContext } from '@/features/conversations/types'
 import { useConversationController } from '@/features/conversations/hooks/use-conversation-controller'
 import { conversationDraftContext } from '@/features/conversations/lib/conversation-state'
-import type {
-  WorkspaceIconThemeCatalogOption,
-  WorkspaceIconThemeMode,
-  WorkspaceIconThemeSelection,
-  WorkspaceIconThemesByMode,
-} from '@/features/workspace/types'
-import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
+import { AppTooltipButton } from '@/components/app-tooltip'
 import {
   AgentChatSurface,
   AgentProvider,
@@ -26,7 +16,7 @@ import {
 } from '@/features/agent/components/agent-sidebar/agent-sidebar'
 import { DEFAULT_AGENT_ID } from '@/features/agent/agent-definition'
 import type { AgentWorkspaceState } from '@/features/agent/types'
-import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host'
+import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host/meo-editor-host'
 import { GitPanel } from '@/features/git/components/git-panel/git-panel'
 import { useGitWorkspaceController } from '@/features/git/hooks/use-git-workspace-controller'
 import { findGitChangeByFilePath } from '@/features/git/lib/repository-state'
@@ -35,8 +25,8 @@ import {
   type SettingsSectionId,
 } from '@/features/settings/components/settings-dialog/settings-dialog'
 import { FileTabs } from '@/features/workspace/components/file-tabs/file-tabs'
-import { WorkspaceFileSystemPanel } from '@/features/workspace/components/workspace-file-system-panel'
-import { WorkspaceFilePreview } from '@/features/workspace/components/workspace-file-preview'
+import { WorkspaceFileSystemPanel } from '@/features/workspace/components/workspace-file-system-panel/workspace-file-system-panel'
+import { WorkspaceFilePreview } from '@/features/workspace/components/workspace-file-preview/workspace-file-preview'
 import {
   WorkspaceEditorDirectorySidebar,
   WorkspaceEditorDirectoryToggle,
@@ -47,7 +37,7 @@ import {
   WorkspaceEditorSurface,
   WorkspaceEditorView,
 } from '@/features/workspace/components/workspace-editor-surface/workspace-editor-surface'
-import { WorkspaceTreePanel } from '@/features/workspace/components/workspace-tree-panel'
+import { WorkspaceTreePanel } from '@/features/workspace/components/workspace-tree-panel/workspace-tree-panel'
 import {
   WorkspaceSidebar,
   type WorkspaceSidebarSurfaceMode as PanelSurfaceMode,
@@ -62,7 +52,7 @@ import {
   type ProjectMenuFrameRect,
   type ProjectMenuSurface,
 } from '@/features/workspace/components/project-menu/project-menu'
-import type { WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree'
+import type { WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree/workspace-tree'
 import {
   useWorkspaceStore,
   type WorkspaceDiffTab,
@@ -96,18 +86,24 @@ import {
   type WorkspaceRefreshScheduleMode,
 } from '@/features/workspace/lib/workspace-refresh-coordinator'
 import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
-import { CommandPalette } from '@/features/command-palette/components/command-palette'
-import { useSettingsStore, type AppLayoutPreference, type AppTheme } from '@/hooks/use-settings-store'
+import { CommandPalette } from '@/features/command-palette/components/command-palette/command-palette'
+import { useSettingsStore, type AppLayoutPreference } from '@/hooks/use-settings-store'
 import { useDevToolsFocusSettlement } from '@/hooks/use-devtools-focus-settlement'
-import { HtmlPreview } from '@/features/editor/components/html-preview'
+import { HtmlPreview } from '@/features/editor/components/html-preview/html-preview'
 import { AppShell } from '@/features/layout/components/app-shell/app-shell'
+import {
+  AppChromeSearchButton,
+  AppChromeSidebarToggleButton,
+  AppLayoutModeSwitch,
+} from '@/features/layout/components/app-chrome-controls/app-chrome-controls'
 import { useShellLayoutController } from '@/features/layout/hooks/use-shell-layout-controller'
+import { useAppAppearanceController } from '@/features/appearance/hooks/use-app-appearance-controller'
 import './App.css'
 
 const CodeEditor = lazy(async () => {
   const startedAt = performance.now()
   recordOpenFileProfile('lazy:code-editor:start')
-  const module = await import('@/features/editor/components/code-editor')
+  const module = await import('@/features/editor/components/code-editor/code-editor')
   recordOpenFileProfile('lazy:code-editor:end', { durationMs: getOpenFileProfileDuration(startedAt) })
   return { default: module.CodeEditor }
 })
@@ -118,13 +114,13 @@ const GitDiffEditor = lazy(async () => {
   recordOpenFileProfile('lazy:git-diff-editor:end', { durationMs: getOpenFileProfileDuration(startedAt) })
   return { default: module.GitDiffEditor }
 })
-let meoEditorHostModulePromise: Promise<typeof import('@/features/editor/components/meo-editor-host')> | null = null
+let meoEditorHostModulePromise: Promise<typeof import('@/features/editor/components/meo-editor-host/meo-editor-host')> | null = null
 
 function loadMeoEditorHostModule(reason: 'lazy' | 'startup-preload') {
   if (!meoEditorHostModulePromise) {
     const startedAt = performance.now()
     recordOpenFileProfile('lazy:meo-editor-host:start', { reason })
-    meoEditorHostModulePromise = import('@/features/editor/components/meo-editor-host')
+    meoEditorHostModulePromise = import('@/features/editor/components/meo-editor-host/meo-editor-host')
       .then((module) => {
         recordOpenFileProfile('lazy:meo-editor-host:end', {
           durationMs: getOpenFileProfileDuration(startedAt),
@@ -152,28 +148,6 @@ const MeoEditorHost = lazy(async () => {
   return { default: module.MeoEditorHost }
 })
 
-type ResolvedAppTheme = 'light' | 'dark'
-type WindowAppearanceTheme = ResolvedAppTheme | 'system'
-
-function createEmptyWorkspaceIconThemes(): WorkspaceIconThemesByMode {
-  return {
-    dark: null,
-    light: null,
-  }
-}
-
-function resolveAppTheme(theme: AppTheme): ResolvedAppTheme {
-  if (theme !== 'auto') {
-    return theme
-  }
-
-  if (typeof window === 'undefined') {
-    return 'light'
-  }
-
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
 const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
 
 type WorkspaceTreeFileClickMode = 'open-tab' | 'replace-active-tab'
@@ -181,77 +155,20 @@ type WorkspaceTreeFileClickMode = 'open-tab' | 'replace-active-tab'
 function App() {
   const platform = window.appApi.platform
   const { layoutPreference, meo, theme, setLayoutPreference } = useSettingsStore()
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedAppTheme>(() => resolveAppTheme(theme))
-
-  // Apply theme to document root
-  useEffect(() => {
-    const applyDocumentTheme = (t: ResolvedAppTheme) => {
-      const body = window.document.body
-      const root = window.document.documentElement
-      setResolvedTheme(t)
-
-      // HeroUI/Tailwind official pattern: apply to html and body
-      root.classList.remove('light', 'dark')
-      root.classList.add(t)
-      root.setAttribute('data-theme', t)
-
-      body.classList.remove('light', 'dark')
-      body.classList.add(t)
-
-      // Also set the theme-color meta tag for better UI integration
-      const meta = window.document.querySelector('meta[name="theme-color"]')
-      if (meta) {
-        // Match official OKLCH background tokens
-        meta.setAttribute('content', t === 'dark' ? '#0a0a0b' : '#ffffff')
-      }
-    }
-
-    const applyTheme = (t: ResolvedAppTheme, appearanceTheme: WindowAppearanceTheme = t) => {
-      applyDocumentTheme(t)
-      void window.appApi.setWindowTheme({
-        appearanceTheme,
-        backgroundTheme: t,
-      })
-    }
-
-    if (theme === 'auto') {
-      if (platform !== 'darwin') {
-        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-        applyTheme(systemTheme, 'system')
-
-        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-        const handleChange = (e: MediaQueryListEvent) => {
-          applyTheme(e.matches ? 'dark' : 'light', 'system')
-        }
-        mediaQuery.addEventListener('change', handleChange)
-        return () => mediaQuery.removeEventListener('change', handleChange)
-      }
-
-      let disposed = false
-      const unsubscribeWindowTheme = window.appApi.onWindowThemeChanged(({ resolvedTheme }) => {
-        applyDocumentTheme(resolvedTheme)
-      })
-
-      void window.appApi.setWindowTheme({ appearanceTheme: 'system' }).then(
-        ({ resolvedTheme }) => {
-          if (!disposed) {
-            applyDocumentTheme(resolvedTheme ?? resolveAppTheme('auto'))
-          }
-        },
-        () => {
-          if (!disposed) {
-            applyDocumentTheme(resolveAppTheme('auto'))
-          }
-        }
-      )
-      return () => {
-        disposed = true
-        unsubscribeWindowTheme()
-      }
-    }
-
-    applyTheme(theme)
-  }, [theme])
+  const [, setStatusMessage] = useState('Open a folder to start.')
+  const {
+    hydrateWorkspaceIconThemes,
+    iconTheme,
+    iconThemeOptions,
+    iconThemes,
+    isApplyingIconTheme,
+    resolvedTheme,
+    selectWorkspaceIconTheme,
+  } = useAppAppearanceController({
+    onStatusMessage: setStatusMessage,
+    platform,
+    theme,
+  })
 
   const [activeWorkspaceContext, setActiveWorkspaceContext] = useState<ActiveWorkspaceContext>(conversationDraftContext)
 
@@ -289,13 +206,8 @@ function App() {
     })
   }
 
-  const [isApplyingIconTheme, setIsApplyingIconTheme] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance')
   const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
-  const [iconThemes, setIconThemes] = useState<WorkspaceIconThemesByMode>(() => createEmptyWorkspaceIconThemes())
-  const [iconThemeOptions, setIconThemeOptions] = useState<WorkspaceIconThemeCatalogOption[]>([])
-  const iconTheme = useMemo(() => iconThemes[resolvedTheme], [iconThemes, resolvedTheme])
-  const [, setStatusMessage] = useState('Open a folder to start.')
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [activeAgentLayoutFixedTab, setActiveAgentLayoutFixedTab] = useState<AgentLayoutFixedTab>('file')
@@ -930,41 +842,6 @@ function App() {
     )
   }
 
-  async function handleSelectWorkspaceIconTheme(
-    mode: WorkspaceIconThemeMode,
-    selection: WorkspaceIconThemeSelection,
-  ) {
-    const currentIconTheme = iconThemes[mode]
-    const isDefaultSelection = !selection.themeId && !selection.sourceVsixPath
-
-    if (
-      !isDefaultSelection
-      && currentIconTheme?.activeThemeId === selection.themeId
-      && currentIconTheme.sourceVsixPath === selection.sourceVsixPath
-    ) {
-      return
-    }
-
-    try {
-      setIsApplyingIconTheme(true)
-      const nextIconTheme = await window.appApi.setWorkspaceIconTheme(mode, selection)
-
-      setIconThemes((currentValue) => ({
-        ...currentValue,
-        [mode]: nextIconTheme,
-      }))
-      setIconThemeOptions(await window.appApi.getWorkspaceIconThemeCatalog())
-      setStatusMessage(nextIconTheme
-        ? `${nextIconTheme.extensionLabel}: ${nextIconTheme.activeThemeLabel}`
-        : '文件图标主题：默认')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to switch the icon theme.'
-      setStatusMessage(message)
-    } finally {
-      setIsApplyingIconTheme(false)
-    }
-  }
-
   useEffect(() => {
     if (
       isAgentLayout
@@ -984,29 +861,7 @@ function App() {
     let cancelled = false
 
     void (async () => {
-      try {
-        const [
-          persistedLightIconTheme,
-          persistedDarkIconTheme,
-          persistedIconThemeOptions,
-        ] = await Promise.all([
-          window.appApi.getWorkspaceIconTheme('light'),
-          window.appApi.getWorkspaceIconTheme('dark'),
-          window.appApi.getWorkspaceIconThemeCatalog(),
-        ])
-        if (!cancelled) {
-          setIconThemes({
-            dark: persistedDarkIconTheme,
-            light: persistedLightIconTheme,
-          })
-          setIconThemeOptions(persistedIconThemeOptions)
-        }
-      } catch {
-        if (!cancelled) {
-          setIconThemes(createEmptyWorkspaceIconThemes())
-          setIconThemeOptions([])
-        }
-      }
+      await hydrateWorkspaceIconThemes(() => cancelled)
 
       const [
         nextProjectState,
@@ -1202,90 +1057,6 @@ function App() {
 
   const isEditorLayoutSwitchDisabled = activeWorkspaceContext.kind === 'conversationDraft' && isAgentLayout
 
-  const renderLayoutModeSwitchButton = () => (
-    <BaseTabs.Root
-      className='layout-mode-tabs-root'
-      orientation='horizontal'
-      value={appLayoutPreference}
-      onValueChange={(value) => {
-        if (value === 'agent') {
-          setLayoutPreference('agent')
-          return
-        }
-
-        if (value === 'editor' && !isEditorLayoutSwitchDisabled) {
-          setLayoutPreference('editor')
-        }
-      }}
-    >
-      <BaseTabs.List
-        className='layout-mode-segmented-control'
-        aria-label='Layout mode'
-      >
-        <AppTooltip tooltip='Agent 模式' triggerMode='focusable'>
-          <BaseTabs.Tab
-            value='agent'
-            className={`layout-mode-segmented-option${isAgentLayout ? ' is-active' : ''}`}
-            aria-label='Agent mode'
-          >
-            <Chat3Line size={16} aria-hidden='true' />
-          </BaseTabs.Tab>
-        </AppTooltip>
-        <AppTooltip
-          tooltip={isEditorLayoutSwitchDisabled ? '先选择工作目录' : '编辑器模式'}
-          triggerMode='focusable'
-        >
-          <BaseTabs.Tab
-            value='editor'
-            className={`layout-mode-segmented-option${!isAgentLayout ? ' is-active' : ''}`}
-            disabled={isEditorLayoutSwitchDisabled}
-            aria-label={isEditorLayoutSwitchDisabled ? 'Editor mode, select a workspace first' : 'Editor mode'}
-          >
-            <FolderLine size={16} aria-hidden='true' />
-          </BaseTabs.Tab>
-        </AppTooltip>
-        <BaseTabs.Indicator className='layout-mode-segmented-indicator' />
-      </BaseTabs.List>
-    </BaseTabs.Root>
-  )
-
-  const renderLeftChromeSearchButton = () => (
-    <AppTooltipButton
-      type='button'
-      className='panel-toggle-button left-chrome-search-button'
-      aria-label='Open search'
-      tooltip='搜索'
-      preventFocusOnPress
-      onClick={handleOpenCommandPaletteFromChrome}
-    >
-      <Icon icon='lucide:search' width={16} height={16} aria-hidden='true' />
-    </AppTooltipButton>
-  )
-
-  const renderLeftSidebarToggleButton = () => {
-    const toggleAriaLabel = isLeftSidebarDrawer
-      ? (isLeftDrawerOpen ? 'Close workspace panel' : 'Open workspace panel')
-      : (isLeftSidebarVisible ? 'Collapse sidebar' : 'Expand sidebar')
-    const toggleTooltip = isLeftSidebarDrawer
-      ? (isLeftDrawerOpen ? '关闭抽屉' : '打开抽屉')
-      : (isLeftSidebarVisible ? '收起侧边栏' : '展开侧边栏')
-
-    return (
-      <AppTooltipButton
-        type='button'
-        className='panel-toggle-button'
-        aria-label={toggleAriaLabel}
-        tooltip={toggleTooltip}
-        preventFocusOnPress
-        onClick={toggleWorkspaceSidebar}
-      >
-        <span className='panel-toggle-icon' aria-hidden='true'>
-          <LayoutLeftLine size={16} />
-        </span>
-      </AppTooltipButton>
-    )
-  }
-
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
     const isDrawerSurface = surfaceMode === 'drawer'
 
@@ -1294,8 +1065,13 @@ function App() {
         chromeStyle={shellChromeVars}
         drawerHeaderActions={isDrawerSurface ? (
           <>
-            {renderLeftChromeSearchButton()}
-            {renderLeftSidebarToggleButton()}
+            <AppChromeSearchButton onClick={handleOpenCommandPaletteFromChrome} />
+            <AppChromeSidebarToggleButton
+              isDrawer={isLeftSidebarDrawer}
+              isDrawerOpen={isLeftDrawerOpen}
+              isSidebarVisible={isLeftSidebarVisible}
+              onClick={toggleWorkspaceSidebar}
+            />
           </>
         ) : undefined}
         hasWorkspace={Boolean(currentPath)}
@@ -1634,9 +1410,22 @@ function App() {
       isDarkTheme={resolvedTheme === 'dark'}
       isModalLayerOpen={isAppModalLayerOpen}
       layout={shellLayout}
-      layoutModeSwitch={renderLayoutModeSwitchButton()}
-      leftChromeSearchAction={renderLeftChromeSearchButton()}
-      leftChromeSidebarAction={renderLeftSidebarToggleButton()}
+      layoutModeSwitch={(
+        <AppLayoutModeSwitch
+          isEditorDisabled={isEditorLayoutSwitchDisabled}
+          value={appLayoutPreference}
+          onValueChange={setLayoutPreference}
+        />
+      )}
+      leftChromeSearchAction={<AppChromeSearchButton onClick={handleOpenCommandPaletteFromChrome} />}
+      leftChromeSidebarAction={(
+        <AppChromeSidebarToggleButton
+          isDrawer={isLeftSidebarDrawer}
+          isDrawerOpen={isLeftDrawerOpen}
+          isSidebarVisible={isLeftSidebarVisible}
+          onClick={toggleWorkspaceSidebar}
+        />
+      )}
       onRequestWindowClose={() => {
         void handleRequestWindowClose()
       }}
@@ -1697,7 +1486,7 @@ function App() {
         onAgentStateChange={setAgentWorkspaceState}
         onOpenChange={setIsSettingsOpen}
         onSectionChange={setSettingsSection}
-        onSelectIconTheme={handleSelectWorkspaceIconTheme}
+        onSelectIconTheme={selectWorkspaceIconTheme}
         onStatusMessage={setStatusMessage}
       />
 

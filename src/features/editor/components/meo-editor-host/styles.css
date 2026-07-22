@@ -1,0 +1,35 @@
+.meo-editor-shell {
+  --meo-directory-toolbar-inset: 0px;
+
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: column;
+  background: var(--background-primary);
+}
+
+.meo-editor-shell[data-leading-toolbar-inset='true'] {
+  --meo-directory-toolbar-inset: calc(
+    var(--editor-directory-toggle-left, 6px)
+    + var(--editor-directory-toggle-size, 32px)
+    + var(--editor-toolbar-gap, 8px)
+  );
+}
+
+.meo-editor-shell.meo-native-theme .mode-toolbar {
+  flex: 0 0 var(--editor-surface-header-height, 44px);
+  height: var(--editor-surface-header-height, 44px);
+  min-height: var(--editor-surface-header-height, 44px);
+  padding-block: 0;
+}
+
+.meo-editor-shell.meo-native-theme[data-leading-toolbar-inset='true'] .mode-toolbar {
+  padding-left: calc(82px + var(--meo-directory-toolbar-inset));
+}
+
+.meo-editor-shell.meo-native-theme[data-leading-toolbar-inset='true'] .editor-root:has(.cm-editor.meo-line-numbers-hidden) .mode-toolbar {
+  padding-left: calc(17px + var(--meo-directory-toolbar-inset));
+}

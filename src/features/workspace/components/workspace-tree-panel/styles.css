@@ -1,0 +1,62 @@
+.sidebar-stack-pane {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-tree-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.workspace-tree-panel-directory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 var(--editor-surface-header-height, 44px);
+  height: var(--editor-surface-header-height, 44px);
+  min-height: var(--editor-surface-header-height, 44px);
+  padding: 0 8px 0 16px;
+  background: var(--background-primary);
+}
+
+.workspace-tree-panel-directory-title {
+  min-width: 0;
+  color: var(--foreground-primary);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+  user-select: none;
+}
+
+.workspace-tree-panel-directory-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.workspace-tree-scroll {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+}
+
+.workspace-tree-scroll-content {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.tree-header.file-panel-header {
+  border-bottom: 0;
+  background: transparent;
+}
+
+.workspace-tree-pane > .tree-header.file-panel-header {
+  box-sizing: border-box;
+  padding-inline: var(--tree-scroll-content-inline-padding, var(--sidebar-content-inline-padding, 6px));
+}

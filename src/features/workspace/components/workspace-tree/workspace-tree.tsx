@@ -38,6 +38,8 @@ import { recordOpenFileProfile } from '@/lib/open-file-profile'
 import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 import type { GitChangeItem, GitDisplayChange, GitRepositoryState } from '@/features/git/types'
+import { WorkspaceTreeEmptyState } from './workspace-tree-empty-state'
+import './styles.css'
 
 export type WorkspaceTreeActivationEvent = Pick<MouseEvent<HTMLElement>, 'button' | 'ctrlKey' | 'metaKey'>
 
@@ -882,12 +884,10 @@ export function WorkspaceTree({
 
   if (nodes.length === 0) {
     return (
-      <div className='workspace-tree-empty-state'>
-        <div className='workspace-tree-empty-icon'>
-          <FolderLine size={26} />
-        </div>
-        <p>{workspacePath ? '这个工作目录还没有文件。' : '选择工作目录以浏览和编辑文件。'}</p>
-      </div>
+      <WorkspaceTreeEmptyState
+        icon={<FolderLine size={26} />}
+        message={workspacePath ? '这个工作目录还没有文件。' : '选择工作目录以浏览和编辑文件。'}
+      />
     )
   }
 

@@ -1,0 +1,39 @@
+.workspace-file-system {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.workspace-file-system-unavailable {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+  background: var(--background-primary);
+  color: var(--foreground-secondary);
+  text-align: center;
+}
+
+.workspace-file-system-unavailable-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--separator);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  color: var(--foreground-secondary);
+}
+
+.workspace-file-system-unavailable p {
+  max-width: 34ch;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}

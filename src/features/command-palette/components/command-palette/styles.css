@@ -1,0 +1,235 @@
+[data-command-active='true'] {
+  scroll-margin: 80px 0;
+}
+
+.command-palette-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-primary);
+  border-radius: 16px;
+  outline: none;
+  background: var(--background-primary);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.command-palette-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 24px;
+  background: var(--background-primary);
+}
+
+.command-palette-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--foreground-secondary);
+}
+
+.command-palette-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--foreground-primary);
+  font-size: 16px;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.command-palette-input::placeholder {
+  color: var(--foreground-secondary);
+}
+
+.command-palette-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.command-palette-kbd-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.command-palette-divider {
+  height: 1px;
+  margin: 0;
+  background: var(--separator);
+}
+
+.command-palette-viewport {
+  position: relative;
+  height: 420px;
+}
+
+.command-palette-viewport-content {
+  padding: 16px 8px;
+}
+
+.command-palette-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.command-palette-section-header {
+  padding: 4px 16px;
+  color: var(--foreground-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  opacity: 0.8;
+  user-select: none;
+}
+
+.command-palette-item {
+  min-height: 48px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  outline: none;
+  background: transparent;
+  transition: all 140ms ease;
+}
+
+.command-palette-item:hover,
+.command-palette-item[data-hover='true'] {
+  background: var(--hover);
+}
+
+.command-palette-item[data-command-active='true'] {
+  background: var(--selected);
+}
+
+.command-palette-item-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  pointer-events: none;
+}
+
+.command-palette-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--foreground-secondary);
+  transition: color 140ms ease;
+}
+
+.command-palette-item-icon .tree-item-icon {
+  color: inherit;
+}
+
+.command-palette-item[data-command-active='true'] .command-palette-item-icon {
+  color: var(--foreground-primary);
+}
+
+.command-palette-item-text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0;
+}
+
+.command-palette-item-title {
+  overflow: hidden;
+  color: var(--foreground-primary);
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.command-palette-item[data-command-active='true'] .command-palette-item-title {
+  opacity: 1;
+}
+
+.command-palette-item-desc {
+  overflow: hidden;
+  color: var(--foreground-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-palette-item[data-command-active='true'] .command-palette-item-desc {
+  color: var(--foreground-primary);
+  opacity: 0.8;
+}
+
+.command-palette-item-action {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, visibility 140ms ease;
+}
+
+.command-palette-item-action.is-active {
+  visibility: visible;
+  opacity: 1;
+}
+
+.command-palette-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+  padding: 96px 0;
+  color: var(--foreground-secondary);
+  opacity: 0.8;
+}
+
+.command-palette-empty-icon {
+  opacity: 0.5;
+}
+
+.command-palette-empty-text {
+  font-size: 14px;
+}
+
+.command-palette-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-top: 1px solid var(--separator);
+  background: var(--background-primary);
+  color: var(--foreground-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  user-select: none;
+}
+
+.command-palette-footer-group {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.command-palette-footer-kbd-row {
+  display: flex;
+  gap: 4px;
+}
+
+.command-palette-footer-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}

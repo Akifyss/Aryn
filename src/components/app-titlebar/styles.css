@@ -106,3 +106,9 @@
   background: var(--danger);
   color: var(--foreground-on-danger);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .window-button {
+    transition: none;
+  }
+}

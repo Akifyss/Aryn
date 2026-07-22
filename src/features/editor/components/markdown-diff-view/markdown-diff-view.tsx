@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { diffLines } from 'diff'
 import type { GitFileDiffResult } from '@/features/git/types'
+import './styles.css'
 
 type MarkdownDiffSection =
   | {

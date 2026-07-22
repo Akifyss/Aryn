@@ -15,6 +15,7 @@ import {
 import type { WorkspaceNode } from '@/features/workspace/types'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
 import type { AgentSessionListItem } from '@/features/agent/types'
+import './styles.css'
 
 type CommandPaletteProps = {
   isOpen: boolean

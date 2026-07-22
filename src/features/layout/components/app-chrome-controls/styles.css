@@ -1,0 +1,7 @@
+.app-layout-mode-switch {
+  --segmented-icon-tabs-width: var(--layout-mode-switch-width);
+}
+
+.left-chrome-search-button {
+  color: var(--foreground-secondary);
+}

@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import './styles.css'
 
 const HTML_PREVIEW_IFRAME_SANDBOX = 'allow-scripts'
 

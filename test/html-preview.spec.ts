@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { __htmlPreviewTestHooks } from '../src/features/editor/components/html-preview'
+import { __htmlPreviewTestHooks } from '../src/features/editor/components/html-preview/html-preview'
 
 describe('HTML preview', () => {
   it('builds file base hrefs with path-segment encoding while preserving Windows drive letters', () => {

@@ -8,6 +8,7 @@ import { mountNativeMeoEditor } from '@/features/editor/lib/meo-native-editor'
 import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
 import '@/vendor/meo/webview/styles.css'
 import 'katex/dist/katex.min.css'
+import './styles.css'
 
 type MeoEditorHostProps = {
   filePath: string

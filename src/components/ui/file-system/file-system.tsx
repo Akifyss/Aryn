@@ -23,7 +23,6 @@ import { Menu } from "@base-ui/react/menu"
 import { Popover as BasePopover } from "@base-ui/react/popover"
 import { ScrollArea as BaseScrollArea } from "@base-ui/react/scroll-area"
 import { Select as BaseSelect } from "@base-ui/react/select"
-import { Tabs as BaseTabs } from "@base-ui/react/tabs"
 import { Modal } from "@heroui/react"
 import {
   prepareFileTreeInput,
@@ -34,6 +33,7 @@ import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
 import { createPortal } from "react-dom"
 import { AppScrollArea } from "@/components/app-scroll-area"
 import { AppTooltip, AppTooltipButton } from "@/components/app-tooltip"
+import { SegmentedIconTabs } from "@/components/ui/segmented-icon-tabs/segmented-icon-tabs"
 import {
   DEFAULT_WORKSPACE_FOLDER_GLYPH_DATA_URL as FOLDER_GLYPH_DATA_URL,
   DefaultWorkspaceFileIconAssets as FileSystemIconSpriteSheet,
@@ -3320,36 +3320,19 @@ export function FileSystem({
         </SelectContent>
       </Select>
     ) : (
-      <BaseTabs.Root
+      <SegmentedIconTabs<FileSystemView>
+        ariaLabel={FILE_SYSTEM_COPY.toolbar.view}
         value={view}
-        onValueChange={(value) => setView(value as FileSystemView)}
-        className="layout-mode-tabs-root file-system-toolbar-view-switch"
-      >
-        <BaseTabs.List
-          aria-label={FILE_SYSTEM_COPY.toolbar.view}
-          className="layout-mode-segmented-control file-system-view-switch"
-        >
-          {VIEW_OPTIONS.map((option) => (
-            <AppTooltip
-              key={option.value}
-              tooltip={option.label}
-              triggerMode="focusable"
-            >
-              <BaseTabs.Tab
-                value={option.value}
-                aria-label={FILE_SYSTEM_COPY.toolbar.viewAria(option.label)}
-                className={cn(
-                  "layout-mode-segmented-option",
-                  view === option.value && "is-active"
-                )}
-              >
-                <SystemIcon icon={option.icon} className="size-4" />
-              </BaseTabs.Tab>
-            </AppTooltip>
-          ))}
-          <BaseTabs.Indicator className="layout-mode-segmented-indicator" />
-        </BaseTabs.List>
-      </BaseTabs.Root>
+        className="file-system-toolbar-view-switch"
+        controlClassName="file-system-view-switch"
+        options={VIEW_OPTIONS.map((option) => ({
+          ariaLabel: FILE_SYSTEM_COPY.toolbar.viewAria(option.label),
+          icon: <SystemIcon icon={option.icon} className="size-4" />,
+          tooltip: option.label,
+          value: option.value,
+        }))}
+        onValueChange={setView}
+      />
     )
   const viewerCloseToolbarAction = (
     <AppTooltip tooltip={FILE_SYSTEM_COPY.toolbar.closePreview} triggerMode="focusable">

@@ -1,0 +1,6 @@
+.markdown-diff-empty-state p {
+  margin: 3px 0 0;
+  color: var(--foreground-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}

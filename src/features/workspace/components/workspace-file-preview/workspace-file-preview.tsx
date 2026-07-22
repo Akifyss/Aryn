@@ -9,7 +9,7 @@ import {
   ViewerToolbarSeparator,
   ViewerZoomControls,
 } from '@/components/ui/document-viewer-controls'
-import { HtmlPreview } from '@/features/editor/components/html-preview'
+import { HtmlPreview } from '@/features/editor/components/html-preview/html-preview'
 import { inferFileContentType } from '@/lib/file-content-types'
 import type { GitRepositoryState } from '@/features/git/types'
 import {
@@ -23,14 +23,15 @@ import {
 import { getBaseName } from '@/features/workspace/lib/workspace-paths'
 import type { AppTheme, MeoSettings } from '@/hooks/use-settings-store'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
+import './styles.css'
 
 const CodeEditor = lazy(async () => {
-  const module = await import('@/features/editor/components/code-editor')
+  const module = await import('@/features/editor/components/code-editor/code-editor')
   return { default: module.CodeEditor }
 })
 
 const MeoEditorHost = lazy(async () => {
-  const module = await import('@/features/editor/components/meo-editor-host')
+  const module = await import('@/features/editor/components/meo-editor-host/meo-editor-host')
   return { default: module.MeoEditorHost }
 })
 

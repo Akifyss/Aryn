@@ -2,9 +2,11 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { Icon } from '@iconify/react'
 import { FolderForbidLine } from '@mingcute/react'
 import { TreeItem, TreeItemActionButton, TreeScrollArea } from '@/components/tree'
-import { WorkspaceTree, type WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree'
+import { WorkspaceTree, type WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree/workspace-tree'
+import { WorkspaceTreeEmptyState } from '@/features/workspace/components/workspace-tree/workspace-tree-empty-state'
 import type { GitChangeItem, GitRepositoryState } from '@/features/git/types'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
+import './styles.css'
 
 type WorkspaceTreePanelProps = {
   activeFilePath: string | null
@@ -113,12 +115,10 @@ export function WorkspaceTreePanel({
         contentClassName='workspace-tree-scroll-content'
       >
         {workspaceUnavailableMessage ? (
-          <div className='workspace-tree-empty-state'>
-            <div className='workspace-tree-empty-icon'>
-              <FolderForbidLine size={26} />
-            </div>
-            <p>{workspaceUnavailableMessage}</p>
-          </div>
+          <WorkspaceTreeEmptyState
+            icon={<FolderForbidLine size={26} />}
+            message={workspaceUnavailableMessage}
+          />
         ) : (
           <WorkspaceTree
             activeFilePath={activeFilePath}

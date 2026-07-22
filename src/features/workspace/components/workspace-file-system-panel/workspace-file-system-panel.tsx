@@ -16,7 +16,7 @@ import {
   shouldUseWorkspaceFileDataUrl,
   workspaceNodesToFileSystemItems,
 } from '@/features/workspace/lib/workspace-file-system'
-import { WorkspaceFileRenderer } from '@/features/workspace/components/workspace-file-preview'
+import { WorkspaceFileRenderer } from '@/features/workspace/components/workspace-file-preview/workspace-file-preview'
 import type { GitRepositoryState } from '@/features/git/types'
 import type { AppTheme, MeoSettings } from '@/hooks/use-settings-store'
 import type {
@@ -26,6 +26,7 @@ import type {
   WorkspaceIconTheme,
   WorkspaceNode,
 } from '@/features/workspace/types'
+import './styles.css'
 
 type WorkspaceFileSystemPanelProps = {
   fileSystemState: WorkspaceFileSystemState

@@ -9,7 +9,7 @@ import { __documentViewerControlsTestHooks } from '../src/components/ui/document
 import { collectLazyFolderLoadCandidates } from '../src/components/ui/file-system-lazy-loading'
 import { __xlsxViewerTestHooks } from '../src/components/ui/xlsx-viewer'
 import { inferFileContentType } from '../src/lib/file-content-types'
-import { __workspaceFilePreviewTestHooks } from '../src/features/workspace/components/workspace-file-preview'
+import { __workspaceFilePreviewTestHooks } from '../src/features/workspace/components/workspace-file-preview/workspace-file-preview'
 import {
   isPptxContentType,
   isPptxFileName,
