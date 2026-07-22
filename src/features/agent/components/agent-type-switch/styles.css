@@ -40,8 +40,14 @@
   white-space: nowrap;
 }
 
-.agent-type-switch-menu {
+.agent-type-switch-menu-positioner {
   z-index: 1300;
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-type-switch-menu {
   display: flex;
   flex-direction: column;
   gap: 3px;

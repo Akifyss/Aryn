@@ -14,6 +14,7 @@ import './styles.css'
 type AgentTypeSwitchProps = {
   agentCatalog: readonly AgentAvailability[]
   isLocked: boolean
+  menuPortalTarget?: HTMLElement | null
   onRefresh: () => Promise<void>
   onSelect: (agentId: AgentId) => void
   refreshError: string | null
@@ -53,6 +54,7 @@ export function AgentTypeSwitchOptionCopy({
 export function AgentTypeSwitch({
   agentCatalog,
   isLocked,
+  menuPortalTarget,
   onRefresh,
   onSelect,
   refreshError,
@@ -88,8 +90,16 @@ export function AgentTypeSwitch({
         <AgentBrandIcon agentId={selectedAgentId} className='agent-brand-icon' size={24} />
         <span className='agent-type-switch-label'>{selectedDefinition.label}</span>
       </Menu.Trigger>
-      <Menu.Portal>
-        <Menu.Positioner align='start' sideOffset={6}>
+      <Menu.Portal container={menuPortalTarget ?? undefined}>
+        <Menu.Positioner
+          align='start'
+          className='agent-type-switch-menu-positioner'
+          collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
+          collisionPadding={8}
+          positionMethod='fixed'
+          side='bottom'
+          sideOffset={6}
+        >
           <Menu.Popup className='agent-type-switch-menu' aria-label='选择用于新会话的 Agent'>
             <AppScrollArea
               className='agent-type-switch-options-scroll'

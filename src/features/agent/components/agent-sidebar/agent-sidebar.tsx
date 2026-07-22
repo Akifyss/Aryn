@@ -2105,7 +2105,11 @@ function AgentSessionTree(props: AgentSessionTreeProps) {
   return <AgentSessionTreeView {...props} controller={controller} />
 }
 
-function AgentTypeSwitchTrigger() {
+function AgentTypeSwitchTrigger({
+  menuPortalTarget,
+}: {
+  menuPortalTarget?: HTMLElement | null
+}) {
   const {
     activeSessionSelection,
     activeWorkspaceContext,
@@ -2121,6 +2125,7 @@ function AgentTypeSwitchTrigger() {
     <AgentTypeSwitch
       agentCatalog={agentCatalog}
       isLocked={isLocked}
+      menuPortalTarget={menuPortalTarget}
       refreshError={agentCatalogRefreshError}
       selectedAgentId={selectedAgentId}
       onRefresh={refreshAgentCatalog}
@@ -2129,7 +2134,11 @@ function AgentTypeSwitchTrigger() {
   )
 }
 
-function AgentNewConversationPrompt() {
+function AgentNewConversationPrompt({
+  menuPortalTarget,
+}: {
+  menuPortalTarget?: HTMLElement | null
+}) {
   const { activeWorkspaceContext, onOpenProjectSwitchMenu, projectState } = useAgentContext()
   const activeProject = activeWorkspaceContext.kind === 'project'
     ? projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
@@ -2146,13 +2155,13 @@ function AgentNewConversationPrompt() {
               onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
             />
             <span>使用</span>
-            <AgentTypeSwitchTrigger />
+            <AgentTypeSwitchTrigger menuPortalTarget={menuPortalTarget} />
             <span>处理什么？</span>
           </>
         ) : (
           <>
             <span>今天使用</span>
-            <AgentTypeSwitchTrigger />
+            <AgentTypeSwitchTrigger menuPortalTarget={menuPortalTarget} />
             <span>处理些什么？</span>
           </>
         )}
@@ -2732,7 +2741,9 @@ function AgentChatSurface() {
               </div>
             ) : null}
             <div className='agent-new-conversation-content'>
-              <AgentNewConversationPrompt />
+              <AgentNewConversationPrompt
+                menuPortalTarget={surfaceMode === 'drawer' ? localOverlayRoot : undefined}
+              />
             </div>
           </div>
           {composerForm}

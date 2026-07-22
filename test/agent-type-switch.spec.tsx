@@ -71,4 +71,26 @@ describe('AgentTypeSwitch', () => {
     expect(source).not.toContain('正在检测')
     expect(source).not.toContain('title={!availability.available')
   })
+
+  it('mounts the menu in the drawer-local overlay when the agent surface is a drawer', async () => {
+    const [switchSource, sidebarSource, styleSource] = await Promise.all([
+      readFile(
+        new URL('../src/features/agent/components/agent-type-switch/agent-type-switch.tsx', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/features/agent/components/agent-type-switch/styles.css', import.meta.url),
+        'utf8',
+      ),
+    ])
+
+    expect(switchSource).toContain('<Menu.Portal container={menuPortalTarget ?? undefined}>')
+    expect(switchSource).toContain("className='agent-type-switch-menu-positioner'")
+    expect(sidebarSource).toContain("menuPortalTarget={surfaceMode === 'drawer' ? localOverlayRoot : undefined}")
+    expect(styleSource).toMatch(/\.agent-type-switch-menu-positioner\s*\{[^}]*pointer-events:\s*auto;/s)
+  })
 })
