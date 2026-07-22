@@ -77,15 +77,12 @@ import { CodexSessionTimeline } from '@/features/agent/components/codex-session-
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
 import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import {
-  shouldApplyAgentSessionOperationResult,
   type AgentProjectSessionRequest,
   type AgentSessionSelection,
 } from '@/features/agent/lib/project-session-request'
 import { shouldShowAgentNewConversationPrompt } from '@/features/agent/lib/agent-surface-state'
 import {
   formatAgentSessionLabel,
-  getAgentSessionTreeKey,
-  invalidateAgentProjectSessionBuckets,
   normalizeAgentProjectPath,
   SESSION_TREE_AGENT_IDS,
   type AgentProjectSessionBucket,
@@ -120,6 +117,9 @@ import {
 } from '@/features/agent/auto-open-file'
 import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-changes'
 import { mergeFileChangesByPath } from '@/features/agent/file-change-utils'
+import { useAgentProjectSessions } from '@/features/agent/hooks/use-agent-project-sessions'
+import { useAgentSessionMutations } from '@/features/agent/hooks/use-agent-session-mutations'
+import { useAgentSessionNavigation } from '@/features/agent/hooks/use-agent-session-navigation'
 import {
   type AgentLiveToolState,
   useAgentRuntimeEvents,
@@ -134,7 +134,6 @@ import type {
   AgentInteractionRequest,
   AgentMessageFileChange,
   AgentQueuedMessageUpdate,
-  AgentSessionListItem,
   AgentSessionSnapshot,
   AgentSidebarMessage,
   AgentThinkingLevel,
@@ -487,13 +486,18 @@ function AgentProvider({
   const [activeOverlayPanel, setActiveOverlayPanel] = useState<'sessions' | null>(null)
   const [activeSessionSelection, setActiveSessionSelection] = useState<AgentSessionSelection>({ kind: 'new' })
   const [isLoading, setIsLoading] = useState(false)
-  const [deletingSessionPath, setDeletingSessionPath] = useState<string | null>(null)
   const [isSwitchingModel, setIsSwitchingModel] = useState(false)
   const [isSwitchingThinkingLevel, setIsSwitchingThinkingLevel] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<OptimisticAgentUserMessage[]>([])
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
-  const [projectSessions, setProjectSessions] = useState<Record<string, AgentProjectSessionBucket>>({})
+  const sessionTreeAgentIds = SESSION_TREE_AGENT_IDS
+  const {
+    invalidateProjectSessions: handleAgentCatalogRefreshed,
+    loadProjectSessions,
+    projectSessions,
+    storeProjectAgentSessions,
+  } = useAgentProjectSessions({ projectState, sessionTreeAgentIds })
   const {
     addComposerFiles,
     clearComposerOptimistically,
@@ -510,23 +514,12 @@ function AgentProvider({
   } = useAgentComposerDraft({ onErrorChange: setPanelError })
   const activeRuntimeSessionRef = useRef<AgentWorkspaceState['activeSession']>(null)
   const modelFieldRef = useRef<HTMLDivElement | null>(null)
-  const openSessionRequestIdRef = useRef(0)
-  const projectSessionRequestsRef = useRef<Set<string>>(new Set())
-  const projectSessionRequestGenerationRef = useRef(0)
-  const projectSessionsRef = useRef(projectSessions)
-  const projectStateRef = useRef(projectState)
-  const handledExternalSessionRequestRef = useRef<number | null>(null)
   const lastConversationTitleSuggestionKeyRef = useRef<string | null>(null)
   const externalSessionRequestRef = useRef<AgentProjectSessionRequest | null>(externalSessionRequest ?? null)
   const activeSessionSelectionRef = useRef(activeSessionSelection)
   const workspacePathRef = useRef<string | null>(workspacePath)
   const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
   const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
-  const handleAgentCatalogRefreshed = useCallback(() => {
-    projectSessionRequestGenerationRef.current += 1
-    projectSessionRequestsRef.current.clear()
-    setProjectSessions(invalidateAgentProjectSessionBuckets)
-  }, [])
   const {
     agentCatalog: resolvedAgentCatalog,
     agentCatalogRefreshError,
@@ -548,15 +541,12 @@ function AgentProvider({
     ?? requestedProjectAgentId
     ?? (activeSessionSelection.kind === 'session' ? activeSessionSelection.agentId : selectedAgentIdValue)
   const selectedAgentIdRef = useRef(selectedAgentId)
-  const sessionTreeAgentIds = SESSION_TREE_AGENT_IDS
   const effectiveRunningPromptEnterBehavior = resolveSupportedRunningPromptBehavior(
     agentState.runtime.supportedRunningPromptBehaviors,
     runningPromptEnterBehavior,
   )
   activeRuntimeSessionRef.current = agentState.activeSession
   selectedAgentIdRef.current = selectedAgentId
-  projectSessionsRef.current = projectSessions
-  projectStateRef.current = projectState
 
   const setSelectedAgentId = useCallback((agentId: AgentId) => {
     if (activeConversation) {
@@ -570,33 +560,6 @@ function AgentProvider({
 
     setSelectedAgentIdValue(agentId)
   }, [activeConversation, resolvedAgentCatalog])
-
-  const storeProjectAgentSessions = useCallback((
-    targetWorkspacePath: string,
-    agentId: AgentId,
-    sessions: AgentSessionListItem[],
-  ) => {
-    const matchingProjectIds = projectStateRef.current.projects
-      .filter((project) => normalizeAgentProjectPath(project.path) === normalizeAgentProjectPath(targetWorkspacePath))
-      .map((project) => project.id)
-    if (matchingProjectIds.length === 0) return
-
-    setProjectSessions((currentValue) => {
-      const nextValue = { ...currentValue }
-      for (const projectId of matchingProjectIds) {
-        nextValue[projectId] = {
-          ...nextValue[projectId],
-          [agentId]: {
-            error: null,
-            hasLoaded: true,
-            isLoading: false,
-            sessions,
-          },
-        }
-      }
-      return nextValue
-    })
-  }, [])
 
   const restorableSessionPath = agentState.activeSession?.sessionPath
     && agentState.sessions.some((session) => session.path === agentState.activeSession?.sessionPath)
@@ -625,145 +588,6 @@ function AgentProvider({
   function syncActiveSessionSelection(selection: AgentSessionSelection) {
     activeSessionSelectionRef.current = selection
     setActiveSessionSelection(selection)
-  }
-
-  function syncActiveRuntimeSessionSnapshot(agentId: AgentId, snapshot: AgentSessionSnapshot) {
-    const currentSelection = activeSessionSelectionRef.current
-    const currentWorkspacePath = workspacePathRef.current
-    if (
-      selectedAgentIdRef.current !== agentId
-      || !currentWorkspacePath
-      || normalizeAgentProjectPath(snapshot.workspacePath) !== normalizeAgentProjectPath(currentWorkspacePath)
-      || currentSelection.kind !== 'session'
-      || currentSelection.agentId !== agentId
-      || currentSelection.sessionPath !== snapshot.sessionPath
-      || activeRuntimeSessionRef.current?.sessionPath !== snapshot.sessionPath
-    ) {
-      return
-    }
-
-    activeRuntimeSessionRef.current = snapshot
-    setAgentState((currentState) => {
-      if (
-        currentState.runtime.agentId !== agentId
-        || currentState.activeSession?.sessionPath !== snapshot.sessionPath
-      ) {
-        return currentState
-      }
-
-      return {
-        ...currentState,
-        activeSession: snapshot,
-      }
-    })
-    setViewedSessionSnapshot(null)
-  }
-
-  const loadProjectSessions = useCallback(async (project: ProjectRecord) => {
-    const requestGeneration = projectSessionRequestGenerationRef.current
-    await Promise.all(sessionTreeAgentIds.map(async (requestAgentId) => {
-      const requestKey = `${requestGeneration}\n${requestAgentId}\n${project.id}`
-      if (projectSessionRequestsRef.current.has(requestKey)) return
-      const existingSource = projectSessionsRef.current[project.id]?.[requestAgentId]
-      if (existingSource?.isLoading || existingSource?.hasLoaded) return
-
-      projectSessionRequestsRef.current.add(requestKey)
-      setProjectSessions((currentValue) => ({
-        ...currentValue,
-        [project.id]: {
-          ...currentValue[project.id],
-          [requestAgentId]: {
-            error: null,
-            hasLoaded: false,
-            isLoading: true,
-            sessions: currentValue[project.id]?.[requestAgentId]?.sessions ?? [],
-          },
-        },
-      }))
-
-      try {
-        const sessions = await window.appApi.listAgentSessions({
-          agentId: requestAgentId,
-          workspacePath: project.path,
-        })
-        if (projectSessionRequestGenerationRef.current !== requestGeneration) return
-        setProjectSessions((currentValue) => ({
-          ...currentValue,
-          [project.id]: {
-            ...currentValue[project.id],
-            [requestAgentId]: {
-              error: null,
-              hasLoaded: true,
-              isLoading: false,
-              sessions,
-            },
-          },
-        }))
-      } catch (error) {
-        if (projectSessionRequestGenerationRef.current !== requestGeneration) return
-        setProjectSessions((currentValue) => ({
-          ...currentValue,
-          [project.id]: {
-            ...currentValue[project.id],
-            [requestAgentId]: {
-              error: error instanceof Error ? error.message : 'Unable to load conversations.',
-              hasLoaded: true,
-              isLoading: false,
-              sessions: currentValue[project.id]?.[requestAgentId]?.sessions ?? [],
-            },
-          },
-        }))
-      } finally {
-        projectSessionRequestsRef.current.delete(requestKey)
-      }
-    }))
-  }, [agentCatalogRefreshRevision, sessionTreeAgentIds])
-
-  async function ensureSelectedAgentSessionActive(selection = activeSessionSelectionRef.current) {
-    if (!workspacePath || selection.kind !== 'session' || selection.agentId !== selectedAgentId) {
-      return null
-    }
-
-    if (
-      agentState.runtime.agentId === selection.agentId
-      && agentState.activeSession?.sessionPath === selection.sessionPath
-    ) {
-      setViewedSessionSnapshot(null)
-      return agentState
-    }
-
-    const requestId = openSessionRequestIdRef.current
-    const nextState = await window.appApi.openAgentSession({
-      agentId: selectedAgentId,
-      workspacePath,
-    }, selection.sessionPath)
-
-    if (
-      requestId !== openSessionRequestIdRef.current
-      || activeSessionSelectionRef.current.kind !== 'session'
-      || activeSessionSelectionRef.current.agentId !== selection.agentId
-      || activeSessionSelectionRef.current.sessionPath !== selection.sessionPath
-    ) {
-      return null
-    }
-
-    setAgentState(nextState)
-    setViewedSessionSnapshot(null)
-    syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
-    return nextState
-  }
-
-  function isAgentSessionOperationCurrent(
-    agentId: AgentId,
-    sessionPath: string,
-    operationWorkspacePath: string,
-  ) {
-    return selectedAgentIdRef.current === agentId
-      && shouldApplyAgentSessionOperationResult(
-        activeSessionSelectionRef.current,
-        workspacePathRef.current,
-        { agentId, sessionPath, workspacePath: operationWorkspacePath },
-      )
   }
 
   function getRuntimePreferredModelId(provider: string) {
@@ -1195,212 +1019,69 @@ function AgentProvider({
     return nextMessages
   }, [draftAssistant, draftThinking, isThinkingStreaming, isViewingActiveRuntime, liveTools, visibleOptimisticUserMessages, visiblePersistedMessages])
 
-  function handleStartNewSession() {
-    openSessionRequestIdRef.current += 1
-    const nextDraft = normalizeAgentModelDraft(
-      newSessionModelDraftRef.current,
-      agentState.runtime,
-      getRuntimeDefaultModelDraft(agentState.runtime),
-    )
-    syncNewSessionModelDraft(nextDraft)
-    syncActiveSessionSelection({ kind: 'new' })
-    setViewedSessionSnapshot(null)
-    syncModelDraft(nextDraft)
-    setComposerState(EMPTY_AGENT_COMPOSER_STATE)
-    setComposerAttachments([])
-    setPanelError(null)
-    setActiveOverlayPanel(null)
-  }
-
-  async function handleOpenSession(agentId: AgentId, sessionPath: string) {
-    if (!workspacePath) {
-      return
-    }
-
-    setSelectedAgentIdValue(agentId)
-    syncActiveSessionSelection({ agentId, kind: 'session', sessionPath })
-    setViewedSessionSnapshot(null)
-    const requestId = openSessionRequestIdRef.current + 1
-    openSessionRequestIdRef.current = requestId
-
-    const isActiveRuntimeSession = agentState.runtime.agentId === agentId
-      && agentState.activeSession?.sessionPath === sessionPath
-    if (isActiveRuntimeSession && agentId !== 'codex') {
-      setViewedSessionSnapshot(null)
-      syncModelDraft(getRuntimeSelectedModelDraft(agentState.runtime))
-      setPanelError(null)
-      setActiveOverlayPanel(null)
-      return
-    }
-
-    try {
-      setPanelError(null)
-      const nextSnapshot = await window.appApi.readAgentSession({
-        agentId,
-        workspacePath,
-      }, sessionPath)
-      if (
-        requestId !== openSessionRequestIdRef.current
-        || activeSessionSelectionRef.current.kind !== 'session'
-        || activeSessionSelectionRef.current.agentId !== agentId
-        || activeSessionSelectionRef.current.sessionPath !== sessionPath
-      ) {
-        return
-      }
-
-      const shouldRefreshActiveRuntime = isActiveRuntimeSession || (
-        selectedAgentIdRef.current === agentId
-        && activeRuntimeSessionRef.current?.sessionPath === sessionPath
-      )
-      if (shouldRefreshActiveRuntime) {
-        syncActiveRuntimeSessionSnapshot(agentId, nextSnapshot)
-        syncModelDraft(getRuntimeSelectedModelDraft(agentState.runtime))
-      } else {
-        setViewedSessionSnapshot(nextSnapshot)
-      }
-      setActiveOverlayPanel(null)
-    } catch (error) {
-      if (
-        requestId !== openSessionRequestIdRef.current
-        || activeSessionSelectionRef.current.kind !== 'session'
-        || activeSessionSelectionRef.current.agentId !== agentId
-        || activeSessionSelectionRef.current.sessionPath !== sessionPath
-      ) {
-        return
-      }
-
-      setPanelError(error instanceof Error ? error.message : 'Unable to open that session.')
-    }
-  }
-
-  useEffect(() => {
-    const requestedProject = externalSessionRequest
-      ? projectState.projects.find((project) => project.id === externalSessionRequest.projectId) ?? null
-      : null
-    const isRequestForCurrentWorkspace = Boolean(
-      requestedProject
-      && workspacePath
-      && normalizeAgentProjectPath(requestedProject.path) === normalizeAgentProjectPath(workspacePath),
-    )
-
-    if (
-      !externalSessionRequest
-      || handledExternalSessionRequestRef.current === externalSessionRequest.requestId
-      || !isRequestForCurrentWorkspace
-      || isLoading
-      || !hasLoadedWorkspaceState
-    ) {
-      return
-    }
-
-    handledExternalSessionRequestRef.current = externalSessionRequest.requestId
-    onExternalSessionRequestHandled?.(externalSessionRequest.requestId)
-
-    if (externalSessionRequest.kind === 'new') {
-      handleStartNewSession()
-      return
-    }
-
-    void handleOpenSession(externalSessionRequest.agentId, externalSessionRequest.sessionPath)
-  }, [
-    externalSessionRequest,
-    hasLoadedWorkspaceState,
-    isLoading,
-    onExternalSessionRequestHandled,
-    projectState.projects,
-    workspacePath,
-  ])
-
-  async function handleDeleteSession(rootPath: string, agentId: AgentId, sessionPath: string) {
-    if (!rootPath) {
-      return
-    }
-
-    const deletingKey = getAgentSessionTreeKey(agentId, sessionPath)
-    try {
-      setDeletingSessionPath(deletingKey)
-      setPanelError(null)
-      const nextState = await window.appApi.deleteAgentSession({
-        agentId,
-        workspacePath: rootPath,
-      }, sessionPath)
-      storeProjectAgentSessions(rootPath, agentId, nextState.sessions)
-      const currentSelection = activeSessionSelectionRef.current
-      const currentWorkspacePath = workspacePathRef.current
-      const isCurrentWorkspaceAgent = Boolean(
-        currentWorkspacePath
-        && selectedAgentIdRef.current === agentId
-        && normalizeAgentProjectPath(rootPath) === normalizeAgentProjectPath(currentWorkspacePath),
-      )
-      const isDeletingCurrentSession = Boolean(
-        isCurrentWorkspaceAgent
-        && currentSelection.kind === 'session'
-        && currentSelection.agentId === agentId
-        && currentSelection.sessionPath === sessionPath
-      )
-      if (isCurrentWorkspaceAgent) {
-        setAgentState((currentState) => isDeletingCurrentSession
-          ? nextState
-          : { ...currentState, sessions: nextState.sessions })
-      }
-      if (isDeletingCurrentSession) {
-        setViewedSessionSnapshot(null)
-        const nextActiveSessionPath = nextState.activeSession?.sessionPath
-        const nextSelection = nextActiveSessionPath
-          && nextState.sessions.some((session) => session.path === nextActiveSessionPath)
-          ? { agentId, kind: 'session' as const, sessionPath: nextActiveSessionPath }
-          : { kind: 'new' as const }
-        syncActiveSessionSelection(nextSelection)
-        syncModelDraft(nextSelection.kind === 'session'
-          ? getRuntimeSelectedModelDraft(nextState.runtime)
-          : newSessionModelDraftRef.current)
-      }
-    } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to delete that session.')
-    } finally {
-      setDeletingSessionPath((currentKey) => currentKey === deletingKey ? null : currentKey)
-    }
-  }
-
-  async function handleRenameSession(rootPath: string, agentId: AgentId, sessionPath: string, name: string) {
-    const nextName = name.trim()
-
-    if (!nextName) {
-      return
-    }
-
-    try {
-      setPanelError(null)
-      const nextState = await window.appApi.renameAgentSession({
-        agentId,
-        workspacePath: rootPath,
-      }, sessionPath, nextName)
-      const currentSelection = activeSessionSelectionRef.current
-      const currentWorkspacePath = workspacePathRef.current
-      const isCurrentWorkspace = Boolean(
-        currentWorkspacePath
-        && selectedAgentIdRef.current === agentId
-        && normalizeAgentProjectPath(rootPath) === normalizeAgentProjectPath(currentWorkspacePath),
-      )
-
-      if (isCurrentWorkspace) {
-        setAgentState((currentState) => ({ ...currentState, sessions: nextState.sessions }))
-        setViewedSessionSnapshot((currentSnapshot) => (
-          currentSelection.kind === 'session'
-          && currentSelection.agentId === agentId
-          && currentSelection.sessionPath === sessionPath
-          && currentSnapshot?.sessionPath === sessionPath
-            ? { ...currentSnapshot, name: nextName }
-            : currentSnapshot
-        ))
-      }
-
-      storeProjectAgentSessions(rootPath, agentId, nextState.sessions)
-    } catch (error) {
-      setPanelError(error instanceof Error ? error.message : 'Unable to rename that session.')
-      throw error
-    }
-  }
+  const {
+    ensureSelectedAgentSessionActive,
+    handleOpenSession,
+    handleStartNewSession,
+    isAgentSessionOperationCurrent,
+    openSessionRequestIdRef,
+  } = useAgentSessionNavigation({
+    externalRequest: {
+      hasLoadedWorkspaceState,
+      isLoading,
+      onExternalSessionRequestHandled,
+      projectState,
+      request: externalSessionRequest,
+    },
+    model: {
+      newSessionModelDraftRef,
+      syncModelDraft,
+      syncNewSessionModelDraft,
+    },
+    navigation: {
+      activeRuntimeSessionRef,
+      activeSessionSelectionRef,
+      selectedAgentId,
+      selectedAgentIdRef,
+      setSelectedAgentIdValue,
+      syncActiveSessionSelection,
+      workspacePath,
+      workspacePathRef,
+    },
+    state: {
+      agentState,
+      closeSessionOverlay: () => setActiveOverlayPanel(null),
+      resetComposer: () => {
+        setComposerState(EMPTY_AGENT_COMPOSER_STATE)
+        setComposerAttachments([])
+      },
+      setAgentState,
+      setPanelError,
+      setViewedSessionSnapshot,
+    },
+  })
+  const {
+    deletingSessionPath,
+    handleDeleteSession,
+    handleRenameSession,
+  } = useAgentSessionMutations({
+    model: {
+      newSessionModelDraftRef,
+      syncModelDraft,
+    },
+    navigation: {
+      activeSessionSelectionRef,
+      selectedAgentIdRef,
+      syncActiveSessionSelection,
+      workspacePathRef,
+    },
+    state: {
+      setAgentState,
+      setPanelError,
+      setViewedSessionSnapshot,
+    },
+    storeProjectAgentSessions,
+  })
 
   async function handleSelectModel(modelKey: string) {
     if (!workspacePath && !canUseDraftRuntimeWithoutWorkspace) {

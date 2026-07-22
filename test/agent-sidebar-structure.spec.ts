@@ -29,6 +29,34 @@ describe('agent sidebar structure', () => {
     expect(workspaceLifecycleSource).not.toContain('agent-sidebar')
   })
 
+  it('keeps session cache, navigation, and mutations in focused Agent hooks', async () => {
+    const [
+      sidebarSource,
+      projectSessionsSource,
+      sessionNavigationSource,
+      sessionMutationsSource,
+    ] = await Promise.all([
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+      readSource('../src/features/agent/hooks/use-agent-project-sessions.ts'),
+      readSource('../src/features/agent/hooks/use-agent-session-navigation.ts'),
+      readSource('../src/features/agent/hooks/use-agent-session-mutations.ts'),
+    ])
+
+    expect(sidebarSource).toContain("from '@/features/agent/hooks/use-agent-project-sessions'")
+    expect(sidebarSource).toContain("from '@/features/agent/hooks/use-agent-session-navigation'")
+    expect(sidebarSource).toContain("from '@/features/agent/hooks/use-agent-session-mutations'")
+    expect(sidebarSource).not.toMatch(/window\.appApi\.(list|open|read|delete|rename)AgentSession/)
+    expect(projectSessionsSource).toContain('window.appApi.listAgentSessions(')
+    expect(projectSessionsSource).toContain('invalidateAgentProjectSessionBuckets')
+    expect(sessionNavigationSource).toContain('window.appApi.openAgentSession(')
+    expect(sessionNavigationSource).toContain('window.appApi.readAgentSession(')
+    expect(sessionMutationsSource).toContain('window.appApi.deleteAgentSession(')
+    expect(sessionMutationsSource).toContain('window.appApi.renameAgentSession(')
+    expect(projectSessionsSource).not.toContain('agent-sidebar')
+    expect(sessionNavigationSource).not.toContain('agent-sidebar')
+    expect(sessionMutationsSource).not.toContain('agent-sidebar')
+  })
+
   it('keeps Composer draft, submission, and runtime commands in the Composer domain', async () => {
     const [
       sidebarSource,
