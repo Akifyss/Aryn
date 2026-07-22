@@ -72,6 +72,25 @@ export function getAgentModelKey(provider: string, modelId: string) {
   return `${provider}/${modelId}`
 }
 
+export function getConfiguredAgentProviders(availableModels: readonly string[]) {
+  return Array.from(new Set(
+    availableModels
+      .map((model) => model.split('/')[0])
+      .filter(Boolean),
+  )).sort((left, right) => {
+    const orderDelta = getAgentProviderOrder(left) - getAgentProviderOrder(right)
+    return orderDelta !== 0 ? orderDelta : left.localeCompare(right)
+  })
+}
+
+export function getAgentProviderModelIds(availableModels: readonly string[], provider: string) {
+  return Array.from(new Set(
+    availableModels
+      .filter((model) => model.startsWith(`${provider}/`))
+      .map((model) => model.split('/').slice(1).join('/')),
+  ))
+}
+
 export function getAgentModelDraftKey(draft: AgentModelDraft) {
   return draft.provider && draft.modelId ? getAgentModelKey(draft.provider, draft.modelId) : null
 }
@@ -81,21 +100,10 @@ export function normalizeAgentModelDraft(
   runtime: AgentWorkspaceState['runtime'],
   fallbackDraft: AgentModelDraft,
 ) {
-  const configuredProviders = Array.from(new Set(
-    runtime.availableModels
-      .map((model) => model.split('/')[0])
-      .filter(Boolean),
-  )).sort((left, right) => {
-    const orderDelta = getAgentProviderOrder(left) - getAgentProviderOrder(right)
-    return orderDelta !== 0 ? orderDelta : left.localeCompare(right)
-  })
+  const configuredProviders = getConfiguredAgentProviders(runtime.availableModels)
   const fallbackProvider = fallbackDraft.provider || configuredProviders[0] || draft.provider
   const provider = configuredProviders.includes(draft.provider) ? draft.provider : fallbackProvider
-  const modelIds = Array.from(new Set(
-    runtime.availableModels
-      .filter((model) => model.startsWith(`${provider}/`))
-      .map((model) => model.split('/').slice(1).join('/')),
-  ))
+  const modelIds = getAgentProviderModelIds(runtime.availableModels, provider)
   const preferredModelKey = runtime.preferredModelByProvider[provider]
   const preferredModel = parseModelSelection(preferredModelKey ?? null)
   const fallbackModelId = fallbackDraft.provider === provider && fallbackDraft.modelId

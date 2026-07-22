@@ -27,7 +27,6 @@ import {
   ToolLine,
 } from '@mingcute/react'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
-import { getAgentProviderOrder } from '@/features/agent/provider-auth'
 import {
   getAgentDefinition,
   type AgentAvailability,
@@ -91,17 +90,6 @@ import {
   getOpenCodeNativeRenderKey,
   getOpenCodeUserMessageText,
 } from '@/features/agent/lib/opencode-timeline'
-import {
-  clampAgentThinkingLevel,
-  createAgentModelDraft,
-  formatThinkingLevelLabel,
-  getAgentModelKey,
-  getRuntimeDefaultModelDraft,
-  getRuntimeSelectedModelDraft,
-  normalizeAgentModelDraft,
-  parseModelSelection,
-  type AgentModelDraft,
-} from '@/features/agent/lib/model-selection'
 import type {
   ActiveWorkspaceContext,
   ConversationRecord,
@@ -120,6 +108,12 @@ import { mergeFileChangesByPath } from '@/features/agent/file-change-utils'
 import { useAgentProjectSessions } from '@/features/agent/hooks/use-agent-project-sessions'
 import { useAgentSessionMutations } from '@/features/agent/hooks/use-agent-session-mutations'
 import { useAgentSessionNavigation } from '@/features/agent/hooks/use-agent-session-navigation'
+import { useAgentModelMutations } from '@/features/agent/model/use-agent-model-mutations'
+import {
+  useAgentModelDraftState,
+  useAgentModelSelectionState,
+  useAgentModelSelectionSync,
+} from '@/features/agent/model/use-agent-model-state'
 import {
   type AgentLiveToolState,
   useAgentRuntimeEvents,
@@ -473,21 +467,25 @@ function AgentProvider({
 }: AgentProviderProps) {
   const runningPromptEnterBehavior = useSettingsStore((state) => state.agent.runningPromptEnterBehavior)
   const workspaceTree = useWorkspaceStore((state) => state.tree)
-  const defaultModelSelection = parseModelSelection(null)
   const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
   const [viewedSessionSnapshot, setViewedSessionSnapshot] = useState<AgentSessionSnapshot | null>(null)
-  const [modelInputValue, setModelInputValue] = useState(defaultModelSelection.modelId)
-  const [selectedProviderValue, setSelectedProviderValue] = useState(defaultModelSelection.provider)
-  const [selectedThinkingLevel, setSelectedThinkingLevel] = useState<AgentThinkingLevel>(emptyAgentState.runtime.defaultThinkingLevel)
-  const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({
-    [defaultModelSelection.provider]: defaultModelSelection.modelId,
-  })
+  const {
+    modelDrafts,
+    modelInputValue,
+    newSessionModelDraftRef,
+    selectedProviderValue,
+    selectedThinkingLevel,
+    setModelDrafts,
+    setModelInputValue,
+    setSelectedProviderValue,
+    syncModelDraft,
+    syncNewSessionModelDraft,
+  } = useAgentModelDraftState(emptyAgentState.runtime)
   const [activeComposerMenu, setActiveComposerMenu] = useState<AgentComposerMenu>(null)
+  const closeComposerMenu = useCallback(() => setActiveComposerMenu(null), [])
   const [activeOverlayPanel, setActiveOverlayPanel] = useState<'sessions' | null>(null)
   const [activeSessionSelection, setActiveSessionSelection] = useState<AgentSessionSelection>({ kind: 'new' })
   const [isLoading, setIsLoading] = useState(false)
-  const [isSwitchingModel, setIsSwitchingModel] = useState(false)
-  const [isSwitchingThinkingLevel, setIsSwitchingThinkingLevel] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<OptimisticAgentUserMessage[]>([])
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
@@ -518,7 +516,6 @@ function AgentProvider({
   const externalSessionRequestRef = useRef<AgentProjectSessionRequest | null>(externalSessionRequest ?? null)
   const activeSessionSelectionRef = useRef(activeSessionSelection)
   const workspacePathRef = useRef<string | null>(workspacePath)
-  const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(emptyAgentState.runtime))
   const fileAutoOpenStateRef = useRef<AgentFileAutoOpenState>(initialAgentFileAutoOpenState)
   const {
     agentCatalog: resolvedAgentCatalog,
@@ -571,30 +568,9 @@ function AgentProvider({
     && activeSessionSelection.kind === 'new',
   )
 
-  function syncModelDraft(draft: AgentModelDraft) {
-    setSelectedProviderValue(draft.provider)
-    setModelInputValue(draft.modelId)
-    setSelectedThinkingLevel(draft.thinkingLevel)
-    setModelDrafts((currentValue) => ({
-      ...currentValue,
-      [draft.provider]: draft.modelId,
-    }))
-  }
-
-  function syncNewSessionModelDraft(draft: AgentModelDraft) {
-    newSessionModelDraftRef.current = draft
-  }
-
   function syncActiveSessionSelection(selection: AgentSessionSelection) {
     activeSessionSelectionRef.current = selection
     setActiveSessionSelection(selection)
-  }
-
-  function getRuntimePreferredModelId(provider: string) {
-    const preferredModelKey = agentState.runtime.preferredModelByProvider[provider]
-    const preferredSelection = parseModelSelection(preferredModelKey ?? null)
-
-    return preferredSelection.provider === provider ? preferredSelection.modelId : null
   }
 
   useEffect(() => {
@@ -625,7 +601,7 @@ function AgentProvider({
     activeRuntimeSessionRef,
     activeSessionSelectionRef,
     agentState,
-    closeComposerMenu: () => setActiveComposerMenu(null),
+    closeComposerMenu,
     newSessionModelDraftRef,
     selectedAgentId,
     selectedAgentIdRef,
@@ -1083,173 +1059,6 @@ function AgentProvider({
     storeProjectAgentSessions,
   })
 
-  async function handleSelectModel(modelKey: string) {
-    if (!workspacePath && !canUseDraftRuntimeWithoutWorkspace) {
-      return
-    }
-
-    const requestAgentId = selectedAgentId
-    const requestWorkspacePath = workspacePath
-    const requestSelection = activeSessionSelectionRef.current
-    let requestSessionPath: string | null = null
-
-    try {
-      setIsSwitchingModel(true)
-      setPanelError(null)
-      const isNewSelection = requestSelection.kind === 'new'
-      const nextDraft = normalizeAgentModelDraft(
-        createAgentModelDraft(modelKey, selectedThinkingLevel),
-        agentState.runtime,
-        getRuntimeDefaultModelDraft(agentState.runtime),
-      )
-      if (isNewSelection) {
-        syncNewSessionModelDraft(nextDraft)
-        syncModelDraft(nextDraft)
-        setActiveComposerMenu(null)
-        return
-      }
-
-      const activeState = await ensureSelectedAgentSessionActive(requestSelection)
-      if (!activeState?.activeSession) {
-        if (
-          requestWorkspacePath
-          && requestSelection.kind === 'session'
-          && isAgentSessionOperationCurrent(requestAgentId, requestSelection.sessionPath, requestWorkspacePath)
-        ) {
-          setPanelError('Open a session before switching the model.')
-          setActiveComposerMenu(null)
-        }
-        return
-      }
-
-      if (!requestWorkspacePath) {
-        setPanelError('Open a workspace before switching the model.')
-        return
-      }
-
-      const activeWorkspacePath = requestWorkspacePath
-      const activeSessionPath = activeState.activeSession.sessionPath
-      if (!activeSessionPath) {
-        setPanelError('The active session does not have a native session identifier.')
-        return
-      }
-      requestSessionPath = activeSessionPath
-      const nextState = await window.appApi.selectAgentModel({
-        agentId: requestAgentId,
-        sessionPath: activeSessionPath,
-        workspacePath: activeWorkspacePath,
-      }, modelKey)
-      if (
-        !isAgentSessionOperationCurrent(requestAgentId, activeSessionPath, activeWorkspacePath)
-        || nextState.activeSession?.sessionPath !== activeSessionPath
-      ) {
-        return
-      }
-
-      setAgentState(nextState)
-      syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
-      setActiveComposerMenu(null)
-    } catch (error) {
-      if (
-        !requestSessionPath
-        || !requestWorkspacePath
-        || isAgentSessionOperationCurrent(requestAgentId, requestSessionPath, requestWorkspacePath)
-      ) {
-        setPanelError(error instanceof Error ? error.message : 'Unable to switch the model.')
-      }
-    } finally {
-      setIsSwitchingModel(false)
-    }
-  }
-
-  async function handleThinkingLevelSelection(level: AgentThinkingLevel, modelKey?: string) {
-    if (!workspacePath && !canUseDraftRuntimeWithoutWorkspace) {
-      return
-    }
-
-    const nextModelKey = modelKey?.trim()
-      ?? getAgentModelKey(resolvedSelectedProviderValue, modelInputValue.trim())
-
-    if (!nextModelKey || !agentState.runtime.availableModels.includes(nextModelKey)) {
-      setPanelError('Select an available model before changing the thinking level.')
-      setActiveComposerMenu(null)
-      return
-    }
-
-    const requestAgentId = selectedAgentId
-    const requestWorkspacePath = workspacePath
-    const requestSelection = activeSessionSelectionRef.current
-    let requestSessionPath: string | null = null
-
-    try {
-      setIsSwitchingThinkingLevel(true)
-      setPanelError(null)
-      const isNewSelection = requestSelection.kind === 'new'
-      const nextDraft = normalizeAgentModelDraft(
-        createAgentModelDraft(nextModelKey, level),
-        agentState.runtime,
-        getRuntimeDefaultModelDraft(agentState.runtime),
-      )
-      if (isNewSelection) {
-        syncNewSessionModelDraft(nextDraft)
-        syncModelDraft(nextDraft)
-        setActiveComposerMenu(null)
-        return
-      }
-
-      const activeState = await ensureSelectedAgentSessionActive(requestSelection)
-      if (!activeState?.activeSession) {
-        if (
-          requestWorkspacePath
-          && requestSelection.kind === 'session'
-          && isAgentSessionOperationCurrent(requestAgentId, requestSelection.sessionPath, requestWorkspacePath)
-        ) {
-          setPanelError('Open a session before changing the thinking level.')
-          setActiveComposerMenu(null)
-        }
-        return
-      }
-
-      if (!requestWorkspacePath) {
-        setPanelError('Open a workspace before changing the thinking level.')
-        return
-      }
-
-      const activeWorkspacePath = requestWorkspacePath
-      const activeSessionPath = activeState.activeSession.sessionPath
-      if (!activeSessionPath) {
-        setPanelError('The active session does not have a native session identifier.')
-        return
-      }
-      requestSessionPath = activeSessionPath
-      const nextState = await window.appApi.selectAgentThinkingLevel({
-        agentId: requestAgentId,
-        sessionPath: activeSessionPath,
-        workspacePath: activeWorkspacePath,
-      }, level, nextModelKey)
-      if (
-        !isAgentSessionOperationCurrent(requestAgentId, activeSessionPath, activeWorkspacePath)
-        || nextState.activeSession?.sessionPath !== activeSessionPath
-      ) {
-        return
-      }
-
-      setAgentState(nextState)
-      syncModelDraft(getRuntimeSelectedModelDraft(nextState.runtime))
-      setActiveComposerMenu(null)
-    } catch (error) {
-      if (
-        !requestSessionPath
-        || !requestWorkspacePath
-        || isAgentSessionOperationCurrent(requestAgentId, requestSessionPath, requestWorkspacePath)
-      ) {
-        setPanelError(error instanceof Error ? error.message : 'Unable to switch the thinking level.')
-      }
-    } finally {
-      setIsSwitchingThinkingLevel(false)
-    }
-  }
-
   const {
     isSubmittingComposerPrompt,
     submitComposerPrompt,
@@ -1258,7 +1067,7 @@ function AgentProvider({
       clearAssistantDraft,
       clearComposerOptimistically,
       clearLiveTools,
-      closeComposerMenu: () => setActiveComposerMenu(null),
+      closeComposerMenu,
       composerAttachmentsRef,
       composerStateRef,
       invalidateOptimisticComposerClear,
@@ -1302,7 +1111,7 @@ function AgentProvider({
     respondToInteraction,
   } = useAgentComposerActions({
     agentState,
-    closeComposerMenu: () => setActiveComposerMenu(null),
+    closeComposerMenu,
     composerAttachmentsRef,
     composerStateRef,
     effectiveRunningPromptEnterBehavior,
@@ -1318,39 +1127,48 @@ function AgentProvider({
     workspacePath,
   })
 
-  const configuredProviders = useMemo(() => (
-    Array.from(new Set(
-      agentState.runtime.availableModels
-        .map((model) => model.split('/')[0])
-        .filter(Boolean),
-    )).sort((left, right) => {
-      const orderDelta = getAgentProviderOrder(left) - getAgentProviderOrder(right)
-      return orderDelta !== 0 ? orderDelta : left.localeCompare(right)
-    })
-  ), [agentState.runtime.availableModels])
-  const hasConfiguredProviders = configuredProviders.length > 0
-  const resolvedSelectedProviderValue = configuredProviders.includes(selectedProviderValue)
-    ? selectedProviderValue
-    : configuredProviders[0] ?? selectedProviderValue
-  const providerModelIds = useMemo(() => (
-    Array.from(new Set(
-      agentState.runtime.availableModels
-        .filter((model) => model.startsWith(`${resolvedSelectedProviderValue}/`))
-        .map((model) => model.split('/').slice(1).join('/')),
-    ))
-  ), [agentState.runtime.availableModels, resolvedSelectedProviderValue])
-  const trimmedModelInputValue = modelInputValue.trim()
-  const composerModelKey = trimmedModelInputValue
-    ? getAgentModelKey(resolvedSelectedProviderValue, trimmedModelInputValue)
-    : null
-  const hasAvailableComposerModel = composerModelKey
-    ? agentState.runtime.availableModels.includes(composerModelKey)
-    : false
-  const composerThinkingLevels = composerModelKey && hasAvailableComposerModel
-    ? (agentState.runtime.availableThinkingLevelsByModel[composerModelKey] ?? agentState.runtime.availableThinkingLevels)
-    : []
-  const thinkingLevel = clampAgentThinkingLevel(selectedThinkingLevel, composerThinkingLevels)
-  const thinkingLevelLabel = formatThinkingLevelLabel(thinkingLevel)
+  const {
+    configuredProviders,
+    hasConfiguredProviders,
+    providerModelIds,
+    resolvedSelectedProviderValue,
+    selectedModelSupportsImages,
+    thinkingLevel,
+    thinkingLevelLabel,
+  } = useAgentModelSelectionState({
+    modelInputValue,
+    runtime: agentState.runtime,
+    selectedProviderValue,
+    selectedThinkingLevel,
+  })
+  const {
+    handleSelectModel,
+    handleThinkingLevelSelection,
+    isSwitchingModel,
+    isSwitchingThinkingLevel,
+  } = useAgentModelMutations({
+    model: {
+      modelInputValue,
+      resolvedSelectedProviderValue,
+      selectedThinkingLevel,
+      syncModelDraft,
+      syncNewSessionModelDraft,
+    },
+    navigation: {
+      activeSessionSelectionRef,
+      ensureSelectedAgentSessionActive,
+      isAgentSessionOperationCurrent,
+      selectedAgentId,
+      workspacePath,
+    },
+    state: {
+      agentState,
+      canUseDraftRuntimeWithoutWorkspace,
+      closeModelMenu: closeComposerMenu,
+      setAgentState,
+      setPanelError,
+    },
+  })
   const hasComposerPayload = hasAgentComposerPayload(composerState, composerAttachments)
   const isConversationDraftContext = activeWorkspaceContext.kind === 'conversationDraft'
   const canCreateConversationWorkspace = Boolean(isConversationDraftContext && onCreateConversationWorkspace)
@@ -1381,10 +1199,6 @@ function AgentProvider({
     && isSubmittingComposerPrompt
     && activeSessionSelection.kind === 'new'
   const streamingShortcutModifierLabel = window.appApi.platform === 'darwin' ? '⌘↵' : 'Ctrl+Enter'
-  const selectedModelInputs = composerModelKey && hasAvailableComposerModel
-    ? agentState.runtime.availableModelInputs[composerModelKey] ?? ['text']
-    : []
-  const selectedModelSupportsImages = selectedModelInputs.includes('image')
   const hasImageComposerAttachments = composerAttachments.some((attachment) => attachment.kind === 'image')
   const attachmentCapabilityMessage = hasImageComposerAttachments && !selectedModelSupportsImages
     ? '当前模型不支持图片输入，图片不会作为视觉内容发送。'
@@ -1542,35 +1356,18 @@ function AgentProvider({
     findLatestOpenableAgentFileChange(visiblePersistedMessages, roundFileChangesByMessageId)
   ), [visiblePersistedMessages, roundFileChangesByMessageId])
 
-  useEffect(() => {
-    if (!hasConfiguredProviders && activeComposerMenu === 'model-cascader') {
-      setActiveComposerMenu(null)
-    }
-
-    if (!hasConfiguredProviders) {
-      return
-    }
-
-    if (resolvedSelectedProviderValue === selectedProviderValue) {
-      return
-    }
-
-    setSelectedProviderValue(resolvedSelectedProviderValue)
-    setModelInputValue(
-      modelDrafts[resolvedSelectedProviderValue]
-        ?? getRuntimePreferredModelId(resolvedSelectedProviderValue)
-        ?? providerModelIds[0]
-        ?? '',
-    )
-  }, [
-    activeComposerMenu,
-    agentState.runtime.preferredModelByProvider,
+  useAgentModelSelectionSync({
+    closeModelMenu: closeComposerMenu,
     hasConfiguredProviders,
+    isModelMenuOpen: activeComposerMenu === 'model-cascader',
     modelDrafts,
+    preferredModelByProvider: agentState.runtime.preferredModelByProvider,
     providerModelIds,
     resolvedSelectedProviderValue,
     selectedProviderValue,
-  ])
+    setModelInputValue,
+    setSelectedProviderValue,
+  })
 
   useEffect(() => {
     const result = resolveNextAgentFileAutoOpen(fileAutoOpenStateRef.current, {

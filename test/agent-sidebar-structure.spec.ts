@@ -57,6 +57,43 @@ describe('agent sidebar structure', () => {
     expect(sessionMutationsSource).not.toContain('agent-sidebar')
   })
 
+  it('keeps model draft state and runtime mutations in the Agent model domain', async () => {
+    const [
+      sidebarSource,
+      modelSelectionSource,
+      modelStateSource,
+      modelMutationsSource,
+    ] = await Promise.all([
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+      readSource('../src/features/agent/lib/model-selection.ts'),
+      readSource('../src/features/agent/model/use-agent-model-state.ts'),
+      readSource('../src/features/agent/model/use-agent-model-mutations.ts'),
+    ])
+
+    expect(sidebarSource).toContain(
+      "from '@/features/agent/model/use-agent-model-state'",
+    )
+    expect(sidebarSource).toContain(
+      "from '@/features/agent/model/use-agent-model-mutations'",
+    )
+    expect(sidebarSource).not.toContain('window.appApi.selectAgentModel(')
+    expect(sidebarSource).not.toContain('window.appApi.selectAgentThinkingLevel(')
+    expect(sidebarSource).not.toContain('const [modelInputValue, setModelInputValue] = useState(')
+    expect(modelStateSource).toContain('export function useAgentModelDraftState(')
+    expect(modelStateSource).toContain('export function useAgentModelSelectionState(')
+    expect(modelStateSource).toContain('export function useAgentModelSelectionSync(')
+    expect(modelStateSource).toContain('getConfiguredAgentProviders(runtime.availableModels)')
+    expect(modelStateSource).toContain('getAgentProviderModelIds(runtime.availableModels,')
+    expect(modelStateSource).not.toContain('getAgentProviderOrder')
+    expect(modelSelectionSource).toContain('export function getConfiguredAgentProviders(')
+    expect(modelSelectionSource).toContain('export function getAgentProviderModelIds(')
+    expect(modelMutationsSource).toContain('export function useAgentModelMutations(')
+    expect(modelMutationsSource).toContain('window.appApi.selectAgentModel(')
+    expect(modelMutationsSource).toContain('window.appApi.selectAgentThinkingLevel(')
+    expect(modelStateSource).not.toContain('agent-sidebar')
+    expect(modelMutationsSource).not.toContain('agent-sidebar')
+  })
+
   it('keeps Composer draft, submission, and runtime commands in the Composer domain', async () => {
     const [
       sidebarSource,

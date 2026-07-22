@@ -3,6 +3,8 @@ import {
   clampAgentThinkingLevel,
   formatThinkingLevelLabel,
   getAgentModelKey,
+  getAgentProviderModelIds,
+  getConfiguredAgentProviders,
   hasConfigurableAgentThinkingLevel,
   parseModelSelection,
 } from '@/features/agent/lib/model-selection'
@@ -21,6 +23,24 @@ describe('agent model selection', () => {
       modelId: '',
       provider: '',
     })
+  })
+
+  it('derives ordered providers and deduplicated provider model identifiers', () => {
+    const availableModels = [
+      'custom/zeta',
+      'openai/gpt-5',
+      'anthropic/claude/sonnet',
+      'openai/gpt-5',
+      'custom/alpha',
+    ]
+
+    expect(getConfiguredAgentProviders(availableModels)).toEqual([
+      'anthropic',
+      'openai',
+      'custom',
+    ])
+    expect(getAgentProviderModelIds(availableModels, 'custom')).toEqual(['zeta', 'alpha'])
+    expect(getAgentProviderModelIds(availableModels, 'anthropic')).toEqual(['claude/sonnet'])
   })
 
   it('clamps unsupported thinking levels to the nearest available level', () => {
