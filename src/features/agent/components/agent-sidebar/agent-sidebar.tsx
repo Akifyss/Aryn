@@ -14,7 +14,6 @@ import { Menu } from '@base-ui/react/menu'
 import { Button, ScrollShadow, Spinner } from '@heroui/react'
 import type { OpenCodeOptimisticUserMessage } from '@aryn/opencode-session-surface'
 import type {
-  PiWebAgentMessage,
   PiWebNativeSessionSnapshot,
   PiWebOptimisticUserMessage,
 } from '@aryn/pi-web-session-surface'
@@ -44,10 +43,7 @@ import {
   useAgentComposerActions,
   resolveSupportedRunningPromptBehavior,
 } from '@/features/agent/composer/use-agent-composer-actions'
-import {
-  type OptimisticAgentUserMessage,
-  useAgentPromptSubmission,
-} from '@/features/agent/composer/use-agent-prompt-submission'
+import { useAgentPromptSubmission } from '@/features/agent/composer/use-agent-prompt-submission'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input'
 import { AgentBrandIcon } from '@/features/agent/components/agent-brand-icon/agent-brand-icon'
 import { AgentAttachmentFileCard } from '@/features/agent/components/agent-file-card/agent-file-card'
@@ -65,13 +61,9 @@ import {
   type AgentSessionTreeProps,
 } from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import { AgentMessageViewport } from '@/features/agent/components/agent-message-viewport/agent-message-viewport'
+import { useAgentMessagePresentation } from '@/features/agent/components/agent-message-viewport/use-agent-message-presentation'
 import { useAgentMessageViewportScroll } from '@/features/agent/components/agent-message-viewport/use-agent-message-viewport-scroll'
-import {
-  deriveAgentSessionPhase,
-  formatAgentSessionStatus,
-  type AgentSessionPhase,
-  type AgentSessionStatus,
-} from '@/features/agent/components/agent-session-status/agent-session-status'
+import type { AgentSessionStatus } from '@/features/agent/components/agent-session-status/agent-session-status'
 import { CodexSessionTimeline } from '@/features/agent/components/codex-session-timeline'
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
 import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
@@ -80,16 +72,13 @@ import {
   type AgentSessionSelection,
 } from '@/features/agent/lib/project-session-request'
 import { shouldShowAgentNewConversationPrompt } from '@/features/agent/lib/agent-surface-state'
+import type { OptimisticAgentUserMessage } from '@/features/agent/lib/optimistic-user-messages'
 import {
   formatAgentSessionLabel,
   normalizeAgentProjectPath,
   SESSION_TREE_AGENT_IDS,
   type AgentProjectSessionBucket,
 } from '@/features/agent/lib/session-tree'
-import {
-  getOpenCodeNativeRenderKey,
-  getOpenCodeUserMessageText,
-} from '@/features/agent/lib/opencode-timeline'
 import type {
   ActiveWorkspaceContext,
   ConversationRecord,
@@ -98,16 +87,14 @@ import type {
 } from '@/features/conversations/types'
 import type { ProjectRecord, ProjectState, WorkspaceIconTheme } from '@/features/workspace/types'
 import {
-  findLatestOpenableAgentFileChange,
   initialAgentFileAutoOpenState,
   resolveNextAgentFileAutoOpen,
   type AgentFileAutoOpenState,
 } from '@/features/agent/auto-open-file'
-import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-changes'
-import { mergeFileChangesByPath } from '@/features/agent/file-change-utils'
 import { useAgentProjectSessions } from '@/features/agent/hooks/use-agent-project-sessions'
 import { useAgentSessionMutations } from '@/features/agent/hooks/use-agent-session-mutations'
 import { useAgentSessionNavigation } from '@/features/agent/hooks/use-agent-session-navigation'
+import { useAgentVisibleSession } from '@/features/agent/hooks/use-agent-visible-session'
 import { useAgentModelMutations } from '@/features/agent/model/use-agent-model-mutations'
 import {
   useAgentModelDraftState,
@@ -143,19 +130,6 @@ type AgentSurfaceMode = 'docked' | 'drawer'
 type ConversationTitleSuggestion = {
   agentSessionPath: string
   title: string
-}
-
-function getPiWebUserMessageText(message: PiWebAgentMessage) {
-  if (typeof message.content === 'string') return message.content
-  if (!Array.isArray(message.content)) return ''
-  return message.content.flatMap((part) => (
-    part
-      && typeof part === 'object'
-      && (part as { type?: unknown }).type === 'text'
-      && typeof (part as { text?: unknown }).text === 'string'
-      ? [(part as { text: string }).text]
-      : []
-  )).join('\n')
 }
 
 type AgentSidebarProps = {
@@ -706,79 +680,31 @@ function AgentProvider({
     }
   }, [activeComposerMenu])
 
-  const activeSessionPath = activeSessionSelection.kind === 'session' ? activeSessionSelection.sessionPath : null
-  const activeSession = activeSessionPath && agentState.runtime.agentId === selectedAgentId
-    ? agentState.sessions.find((session) => session.path === activeSessionPath) ?? null
-    : null
-  useEffect(() => {
-    const snapshot = agentState.activeSession
-    if (!snapshot) return
-    const native = snapshot.native
-    const persistedUsers = native?.agentId === 'codex'
-      ? native.thread.turns.flatMap((turn): AgentSidebarMessage[] => (
-          turn.items.flatMap((item): AgentSidebarMessage[] => item.type === 'userMessage'
-            ? [{
-                id: item.clientId ?? item.id,
-                kind: 'user',
-                text: item.content.flatMap((input) => input.type === 'text' ? [input.text] : []).join('\n\n'),
-                timestamp: (turn.startedAt ?? native.thread.createdAt) * 1_000,
-              }]
-            : [])
-        ))
-      : native?.agentId === 'opencode'
-      ? native.messages.flatMap((record): AgentSidebarMessage[] => (
-          record.info.role === 'user'
-            ? [{
-                id: record.info.id,
-                kind: 'user',
-                text: getOpenCodeUserMessageText(record),
-                timestamp: record.info.time.created,
-              }]
-            : []
-        ))
-      : native?.agentId === 'pi' || native?.agentId === 'builtin-pi'
-        ? native.messages.flatMap((message, index): AgentSidebarMessage[] => (
-            message.role === 'user'
-              ? [{
-                  id: typeof message.id === 'string' ? message.id : `pi-user-${index}`,
-                  kind: 'user',
-                  text: getPiWebUserMessageText(message),
-                  timestamp: typeof message.timestamp === 'number' ? message.timestamp : 0,
-                }]
-              : []
-          ))
-        : snapshot.messages.filter((message) => message.kind === 'user')
-    if (persistedUsers.length === 0) return
-    const contentFallbackUserIds = native?.agentId === 'codex'
-      ? new Set(native.thread.turns.flatMap((turn) => turn.items.flatMap((item) => (
-          item.type === 'userMessage' && !item.clientId ? [item.id] : []
-        ))))
-      : native?.agentId === 'opencode'
-        ? new Set<string>()
-        : new Set(persistedUsers.map((message) => message.id))
-    setOptimisticUserMessages((current) => {
-      const usedPersistedIds = new Set<string>()
-      return current.filter((entry) => {
-        if (
-          entry.agentId !== agentState.runtime.agentId
-          || entry.sessionPath !== snapshot.sessionPath
-        ) return true
-        const match = persistedUsers.find((message) => (
-          !usedPersistedIds.has(message.id)
-          && (
-             message.id === entry.message.id
-             || (contentFallbackUserIds.has(message.id) && (
-               message.text === entry.message.text
-              && Math.abs(message.timestamp - entry.message.timestamp) <= 60_000
-            ))
-          )
-        ))
-        if (!match) return true
-        usedPersistedIds.add(match.id)
-        return false
-      })
-    })
-  }, [agentState.activeSession, agentState.runtime.agentId])
+  const {
+    activeSession,
+    activeSessionPath,
+    codexNativeSession,
+    codexOptimisticUserMessages,
+    isOpenCodeChildSession,
+    isViewingActiveRuntime,
+    openCodeNativeSession,
+    openCodeOptimisticUserMessages,
+    piWebNativeSession,
+    piWebOptimisticUserMessages,
+    visiblePersistedMessages,
+    visibleRuntime,
+    visibleSessionSnapshot,
+  } = useAgentVisibleSession({
+    activeSessionSelection,
+    activeSessionSnapshot: agentState.activeSession,
+    optimisticUserMessages,
+    runtime: agentState.runtime,
+    selectedAgentId,
+    sessions: agentState.sessions,
+    setOptimisticUserMessages,
+    viewedSessionSnapshot,
+    workspacePath,
+  })
 
   useEffect(() => {
     if (activeWorkspaceContext.kind !== 'conversation' || !onConversationTitleSuggested) {
@@ -835,165 +761,37 @@ function AgentProvider({
     onConversationTitleSuggested,
   ])
 
-  const isViewingActiveRuntime = Boolean(
-    activeSessionPath
-    && agentState.runtime.agentId === selectedAgentId
-    && agentState.activeSession?.sessionPath === activeSessionPath,
-  )
-  const viewedSessionForSelection = viewedSessionSnapshot?.sessionPath === activeSessionPath
-    ? viewedSessionSnapshot
-    : null
-  const visibleSessionSnapshot = isViewingActiveRuntime ? agentState.activeSession : viewedSessionForSelection
-  const visibleRuntime = useMemo(() => (
-    isViewingActiveRuntime
-      ? agentState.runtime
-      : {
-          ...agentState.runtime,
-          compactionReason: null,
-          followUpMessageCount: 0,
-          followUpMessages: [],
-          isCompacting: false,
-          isStreaming: false,
-          pendingMessageCount: 0,
-          retryAttempt: 0,
-          retryMaxAttempts: null,
-          steeringMessageCount: 0,
-          steeringMessages: [],
-        }
-  ), [agentState.runtime, isViewingActiveRuntime])
-  const visiblePersistedMessages = visibleSessionSnapshot?.messages ?? []
-  const codexNativeSession = workspacePath
-    && visibleSessionSnapshot
-    && normalizeAgentProjectPath(visibleSessionSnapshot.workspacePath) === normalizeAgentProjectPath(workspacePath)
-    && visibleSessionSnapshot.native?.agentId === 'codex'
-    ? visibleSessionSnapshot.native
-    : null
-  const openCodeNativeSession = visibleSessionSnapshot?.native?.agentId === 'opencode'
-    ? visibleSessionSnapshot.native
-    : null
-  const piWebNativeSession = visibleSessionSnapshot?.native?.agentId === 'pi'
-    || visibleSessionSnapshot?.native?.agentId === 'builtin-pi'
-    ? visibleSessionSnapshot.native
-    : null
-  const isOpenCodeChildSession = Boolean(openCodeNativeSession?.parentSessionId)
-  const visibleOptimisticUserMessageEntries = useMemo(() => (
-    activeSessionSelection.kind === 'session'
-      ? optimisticUserMessages
-        .filter((entry) => (
-          entry.agentId === activeSessionSelection.agentId
-          && entry.sessionPath === activeSessionSelection.sessionPath
-        ))
-      : []
-  ), [activeSessionSelection, optimisticUserMessages])
-  const visibleOptimisticUserMessages = useMemo(
-    () => visibleOptimisticUserMessageEntries.map((entry) => entry.message),
-    [visibleOptimisticUserMessageEntries],
-  )
-  const openCodeOptimisticUserMessages = useMemo(() => (
-    visibleOptimisticUserMessageEntries.map((entry) => {
-      const message = entry.message
-      return {
-        attachments: message.attachments?.flatMap((attachment, index) => {
-          const url = attachment.data ?? (attachment.path
-            ? encodeURI(`file:///${attachment.path.replaceAll('\\', '/')}`)
-            : '')
-          return url
-            ? [{
-                fileName: attachment.fileName,
-                mimeType: attachment.mimeType,
-                partId: entry.nativePartIds?.[index + 1] ?? `${message.id}-file-${String(index).padStart(4, '0')}`,
-                url,
-              }]
-            : []
-        }),
-        id: message.id,
-        text: message.text,
-        textPartId: entry.nativePartIds?.[0] ?? `${message.id}-text`,
-        timestamp: message.timestamp,
-      }
-    })
-  ), [visibleOptimisticUserMessageEntries])
-  const codexOptimisticUserMessages = visibleOptimisticUserMessages
-  const piWebOptimisticUserMessages = useMemo(() => (
-    visibleOptimisticUserMessageEntries.map((entry): PiWebOptimisticUserMessage => {
-      const imageBlocks = entry.message.attachments?.flatMap((attachment) => {
-        if (attachment.kind !== 'image' || !attachment.data) return []
-        const match = attachment.data.match(/^data:([^;]+);base64,(.+)$/)
-        if (!match) return []
-        return [{
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: match[1],
-            data: match[2],
-          },
-        }]
-      }) ?? []
-      return {
-        content: imageBlocks.length > 0
-          ? [
-              ...(entry.message.text ? [{ type: 'text', text: entry.message.text }] : []),
-              ...imageBlocks,
-            ]
-          : entry.message.text,
-        timestamp: entry.message.timestamp,
-      }
-    })
-  ), [visibleOptimisticUserMessageEntries])
-
-  const renderedMessages = useMemo(() => {
-    const persistedMessages = visiblePersistedMessages
-    const nextMessages = [...persistedMessages, ...visibleOptimisticUserMessages]
-    const toolMessageIndices = new Map<string, number>()
-
-    nextMessages.forEach((message, index) => {
-      if (message.kind === 'tool') {
-        toolMessageIndices.set(message.id, index)
-      }
-    })
-
-    if (!isViewingActiveRuntime) {
-      return nextMessages
-    }
-
-    liveTools.forEach((tool) => {
-      const liveToolMessage: AgentSidebarMessage = {
-        id: tool.id,
-        isError: tool.isError,
-        kind: 'tool',
-        status: tool.status,
-        text: tool.summary,
-        timestamp: Date.now(),
-        title: tool.name,
-      }
-      const existingIndex = toolMessageIndices.get(tool.id)
-
-      if (existingIndex === undefined) {
-        toolMessageIndices.set(tool.id, nextMessages.length)
-        nextMessages.push(liveToolMessage)
-        return
-      }
-
-      nextMessages[existingIndex] = {
-        ...nextMessages[existingIndex],
-        ...liveToolMessage,
-        sessionEntryId: nextMessages[existingIndex].sessionEntryId,
-      }
-    })
-
-    if (draftAssistant.trim() || draftThinking.trim()) {
-      nextMessages.push({
-        id: 'draft-assistant',
-        kind: 'assistant',
-        isThinkingStreaming,
-        text: draftAssistant,
-        thinkingText: draftThinking || undefined,
-        timestamp: Date.now(),
-      })
-    }
-
-    return nextMessages
-  }, [draftAssistant, draftThinking, isThinkingStreaming, isViewingActiveRuntime, liveTools, visibleOptimisticUserMessages, visiblePersistedMessages])
+  const {
+    contentRevisions: messageViewportContentRevisions,
+    latestAutoOpenFileChange,
+    piWebFileChanges,
+    piWebStreamingStatus,
+    renderedMessages,
+    roundFileChangesByMessageId,
+    sessionStatus,
+  } = useAgentMessagePresentation({
+    drafts: {
+      assistant: draftAssistant,
+      isThinkingStreaming,
+      thinking: draftThinking,
+    },
+    panelError,
+    runtime: {
+      active: agentState.runtime,
+      isViewingActive: isViewingActiveRuntime,
+      liveTools,
+      visible: visibleRuntime,
+    },
+    session: {
+      codexNative: codexNativeSession,
+      openCodeNative: openCodeNativeSession,
+      optimisticUserMessages: codexOptimisticUserMessages,
+      persistedMessages: visiblePersistedMessages,
+      piWebNative: piWebNativeSession,
+      snapshot: visibleSessionSnapshot,
+    },
+    workspacePath,
+  })
 
   const {
     ensureSelectedAgentSessionActive,
@@ -1216,145 +1014,13 @@ function AgentProvider({
             : '打开工作区以开始。'
       )
     : null
-  const runningTools = liveTools.filter((tool) => tool.status === 'running')
-  const hasVisibleRunningContent = visiblePersistedMessages.some((message) => (
-    message.status === 'running'
-    && (
-      message.kind === 'tool'
-      || Boolean(message.text.trim())
-      || Boolean(message.thinkingText?.trim())
-    )
-  ))
-  const sessionPhase = useMemo(() => visibleRuntime.agentId === 'opencode'
-    ? null
-    : deriveAgentSessionPhase({
-        draftAssistant,
-        hasRunningTools: isViewingActiveRuntime && runningTools.length > 0,
-        hasVisibleRunningContent,
-        isStreaming: visibleRuntime.isStreaming,
-        isThinkingStreaming,
-        panelError,
-        pendingMessageCount: visibleRuntime.pendingMessageCount,
-        retryAttempt: visibleRuntime.retryAttempt,
-        runtime: visibleRuntime,
-        workspacePath,
-      }), [
-    agentState.runtime.compactionReason,
-    agentState.runtime.isCompacting,
-    agentState.runtime.hasConfiguredModels,
-    agentState.runtime.isStreaming,
-    agentState.runtime.pendingMessageCount,
-    agentState.runtime.retryAttempt,
-    draftAssistant,
-    draftThinking,
-    hasVisibleRunningContent,
-    isThinkingStreaming,
-    isViewingActiveRuntime,
-    panelError,
-    runningTools.length,
-    visibleRuntime,
-    workspacePath,
-  ])
-  const sessionStatus = useMemo(
-    () => sessionPhase ? formatAgentSessionStatus(sessionPhase, {
-      followUpMessageCount: visibleRuntime.followUpMessageCount,
-      pendingMessageCount: visibleRuntime.pendingMessageCount,
-      steeringMessageCount: visibleRuntime.steeringMessageCount,
-    }) : null,
-    [
-      sessionPhase,
-      visibleRuntime.followUpMessageCount,
-      visibleRuntime.pendingMessageCount,
-      visibleRuntime.steeringMessageCount,
-    ],
-  )
-  const piWebStreamingStatus = useMemo(() => {
-    if (
-      !piWebNativeSession
-      || !isViewingActiveRuntime
-      || !visibleRuntime.isStreaming
-      || runningTools.length > 0
-    ) {
-      return null
-    }
-
-    const phase: AgentSessionPhase | null = isThinkingStreaming && !draftAssistant.trim()
-      ? { type: 'thinking' }
-      : draftAssistant.trim()
-        ? { type: 'streaming' }
-        : null
-
-    return phase ? formatAgentSessionStatus(phase, {
-      followUpMessageCount: visibleRuntime.followUpMessageCount,
-      pendingMessageCount: visibleRuntime.pendingMessageCount,
-      steeringMessageCount: visibleRuntime.steeringMessageCount,
-    }) : null
-  }, [
-    draftAssistant,
-    isThinkingStreaming,
-    isViewingActiveRuntime,
-    piWebNativeSession,
-    runningTools.length,
-    visibleRuntime.followUpMessageCount,
-    visibleRuntime.isStreaming,
-    visibleRuntime.pendingMessageCount,
-    visibleRuntime.steeringMessageCount,
-  ])
-  const roundFileChangesByMessageId = useMemo(() => {
-    const hasInFlightRound = isViewingActiveRuntime && (liveTools.length > 0
-      || Boolean(draftAssistant.trim() || draftThinking.trim())
-      || agentState.runtime.isStreaming
-      || agentState.runtime.pendingMessageCount > 0)
-    return buildRoundFileChangesByMessageId({
-      annotations: visibleSessionSnapshot?.annotations ?? { fileChangesByEntryId: {} },
-      hasInFlightRound,
-      messages: visiblePersistedMessages,
-    })
-  }, [
-    agentState.runtime.isStreaming,
-    agentState.runtime.pendingMessageCount,
-    draftAssistant,
-    draftThinking,
-    isViewingActiveRuntime,
-    liveTools.length,
-    visibleSessionSnapshot?.annotations,
-    visiblePersistedMessages,
-  ])
-  const piWebFileChanges = useMemo(() => mergeFileChangesByPath(
-    Object.values(visibleSessionSnapshot?.annotations.fileChangesByEntryId ?? {}).flat(),
-  ), [visibleSessionSnapshot?.annotations.fileChangesByEntryId])
-  const sessionStatusKey = sessionStatus
-    ? `${sessionStatus.label}:${sessionStatus.badges?.map((badge) => `${badge.kind}:${badge.label}`).join('|') ?? ''}`
-    : 'none'
-  const fileChangesKey = [...roundFileChangesByMessageId.entries()]
-    .flatMap(([messageId, changes]) => changes.map((change) => `${messageId}:${change.kind}:${change.filePath}`))
-    .join('|')
-  const renderedMessageCount = renderedMessages.length
-  const openCodeNativeRenderKey = getOpenCodeNativeRenderKey(openCodeNativeSession)
-  const codexNativeRenderKey = codexNativeSession ? String(codexNativeSession.sequence) : 'none'
-  const piWebNativeRenderKey = piWebNativeSession
-    ? `${piWebNativeSession.messages.length}:${piWebNativeSession.entryIds.at(-1) ?? ''}`
-    : 'none'
   const {
     messagesScrollElement,
     messagesScrollViewportRef,
   } = useAgentMessageViewportScroll({
     activeSessionPath,
-    contentRevisions: {
-      assistantDraft: draftAssistant,
-      codexNative: codexNativeRenderKey,
-      fileChanges: fileChangesKey,
-      liveTools,
-      openCodeNative: openCodeNativeRenderKey,
-      piWebNative: piWebNativeRenderKey,
-      renderedMessageCount,
-      sessionStatus: sessionStatusKey,
-      thinkingDraft: draftThinking,
-    },
+    contentRevisions: messageViewportContentRevisions,
   })
-  const latestAutoOpenFileChange = useMemo(() => (
-    findLatestOpenableAgentFileChange(visiblePersistedMessages, roundFileChangesByMessageId)
-  ), [visiblePersistedMessages, roundFileChangesByMessageId])
 
   useAgentModelSelectionSync({
     closeModelMenu: closeComposerMenu,

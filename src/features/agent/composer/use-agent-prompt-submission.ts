@@ -20,13 +20,13 @@ import {
   type AgentModelDraft,
 } from '@/features/agent/lib/model-selection'
 import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
+import type { OptimisticAgentUserMessage } from '@/features/agent/lib/optimistic-user-messages'
 import type { AgentSessionSelection } from '@/features/agent/lib/project-session-request'
 import { normalizeAgentProjectPath } from '@/features/agent/lib/session-tree'
 import type { AgentId } from '@/features/agent/agent-definition'
 import type {
   AgentMessageAttachment,
   AgentSessionSnapshot,
-  AgentSidebarMessage,
   AgentWorkspaceState,
 } from '@/features/agent/types'
 import type {
@@ -35,13 +35,6 @@ import type {
   ConversationSessionStartedPatch,
 } from '@/features/conversations/types'
 import type { AgentRunningPromptEnterBehavior } from '@/hooks/use-settings-store'
-
-export type OptimisticAgentUserMessage = {
-  agentId: AgentId
-  message: AgentSidebarMessage
-  nativePartIds?: string[]
-  sessionPath: string
-}
 
 type AgentPromptSubmissionComposer = {
   clearAssistantDraft: () => void
