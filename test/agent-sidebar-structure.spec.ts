@@ -6,6 +6,29 @@ async function readSource(relativePath: string) {
 }
 
 describe('agent sidebar structure', () => {
+  it('keeps runtime events and workspace lifecycle in the Agent runtime domain', async () => {
+    const [sidebarSource, runtimeEventsSource, workspaceLifecycleSource] = await Promise.all([
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+      readSource('../src/features/agent/runtime/use-agent-runtime-events.ts'),
+      readSource('../src/features/agent/runtime/use-agent-workspace-lifecycle.ts'),
+    ])
+
+    expect(sidebarSource).toContain("from '@/features/agent/runtime/use-agent-runtime-events'")
+    expect(sidebarSource).toContain("from '@/features/agent/runtime/use-agent-workspace-lifecycle'")
+    expect(sidebarSource).not.toContain('window.appApi.onAgentEvent(')
+    expect(sidebarSource).not.toContain('window.appApi.loadAgentDraftState(')
+    expect(sidebarSource).not.toContain('window.appApi.getWorkspaceState(')
+    expect(runtimeEventsSource).toContain('export function useAgentRuntimeEvents(')
+    expect(runtimeEventsSource).toContain('window.appApi.onAgentEvent(')
+    expect(runtimeEventsSource).toContain('closeComposerMenu()')
+    expect(workspaceLifecycleSource).toContain('export function useAgentWorkspaceLifecycle(')
+    expect(workspaceLifecycleSource).toContain('window.appApi.loadAgentDraftState(')
+    expect(workspaceLifecycleSource).toContain('window.appApi.getWorkspaceState(')
+    expect(workspaceLifecycleSource).toContain('closeSessionOverlay()')
+    expect(runtimeEventsSource).not.toContain('agent-sidebar')
+    expect(workspaceLifecycleSource).not.toContain('agent-sidebar')
+  })
+
   it('keeps Composer draft, submission, and runtime commands in the Composer domain', async () => {
     const [
       sidebarSource,
