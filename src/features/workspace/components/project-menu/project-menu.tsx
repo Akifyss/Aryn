@@ -22,6 +22,7 @@ import {
   type ProjectMenuMode,
   type ProjectMenuSurface,
 } from './project-menu-positioning'
+import { handleProjectMenuSearchKeyDown } from './project-menu-search-keyboard'
 import './styles.css'
 
 export { serializeProjectMenuAnchorRect } from './project-menu-positioning'
@@ -194,6 +195,7 @@ export function ProjectMenu({
                     value={search}
                     placeholder='搜索项目'
                     onChange={(event) => setSearch(event.target.value)}
+                    onKeyDown={handleProjectMenuSearchKeyDown}
                   />
                 </label>
                 <AppScrollArea
