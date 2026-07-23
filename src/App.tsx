@@ -56,17 +56,9 @@ import {
   type ProjectMenuSurface,
 } from '@/features/workspace/components/project-menu/project-menu'
 import type { WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree/workspace-tree'
+import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
+import { getBaseName } from '@/features/workspace/lib/workspace-paths'
 import {
-  useWorkspaceStore,
-  type WorkspaceDiffTab,
-} from '@/features/workspace/store/use-workspace-store'
-import {
-  getBaseName,
-  normalizeFilePath,
-} from '@/features/workspace/lib/workspace-paths'
-import { getWorkspaceFileTabIdsForPath } from '@/features/workspace/lib/workspace-file-operation-state'
-import {
-  createDiffTab,
   FIXED_FILE_TAB_ID,
   FIXED_GIT_TAB_ID,
   type AgentLayoutFixedTab,
@@ -77,6 +69,7 @@ import { useWorkspaceDocumentPersistence } from '@/features/workspace/hooks/use-
 import { useWorkspaceFileOperations } from '@/features/workspace/hooks/use-workspace-file-operations'
 import { useWorkspaceFileSystemState } from '@/features/workspace/hooks/use-workspace-file-system-state'
 import { useWorkspaceProjectController } from '@/features/workspace/hooks/use-workspace-project-controller'
+import { useWorkspaceSyncController } from '@/features/workspace/hooks/use-workspace-sync-controller'
 import { useWorkspaceTabPersistence } from '@/features/workspace/hooks/use-workspace-tab-persistence'
 import { useWorkspaceTabViewState } from '@/features/workspace/hooks/use-workspace-tab-view-state'
 import {
@@ -144,13 +137,9 @@ function App() {
   const [isDirectorySidebarOpen, setIsDirectorySidebarOpen] = useState(true)
   const meoEditorHostRef = useRef<MeoEditorHostHandle | null>(null)
   const activeTabId = useWorkspaceStore((state) => state.activeTabId)
-  const closeTab = useWorkspaceStore((state) => state.closeTab)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
   const moveTab = useWorkspaceStore((state) => state.moveTab)
-  const openDiffTab = useWorkspaceStore((state) => state.openDiffTab)
   const openTabs = useWorkspaceStore((state) => state.openTabs)
-  const setTree = useWorkspaceStore((state) => state.setTree)
-  const syncFileTabsWithDisk = useWorkspaceStore((state) => state.syncFileTabsWithDisk)
   const tree = useWorkspaceStore((state) => state.tree)
   const {
     handleWorkspaceFileSystemNavigationChange,
@@ -185,32 +174,16 @@ function App() {
   const isActiveMeoEditorMountedRef = useRef(false)
   isActiveMeoEditorMountedRef.current = currentEditorKind === 'prose' && currentFileViewMode === 'meo'
   const [isActiveEditorComposing, setIsActiveEditorComposing] = useState(false)
-  const currentPathRef = useRef<string | null>(currentPath)
   const performWorkspaceRefreshRef = useRef<(request: Required<WorkspaceRefreshRequest>) => Promise<void>>(async () => {})
   const workspaceRefreshCoordinatorRef = useRef<ReturnType<typeof createWorkspaceRefreshCoordinator> | null>(null)
-  currentPathRef.current = currentPath
-  const isActiveWorkspacePath = useCallback((rootPath: string) => {
-    const activePath = currentPathRef.current
-    return Boolean(
-      activePath
-      && normalizeFilePath(activePath) === normalizeFilePath(rootPath),
-    )
-  }, [])
-  const loadTree = useCallback(async (
-    rootPath: string,
-    options: { onlyIfCurrent?: boolean } = {},
-  ) => {
-    const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
-
-    if (options.onlyIfCurrent && !isActiveWorkspacePath(rootPath)) {
-      return
-    }
-
-    setTree(nextTree)
-  }, [isActiveWorkspacePath, setTree])
-  const reloadActiveWorkspaceTree = useCallback(async (rootPath: string) => {
-    await loadTree(rootPath, { onlyIfCurrent: true })
-  }, [loadTree])
+  const {
+    currentPathRef,
+    isActiveWorkspacePath,
+    loadTree,
+    reconcileWorkspaceFileAfterGitDiscard,
+    reloadActiveWorkspaceTree,
+    syncOpenDiffTabs,
+  } = useWorkspaceSyncController(currentPath)
   useDevToolsFocusSettlement()
 
   if (!workspaceRefreshCoordinatorRef.current) {
@@ -280,59 +253,6 @@ function App() {
     requestConfirmation,
     setStatusMessage,
   })
-
-  const syncOpenDiffTabs = useCallback(async (workspacePath: string) => {
-    if (!isActiveWorkspacePath(workspacePath)) {
-      return
-    }
-
-    const diffTabs = useWorkspaceStore.getState().openTabs.filter((tab): tab is WorkspaceDiffTab => tab.kind === 'diff')
-
-    await Promise.all(diffTabs.map(async (tab) => {
-      if (tab.diff.source.kind === 'commit') {
-        return
-      }
-
-      try {
-        const nextDiff = await window.appApi.getGitFileDiff(workspacePath, tab.diff.change.path, tab.diff.change.scope)
-
-        if (!isActiveWorkspacePath(workspacePath)) {
-          return
-        }
-
-        openDiffTab(createDiffTab(nextDiff), false)
-      } catch {
-        if (isActiveWorkspacePath(workspacePath) && !tab.isDirty) {
-          closeTab(tab.id)
-        }
-      }
-    }))
-  }, [closeTab, isActiveWorkspacePath, openDiffTab])
-
-  async function reconcileWorkspaceFileAfterGitDiscard(workspacePath: string, filePath: string) {
-    if (!isActiveWorkspacePath(workspacePath)) {
-      return
-    }
-
-    try {
-      const nextContent = await window.appApi.readWorkspaceFile(filePath)
-
-      if (!isActiveWorkspacePath(workspacePath)) {
-        return
-      }
-
-      syncFileTabsWithDisk(filePath, nextContent)
-    } catch {
-      if (isActiveWorkspacePath(workspacePath)) {
-        for (const tabId of getWorkspaceFileTabIdsForPath(
-          useWorkspaceStore.getState().openTabs,
-          filePath,
-        )) {
-          closeTab(tabId)
-        }
-      }
-    }
-  }
 
   const {
     applyDiffSelection: handleApplyGitDiffSelection,
