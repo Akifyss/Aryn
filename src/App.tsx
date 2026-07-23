@@ -1,5 +1,4 @@
-import type { ReactNode } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Toast } from '@heroui/react'
 import {
   FolderLine,
@@ -16,46 +15,36 @@ import { AppTooltipButton } from '@/components/app-tooltip'
 import {
   AgentChatSurface,
   AgentProvider,
-  AgentSessionTree,
 } from '@/features/agent/components/agent-sidebar/agent-sidebar'
 import { DEFAULT_AGENT_ID } from '@/features/agent/agent-definition'
 import type { AgentWorkspaceState } from '@/features/agent/types'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host/meo-editor-host'
 import type { MeoOpenGitDiffHandler } from '@/features/editor/lib/meo-native-editor-types'
-import { GitPanel } from '@/features/git/components/git-panel/git-panel'
 import { useGitWorkspaceController } from '@/features/git/hooks/use-git-workspace-controller'
 import { findGitChangeByFilePath } from '@/features/git/lib/repository-state'
 import {
   SettingsDialog,
   type SettingsSectionId,
 } from '@/features/settings/components/settings-dialog/settings-dialog'
-import { FileTabs } from '@/features/workspace/components/file-tabs/file-tabs'
-import { WorkspaceFileSystemPanel } from '@/features/workspace/components/workspace-file-system-panel/workspace-file-system-panel'
-import { WorkspaceEditorContent } from '@/features/workspace/components/workspace-editor-content/workspace-editor-content'
 import {
-  WorkspaceEditorDirectorySidebar,
-  WorkspaceEditorDirectoryToggle,
-  WorkspaceEditorDirectoryToggleSlot,
-  WorkspaceEditorDirectoryToggleSpacer,
-  WorkspaceEditorEmptyState,
-  WorkspaceEditorSurface,
-} from '@/features/workspace/components/workspace-editor-surface/workspace-editor-surface'
-import { WorkspaceTreePanel } from '@/features/workspace/components/workspace-tree-panel/workspace-tree-panel'
+  WorkspaceEditorWorkbench,
+} from '@/features/workspace/components/workspace-workbench/workspace-editor-workbench'
 import {
-  WorkspaceSidebar,
-  type WorkspaceSidebarSurfaceMode as PanelSurfaceMode,
-} from '@/features/workspace/components/workspace-sidebar/workspace-sidebar'
-import {
-  WorkspaceSidebarTabs,
-} from '@/features/workspace/components/workspace-sidebar-tabs/workspace-sidebar-tabs'
+  WorkspaceNavigationSurface,
+} from '@/features/workspace/components/workspace-workbench/workspace-navigation-surface'
+import type {
+  WorkspaceNavigationPanelConfiguration,
+} from '@/features/workspace/components/workspace-workbench/workspace-navigation-panels'
+import type { WorkspaceSidebarSurfaceMode as PanelSurfaceMode } from '@/features/workspace/components/workspace-sidebar/workspace-sidebar'
 import { NewProjectDialog } from '@/features/workspace/components/new-project-dialog/new-project-dialog'
 import { ProjectBootstrap } from '@/features/workspace/components/project-bootstrap/project-bootstrap'
 import {
-  ProjectMenu,
-  type ProjectMenuFrameRect,
   type ProjectMenuSurface,
 } from '@/features/workspace/components/project-menu/project-menu'
-import type { WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree/workspace-tree'
+import {
+  ProjectMenuLayer,
+  type ProjectMenuLayerConfiguration,
+} from '@/features/workspace/components/project-menu/project-menu-layer'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
 import { getBaseName } from '@/features/workspace/lib/workspace-paths'
 import {
@@ -72,10 +61,6 @@ import { useWorkspaceProjectController } from '@/features/workspace/hooks/use-wo
 import { useWorkspaceSyncController } from '@/features/workspace/hooks/use-workspace-sync-controller'
 import { useWorkspaceTabPersistence } from '@/features/workspace/hooks/use-workspace-tab-persistence'
 import { useWorkspaceTabViewState } from '@/features/workspace/hooks/use-workspace-tab-view-state'
-import {
-  resolveWorkspaceTreeActiveFilePath,
-  type WorkspaceTreeActiveFileMode,
-} from '@/features/workspace/lib/workspace-tree-active-file'
 import {
   createWorkspaceRefreshCoordinator,
   type WorkspaceRefreshRequest,
@@ -98,8 +83,6 @@ import { useAppAppearanceController } from '@/features/appearance/hooks/use-app-
 import './App.css'
 
 const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
-
-type WorkspaceTreeFileClickMode = 'open-tab' | 'replace-active-tab'
 
 function App() {
   const platform = window.appApi.platform
@@ -515,177 +498,93 @@ function App() {
     await enterProjectlessConversation(enterConversationDraft)
   }
 
-  function renderWorkspaceTreePanel(options: {
-    activeFileMode?: WorkspaceTreeActiveFileMode
-    directoryHeaderAction?: ReactNode
-    fileClickMode?: WorkspaceTreeFileClickMode
-    showDirectoryHeader?: boolean
-    surfaceMode?: PanelSurfaceMode
-    title?: string
-  } = {}) {
-    const {
-      activeFileMode = 'track-active-file',
-      directoryHeaderAction,
-      fileClickMode = 'open-tab',
-      showDirectoryHeader = false,
-      surfaceMode = 'docked',
-      title = '文件树',
-    } = options
-    const menuPortalTarget = surfaceMode === 'drawer' ? leftDrawerOverlayRoot : null
-    const treeActiveFilePath = resolveWorkspaceTreeActiveFilePath(activeTreePath, activeFileMode)
-    const handleSelectFile = (filePath: string, event: WorkspaceTreeActivationEvent) => {
-      if (
-        fileClickMode === 'replace-active-tab'
-        && event.button === 0
-        && !event.ctrlKey
-        && !event.metaKey
-      ) {
-        void replaceActiveFileWithPath(filePath)
-        return
-      }
-
+  const projectMenuLayerConfiguration: ProjectMenuLayerConfiguration = {
+    activeProjectId: activeWorkspaceContext.kind === 'project'
+      ? activeWorkspaceContext.projectId
+      : null,
+    activeSurface: projectMenuSurface,
+    anchorRect: projectMenuAnchorRect,
+    canUseNoProject: isAgentLayout && activeWorkspaceContext.kind === 'project',
+    isBusy: isProjectActionBusy,
+    leftDrawerPortal: leftDrawerOverlayRoot,
+    mode: projectMenuMode,
+    projects: projectState.projects,
+    rightDrawerPortal: rightDrawerOverlayRoot,
+    onAddExistingProject: handleAddExistingProject,
+    onClose: closeProjectMenu,
+    onCreateProject: openNewProjectDialog,
+    onSelectProject: handleSelectProject,
+    onUseNoProject: handleUseNoProject,
+  }
+  const workspaceNavigationConfiguration: WorkspaceNavigationPanelConfiguration = {
+    activeTab: activeLeftSidebarTab,
+    activeTreePath,
+    gitPanel: {
+      busyLabel: gitBusyLabel,
+      commitMessage: gitCommitMessage,
+      historyRefreshVersion: gitHistoryRefreshVersion,
+      iconTheme,
+      isLoading: isGitLoading,
+      layout: gitPanelLayout,
+      repositoryState: gitRepositoryState,
+      workspacePath: currentPath,
+      onCommit: handleCommitGitChanges,
+      onCommitAndSync: handleCommitAndSyncGitChanges,
+      onCommitMessageChange: setGitCommitMessage,
+      onDiscardAll: handleDiscardAllGitChanges,
+      onDiscardMany: handleDiscardGitChanges,
+      onInitialize: handleInitializeGit,
+      onLayoutChange: setGitPanelLayout,
+      onOpenCommitFileDiff: (commitHash, change) => {
+        void openGitCommitFileDiff(commitHash, change)
+      },
+      onOpenDiff: (change) => {
+        void openGitDiff(change)
+      },
+      onOpenFile: (filePath) => {
+        void openFile(filePath)
+      },
+      onOpenMeoDiff: (change) => {
+        void openGitDiff(change, { mode: 'split', view: 'meo' })
+      },
+      onPull: handlePullGitChanges,
+      onPush: handlePushGitChanges,
+      onRefresh: refreshGitPanel,
+      onRevertCommit: handleRevertGitCommit,
+      onStage: handleStageGitPaths,
+      onUnstage: handleUnstageGitPaths,
+    },
+    treePanel: {
+      expandedPaths,
+      gitRepositoryState,
+      iconTheme,
+      isCreatingDirectory,
+      isCreatingFile,
+      nodes: tree,
+      setExpandedPaths,
+      workspacePath: currentPath,
+      workspaceUnavailableMessage,
+      onCreateDirectory: () => void handleCreateDirectory(),
+      onCreateFile: () => void handleCreateFile(),
+      onDeleteNode: (node) => handleDeleteNode(node),
+      onMoveNode: (node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath),
+      onOpenDiff: (change) => {
+        void openGitDiff(change)
+      },
+      onOpenInCodeEditor: (filePath) => {
+        void openFile(filePath, currentPath, 'code')
+      },
+      onRenameNode: (node, nextName) => handleRenameNode(node, nextName),
+      onToggleFileTreeExpansion: handleToggleFileTreeExpansion,
+    },
+    workspaceLabel: editorWorkspaceSwitchLabel,
+    onActiveTabChange: setActiveLeftSidebarTab,
+    onOpenFile: (filePath) => {
       void openFile(filePath)
-    }
-
-    return (
-      <WorkspaceTreePanel
-        activeFilePath={treeActiveFilePath}
-        directoryHeaderAction={directoryHeaderAction}
-        expandedPaths={expandedPaths}
-        gitRepositoryState={gitRepositoryState}
-        iconTheme={iconTheme}
-        isCreatingDirectory={isCreatingDirectory}
-        isCreatingFile={isCreatingFile}
-        menuPortalTarget={menuPortalTarget}
-        nodes={tree}
-        setExpandedPaths={setExpandedPaths}
-        showDirectoryHeader={showDirectoryHeader}
-        title={title}
-        workspacePath={currentPath}
-        workspaceUnavailableMessage={workspaceUnavailableMessage}
-        onCreateDirectory={() => void handleCreateDirectory()}
-        onCreateFile={() => void handleCreateFile()}
-        onDeleteNode={(node) => handleDeleteNode(node)}
-        onMoveNode={(node, targetDirectoryPath) => handleMoveNode(node, targetDirectoryPath)}
-        onOpenDiff={(change) => {
-          void openGitDiff(change)
-        }}
-        onOpenInCodeEditor={(filePath) => {
-          void openFile(filePath, currentPath, 'code')
-        }}
-        onRenameNode={(node, nextName) => handleRenameNode(node, nextName)}
-        onSelectFile={handleSelectFile}
-        onToggleFileTreeExpansion={handleToggleFileTreeExpansion}
-      />
-    )
-  }
-
-  function renderProjectMenu(surface: ProjectMenuSurface, frameRect: ProjectMenuFrameRect | null = null) {
-    if (!projectMenuMode || projectMenuSurface !== surface) {
-      return null
-    }
-
-    const portalContainer = surface === 'left-drawer'
-      ? leftDrawerOverlayRoot
-      : surface === 'right-drawer'
-        ? rightDrawerOverlayRoot
-        : null
-
-    if (surface !== 'global' && (!frameRect || !portalContainer)) {
-      return null
-    }
-
-    return (
-      <ProjectMenu
-        activeProjectId={activeWorkspaceContext.kind === 'project' ? activeWorkspaceContext.projectId : null}
-        anchorRect={projectMenuAnchorRect}
-        canUseNoProject={isAgentLayout && activeWorkspaceContext.kind === 'project'}
-        frameRect={frameRect}
-        isBusy={isProjectActionBusy}
-        mode={projectMenuMode}
-        portalContainer={portalContainer}
-        projects={projectState.projects}
-        surface={surface}
-        onAddExistingProject={handleAddExistingProject}
-        onClose={closeProjectMenu}
-        onCreateProject={openNewProjectDialog}
-        onSelectProject={handleSelectProject}
-        onUseNoProject={handleUseNoProject}
-      />
-    )
-  }
-
-  function renderGitPanel(options: {
-    surfaceMode?: PanelSurfaceMode
-  } = {}) {
-    const { surfaceMode = 'docked' } = options
-    const menuPortalTarget = surfaceMode === 'drawer' ? leftDrawerOverlayRoot : null
-
-    return (
-      <div className='sidebar-stack-pane sidebar-git-pane' id='git-panel'>
-        <GitPanel
-          busyLabel={gitBusyLabel}
-          commitMessage={gitCommitMessage}
-          historyRefreshVersion={gitHistoryRefreshVersion}
-          isLoading={isGitLoading}
-          layout={gitPanelLayout}
-          onCommit={handleCommitGitChanges}
-          onCommitAndSync={handleCommitAndSyncGitChanges}
-          onCommitMessageChange={setGitCommitMessage}
-          onDiscardAll={handleDiscardAllGitChanges}
-          onDiscardMany={handleDiscardGitChanges}
-          onInitialize={handleInitializeGit}
-          onLayoutChange={setGitPanelLayout}
-          onOpenFile={(filePath) => {
-            void openFile(filePath)
-          }}
-          onOpenDiff={(change) => {
-            void openGitDiff(change)
-          }}
-          onOpenMeoDiff={(change) => {
-            void openGitDiff(change, { mode: 'split', view: 'meo' })
-          }}
-          onOpenCommitFileDiff={(commitHash, change) => {
-            void openGitCommitFileDiff(commitHash, change)
-          }}
-          onPull={handlePullGitChanges}
-          onPush={handlePushGitChanges}
-          onRefresh={refreshGitPanel}
-          onRevertCommit={handleRevertGitCommit}
-          onStage={handleStageGitPaths}
-          onUnstage={handleUnstageGitPaths}
-          repositoryState={gitRepositoryState}
-          workspacePath={currentPath}
-          iconTheme={iconTheme}
-          menuPortalTarget={menuPortalTarget}
-        />
-      </div>
-    )
-  }
-
-  function renderSidebarWorkspaceTabs(options: {
-    surfaceMode: PanelSurfaceMode
-    tabListAction?: ReactNode
-    workspaceTreeOptions?: Parameters<typeof renderWorkspaceTreePanel>[0]
-  }) {
-    const {
-      surfaceMode,
-      tabListAction,
-      workspaceTreeOptions,
-    } = options
-
-    return (
-      <WorkspaceSidebarTabs
-        activeTab={activeLeftSidebarTab}
-        filePanel={renderWorkspaceTreePanel({
-          ...workspaceTreeOptions,
-          surfaceMode,
-        })}
-        gitPanel={renderGitPanel({ surfaceMode })}
-        tabListAction={tabListAction}
-        onActiveTabChange={setActiveLeftSidebarTab}
-      />
-    )
+    },
+    onReplaceActiveFile: (filePath) => {
+      void replaceActiveFileWithPath(filePath)
+    },
   }
 
   useEffect(() => {
@@ -794,198 +693,43 @@ function App() {
   const isEditorLayoutSwitchDisabled = activeWorkspaceContext.kind === 'conversationDraft' && isAgentLayout
 
   function renderWorkspaceSidebar(surfaceMode: PanelSurfaceMode) {
-    const isDrawerSurface = surfaceMode === 'drawer'
-
     return (
-      <WorkspaceSidebar
-        chromeStyle={shellChromeVars}
-        drawerHeaderActions={isDrawerSurface ? (
-          <>
-            <AppChromeSearchButton onClick={handleOpenCommandPaletteFromChrome} />
-            <AppChromeSidebarToggleButton
-              isDrawer={isLeftSidebarDrawer}
-              isDrawerOpen={isLeftDrawerOpen}
-              isSidebarVisible={isLeftSidebarVisible}
-              onClick={toggleWorkspaceSidebar}
-            />
-          </>
-        ) : undefined}
-        hasWorkspace={Boolean(currentPath)}
+      <WorkspaceNavigationSurface
+        configuration={workspaceNavigationConfiguration}
+        isAgentLayout={isAgentLayout}
+        isDrawerOpen={isLeftDrawerOpen}
         isPickingWorkspace={isPickingWorkspace}
-        overlay={isDrawerSurface
-          ? renderProjectMenu('left-drawer', leftDrawerOverlayRoot?.getBoundingClientRect() ?? null)
-          : undefined}
-        overlayRootRef={isDrawerSurface ? setLeftDrawerOverlayRoot : undefined}
-        platform={shellPlatform}
-        showWorkspaceSwitch={!isAgentLayout}
-        surfaceMode={surfaceMode}
-        surfaceRef={isDrawerSurface ? leftDrawerSurfaceRef : undefined}
-        workspaceLabel={editorWorkspaceSwitchLabel}
-        onOpenSettings={() => {
-          setIsSettingsOpen(true)
-
-          if (isDrawerSurface) {
-            handleLeftDrawerOpenChange(false)
-          }
-        }}
-        onOpenWorkspaceSwitch={(anchorRect) => {
-          openProjectMenu(
-            'editor-switch',
-            anchorRect,
-            { surface: isDrawerSurface ? 'left-drawer' : 'global' },
-          )
-        }}
-      >
-        {isAgentLayout ? (
-          <AgentSessionTree
-            isProjectAddMenuOpen={isProjectAddMenuOpenForSurface(isDrawerSurface ? 'left-drawer' : 'global')}
-            menuPortalTarget={isDrawerSurface ? leftDrawerOverlayRoot : null}
-            onOpenProjectAddMenu={isDrawerSurface
-              ? (anchorRect) => openProjectMenu('agent-add', anchorRect, { surface: 'left-drawer' })
-              : undefined}
-            onRequestClose={isDrawerSurface ? () => handleLeftDrawerOpenChange(false) : undefined}
-          />
-        ) : renderSidebarWorkspaceTabs({ surfaceMode })}
-      </WorkspaceSidebar>
-    )
-  }
-
-  function renderAgentPanel() {
-    return <AgentChatSurface />
-  }
-
-  function renderDirectorySidebarToggle() {
-    if (!isDirectorySidebarAvailable) {
-      return null
-    }
-
-    return (
-      <WorkspaceEditorDirectoryToggle
-        isVisible={isDirectorySidebarVisible}
-        onToggle={() => setIsDirectorySidebarOpen((currentValue) => !currentValue)}
-      />
-    )
-  }
-
-  function renderDirectorySidebar(options: {
-    activeFileMode?: WorkspaceTreeActiveFileMode
-    action?: ReactNode
-    fileClickMode: WorkspaceTreeFileClickMode
-    showWorkspaceTabs?: boolean
-  }) {
-    const {
-      activeFileMode,
-      action,
-      fileClickMode,
-      showWorkspaceTabs = true,
-    } = options
-
-    return (
-      <WorkspaceEditorDirectorySidebar>
-        {showWorkspaceTabs
-          ? renderSidebarWorkspaceTabs({
-              surfaceMode: 'docked',
-              tabListAction: action,
-              workspaceTreeOptions: {
-                activeFileMode,
-                fileClickMode,
-              },
-            })
-          : renderWorkspaceTreePanel({
-              activeFileMode,
-              directoryHeaderAction: action,
-              fileClickMode,
-              showDirectoryHeader: true,
-              surfaceMode: 'docked',
-              title: workspaceLabel,
-            })}
-      </WorkspaceEditorDirectorySidebar>
-    )
-  }
-
-  function renderEditorEmptyState() {
-    return (
-      <WorkspaceEditorEmptyState
-        hasWorkspace={Boolean(currentPath)}
-        isPickingWorkspace={isPickingWorkspace}
-        onOpenWorkspaceSwitch={(anchorRect) => {
-          openProjectMenu('editor-switch', anchorRect)
-        }}
-      />
-    )
-  }
-
-  function renderFixedFilePanel() {
-    return (
-      <WorkspaceFileSystemPanel
-        fileSystemState={workspaceFileSystemState}
-        gitRepositoryState={gitRepositoryState}
-        iconTheme={iconTheme}
-        meoSettings={meo}
-        nodes={tree}
-        theme={theme}
-        title={workspaceLabel}
-        workspacePath={currentPath}
-        workspaceUnavailableMessage={workspaceUnavailableMessage}
-        onOpenFile={(filePath) => {
-          void openFile(filePath)
-        }}
-        onFileSystemNavigationChange={handleWorkspaceFileSystemNavigationChange}
-        onFileSystemSelectionChange={handleWorkspaceFileSystemSelectionChange}
-        onFileSystemViewChange={handleWorkspaceFileSystemViewChange}
-      />
-    )
-  }
-
-  function renderEditorSurface() {
-    const directorySidebarToggle = renderDirectorySidebarToggle()
-    const editorToolbarLeadingAction = isDirectoryToggleSlotVisible
-      ? <WorkspaceEditorDirectoryToggleSpacer />
-      : null
-
-    return (
-      <WorkspaceEditorSurface
-        tabs={(
-          <FileTabs
-            activeTabId={displayActiveTabId}
-            iconTheme={iconTheme}
-            tabs={displayTabs}
-            workspacePath={currentPath}
-            onActivate={activateFileTab}
-            onClose={(tabId) => {
-              void closeEditorTab(tabId)
-            }}
-            onMoveTab={(movingId, targetId, position) => {
-              moveTab(movingId, targetId, position)
-            }}
-            onOpenDiff={async (filePath) => {
-              const latestGitState = await refreshGitState(currentPath, { silent: true })
-              const nextChange = findGitChangeByFilePath(latestGitState, filePath)
-              if (nextChange) {
-                void openGitDiff(nextChange)
-              }
-            }}
-            getHasDiff={(filePath) => Boolean(findGitChangeByFilePath(gitRepositoryState, filePath))}
-          />
+        isProjectAddMenuOpen={isProjectAddMenuOpenForSurface(
+          surfaceMode === 'drawer' ? 'left-drawer' : 'global',
         )}
-      >
-        {activeFixedPanelTab?.fixedTabKind === 'file-panel' ? renderFixedFilePanel() : null}
-        {activeFixedPanelTab?.fixedTabKind === 'git-panel' ? renderGitPanel() : null}
-        {isDirectorySidebarVisible ? renderDirectorySidebar({
-          action: directorySidebarToggle,
-          fileClickMode: 'replace-active-tab',
-        }) : null}
-        {isDirectoryToggleSlotVisible ? (
-          <WorkspaceEditorDirectoryToggleSlot>
-            {directorySidebarToggle}
-          </WorkspaceEditorDirectoryToggleSlot>
-        ) : null}
-        {!activeFixedPanelTab && !activeFileTab && !activeDiffTab ? renderEditorEmptyState() : null}
+        isSidebarDrawer={isLeftSidebarDrawer}
+        isSidebarVisible={isLeftSidebarVisible}
+        overlayRoot={leftDrawerOverlayRoot}
+        overlayRootRef={setLeftDrawerOverlayRoot}
+        projectMenu={projectMenuLayerConfiguration}
+        shellChromeStyle={shellChromeVars}
+        shellPlatform={shellPlatform}
+        surfaceMode={surfaceMode}
+        surfaceRef={leftDrawerSurfaceRef}
+        onOpenCommandPalette={handleOpenCommandPaletteFromChrome}
+        onOpenProjectMenu={(mode, surface, anchorRect) => {
+          openProjectMenu(mode, anchorRect, { surface })
+        }}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onRequestDrawerClose={() => handleLeftDrawerOpenChange(false)}
+        onToggleSidebar={toggleWorkspaceSidebar}
+      />
+    )
+  }
 
-        <WorkspaceEditorContent
-          activeDiffTab={activeDiffTab}
-          activeFileTab={activeFileTab}
-          diffActions={{
+  function renderEditorWorkbench() {
+    return (
+      <WorkspaceEditorWorkbench
+        activeFixedPanelTab={activeFixedPanelTab}
+        editorContent={{
+          activeDiffTab,
+          activeFileTab,
+          diffActions: {
             discardChange: (change) => {
               void handleDiscardGitChange(change)
             },
@@ -996,10 +740,10 @@ function App() {
             unstagePaths: (filePaths) => {
               void handleUnstageGitPaths(filePaths)
             },
-          }}
-          diffDraftContent={activeDiffDraftContent}
-          diffHasDirtyRelatedFileTab={activeDiffHasDirtyRelatedFileTab}
-          fileActions={{
+          },
+          diffDraftContent: activeDiffDraftContent,
+          diffHasDirtyRelatedFileTab: activeDiffHasDirtyRelatedFileTab,
+          fileActions: {
             applyGitDiffSelection: handleApplyGitDiffSelection,
             compositionChange: setIsActiveEditorComposing,
             openFile: (targetFilePath) => {
@@ -1009,17 +753,68 @@ function App() {
             saveFile: (filePath, content) => {
               void handleSave({ content, filePath })
             },
-          }}
-          gitRepositoryState={gitRepositoryState}
-          iconTheme={iconTheme}
-          isVisible={shouldRenderWorkspaceEditor}
-          leadingToolbarAction={editorToolbarLeadingAction}
-          meoEditorHostRef={meoEditorHostRef}
-          meoSettings={meo}
-          theme={theme}
-          workspacePath={currentPath}
-        />
-      </WorkspaceEditorSurface>
+          },
+          gitRepositoryState,
+          iconTheme,
+          isVisible: shouldRenderWorkspaceEditor,
+          meoEditorHostRef,
+          meoSettings: meo,
+          theme,
+          workspacePath: currentPath,
+        }}
+        emptyState={{
+          hasWorkspace: Boolean(currentPath),
+          isPickingWorkspace,
+          onOpenWorkspaceSwitch: (anchorRect) => {
+            openProjectMenu('editor-switch', anchorRect)
+          },
+        }}
+        fileSystemPanel={{
+          fileSystemState: workspaceFileSystemState,
+          gitRepositoryState,
+          iconTheme,
+          meoSettings: meo,
+          nodes: tree,
+          theme,
+          title: workspaceLabel,
+          workspacePath: currentPath,
+          workspaceUnavailableMessage,
+          onFileSystemNavigationChange: handleWorkspaceFileSystemNavigationChange,
+          onFileSystemSelectionChange: handleWorkspaceFileSystemSelectionChange,
+          onFileSystemViewChange: handleWorkspaceFileSystemViewChange,
+          onOpenFile: (filePath) => {
+            void openFile(filePath)
+          },
+        }}
+        fileTabs={{
+          activeTabId: displayActiveTabId,
+          iconTheme,
+          tabs: displayTabs,
+          workspacePath: currentPath,
+          getHasDiff: (filePath) => Boolean(findGitChangeByFilePath(gitRepositoryState, filePath)),
+          onActivate: activateFileTab,
+          onClose: (tabId) => {
+            void closeEditorTab(tabId)
+          },
+          onMoveTab: (movingId, targetId, position) => {
+            moveTab(movingId, targetId, position)
+          },
+          onOpenDiff: async (filePath) => {
+            const latestGitState = await refreshGitState(currentPath, { silent: true })
+            const nextChange = findGitChangeByFilePath(latestGitState, filePath)
+            if (nextChange) {
+              void openGitDiff(nextChange)
+            }
+          },
+        }}
+        isDirectorySidebarAvailable={isDirectorySidebarAvailable}
+        isDirectorySidebarVisible={isDirectorySidebarVisible}
+        isDirectoryToggleSlotVisible={isDirectoryToggleSlotVisible}
+        navigation={workspaceNavigationConfiguration}
+        onToggleDirectorySidebar={() => {
+          setIsDirectorySidebarOpen((currentValue) => !currentValue)
+        }}
+      />
     )
   }
 
@@ -1034,7 +829,7 @@ function App() {
       )
     }
 
-    return isAgentLayout ? renderAgentPanel() : renderEditorSurface()
+    return isAgentLayout ? <AgentChatSurface /> : renderEditorWorkbench()
   }
 
   function renderRightPanel(surfaceMode: PanelSurfaceMode) {
@@ -1042,7 +837,7 @@ function App() {
       return null
     }
 
-    return isAgentLayout ? renderEditorSurface() : renderAgentPanel()
+    return isAgentLayout ? renderEditorWorkbench() : <AgentChatSurface />
   }
 
   const appShell = (
@@ -1072,7 +867,13 @@ function App() {
       }}
       renderCenterPanel={renderCenterPanel}
       renderLeftSidebar={renderWorkspaceSidebar}
-      renderRightDrawerOverlay={(frameRect) => renderProjectMenu('right-drawer', frameRect)}
+      renderRightDrawerOverlay={(frameRect) => (
+        <ProjectMenuLayer
+          configuration={projectMenuLayerConfiguration}
+          frameRect={frameRect}
+          surface='right-drawer'
+        />
+      )}
       renderRightPanel={renderRightPanel}
       rightCollapsedActions={(
         <>
@@ -1106,7 +907,10 @@ function App() {
     >
       <Toast.Provider placement='bottom end' />
 
-      {renderProjectMenu('global')}
+      <ProjectMenuLayer
+        configuration={projectMenuLayerConfiguration}
+        surface='global'
+      />
       <NewProjectDialog
         isBusy={isProjectActionBusy}
         isOpen={isNewProjectDialogOpen}

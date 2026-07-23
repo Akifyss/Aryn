@@ -78,7 +78,7 @@ describe('resolveWorkspaceEditorContentKind', () => {
 
 describe('workspace editor content ownership', () => {
   it('keeps concrete editor views outside the application composition root', async () => {
-    const [appSource, editorContentSource] = await Promise.all([
+    const [appSource, editorContentSource, workbenchSource] = await Promise.all([
       readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
       readFile(
         new URL(
@@ -87,9 +87,18 @@ describe('workspace editor content ownership', () => {
         ),
         'utf8',
       ),
+      readFile(
+        new URL(
+          '../src/features/workspace/components/workspace-workbench/workspace-editor-workbench.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
     ])
 
-    expect(appSource).toContain('<WorkspaceEditorContent')
+    expect(appSource).toContain('<WorkspaceEditorWorkbench')
+    expect(appSource).not.toContain('<WorkspaceEditorContent')
+    expect(workbenchSource).toContain('<WorkspaceEditorContent')
     expect(appSource).not.toMatch(
       /<(CodeEditor|GitDiffEditor|HtmlPreview|MeoEditorHost|WorkspaceFilePreview)\b/,
     )
