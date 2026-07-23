@@ -1,10 +1,14 @@
 import type { ReactNode } from 'react'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Toast, toast, AlertDialog } from '@heroui/react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Toast } from '@heroui/react'
 import {
   FolderLine,
   GitBranchLine,
 } from '@mingcute/react'
+import {
+  AppConfirmDialog,
+  useAppConfirmation,
+} from '@/components/app-confirm-dialog/app-confirm-dialog'
 import type { ActiveWorkspaceContext } from '@/features/conversations/types'
 import { useConversationController } from '@/features/conversations/hooks/use-conversation-controller'
 import { conversationDraftContext } from '@/features/conversations/lib/conversation-state'
@@ -17,6 +21,11 @@ import {
 import { DEFAULT_AGENT_ID } from '@/features/agent/agent-definition'
 import type { AgentWorkspaceState } from '@/features/agent/types'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host/meo-editor-host'
+import {
+  CodeEditor,
+  GitDiffEditor,
+  MeoEditorHost,
+} from '@/features/editor/components/lazy-editor-surfaces/lazy-editor-surfaces'
 import { GitPanel } from '@/features/git/components/git-panel/git-panel'
 import { useGitWorkspaceController } from '@/features/git/hooks/use-git-workspace-controller'
 import { findGitChangeByFilePath } from '@/features/git/lib/repository-state'
@@ -85,9 +94,11 @@ import {
   type WorkspaceRefreshRequest,
   type WorkspaceRefreshScheduleMode,
 } from '@/features/workspace/lib/workspace-refresh-coordinator'
-import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
 import { CommandPalette } from '@/features/command-palette/components/command-palette/command-palette'
 import { useSettingsStore, type AppLayoutPreference } from '@/hooks/use-settings-store'
+import { useAppBootstrap } from '@/hooks/use-app-bootstrap'
+import { useAppKeyboardShortcuts } from '@/hooks/use-app-keyboard-shortcuts'
+import { useAppWindowClose } from '@/hooks/use-app-window-close'
 import { useDevToolsFocusSettlement } from '@/hooks/use-devtools-focus-settlement'
 import { HtmlPreview } from '@/features/editor/components/html-preview/html-preview'
 import { AppShell } from '@/features/layout/components/app-shell/app-shell'
@@ -99,54 +110,6 @@ import {
 import { useShellLayoutController } from '@/features/layout/hooks/use-shell-layout-controller'
 import { useAppAppearanceController } from '@/features/appearance/hooks/use-app-appearance-controller'
 import './App.css'
-
-const CodeEditor = lazy(async () => {
-  const startedAt = performance.now()
-  recordOpenFileProfile('lazy:code-editor:start')
-  const module = await import('@/features/editor/components/code-editor/code-editor')
-  recordOpenFileProfile('lazy:code-editor:end', { durationMs: getOpenFileProfileDuration(startedAt) })
-  return { default: module.CodeEditor }
-})
-const GitDiffEditor = lazy(async () => {
-  const startedAt = performance.now()
-  recordOpenFileProfile('lazy:git-diff-editor:start')
-  const module = await import('@/features/editor/components/git-diff-editor/git-diff-editor')
-  recordOpenFileProfile('lazy:git-diff-editor:end', { durationMs: getOpenFileProfileDuration(startedAt) })
-  return { default: module.GitDiffEditor }
-})
-let meoEditorHostModulePromise: Promise<typeof import('@/features/editor/components/meo-editor-host/meo-editor-host')> | null = null
-
-function loadMeoEditorHostModule(reason: 'lazy' | 'startup-preload') {
-  if (!meoEditorHostModulePromise) {
-    const startedAt = performance.now()
-    recordOpenFileProfile('lazy:meo-editor-host:start', { reason })
-    meoEditorHostModulePromise = import('@/features/editor/components/meo-editor-host/meo-editor-host')
-      .then((module) => {
-        recordOpenFileProfile('lazy:meo-editor-host:end', {
-          durationMs: getOpenFileProfileDuration(startedAt),
-          reason,
-        })
-        return module
-      })
-  } else {
-    recordOpenFileProfile('lazy:meo-editor-host:reuse', { reason })
-  }
-
-  return meoEditorHostModulePromise
-}
-
-if (typeof window !== 'undefined') {
-  window.setTimeout(() => {
-    void loadMeoEditorHostModule('startup-preload')
-  }, 0)
-}
-
-const MeoEditorHost = lazy(async () => {
-  const startedAt = performance.now()
-  const module = await loadMeoEditorHostModule('lazy')
-  recordOpenFileProfile('lazy:meo-editor-host:lazy-resolved', { durationMs: getOpenFileProfileDuration(startedAt) })
-  return { default: module.MeoEditorHost }
-})
 
 const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
 
@@ -172,39 +135,12 @@ function App() {
 
   const [activeWorkspaceContext, setActiveWorkspaceContext] = useState<ActiveWorkspaceContext>(conversationDraftContext)
 
-  const [confirmDialogOptions, setConfirmDialogOptions] = useState<{
-    isOpen: boolean
-    title: string
-    message: string
-    confirmLabel?: string
-    cancelLabel?: string
-    isDanger?: boolean
-    onConfirm: () => void
-    onCancel: () => void
-  } | null>(null)
-
-  function requestConfirm(options: {
-    title: string
-    message: string
-    confirmLabel?: string
-    cancelLabel?: string
-    isDanger?: boolean
-  }): Promise<boolean> {
-    return new Promise((resolve) => {
-      setConfirmDialogOptions({
-        ...options,
-        isOpen: true,
-        onConfirm: () => {
-          setConfirmDialogOptions((prev) => prev ? { ...prev, isOpen: false } : null)
-          resolve(true)
-        },
-        onCancel: () => {
-          setConfirmDialogOptions((prev) => prev ? { ...prev, isOpen: false } : null)
-          resolve(false)
-        }
-      })
-    })
-  }
+  const {
+    cancelConfirmation,
+    confirmConfirmation,
+    confirmation,
+    requestConfirmation,
+  } = useAppConfirmation()
 
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance')
   const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
@@ -258,7 +194,6 @@ function App() {
   const isActiveMeoEditorMountedRef = useRef(false)
   isActiveMeoEditorMountedRef.current = currentEditorKind === 'prose' && currentFileViewMode === 'meo'
   const [isActiveEditorComposing, setIsActiveEditorComposing] = useState(false)
-  const windowCloseRequestInFlightRef = useRef(false)
   const currentPathRef = useRef<string | null>(currentPath)
   const performWorkspaceRefreshRef = useRef<(request: Required<WorkspaceRefreshRequest>) => Promise<void>>(async () => {})
   const workspaceRefreshCoordinatorRef = useRef<ReturnType<typeof createWorkspaceRefreshCoordinator> | null>(null)
@@ -351,7 +286,7 @@ function App() {
     displayActiveTabId,
     isActiveEditorComposing,
     refreshWorkspaceAfterSave: refreshWorkspaceAfterDocumentSave,
-    requestConfirmation: requestConfirm,
+    requestConfirmation,
     setStatusMessage,
   })
 
@@ -437,7 +372,7 @@ function App() {
     ensureWorkspaceTabsSaved: ensureWorkspaceTabsSavedBeforeGitAction,
     loadWorkspaceTree: reloadActiveWorkspaceTree,
     reconcileDiscardedFile: reconcileWorkspaceFileAfterGitDiscard,
-    requestConfirmation: requestConfirm,
+    requestConfirmation,
     setStatusMessage,
     syncOpenDiffTabs,
     workspacePath: currentPath,
@@ -539,7 +474,7 @@ function App() {
     flushWorkspaceTabsForNode,
     openFile,
     performWorkspaceRefresh,
-    requestConfirmation: requestConfirm,
+    requestConfirmation,
     setStatusMessage,
     syncPersistedActiveFile,
     tree,
@@ -585,7 +520,7 @@ function App() {
     loadTree,
     prepareGitWorkspace,
     refreshGitState,
-    requestConfirmation: requestConfirm,
+    requestConfirmation,
     resetExpandedPaths,
     resetGitWorkspaceState,
     restoreWorkspaceTabs,
@@ -616,7 +551,7 @@ function App() {
     disconnectWorkspaceSurface,
     flushDiffAutosave,
     flushWorkspaceAutosave,
-    requestConfirmation: requestConfirm,
+    requestConfirmation,
     restoreWorkspaceTabs,
     setActiveWorkspaceContext,
     setStatusMessage,
@@ -634,27 +569,9 @@ function App() {
   const isAppModalLayerOpen = isSettingsOpen
     || isCommandPaletteOpen
     || isNewProjectDialogOpen
-    || Boolean(confirmDialogOptions?.isOpen)
+    || Boolean(confirmation)
     || isGlobalProjectMenuOpen
   const isShortcutBlockingLayerOpen = isAppModalLayerOpen || isProjectMenuOpen
-
-  async function handleRequestWindowClose() {
-    if (windowCloseRequestInFlightRef.current) {
-      return
-    }
-
-    windowCloseRequestInFlightRef.current = true
-
-    try {
-      if (!(await confirmDiscardDirtyTabs('close'))) {
-        return
-      }
-
-      await window.appApi.closeWindow()
-    } finally {
-      windowCloseRequestInFlightRef.current = false
-    }
-  }
 
   async function handleStartContextualConversation() {
     if (activeProject) {
@@ -857,72 +774,16 @@ function App() {
     setActiveAgentLayoutFixedTab('file')
   }, [displayActiveTabId, isAgentLayout])
 
-  useEffect(() => {
-    let cancelled = false
-
-    void (async () => {
-      await hydrateWorkspaceIconThemes(() => cancelled)
-
-      const [
-        nextProjectState,
-        nextConversationState,
-        nextActiveContext,
-      ] = await Promise.all([
-        window.appApi.getProjectState(),
-        window.appApi.getConversationState(),
-        window.appApi.getActiveWorkspaceContext(),
-      ])
-
-      if (cancelled) {
-        return
-      }
-
-      hydrateProjectState(nextProjectState)
-      hydrateConversationState(nextConversationState)
-      setActiveWorkspaceContext(nextActiveContext)
-      const activeProject = nextActiveContext.kind === 'project'
-        ? nextProjectState.projects.find((project) => project.id === nextActiveContext.projectId) ?? null
-        : nextProjectState.projects.find((project) => project.id === nextProjectState.lastProjectId) ?? null
-
-      if (await restoreInitialConversationContext(
-        nextActiveContext,
-        nextConversationState,
-        { isCancelled: () => cancelled },
-      )) {
-        return
-      }
-
-      if (nextActiveContext.kind === 'conversationDraft') {
-        setStatusMessage('新对话')
-        return
-      }
-
-      if (!activeProject) {
-        setActiveWorkspaceContext(conversationDraftContext)
-        setStatusMessage('新对话')
-        return
-      }
-
-      try {
-        await connectWorkspace(activeProject.path)
-        if (!cancelled) {
-          await restoreWorkspaceTabs(activeProject.path, activeProject.lastFilePath)
-        }
-
-        if (!cancelled) {
-          setStatusMessage('已恢复上次项目')
-        }
-      } catch {
-        if (!cancelled) {
-          setStatusMessage('创建或打开项目以开始。')
-        }
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  useAppBootstrap({
+    connectWorkspace,
+    hydrateConversationState,
+    hydrateProjectState,
+    hydrateWorkspaceIconThemes,
+    restoreInitialConversationContext,
+    restoreWorkspaceTabs,
+    setActiveWorkspaceContext,
+    setStatusMessage,
+  })
 
   useEffect(() => {
     return () => {
@@ -941,13 +802,9 @@ function App() {
     setStatusMessage,
   })
 
-  useEffect(() => {
-    const unsubscribe = window.appApi.onWindowCloseRequested(() => {
-      void handleRequestWindowClose()
-    })
-
-    return unsubscribe
-  }, [handleRequestWindowClose])
+  const handleRequestWindowClose = useAppWindowClose({
+    confirmDiscardDirtyTabs,
+  })
 
   useEffect(() => {
     return () => {
@@ -955,26 +812,16 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      const isMac = platform === 'darwin'
-      const modifier = isMac ? event.metaKey : event.ctrlKey
-
-      if (!isShortcutBlockingLayerOpen && event.ctrlKey && event.altKey && event.key.toLowerCase() === 'n') {
-        event.preventDefault()
-        void handleStartContextualConversation()
-        return
-      }
-
-      if (modifier && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        setIsCommandPaletteOpen((prev) => !prev)
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeProject, isShortcutBlockingLayerOpen, platform])
+  useAppKeyboardShortcuts({
+    activeTabId: displayActiveTabId,
+    closeActiveTab: closeEditorTab,
+    cycleTabs,
+    isShortcutBlockingLayerOpen,
+    onSaveActiveTab: handleSaveActiveTab,
+    onStartContextualConversation: handleStartContextualConversation,
+    onToggleCommandPalette: () => setIsCommandPaletteOpen((currentValue) => !currentValue),
+    platform,
+  })
 
   useWorkspaceTabPersistence(currentPath, activeTabId, openTabs)
 
@@ -990,46 +837,6 @@ function App() {
       closeProjectMenu()
     }
   }, [isLeftDrawerOpen, isRightDrawerOpen, projectMenuMode, projectMenuSurface])
-
-  useEffect(() => {
-    function handleKeydown(event: KeyboardEvent) {
-      const key = event.key.toLowerCase()
-
-      if ((event.ctrlKey || event.metaKey) && key === 's') {
-        event.preventDefault()
-        void handleSaveActiveTab()
-        return
-      }
-
-      if ((event.ctrlKey || event.metaKey) && key === 'w') {
-        event.preventDefault()
-        if (displayActiveTabId) {
-          void closeEditorTab(displayActiveTabId)
-        }
-        return
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Tab') {
-        event.preventDefault()
-        cycleTabs(event.shiftKey ? -1 : 1)
-        return
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key === 'PageDown') {
-        event.preventDefault()
-        cycleTabs(1)
-        return
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key === 'PageUp') {
-        event.preventDefault()
-        cycleTabs(-1)
-      }
-    }
-
-    window.addEventListener('keydown', handleKeydown)
-    return () => window.removeEventListener('keydown', handleKeydown)
-  }, [closeEditorTab, cycleTabs, displayActiveTabId, handleSaveActiveTab])
 
   const handleCloseCommandPalette = useCallback(() => setIsCommandPaletteOpen(false), [])
   const handleOpenCommandPaletteFromChrome = useCallback(() => {
@@ -1490,37 +1297,13 @@ function App() {
         onStatusMessage={setStatusMessage}
       />
 
-      <AlertDialog.Backdrop
-        isOpen={confirmDialogOptions?.isOpen ?? false}
-        onOpenChange={(isOpen) => {
-          if (!isOpen && confirmDialogOptions) {
-            confirmDialogOptions.onCancel()
-          }
-        }}
-      >
-        <AlertDialog.Container>
-          <AlertDialog.Dialog>
-            <AlertDialog.CloseTrigger />
-            <AlertDialog.Header>
-              <AlertDialog.Icon status={confirmDialogOptions?.isDanger ? "danger" : "warning"} />
-              <AlertDialog.Heading>{confirmDialogOptions?.title}</AlertDialog.Heading>
-            </AlertDialog.Header>
-            <AlertDialog.Body>
-              <p className="text-[var(--foreground-primary)] whitespace-pre-wrap">{confirmDialogOptions?.message}</p>
-            </AlertDialog.Body>
-            <AlertDialog.Footer>
-              <Button variant="tertiary" onPress={() => confirmDialogOptions?.onCancel()}>
-                {confirmDialogOptions?.cancelLabel ?? '取消'}
-              </Button>
-              <Button variant={confirmDialogOptions?.isDanger ? "danger" : "primary"} onPress={() => confirmDialogOptions?.onConfirm()}>
-                {confirmDialogOptions?.confirmLabel ?? '确认'}
-              </Button>
-            </AlertDialog.Footer>
-          </AlertDialog.Dialog>
-        </AlertDialog.Container>
-      </AlertDialog.Backdrop>
+      <AppConfirmDialog
+        confirmation={confirmation}
+        onCancel={cancelConfirmation}
+        onConfirm={confirmConfirmation}
+      />
 
-      <CommandPalette 
+      <CommandPalette
         isOpen={isCommandPaletteOpen}
         onClose={handleCloseCommandPalette}
         files={tree}
