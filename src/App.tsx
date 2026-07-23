@@ -22,10 +22,7 @@ import type { MeoEditorHostHandle } from '@/features/editor/components/meo-edito
 import type { MeoOpenGitDiffHandler } from '@/features/editor/lib/meo-native-editor-types'
 import { useGitWorkspaceController } from '@/features/git/hooks/use-git-workspace-controller'
 import { findGitChangeByFilePath } from '@/features/git/lib/repository-state'
-import {
-  SettingsDialog,
-  type SettingsSectionId,
-} from '@/features/settings/components/settings-dialog/settings-dialog'
+import { SettingsDialog } from '@/features/settings/components/settings-dialog/settings-dialog'
 import {
   WorkspaceEditorWorkbench,
 } from '@/features/workspace/components/workspace-workbench/workspace-editor-workbench'
@@ -55,12 +52,12 @@ import {
 import { useWorkspaceChangeSubscription } from '@/features/workspace/hooks/use-workspace-change-subscription'
 import { useWorkspaceDocumentNavigation } from '@/features/workspace/hooks/use-workspace-document-navigation'
 import { useWorkspaceDocumentPersistence } from '@/features/workspace/hooks/use-workspace-document-persistence'
+import { useWorkspaceEditorSurfaceController } from '@/features/workspace/hooks/use-workspace-editor-surface-controller'
 import { useWorkspaceFileOperations } from '@/features/workspace/hooks/use-workspace-file-operations'
 import { useWorkspaceFileSystemState } from '@/features/workspace/hooks/use-workspace-file-system-state'
 import { useWorkspaceProjectController } from '@/features/workspace/hooks/use-workspace-project-controller'
 import { useWorkspaceSyncController } from '@/features/workspace/hooks/use-workspace-sync-controller'
 import { useWorkspaceTabPersistence } from '@/features/workspace/hooks/use-workspace-tab-persistence'
-import { useWorkspaceTabViewState } from '@/features/workspace/hooks/use-workspace-tab-view-state'
 import {
   createWorkspaceRefreshCoordinator,
   type WorkspaceRefreshRequest,
@@ -70,6 +67,7 @@ import { CommandPalette } from '@/features/command-palette/components/command-pa
 import { useSettingsStore, type AppLayoutPreference } from '@/hooks/use-settings-store'
 import { useAppBootstrap } from '@/hooks/use-app-bootstrap'
 import { useAppKeyboardShortcuts } from '@/hooks/use-app-keyboard-shortcuts'
+import { useAppOverlayController } from '@/hooks/use-app-overlay-controller'
 import { useAppWindowClose } from '@/hooks/use-app-window-close'
 import { useDevToolsFocusSettlement } from '@/hooks/use-devtools-focus-settlement'
 import { AppShell } from '@/features/layout/components/app-shell/app-shell'
@@ -111,13 +109,7 @@ function App() {
     requestConfirmation,
   } = useAppConfirmation()
 
-  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('appearance')
   const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
-  const [activeAgentLayoutFixedTab, setActiveAgentLayoutFixedTab] = useState<AgentLayoutFixedTab>('file')
-  const [isAgentLayoutFixedTabActive, setIsAgentLayoutFixedTabActive] = useState(false)
-  const [isDirectorySidebarOpen, setIsDirectorySidebarOpen] = useState(true)
   const meoEditorHostRef = useRef<MeoEditorHostHandle | null>(null)
   const activeTabId = useWorkspaceStore((state) => state.activeTabId)
   const currentPath = useWorkspaceStore((state) => state.currentPath)
@@ -146,12 +138,17 @@ function App() {
     currentFileViewMode,
     displayActiveTabId,
     displayTabs,
+    isDirectorySidebarAvailable,
+    isDirectorySidebarVisible,
+    isDirectoryToggleSlotVisible,
+    setActiveAgentLayoutFixedTab,
+    setIsAgentLayoutFixedTabActive,
     shouldRenderWorkspaceEditor,
-  } = useWorkspaceTabViewState({
-    activeAgentLayoutFixedTab,
+    toggleDirectorySidebar,
+  } = useWorkspaceEditorSurfaceController({
     activeTabId,
+    currentPath,
     isAgentLayout,
-    isAgentLayoutFixedTabActive,
     openTabs,
   })
   const isActiveMeoEditorMountedRef = useRef(false)
@@ -200,14 +197,6 @@ function App() {
     ? getBaseName(currentPath)
     : '选择工作目录'
   const activeTreePath = activeFileTab?.filePath ?? activeDiffTab?.diff.change.path ?? null
-  const isDirectorySidebarAvailable = Boolean(
-    currentPath
-    && isAgentLayout
-    && shouldRenderWorkspaceEditor
-    && (activeFileTab || activeDiffTab),
-  )
-  const isDirectorySidebarVisible = isDirectorySidebarAvailable && isDirectorySidebarOpen
-  const isDirectoryToggleSlotVisible = isDirectorySidebarAvailable && !isDirectorySidebarVisible
 
   const {
     closeEditorTab,
@@ -478,12 +467,25 @@ function App() {
     && projectMenuSurface === surface
   )
   const isGlobalProjectMenuOpen = isProjectMenuOpen && projectMenuSurface === 'global'
-  const isAppModalLayerOpen = isSettingsOpen
-    || isCommandPaletteOpen
-    || isNewProjectDialogOpen
-    || Boolean(confirmation)
-    || isGlobalProjectMenuOpen
-  const isShortcutBlockingLayerOpen = isAppModalLayerOpen || isProjectMenuOpen
+  const {
+    closeCommandPalette,
+    isAppModalLayerOpen,
+    isCommandPaletteOpen,
+    isSettingsOpen,
+    isShortcutBlockingLayerOpen,
+    openCommandPaletteFromChrome,
+    openSettings,
+    setIsSettingsOpen,
+    setSettingsSection,
+    settingsSection,
+    toggleCommandPalette,
+  } = useAppOverlayController({
+    closeDrawers,
+    hasConfirmation: Boolean(confirmation),
+    isGlobalProjectMenuOpen,
+    isNewProjectDialogOpen,
+    isProjectMenuOpen,
+  })
 
   async function handleStartContextualConversation() {
     if (activeProject) {
@@ -587,21 +589,6 @@ function App() {
     },
   }
 
-  useEffect(() => {
-    if (
-      isAgentLayout
-      || (
-        displayActiveTabId !== FIXED_FILE_TAB_ID
-        && displayActiveTabId !== FIXED_GIT_TAB_ID
-      )
-    ) {
-      return
-    }
-
-    setIsAgentLayoutFixedTabActive(false)
-    setActiveAgentLayoutFixedTab('file')
-  }, [displayActiveTabId, isAgentLayout])
-
   useAppBootstrap({
     connectWorkspace,
     hydrateConversationState,
@@ -647,7 +634,7 @@ function App() {
     isShortcutBlockingLayerOpen,
     onSaveActiveTab: handleSaveActiveTab,
     onStartContextualConversation: handleStartContextualConversation,
-    onToggleCommandPalette: () => setIsCommandPaletteOpen((currentValue) => !currentValue),
+    onToggleCommandPalette: toggleCommandPalette,
     platform,
   })
 
@@ -666,11 +653,6 @@ function App() {
     }
   }, [isLeftDrawerOpen, isRightDrawerOpen, projectMenuMode, projectMenuSurface])
 
-  const handleCloseCommandPalette = useCallback(() => setIsCommandPaletteOpen(false), [])
-  const handleOpenCommandPaletteFromChrome = useCallback(() => {
-    closeDrawers()
-    setIsCommandPaletteOpen(true)
-  }, [closeDrawers])
   const handleOpenSession = useCallback((sessionPath: string) => {
     if (queueCurrentProjectSession(
       sessionPath,
@@ -711,11 +693,11 @@ function App() {
         shellPlatform={shellPlatform}
         surfaceMode={surfaceMode}
         surfaceRef={leftDrawerSurfaceRef}
-        onOpenCommandPalette={handleOpenCommandPaletteFromChrome}
+        onOpenCommandPalette={openCommandPaletteFromChrome}
         onOpenProjectMenu={(mode, surface, anchorRect) => {
           openProjectMenu(mode, anchorRect, { surface })
         }}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={openSettings}
         onRequestDrawerClose={() => handleLeftDrawerOpenChange(false)}
         onToggleSidebar={toggleWorkspaceSidebar}
       />
@@ -811,9 +793,7 @@ function App() {
         isDirectorySidebarVisible={isDirectorySidebarVisible}
         isDirectoryToggleSlotVisible={isDirectoryToggleSlotVisible}
         navigation={workspaceNavigationConfiguration}
-        onToggleDirectorySidebar={() => {
-          setIsDirectorySidebarOpen((currentValue) => !currentValue)
-        }}
+        onToggleDirectorySidebar={toggleDirectorySidebar}
       />
     )
   }
@@ -853,7 +833,7 @@ function App() {
           onValueChange={setLayoutPreference}
         />
       )}
-      leftChromeSearchAction={<AppChromeSearchButton onClick={handleOpenCommandPaletteFromChrome} />}
+      leftChromeSearchAction={<AppChromeSearchButton onClick={openCommandPaletteFromChrome} />}
       leftChromeSidebarAction={(
         <AppChromeSidebarToggleButton
           isDrawer={isLeftSidebarDrawer}
@@ -943,7 +923,7 @@ function App() {
 
       <CommandPalette
         isOpen={isCommandPaletteOpen}
-        onClose={handleCloseCommandPalette}
+        onClose={closeCommandPalette}
         files={tree}
         sessions={agentWorkspaceState?.sessions ?? []}
         iconTheme={iconTheme}
@@ -977,8 +957,7 @@ function App() {
           handleRightDrawerOpenChange(false)
         }
 
-        setSettingsSection('providers')
-        setIsSettingsOpen(true)
+        openSettings('providers')
       }}
       workspacePath={currentPath}
       workspaceState={agentWorkspaceState}

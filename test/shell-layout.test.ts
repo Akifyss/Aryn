@@ -435,9 +435,22 @@ describe('shell layout helpers', () => {
   })
 
   it('uses the workspace FileSystem for the Agent fixed file tab', async () => {
-    const [appShellCss, appSource, workbenchSource, workspaceTabsSource] = await Promise.all([
+    const [
+      appShellCss,
+      appSource,
+      editorSurfaceControllerSource,
+      workbenchSource,
+      workspaceTabsSource,
+    ] = await Promise.all([
       readAppShellCss(),
       readAppSource(),
+      readFile(
+        new URL(
+          '../src/features/workspace/hooks/use-workspace-editor-surface-controller.ts',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
       readFile(
         new URL(
           '../src/features/workspace/components/workspace-workbench/workspace-editor-workbench.tsx',
@@ -448,7 +461,8 @@ describe('shell layout helpers', () => {
       readWorkspaceTabsSource(),
     ])
 
-    expect(appSource).toContain('useWorkspaceTabViewState({')
+    expect(appSource).toContain('useWorkspaceEditorSurfaceController({')
+    expect(editorSurfaceControllerSource).toContain('useWorkspaceTabViewState({')
     expect(appSource).toContain('<WorkspaceEditorWorkbench')
     expect(workspaceTabsSource).toContain("? [getFixedPanelTab('git'), getFixedPanelTab('file')]")
     expect(workbenchSource).toContain("activeFixedPanelTab?.fixedTabKind === 'file-panel' ? (")
