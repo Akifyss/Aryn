@@ -1,18 +1,14 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { constants, existsSync } from 'node:fs'
 import { copyFile, mkdir, readFile, readdir, rm } from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import {
-  getAgentDir as getPiAgentDir,
   SessionManager,
-  SettingsManager,
   type SessionInfo,
 } from '@earendil-works/pi-coding-agent'
 import type {
   AgentClientEventPayload,
   AgentInteractionResponse,
-  AgentMessageFileChange,
   AgentPromptAttachment,
   AgentRunningPromptBehavior,
   AgentSessionCreateOptions,
@@ -28,36 +24,32 @@ import {
   SessionRuntimeCoordinator,
   type SessionRuntimeLease,
 } from './session-runtime-coordinator'
+import {
+  createSessionRuntimeKey as runtimeKey,
+  createWorkspaceIdentity as workspaceIdentity,
+  createWorkspaceRuntimeKeyPrefix as workspaceRuntimeKeyPrefix,
+} from './agent-backends/runtime-keys'
+import {
+  DEFAULT_PI_CLI_SESSION_INDEX as DEFAULT_INDEX,
+  normalizeNullableString,
+  normalizePiCliSessionIndex as normalizeIndex,
+  normalizePiThinkingLevel as normalizeThinkingLevel,
+  PI_CLI_THINKING_LEVELS as THINKING_LEVELS,
+  projectPiFileAnnotations,
+  readPiResponseData as readResponseData,
+  summarizePiToolPayload as summarizeToolPayload,
+  type JsonRecord,
+  type PiCliSessionIndex,
+  type PiCliSessionRecord,
+  type PiRpcModel,
+} from './agent-backends/providers/pi-cli/session-model'
+import {
+  getLegacyPiSessionDirectory as legacySessionDirectory,
+  resolvePiPermissionExtensionPath as permissionExtensionPath,
+  resolvePiSessionDirectory,
+} from './agent-backends/providers/pi-cli/session-paths'
 
-type JsonRecord = Record<string, unknown>
-
-type PiCliSessionRecord = {
-  createdAt: string
-  cwd: string
-  id: string
-  materialized: boolean
-  modelKey: string | null
-  messageCount?: number
-  name: string | null
-  preview?: string | null
-  sessionPath?: string | null
-  thinkingLevel: AgentThinkingLevel
-  updatedAt: string
-}
-
-type PiCliSessionIndex = {
-  sessions: PiCliSessionRecord[]
-  version: 1
-}
-
-type PiRpcModel = {
-  id: string
-  input?: string[]
-  name?: string
-  provider: string
-  reasoning?: boolean
-  thinkingLevelMap?: Partial<Record<AgentThinkingLevel, unknown>>
-}
+export { projectPiFileAnnotations }
 
 type PiRuntime = {
   isStreaming: boolean
@@ -98,155 +90,8 @@ type WorkspaceStateContext = {
   workspaceOperation?: WorkspaceOperation
 }
 
-const DEFAULT_INDEX: PiCliSessionIndex = { sessions: [], version: 1 }
-const THINKING_LEVELS: AgentThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
-
-function workspaceIdentity(cwd: string) {
-  const resolved = path.resolve(cwd)
-  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
-}
-
-function runtimeKey(cwd: string, sessionID: string) {
-  return `${workspaceIdentity(cwd)}\0${sessionID}`
-}
-
-function workspaceRuntimeKeyPrefix(cwd: string) {
-  return `${workspaceIdentity(cwd)}\0`
-}
-
 function pendingInteractionKey(runtimeKeyValue: string, requestID: string) {
   return `${runtimeKeyValue}\0${requestID}`
-}
-
-function normalizeNullableString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function normalizeThinkingLevel(value: unknown): AgentThinkingLevel {
-  return typeof value === 'string' && THINKING_LEVELS.includes(value as AgentThinkingLevel)
-    ? value as AgentThinkingLevel
-    : 'medium'
-}
-
-function normalizeIndex(value: unknown): PiCliSessionIndex {
-  const candidate = value && typeof value === 'object' ? value as Record<string, unknown> : {}
-  const sessions = Array.isArray(candidate.sessions)
-    ? candidate.sessions.flatMap((entry): PiCliSessionRecord[] => {
-        const record = entry && typeof entry === 'object' ? entry as Record<string, unknown> : {}
-        const id = normalizeNullableString(record.id)
-        const cwd = normalizeNullableString(record.cwd)
-        if (!id || !cwd) return []
-        const createdAt = normalizeNullableString(record.createdAt) ?? new Date(0).toISOString()
-        return [{
-          createdAt,
-          cwd,
-          id,
-          materialized: typeof record.materialized === 'boolean' ? record.materialized : true,
-          modelKey: normalizeNullableString(record.modelKey),
-          name: normalizeNullableString(record.name),
-          thinkingLevel: normalizeThinkingLevel(record.thinkingLevel),
-          updatedAt: normalizeNullableString(record.updatedAt) ?? createdAt,
-        }]
-      })
-    : []
-
-  return { sessions, version: 1 }
-}
-
-function legacySessionDirectory(agentDir: string, cwd: string) {
-  const identity = workspaceIdentity(cwd)
-  const hash = createHash('sha256').update(identity).digest('hex').slice(0, 20)
-  return path.join(agentDir, 'external', 'pi', 'sessions', hash)
-}
-
-function resolvePiSessionDirectory(cwd: string) {
-  const environmentDirectory = normalizeNullableString(process.env.PI_CODING_AGENT_SESSION_DIR)
-  const configuredDirectory = environmentDirectory ?? SettingsManager.create(cwd, getPiAgentDir()).getSessionDir()
-  if (configuredDirectory) {
-    if (configuredDirectory === '~') return os.homedir()
-    if (configuredDirectory.startsWith('~/')) {
-      return path.join(os.homedir(), configuredDirectory.slice(2))
-    }
-    return path.isAbsolute(configuredDirectory)
-      ? configuredDirectory
-      : path.resolve(cwd, configuredDirectory)
-  }
-  // Keep this encoding byte-for-byte compatible with PI's official
-  // getDefaultSessionDir implementation (the helper is not part of the
-  // package's public export surface in 0.75.x).
-  const safePath = `--${cwd.replace(/^[/\\]/, '').replace(/[/\\:]/g, '-')}--`
-  return path.join(getPiAgentDir(), 'sessions', safePath)
-}
-
-function permissionExtensionPath() {
-  const resourcesPath = typeof process.resourcesPath === 'string' ? process.resourcesPath : ''
-  if (resourcesPath) {
-    const packagedPath = path.join(resourcesPath, 'agent-extensions', 'pi-permission-gate.mjs')
-    if (existsSync(packagedPath)) return packagedPath
-  }
-  return path.resolve(process.cwd(), 'resources', 'agent-extensions', 'pi-permission-gate.mjs')
-}
-
-function readResponseData(response: JsonRecord) {
-  return response.data && typeof response.data === 'object' ? response.data as JsonRecord : {}
-}
-
-function textFromContent(content: unknown) {
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
-  return content
-    .flatMap((part) => {
-      if (!part || typeof part !== 'object') return []
-      const candidate = part as Record<string, unknown>
-      return candidate.type === 'text'
-        ? [String(candidate.text ?? '')]
-        : []
-    })
-    .filter(Boolean)
-    .join('\n\n')
-}
-
-export function projectPiFileAnnotations(rawMessages: unknown) {
-  const fileChangesByEntryId: Record<string, AgentMessageFileChange[]> = {}
-  if (!Array.isArray(rawMessages)) return { fileChangesByEntryId }
-  for (const entry of rawMessages) {
-    if (!entry || typeof entry !== 'object') continue
-    const message = entry as JsonRecord
-    if (String(message.role ?? '') !== 'assistant' || !Array.isArray(message.content)) continue
-    for (const part of message.content) {
-      if (!part || typeof part !== 'object') continue
-      const toolCall = part as JsonRecord
-      if (toolCall.type !== 'toolCall') continue
-      const toolName = String(toolCall.name ?? toolCall.toolName ?? '')
-      if (toolName !== 'write' && toolName !== 'edit') continue
-      const args = toolCall.arguments && typeof toolCall.arguments === 'object'
-        ? toolCall.arguments as JsonRecord
-        : toolCall.input && typeof toolCall.input === 'object'
-          ? toolCall.input as JsonRecord
-          : {}
-      const filePath = normalizeNullableString(args.path ?? args.filePath)
-      const toolCallId = normalizeNullableString(toolCall.id ?? toolCall.toolCallId)
-      if (filePath && toolCallId) {
-        fileChangesByEntryId[toolCallId] = [{ filePath, kind: 'updated' }]
-      }
-    }
-  }
-  return { fileChangesByEntryId }
-}
-
-function summarizeToolPayload(message: JsonRecord, resultKey: 'partialResult' | 'result') {
-  const result = message[resultKey]
-  if (result && typeof result === 'object') {
-    const content = (result as JsonRecord).content
-    const text = textFromContent(content)
-    if (text) return text
-  }
-  const args = message.args
-  if (args && typeof args === 'object') {
-    const candidate = args as JsonRecord
-    return String(candidate.command ?? candidate.path ?? JSON.stringify(candidate))
-  }
-  return String(message.toolName ?? 'tool')
 }
 
 export class PiCliAgentManager {

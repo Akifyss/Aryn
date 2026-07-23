@@ -6,17 +6,14 @@ import type { ServerRequest } from '../../src/features/agent/codex-protocol/gene
 import type { Model } from '../../src/features/agent/codex-protocol/generated/v2/Model'
 import type { ModelListResponse } from '../../src/features/agent/codex-protocol/generated/v2/ModelListResponse'
 import type { McpServerElicitationRequestResponse } from '../../src/features/agent/codex-protocol/generated/v2/McpServerElicitationRequestResponse'
-import type { PermissionsRequestApprovalResponse } from '../../src/features/agent/codex-protocol/generated/v2/PermissionsRequestApprovalResponse'
 import type { RequestPermissionProfile } from '../../src/features/agent/codex-protocol/generated/v2/RequestPermissionProfile'
 import type { Thread } from '../../src/features/agent/codex-protocol/generated/v2/Thread'
 import type { ThreadListResponse } from '../../src/features/agent/codex-protocol/generated/v2/ThreadListResponse'
-import type { ThreadSourceKind } from '../../src/features/agent/codex-protocol/generated/v2/ThreadSourceKind'
 import type { UserInput } from '../../src/features/agent/codex-protocol/generated/v2/UserInput'
 import { getAgentInteractionKey } from '../../src/features/agent/types'
 import type {
   AgentClientEventPayload,
   AgentInteractionResponse,
-  AgentMessageFileChange,
   AgentPromptAttachment,
   AgentPromptSendOptions,
   AgentRunningPromptBehavior,
@@ -34,26 +31,45 @@ import {
   SessionRuntimeCoordinator,
   type SessionRuntimeLease,
 } from './session-runtime-coordinator'
+import {
+  createSessionRuntimeKey as runtimeKey,
+  createWorkspaceIdentity as workspaceIdentity,
+  createWorkspaceRuntimeKeyPrefix as workspaceRuntimeKeyPrefix,
+} from './agent-backends/runtime-keys'
+import {
+  buildCodexApprovalResult,
+  buildCodexPermissionApprovalResult,
+  buildCodexUserInputs,
+} from './agent-backends/providers/codex/interaction-codec'
+import {
+  getCodexNotificationThreadId as notificationThreadId,
+  isCodexServiceTierCompatibilityError as isServiceTierCompatibilityError,
+  isMissingNativeCodexThreadError as isMissingNativeThreadError,
+  isRecoverableCodexModelsCacheError as isRecoverableModelsCacheError,
+  isTransientCodexThreadReadError as isTransientThreadReadError,
+} from './agent-backends/providers/codex/protocol-compatibility'
+import {
+  CODEX_THINKING_LEVELS as THINKING_LEVELS,
+  countCodexThreadMessages as countThreadMessages,
+  DEFAULT_CODEX_THREAD_INDEX as DEFAULT_INDEX,
+  getCodexFileChanges as fileChangesFromThread,
+  getCodexModelThinkingLevels as codexModelThinkingLevels,
+  normalizeCodexReasoningEffort as reasoningEffort,
+  normalizeCodexThreadIndex as normalizeIndex,
+  toCodexReasoningEffort as codexReasoningEffort,
+  TOP_LEVEL_CODEX_THREAD_SOURCE_KINDS as TOP_LEVEL_THREAD_SOURCE_KINDS,
+  type CodexThreadIndex,
+  type CodexThreadRecord,
+} from './agent-backends/providers/codex/session-model'
 
 type JsonRecord = Record<string, unknown>
 
-export type CodexThreadRecord = {
-  createdAt: string
-  cwd: string
-  id: string
-  materialized: boolean
-  model: string | null
-  modelExplicit: boolean
-  name: string | null
-  preview?: string | null
-  reasoningEffort: AgentThinkingLevel
-  updatedAt: string
+export {
+  buildCodexApprovalResult,
+  buildCodexPermissionApprovalResult,
+  buildCodexUserInputs,
 }
-
-type CodexThreadIndex = {
-  threads: CodexThreadRecord[]
-  version: 1
-}
+export type { CodexThreadRecord }
 
 type QueuedCodexPrompt = {
   attachments: AgentPromptAttachment[]
@@ -114,190 +130,7 @@ type CodexRecordReplacement = {
   workspaceIdentity: string
 }
 
-const DEFAULT_INDEX: CodexThreadIndex = { threads: [], version: 1 }
-const THINKING_LEVELS: AgentThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
 const SNAPSHOT_COALESCE_MS = 16
-const TOP_LEVEL_THREAD_SOURCE_KINDS: ThreadSourceKind[] = ['cli', 'vscode', 'exec', 'appServer', 'unknown']
-
-function workspaceIdentity(cwd: string) {
-  const resolved = path.resolve(cwd)
-  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
-}
-
-function runtimeKey(cwd: string, threadId: string) {
-  return `${workspaceIdentity(cwd)}\0${threadId}`
-}
-
-function workspaceRuntimeKeyPrefix(cwd: string) {
-  return `${workspaceIdentity(cwd)}\0`
-}
-
-function notificationThreadId(notification: ServerNotification) {
-  return notification.method === 'thread/started'
-    ? notification.params.thread.id
-    : 'threadId' in notification.params && typeof notification.params.threadId === 'string'
-      ? notification.params.threadId
-      : null
-}
-
-function isRecoverableModelsCacheError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
-  const explicitSchemaFailure = message.includes('failed to load models cache:')
-    && /missing field|unknown field|invalid type|expected .+ at line|EOF while parsing/i.test(message)
-  // Some Codex versions only write an incompatible-cache diagnostic to their
-  // own log stream and leave model/list pending. In that case the RPC client
-  // can only observe the timeout. Recovery remains bounded to one attempt and
-  // recoverModelsCache() is a no-op unless a cache file actually exists.
-  const modelListTimeout = /codex request ["']model\/list["'] timed out/i.test(message)
-  return explicitSchemaFailure || modelListTimeout
-}
-
-function nullableString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function reasoningEffort(value: unknown): AgentThinkingLevel {
-  if (value === 'none') return 'off'
-  return typeof value === 'string' && THINKING_LEVELS.includes(value as AgentThinkingLevel)
-    ? value as AgentThinkingLevel
-    : 'medium'
-}
-
-function codexReasoningEffort(value: AgentThinkingLevel) {
-  return value === 'off' ? 'none' : value
-}
-
-function codexModelThinkingLevels(model: Model): AgentThinkingLevel[] {
-  const levels = model.supportedReasoningEfforts
-    .map((option) => reasoningEffort(option.reasoningEffort))
-    .filter((effort, index, values) => values.indexOf(effort) === index)
-  return levels.length > 0 ? levels : ['low', 'medium', 'high']
-}
-
-function normalizeIndex(value: unknown): CodexThreadIndex {
-  const candidate = value && typeof value === 'object' ? value as JsonRecord : {}
-  const threads = Array.isArray(candidate.threads)
-    ? candidate.threads.flatMap((entry): CodexThreadRecord[] => {
-        const thread = entry && typeof entry === 'object' ? entry as JsonRecord : {}
-        const id = nullableString(thread.id)
-        const cwd = nullableString(thread.cwd)
-        if (!id || !cwd) return []
-        const createdAt = nullableString(thread.createdAt) ?? new Date(0).toISOString()
-        return [{
-          createdAt,
-          cwd,
-          id,
-          materialized: typeof thread.materialized === 'boolean' ? thread.materialized : true,
-          model: nullableString(thread.model),
-          modelExplicit: thread.modelExplicit === true,
-          name: nullableString(thread.name),
-          preview: nullableString(thread.preview),
-          reasoningEffort: reasoningEffort(thread.reasoningEffort),
-          updatedAt: nullableString(thread.updatedAt) ?? createdAt,
-        }]
-      })
-    : []
-  return { threads, version: 1 }
-}
-
-function isTransientThreadReadError(message: string) {
-  return message.includes('is not materialized yet')
-    || (message.includes('failed to load rollout') && message.includes('is empty'))
-}
-
-function isMissingNativeThreadError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.includes('no rollout found') || message.includes('not found')
-}
-
-function isServiceTierCompatibilityError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.includes('service_tier') || (
-    message.includes('unknown variant `default`')
-    && message.includes('expected `fast` or `flex`')
-  )
-}
-
-function fileChangesFromThread(thread: Thread) {
-  const fileChangesByEntryId: Record<string, AgentMessageFileChange[]> = {}
-  for (const turn of thread.turns) {
-    for (const item of turn.items) {
-      if (item.type !== 'fileChange') continue
-      fileChangesByEntryId[item.id] = item.changes.map((change) => ({
-        filePath: change.path,
-        kind: change.kind.type === 'add'
-          ? 'created'
-          : change.kind.type === 'delete'
-            ? 'deleted'
-            : 'updated',
-      }))
-    }
-  }
-  return fileChangesByEntryId
-}
-
-function countThreadMessages(thread: Thread) {
-  return thread.turns.reduce((count, turn) => count + turn.items.filter((item) => (
-    item.type === 'userMessage' || item.type === 'agentMessage'
-  )).length, 0)
-}
-
-export function buildCodexPermissionApprovalResult(
-  requestedPermissions: RequestPermissionProfile,
-  optionId: string,
-): PermissionsRequestApprovalResponse {
-  const approved = optionId === 'allow_once' || optionId === 'allow_always'
-  const permissions: PermissionsRequestApprovalResponse['permissions'] = approved
-    ? {
-        ...(requestedPermissions.fileSystem
-          ? { fileSystem: structuredClone(requestedPermissions.fileSystem) }
-          : {}),
-        ...(requestedPermissions.network
-          ? { network: structuredClone(requestedPermissions.network) }
-          : {}),
-      }
-    : {}
-  return {
-    permissions,
-    scope: optionId === 'allow_always' ? 'session' : 'turn',
-  }
-}
-
-export function buildCodexApprovalResult(optionId: string, protocol: 'legacy' | 'v2') {
-  if (protocol === 'legacy') {
-    return {
-      decision: optionId === 'allow_always'
-        ? 'approved_for_session'
-        : optionId === 'allow_once'
-          ? 'approved'
-          : 'denied',
-    }
-  }
-  return {
-    decision: optionId === 'allow_always'
-      ? 'acceptForSession'
-      : optionId === 'allow_once'
-        ? 'accept'
-        : 'decline',
-  }
-}
-
-export function buildCodexUserInputs(
-  prompt: string,
-  attachments: AgentPromptAttachment[],
-): UserInput[] {
-  const inputs: UserInput[] = prompt ? [{ type: 'text', text: prompt, text_elements: [] }] : []
-  for (const attachment of attachments) {
-    if (attachment.kind === 'file' && attachment.path) {
-      inputs.push({ type: 'mention', name: attachment.fileName, path: attachment.path })
-    } else if (attachment.kind === 'image') {
-      if (attachment.data) inputs.push({ type: 'image', url: attachment.data })
-      else if (attachment.path) inputs.push({ type: 'localImage', path: attachment.path })
-    }
-  }
-  if (inputs.length === 0) throw new Error('Codex prompt must include text or an attachment.')
-  return inputs
-}
 
 export class CodexAgentManager {
   private readonly bindingLeases = new Map<string, SessionRuntimeLease>()

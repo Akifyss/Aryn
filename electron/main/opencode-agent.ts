@@ -1,8 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import spawn from 'cross-spawn'
 import {
   createOpencodeClient,
   type Event as OpenCodeEvent,
@@ -16,7 +14,6 @@ import {
   type Session,
   type SnapshotFileDiff,
   type SessionStatus,
-  type Todo,
 } from '@opencode-ai/sdk/v2'
 import { getAgentInteractionKey } from '../../src/features/agent/types'
 import {
@@ -48,7 +45,6 @@ import {
   resolveExternalCliCommand,
 } from './external-cli-environment'
 import { AtomicJsonStore } from './json-file-store'
-import { terminateChildProcessTree } from './child-process-lifecycle'
 import {
   getOpenCodeEventSessionId,
   OpenCodeSessionMessageReducer,
@@ -57,12 +53,36 @@ import {
   SessionRuntimeCoordinator,
   type SessionRuntimeLease,
 } from './session-runtime-coordinator'
+import {
+  createSessionRuntimeKey as runtimeKey,
+  createWorkspaceIdentity as workspaceIdentity,
+  createWorkspaceRuntimeKeyPrefix as workspaceRuntimeKeyPrefix,
+} from './agent-backends/runtime-keys'
+import {
+  launchOpenCodeServer,
+  type OpenCodeServer,
+  type OpenCodeServerLaunchOptions,
+} from './agent-backends/providers/opencode/server-process'
+import {
+  ARYN_SESSION_METADATA_KEY,
+  createOpenCodeSessionListItem as sessionListItem,
+  DEFAULT_OPEN_CODE_SESSION_INDEX as DEFAULT_SESSION_INDEX,
+  DEFAULT_OPEN_CODE_THINKING_LEVEL as DEFAULT_THINKING_LEVEL,
+  formatOpenCodeError as formatError,
+  getOpenCodeThinkingLevels as supportedThinkingLevels,
+  getSessionConfigurationFromMetadata as sessionConfigurationFromMetadata,
+  mapOpenCodeThinkingVariant as mapThinkingVariant,
+  normalizeNullableText,
+  normalizeOpenCodeExecutionState as normalizeExecutionState,
+  normalizeOpenCodeSessionIndex as normalizeSessionIndex,
+  parseOpenCodeModelKey as parseModelKey,
+  unwrapOpenCodeSdkResult as unwrapSdkResult,
+  withSessionConfigurationMetadata,
+  type OpenCodeSessionIndex,
+  type OpenCodeSessionRecord,
+} from './agent-backends/providers/opencode/session-model'
+import { requestOpenCodeSurfaceData } from './agent-backends/providers/opencode/surface-gateway'
 
-type OpenCodeServer = {
-  close: () => void
-  onExit?: (listener: (error: Error) => void) => () => void
-  url: string
-}
 type JsonRecord = Record<string, unknown>
 
 type SessionBinding = {
@@ -81,19 +101,6 @@ type SessionBinding = {
   selectedModel: string | null
   thinkingLevel: AgentThinkingLevel
   title: string | null
-}
-
-type OpenCodeSessionRecord = {
-  createdAt: string
-  cwd: string
-  id: string
-  modelKey: string | null
-  thinkingLevel: AgentThinkingLevel
-}
-
-type OpenCodeSessionIndex = {
-  sessions: OpenCodeSessionRecord[]
-  version: 1
 }
 
 type PendingOpenCodeInteraction = {
@@ -135,21 +142,10 @@ type OpenCodeAgentManagerOptions = {
   startServer?: (options: OpenCodeServerLaunchOptions) => Promise<OpenCodeServer>
 }
 
-type OpenCodeServerLaunchOptions = {
-  command: string
-  environment: NodeJS.ProcessEnv
-  hostname: string
-  port: number
-  timeout: number
-}
-
-const DEFAULT_THINKING_LEVEL: AgentThinkingLevel = 'medium'
-const DEFAULT_SESSION_INDEX: OpenCodeSessionIndex = { sessions: [], version: 1 }
 const OPEN_CODE_START_TIMEOUT_MS = 15_000
 const OPEN_CODE_SNAPSHOT_COALESCE_MS = 16
 const OPEN_CODE_EVENT_RECONNECT_MAX_MS = 3_000
 const OPEN_CODE_EVENT_RECONNECT_MIN_MS = 250
-const ARYN_SESSION_METADATA_KEY = 'aryn'
 
 function waitForAbortableDelay(delay: number, signal: AbortSignal) {
   if (signal.aborted) return Promise.resolve()
@@ -162,250 +158,6 @@ function waitForAbortableDelay(delay: number, signal: AbortSignal) {
     const timer = setTimeout(finish, delay)
     signal.addEventListener('abort', finish, { once: true })
   })
-}
-
-async function launchOpenCodeServer(options: OpenCodeServerLaunchOptions): Promise<OpenCodeServer> {
-  const child = spawn(options.command, [
-    'serve',
-    `--hostname=${options.hostname}`,
-    `--port=${options.port}`,
-  ], {
-    env: options.environment,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    windowsHide: true,
-  }) as ChildProcessWithoutNullStreams
-  child.stdout.setEncoding('utf8')
-  child.stderr.setEncoding('utf8')
-
-  return new Promise((resolve, reject) => {
-    let output = ''
-    let settled = false
-    const exitListeners = new Set<(error: Error) => void>()
-    const finishWithError = (error: Error) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timeout)
-      terminateChildProcessTree(child)
-      reject(error)
-    }
-    const timeout = setTimeout(() => {
-      finishWithError(new Error(`Timeout waiting for OpenCode server to start after ${options.timeout}ms.`))
-    }, options.timeout)
-
-    child.stdout.on('data', (chunk: string) => {
-      if (settled) return
-      output = `${output}${chunk}`.slice(-64 * 1024)
-      for (const line of output.split(/\r?\n/)) {
-        if (!line.startsWith('opencode server listening')) continue
-        const match = line.match(/on\s+(https?:\/\/[^\s]+)/)
-        if (!match) {
-          finishWithError(new Error(`Failed to parse OpenCode server URL from output: ${line}`))
-          return
-        }
-        settled = true
-        clearTimeout(timeout)
-        resolve({
-          close: () => terminateChildProcessTree(child),
-          onExit: (listener) => {
-            exitListeners.add(listener)
-            return () => exitListeners.delete(listener)
-          },
-          url: match[1],
-        })
-        return
-      }
-    })
-    child.stderr.on('data', (chunk: string) => {
-      if (!settled) output = `${output}${chunk}`.slice(-64 * 1024)
-    })
-    child.once('error', (error) => finishWithError(error))
-    child.once('exit', (code) => {
-      const error = new Error(
-        `OpenCode server (${options.command}) exited with code ${code ?? 'unknown'}${output.trim() ? `\nServer output: ${output.trim()}` : ''}`,
-      )
-      finishWithError(error)
-      for (const listener of exitListeners) listener(error)
-      exitListeners.clear()
-    })
-  })
-}
-
-function workspaceIdentity(cwd: string) {
-  const resolvedPath = path.resolve(cwd)
-  return process.platform === 'win32' ? resolvedPath.toLowerCase() : resolvedPath
-}
-
-function runtimeKey(cwd: string, sessionID: string) {
-  return `${workspaceIdentity(cwd)}\0${sessionID}`
-}
-
-function workspaceRuntimeKeyPrefix(cwd: string) {
-  return `${workspaceIdentity(cwd)}\0`
-}
-
-function unwrapSdkResult<T>(result: T | { data?: T, error?: unknown }, action: string): T {
-  if (result && typeof result === 'object' && 'error' in result && result.error) {
-    const error = result.error
-    const message = error && typeof error === 'object' && 'message' in error
-      ? String(error.message)
-      : JSON.stringify(error)
-    throw new Error(`OpenCode ${action} failed: ${message}`)
-  }
-
-  if (result && typeof result === 'object' && 'data' in result) {
-    const data = result.data
-    if (data === undefined) {
-      throw new Error(`OpenCode ${action} returned no data.`)
-    }
-    return data as T
-  }
-
-  return result as T
-}
-
-function parseModelKey(modelKey: string | null | undefined) {
-  const normalizedKey = modelKey?.trim() ?? ''
-  const separatorIndex = normalizedKey.indexOf('/')
-  if (separatorIndex <= 0 || separatorIndex === normalizedKey.length - 1) {
-    return null
-  }
-
-  return {
-    modelID: normalizedKey.slice(separatorIndex + 1),
-    providerID: normalizedKey.slice(0, separatorIndex),
-  }
-}
-
-function mapThinkingVariant(level: AgentThinkingLevel) {
-  return level === 'off' ? undefined : level
-}
-
-function supportedThinkingLevels(provider: Provider, modelID: string): AgentThinkingLevel[] {
-  const model = provider.models[modelID]
-  if (!model?.capabilities.reasoning) {
-    return ['off']
-  }
-
-  const variantNames = Object.keys(model.variants ?? {})
-  const knownLevels = (['off', 'minimal', 'low', 'medium', 'high', 'xhigh'] as AgentThinkingLevel[])
-    .filter((level) => variantNames.some((variant) => variant.toLowerCase() === level))
-
-  return knownLevels.length > 0 ? knownLevels : ['low', 'medium', 'high']
-}
-
-function formatError(error: unknown) {
-  if (error instanceof Error) {
-    return error.message
-  }
-  if (error && typeof error === 'object') {
-    if ('data' in error && error.data && typeof error.data === 'object' && 'message' in error.data) {
-      return String(error.data.message)
-    }
-    if ('message' in error) {
-      return String(error.message)
-    }
-  }
-  return String(error)
-}
-
-function normalizeNullableText(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
-}
-
-function normalizeExecutionState(value: unknown): AgentSessionExecutionState {
-  const status = value && typeof value === 'object' ? value as JsonRecord : {}
-  if (status.type === 'busy') return { type: 'busy' }
-  if (status.type === 'retry') {
-    const actionRecord = status.action && typeof status.action === 'object'
-      ? status.action as JsonRecord
-      : null
-    const action = actionRecord
-      && typeof actionRecord.label === 'string'
-      && typeof actionRecord.message === 'string'
-      && typeof actionRecord.provider === 'string'
-      && typeof actionRecord.reason === 'string'
-      && typeof actionRecord.title === 'string'
-      ? {
-          label: actionRecord.label,
-          ...(typeof actionRecord.link === 'string' ? { link: actionRecord.link } : {}),
-          message: actionRecord.message,
-          provider: actionRecord.provider,
-          reason: actionRecord.reason,
-          title: actionRecord.title,
-        }
-      : undefined
-    return {
-      type: 'retry',
-      ...(action ? { action } : {}),
-      attempt: typeof status.attempt === 'number' ? status.attempt : 0,
-      message: typeof status.message === 'string' ? status.message : 'OpenCode 正在重试',
-      next: typeof status.next === 'number' ? status.next : Date.now(),
-    }
-  }
-  return { type: 'idle' }
-}
-
-function normalizeSessionIndex(value: unknown): OpenCodeSessionIndex {
-  const candidate = value && typeof value === 'object' ? value as JsonRecord : {}
-  const sessions = Array.isArray(candidate.sessions)
-    ? candidate.sessions.flatMap((entry): OpenCodeSessionRecord[] => {
-        const record = entry && typeof entry === 'object' ? entry as JsonRecord : {}
-        const id = normalizeNullableText(record.id)
-        const cwd = normalizeNullableText(record.cwd)
-        if (!id || !cwd) return []
-        return [{
-          createdAt: normalizeNullableText(record.createdAt) ?? new Date(0).toISOString(),
-          cwd,
-          id,
-          modelKey: normalizeNullableText(record.modelKey) ?? null,
-          thinkingLevel: typeof record.thinkingLevel === 'string'
-            && ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(record.thinkingLevel)
-            ? record.thinkingLevel as AgentThinkingLevel
-            : DEFAULT_THINKING_LEVEL,
-        }]
-      })
-    : []
-  return { sessions, version: 1 }
-}
-
-function sessionConfigurationFromMetadata(session: Session) {
-  const metadata = session.metadata?.[ARYN_SESSION_METADATA_KEY]
-  if (!metadata || typeof metadata !== 'object') return null
-  const record = metadata as JsonRecord
-  const modelKey = normalizeNullableText(record.modelKey) ?? null
-  const thinkingLevel = typeof record.thinkingLevel === 'string'
-    && ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(record.thinkingLevel)
-    ? record.thinkingLevel as AgentThinkingLevel
-    : null
-  if (!modelKey && !thinkingLevel) return null
-  return { modelKey, thinkingLevel }
-}
-
-function withSessionConfigurationMetadata(
-  session: Session,
-  modelKey: string | null,
-  thinkingLevel: AgentThinkingLevel,
-) {
-  return {
-    ...(session.metadata ?? {}),
-    [ARYN_SESSION_METADATA_KEY]: {
-      modelKey,
-      thinkingLevel,
-    },
-  }
-}
-
-function sessionListItem(session: Session): AgentSessionListItem {
-  const title = session.title?.trim() || null
-  return {
-    createdAt: new Date(session.time.created).toISOString(),
-    id: session.id,
-    messageCount: 0,
-    modifiedAt: new Date(session.time.updated).toISOString(),
-    name: title,
-    path: session.id,
-    preview: title ?? 'OpenCode session',
-  }
 }
 
 export class OpenCodeAgentManager {
@@ -556,74 +308,19 @@ export class OpenCodeAgentManager {
   async requestSurfaceData(cwd: string, request: OpenCodeSurfaceRequest): Promise<OpenCodeSurfaceResponse> {
     if ('sessionID' in request) {
       return this.withBinding(cwd, request.sessionID, (client) => (
-        this.performSurfaceRequest(client, cwd, request)
+        requestOpenCodeSurfaceData(client, cwd, request)
       ))
     }
     const workspaceOperation = this.captureWorkspaceOperation(cwd)
     this.requireWorkspaceOperationCurrent(workspaceOperation)
     const client = await this.ensureClient()
     const clientGeneration = this.clientGeneration
-    const response = await this.performSurfaceRequest(client, cwd, request)
+    const response = await requestOpenCodeSurfaceData(client, cwd, request)
     this.requireWorkspaceOperationCurrent(workspaceOperation)
     if (!this.isClientCurrent(client, clientGeneration)) {
       throw new Error('OpenCode surface request was superseded.')
     }
     return response
-  }
-
-  private async performSurfaceRequest(
-    client: OpencodeClient,
-    cwd: string,
-    request: OpenCodeSurfaceRequest,
-  ): Promise<OpenCodeSurfaceResponse> {
-    switch (request.method) {
-      case 'app.agents': {
-        const response = await client.app.agents({ directory: cwd }, { throwOnError: true })
-        return { data: unwrapSdkResult<unknown>(response, 'load surface agents') }
-      }
-      case 'provider.list': {
-        const response = await client.provider.list({ directory: cwd }, { throwOnError: true })
-        return { data: unwrapSdkResult<unknown>(response, 'load surface providers') }
-      }
-      case 'session.get': {
-        const response = await client.session.get({ directory: cwd, sessionID: request.sessionID }, { throwOnError: true })
-        return { data: unwrapSdkResult<Session>(response, 'load surface session') }
-      }
-      case 'session.messages': {
-        const response = await client.session.messages({
-          directory: cwd,
-          sessionID: request.sessionID,
-          limit: Math.max(1, Math.min(500, request.limit)),
-          ...(request.before ? { before: request.before } : {}),
-        }, { throwOnError: true })
-        const result = unwrapSdkResult<Array<{ info: Message, parts: Part[] }>>(response, 'load surface messages')
-        const nextCursor = response && typeof response === 'object' && 'response' in response
-          ? response.response.headers.get('x-next-cursor') ?? undefined
-          : undefined
-        return { data: result, nextCursor }
-      }
-      case 'session.message': {
-        const response = await client.session.message({
-          directory: cwd,
-          messageID: request.messageID,
-          sessionID: request.sessionID,
-        }, { throwOnError: true })
-        return { data: unwrapSdkResult<{ info: Message, parts: Part[] }>(response, 'load surface message') }
-      }
-      case 'session.diff': {
-        const response = await client.session.diff({ directory: cwd, sessionID: request.sessionID }, { throwOnError: true })
-        return { data: unwrapSdkResult<SnapshotFileDiff[]>(response, 'load surface diff') }
-      }
-      case 'session.todo': {
-        const response = await client.session.todo({ directory: cwd, sessionID: request.sessionID }, { throwOnError: true })
-        return { data: unwrapSdkResult<Todo[]>(response, 'load surface todos') }
-      }
-      case 'session.status': {
-        const response = await client.session.status({ directory: cwd }, { throwOnError: true })
-        const statuses = unwrapSdkResult<Record<string, SessionStatus>>(response, 'load surface status')
-        return { data: statuses[request.sessionID] ?? { type: 'idle' } }
-      }
-    }
   }
 
   async sessionExists(cwd: string, sessionID: string) {
