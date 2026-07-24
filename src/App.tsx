@@ -23,13 +23,12 @@ import { useWorkspaceEditorSurfaceController } from '@/features/workspace/hooks/
 import { useWorkspaceFileOperations } from '@/features/workspace/hooks/use-workspace-file-operations'
 import { useWorkspaceFileSystemState } from '@/features/workspace/hooks/use-workspace-file-system-state'
 import { useWorkspaceProjectController } from '@/features/workspace/hooks/use-workspace-project-controller'
+import {
+  useWorkspaceRefreshController,
+  type WorkspaceGitRefresh,
+} from '@/features/workspace/hooks/use-workspace-refresh-controller'
 import { useWorkspaceSyncController } from '@/features/workspace/hooks/use-workspace-sync-controller'
 import { useWorkspaceTabPersistence } from '@/features/workspace/hooks/use-workspace-tab-persistence'
-import {
-  createWorkspaceRefreshCoordinator,
-  type WorkspaceRefreshRequest,
-  type WorkspaceRefreshScheduleMode,
-} from '@/features/workspace/lib/workspace-refresh-coordinator'
 import { useSettingsStore, type AppLayoutPreference } from '@/hooks/use-settings-store'
 import { useAppBootstrap } from '@/hooks/use-app-bootstrap'
 import { useAppKeyboardShortcuts } from '@/hooks/use-app-keyboard-shortcuts'
@@ -41,8 +40,6 @@ import { AppWorkspaceShell } from '@/features/layout/components/app-workspace-sh
 import { useShellLayoutController } from '@/features/layout/hooks/use-shell-layout-controller'
 import { useAppAppearanceController } from '@/features/appearance/hooks/use-app-appearance-controller'
 import './App.css'
-
-const WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS = 140
 
 function App() {
   const platform = window.appApi.platform
@@ -105,8 +102,6 @@ function App() {
   const isActiveMeoEditorMountedRef = useRef(false)
   isActiveMeoEditorMountedRef.current = currentEditorKind === 'prose' && currentFileViewMode === 'meo'
   const [isActiveEditorComposing, setIsActiveEditorComposing] = useState(false)
-  const performWorkspaceRefreshRef = useRef<(request: Required<WorkspaceRefreshRequest>) => Promise<void>>(async () => {})
-  const workspaceRefreshCoordinatorRef = useRef<ReturnType<typeof createWorkspaceRefreshCoordinator> | null>(null)
   const {
     currentPathRef,
     isActiveWorkspacePath,
@@ -117,26 +112,22 @@ function App() {
   } = useWorkspaceSyncController(currentPath)
   useDevToolsFocusSettlement()
 
-  if (!workspaceRefreshCoordinatorRef.current) {
-    workspaceRefreshCoordinatorRef.current = createWorkspaceRefreshCoordinator({
-      debounceMs: WORKSPACE_CHANGE_REFRESH_DEBOUNCE_MS,
-      onFlush: (request) => performWorkspaceRefreshRef.current(request),
-    })
-  }
-  const requestWorkspaceRefresh = useCallback((
-    request: WorkspaceRefreshRequest,
-    mode: WorkspaceRefreshScheduleMode = 'immediate',
-  ) => {
-    return workspaceRefreshCoordinatorRef.current?.request(request, mode) ?? Promise.resolve()
-  }, [])
-  const refreshWorkspaceAfterDocumentSave = useCallback((rootPath: string) => (
-    performWorkspaceRefreshRef.current({
-      gitSilent: true,
-      refreshGit: true,
-      refreshTree: true,
-      rootPath,
-    })
-  ), [])
+  // Persistence needs a refresh callback before the Git controller is created.
+  // This stable delegate is connected to the current Git controller below.
+  const refreshGitStateRef = useRef<WorkspaceGitRefresh>(async () => null)
+  const refreshGitWorkspace = useCallback<WorkspaceGitRefresh>((
+    workspacePath,
+    options,
+  ) => refreshGitStateRef.current(workspacePath, options), [])
+  const {
+    performWorkspaceRefresh,
+    refreshWorkspaceAfterDocumentSave,
+    requestWorkspaceRefresh,
+  } = useWorkspaceRefreshController({
+    isActiveWorkspacePath,
+    refreshGitState: refreshGitWorkspace,
+    reloadActiveWorkspaceTree,
+  })
   const captureActiveMeoViewPosition = useCallback(() => {
     if (!isActiveMeoEditorMountedRef.current) {
       return
@@ -191,6 +182,7 @@ function App() {
     refreshGitState,
     resetGitWorkspaceState,
   } = gitWorkspace
+  refreshGitStateRef.current = refreshGitState
 
   const shellLayout = useShellLayoutController({
     gitPanelLayout,
@@ -231,27 +223,6 @@ function App() {
     closeRightDrawer,
     setStatusMessage,
   })
-
-  const performWorkspaceRefresh = useCallback(async (
-    rootPath: string,
-    options: Omit<WorkspaceRefreshRequest, 'rootPath'> = {},
-  ) => {
-    if (!isActiveWorkspacePath(rootPath)) {
-      return
-    }
-
-    if (options.refreshTree) {
-      await reloadActiveWorkspaceTree(rootPath)
-    }
-
-    if (options.refreshGit) {
-      await refreshGitState(rootPath, { silent: options.gitSilent ?? true })
-    }
-  }, [isActiveWorkspacePath, refreshGitState, reloadActiveWorkspaceTree])
-
-  performWorkspaceRefreshRef.current = async (request) => {
-    await performWorkspaceRefresh(request.rootPath, request)
-  }
 
   const {
     activateFileTab,
@@ -479,12 +450,6 @@ function App() {
     setActiveWorkspaceContext,
     setStatusMessage,
   })
-
-  useEffect(() => {
-    return () => {
-      workspaceRefreshCoordinatorRef.current?.dispose()
-    }
-  }, [])
 
   useEffect(() => {
     setIsActiveEditorComposing(false)
