@@ -8,6 +8,7 @@ import type { WorkspaceSidebarSurfaceMode } from '@/features/workspace/component
 import { WorkspaceTreePanel } from '@/features/workspace/components/workspace-tree-panel/workspace-tree-panel'
 import type { WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree/workspace-tree'
 import { resolveWorkspaceTreeActiveFilePath } from '@/features/workspace/lib/workspace-tree-active-file'
+import './workspace-navigation-panels.css'
 
 type GitPanelConfiguration = Omit<
   ComponentProps<typeof GitPanel>,

@@ -67,7 +67,7 @@ describe('Git repository state helpers', () => {
 describe('Git feature ownership', () => {
   it('keeps repository commands and component styles out of App', async () => {
     const [
-      appCss,
+      globalCss,
       appSource,
       controllerSource,
       diffEditorCss,
@@ -75,7 +75,7 @@ describe('Git feature ownership', () => {
       gitPanelCss,
       gitPanelSource,
     ] = await Promise.all([
-      readFile(new URL('../src/App.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/git/hooks/use-git-workspace-controller.ts', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/editor/components/git-diff-editor/styles.css', import.meta.url), 'utf8'),
@@ -89,7 +89,7 @@ describe('Git feature ownership', () => {
     expect(controllerSource).toContain('export function useGitWorkspaceController')
     expect(controllerSource).toContain('window.appApi.stageGitPaths')
     expect(controllerSource).toContain('window.appApi.commitAndSyncGitChanges')
-    expect(appCss).not.toMatch(
+    expect(globalCss).not.toMatch(
       /(^|\n)\.(?:git-panel|git-history|git-commit|git-change|git-push|git-empty|git-clean|git-diff)(?:-|\s|[.:#>,{])/,
     )
     expect(gitPanelCss).toContain('.git-panel {')

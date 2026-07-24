@@ -18,6 +18,18 @@
   --shadow-none: 0 0 #0000;
 }
 
+:root {
+  --app-z-panel-resize: 15;
+  --app-z-panel-toggle-underlay: 20;
+  --app-z-drawer-layer: 28;
+  --app-z-window-chrome: 30;
+  --app-z-panel-toggle: 60;
+  --app-z-window-controls: 70;
+  --app-z-tooltip: 1400;
+  --app-menu-item-hover-background: var(--hover);
+  --app-menu-item-active-background: var(--selected);
+}
+
 :root,
 .light,
 .default,

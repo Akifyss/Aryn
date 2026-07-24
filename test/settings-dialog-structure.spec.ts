@@ -7,9 +7,9 @@ async function readSource(relativePath: string) {
 
 describe('settings dialog structure', () => {
   it('keeps the dialog shell and all feature-owned styles with the settings dialog', async () => {
-    const [appSource, appCss, overlaySource, dialogSource, dialogCss] = await Promise.all([
+    const [appSource, globalCss, overlaySource, dialogSource, dialogCss] = await Promise.all([
       readSource('../src/App.tsx'),
-      readSource('../src/App.css'),
+      readSource('../src/index.css'),
       readSource('../src/features/layout/components/app-overlay-layer/app-overlay-layer.tsx'),
       readSource('../src/features/settings/components/settings-dialog/settings-dialog.tsx'),
       readSource('../src/features/settings/components/settings-dialog/styles.css'),
@@ -46,7 +46,7 @@ describe('settings dialog structure', () => {
 
     expect(featureClassNames.size).toBeGreaterThan(0)
     featureClassNames.forEach((className) => {
-      expect(appCss).not.toContain(`.${className}`)
+      expect(globalCss).not.toContain(`.${className}`)
     })
   })
 

@@ -1,13 +1,6 @@
-.sidebar-stack-pane {
-  min-height: 0;
-  overflow: hidden;
-}
-
 .workspace-tree-pane {
   display: flex;
   flex: 1;
-  min-height: 0;
-  overflow: hidden;
   flex-direction: column;
 }
 

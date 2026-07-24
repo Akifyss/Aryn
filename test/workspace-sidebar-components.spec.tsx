@@ -99,14 +99,14 @@ describe('WorkspaceSidebarTabs', () => {
 
 describe('workspace sidebar styles', () => {
   it('keeps component styles local, focus-visible, and reduced-motion aware', async () => {
-    const [appCss, sidebarCss, tabsCss] = await Promise.all([
-      readFile(new URL('../src/App.css', import.meta.url), 'utf8'),
+    const [globalCss, sidebarCss, tabsCss] = await Promise.all([
+      readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/components/workspace-sidebar/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/components/workspace-sidebar-tabs/styles.css', import.meta.url), 'utf8'),
     ])
 
-    expect(appCss).not.toContain('.sidebar-workspace-tabs')
-    expect(appCss).not.toContain('.sidebar-footer-item')
+    expect(globalCss).not.toContain('.sidebar-workspace-tabs')
+    expect(globalCss).not.toContain('.sidebar-footer-item')
     expect(sidebarCss).not.toMatch(/(^|\n)\.section-title/)
     expect(sidebarCss).toContain('.sidebar-footer-item:focus-visible')
     expect(tabsCss).toContain('.sidebar-workspace-tab:focus-visible')

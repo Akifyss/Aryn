@@ -132,7 +132,7 @@ describe('agent sidebar structure', () => {
 
   it('keeps the Agent message viewport and scroll controller in their component module', async () => {
     const [
-      appCss,
+      globalCss,
       sidebarSource,
       sidebarCss,
       viewportSource,
@@ -141,7 +141,7 @@ describe('agent sidebar structure', () => {
       scrollHookSource,
       viewportDomSource,
     ] = await Promise.all([
-      readSource('../src/App.css'),
+      readSource('../src/index.css'),
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
       readSource('../src/features/agent/components/agent-sidebar/styles.css'),
       readSource('../src/features/agent/components/agent-message-viewport/agent-message-viewport.tsx'),
@@ -184,13 +184,13 @@ describe('agent sidebar structure', () => {
     )
     expect(viewportClassNames.size).toBeGreaterThan(0)
     viewportClassNames.forEach((className) => {
-      expect(appCss).not.toContain(`.${className}`)
+      expect(globalCss).not.toContain(`.${className}`)
     })
   })
 
   it('keeps Agent session status behavior and styles in its component module', async () => {
-    const [appCss, sidebarSource, sidebarCss, statusSource, statusCss, viewportCss] = await Promise.all([
-      readSource('../src/App.css'),
+    const [globalCss, sidebarSource, sidebarCss, statusSource, statusCss, viewportCss] = await Promise.all([
+      readSource('../src/index.css'),
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
       readSource('../src/features/agent/components/agent-sidebar/styles.css'),
       readSource('../src/features/agent/components/agent-session-status/agent-session-status.tsx'),
@@ -219,7 +219,7 @@ describe('agent sidebar structure', () => {
     )
     expect(statusClassNames.size).toBeGreaterThan(0)
     statusClassNames.forEach((className) => {
-      expect(appCss).not.toContain(`.${className}`)
+      expect(globalCss).not.toContain(`.${className}`)
     })
   })
 
@@ -248,7 +248,7 @@ describe('agent sidebar structure', () => {
   it('keeps Agent UI styles with their owning Agent components', async () => {
     const [
       appSource,
-      appCss,
+      globalCss,
       sidebarSource,
       sidebarCss,
       messageViewportSource,
@@ -267,7 +267,7 @@ describe('agent sidebar structure', () => {
       modelCascaderCss,
     ] = await Promise.all([
       readSource('../src/App.tsx'),
-      readSource('../src/App.css'),
+      readSource('../src/index.css'),
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
       readSource('../src/features/agent/components/agent-sidebar/styles.css'),
       readSource('../src/features/agent/components/agent-message-viewport/agent-message-viewport.tsx'),
@@ -382,12 +382,12 @@ describe('agent sidebar structure', () => {
     ])
     expect(agentClassNames.size).toBeGreaterThan(0)
     agentClassNames.forEach((className) => {
-      expect(appCss).not.toContain(`.${className}`)
+      expect(globalCss).not.toContain(`.${className}`)
     })
 
-    expect(appCss).not.toContain('.opencode-session-surface-host')
-    expect(appCss).not.toContain('.pi-web-session-surface-host')
-    expect(appCss).not.toContain('.codex-session-surface-host')
+    expect(globalCss).not.toContain('.opencode-session-surface-host')
+    expect(globalCss).not.toContain('.pi-web-session-surface-host')
+    expect(globalCss).not.toContain('.codex-session-surface-host')
   })
 
   it('keeps presentation implementations in their owning components', async () => {

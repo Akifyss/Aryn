@@ -55,22 +55,44 @@ describe('shared application components', () => {
   })
 })
 
-describe('App stylesheet ownership', () => {
-  it('keeps component selectors out of App.css and colocates component styles', async () => {
+describe('application stylesheet ownership', () => {
+  it('keeps global tokens and component styles in their owning layers', async () => {
     const [
-      appCss,
+      appSource,
+      globalCss,
+      appShellCss,
       commandPaletteSource,
+      navigationPanelsSource,
+      navigationPanelsCss,
       treeSource,
+      treePanelCss,
       previewSource,
       segmentedTabsCss,
     ] = await Promise.all([
-      readFile(new URL('../src/App.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
+      readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
+      readFile(
+        new URL('../src/features/layout/components/app-shell/styles.css', import.meta.url),
+        'utf8',
+      ),
       readFile(
         new URL('../src/features/command-palette/components/command-palette/command-palette.tsx', import.meta.url),
         'utf8',
       ),
       readFile(
+        new URL('../src/features/workspace/components/workspace-workbench/workspace-navigation-panels.tsx', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/features/workspace/components/workspace-workbench/workspace-navigation-panels.css', import.meta.url),
+        'utf8',
+      ),
+      readFile(
         new URL('../src/features/workspace/components/workspace-tree/workspace-tree.tsx', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/features/workspace/components/workspace-tree-panel/styles.css', import.meta.url),
         'utf8',
       ),
       readFile(
@@ -80,10 +102,16 @@ describe('App stylesheet ownership', () => {
       readFile(new URL('../src/components/ui/segmented-icon-tabs/styles.css', import.meta.url), 'utf8'),
     ])
 
-    expect(appCss).not.toContain('.command-palette-dialog')
-    expect(appCss).not.toContain('.workspace-tree-root')
-    expect(appCss).not.toContain('.image-preview-zoom-surface')
+    expect(appSource).not.toContain("import './App.css'")
+    expect(globalCss).toContain('--app-z-panel-resize:')
+    expect(globalCss).toContain('--app-menu-item-hover-background:')
+    expect(appShellCss).toContain('.dark .panel-drawer-backdrop.panel-drawer-backdrop')
+    expect(appShellCss).not.toContain("[data-slot='backdrop']")
     expect(commandPaletteSource).toContain("import './styles.css'")
+    expect(navigationPanelsSource).toContain("import './workspace-navigation-panels.css'")
+    expect(navigationPanelsCss).toContain('.sidebar-stack-pane')
+    expect(navigationPanelsCss).toContain('.sidebar-git-pane')
+    expect(treePanelCss).not.toContain('.sidebar-stack-pane')
     expect(treeSource).toContain("import './styles.css'")
     expect(previewSource).toContain("import './styles.css'")
     expect(segmentedTabsCss).toContain('@media (prefers-reduced-motion: reduce)')

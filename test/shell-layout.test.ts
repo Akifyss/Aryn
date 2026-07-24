@@ -60,9 +60,9 @@ describe('shell layout helpers', () => {
       + px(vars, '--panel-toggle-gap')
   }
 
-  async function readAppCss() {
-    const appCss = await readFile(new URL('../src/App.css', import.meta.url), 'utf8')
-    return appCss.replace(/\r\n/g, '\n')
+  async function readGlobalCss() {
+    const globalCss = await readFile(new URL('../src/index.css', import.meta.url), 'utf8')
+    return globalCss.replace(/\r\n/g, '\n')
   }
 
   async function readAppSource() {
@@ -483,7 +483,7 @@ describe('shell layout helpers', () => {
 
   it('keeps docked sidebar expansion motion scoped and disableable', async () => {
     const [
-      appCss,
+      globalCss,
       agentSidebarCss,
       appShellCss,
       appShellSource,
@@ -495,7 +495,7 @@ describe('shell layout helpers', () => {
       shellDrawerControllerSource,
       shellLayoutControllerSource,
     ] = await Promise.all([
-      readAppCss(),
+      readGlobalCss(),
       readAgentSidebarCss(),
       readAppShellCss(),
       readAppShellSource(),
@@ -542,8 +542,8 @@ describe('shell layout helpers', () => {
     expect(appShellSource).toContain("{renderRightPanel('drawer')}")
     expect(appShellSource).toContain('{isRightSidebarDrawer ? (')
     expect(appShellSource).not.toContain('{isRightSidebarDrawer && shouldExposeRightPanelTools ? (')
-    expect(appCss).not.toContain('.app-shell {')
-    expect(appCss).not.toContain('.panel-resize-handle {')
+    expect(globalCss).not.toContain('.app-shell {')
+    expect(globalCss).not.toContain('.panel-resize-handle {')
     expect(appShellRule).toBeDefined()
     expect(appShellRule).not.toContain('transition:')
     expect(appShellCss).toContain('--sidebar-layout-transition-duration: 180ms;')

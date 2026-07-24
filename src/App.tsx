@@ -39,7 +39,6 @@ import { AppOverlayLayer } from '@/features/layout/components/app-overlay-layer/
 import { AppWorkspaceShell } from '@/features/layout/components/app-workspace-shell/app-workspace-shell'
 import { useShellLayoutController } from '@/features/layout/hooks/use-shell-layout-controller'
 import { useAppAppearanceController } from '@/features/appearance/hooks/use-app-appearance-controller'
-import './App.css'
 
 function App() {
   const platform = window.appApi.platform

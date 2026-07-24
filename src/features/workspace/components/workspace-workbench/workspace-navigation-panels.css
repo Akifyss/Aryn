@@ -1,0 +1,18 @@
+.sidebar-stack-pane {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar-git-pane {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex: 1;
+  background: transparent;
+}
+
+@media (max-width: 860px) {
+  .sidebar-git-pane {
+    flex-basis: 288px;
+  }
+}

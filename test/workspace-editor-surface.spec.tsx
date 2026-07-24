@@ -65,17 +65,17 @@ describe('WorkspaceEditorSurface', () => {
 })
 
 describe('workspace editor component styles', () => {
-  it('keeps component-owned styles outside App.css with accessible motion and focus states', async () => {
-    const [appCss, editorSurfaceCss, fileTabsCss, fileTabsSource] = await Promise.all([
-      readFile(new URL('../src/App.css', import.meta.url), 'utf8'),
+  it('keeps component-owned styles outside global CSS with accessible motion and focus states', async () => {
+    const [globalCss, editorSurfaceCss, fileTabsCss, fileTabsSource] = await Promise.all([
+      readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/components/workspace-editor-surface/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/components/file-tabs/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/components/file-tabs/file-tabs.tsx', import.meta.url), 'utf8'),
     ])
 
-    expect(appCss).not.toMatch(/(^|\n)\.editor-frame\s*\{/)
-    expect(appCss).not.toMatch(/(^|\n)\.editor-empty-state\s*\{/)
-    expect(appCss).not.toMatch(/(^|\n)\.file-tabs-shell\s*\{/)
+    expect(globalCss).not.toMatch(/(^|\n)\.editor-frame\s*\{/)
+    expect(globalCss).not.toMatch(/(^|\n)\.editor-empty-state\s*\{/)
+    expect(globalCss).not.toMatch(/(^|\n)\.file-tabs-shell\s*\{/)
     expect(editorSurfaceCss).toContain('.editor-directory-toggle:focus-visible')
     expect(editorSurfaceCss).toContain('outline: 2px solid var(--focus);')
     expect(editorSurfaceCss).toContain('@media (prefers-reduced-motion: reduce)')
