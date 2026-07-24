@@ -18,12 +18,10 @@ import {
   Transfer4Line,
   UpLine,
 } from "@mingcute/react"
-import { Dialog as BaseDialog } from "@base-ui/react/dialog"
 import { Menu } from "@base-ui/react/menu"
 import { Popover as BasePopover } from "@base-ui/react/popover"
 import { ScrollArea as BaseScrollArea } from "@base-ui/react/scroll-area"
 import { Select as BaseSelect } from "@base-ui/react/select"
-import { Modal } from "@heroui/react"
 import {
   prepareFileTreeInput,
   type FileTreeSortComparator,
@@ -31,6 +29,7 @@ import {
 } from "@pierre/trees"
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
 import { createPortal } from "react-dom"
+import { AppDialog } from "@/components/app-dialog"
 import { AppScrollArea } from "@/components/app-scroll-area"
 import { AppTooltip, AppTooltipButton } from "@/components/app-tooltip"
 import { SegmentedIconTabs } from "@/components/ui/segmented-icon-tabs/segmented-icon-tabs"
@@ -301,61 +300,6 @@ function CommandItem({
       {children}
     </div>
   )
-}
-
-function Dialog({
-  children,
-  ...props
-}: React.ComponentPropsWithoutRef<typeof BaseDialog.Root>) {
-  return <BaseDialog.Root {...props}>{children}</BaseDialog.Root>
-}
-
-function DialogContent({
-  className,
-  children,
-  showCloseButton = false,
-  ...props
-}: React.ComponentPropsWithoutRef<typeof BaseDialog.Popup> & {
-  showCloseButton?: boolean
-}) {
-  return (
-    <BaseDialog.Portal>
-      <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px]" />
-      <BaseDialog.Popup
-        className={cn(
-          "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-full -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border bg-[var(--background-primary)] p-5 text-[var(--foreground-primary)] shadow-xl outline-none",
-          className as string | undefined
-        )}
-        {...props}
-      >
-        {children}
-        {showCloseButton ? (
-          <BaseDialog.Close
-            aria-label={FILE_SYSTEM_COPY.toolbar.closePreview}
-            className="absolute top-3 right-3 cursor-pointer rounded-md p-1 text-[var(--foreground-secondary)] outline-none hover:bg-[var(--hover)] hover:text-[var(--foreground-primary)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
-          >
-            <CloseLine aria-hidden="true" className="size-4" />
-          </BaseDialog.Close>
-        ) : null}
-      </BaseDialog.Popup>
-    </BaseDialog.Portal>
-  )
-}
-
-function DialogTitle({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<typeof BaseDialog.Title>) {
-  return (
-    <BaseDialog.Title
-      className={cn("text-base font-semibold", className as string | undefined)}
-      {...props}
-    />
-  )
-}
-
-function DialogClose(props: React.ComponentPropsWithoutRef<typeof BaseDialog.Close>) {
-  return <BaseDialog.Close {...props} />
 }
 
 function DropdownMenu({
@@ -2736,6 +2680,8 @@ export function FileSystem({
     initialRange?: { from: Date; to: Date }
     type: FileSystemDateFilterType
   } | null>(null)
+  const [isDateRangeDialogOpen, setIsDateRangeDialogOpen] =
+    React.useState(false)
 
   const toggleFileTypeFilterValue = React.useCallback(
     (mime: string, checked: boolean) => {
@@ -2808,6 +2754,7 @@ export function FileSystem({
             : undefined,
         type,
       })
+      setIsDateRangeDialogOpen(true)
     },
     [filters]
   )
@@ -2995,6 +2942,7 @@ export function FileSystem({
     kind: FileSystemViewerKind
     url: string
   } | null>(null)
+  const [isViewerDialogOpen, setIsViewerDialogOpen] = React.useState(false)
 
   // Component-lifetime caches shared by every view and the open dialog:
   // resolved (e.g. presigned) URLs keyed by path, lazily loaded page
@@ -3185,6 +3133,7 @@ export function FileSystem({
           // (and the gallery inherits the live viewer after it closes).
           poolStagePath(file.path)
           setOpenedFile({ file, kind, url })
+          setIsViewerDialogOpen(true)
         } else if (url && typeof window !== "undefined") {
           window.open(url, "_blank", "noopener,noreferrer")
         }
@@ -3333,15 +3282,15 @@ export function FileSystem({
         }))}
         onValueChange={setView}
       />
-    )
+  )
   const viewerCloseToolbarAction = (
     <AppTooltip tooltip={FILE_SYSTEM_COPY.toolbar.closePreview} triggerMode="focusable">
-      <DialogClose
+      <AppDialog.Close
         aria-label={FILE_SYSTEM_COPY.toolbar.closePreview}
         render={<Button type="button" variant="ghost" size="icon-sm" />}
       >
         <CloseLine aria-hidden="true" className="size-4" />
-      </DialogClose>
+      </AppDialog.Close>
     </AppTooltip>
   )
 
@@ -3543,21 +3492,28 @@ export function FileSystem({
         </span>
         {selectedEntry ? <span>· {FILE_SYSTEM_COPY.status.selected(selectedEntry.name)}</span> : null}
       </div>
-      <Dialog
-        open={openedFile !== null}
-        onOpenChange={(open) => {
-          if (!open) setOpenedFile(null)
+      <AppDialog.Root
+        open={isViewerDialogOpen}
+        onOpenChange={setIsViewerDialogOpen}
+        onOpenChangeComplete={(open) => {
+          if (!open) {
+            setOpenedFile(null)
+          }
         }}
       >
         {openedFile ? (
-          <DialogContent
+          <AppDialog.Popup
+            size="custom"
             className={cn(
               "overflow-hidden p-0",
               VIEWER_DIALOG_CLASSNAMES[openedFile.kind]
             )}
             showCloseButton={openedFile.kind === "image"}
+            closeLabel={FILE_SYSTEM_COPY.toolbar.closePreview}
           >
-            <DialogTitle className="sr-only">{openedFileName}</DialogTitle>
+            <AppDialog.Title className="sr-only">
+              {openedFileName}
+            </AppDialog.Title>
             {openedFile.kind === "image" ? (
               <img
                 src={openedFile.url}
@@ -3574,9 +3530,9 @@ export function FileSystem({
                 className="flex h-full min-h-0 flex-1 flex-col"
               />
             )}
-          </DialogContent>
+          </AppDialog.Popup>
         ) : null}
-        {/* The pooled previews. Rendered inside <Dialog> so the dialog
+        {/* The pooled previews. Rendered inside AppDialog.Root so the dialog
             variant's close toolbar button keeps its context; each portal's
             container never changes, the container's parent does. */}
         {stagePool.map((path) => {
@@ -3610,17 +3566,26 @@ export function FileSystem({
             path
           )
         })}
-      </Dialog>
-      {dateRangeDialog ? (
-        <FileSystemDateRangeDialog
-          initialRange={dateRangeDialog.initialRange}
-          onApply={(from, to) => {
-            applyCustomDateRange(dateRangeDialog.type, from, to)
+      </AppDialog.Root>
+      <AppDialog.Root
+        open={isDateRangeDialogOpen}
+        onOpenChange={setIsDateRangeDialogOpen}
+        onOpenChangeComplete={(open) => {
+          if (!open) {
             setDateRangeDialog(null)
-          }}
-          onClose={() => setDateRangeDialog(null)}
-        />
-      ) : null}
+          }
+        }}
+      >
+        {dateRangeDialog ? (
+          <FileSystemDateRangeDialog
+            initialRange={dateRangeDialog.initialRange}
+            onApply={(from, to) => {
+              applyCustomDateRange(dateRangeDialog.type, from, to)
+              setIsDateRangeDialogOpen(false)
+            }}
+          />
+        ) : null}
+      </AppDialog.Root>
     </div>
   )
 }
@@ -4337,12 +4302,11 @@ function FileSystemRangeCalendar({
 function FileSystemDateRangeDialog({
   initialRange,
   onApply,
-  onClose,
 }: {
   initialRange?: { from: Date; to: Date }
   onApply: (from: Date, to: Date) => void
-  onClose: () => void
 }) {
+  const initialFocusRef = React.useRef<HTMLInputElement | null>(null)
   const [range, setRange] = React.useState<{ from?: Date; to?: Date }>(
     () => initialRange ?? {}
   )
@@ -4362,7 +4326,8 @@ function FileSystemDateRangeDialog({
   const dateField = (
     label: string,
     value: string,
-    onChange: (value: string) => void
+    onChange: (value: string) => void,
+    inputRef?: React.Ref<HTMLInputElement>
   ) => (
     <div className="flex flex-1 flex-col gap-1.5">
       <span className="text-xs font-medium">{label}</span>
@@ -4372,6 +4337,7 @@ function FileSystemDateRangeDialog({
           className="pointer-events-none absolute left-2.5 size-3.5 text-[var(--foreground-secondary)]"
         />
         <Input
+          ref={inputRef}
           type="text"
           value={value}
           placeholder="YYYY-MM-DD"
@@ -4384,89 +4350,87 @@ function FileSystemDateRangeDialog({
   )
 
   return (
-    <Modal.Backdrop
-      isOpen
-      onOpenChange={(open) => {
-        if (!open) onClose()
-      }}
-      variant="opaque"
+    <AppDialog.Popup
+      initialFocus={initialFocusRef}
+      size="custom"
+      viewportClassName="file-system-date-range-dialog-viewport"
+      className="file-system-date-range-dialog"
     >
-      <Modal.Container
-        scroll="inside"
-        className="file-system-date-range-modal-container"
-      >
-        <Modal.Dialog
-          aria-label={FILE_SYSTEM_COPY.dialog.customDateRange}
-          className="file-system-date-range-dialog"
+      <AppTooltip tooltip="关闭" triggerMode="focusable">
+        <AppDialog.Close
+          aria-label="关闭自定义日期范围"
+          className="app-dialog-close-button"
         >
-          <Modal.CloseTrigger
-            className="file-system-date-range-close"
-            aria-label={FILE_SYSTEM_COPY.toolbar.closePreview}
-          >
-            <CloseLine aria-hidden="true" className="size-4" />
-          </Modal.CloseTrigger>
-          <Modal.Body className="file-system-date-range-body">
-            <div className="file-system-date-range-header">
-              <h2>{FILE_SYSTEM_COPY.dialog.customDateRange}</h2>
-            </div>
-            <div className="file-system-date-range-panel">
-              <div className="flex gap-3">
-                {dateField(FILE_SYSTEM_COPY.dialog.from, fromInput, (value) => {
-                  setFromInput(value)
+          <CloseLine aria-hidden="true" />
+        </AppDialog.Close>
+      </AppTooltip>
+      <AppDialog.Body className="file-system-date-range-body">
+        <div className="file-system-date-range-header">
+          <AppDialog.Title className="file-system-date-range-title">
+            {FILE_SYSTEM_COPY.dialog.customDateRange}
+          </AppDialog.Title>
+        </div>
+        <div className="file-system-date-range-panel">
+          <div className="flex gap-3">
+            {dateField(
+              FILE_SYSTEM_COPY.dialog.from,
+              fromInput,
+              (value) => {
+                setFromInput(value)
 
-                  const parsed = parseDateInputValue(value)
+                const parsed = parseDateInputValue(value)
 
-                  if (parsed)
-                    setRange((previous) => ({ ...previous, from: parsed }))
-                })}
-                {dateField(FILE_SYSTEM_COPY.dialog.to, toInput, (value) => {
-                  setToInput(value)
+                if (parsed)
+                  setRange((previous) => ({ ...previous, from: parsed }))
+              },
+              initialFocusRef
+            )}
+            {dateField(FILE_SYSTEM_COPY.dialog.to, toInput, (value) => {
+              setToInput(value)
 
-                  const parsed = parseDateInputValue(value)
+              const parsed = parseDateInputValue(value)
 
-                  if (parsed) setRange((previous) => ({ ...previous, to: parsed }))
-                })}
-              </div>
-              <FileSystemRangeCalendar range={range} onSelect={selectRange} />
-              <div className="grid grid-cols-3 gap-2">
-                {DATE_RANGE_DIALOG_PRESETS.map((preset) => (
-                  <Button
-                    key={preset}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => selectRange(dateRangePresetRange(preset))}
-                  >
-                    {dateRangePresetLabel(preset)}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="file-system-date-range-footer">
-              <Button type="button" variant="outline" onClick={onClose}>
-                {FILE_SYSTEM_COPY.dialog.cancel}
-              </Button>
+              if (parsed) setRange((previous) => ({ ...previous, to: parsed }))
+            })}
+          </div>
+          <FileSystemRangeCalendar range={range} onSelect={selectRange} />
+          <div className="grid grid-cols-3 gap-2">
+            {DATE_RANGE_DIALOG_PRESETS.map((preset) => (
               <Button
+                key={preset}
                 type="button"
-                disabled={!range.from || !range.to}
-                onClick={() => {
-                  if (!range.from || !range.to) return
-
-                  const from = new Date(range.from)
-                  const to = new Date(range.to)
-
-                  from.setHours(0, 0, 0, 0)
-                  to.setHours(23, 59, 59, 999)
-                  onApply(from, to)
-                }}
+                variant="outline"
+                size="sm"
+                onClick={() => selectRange(dateRangePresetRange(preset))}
               >
-                {FILE_SYSTEM_COPY.dialog.apply}
+                {dateRangePresetLabel(preset)}
               </Button>
-            </div>
-          </Modal.Body>
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
+            ))}
+          </div>
+        </div>
+        <AppDialog.Footer className="file-system-date-range-footer">
+          <AppDialog.Close render={<Button type="button" variant="outline" />}>
+            {FILE_SYSTEM_COPY.dialog.cancel}
+          </AppDialog.Close>
+          <Button
+            type="button"
+            disabled={!range.from || !range.to}
+            onClick={() => {
+              if (!range.from || !range.to) return
+
+              const from = new Date(range.from)
+              const to = new Date(range.to)
+
+              from.setHours(0, 0, 0, 0)
+              to.setHours(23, 59, 59, 999)
+              onApply(from, to)
+            }}
+          >
+            {FILE_SYSTEM_COPY.dialog.apply}
+          </Button>
+        </AppDialog.Footer>
+      </AppDialog.Body>
+    </AppDialog.Popup>
   )
 }
 

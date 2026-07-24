@@ -1,6 +1,8 @@
-import { useLayoutEffect, useState } from 'react'
-import { Button, Modal } from '@heroui/react'
-import { Icon } from '@iconify/react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { Button } from '@heroui/react'
+import { CloseLine } from '@mingcute/react'
+import { AppDialog } from '@/components/app-dialog'
+import { AppTooltip } from '@/components/app-tooltip'
 import './styles.css'
 
 type NewProjectDialogProps = {
@@ -19,6 +21,7 @@ export function NewProjectDialog({
   onOpenChange,
 }: NewProjectDialogProps) {
   const [projectName, setProjectName] = useState('')
+  const projectNameInputRef = useRef<HTMLInputElement>(null)
 
   useLayoutEffect(() => {
     if (isOpen) {
@@ -29,52 +32,63 @@ export function NewProjectDialog({
   const trimmedProjectName = projectName.trim()
 
   return (
-    <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-      <Modal.Container className='project-create-modal-container'>
-        <Modal.Dialog
-          aria-label='新建空白项目'
-          className={`project-create-modal ${theme === 'dark' ? 'dark' : ''}`}
-        >
-          <Modal.CloseTrigger className='project-create-modal-close' aria-label='关闭'>
-            <Icon aria-hidden='true' icon='lucide:x' width={16} height={16} />
-          </Modal.CloseTrigger>
-          <Modal.Body>
-            <form
-              className='project-create-form'
-              onSubmit={(event) => {
-                event.preventDefault()
-                if (!isBusy && trimmedProjectName) {
-                  void onCreate(trimmedProjectName)
-                }
-              }}
-            >
-              <div className='project-create-heading'>
-                <h2>新建空白项目</h2>
-                <p>创建后会自动切换到这个项目。</p>
-              </div>
-              <label className='project-create-field'>
-                <span>项目名称</span>
-                <input
-                  autoFocus
-                  autoComplete='off'
-                  name='project-name'
-                  value={projectName}
-                  placeholder='Untitled Project'
-                  onChange={(event) => setProjectName(event.target.value)}
-                />
-              </label>
-              <div className='project-create-footer'>
-                <Button variant='tertiary' type='button' onPress={() => onOpenChange(false)}>
-                  取消
-                </Button>
-                <Button variant='primary' type='submit' isDisabled={!trimmedProjectName || isBusy}>
-                  创建
-                </Button>
-              </div>
-            </form>
-          </Modal.Body>
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
+    <AppDialog.Root open={isOpen} onOpenChange={onOpenChange}>
+      <AppDialog.Popup
+        size='custom'
+        initialFocus={projectNameInputRef}
+        viewportClassName='project-create-dialog-viewport'
+        className={`project-create-dialog ${theme === 'dark' ? 'dark' : ''}`}
+      >
+        <AppTooltip tooltip='关闭' triggerMode='focusable'>
+          <AppDialog.Close
+            aria-label='关闭新建项目'
+            className='app-dialog-close-button project-create-dialog-close'
+          >
+            <CloseLine aria-hidden='true' />
+          </AppDialog.Close>
+        </AppTooltip>
+        <AppDialog.Body>
+          <form
+            className='project-create-form'
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (!isBusy && trimmedProjectName) {
+                void onCreate(trimmedProjectName)
+              }
+            }}
+          >
+            <div className='project-create-heading'>
+              <AppDialog.Title className='project-create-title'>
+                新建空白项目
+              </AppDialog.Title>
+              <AppDialog.Description>
+                创建后会自动切换到这个项目。
+              </AppDialog.Description>
+            </div>
+            <label className='project-create-field'>
+              <span>项目名称</span>
+              <input
+                ref={projectNameInputRef}
+                autoComplete='off'
+                name='project-name'
+                value={projectName}
+                placeholder='Untitled Project'
+                onChange={(event) => setProjectName(event.target.value)}
+              />
+            </label>
+            <AppDialog.Footer className='project-create-footer'>
+              <AppDialog.Close
+                render={<Button variant='tertiary' type='button' />}
+              >
+                取消
+              </AppDialog.Close>
+              <Button variant='primary' type='submit' isDisabled={!trimmedProjectName || isBusy}>
+                创建
+              </Button>
+            </AppDialog.Footer>
+          </form>
+        </AppDialog.Body>
+      </AppDialog.Popup>
+    </AppDialog.Root>
   )
 }

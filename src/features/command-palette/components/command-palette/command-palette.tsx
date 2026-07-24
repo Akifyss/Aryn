@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import {
-  Modal,
   Kbd,
   ListBox,
   ListBoxItem
 } from '@heroui/react'
 import { Icon } from '@iconify/react'
+import { AppDialog } from '@/components/app-dialog'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import {
@@ -84,7 +84,6 @@ export function CommandPalette({
     if (isOpen) {
       setSelectedIndex(0)
       setQuery('')
-      setTimeout(() => inputRef.current?.focus(), 150)
     }
   }, [isOpen])
 
@@ -154,147 +153,149 @@ export function CommandPalette({
         if (selected) {
           selectResult(selected)
         }
-      } else if (e.key === 'Escape') {
-        onClose()
       }
     }
     window.addEventListener('keydown', handleGlobalKeyDown, true)
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, true)
-  }, [isOpen, onClose, selectResult])
+  }, [isOpen, selectResult])
 
   return (
-    <Modal.Backdrop
-      isOpen={isOpen}
-      onOpenChange={onClose}
-      variant='opaque'
+    <AppDialog.Root
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose()
+        }
+      }}
     >
-      <Modal.Container
-        scroll='inside'
-        className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'
+      <AppDialog.Popup
+        size='custom'
+        initialFocus={inputRef}
+        className={`command-palette-dialog ${theme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}
       >
-        <Modal.Dialog
-          aria-label='Command palette'
-          className={`command-palette-dialog ${theme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}
-        >
-          <Modal.Body className='p-0 m-0'>
-              {/* Header */}
-              <div className='command-palette-header'>
-                <Icon icon='lucide:search' className='command-palette-icon' width={16} height={16} />
-                <input
-                  ref={inputRef}
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  placeholder='搜索...'
-                  style={{ outline: 'none', boxShadow: 'none' }}
-                  className='command-palette-input'
-                />
-                <div className='command-palette-kbd-group'>
-                  <Kbd className="text-[10px] px-2 py-0.5 shadow-none">
-                    {cmdKey}
-                    <span className="ml-1">K</span>
-                  </Kbd>
-                </div>
+        <AppDialog.Title className='sr-only'>命令面板</AppDialog.Title>
+        <AppDialog.Close className='sr-only' tabIndex={-1}>
+          关闭命令面板
+        </AppDialog.Close>
+        <AppDialog.Body>
+          {/* Header */}
+          <div className='command-palette-header'>
+            <Icon icon='lucide:search' className='command-palette-icon' width={16} height={16} />
+            <input
+              ref={inputRef}
+              aria-label='搜索命令'
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder='搜索...'
+              style={{ outline: 'none', boxShadow: 'none' }}
+              className='command-palette-input'
+            />
+            <div className='command-palette-kbd-group'>
+              <Kbd className="text-[10px] px-2 py-0.5 shadow-none">
+                {cmdKey}
+                <span className="ml-1">K</span>
+              </Kbd>
+            </div>
+          </div>
+
+          <div className='command-palette-divider' />
+
+          {/* Viewport with explicit scrolling container */}
+          <AppScrollArea
+            className='command-palette-viewport'
+            contentClassName='command-palette-viewport-content'
+          >
+            {results.length > 0 ? (
+              <div className='flex flex-col gap-6'>
+                {(() => {
+                  const activeId = results[selectedIndex]?.id
+
+                  return resultSections.map((section) => {
+                    return (
+                      <div key={section.category} className='command-palette-section'>
+                        <header className='command-palette-section-header'>
+                          {section.label}
+                        </header>
+                        <ListBox
+                          aria-label={section.label}
+                          className='p-0 gap-0 outline-none'
+                          selectionMode='single'
+                          onAction={(key) => {
+                            const item = resultsRef.current.find(i => i.id === key)
+                            if (item) selectResult(item)
+                          }}
+                        >
+                          {section.items.map((item) => {
+                            const isSelected = item.id === activeId
+
+                            return (
+                              <ListBoxItem
+                                key={item.id}
+                                data-command-active={isSelected ? 'true' : 'false'}
+                                textValue={item.label}
+                                className='command-palette-item'
+                                onPress={() => selectResult(item)}
+                                style={{ outline: 'none' }}
+                              >
+                                <div className='command-palette-item-content'>
+                                  <div className='command-palette-item-icon'>
+                                    {item.category === 'file' ? (
+                                      <WorkspaceFileIcon fileName={item.fileName} iconTheme={iconTheme} />
+                                    ) : (
+                                      <WorkspaceFileIcon fileName='.jsonl' iconTheme={iconTheme} />
+                                    )}
+                                  </div>
+                                  <div className='command-palette-item-text'>
+                                    <span className='command-palette-item-title'>{item.label}</span>
+                                    {item.description && (
+                                      <span className='command-palette-item-desc'>
+                                        {item.description}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className={`command-palette-item-action ${isSelected ? 'is-active' : ''}`}>
+                                    <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">ENTER</Kbd>
+                                  </div>
+                                </div>
+                              </ListBoxItem>
+                            )
+                          })}
+                        </ListBox>
+                      </div>
+                    )
+                  })
+                })()}
               </div>
-
-              <div className='command-palette-divider' />
-
-              {/* Viewport with explicit scrolling container */}
-              <AppScrollArea
-                className='command-palette-viewport'
-                contentClassName='command-palette-viewport-content'
-              >
-                {results.length > 0 ? (
-                  <div className='flex flex-col gap-6'>
-                    {(() => {
-                      const activeId = results[selectedIndex]?.id
-
-                      return resultSections.map((section) => {
-                        return (
-                          <div key={section.category} className='command-palette-section'>
-                            <header className='command-palette-section-header'>
-                              {section.label}
-                            </header>
-                            <ListBox
-                              aria-label={section.label}
-                              className='p-0 gap-0 outline-none'
-                              selectionMode='single'
-                              onAction={(key) => {
-                                const item = resultsRef.current.find(i => i.id === key)
-                                if (item) selectResult(item)
-                              }}
-                            >
-                              {section.items.map((item) => {
-                                const isSelected = item.id === activeId
-
-                                return (
-                                  <ListBoxItem
-                                    key={item.id}
-                                    data-command-active={isSelected ? 'true' : 'false'}
-                                    textValue={item.label}
-                                    className='command-palette-item'
-                                    onPress={() => selectResult(item)}
-                                    style={{ outline: 'none' }}
-                                  >
-                                    <div className='command-palette-item-content'>
-                                      <div className='command-palette-item-icon'>
-                                        {item.category === 'file' ? (
-                                          <WorkspaceFileIcon fileName={item.fileName} iconTheme={iconTheme} />
-                                        ) : (
-                                          <WorkspaceFileIcon fileName='.jsonl' iconTheme={iconTheme} />
-                                        )}
-                                      </div>
-                                      <div className='command-palette-item-text'>
-                                        <span className='command-palette-item-title'>{item.label}</span>
-                                        {item.description && (
-                                          <span className='command-palette-item-desc'>
-                                            {item.description}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className={`command-palette-item-action ${isSelected ? 'is-active' : ''}`}>
-                                        <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">ENTER</Kbd>
-                                      </div>
-                                    </div>
-                                  </ListBoxItem>
-                                )
-                              })}
-                            </ListBox>
-                          </div>
-                        )
-                      })
-                    })()}
-                  </div>
-                ) : (
-                  <div className='command-palette-empty'>
-                    <Icon icon='lucide:search' width={32} className='command-palette-empty-icon' />
-                    <p className='command-palette-empty-text'>未找到结果</p>
-                  </div>
-                )}
-              </AppScrollArea>
-
-              {/* Footer */}
-              <div className='command-palette-footer'>
-                <div className='command-palette-footer-group'>
-                  <div className='command-palette-footer-item'>
-                    <div className='command-palette-footer-kbd-row'>
-                      <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none min-w-[20px]">↑</Kbd>
-                      <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none min-w-[20px]">↓</Kbd>
-                    </div>
-                    <span>导航</span>
-                  </div>
-                  <div className='command-palette-footer-item'>
-                    <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">ENTER</Kbd>
-                    <span>选择</span>
-                  </div>
-                </div>
-                <div className='command-palette-footer-item'>
-                  <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">ESC</Kbd>
-                  <span>关闭</span>
-                </div>
+            ) : (
+              <div className='command-palette-empty'>
+                <Icon icon='lucide:search' width={32} className='command-palette-empty-icon' />
+                <p className='command-palette-empty-text'>未找到结果</p>
               </div>
-          </Modal.Body>
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
+            )}
+          </AppScrollArea>
+
+          {/* Footer */}
+          <div className='command-palette-footer'>
+            <div className='command-palette-footer-group'>
+              <div className='command-palette-footer-item'>
+                <div className='command-palette-footer-kbd-row'>
+                  <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none min-w-[20px]">↑</Kbd>
+                  <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none min-w-[20px]">↓</Kbd>
+                </div>
+                <span>导航</span>
+              </div>
+              <div className='command-palette-footer-item'>
+                <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">ENTER</Kbd>
+                <span>选择</span>
+              </div>
+            </div>
+            <div className='command-palette-footer-item'>
+              <Kbd className="text-[10px] px-1.5 py-0.5 shadow-none">ESC</Kbd>
+              <span>关闭</span>
+            </div>
+          </div>
+        </AppDialog.Body>
+      </AppDialog.Popup>
+    </AppDialog.Root>
   )
 }

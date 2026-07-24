@@ -230,8 +230,7 @@
 .panel-toggle-button-overlay[data-overlay-elevated='false'],
 .app-shell[data-modal-layer-open='true'] .panel-toggle-button-overlay,
 .app-shell[data-left-drawer-open='true'] .panel-toggle-button-overlay-right,
-body:has([data-slot='modal-backdrop']) .panel-toggle-button-overlay,
-body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
+body:has([data-app-modal-layer]) .panel-toggle-button-overlay {
   z-index: var(--app-z-panel-toggle-underlay);
 }
 
@@ -276,8 +275,7 @@ body:has([data-slot='alert-dialog-backdrop']) .panel-toggle-button-overlay {
 }
 
 .left-chrome-actions[data-overlay-elevated='false'],
-body:has([data-slot='modal-backdrop']) .left-chrome-actions,
-body:has([data-slot='alert-dialog-backdrop']) .left-chrome-actions {
+body:has([data-app-modal-layer]) .left-chrome-actions {
   z-index: var(--app-z-panel-toggle-underlay);
   pointer-events: none;
 }
@@ -303,8 +301,7 @@ body:has([data-slot='alert-dialog-backdrop']) .left-chrome-actions {
 .agent-collapsed-tab-actions[data-overlay-elevated='false'],
 .app-shell[data-modal-layer-open='true'] .agent-collapsed-tab-actions,
 .app-shell[data-left-drawer-open='true'] .agent-collapsed-tab-actions,
-body:has([data-slot='modal-backdrop']) .agent-collapsed-tab-actions,
-body:has([data-slot='alert-dialog-backdrop']) .agent-collapsed-tab-actions {
+body:has([data-app-modal-layer]) .agent-collapsed-tab-actions {
   z-index: var(--app-z-panel-toggle-underlay);
   pointer-events: none;
 }

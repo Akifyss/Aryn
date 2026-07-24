@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertDialog, Button } from '@heroui/react'
+import { Button } from '@heroui/react'
+import { AppAlertDialog } from '@/components/app-dialog'
 
 export type AppConfirmationOptions = {
   cancelLabel?: string
@@ -20,41 +21,52 @@ export function AppConfirmDialog({
   onCancel,
   onConfirm,
 }: AppConfirmDialogProps) {
+  // Preserve the content while Base UI plays the closing transition.
+  const lastConfirmationRef = useRef<AppConfirmationOptions | null>(confirmation)
+  if (confirmation) {
+    lastConfirmationRef.current = confirmation
+  }
+  const visibleConfirmation = confirmation ?? lastConfirmationRef.current
+
   return (
-    <AlertDialog.Backdrop
-      isOpen={Boolean(confirmation)}
+    <AppAlertDialog.Root
+      open={Boolean(confirmation)}
       onOpenChange={(isOpen) => {
         if (!isOpen) {
           onCancel()
         }
       }}
+      onOpenChangeComplete={(isOpen) => {
+        if (!isOpen) {
+          lastConfirmationRef.current = null
+        }
+      }}
     >
-      <AlertDialog.Container>
-        <AlertDialog.Dialog>
-          <AlertDialog.CloseTrigger />
-          <AlertDialog.Header>
-            <AlertDialog.Icon status={confirmation?.isDanger ? 'danger' : 'warning'} />
-            <AlertDialog.Heading>{confirmation?.title}</AlertDialog.Heading>
-          </AlertDialog.Header>
-          <AlertDialog.Body>
-            <p className='text-[var(--foreground-primary)] whitespace-pre-wrap'>
-              {confirmation?.message}
-            </p>
-          </AlertDialog.Body>
-          <AlertDialog.Footer>
-            <Button variant='tertiary' onPress={onCancel}>
-              {confirmation?.cancelLabel ?? '取消'}
-            </Button>
-            <Button
-              variant={confirmation?.isDanger ? 'danger' : 'primary'}
-              onPress={onConfirm}
-            >
-              {confirmation?.confirmLabel ?? '确认'}
-            </Button>
-          </AlertDialog.Footer>
-        </AlertDialog.Dialog>
-      </AlertDialog.Container>
-    </AlertDialog.Backdrop>
+      <AppAlertDialog.Popup>
+        <AppAlertDialog.Header>
+          <AppAlertDialog.Icon tone={visibleConfirmation?.isDanger ? 'danger' : 'warning'} />
+          <AppAlertDialog.Title>{visibleConfirmation?.title}</AppAlertDialog.Title>
+        </AppAlertDialog.Header>
+        <AppAlertDialog.Body>
+          <AppAlertDialog.Description className='whitespace-pre-wrap'>
+            {visibleConfirmation?.message}
+          </AppAlertDialog.Description>
+        </AppAlertDialog.Body>
+        <AppAlertDialog.Footer>
+          <AppAlertDialog.Close
+            render={<Button variant='tertiary' />}
+          >
+            {visibleConfirmation?.cancelLabel ?? '取消'}
+          </AppAlertDialog.Close>
+          <Button
+            variant={visibleConfirmation?.isDanger ? 'danger' : 'primary'}
+            onPress={onConfirm}
+          >
+            {visibleConfirmation?.confirmLabel ?? '确认'}
+          </Button>
+        </AppAlertDialog.Footer>
+      </AppAlertDialog.Popup>
+    </AppAlertDialog.Root>
   )
 }
 

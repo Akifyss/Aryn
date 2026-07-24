@@ -6,7 +6,7 @@ async function readSource(relativePath: string) {
 }
 
 describe('settings dialog structure', () => {
-  it('keeps the modal shell and all feature-owned styles with the settings dialog', async () => {
+  it('keeps the dialog shell and all feature-owned styles with the settings dialog', async () => {
     const [appSource, appCss, overlaySource, dialogSource, dialogCss] = await Promise.all([
       readSource('../src/App.tsx'),
       readSource('../src/App.css'),
@@ -27,10 +27,12 @@ describe('settings dialog structure', () => {
     expect(overlaySource).toContain('<SettingsDialog')
 
     expect(dialogSource).toContain("import './styles.css'")
-    expect(dialogSource).toContain('<Modal.Backdrop')
+    expect(dialogSource).toContain("import { AppDialog } from '@/components/app-dialog'")
+    expect(dialogSource).toContain('<AppDialog.Root')
+    expect(dialogSource).toContain('<AppDialog.Popup')
     expect(dialogSource).toContain('<SettingsView')
 
-    expect(dialogCss).toContain('.settings-modal {')
+    expect(dialogCss).toContain('.settings-dialog {')
     expect(dialogCss).toContain('.settings-select-trigger {')
     expect(dialogCss).toContain('.provider-card-list {')
     expect(dialogCss).toContain('@media (max-width: 860px)')
@@ -59,7 +61,7 @@ describe('settings dialog structure', () => {
     expect(dialogCss).not.toContain('.provider-brand-icon-wrapper')
     expect(dialogCss).not.toContain('transition: all')
     expect(dialogCss).toContain('overscroll-behavior: contain')
-    expect(dialogCss).toContain('.settings-modal-close:focus-visible')
+    expect(dialogSource).toContain("className='app-dialog-close-button settings-dialog-close'")
     expect(dialogCss).toContain('.settings-nav-item:focus-visible')
     expect(dialogCss).toContain('.provider-card-header:focus-visible')
     expect(dialogCss).toContain('.settings-secondary-toggle:focus-visible')

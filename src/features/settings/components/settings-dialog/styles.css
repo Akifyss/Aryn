@@ -1,6 +1,7 @@
-.settings-modal {
+.settings-dialog {
+  width: 100% !important;
   max-width: 820px !important;
-  height: 560px !important;
+  height: min(560px, calc(var(--visual-viewport-height, 100dvh) - 32px)) !important;
   background: var(--background-primary) !important;
   border: 1px solid var(--border-primary) !important;
   box-shadow: 0 0 0 1px var(--border-primary) !important;
@@ -13,36 +14,14 @@
   overscroll-behavior: contain;
 }
 
-.settings-modal-close {
-  position: absolute;
+.settings-dialog-close {
   top: 16px;
   right: 16px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-radius: 8px;
-  color: var(--foreground-secondary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
   z-index: 100;
-  transition: background-color 150ms ease, color 150ms ease;
 }
 
-.settings-modal-close:hover {
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
-.settings-modal-close:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--focus);
-}
-
-.settings-modal>*,
-.settings-modal .modal__body {
+.settings-dialog > .app-dialog-body {
   padding: 0 !important;
   margin: 0 !important;
   display: flex !important;
@@ -741,7 +720,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .settings-modal-close,
   .settings-nav-item,
   .settings-select-trigger,
   .settings-select-icon,

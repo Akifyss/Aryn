@@ -139,7 +139,7 @@
   font-size: 12px;
 }
 
-.file-system-date-range-modal-container {
+.file-system-date-range-dialog-viewport {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -173,35 +173,11 @@
   padding: 0;
 }
 
-.file-system-date-range-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--foreground-secondary);
-  cursor: pointer;
-}
-
-.file-system-date-range-close:hover,
-.file-system-date-range-close:focus-visible {
-  outline: none;
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
 .file-system-date-range-header {
   padding: 20px 52px 8px 20px;
 }
 
-.file-system-date-range-header h2 {
+.file-system-date-range-title {
   margin: 0;
   color: var(--foreground-primary);
   font-size: 16px;

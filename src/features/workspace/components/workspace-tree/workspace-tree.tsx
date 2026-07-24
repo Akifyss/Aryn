@@ -1,6 +1,6 @@
 import { type Dispatch, type DragEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type SetStateAction, useEffect, useRef, useState } from 'react'
 import { Menu } from '@base-ui/react/menu'
-import { AlertDialog, Button, useOverlayState } from '@heroui/react'
+import { Button } from '@heroui/react'
 import {
   CheckLine,
   CloseLine,
@@ -12,6 +12,7 @@ import {
   GitBranchLine,
   More1Line,
 } from '@mingcute/react'
+import { AppAlertDialog } from '@/components/app-dialog'
 import {
   FileChangeStatusBadge,
   WorkspaceFileIcon,
@@ -389,7 +390,7 @@ function FileTreeItem({
     }
   }
 
-  const deleteModal = useOverlayState()
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   const handleActivateNode = (event: WorkspaceTreeActivationEvent) => {
     recordOpenFileProfile('workspace-tree:row-click', {
@@ -425,12 +426,12 @@ function FileTreeItem({
     })
   }
 
-  const handleDelete = async (onClose: () => void) => {
+  const handleDelete = async () => {
     try {
       setIsSubmitting(true)
       setError(null)
       await onDeleteNode(node)
-      onClose()
+      setIsDeleteDialogOpen(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed')
     } finally {
@@ -439,48 +440,53 @@ function FileTreeItem({
   }
 
   const deleteDialog = (
-    <AlertDialog.Backdrop
-      isOpen={deleteModal.isOpen}
-      onOpenChange={(open) => (open ? deleteModal.open() : deleteModal.close())}
-      variant='opaque'
+    <AppAlertDialog.Root
+      open={isDeleteDialogOpen}
+      onOpenChange={(open, eventDetails) => {
+        if (!open && isSubmitting) {
+          eventDetails.cancel()
+          return
+        }
+        setIsDeleteDialogOpen(open)
+      }}
     >
-      <AlertDialog.Container size='sm'>
-        <AlertDialog.Dialog>
-          {({ close }) => (
-            <>
-              <AlertDialog.CloseTrigger />
-              <AlertDialog.Header>
-                <AlertDialog.Icon status='danger' />
-                <AlertDialog.Heading>确认删除</AlertDialog.Heading>
-              </AlertDialog.Header>
-              <AlertDialog.Body>
-                <p className='text-[var(--foreground-primary)]'>
-                  您确定要删除 <span style={{ fontWeight: 600 }}>{node.name}</span> 吗？
-                  此操作将无法撤销。
-                </p>
-              </AlertDialog.Body>
-              <AlertDialog.Footer>
-                <Button
-                  className='confirm-dialog-cancel-button'
-                  variant='tertiary'
-                  onPress={close}
-                  isDisabled={isSubmitting}
-                >
-                  取消
-                </Button>
-                <Button
-                  variant='danger'
-                  onPress={() => handleDelete(close)}
-                  isDisabled={isSubmitting}
-                >
-                  删除
-                </Button>
-              </AlertDialog.Footer>
-            </>
-          )}
-        </AlertDialog.Dialog>
-      </AlertDialog.Container>
-    </AlertDialog.Backdrop>
+      <AppAlertDialog.Popup
+        size='sm'
+        closeButtonDisabled={isSubmitting}
+      >
+        <AppAlertDialog.Header>
+          <AppAlertDialog.Icon tone='danger' />
+          <AppAlertDialog.Title>确认删除</AppAlertDialog.Title>
+        </AppAlertDialog.Header>
+        <AppAlertDialog.Body>
+          <AppAlertDialog.Description>
+            您确定要删除 <span style={{ fontWeight: 600 }}>{node.name}</span> 吗？
+            此操作将无法撤销。
+          </AppAlertDialog.Description>
+        </AppAlertDialog.Body>
+        <AppAlertDialog.Footer>
+          <AppAlertDialog.Close
+            disabled={isSubmitting}
+            render={(
+              <Button
+                className='confirm-dialog-cancel-button'
+                variant='tertiary'
+                isDisabled={isSubmitting}
+              />
+            )}
+          >
+            取消
+          </AppAlertDialog.Close>
+          <Button
+            variant='danger'
+            onPress={() => void handleDelete()}
+            isDisabled={isSubmitting}
+          >
+            删除
+          </Button>
+        </AppAlertDialog.Footer>
+      </AppAlertDialog.Popup>
+    </AppAlertDialog.Root>
   )
 
   const fileTreeItemAfter = (
@@ -604,7 +610,7 @@ function FileTreeItem({
         setDraftName(node.name)
         setIsEditing(true)
       }}
-      onDelete={deleteModal.open}
+      onDelete={() => setIsDeleteDialogOpen(true)}
     />
   )
 

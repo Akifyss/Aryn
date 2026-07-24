@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Select as BaseSelect } from '@base-ui/react/select'
 import { ScrollArea } from '@base-ui/react/scroll-area'
-import { Button, Input, Modal, Switch, Tabs } from '@heroui/react'
+import { Button, Input, Switch, Tabs } from '@heroui/react'
 import { Icon } from '@iconify/react'
+import { AppDialog } from '@/components/app-dialog'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import {
   OpenAI,
@@ -1381,32 +1382,30 @@ export function SettingsDialog({
   ...viewProps
 }: SettingsDialogProps) {
   return (
-    <Modal.Backdrop
-      isOpen={isOpen}
+    <AppDialog.Root
+      open={isOpen}
       onOpenChange={onOpenChange}
-      variant='opaque'
     >
-      <Modal.Container scroll='inside' className='flex items-center justify-center p-0 m-0 border-none shadow-none bg-transparent'>
-        <Modal.Dialog
-          aria-label='Settings'
-          className={`settings-modal p-0 m-0 relative ${resolvedTheme === 'dark' ? 'dark' : ''}`}
-        >
-          <AppTooltip tooltip='关闭' triggerMode='context'>
-            <Modal.CloseTrigger
-              className='settings-modal-close'
-              aria-label='Close settings'
-            >
-              <Icon icon='lucide:x' width={16} height={16} />
-            </Modal.CloseTrigger>
-          </AppTooltip>
-          <Modal.Body className='p-0 m-0'>
-            <SettingsView
-              {...viewProps}
-              resolvedTheme={resolvedTheme}
-            />
-          </Modal.Body>
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
+      <AppDialog.Popup
+        size='custom'
+        className={`settings-dialog ${resolvedTheme === 'dark' ? 'dark' : ''}`}
+      >
+        <AppDialog.Title className='sr-only'>设置</AppDialog.Title>
+        <AppTooltip tooltip='关闭' triggerMode='focusable'>
+          <AppDialog.Close
+            aria-label='关闭设置'
+            className='app-dialog-close-button settings-dialog-close'
+          >
+            <Icon aria-hidden='true' icon='lucide:x' width={16} height={16} />
+          </AppDialog.Close>
+        </AppTooltip>
+        <AppDialog.Body>
+          <SettingsView
+            {...viewProps}
+            resolvedTheme={resolvedTheme}
+          />
+        </AppDialog.Body>
+      </AppDialog.Popup>
+    </AppDialog.Root>
   )
 }

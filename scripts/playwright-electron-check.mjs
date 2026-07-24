@@ -427,9 +427,9 @@ try {
     })),
   )
   await page.locator('.drawer-local-overlay-root .project-menu-agent-add .project-menu-action').first().click({ timeout: 5_000 })
-  await page.waitForSelector('.project-create-modal', { timeout: 5_000 })
-  await page.locator('.project-create-modal-close').click({ timeout: 5_000 })
-  await page.waitForSelector('.project-create-modal', { state: 'detached', timeout: 5_000 })
+  await page.waitForSelector('.project-create-dialog', { timeout: 5_000 })
+  await page.locator('.project-create-dialog-close').click({ timeout: 5_000 })
+  await page.waitForSelector('.project-create-dialog', { state: 'detached', timeout: 5_000 })
 
   const drawerConversationRow = page.locator('.workspace-sidebar-surface.is-drawer .agent-conversation-row').first()
   await drawerConversationRow.hover({ timeout: 5_000 })
