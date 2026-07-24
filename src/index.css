@@ -23,11 +23,18 @@
   --app-z-panel-toggle-underlay: 20;
   --app-z-drawer-layer: 28;
   --app-z-window-chrome: 30;
+  --app-z-modal-layer: 50;
   --app-z-panel-toggle: 60;
   --app-z-window-controls: 70;
   --app-z-tooltip: 1400;
   --app-menu-item-hover-background: var(--hover);
   --app-menu-item-active-background: var(--selected);
+  --dialog-backdrop-transition-duration: 150ms;
+  --dialog-popup-start-scale: 0.98;
+  --dialog-popup-transition-duration: 100ms;
+  --dialog-popup-transition-easing: ease-out;
+  --dialog-radius: var(--radius-2xl);
+  --dialog-shadow: var(--shadow-2xl);
 }
 
 :root,
@@ -61,8 +68,11 @@
 
   /* Status */
   --danger: var(--color-red-500);
+  --danger-soft: color-mix(in oklch, var(--danger) 15%, transparent);
   --success: var(--color-green-500);
+  --success-soft: color-mix(in oklch, var(--success) 15%, transparent);
   --warning: var(--color-amber-500);
+  --warning-soft: color-mix(in oklch, var(--warning) 15%, transparent);
   --default: var(--color-gray-100);
 
   /* Git Status */
@@ -78,6 +88,7 @@
   --sidebar: var(--background-secondary);
   --separator: var(--border-secondary);
   --outline: var(--border-secondary);
+  --backdrop: rgb(0 0 0 / 0.25);
   --field-background: var(--background-primary);
   --field-foreground: var(--foreground-primary);
   --field-placeholder: var(--foreground-tertiary);
@@ -140,8 +151,11 @@
 
   /* Status */
   --danger: var(--color-red-600);
+  --danger-soft: color-mix(in oklch, var(--danger) 15%, transparent);
   --success: var(--color-green-600);
+  --success-soft: color-mix(in oklch, var(--success) 15%, transparent);
   --warning: var(--color-amber-500);
+  --warning-soft: color-mix(in oklch, var(--warning) 15%, transparent);
   --default: var(--color-gray-800);
 
   /* Git Status */
@@ -157,6 +171,7 @@
   --sidebar: var(--background-secondary);
   --separator: var(--border-secondary);
   --outline: var(--border-secondary);
+  --backdrop: rgb(0 0 0 / 0.5);
   --field-background: var(--background-primary);
   --field-foreground: var(--foreground-primary);
   --field-placeholder: var(--foreground-tertiary);

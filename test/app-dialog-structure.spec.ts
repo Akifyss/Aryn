@@ -52,7 +52,7 @@ describe('shared application dialogs', () => {
   })
 
   it('centralizes the accessible portal, backdrop, viewport, popup, and motion contract', async () => {
-    const [dialogSource, alertDialogSource, dialogCss, shellCss] =
+    const [dialogSource, alertDialogSource, dialogCss, shellCss, indexCss] =
       await Promise.all([
         readFile(
           new URL(
@@ -79,6 +79,7 @@ describe('shared application dialogs', () => {
           ),
           'utf8',
         ),
+        readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
       ])
 
     expect(dialogSource).toContain("from '@base-ui/react/dialog'")
@@ -104,22 +105,69 @@ describe('shared application dialogs', () => {
     )
     expect(dialogCss).toContain('.app-dialog-close-button:focus-visible')
     expect(dialogCss).toMatch(
-      /\.app-alert-dialog-description\s*\{[^}]*color:\s*var\(--foreground-primary\);/s,
-    )
-    expect(dialogCss).toMatch(
       /\.app-alert-dialog-header\s*\{[^}]*padding-inline-end:\s*44px;/s,
     )
     expect(dialogCss).toContain('[data-starting-style]')
     expect(dialogCss).toContain('[data-ending-style]')
-    expect(dialogCss).toContain('transition: opacity 150ms;')
-    expect(dialogCss).toContain('transform 100ms ease-out')
-    expect(dialogCss).toContain('opacity 100ms ease-out')
-    expect(dialogCss).toContain('transform: scale(0.98);')
+    expect(indexCss).toContain('--dialog-backdrop-transition-duration: 150ms;')
+    expect(indexCss).toContain('--dialog-popup-start-scale: 0.98;')
+    expect(indexCss).toContain('--dialog-popup-transition-duration: 100ms;')
+    expect(indexCss).toContain('--dialog-popup-transition-easing: ease-out;')
+    expect(dialogCss).toContain(
+      'transition: opacity var(--dialog-backdrop-transition-duration);',
+    )
+    expect(dialogCss).toContain(
+      'transform var(--dialog-popup-transition-duration) var(--dialog-popup-transition-easing)',
+    )
+    expect(dialogCss).toContain(
+      'opacity var(--dialog-popup-transition-duration) var(--dialog-popup-transition-easing)',
+    )
+    expect(dialogCss).toContain(
+      'transform: scale(var(--dialog-popup-start-scale));',
+    )
     expect(dialogCss).not.toContain('translateY(4px) scale(0.985)')
     expect(dialogCss).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(indexCss.match(/--app-z-modal-layer: 50;/g)).toHaveLength(1)
+    expect(indexCss.match(/--dialog-radius: var\(--radius-2xl\);/g)).toHaveLength(1)
+    expect(indexCss.match(/--dialog-shadow: var\(--shadow-2xl\);/g)).toHaveLength(1)
+    expect(indexCss.match(/--backdrop: rgb\(0 0 0 \/ 0\.25\);/g)).toHaveLength(1)
+    expect(indexCss.match(/--backdrop: rgb\(0 0 0 \/ 0\.5\);/g)).toHaveLength(1)
+    expect(dialogCss.match(/z-index: var\(--app-z-modal-layer\);/g)).toHaveLength(2)
+    expect(dialogCss).toContain('background: var(--backdrop);')
+    expect(dialogCss).toContain('border-radius: var(--dialog-radius);')
+    expect(dialogCss).toContain('box-shadow: var(--dialog-shadow);')
+    expect(dialogCss).toContain('background: var(--danger-soft);')
+    expect(dialogCss).toContain('background: var(--warning-soft);')
+    expect(dialogCss).toMatch(
+      /\.app-alert-dialog-popup\s*\{[^}]*width:\s*min\(100%, 32rem\);/s,
+    )
     expect(shellCss).toContain('body:has([data-app-modal-layer])')
     expect(shellCss).not.toContain("[data-slot='modal-backdrop']")
     expect(shellCss).not.toContain("[data-slot='alert-dialog-backdrop']")
+    expect(shellCss).toMatch(
+      /\.panel-drawer-backdrop\.panel-drawer-backdrop\s*\{[^}]*background-color:\s*var\(--backdrop\);/s,
+    )
+    expect(shellCss).not.toMatch(
+      /\.panel-drawer-backdrop\.panel-drawer-backdrop\s*\{[^}]*background-color:\s*var\(--overlay\);/s,
+    )
+  })
+
+  it('defines status soft colors consistently across themes', async () => {
+    const indexCss = await readFile(
+      new URL('../src/index.css', import.meta.url),
+      'utf8',
+    )
+
+    for (const token of ['danger', 'success', 'warning']) {
+      expect(
+        indexCss.match(
+          new RegExp(
+            `--${token}-soft: color-mix\\(in oklch, var\\(--${token}\\) 15%, transparent\\);`,
+            'g',
+          ),
+        ),
+      ).toHaveLength(2)
+    }
   })
 
   it('keeps Base UI as a runtime dependency', async () => {
@@ -132,6 +180,62 @@ describe('shared application dialogs', () => {
 
     expect(packageJson.dependencies?.['@base-ui/react']).toBeDefined()
     expect(packageJson.devDependencies?.['@base-ui/react']).toBeUndefined()
+  })
+
+  it('keeps feature dialogs from overriding the shared visual shell', async () => {
+    const dialogStyles = [
+      {
+        selector: 'settings-dialog',
+        source: await readFile(
+          new URL(
+            '../src/features/settings/components/settings-dialog/styles.css',
+            import.meta.url,
+          ),
+          'utf8',
+        ),
+      },
+      {
+        selector: 'command-palette-dialog',
+        source: await readFile(
+          new URL(
+            '../src/features/command-palette/components/command-palette/styles.css',
+            import.meta.url,
+          ),
+          'utf8',
+        ),
+      },
+      {
+        selector: 'project-create-dialog',
+        source: await readFile(
+          new URL(
+            '../src/features/workspace/components/new-project-dialog/styles.css',
+            import.meta.url,
+          ),
+          'utf8',
+        ),
+      },
+      {
+        selector: 'file-system-date-range-dialog',
+        source: await readFile(
+          new URL(
+            '../src/components/ui/file-system/styles.css',
+            import.meta.url,
+          ),
+          'utf8',
+        ),
+      },
+    ]
+    const sharedVisualProperty =
+      /(?:^|\n)\s*(?:background(?:-[\w-]+)?|border(?:-[\w-]+)?|box-shadow)\s*:/
+
+    dialogStyles.forEach(({ selector, source }) => {
+      const rule = source.match(
+        new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`),
+      )?.[1]
+
+      expect(rule, `missing .${selector} rule`).toBeDefined()
+      expect(rule).not.toMatch(sharedVisualProperty)
+    })
   })
 
   it('keeps file dialog roots mounted and retains their content through exit transitions', async () => {
@@ -153,11 +257,10 @@ describe('shared application dialogs', () => {
     expect(fileSystemSource).toContain('setDateRangeDialog(null)')
     expect(fileSystemSource).toContain('setIsDateRangeDialogOpen(true)')
     expect(fileSystemSource).toContain('initialFocus={initialFocusRef}')
-    expect(fileSystemSource).toContain('<AppTooltip tooltip="关闭"')
-    expect(fileSystemSource).toContain('<AppDialog.Close')
+    expect(fileSystemSource.match(/showCloseButton/g)).toHaveLength(2)
   })
 
-  it('uses the existing tooltip and Base UI close composition in every custom dialog', async () => {
+  it('uses the shared close button composition in every custom dialog', async () => {
     const [
       commandPaletteSource,
       settingsSource,
@@ -194,12 +297,9 @@ describe('shared application dialogs', () => {
       ),
     ])
 
-    expect(settingsSource).toContain("<AppTooltip tooltip='关闭'")
-    expect(settingsSource).toContain('<AppDialog.Close')
-    expect(newProjectSource).toContain("<AppTooltip tooltip='关闭'")
-    expect(newProjectSource).toContain('<AppDialog.Close')
-    expect(fileSystemSource).toContain('<AppTooltip tooltip="关闭"')
-    expect(fileSystemSource).toContain('<AppDialog.Close')
+    expect(settingsSource).toContain('showCloseButton')
+    expect(newProjectSource).toContain('showCloseButton')
+    expect(fileSystemSource.match(/showCloseButton/g)).toHaveLength(2)
     expect(commandPaletteSource).toContain(
       "<AppDialog.Close className='sr-only' tabIndex={-1}>",
     )

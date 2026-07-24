@@ -469,7 +469,6 @@ function FileTreeItem({
             disabled={isSubmitting}
             render={(
               <Button
-                className='confirm-dialog-cancel-button'
                 variant='tertiary'
                 isDisabled={isSubmitting}
               />

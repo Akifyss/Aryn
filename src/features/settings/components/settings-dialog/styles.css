@@ -1,31 +1,11 @@
 .settings-dialog {
-  width: 100% !important;
-  max-width: 820px !important;
-  height: min(560px, calc(var(--visual-viewport-height, 100dvh) - 32px)) !important;
-  background: var(--background-primary) !important;
-  border: 1px solid var(--border-primary) !important;
-  box-shadow: 0 0 0 1px var(--border-primary) !important;
-  border-radius: 12px !important;
-  overflow: hidden;
-  display: flex !important;
-  flex-direction: column;
-  padding: 0 !important;
-  margin: 0 !important;
-  overscroll-behavior: contain;
-}
-
-.settings-dialog-close {
-  top: 16px;
-  right: 16px;
-  border-radius: 8px;
-  z-index: 100;
+  width: 100%;
+  max-width: 820px;
+  height: min(560px, calc(var(--visual-viewport-height, 100dvh) - 32px));
 }
 
 .settings-dialog > .app-dialog-body {
-  padding: 0 !important;
-  margin: 0 !important;
-  display: flex !important;
-  flex: 1;
+  display: flex;
 }
 
 .settings-page {

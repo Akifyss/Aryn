@@ -438,10 +438,7 @@ body:has([data-app-modal-layer]) .agent-collapsed-tab-actions {
 
 .panel-drawer-backdrop.panel-drawer-backdrop {
   z-index: var(--app-z-drawer-layer);
-}
-
-.dark .panel-drawer-backdrop.panel-drawer-backdrop {
-  background-color: var(--overlay);
+  background-color: var(--backdrop);
 }
 
 .panel-drawer {

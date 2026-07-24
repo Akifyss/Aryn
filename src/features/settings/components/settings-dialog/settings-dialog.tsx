@@ -1388,17 +1388,10 @@ export function SettingsDialog({
     >
       <AppDialog.Popup
         size='custom'
+        showCloseButton
         className={`settings-dialog ${resolvedTheme === 'dark' ? 'dark' : ''}`}
       >
         <AppDialog.Title className='sr-only'>设置</AppDialog.Title>
-        <AppTooltip tooltip='关闭' triggerMode='focusable'>
-          <AppDialog.Close
-            aria-label='关闭设置'
-            className='app-dialog-close-button settings-dialog-close'
-          >
-            <Icon aria-hidden='true' icon='lucide:x' width={16} height={16} />
-          </AppDialog.Close>
-        </AppTooltip>
         <AppDialog.Body>
           <SettingsView
             {...viewProps}

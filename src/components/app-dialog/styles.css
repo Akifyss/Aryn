@@ -1,15 +1,15 @@
 .app-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 50;
-  background: var(--backdrop, rgb(0 0 0 / 0.5));
-  transition: opacity 150ms;
+  z-index: var(--app-z-modal-layer);
+  background: var(--backdrop);
+  transition: opacity var(--dialog-backdrop-transition-duration);
 }
 
 .app-dialog-viewport {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: var(--app-z-modal-layer);
   display: flex;
   width: 100%;
   min-width: 0;
@@ -30,16 +30,16 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border-primary);
-  border-radius: 16px;
+  border-radius: var(--dialog-radius);
   outline: none;
   background: var(--overlay);
-  color: var(--foreground-primary);
-  box-shadow: 0 28px 80px rgb(15 23 42 / 0.2);
+  color: var(--overlay-foreground);
+  box-shadow: var(--dialog-shadow);
   pointer-events: auto;
   transform-origin: center;
   transition:
-    transform 100ms ease-out,
-    opacity 100ms ease-out;
+    transform var(--dialog-popup-transition-duration) var(--dialog-popup-transition-easing),
+    opacity var(--dialog-popup-transition-duration) var(--dialog-popup-transition-easing);
 }
 
 .app-dialog-popup:not([data-size='custom']) {
@@ -47,33 +47,24 @@
   padding: 24px;
 }
 
-.app-dialog-popup[data-size='sm'] {
-  max-width: 24rem;
-}
-
-.app-dialog-popup[data-size='md'] {
-  max-width: 28rem;
-}
-
-.app-dialog-popup[data-size='lg'] {
-  max-width: 32rem;
-}
-
-.app-alert-dialog-popup {
-  width: min(100%, 28rem);
-  padding: 24px;
-}
-
+.app-dialog-popup[data-size='sm'],
 .app-alert-dialog-popup[data-size='sm'] {
   max-width: 24rem;
 }
 
+.app-dialog-popup[data-size='md'],
 .app-alert-dialog-popup[data-size='md'] {
   max-width: 28rem;
 }
 
+.app-dialog-popup[data-size='lg'],
 .app-alert-dialog-popup[data-size='lg'] {
   max-width: 32rem;
+}
+
+.app-alert-dialog-popup {
+  width: min(100%, 32rem);
+  padding: 24px;
 }
 
 .app-dialog-backdrop[data-starting-style],
@@ -86,13 +77,12 @@
 .app-alert-dialog-popup[data-starting-style],
 .app-alert-dialog-popup[data-ending-style] {
   opacity: 0;
-  transform: scale(0.98);
+  transform: scale(var(--dialog-popup-start-scale));
 }
 
 .app-dialog-title,
 .app-alert-dialog-title {
   margin: 0;
-  color: var(--foreground-primary);
   font-size: 16px;
   font-weight: 600;
   line-height: 1.35;
@@ -109,10 +99,6 @@
 
 .app-dialog-description {
   color: var(--foreground-secondary);
-}
-
-.app-alert-dialog-description {
-  color: var(--foreground-primary);
 }
 
 .app-dialog-body,
@@ -190,16 +176,15 @@
   flex: 0 0 auto;
   border-radius: 999px;
   background: var(--default);
-  color: var(--foreground-primary);
 }
 
 .app-alert-dialog-icon[data-tone='danger'] {
-  background: color-mix(in oklch, var(--danger) 15%, transparent);
+  background: var(--danger-soft);
   color: var(--danger);
 }
 
 .app-alert-dialog-icon[data-tone='warning'] {
-  background: color-mix(in oklch, var(--warning) 18%, transparent);
+  background: var(--warning-soft);
   color: var(--warning);
 }
 

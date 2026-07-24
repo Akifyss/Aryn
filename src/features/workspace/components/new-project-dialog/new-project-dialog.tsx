@@ -1,8 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Button } from '@heroui/react'
-import { CloseLine } from '@mingcute/react'
 import { AppDialog } from '@/components/app-dialog'
-import { AppTooltip } from '@/components/app-tooltip'
 import './styles.css'
 
 type NewProjectDialogProps = {
@@ -36,17 +34,10 @@ export function NewProjectDialog({
       <AppDialog.Popup
         size='custom'
         initialFocus={projectNameInputRef}
+        showCloseButton
         viewportClassName='project-create-dialog-viewport'
         className={`project-create-dialog ${theme === 'dark' ? 'dark' : ''}`}
       >
-        <AppTooltip tooltip='关闭' triggerMode='focusable'>
-          <AppDialog.Close
-            aria-label='关闭新建项目'
-            className='app-dialog-close-button project-create-dialog-close'
-          >
-            <CloseLine aria-hidden='true' />
-          </AppDialog.Close>
-        </AppTooltip>
         <AppDialog.Body>
           <form
             className='project-create-form'

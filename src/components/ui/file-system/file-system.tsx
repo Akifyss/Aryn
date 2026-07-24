@@ -3504,10 +3504,7 @@ export function FileSystem({
         {openedFile ? (
           <AppDialog.Popup
             size="custom"
-            className={cn(
-              "overflow-hidden p-0",
-              VIEWER_DIALOG_CLASSNAMES[openedFile.kind]
-            )}
+            className={VIEWER_DIALOG_CLASSNAMES[openedFile.kind]}
             showCloseButton={openedFile.kind === "image"}
             closeLabel={FILE_SYSTEM_COPY.toolbar.closePreview}
           >
@@ -3518,7 +3515,7 @@ export function FileSystem({
               <img
                 src={openedFile.url}
                 alt={openedFileName}
-                className="max-h-[88vh] w-auto max-w-full rounded-2xl object-contain"
+                className="max-h-[88vh] w-auto max-w-full object-contain"
               />
             ) : (
               // The pooled preview reparents into this host (see the layout
@@ -4353,20 +4350,13 @@ function FileSystemDateRangeDialog({
     <AppDialog.Popup
       initialFocus={initialFocusRef}
       size="custom"
+      showCloseButton
       viewportClassName="file-system-date-range-dialog-viewport"
       className="file-system-date-range-dialog"
     >
-      <AppTooltip tooltip="关闭" triggerMode="focusable">
-        <AppDialog.Close
-          aria-label="关闭自定义日期范围"
-          className="app-dialog-close-button"
-        >
-          <CloseLine aria-hidden="true" />
-        </AppDialog.Close>
-      </AppTooltip>
       <AppDialog.Body className="file-system-date-range-body">
         <div className="file-system-date-range-header">
-          <AppDialog.Title className="file-system-date-range-title">
+          <AppDialog.Title>
             {FILE_SYSTEM_COPY.dialog.customDateRange}
           </AppDialog.Title>
         </div>

@@ -140,49 +140,20 @@
 }
 
 .file-system-date-range-dialog-viewport {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
   padding: 16px;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
 }
 
 .file-system-date-range-dialog {
-  position: relative;
   width: min(30rem, calc(100vw - 2rem));
-  max-width: calc(100vw - 2rem);
-  max-height: calc(100vh - 2rem);
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid var(--border-primary);
-  border-radius: 16px;
-  background: var(--overlay);
-  color: var(--foreground-primary);
-  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.2);
 }
 
 .file-system-date-range-body {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
 }
 
 .file-system-date-range-header {
   padding: 20px 52px 8px 20px;
-}
-
-.file-system-date-range-title {
-  margin: 0;
-  color: var(--foreground-primary);
-  font-size: 16px;
-  font-weight: 650;
-  line-height: 1.3;
 }
 
 .file-system-date-range-panel {
@@ -194,10 +165,6 @@
 }
 
 .file-system-date-range-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
   padding: 14px 20px;
   border-top: 1px solid var(--separator);
   background: var(--background-secondary);

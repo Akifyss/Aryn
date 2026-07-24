@@ -428,7 +428,7 @@ try {
   )
   await page.locator('.drawer-local-overlay-root .project-menu-agent-add .project-menu-action').first().click({ timeout: 5_000 })
   await page.waitForSelector('.project-create-dialog', { timeout: 5_000 })
-  await page.locator('.project-create-dialog-close').click({ timeout: 5_000 })
+  await page.locator('.project-create-dialog .app-dialog-close-button').click({ timeout: 5_000 })
   await page.waitForSelector('.project-create-dialog', { state: 'detached', timeout: 5_000 })
 
   const drawerConversationRow = page.locator('.workspace-sidebar-surface.is-drawer .agent-conversation-row').first()
