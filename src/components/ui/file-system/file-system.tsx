@@ -5900,7 +5900,7 @@ const FileSystemColumn = React.memo(function FileSystemColumn({
   return (
     <ScrollArea
       orientation="vertical"
-      className="h-full w-60 shrink-0 border-r"
+      className="h-full w-60 shrink-0 border-r border-r-[var(--separator)]"
       viewportRef={viewportRef}
       viewportClassName="p-1.5"
       viewportProps={{ "aria-label": "文件", role: "listbox" }}
