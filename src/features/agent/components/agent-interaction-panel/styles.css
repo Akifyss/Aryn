@@ -1,0 +1,146 @@
+.agent-interaction-panel {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 0 2px 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background-secondary);
+}
+
+.agent-interaction-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--foreground-secondary);
+}
+
+.agent-interaction-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--foreground-primary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.agent-interaction-copy strong {
+  font-weight: 600;
+}
+
+.agent-interaction-copy span {
+  overflow: hidden;
+  color: var(--foreground-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-interaction-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-interaction-fields {
+  display: grid;
+  width: min(480px, 45vw);
+  gap: 10px;
+}
+
+.agent-interaction-field {
+  display: grid;
+  gap: 6px;
+}
+
+.agent-interaction-field-copy {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.agent-interaction-field-copy span {
+  color: var(--foreground-secondary);
+}
+
+.agent-interaction-field-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-interaction-field-option {
+  display: grid;
+  gap: 1px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  color: var(--foreground-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.agent-interaction-field-option small {
+  color: var(--foreground-secondary);
+  font-size: 10px;
+}
+
+.agent-interaction-field-option:hover,
+.agent-interaction-field-option.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--background-primary));
+}
+
+.agent-interaction-input {
+  width: min(260px, 32vw);
+  min-width: 140px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: var(--background-primary);
+  color: var(--foreground-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.agent-interaction-input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.agent-interaction-input.is-multiline {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+@media (max-width: 620px) {
+  .agent-interaction-panel {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .agent-interaction-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .agent-interaction-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .agent-interaction-fields {
+    width: 100%;
+  }
+}

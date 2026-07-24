@@ -1,0 +1,189 @@
+.agent-inline-spinner {
+  flex: 0 0 auto;
+}
+
+.agent-new-project-bar .agent-project-switch-trigger {
+  gap: 2px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.agent-new-project-bar .agent-project-switch-trigger .project-icon {
+  --project-icon-size: 16px;
+}
+
+.agent-new-project-bar .agent-project-switch-trigger .agent-project-switch-chevron {
+  width: 14px;
+  height: 14px;
+}
+
+.agent-composer {
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-composer-shell {
+  --agent-composer-control-gap: 11px;
+  --agent-composer-menu-gap: 10px;
+  --agent-composer-padding-block-end: 8px;
+  --agent-composer-padding-block-start: 8px;
+  --agent-composer-padding-inline: 8px;
+  --agent-composer-radius: 14px;
+  --agent-project-bar-height: 42px;
+  --agent-project-bar-overlap: 14px;
+  --agent-composer-text-min-height: 120px;
+  --agent-composer-text-max-height: 240px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--agent-content-max-width);
+  margin: 0 auto;
+  padding: var(--agent-composer-padding-block-start) var(--agent-composer-padding-inline) var(--agent-composer-padding-block-end);
+  isolation: isolate;
+}
+
+.agent-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--agent-composer-action-gap);
+  width: 100%;
+}
+
+.agent-composer-right-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--agent-composer-action-gap);
+  flex: 0 0 auto;
+}
+
+.agent-composer-meta {
+  --agent-composer-action-gap: 6px;
+  --agent-send-button-size: 32px;
+  position: relative;
+  z-index: 50;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  padding: 0 8px 8px;
+}
+
+.agent-new-project-bar {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--agent-project-bar-height);
+  margin: 0 0 calc(-1 * var(--agent-project-bar-overlap));
+  padding: 4px 10px calc(4px + var(--agent-project-bar-overlap));
+  border: 0;
+  border-radius: var(--agent-composer-radius) var(--agent-composer-radius) 0 0;
+  background: var(--background-tertiary);
+  box-sizing: border-box;
+}
+
+.agent-composer-attachments {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: contain;
+  pointer-events: auto;
+}
+
+.agent-composer-attachments::-webkit-scrollbar {
+  height: 0;
+}
+
+.agent-composer-attachments-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: max-content;
+}
+
+.agent-composer-attachment-warning {
+  flex: 0 0 auto;
+  max-width: 280px;
+  align-self: center;
+  color: var(--foreground-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.agent-composer-attach-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--foreground-secondary);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.agent-composer-attach-button:hover,
+.agent-composer-attach-button:focus-visible {
+  outline: none;
+  background: var(--hover);
+  color: var(--foreground-primary);
+}
+
+.agent-composer-attach-button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.agent-send-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--agent-send-button-size);
+  height: var(--agent-send-button-size);
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  color: var(--foreground-on-accent);
+  background: var(--accent);
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
+}
+
+.agent-send-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.agent-send-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.agent-send-button:hover {
+  background: var(--accent);
+  opacity: 0.9;
+}
+
+.agent-send-button.is-stop {
+  color: var(--foreground-primary);
+  background: var(--background-primary);
+  box-shadow: inset 0 0 0 1px var(--border-primary);
+}
+
+.agent-send-button.is-stop:hover {
+  color: var(--foreground-primary);
+  background: var(--hover);
+  opacity: 1;
+}

@@ -134,7 +134,8 @@ describe('agent sidebar structure', () => {
     const [
       globalCss,
       sidebarSource,
-      sidebarCss,
+      chatSurfaceSource,
+      chatSurfaceCss,
       viewportSource,
       viewportCss,
       virtualListSource,
@@ -143,7 +144,8 @@ describe('agent sidebar structure', () => {
     ] = await Promise.all([
       readSource('../src/index.css'),
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
-      readSource('../src/features/agent/components/agent-sidebar/styles.css'),
+      readSource('../src/features/agent/components/agent-chat-surface/agent-chat-surface.tsx'),
+      readSource('../src/features/agent/components/agent-chat-surface/styles.css'),
       readSource('../src/features/agent/components/agent-message-viewport/agent-message-viewport.tsx'),
       readSource('../src/features/agent/components/agent-message-viewport/styles.css'),
       readSource('../src/features/agent/components/agent-message-viewport/agent-virtual-message-list.tsx'),
@@ -151,7 +153,7 @@ describe('agent sidebar structure', () => {
       readSource('../src/features/agent/components/agent-message-viewport/agent-message-viewport-dom.ts'),
     ])
 
-    expect(sidebarSource).toContain(
+    expect(chatSurfaceSource).toContain(
       "from '@/features/agent/components/agent-message-viewport/agent-message-viewport'",
     )
     expect(sidebarSource).toContain(
@@ -175,9 +177,9 @@ describe('agent sidebar structure', () => {
     expect(viewportDomSource).toContain('export function isAgentMessageViewportScrollbarPointerEvent(')
     expect(viewportCss).toContain('.agent-messages-scroll {')
     expect(viewportCss).toContain('.agent-message-stack {')
-    expect(sidebarCss).not.toMatch(/^\.agent-messages(?:[\s.:-]|$)/m)
-    expect(sidebarCss).not.toMatch(/^\.agent-message-(?:stack|virtual)(?:[\s.:-]|$)/m)
-    expect(sidebarCss).toContain('.agent-codex-surface-stage {')
+    expect(chatSurfaceCss).not.toMatch(/^\.agent-messages(?:[\s.:-]|$)/m)
+    expect(chatSurfaceCss).not.toMatch(/^\.agent-message-(?:stack|virtual)(?:[\s.:-]|$)/m)
+    expect(chatSurfaceCss).toContain('.agent-codex-surface-stage {')
 
     const viewportClassNames = new Set(
       Array.from(viewportCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
@@ -189,16 +191,25 @@ describe('agent sidebar structure', () => {
   })
 
   it('keeps Agent session status behavior and styles in its component module', async () => {
-    const [globalCss, sidebarSource, sidebarCss, statusSource, statusCss, viewportCss] = await Promise.all([
+    const [
+      globalCss,
+      sidebarSource,
+      contextSource,
+      chatSurfaceCss,
+      statusSource,
+      statusCss,
+      viewportCss,
+    ] = await Promise.all([
       readSource('../src/index.css'),
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
-      readSource('../src/features/agent/components/agent-sidebar/styles.css'),
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar-context.ts'),
+      readSource('../src/features/agent/components/agent-chat-surface/styles.css'),
       readSource('../src/features/agent/components/agent-session-status/agent-session-status.tsx'),
       readSource('../src/features/agent/components/agent-session-status/styles.css'),
       readSource('../src/features/agent/components/agent-message-viewport/styles.css'),
     ])
 
-    expect(sidebarSource).toContain(
+    expect(contextSource).toContain(
       "from '@/features/agent/components/agent-session-status/agent-session-status'",
     )
     expect(sidebarSource).not.toContain('function deriveAgentSessionPhase(')
@@ -211,7 +222,7 @@ describe('agent sidebar structure', () => {
     expect(statusSource).toContain('export function AgentSessionStatusBubble(')
     expect(statusCss).toContain('.agent-session-status {')
     expect(statusCss).not.toContain('.agent-pi-web-session-status')
-    expect(sidebarCss).not.toMatch(/^\.agent-session-status(?:[\s.-]|$)/m)
+    expect(chatSurfaceCss).not.toMatch(/^\.agent-session-status(?:[\s.-]|$)/m)
     expect(viewportCss).toContain('.agent-pi-web-session-status .agent-session-status {')
 
     const statusClassNames = new Set(
@@ -250,7 +261,19 @@ describe('agent sidebar structure', () => {
       appSource,
       globalCss,
       sidebarSource,
-      sidebarCss,
+      contextSource,
+      chatSurfaceSource,
+      chatSurfaceCss,
+      codexTimelineSource,
+      codexTimelineCss,
+      composerSurfaceSource,
+      composerSurfaceCss,
+      composerMentionInputSource,
+      composerMentionInputCss,
+      interactionPanelSource,
+      interactionPanelCss,
+      newConversationPromptSource,
+      newConversationPromptCss,
       messageViewportSource,
       messageViewportCss,
       sessionTreeSource,
@@ -269,7 +292,19 @@ describe('agent sidebar structure', () => {
       readSource('../src/App.tsx'),
       readSource('../src/index.css'),
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
-      readSource('../src/features/agent/components/agent-sidebar/styles.css'),
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar-context.ts'),
+      readSource('../src/features/agent/components/agent-chat-surface/agent-chat-surface.tsx'),
+      readSource('../src/features/agent/components/agent-chat-surface/styles.css'),
+      readSource('../src/features/agent/components/codex-session-timeline/codex-session-timeline.tsx'),
+      readSource('../src/features/agent/components/codex-session-timeline/styles.css'),
+      readSource('../src/features/agent/components/agent-composer-surface/agent-composer-surface.tsx'),
+      readSource('../src/features/agent/components/agent-composer-surface/styles.css'),
+      readSource('../src/features/agent/components/agent-composer-mention-input/agent-composer-mention-input.tsx'),
+      readSource('../src/features/agent/components/agent-composer-mention-input/styles.css'),
+      readSource('../src/features/agent/components/agent-interaction-panel/agent-interaction-panel.tsx'),
+      readSource('../src/features/agent/components/agent-interaction-panel/styles.css'),
+      readSource('../src/features/agent/components/agent-new-conversation-prompt/agent-new-conversation-prompt.tsx'),
+      readSource('../src/features/agent/components/agent-new-conversation-prompt/styles.css'),
       readSource('../src/features/agent/components/agent-message-viewport/agent-message-viewport.tsx'),
       readSource('../src/features/agent/components/agent-message-viewport/styles.css'),
       readSource('../src/features/agent/components/agent-session-tree/agent-session-tree.tsx'),
@@ -289,22 +324,44 @@ describe('agent sidebar structure', () => {
     expect(appSource).toContain(
       "from '@/features/agent/components/agent-sidebar/agent-sidebar'",
     )
-    expect(sidebarSource).toContain("import './styles.css'")
+    expect(sidebarSource).not.toContain("import './styles.css'")
     expect(sidebarSource).toContain(
+      "from '@/features/agent/components/agent-chat-surface/agent-chat-surface'",
+    )
+    expect(sidebarSource).toContain(
+      "from '@/features/agent/components/agent-sidebar/agent-sidebar-context'",
+    )
+    expect(contextSource).toContain('export type AgentContextValue =')
+    expect(chatSurfaceSource).toContain("import './styles.css'")
+    expect(chatSurfaceSource).toContain(
       "from '@/features/agent/components/agent-message-viewport/agent-message-viewport'",
     )
-    expect(sidebarSource).toContain(
-      "from '@/features/agent/components/agent-file-card/agent-file-card'",
+    expect(chatSurfaceSource).toContain(
+      "from '@/features/agent/components/agent-composer-surface/agent-composer-surface'",
     )
-    expect(sidebarSource).toContain(
+    expect(chatSurfaceSource).toContain(
+      "from '@/features/agent/components/agent-new-conversation-prompt/agent-new-conversation-prompt'",
+    )
+    expect(chatSurfaceSource).toContain(
       "from '@/features/agent/components/agent-session-tree/agent-session-tree'",
     )
-    expect(sidebarSource).toContain(
+    expect(codexTimelineSource).toContain("import './styles.css'")
+    expect(composerSurfaceSource).toContain("import './styles.css'")
+    expect(composerSurfaceSource).toContain(
+      "from '@/features/agent/components/agent-composer-mention-input/agent-composer-mention-input'",
+    )
+    expect(composerMentionInputSource).toContain("import './styles.css'")
+    expect(composerSurfaceSource).toContain(
+      "from '@/features/agent/components/agent-file-card/agent-file-card'",
+    )
+    expect(composerSurfaceSource).toContain(
       "from '@/features/agent/components/agent-queued-composer-tray/agent-queued-composer-tray'",
     )
-    expect(sidebarSource).toContain(
+    expect(composerSurfaceSource).toContain(
       "from '@/features/agent/components/agent-model-cascader/agent-model-cascader'",
     )
+    expect(interactionPanelSource).toContain("import './styles.css'")
+    expect(newConversationPromptSource).toContain("import './styles.css'")
     expect(sessionTreeSource).toContain("import './styles.css'")
     expect(messageViewportSource).toContain("import './styles.css'")
     expect(messageViewportSource).toContain(
@@ -318,11 +375,14 @@ describe('agent sidebar structure', () => {
     expect(fileCardSource).toContain("import './styles.css'")
     expect(queuedTraySource).toContain("import './styles.css'")
     expect(modelCascaderSource).toContain("import './styles.css'")
-    expect(sidebarCss).toContain('.agent-shell {')
+    expect(chatSurfaceCss).toContain('.agent-shell {')
     expect(messageViewportCss).toContain('.agent-message-stack {')
-    expect(sidebarCss).toContain('.agent-composer {')
+    expect(composerSurfaceCss).toContain('.agent-composer {')
+    expect(interactionPanelCss).toContain('.agent-interaction-panel {')
+    expect(newConversationPromptCss).toContain('.agent-new-conversation-prompt {')
     expect(messageViewportCss).toContain('.opencode-session-surface-host,')
-    expect(sidebarCss).toContain('.codex-session-surface-host {')
+    expect(codexTimelineCss).toContain('.codex-session-surface-host {')
+    expect(composerMentionInputCss).toContain('.agent-composer-mention-menu {')
     expect(sessionTreeCss).toContain('.agent-session-tree-shell {')
     expect(sessionTreeCss).toContain('.agent-project-menu {')
     expect(sessionTreeCss).toContain('.agent-project-switch-trigger {')
@@ -335,18 +395,35 @@ describe('agent sidebar structure', () => {
     expect(queuedTrayCss).toContain('.agent-queued-menu {')
     expect(modelCascaderCss).toContain('.agent-model-cascader {')
     expect(modelCascaderCss).toContain('.agent-model-cascader-trigger {')
-    expect(sidebarCss).not.toContain('.agent-message {')
-    expect(sidebarCss).not.toContain('.agent-file-card {')
-    expect(sidebarCss).not.toContain('.agent-session-tree-shell {')
-    expect(sidebarCss).not.toContain('.agent-project-menu {')
-    expect(sidebarCss).not.toContain('.agent-brand-icon {')
-    expect(sidebarCss).not.toContain('.agent-queued-')
-    expect(sidebarCss).not.toContain('.agent-model-cascader')
-    expect(sidebarCss).not.toContain('.agent-message-stack {')
+    expect(chatSurfaceCss).not.toContain('.agent-message {')
+    expect(chatSurfaceCss).not.toContain('.agent-file-card {')
+    expect(chatSurfaceCss).not.toContain('.agent-session-tree-shell {')
+    expect(chatSurfaceCss).not.toContain('.agent-project-menu {')
+    expect(chatSurfaceCss).not.toContain('.agent-brand-icon {')
+    expect(chatSurfaceCss).not.toContain('.agent-queued-')
+    expect(chatSurfaceCss).not.toContain('.agent-model-cascader')
+    expect(chatSurfaceCss).not.toContain('.agent-message-stack {')
+    expect(chatSurfaceCss).not.toContain('.agent-composer {')
+    expect(chatSurfaceCss).not.toContain('.codex-session-surface-host')
+    expect(composerSurfaceCss).not.toContain('.agent-interaction-panel {')
+    expect(composerSurfaceCss).not.toContain('.agent-new-conversation-prompt {')
+    expect(composerSurfaceCss).not.toContain('.agent-composer-mention-menu {')
     expect(messageCss).not.toContain('.agent-file-card {')
 
-    const sidebarClassNames = new Set(
-      Array.from(sidebarCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
+    const chatSurfaceClassNames = new Set(
+      Array.from(chatSurfaceCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
+    )
+    const composerSurfaceClassNames = new Set(
+      Array.from(composerSurfaceCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
+    )
+    const composerMentionInputClassNames = new Set(
+      Array.from(composerMentionInputCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
+    )
+    const interactionPanelClassNames = new Set(
+      Array.from(interactionPanelCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
+    )
+    const newConversationPromptClassNames = new Set(
+      Array.from(newConversationPromptCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
     )
     const messageClassNames = new Set(
       Array.from(messageCss.matchAll(/\.(agent-[\w-]+)/g), (match) => match[1]),
@@ -371,7 +448,11 @@ describe('agent sidebar structure', () => {
     )
 
     const agentClassNames = new Set([
-      ...sidebarClassNames,
+      ...chatSurfaceClassNames,
+      ...composerSurfaceClassNames,
+      ...composerMentionInputClassNames,
+      ...interactionPanelClassNames,
+      ...newConversationPromptClassNames,
       ...sessionTreeClassNames,
       ...brandIconClassNames,
       ...messageClassNames,
@@ -393,6 +474,11 @@ describe('agent sidebar structure', () => {
   it('keeps presentation implementations in their owning components', async () => {
     const [
       sidebarSource,
+      contextSource,
+      chatSurfaceSource,
+      composerSurfaceSource,
+      interactionPanelSource,
+      newConversationPromptSource,
       sessionTreeSource,
       messageSource,
       fileCardSource,
@@ -400,6 +486,11 @@ describe('agent sidebar structure', () => {
       modelCascaderSource,
     ] = await Promise.all([
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar-context.ts'),
+      readSource('../src/features/agent/components/agent-chat-surface/agent-chat-surface.tsx'),
+      readSource('../src/features/agent/components/agent-composer-surface/agent-composer-surface.tsx'),
+      readSource('../src/features/agent/components/agent-interaction-panel/agent-interaction-panel.tsx'),
+      readSource('../src/features/agent/components/agent-new-conversation-prompt/agent-new-conversation-prompt.tsx'),
       readSource('../src/features/agent/components/agent-session-tree/agent-session-tree.tsx'),
       readSource('../src/features/agent/components/agent-message/agent-message.tsx'),
       readSource('../src/features/agent/components/agent-file-card/agent-file-card.tsx'),
@@ -417,7 +508,18 @@ describe('agent sidebar structure', () => {
     expect(sidebarSource).not.toContain('function AgentProjectSwitchTrigger(')
     expect(sidebarSource).not.toContain('function AgentQueuedComposerTray(')
     expect(sidebarSource).not.toContain('function AgentModelCascader(')
+    expect(sidebarSource).not.toContain('function AgentChatSurface(')
+    expect(sidebarSource).not.toContain('function AgentInteractionPanel(')
+    expect(sidebarSource).not.toContain('function AgentNewConversationPrompt(')
+    expect(sidebarSource).not.toContain('type AgentContextValue =')
 
+    expect(contextSource).toContain('export type AgentContextValue =')
+    expect(contextSource).toContain('export function useAgentContext()')
+    expect(chatSurfaceSource).toContain('export function AgentChatSurface()')
+    expect(chatSurfaceSource).toContain('export function AgentSessionTree(')
+    expect(composerSurfaceSource).toContain('export function AgentComposerSurface(')
+    expect(interactionPanelSource).toContain('export function AgentInteractionPanel(')
+    expect(newConversationPromptSource).toContain('export function AgentNewConversationPrompt(')
     expect(sessionTreeSource).toContain('export function AgentSessionTreeView(')
     expect(sessionTreeSource).toContain('export function AgentProjectSwitchTrigger(')
     expect(sessionTreeSource).not.toContain('agent-inline-spinner')
@@ -437,7 +539,12 @@ describe('agent sidebar structure', () => {
 
   it('keeps the extracted stylesheet scoped to Agent UI', async () => {
     const [
-      sidebarCss,
+      chatSurfaceCss,
+      codexTimelineCss,
+      composerSurfaceCss,
+      composerMentionInputCss,
+      interactionPanelCss,
+      newConversationPromptCss,
       sessionTreeCss,
       brandIconCss,
       messageCss,
@@ -447,7 +554,12 @@ describe('agent sidebar structure', () => {
       sessionStatusCss,
       messageViewportCss,
     ] = await Promise.all([
-      readSource('../src/features/agent/components/agent-sidebar/styles.css'),
+      readSource('../src/features/agent/components/agent-chat-surface/styles.css'),
+      readSource('../src/features/agent/components/codex-session-timeline/styles.css'),
+      readSource('../src/features/agent/components/agent-composer-surface/styles.css'),
+      readSource('../src/features/agent/components/agent-composer-mention-input/styles.css'),
+      readSource('../src/features/agent/components/agent-interaction-panel/styles.css'),
+      readSource('../src/features/agent/components/agent-new-conversation-prompt/styles.css'),
       readSource('../src/features/agent/components/agent-session-tree/styles.css'),
       readSource('../src/features/agent/components/agent-brand-icon/styles.css'),
       readSource('../src/features/agent/components/agent-message/styles.css'),
@@ -459,7 +571,12 @@ describe('agent sidebar structure', () => {
     ])
 
     for (const agentCss of [
-      sidebarCss,
+      chatSurfaceCss,
+      codexTimelineCss,
+      composerSurfaceCss,
+      composerMentionInputCss,
+      interactionPanelCss,
+      newConversationPromptCss,
       sessionTreeCss,
       brandIconCss,
       messageCss,

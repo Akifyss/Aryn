@@ -33,6 +33,7 @@ import {
   serializeComposerText,
 } from '@/features/agent/lib/composer-mentions'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
+import './styles.css'
 
 type ComposerModel = {
   mentions: ComposerMentionToken[]

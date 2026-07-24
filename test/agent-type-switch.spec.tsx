@@ -73,13 +73,23 @@ describe('AgentTypeSwitch', () => {
   })
 
   it('mounts the menu in the drawer-local overlay when the agent surface is a drawer', async () => {
-    const [switchSource, sidebarSource, styleSource] = await Promise.all([
+    const [switchSource, promptSource, chatSurfaceSource, styleSource] = await Promise.all([
       readFile(
         new URL('../src/features/agent/components/agent-type-switch/agent-type-switch.tsx', import.meta.url),
         'utf8',
       ),
       readFile(
-        new URL('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx', import.meta.url),
+        new URL(
+          '../src/features/agent/components/agent-new-conversation-prompt/agent-new-conversation-prompt.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/agent/components/agent-chat-surface/agent-chat-surface.tsx',
+          import.meta.url,
+        ),
         'utf8',
       ),
       readFile(
@@ -90,7 +100,10 @@ describe('AgentTypeSwitch', () => {
 
     expect(switchSource).toContain('<Menu.Portal container={menuPortalTarget ?? undefined}>')
     expect(switchSource).toContain("className='agent-type-switch-menu-positioner'")
-    expect(sidebarSource).toContain("menuPortalTarget={surfaceMode === 'drawer' ? localOverlayRoot : undefined}")
+    expect(promptSource).toContain('<AgentTypeSwitchTrigger menuPortalTarget={menuPortalTarget} />')
+    expect(chatSurfaceSource).toMatch(
+      /<AgentNewConversationPrompt\s+menuPortalTarget=\{\s*surfaceMode === 'drawer' \? localOverlayRoot : undefined\s*\}/,
+    )
     expect(styleSource).toMatch(/\.agent-type-switch-menu-positioner\s*\{[^}]*pointer-events:\s*auto;/s)
   })
 })

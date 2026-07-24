@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CodexSessionTimeline,
   toCodexSurfaceOptimisticMessages,
-} from '../src/features/agent/components/codex-session-timeline'
+} from '../src/features/agent/components/codex-session-timeline/codex-session-timeline'
 import { OpenCodeSessionTimeline } from '../src/features/agent/components/opencode-session-timeline'
 import { PiWebSessionTimeline } from '../src/features/agent/components/pi-web-session-timeline'
 import type { CodexNativeSessionSnapshot } from '../src/features/agent/types'

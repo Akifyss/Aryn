@@ -9,6 +9,7 @@ import type {
   CodexNativeSessionSnapshot,
 } from '@/features/agent/types'
 import { resolveWorkspaceMessageLink } from '@/features/agent/lib/message-links'
+import './styles.css'
 
 type CodexSurfaceModule = typeof import('@aryn/codex-session-surface')
 

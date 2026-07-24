@@ -1,0 +1,280 @@
+.agent-shell {
+  --agent-content-max-width: 800px;
+  --agent-messages-block-padding: 8px;
+  --agent-messages-inline-padding: 8px;
+  --agent-messages-bottom-padding: 104px;
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  background: inherit;
+}
+
+.agent-threadbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  min-height: var(--chrome-height);
+  padding: 0 var(--right-panel-content-inset) 0 6px;
+}
+
+.agent-threadbar[data-sidebar-transition='true'] {
+  transition:
+    padding-left var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing),
+    padding-right var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
+}
+
+.agent-threadbar-leading {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 100%;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-session-select {
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 100%;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-threadbar-drag-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: stretch;
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.agent-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--foreground-secondary);
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-toolbar-button svg {
+  flex: 0 0 auto;
+}
+
+.agent-toolbar-button:hover {
+  color: var(--foreground-primary);
+  background: var(--hover);
+}
+
+.agent-toolbar-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.agent-toolbar-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.agent-session-trigger {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 100%;
+  overflow: hidden;
+  align-self: center;
+  margin-left: 0;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground-primary);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-align: left;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 120ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-session-trigger-arrow {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--foreground-secondary);
+  opacity: 0.75;
+  transition: color 120ms ease, opacity 120ms ease, transform 120ms ease;
+}
+
+.agent-session-trigger:hover:not(:disabled),
+.agent-session-trigger.is-open {
+  background: var(--hover);
+  color: var(--foreground-primary);
+}
+
+.agent-session-trigger:hover:not(:disabled) .agent-session-trigger-arrow,
+.agent-session-trigger.is-open .agent-session-trigger-arrow {
+  color: var(--foreground-primary);
+  opacity: 0.85;
+}
+
+.agent-session-trigger.is-open .agent-session-trigger-arrow {
+  transform: rotate(180deg);
+}
+
+.agent-session-trigger:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.agent-session-static-label {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 4px 10px;
+  color: var(--foreground-primary);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-select-current {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-status-inline {
+  padding: 10px 16px 0;
+}
+
+.agent-status-inline p {
+  margin: 0;
+  color: var(--foreground-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-status-inline.is-error p {
+  color: var(--danger);
+}
+
+.agent-status-action {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.agent-status-action:hover {
+  color: var(--foreground-primary);
+}
+
+.agent-status-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.agent-floating-panel {
+  pointer-events: auto;
+  width: min(320px, calc(100vw - 16px));
+  height: min(320px, calc(100vh - 16px));
+  max-height: min(416px, calc(100vh - 16px));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-primary);
+  border-radius: 14px;
+  background: var(--overlay);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(22px);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-session-menu-positioner {
+  z-index: 1200;
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.agent-local-overlay-root {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  pointer-events: none;
+}
+
+.agent-shell.is-new-conversation {
+  --agent-content-max-width: 800px;
+}
+
+.agent-new-conversation-stage {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.agent-new-conversation-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 8px var(--agent-messages-bottom-padding);
+  box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-threadbar {
+    transition: none;
+  }
+}
+
+.agent-codex-surface-stage {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
