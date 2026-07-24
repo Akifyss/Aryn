@@ -126,24 +126,24 @@
   color-scheme: dark;
 
   /* Background */
-  --background-primary: var(--color-gray-950);
-  --background-secondary: var(--color-gray-900);
-  --background-tertiary: var(--color-gray-800);
-  --background-quaternary: var(--color-gray-700);
+  --background-primary: var(--color-neutral-950);
+  --background-secondary: var(--color-neutral-900);
+  --background-tertiary: var(--color-neutral-800);
+  --background-quaternary: var(--color-neutral-700);
 
   /* Foreground */
-  --foreground-primary: var(--color-gray-50);
-  --foreground-secondary: var(--color-gray-400);
-  --foreground-tertiary: var(--color-gray-500);
+  --foreground-primary: var(--color-neutral-50);
+  --foreground-secondary: var(--color-neutral-400);
+  --foreground-tertiary: var(--color-neutral-500);
   --foreground-on-accent: var(--color-white);
   --foreground-on-danger: var(--color-white);
-  --foreground-on-success: var(--color-gray-900);
-  --foreground-on-warning: var(--color-gray-900);
-  --foreground-on-default: var(--color-gray-50);
+  --foreground-on-success: var(--color-neutral-900);
+  --foreground-on-warning: var(--color-neutral-900);
+  --foreground-on-default: var(--color-neutral-50);
 
   /* Border */
-  --border-primary: var(--color-gray-600);
-  --border-secondary: var(--color-gray-800);
+  --border-primary: var(--color-neutral-600);
+  --border-secondary: var(--color-neutral-800);
 
   /* Accent */
   --accent: var(--color-blue-500);
@@ -156,7 +156,7 @@
   --success-soft: color-mix(in oklch, var(--success) 15%, transparent);
   --warning: var(--color-amber-500);
   --warning-soft: color-mix(in oklch, var(--warning) 15%, transparent);
-  --default: var(--color-gray-800);
+  --default: var(--color-neutral-800);
 
   /* Git Status */
   --status-added: var(--color-emerald-500);
