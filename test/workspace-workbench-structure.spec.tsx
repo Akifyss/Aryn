@@ -92,25 +92,32 @@ describe('workspace workbench behavior', () => {
 
 describe('workspace workbench ownership', () => {
   it('keeps navigation and editor composition out of App without creating new large files', async () => {
-    const componentUrls = [
-      '../src/features/workspace/components/project-menu/project-menu-layer.tsx',
-      '../src/features/workspace/components/workspace-workbench/workspace-navigation-panels.tsx',
-      '../src/features/workspace/components/workspace-workbench/workspace-navigation-surface.tsx',
-      '../src/features/workspace/components/workspace-workbench/workspace-editor-workbench.tsx',
+    const extractedModuleUrls = [
+      '../src/features/layout/components/app-workspace-shell/app-workspace-panels.tsx',
+      '../src/features/layout/components/app-workspace-shell/app-workspace-shell.tsx',
+      '../src/features/layout/components/app-overlay-layer/app-overlay-layer.tsx',
+      '../src/features/workspace/components/workspace-workbench/workspace-editor-configuration.ts',
+      '../src/features/workspace/components/workspace-workbench/workspace-navigation-configuration.ts',
     ]
-    const [appSource, ...componentSources] = await Promise.all([
+    const [appSource, ...extractedModuleSources] = await Promise.all([
       readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
-      ...componentUrls.map((path) => readFile(new URL(path, import.meta.url), 'utf8')),
+      ...extractedModuleUrls.map((path) => readFile(new URL(path, import.meta.url), 'utf8')),
     ])
 
-    expect(appSource).toContain('<WorkspaceNavigationSurface')
-    expect(appSource).toContain('<WorkspaceEditorWorkbench')
+    expect(appSource).toContain('createWorkspaceNavigationConfiguration({')
+    expect(appSource).toContain('createWorkspaceEditorConfiguration({')
+    expect(appSource).toContain('<AppWorkspaceShell')
+    expect(appSource).not.toContain('<WorkspaceNavigationSurface')
+    expect(appSource).not.toContain('<WorkspaceEditorWorkbench')
     expect(appSource).not.toContain('function renderWorkspaceTreePanel')
     expect(appSource).not.toContain('function renderGitPanel')
     expect(appSource).not.toContain('function renderDirectorySidebar')
+    expect(extractedModuleSources[0]).toContain('<WorkspaceNavigationSurface')
+    expect(extractedModuleSources[0]).toContain('<WorkspaceEditorWorkbench')
+    expect(appSource.split(/\r?\n/).length).toBeLessThan(750)
 
-    for (const source of componentSources) {
-      expect(source.split(/\r?\n/).length).toBeLessThan(300)
+    for (const source of extractedModuleSources) {
+      expect(source.split(/\r?\n/).length).toBeLessThan(200)
     }
   })
 })

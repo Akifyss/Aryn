@@ -7,18 +7,24 @@ async function readSource(relativePath: string) {
 
 describe('settings dialog structure', () => {
   it('keeps the modal shell and all feature-owned styles with the settings dialog', async () => {
-    const [appSource, appCss, dialogSource, dialogCss] = await Promise.all([
+    const [appSource, appCss, overlaySource, dialogSource, dialogCss] = await Promise.all([
       readSource('../src/App.tsx'),
       readSource('../src/App.css'),
+      readSource('../src/features/layout/components/app-overlay-layer/app-overlay-layer.tsx'),
       readSource('../src/features/settings/components/settings-dialog/settings-dialog.tsx'),
       readSource('../src/features/settings/components/settings-dialog/styles.css'),
     ])
 
     expect(appSource).toContain(
+      "from '@/features/layout/components/app-overlay-layer/app-overlay-layer'",
+    )
+    expect(appSource).toContain('<AppOverlayLayer')
+    expect(appSource).not.toContain('<SettingsDialog')
+    expect(appSource).not.toContain('<Modal.Backdrop')
+    expect(overlaySource).toContain(
       "from '@/features/settings/components/settings-dialog/settings-dialog'",
     )
-    expect(appSource).toContain('<SettingsDialog')
-    expect(appSource).not.toContain('<Modal.Backdrop')
+    expect(overlaySource).toContain('<SettingsDialog')
 
     expect(dialogSource).toContain("import './styles.css'")
     expect(dialogSource).toContain('<Modal.Backdrop')

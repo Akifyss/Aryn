@@ -261,7 +261,16 @@ describe('application window close requests', () => {
 
 describe('App lifecycle ownership', () => {
   it('keeps lifecycle listeners and confirmation markup out of App.tsx', async () => {
-    const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+    const [appSource, overlaySource] = await Promise.all([
+      readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
+      readFile(
+        new URL(
+          '../src/features/layout/components/app-overlay-layer/app-overlay-layer.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ])
 
     expect(appSource).not.toContain("window.addEventListener('keydown'")
     expect(appSource).not.toContain('window.appApi.onWindowCloseRequested')
@@ -272,6 +281,8 @@ describe('App lifecycle ownership', () => {
     expect(appSource).toContain('useAppWindowClose({')
     expect(appSource).toContain('useWorkspaceSyncController(currentPath)')
     expect(appSource).not.toContain('getWorkspaceFileTabIdsForPath')
-    expect(appSource).toContain('<AppConfirmDialog')
+    expect(appSource).toContain('<AppOverlayLayer')
+    expect(appSource).not.toContain('<AppConfirmDialog')
+    expect(overlaySource).toContain('<AppConfirmDialog')
   })
 })

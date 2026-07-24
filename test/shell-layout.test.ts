@@ -439,6 +439,7 @@ describe('shell layout helpers', () => {
       appShellCss,
       appSource,
       editorSurfaceControllerSource,
+      workspacePanelsSource,
       workbenchSource,
       workspaceTabsSource,
     ] = await Promise.all([
@@ -447,6 +448,13 @@ describe('shell layout helpers', () => {
       readFile(
         new URL(
           '../src/features/workspace/hooks/use-workspace-editor-surface-controller.ts',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/layout/components/app-workspace-shell/app-workspace-panels.tsx',
           import.meta.url,
         ),
         'utf8',
@@ -463,7 +471,8 @@ describe('shell layout helpers', () => {
 
     expect(appSource).toContain('useWorkspaceEditorSurfaceController({')
     expect(editorSurfaceControllerSource).toContain('useWorkspaceTabViewState({')
-    expect(appSource).toContain('<WorkspaceEditorWorkbench')
+    expect(appSource).toContain('createWorkspaceEditorConfiguration({')
+    expect(workspacePanelsSource).toContain('<WorkspaceEditorWorkbench')
     expect(workspaceTabsSource).toContain("? [getFixedPanelTab('git'), getFixedPanelTab('file')]")
     expect(workbenchSource).toContain("activeFixedPanelTab?.fixedTabKind === 'file-panel' ? (")
     expect(workbenchSource).toContain('<WorkspaceFileSystemPanel')
@@ -478,6 +487,8 @@ describe('shell layout helpers', () => {
       agentSidebarCss,
       appShellCss,
       appShellSource,
+      appWorkspaceShellSource,
+      appWorkspacePanelsSource,
       appSource,
       fileTabsCss,
       sidebarLayoutTransitionSource,
@@ -488,6 +499,20 @@ describe('shell layout helpers', () => {
       readAgentSidebarCss(),
       readAppShellCss(),
       readAppShellSource(),
+      readFile(
+        new URL(
+          '../src/features/layout/components/app-workspace-shell/app-workspace-shell.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/layout/components/app-workspace-shell/app-workspace-panels.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
       readAppSource(),
       readFileTabsCss(),
       readSidebarLayoutTransitionSource(),
@@ -501,10 +526,15 @@ describe('shell layout helpers', () => {
     ].join('\n')
     const appShellRule = appShellCss.match(/\.app-shell \{([\s\S]*?)\n\}/)?.[1]
 
-    expect(appSource).toContain('<AppShell')
+    expect(appSource).toContain('<AppWorkspaceShell')
     expect(appSource).toContain('layout={shellLayout}')
-    expect(appSource).toContain('function renderRightPanel(surfaceMode: PanelSurfaceMode)')
-    expect(appSource).toContain("if (surfaceMode === 'docked' && needsProjectBootstrap)")
+    expect(appSource).not.toContain('<AppShell')
+    expect(appWorkspaceShellSource).toContain('<AppShell')
+    expect(appWorkspaceShellSource).toContain('layout={layout}')
+    expect(appWorkspaceShellSource).toContain('renderRightPanel={(surfaceMode) => (')
+    expect(appWorkspacePanelsSource).toContain(
+      "surfaceMode === 'docked' && configuration.projectBootstrap.isVisible",
+    )
     expect(appSource).not.toContain("className='app-shell'")
     expect(appSource).not.toContain('className="app-shell"')
     expect(appShellSource).toContain("className='app-shell'")
