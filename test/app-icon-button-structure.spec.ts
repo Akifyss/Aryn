@@ -134,8 +134,12 @@ describe('shared icon tooltip button', () => {
     )
     expect(gitDiffCss).not.toContain('--app-icon-button-')
     expect(fileSystemSource).toContain(
-      '"flex h-6 items-center gap-1 border border-l-0',
+      '"flex h-6 items-center gap-1 border-y border-r border-[var(--border-primary)]',
     )
+    expect(fileSystemSource).toContain(
+      '"rounded-l-md border-l text-[var(--accent)]"',
+    )
+    expect(fileSystemSource).not.toContain('border border-l-0')
     expect(fileSystemSource).not.toContain(
       'h-[var(--app-icon-button-size-compact)]',
     )

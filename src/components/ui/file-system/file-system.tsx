@@ -3923,7 +3923,7 @@ function FileSystemFilterMenu({
 }
 
 const FILTER_PILL_SEGMENT_CLASSNAME =
-  "flex h-6 items-center gap-1 border border-l-0 bg-[var(--background-primary)] px-1.5 whitespace-nowrap text-[var(--foreground-primary)]"
+  "flex h-6 items-center gap-1 border-y border-r border-[var(--border-primary)] bg-[var(--background-primary)] px-1.5 whitespace-nowrap text-[var(--foreground-primary)]"
 
 const FILTER_PILL_BUTTON_CLASSNAME = cn(
   FILTER_PILL_SEGMENT_CLASSNAME,
