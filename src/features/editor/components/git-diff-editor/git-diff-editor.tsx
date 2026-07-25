@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ComponentProps, type Rea
 import * as monaco from 'monaco-editor'
 import { AddLine, Back2Line } from '@mingcute/react'
 import { Icon } from '@iconify/react'
-import { AppTooltipButton } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
 import type { GitChangeItem, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
 import { getCodeLanguage } from '@/features/workspace/lib/file-types'
 import {
@@ -650,9 +650,8 @@ export function GitDiffEditor({
           <div className='git-diff-view-modes'>
             {diff.change.scope === 'unstaged' ? (
             <>
-              <AppTooltipButton
+              <AppIconButton
                 type='button'
-                className='git-diff-view-mode git-diff-view-mode-icon-only'
                 aria-label='Discard'
                 tooltip='放弃更改'
                 disabled={!areFileGitActionsEnabled}
@@ -661,10 +660,9 @@ export function GitDiffEditor({
                 }}
               >
                 <Back2Line size={16} aria-hidden='true' />
-              </AppTooltipButton>
-              <AppTooltipButton
+              </AppIconButton>
+              <AppIconButton
                 type='button'
-                className='git-diff-view-mode git-diff-view-mode-icon-only'
                 aria-label='Stage'
                 tooltip='暂存'
                 disabled={!areFileGitActionsEnabled}
@@ -673,13 +671,12 @@ export function GitDiffEditor({
                 }}
               >
                 <AddLine size={16} aria-hidden='true' />
-              </AppTooltipButton>
+              </AppIconButton>
             </>
             ) : (
             <>
-              <AppTooltipButton
+              <AppIconButton
                 type='button'
-                className='git-diff-view-mode git-diff-view-mode-icon-only'
                 aria-label='Unstage'
                 tooltip='取消暂存'
                 disabled={!areFileGitActionsEnabled}
@@ -688,7 +685,7 @@ export function GitDiffEditor({
                 }}
               >
                 <Icon icon='mdi:minus' width={16} height={16} aria-hidden='true' />
-              </AppTooltipButton>
+              </AppIconButton>
             </>
             )}
           </div>

@@ -1,0 +1,91 @@
+.app-icon-button {
+  --app-icon-button-current-size: var(--app-icon-button-size-md);
+  --app-icon-button-current-radius: var(--app-icon-button-radius-md);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--app-icon-button-current-size);
+  min-width: var(--app-icon-button-current-size);
+  height: var(--app-icon-button-current-size);
+  min-height: var(--app-icon-button-current-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-icon-button-current-radius);
+  background: transparent;
+  color: var(--foreground-secondary);
+  line-height: 0;
+  cursor: pointer;
+  transition:
+    background-color var(--app-icon-button-transition-duration) ease,
+    border-color var(--app-icon-button-transition-duration) ease,
+    color var(--app-icon-button-transition-duration) ease,
+    opacity var(--app-icon-button-transition-duration) ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.app-icon-button[data-size='sm'] {
+  --app-icon-button-current-size: var(--app-icon-button-size-sm);
+  --app-icon-button-current-radius: var(--app-icon-button-radius-sm);
+}
+
+.app-icon-button > svg,
+.app-icon-button > .app-icon-button-icon,
+.app-icon-button > .iconify {
+  width: var(--app-icon-button-icon-size);
+  height: var(--app-icon-button-icon-size);
+  flex: 0 0 auto;
+}
+
+.app-icon-button[data-variant='outline'] {
+  border: 1px solid var(--border-primary);
+  background: var(--background-primary);
+}
+
+.app-icon-button[data-variant='solid'] {
+  color: var(--foreground-on-accent);
+  background: var(--accent);
+}
+
+.app-icon-button:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-icon-button[data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+  color: var(--foreground-primary);
+  background: var(--hover);
+}
+
+.app-icon-button[data-variant='outline']:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-icon-button[data-variant='outline'][data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+  border-color: var(--border-primary);
+}
+
+.app-icon-button[data-variant='solid']:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-icon-button[data-variant='solid'][data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+  color: var(--foreground-on-accent);
+  background: var(--accent);
+  opacity: 0.9;
+}
+
+.app-icon-button:disabled,
+.app-icon-button[aria-disabled='true'],
+.app-icon-button[data-disabled] {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.app-icon-button[data-size]:focus-visible {
+  color: var(--foreground-primary);
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.app-icon-button[data-variant='solid']:focus-visible {
+  color: var(--foreground-on-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-icon-button {
+    transition: none;
+  }
+}

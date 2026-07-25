@@ -1,6 +1,6 @@
 import { Icon } from '@iconify/react'
 import { Chat3Line, FolderLine, LayoutLeftLine } from '@mingcute/react'
-import { AppTooltipButton } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
 import { SegmentedIconTabs } from '@/components/ui/segmented-icon-tabs/segmented-icon-tabs'
 import type { AppLayoutPreference } from '@/hooks/use-settings-store'
 import './styles.css'
@@ -51,7 +51,7 @@ type AppChromeSearchButtonProps = {
 
 export function AppChromeSearchButton({ onClick }: AppChromeSearchButtonProps) {
   return (
-    <AppTooltipButton
+    <AppIconButton
       type='button'
       className='panel-toggle-button left-chrome-search-button'
       aria-label='Open search'
@@ -60,7 +60,7 @@ export function AppChromeSearchButton({ onClick }: AppChromeSearchButtonProps) {
       onClick={onClick}
     >
       <Icon icon='lucide:search' width={16} height={16} aria-hidden='true' />
-    </AppTooltipButton>
+    </AppIconButton>
   )
 }
 
@@ -85,7 +85,7 @@ export function AppChromeSidebarToggleButton({
     : (isSidebarVisible ? '收起侧边栏' : '展开侧边栏')
 
   return (
-    <AppTooltipButton
+    <AppIconButton
       type='button'
       className='panel-toggle-button'
       aria-label={ariaLabel}
@@ -96,6 +96,6 @@ export function AppChromeSidebarToggleButton({
       <span className='panel-toggle-icon' aria-hidden='true'>
         <LayoutLeftLine size={16} />
       </span>
-    </AppTooltipButton>
+    </AppIconButton>
   )
 }

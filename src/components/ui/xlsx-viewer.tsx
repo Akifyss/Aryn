@@ -29,7 +29,7 @@ import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import { createPortal } from "react-dom";
 
 import { AppScrollArea } from "@/components/app-scroll-area";
-import { AppTooltip } from "@/components/app-tooltip";
+import { AppIconButton } from "@/components/app-icon-button";
 import { cn } from "@/components/ui/viewer-utils";
 import {
   ViewerControlButton as Button,
@@ -46,6 +46,7 @@ import {
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerSearchPanel,
   ViewerToolbar,
+  ViewerToolbarButton,
   ViewerToolbarGroup,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
@@ -439,20 +440,6 @@ function useDelayedLoadingIndicator(isLoading: boolean, delayMs: number) {
   return showSpinner;
 }
 
-function ToolbarTooltip({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <AppTooltip tooltip={label} placement="bottom">
-      <span className="inline-flex">{children}</span>
-    </AppTooltip>
-  );
-}
-
 function ViewerLoadingSurface({
   showSpinner = true,
 }: {
@@ -490,14 +477,12 @@ function WorkbookFileActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
+        <ViewerToolbarButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={VIEWER_COPY.openWorkbookActions}
+          label={VIEWER_COPY.openWorkbookActions}
         >
           <More2Line aria-hidden="true" className="size-4" />
-        </Button>
+        </ViewerToolbarButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
@@ -561,16 +546,16 @@ export function WorkbookTableHeaderMenu({
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button
+        <AppIconButton
           {...triggerProps}
           type="button"
-          variant="ghost"
-          size="icon-sm"
-          className={cn("size-6 rounded-sm", triggerProps.className)}
+          size="sm"
+          className={triggerProps.className}
           aria-label="列菜单"
+          tooltip="列菜单"
         >
-          {triggerIcon ? triggerIcon : <More2Line aria-hidden="true" className="size-3.5" />}
-        </Button>
+          {triggerIcon ? triggerIcon : <More2Line aria-hidden="true" className="size-4" />}
+        </AppIconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
@@ -751,19 +736,16 @@ function WorkbookSearchPopover({
 
   return (
     <Popover>
-      <ToolbarTooltip label={VIEWER_COPY.searchWorkbook}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={VIEWER_COPY.searchWorkbook}
-            disabled={controlsDisabled}
-          >
-            <SearchLine aria-hidden="true" className="size-4" />
-          </Button>
-        </PopoverTrigger>
-      </ToolbarTooltip>
+      <PopoverTrigger asChild>
+        <ViewerToolbarButton
+          type="button"
+          label={VIEWER_COPY.searchWorkbook}
+          placement="bottom"
+          disabled={controlsDisabled}
+        >
+          <SearchLine aria-hidden="true" className="size-4" />
+        </ViewerToolbarButton>
+      </PopoverTrigger>
       <PopoverContent align="end" className="viewer-search-popover">
         <ViewerSearchPanel
           canClear={Boolean(searchDraft.trim() || searchQuery.trim())}
@@ -1518,11 +1500,10 @@ function XlsxViewerContent({
             <p className="mt-1 text-[var(--foreground-secondary)]">
               {VIEWER_COPY.uploadWorkbookHelp}
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-4"
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-4"
               onClick={() => fileInputRef.current?.click()}
             >
               <UploadLine aria-hidden="true" className="size-4" />
@@ -1561,11 +1542,10 @@ function XlsxViewerContent({
             <p className="mt-1 text-[var(--foreground-secondary)]">
               {loadError}
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-4"
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-4"
               onClick={() => fileInputRef.current?.click()}
             >
               <UploadLine aria-hidden="true" className="size-4" />

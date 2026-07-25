@@ -30,8 +30,9 @@ import {
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
 import { createPortal } from "react-dom"
 import { AppDialog } from "@/components/app-dialog"
+import { AppIconButton } from "@/components/app-icon-button"
 import { AppScrollArea } from "@/components/app-scroll-area"
-import { AppTooltip, AppTooltipButton } from "@/components/app-tooltip"
+import { AppTooltip } from "@/components/app-tooltip"
 import { SegmentedIconTabs } from "@/components/ui/segmented-icon-tabs/segmented-icon-tabs"
 import {
   DEFAULT_WORKSPACE_FOLDER_GLYPH_DATA_URL as FOLDER_GLYPH_DATA_URL,
@@ -92,7 +93,7 @@ function GalleryThumbnailsIcon({ className }: { className?: string }) {
 }
 
 type ButtonVariant = "default" | "ghost" | "outline"
-type ButtonSize = "default" | "icon" | "icon-sm" | "sm"
+type ButtonSize = "default" | "sm"
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: ButtonSize
@@ -109,8 +110,6 @@ const BUTTON_VARIANT_CLASSNAMES: Record<ButtonVariant, string> = {
 
 const BUTTON_SIZE_CLASSNAMES: Record<ButtonSize, string> = {
   default: "h-9 px-4 py-2",
-  icon: "size-9",
-  "icon-sm": "size-8 rounded-[10px]",
   sm: "h-8 rounded-md px-3 text-xs",
 }
 
@@ -2326,10 +2325,11 @@ function FileVisual({
     >
       {thumbnail}
       <div className="absolute inset-x-0 bottom-1.5 flex items-center justify-center gap-1 opacity-0 transition-opacity group-focus-within/pager:opacity-100 group-hover/pager:opacity-100">
-        <AppTooltipButton
+        <AppIconButton
           type="button"
           aria-label={FILE_SYSTEM_COPY.pager.previous}
           tooltip={FILE_SYSTEM_COPY.pager.previous}
+          size="sm"
           tabIndex={-1}
           disabled={clampedPageIndex === 0}
           onClick={(event) => {
@@ -2337,17 +2337,18 @@ function FileVisual({
             setPageIndex((previous) => Math.max(0, previous - 1))
           }}
           onDoubleClick={(event) => event.stopPropagation()}
-          className="flex size-6 cursor-pointer items-center justify-center rounded-md bg-[color-mix(in_oklab,var(--background-primary)_80%,transparent)] text-[var(--foreground-primary)] shadow-xs backdrop-blur-sm transition-colors outline-none hover:bg-[var(--background-primary)] focus-visible:ring-2 focus-visible:ring-[var(--focus)] disabled:pointer-events-none disabled:cursor-default disabled:opacity-40"
+          className="file-system-thumbnail-pager-button"
         >
-          <LeftLine aria-hidden="true" className="size-3.5" />
-        </AppTooltipButton>
+          <LeftLine aria-hidden="true" className="size-4" />
+        </AppIconButton>
         <span className="rounded-md bg-[color-mix(in_oklab,var(--background-primary)_80%,transparent)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--foreground-secondary)] tabular-nums shadow-xs backdrop-blur-sm">
           {clampedPageIndex + 1}/{totalPages}
         </span>
-        <AppTooltipButton
+        <AppIconButton
           type="button"
           aria-label={FILE_SYSTEM_COPY.pager.next}
           tooltip={FILE_SYSTEM_COPY.pager.next}
+          size="sm"
           tabIndex={-1}
           disabled={clampedPageIndex >= totalPages - 1}
           onClick={(event) => {
@@ -2355,10 +2356,10 @@ function FileVisual({
             setPageIndex((previous) => Math.min(totalPages - 1, previous + 1))
           }}
           onDoubleClick={(event) => event.stopPropagation()}
-          className="flex size-6 cursor-pointer items-center justify-center rounded-md bg-[color-mix(in_oklab,var(--background-primary)_80%,transparent)] text-[var(--foreground-primary)] shadow-xs backdrop-blur-sm transition-colors outline-none hover:bg-[var(--background-primary)] focus-visible:ring-2 focus-visible:ring-[var(--focus)] disabled:pointer-events-none disabled:cursor-default disabled:opacity-40"
+          className="file-system-thumbnail-pager-button"
         >
-          <RightLine aria-hidden="true" className="size-3.5" />
-        </AppTooltipButton>
+          <RightLine aria-hidden="true" className="size-4" />
+        </AppIconButton>
       </div>
     </div>
   )
@@ -3284,14 +3285,16 @@ export function FileSystem({
       />
   )
   const viewerCloseToolbarAction = (
-    <AppTooltip tooltip={FILE_SYSTEM_COPY.toolbar.closePreview} triggerMode="focusable">
-      <AppDialog.Close
-        aria-label={FILE_SYSTEM_COPY.toolbar.closePreview}
-        render={<Button type="button" variant="ghost" size="icon-sm" />}
-      >
-        <CloseLine aria-hidden="true" className="size-4" />
-      </AppDialog.Close>
-    </AppTooltip>
+    <AppDialog.Close
+      render={(
+        <AppIconButton
+          aria-label={FILE_SYSTEM_COPY.toolbar.closePreview}
+          tooltip={FILE_SYSTEM_COPY.toolbar.closePreview}
+        />
+      )}
+    >
+      <CloseLine aria-hidden="true" className="size-4" />
+    </AppDialog.Close>
   )
 
   return (
@@ -3347,26 +3350,24 @@ export function FileSystem({
       <FileSystemIconSpriteSheet />
       <div className="file-system-toolbar">
         <div className="file-system-toolbar-leading">
-          <AppTooltipButton
+          <AppIconButton
             type="button"
             aria-label={FILE_SYSTEM_COPY.toolbar.back}
             tooltip={FILE_SYSTEM_COPY.toolbar.back}
             disabled={!canGoBack}
             onClick={goBack}
-            className="file-system-toolbar-button"
           >
             <LeftLine aria-hidden="true" className="size-4" />
-          </AppTooltipButton>
-          <AppTooltipButton
+          </AppIconButton>
+          <AppIconButton
             type="button"
             aria-label={FILE_SYSTEM_COPY.toolbar.forward}
             tooltip={FILE_SYSTEM_COPY.toolbar.forward}
             disabled={!canGoForward}
             onClick={goForward}
-            className="file-system-toolbar-button"
           >
             <RightLine aria-hidden="true" className="size-4" />
-          </AppTooltipButton>
+          </AppIconButton>
           {headerLayout !== "minimal" ? (
             <span className="file-system-toolbar-title">
               {currentFolderName}
@@ -3587,9 +3588,6 @@ export function FileSystem({
   )
 }
 
-// Shared style for the ghost icon buttons in the toolbar.
-const TOOLBAR_ICON_BUTTON_CLASSNAME = "file-system-toolbar-button"
-
 // macOS Finder-style toolbar search. At the full layout it sits inline in
 // the header's right column; at compact widths it collapses into a ghost
 // icon button that opens the input in a popover (a dot marks the button
@@ -3648,18 +3646,19 @@ function FileSystemSearchField({
         className="h-full w-full min-w-0 rounded-[inherit] bg-transparent pr-6 pl-7 outline-none placeholder:text-[var(--foreground-secondary)]"
       />
       {value ? (
-        <AppTooltipButton
+        <AppIconButton
           type="button"
           aria-label={FILE_SYSTEM_COPY.search.clear}
           tooltip={FILE_SYSTEM_COPY.search.clear}
+          size="sm"
           onClick={() => {
             onValueChange("")
             inputRef.current?.focus()
           }}
-          className="absolute right-1 flex size-5 cursor-pointer items-center justify-center rounded-sm text-[var(--foreground-secondary)] transition-colors outline-none hover:text-[var(--foreground-primary)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+          className="file-system-search-clear-button"
         >
-          <CloseLine aria-hidden="true" className="size-3" />
-        </AppTooltipButton>
+          <CloseLine aria-hidden="true" className="size-4" />
+        </AppIconButton>
       ) : null}
     </div>
   )
@@ -3680,10 +3679,11 @@ function FileSystemSearchField({
       >
         <PopoverTrigger
           render={
-            <button
+            <AppIconButton
               type="button"
               aria-label={FILE_SYSTEM_COPY.search.title}
-              className={cn(TOOLBAR_ICON_BUTTON_CLASSNAME, "relative")}
+              className="relative"
+              tooltip={null}
             />
           }
         >
@@ -3859,12 +3859,12 @@ function FileSystemFilterMenu({
       >
         <DropdownMenuTrigger
           render={
-            <Button
+            <AppIconButton
               type="button"
               variant="outline"
-              size="icon-sm"
               aria-label={FILE_SYSTEM_COPY.filter.title}
-              className="file-system-toolbar-filter-button relative size-8 sm:size-8"
+              className="relative"
+              tooltip={null}
             />
           }
         >
@@ -3923,7 +3923,7 @@ function FileSystemFilterMenu({
 }
 
 const FILTER_PILL_SEGMENT_CLASSNAME =
-  "flex h-5 items-center gap-1 border border-l-0 bg-[var(--background-primary)] px-1.5 whitespace-nowrap text-[var(--foreground-primary)]"
+  "flex h-6 items-center gap-1 border border-l-0 bg-[var(--background-primary)] px-1.5 whitespace-nowrap text-[var(--foreground-primary)]"
 
 const FILTER_PILL_BUTTON_CLASSNAME = cn(
   FILTER_PILL_SEGMENT_CLASSNAME,
@@ -4054,18 +4054,19 @@ function FileSystemFilterPill({
           </DropdownMenuContent>
         </DropdownMenu>
       )}
-      <AppTooltipButton
+      <AppIconButton
         type="button"
         aria-label={FILE_SYSTEM_COPY.filter.remove(FILTER_TYPE_LABELS[filter.type])}
         tooltip={FILE_SYSTEM_COPY.filter.remove(FILTER_TYPE_LABELS[filter.type])}
+        size="sm"
         onClick={onRemove}
         className={cn(
-          FILTER_PILL_BUTTON_CLASSNAME,
-          "rounded-r-md px-1 text-[var(--foreground-secondary)] hover:text-[var(--foreground-primary)]"
+          "file-system-filter-pill-remove-button",
+          "text-[var(--foreground-secondary)] hover:text-[var(--foreground-primary)]"
         )}
       >
-        <CloseLine aria-hidden="true" className="size-3" />
-      </AppTooltipButton>
+        <CloseLine aria-hidden="true" className="size-4" />
+      </AppIconButton>
     </div>
   )
 }
@@ -4180,34 +4181,36 @@ function FileSystemRangeCalendar({
 
   return (
     <div className="relative">
-      <AppTooltipButton
+      <AppIconButton
         type="button"
         aria-label={FILE_SYSTEM_COPY.calendar.previousMonth}
         tooltip={FILE_SYSTEM_COPY.calendar.previousMonth}
+        size="sm"
         onClick={() =>
           setViewMonth(
             (previous) =>
               new Date(previous.getFullYear(), previous.getMonth() - 1, 1)
           )
         }
-        className="absolute top-0 left-0 flex size-6 cursor-pointer items-center justify-center rounded-md text-[var(--foreground-secondary)] transition-colors outline-none hover:bg-[var(--hover)] hover:text-[var(--foreground-primary)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+        className="absolute top-0 left-0"
       >
         <LeftLine aria-hidden="true" className="size-4" />
-      </AppTooltipButton>
-      <AppTooltipButton
+      </AppIconButton>
+      <AppIconButton
         type="button"
         aria-label={FILE_SYSTEM_COPY.calendar.nextMonth}
         tooltip={FILE_SYSTEM_COPY.calendar.nextMonth}
+        size="sm"
         onClick={() =>
           setViewMonth(
             (previous) =>
               new Date(previous.getFullYear(), previous.getMonth() + 1, 1)
           )
         }
-        className="absolute top-0 right-0 flex size-6 cursor-pointer items-center justify-center rounded-md text-[var(--foreground-secondary)] transition-colors outline-none hover:bg-[var(--hover)] hover:text-[var(--foreground-primary)] focus-visible:ring-2 focus-visible:ring-[var(--focus)]"
+        className="absolute top-0 right-0"
       >
         <RightLine aria-hidden="true" className="size-4" />
-      </AppTooltipButton>
+      </AppIconButton>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {months.map((month, monthIndex) => {
           const firstWeekday = month.getDay()

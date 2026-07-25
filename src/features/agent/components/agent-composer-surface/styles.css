@@ -62,7 +62,6 @@
 
 .agent-composer-meta {
   --agent-composer-action-gap: 6px;
-  --agent-send-button-size: 32px;
   position: relative;
   z-index: 50;
   flex: 0 0 auto;
@@ -115,65 +114,6 @@
   color: var(--foreground-secondary);
   font-size: 11px;
   line-height: 1.35;
-}
-
-.agent-composer-attach-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--foreground-secondary);
-  cursor: pointer;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease;
-}
-
-.agent-composer-attach-button:hover,
-.agent-composer-attach-button:focus-visible {
-  outline: none;
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
-.agent-composer-attach-button:disabled {
-  opacity: 0.48;
-  cursor: default;
-}
-
-.agent-send-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--agent-send-button-size);
-  height: var(--agent-send-button-size);
-  padding: 0;
-  border: 0;
-  border-radius: 10px;
-  color: var(--foreground-on-accent);
-  background: var(--accent);
-  cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease, opacity 140ms ease;
-}
-
-.agent-send-button:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.agent-send-button:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.agent-send-button:hover {
-  background: var(--accent);
-  opacity: 0.9;
 }
 
 .agent-send-button.is-stop {

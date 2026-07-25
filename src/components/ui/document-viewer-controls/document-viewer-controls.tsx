@@ -16,6 +16,10 @@ import {
   ZoomOutLine,
 } from "@mingcute/react";
 
+import {
+  AppIconButton,
+  type AppIconButtonProps,
+} from "@/components/app-icon-button";
 import { AppTooltipButton } from "@/components/app-tooltip";
 import { cn } from "@/components/ui/viewer-utils";
 
@@ -32,23 +36,19 @@ const ZOOM_VALUE_EPSILON = 0.000001;
 
 type ViewerControlButtonProps =
   React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    size?: "icon-sm" | "sm";
     variant?: "ghost" | "outline";
   };
 
 export function ViewerControlButton({
   className,
-  size = "sm",
   variant = "ghost",
   ...props
 }: ViewerControlButtonProps) {
-  const iconOnly = size === "icon-sm";
-
   return (
     <AppTooltipButton
       {...props}
       className={cn(
-        iconOnly ? "viewer-toolbar-icon-button" : "viewer-toolbar-text-button",
+        "viewer-toolbar-text-button",
         variant === "outline" &&
           "border border-[var(--border-primary)] bg-[var(--background-primary)]",
         className,
@@ -61,14 +61,14 @@ export function ViewerToolbarButton({
   className,
   label,
   ...props
-}: Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "title"> & {
+}: Omit<AppIconButtonProps, "label" | "title" | "tooltip"> & {
   label: string;
 }) {
   return (
-    <AppTooltipButton
+    <AppIconButton
       {...props}
       aria-label={props["aria-label"] ?? label}
-      className={cn("viewer-toolbar-icon-button", className)}
+      className={className}
       tooltip={label}
     />
   );
@@ -335,35 +335,35 @@ export function ViewerSearchPanel({
           <div className="viewer-search-inline-actions">
             {hasResults ? (
               <>
-                <button
+                <AppIconButton
                   type="button"
-                  aria-label={previousResultLabel}
-                  className="viewer-search-inline-button"
+                  label={previousResultLabel}
+                  size="sm"
                   disabled={navigationDisabled}
                   onClick={onPreviousResult}
                 >
                   <LeftLine aria-hidden="true" className="size-4" />
-                </button>
-                <button
+                </AppIconButton>
+                <AppIconButton
                   type="button"
-                  aria-label={nextResultLabel}
-                  className="viewer-search-inline-button"
+                  label={nextResultLabel}
+                  size="sm"
                   disabled={navigationDisabled}
                   onClick={onNextResult}
                 >
                   <RightLine aria-hidden="true" className="size-4" />
-                </button>
+                </AppIconButton>
               </>
             ) : null}
             {canClear ? (
-              <button
+              <AppIconButton
                 type="button"
-                aria-label={clearLabel}
-                className="viewer-search-inline-button"
+                label={clearLabel}
+                size="sm"
                 onClick={handleClear}
               >
                 <CloseLine aria-hidden="true" className="size-4" />
-              </button>
+              </AppIconButton>
             ) : null}
           </div>
         ) : null}

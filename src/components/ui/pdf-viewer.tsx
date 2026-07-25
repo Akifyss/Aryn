@@ -77,13 +77,11 @@ import { Spinner } from "@heroui/react";
 import { flushSync } from "react-dom";
 
 import { AppScrollArea } from "@/components/app-scroll-area";
-import { AppTooltip } from "@/components/app-tooltip";
 import {
   getPdfDocumentOpenMode,
   loadSharedPdfEngine,
 } from "@/components/pdf-thumbnail-utils";
 import {
-  ViewerControlButton as Button,
   ViewerMenuContent as DropdownMenuContent,
   ViewerMenuItem as DropdownMenuItem,
   ViewerMenuRoot as DropdownMenu,
@@ -94,6 +92,7 @@ import {
   ViewerPageNumberControl,
   ViewerSearchPanel,
   ViewerToolbar,
+  ViewerToolbarButton,
   ViewerToolbarGroup,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
@@ -527,20 +526,6 @@ function PDFViewerFallbackShell({
   );
 }
 
-function ToolbarTooltip({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <AppTooltip tooltip={label} triggerMode="context">
-      <span className="inline-flex">{children}</span>
-    </AppTooltip>
-  );
-}
-
 function PDFViewerFileActionsMenu({
   downloadDisabled,
   isPreparingDownload = false,
@@ -581,14 +566,12 @@ function PDFViewerFileActionsMenu({
       ) : null}
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <Button
+          <ViewerToolbarButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={VIEWER_COPY.openPdfActions}
+            label={VIEWER_COPY.openPdfActions}
           >
             <More2Line aria-hidden="true" className="size-4" />
-          </Button>
+          </ViewerToolbarButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
           {showDownload && onDownload ? (
@@ -771,19 +754,15 @@ function PDFViewerSearchControl({
 
   return (
     <Popover>
-      <ToolbarTooltip label={VIEWER_COPY.searchText}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={VIEWER_COPY.searchText}
-            disabled={controlsDisabled}
-          >
-            <SearchLine aria-hidden="true" className="size-4" />
-          </Button>
-        </PopoverTrigger>
-      </ToolbarTooltip>
+      <PopoverTrigger asChild>
+        <ViewerToolbarButton
+          type="button"
+          label={VIEWER_COPY.searchText}
+          disabled={controlsDisabled}
+        >
+          <SearchLine aria-hidden="true" className="size-4" />
+        </ViewerToolbarButton>
+      </PopoverTrigger>
       <PopoverContent align="end" className="viewer-search-popover">
         <ViewerSearchPanel
           canClear={Boolean(searchDraft.trim() || searchQuery.trim())}
@@ -2138,18 +2117,14 @@ function PDFViewerInner({
                 <Separator />
               </>
             ) : null}
-            <ToolbarTooltip label={VIEWER_COPY.toggleThumbnails}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={VIEWER_COPY.toggleThumbnails}
-                disabled={controlsDisabled}
-                onClick={() => setSidebarOpen((open) => !open)}
-              >
-                <LayoutLeftLine aria-hidden="true" className="size-4" />
-              </Button>
-            </ToolbarTooltip>
+            <ViewerToolbarButton
+              type="button"
+              label={VIEWER_COPY.toggleThumbnails}
+              disabled={controlsDisabled}
+              onClick={() => setSidebarOpen((open) => !open)}
+            >
+              <LayoutLeftLine aria-hidden="true" className="size-4" />
+            </ViewerToolbarButton>
             <ViewerPageNumberControl
               activePage={activePage}
               controlsDisabled={controlsDisabled}
@@ -2162,30 +2137,22 @@ function PDFViewerInner({
           <ViewerToolbarGroup align="end">
             {showRotateControls ? (
               <>
-                <ToolbarTooltip label={VIEWER_COPY.rotateCounterclockwise}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={VIEWER_COPY.rotateCounterclockwise}
-                    disabled={controlsDisabled}
-                    onClick={() => rotateSelectedPages(-1)}
-                  >
-                    <AnticlockwiseLine aria-hidden="true" className="size-4" />
-                  </Button>
-                </ToolbarTooltip>
-                <ToolbarTooltip label={VIEWER_COPY.rotateClockwise}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={VIEWER_COPY.rotateClockwise}
-                    disabled={controlsDisabled}
-                    onClick={() => rotateSelectedPages(1)}
-                  >
-                    <ClockwiseLine aria-hidden="true" className="size-4" />
-                  </Button>
-                </ToolbarTooltip>
+                <ViewerToolbarButton
+                  type="button"
+                  label={VIEWER_COPY.rotateCounterclockwise}
+                  disabled={controlsDisabled}
+                  onClick={() => rotateSelectedPages(-1)}
+                >
+                  <AnticlockwiseLine aria-hidden="true" className="size-4" />
+                </ViewerToolbarButton>
+                <ViewerToolbarButton
+                  type="button"
+                  label={VIEWER_COPY.rotateClockwise}
+                  disabled={controlsDisabled}
+                  onClick={() => rotateSelectedPages(1)}
+                >
+                  <ClockwiseLine aria-hidden="true" className="size-4" />
+                </ViewerToolbarButton>
                 <Separator />
               </>
             ) : null}

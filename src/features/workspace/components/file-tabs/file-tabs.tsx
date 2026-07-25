@@ -1,7 +1,8 @@
 import { type DragEvent as ReactDragEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CloseLine, FolderLine, GitBranchLine, GitCompareLine } from '@mingcute/react'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
-import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
+import { AppTooltip } from '@/components/app-tooltip'
 import {
   reorderWorkspaceTabs,
   type TabDropPosition,
@@ -650,10 +651,11 @@ export function FileTabs({
 
               {!isPinned ? (
                 <div className='file-tab-actions'>
-                  <AppTooltipButton
+                  <AppIconButton
                     type='button'
                     className='file-tab-close'
                     aria-label={`Close ${baseName}`}
+                    size='sm'
                     tooltip='关闭'
                     onClick={(event) => {
                       event.stopPropagation()
@@ -662,7 +664,7 @@ export function FileTabs({
                   >
                     <span className='file-tab-dirty-indicator' aria-hidden='true' />
                     <CloseLine size={16} />
-                  </AppTooltipButton>
+                  </AppIconButton>
                 </div>
               ) : null}
             </div>
@@ -731,9 +733,8 @@ export function FileTabs({
       {hasFileTabActions ? (
         <div className='file-tabs-actions'>
           {canOpenActiveDiff && activeFileTab ? (
-            <AppTooltipButton
+            <AppIconButton
               type='button'
-              className='file-tabs-toolbar-button'
               aria-label={`Open diff for ${getTabLabel(activeFileTab)}`}
               tooltip='查看 Git 差异'
               onClick={() => {
@@ -741,7 +742,7 @@ export function FileTabs({
               }}
             >
               <GitCompareLine size={16} />
-            </AppTooltipButton>
+            </AppIconButton>
           ) : null}
           {actions}
         </div>

@@ -27,7 +27,6 @@ import { Spinner } from "@heroui/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { AppScrollArea } from "@/components/app-scroll-area";
-import { AppTooltip } from "@/components/app-tooltip";
 import { cn } from "@/components/ui/viewer-utils";
 import {
   ViewerControlButton as Button,
@@ -39,6 +38,7 @@ import {
   ViewerMenuTrigger as DropdownMenuTrigger,
   ViewerPageNumberControl,
   ViewerToolbar,
+  ViewerToolbarButton,
   ViewerToolbarGroup,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
@@ -302,20 +302,6 @@ function formatDocxLoadError(error: unknown) {
   return VIEWER_COPY.unableToLoadDocx;
 }
 
-function ToolbarTooltip({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <AppTooltip tooltip={label} placement="bottom">
-      <span className="inline-flex">{children}</span>
-    </AppTooltip>
-  );
-}
-
 function ViewerLoadingSurface({
   showSpinner = true,
 }: {
@@ -364,14 +350,12 @@ function DocxFileActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
+        <ViewerToolbarButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={VIEWER_COPY.openDocxActions}
+          label={VIEWER_COPY.openDocxActions}
         >
           <More2Line aria-hidden="true" className="size-4" />
-        </Button>
+        </ViewerToolbarButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         {showNightRenderToggle ? (
@@ -515,18 +499,15 @@ function DocxToolbar({
             <Separator />
           </>
         ) : null}
-        <ToolbarTooltip label={VIEWER_COPY.toggleThumbnails}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={VIEWER_COPY.toggleThumbnails}
-            disabled={controlsDisabled}
-            onClick={onToggleSidebar}
-          >
-            <LayoutLeftLine aria-hidden="true" className="size-4" />
-          </Button>
-        </ToolbarTooltip>
+        <ViewerToolbarButton
+          type="button"
+          label={VIEWER_COPY.toggleThumbnails}
+          placement="bottom"
+          disabled={controlsDisabled}
+          onClick={onToggleSidebar}
+        >
+          <LayoutLeftLine aria-hidden="true" className="size-4" />
+        </ViewerToolbarButton>
         <DocxPageNumberControl
           activePageStore={activePageStore}
           controlsDisabled={controlsDisabled}
@@ -1414,11 +1395,10 @@ function DocxViewerContent({
                   旧版 <code>.doc</code> 支持有限，建议转换为 DOCX
                   以获得更准确的排版。
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-4"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <UploadLine aria-hidden="true" className="size-4" />

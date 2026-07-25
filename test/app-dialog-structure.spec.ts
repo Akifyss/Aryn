@@ -92,20 +92,23 @@ describe('shared application dialogs', () => {
     expect(alertDialogSource).toContain('<BaseAlertDialog.Backdrop')
     expect(alertDialogSource).toContain('<BaseAlertDialog.Viewport')
     expect(alertDialogSource).toContain('<BaseAlertDialog.Popup')
-    expect(dialogSource).toContain("triggerMode='focusable'")
-    expect(alertDialogSource).toContain("triggerMode='focusable'")
+    expect(dialogSource).toContain("from '@/components/app-icon-button'")
+    expect(alertDialogSource).toContain("from '@/components/app-icon-button'")
+    expect(dialogSource).toContain('<AppIconButton')
+    expect(alertDialogSource).toContain('<AppIconButton')
+    expect(dialogSource).toContain('tooltip={closeLabel}')
+    expect(dialogSource).toContain("placement='top'")
+    expect(alertDialogSource).toContain("tooltip='关闭'")
+    expect(alertDialogSource).toContain("placement='top'")
     expect(alertDialogSource).toContain('<BaseAlertDialog.Close')
     expect(dialogSource).not.toContain('CloseButton:')
     expect(alertDialogSource).not.toContain('CloseButton:')
+    expect(dialogCss).not.toContain('.app-dialog-close-button svg')
+    expect(indexCss).toContain('--app-icon-button-size-md: 32px;')
+    expect(indexCss).toContain('--app-icon-button-icon-size: 16px;')
+    expect(indexCss).toContain('--app-icon-button-radius-md: 8px;')
     expect(dialogCss).toMatch(
-      /\.app-dialog-close-button\s*\{[^}]*width:\s*32px;[^}]*height:\s*32px;/s,
-    )
-    expect(dialogCss).toMatch(
-      /\.app-dialog-close-button svg\s*\{[^}]*width:\s*16px;[^}]*height:\s*16px;/s,
-    )
-    expect(dialogCss).toContain('.app-dialog-close-button:focus-visible')
-    expect(dialogCss).toMatch(
-      /\.app-alert-dialog-header\s*\{[^}]*padding-inline-end:\s*44px;/s,
+      /\.app-alert-dialog-header\s*\{[^}]*padding-inline-end:\s*calc\(var\(--app-icon-button-size-md\) \+ 12px\);/s,
     )
     expect(dialogCss).toContain('[data-starting-style]')
     expect(dialogCss).toContain('[data-ending-style]')

@@ -604,7 +604,7 @@
 
 .provider-apikey-input-container input {
   padding-left: 36px !important;
-  padding-right: 36px !important;
+  padding-right: calc(var(--app-icon-button-size-md) + 20px) !important;
 }
 
 .provider-card.is-expanded .provider-card-header [class*='mingcute'],
@@ -629,20 +629,6 @@
 
 .settings-secondary-icon {
   color: var(--foreground-secondary);
-}
-
-.settings-secondary-toggle {
-  color: var(--foreground-secondary);
-}
-
-.settings-secondary-toggle:hover {
-  color: var(--foreground-primary);
-}
-
-.settings-secondary-toggle:focus-visible {
-  border-radius: 4px;
-  outline: none;
-  box-shadow: 0 0 0 2px var(--focus);
 }
 
 /* Settings: progress dot */
@@ -703,7 +689,6 @@
   .settings-nav-item,
   .settings-select-trigger,
   .settings-select-icon,
-  .settings-secondary-toggle,
   .provider-card-details-wrapper,
   .provider-card-header svg {
     transition: none;

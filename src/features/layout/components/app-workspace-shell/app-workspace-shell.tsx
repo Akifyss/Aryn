@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { FolderLine, GitBranchLine } from '@mingcute/react'
-import { AppTooltipButton } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
 import {
   AppChromeSearchButton,
   AppChromeSidebarToggleButton,
@@ -112,7 +112,7 @@ export function AppWorkspaceShell({
       )}
       rightCollapsedActions={(
         <>
-          <AppTooltipButton
+          <AppIconButton
             type='button'
             className='agent-collapsed-tab-button'
             aria-label='Expand right sidebar and open Git'
@@ -121,8 +121,8 @@ export function AppWorkspaceShell({
             onClick={() => handleCollapsedFixedTabClick('git')}
           >
             <GitBranchLine size={16} />
-          </AppTooltipButton>
-          <AppTooltipButton
+          </AppIconButton>
+          <AppIconButton
             type='button'
             className='agent-collapsed-tab-button'
             aria-label='Expand right sidebar and open files'
@@ -131,7 +131,7 @@ export function AppWorkspaceShell({
             onClick={() => handleCollapsedFixedTabClick('file')}
           >
             <FolderLine size={16} />
-          </AppTooltipButton>
+          </AppIconButton>
         </>
       )}
       shouldExposeRightPanelTools={shouldExposeRightPanelTools}

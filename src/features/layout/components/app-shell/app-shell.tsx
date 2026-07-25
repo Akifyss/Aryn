@@ -6,7 +6,7 @@ import type {
 import { Drawer } from '@heroui/react'
 import { LayoutRightLine } from '@mingcute/react'
 import { AppTitlebar } from '@/components/app-titlebar'
-import { AppTooltipButton } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
 import type { useShellLayoutController } from '@/features/layout/hooks/use-shell-layout-controller'
 import { getShellChromeOverlayState } from '@/features/layout/shell-layout'
 import './styles.css'
@@ -199,7 +199,7 @@ export function AppShell({
       ) : null}
 
       {shouldExposeRightPanelTools ? (
-        <AppTooltipButton
+        <AppIconButton
           type='button'
           className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
           data-overlay-elevated={shellChromeOverlayState.rightControlsElevated ? 'true' : 'false'}
@@ -212,7 +212,7 @@ export function AppShell({
           <span className='panel-toggle-icon' aria-hidden='true'>
             <LayoutRightLine size={16} />
           </span>
-        </AppTooltipButton>
+        </AppIconButton>
       ) : null}
 
       {!isLeftSidebarDrawer ? (

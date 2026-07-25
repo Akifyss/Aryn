@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
-import { Button, ScrollShadow, Spinner } from '@heroui/react'
+import { ScrollShadow, Spinner } from '@heroui/react'
 import {
   AttachmentLine,
   ArrowUpLine,
   StopFill,
 } from '@mingcute/react'
-import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
 import { getAgentDefinition } from '@/features/agent/agent-definition'
 import { resolveSupportedRunningPromptBehavior } from '@/features/agent/composer/use-agent-composer-actions'
 import { AgentComposerMentionInput } from '@/features/agent/components/agent-composer-mention-input/agent-composer-mention-input'
@@ -259,10 +259,9 @@ export function AgentComposerSurface({
         />
 
         <div className='agent-composer-right-actions'>
-          <AppTooltipButton
+          <AppIconButton
             type='button'
             aria-label='附加文件'
-            className='agent-composer-attach-button'
             disabled={
               isOpenCodeChildSession
               || (!workspacePath && !canUseComposerWithoutWorkspace)
@@ -274,27 +273,24 @@ export function AgentComposerSurface({
             }}
           >
             <AttachmentLine aria-hidden='true' size={16} />
-          </AppTooltipButton>
+          </AppIconButton>
 
-          <AppTooltip tooltip={composerActionTitle} triggerMode='context'>
-            <Button
-              isIconOnly
-              aria-label={composerAction === 'stop' ? '停止当前运行' : '发送消息'}
-              isDisabled={!canPerformComposerAction}
-              size='sm'
-              type='submit'
-              variant='ghost'
-              className={`agent-send-button${composerAction === 'stop' ? ' is-stop' : ''}`}
-            >
-              {composerAction === 'stop' ? (
-                <StopFill size={16} />
-              ) : shouldShowComposerSendSpinner ? (
-                <AgentInlineSpinner />
-              ) : (
-                <ArrowUpLine size={16} />
-              )}
-            </Button>
-          </AppTooltip>
+          <AppIconButton
+            aria-label={composerAction === 'stop' ? '停止当前运行' : '发送消息'}
+            disabled={!canPerformComposerAction}
+            type='submit'
+            variant={composerAction === 'stop' ? 'ghost' : 'solid'}
+            className={`agent-send-button${composerAction === 'stop' ? ' is-stop' : ''}`}
+            tooltip={composerActionTitle}
+          >
+            {composerAction === 'stop' ? (
+              <StopFill size={16} />
+            ) : shouldShowComposerSendSpinner ? (
+              <AgentInlineSpinner />
+            ) : (
+              <ArrowUpLine size={16} />
+            )}
+          </AppIconButton>
         </div>
       </div>
     </div>

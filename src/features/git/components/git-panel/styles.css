@@ -270,8 +270,7 @@
   -webkit-app-region: no-drag;
 }
 
-.git-commit-submit-button,
-.git-commit-menu-trigger {
+.git-commit-submit-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -294,9 +293,13 @@
 }
 
 .git-commit-menu-trigger {
-  width: 24px;
-  min-width: 24px;
+  align-self: stretch;
+  width: var(--app-icon-button-size-sm);
+  min-width: var(--app-icon-button-size-sm);
+  height: auto;
+  min-height: 0;
   border-left: 1px solid var(--separator);
+  border-radius: 0;
   color: var(--foreground-secondary);
 }
 
@@ -316,7 +319,6 @@
 
 .git-commit-submit-button:focus-visible,
 .git-commit-menu-trigger:focus-visible {
-  outline: 2px solid var(--focus);
   outline-offset: -2px;
 }
 

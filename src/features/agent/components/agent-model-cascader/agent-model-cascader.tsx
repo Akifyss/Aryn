@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom'
 import { Button } from '@heroui/react'
 import { CloseLine, RightLine, SearchLine } from '@mingcute/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import { AppIconButton } from '@/components/app-icon-button'
 import { AppTooltipButton } from '@/components/app-tooltip'
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
 import {
@@ -1065,10 +1066,11 @@ export function AgentModelCascader({
               onKeyDown={handleSearchKeyDown}
             />
             {query ? (
-              <AppTooltipButton
+              <AppIconButton
                 type='button'
                 className='agent-model-cascader-search-clear'
                 aria-label='Clear model search'
+                size='sm'
                 tooltip='清除搜索'
                 onPointerDown={(event) => {
                   event.preventDefault()
@@ -1080,8 +1082,8 @@ export function AgentModelCascader({
                   })
                 }}
               >
-                <CloseLine aria-hidden='true' size={14} />
-              </AppTooltipButton>
+                <CloseLine aria-hidden='true' size={16} />
+              </AppIconButton>
             ) : null}
           </div>
 

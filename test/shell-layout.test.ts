@@ -143,6 +143,11 @@ describe('shell layout helpers', () => {
     return fileTabsCss.replace(/\r\n/g, '\n')
   }
 
+  async function readAppIconButtonCss() {
+    const appIconButtonCss = await readFile(new URL('../src/components/app-icon-button/styles.css', import.meta.url), 'utf8')
+    return appIconButtonCss.replace(/\r\n/g, '\n')
+  }
+
   async function readGitPanelCss() {
     const gitPanelCss = await readFile(new URL('../src/features/git/components/git-panel/styles.css', import.meta.url), 'utf8')
     return gitPanelCss.replace(/\r\n/g, '\n')
@@ -366,7 +371,10 @@ describe('shell layout helpers', () => {
   })
 
   it('keeps file tab actions visible for keyboard focus', async () => {
-    const fileTabsCss = await readFileTabsCss()
+    const [fileTabsCss, appIconButtonCss] = await Promise.all([
+      readFileTabsCss(),
+      readAppIconButtonCss(),
+    ])
 
     expect(fileTabsCss).toContain(`.file-tab:hover .file-tab-actions,
 .file-tab:focus-within .file-tab-actions,
@@ -378,10 +386,8 @@ describe('shell layout helpers', () => {
   opacity: 0;
   pointer-events: none;
 }`)
-    expect(fileTabsCss).toContain(`.file-tab-close:focus-visible,
-.file-tabs-toolbar-button:focus-visible {
+    expect(appIconButtonCss).toContain(`.app-icon-button[data-size]:focus-visible {
   color: var(--foreground-primary);
-  background: var(--hover);
   outline: 2px solid var(--focus);
   outline-offset: -2px;
 }`)
@@ -414,7 +420,7 @@ describe('shell layout helpers', () => {
       readTreeSource(),
     ])
 
-    expect(treeSource).toContain('tooltip={disabled ? undefined : resolvedTooltip}')
+    expect(treeSource).toContain('tooltip={disabled ? null : resolvedTooltip}')
     expect(treeSource).toContain("triggerClassName='tree-item-action-tooltip-trigger'")
     expect(treeCss).toContain(`.tree-item-action-tooltip-trigger {
   display: inline-flex;

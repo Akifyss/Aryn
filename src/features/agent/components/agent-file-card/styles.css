@@ -131,21 +131,13 @@
   color: var(--foreground-secondary);
 }
 
-.agent-file-card-remove {
+.app-icon-button.agent-file-card-remove {
   position: absolute;
   top: -6px;
   right: -6px;
   z-index: 2;
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border: 0;
-  border-radius: 999px;
   background: color-mix(in oklab, var(--foreground-primary) 54%, var(--background-primary));
   color: var(--background-primary);
-  cursor: pointer;
   opacity: 0;
   transform: scale(0.88);
   transition:
@@ -160,9 +152,8 @@
   transform: scale(1);
 }
 
-.agent-file-card-remove:hover,
-.agent-file-card-remove:focus-visible {
-  outline: none;
+.app-icon-button.agent-file-card-remove:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-icon-button.agent-file-card-remove:focus-visible {
   background: color-mix(in oklab, var(--foreground-primary) 62%, var(--background-primary));
   color: var(--background-primary);
 }

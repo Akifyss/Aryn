@@ -33,7 +33,8 @@ describe('WorkspaceEditorSurface', () => {
     expect(markup).toContain('id="editor-content-panel"')
     expect(markup).toContain('class="editor-directory-sidebar"')
     expect(markup).toContain('class="editor-directory-toggle-slot"')
-    expect(markup).toContain('class="editor-directory-toggle is-active"')
+    expect(markup).toContain('class="app-icon-button editor-directory-toggle"')
+    expect(markup).toContain('data-active="true"')
     expect(markup).toContain('aria-pressed="true"')
     expect(markup).toContain('class="editor-plain-toolbar"')
     expect(markup).toContain('data-slot="editor"')
@@ -66,8 +67,9 @@ describe('WorkspaceEditorSurface', () => {
 
 describe('workspace editor component styles', () => {
   it('keeps component-owned styles outside global CSS with accessible motion and focus states', async () => {
-    const [globalCss, editorSurfaceCss, fileTabsCss, fileTabsSource] = await Promise.all([
+    const [globalCss, appIconButtonCss, editorSurfaceCss, fileTabsCss, fileTabsSource] = await Promise.all([
       readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/components/app-icon-button/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/components/workspace-editor-surface/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/components/file-tabs/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/components/file-tabs/file-tabs.tsx', import.meta.url), 'utf8'),
@@ -76,8 +78,14 @@ describe('workspace editor component styles', () => {
     expect(globalCss).not.toMatch(/(^|\n)\.editor-frame\s*\{/)
     expect(globalCss).not.toMatch(/(^|\n)\.editor-empty-state\s*\{/)
     expect(globalCss).not.toMatch(/(^|\n)\.file-tabs-shell\s*\{/)
-    expect(editorSurfaceCss).toContain('.editor-directory-toggle:focus-visible')
-    expect(editorSurfaceCss).toContain('outline: 2px solid var(--focus);')
+    expect(appIconButtonCss).toContain('.app-icon-button[data-size]:focus-visible')
+    expect(appIconButtonCss).toContain('outline: 2px solid var(--focus);')
+    expect(editorSurfaceCss).toMatch(
+      /\.app-icon-button\.editor-directory-toggle\[data-active='true'\][^{]*\{[^}]*background:\s*transparent;/s,
+    )
+    expect(editorSurfaceCss).toMatch(
+      /\.app-icon-button\.editor-directory-toggle\[data-active='true'\]:hover[^{]*\{[^}]*background:\s*var\(--hover\);/s,
+    )
     expect(editorSurfaceCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(fileTabsCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(`${editorSurfaceCss}\n${fileTabsCss}`).not.toContain('transition: all')

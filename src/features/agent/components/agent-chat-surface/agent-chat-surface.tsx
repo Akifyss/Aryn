@@ -8,7 +8,7 @@ import {
   DownLine,
   EditLine,
 } from '@mingcute/react'
-import { AppTooltipButton } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
 import { AgentComposerSurface } from '@/features/agent/components/agent-composer-surface/agent-composer-surface'
 import { AgentMessageViewport } from '@/features/agent/components/agent-message-viewport/agent-message-viewport'
 import { AgentNewConversationPrompt } from '@/features/agent/components/agent-new-conversation-prompt/agent-new-conversation-prompt'
@@ -116,10 +116,10 @@ export function AgentChatSurface() {
   }, [activeOverlayPanel, canOpenSessionMenu, setActiveOverlayPanel])
 
   const threadbarNewButton = !isNewConversation ? (
-    <AppTooltipButton
+    <AppIconButton
       type='button'
       disabled={!workspacePath}
-      className='agent-toolbar-button agent-threadbar-new-button'
+      className='agent-threadbar-new-button'
       aria-label='Start new conversation'
       tooltip='新对话'
       onClick={() => {
@@ -132,7 +132,7 @@ export function AgentChatSurface() {
       }}
     >
       <EditLine size={16} />
-    </AppTooltipButton>
+    </AppIconButton>
   ) : null
 
   return (

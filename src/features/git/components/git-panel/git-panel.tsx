@@ -22,6 +22,7 @@ import {
   FileChangeStatusBadge,
   WorkspaceFileIcon,
 } from '@/components/file-change-visuals'
+import { AppIconButton } from '@/components/app-icon-button'
 import {
   TreeItemActionButton,
   TreeItemChildren,
@@ -581,9 +582,9 @@ function GitCommitActionMenu({
         aria-label='打开提交菜单'
         className={`git-commit-menu-trigger${isMenuOpen ? ' is-open' : ''}`}
         disabled={menuDisabled}
-        render={<AppTooltipButton tooltip='提交选项' />}
+        render={<AppIconButton size='sm' tooltip='提交选项' />}
       >
-        <DownLine size={12} aria-hidden='true' />
+        <DownLine size={16} aria-hidden='true' />
       </Menu.Trigger>
       <Menu.Portal
         className='git-commit-menu-portal'

@@ -121,50 +121,13 @@
   top: 12px;
   right: 12px;
   z-index: 1;
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 9px;
-  outline: none;
-  background: transparent;
-  color: var(--foreground-secondary);
-  cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease;
-}
-
-.app-dialog-close-button svg {
-  width: 16px;
-  height: 16px;
-}
-
-.app-dialog-close-button:hover {
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
-.app-dialog-close-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.app-dialog-close-button:disabled:hover {
-  background: transparent;
-  color: var(--foreground-secondary);
-}
-
-.app-dialog-close-button:focus-visible {
-  box-shadow: 0 0 0 2px var(--focus);
 }
 
 .app-alert-dialog-header {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-inline-end: 44px;
+  padding-inline-end: calc(var(--app-icon-button-size-md) + 12px);
 }
 
 .app-alert-dialog-icon {

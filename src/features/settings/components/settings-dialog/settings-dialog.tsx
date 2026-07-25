@@ -4,7 +4,7 @@ import { ScrollArea } from '@base-ui/react/scroll-area'
 import { Button, Input, Switch, Tabs } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import { AppDialog } from '@/components/app-dialog'
-import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
 import {
   OpenAI,
   Claude,
@@ -1241,19 +1241,19 @@ function SettingsView({
                                     value={draftValue}
                                     variant='secondary'
                                   />
-                                  <AppTooltipButton
+                                  <AppIconButton
                                     type='button'
                                     disabled={isBusy}
                                     aria-label={showPassword ? 'Hide API key' : 'Show API key'}
                                     tooltip={showPassword ? '隐藏 API 密钥' : '显示 API 密钥'}
                                     onClick={() => setShowPasswords(prev => ({ ...prev, [provider.key]: !showPassword }))}
-                                    className='settings-secondary-toggle absolute right-3 cursor-pointer transition-colors flex items-center justify-center z-10'
+                                    className='absolute right-3 z-10'
                                   >
                                     <Icon
                                       icon={showPassword ? 'mingcute:eye-line' : 'mingcute:eye-close-line'}
                                       className='w-4 h-4'
                                     />
-                                  </AppTooltipButton>
+                                  </AppIconButton>
                                 </div>
                               </div>
                             )}

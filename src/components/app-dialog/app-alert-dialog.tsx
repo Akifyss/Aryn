@@ -6,7 +6,7 @@ import {
 } from 'react'
 import { AlertDialog as BaseAlertDialog } from '@base-ui/react/alert-dialog'
 import { AlertLine, CloseLine, InformationLine, WarningLine } from '@mingcute/react'
-import { AppTooltip } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
 import './styles.css'
 
 export type AppAlertDialogTone = 'danger' | 'default' | 'warning'
@@ -77,25 +77,31 @@ const AlertDialogPopup = forwardRef<HTMLDivElement, AlertDialogPopupProps>(
             {children}
             {closeButtonDisabled ? (
               <BaseAlertDialog.Close
-                aria-label='关闭'
-                className='app-dialog-close-button'
                 disabled
+                render={(
+                  <AppIconButton
+                    aria-label='关闭'
+                    className='app-dialog-close-button'
+                    disabled
+                    tooltip={null}
+                  />
+                )}
               >
                 <CloseLine aria-hidden='true' />
               </BaseAlertDialog.Close>
             ) : (
-              <AppTooltip
-                placement='top'
-                tooltip='关闭'
-                triggerMode='focusable'
+              <BaseAlertDialog.Close
+                render={(
+                  <AppIconButton
+                    aria-label='关闭'
+                    className='app-dialog-close-button'
+                    tooltip='关闭'
+                    placement='top'
+                  />
+                )}
               >
-                <BaseAlertDialog.Close
-                  aria-label='关闭'
-                  className='app-dialog-close-button'
-                >
-                  <CloseLine aria-hidden='true' />
-                </BaseAlertDialog.Close>
-              </AppTooltip>
+                <CloseLine aria-hidden='true' />
+              </BaseAlertDialog.Close>
             )}
           </BaseAlertDialog.Popup>
         </BaseAlertDialog.Viewport>

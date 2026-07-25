@@ -29,7 +29,6 @@ import {
 import { Spinner } from "@heroui/react";
 import Papa from "papaparse";
 
-import { AppTooltip } from "@/components/app-tooltip";
 import { cn } from "@/components/ui/viewer-utils";
 import {
   ViewerControlButton as Button,
@@ -42,6 +41,7 @@ import {
   ViewerPopoverTrigger as PopoverTrigger,
   ViewerSearchPanel,
   ViewerToolbar,
+  ViewerToolbarButton,
   ViewerToolbarGroup,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
@@ -310,15 +310,13 @@ function CsvFileActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
+        <ViewerToolbarButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={VIEWER_COPY.openCsvActions}
+          label={VIEWER_COPY.openCsvActions}
           disabled={isPending}
         >
           <More2Line aria-hidden="true" className="size-4" />
-        </Button>
+        </ViewerToolbarButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         {showDownload ? (
@@ -339,20 +337,6 @@ function CsvFileActionsMenu({
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function ToolbarTooltip({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <AppTooltip tooltip={label} placement="bottom">
-      <span className="inline-flex">{children}</span>
-    </AppTooltip>
   );
 }
 
@@ -506,19 +490,16 @@ function CsvSearchPopover({
 
   return (
     <Popover>
-      <ToolbarTooltip label={VIEWER_COPY.searchCsv}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={VIEWER_COPY.searchCsv}
-            disabled={controlsDisabled}
-          >
-            <SearchLine aria-hidden="true" className="size-4" />
-          </Button>
-        </PopoverTrigger>
-      </ToolbarTooltip>
+      <PopoverTrigger asChild>
+        <ViewerToolbarButton
+          type="button"
+          label={VIEWER_COPY.searchCsv}
+          placement="bottom"
+          disabled={controlsDisabled}
+        >
+          <SearchLine aria-hidden="true" className="size-4" />
+        </ViewerToolbarButton>
+      </PopoverTrigger>
       <PopoverContent align="end" className="viewer-search-popover">
         <ViewerSearchPanel
           canClear={Boolean(searchDraft.trim() || searchQuery.trim())}
@@ -896,11 +877,10 @@ export function CsvViewer({
                 {VIEWER_COPY.uploadCsvHelp}
               </p>
               {showUpload ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-4"
                   disabled={isPending}
                   onClick={() => inputRef.current?.click()}
                 >

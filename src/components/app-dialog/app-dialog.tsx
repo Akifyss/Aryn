@@ -6,7 +6,7 @@ import {
 } from 'react'
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { CloseLine } from '@mingcute/react'
-import { AppTooltip } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
 import './styles.css'
 
 type DialogSize = 'custom' | 'lg' | 'md' | 'sm'
@@ -73,18 +73,18 @@ const DialogPopup = forwardRef<HTMLDivElement, DialogPopupProps>(function Dialog
         >
           {children}
           {showCloseButton ? (
-            <AppTooltip
-              placement='top'
-              tooltip={closeLabel}
-              triggerMode='focusable'
+            <BaseDialog.Close
+              render={(
+                <AppIconButton
+                  aria-label={closeLabel}
+                  className='app-dialog-close-button'
+                  tooltip={closeLabel}
+                  placement='top'
+                />
+              )}
             >
-              <BaseDialog.Close
-                aria-label={closeLabel}
-                className='app-dialog-close-button'
-              >
-                <CloseLine aria-hidden='true' />
-              </BaseDialog.Close>
-            </AppTooltip>
+              <CloseLine aria-hidden='true' />
+            </BaseDialog.Close>
           ) : null}
         </BaseDialog.Popup>
       </BaseDialog.Viewport>

@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import { Button } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import { FolderOpenLine } from '@mingcute/react'
-import { AppTooltipButton } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
 import { EmptyState } from '@/components/empty-state'
 import { recordOpenFileProfile } from '@/lib/open-file-profile'
 import './styles.css'
@@ -49,11 +49,12 @@ export function WorkspaceEditorDirectoryToggle({
   onToggle,
 }: WorkspaceEditorDirectoryToggleProps) {
   return (
-    <AppTooltipButton
+    <AppIconButton
       type='button'
-      className={`editor-directory-toggle${isVisible ? ' is-active' : ''}`}
+      className='editor-directory-toggle'
       aria-label={isVisible ? '隐藏目录侧边栏' : '显示目录侧边栏'}
       aria-pressed={isVisible}
+      isActive={isVisible}
       onClick={onToggle}
       tooltip={isVisible ? '隐藏目录' : '显示目录'}
     >
@@ -63,7 +64,7 @@ export function WorkspaceEditorDirectoryToggle({
         height={16}
         aria-hidden='true'
       />
-    </AppTooltipButton>
+    </AppIconButton>
   )
 }
 

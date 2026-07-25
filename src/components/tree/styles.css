@@ -7,26 +7,10 @@
 }
 
 .tree-item-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--tree-item-action-size, var(--tree-item-trailing-size, 32px));
-  min-width: var(--tree-item-action-size, var(--tree-item-trailing-size, 32px));
-  min-height: var(--tree-item-action-size, var(--tree-item-trailing-size, 32px));
-  padding: 0;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--foreground-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
-}
-
-.tree-item-action svg {
-  width: 16px;
-  height: 16px;
+  width: var(--tree-item-action-size, var(--tree-item-trailing-size, var(--app-icon-button-size-md)));
+  min-width: var(--tree-item-action-size, var(--tree-item-trailing-size, var(--app-icon-button-size-md)));
+  height: var(--tree-item-action-size, var(--tree-item-trailing-size, var(--app-icon-button-size-md)));
+  min-height: var(--tree-item-action-size, var(--tree-item-trailing-size, var(--app-icon-button-size-md)));
 }
 
 .tree-item-action-tooltip-trigger {
@@ -34,12 +18,6 @@
   flex-shrink: 0;
 }
 
-.tree-item-action:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-
-.tree-item-action:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
 .tree-item-action.is-menu-open:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
   background: var(--hover);
   color: var(--foreground-primary);
@@ -49,11 +27,9 @@
 .tree-item-action[aria-disabled='true'],
 .tree-item-action[data-disabled] {
   cursor: not-allowed;
-  color: var(--foreground-secondary);
-  opacity: 0.5;
 }
 
-.tree-item-action.is-danger:hover {
+.app-icon-button.tree-item-action.is-danger:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
   background: var(--danger);
   color: var(--foreground-on-danger);
 }

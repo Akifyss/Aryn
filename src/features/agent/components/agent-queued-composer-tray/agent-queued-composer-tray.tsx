@@ -6,6 +6,7 @@ import {
   EditLine,
   More1Line,
 } from '@mingcute/react'
+import { AppIconButton } from '@/components/app-icon-button'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 import type {
   AgentQueuedMessageKind,
@@ -239,9 +240,10 @@ export function AgentQueuedComposerTray({
                     >
                       {isFollowUp ? '引导' : '排队'}
                     </AppTooltipButton>
-                    <AppTooltipButton
+                    <AppIconButton
                       type='button'
                       className='agent-queued-action'
+                      size='sm'
                       disabled={isUpdating}
                       aria-label='删除待处理消息'
                       tooltip='删除'
@@ -255,7 +257,7 @@ export function AgentQueuedComposerTray({
                       }}
                     >
                       <Delete2Line size={16} />
-                    </AppTooltipButton>
+                    </AppIconButton>
                     <Menu.Root
                       modal={false}
                       open={isMenuOpen}
@@ -279,7 +281,7 @@ export function AgentQueuedComposerTray({
                           className='agent-queued-action'
                           disabled={isUpdating}
                           aria-label='更多待处理消息操作'
-                          render={<AppTooltipButton tooltip='更多' />}
+                          render={<AppIconButton size='sm' tooltip='更多' />}
                         >
                           <More1Line size={16} />
                         </Menu.Trigger>

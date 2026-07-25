@@ -14,6 +14,7 @@ import {
   DownLine,
   RightLine,
 } from '@mingcute/react'
+import { AppIconButton } from '@/components/app-icon-button'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 
@@ -586,13 +587,13 @@ export const TreeItemActionButton = forwardRef<HTMLButtonElement, TreeItemAction
 ) {
   const resolvedTooltip = tooltip ?? title ?? ariaLabel
   const button = (
-    <AppTooltipButton
+    <AppIconButton
       ref={ref}
       type={type}
       className={treeClassNames.action(className)}
       aria-label={ariaLabel}
       disabled={disabled}
-      tooltip={disabled ? undefined : resolvedTooltip}
+      tooltip={disabled ? null : resolvedTooltip}
       {...props}
     />
   )

@@ -49,7 +49,7 @@ type UnsupportedTooltipButtonNativeProps =
   | 'onDrop'
   | 'onDropCapture'
 
-type AppTooltipButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | UnsupportedTooltipButtonNativeProps> & {
+export type AppTooltipButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | UnsupportedTooltipButtonNativeProps> & {
   children?: ReactNode
   closeDelay?: number
   delay?: number

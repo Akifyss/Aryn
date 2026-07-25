@@ -18,7 +18,6 @@ import {
 import { Spinner } from "@heroui/react";
 
 import { AppScrollArea } from "@/components/app-scroll-area";
-import { AppTooltip } from "@/components/app-tooltip";
 import { cn } from "@/components/ui/viewer-utils";
 import {
   isPptxFileName,
@@ -38,6 +37,7 @@ import {
   ViewerPageNumberControl,
   ViewerSearchPanel,
   ViewerToolbar,
+  ViewerToolbarButton,
   ViewerToolbarGroup,
   ViewerToolbarSeparator as Separator,
   ViewerZoomControls,
@@ -130,20 +130,6 @@ function useDelayedLoadingIndicator(isLoading: boolean, delayMs: number) {
   return isLoading && showSpinner;
 }
 
-function ToolbarTooltip({
-  children,
-  label,
-}: {
-  children: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <AppTooltip tooltip={label} placement="bottom">
-      <span className="inline-flex">{children}</span>
-    </AppTooltip>
-  );
-}
-
 function ViewerLoadingSurface({
   showSpinner = true,
 }: {
@@ -174,14 +160,12 @@ function PptxFileActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger>
-        <Button
+        <ViewerToolbarButton
           type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="打开 PPTX 操作菜单"
+          label="打开 PPTX 操作菜单"
         >
           <More2Line aria-hidden="true" className="size-4" />
-        </Button>
+        </ViewerToolbarButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
         {showDownloadButton ? (
@@ -230,19 +214,16 @@ function PptxSearchPopover({
 
   return (
     <Popover>
-      <ToolbarTooltip label={searchLabel}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={searchLabel}
-            disabled={controlsDisabled}
-          >
-            <SearchLine aria-hidden="true" className="size-4" />
-          </Button>
-        </PopoverTrigger>
-      </ToolbarTooltip>
+      <PopoverTrigger asChild>
+        <ViewerToolbarButton
+          type="button"
+          label={searchLabel}
+          placement="bottom"
+          disabled={controlsDisabled}
+        >
+          <SearchLine aria-hidden="true" className="size-4" />
+        </ViewerToolbarButton>
+      </PopoverTrigger>
       <PopoverContent align="end" className="viewer-search-popover">
         <ViewerSearchPanel
           canClear={hasQuery}
@@ -318,6 +299,8 @@ function PptxToolbar({
   toolbarActions?: React.ReactNode;
   zoomPercent: number;
 }) {
+  const fitModeLabel = fitMode === "contain" ? "原始尺寸" : "适应宽度";
+
   return (
     <ViewerToolbar>
       <ViewerToolbarGroup>
@@ -346,18 +329,15 @@ function PptxToolbar({
           zoomInLabel={VIEWER_COPY.zoomIn}
           zoomOutLabel={VIEWER_COPY.zoomOut}
         />
-        <ToolbarTooltip label={fitMode === "contain" ? "原始尺寸" : "适应宽度"}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={fitMode === "contain" ? "原始尺寸" : "适应宽度"}
-            disabled={controlsDisabled}
-            onClick={onFitModeToggle}
-          >
-            <Fullscreen2Line aria-hidden="true" className="size-4" />
-          </Button>
-        </ToolbarTooltip>
+        <ViewerToolbarButton
+          type="button"
+          label={fitModeLabel}
+          placement="bottom"
+          disabled={controlsDisabled}
+          onClick={onFitModeToggle}
+        >
+          <Fullscreen2Line aria-hidden="true" className="size-4" />
+        </ViewerToolbarButton>
         <Separator />
         <PptxSearchPopover
           activeSearchIndex={activeSearchIndex}
@@ -406,11 +386,10 @@ function PptxEmptyState({
           支持 PPTX、PPTM、PPSX、PPSM、POTX、POTM 这类 OpenXML 演示文稿。
         </p>
         {showUpload ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-4"
+      <Button
+        type="button"
+        variant="outline"
+        className="mt-4"
             onClick={onUploadClick}
           >
             <UploadLine aria-hidden="true" className="size-4" />

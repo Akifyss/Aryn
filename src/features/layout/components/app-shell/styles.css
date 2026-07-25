@@ -7,7 +7,7 @@
   --resize-handle-line-width: 2px;
   --chrome-height: 44px;
   --tabs-chrome-height: calc(var(--chrome-height) - 1px);
-  --panel-toggle-size: 32px;
+  --panel-toggle-size: var(--app-icon-button-size-md);
   --panel-toggle-gap: 2px;
   --left-chrome-action-gap: 2px;
   --left-chrome-content-gap: 2px;
@@ -193,30 +193,7 @@
 }
 
 .panel-toggle-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--foreground-secondary);
-  cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.panel-toggle-button:hover {
-  color: var(--foreground-primary);
-  background: var(--hover);
-}
-
-.panel-toggle-button:focus-visible {
-  color: var(--foreground-primary);
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
+  position: relative;
 }
 
 .panel-toggle-button-overlay {
@@ -307,35 +284,7 @@ body:has([data-app-modal-layer]) .agent-collapsed-tab-actions {
 }
 
 .agent-collapsed-tab-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--panel-toggle-size);
-  height: var(--panel-toggle-size);
-  padding: 0;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--foreground-secondary);
-  cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.agent-collapsed-tab-button:hover {
-  color: var(--foreground-primary);
-  background: var(--hover);
-}
-
-.agent-collapsed-tab-button:focus-visible {
-  color: var(--foreground-primary);
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.agent-collapsed-tab-button svg {
-  flex-shrink: 0;
+  position: relative;
 }
 
 .drawer-window-drag-region {
@@ -350,8 +299,8 @@ body:has([data-app-modal-layer]) .agent-collapsed-tab-actions {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: var(--app-icon-button-icon-size);
+  height: var(--app-icon-button-icon-size);
 }
 
 .panel-toggle-icon.is-collapsed {

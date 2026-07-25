@@ -68,6 +68,7 @@ describe('Git feature ownership', () => {
   it('keeps repository commands and component styles out of App', async () => {
     const [
       globalCss,
+      appIconButtonCss,
       appSource,
       controllerSource,
       diffEditorCss,
@@ -76,6 +77,7 @@ describe('Git feature ownership', () => {
       gitPanelSource,
     ] = await Promise.all([
       readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/components/app-icon-button/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/git/hooks/use-git-workspace-controller.ts', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/editor/components/git-diff-editor/styles.css', import.meta.url), 'utf8'),
@@ -95,7 +97,7 @@ describe('Git feature ownership', () => {
     expect(gitPanelCss).toContain('.git-panel {')
     expect(gitPanelCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(diffEditorCss).toContain('.git-diff-editor {')
-    expect(diffEditorCss).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(appIconButtonCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(`${gitPanelCss}\n${diffEditorCss}`).not.toContain('transition: all')
     expect(diffEditorCss).not.toContain('.git-diff-pierre-shell')
     expect(gitPanelSource).toContain("import './styles.css'")

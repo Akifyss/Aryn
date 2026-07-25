@@ -17,7 +17,7 @@
   --editor-toolbar-control-gap: 4px;
   --editor-directory-toggle-left: var(--editor-toolbar-inline-padding);
   --editor-directory-toggle-top: 6px;
-  --editor-directory-toggle-size: 32px;
+  --editor-directory-toggle-size: var(--app-icon-button-size-md);
 
   position: relative;
   display: flex;
@@ -58,46 +58,19 @@
 }
 
 .editor-directory-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: var(--editor-directory-toggle-size);
+  min-width: var(--editor-directory-toggle-size);
   height: var(--editor-directory-toggle-size);
-  padding: 0;
-  border: 0;
-  border-radius: 10px;
+  min-height: var(--editor-directory-toggle-size);
+}
+
+.app-icon-button.editor-directory-toggle[data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+  color: var(--foreground-primary);
   background: transparent;
-  color: var(--foreground-secondary);
-  cursor: pointer;
-  transition:
-    color 140ms ease,
-    background-color 140ms ease,
-    transform 140ms ease;
 }
 
-.editor-directory-toggle:hover {
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
-.editor-directory-toggle:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
-.editor-directory-toggle:active {
-  transform: scale(0.94);
-}
-
-.editor-directory-toggle.is-active {
-  background: transparent;
-  color: var(--foreground-primary);
-}
-
-.editor-directory-toggle.is-active:hover,
-.editor-directory-toggle.is-active:focus-visible {
+.app-icon-button.editor-directory-toggle[data-active='true']:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-icon-button.editor-directory-toggle[data-active='true']:focus-visible:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
   background: var(--hover);
 }
 
@@ -221,10 +194,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .editor-directory-toggle {
-    transition: none;
-  }
-
   .editor-lazy-spinner {
     animation: none;
   }

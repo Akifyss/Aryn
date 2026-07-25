@@ -1,7 +1,7 @@
 import { type KeyboardEvent, type ReactNode } from 'react'
 import { CloseLine, PicLine } from '@mingcute/react'
 
-import { AppTooltipButton } from '@/components/app-tooltip'
+import { AppIconButton } from '@/components/app-icon-button'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import type {
   AgentMessageAttachment,
@@ -126,18 +126,19 @@ export function AgentFileCard({
       )}
       {trailing ? <span className='agent-file-card-trailing'>{trailing}</span> : null}
       {onRemove ? (
-        <AppTooltipButton
+        <AppIconButton
           type='button'
           className='agent-file-card-remove'
           aria-label={`移除 ${fileName}`}
+          size='sm'
           tooltip='移除附件'
           onClick={(event) => {
             event.stopPropagation()
             onRemove()
           }}
         >
-          <CloseLine aria-hidden='true' size={10} />
-        </AppTooltipButton>
+          <CloseLine aria-hidden='true' size={16} />
+        </AppIconButton>
       ) : null}
     </div>
   )

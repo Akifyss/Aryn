@@ -53,42 +53,6 @@
   background: transparent;
 }
 
-.git-diff-view-mode {
-  border: 0;
-  background: transparent;
-  color: var(--foreground-secondary);
-}
-
-.git-diff-view-mode {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
-}
-
-.git-diff-view-mode-icon-only {
-  width: 32px;
-  min-width: 32px;
-  padding: 0;
-}
-
-.git-diff-view-mode:hover:not(:disabled) {
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
-.git-diff-view-mode:disabled {
-  cursor: not-allowed;
-  color: var(--foreground-secondary);
-  opacity: 0.5;
-}
-
 .git-diff-monaco-shell {
   display: flex;
   flex: 1;
@@ -114,11 +78,5 @@
 @media (max-width: 860px) {
   .git-diff-header {
     padding-right: 16px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .git-diff-view-mode {
-    transition: none;
   }
 }
