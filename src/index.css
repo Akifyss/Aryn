@@ -19,12 +19,17 @@
 }
 
 :root {
+  --app-button-base-icon-size: 16px;
+  --app-button-base-radius-md: 8px;
+  --app-button-base-radius-sm: 6px;
+  --app-button-base-transition-duration: 140ms;
+  --app-button-base-disabled-opacity: 0.48;
+  --app-button-height-md: 32px;
+  --app-button-height-sm: 28px;
+  --app-button-padding-inline-md: 12px;
+  --app-button-padding-inline-sm: 8px;
   --app-icon-button-size-md: 32px;
   --app-icon-button-size-sm: 24px;
-  --app-icon-button-icon-size: 16px;
-  --app-icon-button-radius-md: 8px;
-  --app-icon-button-radius-sm: 6px;
-  --app-icon-button-transition-duration: 140ms;
   --app-z-panel-resize: 15;
   --app-z-panel-toggle-underlay: 20;
   --app-z-drawer-layer: 28;

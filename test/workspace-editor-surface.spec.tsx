@@ -59,7 +59,12 @@ describe('WorkspaceEditorSurface', () => {
     expect(missingWorkspaceMarkup).toContain('class="editor-empty-state is-workspace-missing"')
     expect(missingWorkspaceMarkup).toContain('选择工作目录')
     expect(missingWorkspaceMarkup).toContain('连接一个文件夹后')
-    expect(missingWorkspaceMarkup).toMatch(/<svg[^>]*class="mr-2"[^>]*aria-hidden="true"/)
+    expect(missingWorkspaceMarkup).toContain(
+      'data-size="md" data-variant="primary" class="app-button"',
+    )
+    expect(missingWorkspaceMarkup).toMatch(
+      /<button[^>]*class="app-button"[^>]*><svg[^>]*aria-hidden="true"/,
+    )
     expect(unopenedFileMarkup).toContain('未打开文件')
     expect(unopenedFileMarkup).not.toContain('选择工作目录')
   })

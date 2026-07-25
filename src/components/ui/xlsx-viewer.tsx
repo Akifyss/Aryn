@@ -28,11 +28,11 @@ import { Spinner } from "@heroui/react";
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import { createPortal } from "react-dom";
 
+import { AppButton } from "@/components/app-button";
 import { AppScrollArea } from "@/components/app-scroll-area";
 import { AppIconButton } from "@/components/app-icon-button";
 import { cn } from "@/components/ui/viewer-utils";
 import {
-  ViewerControlButton as Button,
   ViewerMenuCheckboxItem as DropdownMenuCheckboxItem,
   ViewerMenuContent as DropdownMenuContent,
   ViewerMenuItem as DropdownMenuItem,
@@ -1500,15 +1500,15 @@ function XlsxViewerContent({
             <p className="mt-1 text-[var(--foreground-secondary)]">
               {VIEWER_COPY.uploadWorkbookHelp}
             </p>
-      <Button
-        type="button"
-        variant="outline"
-        className="mt-4"
+            <AppButton
+              type="button"
+              variant="outline"
+              className="mt-4"
               onClick={() => fileInputRef.current?.click()}
             >
               <UploadLine aria-hidden="true" className="size-4" />
               {VIEWER_COPY.uploadXlsx}
-            </Button>
+            </AppButton>
           </div>
         </div>
       </div>
@@ -1542,15 +1542,15 @@ function XlsxViewerContent({
             <p className="mt-1 text-[var(--foreground-secondary)]">
               {loadError}
             </p>
-      <Button
-        type="button"
-        variant="outline"
-        className="mt-4"
+            <AppButton
+              type="button"
+              variant="outline"
+              className="mt-4"
               onClick={() => fileInputRef.current?.click()}
             >
               <UploadLine aria-hidden="true" className="size-4" />
               {VIEWER_COPY.uploadXlsx}
-            </Button>
+            </AppButton>
           </div>
         </div>
       </div>

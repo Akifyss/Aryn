@@ -11,8 +11,8 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { Button } from '@heroui/react'
 import { CloseLine, RightLine, SearchLine } from '@mingcute/react'
+import { AppButton } from '@/components/app-button'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppTooltipButton } from '@/components/app-tooltip'
@@ -1028,17 +1028,16 @@ export function AgentModelCascader({
           ) : null}
         </AppTooltipButton>
       ) : (
-        <Button
+        <AppButton
           className='agent-provider-setup-button'
-          size='sm'
-          variant='ghost'
-          onPress={() => {
+          variant='outline'
+          onClick={() => {
             onOpenChange(false)
             onOpenProviderSettings?.()
           }}
         >
           配置提供商
-        </Button>
+        </AppButton>
       )}
 
       {isOpen && hasConfiguredProviders && typeof document !== 'undefined' ? createPortal(

@@ -45,9 +45,13 @@ describe('shared icon tooltip button', () => {
 
     expect(indexCss).toContain('--app-icon-button-size-md: 32px;')
     expect(indexCss).toContain('--app-icon-button-size-sm: 24px;')
-    expect(indexCss).toContain('--app-icon-button-icon-size: 16px;')
-    expect(indexCss).toContain('--app-icon-button-radius-md: 8px;')
-    expect(indexCss).toContain('--app-icon-button-radius-sm: 6px;')
+    expect(indexCss).not.toContain('--app-icon-button-icon-size:')
+    expect(indexCss).not.toContain('--app-icon-button-radius-md:')
+    expect(indexCss).not.toContain('--app-icon-button-radius-sm:')
+    expect(indexCss).not.toContain('--app-icon-button-transition-duration:')
+    expect(iconButtonCss).toContain(
+      'opacity: var(--app-button-base-disabled-opacity);',
+    )
     expect(indexCss).not.toContain('--app-icon-button-size-xs:')
     expect(indexCss).not.toContain('--app-icon-button-size-compact:')
     expect(indexCss).not.toContain('--app-icon-button-radius-xs:')
@@ -61,11 +65,12 @@ describe('shared icon tooltip button', () => {
     )
     expect(iconButtonSource).not.toContain('iconSize')
     expect(iconButtonCss).toContain('--app-icon-button-current-size: var(--app-icon-button-size-md);')
-    expect(iconButtonCss).toContain('--app-icon-button-current-radius: var(--app-icon-button-radius-md);')
+    expect(iconButtonCss).toContain('--app-icon-button-current-radius: var(--app-button-base-radius-md);')
     expect(iconButtonCss).toContain('width: var(--app-icon-button-current-size);')
     expect(iconButtonCss).toContain('height: var(--app-icon-button-current-size);')
-    expect(iconButtonCss).toContain('width: var(--app-icon-button-icon-size);')
-    expect(iconButtonCss).toContain('height: var(--app-icon-button-icon-size);')
+    expect(iconButtonCss).toContain('width: var(--app-button-base-icon-size);')
+    expect(iconButtonCss).toContain('height: var(--app-button-base-icon-size);')
+    expect(iconButtonCss).toContain('var(--app-button-base-transition-duration)')
     expect(iconButtonCss).toContain('border: 1px solid var(--border-primary);')
     expect(iconButtonCss).toContain('border-color: var(--border-primary);')
     expect(iconButtonCss).not.toMatch(
@@ -80,7 +85,7 @@ describe('shared icon tooltip button', () => {
     expect(iconButtonCss).not.toContain('--app-icon-button-local-icon-size')
     expect(iconButtonCss).not.toContain('scale(0.96)')
     expect(iconButtonCss).not.toMatch(
-      /transform\s+var\(--app-icon-button-transition-duration\)/,
+      /transform\s+var\(--app-button-base-transition-duration\)/,
     )
     expect(iconButtonCss).toContain("[data-size='sm']")
     expect(iconButtonCss).not.toContain("[data-size='xs']")

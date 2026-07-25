@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button } from '@heroui/react'
+import { AppButton } from '@/components/app-button'
 import { AppAlertDialog } from '@/components/app-dialog'
 
 export type AppConfirmationOptions = {
@@ -54,16 +54,16 @@ export function AppConfirmDialog({
         </AppAlertDialog.Body>
         <AppAlertDialog.Footer>
           <AppAlertDialog.Close
-            render={<Button variant='tertiary' />}
+            render={<AppButton variant='outline' />}
           >
             {visibleConfirmation?.cancelLabel ?? '取消'}
           </AppAlertDialog.Close>
-          <Button
+          <AppButton
             variant={visibleConfirmation?.isDanger ? 'danger' : 'primary'}
-            onPress={onConfirm}
+            onClick={onConfirm}
           >
             {visibleConfirmation?.confirmLabel ?? '确认'}
-          </Button>
+          </AppButton>
         </AppAlertDialog.Footer>
       </AppAlertDialog.Popup>
     </AppAlertDialog.Root>

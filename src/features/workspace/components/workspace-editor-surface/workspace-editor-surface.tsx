@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
-import { Button } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import { FolderOpenLine } from '@mingcute/react'
+import { AppButton } from '@/components/app-button'
 import { AppIconButton } from '@/components/app-icon-button'
 import { EmptyState } from '@/components/empty-state'
 import { recordOpenFileProfile } from '@/lib/open-file-profile'
@@ -98,17 +98,17 @@ export function WorkspaceEditorEmptyState({
           <p>当前对话会保留在右侧。连接一个文件夹后，可以在这里浏览、搜索和编辑文件。</p>
         </div>
         <div className='editor-empty-actions'>
-          <Button
+          <AppButton
             ref={workspaceTriggerRef}
             variant='primary'
-            onPress={() => {
+            onClick={() => {
               onOpenWorkspaceSwitch(workspaceTriggerRef.current?.getBoundingClientRect())
             }}
-            isDisabled={isPickingWorkspace}
+            disabled={isPickingWorkspace}
           >
-            <FolderOpenLine className='mr-2' size={16} aria-hidden='true' />
+            <FolderOpenLine size={16} aria-hidden='true' />
             选择工作目录
-          </Button>
+          </AppButton>
         </div>
       </div>
     </div>

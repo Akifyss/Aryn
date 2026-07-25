@@ -29,9 +29,9 @@ import {
 import { Spinner } from "@heroui/react";
 import Papa from "papaparse";
 
+import { AppButton } from "@/components/app-button";
 import { cn } from "@/components/ui/viewer-utils";
 import {
-  ViewerControlButton as Button,
   ViewerMenuContent as DropdownMenuContent,
   ViewerMenuItem as DropdownMenuItem,
   ViewerMenuRoot as DropdownMenu,
@@ -877,10 +877,10 @@ export function CsvViewer({
                 {VIEWER_COPY.uploadCsvHelp}
               </p>
               {showUpload ? (
-      <Button
-        type="button"
-        variant="outline"
-        className="mt-4"
+                <AppButton
+                  type="button"
+                  variant="outline"
+                  className="mt-4"
                   disabled={isPending}
                   onClick={() => inputRef.current?.click()}
                 >
@@ -890,7 +890,7 @@ export function CsvViewer({
                     <UploadLine aria-hidden="true" className="size-4" />
                   )}
                   {VIEWER_COPY.uploadCsv}
-                </Button>
+                </AppButton>
               ) : null}
             </div>
           </div>

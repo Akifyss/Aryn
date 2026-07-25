@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Button } from '@heroui/react'
 import { ToolLine } from '@mingcute/react'
+import { AppButton } from '@/components/app-button'
 import type { AgentInteractionRequest } from '@/features/agent/types'
 import './styles.css'
 
@@ -117,41 +117,38 @@ export function AgentInteractionPanel({
           />
         ) : null}
         {request.options.map((option) => (
-          <Button
+          <AppButton
             key={option.id}
-            size='sm'
-            variant={option.id.startsWith('allow') ? 'primary' : 'tertiary'}
-            onPress={() => {
+            variant={option.id.startsWith('allow') ? 'primary' : 'outline'}
+            onClick={() => {
               void onRespond(request.id, option.id)
             }}
           >
             {option.label}
-          </Button>
+          </AppButton>
         ))}
         {fields.length > 0 ? (
-          <Button
-            size='sm'
+          <AppButton
             variant='primary'
-            isDisabled={!canSubmitFields}
-            onPress={() => {
+            disabled={!canSubmitFields}
+            onClick={() => {
               const answers = Object.fromEntries(fields.map((field) => [field.id, [fieldAnswers[field.id].trim()]]))
               void onRespond(request.id, 'answer', undefined, answers)
             }}
           >
             提交
-          </Button>
+          </AppButton>
         ) : null}
         {needsTextAnswer ? (
-          <Button
-            size='sm'
+          <AppButton
             variant='primary'
-            isDisabled={!answer.trim()}
-            onPress={() => {
+            disabled={!answer.trim()}
+            onClick={() => {
               void onRespond(request.id, 'answer', [answer.trim()])
             }}
           >
             提交
-          </Button>
+          </AppButton>
         ) : null}
       </div>
     </section>

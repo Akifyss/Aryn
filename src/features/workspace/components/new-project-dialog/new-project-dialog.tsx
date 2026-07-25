@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { Button } from '@heroui/react'
+import { AppButton } from '@/components/app-button'
 import { AppDialog } from '@/components/app-dialog'
 import './styles.css'
 
@@ -69,13 +69,13 @@ export function NewProjectDialog({
             </label>
             <AppDialog.Footer className='project-create-footer'>
               <AppDialog.Close
-                render={<Button variant='tertiary' type='button' />}
+                render={<AppButton variant='outline' type='button' />}
               >
                 取消
               </AppDialog.Close>
-              <Button variant='primary' type='submit' isDisabled={!trimmedProjectName || isBusy}>
+              <AppButton variant='primary' type='submit' disabled={!trimmedProjectName || isBusy}>
                 创建
-              </Button>
+              </AppButton>
             </AppDialog.Footer>
           </form>
         </AppDialog.Body>

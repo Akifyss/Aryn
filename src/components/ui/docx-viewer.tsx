@@ -26,10 +26,10 @@ import {
 import { Spinner } from "@heroui/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
+import { AppButton } from "@/components/app-button";
 import { AppScrollArea } from "@/components/app-scroll-area";
 import { cn } from "@/components/ui/viewer-utils";
 import {
-  ViewerControlButton as Button,
   ViewerMenuCheckboxItem as DropdownMenuCheckboxItem,
   ViewerMenuContent as DropdownMenuContent,
   ViewerMenuItem as DropdownMenuItem,
@@ -1395,15 +1395,15 @@ function DocxViewerContent({
                   旧版 <code>.doc</code> 支持有限，建议转换为 DOCX
                   以获得更准确的排版。
                 </div>
-      <Button
-        type="button"
-        variant="outline"
-        className="mt-4"
+                <AppButton
+                  type="button"
+                  variant="outline"
+                  className="mt-4"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <UploadLine aria-hidden="true" className="size-4" />
                   {VIEWER_COPY.uploadDocx}
-                </Button>
+                </AppButton>
               </div>
             </div>
           ) : loadError ? (

@@ -1,6 +1,5 @@
 import { type Dispatch, type DragEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type SetStateAction, useEffect, useRef, useState } from 'react'
 import { Menu } from '@base-ui/react/menu'
-import { Button } from '@heroui/react'
 import {
   CheckLine,
   CloseLine,
@@ -12,6 +11,7 @@ import {
   GitBranchLine,
   More1Line,
 } from '@mingcute/react'
+import { AppButton } from '@/components/app-button'
 import { AppAlertDialog } from '@/components/app-dialog'
 import {
   FileChangeStatusBadge,
@@ -468,21 +468,21 @@ function FileTreeItem({
           <AppAlertDialog.Close
             disabled={isSubmitting}
             render={(
-              <Button
-                variant='tertiary'
-                isDisabled={isSubmitting}
+              <AppButton
+                variant='outline'
+                disabled={isSubmitting}
               />
             )}
           >
             取消
           </AppAlertDialog.Close>
-          <Button
+          <AppButton
             variant='danger'
-            onPress={() => void handleDelete()}
-            isDisabled={isSubmitting}
+            onClick={() => void handleDelete()}
+            disabled={isSubmitting}
           >
             删除
-          </Button>
+          </AppButton>
         </AppAlertDialog.Footer>
       </AppAlertDialog.Popup>
     </AppAlertDialog.Root>

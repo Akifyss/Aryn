@@ -1,5 +1,5 @@
-import { Button } from '@heroui/react'
 import { FolderOpenLine, NewFolderLine } from '@mingcute/react'
+import { AppButton } from '@/components/app-button'
 import './styles.css'
 
 type ProjectBootstrapProps = {
@@ -24,20 +24,20 @@ export function ProjectBootstrap({
           <p>Aryn 会把编辑器、Git、文件树和 Agent 对话绑定到当前项目。</p>
         </div>
         <div className='project-bootstrap-actions'>
-          <Button variant='primary' onPress={onCreateProject} isDisabled={isBusy}>
-            <NewFolderLine aria-hidden='true' className='mr-2' size={16} />
+          <AppButton variant='primary' onClick={onCreateProject} disabled={isBusy}>
+            <NewFolderLine aria-hidden='true' size={16} />
             新建空白项目
-          </Button>
-          <Button
+          </AppButton>
+          <AppButton
             variant='outline'
-            onPress={() => {
+            onClick={() => {
               void onAddExistingProject()
             }}
-            isDisabled={isBusy}
+            disabled={isBusy}
           >
-            <FolderOpenLine aria-hidden='true' className='mr-2' size={16} />
+            <FolderOpenLine aria-hidden='true' size={16} />
             使用现有文件夹
-          </Button>
+          </AppButton>
         </div>
       </div>
     </div>

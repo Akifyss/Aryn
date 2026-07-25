@@ -17,6 +17,7 @@ import {
 } from "@mingcute/react";
 import { Spinner } from "@heroui/react";
 
+import { AppButton } from "@/components/app-button";
 import { AppScrollArea } from "@/components/app-scroll-area";
 import { cn } from "@/components/ui/viewer-utils";
 import {
@@ -25,7 +26,6 @@ import {
   PPTX_MIME_TYPE,
 } from "@/lib/pptx-file-types";
 import {
-  ViewerControlButton as Button,
   ViewerMenuContent as DropdownMenuContent,
   ViewerMenuItem as DropdownMenuItem,
   ViewerMenuRoot as DropdownMenu,
@@ -386,15 +386,15 @@ function PptxEmptyState({
           支持 PPTX、PPTM、PPSX、PPSM、POTX、POTM 这类 OpenXML 演示文稿。
         </p>
         {showUpload ? (
-      <Button
-        type="button"
-        variant="outline"
-        className="mt-4"
+          <AppButton
+            type="button"
+            variant="outline"
+            className="mt-4"
             onClick={onUploadClick}
           >
             <UploadLine aria-hidden="true" className="size-4" />
             上传 PPTX
-          </Button>
+          </AppButton>
         ) : null}
       </div>
     </div>

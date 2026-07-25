@@ -288,35 +288,8 @@
 }
 
 .agent-model-field .agent-provider-setup-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  min-width: fit-content;
   max-width: 100%;
-  flex: 0 0 auto;
   overflow: hidden;
-  align-self: center;
   margin-left: -4px;
-  padding: 4px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--foreground-primary);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: normal;
-  text-align: left;
   text-overflow: ellipsis;
-  text-transform: none;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: all 120ms ease;
-}
-
-.agent-model-field .agent-provider-setup-button:hover,
-.agent-model-field .agent-provider-setup-button:focus-visible {
-  color: var(--foreground-primary);
-  background: var(--hover);
 }

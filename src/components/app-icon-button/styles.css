@@ -1,6 +1,6 @@
 .app-icon-button {
   --app-icon-button-current-size: var(--app-icon-button-size-md);
-  --app-icon-button-current-radius: var(--app-icon-button-radius-md);
+  --app-icon-button-current-radius: var(--app-button-base-radius-md);
 
   display: inline-flex;
   align-items: center;
@@ -18,24 +18,24 @@
   line-height: 0;
   cursor: pointer;
   transition:
-    background-color var(--app-icon-button-transition-duration) ease,
-    border-color var(--app-icon-button-transition-duration) ease,
-    color var(--app-icon-button-transition-duration) ease,
-    opacity var(--app-icon-button-transition-duration) ease;
+    background-color var(--app-button-base-transition-duration) ease,
+    border-color var(--app-button-base-transition-duration) ease,
+    color var(--app-button-base-transition-duration) ease,
+    opacity var(--app-button-base-transition-duration) ease;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
 .app-icon-button[data-size='sm'] {
   --app-icon-button-current-size: var(--app-icon-button-size-sm);
-  --app-icon-button-current-radius: var(--app-icon-button-radius-sm);
+  --app-icon-button-current-radius: var(--app-button-base-radius-sm);
 }
 
 .app-icon-button > svg,
 .app-icon-button > .app-icon-button-icon,
 .app-icon-button > .iconify {
-  width: var(--app-icon-button-icon-size);
-  height: var(--app-icon-button-icon-size);
+  width: var(--app-button-base-icon-size);
+  height: var(--app-button-base-icon-size);
   flex: 0 0 auto;
 }
 
@@ -71,7 +71,7 @@
 .app-icon-button[aria-disabled='true'],
 .app-icon-button[data-disabled] {
   cursor: default;
-  opacity: 0.48;
+  opacity: var(--app-button-base-disabled-opacity);
 }
 
 .app-icon-button[data-size]:focus-visible {

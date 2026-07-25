@@ -1,0 +1,72 @@
+.app-split-button {
+  display: inline-flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  width: fit-content;
+  min-width: 0;
+  height: var(--app-button-current-height);
+  min-height: var(--app-button-current-height);
+  overflow: hidden;
+  border: 1px solid var(--app-button-border-color);
+  border-radius: var(--app-button-current-radius);
+  background: var(--app-button-background);
+  color: var(--app-button-foreground);
+  box-shadow: var(--app-button-shadow);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.app-split-button > .app-split-button-segment {
+  align-self: stretch;
+  height: auto;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+}
+
+.app-split-button > .app-split-button-action {
+  flex: 1 1 auto;
+}
+
+.app-split-button > .app-split-button-trigger {
+  width: var(--app-button-current-height);
+  min-width: var(--app-button-current-height);
+  border-left: 1px solid var(--app-button-separator-color);
+}
+
+.app-split-button > .app-split-button-trigger:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-split-button > .app-split-button-trigger[data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-split-button > .app-split-button-trigger[data-popup-open]:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+  background: var(--app-button-hover-background);
+  color: var(--app-button-hover-foreground);
+}
+
+.app-split-button > .app-split-button-trigger:active:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+  background: var(--app-button-active-background);
+  color: var(--app-button-active-foreground);
+}
+
+.app-split-button > .app-split-button-segment:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.app-split-button > .app-icon-button.app-split-button-trigger:focus-visible {
+  color: var(--app-button-foreground);
+}
+
+.app-split-button > .app-split-button-segment:disabled,
+.app-split-button > .app-split-button-segment[aria-disabled='true'],
+.app-split-button > .app-split-button-segment[data-disabled] {
+  cursor: default;
+  opacity: var(--app-button-base-disabled-opacity);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-split-button > .app-split-button-segment {
+    transition: none;
+  }
+}

@@ -6,8 +6,9 @@ import {
   EditLine,
   More1Line,
 } from '@mingcute/react'
+import { AppButton } from '@/components/app-button'
 import { AppIconButton } from '@/components/app-icon-button'
-import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
+import { AppTooltip } from '@/components/app-tooltip'
 import type {
   AgentQueuedMessageKind,
   AgentQueuedMessageUpdate,
@@ -203,30 +204,36 @@ export function AgentQueuedComposerTray({
               <div className='agent-queued-actions'>
                 {isEditing ? (
                   <>
-                    <button
+                    <AppButton
                       type='button'
-                      className='agent-queued-action is-text'
+                      className='agent-queued-action'
+                      size='sm'
+                      variant='outline'
                       disabled={isUpdating || !editingText.trim()}
                       onClick={() => {
                         void saveEdit(message)
                       }}
                     >
                       保存
-                    </button>
-                    <button
+                    </AppButton>
+                    <AppButton
                       type='button'
-                      className='agent-queued-action is-text'
+                      className='agent-queued-action'
+                      size='sm'
+                      variant='outline'
                       disabled={isUpdating}
                       onClick={cancelEdit}
                     >
                       取消
-                    </button>
+                    </AppButton>
                   </>
                 ) : (
                   <>
-                    <AppTooltipButton
+                    <AppButton
                       type='button'
-                      className='agent-queued-action is-text'
+                      className='agent-queued-action'
+                      size='sm'
+                      variant='outline'
                       disabled={isUpdating}
                       onClick={() => {
                         void runUpdate({
@@ -239,7 +246,7 @@ export function AgentQueuedComposerTray({
                       }}
                     >
                       {isFollowUp ? '引导' : '排队'}
-                    </AppTooltipButton>
+                    </AppButton>
                     <AppIconButton
                       type='button'
                       className='agent-queued-action'

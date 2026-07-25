@@ -29,6 +29,7 @@ import {
 } from "@pierre/trees"
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react"
 import { createPortal } from "react-dom"
+import { AppButton } from "@/components/app-button"
 import { AppDialog } from "@/components/app-dialog"
 import { AppIconButton } from "@/components/app-icon-button"
 import { AppScrollArea } from "@/components/app-scroll-area"
@@ -91,46 +92,6 @@ function SystemIcon({
 function GalleryThumbnailsIcon({ className }: { className?: string }) {
   return <IconifyIcon aria-hidden="true" className={className} icon="lucide:gallery-thumbnails" />
 }
-
-type ButtonVariant = "default" | "ghost" | "outline"
-type ButtonSize = "default" | "sm"
-
-type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  size?: ButtonSize
-  variant?: ButtonVariant
-}
-
-const BUTTON_VARIANT_CLASSNAMES: Record<ButtonVariant, string> = {
-  default:
-    "bg-[var(--accent)] text-[var(--foreground-on-accent)] shadow-xs hover:bg-[color-mix(in_oklab,var(--accent)_90%,transparent)]",
-  ghost: "hover:bg-[var(--hover)] hover:text-[var(--foreground-primary)]",
-  outline:
-    "border bg-[var(--background-primary)] shadow-xs hover:bg-[var(--hover)] hover:text-[var(--foreground-primary)]",
-}
-
-const BUTTON_SIZE_CLASSNAMES: Record<ButtonSize, string> = {
-  default: "h-9 px-4 py-2",
-  sm: "h-8 rounded-md px-3 text-xs",
-}
-
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { className, size = "default", type = "button", variant = "default", ...props },
-  ref
-) {
-  return (
-    <button
-      ref={ref}
-      type={type}
-      className={cn(
-        "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] disabled:pointer-events-none disabled:cursor-default disabled:opacity-50 [&_svg]:shrink-0",
-        BUTTON_VARIANT_CLASSNAMES[variant],
-        BUTTON_SIZE_CLASSNAMES[size],
-        className
-      )}
-      {...props}
-    />
-  )
-})
 
 type CommandContextValue = {
   query: string
@@ -4389,23 +4350,22 @@ function FileSystemDateRangeDialog({
           <FileSystemRangeCalendar range={range} onSelect={selectRange} />
           <div className="grid grid-cols-3 gap-2">
             {DATE_RANGE_DIALOG_PRESETS.map((preset) => (
-              <Button
+              <AppButton
                 key={preset}
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={() => selectRange(dateRangePresetRange(preset))}
               >
                 {dateRangePresetLabel(preset)}
-              </Button>
+              </AppButton>
             ))}
           </div>
         </div>
         <AppDialog.Footer className="file-system-date-range-footer">
-          <AppDialog.Close render={<Button type="button" variant="outline" />}>
+          <AppDialog.Close render={<AppButton type="button" variant="outline" />}>
             {FILE_SYSTEM_COPY.dialog.cancel}
           </AppDialog.Close>
-          <Button
+          <AppButton
             type="button"
             disabled={!range.from || !range.to}
             onClick={() => {
@@ -4420,7 +4380,7 @@ function FileSystemDateRangeDialog({
             }}
           >
             {FILE_SYSTEM_COPY.dialog.apply}
-          </Button>
+          </AppButton>
         </AppDialog.Footer>
       </AppDialog.Body>
     </AppDialog.Popup>

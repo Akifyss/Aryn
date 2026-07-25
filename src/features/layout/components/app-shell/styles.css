@@ -299,8 +299,8 @@ body:has([data-app-modal-layer]) .agent-collapsed-tab-actions {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--app-icon-button-icon-size);
-  height: var(--app-icon-button-icon-size);
+  width: var(--app-button-base-icon-size);
+  height: var(--app-button-base-icon-size);
 }
 
 .panel-toggle-icon.is-collapsed {

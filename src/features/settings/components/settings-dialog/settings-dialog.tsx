@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Select as BaseSelect } from '@base-ui/react/select'
 import { ScrollArea } from '@base-ui/react/scroll-area'
-import { Button, Input, Switch, Tabs } from '@heroui/react'
+import { Input, Switch, Tabs } from '@heroui/react'
 import { Icon } from '@iconify/react'
+import { AppButton } from '@/components/app-button'
 import { AppDialog } from '@/components/app-dialog'
 import { AppIconButton } from '@/components/app-icon-button'
 import {
@@ -1015,25 +1016,21 @@ function SettingsView({
               
               <div className='flex gap-2 flex-shrink-0'>
                 {authFlow.authUrl && (
-                  <Button
-                    size='sm'
+                  <AppButton
                     variant='primary'
-                    className='settings-action-button gap-2'
-                    onPress={() => void window.appApi.openExternalLink(authFlow.authUrl!)}
+                    onClick={() => void window.appApi.openExternalLink(authFlow.authUrl!)}
                   >
-                    <Icon icon='mingcute:external-link-line' className='w-3.5 h-3.5' />
+                    <Icon aria-hidden='true' icon='mingcute:external-link-line' />
                     打开登录页
-                  </Button>
+                  </AppButton>
                 )}
-                <Button
-                  size='sm'
-                  variant='ghost'
-                  className='settings-action-button gap-2'
-                  onPress={() => void handleCancelAuthFlow()}
+                <AppButton
+                  variant='outline'
+                  onClick={() => void handleCancelAuthFlow()}
                 >
-                  <Icon icon='mingcute:close-circle-line' className='w-3.5 h-3.5' />
+                  <Icon aria-hidden='true' icon='mingcute:close-circle-line' />
                   取消登录
-                </Button>
+                </AppButton>
               </div>
             </div>
 
@@ -1060,15 +1057,13 @@ function SettingsView({
                     value={authFlow.promptDraft}
                     variant='secondary'
                   />
-                  <Button
-                    isDisabled={!authFlow.prompt.allowEmpty && !authFlow.promptDraft.trim()}
-                    size='sm'
+                  <AppButton
+                    disabled={!authFlow.prompt.allowEmpty && !authFlow.promptDraft.trim()}
                     type='submit'
                     variant='primary'
-                    className='settings-action-button'
                   >
                     提交
-                  </Button>
+                  </AppButton>
                 </div>
               </form>
             )}
@@ -1260,44 +1255,42 @@ function SettingsView({
 
                             <div className='provider-actions flex flex-wrap gap-2 mt-1 justify-end'>
                               {showsOAuthActions && (
-                                <Button
-                                  isDisabled={isBusy}
-                                  size='sm'
+                                <AppButton
+                                  disabled={isBusy}
                                   variant='primary'
-                                  className='settings-action-button font-medium gap-2'
-                                  onPress={() => void handleLoginProviderAuth(provider.key)}
+                                  onClick={() => void handleLoginProviderAuth(provider.key)}
                                 >
-                                  <Icon icon='mingcute:entrance-line' className='w-4 h-4' />
+                                  <Icon aria-hidden='true' icon='mingcute:entrance-line' />
                                   {hasStoredOAuth ? '重新登录' : '订阅登录'}
-                                </Button>
+                                </AppButton>
                               )}
                               
                               {showsApiKeyActions && (
-                                <Button
-                                  isDisabled={isBusy || !draftValue.trim()}
-                                  size='sm'
+                                <AppButton
+                                  disabled={isBusy || !draftValue.trim()}
                                   variant='primary'
-                                  className='settings-action-button font-medium gap-2'
-                                  onPress={() => void handleSaveProviderAuth(provider.key, draftValue)}
+                                  onClick={() => void handleSaveProviderAuth(provider.key, draftValue)}
                                 >
-                                  <Icon icon='mingcute:check-line' className='w-4 h-4' />
+                                  <Icon aria-hidden='true' icon='mingcute:check-line' />
                                   保存密钥
-                                </Button>
+                                </AppButton>
                               )}
 
                               {(showsOAuthActions || showsApiKeyActions) && (
-                                <Button
-                                  isDisabled={isBusy || !canClearStoredCredential}
-                                  size='sm'
-                                  variant='ghost'
-                                  className='settings-action-button settings-danger-button font-medium gap-2'
-                                  onPress={() => void (showsOAuthActions
+                                <AppButton
+                                  disabled={isBusy || !canClearStoredCredential}
+                                  variant='outline'
+                                  className='settings-danger-button'
+                                  onClick={() => void (showsOAuthActions
                                     ? handleLogoutProviderAuth(provider.key)
                                     : handleSaveProviderAuth(provider.key, null))}
                                 >
-                                  <Icon icon={showsOAuthActions ? 'mingcute:exit-line' : 'mingcute:delete-2-line'} className='w-4 h-4' />
+                                  <Icon
+                                    aria-hidden='true'
+                                    icon={showsOAuthActions ? 'mingcute:exit-line' : 'mingcute:delete-2-line'}
+                                  />
                                   {showsOAuthActions ? '退出登录' : '清除密钥'}
-                                </Button>
+                                </AppButton>
                               )}
                             </div>
                           </div>

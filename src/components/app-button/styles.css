@@ -1,0 +1,131 @@
+.app-button,
+.app-split-button {
+  --app-button-current-height: var(--app-button-height-md);
+  --app-button-current-padding-inline: var(--app-button-padding-inline-md);
+  --app-button-current-radius: var(--app-button-base-radius-md);
+  --app-button-current-font-size: 13px;
+  --app-button-background: transparent;
+  --app-button-foreground: var(--foreground-primary);
+  --app-button-border-color: transparent;
+  --app-button-shadow: var(--shadow-none);
+  --app-button-hover-background: transparent;
+  --app-button-hover-foreground: var(--app-button-foreground);
+  --app-button-active-background: transparent;
+  --app-button-active-foreground: var(--app-button-foreground);
+  --app-button-separator-color: var(--border-primary);
+}
+
+.app-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: fit-content;
+  min-width: 0;
+  height: var(--app-button-current-height);
+  min-height: var(--app-button-current-height);
+  padding: 0 var(--app-button-current-padding-inline);
+  border: 1px solid var(--app-button-border-color);
+  border-radius: var(--app-button-current-radius);
+  appearance: none;
+  background: var(--app-button-background);
+  color: var(--app-button-foreground);
+  box-shadow: var(--app-button-shadow);
+  font: inherit;
+  font-size: var(--app-button-current-font-size);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--app-button-base-transition-duration) ease,
+    border-color var(--app-button-base-transition-duration) ease,
+    color var(--app-button-base-transition-duration) ease,
+    opacity var(--app-button-base-transition-duration) ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.app-button[data-size='sm'],
+.app-split-button[data-size='sm'] {
+  --app-button-current-height: var(--app-button-height-sm);
+  --app-button-current-padding-inline: var(--app-button-padding-inline-sm);
+  --app-button-current-radius: var(--app-button-base-radius-sm);
+  --app-button-current-font-size: 12px;
+}
+
+.app-button > svg,
+.app-button > .app-button-icon,
+.app-button > .iconify {
+  width: var(--app-button-base-icon-size);
+  height: var(--app-button-base-icon-size);
+  flex: 0 0 auto;
+}
+
+.app-button[data-variant='primary'],
+.app-split-button[data-variant='primary'] {
+  --app-button-background: var(--accent);
+  --app-button-foreground: var(--foreground-on-accent);
+  --app-button-hover-background: color-mix(in oklab, var(--accent) 90%, transparent);
+  --app-button-hover-foreground: var(--foreground-on-accent);
+  --app-button-active-background: color-mix(in oklab, var(--accent) 80%, transparent);
+  --app-button-active-foreground: var(--foreground-on-accent);
+  --app-button-separator-color: color-mix(in oklab, var(--foreground-on-accent) 24%, transparent);
+}
+
+.app-button[data-variant='outline'],
+.app-split-button[data-variant='outline'] {
+  --app-button-background: var(--background-primary);
+  --app-button-foreground: var(--foreground-primary);
+  --app-button-border-color: var(--border-primary);
+  --app-button-shadow: var(--shadow-xs);
+  --app-button-hover-background: var(--hover);
+  --app-button-hover-foreground: var(--foreground-primary);
+  --app-button-active-background: var(--active);
+  --app-button-active-foreground: var(--foreground-primary);
+  --app-button-separator-color: var(--border-primary);
+}
+
+.app-button[data-variant='danger'],
+.app-split-button[data-variant='danger'] {
+  --app-button-background: var(--danger);
+  --app-button-foreground: var(--foreground-on-danger);
+  --app-button-hover-background: color-mix(in oklab, var(--danger) 90%, transparent);
+  --app-button-hover-foreground: var(--foreground-on-danger);
+  --app-button-active-background: color-mix(in oklab, var(--danger) 80%, transparent);
+  --app-button-active-foreground: var(--foreground-on-danger);
+  --app-button-separator-color: color-mix(in oklab, var(--foreground-on-danger) 24%, transparent);
+}
+
+.app-button:hover:not(:disabled):not([data-disabled]) {
+  border-color: var(--app-button-border-color);
+  background: var(--app-button-hover-background);
+  color: var(--app-button-hover-foreground);
+}
+
+.app-button:active:not(:disabled):not([data-disabled]) {
+  border-color: var(--app-button-border-color);
+  background: var(--app-button-active-background);
+  color: var(--app-button-active-foreground);
+}
+
+.app-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.app-button:disabled,
+.app-button[data-disabled] {
+  cursor: default;
+  opacity: var(--app-button-base-disabled-opacity);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-button {
+    transition: none;
+  }
+}

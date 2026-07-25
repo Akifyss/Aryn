@@ -217,14 +217,6 @@
   min-width: 0;
 }
 
-.settings-action-button {
-  height: 32px !important;
-  padding: 0 12px !important;
-  font-size: 12px !important;
-  font-weight: 500 !important;
-  border-radius: 6px !important;
-}
-
 .settings-empty-state {
   display: flex;
   flex-direction: column;
@@ -681,7 +673,13 @@
 
 /* Settings: danger button */
 
-.settings-danger-button {
+.app-button.settings-danger-button {
+  color: var(--danger);
+}
+
+.app-button.settings-danger-button[data-variant='outline']:hover:not(:disabled):not([data-disabled]),
+.app-button.settings-danger-button[data-variant='outline']:active:not(:disabled):not([data-disabled]) {
+  background: var(--danger-soft);
   color: var(--danger);
 }
 

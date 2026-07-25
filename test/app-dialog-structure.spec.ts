@@ -105,8 +105,10 @@ describe('shared application dialogs', () => {
     expect(alertDialogSource).not.toContain('CloseButton:')
     expect(dialogCss).not.toContain('.app-dialog-close-button svg')
     expect(indexCss).toContain('--app-icon-button-size-md: 32px;')
-    expect(indexCss).toContain('--app-icon-button-icon-size: 16px;')
-    expect(indexCss).toContain('--app-icon-button-radius-md: 8px;')
+    expect(indexCss).toContain('--app-button-base-icon-size: 16px;')
+    expect(indexCss).toContain('--app-button-base-radius-md: 8px;')
+    expect(indexCss).not.toContain('--app-icon-button-icon-size:')
+    expect(indexCss).not.toContain('--app-icon-button-radius-md:')
     expect(dialogCss).toMatch(
       /\.app-alert-dialog-header\s*\{[^}]*padding-inline-end:\s*calc\(var\(--app-icon-button-size-md\) \+ 12px\);/s,
     )

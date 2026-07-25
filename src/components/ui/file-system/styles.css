@@ -83,8 +83,8 @@
   border-left: 0;
   border-radius:
     0
-    var(--app-icon-button-radius-sm)
-    var(--app-icon-button-radius-sm)
+    var(--app-button-base-radius-sm)
+    var(--app-button-base-radius-sm)
     0;
   background: var(--background-primary);
 }
