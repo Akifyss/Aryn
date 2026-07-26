@@ -23,7 +23,7 @@ async function collectSourceFiles(directory: URL): Promise<URL[]> {
 
 describe('shared icon tooltip button', () => {
   it('owns the icon-only button dimensions and tooltip composition', async () => {
-    const [indexCss, iconButtonSource, iconButtonCss, treeSource] =
+    const [indexCss, iconButtonSource, iconButtonCss, appItemSource] =
       await Promise.all([
         readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
         readFile(
@@ -40,7 +40,10 @@ describe('shared icon tooltip button', () => {
           ),
           'utf8',
         ),
-        readFile(new URL('../src/components/tree/tree.tsx', import.meta.url), 'utf8'),
+        readFile(
+          new URL('../src/components/app-item/app-item.tsx', import.meta.url),
+          'utf8',
+        ),
       ])
 
     expect(indexCss).toContain('--app-icon-button-size-md: 32px;')
@@ -71,8 +74,23 @@ describe('shared icon tooltip button', () => {
     expect(iconButtonCss).toContain('width: var(--app-button-base-icon-size);')
     expect(iconButtonCss).toContain('height: var(--app-button-base-icon-size);')
     expect(iconButtonCss).toContain('var(--app-button-base-transition-duration)')
-    expect(iconButtonCss).toContain('border: 1px solid var(--border-primary);')
-    expect(iconButtonCss).toContain('border-color: var(--border-primary);')
+    expect(iconButtonCss).toContain(
+      'border: 1px solid var(--border-primary);',
+    )
+    expect(iconButtonCss).toContain(
+      'background: transparent;',
+    )
+    expect(iconButtonCss).toContain(
+      'box-shadow: var(--shadow-xs);',
+    )
+    expect(iconButtonCss).toContain(
+      'background: var(--hover);',
+    )
+    expect(iconButtonCss).toContain(
+      'background: var(--active);',
+    )
+    expect(iconButtonCss).toContain('[data-popup-open]')
+    expect(iconButtonCss).toContain("[aria-expanded='true']")
     expect(iconButtonCss).not.toMatch(
       /^\s*border(?!-radius)(?:-[a-z]+)*\s*:[^;]*var\(--(?:background|foreground)-/m,
     )
@@ -90,18 +108,29 @@ describe('shared icon tooltip button', () => {
     expect(iconButtonCss).toContain("[data-size='sm']")
     expect(iconButtonCss).not.toContain("[data-size='xs']")
     expect(iconButtonCss).not.toContain("[data-size='compact']")
-    expect(treeSource).toContain("from '@/components/app-icon-button'")
-    expect(treeSource).toContain('<AppIconButton')
+    expect(appItemSource).toContain("from '@/components/app-icon-button'")
+    expect(appItemSource).toContain('<AppIconButton')
   })
 
-  it('does not leak icon-button tokens into similarly sized non-button controls', async () => {
-    const [segmentedIconTabsCss, treeCss, queuedTrayCss, gitDiffCss, fileSystemSource] =
+  it('reuses the shared icon-button size for AppItem trailing controls without business overrides', async () => {
+    const [
+      segmentedIconTabsCss,
+      appItemCss,
+      treeCss,
+      queuedTrayCss,
+      gitDiffCss,
+      fileSystemSource,
+    ] =
       await Promise.all([
         readFile(
           new URL(
             '../src/components/ui/segmented-icon-tabs/styles.css',
             import.meta.url,
           ),
+          'utf8',
+        ),
+        readFile(
+          new URL('../src/components/app-item/styles.css', import.meta.url),
           'utf8',
         ),
         readFile(new URL('../src/components/tree/styles.css', import.meta.url), 'utf8'),
@@ -129,11 +158,13 @@ describe('shared icon tooltip button', () => {
       ])
 
     expect(segmentedIconTabsCss).not.toContain('--app-icon-button-')
-    expect(treeCss).toContain('--tree-item-trailing-size: 32px;')
-    expect(treeCss).toContain('--tree-item-icon-size: 16px;')
-    expect(treeCss).not.toMatch(
-      /--tree-item-(?:trailing-size|icon-size):\s*var\(--app-icon-button-/,
-    )
+    expect(appItemCss).toContain('min-width: var(--app-icon-button-size-md);')
+    expect(appItemCss).not.toContain('--app-item-trailing-size')
+    expect(appItemCss).toContain('var(--app-item-icon-size)')
+    expect(treeCss).not.toContain('--app-item-trailing-size:')
+    expect(treeCss).not.toContain('--app-item-action-size:')
+    expect(treeCss).not.toContain('--app-item-action-gap:')
+    expect(treeCss).not.toContain('--app-item-icon-size:')
     expect(queuedTrayCss).not.toMatch(
       /\.agent-queued-action\.is-text\s*\{[^}]*--app-icon-button-/s,
     )

@@ -223,6 +223,7 @@ export function AgentComposerSurface({
         activeProject={activeWorkspaceContext.kind === 'project' ? activeProject : null}
         onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
         placeholder={activeWorkspaceContext.kind === 'conversationDraft' ? '选择工作目录' : undefined}
+        size='sm'
       />
     </div>
   ) : null

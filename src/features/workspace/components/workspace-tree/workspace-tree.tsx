@@ -1,5 +1,4 @@
 import { type Dispatch, type DragEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type SetStateAction, useEffect, useRef, useState } from 'react'
-import { Menu } from '@base-ui/react/menu'
 import {
   CheckLine,
   CloseLine,
@@ -14,15 +13,18 @@ import {
 import { AppButton } from '@/components/app-button'
 import { AppAlertDialog } from '@/components/app-dialog'
 import {
+  AppItem,
+  AppItemActionButton,
+  AppItemMain,
+} from '@/components/app-item'
+import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
+import {
   FileChangeStatusBadge,
   WorkspaceFileIcon,
 } from '@/components/file-change-visuals'
 import {
-  TreeItemActionButton,
-  TreeItemChildren,
-  TreeItem,
+  TreeChildren,
   TreeList,
-  TreeItemMain,
 } from '@/components/tree'
 import { pickDominantGitDisplayChange } from '@/features/git/lib/display-change'
 import {
@@ -36,7 +38,6 @@ import {
   resolveDropTargetDirectoryPath,
 } from '@/features/workspace/lib/workspace-tree-dnd'
 import { recordOpenFileProfile } from '@/lib/open-file-profile'
-import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 import type { GitChangeItem, GitDisplayChange, GitRepositoryState } from '@/features/git/types'
 import { WorkspaceTreeEmptyState } from './workspace-tree-empty-state'
@@ -189,7 +190,7 @@ function FileRowActionMenu({
           <Menu.Trigger
             aria-label='File actions'
             disabled={isSubmitting}
-            render={<TreeItemActionButton />}
+            render={<AppItemActionButton />}
             title='更多'
           >
             <More1Line size={16} />
@@ -209,70 +210,50 @@ function FileRowActionMenu({
             >
               <Menu.Popup
                 aria-label='File actions'
-                className='workspace-tree-menu'
                 finalFocus={false}
                 onAuxClick={stopFileActionMenuPropagation}
                 onClick={stopFileActionMenuPropagation}
               >
                 {canOpenInCodeEditor ? (
                   <Menu.Item
-                    nativeButton
-                    render={<button type='button' />}
-                    className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
                     data-menu-action='open-code'
+                    icon={<CodeLine size={16} />}
                     label='在代码编辑器打开'
+                    text='在代码编辑器打开'
                     onClick={(event) => runFileActionMenuAction(event, onOpenInCodeEditor)}
-                  >
-                    <CodeLine size={16} className='workspace-tree-menu-icon' />
-                    <span>在代码编辑器打开</span>
-                  </Menu.Item>
+                  />
                 ) : null}
                 {gitDiffChange && onOpenDiff ? (
                   <Menu.Item
-                    nativeButton
-                    render={<button type='button' />}
-                    className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
                     data-menu-action='open-diff'
+                    icon={<GitBranchLine size={16} />}
                     label='查看差异'
+                    text='查看差异'
                     onClick={(event) => runFileActionMenuAction(event, () => onOpenDiff(gitDiffChange))}
-                  >
-                    <GitBranchLine size={16} className='workspace-tree-menu-icon' />
-                    <span>查看差异</span>
-                  </Menu.Item>
+                  />
                 ) : null}
                 <Menu.Item
-                  nativeButton
-                  render={<button type='button' />}
-                  className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
                   data-menu-action='show-in-folder'
+                  icon={<ExternalLinkLine size={16} />}
                   label={`在“${systemManagerName}”中打开`}
+                  text={`在“${systemManagerName}”中打开`}
                   onClick={(event) => runFileActionMenuAction(event, onShowInFolder)}
-                >
-                  <ExternalLinkLine size={16} className='workspace-tree-menu-icon' />
-                  <span>{`在“${systemManagerName}”中打开`}</span>
-                </Menu.Item>
+                />
                 <Menu.Item
-                  nativeButton
-                  render={<button type='button' />}
-                  className={({ highlighted }) => `workspace-tree-menu-item${highlighted ? ' is-highlighted' : ''}`}
                   data-menu-action='rename'
+                  icon={<Edit2Line size={16} />}
                   label='重命名'
+                  text='重命名'
                   onClick={(event) => runFileActionMenuAction(event, onRename)}
-                >
-                  <Edit2Line size={16} className='workspace-tree-menu-icon' />
-                  <span>重命名</span>
-                </Menu.Item>
+                />
                 <Menu.Item
-                  nativeButton
-                  render={<button type='button' />}
-                  className={({ highlighted }) => `workspace-tree-menu-item is-danger${highlighted ? ' is-highlighted' : ''}`}
                   data-menu-action='delete'
+                  icon={<Delete2Line size={16} />}
                   label='删除'
+                  text='删除'
+                  tone='danger'
                   onClick={(event) => runFileActionMenuAction(event, onDelete)}
-                >
-                  <Delete2Line size={16} className='workspace-tree-menu-icon' />
-                  <span>删除</span>
-                </Menu.Item>
+                />
               </Menu.Popup>
             </Menu.Positioner>
           </Menu.Portal>
@@ -495,7 +476,7 @@ function FileTreeItem({
       {error && <p className='tree-error'>{error}</p>}
 
       {isFolder && isExpanded && node.children && (
-        <TreeItemChildren>
+        <TreeChildren>
           <TreeList>
             {node.children.map(child => (
               <FileTreeItem
@@ -523,7 +504,7 @@ function FileTreeItem({
               />
             ))}
           </TreeList>
-        </TreeItemChildren>
+        </TreeChildren>
       )}
     </>
   )
@@ -539,7 +520,7 @@ function FileTreeItem({
     />
   )
   const rowMain = isEditing ? (
-    <TreeItemMain onClick={event => event.stopPropagation()}>
+    <AppItemMain onClick={event => event.stopPropagation()}>
       {nodeIcon}
       <input
         ref={renameInputRef}
@@ -568,19 +549,19 @@ function FileTreeItem({
           setIsEditing(false)
         }}
       />
-    </TreeItemMain>
+    </AppItemMain>
   ) : undefined
   const rowActions = isEditing ? (
     <>
-      <TreeItemActionButton
+      <AppItemActionButton
         aria-label='Confirm rename'
         title='确认重命名'
         disabled={isSubmitting}
         onClick={() => void handleSubmitRename()}
       >
         <CheckLine size={16} />
-      </TreeItemActionButton>
-      <TreeItemActionButton
+      </AppItemActionButton>
+      <AppItemActionButton
         aria-label='Cancel rename'
         title='取消重命名'
         onClick={() => {
@@ -589,7 +570,7 @@ function FileTreeItem({
         }}
       >
         <CloseLine size={16} />
-      </TreeItemActionButton>
+      </AppItemActionButton>
     </>
   ) : (
     <FileRowActionMenu
@@ -614,7 +595,7 @@ function FileTreeItem({
   )
 
   return (
-    <TreeItem
+    <AppItem
       ref={rowRef}
       isActive={isActive}
       isDragSource={isDragSource}
@@ -630,7 +611,7 @@ function FileTreeItem({
       label={!isEditing ? node.name : undefined}
       labelProps={!isEditing ? { style: { fontWeight: isFolder ? 600 : 500 } } : undefined}
       renderMain={!isEditing ? (content, mainProps) => (
-        <TreeItemMain
+        <AppItemMain
           {...mainProps}
           aria-expanded={isFolder ? isExpanded : undefined}
           draggable={!isSubmitting}
@@ -648,7 +629,7 @@ function FileTreeItem({
           onKeyDown={handleKeyDownNode}
         >
           {content}
-        </TreeItemMain>
+        </AppItemMain>
       ) : undefined}
       actions={rowActions}
       actionsAlwaysVisible={isEditing || isRowMenuOpen}

@@ -178,7 +178,7 @@ function PreviewUnavailableState({
   return (
     <div className='grid min-h-0 flex-1 place-items-center bg-[var(--background-primary)] p-6 text-center'>
       <div className='flex max-w-sm flex-col items-center gap-3'>
-        <div className='flex size-12 items-center justify-center text-[var(--foreground-secondary)] [--tree-item-icon-size:28px]'>
+        <div className='flex size-12 items-center justify-center text-[var(--foreground-secondary)] [--app-item-icon-size:28px]'>
           <WorkspaceFileIcon fileName={fileName} iconTheme={iconTheme} />
         </div>
         <div className='space-y-1'>

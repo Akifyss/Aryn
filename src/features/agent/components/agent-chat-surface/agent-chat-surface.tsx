@@ -3,12 +3,12 @@ import {
   useEffect,
   useState,
 } from 'react'
-import { Menu } from '@base-ui/react/menu'
 import {
   DownLine,
   EditLine,
 } from '@mingcute/react'
 import { AppIconButton } from '@/components/app-icon-button'
+import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
 import { AgentComposerSurface } from '@/features/agent/components/agent-composer-surface/agent-composer-surface'
 import { AgentMessageViewport } from '@/features/agent/components/agent-message-viewport/agent-message-viewport'
 import { AgentNewConversationPrompt } from '@/features/agent/components/agent-new-conversation-prompt/agent-new-conversation-prompt'
@@ -20,7 +20,6 @@ import { useAgentContext } from '@/features/agent/components/agent-sidebar/agent
 import { CodexSessionTimeline } from '@/features/agent/components/codex-session-timeline/codex-session-timeline'
 import { shouldShowAgentNewConversationPrompt } from '@/features/agent/lib/agent-surface-state'
 import { formatAgentSessionLabel } from '@/features/agent/lib/session-tree'
-import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import './styles.css'
 
 const AGENT_SESSION_MENU_POSITIONER_PROPS = {
@@ -170,7 +169,8 @@ export function AgentChatSurface() {
                 <Menu.Trigger
                   aria-controls='agent-session-tree-floating-panel'
                   className={`agent-session-trigger ${activeOverlayPanel === 'sessions' ? 'is-open' : ''}`}
-                  render={<button type='button' />}
+                  size='md'
+                  variant='ghost'
                 >
                   <span className='agent-select-current'>
                     {activeSessionSelectLabel}
@@ -192,6 +192,8 @@ export function AgentChatSurface() {
                         className='agent-floating-panel'
                         aria-label='Select conversation'
                         finalFocus={false}
+                        layout='compound'
+                        size='fit'
                       >
                         <AgentSessionTree
                           className='agent-session-tree-floating'

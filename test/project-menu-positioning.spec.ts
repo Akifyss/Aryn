@@ -46,11 +46,11 @@ describe('project menu positioning', () => {
     const frameRect = { height: 240, left: 12, top: 20, width: 300 }
 
     expect(resolveProjectMenuStyle('agent-new-switch', false, frameRect)).toEqual({
-      '--project-menu-list-max-height': '92px',
+      '--project-menu-list-max-height': '105px',
       width: '284px',
     })
     expect(resolveProjectMenuStyle('agent-new-switch', true, frameRect)).toEqual({
-      '--project-menu-list-max-height': '53px',
+      '--project-menu-list-max-height': '71px',
       width: '284px',
     })
   })

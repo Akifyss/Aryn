@@ -26,7 +26,11 @@ describe('WorkspaceSidebar', () => {
 
     expect(markup).toContain('class="workspace-sidebar-surface"')
     expect(markup).toContain('data-platform="windows"')
-    expect(markup).toContain('class="section-title-text editor-workspace-switch-button"')
+    expect(markup).toContain(
+      'class="app-button app-menu-trigger app-menu-trigger-outline app-menu-trigger-md editor-workspace-switch-button"',
+    )
+    expect(markup).toContain('data-size="md"')
+    expect(markup).toContain('data-variant="outline"')
     expect(markup).toContain('>Aryn</span>')
     expect(markup).toContain('data-slot="workspace-content"')
     expect(markup).toContain('class="sidebar-footer-item"')
@@ -108,6 +112,21 @@ describe('workspace sidebar styles', () => {
     expect(globalCss).not.toContain('.sidebar-workspace-tabs')
     expect(globalCss).not.toContain('.sidebar-footer-item')
     expect(sidebarCss).not.toMatch(/(^|\n)\.section-title/)
+    const workspaceSwitchRule = sidebarCss.match(
+      /\.editor-workspace-switch-button\s*\{[^}]*\}/,
+    )?.[0]
+    expect(workspaceSwitchRule).toContain('gap: 8px;')
+    expect(workspaceSwitchRule).toContain('padding: 0 8px;')
+    expect(workspaceSwitchRule).toContain('text-align: left;')
+    expect(workspaceSwitchRule).not.toMatch(
+      /\b(?:min-height|border(?:-radius)?|background|box-shadow|font-size|font-weight|opacity|transition)\s*:/,
+    )
+    expect(sidebarCss).toContain(
+      'width: var(--app-button-base-icon-size);',
+    )
+    expect(sidebarCss).toContain(
+      'transition: color var(--app-button-base-transition-duration) ease;',
+    )
     expect(sidebarCss).toContain('.sidebar-footer-item:focus-visible')
     expect(tabsCss).toContain('.sidebar-workspace-tab:focus-visible')
     expect(sidebarCss).toContain('@media (prefers-reduced-motion: reduce)')

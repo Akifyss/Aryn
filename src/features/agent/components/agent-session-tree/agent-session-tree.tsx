@@ -1,6 +1,4 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { ContextMenu } from '@base-ui/react/context-menu'
-import { Menu } from '@base-ui/react/menu'
 import { Spinner } from '@heroui/react'
 import {
   AddLine,
@@ -13,20 +11,26 @@ import {
   ExternalLinkLine,
   More1Line,
 } from '@mingcute/react'
+import {
+  AppItem,
+  AppItemActionButton,
+  AppItemIcon,
+  AppItemMain,
+  AppItemMainButton,
+  type AppItemMainRenderer,
+} from '@/components/app-item'
+import {
+  AppMenu as Menu,
+  type AppMenuTriggerSize,
+} from '@/components/app-menu'
 import { AppTooltipButton } from '@/components/app-tooltip'
 import { ProjectIcon } from '@/components/project-icon'
 import {
-  TreeItemActionButton,
-  TreeItemChildren,
-  TreeItem,
-  TreeItemIcon,
+  TreeChildren,
   TreeList,
   TreeSection,
   TreeStatusItem,
   TreeScrollArea,
-  TreeItemMain,
-  TreeItemMainButton,
-  type TreeItemMainRenderer,
 } from '@/components/tree'
 import { getAgentDefinition, type AgentId } from '@/features/agent/agent-definition'
 import { AgentBrandIcon } from '@/features/agent/components/agent-brand-icon/agent-brand-icon'
@@ -129,31 +133,20 @@ function AgentTreeActionMenuItems({
   return (
     <>
       <ItemComponent
-        nativeButton
-        className={({ highlighted }) => (
-          `agent-session-tree-menu-item${highlighted ? ' is-highlighted' : ''}`
-        )}
         disabled={disabled}
+        icon={<Edit2Line size={16} />}
         label='重命名'
-        render={<button type='button' />}
+        text='重命名'
         onClick={onRename}
-      >
-        <Edit2Line size={16} />
-        <span>重命名</span>
-      </ItemComponent>
+      />
       <ItemComponent
-        nativeButton
-        className={({ highlighted }) => (
-          `agent-session-tree-menu-item is-danger${highlighted ? ' is-highlighted' : ''}`
-        )}
         disabled={disabled}
+        icon={<Delete2Line size={16} />}
         label='删除'
-        render={<button type='button' />}
+        text='删除'
+        tone='danger'
         onClick={onDelete}
-      >
-        <Delete2Line size={16} />
-        <span>删除</span>
-      </ItemComponent>
+      />
     </>
   )
 }
@@ -181,6 +174,7 @@ function AgentTreeMenuPopup({
         <Menu.Popup
           className='agent-session-tree-menu agent-tree-context-menu'
           data-agent-tree-menu-root='true'
+          size='fit'
         >
           <AgentTreeActionMenuItems disabled={disabled} onDelete={onDelete} onRename={onRename} />
         </Menu.Popup>
@@ -201,27 +195,28 @@ function AgentTreeContextMenuPopup({
   onRename: () => void
 }) {
   return (
-    <ContextMenu.Portal
+    <Menu.Context.Portal
       className='agent-tree-menu-portal'
       container={menuPortalTarget ?? undefined}
     >
-      <ContextMenu.Positioner
+      <Menu.Context.Positioner
         align='start'
         {...AGENT_TREE_MENU_POSITIONER_PROPS}
       >
-        <ContextMenu.Popup
+        <Menu.Context.Popup
           className='agent-session-tree-menu agent-tree-context-menu'
           data-agent-tree-menu-root='true'
+          size='fit'
         >
           <AgentTreeActionMenuItems
             disabled={disabled}
-            ItemComponent={ContextMenu.Item}
+            ItemComponent={Menu.Context.Item}
             onDelete={onDelete}
             onRename={onRename}
           />
-        </ContextMenu.Popup>
-      </ContextMenu.Positioner>
-    </ContextMenu.Portal>
+        </Menu.Context.Popup>
+      </Menu.Context.Positioner>
+    </Menu.Context.Portal>
   )
 }
 
@@ -239,29 +234,18 @@ function AgentProjectMenuItems({
   return (
     <>
       <ItemComponent
-        nativeButton
-        className={({ highlighted }) => (
-          `agent-project-menu-item${highlighted ? ' is-highlighted' : ''}`
-        )}
+        icon={<ExternalLinkLine size={16} />}
         label={`在${systemFileManagerName}中打开`}
-        render={<button type='button' />}
+        text={`在“${systemFileManagerName}”中打开`}
         onClick={onOpenFolder}
-      >
-        <ExternalLinkLine size={16} />
-        <span>在“{systemFileManagerName}”中打开</span>
-      </ItemComponent>
+      />
       <ItemComponent
-        nativeButton
-        className={({ highlighted }) => (
-          `agent-project-menu-item is-danger${highlighted ? ' is-highlighted' : ''}`
-        )}
+        icon={<Delete2Line size={16} />}
         label='移除'
-        render={<button type='button' />}
+        text='移除'
+        tone='danger'
         onClick={onRemoveProject}
-      >
-        <Delete2Line size={16} />
-        <span>移除</span>
-      </ItemComponent>
+      />
     </>
   )
 }
@@ -287,6 +271,7 @@ function AgentProjectMenuPopup({
         <Menu.Popup
           className='agent-project-menu agent-tree-context-menu'
           data-agent-tree-menu-root='true'
+          size='md'
         >
           <AgentProjectMenuItems onOpenFolder={onOpenFolder} onRemoveProject={onRemoveProject} />
         </Menu.Popup>
@@ -305,26 +290,27 @@ function AgentProjectContextMenuPopup({
   onRemoveProject: () => void
 }) {
   return (
-    <ContextMenu.Portal
+    <Menu.Context.Portal
       className='agent-tree-menu-portal'
       container={menuPortalTarget ?? undefined}
     >
-      <ContextMenu.Positioner
+      <Menu.Context.Positioner
         align='start'
         {...AGENT_TREE_MENU_POSITIONER_PROPS}
       >
-        <ContextMenu.Popup
+        <Menu.Context.Popup
           className='agent-project-menu agent-tree-context-menu'
           data-agent-tree-menu-root='true'
+          size='md'
         >
           <AgentProjectMenuItems
-            ItemComponent={ContextMenu.Item}
+            ItemComponent={Menu.Context.Item}
             onOpenFolder={onOpenFolder}
             onRemoveProject={onRemoveProject}
           />
-        </ContextMenu.Popup>
-      </ContextMenu.Positioner>
-    </ContextMenu.Portal>
+        </Menu.Context.Popup>
+      </Menu.Context.Positioner>
+    </Menu.Context.Portal>
   )
 }
 
@@ -432,7 +418,7 @@ function AgentSessionTreeRow({
   }
 
   const rowMain = isRenaming ? (
-    <TreeItemMain
+    <AppItemMain
       className='agent-session-rename-trigger'
       onClick={(event) => event.stopPropagation()}
     >
@@ -463,57 +449,57 @@ function AgentSessionTreeRow({
           onCancelRename()
         }}
       />
-    </TreeItemMain>
+    </AppItemMain>
   ) : undefined
-  const renderSessionMain: TreeItemMainRenderer | undefined = isRenaming
+  const renderSessionMain: AppItemMainRenderer | undefined = isRenaming
     ? undefined
     : (content, mainProps) => {
       const { className, hasDescription } = mainProps
 
       return (
-        <ContextMenu.Root onOpenChange={setIsContextMenuOpen}>
-          <ContextMenu.Trigger
+        <Menu.Context.Root onOpenChange={setIsContextMenuOpen}>
+          <Menu.Context.Trigger
             aria-label={accessibleLabel}
-            render={<TreeItemMainButton className={className} hasDescription={hasDescription} role='button' />}
+            render={<AppItemMainButton className={className} hasDescription={hasDescription} role='button' />}
             title={accessibleLabel}
             onClick={onOpen}
           >
             {content}
-          </ContextMenu.Trigger>
+          </Menu.Context.Trigger>
           <AgentTreeContextMenuPopup
             disabled={isDeleting}
             menuPortalTarget={menuPortalTarget}
             onDelete={onDelete}
             onRename={onRequestRename}
           />
-        </ContextMenu.Root>
+        </Menu.Context.Root>
       )
     }
   const rowActions = isRenaming ? (
     <>
-      <TreeItemActionButton
+      <AppItemActionButton
         aria-label='Confirm rename'
         title='确认重命名'
         disabled={isSubmitting}
         onClick={() => void handleSubmitRename()}
       >
         <CheckLine size={16} />
-      </TreeItemActionButton>
-      <TreeItemActionButton
+      </AppItemActionButton>
+      <AppItemActionButton
         aria-label='Cancel rename'
         title='取消重命名'
         disabled={isSubmitting}
         onClick={onCancelRename}
       >
         <CloseLine size={16} />
-      </TreeItemActionButton>
+      </AppItemActionButton>
     </>
   ) : (
     <Menu.Root modal={false} onOpenChange={setIsActionMenuOpen}>
       <Menu.Trigger
         aria-label={`Open ${accessibleLabel} menu`}
         disabled={isDeleting}
-        render={<TreeItemActionButton />}
+        render={<AppItemActionButton />}
         title={menuTitle}
       >
         <More1Line size={16} />
@@ -528,7 +514,7 @@ function AgentSessionTreeRow({
   )
 
   return (
-    <TreeItem
+    <AppItem
       itemClassName={`agent-project-session-node${itemClassName ? ` ${itemClassName}` : ''}`}
       ref={rowRef}
       rowClassName={`agent-project-session-row${rowClassName ? ` ${rowClassName}` : ''}`}
@@ -537,9 +523,9 @@ function AgentSessionTreeRow({
       isMenuOpen={isMenuOpen}
       after={error ? <p className='tree-error agent-session-rename-error'>{error}</p> : null}
       icon={agentId ? (
-        <TreeItemIcon>
+        <AppItemIcon>
           <AgentBrandIcon agentId={agentId} className='agent-brand-icon' size={16} tone='muted' />
-        </TreeItemIcon>
+        </AppItemIcon>
       ) : undefined}
       main={rowMain}
       label={!isRenaming ? label : undefined}
@@ -920,14 +906,14 @@ function AgentProjectTree({
         <TreeList className='agent-session-section-stack' aria-label='项目与对话'>
           <TreeSection className={`agent-project-tree-section agent-project-section${isProjectSectionExpanded ? '' : ' is-collapsed'}${isFloating ? ' is-floating' : ''}`}>
             {!isFloating ? (
-              <TreeItem
+              <AppItem
                 variant='header'
                 itemClassName='agent-project-tree-header'
                 label='项目'
                 isExpanded={isProjectSectionExpanded}
                 isMenuOpen={isProjectAddMenuOpen}
                 actions={(
-                  <TreeItemActionButton
+                  <AppItemActionButton
                     className={isProjectAddMenuOpen ? 'is-menu-open' : undefined}
                     aria-label='添加项目'
                     title='添加项目'
@@ -937,7 +923,7 @@ function AgentProjectTree({
                     }}
                   >
                     <AddLine size={16} />
-                  </TreeItemActionButton>
+                  </AppItemActionButton>
                 )}
                 onToggle={toggleProjectSection}
               />
@@ -959,19 +945,19 @@ function AgentProjectTree({
             )
 
             const projectIcon = <ProjectIcon />
-            const renderProjectMain: TreeItemMainRenderer = (content, mainProps) => {
+            const renderProjectMain: AppItemMainRenderer = (content, mainProps) => {
               const { className, hasDescription } = mainProps
 
               return (
-                <ContextMenu.Root onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
-                  <ContextMenu.Trigger
+                <Menu.Context.Root onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
+                  <Menu.Context.Trigger
                     aria-expanded={isExpanded}
-                    render={<TreeItemMainButton className={className} hasDescription={hasDescription} role='button' />}
+                    render={<AppItemMainButton className={className} hasDescription={hasDescription} role='button' />}
                     title={project.path}
                     onClick={() => toggleProject(project)}
                   >
                     {content}
-                  </ContextMenu.Trigger>
+                  </Menu.Context.Trigger>
                   <AgentProjectContextMenuPopup
                     menuPortalTarget={menuPortalTarget}
                     onOpenFolder={() => {
@@ -981,12 +967,12 @@ function AgentProjectTree({
                       void onRemoveProject?.(project)
                     }}
                   />
-                </ContextMenu.Root>
+                </Menu.Context.Root>
               )
             }
             const projectRowActions = (
               <>
-                <TreeItemActionButton
+                <AppItemActionButton
                   aria-label={`Start new conversation in ${project.name}`}
                   title='新建对话'
                   onClick={() => {
@@ -996,11 +982,11 @@ function AgentProjectTree({
                   }}
                 >
                   <EditLine size={16} />
-                </TreeItemActionButton>
+                </AppItemActionButton>
                 <Menu.Root modal={false} onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
                   <Menu.Trigger
                     aria-label={`Open ${project.name} menu`}
-                    render={<TreeItemActionButton />}
+                    render={<AppItemActionButton />}
                     title='更多'
                   >
                     <More1Line size={16} />
@@ -1019,13 +1005,13 @@ function AgentProjectTree({
             )
 
             return (
-              <TreeItem
+              <AppItem
                 key={project.id}
                 itemClassName='agent-project-node'
                 rowClassName='agent-project-row'
                 isMenuOpen={openProjectMenuId === project.id}
                 after={showChildren ? (
-                  <TreeItemChildren className='agent-project-session-children'>
+                  <TreeChildren className='agent-project-session-children'>
                     <TreeList className='agent-project-session-list'>
                       {loadSummary.isLoading ? <TreeStatusItem>加载中</TreeStatusItem> : null}
                       {loadSummary.errors.length > 0 ? <TreeStatusItem tone='danger'>部分 Agent 无法加载</TreeStatusItem> : null}
@@ -1077,7 +1063,7 @@ function AgentProjectTree({
                         )
                       })}
                     </TreeList>
-                  </TreeItemChildren>
+                  </TreeChildren>
                 ) : null}
                 icon={projectIcon}
                 label={project.name}
@@ -1091,13 +1077,13 @@ function AgentProjectTree({
             ) : null}
           </TreeSection>
           <TreeSection className={`agent-project-tree-section agent-conversation-section${isConversationSectionExpanded ? '' : ' is-collapsed'}`}>
-            <TreeItem
+            <AppItem
               variant='header'
               itemClassName='agent-project-tree-header agent-conversation-tree-header'
               label='对话'
               isExpanded={isConversationSectionExpanded}
               actions={(
-                <TreeItemActionButton
+                <AppItemActionButton
                   aria-label='新对话'
                   aria-keyshortcuts='Control+Alt+N'
                   title='新对话 Ctrl+Alt+N'
@@ -1108,7 +1094,7 @@ function AgentProjectTree({
                   }}
                 >
                   <EditLine size={16} />
-                </TreeItemActionButton>
+                </AppItemActionButton>
               )}
               onToggle={toggleConversationSection}
             />
@@ -1166,23 +1152,27 @@ export function AgentProjectSwitchTrigger({
   className,
   onOpenProjectSwitchMenu,
   placeholder,
+  size = 'md',
 }: {
   activeProject: ProjectRecord | null
   className?: string
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   placeholder?: string
+  size?: AppMenuTriggerSize
 }) {
   const label = activeProject?.name ?? placeholder ?? '未选择项目'
   const isEnabled = Boolean(onOpenProjectSwitchMenu && (activeProject || placeholder))
 
   return (
-    <AppTooltipButton
+    <Menu.TriggerSurface
       type='button'
       className={[
         'agent-project-switch-trigger',
         className,
       ].filter(Boolean).join(' ')}
       disabled={!isEnabled}
+      size={size}
+      variant='ghost'
       aria-label={activeProject ? `切换项目，当前项目：${activeProject.name}` : label}
       onClick={(event) => {
         onOpenProjectSwitchMenu?.(event.currentTarget.getBoundingClientRect(), { startNewSession: true })
@@ -1191,6 +1181,6 @@ export function AgentProjectSwitchTrigger({
       <ProjectIcon />
       <span className='agent-project-switch-trigger-label'>{label}</span>
       <DownLine className='agent-project-switch-chevron' aria-hidden='true' size={14} />
-    </AppTooltipButton>
+    </Menu.TriggerSurface>
   )
 }

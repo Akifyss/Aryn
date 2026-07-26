@@ -48,8 +48,7 @@
     opacity 140ms ease;
 }
 
-.viewer-toolbar-page-control,
-.viewer-toolbar-select {
+.viewer-toolbar-page-control {
   height: 32px;
   padding: 0 8px;
   border: 1px solid var(--border-primary);
@@ -242,24 +241,10 @@
 .viewer-toolbar-select {
   width: 84px;
   min-width: 84px;
-  color: var(--foreground-primary);
-  cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
-}
-
-.viewer-toolbar-select:hover,
-.viewer-toolbar-select[data-popup-open] {
-  background: var(--hover);
-}
-
-.viewer-toolbar-select:focus-visible {
-  border-color: var(--focus);
-  box-shadow: 0 0 0 2px var(--focus);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .viewer-toolbar-page-control,
-  .viewer-toolbar-select {
+  .viewer-toolbar-page-control {
     transition: none;
   }
 }

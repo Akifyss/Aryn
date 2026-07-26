@@ -2,14 +2,6 @@
   flex: 0 0 auto;
 }
 
-.agent-new-project-bar .agent-project-switch-trigger {
-  gap: 2px;
-  min-height: 28px;
-  padding: 0 8px;
-  border-radius: 9px;
-  font-size: 13px;
-}
-
 .agent-new-project-bar .agent-project-switch-trigger .project-icon {
   --project-icon-size: 16px;
 }

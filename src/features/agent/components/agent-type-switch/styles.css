@@ -1,36 +1,14 @@
 .agent-type-switch-trigger {
-  display: inline-flex;
-  align-items: center;
   gap: 4px;
   max-width: 100%;
   min-width: 0;
-  min-height: 34px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
   color: var(--foreground-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: inherit;
-  line-height: 1.2;
-  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .agent-type-switch-trigger:hover,
 .agent-type-switch-trigger:focus-visible,
 .agent-type-switch-trigger[data-popup-open] {
-  background: var(--hover);
   color: var(--foreground-primary);
-}
-
-.agent-type-switch-trigger:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
-}
-
-.agent-type-switch-trigger:disabled {
-  cursor: default;
 }
 
 .agent-type-switch-label {
@@ -48,16 +26,7 @@
 }
 
 .agent-type-switch-menu {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
   width: min(320px, calc(100vw - 24px));
-  padding: 7px;
-  border: 1px solid var(--border-primary);
-  border-radius: 13px;
-  background: var(--overlay);
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
-  color: var(--foreground-primary);
 }
 
 .agent-type-switch-options-scroll {
@@ -69,51 +38,16 @@
   overscroll-behavior: contain;
 }
 
-.agent-type-switch-options-content {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
+/* Options may contain a title, unavailable reason, and guidance; only block size expands. */
 .agent-type-switch-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
+  height: auto;
   min-height: 34px;
-  padding: 7px 9px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 400;
-  text-align: left;
-  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+  padding-block: 7px;
 }
 
-.agent-type-switch-option.is-highlighted {
-  background: var(--hover);
-}
-
-.agent-type-switch-option.is-selected {
-  background: var(--selected);
-}
-
-.agent-type-switch-option.is-unavailable {
-  cursor: default;
-  color: var(--foreground-secondary);
-}
-
-.agent-type-switch-option-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  color: var(--foreground-secondary);
+.agent-type-switch-option > .app-item-main > .app-item-label {
+  overflow: visible;
+  white-space: normal;
 }
 
 .agent-type-switch-option-copy {
@@ -147,23 +81,20 @@
   color: color-mix(in oklab, var(--foreground-secondary) 82%, transparent);
 }
 
-.agent-type-switch-option-state {
-  flex: 0 0 auto;
+.agent-type-switch-option.is-unavailable {
   color: var(--foreground-secondary);
+  cursor: default;
 }
 
-.agent-type-switch-option.is-unavailable .agent-type-switch-option-state {
+.agent-type-switch-option.is-unavailable .app-item-info {
   color: var(--warning);
 }
 
-.agent-type-switch-menu-separator {
-  height: 1px;
-  margin: 4px 5px;
-  background: var(--separator);
-}
-
 .agent-type-switch-error {
-  margin: 1px 9px 3px;
+  margin:
+    1px
+    var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px))
+    3px;
   overflow-wrap: anywhere;
   color: var(--danger);
   font-size: 11px;

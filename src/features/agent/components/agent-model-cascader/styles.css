@@ -12,32 +12,8 @@
   width: fit-content;
   min-width: 0;
   max-width: 100%;
-  height: 30px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--foreground-primary);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.2;
+  justify-content: flex-start;
   text-align: left;
-  cursor: pointer;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease;
-}
-
-.agent-model-cascader-trigger:hover,
-.agent-model-cascader-trigger:focus-visible,
-.agent-model-cascader-trigger[aria-expanded="true"] {
-  outline: none;
-  background: var(--hover);
-}
-
-.agent-model-cascader-trigger:disabled {
-  opacity: 0.54;
-  cursor: default;
 }
 
 .agent-model-cascader-trigger-model {
@@ -58,26 +34,25 @@
   flex: 0 0 auto;
   max-width: 92px;
   color: color-mix(in srgb, var(--foreground-primary) 82%, var(--foreground-secondary));
-  font-size: 13px;
-  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .agent-model-cascader {
+  --app-menu-popup-max-width: 680px;
   position: fixed;
   z-index: 1200;
-  overflow: hidden;
   width: min(680px, calc(100vw - 24px));
   min-width: min(340px, calc(100vw - 24px));
   max-height: min(390px, calc(100vh - 24px));
-  border: 1px solid var(--border-primary);
-  border-radius: 12px;
-  background: var(--overlay);
-  box-shadow: 0 18px 48px rgb(15 23 42 / 0.16);
+  padding: 0;
 }
 
+/*
+ * Compound menu exception: search and column dividers are edge-to-edge.
+ * Each independent column list applies the shared menu inset exactly once.
+ */
 .agent-model-cascader-search {
   display: flex;
   align-items: center;
@@ -156,7 +131,13 @@
 
 .agent-model-cascader-column-title {
   flex: 0 0 auto;
-  padding: 8px 9px 5px;
+  padding:
+    8px
+    calc(
+      var(--app-menu-content-padding)
+      + var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px))
+    )
+    5px;
   color: var(--foreground-secondary);
   font-size: 11px;
   font-weight: 500;
@@ -164,9 +145,6 @@
 }
 
 .agent-model-cascader-scroll.app-scroll-area {
-  --app-scroll-area-scrollbar-gap: 4px;
-  --app-scroll-area-scrollbar-thickness: 8px;
-
   flex: 1 1 auto;
   height: 100%;
   min-height: 0;
@@ -180,48 +158,8 @@
   overscroll-behavior: contain;
 }
 
-.agent-model-cascader-scroll-content {
-  min-width: 100%;
-}
-
-.agent-model-cascader-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 0 5px 6px;
-}
-
-.agent-model-cascader-option {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  min-width: 0;
-  min-height: 30px;
-  padding: 5px 7px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--foreground-primary);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.25;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease;
-}
-
-.agent-model-cascader-option:hover,
-.agent-model-cascader-option:focus-visible,
-.agent-model-cascader-option.is-active {
-  outline: none;
-  background: var(--app-menu-item-hover-background);
-}
-
-.agent-model-cascader-option.is-selected {
-  background: var(--app-menu-item-active-background);
+.agent-model-cascader-scroll .app-menu-list {
+  padding: 0 var(--app-menu-content-padding) var(--app-menu-content-padding);
 }
 
 .agent-model-cascader-option-main,
@@ -230,10 +168,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.agent-model-cascader-option-main {
-  flex: 1 1 auto;
 }
 
 .agent-model-cascader-option-sub {
@@ -247,12 +181,11 @@
   color: var(--foreground-secondary);
 }
 
-.agent-model-cascader-model-option {
-  flex-wrap: nowrap;
-}
-
 .agent-model-cascader-empty {
-  padding: 8px 7px 10px;
+  padding:
+    8px
+    var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px))
+    10px;
   color: var(--foreground-secondary);
   font-size: 12px;
   line-height: 1.4;

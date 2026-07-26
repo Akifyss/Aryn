@@ -309,31 +309,32 @@ function CsvFileActionsMenu({
 }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <ViewerToolbarButton
-          type="button"
-          label={VIEWER_COPY.openCsvActions}
-          disabled={isPending}
-        >
-          <More2Line aria-hidden="true" className="size-4" />
-        </ViewerToolbarButton>
+      <DropdownMenuTrigger
+        disabled={isPending}
+        label={VIEWER_COPY.openCsvActions}
+      >
+        <More2Line aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         {showDownload ? (
-          <DropdownMenuItem disabled={downloadDisabled} onClick={onDownload}>
-            <DownloadLine aria-hidden="true" className="size-4" />
-            {VIEWER_COPY.download}
-          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={downloadDisabled}
+            icon={<DownloadLine aria-hidden="true" className="size-4" />}
+            text={VIEWER_COPY.download}
+            onClick={onDownload}
+          />
         ) : null}
         {showUpload ? (
-          <DropdownMenuItem disabled={isPending} onClick={onUploadClick}>
-            {isPending ? (
+          <DropdownMenuItem
+            disabled={isPending}
+            icon={isPending ? (
               <Spinner aria-hidden="true" className="size-4" />
             ) : (
               <UploadLine aria-hidden="true" className="size-4" />
             )}
-            {VIEWER_COPY.upload}
-          </DropdownMenuItem>
+            text={VIEWER_COPY.upload}
+            onClick={onUploadClick}
+          />
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>

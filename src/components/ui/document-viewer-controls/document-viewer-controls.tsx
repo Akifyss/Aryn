@@ -1,12 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Menu } from "@base-ui/react/menu";
 import { Popover } from "@base-ui/react/popover";
-import { ScrollArea } from "@base-ui/react/scroll-area";
-import { Select } from "@base-ui/react/select";
 import {
-  CheckLine,
   CloseLine,
   DownLine,
   LeftLine,
@@ -17,18 +13,19 @@ import {
 } from "@mingcute/react";
 
 import {
+  AppMenu as Menu,
+  AppMenuSelect as Select,
+  type AppMenuCheckboxItemProps,
+  type AppMenuItemProps,
+  type AppMenuRadioItemProps,
+  type AppMenuVisualTriggerProps,
+} from "@/components/app-menu";
+import {
   AppIconButton,
   type AppIconButtonProps,
 } from "@/components/app-icon-button";
 import { cn } from "@/components/ui/viewer-utils";
 
-const VIEWER_MENU_SURFACE =
-  "z-50 min-w-32 rounded-lg border border-[var(--border-primary)] bg-[var(--overlay)] p-1 text-[var(--overlay-foreground)] shadow-lg outline-none";
-const VIEWER_MENU_ITEM_BASE =
-  "relative flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left text-[var(--foreground-primary)] outline-none transition-colors data-highlighted:bg-[var(--hover)] data-disabled:pointer-events-none data-disabled:opacity-50";
-const VIEWER_MENU_ITEM = cn(VIEWER_MENU_ITEM_BASE, "text-sm");
-const VIEWER_MENU_OPTION = cn(VIEWER_MENU_ITEM, "pl-8");
-const VIEWER_ZOOM_MENU_OPTION = cn(VIEWER_MENU_ITEM_BASE, "pl-8 text-sm");
 const VIEWER_POPOVER_SURFACE =
   "z-50 rounded-lg border border-[var(--border-primary)] bg-[var(--overlay)] p-4 text-[var(--overlay-foreground)] shadow-lg outline-none data-ending-style:scale-98 data-ending-style:opacity-0 data-starting-style:scale-98 data-starting-style:opacity-0";
 const ZOOM_VALUE_EPSILON = 0.000001;
@@ -380,7 +377,6 @@ function ViewerZoomSelect({
     label: formatZoomOption(option),
     value: String(option),
   }));
-  const menuMaxHeight = Math.min(items.length * 32 + 8, 384);
 
   return (
     <Select.Root
@@ -396,9 +392,11 @@ function ViewerZoomSelect({
         type="button"
         aria-label={ariaLabel}
         className={cn(
-          "viewer-toolbar-select inline-flex shrink-0 items-center justify-between gap-1 shadow-xs tabular-nums disabled:pointer-events-none disabled:cursor-default disabled:opacity-50",
+          "viewer-toolbar-select shrink-0 justify-between gap-1 tabular-nums disabled:pointer-events-none disabled:cursor-default disabled:opacity-50",
           className,
         )}
+        size="md"
+        variant="outline"
       >
         <Select.Value className="min-w-0 flex-1 text-center">
           {() => formatZoomOption(value)}
@@ -410,63 +408,27 @@ function ViewerZoomSelect({
       <Select.Portal>
         <Select.Positioner
           alignItemWithTrigger
-          className="z-[82]"
           collisionPadding={8}
           positionMethod="fixed"
         >
           <Select.Popup
-            className={cn(VIEWER_MENU_SURFACE, "w-32 overflow-hidden p-0")}
-            style={{ maxHeight: menuMaxHeight }}
+            className="w-32 overflow-hidden"
+            size="sm"
+            style={{
+              "--app-menu-popup-max-height": "384px",
+            } as React.CSSProperties}
           >
-            <ScrollArea.Root
-              className="app-scroll-area h-full w-full"
-              style={{ height: "100%", maxHeight: menuMaxHeight }}
-            >
-              <Select.List
-                className="app-scroll-area-viewport p-1"
-                render={(listProps) => {
-                  const { children, style, ...viewportProps } = listProps;
-                  const viewportStyle = { ...style };
-                  delete viewportStyle.maxHeight;
-                  delete viewportStyle.overflow;
-                  delete viewportStyle.overflowX;
-                  delete viewportStyle.overflowY;
-
-                  return (
-                    <ScrollArea.Viewport
-                      {...viewportProps}
-                      style={viewportStyle}
-                    >
-                      {children}
-                    </ScrollArea.Viewport>
-                  );
-                }}
-              >
-                {items.map((item) => (
-                  <Select.Item
-                    key={item.value}
-                    className={cn(
-                      VIEWER_ZOOM_MENU_OPTION,
-                      "tabular-nums data-selected:bg-[var(--hover)]",
-                    )}
-                    value={item.value}
-                  >
-                    <span className="pointer-events-none absolute left-2 grid size-4 place-items-center">
-                      <Select.ItemIndicator>
-                        <CheckLine aria-hidden="true" className="size-4" />
-                      </Select.ItemIndicator>
-                    </span>
-                    <Select.ItemText>{item.label}</Select.ItemText>
-                  </Select.Item>
-                ))}
-              </Select.List>
-              <ScrollArea.Scrollbar
-                className="app-scroll-area-scrollbar"
-                orientation="vertical"
-              >
-                <ScrollArea.Thumb className="app-scroll-area-thumb" />
-              </ScrollArea.Scrollbar>
-            </ScrollArea.Root>
+            <Select.ScrollList>
+              {items.map((item) => (
+                <Select.Item
+                  key={item.value}
+                  className="tabular-nums"
+                  label={item.label}
+                  text={item.label}
+                  value={item.value}
+                />
+              ))}
+            </Select.ScrollList>
           </Select.Popup>
         </Select.Positioner>
       </Select.Portal>
@@ -570,12 +532,23 @@ function formatZoomOption(value: number) {
 export const ViewerMenuRoot = Menu.Root;
 
 export function ViewerMenuTrigger({
+  "aria-label": ariaLabel,
   children,
-}: {
-  asChild?: boolean;
-  children: React.ReactElement;
+  label,
+  ...props
+}: Omit<AppMenuVisualTriggerProps, "iconTooltip" | "render" | "variant"> & {
+  label: string;
 }) {
-  return <Menu.Trigger render={children} />;
+  return (
+    <Menu.Trigger
+      {...props}
+      aria-label={ariaLabel ?? label}
+      iconTooltip={label}
+      variant="icon"
+    >
+      {children}
+    </Menu.Trigger>
+  );
 }
 
 export function ViewerMenuContent({
@@ -599,7 +572,7 @@ export function ViewerMenuContent({
         side={side}
         sideOffset={sideOffset}
       >
-        <Menu.Popup className={cn(VIEWER_MENU_SURFACE, className)}>
+        <Menu.Popup className={className} size="sm">
           {children}
         </Menu.Popup>
       </Menu.Positioner>
@@ -611,13 +584,11 @@ export function ViewerMenuItem({
   children,
   className,
   ...props
-}: Menu.Item.Props) {
+}: AppMenuItemProps) {
   return (
     <Menu.Item
       {...props}
-      className={cn(VIEWER_MENU_ITEM, className as string | undefined)}
-      nativeButton
-      render={<button type="button" />}
+      className={className}
     >
       {children}
     </Menu.Item>
@@ -629,20 +600,13 @@ export function ViewerMenuCheckboxItem({
   children,
   className,
   ...props
-}: Menu.CheckboxItem.Props) {
+}: AppMenuCheckboxItemProps) {
   return (
     <Menu.CheckboxItem
       {...props}
       checked={checked}
-      className={cn(VIEWER_MENU_OPTION, className as string | undefined)}
-      nativeButton
-      render={<button type="button" />}
+      className={className}
     >
-      <span className="pointer-events-none absolute left-2 grid size-4 place-items-center">
-        <Menu.CheckboxItemIndicator>
-          <CheckLine aria-hidden="true" className="size-4" />
-        </Menu.CheckboxItemIndicator>
-      </span>
       {children}
     </Menu.CheckboxItem>
   );
@@ -654,26 +618,19 @@ export function ViewerMenuRadioItem({
   children,
   className,
   ...props
-}: Menu.RadioItem.Props) {
+}: AppMenuRadioItemProps) {
   return (
     <Menu.RadioItem
       {...props}
-      className={cn(VIEWER_MENU_OPTION, className as string | undefined)}
-      nativeButton
-      render={<button type="button" />}
+      className={className}
     >
-      <span className="pointer-events-none absolute left-2 grid size-4 place-items-center">
-        <Menu.RadioItemIndicator>
-          <span className="size-2 rounded-full bg-current" />
-        </Menu.RadioItemIndicator>
-      </span>
       {children}
     </Menu.RadioItem>
   );
 }
 
 export function ViewerMenuSeparator() {
-  return <Menu.Separator className="mx-2 my-1 h-px bg-[var(--separator)]" />;
+  return <Menu.Separator />;
 }
 
 export const ViewerPopoverRoot = Popover.Root;

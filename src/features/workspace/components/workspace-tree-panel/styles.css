@@ -44,12 +44,12 @@
   flex-direction: column;
 }
 
-.tree-header.file-panel-header {
+.app-item-header.file-panel-header {
   border-bottom: 0;
   background: transparent;
 }
 
-.workspace-tree-pane > .tree-header.file-panel-header {
+.workspace-tree-pane > .app-item-header.file-panel-header {
   box-sizing: border-box;
   padding-inline: var(--tree-scroll-content-inline-padding, var(--sidebar-content-inline-padding, 6px));
 }

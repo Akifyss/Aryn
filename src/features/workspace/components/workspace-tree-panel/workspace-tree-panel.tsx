@@ -1,7 +1,8 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { Icon } from '@iconify/react'
 import { FolderForbidLine } from '@mingcute/react'
-import { TreeItem, TreeItemActionButton, TreeScrollArea } from '@/components/tree'
+import { AppItem, AppItemActionButton } from '@/components/app-item'
+import { TreeScrollArea } from '@/components/tree'
 import { WorkspaceTree, type WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree/workspace-tree'
 import { WorkspaceTreeEmptyState } from '@/features/workspace/components/workspace-tree/workspace-tree-empty-state'
 import type { GitChangeItem, GitRepositoryState } from '@/features/git/types'
@@ -72,29 +73,29 @@ export function WorkspaceTreePanel({
         </div>
       ) : null}
 
-      <TreeItem
+      <AppItem
         variant='header'
         itemClassName='file-panel-header'
         label={title}
         actions={(
           <>
-            <TreeItemActionButton
+            <AppItemActionButton
               onClick={onCreateFile}
               disabled={!workspacePath || isCreatingFile}
               aria-label='Create File'
               title='新建文件'
             >
               <Icon icon='lucide:file-plus' width={16} height={16} />
-            </TreeItemActionButton>
-            <TreeItemActionButton
+            </AppItemActionButton>
+            <AppItemActionButton
               onClick={onCreateDirectory}
               disabled={!workspacePath || isCreatingDirectory}
               aria-label='Create Folder'
               title='新建文件夹'
             >
               <Icon icon='lucide:folder-plus' width={16} height={16} />
-            </TreeItemActionButton>
-            <TreeItemActionButton
+            </AppItemActionButton>
+            <AppItemActionButton
               onClick={onToggleFileTreeExpansion}
               disabled={!workspacePath || nodes.length === 0}
               aria-label='Toggle Expansion'
@@ -105,7 +106,7 @@ export function WorkspaceTreePanel({
                 width={16}
                 height={16}
               />
-            </TreeItemActionButton>
+            </AppItemActionButton>
           </>
         )}
       />

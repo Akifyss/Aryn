@@ -9,10 +9,10 @@ import {
   DefaultWorkspaceFolderGlyph,
 } from './workspace-file-icons'
 import {
-  TreeItemIcon,
-  TreeItemStatusDot,
-  type TreeItemStatusTone,
-} from './tree'
+  AppItemIcon,
+  AppItemStatusDot,
+  type AppItemStatusTone,
+} from './app-item'
 
 export type FileChangeVisualKind =
   | 'added'
@@ -24,7 +24,7 @@ export type FileChangeVisualKind =
   | 'type-changed'
   | 'untracked'
 
-function getFileChangeStatusTone(kind: FileChangeVisualKind): TreeItemStatusTone {
+function getFileChangeStatusTone(kind: FileChangeVisualKind): AppItemStatusTone {
   if (kind === 'added' || kind === 'untracked') return 'success'
   if (kind === 'deleted' || kind === 'conflicted') return 'danger'
   return 'warning'
@@ -40,7 +40,7 @@ export function FileChangeStatusBadge({
   title?: string
 }) {
   return (
-    <TreeItemStatusDot
+    <AppItemStatusDot
       className={className}
       tone={getFileChangeStatusTone(kind)}
       aria-label={title}
@@ -67,22 +67,22 @@ export function WorkspaceFileIcon({
     : resolveWorkspaceFileIconUrl(iconTheme, fileName ?? '')
 
   return (
-    <TreeItemIcon>
+    <AppItemIcon>
       {iconUrl ? (
-        <img alt='' className='tree-item-icon-image' draggable='false' src={iconUrl} />
+        <img alt='' className='app-item-icon-image' draggable='false' src={iconUrl} />
       ) : isFolder && iconTheme === null ? (
         <DefaultWorkspaceDirectoryIcon
-          className='tree-item-icon-image tree-item-icon-fallback'
+          className='app-item-icon-image app-item-icon-fallback'
           isExpanded={!isClosed}
         />
       ) : isFolder ? (
-        <DefaultWorkspaceFolderGlyph className='tree-item-icon-image' />
+        <DefaultWorkspaceFolderGlyph className='app-item-icon-image' />
       ) : (
         <DefaultWorkspaceFileTypeIcon
-          className='tree-item-icon-image tree-item-icon-fallback'
+          className='app-item-icon-image app-item-icon-fallback'
           fileName={fileName ?? ''}
         />
       )}
-    </TreeItemIcon>
+    </AppItemIcon>
   )
 }

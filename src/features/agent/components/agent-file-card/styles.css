@@ -65,8 +65,8 @@
   background: var(--background-secondary);
 }
 
-.agent-file-card-preview .tree-item-icon,
-.agent-file-card-preview .tree-item-icon img {
+.agent-file-card-preview .app-item-icon,
+.agent-file-card-preview .app-item-icon img {
   width: 24px;
   height: 24px;
 }

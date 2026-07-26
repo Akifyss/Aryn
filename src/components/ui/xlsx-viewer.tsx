@@ -476,13 +476,8 @@ function WorkbookFileActionsMenu({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <ViewerToolbarButton
-          type="button"
-          label={VIEWER_COPY.openWorkbookActions}
-        >
-          <More2Line aria-hidden="true" className="size-4" />
-        </ViewerToolbarButton>
+      <DropdownMenuTrigger label={VIEWER_COPY.openWorkbookActions}>
+        <More2Line aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
@@ -492,27 +487,26 @@ function WorkbookFileActionsMenu({
           <>
             <DropdownMenuCheckboxItem
               checked={Boolean(isDark)}
+              icon={<MoonLine aria-hidden="true" className="size-4" />}
+              text={VIEWER_COPY.darkMode}
               onCheckedChange={(checked) => onIsDarkChange?.(checked === true)}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <MoonLine aria-hidden="true" className="size-4" />
-                {VIEWER_COPY.darkMode}
-              </span>
-            </DropdownMenuCheckboxItem>
+            />
             {showFileActions ? <DropdownMenuSeparator /> : null}
           </>
         ) : null}
         {showDownloadButton && onDownload ? (
-          <DropdownMenuItem onClick={onDownload}>
-            <DownloadLine aria-hidden="true" className="size-4" />
-            {VIEWER_COPY.download}
-          </DropdownMenuItem>
+          <DropdownMenuItem
+            icon={<DownloadLine aria-hidden="true" className="size-4" />}
+            text={VIEWER_COPY.download}
+            onClick={onDownload}
+          />
         ) : null}
         {showUploadButton ? (
-          <DropdownMenuItem onClick={onUploadClick}>
-            <UploadLine aria-hidden="true" className="size-4" />
-            {VIEWER_COPY.upload}
-          </DropdownMenuItem>
+          <DropdownMenuItem
+            icon={<UploadLine aria-hidden="true" className="size-4" />}
+            text={VIEWER_COPY.upload}
+            onClick={onUploadClick}
+          />
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -545,17 +539,15 @@ export function WorkbookTableHeaderMenu({
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <AppIconButton
-          {...triggerProps}
-          type="button"
-          size="sm"
-          className={triggerProps.className}
-          aria-label="列菜单"
-          tooltip="列菜单"
-        >
-          {triggerIcon ? triggerIcon : <More2Line aria-hidden="true" className="size-4" />}
-        </AppIconButton>
+      <DropdownMenuTrigger
+        {...triggerProps}
+        type="button"
+        size="sm"
+        className={triggerProps.className}
+        aria-label="列菜单"
+        label="列菜单"
+      >
+        {triggerIcon ? triggerIcon : <More2Line aria-hidden="true" className="size-4" />}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
@@ -572,12 +564,8 @@ export function WorkbookTableHeaderMenu({
             setOpen(false);
           }}
         >
-          <DropdownMenuRadioItem value="ascending">
-            {VIEWER_COPY.sortAscending}
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="descending">
-            {VIEWER_COPY.sortDescending}
-          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem text={VIEWER_COPY.sortAscending} value="ascending" />
+          <DropdownMenuRadioItem text={VIEWER_COPY.sortDescending} value="descending" />
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>

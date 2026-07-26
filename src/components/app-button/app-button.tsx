@@ -7,6 +7,7 @@ import { forwardRef } from 'react'
 export type AppButtonSize = 'md' | 'sm'
 export type AppButtonVariant =
   | 'danger'
+  | 'ghost'
   | 'outline'
   | 'primary'
 

@@ -1,7 +1,6 @@
 import { useId } from 'react'
-import { Menu } from '@base-ui/react/menu'
 import { CheckLine, WarningLine } from '@mingcute/react'
-import { AppScrollArea } from '@/components/app-scroll-area'
+import { AppMenu as Menu } from '@/components/app-menu'
 import {
   DEFAULT_AGENT_ID,
   getAgentDefinition,
@@ -85,7 +84,8 @@ export function AgentTypeSwitch({
         aria-label={`选择 Agent，当前：${selectedDefinition.label}`}
         className='agent-type-switch-trigger'
         disabled={isLocked}
-        render={<button type='button' />}
+        size='md'
+        variant='ghost'
       >
         <AgentBrandIcon agentId={selectedAgentId} className='agent-brand-icon' size={24} />
         <span className='agent-type-switch-label'>{selectedDefinition.label}</span>
@@ -100,13 +100,15 @@ export function AgentTypeSwitch({
           side='bottom'
           sideOffset={6}
         >
-          <Menu.Popup className='agent-type-switch-menu' aria-label='选择用于新会话的 Agent'>
-            <AppScrollArea
-              className='agent-type-switch-options-scroll'
-              contentClassName='agent-type-switch-options-content'
-              viewportClassName='agent-type-switch-options-viewport'
-            >
-              <Menu.RadioGroup
+          <Menu.Popup
+            className='agent-type-switch-menu'
+            aria-label='选择用于新会话的 Agent'
+            size='lg'
+          >
+            <Menu.ScrollArea className='agent-type-switch-options-scroll'>
+              <Menu.ScrollViewport className='agent-type-switch-options-viewport'>
+                <Menu.ScrollContent>
+                  <Menu.RadioGroup
                 value={selectedAgentId}
                 onValueChange={(nextAgentId, eventDetails) => {
                   const availability = catalog.find((item) => item.definition.id === nextAgentId)
@@ -129,50 +131,51 @@ export function AgentTypeSwitch({
                   return (
                     <Menu.RadioItem
                       key={agentId}
-                      nativeButton
                       aria-describedby={isUnavailable
                         ? [reasonId, guidanceId].filter(Boolean).join(' ')
                         : undefined}
                       aria-disabled={isUnavailable || undefined}
-                      className={({ highlighted }) => (
-                        `agent-type-switch-option${highlighted ? ' is-highlighted' : ''}${isSelected ? ' is-selected' : ''}${isUnavailable ? ' is-unavailable' : ''}`
-                      )}
+                      className={`agent-type-switch-option${isUnavailable ? ' is-unavailable' : ''}`}
                       closeOnClick={!isUnavailable}
+                      info={isUnavailable ? (
+                        <WarningLine aria-hidden='true' size={16} />
+                      ) : isSelected ? (
+                        <CheckLine aria-hidden='true' size={16} />
+                      ) : undefined}
+                      infoVariant='status'
+                      icon={(
+                        <AgentBrandIcon
+                          agentId={agentId}
+                          className='agent-brand-icon'
+                          size={16}
+                        />
+                      )}
                       label={availability.definition.label}
-                      render={<button type='button' />}
+                      selected={isSelected}
+                      text={(
+                        <AgentTypeSwitchOptionCopy
+                          availability={availability}
+                          guidanceId={guidanceId}
+                          reasonId={reasonId}
+                        />
+                      )}
                       value={agentId}
                       onClick={(event) => {
                         if (isUnavailable) {
                           event.preventDefault()
                         }
                       }}
-                    >
-                      <span className='agent-type-switch-option-icon'>
-                        <AgentBrandIcon
-                          agentId={agentId}
-                          className='agent-brand-icon'
-                          size={16}
-                        />
-                      </span>
-                      <AgentTypeSwitchOptionCopy
-                        availability={availability}
-                        guidanceId={guidanceId}
-                        reasonId={reasonId}
-                      />
-                      {isUnavailable ? (
-                        <WarningLine className='agent-type-switch-option-state' aria-hidden='true' size={16} />
-                      ) : isSelected ? (
-                        <CheckLine className='agent-type-switch-option-state' aria-hidden='true' size={16} />
-                      ) : null}
-                    </Menu.RadioItem>
+                    />
                   )
                 })}
-              </Menu.RadioGroup>
-            </AppScrollArea>
+                </Menu.RadioGroup>
+                </Menu.ScrollContent>
+              </Menu.ScrollViewport>
+            </Menu.ScrollArea>
 
             {refreshError ? (
               <>
-                <div className='agent-type-switch-menu-separator' role='separator' />
+                <Menu.Separator />
                 <p
                   className='agent-type-switch-error'
                   role='alert'

@@ -18,10 +18,8 @@ import {
   Transfer4Line,
   UpLine,
 } from "@mingcute/react"
-import { Menu } from "@base-ui/react/menu"
 import { Popover as BasePopover } from "@base-ui/react/popover"
 import { ScrollArea as BaseScrollArea } from "@base-ui/react/scroll-area"
-import { Select as BaseSelect } from "@base-ui/react/select"
 import {
   prepareFileTreeInput,
   type FileTreeSortComparator,
@@ -32,6 +30,10 @@ import { createPortal } from "react-dom"
 import { AppButton } from "@/components/app-button"
 import { AppDialog } from "@/components/app-dialog"
 import { AppIconButton } from "@/components/app-icon-button"
+import {
+  AppMenu as Menu,
+  AppMenuSelect as MenuSelect,
+} from "@/components/app-menu"
 import { AppScrollArea } from "@/components/app-scroll-area"
 import { AppTooltip } from "@/components/app-tooltip"
 import { SegmentedIconTabs } from "@/components/ui/segmented-icon-tabs/segmented-icon-tabs"
@@ -63,17 +65,8 @@ function cn(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ")
 }
 
-const FILE_SYSTEM_MENU_SURFACE_CLASSNAME =
+const FILE_SYSTEM_POPOVER_SURFACE_CLASSNAME =
   "z-[82] min-w-32 rounded-[14px] border border-[var(--border-primary)] bg-[var(--overlay)] p-[7px] text-[var(--overlay-foreground)] shadow-[0_24px_64px_rgba(15,23,42,0.18)] backdrop-blur-[22px] outline-none"
-
-const FILE_SYSTEM_MENU_ITEM_CLASSNAME =
-  "flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-0 text-left text-[13px] leading-[1.4] text-[var(--foreground-primary)] outline-none transition-colors data-[highlighted]:bg-[var(--app-menu-item-hover-background)] data-[highlighted]:text-[var(--foreground-primary)] disabled:pointer-events-none disabled:cursor-default disabled:opacity-50"
-
-const FILE_SYSTEM_MENU_OPTION_CLASSNAME =
-  "flex min-h-8 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-0 text-[13px] leading-[1.4] text-[var(--foreground-primary)] outline-none transition-colors data-[highlighted]:bg-[var(--app-menu-item-hover-background)] data-[highlighted]:text-[var(--foreground-primary)] data-[selected]:bg-[var(--app-menu-item-active-background)] data-[selected]:font-medium disabled:pointer-events-none disabled:cursor-default disabled:opacity-50"
-
-const FILE_SYSTEM_COMMAND_ITEM_CLASSNAME =
-  "flex min-h-8 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-0 text-[13px] leading-[1.4] text-[var(--foreground-primary)] outline-none transition-colors hover:bg-[var(--app-menu-item-hover-background)] hover:text-[var(--foreground-primary)] focus-visible:bg-[var(--app-menu-item-hover-background)]"
 
 type SystemIconComponent = React.ElementType<{
   className?: string
@@ -173,7 +166,7 @@ function CommandList({
   role = "listbox",
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div role={role} className={cn("min-h-0", className)} {...props} />
+  return <Menu.List role={role} className={cn("min-h-0", className)} {...props} />
 }
 
 function CommandEmpty({
@@ -203,14 +196,14 @@ function CommandGroup({
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & { heading?: React.ReactNode }) {
   return (
-    <div className={cn("p-1", className)} {...props}>
+    <Menu.Group className={className} {...props}>
       {heading ? (
-        <div className="px-2 py-1.5 text-xs font-medium text-[var(--foreground-secondary)]">
+        <Menu.GroupLabel>
           {heading}
-        </div>
+        </Menu.GroupLabel>
       ) : null}
       {children}
-    </div>
+    </Menu.Group>
   )
 }
 
@@ -241,13 +234,10 @@ function CommandItem({
 
   if (!visible) return null
   return (
-    <div
+    <Menu.Option
       role="option"
       tabIndex={0}
-      className={cn(
-        FILE_SYSTEM_COMMAND_ITEM_CLASSNAME,
-        className
-      )}
+      className={className}
       onClick={() => onSelect?.(value)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -258,7 +248,7 @@ function CommandItem({
       {...props}
     >
       {children}
-    </div>
+    </Menu.Option>
   )
 }
 
@@ -294,10 +284,8 @@ function DropdownMenuContent({
     <Menu.Portal>
       <Menu.Positioner align={align} collisionPadding={8} side={side} sideOffset={sideOffset}>
         <Menu.Popup
-          className={cn(
-            FILE_SYSTEM_MENU_SURFACE_CLASSNAME,
-            className as string | undefined
-          )}
+          className={className}
+          size="sm"
           {...props}
         />
       </Menu.Positioner>
@@ -312,12 +300,7 @@ function DropdownMenuItem({
 }: React.ComponentPropsWithoutRef<typeof Menu.Item>) {
   return (
     <Menu.Item
-      nativeButton
-      render={<button type="button" />}
-      className={cn(
-        FILE_SYSTEM_MENU_ITEM_CLASSNAME,
-        className as string | undefined
-      )}
+      className={className}
       {...props}
     >
       {children}
@@ -334,25 +317,13 @@ function DropdownMenuSub({
 
 function DropdownMenuSubTrigger({
   className,
-  children,
   ...props
 }: React.ComponentPropsWithoutRef<typeof Menu.SubmenuTrigger>) {
   return (
     <Menu.SubmenuTrigger
-      nativeButton
-      render={<button type="button" />}
-      className={cn(
-        FILE_SYSTEM_MENU_ITEM_CLASSNAME,
-        className as string | undefined
-      )}
+      className={className}
       {...props}
-    >
-      {children}
-      <RightLine
-        aria-hidden="true"
-        className="ml-auto size-3.5 text-[var(--foreground-secondary)]"
-      />
-    </Menu.SubmenuTrigger>
+    />
   )
 }
 
@@ -367,10 +338,8 @@ function DropdownMenuSubContent({
     <Menu.Portal>
       <Menu.Positioner align={align} collisionPadding={8} side={side} sideOffset={sideOffset}>
         <Menu.Popup
-          className={cn(
-            FILE_SYSTEM_MENU_SURFACE_CLASSNAME,
-            className as string | undefined
-          )}
+          className={className}
+          size="sm"
           {...props}
         />
       </Menu.Positioner>
@@ -433,7 +402,7 @@ function PopoverContent({
       >
         <BasePopover.Popup
           className={cn(
-            FILE_SYSTEM_MENU_SURFACE_CLASSNAME,
+            FILE_SYSTEM_POPOVER_SURFACE_CLASSNAME,
             className as string | undefined
           )}
           {...props}
@@ -502,50 +471,62 @@ function Select({
   children,
   onValueChange,
   ...props
-}: React.ComponentPropsWithoutRef<typeof BaseSelect.Root>) {
+}: React.ComponentPropsWithoutRef<typeof MenuSelect.Root>) {
   return (
-    <BaseSelect.Root
+    <MenuSelect.Root
       modal={false}
       onValueChange={(value) => onValueChange?.(value as never, undefined as never)}
       {...props}
     >
       {children}
-    </BaseSelect.Root>
+    </MenuSelect.Root>
   )
 }
 
 function SelectTrigger({
   className,
-  size: _size,
-  variant = "default",
+  compact = false,
+  size = "md",
   children,
   ...props
-}: React.ComponentPropsWithoutRef<typeof BaseSelect.Trigger> & {
-  size?: "default" | "sm"
-  variant?: "default" | "icon"
+}: Omit<
+  React.ComponentPropsWithoutRef<typeof MenuSelect.Trigger>,
+  "size" | "variant"
+> & {
+  compact?: boolean
+  size?: "md" | "sm"
 }) {
   return (
-    <BaseSelect.Trigger
+    <MenuSelect.Trigger
+      {...props}
       className={cn(
-        "flex h-8 cursor-pointer items-center gap-1 rounded-[8px] border bg-[var(--background-primary)] text-sm shadow-xs outline-none transition-colors hover:bg-[var(--hover)] focus-visible:ring-2 focus-visible:ring-[var(--focus)] data-[popup-open]:bg-[var(--hover)] disabled:pointer-events-none disabled:cursor-default disabled:opacity-50",
-        variant === "icon" ? "w-auto min-w-0 justify-between px-2" : "min-w-24 justify-between px-2",
+        compact ? "w-auto min-w-0 justify-between" : "min-w-24 justify-between",
         className as string | undefined
       )}
-      {...props}
+      size={size}
+      variant="outline"
     >
       {children}
-      <BaseSelect.Icon className="flex shrink-0 items-center text-[var(--foreground-secondary)]">
+      <MenuSelect.Icon className="flex shrink-0 items-center text-[var(--foreground-secondary)]">
         <DownLine aria-hidden="true" className="size-3.5" />
-      </BaseSelect.Icon>
-    </BaseSelect.Trigger>
+      </MenuSelect.Icon>
+    </MenuSelect.Trigger>
   )
 }
 
-function SelectValue({ children }: { children?: React.ReactNode }) {
-  return <span className="flex min-w-0 items-center">{children}</span>
+function SelectValue({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof MenuSelect.Value>) {
+  return (
+    <MenuSelect.Value
+      className={cn("flex min-w-0 items-center", className as string | undefined)}
+      {...props}
+    />
+  )
 }
 
-type SelectContentProps = React.ComponentPropsWithoutRef<typeof BaseSelect.Popup> & {
+type SelectContentProps = React.ComponentPropsWithoutRef<typeof MenuSelect.Popup> & {
   align?: "center" | "end" | "start"
   alignItemWithTrigger?: boolean
   side?: "bottom" | "left" | "right" | "top"
@@ -554,7 +535,7 @@ type SelectContentProps = React.ComponentPropsWithoutRef<typeof BaseSelect.Popup
 
 function SelectContent({
   align = "start",
-  alignItemWithTrigger: _alignItemWithTrigger,
+  alignItemWithTrigger = true,
   className,
   side = "bottom",
   sideOffset = 4,
@@ -562,19 +543,23 @@ function SelectContent({
   ...props
 }: SelectContentProps) {
   return (
-    <BaseSelect.Portal>
-      <BaseSelect.Positioner align={align} collisionPadding={8} side={side} sideOffset={sideOffset}>
-        <BaseSelect.Popup
-          className={cn(
-            FILE_SYSTEM_MENU_SURFACE_CLASSNAME,
-            className as string | undefined
-          )}
+    <MenuSelect.Portal>
+      <MenuSelect.Positioner
+        align={align}
+        alignItemWithTrigger={alignItemWithTrigger}
+        collisionPadding={8}
+        side={side}
+        sideOffset={sideOffset}
+      >
+        <MenuSelect.Popup
+          className={className}
+          size="sm"
           {...props}
         >
-          <BaseSelect.List>{children}</BaseSelect.List>
-        </BaseSelect.Popup>
-      </BaseSelect.Positioner>
-    </BaseSelect.Portal>
+          <MenuSelect.List>{children}</MenuSelect.List>
+        </MenuSelect.Popup>
+      </MenuSelect.Positioner>
+    </MenuSelect.Portal>
   )
 }
 
@@ -582,17 +567,14 @@ function SelectItem({
   className,
   children,
   ...props
-}: React.ComponentPropsWithoutRef<typeof BaseSelect.Item>) {
+}: React.ComponentPropsWithoutRef<typeof MenuSelect.Item>) {
   return (
-    <BaseSelect.Item
-      className={cn(
-        FILE_SYSTEM_MENU_OPTION_CLASSNAME,
-        className as string | undefined
-      )}
+    <MenuSelect.Item
+      className={className}
+      indicator={<CheckLine aria-hidden="true" className="size-4" />}
+      text={children}
       {...props}
-    >
-      <BaseSelect.ItemText>{children}</BaseSelect.ItemText>
-    </BaseSelect.Item>
+    />
   )
 }
 
@@ -3202,12 +3184,11 @@ export function FileSystem({
       >
         <AppTooltip tooltip={FILE_SYSTEM_COPY.toolbar.view} triggerMode="focusable">
           <SelectTrigger
-            size="sm"
-            variant="icon"
+            compact
             aria-label={FILE_SYSTEM_COPY.toolbar.view}
-            // Icon-only like the sort select: sheds the base min-width to
-            // hug icon + chevron at the toolbar button's 32px height.
-            className="h-8 min-h-8 [&_svg]:size-4"
+            // Compact select: sheds the base min-width while retaining the
+            // shared medium outline-button geometry and select chevron.
+            className="[&_svg]:size-4"
           >
             <SelectValue>
               {activeViewOption ? (
@@ -3683,10 +3664,9 @@ function FileSystemSortSelect({
     >
       <AppTooltip tooltip={FILE_SYSTEM_COPY.sort.by} triggerMode="focusable">
         <SelectTrigger
-          size="sm"
-          variant={layout === "full" && showLabel ? "default" : "icon"}
+          compact={layout !== "full" || !showLabel}
           aria-label={FILE_SYSTEM_COPY.sort.by}
-          className="h-8 min-h-8 shrink-0 [&_svg]:size-4"
+          className="shrink-0 [&_svg]:size-4"
         >
           <SelectValue>
             <span className="flex items-center gap-1.5">
@@ -3731,9 +3711,7 @@ function FileSystemFileTypeCommand({
 
   return (
     <Command
-      // Span the menu viewport's built-in padding so the search
-      // field's bottom border runs edge to edge.
-      className="-m-[7px] w-[calc(100%+14px)] bg-transparent"
+      className="w-full bg-transparent"
       // The local command list owns keyboard input while focus is inside;
       // only Escape (close the menu) and Tab continue outward.
       onKeyDown={(event) => {
@@ -3749,45 +3727,49 @@ function FileSystemFileTypeCommand({
       />
       <CommandList className="max-h-none">
         <CommandEmpty>{FILE_SYSTEM_COPY.empty.noFileTypes}</CommandEmpty>
-        <AppScrollArea className="file-system-file-type-scroll">
-          {FILE_TYPE_FILTER_GROUPS.map((group) => {
-            const groupOptions = options.filter(
-              (option) => option.group === group
-            )
+        <Menu.ScrollArea className="file-system-file-type-scroll">
+          <Menu.ScrollViewport>
+            <Menu.ScrollContent>
+              {FILE_TYPE_FILTER_GROUPS.map((group) => {
+                const groupOptions = options.filter(
+                  (option) => option.group === group
+                )
 
-            if (groupOptions.length === 0) return null
+                if (groupOptions.length === 0) return null
 
-            return (
-              <CommandGroup key={group} heading={FILE_TYPE_FILTER_GROUP_LABELS[group]}>
-                {groupOptions.map((option) => {
-                  const isChecked = checkedMimes.includes(option.mime)
+                return (
+                  <CommandGroup key={group} heading={FILE_TYPE_FILTER_GROUP_LABELS[group]}>
+                    {groupOptions.map((option) => {
+                      const isChecked = checkedMimes.includes(option.mime)
 
-                  return (
-                    <CommandItem
-                      key={option.mime}
-                      value={option.label}
-                      keywords={[option.mime]}
-                      onSelect={() => onToggle(option.mime, !isChecked)}
-                    >
-                      <CheckLine
-                        aria-hidden="true"
-                        className={cn(
-                          "size-4 text-[var(--foreground-primary)]",
-                          !isChecked && "opacity-0"
-                        )}
-                      />
-                      <FileTypeIcon
-                        fileName={option.iconFileName}
-                        className="size-4"
-                      />
-                      {option.label}
-                    </CommandItem>
-                  )
-                })}
-              </CommandGroup>
-            )
-          })}
-        </AppScrollArea>
+                      return (
+                        <CommandItem
+                          key={option.mime}
+                          value={option.label}
+                          keywords={[option.mime]}
+                          onSelect={() => onToggle(option.mime, !isChecked)}
+                        >
+                          <CheckLine
+                            aria-hidden="true"
+                            className={cn(
+                              "size-4 text-[var(--foreground-primary)]",
+                              !isChecked && "opacity-0"
+                            )}
+                          />
+                          <FileTypeIcon
+                            fileName={option.iconFileName}
+                            className="size-4"
+                          />
+                          {option.label}
+                        </CommandItem>
+                      )
+                    })}
+                  </CommandGroup>
+                )
+              })}
+            </Menu.ScrollContent>
+          </Menu.ScrollViewport>
+        </Menu.ScrollArea>
       </CommandList>
     </Command>
   )
@@ -3819,15 +3801,13 @@ function FileSystemFilterMenu({
         triggerMode="wrapper"
       >
         <DropdownMenuTrigger
-          render={
-            <AppIconButton
-              type="button"
-              variant="outline"
-              aria-label={FILE_SYSTEM_COPY.filter.title}
-              className="relative"
-              tooltip={null}
-            />
-          }
+          type="button"
+          aria-label={FILE_SYSTEM_COPY.filter.title}
+          className="relative"
+          iconTooltip={null}
+          iconVariant="outline"
+          size="md"
+          variant="icon"
         >
           <FilterLine aria-hidden="true" className="size-4" />
           {filters.length > 0 ? (
@@ -3837,13 +3817,15 @@ function FileSystemFilterMenu({
       </AppTooltip>
       <DropdownMenuContent align="end" className="min-w-44">
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Document2Line
-              aria-hidden="true"
-              className="size-4 text-[var(--foreground-secondary)]"
-            />
-            {FILE_SYSTEM_COPY.filter.type.fileType}
-          </DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger
+            icon={(
+              <Document2Line
+                aria-hidden="true"
+                className="size-4 text-[var(--foreground-secondary)]"
+              />
+            )}
+            text={FILE_SYSTEM_COPY.filter.type.fileType}
+          />
           <DropdownMenuSubContent className="w-60">
             <FileSystemFileTypeCommand
               checkedMimes={fileTypeFilter?.value ?? []}
@@ -3854,27 +3836,33 @@ function FileSystemFilterMenu({
         </DropdownMenuSub>
         {(["dateModified", "dateCreated"] as const).map((type) => (
           <DropdownMenuSub key={type}>
-            <DropdownMenuSubTrigger>
-              <Calendar2Line
-                aria-hidden="true"
-                className="size-4 text-[var(--foreground-secondary)]"
-              />
-              {FILTER_TYPE_LABELS[type]}
-            </DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger
+              icon={(
+                <Calendar2Line
+                  aria-hidden="true"
+                  className="size-4 text-[var(--foreground-secondary)]"
+                />
+              )}
+              text={FILTER_TYPE_LABELS[type]}
+            />
             <DropdownMenuSubContent>
-              <ScrollArea orientation="vertical" className="h-auto max-h-72">
-                {DATE_FILTER_PRESETS.map((preset) => (
-                  <DropdownMenuItem
-                    key={preset}
-                    onClick={() => onSelectDatePreset(type, preset)}
-                  >
-                    {dateFilterPresetLabel(preset)}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuItem onClick={() => onOpenCustomRange(type)}>
-                  {FILE_SYSTEM_COPY.filter.customDateRange}
-                </DropdownMenuItem>
-              </ScrollArea>
+              <Menu.ScrollArea className="h-auto max-h-72">
+                <Menu.ScrollViewport>
+                  <Menu.ScrollContent>
+                    {DATE_FILTER_PRESETS.map((preset) => (
+                      <DropdownMenuItem
+                        key={preset}
+                        text={dateFilterPresetLabel(preset)}
+                        onClick={() => onSelectDatePreset(type, preset)}
+                      />
+                    ))}
+                    <DropdownMenuItem
+                      text={FILE_SYSTEM_COPY.filter.customDateRange}
+                      onClick={() => onOpenCustomRange(type)}
+                    />
+                  </Menu.ScrollContent>
+                </Menu.ScrollViewport>
+              </Menu.ScrollArea>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         ))}
@@ -3949,10 +3937,9 @@ function FileSystemFilterPill({
           {filterOperatorChoices(filter).map((operator) => (
             <DropdownMenuItem
               key={operator}
+              text={FILTER_OPERATOR_LABELS[operator]}
               onClick={() => onOperatorChange(operator)}
-            >
-              {FILTER_OPERATOR_LABELS[operator]}
-            </DropdownMenuItem>
+            />
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
@@ -3999,19 +3986,23 @@ function FileSystemFilterPill({
             {filter.value[0]}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <ScrollArea orientation="vertical" className="h-auto max-h-72">
-            {DATE_FILTER_PRESETS.map((preset) => (
-              <DropdownMenuItem
-                key={preset}
-                onClick={() => onSelectDatePreset(preset)}
-              >
-                {dateFilterPresetLabel(preset)}
-              </DropdownMenuItem>
-            ))}
-              <DropdownMenuItem onClick={onOpenCustomRange}>
-                {FILE_SYSTEM_COPY.filter.customDateRange}
-              </DropdownMenuItem>
-            </ScrollArea>
+            <Menu.ScrollArea className="h-auto max-h-72">
+              <Menu.ScrollViewport>
+                <Menu.ScrollContent>
+                  {DATE_FILTER_PRESETS.map((preset) => (
+                    <DropdownMenuItem
+                      key={preset}
+                      text={dateFilterPresetLabel(preset)}
+                      onClick={() => onSelectDatePreset(preset)}
+                    />
+                  ))}
+                  <DropdownMenuItem
+                    text={FILE_SYSTEM_COPY.filter.customDateRange}
+                    onClick={onOpenCustomRange}
+                  />
+                </Menu.ScrollContent>
+              </Menu.ScrollViewport>
+            </Menu.ScrollArea>
           </DropdownMenuContent>
         </DropdownMenu>
       )}

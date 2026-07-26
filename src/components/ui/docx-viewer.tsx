@@ -349,13 +349,8 @@ function DocxFileActionsMenu({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <ViewerToolbarButton
-          type="button"
-          label={VIEWER_COPY.openDocxActions}
-        >
-          <More2Line aria-hidden="true" className="size-4" />
-        </ViewerToolbarButton>
+      <DropdownMenuTrigger label={VIEWER_COPY.openDocxActions}>
+        <More2Line aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         {showNightRenderToggle ? (
@@ -363,54 +358,48 @@ function DocxFileActionsMenu({
             <DropdownMenuCheckboxItem
               checked={isDark}
               disabled={controlsDisabled}
+              icon={<MoonLine aria-hidden="true" className="size-4" />}
+              text={VIEWER_COPY.darkMode}
               onCheckedChange={(checked) => onIsDarkChange(checked === true)}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <MoonLine aria-hidden="true" className="size-4" />
-                {VIEWER_COPY.darkMode}
-              </span>
-            </DropdownMenuCheckboxItem>
+            />
             <DropdownMenuSeparator />
           </>
         ) : null}
         <DropdownMenuCheckboxItem
           checked={showComments}
           disabled={controlsDisabled}
+          icon={<CommentLine aria-hidden="true" className="size-4" />}
+          text={VIEWER_COPY.showComments}
           onCheckedChange={(checked) => onShowCommentsChange(checked === true)}
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <CommentLine aria-hidden="true" className="size-4" />
-            {VIEWER_COPY.showComments}
-          </span>
-        </DropdownMenuCheckboxItem>
+        />
         <DropdownMenuCheckboxItem
           checked={showTrackedChanges}
           disabled={controlsDisabled}
+          icon={<GitCompareLine aria-hidden="true" className="size-4" />}
+          text={VIEWER_COPY.showTrackedChanges}
           onCheckedChange={(checked) =>
             onShowTrackedChangesChange(checked === true)
           }
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <GitCompareLine aria-hidden="true" className="size-4" />
-            {VIEWER_COPY.showTrackedChanges}
-          </span>
-        </DropdownMenuCheckboxItem>
+        />
         {showFileActions ? <DropdownMenuSeparator /> : null}
         {showDownloadButton ? (
-          <DropdownMenuItem disabled={downloadDisabled} onClick={onDownload}>
-            {isPreparingDownload ? (
+          <DropdownMenuItem
+            disabled={downloadDisabled}
+            icon={isPreparingDownload ? (
               <Spinner aria-hidden="true" className="size-4" />
             ) : (
               <DownloadLine aria-hidden="true" className="size-4" />
             )}
-            {VIEWER_COPY.download}
-          </DropdownMenuItem>
+            text={VIEWER_COPY.download}
+            onClick={onDownload}
+          />
         ) : null}
         {showUploadButton ? (
-          <DropdownMenuItem onClick={onUploadClick}>
-            <UploadLine aria-hidden="true" className="size-4" />
-            {VIEWER_COPY.upload}
-          </DropdownMenuItem>
+          <DropdownMenuItem
+            icon={<UploadLine aria-hidden="true" className="size-4" />}
+            text={VIEWER_COPY.upload}
+            onClick={onUploadClick}
+          />
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>

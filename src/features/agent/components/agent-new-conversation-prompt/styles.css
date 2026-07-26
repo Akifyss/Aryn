@@ -22,6 +22,11 @@
   letter-spacing: 0;
 }
 
+/* This ghost trigger is inline prose inside the hero heading, so it inherits heading type. */
+.agent-new-conversation-prompt h2 .agent-project-switch-trigger {
+  font-size: inherit;
+}
+
 .agent-new-conversation-prompt h2 .agent-project-switch-trigger .agent-project-switch-chevron {
   display: none;
 }

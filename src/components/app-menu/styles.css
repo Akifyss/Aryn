@@ -1,0 +1,189 @@
+.app-menu-positioner {
+  z-index: var(--app-menu-z-index, var(--app-z-menu));
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.app-menu-surface {
+  --app-menu-popup-min-width: 220px;
+  display: flex;
+  box-sizing: border-box;
+  min-width: min(var(--app-menu-popup-min-width), calc(100vw - 16px));
+  max-width: min(var(--app-menu-popup-max-width), calc(100vw - 16px));
+  max-height: min(var(--app-menu-popup-max-height), calc(100vh - 16px));
+  padding: var(--app-menu-content-padding);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--app-menu-popup-radius);
+  outline: none;
+  background: var(--overlay);
+  box-shadow: var(--app-menu-popup-shadow);
+  color: var(--overlay-foreground);
+  flex-direction: column;
+  overflow: hidden;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.app-menu-list {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--app-item-list-gap);
+}
+
+.app-menu-surface-sm {
+  --app-menu-popup-min-width: 180px;
+}
+
+.app-menu-surface-md {
+  --app-menu-popup-min-width: 220px;
+}
+
+.app-menu-surface-lg {
+  --app-menu-popup-min-width: 320px;
+}
+
+.app-menu-surface-fit {
+  --app-menu-popup-min-width: 0px;
+  width: max-content;
+}
+
+.app-menu-scroll-area.app-scroll-area {
+  inline-size: calc(100% + var(--app-menu-content-padding) + var(--app-menu-content-padding));
+  margin-inline: calc(0px - var(--app-menu-content-padding));
+  --app-scroll-area-scrollbar-gap: 0px;
+}
+
+.app-menu-scroll-viewport.app-scroll-area-viewport {
+  inline-size: calc(100% - var(--app-menu-content-padding) - var(--app-menu-content-padding));
+  margin-inline: var(--app-menu-content-padding);
+}
+
+.app-menu-item {
+  position: relative;
+  flex: 0 0 auto;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--foreground-primary);
+  user-select: none;
+}
+
+.app-menu-item.app-item-row {
+  margin: 0;
+}
+
+.app-menu-link-item {
+  display: block;
+  border-radius: var(--app-item-row-radius);
+  text-decoration: none;
+}
+
+.app-menu-item:hover,
+.app-menu-item:focus-visible,
+.app-menu-item[data-highlighted],
+.app-menu-item.is-highlighted {
+  background: var(--hover);
+}
+
+.app-menu-item.is-selected,
+.app-menu-item[data-checked],
+.app-menu-item[data-selected] {
+  background: var(--selected);
+}
+
+.app-menu-item[data-disabled],
+.app-menu-item:disabled {
+  cursor: default;
+  opacity: var(--app-button-base-disabled-opacity);
+  pointer-events: none;
+}
+
+.app-menu-item-danger {
+  color: var(--danger);
+}
+
+.app-menu-item-danger .app-item-label,
+.app-menu-item-danger .app-item-icon {
+  color: inherit;
+}
+
+.app-menu-item-danger:hover,
+.app-menu-item-danger:focus-visible,
+.app-menu-item-danger[data-highlighted],
+.app-menu-item-danger.is-highlighted {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.app-menu-item .app-item-main {
+  color: inherit;
+}
+
+.app-menu-item .app-item-icon {
+  color: var(--foreground-secondary);
+}
+
+.app-menu-item-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground-primary);
+}
+
+.app-menu-radio-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.app-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--separator);
+  flex: 0 0 auto;
+}
+
+@media (min-resolution: 1.25dppx) {
+  .app-menu-separator {
+    background:
+      linear-gradient(
+        to bottom,
+        var(--separator) 0 50%,
+        transparent 50% 100%
+      );
+  }
+}
+
+@media (min-resolution: 2.5dppx) {
+  .app-menu-separator {
+    background:
+      linear-gradient(
+        to bottom,
+        var(--separator) 0 33.333%,
+        transparent 33.333% 100%
+      );
+  }
+}
+
+.app-menu-group-label {
+  padding:
+    5px
+    var(--app-item-row-padding-right, 0)
+    3px
+    var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px));
+  color: var(--foreground-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.app-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}

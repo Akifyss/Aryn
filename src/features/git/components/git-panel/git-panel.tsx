@@ -1,5 +1,4 @@
 import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import { Menu } from '@base-ui/react/menu'
 import { ScrollArea } from '@base-ui/react/scroll-area'
 import {
   AddLine,
@@ -23,12 +22,15 @@ import {
 } from '@/components/file-change-visuals'
 import { AppButton } from '@/components/app-button'
 import { AppIconButton } from '@/components/app-icon-button'
+import {
+  AppItem,
+  AppItemActionButton,
+  AppItemIcon,
+} from '@/components/app-item'
+import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
 import { AppSplitButton } from '@/components/app-split-button'
 import {
-  TreeItemActionButton,
-  TreeItemChildren,
-  TreeItem,
-  TreeItemIcon,
+  TreeChildren,
   TreeList,
   TreeScrollArea,
   TreeStatusItem,
@@ -45,7 +47,6 @@ import type {
 } from '@/features/git/types'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
 import { getBaseName } from '@/features/workspace/lib/workspace-paths'
-import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import {
   buildGitTree,
   formatCommitRelativeTime,
@@ -172,7 +173,7 @@ function GitRowActions({
   return (
     <>
         {showOpenFile && (
-          <TreeItemActionButton
+          <AppItemActionButton
             aria-label='打开文件'
             title='打开文件'
             onClick={(e) => {
@@ -181,10 +182,10 @@ function GitRowActions({
             }}
           >
             <Icon icon='material-symbols:file-export-outline-rounded' width={16} height={16} aria-hidden='true' />
-          </TreeItemActionButton>
+          </AppItemActionButton>
         )}
         {showMeoDiff && (
-          <TreeItemActionButton
+          <AppItemActionButton
             aria-label='打开 MEO 分屏差异'
             title='打开 MEO 分屏差异'
             onClick={(e) => {
@@ -193,11 +194,11 @@ function GitRowActions({
             }}
           >
             <MarkdownLine size={16} aria-hidden='true' />
-          </TreeItemActionButton>
+          </AppItemActionButton>
         )}
 
         {showUnstage && (
-          <TreeItemActionButton
+          <AppItemActionButton
             aria-label='取消暂存'
             title='取消暂存'
             onClick={(e) => {
@@ -206,12 +207,12 @@ function GitRowActions({
             }}
           >
             <Icon icon='mdi:minus' width={16} height={16} aria-hidden='true' />
-          </TreeItemActionButton>
+          </AppItemActionButton>
         )}
 
         {showStageControls && (
           <>
-            <TreeItemActionButton
+            <AppItemActionButton
               aria-label='放弃更改'
               title='放弃更改'
               onClick={(e) => {
@@ -220,8 +221,8 @@ function GitRowActions({
               }}
             >
               <Back2Line size={16} aria-hidden='true' />
-            </TreeItemActionButton>
-            <TreeItemActionButton
+            </AppItemActionButton>
+            <AppItemActionButton
               aria-label='暂存'
               title='暂存'
               onClick={(e) => {
@@ -230,7 +231,7 @@ function GitRowActions({
               }}
             >
               <AddLine size={16} aria-hidden='true' />
-            </TreeItemActionButton>
+            </AppItemActionButton>
           </>
         )}
     </>
@@ -277,9 +278,9 @@ function GitTreeFolder({
   })
 
   return (
-    <TreeItem
+    <AppItem
       after={!isClosed ? (
-        <TreeItemChildren>
+        <TreeChildren>
           <TreeList>
             {node.children.map((child) => (
               <GitTreeFolder
@@ -313,7 +314,7 @@ function GitTreeFolder({
               layout={layout}
             />
           </TreeList>
-        </TreeItemChildren>
+        </TreeChildren>
       ) : null}
       icon={<WorkspaceFileIcon isFolder nodeLabel={node.label} isClosed={isClosed} iconTheme={iconTheme} />}
       label={node.label}
@@ -358,7 +359,7 @@ function GitChangeRows({
         const pathMeta = layout === 'list' ? dirLabel : ''
         const changeKindLabel = getGitChangeKindLabel(change.kind)
         return (
-          <TreeItem
+          <AppItem
             key={change.path}
             icon={<WorkspaceFileIcon fileName={fileName} iconTheme={iconTheme} />}
             label={fileName}
@@ -456,7 +457,7 @@ function GitSection({
 
   return (
     <div className='git-panel-section'>
-      <TreeItem
+      <AppItem
         variant='header'
         itemClassName='git-panel-section-header'
         label={title}
@@ -607,29 +608,22 @@ function GitCommitActionMenu({
             aria-label='提交选项'
             className='git-commit-menu'
             finalFocus={false}
+            size='fit'
           >
             <Menu.Item
-              nativeButton
-              render={<button type='button' />}
-              className={({ highlighted }) => `git-commit-menu-item${highlighted ? ' is-highlighted' : ''}`}
               disabled={commitDisabled}
+              icon={<CheckLine size={16} aria-hidden='true' />}
               label='提交'
+              text='提交'
               onClick={(event) => runCommitMenuAction(event, onCommit)}
-            >
-              <CheckLine size={16} className='git-commit-menu-icon' aria-hidden='true' />
-              <span>提交</span>
-            </Menu.Item>
+            />
             <Menu.Item
-              nativeButton
-              render={<button type='button' />}
-              className={({ highlighted }) => `git-commit-menu-item${highlighted ? ' is-highlighted' : ''}`}
               disabled={commitAndSyncDisabled}
+              icon={<ArrowUpCircleLine size={16} aria-hidden='true' />}
               label='提交并同步'
+              text='提交并同步'
               onClick={(event) => runCommitMenuAction(event, onCommitAndSync)}
-            >
-              <ArrowUpCircleLine size={16} className='git-commit-menu-icon' aria-hidden='true' />
-              <span>提交并同步</span>
-            </Menu.Item>
+            />
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>
@@ -929,7 +923,7 @@ export function GitPanel({
   }
 
   const renderLayoutToggleAction = () => (
-    <TreeItemActionButton
+    <AppItemActionButton
       aria-label={layout === 'tree' ? '切换到列表视图' : '切换到树状视图'}
       title={layout === 'tree' ? '列表视图' : '树状视图'}
       disabled={Boolean(busyLabel)}
@@ -940,14 +934,14 @@ export function GitPanel({
       {layout === 'tree'
         ? <ListCheckLine size={16} aria-hidden='true' />
         : <FolderLine size={16} aria-hidden='true' />}
-    </TreeItemActionButton>
+    </AppItemActionButton>
   )
 
   const noopChangeAction = () => {}
   const noopPathAction = () => {}
 
   const renderHistoryCommitActions = (commit: GitCommitItem) => (
-    <TreeItemActionButton
+    <AppItemActionButton
       aria-label={`还原提交 ${commit.shortHash}`}
       title={revertDisabledReason ?? busyLabel ?? '还原提交'}
       disabled={Boolean(busyLabel) || Boolean(revertDisabledReason)}
@@ -957,22 +951,22 @@ export function GitPanel({
       }}
     >
       <Back2Line size={16} aria-hidden='true' />
-    </TreeItemActionButton>
+    </AppItemActionButton>
   )
 
   function renderHistoryList() {
     return (
       <TreeList className='git-history-list'>
-        <TreeItem
+        <AppItem
           icon={(
-            <TreeItemIcon>
+            <AppItemIcon>
               <Icon
                 icon={historySelection.kind === 'working-tree' ? 'octicon:dot-fill-16' : 'octicon:dot-16'}
                 width={16}
                 height={16}
                 aria-hidden='true'
               />
-            </TreeItemIcon>
+            </AppItemIcon>
           )}
           isActive={historySelection.kind === 'working-tree'}
           label='工作树'
@@ -999,14 +993,14 @@ export function GitPanel({
           const isCommitSelected = selectedCommitHash === commit.hash
 
           return (
-            <TreeItem
+            <AppItem
               key={commit.hash}
               icon={(
-                <TreeItemIcon>
+                <AppItemIcon>
                   {isCommitSelected
                     ? <GitCommitFill size={16} aria-hidden='true' />
                     : <GitCommitLine size={16} aria-hidden='true' />}
-                </TreeItemIcon>
+                </AppItemIcon>
               )}
               isActive={isCommitSelected}
               label={commit.subject}
@@ -1064,7 +1058,7 @@ export function GitPanel({
   function renderHistorySection() {
     return (
       <div className='git-panel-section git-history-section'>
-        <TreeItem
+        <AppItem
           variant='header'
           itemClassName='git-panel-section-header'
           label='历史'
@@ -1093,21 +1087,21 @@ export function GitPanel({
                 const commitMeta = getCommitMeta(commit)
 
                 return (
-                  <TreeItem
+                  <AppItem
                     key={commit.hash}
                     after={isCommitExpanded ? (
-                      <TreeItemChildren className='git-history-commit-children'>
+                      <TreeChildren className='git-history-commit-children'>
                         <TreeList className='git-history-file-list'>
                           {renderHistoryCommitChildren(commit)}
                         </TreeList>
-                      </TreeItemChildren>
+                      </TreeChildren>
                     ) : null}
                     icon={(
-                      <TreeItemIcon>
+                      <AppItemIcon>
                         {isCommitExpanded
                           ? <GitCommitFill size={16} aria-hidden='true' />
                           : <GitCommitLine size={16} aria-hidden='true' />}
-                      </TreeItemIcon>
+                      </AppItemIcon>
                     )}
                     label={commit.subject}
                     description={commitMeta}
@@ -1241,7 +1235,7 @@ export function GitPanel({
     <div className='git-panel'>
       {hasVisibleChanges ? (
         <header className='git-panel-header'>
-          <TreeItem
+          <AppItem
             variant='header'
             label='工作树'
             info={syncSummary?.content}
@@ -1253,7 +1247,7 @@ export function GitPanel({
             } : undefined}
             actions={(
               <>
-                <TreeItemActionButton
+                <AppItemActionButton
                   className={hasUnpushedCommits ? 'git-push-action-with-badge' : undefined}
                   aria-label={pushAccessibleLabel}
                   title={syncDisabledReason ?? pushAccessibleLabel}
@@ -1262,24 +1256,24 @@ export function GitPanel({
                 >
                   <ArrowUpLine size={16} aria-hidden='true' />
                   {hasUnpushedCommits ? <span className='git-push-action-badge'>{pushBadgeLabel}</span> : null}
-                </TreeItemActionButton>
-                <TreeItemActionButton
+                </AppItemActionButton>
+                <AppItemActionButton
                   aria-label='拉取'
                   title={syncDisabledReason ?? '拉取'}
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPull}
                 >
                   <ArrowDownLine size={16} aria-hidden='true' />
-                </TreeItemActionButton>
+                </AppItemActionButton>
                 {renderLayoutToggleAction()}
-                <TreeItemActionButton
+                <AppItemActionButton
                   aria-label='刷新 Git 状态'
                   title='刷新'
                   disabled={Boolean(busyLabel)}
                   onClick={onRefresh}
                 >
                   <Refresh2Line size={16} aria-hidden='true' />
-                </TreeItemActionButton>
+                </AppItemActionButton>
               </>
             )}
           />
@@ -1402,14 +1396,14 @@ export function GitPanel({
               onStage={onStage}
               onUnstage={onUnstage}
               action={
-                <TreeItemActionButton
+                <AppItemActionButton
                   aria-label='全部取消暂存'
                   title='全部取消暂存'
                   disabled={Boolean(busyLabel)}
                   onClick={() => onUnstage(stagedPaths)}
                 >
                   <Icon icon='mdi:minus' width={16} height={16} aria-hidden='true' />
-                </TreeItemActionButton>
+                </AppItemActionButton>
               }
             />
 
@@ -1427,22 +1421,22 @@ export function GitPanel({
               onUnstage={onUnstage}
               action={
                 <>
-                  <TreeItemActionButton
+                  <AppItemActionButton
                     aria-label='全部放弃'
                     title='全部放弃'
                     disabled={Boolean(busyLabel)}
                     onClick={onDiscardAll}
                   >
                     <Back2Line size={16} aria-hidden='true' />
-                  </TreeItemActionButton>
-                  <TreeItemActionButton
+                  </AppItemActionButton>
+                  <AppItemActionButton
                     aria-label='全部暂存'
                     title='全部暂存'
                     disabled={Boolean(busyLabel)}
                     onClick={() => onStage(unstagedPaths)}
                   >
                     <AddLine size={16} aria-hidden='true' />
-                  </TreeItemActionButton>
+                  </AppItemActionButton>
                 </>
               }
             />

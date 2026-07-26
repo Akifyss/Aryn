@@ -123,14 +123,14 @@ describe('shell layout helpers', () => {
     return titlebarCss.replace(/\r\n/g, '\n')
   }
 
-  async function readTreeSource() {
-    const treeSource = await readFile(new URL('../src/components/tree/tree.tsx', import.meta.url), 'utf8')
-    return treeSource.replace(/\r\n/g, '\n')
+  async function readAppItemSource() {
+    const appItemSource = await readFile(new URL('../src/components/app-item/app-item.tsx', import.meta.url), 'utf8')
+    return appItemSource.replace(/\r\n/g, '\n')
   }
 
-  async function readTreeCss() {
-    const treeCss = await readFile(new URL('../src/components/tree/styles.css', import.meta.url), 'utf8')
-    return treeCss.replace(/\r\n/g, '\n')
+  async function readAppItemCss() {
+    const appItemCss = await readFile(new URL('../src/components/app-item/styles.css', import.meta.url), 'utf8')
+    return appItemCss.replace(/\r\n/g, '\n')
   }
 
   async function readFileTabsSource() {
@@ -414,15 +414,15 @@ describe('shell layout helpers', () => {
     expect(editorSurfaceCss).not.toMatch(/\.editor-content-shell\s*>\s*\.sidebar-git-pane\s+\.git-panel-detail-pane\s*\{\s*padding-(?:top|block-start):/)
   })
 
-  it('keeps disabled tree action tooltips hoverable', async () => {
-    const [treeCss, treeSource] = await Promise.all([
-      readTreeCss(),
-      readTreeSource(),
+  it('keeps disabled shared item action tooltips hoverable', async () => {
+    const [appItemCss, appItemSource] = await Promise.all([
+      readAppItemCss(),
+      readAppItemSource(),
     ])
 
-    expect(treeSource).toContain('tooltip={disabled ? null : resolvedTooltip}')
-    expect(treeSource).toContain("triggerClassName='tree-item-action-tooltip-trigger'")
-    expect(treeCss).toContain(`.tree-item-action-tooltip-trigger {
+    expect(appItemSource).toContain('tooltip={disabled ? null : resolvedTooltip}')
+    expect(appItemSource).toContain("triggerClassName='app-item-action-tooltip-trigger'")
+    expect(appItemCss).toContain(`.app-item-action-tooltip-trigger {
   display: inline-flex;
   flex-shrink: 0;
 }`)

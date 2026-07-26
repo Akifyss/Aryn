@@ -159,27 +159,25 @@ function PptxFileActionsMenu({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger>
-        <ViewerToolbarButton
-          type="button"
-          label="打开 PPTX 操作菜单"
-        >
-          <More2Line aria-hidden="true" className="size-4" />
-        </ViewerToolbarButton>
+      <DropdownMenuTrigger label="打开 PPTX 操作菜单">
+        <More2Line aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
         {showDownloadButton ? (
-          <DropdownMenuItem disabled={downloadDisabled} onClick={onDownload}>
-            <DownloadLine aria-hidden="true" className="size-4" />
-            下载
-          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={downloadDisabled}
+            icon={<DownloadLine aria-hidden="true" className="size-4" />}
+            text="下载"
+            onClick={onDownload}
+          />
         ) : null}
         {showDownloadButton && showUploadButton ? <DropdownMenuSeparator /> : null}
         {showUploadButton ? (
-          <DropdownMenuItem onClick={onUploadClick}>
-            <UploadLine aria-hidden="true" className="size-4" />
-            上传
-          </DropdownMenuItem>
+          <DropdownMenuItem
+            icon={<UploadLine aria-hidden="true" className="size-4" />}
+            text="上传"
+            onClick={onUploadClick}
+          />
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>

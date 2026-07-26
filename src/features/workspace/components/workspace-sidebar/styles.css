@@ -34,39 +34,6 @@
   -webkit-app-region: no-drag;
 }
 
-.workspace-sidebar-surface .section-title-text {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  flex: 0 1 auto;
-  max-width: 100%;
-  overflow: hidden;
-  align-self: center;
-  margin-left: 0;
-  padding: 4px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--foreground-primary);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-align: left;
-  text-overflow: ellipsis;
-  text-transform: none;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.workspace-sidebar-surface .section-title-text:hover {
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
 .workspace-sidebar-surface .section-title-drag-spacer {
   flex: 1 1 auto;
   min-width: 0;
@@ -80,22 +47,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.workspace-sidebar-surface .section-title-text:hover:not(:disabled),
-.workspace-sidebar-surface .section-title-text:focus-visible {
-  color: var(--foreground-primary);
-}
-
-.workspace-sidebar-surface .section-title-text:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 4px;
-  border-radius: 8px;
-}
-
-.workspace-sidebar-surface .section-title-text:disabled {
-  cursor: default;
-  opacity: 0.65;
 }
 
 .workspace-sidebar-surface .editor-workspace-switch-row {
@@ -115,16 +66,10 @@
 .workspace-sidebar-surface .editor-workspace-switch-button {
   flex: 1 1 auto;
   width: 100%;
-  min-height: 32px;
   justify-content: flex-start;
   gap: 8px;
   padding: 0 8px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--border-primary);
-  font-size: 13px;
-  font-weight: 500;
+  text-align: left;
 }
 
 .workspace-sidebar-surface .editor-workspace-switch-button .section-title-label {
@@ -133,15 +78,10 @@
 
 .workspace-sidebar-surface .editor-workspace-switch-chevron {
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  width: var(--app-button-base-icon-size);
+  height: var(--app-button-base-icon-size);
   color: var(--foreground-secondary);
-  transition: color 120ms ease;
-}
-
-.workspace-sidebar-surface .editor-workspace-switch-button:hover:not(:disabled),
-.workspace-sidebar-surface .editor-workspace-switch-button:focus-visible {
-  background: var(--hover);
+  transition: color var(--app-button-base-transition-duration) ease;
 }
 
 .workspace-sidebar-surface .editor-workspace-switch-button:hover:not(:disabled) .editor-workspace-switch-chevron,
@@ -150,7 +90,6 @@
 }
 
 .workspace-sidebar-surface .editor-workspace-switch-button.is-empty {
-  box-shadow: inset 0 0 0 1px var(--border-secondary);
   color: var(--foreground-secondary);
 }
 
@@ -208,7 +147,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workspace-sidebar-surface .section-title-text,
   .workspace-sidebar-surface .editor-workspace-switch-chevron,
   .workspace-sidebar-surface .sidebar-footer-item {
     transition: none;

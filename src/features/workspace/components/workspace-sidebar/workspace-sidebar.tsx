@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode, Ref } from 'react'
 import { Icon } from '@iconify/react'
 import { DownLine } from '@mingcute/react'
+import { AppMenu as Menu } from '@/components/app-menu'
 import { ProjectIcon } from '@/components/project-icon'
 import type { ShellPlatform } from '@/features/layout/shell-layout'
 import './styles.css'
@@ -56,17 +57,19 @@ export function WorkspaceSidebar({
 
       {showWorkspaceSwitch ? (
         <div className='editor-workspace-switch-row'>
-          <button
+          <Menu.TriggerSurface
             type='button'
             onClick={(event) => onOpenWorkspaceSwitch(event.currentTarget.getBoundingClientRect())}
             disabled={isPickingWorkspace}
-            className={`section-title-text editor-workspace-switch-button${hasWorkspace ? '' : ' is-empty'}`}
+            className={`editor-workspace-switch-button${hasWorkspace ? '' : ' is-empty'}`}
+            size='md'
+            variant='outline'
             aria-label={isPickingWorkspace ? 'Opening workspace' : '选择或切换工作目录'}
           >
             <ProjectIcon />
             <span className='section-title-label'>{workspaceLabel}</span>
             <DownLine className='editor-workspace-switch-chevron' size={16} aria-hidden='true' />
-          </button>
+          </Menu.TriggerSurface>
         </div>
       ) : null}
 

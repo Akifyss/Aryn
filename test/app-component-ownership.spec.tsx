@@ -104,7 +104,8 @@ describe('application stylesheet ownership', () => {
 
     expect(appSource).not.toContain("import './App.css'")
     expect(globalCss).toContain('--app-z-panel-resize:')
-    expect(globalCss).toContain('--app-menu-item-hover-background:')
+    expect(globalCss).not.toContain('--app-menu-item-hover-background:')
+    expect(globalCss).not.toContain('--app-menu-item-active-background:')
     expect(appShellCss).toContain('.panel-drawer-backdrop.panel-drawer-backdrop')
     expect(appShellCss).not.toContain("[data-slot='backdrop']")
     expect(commandPaletteSource).toContain("import './styles.css'")

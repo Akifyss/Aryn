@@ -347,40 +347,9 @@
 /* Settings dropdowns use Base UI Select so popup geometry stays inside the modal stack. */
 
 .settings-select-trigger {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
   width: 100%;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--border-primary);
-  border-radius: 15px;
-  background: var(--field-background);
-  color: var(--foreground-primary);
-  font: inherit;
-  font-size: 14px;
   text-align: left;
-  outline: none;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-  cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
-}
-
-.settings-select-trigger:hover:not([data-disabled]) {
-  background: var(--hover);
-}
-
-.settings-select-trigger:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.settings-select-trigger[data-disabled] {
-  cursor: not-allowed;
-  opacity: 0.58;
 }
 
 .settings-select-value {
@@ -414,72 +383,10 @@
 .settings-select-popup {
   width: var(--anchor-width);
   max-width: var(--available-width);
-  overflow: hidden;
-  padding: 6px 0 6px 6px;
-  border: 1px solid var(--border-primary);
-  border-radius: 14px;
-  background: var(--overlay);
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
-  backdrop-filter: blur(22px);
 }
 
 .settings-select-scroll {
   height: 100%;
-  --app-scroll-area-scrollbar-gap: 0px;
-}
-
-.settings-select-scroll .app-scroll-area-scrollbar[data-orientation='vertical'] {
-  right: 0;
-}
-
-.settings-select-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-right: 6px;
-}
-
-.settings-select-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 9px;
-  border-radius: 10px;
-  color: var(--foreground-primary);
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1.3;
-  outline: none;
-}
-
-.settings-select-item[data-highlighted] {
-  background: var(--app-menu-item-hover-background);
-}
-
-.settings-select-item[data-selected] {
-  background: var(--app-menu-item-active-background);
-}
-
-.settings-select-item-text {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-select-item-indicator {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--foreground-secondary);
-  opacity: 0;
-}
-
-.settings-select-item[data-selected] .settings-select-item-indicator {
-  opacity: 1;
 }
 
 /* Service Providers UI/UX Improvements */

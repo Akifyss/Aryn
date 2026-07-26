@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Select as BaseSelect } from '@base-ui/react/select'
-import { ScrollArea } from '@base-ui/react/scroll-area'
 import { Input, Switch, Tabs } from '@heroui/react'
 import { Icon } from '@iconify/react'
 import { AppButton } from '@/components/app-button'
 import { AppDialog } from '@/components/app-dialog'
 import { AppIconButton } from '@/components/app-icon-button'
+import {
+  AppMenuSelect as Select,
+} from '@/components/app-menu'
 import {
   OpenAI,
   Claude,
@@ -147,7 +148,7 @@ function SettingsSelect({
   value,
 }: SettingsSelectProps) {
   return (
-    <BaseSelect.Root
+    <Select.Root
       disabled={disabled}
       items={options}
       modal={false}
@@ -157,68 +158,47 @@ function SettingsSelect({
           onValueChange(nextValue)
         }
       }}
-    >
-      <BaseSelect.Trigger
-        type='button'
-        aria-label={ariaLabel}
-        className={joinClasses('settings-select-trigger', className)}
       >
-        <BaseSelect.Value className='settings-select-value' placeholder={placeholder} />
-        <BaseSelect.Icon className='settings-select-icon'>
-          <Icon icon='mingcute:down-line' width={18} height={18} />
-        </BaseSelect.Icon>
-      </BaseSelect.Trigger>
-      <BaseSelect.Positioner
+        <Select.Trigger
+          type='button'
+          aria-label={ariaLabel}
+          className={joinClasses('settings-select-trigger', className)}
+          variant='outline'
+        >
+          <Select.Value className='settings-select-value' placeholder={placeholder} />
+          <Select.Icon className='settings-select-icon'>
+            <Icon icon='mingcute:down-line' width={16} height={16} />
+          </Select.Icon>
+        </Select.Trigger>
+      <Select.Positioner
         align='start'
+        alignItemWithTrigger
         className='settings-select-positioner'
         collisionPadding={8}
         positionMethod='fixed'
         side='bottom'
         sideOffset={6}
       >
-        <BaseSelect.Popup className='settings-select-popup'>
-          <ScrollArea.Root className='app-scroll-area settings-select-scroll'>
-            {/* alignItemWithTrigger requires the Select.List DOM node to be the scroll viewport. */}
-            <BaseSelect.List
-              className='app-scroll-area-viewport settings-select-list'
-              render={(listProps) => {
-                const { children, style, ...viewportProps } = listProps
-                const viewportStyle = { ...style }
-                delete viewportStyle.maxHeight
-                delete viewportStyle.overflowX
-                delete viewportStyle.overflowY
-
-                return (
-                  <ScrollArea.Viewport
-                    {...viewportProps}
-                    style={viewportStyle}
-                  >
-                    {children}
-                  </ScrollArea.Viewport>
-                )
-              }}
-            >
-              {options.map((option) => (
-                <BaseSelect.Item
-                  key={option.value}
-                  className='settings-select-item'
-                  label={option.label}
-                  value={option.value}
-                >
-                  <BaseSelect.ItemText className='settings-select-item-text'>{option.label}</BaseSelect.ItemText>
-                  <BaseSelect.ItemIndicator className='settings-select-item-indicator'>
-                    <Icon icon='mingcute:check-line' width={16} height={16} />
-                  </BaseSelect.ItemIndicator>
-                </BaseSelect.Item>
-              ))}
-            </BaseSelect.List>
-            <ScrollArea.Scrollbar className='app-scroll-area-scrollbar' orientation='vertical'>
-              <ScrollArea.Thumb className='app-scroll-area-thumb' />
-            </ScrollArea.Scrollbar>
-          </ScrollArea.Root>
-        </BaseSelect.Popup>
-      </BaseSelect.Positioner>
-    </BaseSelect.Root>
+        <Select.Popup
+          className='settings-select-popup'
+          size='fit'
+        >
+          <Select.ScrollList
+            scrollAreaClassName='settings-select-scroll'
+          >
+            {options.map((option) => (
+              <Select.Item
+                key={option.value}
+                indicator={<Icon icon='mingcute:check-line' width={16} height={16} />}
+                label={option.label}
+                text={option.label}
+                value={option.value}
+              />
+            ))}
+          </Select.ScrollList>
+        </Select.Popup>
+      </Select.Positioner>
+    </Select.Root>
   )
 }
 

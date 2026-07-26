@@ -52,7 +52,7 @@ describe('shared text button', () => {
     expect(buttonSource).toContain("from '@base-ui/react/button'")
     expect(buttonSource).toContain("export type AppButtonSize = 'md' | 'sm'")
     expect(buttonSource).not.toContain("| 'xs'")
-    expect(buttonSource).not.toContain("| 'ghost'")
+    expect(buttonSource).toContain("| 'ghost'")
     expect(buttonSource).not.toContain("| 'link'")
     expect(buttonSource).not.toContain("| 'tertiary'")
     expect(buttonSource).toContain('<BaseButton')
@@ -62,6 +62,10 @@ describe('shared text button', () => {
     expect(buttonSource).toContain('data-variant={variant}')
     expect(indexCss).toContain('--app-button-height-md: 32px;')
     expect(indexCss).toContain('--app-button-height-sm: 28px;')
+    expect(indexCss).toContain('--app-button-font-size-md: 13px;')
+    expect(indexCss).toContain('--app-button-font-size-sm: 12px;')
+    expect(indexCss).toContain('--app-button-padding-inline-md: 8px;')
+    expect(indexCss).toContain('--app-button-padding-inline-sm: 6px;')
     expect(indexCss).not.toContain('--app-button-height-xs:')
     expect(indexCss).toContain('--app-button-base-icon-size: 16px;')
     expect(indexCss).toContain('--app-button-base-radius-md: 8px;')
@@ -80,11 +84,21 @@ describe('shared text button', () => {
     expect(buttonCss).toContain(
       'opacity: var(--app-button-base-disabled-opacity);',
     )
-    expect(buttonCss).toContain('border-color: var(--border-primary);')
-    expect(buttonCss).toContain('--app-button-shadow: var(--shadow-xs);')
+    expect(indexCss).not.toContain('--app-button-outline-')
+    expect(indexCss).not.toContain('--app-button-ghost-')
+    expect(buttonCss).toContain(
+      '--app-button-border-color: var(--border-primary);',
+    )
+    expect(buttonCss).toContain(
+      '--app-button-shadow: var(--shadow-xs);',
+    )
+    expect(buttonCss).toContain('--app-button-background: transparent;')
     expect(buttonCss).toContain('box-shadow: var(--app-button-shadow);')
     expect(buttonCss).not.toContain("[data-size='xs']")
-    expect(buttonCss).not.toContain("[data-variant='ghost']")
+    expect(buttonCss).toContain("[data-variant='ghost']")
+    expect(buttonCss).toContain('--app-button-hover-background: var(--hover);')
+    expect(buttonCss).toContain('[data-popup-open]')
+    expect(buttonCss).toContain("[aria-expanded='true']")
     expect(buttonCss).not.toContain("[data-variant='tertiary']")
     expect(buttonCss).not.toMatch(
       /^\s*border(?!-radius)(?:-[a-z]+)*\s*:[^;]*var\(--(?:background|foreground)-/m,
@@ -183,29 +197,29 @@ describe('shared text button', () => {
       /<AppButton[\s\S]{0,240}className='agent-session-new-button'/,
     )
     expect(agentSessionTreeSource ?? '').toMatch(
-      /<AppTooltipButton[\s\S]{0,240}agent-project-switch-trigger/,
+      /<Menu\.TriggerSurface[\s\S]{0,260}agent-project-switch-trigger[\s\S]{0,220}size=\{size\}[\s\S]{0,100}variant='ghost'/,
     )
     expect(agentChatSurfaceSource).toBeDefined()
     expect(agentChatSurfaceSource ?? '').toMatch(
-      /className=\{`agent-session-trigger[\s\S]{0,240}render=\{<button type='button' \/>}/,
+      /className=\{`agent-session-trigger[\s\S]{0,160}size='md'[\s\S]{0,80}variant='ghost'/,
     )
     expect(agentChatSurfaceSource ?? '').not.toMatch(
-      /className=\{`agent-session-trigger[\s\S]{0,240}render=\{<AppButton/,
+      /className=\{`agent-session-trigger[\s\S]{0,240}render=/,
     )
     expect(agentTypeSwitchSource).toBeDefined()
     expect(agentTypeSwitchSource ?? '').toMatch(
-      /className='agent-type-switch-trigger'[\s\S]{0,160}render=\{<button type='button' \/>}/,
+      /<Menu\.Trigger[\s\S]{0,240}className='agent-type-switch-trigger'[\s\S]{0,120}size='md'[\s\S]{0,80}variant='ghost'/,
     )
     expect(agentTypeSwitchSource ?? '').not.toMatch(
-      /className='agent-type-switch-trigger'[\s\S]{0,160}render=\{<AppButton/,
+      /className='agent-type-switch-trigger'[\s\S]{0,240}render=\{<AppButton/,
     )
     expect(agentModelCascaderSource).toBeDefined()
     expect(agentModelCascaderSource ?? '').toMatch(
-      /<AppTooltipButton[\s\S]{0,240}className='agent-model-cascader-trigger'/,
+      /<Menu\.TriggerSurface[\s\S]{0,300}className='agent-model-cascader-trigger'[\s\S]{0,180}size='md'[\s\S]{0,80}variant='ghost'/,
     )
     expect(workspaceSidebarSource).toBeDefined()
     expect(workspaceSidebarSource ?? '').toMatch(
-      /<button[\s\S]{0,320}section-title-text editor-workspace-switch-button/,
+      /<Menu\.TriggerSurface[\s\S]{0,320}editor-workspace-switch-button[\s\S]{0,120}size='md'[\s\S]{0,80}variant='outline'/,
     )
     expect(workspaceSidebarSource ?? '').not.toMatch(
       /<AppButton[\s\S]{0,320}editor-workspace-switch-button/,

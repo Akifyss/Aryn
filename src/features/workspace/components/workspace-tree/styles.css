@@ -30,54 +30,6 @@
   pointer-events: auto;
 }
 
-.workspace-tree-menu {
-  min-width: 220px;
-  padding: 7px;
-  border: 1px solid var(--border-primary);
-  border-radius: 14px;
-  background: var(--overlay);
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
-  backdrop-filter: blur(22px);
-}
-
-.workspace-tree-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  min-height: 34px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--foreground-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.4;
-  text-align: left;
-  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.workspace-tree-menu-item .workspace-tree-menu-icon {
-  flex: 0 0 auto;
-  color: currentColor;
-}
-
-.workspace-tree-menu-item.is-danger {
-  color: var(--danger);
-}
-
-.workspace-tree-menu-item:hover,
-.workspace-tree-menu-item:focus-visible,
-.workspace-tree-menu-item.is-highlighted {
-  outline: none;
-  background: var(--app-menu-item-hover-background);
-}
-
 .workspace-tree-root.is-root-drop-target {
   outline: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   outline-offset: -1px;
@@ -91,13 +43,13 @@
   flex-direction: column;
 }
 
-.workspace-tree-root.is-dragging .tree-item-row.is-drag-source .tree-item-main,
-body.workspace-tree-dragging .tree-item-row.is-drag-source .tree-item-main {
+.workspace-tree-root.is-dragging .app-item-row.is-drag-source .app-item-main,
+body.workspace-tree-dragging .app-item-row.is-drag-source .app-item-main {
   cursor: grabbing;
 }
 
 body.workspace-tree-dragging,
-body.workspace-tree-dragging .tree-item-main,
-body.workspace-tree-dragging .tree-item-row {
+body.workspace-tree-dragging .app-item-main,
+body.workspace-tree-dragging .app-item-row {
   cursor: grabbing;
 }

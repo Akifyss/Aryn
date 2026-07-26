@@ -79,28 +79,12 @@
   padding-block: 12px;
 }
 
-.git-history-list {
-  --tree-item-row-description-min-height: 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
 .git-history-tree-shell {
   padding-top: 2px;
 }
 
 .git-history-tree-list {
-  --tree-item-row-description-min-height: 42px;
   --tree-nested-list-padding-left: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.git-history-file-list {
-  --tree-item-row-description-min-height: 40px;
-  --tree-item-row-height: 32px;
 }
 
 .git-history-commit-children {
@@ -272,54 +256,7 @@
 }
 
 .git-commit-menu {
-  min-width: 168px;
-  padding: 7px;
-  border: 1px solid var(--border-primary);
-  border-radius: 14px;
-  background: var(--overlay);
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
-  backdrop-filter: blur(22px);
-}
-
-.git-commit-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 34px;
-  min-width: 0;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--foreground-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.4;
-  text-align: left;
-  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.git-commit-menu-icon {
-  flex: 0 0 auto;
-  color: currentColor;
-}
-
-.git-commit-menu-item:hover,
-.git-commit-menu-item:focus-visible,
-.git-commit-menu-item.is-highlighted {
-  outline: none;
-  background: var(--app-menu-item-hover-background);
-}
-
-.git-commit-menu-item:disabled,
-.git-commit-menu-item[data-disabled] {
-  cursor: not-allowed;
-  color: var(--foreground-secondary);
-  opacity: 0.5;
+  width: 168px;
 }
 
 .git-panel-empty-state {
@@ -456,13 +393,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .git-commit-menu-item {
-    transition: none;
-  }
-}
-
-.tree-header.git-panel-section-header {
+.app-item-header.git-panel-section-header {
   border-bottom: 0;
   background: transparent;
 }

@@ -57,30 +57,18 @@
 .agent-session-trigger {
   display: flex;
   align-items: center;
-  gap: 2px;
   width: 100%;
   min-width: 0;
   flex: 0 1 auto;
   max-width: 100%;
   overflow: hidden;
   align-self: center;
+  justify-content: flex-start;
   margin-left: 0;
-  padding: 4px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--foreground-primary);
-  font-size: 13px;
-  font-weight: 500;
   letter-spacing: -0.01em;
   text-align: left;
   text-overflow: ellipsis;
   text-transform: none;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: all 120ms ease;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
 }
 
 .agent-session-trigger-arrow {
@@ -92,12 +80,6 @@
   transition: color 120ms ease, opacity 120ms ease, transform 120ms ease;
 }
 
-.agent-session-trigger:hover:not(:disabled),
-.agent-session-trigger.is-open {
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
 .agent-session-trigger:hover:not(:disabled) .agent-session-trigger-arrow,
 .agent-session-trigger.is-open .agent-session-trigger-arrow {
   color: var(--foreground-primary);
@@ -106,11 +88,6 @@
 
 .agent-session-trigger.is-open .agent-session-trigger-arrow {
   transform: rotate(180deg);
-}
-
-.agent-session-trigger:disabled {
-  cursor: default;
-  opacity: 0.65;
 }
 
 .agent-session-static-label {
@@ -176,17 +153,6 @@
   width: min(320px, calc(100vw - 16px));
   height: min(320px, calc(100vh - 16px));
   max-height: min(416px, calc(100vh - 16px));
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--border-primary);
-  border-radius: 14px;
-  background: var(--overlay);
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
-  backdrop-filter: blur(22px);
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
 }
 
 .agent-session-menu-positioner {

@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Menu } from '@base-ui/react/menu'
 import {
   CheckLine,
   FolderForbidLine,
@@ -7,10 +6,9 @@ import {
   NewFolderLine,
   SearchLine,
 } from '@mingcute/react'
-import { AppScrollArea } from '@/components/app-scroll-area'
+import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
 import { ProjectIcon } from '@/components/project-icon'
 import type { ProjectRecord } from '@/features/workspace/types'
-import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import {
   createProjectMenuVirtualAnchor,
   PROJECT_MENU_GAP_PX,
@@ -93,51 +91,38 @@ export function ProjectMenu({
   const collisionBoundary = resolveProjectMenuCollisionBoundary(frameRect)
   const menuAlign = renderedMode === 'editor-switch' ? 'center' : 'start'
   const projectMenuActions = (
-    <>
-      <div className='project-menu-actions'>
-        <Menu.Item
-          nativeButton
-          render={<button type='button' />}
-          className={({ highlighted }) => `project-menu-action${highlighted ? ' is-highlighted' : ''}`}
-          disabled={isBusy}
-          label='新建空白项目'
-          onClick={onCreateProject}
-        >
-          <NewFolderLine aria-hidden='true' size={18} />
-          <span>新建空白项目</span>
-        </Menu.Item>
-        <Menu.Item
-          nativeButton
-          render={<button type='button' />}
-          className={({ highlighted }) => `project-menu-action${highlighted ? ' is-highlighted' : ''}`}
-          disabled={isBusy}
-          label='使用现有文件夹'
-          onClick={() => {
-            void onAddExistingProject()
-          }}
-        >
-          <FolderOpenLine aria-hidden='true' size={18} />
-          <span>使用现有文件夹</span>
-        </Menu.Item>
-      </div>
+    <Menu.List className='project-menu-actions'>
+      <Menu.Item
+        className='project-menu-action'
+        disabled={isBusy}
+        icon={<NewFolderLine aria-hidden='true' size={18} />}
+        label='新建空白项目'
+        text='新建空白项目'
+        onClick={onCreateProject}
+      />
+      <Menu.Item
+        className='project-menu-action'
+        disabled={isBusy}
+        icon={<FolderOpenLine aria-hidden='true' size={18} />}
+        label='使用现有文件夹'
+        text='使用现有文件夹'
+        onClick={() => {
+          void onAddExistingProject()
+        }}
+      />
       {showProjectlessAction ? (
-        <div className='project-menu-actions project-menu-projectless-actions'>
-          <Menu.Item
-            nativeButton
-            render={<button type='button' />}
-            className={({ highlighted }) => `project-menu-action${highlighted ? ' is-highlighted' : ''}`}
-            disabled={isBusy}
-            label='不使用项目'
-            onClick={() => {
-              void onUseNoProject()
-            }}
-          >
-            <FolderForbidLine aria-hidden='true' size={18} />
-            <span className='project-menu-action-spacer'>不使用项目</span>
-          </Menu.Item>
-        </div>
+        <Menu.Item
+          className='project-menu-action'
+          disabled={isBusy}
+          icon={<FolderForbidLine aria-hidden='true' size={18} />}
+          label='不使用项目'
+          text='不使用项目'
+          onClick={() => {
+            void onUseNoProject()
+          }}
+        />
       ) : null}
-    </>
+    </Menu.List>
   )
 
   return (
@@ -181,57 +166,60 @@ export function ProjectMenu({
             data-surface={surface}
             aria-label={isSwitchMenu && hasProjects ? '切换项目' : '添加项目'}
             finalFocus={false}
+            layout='compound'
+            size='fit'
             style={menuStyle}
           >
             {isSwitchMenu && hasProjects ? (
               <>
-                <label className='project-menu-search'>
-                  <SearchLine aria-hidden='true' size={16} />
-                  <input
-                    autoFocus
-                    aria-label='搜索项目'
-                    autoComplete='off'
-                    name='project-search'
-                    value={search}
-                    placeholder='搜索项目'
-                    onChange={(event) => setSearch(event.target.value)}
-                    onKeyDown={handleProjectMenuSearchKeyDown}
-                  />
-                </label>
-                <AppScrollArea
-                  className='project-menu-list'
-                  contentClassName='project-menu-list-content'
-                >
-                  {filteredProjects.map((project) => {
-                    const isActive = project.id === activeProjectId
+                <div className='project-menu-project-section'>
+                  <div className='project-menu-search-section'>
+                    <label className='project-menu-search'>
+                      <SearchLine aria-hidden='true' size={16} />
+                      <input
+                        autoFocus
+                        aria-label='搜索项目'
+                        autoComplete='off'
+                        name='project-search'
+                        value={search}
+                        placeholder='搜索项目'
+                        onChange={(event) => setSearch(event.target.value)}
+                        onKeyDown={handleProjectMenuSearchKeyDown}
+                      />
+                    </label>
+                  </div>
+                  <Menu.ScrollArea className='project-menu-list'>
+                    <Menu.ScrollViewport>
+                      <Menu.ScrollContent className='project-menu-project-list'>
+                        {filteredProjects.map((project) => {
+                          const isActive = project.id === activeProjectId
 
-                    return (
-                      <Menu.Item
-                        key={project.id}
-                        nativeButton
-                        render={<button type='button' />}
-                        className={({ highlighted }) => (
-                          `project-menu-project${isActive ? ' is-active' : ''}${highlighted ? ' is-highlighted' : ''}`
-                        )}
-                        disabled={isBusy}
-                        label={project.name}
-                        aria-current={isActive ? 'true' : undefined}
-                        onClick={() => {
-                          void onSelectProject(project)
-                        }}
-                      >
-                        <ProjectIcon />
-                        <span className='project-menu-project-name'>{project.name}</span>
-                        {isActive ? (
-                          <CheckLine aria-hidden='true' className='project-menu-project-check' size={16} />
+                          return (
+                            <Menu.Item
+                              key={project.id}
+                              className='project-menu-project'
+                              disabled={isBusy}
+                              info={isActive ? <CheckLine aria-hidden='true' size={16} /> : undefined}
+                              infoVariant='status'
+                              icon={<ProjectIcon />}
+                              label={project.name}
+                              selected={isActive}
+                              text={project.name}
+                              aria-current={isActive ? 'true' : undefined}
+                              onClick={() => {
+                                void onSelectProject(project)
+                              }}
+                            />
+                          )
+                        })}
+                        {filteredProjects.length === 0 ? (
+                          <div className='project-menu-empty' role='status'>没有匹配项目</div>
                         ) : null}
-                      </Menu.Item>
-                    )
-                  })}
-                  {filteredProjects.length === 0 ? (
-                    <div className='project-menu-empty' role='status'>没有匹配项目</div>
-                  ) : null}
-                </AppScrollArea>
+                      </Menu.ScrollContent>
+                    </Menu.ScrollViewport>
+                  </Menu.ScrollArea>
+                </div>
+                <Menu.Separator className='project-menu-section-separator' />
                 {projectMenuActions}
               </>
             ) : projectMenuActions}

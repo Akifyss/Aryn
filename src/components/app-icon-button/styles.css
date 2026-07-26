@@ -41,7 +41,8 @@
 
 .app-icon-button[data-variant='outline'] {
   border: 1px solid var(--border-primary);
-  background: var(--background-primary);
+  background: transparent;
+  box-shadow: var(--shadow-xs);
 }
 
 .app-icon-button[data-variant='solid'] {
@@ -50,18 +51,31 @@
 }
 
 .app-icon-button:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
-.app-icon-button[data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+.app-icon-button[data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-icon-button[data-popup-open]:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-icon-button[aria-expanded='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
   color: var(--foreground-primary);
   background: var(--hover);
 }
 
 .app-icon-button[data-variant='outline']:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
-.app-icon-button[data-variant='outline'][data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+.app-icon-button[data-variant='outline'][data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-icon-button[data-variant='outline'][data-popup-open]:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-icon-button[data-variant='outline'][aria-expanded='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
   border-color: var(--border-primary);
+  background: var(--hover);
+  color: var(--foreground-primary);
+}
+
+.app-icon-button[data-variant='outline']:active:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+  background: var(--active);
+  color: var(--foreground-primary);
 }
 
 .app-icon-button[data-variant='solid']:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
-.app-icon-button[data-variant='solid'][data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+.app-icon-button[data-variant='solid'][data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-icon-button[data-variant='solid'][data-popup-open]:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
+.app-icon-button[data-variant='solid'][aria-expanded='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
   color: var(--foreground-on-accent);
   background: var(--accent);
   opacity: 0.9;

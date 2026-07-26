@@ -11,9 +11,10 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Popover } from '@base-ui/react/popover'
-import { AppScrollArea } from '@/components/app-scroll-area'
-import { AppTooltipButton } from '@/components/app-tooltip'
+import {
+  AppMenu as Menu,
+  AppMenuPopover as Popover,
+} from '@/components/app-menu'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import type {
   ActiveComposerMentionQuery,
@@ -949,55 +950,55 @@ export function AgentComposerMentionInput({
             className='agent-composer-mention-menu'
             finalFocus={false}
             initialFocus={false}
+            size='fit'
             style={mentionMenuCssVars}
           >
-            <AppScrollArea
+            <Menu.ScrollArea
               ref={menuRef}
-              className='agent-composer-mention-menu-scroll'
-              contentClassName='agent-composer-mention-menu-scroll-content'
-              rootStyle={{ height: 'var(--agent-composer-mention-menu-height)' }}
+              style={{ height: 'var(--agent-composer-mention-menu-height)' }}
             >
-              <div className='agent-composer-mention-menu-list' role='listbox' aria-label='Project files'>
-                {mentionResults.length > 0 ? mentionResults.map((item, index) => {
-                  const isActive = index === selectedIndex
+              <Menu.ScrollViewport>
+                <Menu.ScrollContent role='listbox' aria-label='Project files'>
+                  {mentionResults.length > 0 ? mentionResults.map((item, index) => {
+                    const isActive = index === selectedIndex
 
-                  return (
-                    <AppTooltipButton
-                      key={item.id}
-                      type='button'
-                      role='option'
-                      aria-selected={isActive}
-                      data-active={isActive ? 'true' : 'false'}
-                      className={`agent-composer-mention-option${isActive ? ' is-active' : ''}`}
-                      onMouseDown={(mouseEvent) => {
-                        mouseEvent.preventDefault()
-                        applyMentionSelection(index)
-                      }}
-                      onMouseEnter={() => {
-                        setSelectedIndex(index)
-                      }}
-                    >
-                      <WorkspaceFileIcon
-                        fileName={item.name}
-                        iconTheme={iconTheme ?? null}
-                        isClosed={item.kind === 'directory'}
-                        isFolder={item.kind === 'directory'}
-                        nodeLabel={item.name}
-                      />
-
-                      <span className='agent-composer-mention-option-inline'>
-                        <span className='agent-composer-mention-option-label'>{item.displayName}</span>
-                        {item.displayPath ? (
-                          <span className='agent-composer-mention-option-meta'>{item.displayPath}</span>
-                        ) : null}
-                      </span>
-                    </AppTooltipButton>
-                  )
-                }) : (
-                  <div className='agent-composer-mention-empty'>No matching files or folders</div>
-                )}
-              </div>
-            </AppScrollArea>
+                    return (
+                      <Menu.Option
+                        key={item.id}
+                        role='option'
+                        aria-selected={isActive}
+                        data-active={isActive ? 'true' : 'false'}
+                        className='agent-composer-mention-option'
+                        selected={isActive}
+                        onMouseDown={(mouseEvent) => {
+                          mouseEvent.preventDefault()
+                          applyMentionSelection(index)
+                        }}
+                        onMouseEnter={() => {
+                          setSelectedIndex(index)
+                        }}
+                      >
+                        <WorkspaceFileIcon
+                          fileName={item.name}
+                          iconTheme={iconTheme ?? null}
+                          isClosed={item.kind === 'directory'}
+                          isFolder={item.kind === 'directory'}
+                          nodeLabel={item.name}
+                        />
+                        <span className='agent-composer-mention-option-inline'>
+                          <span className='agent-composer-mention-option-label'>{item.displayName}</span>
+                          {item.displayPath ? (
+                            <span className='agent-composer-mention-option-meta'>{item.displayPath}</span>
+                          ) : null}
+                        </span>
+                      </Menu.Option>
+                    )
+                  }) : (
+                    <div className='agent-composer-mention-empty'>No matching files or folders</div>
+                  )}
+                </Menu.ScrollContent>
+              </Menu.ScrollViewport>
+            </Menu.ScrollArea>
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>

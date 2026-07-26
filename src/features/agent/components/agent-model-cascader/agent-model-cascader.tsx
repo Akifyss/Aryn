@@ -15,7 +15,7 @@ import { CloseLine, RightLine, SearchLine } from '@mingcute/react'
 import { AppButton } from '@/components/app-button'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { AppIconButton } from '@/components/app-icon-button'
-import { AppTooltipButton } from '@/components/app-tooltip'
+import { AppMenu as Menu } from '@/components/app-menu'
 import { isAgentKeyboardCompositionEvent } from '@/features/agent/lib/keyboard'
 import {
   clampAgentThinkingLevel,
@@ -232,7 +232,7 @@ function scrollAgentModelCascaderActiveItemsIntoView() {
   }
 
   const cascaderElement = document.getElementById('agent-model-cascader')
-  const activeItems = cascaderElement?.querySelectorAll<HTMLElement>('.agent-model-cascader-option.is-active')
+  const activeItems = cascaderElement?.querySelectorAll<HTMLElement>('.agent-model-cascader-option.is-highlighted')
 
   activeItems?.forEach((activeItem) => {
     const viewportElement = activeItem.closest<HTMLElement>('.app-scroll-area-viewport')
@@ -1001,7 +1001,7 @@ export function AgentModelCascader({
   return (
     <div className='agent-model-field'>
       {hasConfiguredProviders ? (
-        <AppTooltipButton
+        <Menu.TriggerSurface
           ref={triggerRef}
           type='button'
           aria-expanded={isOpen}
@@ -1010,6 +1010,8 @@ export function AgentModelCascader({
           aria-label={triggerTitle}
           className='agent-model-cascader-trigger'
           disabled={disabled}
+          size='md'
+          variant='ghost'
           onClick={openCascader}
           onPointerMove={(event) => {
             if (isOpen) {
@@ -1026,7 +1028,7 @@ export function AgentModelCascader({
               </span>
             </>
           ) : null}
-        </AppTooltipButton>
+        </Menu.TriggerSurface>
       ) : (
         <AppButton
           className='agent-provider-setup-button'
@@ -1041,12 +1043,14 @@ export function AgentModelCascader({
       )}
 
       {isOpen && hasConfiguredProviders && typeof document !== 'undefined' ? createPortal(
-        <div
+        <Menu.Surface
           id='agent-model-cascader'
           className='agent-model-cascader'
           data-agent-model-cascader='true'
           role='dialog'
           aria-label='Select model and thinking level'
+          layout='compound'
+          size='fit'
           style={cascaderStyle}
           onPointerMove={handlePointerMove}
           onPointerLeave={clearPointerIntent}
@@ -1092,16 +1096,18 @@ export function AgentModelCascader({
                 <div className='agent-model-cascader-column-title'>Models</div>
                 <AppScrollArea
                   className='agent-model-cascader-scroll'
-                  contentClassName='agent-model-cascader-scroll-content'
                 >
-                  <div className='agent-model-cascader-list' role='listbox' aria-label='Matching models'>
+                  <Menu.List role='listbox' aria-label='Matching models'>
                     {searchResults.length > 0 ? searchResults.map((option) => (
-                      <button
+                      <Menu.Option
                         key={option.key}
-                        type='button'
                         role='option'
                         aria-selected={option.key === selectedModelKey}
-                        className={`agent-model-cascader-option agent-model-cascader-model-option${option.key === activeModelOption?.key ? ' is-active' : ''}${option.key === selectedModelKey ? ' is-selected' : ''}`}
+                        className={`agent-model-cascader-option${option.key === activeModelOption?.key ? ' is-highlighted' : ''}`}
+                        selected={option.key === selectedModelKey}
+                        text={<span className='agent-model-cascader-option-main'>{option.modelId}</span>}
+                        info={<span className='agent-model-cascader-option-sub'>{option.provider}</span>}
+                        infoVariant='text'
                         onFocus={() => {
                           activateModelPreview(option.key)
                           setKeyboardColumn('model')
@@ -1116,14 +1122,11 @@ export function AgentModelCascader({
                         onClick={() => {
                           void handleModelSelect(option)
                         }}
-                      >
-                        <span className='agent-model-cascader-option-main'>{option.modelId}</span>
-                        <span className='agent-model-cascader-option-sub'>{option.provider}</span>
-                      </button>
+                      />
                     )) : (
                       <div className='agent-model-cascader-empty'>No matching models</div>
                     )}
-                  </div>
+                  </Menu.List>
                 </AppScrollArea>
               </section>
             ) : (
@@ -1132,16 +1135,18 @@ export function AgentModelCascader({
                   <div className='agent-model-cascader-column-title'>Provider</div>
                   <AppScrollArea
                     className='agent-model-cascader-scroll'
-                    contentClassName='agent-model-cascader-scroll-content'
                   >
-                    <div className='agent-model-cascader-list' role='listbox' aria-label='Available providers'>
+                    <Menu.List role='listbox' aria-label='Available providers'>
                       {configuredProviders.map((provider) => (
-                        <button
+                        <Menu.Option
                           key={provider}
-                          type='button'
                           role='option'
                           aria-selected={provider === resolvedPreviewProvider}
-                          className={`agent-model-cascader-option${provider === resolvedPreviewProvider ? ' is-active' : ''}${provider === currentProvider ? ' is-selected' : ''}`}
+                          className={`agent-model-cascader-option${provider === resolvedPreviewProvider ? ' is-highlighted' : ''}`}
+                          selected={provider === currentProvider}
+                          text={<span className='agent-model-cascader-option-main'>{provider}</span>}
+                          info={<RightLine aria-hidden='true' className='agent-model-cascader-option-arrow' size={16} />}
+                          infoVariant='status'
                           onFocus={() => {
                             setKeyboardColumn('provider')
                             handleProviderFocus(provider)
@@ -1153,12 +1158,9 @@ export function AgentModelCascader({
                             setKeyboardColumn('provider')
                             handleProviderFocus(provider)
                           }}
-                        >
-                          <span className='agent-model-cascader-option-main'>{provider}</span>
-                          <RightLine aria-hidden='true' className='agent-model-cascader-option-arrow' size={13} />
-                        </button>
+                        />
                       ))}
-                    </div>
+                    </Menu.List>
                   </AppScrollArea>
                 </section>
 
@@ -1173,16 +1175,16 @@ export function AgentModelCascader({
                   <div className='agent-model-cascader-column-title'>Model</div>
                   <AppScrollArea
                     className='agent-model-cascader-scroll'
-                    contentClassName='agent-model-cascader-scroll-content'
                   >
-                    <div className='agent-model-cascader-list' role='listbox' aria-label='Available models'>
+                    <Menu.List role='listbox' aria-label='Available models'>
                       {providerModels.map((option) => (
-                        <button
+                        <Menu.Option
                           key={option.key}
-                          type='button'
                           role='option'
                           aria-selected={option.key === selectedModelKey}
-                          className={`agent-model-cascader-option agent-model-cascader-model-option${option.key === activeModelOption?.key ? ' is-active' : ''}${option.key === selectedModelKey ? ' is-selected' : ''}`}
+                          className={`agent-model-cascader-option${option.key === activeModelOption?.key ? ' is-highlighted' : ''}`}
+                          selected={option.key === selectedModelKey}
+                          text={<span className='agent-model-cascader-option-main'>{option.modelId}</span>}
                           onFocus={() => {
                             activateModelPreview(option.key)
                             setKeyboardColumn('model')
@@ -1197,11 +1199,9 @@ export function AgentModelCascader({
                           onClick={() => {
                             void handleModelSelect(option)
                           }}
-                        >
-                          <span className='agent-model-cascader-option-main'>{option.modelId}</span>
-                        </button>
+                        />
                       ))}
-                    </div>
+                    </Menu.List>
                   </AppScrollArea>
                 </section>
               </>
@@ -1219,16 +1219,16 @@ export function AgentModelCascader({
                 <div className='agent-model-cascader-column-title'>Thinking level</div>
                 <AppScrollArea
                   className='agent-model-cascader-scroll'
-                  contentClassName='agent-model-cascader-scroll-content'
                 >
-                  <div className='agent-model-cascader-list' role='listbox' aria-label='Available thinking levels'>
+                  <Menu.List role='listbox' aria-label='Available thinking levels'>
                     {activeModelThinkingLevels.map((level) => (
-                      <button
+                      <Menu.Option
                         key={level}
-                        type='button'
                         role='option'
                         aria-selected={level === selectedActiveThinkingLevel}
-                        className={`agent-model-cascader-option${level === previewThinkingLevel ? ' is-active' : ''}${level === selectedActiveThinkingLevel ? ' is-selected' : ''}`}
+                        className={`agent-model-cascader-option${level === previewThinkingLevel ? ' is-highlighted' : ''}`}
+                        selected={level === selectedActiveThinkingLevel}
+                        text={<span className='agent-model-cascader-option-main'>{formatThinkingLevelLabel(level)}</span>}
                         onFocus={() => {
                           setActiveThinkingLevel(level)
                           setKeyboardColumn('thinking')
@@ -1241,16 +1241,14 @@ export function AgentModelCascader({
                         onClick={() => {
                           void handleThinkingSelect(level, activeModelOption.key)
                         }}
-                      >
-                        <span className='agent-model-cascader-option-main'>{formatThinkingLevelLabel(level)}</span>
-                      </button>
+                      />
                     ))}
-                  </div>
+                  </Menu.List>
                 </AppScrollArea>
               </section>
             ) : null}
           </div>
-        </div>,
+        </Menu.Surface>,
         document.body,
       ) : null}
     </div>

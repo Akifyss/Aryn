@@ -565,30 +565,28 @@ function PDFViewerFileActionsMenu({
         />
       ) : null}
       <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <ViewerToolbarButton
-            type="button"
-            label={VIEWER_COPY.openPdfActions}
-          >
-            <More2Line aria-hidden="true" className="size-4" />
-          </ViewerToolbarButton>
+        <DropdownMenuTrigger label={VIEWER_COPY.openPdfActions}>
+          <More2Line aria-hidden="true" className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
           {showDownload && onDownload ? (
-            <DropdownMenuItem disabled={downloadDisabled} onClick={onDownload}>
-              {isPreparingDownload ? (
+            <DropdownMenuItem
+              disabled={downloadDisabled}
+              icon={isPreparingDownload ? (
                 <Spinner aria-hidden="true" size="sm" />
               ) : (
                 <DownloadLine aria-hidden="true" className="size-4" />
               )}
-              {VIEWER_COPY.download}
-            </DropdownMenuItem>
+              text={VIEWER_COPY.download}
+              onClick={onDownload}
+            />
           ) : null}
           {showUpload && onUploadFile ? (
-            <DropdownMenuItem onClick={() => inputRef.current?.click()}>
-              <UploadLine aria-hidden="true" className="size-4" />
-              {VIEWER_COPY.upload}
-            </DropdownMenuItem>
+            <DropdownMenuItem
+              icon={<UploadLine aria-hidden="true" className="size-4" />}
+              text={VIEWER_COPY.upload}
+              onClick={() => inputRef.current?.click()}
+            />
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>

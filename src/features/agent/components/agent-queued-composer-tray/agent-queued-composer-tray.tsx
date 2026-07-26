@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Menu } from '@base-ui/react/menu'
 import {
   CornerUpLeftLine,
   Delete2Line,
@@ -8,12 +7,12 @@ import {
 } from '@mingcute/react'
 import { AppButton } from '@/components/app-button'
 import { AppIconButton } from '@/components/app-icon-button'
+import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
 import { AppTooltip } from '@/components/app-tooltip'
 import type {
   AgentQueuedMessageKind,
   AgentQueuedMessageUpdate,
 } from '@/features/agent/types'
-import { shouldCloseClickOpenedMenu } from '@/lib/base-ui-menu'
 import './styles.css'
 
 export type AgentQueuedComposerMessage = {
@@ -288,7 +287,9 @@ export function AgentQueuedComposerTray({
                           className='agent-queued-action'
                           disabled={isUpdating}
                           aria-label='更多待处理消息操作'
-                          render={<AppIconButton size='sm' tooltip='更多' />}
+                          iconTooltip='更多'
+                          size='sm'
+                          variant='icon'
                         >
                           <More1Line size={16} />
                         </Menu.Trigger>
@@ -303,28 +304,19 @@ export function AgentQueuedComposerTray({
                               side='bottom'
                               sideOffset={6}
                             >
-                              <Menu.Popup className='agent-queued-menu' finalFocus={false}>
+                              <Menu.Popup className='agent-queued-menu' finalFocus={false} size='fit'>
                                 <Menu.Item
-                                  nativeButton
-                                  className={({ highlighted }) => (
-                                    `agent-queued-menu-item${highlighted ? ' is-highlighted' : ''}`
-                                  )}
+                                  icon={<EditLine size={16} />}
                                   label='编辑消息'
-                                  render={<button type='button' />}
+                                  text='编辑消息'
                                   onClick={() => {
                                     beginEdit(message)
                                   }}
-                                >
-                                  <EditLine size={16} />
-                                  <span>编辑消息</span>
-                                </Menu.Item>
+                                />
                                 <Menu.Item
-                                  nativeButton
-                                  className={({ highlighted }) => (
-                                    `agent-queued-menu-item${highlighted ? ' is-highlighted' : ''}`
-                                  )}
+                                  icon={<CornerUpLeftLine size={16} />}
                                   label={`关闭${isFollowUp ? '排队' : '引导'}`}
-                                  render={<button type='button' />}
+                                  text={`关闭${isFollowUp ? '排队' : '引导'}`}
                                   onClick={() => {
                                     void runUpdate({
                                       action: 'delete',
@@ -333,10 +325,7 @@ export function AgentQueuedComposerTray({
                                       kind: message.kind,
                                     })
                                   }}
-                                >
-                                  <CornerUpLeftLine size={16} />
-                                  <span>关闭{isFollowUp ? '排队' : '引导'}</span>
-                                </Menu.Item>
+                                />
                               </Menu.Popup>
                             </Menu.Positioner>
                           </Menu.Portal>

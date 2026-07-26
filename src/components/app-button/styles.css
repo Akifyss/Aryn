@@ -3,7 +3,7 @@
   --app-button-current-height: var(--app-button-height-md);
   --app-button-current-padding-inline: var(--app-button-padding-inline-md);
   --app-button-current-radius: var(--app-button-base-radius-md);
-  --app-button-current-font-size: 13px;
+  --app-button-current-font-size: var(--app-button-font-size-md);
   --app-button-background: transparent;
   --app-button-foreground: var(--foreground-primary);
   --app-button-border-color: transparent;
@@ -55,7 +55,7 @@
   --app-button-current-height: var(--app-button-height-sm);
   --app-button-current-padding-inline: var(--app-button-padding-inline-sm);
   --app-button-current-radius: var(--app-button-base-radius-sm);
-  --app-button-current-font-size: 12px;
+  --app-button-current-font-size: var(--app-button-font-size-sm);
 }
 
 .app-button > svg,
@@ -79,7 +79,7 @@
 
 .app-button[data-variant='outline'],
 .app-split-button[data-variant='outline'] {
-  --app-button-background: var(--background-primary);
+  --app-button-background: transparent;
   --app-button-foreground: var(--foreground-primary);
   --app-button-border-color: var(--border-primary);
   --app-button-shadow: var(--shadow-xs);
@@ -88,6 +88,19 @@
   --app-button-active-background: var(--active);
   --app-button-active-foreground: var(--foreground-primary);
   --app-button-separator-color: var(--border-primary);
+}
+
+.app-button[data-variant='ghost'],
+.app-split-button[data-variant='ghost'] {
+  --app-button-background: transparent;
+  --app-button-foreground: var(--foreground-primary);
+  --app-button-border-color: transparent;
+  --app-button-shadow: var(--shadow-none);
+  --app-button-hover-background: var(--hover);
+  --app-button-hover-foreground: var(--foreground-primary);
+  --app-button-active-background: var(--active);
+  --app-button-active-foreground: var(--foreground-primary);
+  --app-button-separator-color: transparent;
 }
 
 .app-button[data-variant='danger'],
@@ -101,7 +114,9 @@
   --app-button-separator-color: color-mix(in oklab, var(--foreground-on-danger) 24%, transparent);
 }
 
-.app-button:hover:not(:disabled):not([data-disabled]) {
+.app-button:hover:not(:disabled):not([data-disabled]),
+.app-button[data-popup-open]:not(:disabled):not([data-disabled]),
+.app-button[aria-expanded='true']:not(:disabled):not([data-disabled]) {
   border-color: var(--app-button-border-color);
   background: var(--app-button-hover-background);
   color: var(--app-button-hover-foreground);

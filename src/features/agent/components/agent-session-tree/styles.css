@@ -13,6 +13,7 @@
 
 .agent-session-tree-floating {
   height: 100%;
+  padding: 0;
 }
 
 .agent-session-new-button {
@@ -64,57 +65,6 @@
 .agent-session-tree-menu {
   z-index: 5;
   width: 168px;
-  min-width: 168px;
-  padding: 5px;
-  border: 1px solid var(--border-primary);
-  border-radius: 10px;
-  background: var(--overlay);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
-}
-
-.agent-session-tree-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 32px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--foreground-primary);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-}
-
-.agent-session-tree-menu-item:hover,
-.agent-session-tree-menu-item:focus-visible,
-.agent-session-tree-menu-item.is-highlighted {
-  outline: none;
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
-.agent-session-tree-menu-item:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.agent-session-tree-menu-item svg {
-  flex: 0 0 auto;
-}
-
-.agent-session-tree-menu-item.is-danger {
-  color: var(--danger);
-}
-
-.agent-session-tree-menu-item.is-danger:hover,
-.agent-session-tree-menu-item.is-danger:focus-visible,
-.agent-session-tree-menu-item.is-danger.is-highlighted {
-  background: var(--danger);
-  color: var(--foreground-on-danger);
 }
 
 .agent-tree-menu-positioner {
@@ -186,46 +136,6 @@
 .agent-project-menu {
   z-index: 20;
   width: min(238px, calc(100vw - 16px));
-  padding: 6px;
-  border: 1px solid var(--border-primary);
-  border-radius: 12px;
-  background: var(--overlay);
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.16);
-}
-
-.agent-project-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  min-height: 34px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--foreground-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-}
-
-.agent-project-menu-item:hover,
-.agent-project-menu-item:focus-visible,
-.agent-project-menu-item.is-highlighted {
-  outline: none;
-  background: var(--hover);
-}
-
-.agent-project-menu-item.is-danger {
-  color: var(--danger);
-}
-
-.agent-project-menu-item.is-danger:hover,
-.agent-project-menu-item.is-danger:focus-visible,
-.agent-project-menu-item.is-danger.is-highlighted {
-  background: var(--danger);
-  color: var(--foreground-on-danger);
 }
 
 .agent-project-switch-trigger {
@@ -234,29 +144,7 @@
   gap: 2px;
   max-width: 100%;
   min-width: 0;
-  min-height: 34px;
-  padding: 0 4px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
   color: var(--foreground-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: inherit;
-  line-height: 1.2;
-  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease, box-shadow 120ms ease;
-}
-
-.agent-project-switch-trigger:hover,
-.agent-project-switch-trigger:focus-visible {
-  outline: none;
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
-.agent-project-switch-trigger:disabled {
-  cursor: default;
-  opacity: 0.55;
 }
 
 .agent-project-switch-trigger-label {

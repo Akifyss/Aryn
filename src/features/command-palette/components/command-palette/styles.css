@@ -124,7 +124,7 @@
   transition: color 140ms ease;
 }
 
-.command-palette-item-icon .tree-item-icon {
+.command-palette-item-icon .app-item-icon {
   color: inherit;
 }
 
