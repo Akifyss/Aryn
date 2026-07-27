@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { AppItem, AppItemActionButton, AppItemIcon } from '@/components/app-item'
@@ -16,7 +17,7 @@ describe('shared application item', () => {
     )
 
     expect(markup).toContain('<li class="app-item-container">')
-    expect(markup).toContain('<div class="app-item-row has-info is-active">')
+    expect(markup).toContain('<div class="app-item-row has-end has-info is-active">')
     expect(markup).toMatch(/<button[^>]*class="app-item-main"[^>]*type="button"/)
     expect(markup).toContain('<span class="app-item-label">README.md</span>')
     expect(markup).toContain('<span class="app-item-info app-item-info-text">M</span>')
@@ -51,6 +52,43 @@ describe('shared application item', () => {
     expect(markup).toMatch(/^<div class="app-item-row"/)
     expect(markup).not.toContain('app-item-container')
     expect(markup).not.toContain('<li')
+  })
+
+  it('adds right padding only when no trailing end content is rendered', async () => {
+    const withoutEnd = renderToStaticMarkup(
+      <AppItem
+        itemAs={null}
+        label='Open'
+        mainKind='static'
+      />,
+    )
+    const withEnd = renderToStaticMarkup(
+      <AppItem
+        info='1'
+        itemAs={null}
+        label='Open'
+        mainKind='static'
+      />,
+    )
+    const withCustomEnd = renderToStaticMarkup(
+      <AppItem
+        end={<span>Meta</span>}
+        itemAs={null}
+        label='Open'
+        mainKind='static'
+      />,
+    )
+    const styles = await readFile(
+      new URL('../src/components/app-item/styles.css', import.meta.url),
+      'utf8',
+    )
+
+    expect(withoutEnd).not.toContain('has-end')
+    expect(withEnd).toContain('app-item-row has-end has-info')
+    expect(withCustomEnd).toContain('app-item-row has-end')
+    expect(styles).toMatch(
+      /\.app-item-row:not\(\.has-end\)\s*\{[^}]*padding-right:\s*8px;/,
+    )
   })
 
   it('builds item actions from AppIconButton instead of cloning an icon button', () => {

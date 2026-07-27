@@ -46,6 +46,10 @@
   transition: background-color 120ms ease;
 }
 
+.app-item-row:not(.has-end) {
+  padding-right: 8px;
+}
+
 .app-item-row:hover,
 .app-item-row.is-menu-open {
   background: var(--hover);

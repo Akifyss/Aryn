@@ -22,6 +22,7 @@ export type AppItemState = {
 type AppItemRowState = AppItemState & {
   hasActions?: boolean
   hasDescription?: boolean
+  hasEnd?: boolean
   hasInfo?: boolean
   hasVisibleActions?: boolean
 }
@@ -117,6 +118,7 @@ const appItemClassNames = {
 function appItemRowStateClassName({
   hasActions,
   hasDescription,
+  hasEnd,
   hasInfo,
   hasVisibleActions,
   isActive,
@@ -128,6 +130,7 @@ function appItemRowStateClassName({
   return cx(
     hasActions && 'has-actions',
     hasDescription && 'has-description',
+    hasEnd && 'has-end',
     hasInfo && 'has-info',
     hasVisibleActions && 'has-visible-actions',
     isActive && 'is-active',
@@ -268,6 +271,7 @@ export const AppItem = forwardRef<HTMLDivElement, AppItemProps>(function AppItem
       ) : null}
     </AppItemEnd>
   ) : null)
+  const hasEnd = defaultEnd !== undefined && defaultEnd !== null && defaultEnd !== false
 
   const row = (
     <div
@@ -276,6 +280,7 @@ export const AppItem = forwardRef<HTMLDivElement, AppItemProps>(function AppItem
         appItemRowStateClassName({
           hasActions,
           hasDescription,
+          hasEnd,
           hasInfo,
           hasVisibleActions: hasActions && actionsAlwaysVisible,
           isActive,
