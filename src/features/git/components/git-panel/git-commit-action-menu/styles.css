@@ -1,0 +1,14 @@
+.git-commit-menu-positioner {
+  z-index: 82;
+  pointer-events: auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.git-commit-menu-portal {
+  pointer-events: auto;
+}
+
+.git-commit-menu {
+  width: 168px;
+}

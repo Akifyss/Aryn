@@ -1,67 +1,46 @@
-import { type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { ScrollArea } from '@base-ui/react/scroll-area'
 import {
   AddLine,
   ArrowDownLine,
-  ArrowUpCircleLine,
   ArrowUpLine,
   CheckLine,
-  DownLine,
   FolderLine,
-  GitCommitFill,
-  GitCommitLine,
-  MarkdownLine,
   Refresh2Line,
   Back2Line,
   ListCheckLine,
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
-import {
-  FileChangeStatusBadge,
-  WorkspaceFileIcon,
-} from '@/components/file-change-visuals'
 import { AppButton } from '@/components/app-button'
-import { AppIconButton } from '@/components/app-icon-button'
 import {
   AppItem,
   AppItemActionButton,
-  AppItemIcon,
 } from '@/components/app-item'
-import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
 import { AppSplitButton } from '@/components/app-split-button'
-import {
-  TreeChildren,
-  TreeList,
-  TreeScrollArea,
-  TreeStatusItem,
-} from '@/components/tree'
+import { TreeScrollArea } from '@/components/tree'
 import type {
   GitChangeItem,
   GitCommitDetails,
   GitCommitFileChange,
   GitCommitHistoryResult,
   GitCommitItem,
-  GitDisplayChange,
   GitPanelLayout,
   GitRepositoryState,
 } from '@/features/git/types'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
-import { getBaseName } from '@/features/workspace/lib/workspace-paths'
 import {
-  buildGitTree,
-  formatCommitRelativeTime,
   getCleanStateSubtext,
-  getCommitChangeCountLabel,
-  getCommitMeta,
-  getDirectoryLabel,
-  getGitChangeKindLabel,
   getRepositoryHeading,
   getSelectedCommitHash,
-  isScopedGitChange,
-  supportsMeoDiff,
   type GitHistorySelection,
-  type GitTreeNode,
 } from './git-panel-model'
+import { GitChangeSection } from './git-change-section/git-change-section'
+import { GitCommitActionMenu } from './git-commit-action-menu/git-commit-action-menu'
+import {
+  GitCommitDetail,
+  GitHistoryPane,
+  GitHistorySection,
+} from './git-history/git-history'
 import './styles.css'
 
 type GitPanelProps = {
@@ -93,23 +72,7 @@ type GitPanelProps = {
   menuPortalTarget?: HTMLElement | null
 }
 
-type GitPanelSectionKind = 'staged' | 'unstaged' | 'pulled' | 'commit'
-
 const GIT_HISTORY_COMPACT_WIDTH_PX = 520
-
-type GitChangeRowsProps = {
-  changes: GitDisplayChange[]
-  onDiscardMany: (changes: GitChangeItem[]) => void
-  onOpenDiff: (change: GitChangeItem) => void
-  onOpenCommitFileDiff?: (change: GitCommitFileChange) => void
-  onOpenMeoDiff: (change: GitChangeItem) => void
-  onOpenFile: (filePath: string) => void
-  onStage: (filePaths: string[]) => void
-  onUnstage: (filePaths: string[]) => void
-  iconTheme: WorkspaceIconTheme | null
-  kind: GitPanelSectionKind
-  layout: GitPanelLayout
-}
 
 function getRepositorySyncSummary(repositoryState: GitRepositoryState) {
   const contentParts: ReactNode[] = []
@@ -137,498 +100,6 @@ function getRepositorySyncSummary(repositoryState: GitRepositoryState) {
         label: labelParts.join('，'),
       }
     : null
-}
-
-function GitRowActions({
-  kind,
-  onUnstage,
-  onStage,
-  onDiscard,
-  onOpenFile,
-  onOpenMeoDiff,
-  isFolder,
-  change,
-}: {
-  kind: GitPanelSectionKind
-  onUnstage?: () => void
-  onStage?: () => void
-  onDiscard?: () => void
-  onOpenFile?: () => void
-  onOpenMeoDiff?: () => void
-  isFolder?: boolean
-  change?: GitDisplayChange
-}) {
-  const scopedChange = change && isScopedGitChange(change) ? change : null
-  const hasMeoDiff = change ? supportsMeoDiff(change) : false
-  const canOpenFile = Boolean(scopedChange && scopedChange.kind !== 'deleted' && onOpenFile)
-  const showOpenFile = !isFolder && canOpenFile
-  const showMeoDiff = !isFolder && Boolean(scopedChange && hasMeoDiff)
-  const showUnstage = kind === 'staged'
-  const showStageControls = kind === 'unstaged'
-
-  if (!showOpenFile && !showMeoDiff && !showUnstage && !showStageControls) {
-    return null
-  }
-
-  return (
-    <>
-        {showOpenFile && (
-          <AppItemActionButton
-            aria-label='打开文件'
-            title='打开文件'
-            onClick={(e) => {
-              e.stopPropagation()
-              onOpenFile?.()
-            }}
-          >
-            <Icon icon='material-symbols:file-export-outline-rounded' width={16} height={16} aria-hidden='true' />
-          </AppItemActionButton>
-        )}
-        {showMeoDiff && (
-          <AppItemActionButton
-            aria-label='打开 MEO 分屏差异'
-            title='打开 MEO 分屏差异'
-            onClick={(e) => {
-              e.stopPropagation()
-              onOpenMeoDiff?.()
-            }}
-          >
-            <MarkdownLine size={16} aria-hidden='true' />
-          </AppItemActionButton>
-        )}
-
-        {showUnstage && (
-          <AppItemActionButton
-            aria-label='取消暂存'
-            title='取消暂存'
-            onClick={(e) => {
-              e.stopPropagation()
-              onUnstage?.()
-            }}
-          >
-            <Icon icon='mdi:minus' width={16} height={16} aria-hidden='true' />
-          </AppItemActionButton>
-        )}
-
-        {showStageControls && (
-          <>
-            <AppItemActionButton
-              aria-label='放弃更改'
-              title='放弃更改'
-              onClick={(e) => {
-                e.stopPropagation()
-                onDiscard?.()
-              }}
-            >
-              <Back2Line size={16} aria-hidden='true' />
-            </AppItemActionButton>
-            <AppItemActionButton
-              aria-label='暂存'
-              title='暂存'
-              onClick={(e) => {
-                e.stopPropagation()
-                onStage?.()
-              }}
-            >
-              <AddLine size={16} aria-hidden='true' />
-            </AppItemActionButton>
-          </>
-        )}
-    </>
-  )
-}
-
-function GitTreeFolder({
-  kind,
-  node,
-  onDiscardMany,
-  onOpenDiff,
-  onOpenCommitFileDiff,
-  onOpenMeoDiff,
-  onOpenFile,
-  onStage,
-  onUnstage,
-  iconTheme,
-  closedMap,
-  toggleNode,
-  layout,
-}: {
-  kind: GitPanelSectionKind
-  node: GitTreeNode
-  onDiscardMany: (changes: GitChangeItem[]) => void
-  onOpenDiff: (change: GitChangeItem) => void
-  onOpenCommitFileDiff?: (change: GitCommitFileChange) => void
-  onOpenMeoDiff: (change: GitChangeItem) => void
-  onOpenFile: (filePath: string) => void
-  onStage: (filePaths: string[]) => void
-  onUnstage: (filePaths: string[]) => void
-  iconTheme: WorkspaceIconTheme | null
-  closedMap: Record<string, boolean>
-  toggleNode: (id: string) => void
-  layout: GitPanelLayout
-}) {
-  const isClosed = closedMap[node.id] ?? false
-  const activeItems = node.items.filter(isScopedGitChange)
-  const paths = activeItems.map((i) => i.path)
-
-  // Only show files directly under this node
-  const localItems = node.items.filter((item) => {
-    const parentPath = item.relativePath.substring(0, item.relativePath.lastIndexOf('/'))
-    return parentPath === node.path
-  })
-
-  return (
-    <AppItem
-      after={!isClosed ? (
-        <TreeChildren>
-          <TreeList>
-            {node.children.map((child) => (
-              <GitTreeFolder
-                key={child.id}
-                kind={kind}
-                node={child}
-                onDiscardMany={onDiscardMany}
-                onOpenDiff={onOpenDiff}
-                onOpenCommitFileDiff={onOpenCommitFileDiff}
-                onOpenMeoDiff={onOpenMeoDiff}
-                onOpenFile={onOpenFile}
-                onStage={onStage}
-                onUnstage={onUnstage}
-                iconTheme={iconTheme}
-                closedMap={closedMap}
-                toggleNode={toggleNode}
-                layout={layout}
-              />
-            ))}
-            <GitChangeRows
-              changes={localItems}
-              kind={kind}
-              onDiscardMany={onDiscardMany}
-              onOpenDiff={onOpenDiff}
-              onOpenCommitFileDiff={onOpenCommitFileDiff}
-              onOpenMeoDiff={onOpenMeoDiff}
-              onOpenFile={onOpenFile}
-              onStage={onStage}
-              onUnstage={onUnstage}
-              iconTheme={iconTheme}
-              layout={layout}
-            />
-          </TreeList>
-        </TreeChildren>
-      ) : null}
-      icon={<WorkspaceFileIcon isFolder nodeLabel={node.label} isClosed={isClosed} iconTheme={iconTheme} />}
-      label={node.label}
-      mainButtonProps={{
-        'aria-expanded': !isClosed,
-        onClick: () => toggleNode(node.id),
-      }}
-      actions={() => (
-        <GitRowActions
-          kind={kind}
-          isFolder
-          onStage={() => onStage(paths)}
-          onUnstage={() => onUnstage(paths)}
-          onDiscard={() => onDiscardMany(activeItems)}
-        />
-      )}
-      info={node.items.length}
-      infoVariant='count'
-    />
-  )
-}
-
-function GitChangeRows({
-  changes,
-  onDiscardMany,
-  onOpenDiff,
-  onOpenCommitFileDiff,
-  onOpenMeoDiff,
-  onOpenFile,
-  onStage,
-  onUnstage,
-  iconTheme,
-  kind,
-  layout,
-}: GitChangeRowsProps) {
-  return (
-    <>
-      {changes.map((change) => {
-        const fileName = getBaseName(change.relativePath)
-        const dirLabel = getDirectoryLabel(change.relativePath)
-        const isChange = isScopedGitChange(change)
-        const pathMeta = layout === 'list' ? dirLabel : ''
-        const changeKindLabel = getGitChangeKindLabel(change.kind)
-        return (
-          <AppItem
-            key={change.path}
-            icon={<WorkspaceFileIcon fileName={fileName} iconTheme={iconTheme} />}
-            label={fileName}
-            description={pathMeta || undefined}
-            mainButtonProps={{
-              title: change.relativePath,
-              onClick: () => {
-                if (isChange) onOpenDiff(change)
-                else if (kind === 'commit') onOpenCommitFileDiff?.(change)
-                else onOpenFile(change.path)
-              },
-            }}
-            actions={() => (
-              <GitRowActions
-                kind={kind}
-                change={change}
-                onStage={() => onStage([change.path])}
-                onUnstage={() => onUnstage([change.path])}
-                onDiscard={() => onDiscardMany([change as GitChangeItem])}
-                onOpenFile={() => onOpenFile(change.path)}
-                onOpenMeoDiff={() => isChange && onOpenMeoDiff(change)}
-              />
-            )}
-            info={(
-              <FileChangeStatusBadge
-                kind={change.kind}
-                title={changeKindLabel}
-              />
-            )}
-            infoVariant='status'
-          />
-        )
-      })}
-    </>
-  )
-}
-
-function GitChangeList(props: GitChangeRowsProps) {
-  if (props.changes.length === 0) {
-    return null
-  }
-
-  return (
-    <TreeList className='git-change-list git-change-list-flat'>
-      <GitChangeRows {...props} />
-    </TreeList>
-  )
-}
-
-function GitSection({
-  title,
-  changes,
-  kind,
-  layout,
-  action,
-  onStage,
-  onUnstage,
-  onDiscardMany,
-  onOpenDiff,
-  onOpenCommitFileDiff,
-  onOpenMeoDiff,
-  onOpenFile,
-  iconTheme,
-}: {
-  title: string
-  changes: GitDisplayChange[]
-  kind: GitPanelSectionKind
-  layout: GitPanelLayout
-  action?: ReactNode
-  onStage: (filePaths: string[]) => void
-  onUnstage: (filePaths: string[]) => void
-  onDiscardMany: (changes: GitChangeItem[]) => void
-  onOpenDiff: (change: GitChangeItem) => void
-  onOpenCommitFileDiff?: (change: GitCommitFileChange) => void
-  onOpenMeoDiff: (change: GitChangeItem) => void
-  onOpenFile: (filePath: string) => void
-  iconTheme: WorkspaceIconTheme | null
-}) {
-  const [isExpanded, setIsExpanded] = useState(true)
-  const [closedMap, setClosedMap] = useState<Record<string, boolean>>({})
-  
-  const treeNodes = useMemo(() => buildGitTree(changes), [changes])
-  const rootFiles = useMemo(() => 
-    changes.filter(c => !c.relativePath.includes('/')),
-    [changes]
-  )
-
-  const toggleNode = (id: string) => {
-    setClosedMap((prev) => ({ ...prev, [id]: !prev[id] }))
-  }
-
-  if (changes.length === 0) {
-    return null
-  }
-
-  return (
-    <div className='git-panel-section'>
-      <AppItem
-        variant='header'
-        itemClassName='git-panel-section-header'
-        label={title}
-        isExpanded={isExpanded}
-        info={changes.length}
-        actions={action}
-        onToggle={() => setIsExpanded((v) => !v)}
-      />
-
-      {isExpanded && changes.length > 0 && (
-        <div className={layout === 'tree' ? 'git-panel-tree-shell' : ''}>
-          {layout === 'tree' && treeNodes.length > 0 ? (
-            <TreeList className='git-change-list'>
-              {treeNodes.map((node) => (
-                <GitTreeFolder
-                  key={node.id}
-                  kind={kind}
-                  node={node}
-                  closedMap={closedMap}
-                  toggleNode={toggleNode}
-                  onDiscardMany={onDiscardMany}
-                  onOpenDiff={onOpenDiff}
-                  onOpenCommitFileDiff={onOpenCommitFileDiff}
-                  onOpenMeoDiff={onOpenMeoDiff}
-                  onOpenFile={onOpenFile}
-                  onStage={onStage}
-                  onUnstage={onUnstage}
-                  iconTheme={iconTheme}
-                  layout={layout}
-                />
-              ))}
-              {rootFiles.length > 0 && (
-                <GitChangeRows
-                  changes={rootFiles}
-                  kind={kind}
-                  onDiscardMany={onDiscardMany}
-                  onOpenDiff={onOpenDiff}
-                  onOpenCommitFileDiff={onOpenCommitFileDiff}
-                  onOpenMeoDiff={onOpenMeoDiff}
-                  onOpenFile={onOpenFile}
-                  onStage={onStage}
-                  onUnstage={onUnstage}
-                  iconTheme={iconTheme}
-                  layout={layout}
-                />
-              )}
-            </TreeList>
-          ) : (
-            <GitChangeList
-              changes={changes}
-              kind={kind}
-              onDiscardMany={onDiscardMany}
-              onOpenDiff={onOpenDiff}
-              onOpenCommitFileDiff={onOpenCommitFileDiff}
-              onOpenMeoDiff={onOpenMeoDiff}
-              onOpenFile={onOpenFile}
-              onStage={onStage}
-              onUnstage={onUnstage}
-              iconTheme={iconTheme}
-              layout={layout}
-            />
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function runCommitMenuAction(event: MouseEvent<HTMLElement>, action: () => void) {
-  event.stopPropagation()
-  action()
-}
-
-function GitCommitActionMenu({
-  canSubmitCommit,
-  isBusy,
-  menuPortalTarget,
-  syncDisabledReason,
-  onCommit,
-  onCommitAndSync,
-}: {
-  canSubmitCommit: boolean
-  isBusy: boolean
-  menuPortalTarget?: HTMLElement | null
-  syncDisabledReason: string | null
-  onCommit: () => void
-  onCommitAndSync: () => void
-}) {
-  const [isOpen, setIsOpen] = useState(false)
-  const commitDisabled = !canSubmitCommit || isBusy
-  const commitAndSyncDisabled = !canSubmitCommit || Boolean(syncDisabledReason)
-  const menuDisabled = commitDisabled
-  const isMenuOpen = isOpen && !menuDisabled
-
-  useEffect(() => {
-    if (menuDisabled) {
-      setIsOpen(false)
-    }
-  }, [menuDisabled])
-
-  return (
-    <Menu.Root
-      modal={false}
-      open={isMenuOpen}
-      onOpenChange={(open, details) => {
-        if (open) {
-          if (menuDisabled) {
-            return
-          }
-
-          setIsOpen(true)
-          return
-        }
-
-        if (shouldCloseClickOpenedMenu(details)) {
-          setIsOpen(false)
-        } else {
-          details.cancel?.()
-        }
-      }}
-    >
-      <Menu.Trigger
-        aria-label='打开提交菜单'
-        disabled={menuDisabled}
-        render={(
-          <AppSplitButton.Trigger
-            isActive={isMenuOpen}
-            tooltip='提交选项'
-          />
-        )}
-      >
-        <DownLine size={16} aria-hidden='true' />
-      </Menu.Trigger>
-      <Menu.Portal
-        className='git-commit-menu-portal'
-        container={menuPortalTarget ?? undefined}
-      >
-        <Menu.Positioner
-          align='end'
-          className='git-commit-menu-positioner'
-          collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
-          collisionPadding={8}
-          positionMethod='fixed'
-          side='bottom'
-          sideOffset={4}
-        >
-          <Menu.Popup
-            aria-label='提交选项'
-            className='git-commit-menu'
-            finalFocus={false}
-            size='fit'
-          >
-            <Menu.Item
-              disabled={commitDisabled}
-              icon={<CheckLine size={16} aria-hidden='true' />}
-              label='提交'
-              text='提交'
-              onClick={(event) => runCommitMenuAction(event, onCommit)}
-            />
-            <Menu.Item
-              disabled={commitAndSyncDisabled}
-              icon={<ArrowUpCircleLine size={16} aria-hidden='true' />}
-              label='提交并同步'
-              text='提交并同步'
-              onClick={(event) => runCommitMenuAction(event, onCommitAndSync)}
-            />
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
-  )
 }
 
 export function GitPanel({
@@ -688,6 +159,12 @@ export function GitPanel({
   const selectedCommitSummary = selectedCommitHash
     ? selectedCommitDetails ?? commitHistory?.commits.find((commit) => commit.hash === selectedCommitHash) ?? null
     : null
+  const selectedCommitError = selectedCommitHash
+    ? commitDetailsErrorsByHash[selectedCommitHash] ?? null
+    : null
+  const isSelectedCommitLoading = selectedCommitHash
+    ? Boolean(loadingCommitHashes[selectedCommitHash])
+    : false
   const workingTreeChangeCount = repositoryState
     ? repositoryState.stagedChanges.length + repositoryState.unstagedChanges.length
     : 0
@@ -937,301 +414,27 @@ export function GitPanel({
     </AppItemActionButton>
   )
 
-  const noopChangeAction = () => {}
-  const noopPathAction = () => {}
-
-  const renderHistoryCommitActions = (commit: GitCommitItem) => (
-    <AppItemActionButton
-      aria-label={`还原提交 ${commit.shortHash}`}
-      title={revertDisabledReason ?? busyLabel ?? '还原提交'}
-      disabled={Boolean(busyLabel) || Boolean(revertDisabledReason)}
-      onClick={(event) => {
-        event.stopPropagation()
-        onRevertCommit(commit)
-      }}
-    >
-      <Back2Line size={16} aria-hidden='true' />
-    </AppItemActionButton>
+  const historySection = (
+    <GitHistorySection
+      busyLabel={busyLabel}
+      commits={historyCommits}
+      detailsByHash={commitDetailsByHash}
+      detailsErrorsByHash={commitDetailsErrorsByHash}
+      error={historyError}
+      expandedCommitHashes={expandedCommitHashes}
+      iconTheme={iconTheme}
+      isExpanded={isHistoryExpanded}
+      isLoading={isHistoryLoading}
+      loadingCommitHashes={loadingCommitHashes}
+      revertDisabledReason={revertDisabledReason}
+      onExpandedChange={setIsHistoryExpanded}
+      onOpenCommitFileDiff={onOpenCommitFileDiff}
+      onRevertCommit={onRevertCommit}
+      onToggleCommit={toggleHistoryCommit}
+    />
   )
 
-  function renderHistoryList() {
-    return (
-      <TreeList className='git-history-list'>
-        <AppItem
-          icon={(
-            <AppItemIcon>
-              <Icon
-                icon={historySelection.kind === 'working-tree' ? 'octicon:dot-fill-16' : 'octicon:dot-16'}
-                width={16}
-                height={16}
-                aria-hidden='true'
-              />
-            </AppItemIcon>
-          )}
-          isActive={historySelection.kind === 'working-tree'}
-          label='工作树'
-          description={repositoryMeta}
-          mainButtonProps={{
-            title: '工作树',
-            onClick: selectWorkingTree,
-          }}
-        />
-
-        {isHistoryLoading && historyCommits.length === 0 ? (
-          <TreeStatusItem>正在加载提交历史...</TreeStatusItem>
-        ) : null}
-
-        {historyError ? (
-          <TreeStatusItem tone='danger'>{historyError}</TreeStatusItem>
-        ) : null}
-
-        {!isHistoryLoading && !historyError && historyCommits.length === 0 ? (
-          <TreeStatusItem>暂无历史提交</TreeStatusItem>
-        ) : null}
-
-        {historyCommits.map((commit) => {
-          const isCommitSelected = selectedCommitHash === commit.hash
-
-          return (
-            <AppItem
-              key={commit.hash}
-              icon={(
-                <AppItemIcon>
-                  {isCommitSelected
-                    ? <GitCommitFill size={16} aria-hidden='true' />
-                    : <GitCommitLine size={16} aria-hidden='true' />}
-                </AppItemIcon>
-              )}
-              isActive={isCommitSelected}
-              label={commit.subject}
-              description={getCommitMeta(commit)}
-              actions={renderHistoryCommitActions(commit)}
-              mainButtonProps={{
-                title: `${commit.subject}\n${getCommitMeta(commit)}\n${commit.hash}`,
-                onClick: () => selectCommit(commit.hash),
-              }}
-            />
-          )
-        })}
-      </TreeList>
-    )
-  }
-
-  function renderHistoryCommitChildren(commit: GitCommitItem) {
-    const details = commitDetailsByHash[commit.hash]
-    const isCommitLoading = Boolean(loadingCommitHashes[commit.hash])
-    const commitError = commitDetailsErrorsByHash[commit.hash]
-
-    if (isCommitLoading && !details) {
-      return <TreeStatusItem>正在加载提交文件...</TreeStatusItem>
-    }
-
-    if (commitError && !details) {
-      return <TreeStatusItem tone='danger'>{commitError}</TreeStatusItem>
-    }
-
-    if (!details) {
-      return <TreeStatusItem>展开后加载文件变更。</TreeStatusItem>
-    }
-
-    if (details.changes.length === 0) {
-      return <TreeStatusItem>这个提交没有文件变更。</TreeStatusItem>
-    }
-
-    return (
-      <GitChangeRows
-        changes={details.changes}
-        kind='commit'
-        layout='list'
-        iconTheme={iconTheme}
-        onDiscardMany={noopChangeAction}
-        onOpenCommitFileDiff={(change) => onOpenCommitFileDiff(details.hash, change)}
-        onOpenDiff={noopChangeAction}
-        onOpenMeoDiff={noopChangeAction}
-        onOpenFile={noopPathAction}
-        onStage={noopPathAction}
-        onUnstage={noopPathAction}
-      />
-    )
-  }
-
-  function renderHistorySection() {
-    return (
-      <div className='git-panel-section git-history-section'>
-        <AppItem
-          variant='header'
-          itemClassName='git-panel-section-header'
-          label='历史'
-          isExpanded={isHistoryExpanded}
-          info={historyCommits.length}
-          onToggle={() => setIsHistoryExpanded((value) => !value)}
-        />
-
-        {isHistoryExpanded ? (
-          <div className='git-history-tree-shell'>
-            <TreeList className='git-history-tree-list'>
-              {isHistoryLoading && historyCommits.length === 0 ? (
-                <TreeStatusItem>正在加载提交历史...</TreeStatusItem>
-              ) : null}
-
-              {historyError ? (
-                <TreeStatusItem tone='danger'>{historyError}</TreeStatusItem>
-              ) : null}
-
-              {!isHistoryLoading && !historyError && historyCommits.length === 0 ? (
-                <TreeStatusItem>暂无历史提交</TreeStatusItem>
-              ) : null}
-
-              {historyCommits.map((commit) => {
-                const isCommitExpanded = Boolean(expandedCommitHashes[commit.hash])
-                const commitMeta = getCommitMeta(commit)
-
-                return (
-                  <AppItem
-                    key={commit.hash}
-                    after={isCommitExpanded ? (
-                      <TreeChildren className='git-history-commit-children'>
-                        <TreeList className='git-history-file-list'>
-                          {renderHistoryCommitChildren(commit)}
-                        </TreeList>
-                      </TreeChildren>
-                    ) : null}
-                    icon={(
-                      <AppItemIcon>
-                        {isCommitExpanded
-                          ? <GitCommitFill size={16} aria-hidden='true' />
-                          : <GitCommitLine size={16} aria-hidden='true' />}
-                      </AppItemIcon>
-                    )}
-                    label={commit.subject}
-                    description={commitMeta}
-                    actions={renderHistoryCommitActions(commit)}
-                    mainButtonProps={{
-                      'aria-expanded': isCommitExpanded,
-                      title: `${commit.subject}\n${commitMeta}\n${commit.hash}`,
-                      onClick: () => toggleHistoryCommit(commit.hash),
-                    }}
-                  />
-                )
-              })}
-            </TreeList>
-          </div>
-        ) : null}
-      </div>
-    )
-  }
-
-  function renderHistoryPane() {
-    return (
-      <aside className='git-history-pane' aria-label='Git 历史'>
-        <TreeScrollArea
-          className='git-history-scroll'
-          contentClassName='git-history-scroll-content'
-        >
-          {renderHistoryList()}
-        </TreeScrollArea>
-      </aside>
-    )
-  }
-
-  function renderCommitDetailsPane() {
-    if (!selectedCommitHash) {
-      return null
-    }
-
-    const selectedCommitError = commitDetailsErrorsByHash[selectedCommitHash] ?? null
-    const isSelectedCommitLoading = Boolean(loadingCommitHashes[selectedCommitHash])
-
-    const renderCommitDetailHeader = (commit: GitCommitItem, changeCount?: number) => (
-      <header className='git-commit-detail-header'>
-        <div className='git-commit-detail-title-area'>
-          <h3 className='git-commit-detail-title'>{commit.subject}</h3>
-          <p className='git-commit-detail-meta'>
-            <span>{commit.authorName}</span>
-            <span>{formatCommitRelativeTime(commit.authorTimeUnix)}</span>
-            <span>{commit.shortHash}</span>
-          </p>
-        </div>
-        <div className='git-commit-detail-actions'>
-          {typeof changeCount === 'number' ? (
-            <span className='git-commit-detail-count'>
-              {getCommitChangeCountLabel(changeCount)}
-            </span>
-          ) : null}
-          {renderHistoryCommitActions(commit)}
-          {renderLayoutToggleAction()}
-        </div>
-      </header>
-    )
-
-    if (isSelectedCommitLoading && !selectedCommitDetails) {
-      return (
-        <div className='git-commit-detail'>
-          {selectedCommitSummary ? renderCommitDetailHeader(selectedCommitSummary) : null}
-          <div className='git-commit-detail-state'>
-            <p>正在加载提交文件...</p>
-            {selectedCommitSummary ? <span>{selectedCommitSummary.subject}</span> : null}
-          </div>
-        </div>
-      )
-    }
-
-    if (selectedCommitError && !selectedCommitDetails) {
-      return (
-        <div className='git-commit-detail'>
-          {selectedCommitSummary ? renderCommitDetailHeader(selectedCommitSummary) : null}
-          <div className='git-commit-detail-state git-panel-error'>
-            <p>{selectedCommitError}</p>
-          </div>
-        </div>
-      )
-    }
-
-    if (!selectedCommitDetails) {
-      return (
-        <div className='git-commit-detail'>
-          {selectedCommitSummary ? renderCommitDetailHeader(selectedCommitSummary) : null}
-          <div className='git-commit-detail-state'>
-            <p>选择一个提交查看文件变更。</p>
-          </div>
-        </div>
-      )
-    }
-
-    return (
-      <div className='git-commit-detail'>
-        {renderCommitDetailHeader(selectedCommitDetails, selectedCommitDetails.changes.length)}
-        <TreeScrollArea
-          className='git-panel-sections git-commit-detail-sections'
-          contentClassName='git-panel-sections-content'
-        >
-          {selectedCommitDetails.changes.length === 0 ? (
-            <div className='git-panel-empty-state git-commit-detail-state'>
-              <p>这个提交没有文件变更。</p>
-            </div>
-          ) : (
-            <GitSection
-              title='变更文件'
-              changes={selectedCommitDetails.changes}
-              kind='commit'
-              layout={layout}
-              iconTheme={iconTheme}
-              onDiscardMany={noopChangeAction}
-              onOpenCommitFileDiff={(change) => onOpenCommitFileDiff(selectedCommitDetails.hash, change)}
-              onOpenDiff={noopChangeAction}
-              onOpenMeoDiff={noopChangeAction}
-              onOpenFile={noopPathAction}
-              onStage={noopPathAction}
-              onUnstage={noopPathAction}
-            />
-          )}
-        </TreeScrollArea>
-      </div>
-    )
-  }
-
-  function renderWorkingTreeContent({ includeHistorySection }: { includeHistorySection: boolean }) {
-    return (
+  const workingTreeContent = (
     <div className='git-panel'>
       {hasVisibleChanges ? (
         <header className='git-panel-header'>
@@ -1383,7 +586,7 @@ export function GitPanel({
           </div>
         ) : (
           <>
-            <GitSection
+            <GitChangeSection
               title='已暂存更改'
               changes={currentRepositoryState.stagedChanges}
               kind='staged'
@@ -1407,7 +610,7 @@ export function GitPanel({
               }
             />
 
-            <GitSection
+            <GitChangeSection
               title='更改'
               changes={currentRepositoryState.unstagedChanges}
               kind='unstaged'
@@ -1440,30 +643,54 @@ export function GitPanel({
                 </>
               }
             />
-
           </>
         )}
-        {includeHistorySection ? renderHistorySection() : null}
+        {isHistoryCompact ? historySection : null}
       </TreeScrollArea>
     </div>
   )
-  }
-
-  const workingTreeContent = renderWorkingTreeContent({ includeHistorySection: isHistoryCompact })
 
   return (
     <div
       ref={setHistoryShellElement}
       className={`git-panel-history-shell${isHistoryCompact ? ' is-compact' : ''}`}
     >
-      {isHistoryCompact ? null : renderHistoryPane()}
+      {isHistoryCompact ? null : (
+        <GitHistoryPane
+          busyLabel={busyLabel}
+          commits={historyCommits}
+          error={historyError}
+          historySelection={historySelection}
+          isLoading={isHistoryLoading}
+          repositoryMeta={repositoryMeta}
+          revertDisabledReason={revertDisabledReason}
+          onRevertCommit={onRevertCommit}
+          onSelectCommit={selectCommit}
+          onSelectWorkingTree={selectWorkingTree}
+        />
+      )}
       <section
         className='git-panel-detail-pane'
         aria-label={isHistoryCompact || historySelection.kind === 'working-tree' ? '工作树变更' : '提交变更文件'}
       >
         {isHistoryCompact || historySelection.kind === 'working-tree'
           ? workingTreeContent
-          : renderCommitDetailsPane()}
+          : (
+            <GitCommitDetail
+              busyLabel={busyLabel}
+              details={selectedCommitDetails}
+              error={selectedCommitError}
+              iconTheme={iconTheme}
+              isLoading={isSelectedCommitLoading}
+              layout={layout}
+              layoutAction={renderLayoutToggleAction()}
+              revertDisabledReason={revertDisabledReason}
+              selectedCommitHash={selectedCommitHash}
+              summary={selectedCommitSummary}
+              onOpenCommitFileDiff={onOpenCommitFileDiff}
+              onRevertCommit={onRevertCommit}
+            />
+          )}
       </section>
     </div>
   )

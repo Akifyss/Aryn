@@ -161,4 +161,96 @@ describe('Git panel model ownership', () => {
     expect(panelSource).not.toContain('function buildGitTree(')
     expect(panelSource).not.toContain('function getRepositoryHeading(')
   })
+
+  it('keeps display-heavy Git views in focused colocated modules', async () => {
+    const [
+      panelSource,
+      panelCss,
+      changeSectionSource,
+      changeSectionCss,
+      commitActionMenuSource,
+      commitActionMenuCss,
+      historySource,
+      historyCss,
+    ] = await Promise.all([
+      readFile(
+        new URL(
+          '../src/features/git/components/git-panel/git-panel.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/git/components/git-panel/styles.css',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/git/components/git-panel/git-change-section/git-change-section.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/git/components/git-panel/git-change-section/styles.css',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/git/components/git-panel/git-commit-action-menu/git-commit-action-menu.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/git/components/git-panel/git-commit-action-menu/styles.css',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/git/components/git-panel/git-history/git-history.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/git/components/git-panel/git-history/styles.css',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ])
+
+    expect(panelSource).toContain("from './git-change-section/git-change-section'")
+    expect(panelSource).toContain("from './git-commit-action-menu/git-commit-action-menu'")
+    expect(panelSource).toContain("from './git-history/git-history'")
+    expect(panelSource).not.toContain('function GitTreeFolder(')
+    expect(panelSource).not.toContain('function GitCommitActionMenu(')
+    expect(panelSource).not.toContain('function renderHistoryList(')
+
+    for (const source of [
+      changeSectionSource,
+      commitActionMenuSource,
+      historySource,
+    ]) {
+      expect(source).toContain("import './styles.css'")
+    }
+
+    expect(panelCss).not.toContain('.git-panel-section {')
+    expect(panelCss).not.toContain('.git-commit-menu {')
+    expect(panelCss).not.toContain('.git-history-pane {')
+    expect(changeSectionCss).toContain('.git-panel-section {')
+    expect(commitActionMenuCss).toContain('.git-commit-menu {')
+    expect(historyCss).toContain('.git-history-pane {')
+  })
 })
