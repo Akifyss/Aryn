@@ -1,0 +1,11 @@
+.settings-theme-switcher {
+  margin-top: 12px;
+}
+
+.settings-field.settings-appearance-icon-theme-field {
+  margin-top: 24px;
+}
+
+.settings-inline-form.settings-appearance-icon-theme-form {
+  align-items: center;
+}

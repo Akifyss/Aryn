@@ -1,0 +1,271 @@
+.settings-panel-content.settings-providers-panel-content {
+  padding: 20px 32px 0;
+  gap: 0;
+}
+
+.settings-provider-auth-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+
+.settings-provider-prompt-form {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  margin-top: 8px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 12px;
+  background: var(--background-primary);
+}
+
+.settings-provider-progress {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  margin-top: 4px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--background-primary) 30%, transparent);
+  color: var(--foreground-secondary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  line-height: 1.45;
+}
+
+.settings-provider-progress-title {
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-secondary);
+  font-size: 10px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--foreground-secondary);
+}
+
+.settings-providers-group-desc {
+  padding: 14px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--background-secondary) 40%, transparent);
+}
+
+.settings-provider-input {
+  min-width: 0;
+}
+
+.settings-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 17px;
+  border: 1px dashed var(--border-secondary);
+  border-radius: 15px;
+  background: var(--background-secondary);
+  color: var(--foreground-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.settings-providers-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-providers-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .settings-providers-toolbar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.provider-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.provider-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-secondary);
+  border-radius: 16px;
+  background: var(--background-secondary);
+  overflow: hidden;
+}
+
+.provider-card-header {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  padding: 16px;
+  outline: none;
+}
+
+.provider-card-header:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+
+.provider-status-badge {
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+}
+
+.provider-card-details-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.provider-card-details-wrapper.is-expanded {
+  grid-template-rows: 1fr;
+}
+
+.provider-card-details-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.provider-card-details-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 16px 16px 16px;
+  border-top: 1px solid var(--border-secondary);
+  background: var(--background-secondary);
+}
+
+.provider-config-status {
+  padding: 12px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 12px;
+  background: var(--background-primary);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--foreground-secondary);
+}
+
+.provider-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-search-wrapper input {
+  padding-left: 36px !important;
+}
+
+.provider-apikey-input-container input {
+  padding-left: 36px !important;
+  padding-right: calc(var(--app-icon-button-size-md) + 20px) !important;
+}
+
+.provider-card.is-expanded .provider-card-header [class*='mingcute'],
+.provider-card.is-expanded .provider-card-header svg {
+  color: var(--foreground-primary);
+}
+
+.settings-auth-prompt-label,
+.provider-apikey-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground-secondary);
+}
+
+.settings-auth-instructions,
+.settings-group-desc-text,
+.settings-secondary-text {
+  font-size: 12px;
+  color: var(--foreground-secondary);
+  line-height: 1.5;
+}
+
+.settings-secondary-icon {
+  color: var(--foreground-secondary);
+}
+
+.settings-progress-dot {
+  background: var(--accent);
+}
+
+.settings-auth-flow-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.provider-status-badge-muted {
+  background: var(--background-secondary);
+  color: var(--foreground-secondary);
+  border: 1px solid var(--border-secondary);
+}
+
+.provider-status-badge-success {
+  background: var(--background-secondary);
+  color: var(--status-added);
+  border: 1px solid var(--border-secondary);
+}
+
+.provider-status-badge-warning {
+  background: var(--background-secondary);
+  color: var(--status-modified);
+  border: 1px solid var(--border-secondary);
+}
+
+.provider-status-badge-info {
+  background: var(--background-secondary);
+  color: var(--accent);
+  border: 1px solid var(--border-secondary);
+}
+
+.provider-setup-hint {
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--border-secondary);
+  line-height: 1.5;
+}
+
+.app-button.settings-danger-button {
+  color: var(--danger);
+}
+
+.app-button.settings-danger-button[data-variant='outline']:hover:not(:disabled):not([data-disabled]),
+.app-button.settings-danger-button[data-variant='outline']:active:not(:disabled):not([data-disabled]) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .provider-card-details-wrapper,
+  .provider-card-header svg {
+    transition: none;
+  }
+
+  .settings-provider-auth-flow .animate-spin {
+    animation: none;
+  }
+}

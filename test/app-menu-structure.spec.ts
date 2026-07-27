@@ -450,15 +450,15 @@ describe('shared application menu', () => {
   })
 
   it('keeps single-line items at 32px, opens without animation, and preserves Select alignment', async () => {
-    const [appButtonCss, appItemCss, appMenuCss, appMenuSource, fileSystemSource, indexCss, settingsCss, settingsSource, treeCss] = await Promise.all([
+    const [appButtonCss, appItemCss, appMenuCss, appMenuSource, fileSystemSource, indexCss, settingsSelectCss, settingsSelectSource, treeCss] = await Promise.all([
       readFile(new URL('../src/components/app-button/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/app-item/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/app-menu/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/app-menu/app-menu.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/ui/file-system/file-system.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
-      readFile(new URL('../src/features/settings/components/settings-dialog/styles.css', import.meta.url), 'utf8'),
-      readFile(new URL('../src/features/settings/components/settings-dialog/settings-dialog.tsx', import.meta.url), 'utf8'),
+      readFile(new URL('../src/features/settings/components/settings-dialog/settings-select/styles.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/features/settings/components/settings-dialog/settings-select/settings-select.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/tree/styles.css', import.meta.url), 'utf8'),
     ])
 
@@ -510,29 +510,29 @@ describe('shared application menu', () => {
     expect(appMenuCss).not.toContain('data-starting-style')
     expect(appMenuCss).not.toContain('data-ending-style')
     expect(appMenuCss).not.toContain('transform: scale(')
-    expect(settingsCss).not.toMatch(/\.settings-select-item\s*\{[^}]*--app-item-row-height:/)
+    expect(settingsSelectCss).not.toMatch(/\.settings-select-item\s*\{[^}]*--app-item-row-height:/)
     expect(indexCss).toContain('--app-button-font-size-md: 13px;')
     expect(indexCss).not.toContain('--app-button-outline-')
     expect(indexCss).not.toContain('--app-button-ghost-')
     expect(appButtonCss).toContain('--app-button-background: transparent;')
     expect(appButtonCss).toContain("--app-button-hover-background: var(--hover);")
     expect(appMenuCss).not.toContain('--app-menu-trigger-')
-    expect(settingsCss).not.toMatch(/\.settings-select-trigger\s*\{[^}]*(?:min-)?height:/)
-    expect(settingsCss).not.toMatch(/\.settings-select-trigger\s*\{[^}]*font-size:/)
-    expect(settingsCss).not.toMatch(/\.settings-select-trigger\s*\{[^}]*border-radius:/)
+    expect(settingsSelectCss).not.toMatch(/\.settings-select-trigger\s*\{[^}]*(?:min-)?height:/)
+    expect(settingsSelectCss).not.toMatch(/\.settings-select-trigger\s*\{[^}]*font-size:/)
+    expect(settingsSelectCss).not.toMatch(/\.settings-select-trigger\s*\{[^}]*border-radius:/)
 
     expect(appMenuSource).toContain('alignItemWithTrigger = true')
-    expect(settingsSource).toMatch(/<Select\.Positioner[\s\S]{0,160}alignItemWithTrigger/)
-    expect(settingsSource).toContain('<Select.Trigger')
-    expect(settingsSource).toMatch(
+    expect(settingsSelectSource).toMatch(/<Select\.Positioner[\s\S]{0,160}alignItemWithTrigger/)
+    expect(settingsSelectSource).toContain('<Select.Trigger')
+    expect(settingsSelectSource).toMatch(
       /<Select\.Trigger[\s\S]{0,180}variant='outline'/,
     )
-    expect(settingsSource).not.toContain("'app-menu-trigger app-menu-trigger-outline settings-select-trigger'")
-    expect(settingsSource).toContain('<Select.ScrollList')
-    expect(settingsSource).toContain("scrollAreaClassName='settings-select-scroll'")
-    expect(settingsSource).toContain('<Select.Item')
-    expect(settingsSource).not.toContain('<BaseSelect.')
-    expect(settingsSource).not.toContain('@base-ui/react/scroll-area')
+    expect(settingsSelectSource).not.toContain("'app-menu-trigger app-menu-trigger-outline settings-select-trigger'")
+    expect(settingsSelectSource).toContain('<Select.ScrollList')
+    expect(settingsSelectSource).toContain("scrollAreaClassName='settings-select-scroll'")
+    expect(settingsSelectSource).toContain('<Select.Item')
+    expect(settingsSelectSource).not.toContain('<BaseSelect.')
+    expect(settingsSelectSource).not.toContain('@base-ui/react/scroll-area')
     expect(fileSystemSource).toContain('alignItemWithTrigger={alignItemWithTrigger}')
     expect(fileSystemSource).toContain('<MenuSelect.Trigger')
     expect(fileSystemSource).toMatch(

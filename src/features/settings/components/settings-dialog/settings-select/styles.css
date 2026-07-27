@@ -1,0 +1,49 @@
+.settings-select-trigger {
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+}
+
+.settings-select-value {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-select-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground-secondary);
+  transition: transform 140ms ease, color 140ms ease;
+}
+
+.settings-select-trigger[data-popup-open] .settings-select-icon {
+  color: var(--foreground-primary);
+  transform: rotate(180deg);
+}
+
+.settings-select-positioner {
+  z-index: 110;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.settings-select-popup {
+  width: var(--anchor-width);
+  max-width: var(--available-width);
+}
+
+.settings-select-scroll {
+  height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-select-trigger,
+  .settings-select-icon {
+    transition: none;
+  }
+}
