@@ -75,7 +75,15 @@ describe('shared application menu', () => {
       treeSource,
       workspaceTreeSource,
     ] = await Promise.all([
-      readFile(new URL('../src/features/agent/components/agent-session-tree/agent-session-tree.tsx', import.meta.url), 'utf8'),
+      Promise.all([
+        'agent-session-tree.tsx',
+        'flat-session-tree.tsx',
+        'menus.tsx',
+        'project-tree.tsx',
+        'session-row.tsx',
+      ].map((fileName) => (
+        readFile(new URL(`../src/features/agent/components/agent-session-tree/${fileName}`, import.meta.url), 'utf8')
+      ))).then((sources) => sources.join('\n')),
       readFile(new URL('../src/features/agent/components/agent-composer-mention-input/agent-composer-mention-input.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/agent/components/agent-model-cascader/agent-model-cascader.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/app-item/app-item.tsx', import.meta.url), 'utf8'),

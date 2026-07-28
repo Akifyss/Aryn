@@ -138,11 +138,12 @@ describe('shared text button', () => {
         '/src/components/ui/document-viewer-controls/document-viewer-controls.tsx',
       ),
     )?.source
-    const agentSessionTreeSource = sources.find(({ path }) =>
-      path.endsWith(
-        '/src/features/agent/components/agent-session-tree/agent-session-tree.tsx',
-      ),
-    )?.source
+    const agentSessionTreeSource = sources
+      .filter(({ path }) => path.includes(
+        '/src/features/agent/components/agent-session-tree/',
+      ))
+      .map(({ source }) => source)
+      .join('\n')
     const agentChatSurfaceSource = sources.find(({ path }) =>
       path.endsWith(
         '/src/features/agent/components/agent-chat-surface/agent-chat-surface.tsx',
@@ -186,17 +187,16 @@ describe('shared text button', () => {
     )
     expect(viewerControlsSource).toBeDefined()
     expect(viewerControlsSource ?? '').not.toContain('ViewerControlButton')
-    expect(agentSessionTreeSource).toBeDefined()
-    expect(agentSessionTreeSource ?? '').toMatch(
+    expect(agentSessionTreeSource).toMatch(
       /<button[\s\S]{0,240}className='agent-session-new-button'/,
     )
-    expect(agentSessionTreeSource ?? '').toMatch(
+    expect(agentSessionTreeSource).toMatch(
       /<AppTooltipButton[\s\S]{0,240}className='agent-session-new-button'/,
     )
-    expect(agentSessionTreeSource ?? '').not.toMatch(
+    expect(agentSessionTreeSource).not.toMatch(
       /<AppButton[\s\S]{0,240}className='agent-session-new-button'/,
     )
-    expect(agentSessionTreeSource ?? '').toMatch(
+    expect(agentSessionTreeSource).toMatch(
       /<Menu\.TriggerSurface[\s\S]{0,260}agent-project-switch-trigger[\s\S]{0,220}size=\{size\}[\s\S]{0,100}variant='ghost'/,
     )
     expect(agentChatSurfaceSource).toBeDefined()

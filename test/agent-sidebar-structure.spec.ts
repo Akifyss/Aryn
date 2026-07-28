@@ -480,6 +480,10 @@ describe('agent sidebar structure', () => {
       interactionPanelSource,
       newConversationPromptSource,
       sessionTreeSource,
+      flatSessionTreeSource,
+      sessionTreeMenusSource,
+      projectTreeSource,
+      sessionTreeRowSource,
       messageSource,
       fileCardSource,
       queuedTraySource,
@@ -492,11 +496,22 @@ describe('agent sidebar structure', () => {
       readSource('../src/features/agent/components/agent-interaction-panel/agent-interaction-panel.tsx'),
       readSource('../src/features/agent/components/agent-new-conversation-prompt/agent-new-conversation-prompt.tsx'),
       readSource('../src/features/agent/components/agent-session-tree/agent-session-tree.tsx'),
+      readSource('../src/features/agent/components/agent-session-tree/flat-session-tree.tsx'),
+      readSource('../src/features/agent/components/agent-session-tree/menus.tsx'),
+      readSource('../src/features/agent/components/agent-session-tree/project-tree.tsx'),
+      readSource('../src/features/agent/components/agent-session-tree/session-row.tsx'),
       readSource('../src/features/agent/components/agent-message/agent-message.tsx'),
       readSource('../src/features/agent/components/agent-file-card/agent-file-card.tsx'),
       readSource('../src/features/agent/components/agent-queued-composer-tray/agent-queued-composer-tray.tsx'),
       readSource('../src/features/agent/components/agent-model-cascader/agent-model-cascader.tsx'),
     ])
+    const sessionTreeImplementationSource = [
+      sessionTreeSource,
+      flatSessionTreeSource,
+      sessionTreeMenusSource,
+      projectTreeSource,
+      sessionTreeRowSource,
+    ].join('\n')
 
     expect(sidebarSource).not.toContain('function AgentMarkdown(')
     expect(sidebarSource).not.toContain('function AgentMessageDisclosure(')
@@ -522,7 +537,14 @@ describe('agent sidebar structure', () => {
     expect(newConversationPromptSource).toContain('export function AgentNewConversationPrompt(')
     expect(sessionTreeSource).toContain('export function AgentSessionTreeView(')
     expect(sessionTreeSource).toContain('export function AgentProjectSwitchTrigger(')
-    expect(sessionTreeSource).not.toContain('agent-inline-spinner')
+    expect(sessionTreeSource).not.toContain('function AgentSessionTreeRow(')
+    expect(sessionTreeSource).not.toContain('function AgentProjectTree(')
+    expect(flatSessionTreeSource).toContain('export function FlatAgentSessionTree(')
+    expect(sessionTreeMenusSource).toContain('export function AgentTreeMenuPopup(')
+    expect(sessionTreeMenusSource).toContain('export function AgentProjectMenuPopup(')
+    expect(projectTreeSource).toContain('export function AgentProjectTree(')
+    expect(sessionTreeRowSource).toContain('export function AgentSessionTreeRow(')
+    expect(sessionTreeImplementationSource).not.toContain('agent-inline-spinner')
     expect(messageSource).not.toContain('function AgentFileCard(')
     expect(messageSource).not.toContain(
       'function getAgentAttachmentFileCardProps(',
