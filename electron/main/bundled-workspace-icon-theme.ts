@@ -1,6 +1,6 @@
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'
-import type { WorkspaceIconThemeMode } from '../../src/features/workspace/types'
+import type { WorkspaceIconThemeMode } from '../shared/contracts/workspace'
 
 const bundledVsixPattern = /^(.+)-(\d+(?:\.\d+)*)\.vsix$/u
 export const defaultBundledWorkspaceIconThemeIds = {

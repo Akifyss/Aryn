@@ -9,8 +9,8 @@ import type {
   PersistedLayoutState,
   PersistedMeoSettings,
   MeoOutlinePosition,
-} from '../../src/features/persistence/types'
-import type { WorkspaceIconThemeMode } from '../../src/features/workspace/types'
+} from '../shared/contracts/persistence'
+import type { WorkspaceIconThemeMode } from '../shared/contracts/workspace'
 import { AtomicJsonStore, type AtomicJsonStoreMissingResult } from './json-file-store'
 
 export const APP_STATE_SCHEMA_VERSION = 3

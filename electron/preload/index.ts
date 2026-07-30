@@ -1,7 +1,7 @@
 import { ipcRenderer, contextBridge, webUtils } from 'electron'
 import type { AgentClientEvent, AgentInteractionResponse, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState, OpenCodeSurfaceRequest, OpenCodeSurfaceResponse } from '../shared/agent-contracts/types'
 import type { AgentAvailability } from '../shared/agent-contracts/definition'
-import type { ActiveWorkspaceContext, ConversationRecord, ConversationState, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../../src/features/conversations/types'
+import type { ActiveWorkspaceContext, ConversationRecord, ConversationState, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../shared/contracts/conversations'
 import type {
   GitBaselinePayload,
   GitBlameResult,
@@ -13,7 +13,7 @@ import type {
   GitDiffSelection,
   GitFileDiffResult,
   GitRepositoryState,
-} from '../../src/features/git/types'
+} from '../shared/contracts/git'
 import type {
   ProjectState,
   WorkspaceChangeEvent,
@@ -22,7 +22,7 @@ import type {
   WorkspaceIconThemeMode,
   WorkspaceIconThemeSelection,
   WorkspaceNode,
-} from '../../src/features/workspace/types'
+} from '../shared/contracts/workspace'
 import type {
   LocalStorageStateMigration,
   PersistedAppSettings,
@@ -30,7 +30,7 @@ import type {
   PersistedMeoStoredState,
   PersistedWorkspaceTabState,
   PersistentClientStateSnapshot,
-} from '../../src/features/persistence/types'
+} from '../shared/contracts/persistence'
 
 type WindowLifecycleChannel = 'window:close-requested' | 'window:devtools-closed' | 'window:devtools-opened'
 

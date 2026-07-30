@@ -61,16 +61,16 @@ import {
   normalizeWorkspaceTabState,
   WorkspaceStateStore,
 } from './workspace-state-store'
-import type { ActiveWorkspaceContext, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../../src/features/conversations/types'
+import type { ActiveWorkspaceContext, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../shared/contracts/conversations'
 import type { AgentClientEvent } from '../shared/agent-contracts/types'
-import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
-import type { LocalStorageStateMigration } from '../../src/features/persistence/types'
+import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../shared/contracts/git'
+import type { LocalStorageStateMigration } from '../shared/contracts/persistence'
 import type {
   ProjectRecord,
   ProjectState,
   WorkspaceIconThemeCatalogOption,
   WorkspaceIconThemeMode,
-} from '../../src/features/workspace/types'
+} from '../shared/contracts/workspace'
 import {
   importWorkspaceIconThemeFromVsix,
   loadWorkspaceIconThemeCatalogFromVsix,
@@ -1147,7 +1147,11 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   agentIpc.dispose()
-  agentManager.dispose()
+  try {
+    agentManager.dispose()
+  } catch (error) {
+    console.warn('Failed to dispose one or more Agent backends.', error)
+  }
 })
 
 app.on('second-instance', () => {

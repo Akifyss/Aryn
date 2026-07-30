@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { AGENT_IDS, type AgentId } from '../src/features/agent/agent-definition'
+import { AgentApplicationService } from '../electron/main/agent-host/application/agent-application-service'
 import { AgentBackendRegistry } from '../electron/main/agent-host/application/backend-registry'
 import type { AgentBackend } from '../electron/main/agent-host/application/agent-backend'
 
@@ -44,5 +45,29 @@ describe('AgentBackendRegistry', () => {
     ])).toThrow(
       'Agent backend "unknown-agent" has an unknown Agent ID.',
     )
+  })
+
+  it('attempts every backend disposal before reporting aggregated failures', () => {
+    const disposals = Object.fromEntries(AGENT_IDS.map((agentId) => [
+      agentId,
+      vi.fn(() => {
+        if (agentId === 'pi') throw new Error('PI disposal failed')
+      }),
+    ])) as Record<AgentId, ReturnType<typeof vi.fn>>
+    const backends = AGENT_IDS.map((agentId) => ({
+      ...createBackend(agentId),
+      dispose: disposals[agentId],
+    }))
+    const service = new AgentApplicationService(new AgentBackendRegistry(backends))
+
+    expect(() => service.dispose()).toThrow(
+      'One or more Agent backends could not be disposed.',
+    )
+    expect(AGENT_IDS.map((agentId) => disposals[agentId].mock.calls.length))
+      .toEqual(AGENT_IDS.map(() => 1))
+
+    expect(() => service.dispose()).not.toThrow()
+    expect(AGENT_IDS.map((agentId) => disposals[agentId].mock.calls.length))
+      .toEqual(AGENT_IDS.map(() => 1))
   })
 })

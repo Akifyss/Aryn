@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto'
-import { lstat, open as openFile, rm } from 'node:fs/promises'
+import { lstat, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentMessage, ThinkingLevel } from '@earendil-works/pi-agent-core'
 import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent'
@@ -67,8 +66,14 @@ import {
   serializeSessionEntries,
   summarizeToolPayload,
 } from './session-presentation'
+import {
+  areSameWorkspacePath,
+  BuiltinPiSessionCatalog,
+  getArynPiSessionDir,
+} from './session-catalog'
 
 export {
+  getArynPiSessionDir,
   getThinkingLevelsByModel,
   serializePiWebSessionEntries,
   serializeSessionEntries,
@@ -100,41 +105,6 @@ type PiAgentManagerOptions = {
 
 type LoadAgentWorkspaceStateOptions = {
   restoreSession?: boolean
-}
-
-const SESSION_HEADER_READ_CHUNK_BYTES = 4096
-const SESSION_HEADER_READ_LIMIT_BYTES = 64 * 1024
-
-function getWorkspacePathIdentity(workspacePath: string) {
-  const normalizedPath = path.resolve(workspacePath)
-  return process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath
-}
-
-function areSameWorkspacePath(left: string | null | undefined, right: string | null | undefined) {
-  return Boolean(left && right && getWorkspacePathIdentity(left) === getWorkspacePathIdentity(right))
-}
-
-export function getArynPiSessionDir(cwd: string, agentDir: string) {
-  const workspaceIdentity = getWorkspacePathIdentity(cwd)
-  const workspaceName = path.basename(workspaceIdentity) || 'workspace'
-  const safeWorkspaceName = workspaceName
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-')
-    .replace(/[. ]+$/, '')
-    .replace(/^\.+$/, '')
-    .trim()
-    .slice(0, 48) || 'workspace'
-  const workspaceHash = createHash('sha256')
-    .update(workspaceIdentity)
-    .digest('hex')
-    .slice(0, 16)
-
-  return path.join(agentDir, 'sessions', `${safeWorkspaceName}-${workspaceHash}`)
-}
-
-function getLegacyArynPiSessionDir(cwd: string, agentDir: string) {
-  const workspaceIdentity = getWorkspacePathIdentity(cwd)
-  const safePath = `--${workspaceIdentity.replace(/^[/\\]/, '').replace(/[/\\:]/g, '-')}--`
-  return path.join(agentDir, 'sessions', safePath)
 }
 
 type AgentQueuedMessageKind = AgentRunningPromptBehavior
@@ -247,6 +217,7 @@ export class PiAgentManager {
   private readonly annotationStore = new AgentSessionAnnotationStore()
   private readonly authStorage: AuthStorage
   private readonly modelRegistry: ModelRegistry
+  private readonly sessionCatalog: BuiltinPiSessionCatalog
 
   constructor(
     private readonly emitEvent: (event: AgentClientEventPayload) => void,
@@ -254,6 +225,7 @@ export class PiAgentManager {
   ) {
     this.authStorage = AuthStorage.create(path.join(options.agentDir, 'auth.json'))
     this.modelRegistry = ModelRegistry.create(this.authStorage, path.join(options.agentDir, 'models.json'))
+    this.sessionCatalog = new BuiltinPiSessionCatalog(options.agentDir, this.annotationStore)
   }
 
   async loadWorkspaceState(
@@ -274,11 +246,11 @@ export class PiAgentManager {
     }
 
     if (!this.activeRuntime) {
-      const restorableSessionPath = await this.resolveRestorableSessionPath(cwd, preferredSessionPath)
+      const restorableSessionPath = await this.sessionCatalog.resolveRestorable(cwd, preferredSessionPath)
 
       if (restorableSessionPath) {
         try {
-          await this.activateSession(cwd, this.openSessionManager(cwd, restorableSessionPath))
+          await this.activateSession(cwd, this.sessionCatalog.open(cwd, restorableSessionPath))
         } catch {
           return this.buildWorkspaceState(cwd)
         }
@@ -308,27 +280,23 @@ export class PiAgentManager {
 
   async discardWorkspaceSessions(cwd: string) {
     await this.releaseWorkspaceRuntime(cwd)
-    await Promise.all([
-      rm(this.getSessionDir(cwd), { force: true, recursive: true }),
-      this.discardMatchingSessionFiles(cwd, this.getLegacyArynAppSessionDir(cwd)),
-      rm(this.getLegacySessionDir(cwd), { force: true, recursive: true }),
-    ])
+    await this.sessionCatalog.discard(cwd)
   }
 
   async listSessionItems(cwd: string): Promise<AgentSessionListItem[]> {
-    return this.listSessions(cwd)
+    return this.sessionCatalog.list(cwd)
   }
 
   async readSession(cwd: string, sessionPath: string): Promise<AgentSessionSnapshot> {
-    const resolvedSessionPath = await this.resolveSessionFileForCwd(cwd, sessionPath)
-    const sessionManager = this.openSessionManager(cwd, resolvedSessionPath)
+    const resolvedSessionPath = await this.sessionCatalog.resolveFile(cwd, sessionPath)
+    const sessionManager = this.sessionCatalog.open(cwd, resolvedSessionPath)
 
     return this.serializeSessionManager(cwd, sessionManager)
   }
 
   async createSession(cwd: string, options?: string | AgentSessionCreateOptions): Promise<AgentWorkspaceState> {
     const createOptions = this.normalizeCreateSessionOptions(options)
-    const session = await this.activateSession(cwd, SessionManager.create(cwd, this.getSessionDir(cwd)))
+    const session = await this.activateSession(cwd, SessionManager.create(cwd, this.sessionCatalog.sessionDir(cwd)))
 
     if (createOptions.name) {
       session.setSessionName(createOptions.name)
@@ -346,7 +314,7 @@ export class PiAgentManager {
   }
 
   async openSession(cwd: string, sessionPath: string): Promise<AgentWorkspaceState> {
-    const resolvedSessionPath = await this.resolveSessionFileForCwd(cwd, sessionPath)
+    const resolvedSessionPath = await this.sessionCatalog.resolveFile(cwd, sessionPath)
     const runtime = this.activeRuntime
 
     if (
@@ -357,7 +325,7 @@ export class PiAgentManager {
       return this.buildWorkspaceState(cwd)
     }
 
-    await this.activateSession(cwd, this.openSessionManager(cwd, resolvedSessionPath))
+    await this.activateSession(cwd, this.sessionCatalog.open(cwd, resolvedSessionPath))
     return this.broadcastWorkspaceState(cwd)
   }
 
@@ -366,7 +334,7 @@ export class PiAgentManager {
     sessionPath: string,
     options: { restoreFallback?: boolean } = {},
   ): Promise<AgentWorkspaceState> {
-    const resolvedSessionPath = await this.resolveSessionFileForCwd(cwd, sessionPath)
+    const resolvedSessionPath = await this.sessionCatalog.resolveFile(cwd, sessionPath)
     const runtime = this.activeRuntime
     const isDeletingActiveSession = Boolean(
       runtime
@@ -393,10 +361,10 @@ export class PiAgentManager {
     await this.annotationStore.delete(resolvedSessionPath)
 
     if (isDeletingActiveSession && options.restoreFallback !== false) {
-      const remainingSessions = await this.listSessions(cwd)
+      const remainingSessions = await this.sessionCatalog.list(cwd)
 
       if (remainingSessions.length > 0) {
-        await this.activateSession(cwd, this.openSessionManager(cwd, remainingSessions[0].path))
+        await this.activateSession(cwd, this.sessionCatalog.open(cwd, remainingSessions[0].path))
       }
     }
 
@@ -404,7 +372,7 @@ export class PiAgentManager {
   }
 
   async renameSession(cwd: string, sessionPath: string, name: string) {
-    const resolvedSessionPath = await this.resolveSessionFileForCwd(cwd, sessionPath)
+    const resolvedSessionPath = await this.sessionCatalog.resolveFile(cwd, sessionPath)
     const nextName = name.trim()
     const runtime = this.activeRuntime
     const isRenamingActiveSession = Boolean(
@@ -416,7 +384,7 @@ export class PiAgentManager {
     if (runtime && isRenamingActiveSession) {
       runtime.session.setSessionName(nextName)
     } else {
-      const sessionManager = this.openSessionManager(cwd, resolvedSessionPath)
+      const sessionManager = this.sessionCatalog.open(cwd, resolvedSessionPath)
       sessionManager.appendSessionInfo(nextName)
     }
 
@@ -636,7 +604,7 @@ export class PiAgentManager {
       type: 'workspace_state',
       state: await this.serializeWorkspaceState(
         runtime.cwd,
-        await this.listSessions(runtime.cwd),
+        await this.sessionCatalog.list(runtime.cwd),
         runtime.session,
       ),
     })
@@ -651,7 +619,7 @@ export class PiAgentManager {
 
   async sessionExists(cwd: string, sessionPath: string) {
     try {
-      const resolvedSessionPath = await this.resolveSessionFileForCwd(cwd, sessionPath)
+      const resolvedSessionPath = await this.sessionCatalog.resolveFile(cwd, sessionPath)
       const sessionStats = await lstat(resolvedSessionPath)
       return sessionStats.isFile()
     } catch {
@@ -743,7 +711,7 @@ export class PiAgentManager {
   private createSettingsManager(cwd: string) {
     const settingsManager = SettingsManager.create(cwd, this.options.agentDir)
     settingsManager.applyOverrides({
-      sessionDir: this.getSessionDir(cwd),
+      sessionDir: this.sessionCatalog.sessionDir(cwd),
     })
     return settingsManager
   }
@@ -1099,7 +1067,7 @@ export class PiAgentManager {
   }
 
   private async buildWorkspaceState(cwd: string): Promise<AgentWorkspaceState> {
-    const sessions = await this.listSessions(cwd)
+    const sessions = await this.sessionCatalog.list(cwd)
     const runtime = this.activeRuntime
     return this.serializeWorkspaceState(cwd, sessions, runtime && areSameWorkspacePath(runtime.cwd, cwd) ? runtime.session : null)
   }
@@ -1280,186 +1248,6 @@ export class PiAgentManager {
       sessionPath,
       workspacePath: cwd,
     }
-  }
-
-  private async listSessions(cwd: string): Promise<AgentSessionListItem[]> {
-    const sessions = (
-      await Promise.all(this.getReadableSessionDirs(cwd).map((sessionDir) => (
-        SessionManager.list(cwd, sessionDir)
-      )))
-    )
-      .flat()
-      .filter((session) => !session.cwd || areSameWorkspacePath(session.cwd, cwd))
-
-    return sessions
-      .slice()
-      .filter((session) => session.messageCount > 0)
-      .sort((left, right) => right.modified.getTime() - left.modified.getTime())
-      .map((session) => ({
-        createdAt: session.created.toISOString(),
-        id: session.id,
-        messageCount: session.messageCount,
-        modifiedAt: session.modified.toISOString(),
-        name: session.name ?? null,
-        path: session.path,
-        preview: clampText(session.name || session.firstMessage || 'New session', 72),
-      }))
-  }
-
-  private async discardMatchingSessionFiles(cwd: string, sessionDir: string) {
-    const sessions = await SessionManager.list(cwd, sessionDir)
-
-    await Promise.all(sessions.map(async (session) => {
-      const sessionCwd = await this.readSessionFileCwd(session.path)
-
-      if (!sessionCwd || !areSameWorkspacePath(sessionCwd, cwd)) {
-        return
-      }
-
-      await rm(session.path, { force: true })
-      await this.annotationStore.delete(session.path)
-    }))
-  }
-
-  private async resolveRestorableSessionPath(cwd: string, preferredSessionPath: string | null) {
-    if (preferredSessionPath) {
-      try {
-        const resolvedSessionPath = await this.resolveSessionFileForCwd(cwd, preferredSessionPath)
-        return await pathExists(resolvedSessionPath) ? resolvedSessionPath : null
-      } catch {
-        return null
-      }
-    }
-
-    const sessions = await this.listSessions(cwd)
-    return sessions[0]?.path ?? null
-  }
-
-  private getSessionDir(cwd: string) {
-    return getArynPiSessionDir(cwd, this.options.agentDir)
-  }
-
-  private getLegacyArynAppSessionDir(cwd: string) {
-    return getLegacyArynPiSessionDir(cwd, this.options.agentDir)
-  }
-
-  private getLegacySessionDir(cwd: string) {
-    return path.join(cwd, '.pi', 'sessions')
-  }
-
-  private getReadableSessionDirs(cwd: string) {
-    const primarySessionDir = this.getSessionDir(cwd)
-    const legacyAppSessionDir = this.getLegacyArynAppSessionDir(cwd)
-    const legacyWorkspaceSessionDir = this.getLegacySessionDir(cwd)
-
-    return [primarySessionDir, legacyAppSessionDir, legacyWorkspaceSessionDir]
-      .filter((sessionDir, index, sessionDirs) => (
-        sessionDirs.findIndex((candidate) => areSameWorkspacePath(candidate, sessionDir)) === index
-      ))
-  }
-
-  private openSessionManager(cwd: string, sessionPath: string) {
-    return SessionManager.open(sessionPath, this.getSessionDirForPath(cwd, sessionPath), cwd)
-  }
-
-  private getSessionDirForPath(cwd: string, sessionPath: string) {
-    const resolvedSessionPath = path.resolve(sessionPath)
-    const matchingSessionDir = this.getReadableSessionDirs(cwd)
-      .map((sessionDir) => path.resolve(sessionDir))
-      .find((sessionDir) => this.isPathInsideSessionDir(sessionDir, resolvedSessionPath))
-
-    if (!matchingSessionDir) {
-      throw new Error('Invalid session path.')
-    }
-
-    return matchingSessionDir
-  }
-
-  private async resolveSessionFileForCwd(cwd: string, sessionPath: string) {
-    const resolvedSessionPath = this.resolveSessionPath(cwd, sessionPath)
-    const sessionCwd = await this.readSessionFileCwd(resolvedSessionPath)
-
-    if (!sessionCwd || !areSameWorkspacePath(sessionCwd, cwd)) {
-      throw new Error('Invalid session path.')
-    }
-
-    return resolvedSessionPath
-  }
-
-  private resolveSessionPath(cwd: string, sessionPath: string) {
-    const resolvedSessionPath = path.resolve(sessionPath)
-
-    if (
-      path.extname(resolvedSessionPath).toLowerCase() !== '.jsonl'
-      || !this.getReadableSessionDirs(cwd)
-        .map((sessionDir) => path.resolve(sessionDir))
-        .some((sessionDir) => this.isPathInsideSessionDir(sessionDir, resolvedSessionPath))
-    ) {
-      throw new Error('Invalid session path.')
-    }
-
-    return resolvedSessionPath
-  }
-
-  private readSessionHeaderCwd(firstLine: string) {
-    const line = firstLine.trim()
-
-    if (!line) {
-      return null
-    }
-
-    try {
-      const header = JSON.parse(line) as { cwd?: unknown; type?: unknown }
-      return header.type === 'session' && typeof header.cwd === 'string' && header.cwd.trim()
-        ? header.cwd
-        : null
-    } catch {
-      return null
-    }
-  }
-
-  private async readSessionFileCwd(sessionPath: string) {
-    let file: Awaited<ReturnType<typeof openFile>> | null = null
-
-    try {
-      file = await openFile(sessionPath, 'r')
-      const chunks: string[] = []
-      const buffer = Buffer.alloc(SESSION_HEADER_READ_CHUNK_BYTES)
-      let position = 0
-
-      while (position < SESSION_HEADER_READ_LIMIT_BYTES) {
-        const bytesToRead = Math.min(buffer.length, SESSION_HEADER_READ_LIMIT_BYTES - position)
-        const { bytesRead } = await file.read(buffer, 0, bytesToRead, position)
-
-        if (bytesRead === 0) {
-          break
-        }
-
-        chunks.push(buffer.toString('utf8', 0, bytesRead))
-        const content = chunks.join('')
-        const newlineMatch = content.match(/\r?\n/)
-
-        if (newlineMatch?.index !== undefined) {
-          return this.readSessionHeaderCwd(content.slice(0, newlineMatch.index))
-        }
-
-        position += bytesRead
-      }
-
-      return this.readSessionHeaderCwd(chunks.join(''))
-    } catch {
-      return null
-    } finally {
-      await file?.close().catch(() => undefined)
-    }
-  }
-
-  private isPathInsideSessionDir(sessionDir: string, sessionPath: string) {
-    const relativeSessionPath = path.relative(sessionDir, sessionPath)
-
-    return Boolean(relativeSessionPath)
-      && !relativeSessionPath.startsWith('..')
-      && !path.isAbsolute(relativeSessionPath)
   }
 
   private findEntryIdForMessage(session: AgentSession, message: AgentMessage) {

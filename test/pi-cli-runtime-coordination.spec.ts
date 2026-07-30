@@ -192,6 +192,42 @@ describe('PI CLI runtime coordination', () => {
     }
   })
 
+  it('keeps the ordered event lane usable after an unknown future event', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-runtime-unknown-event-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const sessionDir = path.join(tempRoot, 'sessions')
+    process.env.PI_CODING_AGENT_SESSION_DIR = sessionDir
+    await mkdir(workspace, { recursive: true })
+    const sessionID = createOfficialSession(workspace, sessionDir, 'Unknown event')
+    const events: AgentClientEventPayload[] = []
+    const manager = new PiCliAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: (event) => events.push(event),
+    })
+
+    try {
+      await manager.openSession(workspace, sessionID)
+      events.length = 0
+      const processHandle = processInstances(sessionID)[0]!
+
+      processHandle.emit({ type: 'future_rpc_event', payload: { value: 1 } })
+      processHandle.emit({ type: 'queue_update', followUp: ['still ordered'], steering: [] })
+      await manager.drainSessionEvents(workspace, sessionID)
+
+      expect(events).toContainEqual(expect.objectContaining({
+        event: expect.objectContaining({ type: 'future_rpc_event' }),
+        type: 'pi_native_event',
+      }))
+      expect(events.findLast((event) => event.type === 'workspace_state')).toMatchObject({
+        state: { runtime: { followUpMessageCount: 1 } },
+        type: 'workspace_state',
+      })
+    } finally {
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
   it('keeps the latest activation when an earlier session finishes opening later', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-runtime-activation-'))
     const workspace = path.join(tempRoot, 'workspace')

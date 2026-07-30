@@ -655,4 +655,22 @@ describe('AgentApplicationService native-session routing', () => {
     expect(sessionManagers[1]?.listed).toBe(1)
     manager.dispose()
   })
+
+  it('does not allow a disposed Agent Host to recreate provider managers', async () => {
+    const manager = createManager()
+    const managerCount = calls.builtinManagers.length
+
+    manager.dispose()
+    manager.dispose()
+
+    await expect(manager.loadWorkspaceState({
+      agentId: 'builtin-pi',
+      sessionPath: null,
+      workspacePath: 'C:/workspace',
+    })).rejects.toThrow('Agent Host has been disposed.')
+    await expect(manager.releaseWorkspaceRuntime('C:/workspace'))
+      .rejects.toThrow('Agent Host has been disposed.')
+    expect(calls.builtinManagers).toHaveLength(managerCount)
+    expect(calls.builtinManagers.every((entry) => entry.disposed === 1)).toBe(true)
+  })
 })

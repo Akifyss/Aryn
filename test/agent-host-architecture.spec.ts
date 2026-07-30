@@ -15,6 +15,38 @@ async function listTypeScriptFiles(directory: string): Promise<string[]> {
   return files.flat()
 }
 
+function listModuleSpecifiers(source: string) {
+  const specifiers = new Set<string>()
+  const patterns = [
+    /\b(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g,
+    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+    /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+  ]
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      if (match[1]) specifiers.add(match[1])
+    }
+  }
+  return [...specifiers]
+}
+
+function resolveLocalModule(importer: string, specifier: string) {
+  if (specifier.startsWith('@/')) return path.join(root, 'src', specifier.slice(2))
+  if (specifier.startsWith('.')) return path.resolve(path.dirname(importer), specifier)
+  return null
+}
+
+function isInside(directory: string, candidate: string) {
+  const relative = path.relative(directory, candidate)
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
+function stripComments(source: string) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '')
+}
+
 describe('Agent Host architecture boundaries', () => {
   it('keeps Agent IPC and provider composition out of the Electron entrypoint', async () => {
     const source = await readFile(path.join(root, 'electron/main/index.ts'), 'utf8')
@@ -27,17 +59,39 @@ describe('Agent Host architecture boundaries', () => {
     expect(source).not.toContain('new PiCliAgentManager')
   })
 
-  it('does not make Main or Preload depend on Renderer Agent features', async () => {
+  it('does not make Main or Preload depend on Renderer source', async () => {
     const files = [
       ...await listTypeScriptFiles(path.join(root, 'electron/main')),
       ...await listTypeScriptFiles(path.join(root, 'electron/preload')),
     ]
+    const rendererRoot = path.join(root, 'src')
     const violations: string[] = []
 
     for (const file of files) {
       const source = await readFile(file, 'utf8')
-      if (source.includes('src/features/agent') || source.includes('@/features/agent')) {
-        violations.push(path.relative(root, file))
+      for (const specifier of listModuleSpecifiers(source)) {
+        const resolved = resolveLocalModule(file, specifier)
+        if (resolved && isInside(rendererRoot, resolved)) {
+          violations.push(`${path.relative(root, file)} -> ${specifier}`)
+        }
+      }
+    }
+
+    expect(violations).toEqual([])
+  })
+
+  it('does not make Renderer source depend on Main internals', async () => {
+    const files = await listTypeScriptFiles(path.join(root, 'src'))
+    const mainRoot = path.join(root, 'electron/main')
+    const violations: string[] = []
+
+    for (const file of files) {
+      const source = await readFile(file, 'utf8')
+      for (const specifier of listModuleSpecifiers(source)) {
+        const resolved = resolveLocalModule(file, specifier)
+        if (resolved && isInside(mainRoot, resolved)) {
+          violations.push(`${path.relative(root, file)} -> ${specifier}`)
+        }
       }
     }
 
@@ -53,10 +107,9 @@ describe('Agent Host architecture boundaries', () => {
       const providerRoot = path.join(providersRoot, providerName)
       for (const file of await listTypeScriptFiles(providerRoot)) {
         const source = await readFile(file, 'utf8')
-        const imports = source.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)
-        for (const match of imports) {
-          if (!match[1]?.startsWith('.')) continue
-          const resolved = path.resolve(path.dirname(file), match[1])
+        for (const specifier of listModuleSpecifiers(source)) {
+          const resolved = resolveLocalModule(file, specifier)
+          if (!resolved) continue
           for (const siblingName of providerNames) {
             if (
               siblingName !== providerName
@@ -66,7 +119,7 @@ describe('Agent Host architecture boundaries', () => {
               )
             ) {
               violations.push(
-                `${path.relative(root, file)} -> ${path.relative(root, resolved)}`,
+                `${path.relative(root, file)} -> ${specifier}`,
               )
             }
           }
@@ -77,19 +130,63 @@ describe('Agent Host architecture boundaries', () => {
     expect(violations).toEqual([])
   })
 
-  it('keeps shared Agent contracts framework and process agnostic', async () => {
-    const files = await listTypeScriptFiles(path.join(root, 'electron/shared/agent-contracts'))
+  it('keeps Host application and runtime policy independent from provider implementations', async () => {
+    const coreRoots = [
+      path.join(root, 'electron/main/agent-host/application'),
+      path.join(root, 'electron/main/agent-host/runtime'),
+    ]
+    const providersRoot = path.join(root, 'electron/main/agent-host/providers')
+    const violations: string[] = []
+
+    for (const coreRoot of coreRoots) {
+      for (const file of await listTypeScriptFiles(coreRoot)) {
+        const source = await readFile(file, 'utf8')
+        for (const specifier of listModuleSpecifiers(source)) {
+          const resolved = resolveLocalModule(file, specifier)
+          const importsProvider = Boolean(resolved && isInside(providersRoot, resolved))
+          const importsProviderSdk = (
+            specifier.startsWith('@opencode-ai/')
+            || specifier.startsWith('@earendil-works/')
+          )
+          if (importsProvider || importsProviderSdk) {
+            violations.push(`${path.relative(root, file)} -> ${specifier}`)
+          }
+        }
+      }
+    }
+
+    expect(violations).toEqual([])
+  })
+
+  it('keeps shared contracts framework and process agnostic', async () => {
+    const files = await listTypeScriptFiles(path.join(root, 'electron/shared'))
     const violations: string[] = []
 
     for (const file of files) {
       const source = await readFile(file, 'utf8')
-      if (
-        /\bfrom\s+['"](?:electron|react|react-dom)['"]/.test(source)
-        || /\bfrom\s+['"](?:@opencode-ai|@earendil-works)\//.test(source)
-        || source.includes('/main/')
-        || source.includes('/src/features/')
-      ) {
-        violations.push(path.relative(root, file))
+      for (const specifier of listModuleSpecifiers(source)) {
+        const forbiddenExternal = (
+          specifier === 'electron'
+          || specifier === 'react'
+          || specifier === 'react-dom'
+          || specifier.startsWith('node:')
+          || specifier.startsWith('@opencode-ai/')
+          || specifier.startsWith('@earendil-works/')
+        )
+        const resolved = resolveLocalModule(file, specifier)
+        const forbiddenLocal = Boolean(
+          resolved
+          && (
+            isInside(path.join(root, 'electron/main'), resolved)
+            || isInside(path.join(root, 'src'), resolved)
+          )
+        )
+        if (forbiddenExternal || forbiddenLocal) {
+          violations.push(`${path.relative(root, file)} -> ${specifier}`)
+        }
+      }
+      if (/\bprocess\./.test(stripComments(source))) {
+        violations.push(`${path.relative(root, file)} -> process`)
       }
     }
 

@@ -198,4 +198,23 @@ describe('OpenCode native session event reduction', () => {
     expect(reducer.hydrate('session-1', [{ info: assistantMessage(), parts: [textPart()] }], newer)).toBe(true)
     expect(reducer.records('session-1')[0]?.parts).toHaveLength(1)
   })
+
+  it('degrades an unknown future event to a no-op without poisoning later events', () => {
+    const reducer = new OpenCodeSessionMessageReducer()
+
+    expect(reducer.apply(event({
+      type: 'session.future-capability',
+      properties: { sessionID: 'session-1' },
+    }))).toEqual({
+      awaitingBaseline: false,
+      changed: false,
+      sessionId: 'session-1',
+    })
+
+    expect(reducer.apply(event({
+      type: 'message.updated',
+      properties: { info: assistantMessage(), sessionID: 'session-1' },
+    })).changed).toBe(true)
+    expect(reducer.records('session-1')).toHaveLength(1)
+  })
 })

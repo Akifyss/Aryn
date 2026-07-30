@@ -174,13 +174,17 @@ describe('Codex App Server lifecycle', () => {
     }
     const internals = manager as unknown as {
       client: unknown
-      index: { read: () => Promise<{ threads: CodexThreadRecord[], version: 1 }> }
+      sessionCatalog: {
+        index: { read: () => Promise<{ threads: CodexThreadRecord[], version: 1 }> }
+      }
       installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
         activeTurnId: string | null
       }>
     }
     internals.client = fakeClient
-    internals.index = { read: async () => ({ threads: [currentRecord], version: 1 }) }
+    internals.sessionCatalog.index = {
+      read: async () => ({ threads: [currentRecord], version: 1 }),
+    }
     const binding = await internals.installBinding(currentRecord, true)
     binding.activeTurnId = 'turn-1'
 
@@ -219,7 +223,7 @@ describe('Codex App Server lifecycle', () => {
     }
     const internals = manager as unknown as {
       client: unknown
-      index: { update: () => Promise<never> }
+      sessionCatalog: { index: { update: () => Promise<never> } }
       installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
         activeTurnId: string | null
         isStreaming: boolean
@@ -228,7 +232,9 @@ describe('Codex App Server lifecycle', () => {
       sessionStore: CodexSessionStore
     }
     internals.client = fakeClient
-    internals.index = { update: async () => { throw new Error('disk full') } }
+    internals.sessionCatalog.index = {
+      update: async () => { throw new Error('disk full') },
+    }
     internals.models = [model()]
     internals.sessionStore.install(thread())
     const binding = await internals.installBinding(currentRecord, false)
@@ -258,9 +264,11 @@ describe('Codex App Server lifecycle', () => {
         request: (method: string) => Promise<unknown>
         stop: () => void
       }
-      index: {
-        read: () => Promise<typeof state>
-        update: (updater: (current: typeof state) => typeof state) => Promise<typeof state>
+      sessionCatalog: {
+        index: {
+          read: () => Promise<typeof state>
+          update: (updater: (current: typeof state) => typeof state) => Promise<typeof state>
+        }
       }
       recordReplacements: Map<string, {
         promise: Promise<CodexThreadRecord>
@@ -275,7 +283,7 @@ describe('Codex App Server lifecycle', () => {
       },
       stop: () => undefined,
     }
-    internals.index = {
+    internals.sessionCatalog.index = {
       read: async () => state,
       update: async (updater) => {
         signalUpdateStarted()
@@ -314,9 +322,11 @@ describe('Codex App Server lifecycle', () => {
         request: (method: string, params: unknown) => Promise<unknown>
         stop: () => void
       }
-      index: {
-        read: () => Promise<typeof state>
-        update: (updater: (current: typeof state) => typeof state) => Promise<typeof state>
+      sessionCatalog: {
+        index: {
+          read: () => Promise<typeof state>
+          update: (updater: (current: typeof state) => typeof state) => Promise<typeof state>
+        }
       }
       installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
         record: CodexThreadRecord
@@ -331,7 +341,7 @@ describe('Codex App Server lifecycle', () => {
       },
       stop: () => undefined,
     }
-    internals.index = {
+    internals.sessionCatalog.index = {
       read: async () => structuredClone(state),
       update: async (updater) => {
         state = updater(structuredClone(state))
@@ -365,7 +375,11 @@ describe('Codex App Server lifecycle', () => {
         method: 'turn/completed'
         params: { threadId: string, turn: Thread['turns'][number] }
       }) => Promise<void>
-      index: { update: (updater: (state: { threads: CodexThreadRecord[], version: 1 }) => unknown) => Promise<unknown> }
+      sessionCatalog: {
+        index: {
+          update: (updater: (state: { threads: CodexThreadRecord[], version: 1 }) => unknown) => Promise<unknown>
+        }
+      }
       installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
         activeTurnId: string | null
         isStreaming: boolean
@@ -394,7 +408,7 @@ describe('Codex App Server lifecycle', () => {
       },
       stop: () => undefined,
     }
-    internals.index = {
+    internals.sessionCatalog.index = {
       update: async (updater) => updater({ threads: [currentRecord], version: 1 }),
     }
     internals.sessionStore.install(thread({ type: 'active', activeFlags: [] }))
@@ -441,7 +455,9 @@ describe('Codex App Server lifecycle', () => {
     const requests: Array<{ method: string, params: unknown }> = []
     const internals = manager as unknown as {
       client: unknown
-      index: { read: () => Promise<{ threads: CodexThreadRecord[], version: 1 }> }
+      sessionCatalog: {
+        index: { read: () => Promise<{ threads: CodexThreadRecord[], version: 1 }> }
+      }
       installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
         activeTurnId: string | null
         isStreaming: boolean
@@ -458,7 +474,9 @@ describe('Codex App Server lifecycle', () => {
       },
       stop: () => undefined,
     }
-    internals.index = { read: async () => ({ threads: [currentRecord], version: 1 }) }
+    internals.sessionCatalog.index = {
+      read: async () => ({ threads: [currentRecord], version: 1 }),
+    }
     const activeThread = thread({ type: 'active', activeFlags: [] })
     internals.sessionStore.install(activeThread)
     const binding = await internals.installBinding(currentRecord, true)

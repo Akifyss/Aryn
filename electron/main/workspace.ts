@@ -5,7 +5,7 @@ import chokidar, { type FSWatcher } from 'chokidar'
 import {
   getWorkspaceEditorKind,
   type WorkspaceFileTabEditorKind,
-} from '../../src/features/workspace/lib/file-types'
+} from '../shared/contracts/workspace-files'
 
 export type WorkspaceNode = {
   name: string

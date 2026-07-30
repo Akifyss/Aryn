@@ -474,4 +474,35 @@ describe('Codex native session store', () => {
     expect(snapshot.itemRuntime['command-1'].output).toBe('passed')
     expect(snapshot.itemRuntime['mcp-1'].progress).toEqual(['Searching'])
   })
+
+  it('degrades an unknown future notification to a no-op without poisoning later notifications', () => {
+    const store = new CodexSessionStore()
+    store.install(thread())
+
+    expect(() => store.apply({
+      method: 'thread/future-capability',
+      params: { threadId: 'thread-1' },
+    } as unknown as ServerNotification)).not.toThrow()
+
+    const snapshot = store.apply(notify({
+      method: 'turn/started',
+      params: {
+        threadId: 'thread-1',
+        turn: {
+          completedAt: null,
+          durationMs: null,
+          error: null,
+          id: 'turn-after-unknown',
+          items: [],
+          itemsView: 'full',
+          startedAt: 2,
+          status: 'inProgress',
+        },
+      },
+    }))
+    expect(snapshot).toMatchObject({
+      status: { type: 'busy' },
+      thread: { turns: [expect.objectContaining({ id: 'turn-after-unknown' })] },
+    })
+  })
 })

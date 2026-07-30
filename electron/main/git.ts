@@ -18,8 +18,8 @@ import type {
   GitFileDiffResult,
   GitRecentPullItem,
   GitRepositoryState,
-} from '../../src/features/git/types'
-import { getSupportedWorkspaceEditorKind } from '../../src/features/workspace/lib/file-types'
+} from '../shared/contracts/git'
+import { getSupportedWorkspaceEditorKind } from '../shared/contracts/workspace-files'
 
 const execFileAsync = promisify(execFile)
 

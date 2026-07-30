@@ -257,9 +257,11 @@ describe('Codex unmaterialized sessions', () => {
         request: (method: string) => Promise<unknown>
         stop: () => void
       }
-      index: {
-        read: () => Promise<{ threads: typeof indexedRecord[] }>
-        update: (updater: (state: { threads: typeof indexedRecord[], version: 1 }) => { threads: typeof indexedRecord[], version: 1 }) => Promise<void>
+      sessionCatalog: {
+        index: {
+          read: () => Promise<{ threads: typeof indexedRecord[] }>
+          update: (updater: (state: { threads: typeof indexedRecord[], version: 1 }) => { threads: typeof indexedRecord[], version: 1 }) => Promise<void>
+        }
       }
     }
     internals.client = {
@@ -272,10 +274,10 @@ describe('Codex unmaterialized sessions', () => {
     }
 
     try {
-      await internals.index.update(() => ({ threads: [indexedRecord], version: 1 }))
+      await internals.sessionCatalog.index.update(() => ({ threads: [indexedRecord], version: 1 }))
 
       await expect(manager.renameSession(workspace, threadId, 'Must not persist')).rejects.toThrow('native rename rejected')
-      await expect(internals.index.read()).resolves.toMatchObject({
+      await expect(internals.sessionCatalog.index.read()).resolves.toMatchObject({
         threads: [expect.objectContaining({ id: threadId, name: 'Original name' })],
       })
     } finally {

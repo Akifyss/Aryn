@@ -61,7 +61,7 @@ type ExternalAgentBackendOptions = {
   }
 }
 
-/** Keeps native provider managers small while adapting them to the product contract. */
+/** Adapts a provider-native manager to the stable product-side contract. */
 export class ExternalAgentBackend implements AgentBackend {
   readonly capabilities: Readonly<AgentBackendCapabilities>
 

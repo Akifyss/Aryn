@@ -100,12 +100,14 @@ describe('agent sidebar structure', () => {
       draftSource,
       submissionSource,
       actionsSource,
+      conversationContractSource,
       conversationTypesSource,
     ] = await Promise.all([
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
       readSource('../src/features/agent/composer/use-agent-composer-draft.ts'),
       readSource('../src/features/agent/composer/use-agent-prompt-submission.ts'),
       readSource('../src/features/agent/composer/use-agent-composer-actions.ts'),
+      readSource('../electron/shared/contracts/conversations.ts'),
       readSource('../src/features/conversations/types.ts'),
     ])
 
@@ -127,7 +129,10 @@ describe('agent sidebar structure', () => {
     expect(draftSource).not.toContain('agent-sidebar')
     expect(submissionSource).not.toContain('agent-sidebar')
     expect(actionsSource).not.toContain('agent-sidebar')
-    expect(conversationTypesSource).toContain('export type ConversationSessionStartedPatch')
+    expect(conversationContractSource).toContain('export type ConversationSessionStartedPatch')
+    expect(conversationTypesSource).toContain(
+      "export * from '../../../electron/shared/contracts/conversations'",
+    )
   })
 
   it('keeps the Agent message viewport and scroll controller in their component module', async () => {

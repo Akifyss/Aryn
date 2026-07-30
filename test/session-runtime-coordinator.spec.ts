@@ -377,4 +377,30 @@ describe('SessionRuntimeCoordinator', () => {
     expect(stopRuntime).toHaveBeenCalledOnce()
     expect(stopRuntime).toHaveBeenCalledWith({ id: 'late-runtime' })
   })
+
+  it('rejects admitted lifecycle work that was still queued when disposal began', async () => {
+    const firstEntered = deferred()
+    const allowFirst = deferred()
+    const coordinator = new SessionRuntimeCoordinator<{ id: string }>({
+      stopRuntime: () => undefined,
+    })
+    let queuedOperationRan = false
+
+    const first = coordinator.run('session-a', async () => {
+      firstEntered.resolve()
+      await allowFirst.promise
+    })
+    await firstEntered.promise
+    const queued = coordinator.run('session-a', () => {
+      queuedOperationRan = true
+    })
+
+    const disposal = coordinator.dispose()
+    allowFirst.resolve()
+
+    await first
+    await expect(queued).rejects.toThrow('Session runtime coordinator has been disposed.')
+    await disposal
+    expect(queuedOperationRan).toBe(false)
+  })
 })

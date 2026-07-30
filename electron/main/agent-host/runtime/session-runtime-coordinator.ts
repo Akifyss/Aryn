@@ -329,7 +329,13 @@ export class SessionRuntimeCoordinator<TRuntime> {
     operation: () => MaybePromise<TResult>,
     priority: TaskPriority = 'user',
   ): Promise<TResult> {
-    return entry.lifecycleLane.enqueue(priority, operation).finally(() => {
+    return entry.lifecycleLane.enqueue(priority, () => {
+      // A task may have been admitted before disposal but still be waiting
+      // behind another operation. Do not let it perform provider work after
+      // the coordinator's ownership boundary has closed.
+      this.assertUsable()
+      return operation()
+    }).finally(() => {
       this.cleanupEntry(entry)
     })
   }

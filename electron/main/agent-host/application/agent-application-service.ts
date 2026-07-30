@@ -114,7 +114,7 @@ export class AgentApplicationService {
 
   async loadDraftState(agentId: AgentId = 'builtin-pi') {
     if (!isAgentId(agentId)) throw new Error('Agent draft state requires a valid Agent ID.')
-    return this.backends.get(agentId).loadDraftState()
+    return this.requireBackend(agentId).loadDraftState()
   }
 
   async listSessionItems(rawScope: AgentRequestScope) {
@@ -217,11 +217,12 @@ export class AgentApplicationService {
 
   async respondToInteraction(rawResponse: AgentInteractionResponse) {
     const response = normalizeInteractionResponse(rawResponse)
-    const capability = this.backends.get(response.agentId).capabilities.interactionResponse
+    const capability = this.requireBackend(response.agentId).capabilities.interactionResponse
     return capability ? capability.respond(response) : false
   }
 
   async releaseWorkspaceRuntime(cwd: string) {
+    this.assertUsable()
     const results = await Promise.allSettled(
       [...this.backends.values()].map((backend) => backend.releaseWorkspaceRuntime(cwd)),
     )
@@ -229,6 +230,7 @@ export class AgentApplicationService {
   }
 
   async discardWorkspaceSessions(cwd: string) {
+    this.assertUsable()
     const results = await Promise.allSettled(
       [...this.backends.values()].map((backend) => backend.discardWorkspaceSessions(cwd)),
     )
@@ -238,13 +240,23 @@ export class AgentApplicationService {
   dispose() {
     if (this.disposed) return
     this.disposed = true
-    for (const backend of this.backends.values()) backend.dispose()
+    const failures: unknown[] = []
+    for (const backend of this.backends.values()) {
+      try {
+        backend.dispose()
+      } catch (error) {
+        failures.push(error)
+      }
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'One or more Agent backends could not be disposed.')
+    }
   }
 
   private resolveWorkspaceBackend(rawScope: AgentRequestScope) {
     const scope = normalizeScope(rawScope)
     return {
-      backend: this.backends.get(scope.agentId),
+      backend: this.requireBackend(scope.agentId),
       cwd: requireWorkspacePath(scope),
       scope,
     }
@@ -256,9 +268,18 @@ export class AgentApplicationService {
   }
 
   private requireProviderAuthCapability() {
-    const capability = this.backends.get('builtin-pi').capabilities.providerAuth
+    const capability = this.requireBackend('builtin-pi').capabilities.providerAuth
     if (!capability) throw new Error('Embedded PI provider authentication is unavailable.')
     return capability
+  }
+
+  private requireBackend(agentId: AgentId) {
+    this.assertUsable()
+    return this.backends.get(agentId)
+  }
+
+  private assertUsable() {
+    if (this.disposed) throw new Error('Agent Host has been disposed.')
   }
 
   private throwFanOutFailures(

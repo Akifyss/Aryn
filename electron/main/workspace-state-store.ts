@@ -3,12 +3,12 @@ import type {
   PersistedMeoStoredState,
   PersistedMeoStoredViewPosition,
   PersistedWorkspaceTabState,
-} from '../../src/features/persistence/types'
+} from '../shared/contracts/persistence'
 import type {
   WorkspaceFileSystemNavigationState,
   WorkspaceFileSystemState,
   WorkspaceFileSystemView,
-} from '../../src/features/workspace/types'
+} from '../shared/contracts/workspace'
 import { AtomicJsonStore } from './json-file-store'
 
 export const WORKSPACE_STATE_SCHEMA_VERSION = 1

@@ -9,7 +9,7 @@ import type {
   WorkspaceIconTheme,
   WorkspaceIconThemeOption,
   WorkspaceIconThemeSourceKind,
-} from '../../src/features/workspace/types'
+} from '../shared/contracts/workspace'
 
 export type WorkspaceIconThemeCatalog = Pick<
   WorkspaceIconTheme,

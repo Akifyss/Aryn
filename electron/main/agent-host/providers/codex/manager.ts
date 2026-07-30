@@ -5,10 +5,6 @@ import type { ServerNotification } from '../../../../shared/agent-contracts/prov
 import type { ServerRequest } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/ServerRequest'
 import type { Model } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/v2/Model'
 import type { ModelListResponse } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/v2/ModelListResponse'
-import type { McpServerElicitationRequestResponse } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/v2/McpServerElicitationRequestResponse'
-import type { RequestPermissionProfile } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/v2/RequestPermissionProfile'
-import type { Thread } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/v2/Thread'
-import type { ThreadListResponse } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/v2/ThreadListResponse'
 import type { UserInput } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/v2/UserInput'
 import { getAgentInteractionKey } from '../../../../shared/agent-contracts/types'
 import type {
@@ -23,7 +19,6 @@ import type {
   AgentWorkspaceState,
   CodexNativeSessionSnapshot,
 } from '../../../../shared/agent-contracts/types'
-import { AtomicJsonStore } from '../../../json-file-store'
 import { prepareExternalCliEnvironment } from '../../../external-cli-environment'
 import { CodexRpcClient } from './rpc-client'
 import { CodexSessionStore } from './session-store'
@@ -56,16 +51,17 @@ import {
 import {
   CODEX_THINKING_LEVELS as THINKING_LEVELS,
   countCodexThreadMessages as countThreadMessages,
-  DEFAULT_CODEX_THREAD_INDEX as DEFAULT_INDEX,
   getCodexFileChanges as fileChangesFromThread,
   getCodexModelThinkingLevels as codexModelThinkingLevels,
   normalizeCodexReasoningEffort as reasoningEffort,
-  normalizeCodexThreadIndex as normalizeIndex,
   toCodexReasoningEffort as codexReasoningEffort,
-  TOP_LEVEL_CODEX_THREAD_SOURCE_KINDS as TOP_LEVEL_THREAD_SOURCE_KINDS,
-  type CodexThreadIndex,
   type CodexThreadRecord,
 } from './session-model'
+import {
+  handleCodexServerRequest,
+  type PendingCodexInteraction,
+} from './server-request-handler'
+import { CodexSessionCatalog } from './session-catalog'
 
 type JsonRecord = Record<string, unknown>
 
@@ -88,18 +84,6 @@ type CodexBinding = {
   lease: SessionRuntimeLease
   queuedPrompts: QueuedCodexPrompt[]
   record: CodexThreadRecord
-}
-
-type PendingCodexInteraction = {
-  approvalProtocol?: 'legacy' | 'v2'
-  client: CodexRpcClient
-  kind: 'approval' | 'permissions' | 'question'
-  lease: SessionRuntimeLease
-  originalId: ServerRequest['id']
-  questionIds?: string[]
-  requestId: string
-  requestedPermissions?: RequestPermissionProfile
-  sessionId: string
 }
 
 type CodexAgentManagerOptions = {
@@ -129,11 +113,11 @@ export class CodexAgentManager {
   private clientPromise: Promise<CodexRpcClient> | null = null
   private clientStartRevision = 0
   private disposed = false
-  private readonly index: AtomicJsonStore<CodexThreadIndex>
   private models: Model[] = []
   private readonly pendingInteractions = new Map<string, PendingCodexInteraction>()
   private readonly recordReplacements = new Map<string, CodexRecordReplacement>()
   private readonly runtimeCoordinator: SessionRuntimeCoordinator<CodexBinding>
+  private readonly sessionCatalog: CodexSessionCatalog
   private serviceTierCompatibilityOverride = false
   private readonly snapshotTimers = new Map<string, NodeJS.Timeout>()
   private readonly sessionStore = new CodexSessionStore()
@@ -152,11 +136,7 @@ export class CodexAgentManager {
   private readonly workspaceTeardownCounts = new Map<string, number>()
 
   constructor(private readonly options: CodexAgentManagerOptions) {
-    this.index = new AtomicJsonStore({
-      defaultState: () => structuredClone(DEFAULT_INDEX),
-      filePath: path.join(options.agentDir, 'external', 'codex', 'threads.json'),
-      normalize: normalizeIndex,
-    })
+    this.sessionCatalog = new CodexSessionCatalog(options.agentDir)
     this.runtimeCoordinator = new SessionRuntimeCoordinator({
       stopRuntime: (binding) => this.dropThreadRuntime(binding.record.id, binding),
     })
@@ -326,7 +306,7 @@ export class CodexAgentManager {
       }
       this.requireWorkspaceOperationCurrent(workspaceOperation)
       this.sessionStore.install(result.thread)
-      await this.index.update((state) => ({ ...state, threads: [record, ...state.threads] }))
+      await this.sessionCatalog.add(record)
       indexed = true
       this.requireWorkspaceOperationCurrent(workspaceOperation)
       await this.installBinding(record, result.thread.status.type === 'active', client)
@@ -365,12 +345,7 @@ export class CodexAgentManager {
           console.warn(`[codex app-server] Failed to remove a rolled-back thread from the ownership index: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
         })
       } else if (!indexed && !released) {
-        await this.index.update((state) => ({
-          ...state,
-          threads: state.threads.some((candidate) => candidate.id === record.id)
-            ? state.threads
-            : [record, ...state.threads],
-        })).catch((cleanupError) => {
+        await this.sessionCatalog.ensure(record).catch((cleanupError) => {
           console.warn(`[codex app-server] Failed to retain ownership of a thread whose rollback cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
         })
       }
@@ -652,13 +627,13 @@ export class CodexAgentManager {
         this.waitForWorkspaceCreations(identity),
         this.waitForRecordReplacements(identity),
       ])
-      const records = await this.listIndexedRecords(cwd)
+      const records = await this.sessionCatalog.listIndexed(cwd)
       if (records.length === 0) return
       const client = records.some((record) => record.materialized) || this.client
         ? await this.ensureClient()
         : null
       const nativeThreadIds = client
-        ? new Set((await this.listNativeThreads(cwd)).map((thread) => thread.id))
+        ? new Set((await this.sessionCatalog.listNative(client, cwd)).map((thread) => thread.id))
         : new Set<string>()
       const archived = new Set<string>()
       const results = await Promise.allSettled(records.map((record) => this.runtimeCoordinator.runAndRetire(
@@ -678,10 +653,7 @@ export class CodexAgentManager {
         },
       )))
       if (archived.size > 0) {
-        await this.index.update((state) => ({
-          ...state,
-          threads: state.threads.filter((record) => !archived.has(record.id)),
-        }))
+        await this.sessionCatalog.removeMany(archived)
       }
       const activeThreadId = this.workspaceIntent.active(identity)
       if (activeThreadId && archived.has(activeThreadId)) {
@@ -910,178 +882,17 @@ export class CodexAgentManager {
     sourceClient: CodexRpcClient | null = this.client,
     sourceLease?: SessionRuntimeLease,
   ) {
-    if (!sourceClient || sourceClient !== this.client || this.disposed) return
-    if (
-      request.method === 'account/chatgptAuthTokens/refresh'
-      || request.method === 'attestation/generate'
-    ) {
-      sourceClient.respondError(request.id, -32601, `Unsupported Codex server request: ${request.method}.`)
-      return
-    }
-    const threadId = 'threadId' in request.params
-      ? request.params.threadId
-      : 'conversationId' in request.params
-        ? String(request.params.conversationId)
-        : null
-    if (!threadId) {
-      sourceClient.respondError(request.id, -32602, `${request.method} did not include a thread identifier.`)
-      return
-    }
-
-    const lease = sourceLease ?? this.bindingLeases.get(threadId)
-
-    if (
-      request.method === 'item/commandExecution/requestApproval'
-      || request.method === 'item/fileChange/requestApproval'
-      || request.method === 'item/permissions/requestApproval'
-      || request.method === 'applyPatchApproval'
-      || request.method === 'execCommandApproval'
-    ) {
-      if (!lease?.isCurrent()) {
-        sourceClient.respondError(request.id, -32000, 'Codex thread binding is no longer active.')
-        return
-      }
-      const params = request.params as unknown as JsonRecord
-      const isPermissions = request.method === 'item/permissions/requestApproval'
-      const isLegacy = request.method === 'applyPatchApproval' || request.method === 'execCommandApproval'
-      const requestedPermissions = isPermissions
-        ? request.params.permissions
-        : null
-      const detail = this.describeApproval(request)
-      const requestId = `codex:${String(request.id)}`
-      this.pendingInteractions.set(getAgentInteractionKey(threadId, requestId), {
-        approvalProtocol: isLegacy ? 'legacy' : 'v2',
-        client: sourceClient,
-        kind: isPermissions ? 'permissions' : 'approval',
-        lease,
-        originalId: request.id,
-        requestId,
-        ...(requestedPermissions ? { requestedPermissions } : {}),
-        sessionId: threadId,
-      })
-      this.options.emitEvent({
-        type: 'interaction_requested',
-        request: {
-          agentId: 'codex',
-          id: requestId,
-          kind: 'permission',
-          message: requestedPermissions ? this.describeRequestedPermissions(requestedPermissions, detail) : detail,
-          options: [
-            { id: 'deny', label: '拒绝' },
-            { id: 'allow_once', label: '允许本次' },
-            { id: 'allow_always', label: '本会话始终允许' },
-          ],
-          sessionId: threadId,
-          title: isPermissions
-            ? 'Codex 请求扩展权限'
-            : request.method.includes('fileChange') || request.method === 'applyPatchApproval'
-              ? 'Codex 请求修改文件'
-              : 'Codex 请求执行命令',
-          workspacePath: this.bindings.get(threadId)?.record.cwd ?? String(params.cwd ?? ''),
-        },
-      })
-      return
-    }
-
-    if (request.method === 'item/tool/requestUserInput') {
-      if (!lease?.isCurrent()) {
-        sourceClient.respondError(request.id, -32000, 'Codex thread binding is no longer active.')
-        return
-      }
-      const questions = request.params.questions
-      if (questions.length === 0) {
-        sourceClient.respondError(request.id, -32602, 'Codex user-input request contained no questions.')
-        return
-      }
-      const requestId = `codex:${String(request.id)}`
-      const questionIds = questions.map((question) => question.id)
-      this.pendingInteractions.set(getAgentInteractionKey(threadId, requestId), {
-        client: sourceClient,
-        kind: 'question',
-        lease,
-        originalId: request.id,
-        questionIds,
-        requestId,
-        sessionId: threadId,
-      })
-      this.options.emitEvent({
-        type: 'interaction_requested',
-        request: {
-          agentId: 'codex',
-          fields: questions.map((question) => ({
-            allowsCustomAnswer: question.isOther || !question.options?.length,
-            id: question.id,
-            isSecret: question.isSecret,
-            label: question.header,
-            message: question.question,
-            options: question.options?.map((option) => ({
-              description: option.description,
-              id: option.label,
-              label: option.label,
-            })) ?? [],
-          })),
-          id: requestId,
-          kind: 'question',
-          message: questions.length === 1 ? questions[0].question : `Codex 有 ${questions.length} 个问题需要回答。`,
-          options: [{ id: 'deny', label: '取消' }],
-          sessionId: threadId,
-          title: questions.length === 1 ? questions[0].header : 'Codex 提问',
-          workspacePath: this.bindings.get(threadId)?.record.cwd ?? '',
-        },
-      })
-      return
-    }
-
-    if (request.method === 'mcpServer/elicitation/request') {
-      const response: McpServerElicitationRequestResponse = {
-        _meta: null,
-        action: 'decline',
-        content: null,
-      }
-      sourceClient.respond(request.id, response)
-      console.warn(`[codex app-server] Declined unsupported MCP elicitation from ${request.params.serverName}.`)
-      return
-    }
-    if (request.method === 'item/tool/call') {
-      sourceClient.respond(request.id, {
-        contentItems: [{ type: 'inputText', text: 'Aryn did not register this dynamic tool.' }],
-        success: false,
-      })
-      return
-    }
-    const unsupportedRequest = request as unknown as { id: string | number, method: string }
-    sourceClient.respondError(
-      unsupportedRequest.id,
-      -32601,
-      `Unsupported Codex server request: ${unsupportedRequest.method}.`,
-    )
-  }
-
-  private describeApproval(request: ServerRequest) {
-    switch (request.method) {
-      case 'item/commandExecution/requestApproval':
-        return request.params.command ?? request.params.reason ?? 'Codex 请求执行受保护的命令。'
-      case 'item/fileChange/requestApproval':
-        return request.params.reason ?? request.params.grantRoot ?? 'Codex 请求修改工作区文件。'
-      case 'item/permissions/requestApproval':
-        return request.params.reason ?? 'Codex 请求扩展当前权限。'
-      case 'execCommandApproval':
-        return request.params.command.join(' ')
-      case 'applyPatchApproval':
-        return request.params.reason ?? Object.keys(request.params.fileChanges).join('\n')
-      default:
-        return 'Codex 请求批准操作。'
-    }
-  }
-
-  private describeRequestedPermissions(permissions: RequestPermissionProfile, fallback: string) {
-    const fileSystem = permissions.fileSystem
-    const network = permissions.network
-    const lines: string[] = []
-    if (Array.isArray(fileSystem?.read) && fileSystem.read.length > 0) lines.push(`读取：${fileSystem.read.map(String).join('\n')}`)
-    if (Array.isArray(fileSystem?.write) && fileSystem.write.length > 0) lines.push(`写入：${fileSystem.write.map(String).join('\n')}`)
-    if (network?.enabled === true) lines.push('网络：允许访问')
-    return lines.join('\n\n') || fallback
+    handleCodexServerRequest({
+      currentClient: this.client,
+      disposed: this.disposed,
+      emitEvent: this.options.emitEvent,
+      findLease: (threadId) => this.bindingLeases.get(threadId),
+      findWorkspace: (threadId) => this.bindings.get(threadId)?.record.cwd ?? '',
+      pendingInteractions: this.pendingInteractions,
+      request,
+      sourceClient,
+      sourceLease,
+    })
   }
 
   private handleConnectionExit(client: CodexRpcClient, error: Error) {
@@ -1522,74 +1333,12 @@ export class CodexAgentManager {
   }
 
   private async listRecords(cwd: string) {
-    const [nativeThreads, indexedRecords] = await Promise.all([
-      this.listNativeThreads(cwd),
-      this.listIndexedRecords(cwd),
-    ])
-    const indexedById = new Map(indexedRecords.map((record) => [record.id, record]))
-    const nativeIds = new Set(nativeThreads.map((thread) => thread.id))
-    const officialRecords = nativeThreads.map((thread): CodexThreadRecord => {
-      const indexed = indexedById.get(thread.id)
-      return {
-        createdAt: new Date(thread.createdAt * 1_000).toISOString(),
-        cwd: thread.cwd,
-        id: thread.id,
-        materialized: true,
-        model: indexed?.model ?? null,
-        modelExplicit: indexed?.modelExplicit ?? false,
-        name: thread.name,
-        preview: thread.preview || null,
-        reasoningEffort: indexed?.reasoningEffort ?? 'medium',
-        updatedAt: new Date(thread.updatedAt * 1_000).toISOString(),
-      }
-    })
-    // thread/start can produce a real App Server thread before Codex writes a
-    // rollout. Preserve those live drafts, but never revive stale materialized
-    // index entries that are absent from the official thread list.
-    const liveOrUnmaterializedDrafts = indexedRecords.filter((record) => (
-      !nativeIds.has(record.id)
-      && (!record.materialized || this.bindings.has(record.id) || this.sessionStore.get(record.id))
-    ))
-    return [...officialRecords, ...liveOrUnmaterializedDrafts]
-      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
-  }
-
-  private async listNativeThreads(cwd: string) {
     const client = await this.ensureClient()
-    const threads: Thread[] = []
-    const seenCursors = new Set<string>()
-    const seenThreadIds = new Set<string>()
-    let cursor: string | null = null
-    do {
-      const response: ThreadListResponse = await client.request('thread/list', {
-        archived: false,
-        cursor,
-        cwd,
-        limit: 100,
-        sortDirection: 'desc',
-        sortKey: 'updated_at',
-        sourceKinds: TOP_LEVEL_THREAD_SOURCE_KINDS,
-      })
-      for (const thread of response.data) {
-        if (thread.ephemeral || thread.parentThreadId || seenThreadIds.has(thread.id)) continue
-        seenThreadIds.add(thread.id)
-        threads.push(thread)
-      }
-      const nextCursor = response.nextCursor ?? null
-      if (nextCursor && seenCursors.has(nextCursor)) {
-        throw new Error(`Codex thread/list returned the repeated cursor "${nextCursor}".`)
-      }
-      if (nextCursor) seenCursors.add(nextCursor)
-      cursor = nextCursor
-    } while (cursor)
-    return threads
-  }
-
-  private async listIndexedRecords(cwd: string) {
-    const identity = workspaceIdentity(cwd)
-    return (await this.index.read()).threads
-      .filter((record) => workspaceIdentity(record.cwd) === identity)
-      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+    return this.sessionCatalog.list(client, cwd, {
+      retainIndexedRecord: (record) => (
+        this.bindings.has(record.id) || Boolean(this.sessionStore.get(record.id))
+      ),
+    })
   }
 
   private async requireRecord(cwd: string, threadId: string) {
@@ -1629,10 +1378,7 @@ export class CodexAgentManager {
       }
       let replacementIndexed = false
       try {
-        await this.index.update((state) => ({
-          ...state,
-          threads: state.threads.map((candidate) => candidate.id === threadId ? replacement : candidate),
-        }))
+        await this.sessionCatalog.replace(threadId, replacement)
         replacementIndexed = true
         if (workspaceOperation) this.requireWorkspaceOperationCurrent(workspaceOperation)
         await this.runtimeCoordinator.retire(runtimeKey(cwd, threadId))
@@ -1651,17 +1397,11 @@ export class CodexAgentManager {
           'failed replacement',
         )
         if (replacementIndexed && released) {
-          await this.index.update((state) => ({
-            ...state,
-            threads: state.threads.map((candidate) => candidate.id === replacement.id ? record : candidate),
-          })).catch((cleanupError) => {
+          await this.sessionCatalog.replace(replacement.id, record).catch((cleanupError) => {
             console.warn(`[codex app-server] Failed to restore a rolled-back draft in the ownership index: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
           })
         } else if (!replacementIndexed && !released) {
-          await this.index.update((state) => ({
-            ...state,
-            threads: state.threads.map((candidate) => candidate.id === threadId ? replacement : candidate),
-          })).catch((cleanupError) => {
+          await this.sessionCatalog.replace(threadId, replacement).catch((cleanupError) => {
             console.warn(`[codex app-server] Failed to retain ownership of a replacement whose rollback cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
           })
         }
@@ -1821,10 +1561,7 @@ export class CodexAgentManager {
 
   private async updateRecord(record: CodexThreadRecord) {
     record.updatedAt = new Date().toISOString()
-    await this.index.update((state) => ({
-      ...state,
-      threads: state.threads.map((candidate) => candidate.id === record.id ? { ...record } : candidate),
-    }))
+    await this.sessionCatalog.update(record)
   }
 
   private async touchRecord(record: CodexThreadRecord) {
@@ -1832,10 +1569,7 @@ export class CodexAgentManager {
   }
 
   private async removeRecord(threadId: string) {
-    await this.index.update((state) => ({
-      ...state,
-      threads: state.threads.filter((record) => record.id !== threadId),
-    }))
+    await this.sessionCatalog.remove(threadId)
   }
 
   private dropThreadRuntime(threadId: string, expectedBinding?: CodexBinding) {
