@@ -1,10 +1,10 @@
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import type { Model } from '../src/features/agent/codex-protocol/generated/v2/Model'
-import type { Thread } from '../src/features/agent/codex-protocol/generated/v2/Thread'
-import type { CodexThreadRecord } from '../electron/main/codex-agent'
-import { CodexAgentManager } from '../electron/main/codex-agent'
-import type { CodexSessionStore } from '../electron/main/codex-session-store'
+import type { Model } from '../electron/shared/agent-contracts/providers/codex/protocol/generated/v2/Model'
+import type { Thread } from '../electron/shared/agent-contracts/providers/codex/protocol/generated/v2/Thread'
+import type { CodexThreadRecord } from '../electron/main/agent-host/providers/codex/manager'
+import { CodexAgentManager } from '../electron/main/agent-host/providers/codex/manager'
+import type { CodexSessionStore } from '../electron/main/agent-host/providers/codex/session-store'
 
 function thread(status: Thread['status'] = { type: 'idle' }): Thread {
   return {

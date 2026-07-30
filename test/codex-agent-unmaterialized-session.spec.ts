@@ -2,9 +2,9 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { Model } from '../src/features/agent/codex-protocol/generated/v2/Model'
-import type { Thread } from '../src/features/agent/codex-protocol/generated/v2/Thread'
-import { CodexAgentManager } from '../electron/main/codex-agent'
+import type { Model } from '../electron/shared/agent-contracts/providers/codex/protocol/generated/v2/Model'
+import type { Thread } from '../electron/shared/agent-contracts/providers/codex/protocol/generated/v2/Thread'
+import { CodexAgentManager } from '../electron/main/agent-host/providers/codex/manager'
 
 function emptyThread(cwd: string, overrides: Partial<Thread> = {}): Thread {
   return {

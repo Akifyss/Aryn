@@ -9,7 +9,7 @@ import type {
   CreateConversationWorkspaceRequest,
   UpdateConversationRequest,
 } from '../../src/features/conversations/types'
-import { DEFAULT_AGENT_ID, normalizeAgentId } from '../../src/features/agent/agent-definition'
+import { DEFAULT_AGENT_ID, normalizeAgentId } from '../shared/agent-contracts/definition'
 import { AtomicJsonStore } from './json-file-store'
 import { ensureUsableFolderName } from './path-names'
 

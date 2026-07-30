@@ -1,9 +1,9 @@
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { CodexAgentManager } from '../electron/main/codex-agent'
-import { OpenCodeAgentManager } from '../electron/main/opencode-agent'
-import { PiCliAgentManager } from '../electron/main/pi-cli-agent'
-import type { SessionRuntimeLease } from '../electron/main/session-runtime-coordinator'
+import { CodexAgentManager } from '../electron/main/agent-host/providers/codex/manager'
+import { OpenCodeAgentManager } from '../electron/main/agent-host/providers/opencode/manager'
+import { PiCliAgentManager } from '../electron/main/agent-host/providers/pi-cli/manager'
+import type { SessionRuntimeLease } from '../electron/main/agent-host/runtime/session-runtime-coordinator'
 
 function workspaceIdentity(cwd: string) {
   const resolved = path.resolve(cwd)

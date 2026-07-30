@@ -13,7 +13,7 @@ import type {
  */
 export function getOpenCodeUserTextPart(record: OpenCodeNativeMessageRecord) {
   if (record.info.role !== 'user') return null
-  return record.parts.find((part): part is Extract<OpenCodePart, { type: 'text' }> => (
+  return (record.parts as OpenCodePart[]).find((part): part is Extract<OpenCodePart, { type: 'text' }> => (
     part.type === 'text' && !part.synthetic
   )) ?? null
 }
@@ -30,7 +30,7 @@ export function getOpenCodeUserMessageText(record: OpenCodeNativeMessageRecord) 
 export function getOpenCodeNativeRenderKey(snapshot: OpenCodeNativeSessionSnapshot | null | undefined) {
   if (!snapshot) return 'none'
   const tail = snapshot.messages.at(-1)
-  const partKey = tail?.parts.map((part) => {
+  const partKey = (tail?.parts as OpenCodePart[] | undefined)?.map((part) => {
     if (part.type === 'text' || part.type === 'reasoning') return `${part.id}:${part.text.length}`
     if (part.type === 'tool') return `${part.id}:${part.state.status}`
     return `${part.id}:${part.type}`

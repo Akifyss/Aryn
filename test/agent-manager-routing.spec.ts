@@ -32,7 +32,7 @@ const behavior = vi.hoisted(() => ({
   remainingSessions: [] as Array<{ path: string }>,
 }))
 
-vi.mock('../electron/main/agent', () => ({
+vi.mock('../electron/main/agent-host/providers/builtin-pi/manager', () => ({
   PiAgentManager: class {
     private readonly state = {
       created: 0,
@@ -104,7 +104,7 @@ vi.mock('../electron/main/agent', () => ({
   },
 }))
 
-vi.mock('../electron/main/codex-agent', () => ({
+vi.mock('../electron/main/agent-host/providers/codex/manager', () => ({
   CodexAgentManager: class {
     dispose() {}
     async discardWorkspaceSessions() {}
@@ -124,7 +124,7 @@ vi.mock('../electron/main/codex-agent', () => ({
   },
 }))
 
-vi.mock('../electron/main/opencode-agent', () => ({
+vi.mock('../electron/main/agent-host/providers/opencode/manager', () => ({
   OpenCodeAgentManager: class {
     dispose() {}
     async discardWorkspaceSessions() {}
@@ -136,7 +136,7 @@ vi.mock('../electron/main/opencode-agent', () => ({
   },
 }))
 
-vi.mock('../electron/main/pi-cli-agent', () => ({
+vi.mock('../electron/main/agent-host/providers/pi-cli/manager', () => ({
   PiCliAgentManager: class {
     dispose() {}
     async discardWorkspaceSessions() {}
@@ -148,7 +148,7 @@ vi.mock('../electron/main/pi-cli-agent', () => ({
   },
 }))
 
-import { AgentManager } from '../electron/main/agent-manager'
+import { createAgentHost } from '../electron/main/composition/create-agent-host'
 
 function deferred() {
   let resolve!: () => void
@@ -158,7 +158,14 @@ function deferred() {
   return { promise, resolve }
 }
 
-describe('AgentManager native-session routing', () => {
+function createManager() {
+  return createAgentHost({
+    agentDir: 'C:/agent-data',
+    emitEvent: () => undefined,
+  })
+}
+
+describe('AgentApplicationService native-session routing', () => {
   beforeEach(() => {
     calls.builtinManagers.length = 0
     calls.codexLoads.length = 0
@@ -178,7 +185,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('passes the requested native session directly to an external adapter', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     await manager.sendPrompt({
       agentId: 'codex',
       sessionPath: 'thread-a',
@@ -190,7 +197,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('passes Codex client message IDs through for exact optimistic reconciliation', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     await manager.sendPrompt({
       agentId: 'codex',
       sessionPath: 'thread-a',
@@ -209,7 +216,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('rejects mutable workspace-active routing when no native session is supplied', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     await expect(manager.sendPrompt({
       agentId: 'codex',
       workspacePath: 'C:/workspace',
@@ -218,7 +225,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('rejects conflicting scoped and explicit native session identities', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = {
       agentId: 'codex' as const,
       sessionPath: 'thread-a',
@@ -236,7 +243,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('rejects a preferred workspace session that conflicts with its scope', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = {
       agentId: 'codex' as const,
       sessionPath: 'thread-a',
@@ -254,7 +261,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('rejects malformed interaction responses before they reach an adapter', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
 
     await expect(manager.respondToInteraction({
       agentId: 'codex',
@@ -266,7 +273,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('routes client optimistic IDs only to the OpenCode adapter', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const options = {
       clientMessageId: 'msg_0123456789abABCDEFGHIJKLMN',
       clientPartIds: ['prt_0123456789acABCDEFGHIJKLMN'],
@@ -289,7 +296,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('keeps identical native session IDs isolated across external Agents', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const workspacePath = 'C:/workspace'
     const sessionPath = 'shared-native-id'
 
@@ -326,7 +333,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('keeps embedded PI operations bound to their own session manager', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     await manager.openSession(scope, 'C:/sessions/one.jsonl')
     await manager.openSession(scope, 'C:/sessions/two.jsonl')
@@ -341,7 +348,7 @@ describe('AgentManager native-session routing', () => {
 
   it('disposes a newly allocated embedded PI manager when session creation fails', async () => {
     behavior.createFailures = 1
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
 
     await expect(manager.createSession({
       agentId: 'builtin-pi',
@@ -355,7 +362,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('keeps a superseded embedded PI creation bound for its first background prompt', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const createdSession = 'C:/sessions/new.jsonl'
     const newerSession = 'C:/sessions/newer.jsonl'
@@ -380,7 +387,7 @@ describe('AgentManager native-session routing', () => {
 
   it('does not cache a newly allocated embedded PI manager when opening fails', async () => {
     behavior.openFailures = 1
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
 
     await expect(manager.openSession(scope, 'C:/sessions/one.jsonl')).rejects.toThrow('open failed')
@@ -395,7 +402,7 @@ describe('AgentManager native-session routing', () => {
 
   it('keeps a shared embedded PI manager when one concurrent open succeeds', async () => {
     behavior.openFailures = 1
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const sessionPath = 'C:/sessions/shared.jsonl'
 
@@ -415,7 +422,7 @@ describe('AgentManager native-session routing', () => {
 
   it('evicts a shared embedded PI manager after all concurrent opens fail', async () => {
     behavior.openFailures = 2
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const sessionPath = 'C:/sessions/shared-failure.jsonl'
 
@@ -434,7 +441,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('reuses one fallback manager after deleting the active embedded PI session', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     await manager.openSession(scope, 'C:/sessions/one.jsonl')
     behavior.remainingSessions = [{ path: 'C:/sessions/two.jsonl' }]
@@ -450,7 +457,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('does not let a slow embedded PI open replace a newer active session', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const slowSession = 'C:/sessions/slow.jsonl'
     const fastSession = 'C:/sessions/fast.jsonl'
@@ -471,7 +478,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('disposes an unbound provisional manager after a newer session becomes active', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const targetSession = 'C:/sessions/target.jsonl'
     const slowOpen = deferred()
@@ -493,7 +500,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('does not let a stale deletion fallback replace a newer active session', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const deletedSession = 'C:/sessions/deleted.jsonl'
     const newerSession = 'C:/sessions/newer.jsonl'
@@ -516,7 +523,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('disposes a late active-session refresh again after a background deletion releases the workspace', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const backgroundSession = 'C:/sessions/background.jsonl'
     const activeSession = 'C:/sessions/active.jsonl'
@@ -540,7 +547,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('disposes a late embedded PI deletion fallback again after workspace release', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const deletedSession = 'C:/sessions/deleted.jsonl'
     const fallbackSession = 'C:/sessions/fallback.jsonl'
@@ -563,7 +570,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('does not resurrect an embedded PI manager after workspace release', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const sessionPath = 'C:/sessions/slow.jsonl'
     const slowOpen = deferred()
@@ -585,7 +592,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('disposes a late embedded PI creation again after workspace release', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const createdSession = 'C:/sessions/new.jsonl'
     const slowCreate = deferred()
@@ -606,7 +613,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('disposes a late embedded PI open again after its session is deleted', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const sessionPath = 'C:/sessions/deleted-while-opening.jsonl'
     const slowOpen = deferred()
@@ -627,7 +634,7 @@ describe('AgentManager native-session routing', () => {
   })
 
   it('routes a session reopened during workspace release to a fresh embedded PI manager', async () => {
-    const manager = new AgentManager(() => undefined, { agentDir: 'C:/agent-data' })
+    const manager = createManager()
     const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
     const sessionPath = 'C:/sessions/reopened.jsonl'
     await manager.openSession(scope, sessionPath)

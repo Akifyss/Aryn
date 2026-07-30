@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyAgentQueuedMessageUpdate } from '../electron/main/agent'
+import { applyAgentQueuedMessageUpdate } from '../electron/main/agent-host/providers/builtin-pi/manager'
 
 describe('agent queued message updates', () => {
   it('edits a follow-up message without touching steering messages', () => {

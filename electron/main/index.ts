@@ -1,6 +1,5 @@
 import { Menu, app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
-import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, stat } from 'node:fs/promises'
+import { mkdir, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -43,8 +42,8 @@ import {
   workspaceFileExists,
   workspacePathExists,
 } from './workspace'
-import { AgentManager } from './agent-manager'
-import { discoverAgentCatalog } from './agent-cli-discovery'
+import { createAgentHost } from './composition/create-agent-host'
+import { registerAgentIpc } from './agent-ipc/register-agent-ipc'
 import {
   AppStateStore,
   getWorkspaceEntry,
@@ -63,7 +62,7 @@ import {
   WorkspaceStateStore,
 } from './workspace-state-store'
 import type { ActiveWorkspaceContext, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../../src/features/conversations/types'
-import type { AgentClientEvent, AgentInteractionResponse, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, OpenCodeSurfaceRequest } from '../../src/features/agent/types'
+import type { AgentClientEvent } from '../shared/agent-contracts/types'
 import type { GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '../../src/features/git/types'
 import type { LocalStorageStateMigration } from '../../src/features/persistence/types'
 import type {
@@ -166,25 +165,6 @@ const RENDERER_LOCAL_STORAGE_MIGRATION_VERSION = 1
 type WindowBackgroundTheme = 'light' | 'dark'
 type WindowAppearanceTheme = WindowBackgroundTheme | 'system'
 type WindowThemeState = { resolvedTheme: WindowBackgroundTheme }
-const MAX_PICKED_IMAGE_ATTACHMENT_BYTES = 12 * 1024 * 1024
-
-function getAgentAttachmentMimeType(filePath: string) {
-  const extension = path.extname(filePath).toLowerCase()
-
-  switch (extension) {
-    case '.png':
-      return 'image/png'
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg'
-    case '.webp':
-      return 'image/webp'
-    case '.gif':
-      return 'image/gif'
-    default:
-      return undefined
-  }
-}
 
 const WINDOW_BACKGROUND_COLORS = {
   dark: '#1f1f1f',
@@ -426,128 +406,20 @@ function emitWindowThemeState(state: WindowThemeState) {
   win.webContents.send('window:theme-changed', state)
 }
 
-const agentManager = new AgentManager(
-  (event: AgentClientEvent) => {
+const agentManager = createAgentHost({
+  agentDir,
+  emitEvent: (event: AgentClientEvent) => {
     if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
       return
     }
 
     win.webContents.send('agent:event', event)
   },
-  { agentDir },
-)
-let legacyBuiltinAgentScope: AgentRequestScope | null = null
-
-function normalizeAgentIpcScope(scopeOrWorkspacePath: AgentRequestScope | string): AgentRequestScope {
-  if (typeof scopeOrWorkspacePath !== 'string') return scopeOrWorkspacePath
-  return {
-    agentId: 'builtin-pi',
-    sessionPath: null,
-    workspacePath: scopeOrWorkspacePath,
-  }
-}
-
-function rememberLegacyBuiltinScope(scope: AgentRequestScope, state: Awaited<ReturnType<AgentManager['loadWorkspaceState']>>) {
-  if (scope.agentId !== 'builtin-pi' || !scope.workspacePath) return
-  legacyBuiltinAgentScope = {
-    agentId: 'builtin-pi',
-    sessionPath: state.activeSession?.sessionPath ?? null,
-    workspacePath: scope.workspacePath,
-  }
-}
-
-function requireLegacyBuiltinScope() {
-  if (!legacyBuiltinAgentScope?.workspacePath || !legacyBuiltinAgentScope.sessionPath) {
-    throw new Error('No embedded PI session is active for this legacy Agent request.')
-  }
-  return legacyBuiltinAgentScope
-}
-
-type PendingProviderAuthPrompt = {
-  flowId: string
-  provider: string
-  reject: (error: Error) => void
-  resolve: (value: string) => void
-}
-type ActiveProviderAuthFlow = {
-  controller: AbortController
-  flowId: string
-}
-
-const activeProviderAuthFlows = new Map<string, ActiveProviderAuthFlow>()
-const pendingProviderAuthPrompts = new Map<string, PendingProviderAuthPrompt>()
-
-function emitProviderAuthUiEvent(event: AgentProviderAuthUiEvent) {
-  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
-    return
-  }
-
-  win.webContents.send('agent:provider-auth-ui-event', event)
-}
-
-function requestProviderAuthInput(
-  provider: string,
-  flowId: string,
-  prompt: { allowEmpty?: boolean, message: string, placeholder?: string },
-) {
-  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
-    throw new Error('No renderer window is available for provider login.')
-  }
-
-  const requestId = randomUUID()
-  emitProviderAuthUiEvent({
-    type: 'prompt',
-    allowEmpty: prompt.allowEmpty,
-    message: prompt.message,
-    placeholder: prompt.placeholder,
-    provider,
-    requestId,
-  })
-
-  return new Promise<string>((resolve, reject) => {
-    pendingProviderAuthPrompts.set(requestId, {
-      flowId,
-      provider,
-      reject,
-      resolve,
-    })
-  })
-}
-
-function rejectProviderAuthPrompts(provider: string, flowId?: string, message = 'Login cancelled.') {
-  for (const [requestId, pendingPrompt] of pendingProviderAuthPrompts.entries()) {
-    if (pendingPrompt.provider !== provider || (flowId && pendingPrompt.flowId !== flowId)) {
-      continue
-    }
-
-    pendingProviderAuthPrompts.delete(requestId)
-    pendingPrompt.reject(new Error(message))
-  }
-}
-
-function cancelProviderAuthFlow(provider: string, message = 'Login cancelled.') {
-  const activeFlow = activeProviderAuthFlows.get(provider)
-
-  if (!activeFlow) {
-    rejectProviderAuthPrompts(provider, undefined, message)
-    return false
-  }
-
-  activeProviderAuthFlows.delete(provider)
-  rejectProviderAuthPrompts(provider, activeFlow.flowId, message)
-
-  if (!activeFlow.controller.signal.aborted) {
-    activeFlow.controller.abort(new Error(message))
-  }
-
-  return true
-}
-
-function cancelAllProviderAuthFlows(message = 'Login cancelled.') {
-  for (const provider of Array.from(activeProviderAuthFlows.keys())) {
-    cancelProviderAuthFlow(provider, message)
-  }
-}
+})
+const agentIpc = registerAgentIpc({
+  agentHost: agentManager,
+  getWindow: () => win,
+})
 
 nativeTheme.on('updated', () => {
   if (process.platform !== 'darwin' || windowAppearanceTheme !== 'system') {
@@ -1266,12 +1138,16 @@ void app.whenReady()
 
 app.on('window-all-closed', () => {
   win = null
-  cancelAllProviderAuthFlows()
-  agentManager.dispose()
+  agentIpc.cancelProviderAuthFlows()
   void unwatchWorkspace().catch((error) => {
     console.warn('Failed to stop workspace watcher.', error)
   })
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  agentIpc.dispose()
+  agentManager.dispose()
 })
 
 app.on('second-instance', () => {
@@ -2359,250 +2235,6 @@ ipcMain.handle('workspace-icons:select-theme', async (
   await updatePersistedWorkspaceIconTheme(mode, theme)
 
   return theme
-})
-
-ipcMain.handle('agent:get-catalog', async (_event, options?: { force?: boolean }) => {
-  return discoverAgentCatalog({ force: options?.force === true })
-})
-
-ipcMain.handle('agent:load-workspace', async (
-  _event,
-  scopeOrWorkspacePath: AgentRequestScope | string,
-  preferredSessionPath?: string | null,
-  options?: { restoreSession?: boolean },
-) => {
-  const scope = normalizeAgentIpcScope(scopeOrWorkspacePath)
-  const state = await agentManager.loadWorkspaceState(scope, preferredSessionPath ?? null, options)
-  rememberLegacyBuiltinScope(scope, state)
-  return state
-})
-
-ipcMain.handle('agent:load-draft-state', async (_event, agentId?: AgentRequestScope['agentId']) => {
-  return agentManager.loadDraftState(agentId)
-})
-
-ipcMain.handle('agent:list-sessions', async (_event, scopeOrWorkspacePath: AgentRequestScope | string) => {
-  return agentManager.listSessionItems(normalizeAgentIpcScope(scopeOrWorkspacePath))
-})
-
-ipcMain.handle('agent:read-session', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, sessionPath: string) => {
-  return agentManager.readSession(normalizeAgentIpcScope(scopeOrWorkspacePath), sessionPath)
-})
-
-ipcMain.handle('agent:opencode-surface-request', async (_event, scope: AgentRequestScope, request: OpenCodeSurfaceRequest) => {
-  return agentManager.requestOpenCodeSurface(scope, request)
-})
-
-ipcMain.handle('agent:session-exists', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, sessionPath: string) => {
-  return { exists: await agentManager.sessionExists(normalizeAgentIpcScope(scopeOrWorkspacePath), sessionPath) }
-})
-
-ipcMain.handle('agent:create-session', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, options?: string | AgentSessionCreateOptions) => {
-  const scope = normalizeAgentIpcScope(scopeOrWorkspacePath)
-  const state = await agentManager.createSession(scope, options)
-  rememberLegacyBuiltinScope(scope, state)
-  return state
-})
-
-ipcMain.handle('agent:open-session', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, sessionPath: string) => {
-  const scope = normalizeAgentIpcScope(scopeOrWorkspacePath)
-  const state = await agentManager.openSession(scope, sessionPath)
-  rememberLegacyBuiltinScope(scope, state)
-  return state
-})
-
-ipcMain.handle('agent:delete-session', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, sessionPath: string) => {
-  const scope = normalizeAgentIpcScope(scopeOrWorkspacePath)
-  const state = await agentManager.deleteSession(scope, sessionPath)
-  rememberLegacyBuiltinScope(scope, state)
-  return state
-})
-
-ipcMain.handle('agent:rename-session', async (_event, scopeOrWorkspacePath: AgentRequestScope | string, sessionPath: string, name: string) => {
-  const scope = normalizeAgentIpcScope(scopeOrWorkspacePath)
-  const state = await agentManager.renameSession(scope, sessionPath, name)
-  rememberLegacyBuiltinScope(scope, state)
-  return state
-})
-
-ipcMain.handle('agent:pick-attachments', async () => {
-  if (!win) {
-    return []
-  }
-
-  const result = await dialog.showOpenDialog(win, {
-    filters: [
-      {
-        name: 'Supported attachments',
-        extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'txt', 'md', 'markdown', 'json', 'csv', 'tsv', 'yaml', 'yml', 'xml', 'html', 'css', 'js', 'jsx', 'ts', 'tsx', 'py', 'go', 'rs', 'java', 'cpp', 'c', 'h', 'hpp', 'sql', 'docx', 'pdf'],
-      },
-      {
-        name: 'All files',
-        extensions: ['*'],
-      },
-    ],
-    properties: ['openFile', 'multiSelections'],
-    title: 'Attach Files',
-  })
-
-  if (result.canceled || result.filePaths.length === 0) {
-    return []
-  }
-
-  return Promise.all(result.filePaths.map(async (filePath): Promise<AgentPromptAttachment> => {
-    const mimeType = getAgentAttachmentMimeType(filePath)
-    const fileStats = await stat(filePath).catch(() => null)
-    const isImage = Boolean(mimeType)
-    const shouldInlineImage = isImage && (!fileStats || fileStats.size <= MAX_PICKED_IMAGE_ATTACHMENT_BYTES)
-    const data = shouldInlineImage
-      ? `data:${mimeType};base64,${(await readFile(filePath)).toString('base64')}`
-      : undefined
-
-    return {
-      ...(data ? { data } : {}),
-      fileName: path.basename(filePath),
-      kind: isImage ? 'image' : 'file',
-      ...(mimeType ? { mimeType } : {}),
-      path: filePath,
-      ...(fileStats ? { size: fileStats.size } : {}),
-    }
-  }))
-})
-
-ipcMain.handle('agent:send-prompt', async (
-  _event,
-  scopeOrPrompt: AgentRequestScope | string,
-  promptOrStreamingBehavior?: string | AgentRunningPromptBehavior,
-  streamingBehaviorOrAttachments?: AgentRunningPromptBehavior | AgentPromptAttachment[],
-  attachmentsOrOptions?: AgentPromptAttachment[] | AgentPromptSendOptions,
-  options?: AgentPromptSendOptions,
-) => {
-  if (typeof scopeOrPrompt !== 'string') {
-    return agentManager.sendPrompt(
-      scopeOrPrompt,
-      String(promptOrStreamingBehavior ?? ''),
-      streamingBehaviorOrAttachments as AgentRunningPromptBehavior | undefined,
-      attachmentsOrOptions as AgentPromptAttachment[] | undefined,
-      options,
-    )
-  }
-  return agentManager.sendPrompt(
-    requireLegacyBuiltinScope(),
-    scopeOrPrompt,
-    promptOrStreamingBehavior as AgentRunningPromptBehavior | undefined,
-    streamingBehaviorOrAttachments as AgentPromptAttachment[] | undefined,
-  )
-})
-
-ipcMain.handle('agent:update-queued-message', async (
-  _event,
-  scopeOrUpdate: AgentRequestScope | AgentQueuedMessageUpdate,
-  maybeUpdate?: AgentQueuedMessageUpdate,
-) => {
-  return scopeOrUpdate && typeof scopeOrUpdate === 'object' && 'agentId' in scopeOrUpdate
-    ? agentManager.updateQueuedMessage(scopeOrUpdate, maybeUpdate as AgentQueuedMessageUpdate)
-    : agentManager.updateQueuedMessage(requireLegacyBuiltinScope(), scopeOrUpdate)
-})
-
-ipcMain.handle('agent:select-model', async (_event, scopeOrModelKey: AgentRequestScope | string, maybeModelKey?: string) => {
-  return typeof scopeOrModelKey === 'string'
-    ? agentManager.selectModel(requireLegacyBuiltinScope(), scopeOrModelKey)
-    : agentManager.selectModel(scopeOrModelKey, String(maybeModelKey ?? ''))
-})
-
-ipcMain.handle('agent:select-thinking-level', async (
-  _event,
-  scopeOrLevel: AgentRequestScope | string,
-  levelOrModelKey?: string,
-  maybeModelKey?: string,
-) => {
-  return typeof scopeOrLevel === 'string'
-    ? agentManager.selectThinkingLevel(requireLegacyBuiltinScope(), scopeOrLevel, levelOrModelKey)
-    : agentManager.selectThinkingLevel(scopeOrLevel, String(levelOrModelKey ?? ''), maybeModelKey)
-})
-
-ipcMain.handle('agent:update-provider-auth', async (_event, rootPath: string | null, provider: string, apiKey: string | null) => {
-  return agentManager.updateProviderAuth(rootPath, provider, apiKey)
-})
-
-ipcMain.handle('agent:login-provider-auth', async (_event, rootPath: string | null, provider: string) => {
-  cancelProviderAuthFlow(provider, 'A new login was started.')
-  const controller = new AbortController()
-  const flowId = randomUUID()
-  activeProviderAuthFlows.set(provider, { controller, flowId })
-
-  try {
-    return await agentManager.loginProviderAuth(rootPath, provider, {
-      emitAuth: (providerId, info) => {
-        emitProviderAuthUiEvent({
-          type: 'auth',
-          instructions: info.instructions,
-          provider: providerId,
-          url: info.url,
-        })
-      },
-      emitComplete: (providerId, ok, message) => {
-        emitProviderAuthUiEvent({
-          type: 'complete',
-          message,
-          ok,
-          provider: providerId,
-        })
-      },
-      emitProgress: (providerId, message) => {
-        emitProviderAuthUiEvent({
-          type: 'progress',
-          message,
-          provider: providerId,
-        })
-      },
-      openExternal: async (url) => {
-        await shell.openExternal(url)
-      },
-      requestInput: (providerId, prompt) => requestProviderAuthInput(providerId, flowId, prompt),
-      signal: controller.signal,
-    })
-  } finally {
-    const activeFlow = activeProviderAuthFlows.get(provider)
-    if (activeFlow?.flowId === flowId) {
-      activeProviderAuthFlows.delete(provider)
-    }
-    rejectProviderAuthPrompts(provider, flowId)
-  }
-})
-
-ipcMain.handle('agent:logout-provider-auth', async (_event, rootPath: string | null, provider: string) => {
-  cancelProviderAuthFlow(provider)
-  return agentManager.logoutProviderAuth(rootPath, provider)
-})
-
-ipcMain.handle('agent:cancel-provider-auth', async (_event, provider: string) => {
-  return { ok: cancelProviderAuthFlow(provider) }
-})
-
-ipcMain.handle('agent:respond-provider-auth-prompt', async (_event, requestId: string, value: string | null) => {
-  const pendingPrompt = pendingProviderAuthPrompts.get(requestId)
-  if (!pendingPrompt) {
-    return { ok: false }
-  }
-
-  pendingProviderAuthPrompts.delete(requestId)
-
-  if (value === null) {
-    pendingPrompt.reject(new Error('Login cancelled.'))
-    return { ok: true }
-  }
-
-  pendingPrompt.resolve(value)
-  return { ok: true }
-})
-
-ipcMain.handle('agent:abort', async (_event, scope?: AgentRequestScope) => {
-  return agentManager.abortActivePrompt(scope ?? requireLegacyBuiltinScope())
-})
-
-ipcMain.handle('agent:respond-interaction', async (_event, response: AgentInteractionResponse) => {
-  return { ok: await agentManager.respondToInteraction(response) }
 })
 
 ipcMain.handle('window:minimize', () => {

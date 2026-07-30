@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { getArynPiSessionDir } from '../electron/main/agent'
+import { getArynPiSessionDir } from '../electron/main/agent-host/providers/builtin-pi/manager'
 import { ConversationStore } from '../electron/main/conversations'
 
 const tempRoots: string[] = []

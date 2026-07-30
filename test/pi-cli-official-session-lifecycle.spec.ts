@@ -76,7 +76,7 @@ vi.mock('../electron/main/json-line-process', async () => {
   return { JsonLineProcess: FakePiRpcProcess }
 })
 
-import { PiCliAgentManager } from '../electron/main/pi-cli-agent'
+import { PiCliAgentManager } from '../electron/main/agent-host/providers/pi-cli/manager'
 
 type PiIndexRecord = {
   createdAt: string

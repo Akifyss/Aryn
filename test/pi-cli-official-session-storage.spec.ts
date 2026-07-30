@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { SessionManager } from '@earendil-works/pi-coding-agent'
-import { PiCliAgentManager } from '../electron/main/pi-cli-agent'
+import { PiCliAgentManager } from '../electron/main/agent-host/providers/pi-cli/manager'
 
 function legacySessionDirectory(agentDir: string, cwd: string) {
   const resolved = path.resolve(cwd)

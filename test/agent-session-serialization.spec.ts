@@ -10,7 +10,7 @@ import {
   PiAgentManager,
   serializePiWebSessionEntries,
   serializeSessionEntries,
-} from '../electron/main/agent'
+} from '../electron/main/agent-host/providers/builtin-pi/manager'
 
 function appendTestAssistantMessage(sessionManager: SessionManager, text: string, timestamp: number) {
   sessionManager.appendMessage({

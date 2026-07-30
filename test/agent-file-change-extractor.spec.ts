@@ -5,7 +5,7 @@ import {
   extractExplicitBashFileChanges,
   extractWritableToolFilePath,
   filterAnnotationsByDirectToolPaths,
-} from '../electron/main/agent-file-change-extractor'
+} from '../electron/main/agent-host/sessions/file-change-extractor'
 
 describe('agent file change extractor', () => {
   it('extracts only explicit top-level bash file operations', () => {

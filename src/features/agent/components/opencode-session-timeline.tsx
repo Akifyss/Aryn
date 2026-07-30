@@ -5,6 +5,7 @@ import type {
   OpenCodeSessionSurfaceOptions,
   OpenCodeSurfaceEvent,
 } from '@aryn/opencode-session-surface'
+import type { Event as OpenCodeEvent } from '@opencode-ai/sdk/v2'
 
 type OpenCodeSurfaceModule = typeof import('@aryn/opencode-session-surface')
 
@@ -120,7 +121,11 @@ export const OpenCodeSessionTimeline = memo(function OpenCodeSessionTimeline({
       subscribe: (listener) => window.appApi.onAgentEvent((event) => {
         if (event.agentId !== 'opencode') return
         if (event.type === 'opencode_native_event') {
-          listener({ event: event.event, type: 'event', workspacePath: event.workspacePath } satisfies OpenCodeSurfaceEvent)
+          listener({
+            event: event.event as OpenCodeEvent,
+            type: 'event',
+            workspacePath: event.workspacePath,
+          } satisfies OpenCodeSurfaceEvent)
           return
         }
         if (event.type === 'opencode_surface_refresh') {

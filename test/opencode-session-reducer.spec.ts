@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getOpenCodeEventSessionId,
   OpenCodeSessionMessageReducer,
-} from '../electron/main/opencode-session-reducer'
+} from '../electron/main/agent-host/providers/opencode/session-reducer'
 
 function event(value: unknown) {
   return value as OpenCodeEvent

@@ -210,7 +210,7 @@ vi.mock('@opencode-ai/sdk/v2', () => {
   }
 })
 
-import { OpenCodeAgentManager } from '../electron/main/opencode-agent'
+import { OpenCodeAgentManager } from '../electron/main/agent-host/providers/opencode/manager'
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void

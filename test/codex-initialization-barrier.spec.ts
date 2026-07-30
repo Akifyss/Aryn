@@ -56,7 +56,7 @@ vi.mock('../electron/main/json-line-process', () => ({
   },
 }))
 
-import { CodexAgentManager } from '../electron/main/codex-agent'
+import { CodexAgentManager } from '../electron/main/agent-host/providers/codex/manager'
 
 describe('Codex App Server initialization', () => {
   beforeEach(() => {

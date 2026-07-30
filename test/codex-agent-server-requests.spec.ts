@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ServerRequest } from '../src/features/agent/codex-protocol/generated/ServerRequest'
-import { CodexAgentManager } from '../electron/main/codex-agent'
+import type { ServerRequest } from '../electron/shared/agent-contracts/providers/codex/protocol/generated/ServerRequest'
+import { CodexAgentManager } from '../electron/main/agent-host/providers/codex/manager'
 
 describe('Codex App Server requests', () => {
   it('reports unsupported global requests as missing methods rather than malformed thread requests', () => {

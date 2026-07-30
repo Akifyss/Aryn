@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { AGENT_IDS, type AgentId } from '../src/features/agent/agent-definition'
-import { AgentBackendRegistry } from '../electron/main/agent-backends/registry'
-import type { AgentBackend } from '../electron/main/agent-backends/types'
+import { AgentBackendRegistry } from '../electron/main/agent-host/application/backend-registry'
+import type { AgentBackend } from '../electron/main/agent-host/application/agent-backend'
 
 function createBackend(agentId: AgentId) {
   return { agentId, capabilities: {} } as AgentBackend

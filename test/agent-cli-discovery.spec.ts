@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createAgentAvailabilityFromProbe,
   createAgentCatalogDiscovery,
-} from '../electron/main/agent-cli-discovery'
+} from '../electron/main/agent-host/infrastructure/cli-discovery'
 import {
   AGENT_DEFINITIONS,
   type AgentAvailability,

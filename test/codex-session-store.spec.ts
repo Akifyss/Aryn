@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { ServerNotification } from '../src/features/agent/codex-protocol/generated/ServerNotification'
-import type { Thread } from '../src/features/agent/codex-protocol/generated/v2/Thread'
-import { CodexSessionStore } from '../electron/main/codex-session-store'
+import type { ServerNotification } from '../electron/shared/agent-contracts/providers/codex/protocol/generated/ServerNotification'
+import type { Thread } from '../electron/shared/agent-contracts/providers/codex/protocol/generated/v2/Thread'
+import { CodexSessionStore } from '../electron/main/agent-host/providers/codex/session-store'
 
 function thread(turns: Thread['turns'] = []): Thread {
   return {

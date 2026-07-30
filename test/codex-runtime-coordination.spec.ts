@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Thread } from '../src/features/agent/codex-protocol/generated/v2/Thread'
+import type { Thread } from '../electron/shared/agent-contracts/providers/codex/protocol/generated/v2/Thread'
 import type { AgentClientEventPayload } from '../src/features/agent/types'
 
 type FakeClientInstance = {
@@ -33,7 +33,7 @@ vi.mock('../electron/main/external-cli-environment', () => ({
   prepareExternalCliEnvironment: async () => undefined,
 }))
 
-vi.mock('../electron/main/codex-rpc-client', () => ({
+vi.mock('../electron/main/agent-host/providers/codex/rpc-client', () => ({
   CodexRpcClient: class implements FakeClientInstance {
     requests: Array<{ method: string, params: Record<string, unknown> }> = []
     responses: Array<{ id: string | number, result: unknown }> = []
@@ -170,7 +170,7 @@ vi.mock('../electron/main/codex-rpc-client', () => ({
   },
 }))
 
-import { CodexAgentManager } from '../electron/main/codex-agent'
+import { CodexAgentManager } from '../electron/main/agent-host/providers/codex/manager'
 
 function deferred() {
   let resolve!: () => void

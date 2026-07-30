@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   SessionRuntimeCoordinator,
   type SessionRuntimeLease,
-} from '../electron/main/session-runtime-coordinator'
+} from '../electron/main/agent-host/runtime/session-runtime-coordinator'
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -262,6 +262,74 @@ describe('SessionRuntimeCoordinator', () => {
 
     expect(failures).toEqual(['first event failed'])
     expect(applied).toEqual(['second'])
+    await coordinator.dispose()
+  })
+
+  it('returns typed receipts for applied, failed, and stale events', async () => {
+    const coordinator = new SessionRuntimeCoordinator<{ id: string }>({
+      stopRuntime: () => undefined,
+    })
+    const handle = await coordinator.ensure('session-a', async () => ({ id: 'runtime-a' }))
+
+    const applied = handle.lease.enqueue(() => undefined)
+    const failed = handle.lease.enqueue(() => {
+      throw new Error('projection failed')
+    })
+    await handle.lease.drain()
+    await coordinator.retire('session-a')
+    const dropped = handle.lease.enqueue(() => undefined)
+
+    await expect(applied.settled).resolves.toEqual({ status: 'applied' })
+    await expect(failed.settled).resolves.toMatchObject({
+      error: expect.objectContaining({ message: 'projection failed' }),
+      status: 'failed',
+    })
+    await expect(dropped.settled).resolves.toEqual({ status: 'dropped' })
+    await coordinator.dispose()
+  })
+
+  it('admits queued retirement before later user work for the same session', async () => {
+    const firstEntered = deferred()
+    const releaseFirst = deferred()
+    const order: string[] = []
+    const coordinator = new SessionRuntimeCoordinator<{ id: string }>({
+      stopRuntime: ({ id }) => {
+        order.push(`stop:${id}`)
+      },
+    })
+    await coordinator.ensure('session-a', async () => ({ id: 'runtime-a' }))
+
+    const first = coordinator.use(
+      'session-a',
+      async () => ({ id: 'unexpected' }),
+      async () => {
+        order.push('first-user')
+        firstEntered.resolve()
+        await releaseFirst.promise
+      },
+    )
+    await firstEntered.promise
+    const second = coordinator.use(
+      'session-a',
+      async () => {
+        order.push('restart')
+        return { id: 'runtime-b' }
+      },
+      () => {
+        order.push('second-user')
+      },
+    )
+    const retirement = coordinator.retire('session-a')
+
+    releaseFirst.resolve()
+    await Promise.all([first, second, retirement])
+
+    expect(order).toEqual([
+      'first-user',
+      'stop:runtime-a',
+      'restart',
+      'second-user',
+    ])
     await coordinator.dispose()
   })
 

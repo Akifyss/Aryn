@@ -3,9 +3,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { AgentClientEventPayload, AgentWorkspaceState } from '../src/features/agent/types'
-import { CodexAgentManager } from '../electron/main/codex-agent'
-import { OpenCodeAgentManager } from '../electron/main/opencode-agent'
-import { PiCliAgentManager } from '../electron/main/pi-cli-agent'
+import { CodexAgentManager } from '../electron/main/agent-host/providers/codex/manager'
+import { OpenCodeAgentManager } from '../electron/main/agent-host/providers/opencode/manager'
+import { PiCliAgentManager } from '../electron/main/agent-host/providers/pi-cli/manager'
 
 type SmokeAdapter = {
   createSession: (cwd: string, options?: {

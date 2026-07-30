@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const generatedDir = path.join(rootDir, 'src/features/agent/codex-protocol/generated')
+const generatedDir = path.join(rootDir, 'electron/shared/agent-contracts/providers/codex/protocol/generated')
 const expectedFileCount = 598
 const expectedAggregateHash = '245C5862B40E007052542BB0DE70B68F7AD57475DD371748BA34D602147C603B'
 
@@ -37,7 +37,7 @@ if (files.length !== expectedFileCount || actualAggregateHash !== expectedAggreg
       `Expected: ${expectedFileCount} files, SHA-256 ${expectedAggregateHash}\n` +
       `Actual:   ${files.length} files, SHA-256 ${actualAggregateHash}\n` +
       'Regenerate the complete tree with the command documented in ' +
-      'src/features/agent/codex-protocol/UPSTREAM.md and review the protocol diff.',
+      'electron/shared/agent-contracts/providers/codex/protocol/UPSTREAM.md and review the protocol diff.',
   )
 }
 

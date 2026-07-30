@@ -86,7 +86,7 @@ vi.mock('../electron/main/json-line-process', () => {
   return { JsonLineProcess: FakePiRpcProcess }
 })
 
-import { PiCliAgentManager } from '../electron/main/pi-cli-agent'
+import { PiCliAgentManager } from '../electron/main/agent-host/providers/pi-cli/manager'
 
 function deferred() {
   let resolve!: () => void

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AgentSessionAnnotationStore, upsertAgentSessionFileChange } from '../electron/main/agent-session-annotations'
+import { AgentSessionAnnotationStore, upsertAgentSessionFileChange } from '../electron/main/agent-host/sessions/annotations'
 import { mergeAgentMessageFileChangeKind } from '../src/features/agent/file-change-utils'
 
 const tempRoots: string[] = []

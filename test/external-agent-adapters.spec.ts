@@ -3,8 +3,8 @@ import {
   buildCodexApprovalResult,
   buildCodexPermissionApprovalResult,
   buildCodexUserInputs,
-} from '../electron/main/codex-agent'
-import { projectPiFileAnnotations } from '../electron/main/pi-cli-agent'
+} from '../electron/main/agent-host/providers/codex/manager'
+import { projectPiFileAnnotations } from '../electron/main/agent-host/providers/pi-cli/manager'
 import {
   AGENT_DEFINITIONS,
   DEFAULT_AGENT_ID,
