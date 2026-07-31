@@ -54,7 +54,7 @@ describe('shared application item', () => {
     expect(markup).not.toContain('<li')
   })
 
-  it('adds right padding only when no trailing end content is rendered', async () => {
+  it('adds right padding whenever no trailing end content is visible', async () => {
     const withoutEnd = renderToStaticMarkup(
       <AppItem
         itemAs={null}
@@ -78,6 +78,49 @@ describe('shared application item', () => {
         mainKind='static'
       />,
     )
+    const withHiddenActions = renderToStaticMarkup(
+      <AppItem
+        actions={<button type='button'>More</button>}
+        itemAs={null}
+        label='Open'
+        mainKind='static'
+      />,
+    )
+    const withVisibleActions = renderToStaticMarkup(
+      <AppItem
+        actions={<button type='button'>More</button>}
+        actionsAlwaysVisible
+        itemAs={null}
+        label='Open'
+        mainKind='static'
+      />,
+    )
+    const withInfoAndActions = renderToStaticMarkup(
+      <AppItem
+        actions={<button type='button'>More</button>}
+        info='1'
+        itemAs={null}
+        label='Open'
+        mainKind='static'
+      />,
+    )
+    const withEmptyActions = renderToStaticMarkup(
+      <AppItem
+        actions={() => null}
+        itemAs={null}
+        label='Open'
+        mainKind='static'
+      />,
+    )
+    const withOverriddenActions = renderToStaticMarkup(
+      <AppItem
+        actions={<button type='button'>Unused action</button>}
+        end={<span>Custom end</span>}
+        itemAs={null}
+        label='Open'
+        mainKind='static'
+      />,
+    )
     const styles = await readFile(
       new URL('../src/components/app-item/styles.css', import.meta.url),
       'utf8',
@@ -86,9 +129,23 @@ describe('shared application item', () => {
     expect(withoutEnd).not.toContain('has-end')
     expect(withEnd).toContain('app-item-row has-end has-info')
     expect(withCustomEnd).toContain('app-item-row has-end')
-    expect(styles).toMatch(
-      /\.app-item-row:not\(\.has-end\)\s*\{[^}]*padding-right:\s*8px;/,
-    )
+    expect(withHiddenActions).toContain('app-item-row has-actions has-end')
+    expect(withHiddenActions).not.toContain('has-visible-actions')
+    expect(withVisibleActions).toContain('app-item-row has-actions has-end has-visible-actions')
+    expect(withInfoAndActions).toContain('app-item-row has-actions has-end has-info')
+    expect(withEmptyActions).not.toContain('has-actions')
+    expect(withEmptyActions).not.toContain('has-end')
+    expect(withOverriddenActions).toContain('app-item-row has-end')
+    expect(withOverriddenActions).not.toContain('has-actions')
+    expect(withOverriddenActions).not.toContain('Unused action')
+    expect(styles).toContain([
+      '.app-item-row:not(.has-end),',
+      '.app-item-row.has-actions:not(.has-info):not(.has-visible-actions):not(:hover):not(:focus-within):not(.is-menu-open):not(.is-editing) {',
+      '  padding-right: 8px;',
+      '}',
+    ].join('\n'))
+    expect(styles).toContain('.app-item-row:focus-within .app-item-actions,')
+    expect(styles).toContain('.app-item-row.has-actions:focus-within .app-item-info,')
   })
 
   it('builds item actions from AppIconButton instead of cloning an icon button', () => {

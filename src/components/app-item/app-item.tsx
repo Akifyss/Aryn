@@ -254,9 +254,12 @@ export const AppItem = forwardRef<HTMLDivElement, AppItemProps>(function AppItem
       </AppItemMainButton>
     )
   ) : null)
-  const defaultEnd = end ?? (hasActions || hasInfo ? (
+  const usesDefaultEnd = end === undefined || end === null
+  const hasRenderedActions = usesDefaultEnd && hasActions
+  const hasRenderedInfo = usesDefaultEnd && hasInfo
+  const renderedEnd = usesDefaultEnd && (hasRenderedActions || hasRenderedInfo) ? (
     <AppItemEnd>
-      {hasActions ? (
+      {hasRenderedActions ? (
         <AppItemActions
           {...actionsProps}
           className={cx(actionsClassName, actionsProps?.className)}
@@ -264,7 +267,7 @@ export const AppItem = forwardRef<HTMLDivElement, AppItemProps>(function AppItem
           {renderedActions}
         </AppItemActions>
       ) : null}
-      {hasInfo ? (
+      {hasRenderedInfo ? (
         <AppItemInfo
           {...infoProps}
           variant={effectiveInfoVariant}
@@ -274,19 +277,19 @@ export const AppItem = forwardRef<HTMLDivElement, AppItemProps>(function AppItem
         </AppItemInfo>
       ) : null}
     </AppItemEnd>
-  ) : null)
-  const hasEnd = defaultEnd !== undefined && defaultEnd !== null && defaultEnd !== false
+  ) : end
+  const hasEnd = renderedEnd !== undefined && renderedEnd !== null && renderedEnd !== false
 
   const row = (
     <div
       ref={ref}
       className={appItemClassNames.row(cx(
         appItemRowStateClassName({
-          hasActions,
+          hasActions: hasRenderedActions,
           hasDescription,
           hasEnd,
-          hasInfo,
-          hasVisibleActions: hasActions && actionsAlwaysVisible,
+          hasInfo: hasRenderedInfo,
+          hasVisibleActions: hasRenderedActions && actionsAlwaysVisible,
           isActive,
           isDragSource,
           isDropTarget,
@@ -299,7 +302,7 @@ export const AppItem = forwardRef<HTMLDivElement, AppItemProps>(function AppItem
       {...props}
     >
       {defaultMain}
-      {defaultEnd}
+      {renderedEnd}
     </div>
   )
 
