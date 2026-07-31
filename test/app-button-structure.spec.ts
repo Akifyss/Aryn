@@ -85,7 +85,10 @@ describe('shared text button', () => {
     expect(indexCss).toContain('--app-button-padding-inline-md: 8px;')
     expect(indexCss).toContain('--app-button-padding-inline-sm: 6px;')
     expect(indexCss).not.toContain('--app-button-height-xs:')
-    expect(indexCss).toContain('--app-button-base-icon-size: 16px;')
+    expect(indexCss).toContain('--icon-size-md: 16px;')
+    expect(indexCss).toContain('--icon-size-lg: 20px;')
+    expect(indexCss).toContain('--icon-size-xl: 24px;')
+    expect(indexCss).not.toContain('--app-button-base-icon-size:')
     expect(indexCss).toContain('--app-button-base-radius-md: 8px;')
     expect(indexCss).toContain('--app-button-base-radius-sm: 6px;')
     expect(indexCss).toContain('--app-button-base-transition-duration: 140ms;')
@@ -97,7 +100,7 @@ describe('shared text button', () => {
     expect(buttonCss).toContain(
       '--app-button-current-radius: var(--app-button-base-radius-md);',
     )
-    expect(buttonCss).toContain('width: var(--app-button-base-icon-size);')
+    expect(buttonCss).toContain('width: var(--icon-size-md);')
     expect(buttonCss).toContain('var(--app-button-base-transition-duration)')
     expect(buttonCss).toContain(
       'opacity: var(--app-button-base-disabled-opacity);',

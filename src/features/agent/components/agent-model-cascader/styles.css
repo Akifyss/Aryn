@@ -64,6 +64,13 @@
   color: var(--foreground-secondary);
 }
 
+.agent-model-cascader-search > svg,
+.agent-model-cascader-search > .iconify {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+  flex: 0 0 auto;
+}
+
 .agent-model-cascader-search:focus-within {
   outline: 2px solid var(--focus);
   outline-offset: -2px;

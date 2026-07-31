@@ -1056,7 +1056,7 @@ export function AgentModelCascader({
           onPointerLeave={clearPointerIntent}
         >
           <div className='agent-model-cascader-search'>
-            <SearchLine aria-hidden='true' size={16} />
+            <SearchLine aria-hidden='true' />
             <input
               ref={searchRef}
               type='search'
@@ -1085,7 +1085,7 @@ export function AgentModelCascader({
                   })
                 }}
               >
-                <CloseLine aria-hidden='true' size={16} />
+                <CloseLine aria-hidden='true' />
               </AppIconButton>
             ) : null}
           </div>
@@ -1145,7 +1145,7 @@ export function AgentModelCascader({
                           className={`agent-model-cascader-option${provider === resolvedPreviewProvider ? ' is-highlighted' : ''}`}
                           selected={provider === currentProvider}
                           text={provider}
-                          info={<RightLine aria-hidden='true' size={16} />}
+                          info={<RightLine aria-hidden='true' />}
                           infoVariant='status'
                           onFocus={() => {
                             setKeyboardColumn('provider')

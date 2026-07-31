@@ -79,8 +79,8 @@
 
 .workspace-sidebar-surface .editor-workspace-switch-chevron {
   flex: 0 0 auto;
-  width: var(--app-button-base-icon-size);
-  height: var(--app-button-base-icon-size);
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   color: var(--foreground-secondary);
   transition: color var(--app-button-base-transition-duration) ease;
 }
@@ -130,6 +130,12 @@
   font-weight: 500;
   text-align: left;
   transition: background-color 140ms ease, color 140ms ease;
+}
+
+.workspace-sidebar-surface .sidebar-footer-item > svg,
+.workspace-sidebar-surface .sidebar-footer-item > .iconify {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
 }
 
 .workspace-sidebar-surface .sidebar-footer-item:hover,

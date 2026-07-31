@@ -33,6 +33,13 @@
   transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
 }
 
+.agent-session-new-button > svg,
+.agent-session-new-button > .iconify {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+  flex: 0 0 auto;
+}
+
 .agent-session-new-button:hover,
 .agent-session-new-button:focus-visible {
   outline: none;

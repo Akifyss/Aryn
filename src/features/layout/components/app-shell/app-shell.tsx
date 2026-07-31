@@ -211,7 +211,7 @@ export function AppShell({
           onClick={toggleAssistantSurface}
         >
           <span className='panel-toggle-icon' aria-hidden='true'>
-            <LayoutRightLine size={16} />
+            <LayoutRightLine />
           </span>
         </AppIconButton>
       ) : null}

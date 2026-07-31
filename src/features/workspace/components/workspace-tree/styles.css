@@ -19,6 +19,12 @@
   color: var(--accent);
 }
 
+.workspace-tree-empty-icon > svg,
+.workspace-tree-empty-icon > .iconify {
+  width: var(--icon-size-xl);
+  height: var(--icon-size-xl);
+}
+
 .workspace-tree-root.is-root-drop-target {
   outline: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   outline-offset: -1px;

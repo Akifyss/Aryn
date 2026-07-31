@@ -3,6 +3,7 @@ import {
   resolveWorkspaceFileIconUrl,
 } from '@/features/workspace/lib/icon-theme'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
+import type { AppIconSize } from './icon-size'
 import {
   DefaultWorkspaceDirectoryIcon,
   DefaultWorkspaceFileTypeIcon,
@@ -50,12 +51,14 @@ export function FileChangeStatusBadge({
 }
 
 export function WorkspaceFileIcon({
+  iconSize,
   fileName,
   iconTheme,
   isClosed,
   isFolder,
   nodeLabel,
 }: {
+  iconSize?: AppIconSize
   fileName?: string
   iconTheme: WorkspaceIconTheme | null
   isClosed?: boolean
@@ -67,7 +70,7 @@ export function WorkspaceFileIcon({
     : resolveWorkspaceFileIconUrl(iconTheme, fileName ?? '')
 
   return (
-    <AppItemIcon>
+    <AppItemIcon size={iconSize}>
       {iconUrl ? (
         <img alt='' className='app-item-icon-image' draggable='false' src={iconUrl} />
       ) : isFolder && iconTheme === null ? (

@@ -31,6 +31,12 @@
   color: var(--foreground-secondary);
 }
 
+.workspace-file-system-unavailable-icon > svg,
+.workspace-file-system-unavailable-icon > .iconify {
+  width: var(--icon-size-xl);
+  height: var(--icon-size-xl);
+}
+
 .workspace-file-system-unavailable p {
   max-width: 34ch;
   margin: 0;

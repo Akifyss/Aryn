@@ -446,7 +446,7 @@ function ViewerLoadingSurface({
 }) {
   return (
     <div className="grid h-full min-h-52 w-full min-w-full place-items-center bg-transparent">
-      {showSpinner ? <Spinner className="size-4" /> : null}
+      {showSpinner ? <Spinner className="size-[var(--icon-size-md)]" /> : null}
     </div>
   );
 }
@@ -476,7 +476,7 @@ function WorkbookFileActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger label={VIEWER_COPY.openWorkbookActions}>
-        <More2Line aria-hidden="true" className="size-4" />
+        <More2Line aria-hidden="true" className="size-[var(--icon-size-md)]" />
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
@@ -485,7 +485,7 @@ function WorkbookFileActionsMenu({
           <>
             <DropdownMenuCheckboxItem
               checked={Boolean(isDark)}
-              icon={<MoonLine aria-hidden="true" className="size-4" />}
+              icon={<MoonLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
               text={VIEWER_COPY.darkMode}
               onCheckedChange={(checked) => onIsDarkChange?.(checked === true)}
             />
@@ -494,14 +494,14 @@ function WorkbookFileActionsMenu({
         ) : null}
         {showDownloadButton && onDownload ? (
           <DropdownMenuItem
-            icon={<DownloadLine aria-hidden="true" className="size-4" />}
+            icon={<DownloadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
             text={VIEWER_COPY.download}
             onClick={onDownload}
           />
         ) : null}
         {showUploadButton ? (
           <DropdownMenuItem
-            icon={<UploadLine aria-hidden="true" className="size-4" />}
+            icon={<UploadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
             text={VIEWER_COPY.upload}
             onClick={onUploadClick}
           />
@@ -545,7 +545,7 @@ export function WorkbookTableHeaderMenu({
         aria-label="列菜单"
         label="列菜单"
       >
-        {triggerIcon ? triggerIcon : <More2Line aria-hidden="true" className="size-4" />}
+        {triggerIcon ? triggerIcon : <More2Line aria-hidden="true" className="size-[var(--icon-size-md)]" />}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
@@ -728,7 +728,7 @@ function WorkbookSearchPopover({
           placement="bottom"
           disabled={controlsDisabled}
         >
-          <SearchLine aria-hidden="true" className="size-4" />
+          <SearchLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
         </ViewerToolbarButton>
       </PopoverTrigger>
       <PopoverContent align="end" className="viewer-search-popover">
@@ -1491,7 +1491,7 @@ function XlsxViewerContent({
               className="mt-4"
               onClick={() => fileInputRef.current?.click()}
             >
-              <UploadLine aria-hidden="true" className="size-4" />
+              <UploadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
               {VIEWER_COPY.uploadXlsx}
             </AppButton>
           </div>
@@ -1533,7 +1533,7 @@ function XlsxViewerContent({
               className="mt-4"
               onClick={() => fileInputRef.current?.click()}
             >
-              <UploadLine aria-hidden="true" className="size-4" />
+              <UploadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
               {VIEWER_COPY.uploadXlsx}
             </AppButton>
           </div>

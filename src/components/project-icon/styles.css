@@ -1,7 +1,17 @@
 .project-icon {
   display: block;
   flex: 0 0 auto;
-  width: var(--project-icon-size, 16px);
-  height: var(--project-icon-size, 16px);
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   color: var(--project-icon-color, currentColor);
+}
+
+.project-icon[data-size='lg'] {
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+}
+
+.project-icon[data-size='xl'] {
+  width: var(--icon-size-xl);
+  height: var(--icon-size-xl);
 }

@@ -152,8 +152,8 @@
 }
 
 .app-alert-dialog-icon svg {
-  width: 20px;
-  height: 20px;
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
 }
 
 .app-alert-dialog-body {

@@ -22,8 +22,8 @@
 
 .app-empty-state-icon {
   display: block;
-  width: 32px;
-  height: 32px;
+  width: var(--icon-size-xl);
+  height: var(--icon-size-xl);
 }
 
 .app-empty-state-copy {

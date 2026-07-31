@@ -85,7 +85,7 @@ export function WorkspaceTreePanel({
               aria-label='Create File'
               title='新建文件'
             >
-              <Icon icon='lucide:file-plus' width={16} height={16} />
+              <Icon icon='lucide:file-plus' />
             </AppItemActionButton>
             <AppItemActionButton
               onClick={onCreateDirectory}
@@ -93,7 +93,7 @@ export function WorkspaceTreePanel({
               aria-label='Create Folder'
               title='新建文件夹'
             >
-              <Icon icon='lucide:folder-plus' width={16} height={16} />
+              <Icon icon='lucide:folder-plus' />
             </AppItemActionButton>
             <AppItemActionButton
               onClick={onToggleFileTreeExpansion}
@@ -103,8 +103,6 @@ export function WorkspaceTreePanel({
             >
               <Icon
                 icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'}
-                width={16}
-                height={16}
               />
             </AppItemActionButton>
           </>
@@ -117,7 +115,7 @@ export function WorkspaceTreePanel({
       >
         {workspaceUnavailableMessage ? (
           <WorkspaceTreeEmptyState
-            icon={<FolderForbidLine size={26} />}
+            icon={<FolderForbidLine />}
             message={workspaceUnavailableMessage}
           />
         ) : (

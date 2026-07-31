@@ -59,8 +59,6 @@ export function WorkspaceEditorDirectoryToggle({
     >
       <Icon
         icon={isVisible ? 'ri:menu-fold-line' : 'ri:menu-fold-2-line'}
-        width={16}
-        height={16}
         aria-hidden='true'
       />
     </AppIconButton>
@@ -90,7 +88,7 @@ export function WorkspaceEditorEmptyState({
     <div className='editor-empty-state is-workspace-missing'>
       <div className='editor-empty-content'>
         <div className='editor-empty-logo-shell' aria-hidden='true'>
-          <FolderOpenLine className='editor-empty-folder-icon' size={30} />
+          <FolderOpenLine className='editor-empty-folder-icon' />
         </div>
         <div className='editor-empty-copy'>
           <h3>选择工作目录</h3>
@@ -105,7 +103,7 @@ export function WorkspaceEditorEmptyState({
             }}
             disabled={isPickingWorkspace}
           >
-            <FolderOpenLine size={16} aria-hidden='true' />
+            <FolderOpenLine aria-hidden='true' />
             选择工作目录
           </AppButton>
         </div>

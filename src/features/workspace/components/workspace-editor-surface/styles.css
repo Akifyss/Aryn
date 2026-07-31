@@ -100,8 +100,8 @@
 }
 
 .editor-lazy-spinner {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   border: 2px solid color-mix(in srgb, var(--foreground-secondary) 24%, transparent);
   border-top-color: var(--accent);
   border-radius: 999px;
@@ -144,8 +144,8 @@
 }
 
 .editor-empty-folder-icon {
-  width: 30px;
-  height: 30px;
+  width: var(--icon-size-xl);
+  height: var(--icon-size-xl);
 }
 
 .editor-empty-copy h3 {

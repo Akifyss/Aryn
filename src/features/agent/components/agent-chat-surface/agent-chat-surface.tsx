@@ -128,7 +128,7 @@ export function AgentChatSurface() {
         void onStartStandaloneConversation?.()
       }}
     >
-      <EditLine size={16} />
+      <EditLine />
     </AppIconButton>
   ) : null
 
@@ -176,7 +176,6 @@ export function AgentChatSurface() {
                   <DownLine
                     aria-hidden='true'
                     className='agent-session-trigger-arrow'
-                    size={16}
                   />
                 </Menu.Trigger>
                 {sessionMenuPortalTarget ? (

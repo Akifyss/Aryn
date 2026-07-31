@@ -129,8 +129,8 @@
 }
 
 .viewer-search-field-icon {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   flex: 0 0 auto;
   color: var(--foreground-secondary);
 }

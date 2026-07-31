@@ -28,14 +28,14 @@ function AgentTreeActionMenuItems({
     <>
       <ItemComponent
         disabled={disabled}
-        icon={<Edit2Line size={16} />}
+        icon={<Edit2Line />}
         label='重命名'
         text='重命名'
         onClick={onRename}
       />
       <ItemComponent
         disabled={disabled}
-        icon={<Delete2Line size={16} />}
+        icon={<Delete2Line />}
         label='删除'
         text='删除'
         tone='danger'
@@ -124,13 +124,13 @@ function AgentProjectMenuItems({
   return (
     <>
       <ItemComponent
-        icon={<ExternalLinkLine size={16} />}
+        icon={<ExternalLinkLine />}
         label={`在${systemFileManagerName}中打开`}
         text={`在“${systemFileManagerName}”中打开`}
         onClick={onOpenFolder}
       />
       <ItemComponent
-        icon={<Delete2Line size={16} />}
+        icon={<Delete2Line />}
         label='移除'
         text='移除'
         tone='danger'

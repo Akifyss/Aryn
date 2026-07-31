@@ -82,7 +82,7 @@ function GitRevertCommitAction({
         onRevertCommit(commit)
       }}
     >
-      <Back2Line size={16} aria-hidden='true' />
+      <Back2Line aria-hidden='true' />
     </AppItemActionButton>
   )
 }
@@ -120,8 +120,6 @@ export function GitHistoryPane({
               <AppItemIcon>
                 <Icon
                   icon={historySelection.kind === 'working-tree' ? 'octicon:dot-fill-16' : 'octicon:dot-16'}
-                  width={16}
-                  height={16}
                   aria-hidden='true'
                 />
               </AppItemIcon>
@@ -151,8 +149,8 @@ export function GitHistoryPane({
                 icon={(
                   <AppItemIcon>
                     {isCommitSelected
-                      ? <GitCommitFill size={16} aria-hidden='true' />
-                      : <GitCommitLine size={16} aria-hidden='true' />}
+                      ? <GitCommitFill aria-hidden='true' />
+                      : <GitCommitLine aria-hidden='true' />}
                   </AppItemIcon>
                 )}
                 isActive={isCommitSelected}
@@ -307,8 +305,8 @@ export function GitHistorySection({
                   icon={(
                     <AppItemIcon>
                       {isCommitExpanded
-                        ? <GitCommitFill size={16} aria-hidden='true' />
-                        : <GitCommitLine size={16} aria-hidden='true' />}
+                        ? <GitCommitFill aria-hidden='true' />
+                        : <GitCommitLine aria-hidden='true' />}
                     </AppItemIcon>
                   )}
                   label={commit.subject}

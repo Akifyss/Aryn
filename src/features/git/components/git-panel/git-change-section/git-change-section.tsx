@@ -89,7 +89,7 @@ function GitRowActions({
             onOpenFile?.()
           }}
         >
-          <Icon icon='material-symbols:file-export-outline-rounded' width={16} height={16} aria-hidden='true' />
+          <Icon icon='material-symbols:file-export-outline-rounded' aria-hidden='true' />
         </AppItemActionButton>
       )}
       {showMeoDiff && (
@@ -101,7 +101,7 @@ function GitRowActions({
             onOpenMeoDiff?.()
           }}
         >
-          <MarkdownLine size={16} aria-hidden='true' />
+          <MarkdownLine aria-hidden='true' />
         </AppItemActionButton>
       )}
 
@@ -114,7 +114,7 @@ function GitRowActions({
             onUnstage?.()
           }}
         >
-          <Icon icon='mdi:minus' width={16} height={16} aria-hidden='true' />
+          <Icon icon='mdi:minus' aria-hidden='true' />
         </AppItemActionButton>
       )}
 
@@ -128,7 +128,7 @@ function GitRowActions({
               onDiscard?.()
             }}
           >
-            <Back2Line size={16} aria-hidden='true' />
+            <Back2Line aria-hidden='true' />
           </AppItemActionButton>
           <AppItemActionButton
             aria-label='暂存'
@@ -138,7 +138,7 @@ function GitRowActions({
               onStage?.()
             }}
           >
-            <AddLine size={16} aria-hidden='true' />
+            <AddLine aria-hidden='true' />
           </AppItemActionButton>
         </>
       )}

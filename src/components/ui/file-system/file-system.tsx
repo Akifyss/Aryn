@@ -505,7 +505,7 @@ function SelectTrigger({
     >
       {children}
       <MenuSelect.Icon className="flex shrink-0 items-center text-[var(--foreground-secondary)]">
-        <DownLine aria-hidden="true" className="size-4" />
+        <DownLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
       </MenuSelect.Icon>
     </MenuSelect.Trigger>
   )
@@ -567,7 +567,7 @@ function SelectItem({
   return (
     <MenuSelect.Item
       className={className}
-      indicator={<CheckLine aria-hidden="true" className="size-4" />}
+      indicator={<CheckLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
       text={children}
       {...props}
     />
@@ -580,7 +580,7 @@ function Spinner({ className }: { className?: string }) {
       aria-label="加载中"
       role="status"
       className={cn(
-        "inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent",
+        "inline-block size-[var(--icon-size-md)] animate-spin rounded-full border-2 border-current border-t-transparent",
         className
       )}
     />
@@ -632,7 +632,7 @@ function FileThumbnail({
         ) : (
           <Document2Line
             aria-hidden="true"
-            className="size-8 text-[var(--foreground-secondary)]"
+            className="size-[var(--icon-size-xl)] text-[var(--foreground-secondary)]"
           />
         )}
       </div>
@@ -1354,7 +1354,7 @@ const VIEWER_DIALOG_CLASSNAMES: Record<FileSystemViewerKind, string> = {
 function FileSystemViewerLoading() {
   return (
     <div className="grid h-full min-h-48 flex-1 place-items-center bg-[var(--background-primary)]">
-      <Spinner className="size-4 text-[var(--foreground-secondary)]" />
+      <Spinner className="size-[var(--icon-size-md)] text-[var(--foreground-secondary)]" />
     </div>
   )
 }
@@ -1419,7 +1419,7 @@ function FileSystemCsvViewerFromUrl({
           message ? "text-[var(--danger)]" : "text-[var(--foreground-secondary)]"
         )}
       >
-        {message ?? <Spinner className="size-4" />}
+        {message ?? <Spinner className="size-[var(--icon-size-md)]" />}
       </div>
     </div>
   )
@@ -2278,7 +2278,7 @@ function FileVisual({
           onDoubleClick={(event) => event.stopPropagation()}
           className="file-system-thumbnail-pager-button"
         >
-          <LeftLine aria-hidden="true" className="size-4" />
+          <LeftLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
         </AppIconButton>
         <span className="rounded-md bg-[color-mix(in_oklab,var(--background-primary)_80%,transparent)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--foreground-secondary)] tabular-nums shadow-xs backdrop-blur-sm">
           {clampedPageIndex + 1}/{totalPages}
@@ -2297,7 +2297,7 @@ function FileVisual({
           onDoubleClick={(event) => event.stopPropagation()}
           className="file-system-thumbnail-pager-button"
         >
-          <RightLine aria-hidden="true" className="size-4" />
+          <RightLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
         </AppIconButton>
       </div>
     </div>
@@ -3189,7 +3189,7 @@ export function FileSystem({
               {activeViewOption ? (
                 <SystemIcon
                   icon={activeViewOption.icon}
-                  className="size-4"
+                  className="size-[var(--icon-size-md)]"
                 />
               ) : null}
             </SelectValue>
@@ -3199,7 +3199,7 @@ export function FileSystem({
           {VIEW_OPTIONS.map((option) => (
             <SelectItem
               key={option.value}
-              icon={<SystemIcon icon={option.icon} className="size-4" />}
+              icon={<SystemIcon icon={option.icon} className="size-[var(--icon-size-md)]" />}
               value={option.value}
             >
               {option.label}
@@ -3215,7 +3215,7 @@ export function FileSystem({
         controlClassName="file-system-view-switch"
         options={VIEW_OPTIONS.map((option) => ({
           ariaLabel: FILE_SYSTEM_COPY.toolbar.viewAria(option.label),
-          icon: <SystemIcon icon={option.icon} className="size-4" />,
+          icon: <SystemIcon icon={option.icon} className="size-[var(--icon-size-md)]" />,
           tooltip: option.label,
           value: option.value,
         }))}
@@ -3231,7 +3231,7 @@ export function FileSystem({
         />
       )}
     >
-      <CloseLine aria-hidden="true" className="size-4" />
+      <CloseLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
     </AppDialog.Close>
   )
 
@@ -3295,7 +3295,7 @@ export function FileSystem({
             disabled={!canGoBack}
             onClick={goBack}
           >
-            <LeftLine aria-hidden="true" className="size-4" />
+            <LeftLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
           </AppIconButton>
           <AppIconButton
             type="button"
@@ -3304,7 +3304,7 @@ export function FileSystem({
             disabled={!canGoForward}
             onClick={goForward}
           >
-            <RightLine aria-hidden="true" className="size-4" />
+            <RightLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
           </AppIconButton>
           {headerLayout !== "minimal" ? (
             <span className="file-system-toolbar-title">
@@ -3560,7 +3560,7 @@ function FileSystemSearchField({
     >
       <SearchLine
         aria-hidden="true"
-        className="pointer-events-none absolute left-2 size-3.5 text-[var(--foreground-secondary)]"
+        className="pointer-events-none absolute left-2 size-[var(--icon-size-md)] text-[var(--foreground-secondary)]"
       />
       <input
         ref={inputRef}
@@ -3595,7 +3595,7 @@ function FileSystemSearchField({
           }}
           className="file-system-search-clear-button"
         >
-          <CloseLine aria-hidden="true" className="size-4" />
+          <CloseLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
         </AppIconButton>
       ) : null}
     </div>
@@ -3625,7 +3625,7 @@ function FileSystemSearchField({
             />
           }
         >
-          <SearchLine aria-hidden="true" className="size-4" />
+          <SearchLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
           {value ? (
             <span className="absolute top-1 right-1 size-1.5 rounded-full bg-[var(--accent)]" />
           ) : null}
@@ -3666,7 +3666,7 @@ function FileSystemSortSelect({
         >
           <SelectValue>
             <span className="flex items-center gap-1.5">
-              <Transfer4Line aria-hidden="true" className="size-4" />
+              <Transfer4Line aria-hidden="true" className="size-[var(--icon-size-md)]" />
               {layout === "full" && showLabel ? activeOption?.triggerLabel : null}
             </span>
           </SelectValue>
@@ -3746,10 +3746,10 @@ function FileSystemFileTypeCommand({
                           icon={(
                             <FileTypeIcon
                               fileName={option.iconFileName}
-                              className="size-4"
+                              className="size-[var(--icon-size-md)]"
                             />
                           )}
-                          info={isChecked ? <CheckLine aria-hidden="true" className="size-4" /> : undefined}
+                          info={isChecked ? <CheckLine aria-hidden="true" className="size-[var(--icon-size-md)]" /> : undefined}
                           infoVariant="status"
                           aria-selected={isChecked}
                           selected={isChecked}
@@ -3806,7 +3806,7 @@ function FileSystemFilterMenu({
           size="md"
           variant="icon"
         >
-          <FilterLine aria-hidden="true" className="size-4" />
+          <FilterLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
           {filters.length > 0 ? (
             <span className="absolute top-1 right-1 size-1.5 rounded-full bg-[var(--accent)]" />
           ) : null}
@@ -3818,7 +3818,6 @@ function FileSystemFilterMenu({
             icon={(
               <Document2Line
                 aria-hidden="true"
-                size={16}
               />
             )}
             text={FILE_SYSTEM_COPY.filter.type.fileType}
@@ -3837,7 +3836,6 @@ function FileSystemFilterMenu({
               icon={(
                 <Calendar2Line
                   aria-hidden="true"
-                  size={16}
                 />
               )}
               text={FILTER_TYPE_LABELS[type]}
@@ -3916,7 +3914,7 @@ function FileSystemFilterPill({
           "rounded-l-md border-l text-[var(--accent)]"
         )}
       >
-        <FilterTypeIcon aria-hidden="true" className="size-3" />
+        <FilterTypeIcon aria-hidden="true" className="size-[var(--icon-size-md)]" />
         {FILTER_TYPE_LABELS[filter.type]}
       </span>
       <DropdownMenu>
@@ -4011,7 +4009,7 @@ function FileSystemFilterPill({
         onClick={onRemove}
         className="file-system-filter-pill-remove-button"
       >
-        <CloseLine aria-hidden="true" className="size-4" />
+        <CloseLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
       </AppIconButton>
     </div>
   )
@@ -4140,7 +4138,7 @@ function FileSystemRangeCalendar({
         }
         className="absolute top-0 left-0"
       >
-        <LeftLine aria-hidden="true" className="size-4" />
+        <LeftLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
       </AppIconButton>
       <AppIconButton
         type="button"
@@ -4155,7 +4153,7 @@ function FileSystemRangeCalendar({
         }
         className="absolute top-0 right-0"
       >
-        <RightLine aria-hidden="true" className="size-4" />
+        <RightLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
       </AppIconButton>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {months.map((month, monthIndex) => {
@@ -4280,7 +4278,7 @@ function FileSystemDateRangeDialog({
       <div className="relative flex items-center">
         <Calendar2Line
           aria-hidden="true"
-          className="pointer-events-none absolute left-2.5 size-3.5 text-[var(--foreground-secondary)]"
+          className="pointer-events-none absolute left-2.5 size-[var(--icon-size-md)] text-[var(--foreground-secondary)]"
         />
         <Input
           ref={inputRef}
@@ -4906,9 +4904,9 @@ function FileSystemListColumnHeader({
       {label}
       {isActive ? (
         sort.direction === "asc" ? (
-          <UpLine aria-hidden="true" className="size-3 shrink-0" />
+          <UpLine aria-hidden="true" className="size-[var(--icon-size-md)] shrink-0" />
         ) : (
-          <DownLine aria-hidden="true" className="size-3 shrink-0" />
+          <DownLine aria-hidden="true" className="size-[var(--icon-size-md)] shrink-0" />
         )
       ) : null}
     </button>
@@ -5920,18 +5918,18 @@ const FileSystemColumn = React.memo(function FileSystemColumn({
                   )}
                 >
                   {entry.kind === "folder" ? (
-                    <FileSystemFolderGlyph className="h-3.5 w-auto shrink-0" />
+                    <FileSystemFolderGlyph className="h-[var(--icon-size-md)] w-auto shrink-0" />
                   ) : coverUrl ? (
                     <img
                       src={coverUrl}
                       alt=""
                       draggable={false}
-                      className="size-4 shrink-0 rounded-[3px] bg-white object-cover"
+                      className="size-[var(--icon-size-md)] shrink-0 rounded-[3px] bg-white object-cover"
                     />
                   ) : (
                     <FileTypeIcon
                       fileName={entry.name}
-                      className="size-4 shrink-0"
+                      className="size-[var(--icon-size-md)] shrink-0"
                     />
                   )}
                   <span className="min-w-0 flex-1 truncate">{entry.name}</span>
@@ -5940,7 +5938,7 @@ const FileSystemColumn = React.memo(function FileSystemColumn({
                     <RightLine
                       aria-hidden="true"
                       className={cn(
-                        "size-3.5 shrink-0",
+                        "size-[var(--icon-size-md)] shrink-0",
                         !isSelected && "text-[color-mix(in_oklab,var(--foreground-secondary)_60%,transparent)]"
                       )}
                     />
@@ -6152,7 +6150,7 @@ function FileSystemBuiltInGalleryStage({
   const viewerFrameClassName = cn("size-full", !isDialog && "overflow-hidden")
 
   if (viewerKind && isResolving) {
-    return <Spinner className="size-6 text-[var(--foreground-secondary)]" />
+    return <Spinner className="size-[var(--icon-size-xl)] text-[var(--foreground-secondary)]" />
   }
   if (viewerKind === "image" && url) {
     return (
@@ -6464,7 +6462,7 @@ function FileSystemGalleryView(props: FileSystemViewProps) {
           {activeEntry?.kind === "folder" ? (
             <FileSystemFolderGlyph className="h-40 max-h-full w-auto drop-shadow-md" />
           ) : activeFile && !attachedStagePaths.includes(activeFile.path) ? (
-            <Spinner className="size-6 text-[var(--foreground-secondary)]" />
+            <Spinner className="size-[var(--icon-size-xl)] text-[var(--foreground-secondary)]" />
           ) : null}
           {/* Inactive hosts hide via `visibility` + `opacity`, never
               `display`: the document viewers size pages off ResizeObserver
@@ -6514,7 +6512,7 @@ function FileSystemGalleryView(props: FileSystemViewProps) {
                   renderFilePreview={renderFilePreview}
                 />
               ) : (
-                <FileSystemFolderGlyph className="h-8 w-auto shrink-0" />
+                <FileSystemFolderGlyph className="h-[var(--icon-size-xl)] w-auto shrink-0" />
               )}
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold break-words">

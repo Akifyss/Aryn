@@ -77,7 +77,7 @@ export function ProviderCard({
       >
         <div className='flex items-center gap-3 min-w-0'>
           <div className='flex-shrink-0'>
-            <ProviderIcon provider={provider.key} size={18} />
+            <ProviderIcon provider={provider.key} />
           </div>
 
           <div className='flex flex-col min-w-0'>
@@ -97,7 +97,7 @@ export function ProviderCard({
 
           <Icon
             icon='mingcute:down-line'
-            className={`settings-secondary-icon w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+            className={`settings-secondary-icon size-[var(--icon-size-md)] transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
           />
         </div>
       </button>
@@ -120,7 +120,7 @@ export function ProviderCard({
                 <div className='provider-setup-hint flex gap-2 p-3 rounded-xl'>
                   <Icon
                     icon='mingcute:information-line'
-                    className='w-4 h-4 flex-shrink-0 mt-0.5'
+                    className='size-[var(--icon-size-md)] flex-shrink-0 mt-0.5'
                   />
                   <span>{provider.setupHint}</span>
                 </div>
@@ -132,7 +132,7 @@ export function ProviderCard({
                 <label className='provider-apikey-label'>配置 API 密钥</label>
                 <div className='relative flex items-center w-full provider-apikey-input-container'>
                   <span className='settings-secondary-icon absolute left-3 pointer-events-none flex items-center justify-center z-20'>
-                    <Icon icon='mingcute:key-2-line' className='w-4 h-4' />
+                    <Icon icon='mingcute:key-2-line' className='size-[var(--icon-size-md)]' />
                   </span>
                   <Input
                     aria-label={`${provider.label} API key`}
@@ -158,7 +158,7 @@ export function ProviderCard({
                   >
                     <Icon
                       icon={showPassword ? 'mingcute:eye-line' : 'mingcute:eye-close-line'}
-                      className='w-4 h-4'
+                      className='size-[var(--icon-size-md)]'
                     />
                   </AppIconButton>
                 </div>

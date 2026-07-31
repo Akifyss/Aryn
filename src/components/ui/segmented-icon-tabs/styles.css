@@ -41,6 +41,12 @@
   z-index: 1;
 }
 
+.segmented-icon-tabs-option > svg,
+.segmented-icon-tabs-option > .iconify {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
 .segmented-icon-tabs-option:hover:not(:disabled):not([data-disabled]):not([aria-disabled='true']):not(.is-active),
 .segmented-icon-tabs-option:focus-visible:not(:disabled):not([data-disabled]):not([aria-disabled='true']):not(.is-active) {
   outline: none;

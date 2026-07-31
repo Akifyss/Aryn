@@ -291,8 +291,14 @@ body:has([data-app-modal-layer]) .agent-collapsed-tab-actions {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--app-button-base-icon-size);
-  height: var(--app-button-base-icon-size);
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
+.panel-toggle-icon > svg,
+.panel-toggle-icon > .iconify {
+  width: 100%;
+  height: 100%;
 }
 
 .panel-toggle-icon.is-collapsed {

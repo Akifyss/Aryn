@@ -130,7 +130,7 @@ describe('shared application menu', () => {
       expect(source).not.toMatch(/className=\{?['"`]app-menu-item/)
     }
     expect(agentModelSource).toContain('text={provider}')
-    expect(agentModelSource).toContain("info={<RightLine aria-hidden='true' size={16} />}")
+    expect(agentModelSource).toContain("info={<RightLine aria-hidden='true' />}")
     expect(agentModelSource).toContain('info={option.provider}')
     expect(agentModelSource).not.toContain('agent-model-cascader-option-main')
     expect(agentModelSource).not.toContain('agent-model-cascader-option-sub')
@@ -186,7 +186,7 @@ describe('shared application menu', () => {
       /function AppMenuSelectItem[\s\S]{0,900}<AppMenuSelectItemIndicator>[\s\S]{0,400}info=\{resolvedInfo\}/,
     )
     expect(appMenuSource).toMatch(
-      /function AppMenuSubmenuTrigger[\s\S]{0,300}info = <RightLine[^>]*size=\{16\}/,
+      /function AppMenuSubmenuTrigger[\s\S]{0,300}info = <RightLine aria-hidden='true' \/>/,
     )
     expect(appMenuSource).not.toContain('app-menu-item-end')
     expect(appMenuSource).not.toContain('AppMenuPopupVariant')
@@ -475,7 +475,10 @@ describe('shared application menu', () => {
     expect(indexCss).not.toContain('--app-item-row-single-line-height:')
     expect(indexCss).not.toContain('--app-item-row-description-min-height:')
     expect(indexCss).toContain('--app-item-row-radius: 8px;')
-    expect(indexCss).toContain('--app-item-icon-size: 16px;')
+    expect(indexCss).toContain('--icon-size-md: 16px;')
+    expect(indexCss).toContain('--icon-size-lg: 20px;')
+    expect(indexCss).toContain('--icon-size-xl: 24px;')
+    expect(indexCss).not.toContain('--app-item-icon-size:')
     expect(indexCss).not.toContain('--app-item-trailing-size:')
     expect(indexCss).toContain('--app-item-font-size: 13px;')
     expect(appItemCss).toContain('height: 32px;')
@@ -488,7 +491,7 @@ describe('shared application menu', () => {
     expect(appItemCss).toMatch(/\.app-item-row\s*\{[^}]*margin:\s*0;/)
     expect(appItemCss).not.toContain('--app-item-row-gap')
     expect(appItemCss).not.toContain('var(--app-item-row-radius, 8px)')
-    expect(appItemCss).not.toContain('var(--app-item-icon-size, 16px)')
+    expect(appItemCss).not.toContain('var(--app-item-icon-size')
     expect(appItemCss).not.toContain('--app-item-trailing-size')
     expect(appItemCss).toContain('min-width: var(--app-icon-button-size-md);')
     expect(appItemCss).not.toContain('var(--app-item-font-size, 13px)')

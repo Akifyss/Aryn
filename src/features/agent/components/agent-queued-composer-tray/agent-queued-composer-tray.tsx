@@ -156,7 +156,7 @@ export function AgentQueuedComposerTray({
           >
             <div className='agent-queued-row-leading' aria-hidden='true'>
               <span className='agent-queued-row-grip'>::</span>
-              <CornerUpLeftLine size={16} />
+              <CornerUpLeftLine />
             </div>
 
             <div className='agent-queued-row-main'>
@@ -262,7 +262,7 @@ export function AgentQueuedComposerTray({
                         })
                       }}
                     >
-                      <Delete2Line size={16} />
+                      <Delete2Line />
                     </AppIconButton>
                     <Menu.Root
                       modal={false}
@@ -291,7 +291,7 @@ export function AgentQueuedComposerTray({
                           size='sm'
                           variant='icon'
                         >
-                          <More1Line size={16} />
+                          <More1Line />
                         </Menu.Trigger>
                         {canRenderMenuPortal ? (
                           <Menu.Portal container={menuPortalTarget ?? undefined}>
@@ -302,7 +302,7 @@ export function AgentQueuedComposerTray({
                             >
                               <Menu.Popup finalFocus={false} size='sm'>
                                 <Menu.Item
-                                  icon={<EditLine size={16} />}
+                                  icon={<EditLine />}
                                   label='编辑消息'
                                   text='编辑消息'
                                   onClick={() => {
@@ -310,7 +310,7 @@ export function AgentQueuedComposerTray({
                                   }}
                                 />
                                 <Menu.Item
-                                  icon={<CornerUpLeftLine size={16} />}
+                                  icon={<CornerUpLeftLine />}
                                   label={`关闭${isFollowUp ? '排队' : '引导'}`}
                                   text={`关闭${isFollowUp ? '排队' : '引导'}`}
                                   onClick={() => {

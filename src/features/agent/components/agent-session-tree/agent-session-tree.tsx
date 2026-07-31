@@ -3,6 +3,7 @@ import {
   AppMenu as Menu,
   type AppMenuTriggerSize,
 } from '@/components/app-menu'
+import type { AppIconSize } from '@/components/icon-size'
 import { ProjectIcon } from '@/components/project-icon'
 import type { ProjectRecord } from '@/features/workspace/types'
 import { FlatAgentSessionTree } from './flat-session-tree'
@@ -28,12 +29,14 @@ export function AgentSessionTreeView(props: AgentSessionTreeViewProps) {
 export function AgentProjectSwitchTrigger({
   activeProject,
   className,
+  iconSize = 'md',
   onOpenProjectSwitchMenu,
   placeholder,
   size = 'md',
 }: {
   activeProject: ProjectRecord | null
   className?: string
+  iconSize?: AppIconSize
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   placeholder?: string
   size?: AppMenuTriggerSize
@@ -56,9 +59,9 @@ export function AgentProjectSwitchTrigger({
         onOpenProjectSwitchMenu?.(event.currentTarget.getBoundingClientRect(), { startNewSession: true })
       }}
     >
-      <ProjectIcon />
+      <ProjectIcon size={iconSize} />
       <span className='agent-project-switch-trigger-label'>{label}</span>
-      <DownLine className='agent-project-switch-chevron' aria-hidden='true' size={16} />
+      <DownLine className='agent-project-switch-chevron' aria-hidden='true' />
     </Menu.TriggerSurface>
   )
 }

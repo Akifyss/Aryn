@@ -24,10 +24,10 @@ import {
   Rows2,
   Search,
   Table2,
-  createElement,
 } from 'lucide'
 import { createFindPanel } from '@/vendor/meo/webview/helpers/findPanel'
 import { createSelectionMenu } from '@/vendor/meo/webview/helpers/selectionMenu'
+import { createCompactMeoIcon } from './meo-native-icon'
 
 type NativeMeoButtonMap = {
   bulletListBtn: HTMLButtonElement
@@ -66,7 +66,7 @@ export type NativeMeoEditorShell = {
 function createIconButton(
   title: string,
   action: string,
-  IconComponent: Parameters<typeof createElement>[0],
+  IconComponent: Parameters<typeof createCompactMeoIcon>[0],
   className = 'format-button',
 ) {
   const button = document.createElement('button')
@@ -75,7 +75,7 @@ function createIconButton(
   button.dataset.action = action
   button.title = title
   button.setAttribute('aria-label', title)
-  button.appendChild(createElement(IconComponent, { width: 18, height: 18 }))
+  button.appendChild(createCompactMeoIcon(IconComponent))
   return button
 }
 
@@ -111,7 +111,7 @@ export function createNativeMeoEditorShell(): NativeMeoEditorShell {
     option.className = 'heading-dropdown-option'
     option.dataset.level = String(index + 1)
     option.title = `Heading ${index + 1}`
-    option.appendChild(createElement(IconComponent, { width: 18, height: 18 }))
+    option.appendChild(createCompactMeoIcon(IconComponent))
     headingDropdown.appendChild(option)
   })
 
@@ -178,7 +178,7 @@ export function createNativeMeoEditorShell(): NativeMeoEditorShell {
   diffSplitButton.title = 'Diff Split'
   diffSplitButton.setAttribute('aria-label', 'Diff Split')
   diffSplitButton.setAttribute('role', 'tab')
-  diffSplitButton.appendChild(createElement(Columns2, { width: 16, height: 16 }))
+  diffSplitButton.appendChild(createCompactMeoIcon(Columns2))
 
   const diffUnifiedButton = document.createElement('button')
   diffUnifiedButton.type = 'button'
@@ -187,7 +187,7 @@ export function createNativeMeoEditorShell(): NativeMeoEditorShell {
   diffUnifiedButton.title = 'Diff Unified'
   diffUnifiedButton.setAttribute('aria-label', 'Diff Unified')
   diffUnifiedButton.setAttribute('role', 'tab')
-  diffUnifiedButton.appendChild(createElement(Rows2, { width: 16, height: 16 }))
+  diffUnifiedButton.appendChild(createCompactMeoIcon(Rows2))
 
   modeGroup.append(liveButton, sourceButton, diffSplitButton, diffUnifiedButton)
 

@@ -70,8 +70,8 @@ describe('AgentTypeSwitch', () => {
 
     expect(switchSource).toContain('<Menu.Portal container={menuPortalTarget ?? undefined}>')
     expect(switchSource).not.toContain('agent-type-switch-menu-positioner')
-    expect(switchSource).toContain('triggerIconSize = 16')
-    expect(promptSource).toContain('triggerIconSize={24}')
+    expect(switchSource).toContain("triggerIconSize = 'md'")
+    expect(promptSource).toContain("triggerIconSize='xl'")
     expect(promptSource).toContain('<AgentTypeSwitchTrigger menuPortalTarget={menuPortalTarget} />')
     expect(chatSurfaceSource).toMatch(
       /<AgentNewConversationPrompt\s+menuPortalTarget=\{\s*surfaceMode === 'drawer' \? localOverlayRoot : undefined\s*\}/,

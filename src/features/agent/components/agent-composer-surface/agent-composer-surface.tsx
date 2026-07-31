@@ -52,7 +52,7 @@ function AgentInlineSpinner() {
   return (
     <Spinner
       aria-hidden='true'
-      className='agent-inline-spinner size-4'
+      className='agent-inline-spinner size-[var(--icon-size-md)]'
       color='current'
       size='sm'
     />
@@ -273,7 +273,7 @@ export function AgentComposerSurface({
               void handlePickComposerAttachments()
             }}
           >
-            <AttachmentLine aria-hidden='true' size={16} />
+            <AttachmentLine aria-hidden='true' />
           </AppIconButton>
 
           <AppIconButton
@@ -284,11 +284,11 @@ export function AgentComposerSurface({
             tooltip={composerActionTitle}
           >
             {composerAction === 'stop' ? (
-              <StopFill size={16} />
+              <StopFill />
             ) : shouldShowComposerSendSpinner ? (
               <AgentInlineSpinner />
             ) : (
-              <ArrowUpLine size={16} />
+              <ArrowUpLine />
             )}
           </AppIconButton>
         </div>

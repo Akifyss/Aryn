@@ -61,8 +61,8 @@
 .app-button > svg,
 .app-button > .app-button-icon,
 .app-button > .iconify {
-  width: var(--app-button-base-icon-size);
-  height: var(--app-button-base-icon-size);
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   flex: 0 0 auto;
 }
 

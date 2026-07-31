@@ -542,25 +542,25 @@ export class MermaidDiagramWidget extends WidgetType {
     const zoomIn = document.createElement('button');
     zoomIn.type = 'button';
     zoomIn.className = 'meo-mermaid-zoom-btn';
-    zoomIn.appendChild(createElement(ZoomIn, { width: 16, height: 16 }));
+    zoomIn.appendChild(createElement(ZoomIn));
     zoomIn.setAttribute('aria-label', 'Zoom in');
 
     const zoomOut = document.createElement('button');
     zoomOut.type = 'button';
     zoomOut.className = 'meo-mermaid-zoom-btn';
-    zoomOut.appendChild(createElement(ZoomOut, { width: 16, height: 16 }));
+    zoomOut.appendChild(createElement(ZoomOut));
     zoomOut.setAttribute('aria-label', 'Zoom out');
 
     const reset = document.createElement('button');
     reset.type = 'button';
     reset.className = 'meo-mermaid-zoom-btn';
-    reset.appendChild(createElement(RotateCcw, { width: 16, height: 16 }));
+    reset.appendChild(createElement(RotateCcw));
     reset.setAttribute('aria-label', 'Reset zoom');
 
     const fullscreen = document.createElement('button');
     fullscreen.type = 'button';
     fullscreen.className = 'meo-mermaid-zoom-btn';
-    fullscreen.appendChild(createElement(Maximize2, { width: 16, height: 16 }));
+    fullscreen.appendChild(createElement(Maximize2));
     fullscreen.setAttribute('aria-label', 'Fullscreen');
 
     zoomIn.addEventListener('pointerdown', (e) => {
@@ -674,25 +674,25 @@ export class MermaidDiagramWidget extends WidgetType {
     const zoomIn = document.createElement('button');
     zoomIn.type = 'button';
     zoomIn.className = 'meo-mermaid-zoom-btn';
-    zoomIn.appendChild(createElement(ZoomIn, { width: 16, height: 16 }));
+    zoomIn.appendChild(createElement(ZoomIn));
     zoomIn.setAttribute('aria-label', 'Zoom in');
 
     const zoomOut = document.createElement('button');
     zoomOut.type = 'button';
     zoomOut.className = 'meo-mermaid-zoom-btn';
-    zoomOut.appendChild(createElement(ZoomOut, { width: 16, height: 16 }));
+    zoomOut.appendChild(createElement(ZoomOut));
     zoomOut.setAttribute('aria-label', 'Zoom out');
 
     const reset = document.createElement('button');
     reset.type = 'button';
     reset.className = 'meo-mermaid-zoom-btn';
-    reset.appendChild(createElement(RotateCcw, { width: 16, height: 16 }));
+    reset.appendChild(createElement(RotateCcw));
     reset.setAttribute('aria-label', 'Reset zoom');
 
     const exitBtn = document.createElement('button');
     exitBtn.type = 'button';
     exitBtn.className = 'meo-mermaid-zoom-btn meo-mermaid-exit-btn';
-    exitBtn.appendChild(createElement(X, { width: 16, height: 16 }));
+    exitBtn.appendChild(createElement(X));
     exitBtn.setAttribute('aria-label', 'Exit fullscreen');
 
     zoomIn.addEventListener('pointerdown', (e) => {

@@ -309,7 +309,7 @@ function ViewerLoadingSurface({
 }) {
   return (
     <div className="grid h-full min-h-52 place-items-center bg-transparent">
-      {showSpinner ? <Spinner className="size-4" /> : null}
+      {showSpinner ? <Spinner className="size-[var(--icon-size-md)]" /> : null}
     </div>
   );
 }
@@ -350,7 +350,7 @@ function DocxFileActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger label={VIEWER_COPY.openDocxActions}>
-        <More2Line aria-hidden="true" className="size-4" />
+        <More2Line aria-hidden="true" className="size-[var(--icon-size-md)]" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {showNightRenderToggle ? (
@@ -358,7 +358,7 @@ function DocxFileActionsMenu({
             <DropdownMenuCheckboxItem
               checked={isDark}
               disabled={controlsDisabled}
-              icon={<MoonLine aria-hidden="true" className="size-4" />}
+              icon={<MoonLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
               text={VIEWER_COPY.darkMode}
               onCheckedChange={(checked) => onIsDarkChange(checked === true)}
             />
@@ -368,14 +368,14 @@ function DocxFileActionsMenu({
         <DropdownMenuCheckboxItem
           checked={showComments}
           disabled={controlsDisabled}
-          icon={<CommentLine aria-hidden="true" className="size-4" />}
+          icon={<CommentLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
           text={VIEWER_COPY.showComments}
           onCheckedChange={(checked) => onShowCommentsChange(checked === true)}
         />
         <DropdownMenuCheckboxItem
           checked={showTrackedChanges}
           disabled={controlsDisabled}
-          icon={<GitCompareLine aria-hidden="true" className="size-4" />}
+          icon={<GitCompareLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
           text={VIEWER_COPY.showTrackedChanges}
           onCheckedChange={(checked) =>
             onShowTrackedChangesChange(checked === true)
@@ -386,9 +386,9 @@ function DocxFileActionsMenu({
           <DropdownMenuItem
             disabled={downloadDisabled}
             icon={isPreparingDownload ? (
-              <Spinner aria-hidden="true" className="size-4" />
+              <Spinner aria-hidden="true" className="size-[var(--icon-size-md)]" />
             ) : (
-              <DownloadLine aria-hidden="true" className="size-4" />
+              <DownloadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
             )}
             text={VIEWER_COPY.download}
             onClick={onDownload}
@@ -396,7 +396,7 @@ function DocxFileActionsMenu({
         ) : null}
         {showUploadButton ? (
           <DropdownMenuItem
-            icon={<UploadLine aria-hidden="true" className="size-4" />}
+            icon={<UploadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
             text={VIEWER_COPY.upload}
             onClick={onUploadClick}
           />
@@ -495,7 +495,7 @@ function DocxToolbar({
           disabled={controlsDisabled}
           onClick={onToggleSidebar}
         >
-          <LayoutLeftLine aria-hidden="true" className="size-4" />
+          <LayoutLeftLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
         </ViewerToolbarButton>
         <DocxPageNumberControl
           activePageStore={activePageStore}
@@ -1390,7 +1390,7 @@ function DocxViewerContent({
                   className="mt-4"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <UploadLine aria-hidden="true" className="size-4" />
+                  <UploadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
                   {VIEWER_COPY.uploadDocx}
                 </AppButton>
               </div>

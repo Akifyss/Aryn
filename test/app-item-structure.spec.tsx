@@ -126,4 +126,16 @@ describe('shared application item', () => {
 
     expect(markup.match(/class="app-item-icon"/g)).toHaveLength(1)
   })
+
+  it('uses the shared semantic icon-size scale', () => {
+    const defaultMarkup = renderToStaticMarkup(
+      <AppItemIcon><svg aria-hidden='true' /></AppItemIcon>,
+    )
+    const largeMarkup = renderToStaticMarkup(
+      <AppItemIcon size='xl'><svg aria-hidden='true' /></AppItemIcon>,
+    )
+
+    expect(defaultMarkup).toContain('data-size="md"')
+    expect(largeMarkup).toContain('data-size="xl"')
+  })
 })

@@ -52,7 +52,7 @@ export function SettingsSelect({
       >
         <Select.Value className='settings-select-value' placeholder={placeholder} />
         <Select.Icon className='settings-select-icon'>
-          <Icon icon='mingcute:down-line' width={16} height={16} />
+          <Icon icon='mingcute:down-line' />
         </Select.Icon>
       </Select.Trigger>
       <Select.Positioner
@@ -69,7 +69,7 @@ export function SettingsSelect({
             {options.map((option) => (
               <Select.Item
                 key={option.value}
-                indicator={<Icon icon='mingcute:check-line' width={16} height={16} />}
+                indicator={<Icon icon='mingcute:check-line' />}
                 label={option.label}
                 text={option.label}
                 value={option.value}

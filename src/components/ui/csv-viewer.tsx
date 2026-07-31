@@ -313,13 +313,13 @@ function CsvFileActionsMenu({
         disabled={isPending}
         label={VIEWER_COPY.openCsvActions}
       >
-        <More2Line aria-hidden="true" className="size-4" />
+        <More2Line aria-hidden="true" className="size-[var(--icon-size-md)]" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {showDownload ? (
           <DropdownMenuItem
             disabled={downloadDisabled}
-            icon={<DownloadLine aria-hidden="true" className="size-4" />}
+            icon={<DownloadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
             text={VIEWER_COPY.download}
             onClick={onDownload}
           />
@@ -328,9 +328,9 @@ function CsvFileActionsMenu({
           <DropdownMenuItem
             disabled={isPending}
             icon={isPending ? (
-              <Spinner aria-hidden="true" className="size-4" />
+              <Spinner aria-hidden="true" className="size-[var(--icon-size-md)]" />
             ) : (
-              <UploadLine aria-hidden="true" className="size-4" />
+              <UploadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
             )}
             text={VIEWER_COPY.upload}
             onClick={onUploadClick}
@@ -498,7 +498,7 @@ function CsvSearchPopover({
           placement="bottom"
           disabled={controlsDisabled}
         >
-          <SearchLine aria-hidden="true" className="size-4" />
+          <SearchLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
         </ViewerToolbarButton>
       </PopoverTrigger>
       <PopoverContent align="end" className="viewer-search-popover">
@@ -886,9 +886,9 @@ export function CsvViewer({
                   onClick={() => inputRef.current?.click()}
                 >
                   {isPending ? (
-                    <Spinner className="size-4" />
+                    <Spinner className="size-[var(--icon-size-md)]" />
                   ) : (
-                    <UploadLine aria-hidden="true" className="size-4" />
+                    <UploadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
                   )}
                   {VIEWER_COPY.uploadCsv}
                 </AppButton>
@@ -897,7 +897,7 @@ export function CsvViewer({
           </div>
         ) : !glide ? (
           <div className="grid h-full place-items-center bg-[var(--background-primary)]">
-            <Spinner className="size-4" />
+            <Spinner className="size-[var(--icon-size-md)]" />
           </div>
         ) : (
           <glide.DataEditor

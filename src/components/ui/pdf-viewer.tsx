@@ -457,7 +457,7 @@ function PDFViewerLoadingSkeleton({
         />
       ) : null}
       <div className="grid min-w-0 flex-1 place-items-center">
-        <Spinner className="size-4" />
+        <Spinner className="size-[var(--icon-size-md)]" />
       </div>
     </div>
   );
@@ -566,7 +566,7 @@ function PDFViewerFileActionsMenu({
       ) : null}
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger label={VIEWER_COPY.openPdfActions}>
-          <More2Line aria-hidden="true" className="size-4" />
+          <More2Line aria-hidden="true" className="size-[var(--icon-size-md)]" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {showDownload && onDownload ? (
@@ -575,7 +575,7 @@ function PDFViewerFileActionsMenu({
               icon={isPreparingDownload ? (
                 <Spinner aria-hidden="true" size="sm" />
               ) : (
-                <DownloadLine aria-hidden="true" className="size-4" />
+                <DownloadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
               )}
               text={VIEWER_COPY.download}
               onClick={onDownload}
@@ -583,7 +583,7 @@ function PDFViewerFileActionsMenu({
           ) : null}
           {showUpload && onUploadFile ? (
             <DropdownMenuItem
-              icon={<UploadLine aria-hidden="true" className="size-4" />}
+              icon={<UploadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
               text={VIEWER_COPY.upload}
               onClick={() => inputRef.current?.click()}
             />
@@ -758,7 +758,7 @@ function PDFViewerSearchControl({
           label={VIEWER_COPY.searchText}
           disabled={controlsDisabled}
         >
-          <SearchLine aria-hidden="true" className="size-4" />
+          <SearchLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
         </ViewerToolbarButton>
       </PopoverTrigger>
       <PopoverContent align="end" className="viewer-search-popover">
@@ -2121,7 +2121,7 @@ function PDFViewerInner({
               disabled={controlsDisabled}
               onClick={() => setSidebarOpen((open) => !open)}
             >
-              <LayoutLeftLine aria-hidden="true" className="size-4" />
+              <LayoutLeftLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
             </ViewerToolbarButton>
             <ViewerPageNumberControl
               activePage={activePage}
@@ -2141,7 +2141,7 @@ function PDFViewerInner({
                   disabled={controlsDisabled}
                   onClick={() => rotateSelectedPages(-1)}
                 >
-                  <AnticlockwiseLine aria-hidden="true" className="size-4" />
+                  <AnticlockwiseLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
                 </ViewerToolbarButton>
                 <ViewerToolbarButton
                   type="button"
@@ -2149,7 +2149,7 @@ function PDFViewerInner({
                   disabled={controlsDisabled}
                   onClick={() => rotateSelectedPages(1)}
                 >
-                  <ClockwiseLine aria-hidden="true" className="size-4" />
+                  <ClockwiseLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
                 </ViewerToolbarButton>
                 <Separator />
               </>

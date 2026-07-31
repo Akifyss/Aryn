@@ -12,6 +12,7 @@ import {
   AppIconButton,
   type AppIconButtonProps,
 } from '@/components/app-icon-button'
+import type { AppIconSize } from '@/components/icon-size'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 
 export type AppItemState = {
@@ -194,8 +195,8 @@ export const AppItem = forwardRef<HTMLDivElement, AppItemProps>(function AppItem
   const hasInfo = info !== undefined && info !== null && info !== false
   const renderedHeaderChevron = isHeaderToggleable
     ? isExpanded
-      ? <DownLine className='app-item-chevron app-item-chevron-box' size={16} aria-hidden='true' />
-      : <RightLine className='app-item-chevron app-item-chevron-box' size={16} aria-hidden='true' />
+      ? <DownLine className='app-item-chevron app-item-chevron-box' aria-hidden='true' />
+      : <RightLine className='app-item-chevron app-item-chevron-box' aria-hidden='true' />
     : null
   const hasLabelSuffix = labelSuffix !== undefined && labelSuffix !== null && labelSuffix !== false
   const resolvedLabelSuffix = hasLabelSuffix || renderedHeaderChevron
@@ -540,11 +541,22 @@ export const AppItemActionButton = forwardRef<HTMLButtonElement, AppItemActionBu
   return button
 })
 
-export const AppItemIcon = forwardRef<HTMLSpanElement, HTMLAttributes<HTMLSpanElement>>(function AppItemIcon(
-  { className, ...props },
+export const AppItemIcon = forwardRef<
+  HTMLSpanElement,
+  HTMLAttributes<HTMLSpanElement> & { size?: AppIconSize }
+>(function AppItemIcon(
+  { className, size = 'md', ...props },
   ref,
 ) {
-  return <span ref={ref} className={appItemClassNames.icon(className)} aria-hidden='true' {...props} />
+  return (
+    <span
+      ref={ref}
+      className={appItemClassNames.icon(className)}
+      data-size={size}
+      aria-hidden='true'
+      {...props}
+    />
+  )
 })
 
 const AppItemLabel = forwardRef<HTMLSpanElement, HTMLAttributes<HTMLSpanElement>>(function AppItemLabel(

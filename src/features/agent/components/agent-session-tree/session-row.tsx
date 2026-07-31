@@ -72,7 +72,7 @@ export function AgentSessionTreeRow({
     ? activity === 'running'
       ? <Spinner
         aria-hidden='true'
-        className='size-4 agent-session-running-spinner'
+        className='size-[var(--icon-size-md)] agent-session-running-spinner'
         color='current'
         size='sm'
       />
@@ -192,7 +192,7 @@ export function AgentSessionTreeRow({
         disabled={isSubmitting}
         onClick={() => void handleSubmitRename()}
       >
-        <CheckLine size={16} />
+        <CheckLine />
       </AppItemActionButton>
       <AppItemActionButton
         aria-label='Cancel rename'
@@ -200,7 +200,7 @@ export function AgentSessionTreeRow({
         disabled={isSubmitting}
         onClick={onCancelRename}
       >
-        <CloseLine size={16} />
+        <CloseLine />
       </AppItemActionButton>
     </>
   ) : (
@@ -211,7 +211,7 @@ export function AgentSessionTreeRow({
         render={<AppItemActionButton />}
         title={menuTitle}
       >
-        <More1Line size={16} />
+        <More1Line />
       </Menu.Trigger>
       <AgentTreeMenuPopup
         disabled={isDeleting}
@@ -233,7 +233,7 @@ export function AgentSessionTreeRow({
       after={error ? <p className='tree-error agent-session-rename-error'>{error}</p> : null}
       icon={agentId ? (
         <AppItemIcon>
-          <AgentBrandIcon agentId={agentId} className='agent-brand-icon' size={16} tone='muted' />
+          <AgentBrandIcon agentId={agentId} className='agent-brand-icon' size='md' tone='muted' />
         </AppItemIcon>
       ) : undefined}
       main={rowMain}

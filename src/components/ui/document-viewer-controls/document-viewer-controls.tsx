@@ -315,7 +315,7 @@ export function ViewerSearchPanel({
                   disabled={navigationDisabled}
                   onClick={onPreviousResult}
                 >
-                  <LeftLine aria-hidden="true" className="size-4" />
+                  <LeftLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
                 </AppIconButton>
                 <AppIconButton
                   type="button"
@@ -324,7 +324,7 @@ export function ViewerSearchPanel({
                   disabled={navigationDisabled}
                   onClick={onNextResult}
                 >
-                  <RightLine aria-hidden="true" className="size-4" />
+                  <RightLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
                 </AppIconButton>
               </>
             ) : null}
@@ -335,7 +335,7 @@ export function ViewerSearchPanel({
                 size="sm"
                 onClick={handleClear}
               >
-                <CloseLine aria-hidden="true" className="size-4" />
+                <CloseLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
               </AppIconButton>
             ) : null}
           </div>
@@ -402,7 +402,7 @@ function ViewerZoomSelect({
           {() => formatZoomOption(value)}
         </Select.Value>
         <Select.Icon className="flex shrink-0 items-center text-[var(--foreground-secondary)]">
-          <DownLine aria-hidden="true" className="size-4" />
+          <DownLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
         </Select.Icon>
       </Select.Trigger>
       <Select.Portal>
@@ -470,7 +470,7 @@ export function ViewerZoomControls({
           if (zoomOutValue !== null) onValueChange(zoomOutValue);
         }}
       >
-        <ZoomOutLine aria-hidden="true" className="size-4" />
+        <ZoomOutLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
       </ViewerToolbarButton>
       <ViewerZoomSelect
         ariaLabel={ariaLabel}
@@ -487,7 +487,7 @@ export function ViewerZoomControls({
           if (zoomInValue !== null) onValueChange(zoomInValue);
         }}
       >
-        <ZoomInLine aria-hidden="true" className="size-4" />
+        <ZoomInLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
       </ViewerToolbarButton>
     </div>
   );

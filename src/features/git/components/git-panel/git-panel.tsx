@@ -80,7 +80,7 @@ function getRepositorySyncSummary(repositoryState: GitRepositoryState) {
 
   if (repositoryState.ahead > 0) {
     contentParts.push(
-      <ArrowUpLine key='ahead-icon' size={12} aria-hidden='true' />,
+      <ArrowUpLine key='ahead-icon' aria-hidden='true' />,
       <span key='ahead-count'>{repositoryState.ahead}</span>,
     )
     labelParts.push(`本地领先远端 ${repositoryState.ahead} 个提交`)
@@ -88,7 +88,7 @@ function getRepositorySyncSummary(repositoryState: GitRepositoryState) {
 
   if (repositoryState.behind > 0) {
     contentParts.push(
-      <ArrowDownLine key='behind-icon' size={12} aria-hidden='true' />,
+      <ArrowDownLine key='behind-icon' aria-hidden='true' />,
       <span key='behind-count'>{repositoryState.behind}</span>,
     )
     labelParts.push(`本地落后远端 ${repositoryState.behind} 个提交`)
@@ -409,8 +409,8 @@ export function GitPanel({
       }}
     >
       {layout === 'tree'
-        ? <ListCheckLine size={16} aria-hidden='true' />
-        : <FolderLine size={16} aria-hidden='true' />}
+        ? <ListCheckLine aria-hidden='true' />
+        : <FolderLine aria-hidden='true' />}
     </AppItemActionButton>
   )
 
@@ -457,7 +457,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPush}
                 >
-                  <ArrowUpLine size={16} aria-hidden='true' />
+                  <ArrowUpLine aria-hidden='true' />
                   {hasUnpushedCommits ? <span className='git-push-action-badge'>{pushBadgeLabel}</span> : null}
                 </AppItemActionButton>
                 <AppItemActionButton
@@ -466,7 +466,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPull}
                 >
-                  <ArrowDownLine size={16} aria-hidden='true' />
+                  <ArrowDownLine aria-hidden='true' />
                 </AppItemActionButton>
                 {renderLayoutToggleAction()}
                 <AppItemActionButton
@@ -475,7 +475,7 @@ export function GitPanel({
                   disabled={Boolean(busyLabel)}
                   onClick={onRefresh}
                 >
-                  <Refresh2Line size={16} aria-hidden='true' />
+                  <Refresh2Line aria-hidden='true' />
                 </AppItemActionButton>
               </>
             )}
@@ -519,7 +519,7 @@ export function GitPanel({
                     disabled={!canSubmitCommit || Boolean(busyLabel)}
                     onClick={onCommit}
                   >
-                    <CheckLine size={16} aria-hidden='true' />
+                    <CheckLine aria-hidden='true' />
                     <span>提交</span>
                   </AppSplitButton.Action>
                   <GitCommitActionMenu
@@ -546,7 +546,7 @@ export function GitPanel({
         {!currentRepositoryState.hasChanges ? (
           <div className='git-panel-empty-state git-panel-clean-state'>
             <div className='git-empty-illustration'>
-              <CheckLine size={28} aria-hidden='true' />
+              <CheckLine aria-hidden='true' />
             </div>
             <p>工作区干净</p>
             <span className='git-empty-subtext'>{cleanStateSubtext}</span>
@@ -558,7 +558,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPush}
                 >
-                  <ArrowUpLine size={16} aria-hidden='true' />
+                  <ArrowUpLine aria-hidden='true' />
                   <span>推送</span>
                 </AppButton>
               ) : null}
@@ -569,7 +569,7 @@ export function GitPanel({
                   disabled={Boolean(syncDisabledReason)}
                   onClick={onPull}
                 >
-                  <ArrowDownLine size={16} aria-hidden='true' />
+                  <ArrowDownLine aria-hidden='true' />
                   <span>拉取</span>
                 </AppButton>
               ) : null}
@@ -579,7 +579,7 @@ export function GitPanel({
                 disabled={Boolean(busyLabel)}
                 onClick={onRefresh}
               >
-                <Refresh2Line size={16} aria-hidden='true' />
+                <Refresh2Line aria-hidden='true' />
                 <span>刷新</span>
               </AppButton>
             </div>
@@ -605,7 +605,7 @@ export function GitPanel({
                   disabled={Boolean(busyLabel)}
                   onClick={() => onUnstage(stagedPaths)}
                 >
-                  <Icon icon='mdi:minus' width={16} height={16} aria-hidden='true' />
+                  <Icon icon='mdi:minus' aria-hidden='true' />
                 </AppItemActionButton>
               }
             />
@@ -630,7 +630,7 @@ export function GitPanel({
                     disabled={Boolean(busyLabel)}
                     onClick={onDiscardAll}
                   >
-                    <Back2Line size={16} aria-hidden='true' />
+                    <Back2Line aria-hidden='true' />
                   </AppItemActionButton>
                   <AppItemActionButton
                     aria-label='全部暂存'
@@ -638,7 +638,7 @@ export function GitPanel({
                     disabled={Boolean(busyLabel)}
                     onClick={() => onStage(unstagedPaths)}
                   >
-                    <AddLine size={16} aria-hidden='true' />
+                    <AddLine aria-hidden='true' />
                   </AppItemActionButton>
                 </>
               }

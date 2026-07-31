@@ -36,9 +36,10 @@ import {
   type WidgetType,
   ViewPlugin,
 } from '@codemirror/view'
-import { ChevronDown, createElement } from 'lucide'
+import { ChevronDown } from 'lucide'
 import type { GitBaselinePayload, GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
 import { mountMeoBaseScrollArea } from '@/features/editor/lib/meo-base-scroll-area'
+import { createCompactMeoIcon } from '@/features/editor/lib/meo-native-icon'
 import type { MeoDiffSplitGitChangeContext, MeoEditorInsertFormat, MeoEditorViewportPosition } from '@/features/editor/lib/meo-native-editor-types'
 import {
   createSelectionFromCodeMirrorChunk,
@@ -4172,7 +4173,7 @@ export function createMeoDiffSplitController({
   comparisonButtonLabel.className = 'meo-diff-comparison-button-label'
   const comparisonButtonIcon = document.createElement('span')
   comparisonButtonIcon.className = 'meo-diff-comparison-button-icon'
-  comparisonButtonIcon.appendChild(createElement(ChevronDown, { width: 12, height: 12 }))
+  comparisonButtonIcon.appendChild(createCompactMeoIcon(ChevronDown))
   comparisonButton.append(comparisonButtonLabel, comparisonButtonIcon)
 
   const comparisonMenu = document.createElement('div')

@@ -137,7 +137,7 @@ function ViewerLoadingSurface({
 }) {
   return (
     <div className="grid h-full min-h-96 w-full place-items-center bg-transparent">
-      {showSpinner ? <Spinner className="size-4" /> : null}
+      {showSpinner ? <Spinner className="size-[var(--icon-size-md)]" /> : null}
     </div>
   );
 }
@@ -160,13 +160,13 @@ function PptxFileActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger label="打开 PPTX 操作菜单">
-        <More2Line aria-hidden="true" className="size-4" />
+        <More2Line aria-hidden="true" className="size-[var(--icon-size-md)]" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {showDownloadButton ? (
           <DropdownMenuItem
             disabled={downloadDisabled}
-            icon={<DownloadLine aria-hidden="true" className="size-4" />}
+            icon={<DownloadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
             text="下载"
             onClick={onDownload}
           />
@@ -174,7 +174,7 @@ function PptxFileActionsMenu({
         {showDownloadButton && showUploadButton ? <DropdownMenuSeparator /> : null}
         {showUploadButton ? (
           <DropdownMenuItem
-            icon={<UploadLine aria-hidden="true" className="size-4" />}
+            icon={<UploadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />}
             text="上传"
             onClick={onUploadClick}
           />
@@ -219,7 +219,7 @@ function PptxSearchPopover({
           placement="bottom"
           disabled={controlsDisabled}
         >
-          <SearchLine aria-hidden="true" className="size-4" />
+          <SearchLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
         </ViewerToolbarButton>
       </PopoverTrigger>
       <PopoverContent align="end" className="viewer-search-popover">
@@ -334,7 +334,7 @@ function PptxToolbar({
           disabled={controlsDisabled}
           onClick={onFitModeToggle}
         >
-          <Fullscreen2Line aria-hidden="true" className="size-4" />
+          <Fullscreen2Line aria-hidden="true" className="size-[var(--icon-size-md)]" />
         </ViewerToolbarButton>
         <Separator />
         <PptxSearchPopover
@@ -390,7 +390,7 @@ function PptxEmptyState({
             className="mt-4"
             onClick={onUploadClick}
           >
-            <UploadLine aria-hidden="true" className="size-4" />
+            <UploadLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
             上传 PPTX
           </AppButton>
         ) : null}

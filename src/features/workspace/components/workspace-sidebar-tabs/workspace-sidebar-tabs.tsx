@@ -34,11 +34,11 @@ export function WorkspaceSidebarTabs({
       <div className='sidebar-workspace-tabs-list-container'>
         <Tabs.List aria-label='工作区面板' className='sidebar-workspace-tabs-list'>
           <Tabs.Tab value='file' className='sidebar-workspace-tab'>
-            <FolderLine aria-hidden='true' size={16} className='sidebar-workspace-tab-icon' />
+            <FolderLine aria-hidden='true' className='sidebar-workspace-tab-icon' />
             <span className='sidebar-workspace-tab-label'>文件</span>
           </Tabs.Tab>
           <Tabs.Tab value='git' className='sidebar-workspace-tab'>
-            <GitBranchLine aria-hidden='true' size={16} className='sidebar-workspace-tab-icon' />
+            <GitBranchLine aria-hidden='true' className='sidebar-workspace-tab-icon' />
             <span className='sidebar-workspace-tab-label'>更改</span>
           </Tabs.Tab>
           <Tabs.Indicator className='sidebar-workspace-tab-indicator' />

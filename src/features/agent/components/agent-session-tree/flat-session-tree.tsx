@@ -72,7 +72,7 @@ export function FlatAgentSessionTree({
             onRequestClose?.()
           }}
         >
-          <EditLine size={16} />
+          <EditLine />
           <span>新对话</span>
         </button>
       ) : null}

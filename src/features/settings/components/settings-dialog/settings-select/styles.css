@@ -23,6 +23,12 @@
     color var(--app-button-base-transition-duration) ease;
 }
 
+.settings-select-icon > svg,
+.settings-select-icon > .iconify {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
 .settings-select-trigger[data-popup-open] .settings-select-icon {
   color: var(--foreground-primary);
   transform: rotate(180deg);

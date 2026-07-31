@@ -44,7 +44,6 @@
   --agent-pill-x: 8px;
   --agent-pill-gap: 6px;
   --agent-pill-font-size: 11px;
-  --agent-pill-icon-size: 16px;
   --agent-disclosure-content-max-height: min(360px, 40vh);
 }
 
@@ -146,8 +145,8 @@
 
 .agent-message-toggle-icon,
 .agent-message-toggle-arrow {
-  width: var(--agent-pill-icon-size);
-  height: var(--agent-pill-icon-size);
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   flex: 0 0 auto;
 }
 
@@ -160,8 +159,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--agent-pill-icon-size);
-  height: var(--agent-pill-icon-size);
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   margin-left: 1px;
   flex: 0 0 auto;
 }
@@ -169,8 +168,8 @@
 .agent-message-toggle-arrow {
   position: absolute;
   inset: 0;
-  width: var(--agent-pill-icon-size);
-  height: var(--agent-pill-icon-size);
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   color: var(--foreground-secondary);
   opacity: 0;
   transition: transform 160ms ease, opacity 160ms ease;
@@ -209,8 +208,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--agent-pill-icon-size);
-  height: var(--agent-pill-icon-size);
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   transition: opacity 160ms ease;
 }
 
@@ -220,8 +219,8 @@
 }
 
 .agent-message-status-icon {
-  width: var(--agent-pill-icon-size);
-  height: var(--agent-pill-icon-size);
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   color: var(--foreground-secondary);
 }
 

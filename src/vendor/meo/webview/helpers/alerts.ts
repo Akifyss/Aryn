@@ -37,7 +37,7 @@ function getAlertDirectiveDetails(lineText: string, lineFrom: number): {
 }
 
 function getAlertIconElement(type: AlertType): Element {
-  const iconProps = { 'aria-hidden': 'true', width: 16, height: 16 };
+  const iconProps = { 'aria-hidden': 'true' };
   switch (type) {
     case 'NOTE':
       return createElement(Info, iconProps);

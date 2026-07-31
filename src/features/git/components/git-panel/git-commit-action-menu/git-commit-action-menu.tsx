@@ -66,7 +66,7 @@ export function GitCommitActionMenu({
           />
         )}
       >
-        <DownLine size={16} aria-hidden='true' />
+        <DownLine aria-hidden='true' />
       </Menu.Trigger>
       <Menu.Portal
         container={menuPortalTarget ?? undefined}
@@ -83,14 +83,14 @@ export function GitCommitActionMenu({
           >
             <Menu.Item
               disabled={commitDisabled}
-              icon={<CheckLine size={16} aria-hidden='true' />}
+              icon={<CheckLine aria-hidden='true' />}
               label='提交'
               text='提交'
               onClick={(event) => runCommitMenuAction(event, onCommit)}
             />
             <Menu.Item
               disabled={commitAndSyncDisabled}
-              icon={<ArrowUpCircleLine size={16} aria-hidden='true' />}
+              icon={<ArrowUpCircleLine aria-hidden='true' />}
               label='提交并同步'
               text='提交并同步'
               onClick={(event) => runCommitMenuAction(event, onCommitAndSync)}

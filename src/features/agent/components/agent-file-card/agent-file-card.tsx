@@ -19,7 +19,6 @@ type AgentFileCardProps = {
   ariaLabel?: string
   className?: string
   fileName: string
-  iconSize?: number
   iconTheme?: WorkspaceIconTheme | null
   imageSrc?: string
   isImage?: boolean
@@ -68,7 +67,6 @@ export function AgentFileCard({
   ariaLabel,
   className,
   fileName,
-  iconSize = 18,
   iconTheme,
   imageSrc,
   isImage = false,
@@ -113,9 +111,9 @@ export function AgentFileCard({
         {imageSrc ? (
           <img alt='' draggable='false' src={imageSrc} />
         ) : isImage ? (
-          <PicLine aria-hidden='true' size={iconSize} />
+          <PicLine aria-hidden='true' className='agent-file-card-preview-icon' />
         ) : (
-          <WorkspaceFileIcon fileName={fileName} iconTheme={iconTheme ?? null} />
+          <WorkspaceFileIcon fileName={fileName} iconSize='xl' iconTheme={iconTheme ?? null} />
         )}
       </span>
       {isImage ? null : (
@@ -137,7 +135,7 @@ export function AgentFileCard({
             onRemove()
           }}
         >
-          <CloseLine aria-hidden='true' size={16} />
+          <CloseLine aria-hidden='true' />
         </AppIconButton>
       ) : null}
     </div>
@@ -149,12 +147,10 @@ export function AgentFileCard({
 export function AgentAttachmentFileCard({
   attachment,
   iconTheme,
-  iconSize = 18,
   onRemove,
 }: {
   attachment: AgentFileCardAttachment
   iconTheme?: WorkspaceIconTheme | null
-  iconSize?: number
   onRemove?: () => void
 }) {
   const isImage = attachment.kind === 'image'
@@ -170,7 +166,6 @@ export function AgentAttachmentFileCard({
   return (
     <AgentFileCard
       fileName={attachment.fileName}
-      iconSize={iconSize}
       iconTheme={iconTheme}
       imageSrc={previewSrc}
       isImage={isImage}

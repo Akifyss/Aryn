@@ -180,7 +180,7 @@ export function CommandPalette({
         <AppDialog.Body>
           {/* Header */}
           <div className='command-palette-header'>
-            <Icon icon='lucide:search' className='command-palette-icon' width={16} height={16} />
+            <Icon icon='lucide:search' className='command-palette-icon' />
             <input
               ref={inputRef}
               aria-label='搜索命令'
@@ -268,7 +268,7 @@ export function CommandPalette({
               </div>
             ) : (
               <div className='command-palette-empty'>
-                <Icon icon='lucide:search' width={32} className='command-palette-empty-icon' />
+                <Icon icon='lucide:search' className='command-palette-empty-icon' />
                 <p className='command-palette-empty-text'>未找到结果</p>
               </div>
             )}

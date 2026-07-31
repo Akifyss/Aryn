@@ -193,7 +193,7 @@ function FileRowActionMenu({
             render={<AppItemActionButton />}
             title='更多'
           >
-            <More1Line size={16} />
+            <More1Line />
           </Menu.Trigger>
           <Menu.Portal
             container={menuPortalTarget ?? undefined}
@@ -212,7 +212,7 @@ function FileRowActionMenu({
                 {canOpenInCodeEditor ? (
                   <Menu.Item
                     data-menu-action='open-code'
-                    icon={<CodeLine size={16} />}
+                    icon={<CodeLine />}
                     label='在代码编辑器打开'
                     text='在代码编辑器打开'
                     onClick={(event) => runFileActionMenuAction(event, onOpenInCodeEditor)}
@@ -221,7 +221,7 @@ function FileRowActionMenu({
                 {gitDiffChange && onOpenDiff ? (
                   <Menu.Item
                     data-menu-action='open-diff'
-                    icon={<GitBranchLine size={16} />}
+                    icon={<GitBranchLine />}
                     label='查看差异'
                     text='查看差异'
                     onClick={(event) => runFileActionMenuAction(event, () => onOpenDiff(gitDiffChange))}
@@ -229,21 +229,21 @@ function FileRowActionMenu({
                 ) : null}
                 <Menu.Item
                   data-menu-action='show-in-folder'
-                  icon={<ExternalLinkLine size={16} />}
+                  icon={<ExternalLinkLine />}
                   label={`在“${systemManagerName}”中打开`}
                   text={`在“${systemManagerName}”中打开`}
                   onClick={(event) => runFileActionMenuAction(event, onShowInFolder)}
                 />
                 <Menu.Item
                   data-menu-action='rename'
-                  icon={<Edit2Line size={16} />}
+                  icon={<Edit2Line />}
                   label='重命名'
                   text='重命名'
                   onClick={(event) => runFileActionMenuAction(event, onRename)}
                 />
                 <Menu.Item
                   data-menu-action='delete'
-                  icon={<Delete2Line size={16} />}
+                  icon={<Delete2Line />}
                   label='删除'
                   text='删除'
                   tone='danger'
@@ -554,7 +554,7 @@ function FileTreeItem({
         disabled={isSubmitting}
         onClick={() => void handleSubmitRename()}
       >
-        <CheckLine size={16} />
+        <CheckLine />
       </AppItemActionButton>
       <AppItemActionButton
         aria-label='Cancel rename'
@@ -564,7 +564,7 @@ function FileTreeItem({
           setIsEditing(false)
         }}
       >
-        <CloseLine size={16} />
+        <CloseLine />
       </AppItemActionButton>
     </>
   ) : (
@@ -866,7 +866,7 @@ export function WorkspaceTree({
   if (nodes.length === 0) {
     return (
       <WorkspaceTreeEmptyState
-        icon={<FolderLine size={26} />}
+        icon={<FolderLine />}
         message={workspacePath ? '这个工作目录还没有文件。' : '选择工作目录以浏览和编辑文件。'}
       />
     )

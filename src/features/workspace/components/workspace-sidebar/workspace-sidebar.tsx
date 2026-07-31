@@ -68,7 +68,7 @@ export function WorkspaceSidebar({
           >
             <ProjectIcon />
             <span className='section-title-label'>{workspaceLabel}</span>
-            <DownLine className='editor-workspace-switch-chevron' size={16} aria-hidden='true' />
+            <DownLine className='editor-workspace-switch-chevron' aria-hidden='true' />
           </Menu.TriggerSurface>
         </div>
       ) : null}
@@ -79,7 +79,7 @@ export function WorkspaceSidebar({
 
       <div className='sidebar-footer'>
         <button type='button' className='sidebar-footer-item' onClick={onOpenSettings}>
-          <Icon aria-hidden='true' icon='lucide:settings' width={16} height={16} />
+          <Icon aria-hidden='true' icon='lucide:settings' />
           <span>设置</span>
         </button>
       </div>

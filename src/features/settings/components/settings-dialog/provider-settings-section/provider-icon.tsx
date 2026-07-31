@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Icon } from '@iconify/react'
+import type { AppIconSize } from '@/components/icon-size'
 import {
   Azure,
   Bedrock,
@@ -26,18 +27,18 @@ import {
 } from '@lobehub/icons'
 
 type LobeIconRenderer = {
-  (props: { size: number }): ReactNode
+  (props: { size?: number }): ReactNode
   Color?: LobeIconRenderer
 }
 
-function renderLobeIcon(IconComponent: LobeIconRenderer, size: number) {
+function renderLobeIcon(IconComponent: LobeIconRenderer) {
   if (IconComponent.Color) {
     const ColorIcon = IconComponent.Color
-    return <ColorIcon size={size} />
+    return <ColorIcon />
   }
 
   const ProviderIcon = IconComponent
-  return <ProviderIcon size={size} />
+  return <ProviderIcon />
 }
 
 function ProviderIconFrame({
@@ -45,12 +46,12 @@ function ProviderIconFrame({
   size,
 }: {
   children: ReactNode
-  size: number
+  size: AppIconSize
 }) {
   return (
     <div
-      className='flex items-center justify-center flex-shrink-0'
-      style={{ width: size, height: size }}
+      className='provider-icon'
+      data-size={size}
     >
       {children}
     </div>
@@ -59,94 +60,94 @@ function ProviderIconFrame({
 
 export function ProviderIcon({
   provider,
-  size = 18,
+  size = 'lg',
 }: {
   provider: string
-  size?: number
+  size?: AppIconSize
 }) {
   let icon: ReactNode
 
   switch (provider) {
     case 'openai-codex':
     case 'openai':
-      icon = renderLobeIcon(OpenAI, size)
+      icon = renderLobeIcon(OpenAI)
       break
     case 'zai':
-      icon = renderLobeIcon(ZAI, size)
+      icon = renderLobeIcon(ZAI)
       break
     case 'opencode':
     case 'opencode-go':
-      icon = renderLobeIcon(OpenCode, size)
+      icon = renderLobeIcon(OpenCode)
       break
     case 'anthropic':
-      icon = renderLobeIcon(Claude, size)
+      icon = renderLobeIcon(Claude)
       break
     case 'github-copilot':
-      icon = renderLobeIcon(GithubCopilot, size)
+      icon = renderLobeIcon(GithubCopilot)
       break
     case 'openrouter':
-      icon = renderLobeIcon(OpenRouter, size)
+      icon = renderLobeIcon(OpenRouter)
       break
     case 'google':
     case 'google-vertex':
-      icon = renderLobeIcon(Gemini, size)
+      icon = renderLobeIcon(Gemini)
       break
     case 'deepseek':
-      icon = renderLobeIcon(DeepSeek, size)
+      icon = renderLobeIcon(DeepSeek)
       break
     case 'mistral':
-      icon = renderLobeIcon(Mistral, size)
+      icon = renderLobeIcon(Mistral)
       break
     case 'groq':
-      icon = renderLobeIcon(Groq, size)
+      icon = renderLobeIcon(Groq)
       break
     case 'cerebras':
-      icon = renderLobeIcon(Cerebras, size)
+      icon = renderLobeIcon(Cerebras)
       break
     case 'xai':
-      icon = renderLobeIcon(XAI, size)
+      icon = renderLobeIcon(XAI)
       break
     case 'vercel-ai-gateway':
-      icon = renderLobeIcon(Vercel, size)
+      icon = renderLobeIcon(Vercel)
       break
     case 'huggingface':
-      icon = renderLobeIcon(HuggingFace, size)
+      icon = renderLobeIcon(HuggingFace)
       break
     case 'fireworks':
-      icon = renderLobeIcon(Fireworks, size)
+      icon = renderLobeIcon(Fireworks)
       break
     case 'together':
-      icon = renderLobeIcon(Together, size)
+      icon = renderLobeIcon(Together)
       break
     case 'kimi-coding':
-      icon = renderLobeIcon(Moonshot, size)
+      icon = renderLobeIcon(Moonshot)
       break
     case 'minimax':
     case 'minimax-cn':
-      icon = renderLobeIcon(Minimax, size)
+      icon = renderLobeIcon(Minimax)
       break
     case 'moonshotai':
     case 'moonshotai-cn':
-      icon = renderLobeIcon(Moonshot, size)
+      icon = renderLobeIcon(Moonshot)
       break
     case 'xiaomi':
     case 'xiaomi-token-plan-cn':
     case 'xiaomi-token-plan-ams':
     case 'xiaomi-token-plan-sgp':
-      icon = renderLobeIcon(XiaomiMiMo, size)
+      icon = renderLobeIcon(XiaomiMiMo)
       break
     case 'azure-openai-responses':
-      icon = renderLobeIcon(Azure, size)
+      icon = renderLobeIcon(Azure)
       break
     case 'cloudflare-ai-gateway':
     case 'cloudflare-workers-ai':
-      icon = renderLobeIcon(Cloudflare, size)
+      icon = renderLobeIcon(Cloudflare)
       break
     case 'amazon-bedrock':
-      icon = renderLobeIcon(Bedrock, size)
+      icon = renderLobeIcon(Bedrock)
       break
     default:
-      icon = <Icon icon='mingcute:key-2-line' style={{ fontSize: size * 0.7 }} />
+      icon = <Icon icon='mingcute:key-2-line' />
   }
 
   return (

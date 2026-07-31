@@ -9,13 +9,14 @@ import {
   gutterLineClass,
   GutterMarker,
 } from '@codemirror/view'
-import { Columns2, Rows2, createElement } from 'lucide'
+import { Columns2, Rows2 } from 'lucide'
 import type { GitBaselinePayload, GitChangeItem, GitChangeKind, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
 import {
   createSelectionFromCodeMirrorChunk,
   resolveChunkNavigationMatch,
   type CodeMirrorDiffChunk,
 } from '@/features/editor/lib/git-diff-navigation'
+import { createCompactMeoIcon } from '@/features/editor/lib/meo-native-icon'
 import {
   buildDiffSplitGutterFlagsFromChunks,
   createActiveLineHighlightExtensions,
@@ -219,7 +220,7 @@ function createInlineDiffViewModeToggleIcon(mode: InlineDiffViewMode) {
   const IconComponent = getInlineDiffViewModeToggleIconName(mode) === 'unified'
     ? Rows2
     : Columns2
-  return createElement(IconComponent, { width: 14, height: 14 })
+  return createCompactMeoIcon(IconComponent)
 }
 
 function getInlineDiffViewModeToggleLabel(mode: InlineDiffViewMode) {

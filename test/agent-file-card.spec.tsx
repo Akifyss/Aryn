@@ -19,6 +19,7 @@ describe('AgentAttachmentFileCard', () => {
 
     expect(markup).toContain('agent-file-card')
     expect(markup).toContain('notes.md')
+    expect(markup).toContain('data-size="xl"')
     expect(markup).toContain('File · 2.00 KB · sent')
     expect(markup).toContain('agent-file-card-remove')
     expect(markup).toContain('aria-label="移除 notes.md"')

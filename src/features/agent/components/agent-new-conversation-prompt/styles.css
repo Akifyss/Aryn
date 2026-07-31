@@ -27,10 +27,6 @@
   font-size: inherit;
 }
 
-.agent-new-conversation-prompt h2 .agent-project-switch-trigger .project-icon {
-  --project-icon-size: 24px;
-}
-
 .agent-new-conversation-prompt h2 .agent-project-switch-trigger .agent-project-switch-chevron {
   display: none;
 }

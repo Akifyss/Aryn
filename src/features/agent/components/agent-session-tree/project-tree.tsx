@@ -266,7 +266,7 @@ export function AgentProjectTree({
             startPrimaryNewConversation()
           }}
         >
-          <EditLine size={16} />
+          <EditLine />
           <span>新对话</span>
         </AppTooltipButton>
       ) : null}
@@ -295,7 +295,7 @@ export function AgentProjectTree({
                       openProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
                     }}
                   >
-                    <AddLine size={16} />
+                    <AddLine />
                   </AppItemActionButton>
                 )}
                 onToggle={toggleProjectSection}
@@ -354,7 +354,7 @@ export function AgentProjectTree({
                           onRequestClose?.()
                         }}
                       >
-                        <EditLine size={16} />
+                        <EditLine />
                       </AppItemActionButton>
                       <Menu.Root modal={false} onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
                         <Menu.Trigger
@@ -362,7 +362,7 @@ export function AgentProjectTree({
                           render={<AppItemActionButton />}
                           title='更多'
                         >
-                          <More1Line size={16} />
+                          <More1Line />
                         </Menu.Trigger>
                         <AgentProjectMenuPopup
                           menuPortalTarget={menuPortalTarget}
@@ -466,7 +466,7 @@ export function AgentProjectTree({
                     onRequestClose?.()
                   }}
                 >
-                  <EditLine size={16} />
+                  <EditLine />
                 </AppItemActionButton>
               )}
               onToggle={toggleConversationSection}

@@ -19,7 +19,9 @@
 }
 
 :root {
-  --app-button-base-icon-size: 16px;
+  --icon-size-md: 16px;
+  --icon-size-lg: 20px;
+  --icon-size-xl: 24px;
   --app-button-base-radius-md: 8px;
   --app-button-base-radius-sm: 6px;
   --app-button-base-transition-duration: 140ms;
@@ -33,7 +35,6 @@
   --app-icon-button-size-md: 32px;
   --app-icon-button-size-sm: 24px;
   --app-item-row-radius: 8px;
-  --app-item-icon-size: 16px;
   --app-item-font-size: 13px;
   --app-item-list-gap: 2px;
   --app-menu-content-padding: 6px;

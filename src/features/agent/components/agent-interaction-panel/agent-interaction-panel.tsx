@@ -33,7 +33,7 @@ export function AgentInteractionPanel({
   return (
     <section className='agent-interaction-panel' aria-label={request.title} aria-live='polite'>
       <div className='agent-interaction-icon' aria-hidden='true'>
-        <ToolLine size={17} />
+        <ToolLine />
       </div>
       <div className='agent-interaction-copy'>
         <strong>{request.title}</strong>

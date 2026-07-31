@@ -65,10 +65,9 @@
   background: var(--background-secondary);
 }
 
-.agent-file-card-preview .app-item-icon,
-.agent-file-card-preview .app-item-icon img {
-  width: 24px;
-  height: 24px;
+.agent-file-card-preview-icon {
+  width: var(--icon-size-xl);
+  height: var(--icon-size-xl);
 }
 
 .agent-file-card.is-image .agent-file-card-preview {

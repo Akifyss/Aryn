@@ -93,7 +93,7 @@ headingBtn.type = 'button';
 headingBtn.className = 'format-button';
 headingBtn.dataset.action = 'heading';
 headingBtn.title = 'Heading';
-headingBtn.appendChild(createElement(Heading, { width: 18, height: 18 }));
+headingBtn.appendChild(createElement(Heading));
 
 const headingDropdown = document.createElement('div');
 headingDropdown.className = 'heading-dropdown';
@@ -111,7 +111,7 @@ for (let level = 1; level <= 6; level++) {
   option.className = 'heading-dropdown-option';
   option.dataset.level = String(level);
   option.title = `Heading ${level}`;
-  option.appendChild(createElement(headingIcons[level - 1], { width: 18, height: 18 }));
+  option.appendChild(createElement(headingIcons[level - 1]));
   headingDropdown.appendChild(option);
 }
 
@@ -126,21 +126,21 @@ bulletListBtn.type = 'button';
 bulletListBtn.className = 'format-button';
 bulletListBtn.dataset.action = 'bulletList';
 bulletListBtn.title = 'Bullet List';
-bulletListBtn.appendChild(createElement(List, { width: 18, height: 18 }));
+bulletListBtn.appendChild(createElement(List));
 
 const numberedListBtn = document.createElement('button');
 numberedListBtn.type = 'button';
 numberedListBtn.className = 'format-button';
 numberedListBtn.dataset.action = 'numberedList';
 numberedListBtn.title = 'Numbered List';
-numberedListBtn.appendChild(createElement(ListOrdered, { width: 18, height: 18 }));
+numberedListBtn.appendChild(createElement(ListOrdered));
 
 const taskBtn = document.createElement('button');
 taskBtn.type = 'button';
 taskBtn.className = 'format-button';
 taskBtn.dataset.action = 'task';
 taskBtn.title = 'Task';
-taskBtn.appendChild(createElement(ListTodo, { width: 18, height: 18 }));
+taskBtn.appendChild(createElement(ListTodo));
 
 let vimModeEnabled = false;
 
@@ -154,21 +154,21 @@ outlineBtn.type = 'button';
 outlineBtn.className = 'format-button toggle-button';
 outlineBtn.dataset.action = 'outline';
 outlineBtn.title = 'Toggle Outline';
-outlineBtn.appendChild(createElement(ListTree, { width: 18, height: 18 }));
+outlineBtn.appendChild(createElement(ListTree));
 
 const lineNumbersBtn = document.createElement('button');
 lineNumbersBtn.type = 'button';
 lineNumbersBtn.className = 'format-button toggle-button is-active';
 lineNumbersBtn.dataset.action = 'lineNumbers';
 lineNumbersBtn.title = 'Hide Line Numbers';
-lineNumbersBtn.appendChild(createElement(Hash, { width: 18, height: 18 }));
+lineNumbersBtn.appendChild(createElement(Hash));
 
 const gitChangesGutterBtn = document.createElement('button');
 gitChangesGutterBtn.type = 'button';
 gitChangesGutterBtn.className = 'format-button toggle-button is-active';
 gitChangesGutterBtn.dataset.action = 'gitChangesGutter';
 gitChangesGutterBtn.title = 'Hide Git Changes Gutter';
-gitChangesGutterBtn.appendChild(createElement(GitCompare, { width: 18, height: 18 }));
+gitChangesGutterBtn.appendChild(createElement(GitCompare));
 
 const updateLineNumbersUI = () => {
   lineNumbersBtn.classList.toggle('is-active', lineNumbersVisible);
@@ -254,49 +254,49 @@ codeBlockBtn.type = 'button';
 codeBlockBtn.className = 'format-button';
 codeBlockBtn.dataset.action = 'codeBlock';
 codeBlockBtn.title = 'Code Block';
-codeBlockBtn.appendChild(createElement(Code, { width: 18, height: 18 }));
+codeBlockBtn.appendChild(createElement(Code));
 
 const quoteBtn = document.createElement('button');
 quoteBtn.type = 'button';
 quoteBtn.className = 'format-button';
 quoteBtn.dataset.action = 'quote';
 quoteBtn.title = 'Quote';
-quoteBtn.appendChild(createElement(Quote, { width: 18, height: 18 }));
+quoteBtn.appendChild(createElement(Quote));
 
 const hrBtn = document.createElement('button');
 hrBtn.type = 'button';
 hrBtn.className = 'format-button';
 hrBtn.dataset.action = 'hr';
 hrBtn.title = 'Horizontal Rule';
-hrBtn.appendChild(createElement(Minus, { width: 18, height: 18 }));
+hrBtn.appendChild(createElement(Minus));
 
 const linkBtn = document.createElement('button');
 linkBtn.type = 'button';
 linkBtn.className = 'format-button';
 linkBtn.dataset.action = 'link';
 linkBtn.title = 'Link';
-linkBtn.appendChild(createElement(Link, { width: 18, height: 18 }));
+linkBtn.appendChild(createElement(Link));
 
 const wikiLinkBtn = document.createElement('button');
 wikiLinkBtn.type = 'button';
 wikiLinkBtn.className = 'format-button';
 wikiLinkBtn.dataset.action = 'wikiLink';
 wikiLinkBtn.title = 'Wiki Link';
-wikiLinkBtn.appendChild(createElement(Brackets, { width: 18, height: 18 }));
+wikiLinkBtn.appendChild(createElement(Brackets));
 
 const imageBtn = document.createElement('button');
 imageBtn.type = 'button';
 imageBtn.className = 'format-button';
 imageBtn.dataset.action = 'image';
 imageBtn.title = 'Image';
-imageBtn.appendChild(createElement(Image, { width: 18, height: 18 }));
+imageBtn.appendChild(createElement(Image));
 
 const tableBtn = document.createElement('button');
 tableBtn.type = 'button';
 tableBtn.className = 'format-button';
 tableBtn.dataset.action = 'table';
 tableBtn.title = 'Table';
-tableBtn.appendChild(createElement(Table2, { width: 18, height: 18 }));
+tableBtn.appendChild(createElement(Table2));
 
 const tableDropdown = document.createElement('div');
 tableDropdown.className = 'table-dropdown';
@@ -376,7 +376,7 @@ findToggleBtn.type = 'button';
 findToggleBtn.className = 'format-button toggle-button';
 findToggleBtn.dataset.action = 'find';
 findToggleBtn.title = 'Find and Replace';
-findToggleBtn.appendChild(createElement(Search, { width: 18, height: 18 }));
+findToggleBtn.appendChild(createElement(Search));
 
 const exportBtn = document.createElement('button');
 exportBtn.type = 'button';
@@ -384,7 +384,7 @@ exportBtn.className = 'format-button export-button';
 exportBtn.dataset.action = 'export';
 exportBtn.title = 'Export';
 exportBtn.setAttribute('aria-label', 'Export');
-exportBtn.appendChild(createElement(Share, { width: 18, height: 18 }));
+exportBtn.appendChild(createElement(Share));
 
 const exportDropdown = document.createElement('div');
 exportDropdown.className = 'export-dropdown';

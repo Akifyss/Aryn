@@ -25,7 +25,7 @@ export function ProviderAuthFlowPanel({
       <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
         <div className='flex items-center gap-3'>
           <div className='settings-auth-flow-icon flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0'>
-            <Icon icon='mingcute:loading-3-line' className='w-5 h-5 animate-spin' />
+            <Icon icon='mingcute:loading-3-line' className='size-[var(--icon-size-lg)] animate-spin' />
           </div>
           <div className='flex flex-col min-w-0'>
             <span className='text-sm font-semibold truncate'>{providerLabel} 登录中</span>

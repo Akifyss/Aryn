@@ -21,6 +21,12 @@
   color: var(--foreground-secondary);
 }
 
+.agent-interaction-icon > svg,
+.agent-interaction-icon > .iconify {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
 .agent-interaction-copy {
   display: flex;
   min-width: 0;

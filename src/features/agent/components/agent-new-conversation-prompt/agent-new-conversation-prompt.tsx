@@ -30,7 +30,7 @@ function AgentTypeSwitchTrigger({
       refreshError={agentCatalogRefreshError}
       selectedAgentId={selectedAgentId}
       // This trigger is inline with the 24px hero heading.
-      triggerIconSize={24}
+      triggerIconSize='xl'
       onRefresh={refreshAgentCatalog}
       onSelect={setSelectedAgentId}
     />
@@ -61,6 +61,7 @@ export function AgentNewConversationPrompt({
             <span>今天在</span>
             <AgentProjectSwitchTrigger
               activeProject={activeProject}
+              iconSize='xl'
               onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
             />
             <span>使用</span>

@@ -14,7 +14,7 @@ const createSelectionActionButton = (action: string, label: string, Icon: any): 
   button.dataset.action = action;
   button.title = label;
   button.setAttribute('aria-label', label);
-  button.appendChild(createElement(Icon, { width: 16, height: 16 }));
+  button.appendChild(createElement(Icon));
   return button;
 };
 

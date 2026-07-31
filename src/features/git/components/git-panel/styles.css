@@ -143,6 +143,12 @@
   color: var(--foreground-on-success);
 }
 
+.git-empty-illustration > svg,
+.git-empty-illustration > .iconify {
+  width: var(--icon-size-xl);
+  height: var(--icon-size-xl);
+}
+
 .git-empty-subtext {
   display: block;
   margin-top: 6px;

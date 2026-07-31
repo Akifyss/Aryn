@@ -80,8 +80,8 @@
 
 .project-menu-search > svg {
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
 }
 
 .project-menu-search input {

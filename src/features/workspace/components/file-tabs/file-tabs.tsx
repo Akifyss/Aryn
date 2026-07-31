@@ -639,8 +639,8 @@ export function FileTabs({
                 >
                   {tab.kind === 'fixed-panel' ? (
                     tab.fixedTabKind === 'file-panel'
-                      ? <FolderLine size={16} className='file-tab-leading-icon' />
-                      : <GitBranchLine size={16} className='file-tab-leading-icon' />
+                      ? <FolderLine className='file-tab-leading-icon' />
+                      : <GitBranchLine className='file-tab-leading-icon' />
                   ) : fileIconName ? (
                     <WorkspaceFileIcon fileName={fileIconName} iconTheme={iconTheme} />
                   ) : null}
@@ -663,7 +663,7 @@ export function FileTabs({
                     }}
                   >
                     <span className='file-tab-dirty-indicator' aria-hidden='true' />
-                    <CloseLine size={16} />
+                    <CloseLine />
                   </AppIconButton>
                 </div>
               ) : null}
@@ -741,7 +741,7 @@ export function FileTabs({
                 onOpenDiff?.(activeFileTab.filePath)
               }}
             >
-              <GitCompareLine size={16} />
+              <GitCompareLine />
             </AppIconButton>
           ) : null}
           {actions}

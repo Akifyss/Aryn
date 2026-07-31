@@ -29,6 +29,13 @@
   color: color-mix(in oklab, var(--foreground-secondary) 72%, transparent);
 }
 
+.agent-queued-row-leading > svg,
+.agent-queued-row-leading > .iconify {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+  flex: 0 0 auto;
+}
+
 .agent-queued-row-grip {
   display: inline-block;
   width: 8px;

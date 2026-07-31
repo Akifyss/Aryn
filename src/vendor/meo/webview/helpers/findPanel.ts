@@ -45,7 +45,7 @@ export const createFindPanel = (toggleBtn: HTMLButtonElement): FindPanelElements
   wholeWordBtn.type = 'button';
   wholeWordBtn.className = 'format-button toggle-button find-option-button';
   wholeWordBtn.title = 'Whole Word';
-  wholeWordBtn.appendChild(createElement(WholeWord, { width: 16, height: 16 }));
+  wholeWordBtn.appendChild(createElement(WholeWord));
   wholeWordBtn.setAttribute('aria-label', 'Whole Word');
   wholeWordBtn.setAttribute('aria-pressed', 'false');
 
@@ -53,7 +53,7 @@ export const createFindPanel = (toggleBtn: HTMLButtonElement): FindPanelElements
   caseSensitiveBtn.type = 'button';
   caseSensitiveBtn.className = 'format-button toggle-button find-option-button';
   caseSensitiveBtn.title = 'Case Sensitive';
-  caseSensitiveBtn.appendChild(createElement(CaseSensitive, { width: 16, height: 16 }));
+  caseSensitiveBtn.appendChild(createElement(CaseSensitive));
   caseSensitiveBtn.setAttribute('aria-label', 'Case Sensitive');
   caseSensitiveBtn.setAttribute('aria-pressed', 'false');
 
@@ -61,13 +61,13 @@ export const createFindPanel = (toggleBtn: HTMLButtonElement): FindPanelElements
   findPrevBtn.type = 'button';
   findPrevBtn.className = 'format-button';
   findPrevBtn.title = 'Previous Match';
-  findPrevBtn.appendChild(createElement(ChevronUp, { width: 16, height: 16 }));
+  findPrevBtn.appendChild(createElement(ChevronUp));
 
   const findNextBtn = document.createElement('button');
   findNextBtn.type = 'button';
   findNextBtn.className = 'format-button';
   findNextBtn.title = 'Next Match';
-  findNextBtn.appendChild(createElement(ChevronDown, { width: 16, height: 16 }));
+  findNextBtn.appendChild(createElement(ChevronDown));
 
   findInputWrap.append(findInput, findStatus);
   findRow.append(findInputWrap, wholeWordBtn, caseSensitiveBtn, findPrevBtn, findNextBtn);
@@ -85,13 +85,13 @@ export const createFindPanel = (toggleBtn: HTMLButtonElement): FindPanelElements
   replaceBtn.type = 'button';
   replaceBtn.className = 'format-button';
   replaceBtn.title = 'Replace Current Match';
-  replaceBtn.appendChild(createElement(Replace, { width: 16, height: 16 }));
+  replaceBtn.appendChild(createElement(Replace));
 
   const replaceAllBtn = document.createElement('button');
   replaceAllBtn.type = 'button';
   replaceAllBtn.className = 'format-button';
   replaceAllBtn.title = 'Replace All Matches';
-  replaceAllBtn.appendChild(createElement(ReplaceAll, { width: 16, height: 16 }));
+  replaceAllBtn.appendChild(createElement(ReplaceAll));
 
   replaceRow.append(replaceInput, replaceBtn, replaceAllBtn);
   panel.append(findRow, replaceRow);

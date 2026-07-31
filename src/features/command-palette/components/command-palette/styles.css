@@ -22,8 +22,8 @@
 
 .command-palette-icon {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   color: var(--foreground-secondary);
 }
 
@@ -118,8 +118,8 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
   color: var(--foreground-secondary);
   transition: color 140ms ease;
 }
@@ -192,6 +192,8 @@
 }
 
 .command-palette-empty-icon {
+  width: var(--icon-size-xl);
+  height: var(--icon-size-xl);
   opacity: 0.5;
 }
 

@@ -25,7 +25,7 @@ export function ProjectBootstrap({
         </div>
         <div className='project-bootstrap-actions'>
           <AppButton variant='primary' onClick={onCreateProject} disabled={isBusy}>
-            <NewFolderLine aria-hidden='true' size={16} />
+            <NewFolderLine aria-hidden='true' />
             新建空白项目
           </AppButton>
           <AppButton
@@ -35,7 +35,7 @@ export function ProjectBootstrap({
             }}
             disabled={isBusy}
           >
-            <FolderOpenLine aria-hidden='true' size={16} />
+            <FolderOpenLine aria-hidden='true' />
             使用现有文件夹
           </AppButton>
         </div>

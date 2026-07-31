@@ -120,7 +120,7 @@ export function AppWorkspaceShell({
             preventFocusOnPress
             onClick={() => handleCollapsedFixedTabClick('git')}
           >
-            <GitBranchLine size={16} />
+            <GitBranchLine />
           </AppIconButton>
           <AppIconButton
             type='button'
@@ -130,7 +130,7 @@ export function AppWorkspaceShell({
             preventFocusOnPress
             onClick={() => handleCollapsedFixedTabClick('file')}
           >
-            <FolderLine size={16} />
+            <FolderLine />
           </AppIconButton>
         </>
       )}

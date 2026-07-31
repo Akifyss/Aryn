@@ -86,6 +86,12 @@
   transition: background-color 140ms ease, color 140ms ease;
 }
 
+.window-button > svg,
+.window-button > .iconify {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
 .window-button:focus {
   outline: none;
 }

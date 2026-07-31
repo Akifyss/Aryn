@@ -24,14 +24,14 @@ export function AppLayoutModeSwitch({
       options={[
         {
           ariaLabel: 'Agent mode',
-          icon: <Chat3Line size={16} aria-hidden='true' />,
+          icon: <Chat3Line aria-hidden='true' />,
           tooltip: 'Agent 模式',
           value: 'agent',
         },
         {
           ariaLabel: isEditorDisabled ? 'Editor mode, select a workspace first' : 'Editor mode',
           disabled: isEditorDisabled,
-          icon: <FolderLine size={16} aria-hidden='true' />,
+          icon: <FolderLine aria-hidden='true' />,
           tooltip: isEditorDisabled ? '先选择工作目录' : '编辑器模式',
           value: 'editor',
         },
@@ -59,7 +59,7 @@ export function AppChromeSearchButton({ onClick }: AppChromeSearchButtonProps) {
       preventFocusOnPress
       onClick={onClick}
     >
-      <Icon icon='lucide:search' width={16} height={16} aria-hidden='true' />
+      <Icon icon='lucide:search' aria-hidden='true' />
     </AppIconButton>
   )
 }
@@ -94,7 +94,7 @@ export function AppChromeSidebarToggleButton({
       onClick={onClick}
     >
       <span className='panel-toggle-icon' aria-hidden='true'>
-        <LayoutLeftLine size={16} />
+        <LayoutLeftLine />
       </span>
     </AppIconButton>
   )

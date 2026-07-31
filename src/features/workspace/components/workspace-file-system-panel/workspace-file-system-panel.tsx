@@ -370,7 +370,7 @@ export function WorkspaceFileSystemPanel({
     return (
       <div className='workspace-file-system-unavailable'>
         <div className='workspace-file-system-unavailable-icon'>
-          <FolderForbidLine size={28} />
+          <FolderForbidLine />
         </div>
         <p>{workspaceUnavailableMessage}</p>
       </div>
@@ -381,7 +381,7 @@ export function WorkspaceFileSystemPanel({
     return (
       <div className='workspace-file-system-unavailable'>
         <div className='workspace-file-system-unavailable-icon'>
-          <FolderOpenLine size={28} />
+          <FolderOpenLine />
         </div>
         <p>选择一个工作区以浏览文件。</p>
       </div>

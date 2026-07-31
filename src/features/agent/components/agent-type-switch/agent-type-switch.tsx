@@ -1,5 +1,6 @@
 import { useId } from 'react'
 import { CheckLine, WarningLine } from '@mingcute/react'
+import type { AppIconSize } from '@/components/icon-size'
 import { AppMenu as Menu } from '@/components/app-menu'
 import {
   DEFAULT_AGENT_ID,
@@ -18,7 +19,7 @@ type AgentTypeSwitchProps = {
   onSelect: (agentId: AgentId) => void
   refreshError: string | null
   selectedAgentId: AgentId
-  triggerIconSize?: number
+  triggerIconSize?: AppIconSize
 }
 
 export function AgentTypeSwitch({
@@ -29,7 +30,7 @@ export function AgentTypeSwitch({
   onSelect,
   refreshError,
   selectedAgentId,
-  triggerIconSize = 16,
+  triggerIconSize = 'md',
 }: AgentTypeSwitchProps) {
   const descriptionIdPrefix = useId()
   const catalog = agentCatalog.length > 0
@@ -115,16 +116,16 @@ export function AgentTypeSwitch({
                             </>
                           ) : undefined}
                           info={isUnavailable ? (
-                            <WarningLine aria-hidden='true' size={16} />
+                            <WarningLine aria-hidden='true' />
                           ) : isSelected ? (
-                            <CheckLine aria-hidden='true' size={16} />
+                            <CheckLine aria-hidden='true' />
                           ) : undefined}
                           infoVariant='status'
                           icon={(
                             <AgentBrandIcon
                               agentId={agentId}
                               className='agent-brand-icon'
-                              size={16}
+                              size='md'
                             />
                           )}
                           label={availability.definition.label}

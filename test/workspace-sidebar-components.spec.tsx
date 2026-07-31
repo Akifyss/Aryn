@@ -122,7 +122,7 @@ describe('workspace sidebar styles', () => {
       /\b(?:min-height|border(?:-radius)?|background|box-shadow|font-size|font-weight|opacity|transition)\s*:/,
     )
     expect(sidebarCss).toContain(
-      'width: var(--app-button-base-icon-size);',
+      'width: var(--icon-size-md);',
     )
     expect(sidebarCss).toContain(
       'transition: color var(--app-button-base-transition-duration) ease;',

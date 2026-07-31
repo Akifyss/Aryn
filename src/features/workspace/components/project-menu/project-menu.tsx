@@ -94,14 +94,14 @@ export function ProjectMenu({
     <Menu.List className='project-menu-actions'>
       <Menu.Item
         disabled={isBusy}
-        icon={<NewFolderLine aria-hidden='true' size={16} />}
+        icon={<NewFolderLine aria-hidden='true' />}
         label='新建空白项目'
         text='新建空白项目'
         onClick={onCreateProject}
       />
       <Menu.Item
         disabled={isBusy}
-        icon={<FolderOpenLine aria-hidden='true' size={16} />}
+        icon={<FolderOpenLine aria-hidden='true' />}
         label='使用现有文件夹'
         text='使用现有文件夹'
         onClick={() => {
@@ -111,7 +111,7 @@ export function ProjectMenu({
       {showProjectlessAction ? (
         <Menu.Item
           disabled={isBusy}
-          icon={<FolderForbidLine aria-hidden='true' size={16} />}
+          icon={<FolderForbidLine aria-hidden='true' />}
           label='不使用项目'
           text='不使用项目'
           onClick={() => {
@@ -170,7 +170,7 @@ export function ProjectMenu({
                 <div className='project-menu-project-section'>
                   <div className='project-menu-search-section'>
                     <label className='project-menu-search'>
-                      <SearchLine aria-hidden='true' size={16} />
+                      <SearchLine aria-hidden='true' />
                       <input
                         autoFocus
                         aria-label='搜索项目'
@@ -193,7 +193,7 @@ export function ProjectMenu({
                             <Menu.Item
                               key={project.id}
                               disabled={isBusy}
-                              info={isActive ? <CheckLine aria-hidden='true' size={16} /> : undefined}
+                              info={isActive ? <CheckLine aria-hidden='true' /> : undefined}
                               infoVariant='status'
                               icon={<ProjectIcon />}
                               label={project.name}
