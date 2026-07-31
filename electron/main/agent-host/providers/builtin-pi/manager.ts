@@ -1,7 +1,6 @@
 import { lstat, rm } from 'node:fs/promises'
 import path from 'node:path'
-import type { AgentMessage, ThinkingLevel } from '@earendil-works/pi-agent-core'
-import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent'
+import type { ThinkingLevel } from '@earendil-works/pi-agent-core'
 import {
   AuthStorage,
   createAgentSession,
@@ -10,9 +9,8 @@ import {
   SettingsManager,
   type AgentSession,
 } from '@earendil-works/pi-coding-agent'
-import { clampThinkingLevel, complete, getEnvApiKey, getSupportedThinkingLevels, type Api, type AssistantMessage, type Model, type UserMessage } from '@earendil-works/pi-ai'
+import { clampThinkingLevel, getEnvApiKey, getSupportedThinkingLevels, type Api, type Model } from '@earendil-works/pi-ai'
 import type {
-  AgentMessageFileChange,
   AgentClientEventPayload,
   AgentPromptAttachment,
   AgentProviderAuthState,
@@ -34,13 +32,9 @@ import {
 import { AgentSessionAnnotationStore } from '../../sessions/annotations'
 import {
   collectDirectToolPathsByEntryId,
-  extractExplicitBashFileChanges,
-  extractWritableToolFilePath,
   filterAnnotationsByDirectToolPaths,
-  resolveDirectToolFileChangeKind,
 } from '../../sessions/file-change-extractor'
 import type { AgentProviderAuthLoginCallbacks } from '../../application/agent-backend'
-import { pathExists } from './file-system'
 import {
   getInputsByModel,
   getProviderPreferredModelKeys,
@@ -56,47 +50,31 @@ import {
   preparePromptAttachments,
 } from './prompt-attachments'
 import {
-  buildFallbackSessionTitle,
   clampText,
-  getAutoNamingContext,
-  normalizeSessionTitle,
   parseEntryTimestamp,
   serializeMessage,
   serializePiWebSessionEntries,
   serializeSessionEntries,
-  summarizeToolPayload,
 } from './session-presentation'
 import {
   areSameWorkspacePath,
   BuiltinPiSessionCatalog,
   getArynPiSessionDir,
 } from './session-catalog'
+import {
+  applyAgentQueuedMessageUpdate,
+  type AgentQueueSnapshot,
+} from './message-queue'
+import { handleBuiltinPiSessionEvent } from './session-event-handler'
+import type { BuiltinPiSessionRuntime as ActiveSessionRuntime } from './runtime'
+import { BuiltinPiSessionNamer } from './session-namer'
 
 export {
+  applyAgentQueuedMessageUpdate,
   getArynPiSessionDir,
   getThinkingLevelsByModel,
   serializePiWebSessionEntries,
   serializeSessionEntries,
-}
-
-type ActiveSessionRuntime = {
-  activity: {
-    pendingAssistantEntryId: string | null
-    runningToolCalls: Map<string, {
-      existedBeforeWrite: boolean | null
-      filePath: string | null
-      ownerEntryId: string | null
-      parsedFileChanges: AgentMessageFileChange[]
-      toolName: string
-    }>
-  }
-  cwd: string
-  session: AgentSession
-  status: {
-    compactionReason: 'manual' | 'overflow' | 'threshold' | null
-    retryMaxAttempts: number | null
-  }
-  unsubscribe: () => void
 }
 
 type PiAgentManagerOptions = {
@@ -107,116 +85,23 @@ type LoadAgentWorkspaceStateOptions = {
   restoreSession?: boolean
 }
 
-type AgentQueuedMessageKind = AgentRunningPromptBehavior
-type AgentQueueSnapshot = {
-  followUp: string[]
-  steering: string[]
-}
 type NormalizedCreateSessionOptions = {
   modelKey: string | null
   name: string | null
   thinkingLevel: ThinkingLevel | null
 }
-export function applyAgentQueuedMessageUpdate(
-  queue: AgentQueueSnapshot,
-  update: AgentQueuedMessageUpdate,
-): AgentQueueSnapshot {
-  validateAgentQueuedMessageUpdate(update, queue)
-
-  const nextQueue: AgentQueueSnapshot = {
-    followUp: [...queue.followUp],
-    steering: [...queue.steering],
-  }
-  const sourceQueue = getAgentQueueMessages(nextQueue, update.kind)
-  const [message] = sourceQueue.splice(update.index, 1)
-
-  if (!message) {
-    throw new Error('Queued message has already been processed.')
-  }
-
-  if (update.action === 'edit') {
-    sourceQueue.splice(update.index, 0, update.text.trim())
-  } else if (update.action === 'move') {
-    getAgentQueueMessages(nextQueue, update.targetKind).push(message)
-  }
-
-  return nextQueue
-}
-
-function getAgentQueueMessages(queue: AgentQueueSnapshot, kind: AgentQueuedMessageKind) {
-  return kind === 'steer' ? queue.steering : queue.followUp
-}
-
-function validateAgentQueuedMessageUpdate(update: AgentQueuedMessageUpdate, queue: AgentQueueSnapshot) {
-  if (update.kind !== 'steer' && update.kind !== 'followUp') {
-    throw new Error('Unknown queued message type.')
-  }
-
-  if (update.action !== 'delete' && update.action !== 'edit' && update.action !== 'move') {
-    throw new Error('Unknown queued message action.')
-  }
-
-  if (!Number.isInteger(update.index) || update.index < 0) {
-    throw new Error('Queued message index is invalid.')
-  }
-
-  if (!update.expectedText.trim()) {
-    throw new Error('Queued message text is empty.')
-  }
-
-  if (update.action === 'edit' && !update.text.trim()) {
-    throw new Error('Queued message cannot be empty.')
-  }
-
-  if (update.action === 'move' && update.targetKind !== 'steer' && update.targetKind !== 'followUp') {
-    throw new Error('Unknown queued message target.')
-  }
-
-  const messages = getAgentQueueMessages(queue, update.kind)
-
-  if (messages[update.index] !== update.expectedText) {
-    throw new Error('Queued message changed before this action completed. Please try again.')
-  }
-}
-
 const OPENROUTER_ENV_KEY = 'OPENROUTER_API_KEY'
 const OPENROUTER_PROVIDER = 'openrouter'
 const OPENAI_ENV_KEY = 'OPENAI_API_KEY'
 const GOOGLE_ENV_KEY = 'GEMINI_API_KEY'
-const AUTO_SESSION_NAME_MODEL_ID = 'openrouter/free'
-const AUTO_SESSION_NAME_MAX_TOKENS = 48
 const AUTH_SETUP_HINT = `No authenticated models are available. Add a provider credential in Settings > Providers, log in to a subscription provider, or set a supported Pi provider environment variable such as ${OPENROUTER_ENV_KEY}, ${OPENAI_ENV_KEY}, or ${GOOGLE_ENV_KEY}.`
-const AUTO_SESSION_NAME_SYSTEM_PROMPT = [
-  'You generate short chat session titles.',
-  'Reply with title text only.',
-  'Use the same language as the user when possible.',
-  'Do not use quotes, markdown, labels, prefixes, numbering, or ending punctuation.',
-  'Keep it compact and specific.',
-].join(' ')
-const AUTO_SESSION_NAME_MODEL: Model<Api> = {
-  api: 'openai-completions',
-  baseUrl: 'https://openrouter.ai/api/v1',
-  contextWindow: 200000,
-  cost: {
-    cacheRead: 0,
-    cacheWrite: 0,
-    input: 0,
-    output: 0,
-  },
-  id: AUTO_SESSION_NAME_MODEL_ID,
-  input: ['text'],
-  maxTokens: 256,
-  name: 'OpenRouter Free Router',
-  provider: OPENROUTER_PROVIDER,
-  reasoning: false,
-}
 
 export class PiAgentManager {
   private activeRuntime: ActiveSessionRuntime | null = null
-  private readonly autoNamingSessions = new Set<string>()
   private readonly annotationStore = new AgentSessionAnnotationStore()
   private readonly authStorage: AuthStorage
   private readonly modelRegistry: ModelRegistry
+  private readonly sessionNamer: BuiltinPiSessionNamer
   private readonly sessionCatalog: BuiltinPiSessionCatalog
 
   constructor(
@@ -226,6 +111,11 @@ export class PiAgentManager {
     this.authStorage = AuthStorage.create(path.join(options.agentDir, 'auth.json'))
     this.modelRegistry = ModelRegistry.create(this.authStorage, path.join(options.agentDir, 'models.json'))
     this.sessionCatalog = new BuiltinPiSessionCatalog(options.agentDir, this.annotationStore)
+    this.sessionNamer = new BuiltinPiSessionNamer(async (session) => {
+      if (this.activeRuntime?.session === session) {
+        await this.broadcastWorkspaceState(this.activeRuntime.cwd)
+      }
+    })
   }
 
   async loadWorkspaceState(
@@ -661,7 +551,7 @@ export class PiAgentManager {
   }
 
   dispose() {
-    void this.releaseActiveSession()
+    return this.releaseActiveSession()
   }
 
   private async activateSession(cwd: string, sessionManager: SessionManager) {
@@ -752,309 +642,20 @@ export class PiAgentManager {
     await session.setModel(preferredSelection)
   }
 
-  private getAutoNamingModels(session: AgentSession) {
-    const models: Model<Api>[] = []
-    const preferredNamingModel = session.modelRegistry.find(OPENROUTER_PROVIDER, AUTO_SESSION_NAME_MODEL_ID) ?? AUTO_SESSION_NAME_MODEL
-
-    if (
-      session.model
-      && session.modelRegistry.hasConfiguredAuth(session.model)
-      && !models.some((model) => model.provider === session.model?.provider && model.id === session.model?.id)
-    ) {
-      models.push(session.model)
-    }
-
-    if (
-      session.modelRegistry.hasConfiguredAuth(preferredNamingModel)
-      && !models.some((model) => model.provider === preferredNamingModel.provider && model.id === preferredNamingModel.id)
-    ) {
-      models.push(preferredNamingModel)
-    }
-
-    return models
-  }
-
-  private async generateSessionNameWithModel(session: AgentSession, model: Model<Api>, sourceText: string) {
-    const auth = await session.modelRegistry.getApiKeyAndHeaders(model)
-
-    if (!auth.ok) {
-      return null
-    }
-
-    const response = await complete(
-      model,
-      {
-        messages: [
-          {
-            content: [{ type: 'text', text: sourceText }],
-            role: 'user',
-            timestamp: Date.now(),
-          } satisfies UserMessage,
-        ],
-        systemPrompt: AUTO_SESSION_NAME_SYSTEM_PROMPT,
-      },
-      {
-        apiKey: auth.apiKey,
-        headers: auth.headers,
-        maxTokens: AUTO_SESSION_NAME_MAX_TOKENS,
-      },
-    )
-
-    if (response.stopReason === 'aborted' || response.stopReason === 'error') {
-      return null
-    }
-
-    const text = response.content
-      .filter((block): block is Extract<AssistantMessage['content'][number], { type: 'text' }> => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n')
-
-    return normalizeSessionTitle(text)
-  }
-
-  private async generateSessionName(session: AgentSession, context: NonNullable<ReturnType<typeof getAutoNamingContext>>) {
-    const namingSource = [
-      `First user message:\n${context.firstUserText}`,
-      context.firstAssistantText ? `\nFirst assistant reply:\n${context.firstAssistantText}` : '',
-    ]
-      .join('\n')
-      .trim()
-
-    for (const model of this.getAutoNamingModels(session)) {
-      try {
-        const title = await this.generateSessionNameWithModel(session, model, namingSource)
-
-        if (title) {
-          return title
-        }
-      } catch {
-        // Fall through to the next model or the local fallback.
-      }
-    }
-
-    return buildFallbackSessionTitle(context.firstUserText)
-  }
-
-  private async maybeAutoNameSession(session: AgentSession) {
-    if (session.sessionName?.trim() || this.autoNamingSessions.has(session.sessionId)) {
-      return
-    }
-
-    const namingContext = getAutoNamingContext(session.sessionManager.getBranch())
-
-    if (!namingContext || namingContext.userMessageCount !== 1) {
-      return
-    }
-
-    this.autoNamingSessions.add(session.sessionId)
-
-    try {
-      const title = await this.generateSessionName(session, namingContext)
-
-      if (!title || session.sessionName?.trim()) {
-        return
-      }
-
-      session.setSessionName(title)
-
-      if (this.activeRuntime?.session === session) {
-        await this.broadcastWorkspaceState(this.activeRuntime.cwd)
-      }
-    } finally {
-      this.autoNamingSessions.delete(session.sessionId)
-    }
-  }
-
-  private async handleSessionEvent(session: AgentSession, event: AgentSessionEvent) {
-    if (!this.activeRuntime || this.activeRuntime.session !== session) {
-      return
-    }
-
+  private async handleSessionEvent(
+    session: AgentSession,
+    event: Parameters<typeof handleBuiltinPiSessionEvent>[1],
+  ) {
     const runtime = this.activeRuntime
-
-    this.emitEvent({
-      type: 'pi_native_event',
-      event: event as unknown as { type: string; [key: string]: unknown },
-      sessionId: session.sessionId,
+    if (!runtime || runtime.session !== session) return
+    await handleBuiltinPiSessionEvent(runtime, event, {
+      annotationStore: this.annotationStore,
+      emitEvent: this.emitEvent,
+      onTurnEnded: (currentSession) => {
+        void this.sessionNamer.maybeName(currentSession)
+      },
+      onWorkspaceStateChanged: (cwd) => this.broadcastWorkspaceState(cwd),
     })
-
-    if (event.type === 'compaction_start') {
-      runtime.status.compactionReason = event.reason
-    }
-
-    if (event.type === 'compaction_end') {
-      runtime.status.compactionReason = null
-    }
-
-    if (event.type === 'auto_retry_start') {
-      runtime.status.retryMaxAttempts = event.maxAttempts
-    }
-
-    if (event.type === 'auto_retry_end') {
-      runtime.status.retryMaxAttempts = null
-    }
-
-    if (event.type === 'message_start' && 'role' in event.message && event.message.role === 'assistant') {
-      runtime.activity.pendingAssistantEntryId = null
-      this.emitEvent({
-        type: 'assistant_message_started',
-        sessionId: session.sessionId,
-      })
-      return
-    }
-
-    if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') {
-      this.emitEvent({
-        type: 'assistant_message_delta',
-        delta: event.assistantMessageEvent.delta,
-        sessionId: session.sessionId,
-      })
-      return
-    }
-
-    if (event.type === 'message_update' && event.assistantMessageEvent.type === 'thinking_delta') {
-      this.emitEvent({
-        type: 'assistant_thinking_delta',
-        delta: event.assistantMessageEvent.delta,
-        sessionId: session.sessionId,
-      })
-      return
-    }
-
-    if (event.type === 'message_update' && event.assistantMessageEvent.type === 'thinking_end') {
-      this.emitEvent({
-        type: 'assistant_thinking_finished',
-        sessionId: session.sessionId,
-      })
-      return
-    }
-
-    if (event.type === 'tool_execution_start') {
-      const ownerEntryId = this.findLatestAssistantEntryId(session) ?? runtime.activity.pendingAssistantEntryId
-
-      const directFilePath = extractWritableToolFilePath(runtime.cwd, event.toolName, event.args)
-      const existedBeforeWrite = event.toolName === 'write' && directFilePath
-        ? await pathExists(directFilePath)
-        : null
-
-      runtime.activity.runningToolCalls.set(event.toolCallId, {
-        existedBeforeWrite,
-        filePath: directFilePath,
-        ownerEntryId,
-        parsedFileChanges: event.toolName === 'bash' ? extractExplicitBashFileChanges(runtime.cwd, event.args) : [],
-        toolName: event.toolName,
-      })
-      this.emitEvent({
-        type: 'tool_execution_started',
-        sessionId: session.sessionId,
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        summary: summarizeToolPayload(event.args, 240, 'Running tool...'),
-      })
-      return
-    }
-
-    if (event.type === 'tool_execution_update') {
-      this.emitEvent({
-        type: 'tool_execution_updated',
-        sessionId: session.sessionId,
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        summary: summarizeToolPayload(
-          event.partialResult?.content ?? event.partialResult?.details ?? event.partialResult,
-          320,
-          `${event.toolName} is running...`,
-        ),
-      })
-      return
-    }
-
-    if (event.type === 'tool_execution_end') {
-      const finishedTool = runtime.activity.runningToolCalls.get(event.toolCallId) ?? null
-      runtime.activity.runningToolCalls.delete(event.toolCallId)
-
-      if (
-        finishedTool
-        && !event.isError
-        && runtime.session.sessionFile
-        && finishedTool.ownerEntryId
-      ) {
-        const nextFileChanges = [...finishedTool.parsedFileChanges]
-
-        if (finishedTool.filePath) {
-          const directChangeKind = resolveDirectToolFileChangeKind(
-            finishedTool.toolName,
-            finishedTool.existedBeforeWrite,
-          )
-
-          if (directChangeKind) {
-            nextFileChanges.push({
-              filePath: finishedTool.filePath,
-              kind: directChangeKind,
-            })
-          }
-        }
-
-        let nextAnnotations = null
-
-        for (const change of nextFileChanges) {
-          nextAnnotations = await this.annotationStore.recordFileChange(
-            runtime.session.sessionFile,
-            finishedTool.ownerEntryId,
-            change,
-          )
-        }
-
-        if (nextAnnotations) {
-          this.emitEvent({
-            type: 'session_annotations_updated',
-            sessionId: runtime.session.sessionId,
-            annotations: nextAnnotations,
-          })
-        }
-      }
-
-      this.emitEvent({
-        type: 'tool_execution_finished',
-        sessionId: session.sessionId,
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        summary: summarizeToolPayload(
-          event.result?.content ?? event.result?.details ?? event.result,
-          320,
-          `${event.toolName} finished.`,
-        ),
-        isError: event.isError,
-      })
-      return
-    }
-
-    if (event.type === 'message_end' && 'role' in event.message && event.message.role === 'assistant') {
-      runtime.activity.pendingAssistantEntryId = this.findEntryIdForMessage(session, event.message)
-    }
-
-    if (
-      event.type === 'compaction_start'
-      || event.type === 'compaction_end'
-      || event.type === 'auto_retry_start'
-      || event.type === 'auto_retry_end'
-      || event.type === 'agent_start'
-      || event.type === 'turn_start'
-      || event.type === 'turn_end'
-      || event.type === 'thinking_level_changed'
-    ) {
-      await this.broadcastWorkspaceState(runtime.cwd)
-
-      if (event.type === 'turn_end') {
-        void this.maybeAutoNameSession(session)
-      }
-
-      return
-    }
-
-    if (event.type === 'message_end' || event.type === 'agent_end') {
-      await this.broadcastWorkspaceState(runtime.cwd)
-    }
   }
 
   private async broadcastWorkspaceState(cwd: string) {
@@ -1248,42 +849,6 @@ export class PiAgentManager {
       sessionPath,
       workspacePath: cwd,
     }
-  }
-
-  private findEntryIdForMessage(session: AgentSession, message: AgentMessage) {
-    if (!('role' in message) || typeof message.timestamp !== 'number') {
-      return null
-    }
-
-    const branchEntries = session.sessionManager.getBranch()
-
-    for (let index = branchEntries.length - 1; index >= 0; index -= 1) {
-      const entry = branchEntries[index]
-
-      if (entry.type !== 'message' || !('role' in entry.message)) {
-        continue
-      }
-
-      if (entry.message.role === message.role && entry.message.timestamp === message.timestamp) {
-        return entry.id
-      }
-    }
-
-    return null
-  }
-
-  private findLatestAssistantEntryId(session: AgentSession) {
-    const branchEntries = session.sessionManager.getBranch()
-
-    for (let index = branchEntries.length - 1; index >= 0; index -= 1) {
-      const entry = branchEntries[index]
-
-      if (entry.type === 'message' && 'role' in entry.message && entry.message.role === 'assistant') {
-        return entry.id
-      }
-    }
-
-    return null
   }
 
   private getProviderAuthStates(modelProviders: string[]): Record<string, AgentProviderAuthState> {

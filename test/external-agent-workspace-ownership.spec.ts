@@ -63,8 +63,7 @@ describe('external Agent workspace ownership', () => {
     const manager = new OpenCodeAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
     const client = {}
     const internals = manager as unknown as {
-      client: unknown
-      clientGeneration: number
+      bindingRegistry: { install: (binding: unknown) => void }
       requireBinding: (sourceClient: unknown, cwd: string, sessionID: string) => Promise<unknown>
       runtimeCoordinator: {
         ensure: (
@@ -72,10 +71,10 @@ describe('external Agent workspace ownership', () => {
           start: (lease: SessionRuntimeLease) => Promise<unknown>,
         ) => Promise<unknown>
       }
-      sessionBindings: Map<string, unknown>
+      serverSupervisor: { clientValue: unknown, generationValue: number }
     }
-    internals.client = client
-    internals.clientGeneration = 1
+    internals.serverSupervisor.clientValue = client
+    internals.serverSupervisor.generationValue = 1
     const wrongWorkspaceKey = `${workspaceIdentity('C:/workspace-b')}\0session-a`
     await internals.runtimeCoordinator.ensure(wrongWorkspaceKey, async (lease) => {
       const binding = {
@@ -93,7 +92,7 @@ describe('external Agent workspace ownership', () => {
         thinkingLevel: 'medium',
         title: null,
       }
-      internals.sessionBindings.set(wrongWorkspaceKey, binding)
+      internals.bindingRegistry.install(binding)
       return binding
     })
 

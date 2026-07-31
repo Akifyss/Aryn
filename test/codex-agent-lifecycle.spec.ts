@@ -74,7 +74,9 @@ describe('Codex App Server lifecycle', () => {
     const manager = new CodexAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
     const currentRecord = record()
     const internals = manager as unknown as {
-      client: { request: (method: string) => Promise<unknown>, stop: () => void }
+      clientSupervisor: {
+        client: { request: (method: string) => Promise<unknown>, stop: () => void }
+      }
       handleNotification: (notification: {
         method: 'turn/started'
         params: { threadId: string, turn: Thread['turns'][number] }
@@ -82,7 +84,7 @@ describe('Codex App Server lifecycle', () => {
       resumeThread: (value: CodexThreadRecord) => Promise<void>
       sessionStore: CodexSessionStore
     }
-    internals.client = {
+    internals.clientSupervisor.client = {
       request: async (method) => {
         expect(method).toBe('thread/resume')
         await internals.handleNotification({
@@ -133,7 +135,7 @@ describe('Codex App Server lifecycle', () => {
     const currentRecord = record()
     const fakeClient = { stop: () => undefined }
     const internals = manager as unknown as {
-      client: unknown
+      clientSupervisor: { client: unknown }
       handleConnectionExit: (client: unknown, error: Error) => void
       installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
         activeTurnId: string | null
@@ -141,7 +143,7 @@ describe('Codex App Server lifecycle', () => {
       }>
       sessionStore: CodexSessionStore
     }
-    internals.client = fakeClient
+    internals.clientSupervisor.client = fakeClient
     internals.sessionStore.install(thread({ type: 'active', activeFlags: [] }))
     const binding = await internals.installBinding(currentRecord, true)
     binding.activeTurnId = 'turn-1'
@@ -173,7 +175,7 @@ describe('Codex App Server lifecycle', () => {
       stop: () => undefined,
     }
     const internals = manager as unknown as {
-      client: unknown
+      clientSupervisor: { client: unknown }
       sessionCatalog: {
         index: { read: () => Promise<{ threads: CodexThreadRecord[], version: 1 }> }
       }
@@ -181,7 +183,7 @@ describe('Codex App Server lifecycle', () => {
         activeTurnId: string | null
       }>
     }
-    internals.client = fakeClient
+    internals.clientSupervisor.client = fakeClient
     internals.sessionCatalog.index = {
       read: async () => ({ threads: [currentRecord], version: 1 }),
     }
@@ -222,20 +224,19 @@ describe('Codex App Server lifecycle', () => {
       stop: () => undefined,
     }
     const internals = manager as unknown as {
-      client: unknown
+      clientSupervisor: { client: unknown, modelsValue: Model[] }
       sessionCatalog: { index: { update: () => Promise<never> } }
       installBinding: (value: CodexThreadRecord, isStreaming: boolean) => Promise<{
         activeTurnId: string | null
         isStreaming: boolean
       }>
-      models: Model[]
       sessionStore: CodexSessionStore
     }
-    internals.client = fakeClient
+    internals.clientSupervisor.client = fakeClient
     internals.sessionCatalog.index = {
       update: async () => { throw new Error('disk full') },
     }
-    internals.models = [model()]
+    internals.clientSupervisor.modelsValue = [model()]
     internals.sessionStore.install(thread())
     const binding = await internals.installBinding(currentRecord, false)
 
@@ -260,9 +261,11 @@ describe('Codex App Server lifecycle', () => {
     const updateStarted = new Promise<void>((resolve) => { signalUpdateStarted = resolve })
     const updateGate = new Promise<void>((resolve) => { releaseUpdate = resolve })
     const internals = manager as unknown as {
-      client: {
-        request: (method: string) => Promise<unknown>
-        stop: () => void
+      clientSupervisor: {
+        client: {
+          request: (method: string) => Promise<unknown>
+          stop: () => void
+        }
       }
       sessionCatalog: {
         index: {
@@ -275,7 +278,7 @@ describe('Codex App Server lifecycle', () => {
         workspaceIdentity: string
       }>
     }
-    internals.client = {
+    internals.clientSupervisor.client = {
       request: async (method) => {
         if (method === 'thread/list') return { data: [], nextCursor: null }
         if (method === 'thread/unsubscribe') return {}
@@ -318,9 +321,11 @@ describe('Codex App Server lifecycle', () => {
     let state = { threads: [{ ...bindingRecord }], version: 1 as const }
     const requests: Array<{ method: string, params: unknown }> = []
     const internals = manager as unknown as {
-      client: {
-        request: (method: string, params: unknown) => Promise<unknown>
-        stop: () => void
+      clientSupervisor: {
+        client: {
+          request: (method: string, params: unknown) => Promise<unknown>
+          stop: () => void
+        }
       }
       sessionCatalog: {
         index: {
@@ -332,7 +337,7 @@ describe('Codex App Server lifecycle', () => {
         record: CodexThreadRecord
       }>
     }
-    internals.client = {
+    internals.clientSupervisor.client = {
       request: async (method, params) => {
         requests.push({ method, params })
         if (method === 'thread/list') return { data: [], nextCursor: null }
@@ -370,7 +375,7 @@ describe('Codex App Server lifecycle', () => {
     const currentRecord = record()
     const requests: string[] = []
     const internals = manager as unknown as {
-      client: unknown
+      clientSupervisor: { client: unknown }
       handleNotification: (notification: {
         method: 'turn/completed'
         params: { threadId: string, turn: Thread['turns'][number] }
@@ -387,7 +392,7 @@ describe('Codex App Server lifecycle', () => {
       }>
       sessionStore: CodexSessionStore
     }
-    internals.client = {
+    internals.clientSupervisor.client = {
       request: async (method: string, params: { input?: Array<{ type: string, text?: string }> }) => {
         expect(method).toBe('turn/start')
         const prompt = params.input?.find((input) => input.type === 'text')?.text ?? ''
@@ -454,7 +459,7 @@ describe('Codex App Server lifecycle', () => {
     const currentRecord = record()
     const requests: Array<{ method: string, params: unknown }> = []
     const internals = manager as unknown as {
-      client: unknown
+      clientSupervisor: { client: unknown }
       sessionCatalog: {
         index: { read: () => Promise<{ threads: CodexThreadRecord[], version: 1 }> }
       }
@@ -464,7 +469,7 @@ describe('Codex App Server lifecycle', () => {
       }>
       sessionStore: CodexSessionStore
     }
-    internals.client = {
+    internals.clientSupervisor.client = {
       request: async (method: string, params: unknown) => {
         requests.push({ method, params })
         if (method === 'thread/list') {

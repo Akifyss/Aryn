@@ -97,6 +97,7 @@ function unsupportedQueuedMessageEditingError(agentId: AgentId) {
  */
 export class AgentApplicationService {
   private disposed = false
+  private disposePromise: Promise<void> | null = null
 
   constructor(private readonly backends: AgentBackendRegistry) {}
 
@@ -238,19 +239,19 @@ export class AgentApplicationService {
   }
 
   dispose() {
-    if (this.disposed) return
+    if (this.disposePromise) return this.disposePromise
     this.disposed = true
-    const failures: unknown[] = []
-    for (const backend of this.backends.values()) {
+    const disposals = [...this.backends.values()].map((backend) => {
       try {
-        backend.dispose()
+        return Promise.resolve(backend.dispose())
       } catch (error) {
-        failures.push(error)
+        return Promise.reject(error)
       }
-    }
-    if (failures.length > 0) {
-      throw new AggregateError(failures, 'One or more Agent backends could not be disposed.')
-    }
+    })
+    this.disposePromise = Promise.allSettled(disposals).then((results) => {
+      this.throwFanOutFailures(results, 'One or more Agent backends could not be disposed.')
+    })
+    return this.disposePromise
   }
 
   private resolveWorkspaceBackend(rawScope: AgentRequestScope) {

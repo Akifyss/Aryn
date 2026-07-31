@@ -47,11 +47,16 @@ describe('AgentBackendRegistry', () => {
     )
   })
 
-  it('attempts every backend disposal before reporting aggregated failures', () => {
+  it('awaits every backend disposal before reporting aggregated failures', async () => {
+    let releaseCodexDisposal!: () => void
+    const codexDisposal = new Promise<void>((resolve) => {
+      releaseCodexDisposal = resolve
+    })
     const disposals = Object.fromEntries(AGENT_IDS.map((agentId) => [
       agentId,
       vi.fn(() => {
         if (agentId === 'pi') throw new Error('PI disposal failed')
+        if (agentId === 'codex') return codexDisposal
       }),
     ])) as Record<AgentId, ReturnType<typeof vi.fn>>
     const backends = AGENT_IDS.map((agentId) => ({
@@ -60,13 +65,27 @@ describe('AgentBackendRegistry', () => {
     }))
     const service = new AgentApplicationService(new AgentBackendRegistry(backends))
 
-    expect(() => service.dispose()).toThrow(
+    const disposal = service.dispose()
+    let settled = false
+    void disposal.then(
+      () => { settled = true },
+      () => { settled = true },
+    )
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    expect(AGENT_IDS.map((agentId) => disposals[agentId].mock.calls.length))
+      .toEqual(AGENT_IDS.map(() => 1))
+    releaseCodexDisposal()
+    await expect(disposal).rejects.toThrow(
       'One or more Agent backends could not be disposed.',
     )
     expect(AGENT_IDS.map((agentId) => disposals[agentId].mock.calls.length))
       .toEqual(AGENT_IDS.map(() => 1))
 
-    expect(() => service.dispose()).not.toThrow()
+    expect(service.dispose()).toBe(disposal)
+    await expect(service.dispose()).rejects.toThrow(
+      'One or more Agent backends could not be disposed.',
+    )
     expect(AGENT_IDS.map((agentId) => disposals[agentId].mock.calls.length))
       .toEqual(AGENT_IDS.map(() => 1))
   })

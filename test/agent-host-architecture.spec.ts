@@ -130,6 +130,49 @@ describe('Agent Host architecture boundaries', () => {
     expect(violations).toEqual([])
   })
 
+  it('keeps provider facades delegated to explicit lifecycle and projection owners', async () => {
+    const expectedModules = {
+      'builtin-pi': [
+        './message-queue',
+        './session-event-handler',
+        './session-namer',
+      ],
+      codex: [
+        './client-supervisor',
+        './presentation',
+        './runtime',
+        './server-request-handler',
+      ],
+      opencode: [
+        './binding-registry',
+        './event-projector',
+        './presentation',
+        './reconnect-reconciler',
+        './runtime',
+        './server-supervisor',
+      ],
+      'pi-cli': [
+        './event-handler',
+        './interaction-registry',
+        './presentation',
+        './runtime',
+      ],
+    } as const
+
+    for (const [provider, moduleSpecifiers] of Object.entries(expectedModules)) {
+      const source = await readFile(
+        path.join(root, 'electron/main/agent-host/providers', provider, 'manager.ts'),
+        'utf8',
+      )
+      const imports = listModuleSpecifiers(source)
+      for (const moduleSpecifier of moduleSpecifiers) {
+        expect(imports, `${provider} facade must delegate to ${moduleSpecifier}`).toContain(
+          moduleSpecifier,
+        )
+      }
+    }
+  })
+
   it('keeps Host application and runtime policy independent from provider implementations', async () => {
     const coreRoots = [
       path.join(root, 'electron/main/agent-host/application'),

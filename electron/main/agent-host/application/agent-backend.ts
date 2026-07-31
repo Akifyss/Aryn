@@ -73,7 +73,7 @@ export interface AgentBackend {
   createSession(cwd: string, options?: string | AgentSessionCreateOptions): Promise<AgentWorkspaceState>
   deleteSession(cwd: string, sessionPath: string): Promise<AgentWorkspaceState>
   discardWorkspaceSessions(cwd: string): Promise<void>
-  dispose(): void
+  dispose(): void | Promise<void>
   listSessionItems(cwd: string): Promise<AgentSessionListItem[]>
   loadDraftState(): Promise<AgentWorkspaceState>
   loadWorkspaceState(

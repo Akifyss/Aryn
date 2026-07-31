@@ -7,13 +7,15 @@ describe('Codex App Server requests', () => {
     const errors: Array<{ code: number, id: string | number, message: string }> = []
     const manager = new CodexAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
     const internals = manager as unknown as {
-      client: {
-        respondError: (id: string | number, code: number, message: string) => void
-        stop: () => void
+      clientSupervisor: {
+        client: {
+          respondError: (id: string | number, code: number, message: string) => void
+          stop: () => void
+        }
       }
       handleServerRequest: (request: ServerRequest) => void
     }
-    internals.client = {
+    internals.clientSupervisor.client = {
       respondError: (id, code, message) => errors.push({ code, id, message }),
       stop: () => undefined,
     }
@@ -38,10 +40,15 @@ describe('Codex App Server requests', () => {
     const responses: Array<{ id: string | number, result: unknown }> = []
     const manager = new CodexAgentManager({ agentDir: 'C:/agent-data', emitEvent: () => undefined })
     const internals = manager as unknown as {
-      client: { respond: (id: string | number, result: unknown) => void, stop: () => void }
+      clientSupervisor: {
+        client: { respond: (id: string | number, result: unknown) => void, stop: () => void }
+      }
       handleServerRequest: (request: ServerRequest) => void
     }
-    internals.client = { respond: (id, result) => responses.push({ id, result }), stop: () => undefined }
+    internals.clientSupervisor.client = {
+      respond: (id, result) => responses.push({ id, result }),
+      stop: () => undefined,
+    }
 
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     try {

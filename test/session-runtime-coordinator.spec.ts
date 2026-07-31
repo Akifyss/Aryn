@@ -378,6 +378,25 @@ describe('SessionRuntimeCoordinator', () => {
     expect(stopRuntime).toHaveBeenCalledWith({ id: 'late-runtime' })
   })
 
+  it('attempts every runtime stop before reporting disposal failures', async () => {
+    const stopped: string[] = []
+    const coordinator = new SessionRuntimeCoordinator<{ id: string }>({
+      stopRuntime: ({ id }) => {
+        stopped.push(id)
+        if (id === 'runtime-a') throw new Error('A could not stop')
+      },
+    })
+    await coordinator.ensure('session-a', async () => ({ id: 'runtime-a' }))
+    await coordinator.ensure('session-b', async () => ({ id: 'runtime-b' }))
+
+    await expect(coordinator.dispose()).rejects.toThrow(
+      'One or more session runtimes could not be disposed.',
+    )
+    expect(stopped).toEqual(expect.arrayContaining(['runtime-a', 'runtime-b']))
+    expect(coordinator.current('session-a')).toBeNull()
+    expect(coordinator.current('session-b')).toBeNull()
+  })
+
   it('rejects admitted lifecycle work that was still queued when disposal began', async () => {
     const firstEntered = deferred()
     const allowFirst = deferred()

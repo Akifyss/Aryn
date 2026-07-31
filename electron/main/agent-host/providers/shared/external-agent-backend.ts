@@ -23,7 +23,7 @@ export interface ExternalAgentManager {
   createSession(cwd: string, options?: string | AgentSessionCreateOptions): Promise<AgentWorkspaceState>
   deleteSession(cwd: string, sessionPath: string): Promise<AgentWorkspaceState>
   discardWorkspaceSessions(cwd: string): Promise<void>
-  dispose(): void
+  dispose(): void | Promise<void>
   listSessionItems(cwd: string): Promise<AgentSessionListItem[]>
   loadDraftState(): Promise<AgentWorkspaceState>
   loadWorkspaceState(
@@ -95,7 +95,7 @@ export class ExternalAgentBackend implements AgentBackend {
   }
 
   dispose() {
-    this.manager.dispose()
+    return this.manager.dispose()
   }
 
   listSessionItems(cwd: string) {

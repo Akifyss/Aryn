@@ -1,10 +1,5 @@
-import { copyFile, rm } from 'node:fs/promises'
-import os from 'node:os'
-import path from 'node:path'
 import type { ServerNotification } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/ServerNotification'
 import type { ServerRequest } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/ServerRequest'
-import type { Model } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/v2/Model'
-import type { ModelListResponse } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/v2/ModelListResponse'
 import type { UserInput } from '../../../../shared/agent-contracts/providers/codex/protocol/generated/v2/UserInput'
 import { getAgentInteractionKey } from '../../../../shared/agent-contracts/types'
 import type {
@@ -14,12 +9,9 @@ import type {
   AgentPromptSendOptions,
   AgentRunningPromptBehavior,
   AgentSessionCreateOptions,
-  AgentSessionSnapshot,
   AgentThinkingLevel,
   AgentWorkspaceState,
-  CodexNativeSessionSnapshot,
 } from '../../../../shared/agent-contracts/types'
-import { prepareExternalCliEnvironment } from '../../../external-cli-environment'
 import { CodexRpcClient } from './rpc-client'
 import { CodexSessionStore } from './session-store'
 import {
@@ -43,15 +35,11 @@ import {
 } from './interaction-codec'
 import {
   getCodexNotificationThreadId as notificationThreadId,
-  isCodexServiceTierCompatibilityError as isServiceTierCompatibilityError,
   isMissingNativeCodexThreadError as isMissingNativeThreadError,
-  isRecoverableCodexModelsCacheError as isRecoverableModelsCacheError,
   isTransientCodexThreadReadError as isTransientThreadReadError,
 } from './protocol-compatibility'
 import {
   CODEX_THINKING_LEVELS as THINKING_LEVELS,
-  countCodexThreadMessages as countThreadMessages,
-  getCodexFileChanges as fileChangesFromThread,
   getCodexModelThinkingLevels as codexModelThinkingLevels,
   normalizeCodexReasoningEffort as reasoningEffort,
   toCodexReasoningEffort as codexReasoningEffort,
@@ -62,6 +50,15 @@ import {
   type PendingCodexInteraction,
 } from './server-request-handler'
 import { CodexSessionCatalog } from './session-catalog'
+import {
+  createCodexSessionListItem,
+  createCodexSessionSnapshot,
+  getDefaultCodexModel,
+  requireCodexModel,
+  serializeCodexRuntime,
+} from './presentation'
+import type { CodexBinding, QueuedCodexPrompt } from './runtime'
+import { CodexClientSupervisor } from './client-supervisor'
 
 type JsonRecord = Record<string, unknown>
 
@@ -71,20 +68,6 @@ export {
   buildCodexUserInputs,
 }
 export type { CodexThreadRecord }
-
-type QueuedCodexPrompt = {
-  attachments: AgentPromptAttachment[]
-  options?: AgentPromptSendOptions
-  prompt: string
-}
-
-type CodexBinding = {
-  activeTurnId: string | null
-  isStreaming: boolean
-  lease: SessionRuntimeLease
-  queuedPrompts: QueuedCodexPrompt[]
-  record: CodexThreadRecord
-}
 
 type CodexAgentManagerOptions = {
   agentDir: string
@@ -109,18 +92,16 @@ const SNAPSHOT_COALESCE_MS = 16
 export class CodexAgentManager {
   private readonly bindingLeases = new Map<string, SessionRuntimeLease>()
   private readonly bindings = new Map<string, CodexBinding>()
-  private client: CodexRpcClient | null = null
-  private clientPromise: Promise<CodexRpcClient> | null = null
-  private clientStartRevision = 0
+  private readonly clientSupervisor: CodexClientSupervisor
   private disposed = false
-  private models: Model[] = []
+  private disposePromise: Promise<void> | null = null
   private readonly pendingInteractions = new Map<string, PendingCodexInteraction>()
   private readonly recordReplacements = new Map<string, CodexRecordReplacement>()
   private readonly runtimeCoordinator: SessionRuntimeCoordinator<CodexBinding>
   private readonly sessionCatalog: CodexSessionCatalog
-  private serviceTierCompatibilityOverride = false
   private readonly snapshotTimers = new Map<string, NodeJS.Timeout>()
   private readonly sessionStore = new CodexSessionStore()
+  private readonly unscopedNotificationTails = new WeakMap<CodexRpcClient, Promise<void>>()
   // Activation revisions preserve the latest foreground selection. Operation
   // revisions are invalidated by release/discard; state revisions suppress an
   // older asynchronous snapshot that completes after a newer one.
@@ -136,6 +117,22 @@ export class CodexAgentManager {
   private readonly workspaceTeardownCounts = new Map<string, number>()
 
   constructor(private readonly options: CodexAgentManagerOptions) {
+    this.clientSupervisor = new CodexClientSupervisor({
+      onExit: (client, error) => this.handleConnectionExit(client, error),
+      onNotification: (client, notification) => this.routeNotification(client, notification),
+      onRequest: (client, request) => {
+        const threadId = 'threadId' in request.params
+          ? request.params.threadId
+          : 'conversationId' in request.params
+            ? String(request.params.conversationId)
+            : null
+        this.handleServerRequest(
+          request,
+          client,
+          threadId ? this.bindingLeases.get(threadId) : undefined,
+        )
+      },
+    })
     this.sessionCatalog = new CodexSessionCatalog(options.agentDir)
     this.runtimeCoordinator = new SessionRuntimeCoordinator({
       stopRuntime: (binding) => this.dropThreadRuntime(binding.record.id, binding),
@@ -202,7 +199,9 @@ export class CodexAgentManager {
   }
 
   async listSessionItems(cwd: string) {
-    return (await this.listRecords(cwd)).map((record) => this.createSessionListItem(record))
+    return (await this.listRecords(cwd)).map((record) => (
+      createCodexSessionListItem(record, this.sessionStore.get(record.id))
+    ))
   }
 
   async readSession(cwd: string, threadId: string) {
@@ -213,7 +212,7 @@ export class CodexAgentManager {
     if (!record.materialized) {
       const snapshot = this.sessionStore.get(threadId)
       if (!snapshot) throw new Error('Codex thread is not materialized and has no in-memory state.')
-      return this.createSessionSnapshot(record, snapshot)
+      return createCodexSessionSnapshot(record, snapshot)
     }
     return this.withBinding(cwd, threadId, (binding) => this.readBoundSession(binding), workspaceOperation)
   }
@@ -235,7 +234,7 @@ export class CodexAgentManager {
         throw new Error('Codex thread binding was superseded.')
       }
       const native = this.sessionStore.hydrate(response.thread, checkpoint)
-      return this.createSessionSnapshot(record, native)
+      return createCodexSessionSnapshot(record, native)
     } catch (error) {
       this.sessionStore.cancelHydration(checkpoint)
       if (!binding.lease.isCurrent()) {
@@ -249,7 +248,7 @@ export class CodexAgentManager {
       // narrowly classified transient failure, even if the turn has already
       // flipped back to idle by the time this read races it.
       if (current && isTransientThreadReadError(message)) {
-        return this.createSessionSnapshot(record, current)
+        return createCodexSessionSnapshot(record, current)
       }
       throw error
     }
@@ -668,14 +667,11 @@ export class CodexAgentManager {
   }
 
   dispose() {
+    if (this.disposePromise) return this.disposePromise
     this.disposed = true
     for (const timer of this.snapshotTimers.values()) clearTimeout(timer)
     this.snapshotTimers.clear()
-    this.client?.stop()
-    this.client = null
-    this.clientPromise = null
-    this.clientStartRevision += 1
-    void this.runtimeCoordinator.dispose()
+    this.clientSupervisor.dispose()
     this.bindingLeases.clear()
     this.bindings.clear()
     this.pendingInteractions.clear()
@@ -689,6 +685,8 @@ export class CodexAgentManager {
     this.workspaceCreationWaiters.clear()
     this.workspaceStateRevisions.clear()
     this.workspaceTeardownCounts.clear()
+    this.disposePromise = this.runtimeCoordinator.dispose()
+    return this.disposePromise
   }
 
   drainSessionEvents(cwd: string, threadId: string) {
@@ -697,138 +695,46 @@ export class CodexAgentManager {
 
   private async ensureClient() {
     if (this.disposed) throw new Error('Codex manager has been disposed.')
-    if (!this.clientPromise) {
-      if (this.client) return this.client
-      this.clientStartRevision += 1
-      this.clientPromise = this.startClient(this.clientStartRevision)
-    }
-    const clientPromise = this.clientPromise
-    try {
-      return await clientPromise
-    } catch (error) {
-      if (this.clientPromise === clientPromise) {
-        this.client = null
-        this.clientPromise = null
-      }
-      throw error
-    }
+    return this.clientSupervisor.ensureClient()
   }
 
-  private async startClient(startRevision: number) {
-    let cacheRecoveryAttempted = false
-    for (;;) {
-      if (startRevision !== this.clientStartRevision) {
-        throw new Error('Codex App Server startup was superseded.')
-      }
-      const args = this.serviceTierCompatibilityOverride
-        ? ['app-server', '-c', 'service_tier=fast']
-        : ['app-server']
-      try {
-        return await this.initializeClient(args)
-      } catch (error) {
-        if (this.disposed) throw error
-        if (startRevision !== this.clientStartRevision) throw error
-        if (!cacheRecoveryAttempted && isRecoverableModelsCacheError(error)) {
-          cacheRecoveryAttempted = true
-          if (await this.recoverModelsCache()) continue
-        }
-        if (!this.serviceTierCompatibilityOverride && isServiceTierCompatibilityError(error)) {
-          this.serviceTierCompatibilityOverride = true
-          continue
-        }
-        throw error
-      }
-    }
+  private get client() {
+    return this.clientSupervisor.currentClient
   }
 
-  private async recoverModelsCache() {
-    const configuredHome = process.env.CODEX_HOME?.trim()
-    const codexHome = configuredHome ? path.resolve(configuredHome) : path.join(os.homedir(), '.codex')
-    const cachePath = path.join(codexHome, 'models_cache.json')
-    const backupPath = path.join(codexHome, 'models_cache.aryn-incompatible.json')
-    try {
-      await copyFile(cachePath, backupPath)
-      await rm(cachePath, { force: true })
-      console.warn(`[codex app-server] Rebuilt an incompatible models cache. The previous cache is preserved at ${backupPath}.`)
-      return true
-    } catch (error) {
-      const code = error && typeof error === 'object' && 'code' in error
-        ? String((error as NodeJS.ErrnoException).code)
-        : null
-      if (code !== 'ENOENT') {
-        console.warn(`[codex app-server] Could not preserve and rebuild the incompatible models cache: ${error instanceof Error ? error.message : String(error)}`)
-      }
-      return false
-    }
+  private get models() {
+    return this.clientSupervisor.models
   }
 
-  private async initializeClient(args: string[]) {
-    await prepareExternalCliEnvironment()
-    if (this.disposed) throw new Error('Codex manager has been disposed.')
-    let client!: CodexRpcClient
-    let eventChain = Promise.resolve()
-    client = new CodexRpcClient({
-      args,
-      onExit: (error) => this.handleConnectionExit(client, error),
-      onNotification: (notification) => {
-        if (this.client !== client || this.disposed) return
-        const threadId = notificationThreadId(notification)
-        const lease = threadId ? this.bindingLeases.get(threadId) : null
-        const reportError = (error: Error) => {
-          if (this.client !== client || (lease && !lease.isCurrent())) return
-          this.options.emitEvent({
-            type: 'error',
-            message: `Codex event handling failed: ${error.message}`,
-            sessionId: threadId,
-          })
-        }
-        const handle = () => {
-          if (this.client !== client || this.disposed || (lease && !lease.isCurrent())) return
-          return this.handleNotification(notification, lease ?? undefined)
-        }
-        if (lease) {
-          lease.enqueue(handle, reportError)
-        } else {
-          eventChain = eventChain.then(handle).catch((error) => {
-            reportError(error instanceof Error ? error : new Error(String(error)))
-          })
-        }
-      },
-      onProtocolWarning: (message) => console.warn(`[codex app-server] ${message}`),
-      onRequest: (request) => {
-        if (this.client !== client || this.disposed) return
-        const threadId = 'threadId' in request.params
-          ? request.params.threadId
-          : 'conversationId' in request.params
-            ? String(request.params.conversationId)
-            : null
-        this.handleServerRequest(request, client, threadId ? this.bindingLeases.get(threadId) : undefined)
-      },
-    })
-    this.client = client
-    client.start()
-    try {
-      await client.request('initialize', {
-        capabilities: {
-          experimentalApi: false,
-          requestAttestation: false,
-        },
-        clientInfo: { name: 'aryn', title: 'Aryn', version: '0.1.0' },
+  private get serviceTierCompatibilityOverride() {
+    return this.clientSupervisor.serviceTierCompatibilityOverride
+  }
+
+  private routeNotification(client: CodexRpcClient, notification: ServerNotification) {
+    if (this.client !== client || this.disposed) return
+    const threadId = notificationThreadId(notification)
+    const lease = threadId ? this.bindingLeases.get(threadId) : null
+    const reportError = (error: Error) => {
+      if (this.client !== client || (lease && !lease.isCurrent())) return
+      this.options.emitEvent({
+        type: 'error',
+        message: `Codex event handling failed: ${error.message}`,
+        sessionId: threadId,
       })
-      client.notifyInitialized()
-      const [models] = await Promise.all([
-        this.loadModels(client),
-        client.request('account/read', { refreshToken: false }).catch(() => null),
-      ])
-      if (this.disposed) throw new Error('Codex manager was disposed during App Server initialization.')
-      if (this.client !== client) throw new Error('Codex App Server initialization was superseded.')
-      this.models = models
-      return client
-    } catch (error) {
-      if (this.client === client) this.client = null
-      client.stop()
-      throw error
     }
+    const handle = () => {
+      if (this.client !== client || this.disposed || (lease && !lease.isCurrent())) return
+      return this.handleNotification(notification, lease ?? undefined)
+    }
+    if (lease) {
+      lease.enqueue(handle, reportError)
+      return
+    }
+    const tail = this.unscopedNotificationTails.get(client) ?? Promise.resolve()
+    const next = tail.then(handle).catch((error) => {
+      reportError(error instanceof Error ? error : new Error(String(error)))
+    })
+    this.unscopedNotificationTails.set(client, next)
   }
 
   private async handleNotification(notification: ServerNotification, sourceLease?: SessionRuntimeLease) {
@@ -896,11 +802,6 @@ export class CodexAgentManager {
   }
 
   private handleConnectionExit(client: CodexRpcClient, error: Error) {
-    if (this.client !== client) return
-    this.clientStartRevision += 1
-    this.client = null
-    this.clientPromise = null
-    this.models = []
     if (this.disposed) return
     const bindings = [...this.bindings.values()]
     for (const binding of bindings) {
@@ -910,7 +811,7 @@ export class CodexAgentManager {
         this.options.emitEvent({
           type: 'session_snapshot_updated',
           executionState: native.status,
-          session: this.createSessionSnapshot(binding.record, native),
+          session: createCodexSessionSnapshot(binding.record, native),
           sessionId: binding.record.id,
         })
       }
@@ -926,27 +827,6 @@ export class CodexAgentManager {
     void this.runtimeCoordinator.invalidateWhere(() => true).catch((retirementError) => {
       console.warn(`[codex app-server] Failed to invalidate disconnected thread bindings: ${retirementError instanceof Error ? retirementError.message : String(retirementError)}`)
     })
-  }
-
-  private async loadModels(client: CodexRpcClient) {
-    const models: Model[] = []
-    const seenCursors = new Set<string>()
-    let cursor: string | null = null
-    do {
-      const response: ModelListResponse = await client.request('model/list', {
-        cursor,
-        includeHidden: false,
-        limit: 100,
-      })
-      models.push(...response.data)
-      const nextCursor = response.nextCursor ?? null
-      if (nextCursor && seenCursors.has(nextCursor)) {
-        throw new Error(`Codex model/list returned the repeated cursor "${nextCursor}".`)
-      }
-      if (nextCursor) seenCursors.add(nextCursor)
-      cursor = nextCursor
-    } while (cursor)
-    return models
   }
 
   private buildInputs(prompt: string, attachments: AgentPromptAttachment[]): UserInput[] {
@@ -1054,92 +934,15 @@ export class CodexAgentManager {
   }
 
   private defaultModel() {
-    return this.models.find((model) => model.isDefault) ?? this.models[0] ?? null
+    return getDefaultCodexModel(this.models)
   }
 
   private requireModel(modelKey: string) {
-    const normalized = modelKey.trim()
-    const match = this.models.find((model) => `openai/${model.model}` === normalized)
-    if (!match) throw new Error(`Codex model "${modelKey}" is not available.`)
-    return match
+    return requireCodexModel(this.models, modelKey)
   }
 
   private serializeRuntime(cwd: string | null, binding: CodexBinding | null): AgentWorkspaceState['runtime'] {
-    const models = this.models.filter((model) => !model.hidden)
-    const availableModels = models.map((model) => `openai/${model.model}`)
-    const levelsByModel: Record<string, AgentThinkingLevel[]> = Object.fromEntries(models.map((model) => [
-      `openai/${model.model}`,
-      codexModelThinkingLevels(model),
-    ]))
-    const defaultModel = this.defaultModel()
-    const defaultModelKey = defaultModel ? `openai/${defaultModel.model}` : null
-    const selectedModel = binding?.record.model ? `openai/${binding.record.model}` : defaultModelKey
-    const levels: AgentThinkingLevel[] = selectedModel
-      ? levelsByModel[selectedModel] ?? ['low', 'medium', 'high']
-      : ['low', 'medium', 'high']
-    const native = binding ? this.sessionStore.get(binding.record.id) : null
-    const executionState = native?.status ?? (binding?.isStreaming ? { type: 'busy' as const } : { type: 'idle' as const })
-
-    return {
-      agentId: 'codex',
-      auth: {},
-      availableModelInputs: Object.fromEntries(models.map((model) => [
-        `openai/${model.model}`,
-        model.inputModalities.includes('image') ? ['text', 'image'] : ['text'],
-      ])),
-      availableModels,
-      availableThinkingLevels: levels,
-      availableThinkingLevelsByModel: levelsByModel,
-      compactionReason: null,
-      defaultModel: defaultModelKey,
-      defaultThinkingLevel: reasoningEffort(defaultModel?.defaultReasoningEffort),
-      executionState,
-      followUpMessageCount: binding?.queuedPrompts.length ?? 0,
-      followUpMessages: binding?.queuedPrompts.map((queued) => queued.prompt) ?? [],
-      followUpMode: 'one-at-a-time',
-      hasConfiguredModels: availableModels.length > 0,
-      isCompacting: false,
-      isStreaming: binding?.isStreaming ?? false,
-      pendingMessageCount: binding?.queuedPrompts.length ?? 0,
-      preferredModelByProvider: defaultModelKey ? { openai: defaultModelKey } : {},
-      retryAttempt: executionState.type === 'retry' ? executionState.attempt : 0,
-      retryMaxAttempts: null,
-      selectedModel,
-      setupHint: availableModels.length > 0 ? null : 'Codex 当前没有可用模型，请先通过 Codex CLI 完成登录。',
-      supportedRunningPromptBehaviors: ['steer', 'followUp'],
-      supportsQueuedMessageEditing: false,
-      supportsThinking: levels.some((level) => level !== 'off'),
-      steeringMessageCount: 0,
-      steeringMessages: [],
-      steeringMode: 'one-at-a-time',
-      thinkingLevel: binding?.record.reasoningEffort ?? reasoningEffort(defaultModel?.defaultReasoningEffort),
-      workspacePath: cwd,
-    }
-  }
-
-  private createSessionSnapshot(record: CodexThreadRecord, native: CodexNativeSessionSnapshot): AgentSessionSnapshot {
-    return {
-      annotations: { fileChangesByEntryId: fileChangesFromThread(native.thread) },
-      messages: [],
-      name: record.name ?? native.thread.name,
-      native,
-      sessionId: record.id,
-      sessionPath: record.id,
-      workspacePath: record.cwd,
-    }
-  }
-
-  private createSessionListItem(record: CodexThreadRecord) {
-    const native = this.sessionStore.get(record.id)
-    return {
-      createdAt: record.createdAt,
-      id: record.id,
-      messageCount: native ? countThreadMessages(native.thread) : 0,
-      modifiedAt: record.updatedAt,
-      name: record.name ?? native?.thread.name ?? null,
-      path: record.id,
-      preview: record.name ?? native?.thread.preview ?? record.preview ?? 'Codex thread',
-    }
+    return serializeCodexRuntime(cwd, binding, this.models, (threadId) => this.sessionStore.get(threadId))
   }
 
   private async buildWorkspaceState(
@@ -1164,14 +967,14 @@ export class CodexAgentManager {
     const native = binding ? this.sessionStore.get(binding.record.id) : null
     const activeSession = binding
       ? native
-        ? this.createSessionSnapshot(binding.record, native)
+        ? createCodexSessionSnapshot(binding.record, native)
         : await this.readBoundSession(binding)
       : null
     if (!isRequestCurrent()) throw new Error('Codex workspace state request was superseded.')
     return {
       activeSession,
       runtime: this.serializeRuntime(cwd, binding),
-      sessions: records.map((record) => this.createSessionListItem(record)),
+      sessions: records.map((record) => createCodexSessionListItem(record, this.sessionStore.get(record.id))),
     }
   }
 
@@ -1214,7 +1017,7 @@ export class CodexAgentManager {
     this.options.emitEvent({
       type: 'session_snapshot_updated',
       executionState: native.status,
-      session: this.createSessionSnapshot(binding.record, native),
+      session: createCodexSessionSnapshot(binding.record, native),
       sessionId: threadId,
     })
   }

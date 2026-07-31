@@ -420,6 +420,8 @@ const agentIpc = registerAgentIpc({
   agentHost: agentManager,
   getWindow: () => win,
 })
+let agentHostDisposed = false
+let agentHostDisposal: Promise<void> | null = null
 
 nativeTheme.on('updated', () => {
   if (process.platform !== 'darwin' || windowAppearanceTheme !== 'system') {
@@ -1145,13 +1147,19 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   agentIpc.dispose()
-  try {
-    agentManager.dispose()
-  } catch (error) {
-    console.warn('Failed to dispose one or more Agent backends.', error)
-  }
+  if (agentHostDisposed) return
+  event.preventDefault()
+  if (agentHostDisposal) return
+  agentHostDisposal = agentManager.dispose()
+    .catch((error) => {
+      console.warn('Failed to dispose one or more Agent backends.', error)
+    })
+    .finally(() => {
+      agentHostDisposed = true
+      app.quit()
+    })
 })
 
 app.on('second-instance', () => {

@@ -1,30 +1,20 @@
-import { randomBytes } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import {
-  createOpencodeClient,
   type Event as OpenCodeEvent,
   type Message,
   type OpencodeClient,
   type Part,
-  type PermissionRequest,
   type Provider,
-  type QuestionRequest,
   type Session,
   type SnapshotFileDiff,
   type SessionStatus,
 } from '@opencode-ai/sdk/v2'
-import { getAgentInteractionKey } from '../../../../shared/agent-contracts/types'
-import {
-  formatOpenCodeVersionCompatibilityError,
-  isCompatibleOpenCodeVersion,
-} from '../../../../shared/agent-contracts/providers/opencode/version'
 import type {
   AgentClientEventPayload,
   AgentInteractionResponse,
   AgentPromptAttachment,
   AgentPromptSendOptions,
   AgentRunningPromptBehavior,
-  AgentSessionExecutionState,
   AgentSessionCreateOptions,
   AgentSessionListItem,
   AgentSessionSnapshot,
@@ -37,11 +27,6 @@ import {
   isOpenCodeMessageId,
   isOpenCodePartId,
 } from '../../../../shared/agent-contracts/providers/opencode/message-id'
-import {
-  createExternalCliEnvironment,
-  prepareExternalCliEnvironment,
-  resolveExternalCliCommand,
-} from '../../../external-cli-environment'
 import {
   getOpenCodeEventSessionId,
   OpenCodeSessionMessageReducer,
@@ -61,7 +46,6 @@ import {
   createWorkspaceRuntimeKeyPrefix as workspaceRuntimeKeyPrefix,
 } from '../../runtime/runtime-keys'
 import {
-  launchOpenCodeServer,
   type OpenCodeServer,
   type OpenCodeServerLaunchOptions,
 } from './server-process'
@@ -71,7 +55,6 @@ import {
   DEFAULT_OPEN_CODE_THINKING_LEVEL as DEFAULT_THINKING_LEVEL,
   formatOpenCodeError as formatError,
   getOpenCodeThinkingLevels as supportedThinkingLevels,
-  getSessionConfigurationFromMetadata as sessionConfigurationFromMetadata,
   mapOpenCodeThinkingVariant as mapThinkingVariant,
   normalizeNullableText,
   normalizeOpenCodeExecutionState as normalizeExecutionState,
@@ -80,29 +63,19 @@ import {
   type OpenCodeSessionRecord,
 } from './session-model'
 import { requestOpenCodeSurfaceData } from './surface-gateway'
-import { OpenCodeEventStream } from './event-stream'
 import { OpenCodeInteractionRegistry } from './interaction-registry'
 import { OpenCodeSessionCatalog } from './session-catalog'
+import {
+  buildOpenCodeRuntime,
+  createOpenCodeSessionSnapshot,
+} from './presentation'
+import type { OpenCodeSessionBinding as SessionBinding } from './runtime'
+import { OpenCodeServerSupervisor } from './server-supervisor'
+import { applyOpenCodeSessionEvent } from './event-projector'
+import { OpenCodeBindingRegistry } from './binding-registry'
+import { OpenCodeReconnectReconciler } from './reconnect-reconciler'
 
 type JsonRecord = Record<string, unknown>
-
-type SessionBinding = {
-  cwd: string
-  executionState: AgentSessionExecutionState
-  isStreaming: boolean
-  lastAssistantMessageId: string | null
-  lease: SessionRuntimeLease
-  // Root ownership routes nested interactions; the immediate parent lease
-  // makes retirement cascade through arbitrarily deep subagent trees.
-  ownerLease: SessionRuntimeLease
-  parentLease: SessionRuntimeLease
-  parentSessionId: string | null
-  rootSessionId: string
-  sessionId: string
-  selectedModel: string | null
-  thinkingLevel: AgentThinkingLevel
-  title: string | null
-}
 
 type WorkspaceStateContext = {
   activation?: WorkspaceActivation
@@ -116,21 +89,20 @@ type OpenCodeAgentManagerOptions = {
   startServer?: (options: OpenCodeServerLaunchOptions) => Promise<OpenCodeServer>
 }
 
-const OPEN_CODE_START_TIMEOUT_MS = 15_000
 const OPEN_CODE_SNAPSHOT_COALESCE_MS = 16
 
 export class OpenCodeAgentManager {
-  private client: OpencodeClient | null = null
-  private clientGeneration = 0
   private disposed = false
-  private readonly eventStream = new OpenCodeEventStream()
+  private disposePromise: Promise<void> | null = null
   private readonly interactionRegistry: OpenCodeInteractionRegistry
+  private readonly bindingRegistry = new OpenCodeBindingRegistry()
   private readonly messageReducer = new OpenCodeSessionMessageReducer()
+  private readonly reconnectReconciler: OpenCodeReconnectReconciler
   private readonly runtimeCoordinator: SessionRuntimeCoordinator<SessionBinding>
   private readonly sessionCatalog: OpenCodeSessionCatalog
   private readonly sessionDiffs = new Map<string, SnapshotFileDiff[]>()
-  private readonly sessionBindings = new Map<string, SessionBinding>()
   private readonly sessionSnapshotTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly serverSupervisor: OpenCodeServerSupervisor
   private readonly knownWorkspaces = new Map<string, string>()
   private readonly workspaceIntent = new WorkspaceIntentCoordinator({
     canOperate: (identity) => !this.disposed && !this.workspaceTeardownCounts.has(identity),
@@ -139,12 +111,48 @@ export class OpenCodeAgentManager {
   private readonly workspaceCreationWaiters = new Map<string, Set<() => void>>()
   private readonly workspaceStateRevisions = new Map<string, number>()
   private readonly workspaceTeardownCounts = new Map<string, number>()
-  private server: OpenCodeServer | null = null
-  private serverExitUnsubscribe: (() => void) | null = null
-  private serverPromise: Promise<void> | null = null
-
   constructor(private readonly options: OpenCodeAgentManagerOptions) {
     this.interactionRegistry = new OpenCodeInteractionRegistry(options.emitEvent)
+    this.reconnectReconciler = new OpenCodeReconnectReconciler({
+      activeSessionId: (cwd) => this.workspaceIntent.active(workspaceIdentity(cwd)),
+      bindings: () => this.bindingRegistry.values(),
+      broadcastWorkspaceState: (cwd, activeSessionId, operation) => (
+        this.broadcastWorkspaceState(cwd, activeSessionId, { workspaceOperation: operation })
+      ),
+      captureWorkspaceOperation: (cwd) => this.captureWorkspaceOperation(cwd),
+      emitEvent: options.emitEvent,
+      enqueueSessionEvent: (client, generation, event, directory) => (
+        this.enqueueSessionEvent(client, generation, event, directory)
+      ),
+      interactionRegistry: this.interactionRegistry,
+      isBindingCurrent: (binding) => this.isSessionBindingCurrent(binding),
+      isClientCurrent: (client, generation) => this.isClientCurrent(client, generation),
+      isWorkspaceOperationCurrent: (operation) => this.isWorkspaceOperationCurrent(operation),
+      knownWorkspaces: () => this.knownWorkspaces.entries(),
+      requireBinding: (client, cwd, sessionId) => this.requireBinding(client, cwd, sessionId),
+    })
+    this.serverSupervisor = new OpenCodeServerSupervisor({
+      onDisconnected: (error) => this.handleConnectionFailure(error),
+      onEvent: async (client, generation, event, directory) => {
+        await this.enqueueSessionEvent(client, generation, event, directory)
+      },
+      onEventError: (error, event) => {
+        this.options.emitEvent({
+          type: 'error',
+          message: `OpenCode 事件处理失败：${formatError(error)}`,
+          sessionId: getOpenCodeEventSessionId(event),
+        })
+      },
+      onReconnect: (client, generation) => this.reconnectReconciler.reconcile(client, generation),
+      onRestartFailure: (error) => {
+        this.options.emitEvent({
+          type: 'error',
+          message: `OpenCode server restart failed: ${formatError(error)}`,
+          sessionId: null,
+        })
+      },
+      startServer: options.startServer,
+    })
     this.runtimeCoordinator = new SessionRuntimeCoordinator({
       stopRuntime: (binding) => this.dropSessionBinding(binding),
     })
@@ -199,7 +207,7 @@ export class OpenCodeAgentManager {
       throw new Error('OpenCode workspace activation was superseded.')
     }
 
-    await this.reconcilePendingInteractions(
+    await this.reconnectReconciler.reconcilePendingInteractions(
       client,
       clientGeneration,
       cwd,
@@ -798,7 +806,7 @@ export class OpenCodeAgentManager {
       )))
       const completed = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
       const deleted = new Set(completed.flatMap((result) => result.deleted ? [result.sessionID] : []))
-      const descendantKeys = [...this.sessionBindings.values()]
+      const descendantKeys = [...this.bindingRegistry.values()]
         .filter((binding) => (
           deleted.has(binding.rootSessionId)
           && workspaceIdentity(binding.cwd) === identity
@@ -816,21 +824,14 @@ export class OpenCodeAgentManager {
   }
 
   dispose() {
+    if (this.disposePromise) return this.disposePromise
     this.disposed = true
-    this.clientGeneration += 1
-    this.eventStream.stop()
-    this.serverExitUnsubscribe?.()
-    this.serverExitUnsubscribe = null
-    this.server?.close()
-    this.server = null
-    this.serverPromise = null
-    this.client = null
+    this.serverSupervisor.dispose()
     for (const timer of this.sessionSnapshotTimers.values()) clearTimeout(timer)
     this.sessionSnapshotTimers.clear()
     this.messageReducer.clearAll()
     this.interactionRegistry.reset()
     this.sessionDiffs.clear()
-    void this.runtimeCoordinator.dispose()
     this.knownWorkspaces.clear()
     this.workspaceIntent.clear()
     this.workspaceCreationCounts.clear()
@@ -840,317 +841,21 @@ export class OpenCodeAgentManager {
     this.workspaceCreationWaiters.clear()
     this.workspaceStateRevisions.clear()
     this.workspaceTeardownCounts.clear()
+    this.disposePromise = this.runtimeCoordinator.dispose()
+    return this.disposePromise
   }
 
   private async ensureClient() {
     if (this.disposed) throw new Error('OpenCode manager has been disposed.')
-    if (!this.serverPromise) {
-      if (this.client) return this.client
-      this.serverPromise = this.startServer()
-    }
-    try {
-      await this.serverPromise
-    } catch (error) {
-      this.serverPromise = null
-      throw error
-    }
-    return this.client!
+    return this.serverSupervisor.ensureClient()
   }
 
-  private async startServer() {
-    await prepareExternalCliEnvironment()
-    if (this.disposed) throw new Error('OpenCode manager has been disposed.')
-    const password = randomBytes(24).toString('base64url')
-    const environment = createExternalCliEnvironment({
-      OPENCODE_SERVER_PASSWORD: password,
-      OPENCODE_SERVER_USERNAME: 'aryn',
-    })
-    const command = resolveExternalCliCommand('opencode', environment)
-    if (!command) throw new Error('OpenCode CLI was not found in PATH.')
-    const server = await (this.options.startServer ?? launchOpenCodeServer)({
-      command,
-      environment,
-      hostname: '127.0.0.1',
-      port: 0,
-      timeout: OPEN_CODE_START_TIMEOUT_MS,
-    })
-    if (this.disposed) {
-      server.close()
-      throw new Error('OpenCode manager was disposed during server initialization.')
-    }
-    this.server = server
-
-    const authorization = `Basic ${Buffer.from(`aryn:${password}`).toString('base64')}`
-    const client = createOpencodeClient({
-      baseUrl: this.server.url,
-      headers: { Authorization: authorization },
-    })
-    const clientGeneration = this.clientGeneration + 1
-    this.clientGeneration = clientGeneration
-    this.client = client
-    try {
-      const health = unwrapSdkResult<{ healthy: true, version: string }>(
-        await client.global.health({ throwOnError: true }),
-        'health check',
-      )
-      if (!health.healthy || !isCompatibleOpenCodeVersion(health.version)) {
-        throw new Error(formatOpenCodeVersionCompatibilityError(health.version))
-      }
-
-      // OpenCode Desktop consumes the global stream and routes every envelope
-      // by its payload/session identity. The instance-scoped endpoint requires
-      // workspace routing and cannot replace this global subscription.
-      try {
-        await this.eventStream.start(client, {
-          isCurrent: () => this.isClientCurrent(client, clientGeneration),
-          onEvent: async (envelope) => {
-            await this.enqueueSessionEvent(
-              client,
-              clientGeneration,
-              envelope.payload as OpenCodeEvent,
-              envelope.directory,
-            )
-          },
-          onEventError: (error, envelope) => {
-            const event = envelope.payload as OpenCodeEvent
-            this.options.emitEvent({
-              type: 'error',
-              message: `OpenCode 事件处理失败：${formatError(error)}`,
-              sessionId: getOpenCodeEventSessionId(event),
-            })
-          },
-          onReconnect: () => this.reconcileAfterEventReconnect(client, clientGeneration),
-        })
-      } catch (error) {
-        if (this.isClientCurrent(client, clientGeneration)) {
-          this.handleEventStreamFailure(client, clientGeneration, error)
-        }
-        throw error
-      }
-      this.serverExitUnsubscribe = server.onExit?.((error) => {
-        if (
-          this.disposed
-          || this.server !== server
-          || !this.isClientCurrent(client, clientGeneration)
-        ) return
-        this.handleEventStreamFailure(client, clientGeneration, error)
-        if (!this.disposed) {
-          void this.ensureClient()
-            .then((restartedClient) => (
-              this.reconcileAfterEventReconnect(restartedClient, this.clientGeneration)
-            ))
-            .catch((cause) => {
-              if (this.disposed) return
-              this.options.emitEvent({
-                type: 'error',
-                message: `OpenCode server restart failed: ${formatError(cause)}`,
-                sessionId: null,
-              })
-            })
-        }
-      }) ?? null
-    } catch (error) {
-      if (this.isClientCurrent(client, clientGeneration)) {
-        this.clientGeneration += 1
-        this.eventStream.stop()
-        this.client = null
-      }
-      if (this.server === server) {
-        this.server = null
-        server.close()
-      }
-      throw error
-    }
+  private get client() {
+    return this.serverSupervisor.client
   }
 
-  private async reconcileAfterEventReconnect(client: OpencodeClient, clientGeneration: number) {
-    if (!this.isClientCurrent(client, clientGeneration)) return
-    const workspaces = new Map<string, { bindings: SessionBinding[], cwd: string }>()
-    for (const [identity, cwd] of this.knownWorkspaces) {
-      workspaces.set(identity, { bindings: [], cwd })
-    }
-    for (const binding of this.sessionBindings.values()) {
-      if (!this.isSessionBindingCurrent(binding)) continue
-      const identity = workspaceIdentity(binding.cwd)
-      const workspace = workspaces.get(identity)
-      if (workspace) workspace.bindings.push(binding)
-      else workspaces.set(identity, { bindings: [binding], cwd: binding.cwd })
-    }
-
-    for (const { bindings: entries, cwd } of workspaces.values()) {
-      if (!this.isClientCurrent(client, clientGeneration)) return
-      const workspaceOperation = this.captureWorkspaceOperation(cwd)
-      if (!this.isWorkspaceOperationCurrent(workspaceOperation)) continue
-
-      try {
-        const response = await client.session.status({ directory: cwd }, { throwOnError: true })
-        const statuses = unwrapSdkResult<Record<string, SessionStatus>>(response, 'reconcile session status')
-        if (!this.isClientCurrent(client, clientGeneration)) return
-        if (!this.isWorkspaceOperationCurrent(workspaceOperation)) continue
-        for (const binding of entries) {
-          if (!this.isSessionBindingCurrent(binding)) continue
-          binding.executionState = normalizeExecutionState(statuses[binding.sessionId])
-          binding.isStreaming = binding.executionState.type !== 'idle'
-        }
-      } catch (error) {
-        if (
-          this.isClientCurrent(client, clientGeneration)
-          && this.isWorkspaceOperationCurrent(workspaceOperation)
-        ) {
-          this.options.emitEvent({
-            type: 'error',
-            message: `OpenCode 重连后状态同步失败：${formatError(error)}`,
-            sessionId: this.workspaceIntent.active(workspaceIdentity(cwd)),
-          })
-        }
-      }
-
-      try {
-        await this.reconcilePendingInteractions(
-          client,
-          clientGeneration,
-          cwd,
-          workspaceOperation,
-        )
-      } catch (error) {
-        if (
-          this.isClientCurrent(client, clientGeneration)
-          && this.isWorkspaceOperationCurrent(workspaceOperation)
-        ) {
-          this.options.emitEvent({
-            type: 'error',
-            message: `OpenCode 重连后待处理请求同步失败：${formatError(error)}`,
-            sessionId: this.workspaceIntent.active(workspaceIdentity(cwd)),
-          })
-        }
-      }
-
-      if (!this.isClientCurrent(client, clientGeneration)) return
-      if (!this.isWorkspaceOperationCurrent(workspaceOperation)) continue
-      for (const binding of entries) {
-        if (!this.isSessionBindingCurrent(binding)) continue
-        this.options.emitEvent({
-          type: 'opencode_surface_refresh',
-          sessionId: binding.sessionId,
-          workspacePath: cwd,
-        })
-      }
-
-      const activeSessionID = this.workspaceIntent.active(workspaceIdentity(cwd))
-      try {
-        await this.broadcastWorkspaceState(cwd, activeSessionID, { workspaceOperation })
-      } catch (error) {
-        if (
-          this.isClientCurrent(client, clientGeneration)
-          && this.isWorkspaceOperationCurrent(workspaceOperation)
-        ) {
-          this.options.emitEvent({
-            type: 'error',
-            message: `OpenCode 重连后会话同步失败：${formatError(error)}`,
-            sessionId: activeSessionID,
-          })
-        }
-      }
-    }
-  }
-
-  /**
-   * The event stream is not a durable queue. Match OpenCode Desktop's
-   * bootstrap behaviour by reconciling the server's pending permission and
-   * question lists after opening a workspace and after every reconnect.
-   * Otherwise a request emitted while Aryn is closed or disconnected leaves
-   * the native run blocked with no interaction UI.
-   */
-  private async reconcilePendingInteractions(
-    client: OpencodeClient,
-    clientGeneration: number,
-    cwd: string,
-    workspaceOperation: WorkspaceOperation = this.captureWorkspaceOperation(cwd),
-  ) {
-    const [permissionResponse, questionResponse] = await Promise.all([
-      client.permission.list({ directory: cwd }, { throwOnError: true }),
-      client.question.list({ directory: cwd }, { throwOnError: true }),
-    ])
-    const permissions = unwrapSdkResult<PermissionRequest[]>(permissionResponse, 'list pending permissions')
-    const questions = unwrapSdkResult<QuestionRequest[]>(questionResponse, 'list pending questions')
-    if (
-      !this.isClientCurrent(client, clientGeneration)
-      || !this.isWorkspaceOperationCurrent(workspaceOperation)
-    ) return
-    const ownedPermissions: PermissionRequest[] = []
-    const ownedQuestions: QuestionRequest[] = []
-    const liveInteractionKeys = new Set<string>()
-    let bindingResolutionFailure: unknown = null
-
-    await Promise.all([
-      ...permissions.map(async (request) => {
-        let binding: SessionBinding
-        try {
-          binding = await this.requireBinding(client, cwd, request.sessionID)
-        } catch (error) {
-          bindingResolutionFailure ??= error
-          return
-        }
-        if (workspaceIdentity(binding.cwd) !== workspaceIdentity(cwd)) return
-        ownedPermissions.push(request)
-        liveInteractionKeys.add(getAgentInteractionKey(request.sessionID, request.id))
-      }),
-      ...questions.map(async (request) => {
-        let binding: SessionBinding
-        try {
-          binding = await this.requireBinding(client, cwd, request.sessionID)
-        } catch (error) {
-          bindingResolutionFailure ??= error
-          return
-        }
-        if (workspaceIdentity(binding.cwd) !== workspaceIdentity(cwd)) return
-        ownedQuestions.push(request)
-        liveInteractionKeys.add(getAgentInteractionKey(request.sessionID, request.id))
-      }),
-    ])
-    if (
-      !this.isClientCurrent(client, clientGeneration)
-      || !this.isWorkspaceOperationCurrent(workspaceOperation)
-    ) return
-
-    // A transient session lookup failure makes the server snapshot incomplete.
-    // Keep existing prompts in that case: falsely resolving one hides a native
-    // run that may still be waiting for the user. A later successful
-    // reconciliation can safely remove prompts absent from the complete list.
-    if (!bindingResolutionFailure) {
-      for (const [interactionKey, pending] of this.interactionRegistry.entries()) {
-        if (!this.isWorkspaceOperationCurrent(workspaceOperation)) return
-        if (workspaceIdentity(pending.cwd) !== workspaceIdentity(cwd)) continue
-        if (liveInteractionKeys.has(interactionKey)) continue
-        this.interactionRegistry.resolve(interactionKey, true)
-      }
-    }
-
-    for (const request of ownedPermissions) {
-      if (!this.isWorkspaceOperationCurrent(workspaceOperation)) return
-      const binding = await this.enqueueSessionEvent(
-        client,
-        clientGeneration,
-        { type: 'permission.asked', properties: request } as OpenCodeEvent,
-        cwd,
-      )
-      await binding?.lease.drain()
-    }
-    for (const request of ownedQuestions) {
-      if (!this.isWorkspaceOperationCurrent(workspaceOperation)) return
-      const binding = await this.enqueueSessionEvent(
-        client,
-        clientGeneration,
-        { type: 'question.asked', properties: request } as OpenCodeEvent,
-        cwd,
-      )
-      await binding?.lease.drain()
-    }
-    if (bindingResolutionFailure) {
-      throw new Error(
-        `Could not verify one or more pending OpenCode interactions: ${formatError(bindingResolutionFailure)}`,
-      )
-    }
+  private get clientGeneration() {
+    return this.serverSupervisor.generation
   }
 
   private async enqueueSessionEvent(
@@ -1215,121 +920,27 @@ export class OpenCodeAgentManager {
     event: OpenCodeEvent,
     properties: Record<string, unknown>,
   ) {
-    if (
-      !this.isClientCurrent(client, clientGeneration)
-      || !this.isSessionBindingCurrent(binding)
-    ) return
-    const sessionID = binding.sessionId
-
-    this.options.emitEvent({
-      type: 'opencode_native_event',
-      event,
-      workspacePath: binding.cwd,
+    if (!this.isClientCurrent(client, clientGeneration)) return
+    await applyOpenCodeSessionEvent(binding, event, properties, clientGeneration, {
+      emitEvent: this.options.emitEvent,
+      emitSessionSnapshot: (currentBinding) => this.emitSessionSnapshot(currentBinding),
+      interactionRegistry: this.interactionRegistry,
+      isCurrent: (currentBinding) => (
+        this.isClientCurrent(client, clientGeneration)
+        && this.isSessionBindingCurrent(currentBinding)
+      ),
+      messageReducer: this.messageReducer,
+      onSessionDeleted: (currentBinding) => (
+        this.applyBoundSessionDeletedEvent(client, clientGeneration, currentBinding)
+      ),
+      onWorkspaceStateChanged: (currentBinding) => this.broadcastWorkspaceState(
+        currentBinding.cwd,
+        this.workspaceIntent.active(workspaceIdentity(currentBinding.cwd)),
+        { sourceLease: currentBinding.lease },
+      ),
+      scheduleSessionSnapshot: (currentBinding) => this.scheduleSessionSnapshot(currentBinding),
+      sessionDiffs: this.sessionDiffs,
     })
-    if (
-      !this.isClientCurrent(client, clientGeneration)
-      || !this.isSessionBindingCurrent(binding)
-    ) return
-
-    if (event.type === 'session.created' || event.type === 'session.updated') {
-      const info = properties.info as Session | undefined
-      if (info?.id === sessionID) {
-        binding.title = info.title?.trim() || null
-      }
-      await this.broadcastWorkspaceState(
-        binding.cwd,
-        this.workspaceIntent.active(workspaceIdentity(binding.cwd)),
-        {
-          sourceLease: binding.lease,
-        },
-      )
-      return
-    }
-
-    if (event.type === 'session.deleted') {
-      await this.applyBoundSessionDeletedEvent(client, clientGeneration, binding)
-      return
-    }
-
-    if (
-      event.type === 'message.updated'
-      || event.type === 'message.removed'
-      || event.type === 'message.part.updated'
-      || event.type === 'message.part.removed'
-      || event.type === 'message.part.delta'
-    ) {
-      const reduction = this.messageReducer.apply(event)
-      if (event.type === 'message.updated') {
-        const info = properties.info as Message | undefined
-        if (info?.role === 'assistant') {
-          binding.lastAssistantMessageId = info.id
-          if (!info.time.completed && !info.error) {
-            binding.executionState = { type: 'busy' }
-            binding.isStreaming = true
-          }
-        }
-      }
-      if (reduction.awaitingBaseline) {
-        // Match OpenCode Desktop's live store semantics: an out-of-order part
-        // stays buffered until its parent/complete Part event arrives. Pulling
-        // an in-flight REST snapshot here can be older than the SSE stream and
-        // overwrite text that was already rendered.
-        return
-      } else if (reduction.changed) {
-        if (event.type === 'message.part.delta') {
-          this.scheduleSessionSnapshot(binding)
-        } else {
-          this.emitSessionSnapshot(binding)
-        }
-      }
-      return
-    }
-
-    if (event.type === 'session.diff') {
-      const diffs = Array.isArray(properties.diff) ? properties.diff as SnapshotFileDiff[] : []
-      this.sessionDiffs.set(sessionID, diffs)
-      this.emitSessionSnapshot(binding)
-      return
-    }
-
-    if (event.type === 'session.status' || event.type === 'session.idle') {
-      binding.executionState = event.type === 'session.idle'
-        ? { type: 'idle' }
-        : normalizeExecutionState(properties.status)
-      binding.isStreaming = binding.executionState.type !== 'idle'
-      if (binding.isStreaming) {
-        this.emitSessionSnapshot(binding)
-      } else {
-        await this.broadcastWorkspaceState(
-          binding.cwd,
-          this.workspaceIntent.active(workspaceIdentity(binding.cwd)),
-          {
-            sourceLease: binding.lease,
-          },
-        )
-      }
-      return
-    }
-
-    if (event.type === 'session.error') {
-      binding.executionState = { type: 'idle' }
-      binding.isStreaming = false
-      this.options.emitEvent({
-        type: 'error',
-        message: formatError(properties.error ?? 'OpenCode session failed.'),
-        sessionId: sessionID,
-      })
-      await this.broadcastWorkspaceState(
-        binding.cwd,
-        this.workspaceIntent.active(workspaceIdentity(binding.cwd)),
-        {
-          sourceLease: binding.lease,
-        },
-      )
-      return
-    }
-
-    this.interactionRegistry.projectEvent(event, properties, binding, clientGeneration)
   }
 
   private async applyBoundSessionDeletedEvent(
@@ -1444,28 +1055,15 @@ export class OpenCodeAgentManager {
     ownerLease = lease,
     parentLease = lease,
   ): SessionBinding {
-    const officialConfiguration = sessionConfigurationFromMetadata(session)
-    return {
+    return this.bindingRegistry.create(
       cwd,
-      executionState: { type: 'idle' },
-      isStreaming: false,
-      lastAssistantMessageId: null,
+      session,
       lease,
+      record,
+      rootSessionId,
       ownerLease,
       parentLease,
-      parentSessionId: session.parentID ?? null,
-      rootSessionId,
-      selectedModel: officialConfiguration?.modelKey
-        ?? record?.modelKey
-        ?? (session.model ? `${session.model.providerID}/${session.model.id}` : null),
-      sessionId: session.id,
-      thinkingLevel: officialConfiguration?.thinkingLevel
-        ?? record?.thinkingLevel
-        ?? (session.model?.variant && ['off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(session.model.variant)
-          ? session.model.variant as AgentThinkingLevel
-          : DEFAULT_THINKING_LEVEL),
-      title: session.title ?? null,
-    }
+    )
   }
 
   private mergeSessionBinding(
@@ -1476,20 +1074,14 @@ export class OpenCodeAgentManager {
     ownerLease = binding.ownerLease,
     parentLease = binding.parentLease,
   ) {
-    const officialConfiguration = sessionConfigurationFromMetadata(session)
-    binding.ownerLease = ownerLease
-    binding.parentLease = parentLease
-    binding.parentSessionId = session.parentID ?? null
-    binding.rootSessionId = rootSessionId
-    binding.selectedModel = officialConfiguration?.modelKey
-      ?? binding.selectedModel
-      ?? record?.modelKey
-      ?? (session.model ? `${session.model.providerID}/${session.model.id}` : null)
-    binding.thinkingLevel = officialConfiguration?.thinkingLevel
-      ?? binding.thinkingLevel
-      ?? record?.thinkingLevel
-      ?? DEFAULT_THINKING_LEVEL
-    binding.title = session.title ?? null
+    this.bindingRegistry.merge(
+      binding,
+      session,
+      record,
+      rootSessionId,
+      ownerLease,
+      parentLease,
+    )
   }
 
   private async installSessionBinding(
@@ -1535,7 +1127,7 @@ export class OpenCodeAgentManager {
           resolvedOwnerLease ?? lease,
           resolvedParentLease ?? lease,
         )
-        this.sessionBindings.set(key, binding)
+        this.bindingRegistry.install(binding)
         return binding
       },
       ({ runtime: binding }) => {
@@ -1558,15 +1150,9 @@ export class OpenCodeAgentManager {
     )
   }
 
-  private handleEventStreamFailure(
-    client: OpencodeClient,
-    clientGeneration: number,
-    error: unknown,
-  ) {
-    if (!this.isClientCurrent(client, clientGeneration)) return
-    this.clientGeneration += 1
+  private handleConnectionFailure(error: unknown) {
     const message = `OpenCode event stream stopped: ${formatError(error)}`
-    const streamingBindings = [...this.sessionBindings.values()]
+    const streamingBindings = [...this.bindingRegistry.values()]
       .filter((binding) => this.isSessionBindingCurrent(binding) && binding.isStreaming)
     for (const binding of streamingBindings) {
       binding.executionState = { type: 'idle' }
@@ -1576,21 +1162,11 @@ export class OpenCodeAgentManager {
     if (streamingBindings.length === 0) {
       this.options.emitEvent({ type: 'error', message, sessionId: null })
     }
-    this.eventStream.stop()
-    this.serverExitUnsubscribe?.()
-    this.serverExitUnsubscribe = null
-    this.server?.close()
-    this.server = null
-    this.serverPromise = null
-    this.client = null
     this.interactionRegistry.clear(() => true)
   }
 
   private dropSessionBinding(binding: SessionBinding) {
-    const key = runtimeKey(binding.cwd, binding.sessionId)
-    if (this.sessionBindings.get(key) === binding) {
-      this.sessionBindings.delete(key)
-    }
+    this.bindingRegistry.remove(binding)
     this.clearScheduledSessionSnapshot(binding.sessionId, binding.lease)
     this.messageReducer.clear(binding.sessionId)
     this.sessionDiffs.delete(binding.sessionId)
@@ -1607,9 +1183,7 @@ export class OpenCodeAgentManager {
   }
 
   private isClientCurrent(client: OpencodeClient, clientGeneration: number) {
-    return !this.disposed
-      && this.client === client
-      && this.clientGeneration === clientGeneration
+    return !this.disposed && this.serverSupervisor.isCurrent(client, clientGeneration)
   }
 
   private async resolveEventBinding(
@@ -1735,7 +1309,7 @@ export class OpenCodeAgentManager {
       binding.executionState = normalizeExecutionState(statuses[sessionID])
       binding.isStreaming = binding.executionState.type !== 'idle'
     }
-    this.sessionBindings.set(runtimeKey(cwd, sessionID), binding)
+    this.bindingRegistry.install(binding)
     return binding
   }
 
@@ -1797,54 +1371,19 @@ export class OpenCodeAgentManager {
   }
 
   private currentSessionBinding(cwd: string, sessionID: string) {
-    const binding = this.runtimeCoordinator.current(runtimeKey(cwd, sessionID))?.runtime ?? null
-    return binding && this.isSessionBindingCurrent(binding) ? binding : null
+    return this.bindingRegistry.current(cwd, sessionID)
   }
 
   private findSessionBinding(sessionID: string, cwd?: string) {
-    if (cwd) {
-      const binding = this.currentSessionBinding(cwd, sessionID)
-      if (binding) return binding
-    }
-    for (const binding of this.sessionBindings.values()) {
-      if (
-        binding.sessionId === sessionID
-        && (!cwd || workspaceIdentity(binding.cwd) === workspaceIdentity(cwd))
-        && this.isSessionBindingCurrent(binding)
-      ) {
-        return binding
-      }
-    }
-    return null
+    return this.bindingRegistry.find(sessionID, cwd)
   }
 
   private findDescendantSessionBindings(cwd: string, ancestorSessionID: string) {
-    const identity = workspaceIdentity(cwd)
-    const discoveredSessionIDs = new Set([ancestorSessionID])
-    const descendants: SessionBinding[] = []
-    let discoveredAnotherGeneration = true
-    while (discoveredAnotherGeneration) {
-      discoveredAnotherGeneration = false
-      for (const binding of this.sessionBindings.values()) {
-        if (
-          discoveredSessionIDs.has(binding.sessionId)
-          || workspaceIdentity(binding.cwd) !== identity
-          || !binding.parentSessionId
-          || !discoveredSessionIDs.has(binding.parentSessionId)
-        ) continue
-        discoveredSessionIDs.add(binding.sessionId)
-        descendants.push(binding)
-        discoveredAnotherGeneration = true
-      }
-    }
-    return descendants
+    return this.bindingRegistry.descendants(cwd, ancestorSessionID)
   }
 
   private isSessionBindingCurrent(binding: SessionBinding) {
-    return binding.lease.isCurrent()
-      && binding.ownerLease.isCurrent()
-      && binding.parentLease.isCurrent()
-      && this.sessionBindings.get(runtimeKey(binding.cwd, binding.sessionId)) === binding
+    return this.bindingRegistry.isCurrent(binding)
   }
 
   private beginWorkspaceActivation(cwd: string, targetSessionId?: string | null): WorkspaceActivation {
@@ -2035,25 +1574,9 @@ export class OpenCodeAgentManager {
   }
 
   private createSessionSnapshot(binding: SessionBinding): AgentSessionSnapshot {
-    const { cwd, sessionId: sessionID } = binding
-    const records = this.messageReducer.records(sessionID)
-    const lastAssistantMessage = [...records].reverse().find((record) => record.info.role === 'assistant')?.info ?? null
-    binding.lastAssistantMessageId = lastAssistantMessage?.id ?? null
-    return {
-      annotations: { fileChangesByEntryId: {} },
-      messages: [],
-      name: binding.title,
-      native: {
-        agentId: 'opencode',
-        diffs: this.sessionDiffs.get(sessionID) ?? [],
-        messages: records,
-        parentSessionId: binding.parentSessionId,
-        status: binding.executionState,
-      },
-      sessionId: sessionID,
-      sessionPath: sessionID,
-      workspacePath: cwd,
-    }
+    return createOpenCodeSessionSnapshot(binding, this.messageReducer, {
+      diffs: this.sessionDiffs,
+    })
   }
 
   private emitSessionSnapshot(binding: SessionBinding) {
@@ -2089,62 +1612,7 @@ export class OpenCodeAgentManager {
     cwd: string | null,
     binding: SessionBinding | null,
   ): Promise<AgentWorkspaceState['runtime']> {
-    const response = await client.config.providers(cwd ? { directory: cwd } : undefined, { throwOnError: true })
-    const providerConfig = unwrapSdkResult<{ default: Record<string, string>, providers: Provider[] }>(response, 'list providers')
-    const models = providerConfig.providers.flatMap((provider) => (
-      Object.values(provider.models).map((model) => ({ key: `${provider.id}/${model.id}`, model, provider }))
-    ))
-    const defaultModel = Object.entries(providerConfig.default)
-      .map(([providerID, modelID]) => `${providerID}/${modelID}`)
-      .find((key) => models.some((model) => model.key === key))
-      ?? models[0]?.key
-      ?? null
-    const selectedModel = binding?.selectedModel ?? defaultModel
-    const selected = parseModelKey(selectedModel)
-    const selectedProvider = selected
-      ? providerConfig.providers.find((provider) => provider.id === selected.providerID) ?? null
-      : null
-    const levels = selectedProvider && selected
-      ? supportedThinkingLevels(selectedProvider, selected.modelID)
-      : ['off'] as AgentThinkingLevel[]
-    const availableThinkingLevelsByModel = Object.fromEntries(models.map(({ key, model, provider }) => (
-      [key, supportedThinkingLevels(provider, model.id)]
-    )))
-
-    return {
-      agentId: 'opencode',
-      auth: {},
-      availableModelInputs: Object.fromEntries(models.map(({ key, model }) => (
-        [key, model.capabilities.input.image ? ['text', 'image'] : ['text']]
-      ))),
-      availableModels: models.map((model) => model.key),
-      availableThinkingLevels: levels,
-      availableThinkingLevelsByModel,
-      compactionReason: null,
-      defaultModel,
-      defaultThinkingLevel: DEFAULT_THINKING_LEVEL,
-      executionState: binding?.executionState ?? { type: 'idle' },
-      followUpMessageCount: 0,
-      followUpMessages: [],
-      followUpMode: 'all',
-      hasConfiguredModels: models.length > 0,
-      isCompacting: false,
-      isStreaming: binding?.isStreaming ?? false,
-      pendingMessageCount: 0,
-      preferredModelByProvider: providerConfig.default,
-      retryAttempt: 0,
-      retryMaxAttempts: null,
-      selectedModel,
-      setupHint: models.length > 0 ? null : 'OpenCode 当前没有可用模型，请先在 OpenCode 中配置 Provider。',
-      supportedRunningPromptBehaviors: ['steer'],
-      supportsQueuedMessageEditing: false,
-      steeringMessageCount: 0,
-      steeringMessages: [],
-      steeringMode: 'all',
-      supportsThinking: levels.some((level) => level !== 'off'),
-      thinkingLevel: binding?.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
-      workspacePath: cwd,
-    }
+    return buildOpenCodeRuntime(client, cwd, binding)
   }
 
   private async buildWorkspaceState(

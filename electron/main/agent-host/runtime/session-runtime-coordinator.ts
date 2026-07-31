@@ -223,8 +223,12 @@ export class SessionRuntimeCoordinator<TRuntime> {
       ...stops,
       ...entries.map((entry) => entry.lifecycleLane.drain()),
       ...entries.map((entry) => this.drainEntry(entry)),
-    ]).then(() => {
+    ]).then((results) => {
       this.entries.clear()
+      const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+      if (failures.length > 0) {
+        throw new AggregateError(failures, 'One or more session runtimes could not be disposed.')
+      }
     })
     return this.disposePromise
   }

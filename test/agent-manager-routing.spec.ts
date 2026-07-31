@@ -656,6 +656,51 @@ describe('AgentApplicationService native-session routing', () => {
     manager.dispose()
   })
 
+  it('waits for a late embedded PI initialization and disposes its runtime again', async () => {
+    const manager = createManager()
+    const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
+    const sessionPath = 'C:/sessions/late-during-dispose.jsonl'
+    const slowOpen = deferred()
+    behavior.openGates.set(sessionPath, slowOpen.promise)
+
+    const opening = manager.openSession(scope, sessionPath)
+    const sessionManager = calls.builtinManagers.find((entry) => entry.opened.includes(sessionPath))
+    const disposal = manager.dispose()
+    let disposed = false
+    void disposal.then(
+      () => { disposed = true },
+      () => { disposed = true },
+    )
+    await Promise.resolve()
+
+    expect(disposed).toBe(false)
+    expect(sessionManager?.disposed).toBe(1)
+    slowOpen.resolve()
+    await opening
+    await disposal
+
+    expect(sessionManager?.disposed).toBe(2)
+    behavior.openGates.delete(sessionPath)
+  })
+
+  it('does not misreport a waited initialization error as a disposal failure', async () => {
+    const manager = createManager()
+    const scope = { agentId: 'builtin-pi' as const, workspacePath: 'C:/workspace' }
+    const sessionPath = 'C:/sessions/failing-during-dispose.jsonl'
+    const slowOpen = deferred()
+    behavior.openFailures = 1
+    behavior.openGates.set(sessionPath, slowOpen.promise)
+
+    const opening = manager.openSession(scope, sessionPath)
+    const sessionManager = calls.builtinManagers.find((entry) => entry.opened.includes(sessionPath))
+    const disposal = manager.dispose()
+    slowOpen.resolve()
+
+    await expect(opening).rejects.toThrow('open failed')
+    await expect(disposal).resolves.toBeUndefined()
+    expect(sessionManager?.disposed).toBe(2)
+  })
+
   it('does not allow a disposed Agent Host to recreate provider managers', async () => {
     const manager = createManager()
     const managerCount = calls.builtinManagers.length

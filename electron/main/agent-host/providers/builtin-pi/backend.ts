@@ -45,9 +45,12 @@ export class BuiltinPiBackend implements AgentBackend {
   // share them. Readiness plus pending counts keeps one failed caller from
   // disposing a manager that another caller is still successfully opening.
   private readonly pendingOperationCounts = new Map<PiAgentManager, number>()
+  private readonly pendingInitializations = new Map<Promise<unknown>, PiAgentManager>()
+  private readonly pendingManagerDisposals = new Set<Promise<void>>()
   private readonly readyManagers = new Set<PiAgentManager>()
   private readonly sessionManagers = new Map<string, PiAgentManager>()
   private disposed = false
+  private disposePromise: Promise<void> | null = null
 
   constructor(
     private readonly emitEvent: AgentBackendEventEmitter,
@@ -249,8 +252,11 @@ export class BuiltinPiBackend implements AgentBackend {
     const releaseResults = await Promise.allSettled(
       managers.map((manager) => manager.releaseWorkspaceRuntime(cwd)),
     )
-    for (const manager of managers) manager.dispose()
-    const failures = releaseResults.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+    const disposalResults = await Promise.allSettled(
+      managers.map((manager) => this.invokeManagerDisposal(manager)),
+    )
+    const failures = [...releaseResults, ...disposalResults]
+      .flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
     if (failures.length > 0) {
       throw new AggregateError(failures, 'One or more embedded PI workspace runtimes could not be released.')
     }
@@ -270,24 +276,55 @@ export class BuiltinPiBackend implements AgentBackend {
       )),
       manager.discardWorkspaceSessions(cwd),
     ])
-    for (const candidate of workspaceManagers) candidate.dispose()
-    const failures = cleanupResults.flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+    const disposalResults = await Promise.allSettled(
+      workspaceManagers.map((candidate) => this.invokeManagerDisposal(candidate)),
+    )
+    const failures = [...cleanupResults, ...disposalResults]
+      .flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
     if (failures.length > 0) {
       throw new AggregateError(failures, 'One or more embedded PI session stores could not be cleaned up.')
     }
   }
 
   dispose() {
-    if (this.disposed) return
+    if (this.disposePromise) return this.disposePromise
     this.disposed = true
-    this.draftManager.dispose()
-    for (const manager of this.managerWorkspaces.keys()) manager.dispose()
+    const managers = [...new Set([
+      this.draftManager,
+      ...this.managerWorkspaces.keys(),
+      ...this.pendingInitializations.values(),
+    ])]
+    const pendingInitializations = [...this.pendingInitializations.keys()]
+    const pendingManagerDisposals = [...this.pendingManagerDisposals]
+    for (const disposal of pendingManagerDisposals) this.pendingManagerDisposals.delete(disposal)
     this.activeManagers.clear()
     this.activationRevisions.clear()
     this.managerWorkspaces.clear()
     this.pendingOperationCounts.clear()
     this.readyManagers.clear()
     this.sessionManagers.clear()
+    this.disposePromise = (async () => {
+      const initialDisposals = Promise.allSettled([
+        ...managers.map((manager) => this.invokeManagerDisposal(manager)),
+        ...pendingManagerDisposals,
+      ])
+      // Initialization failures belong to their original callers. Disposal
+      // waits for them only so finishManagerOperation can schedule cleanup for
+      // a runtime that appeared after teardown began.
+      await Promise.allSettled(pendingInitializations)
+      const initialResults = await initialDisposals
+      // A manager can establish a native runtime after its first dispose while
+      // an in-flight open/load is settling. finishManagerOperation schedules
+      // that second disposal; wait for every such late cleanup here.
+      const finalResults = await Promise.allSettled([...this.pendingManagerDisposals])
+      this.pendingManagerDisposals.clear()
+      const failures = [...initialResults, ...finalResults]
+        .flatMap((result) => result.status === 'rejected' ? [result.reason] : [])
+      if (failures.length > 0) {
+        throw new AggregateError(failures, 'One or more embedded PI runtimes could not be disposed.')
+      }
+    })()
+    return this.disposePromise
   }
 
   private createManager() {
@@ -399,8 +436,26 @@ export class BuiltinPiBackend implements AgentBackend {
   }
 
   private disposeManager(manager: PiAgentManager) {
-    manager.dispose()
     this.removeManager(manager)
+    this.trackManagerDisposal(manager)
+  }
+
+  private trackManagerDisposal(manager: PiAgentManager) {
+    const disposal = this.invokeManagerDisposal(manager)
+    this.pendingManagerDisposals.add(disposal)
+    void disposal.then(
+      () => this.pendingManagerDisposals.delete(disposal),
+      () => undefined,
+    )
+    return disposal
+  }
+
+  private invokeManagerDisposal(manager: PiAgentManager) {
+    try {
+      return Promise.resolve(manager.dispose())
+    } catch (error) {
+      return Promise.reject(error)
+    }
   }
 
   private disposeManagerIfOrphaned(manager: PiAgentManager) {
@@ -427,7 +482,7 @@ export class BuiltinPiBackend implements AgentBackend {
       // Teardown may finish before a native open/load/create. PI can establish
       // a runtime after that first dispose, so every detached late completion
       // must be disposed again instead of becoming unreachable live state.
-      manager.dispose()
+      this.trackManagerDisposal(manager)
       return
     }
     if (succeeded) this.readyManagers.add(manager)
@@ -440,18 +495,26 @@ export class BuiltinPiBackend implements AgentBackend {
     this.disposeManager(manager)
   }
 
-  private async runManagerInitialization<T>(manager: PiAgentManager, initialize: () => Promise<T>) {
+  private runManagerInitialization<T>(manager: PiAgentManager, initialize: () => Promise<T>) {
     this.beginManagerOperation(manager)
-    try {
-      const result = await initialize()
-      this.finishManagerOperation(manager, true)
-      return result
-    } catch (error) {
-      this.finishManagerOperation(manager, false)
-      this.disposeManagerIfUnreadyAndIdle(manager)
-      this.disposeManagerIfOrphaned(manager)
-      throw error
-    }
+    const operation = (async () => {
+      try {
+        const result = await initialize()
+        this.finishManagerOperation(manager, true)
+        return result
+      } catch (error) {
+        this.finishManagerOperation(manager, false)
+        this.disposeManagerIfUnreadyAndIdle(manager)
+        this.disposeManagerIfOrphaned(manager)
+        throw error
+      }
+    })()
+    this.pendingInitializations.set(operation, manager)
+    void operation.then(
+      () => this.pendingInitializations.delete(operation),
+      () => this.pendingInitializations.delete(operation),
+    )
+    return operation
   }
 
   private getManagerForOptionalWorkspace(cwd: string | null) {

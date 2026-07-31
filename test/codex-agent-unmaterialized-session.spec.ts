@@ -40,12 +40,14 @@ describe('Codex unmaterialized sessions', () => {
     const requests: Array<{ method: string, params: Record<string, unknown> }> = []
     const manager = new CodexAgentManager({ agentDir: path.join(tempRoot, 'agent-data'), emitEvent: () => undefined })
     const internals = manager as unknown as {
-      client: {
-        request: (method: string, params: Record<string, unknown>) => Promise<unknown>
-        stop: () => void
+      clientSupervisor: {
+        client: {
+          request: (method: string, params: Record<string, unknown>) => Promise<unknown>
+          stop: () => void
+        }
       }
     }
-    internals.client = {
+    internals.clientSupervisor.client = {
       request: async (method, params) => {
         requests.push({ method, params })
         if (method !== 'thread/list') throw new Error(`Unexpected Codex request: ${method}`)
@@ -139,12 +141,14 @@ describe('Codex unmaterialized sessions', () => {
 
     const installClient = (manager: CodexAgentManager) => {
       const internals = manager as unknown as {
-        client: {
-          request: (method: string, params: Record<string, unknown>) => Promise<unknown>
-          stop: () => void
+        clientSupervisor: {
+          client: {
+            request: (method: string, params: Record<string, unknown>) => Promise<unknown>
+            stop: () => void
+          }
         }
       }
-      internals.client = {
+      internals.clientSupervisor.client = {
         request: async (method, params) => {
           requests.push({ method, params })
           if (method === 'thread/list') {
@@ -253,9 +257,11 @@ describe('Codex unmaterialized sessions', () => {
       updatedAt: 2,
     })
     const internals = manager as unknown as {
-      client: {
-        request: (method: string) => Promise<unknown>
-        stop: () => void
+      clientSupervisor: {
+        client: {
+          request: (method: string) => Promise<unknown>
+          stop: () => void
+        }
       }
       sessionCatalog: {
         index: {
@@ -264,7 +270,7 @@ describe('Codex unmaterialized sessions', () => {
         }
       }
     }
-    internals.client = {
+    internals.clientSupervisor.client = {
       request: async (method) => {
         if (method === 'thread/list') return { data: [nativeThread], nextCursor: null }
         if (method === 'thread/name/set') throw new Error('native rename rejected')
@@ -292,12 +298,14 @@ describe('Codex unmaterialized sessions', () => {
     const requestedMethods: string[] = []
     const manager = new CodexAgentManager({ agentDir: path.join(tempRoot, 'agent-data'), emitEvent: () => undefined })
     const internals = manager as unknown as {
-      client: {
-        request: (method: string) => Promise<unknown>
-        stop: () => void
+      clientSupervisor: {
+        client: {
+          request: (method: string) => Promise<unknown>
+          stop: () => void
+        }
       }
     }
-    internals.client = {
+    internals.clientSupervisor.client = {
       request: async (method) => {
         requestedMethods.push(method)
         if (method === 'thread/start') {
@@ -346,12 +354,14 @@ describe('Codex unmaterialized sessions', () => {
         isStreaming: boolean
         record: { materialized: boolean }
       }>
-      client: {
-        request: (method: string) => Promise<unknown>
-        stop: () => void
+      clientSupervisor: {
+        client: {
+          request: (method: string) => Promise<unknown>
+          stop: () => void
+        }
       }
     }
-    internals.client = {
+    internals.clientSupervisor.client = {
       request: async (method) => {
         if (method === 'thread/start') {
           return {
@@ -416,14 +426,16 @@ describe('Codex unmaterialized sessions', () => {
       upgradeInfo: null,
     }
     const internals = manager as unknown as {
-      client: {
-        request: (method: string, params: unknown) => Promise<unknown>
-        stop: () => void
+      clientSupervisor: {
+        client: {
+          request: (method: string, params: unknown) => Promise<unknown>
+          stop: () => void
+        }
+        modelsValue: Model[]
       }
-      models: Model[]
     }
-    internals.models = [defaultModel]
-    internals.client = {
+    internals.clientSupervisor.modelsValue = [defaultModel]
+    internals.clientSupervisor.client = {
       request: async (method, params) => {
         requests.push({ method, params })
         if (method === 'thread/start') {
@@ -493,11 +505,13 @@ describe('Codex unmaterialized sessions', () => {
       supportedReasoningEfforts: [{ description: '', reasoningEffort: 'low' }],
     }
     const internals = manager as unknown as {
-      client: { request: (method: string, params: Record<string, unknown>) => Promise<unknown>, stop: () => void }
-      models: Model[]
+      clientSupervisor: {
+        client: { request: (method: string, params: Record<string, unknown>) => Promise<unknown>, stop: () => void }
+        modelsValue: Model[]
+      }
     }
-    internals.models = [defaultModel, selectedModel]
-    internals.client = {
+    internals.clientSupervisor.modelsValue = [defaultModel, selectedModel]
+    internals.clientSupervisor.client = {
       request: async (method, params) => {
         if (method === 'thread/list') return { data: [], nextCursor: null }
         expect(method).toBe('thread/start')

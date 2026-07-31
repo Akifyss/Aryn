@@ -6,10 +6,7 @@ import type {
   AgentPromptAttachment,
   AgentRunningPromptBehavior,
   AgentSessionCreateOptions,
-  AgentSessionSnapshot,
-  AgentThinkingLevel,
   AgentWorkspaceState,
-  PiWebAgentMessage,
 } from '../../../../shared/agent-contracts/types'
 import { prepareExternalCliEnvironment } from '../../../external-cli-environment'
 import { JsonLineProcess } from '../../../json-line-process'
@@ -28,13 +25,9 @@ import {
   createWorkspaceRuntimeKeyPrefix as workspaceRuntimeKeyPrefix,
 } from '../../runtime/runtime-keys'
 import {
-  normalizeNullableString,
   normalizePiThinkingLevel as normalizeThinkingLevel,
-  PI_CLI_THINKING_LEVELS as THINKING_LEVELS,
   projectPiFileAnnotations,
   readPiResponseData as readResponseData,
-  summarizePiToolPayload as summarizeToolPayload,
-  type JsonRecord,
   type PiCliSessionRecord,
   type PiRpcModel,
 } from './session-model'
@@ -42,17 +35,16 @@ import {
   resolvePiPermissionExtensionPath as permissionExtensionPath,
 } from './session-paths'
 import { PiCliSessionCatalog } from './session-catalog'
+import { handlePiCliEvent } from './event-handler'
+import { PiCliInteractionRegistry } from './interaction-registry'
+import {
+  createPiCliSessionListItem,
+  serializePiCliRuntime,
+  serializePiCliSession,
+} from './presentation'
+import type { PiCliRuntime } from './runtime'
 
 export { projectPiFileAnnotations }
-
-type PiRuntime = {
-  isStreaming: boolean
-  lease: SessionRuntimeLease
-  models: PiRpcModel[]
-  process: JsonLineProcess
-  record: PiCliSessionRecord
-  state: JsonRecord
-}
 
 type PiCliAgentManagerOptions = {
   agentDir: string
@@ -62,29 +54,18 @@ type PiCliAgentManagerOptions = {
 
 type WorkspaceStateContext = {
   activation?: WorkspaceActivation
-  providedRuntime?: PiRuntime
+  providedRuntime?: PiCliRuntime
   sourceLease?: SessionRuntimeLease
   state?: AgentWorkspaceState
   workspaceOperation?: WorkspaceOperation
 }
 
-function pendingInteractionKey(runtimeKeyValue: string, requestID: string) {
-  return `${runtimeKeyValue}\0${requestID}`
-}
-
 export class PiCliAgentManager {
-  private readonly pendingInteractions = new Map<string, {
-    lease: SessionRuntimeLease
-    method: 'confirm' | 'editor' | 'input' | 'select'
-    optionValues?: Record<string, string>
-    process: JsonLineProcess
-    requestId: string
-    runtimeKey: string
-    sessionId: string
-  }>()
   private disposed = false
+  private disposePromise: Promise<void> | null = null
   private readonly initializingProcesses = new Set<JsonLineProcess>()
-  private readonly runtimeCoordinator: SessionRuntimeCoordinator<PiRuntime>
+  private readonly interactionRegistry: PiCliInteractionRegistry
+  private readonly runtimeCoordinator: SessionRuntimeCoordinator<PiCliRuntime>
   private readonly sessionCatalog: PiCliSessionCatalog
   // Activation revisions preserve last-user-intent ordering. Operation revisions
   // are invalidated only by workspace release/discard, while state revisions
@@ -96,6 +77,7 @@ export class PiCliAgentManager {
   private readonly workspaceStateRevisions = new Map<string, number>()
 
   constructor(private readonly options: PiCliAgentManagerOptions) {
+    this.interactionRegistry = new PiCliInteractionRegistry(options.emitEvent)
     this.runtimeCoordinator = new SessionRuntimeCoordinator({
       stopRuntime: (runtime) => runtime.process.stop(),
     })
@@ -110,7 +92,7 @@ export class PiCliAgentManager {
   async loadDraftState(): Promise<AgentWorkspaceState> {
     const runtime = await this.createEphemeralRuntime(process.cwd())
     try {
-      return { activeSession: null, runtime: this.serializeRuntime(null, runtime), sessions: [] }
+      return { activeSession: null, runtime: serializePiCliRuntime(null, runtime), sessions: [] }
     } finally {
       await this.runtimeCoordinator.retireLease(runtime.lease)
     }
@@ -176,7 +158,7 @@ export class PiCliAgentManager {
   }
 
   async readSession(cwd: string, sessionID: string) {
-    return this.withRuntime(cwd, sessionID, (runtime) => this.serializeSession(runtime))
+    return this.withRuntime(cwd, sessionID, serializePiCliSession)
   }
 
   async sessionExists(cwd: string, sessionID: string) {
@@ -238,7 +220,7 @@ export class PiCliAgentManager {
       const record = retired
         ? this.requireRuntimeWorkspace(retired.runtime, cwd).record
         : await this.sessionCatalog.require(cwd, sessionID)
-      this.clearPendingInteractions((pending) => pending.runtimeKey === runtimeKey(cwd, sessionID))
+      this.interactionRegistry.clear((pending) => pending.runtimeKey === runtimeKey(cwd, sessionID))
       if (record.sessionPath) {
         if (this.options.removeSessionFile) await this.options.removeSessionFile(record.sessionPath)
         else await rm(record.sessionPath, { force: true })
@@ -367,38 +349,7 @@ export class PiCliAgentManager {
   }
 
   respondToInteraction(response: AgentInteractionResponse) {
-    const matches = [...this.pendingInteractions.entries()].filter(([, pending]) => (
-      pending.sessionId === response.sessionId
-      && pending.requestId === response.requestId
-      && pending.lease.isCurrent()
-    ))
-    if (matches.length !== 1) return false
-    const [interactionKey, pending] = matches[0]
-    const cancelled = response.optionId === 'deny' || response.optionId === 'reject'
-    const value = pending.method === 'select'
-      ? pending.optionValues?.[response.optionId]
-      : response.values?.[0] ?? Object.values(response.answers ?? {})[0]?.[0]
-    pending.process.notify(pending.method === 'confirm'
-      ? {
-          type: 'extension_ui_response',
-          id: response.requestId,
-          ...(cancelled
-            ? { cancelled: true }
-            : { confirmed: response.optionId === 'allow_once' || response.optionId === 'allow' }),
-        }
-      : {
-          type: 'extension_ui_response',
-          id: response.requestId,
-          ...(cancelled || value === undefined ? { cancelled: true } : { value }),
-        })
-    this.pendingInteractions.delete(interactionKey)
-    this.options.emitEvent({
-      type: 'interaction_resolved',
-      requestId: response.requestId,
-      resumeRun: true,
-      sessionId: pending.sessionId,
-    })
-    return true
+    return this.interactionRegistry.respond(response)
   }
 
   async releaseWorkspaceRuntime(cwd: string) {
@@ -411,7 +362,7 @@ export class PiCliAgentManager {
     try {
       await this.runtimeCoordinator.retireWhere((key) => key.startsWith(prefix))
     } finally {
-      this.clearPendingInteractions((pending) => pending.runtimeKey.startsWith(prefix))
+      this.interactionRegistry.clear((pending) => pending.runtimeKey.startsWith(prefix))
     }
   }
 
@@ -427,7 +378,7 @@ export class PiCliAgentManager {
     await Promise.all(records.map((record) => this.runtimeCoordinator.retireAndRun(
       runtimeKey(cwd, record.id),
       async () => {
-        this.clearPendingInteractions((pending) => pending.runtimeKey === runtimeKey(cwd, record.id))
+        this.interactionRegistry.clear((pending) => pending.runtimeKey === runtimeKey(cwd, record.id))
         const sessionPath = officialById.get(record.id)?.sessionPath
         if (sessionPath) await rm(sessionPath, { force: true })
       },
@@ -438,14 +389,16 @@ export class PiCliAgentManager {
   }
 
   dispose() {
+    if (this.disposePromise) return this.disposePromise
     this.disposed = true
     for (const processHandle of this.initializingProcesses) processHandle.stop()
     this.initializingProcesses.clear()
-    void this.runtimeCoordinator.dispose()
-    this.pendingInteractions.clear()
+    this.interactionRegistry.reset()
     this.sessionCatalog.dispose()
     this.workspaceIntent.clear()
     this.workspaceStateRevisions.clear()
+    this.disposePromise = this.runtimeCoordinator.dispose()
+    return this.disposePromise
   }
 
   drainSessionEvents(cwd: string, sessionID: string) {
@@ -488,7 +441,7 @@ export class PiCliAgentManager {
           : ['--session', record.id]),
       '--extension', permissionExtensionPath(),
     ]
-    let runtime: PiRuntime
+    let runtime: PiCliRuntime
     const processHandle = new JsonLineProcess({
       args,
       command: 'pi',
@@ -496,7 +449,12 @@ export class PiCliAgentManager {
       onEvent: (message) => {
         if (!runtime) return
         lease.enqueue(
-          () => this.handleEvent(runtime, message),
+          () => handlePiCliEvent(runtime, message, {
+            emitEvent: this.options.emitEvent,
+            interactions: this.interactionRegistry,
+            onAgentEnd: (currentRuntime) => this.handleAgentEnd(currentRuntime),
+            onRuntimeStateChanged: (currentRuntime) => this.broadcastRuntimeState(currentRuntime),
+          }),
           (error) => {
             this.options.emitEvent({
               type: 'error',
@@ -530,7 +488,7 @@ export class PiCliAgentManager {
     return runtime
   }
 
-  private async refreshRuntime(runtime: PiRuntime) {
+  private async refreshRuntime(runtime: PiCliRuntime) {
     const [stateResponse, modelsResponse] = await Promise.all([
       runtime.process.request({ type: 'get_state' }),
       runtime.process.request({ type: 'get_available_models' }, 30_000),
@@ -541,198 +499,27 @@ export class PiCliAgentManager {
     runtime.isStreaming = runtime.state.isStreaming === true
   }
 
-  private async handleEvent(runtime: PiRuntime, message: JsonRecord) {
-    const type = String(message.type ?? '')
-    const sessionId = runtime.record.id
-    this.options.emitEvent({
-      type: 'pi_native_event',
-      event: message as { type: string; [key: string]: unknown },
-      sessionId,
-    })
-    if (type === 'agent_start') {
-      runtime.isStreaming = true
-      this.options.emitEvent({ type: 'assistant_message_started', sessionId })
-      return
-    }
-    if (type === 'message_start') {
-      const messageValue = message.message && typeof message.message === 'object'
-        ? message.message as JsonRecord
-        : null
-      if (messageValue && String(messageValue.role ?? '') === 'assistant') {
-        this.options.emitEvent({ type: 'assistant_message_started', sessionId })
-      }
-      return
-    }
-    if (type === 'message_update') {
-      const event = message.assistantMessageEvent
-      if (!event || typeof event !== 'object') return
-      const update = event as JsonRecord
-      if (update.type === 'text_delta' && typeof update.delta === 'string') {
-        this.options.emitEvent({ type: 'assistant_message_delta', delta: update.delta, sessionId })
-      } else if (update.type === 'thinking_delta' && typeof update.delta === 'string') {
-        this.options.emitEvent({ type: 'assistant_thinking_delta', delta: update.delta, sessionId })
-      } else if (update.type === 'thinking_end') {
-        this.options.emitEvent({ type: 'assistant_thinking_finished', sessionId })
-      }
-      return
-    }
-    if (type === 'tool_execution_start' || type === 'tool_execution_update' || type === 'tool_execution_end') {
-      const toolCallId = String(message.toolCallId ?? randomUUID())
-      const toolName = String(message.toolName ?? 'tool')
-      if (type === 'tool_execution_end') {
-        this.options.emitEvent({
-          type: 'tool_execution_finished',
-          isError: message.isError === true,
-          sessionId,
-          summary: summarizeToolPayload(message, 'result'),
-          toolCallId,
-          toolName,
-        })
-      } else {
-        this.options.emitEvent({
-          type: type === 'tool_execution_start' ? 'tool_execution_started' : 'tool_execution_updated',
-          sessionId,
-          summary: summarizeToolPayload(message, type === 'tool_execution_start' ? 'result' : 'partialResult'),
-          toolCallId,
-          toolName,
-        })
-      }
-      return
-    }
-    if (type === 'message_end') {
-      const messageValue = message.message && typeof message.message === 'object' ? message.message as JsonRecord : null
-      const errorMessage = messageValue && String(messageValue.role ?? '') === 'assistant'
-        ? normalizeNullableString(messageValue.errorMessage)
-        : null
-      if (errorMessage) {
-        this.options.emitEvent({ type: 'error', message: errorMessage, sessionId })
-      }
-      return
-    }
-    if (type === 'agent_end') {
-      runtime.isStreaming = false
-      this.clearPendingInteractions((pending) => pending.lease === runtime.lease)
-      await this.refreshRuntime(runtime).catch(() => undefined)
-      if (!runtime.lease.isCurrent()) return
-      await this.touchRecord(runtime)
-      if (!runtime.lease.isCurrent()) return
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, {
-        providedRuntime: runtime,
-        sourceLease: runtime.lease,
-      })
-      return
-    }
-    if (type === 'queue_update') {
-      runtime.state.steering = Array.isArray(message.steering) ? message.steering.map(String) : []
-      runtime.state.followUp = Array.isArray(message.followUp) ? message.followUp.map(String) : []
-      runtime.state.pendingMessageCount = (runtime.state.steering as string[]).length
-        + (runtime.state.followUp as string[]).length
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, {
-        providedRuntime: runtime,
-        sourceLease: runtime.lease,
-      })
-      return
-    }
-    if (type === 'compaction_start') {
-      runtime.state.isCompacting = true
-      runtime.state.compactionReason = message.reason
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, {
-        providedRuntime: runtime,
-        sourceLease: runtime.lease,
-      })
-      return
-    }
-    if (type === 'compaction_end') {
-      runtime.state.isCompacting = false
-      runtime.state.compactionReason = null
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, {
-        providedRuntime: runtime,
-        sourceLease: runtime.lease,
-      })
-      return
-    }
-    if (type === 'auto_retry_start') {
-      runtime.state.retryAttempt = typeof message.attempt === 'number' ? message.attempt : 0
-      runtime.state.retryMaxAttempts = typeof message.maxAttempts === 'number' ? message.maxAttempts : null
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, {
-        providedRuntime: runtime,
-        sourceLease: runtime.lease,
-      })
-      return
-    }
-    if (type === 'auto_retry_end') {
-      runtime.state.retryAttempt = 0
-      runtime.state.retryMaxAttempts = null
-      await this.broadcastWorkspaceState(runtime.record.cwd, sessionId, {
-        providedRuntime: runtime,
-        sourceLease: runtime.lease,
-      })
-      return
-    }
-    if (
-      type === 'extension_ui_request'
-      && (message.method === 'confirm' || message.method === 'select' || message.method === 'input' || message.method === 'editor')
-    ) {
-      const requestId = String(message.id ?? randomUUID())
-      const method = message.method
-      const selectOptions = method === 'select' && Array.isArray(message.options)
-        ? message.options.map(String)
-        : []
-      const optionValues = Object.fromEntries(selectOptions.map((option, index) => [`select:${index}`, option]))
-      this.pendingInteractions.set(pendingInteractionKey(runtime.lease.key, requestId), {
-        lease: runtime.lease,
-        method,
-        ...(selectOptions.length > 0 ? { optionValues } : {}),
-        process: runtime.process,
-        requestId,
-        runtimeKey: runtime.lease.key,
-        sessionId,
-      })
-      this.options.emitEvent({
-        type: 'interaction_requested',
-        request: {
-          agentId: 'pi',
-          id: requestId,
-          kind: method === 'confirm' ? 'permission' : 'question',
-          message: String(message.message ?? message.placeholder ?? message.prefill ?? 'PI 扩展需要你的输入。'),
-          ...(method === 'input' || method === 'editor'
-            ? {
-                fields: [{
-                  id: 'value',
-                  label: String(message.title ?? 'PI 输入'),
-                  message: String(message.message ?? message.placeholder ?? ''),
-                  multiline: method === 'editor',
-                }],
-              }
-            : {}),
-          options: method === 'confirm'
-            ? [
-                { id: 'deny', label: '拒绝' },
-                { id: 'allow_once', label: '允许本次' },
-              ]
-            : method === 'select'
-              ? [
-                  ...selectOptions.map((option, index) => ({ id: `select:${index}`, label: option })),
-                  { id: 'reject', label: '取消' },
-                ]
-              : [{ id: 'reject', label: '取消' }],
-          sessionId,
-          title: String(message.title ?? (method === 'confirm' ? 'PI 请求执行工具' : 'PI 提问')),
-          workspacePath: runtime.record.cwd,
-        },
-      })
-      return
-    }
-    if (type === 'extension_error' || type === 'protocol_error') {
-      this.options.emitEvent({ type: 'error', message: String(message.error ?? message.message ?? 'PI extension failed.'), sessionId })
-    }
+  private async handleAgentEnd(runtime: PiCliRuntime) {
+    this.interactionRegistry.clear((pending) => pending.lease === runtime.lease)
+    await this.refreshRuntime(runtime).catch(() => undefined)
+    if (!runtime.lease.isCurrent()) return
+    await this.touchRecord(runtime)
+    if (!runtime.lease.isCurrent()) return
+    await this.broadcastRuntimeState(runtime)
   }
 
-  private handleRuntimeExit(runtime: PiRuntime, error: Error) {
+  private broadcastRuntimeState(runtime: PiCliRuntime) {
+    return this.broadcastWorkspaceState(runtime.record.cwd, runtime.record.id, {
+      providedRuntime: runtime,
+      sourceLease: runtime.lease,
+    })
+  }
+
+  private handleRuntimeExit(runtime: PiCliRuntime, error: Error) {
     runtime.isStreaming = false
     void this.runtimeCoordinator.retireLease(runtime.lease).then((retired) => {
       if (!retired || this.disposed) return
-      this.clearPendingInteractions((pending) => pending.lease === runtime.lease)
+      this.interactionRegistry.clear((pending) => pending.lease === runtime.lease)
       this.options.emitEvent({
         type: 'error',
         message: `PI CLI 会话进程已退出：${error.message}`,
@@ -748,133 +535,10 @@ export class PiCliAgentManager {
     })
   }
 
-  private clearPendingInteractions(predicate: (pending: {
-    lease: SessionRuntimeLease
-    method: 'confirm' | 'editor' | 'input' | 'select'
-    optionValues?: Record<string, string>
-    process: JsonLineProcess
-    requestId: string
-    runtimeKey: string
-    sessionId: string
-  }) => boolean) {
-    for (const [interactionKey, pending] of this.pendingInteractions) {
-      if (!predicate(pending)) continue
-      this.pendingInteractions.delete(interactionKey)
-      this.options.emitEvent({
-        type: 'interaction_resolved',
-        requestId: pending.requestId,
-        resumeRun: false,
-        sessionId: pending.sessionId,
-      })
-    }
-  }
-
-  private async serializeSession(runtime: PiRuntime): Promise<AgentSessionSnapshot> {
-    const response = await runtime.process.request({ type: 'get_messages' })
-    const data = readResponseData(response)
-    const nativeMessages = Array.isArray(data.messages)
-      ? data.messages.filter((message): message is PiWebAgentMessage => (
-          Boolean(message)
-          && typeof message === 'object'
-          && typeof (message as { role?: unknown }).role === 'string'
-        ))
-      : []
-    return {
-      annotations: projectPiFileAnnotations(data.messages),
-      messages: [],
-      native: {
-        agentId: 'pi',
-        entryIds: nativeMessages.map((message) => (
-          typeof message.id === 'string' ? message.id : ''
-        )),
-        isStreaming: runtime.isStreaming,
-        messages: nativeMessages,
-        modelNames: Object.fromEntries(runtime.models.flatMap((model) => {
-          if (!model.id || !model.provider) return []
-          const label = model.name?.trim() || model.id
-          return [
-            [`${model.provider}:${model.id}`, label],
-            [model.id, label],
-          ]
-        })),
-        sessionId: runtime.record.id,
-      },
-      name: runtime.record.name,
-      sessionId: runtime.record.id,
-      sessionPath: runtime.record.id,
-      workspacePath: runtime.record.cwd,
-    }
-  }
-
-  private serializeRuntime(cwd: string | null, runtime: PiRuntime): AgentWorkspaceState['runtime'] {
-    const models = runtime.models.filter((model) => model?.id && model?.provider)
-    const availableModels = models.map((model) => `${model.provider}/${model.id}`)
-    const levelsByModel: Record<string, AgentThinkingLevel[]> = Object.fromEntries(models.map((model) => {
-      const mapped: AgentThinkingLevel[] = model.reasoning === false
-        ? ['off']
-        : model.thinkingLevelMap
-          ? THINKING_LEVELS.filter((level) => level === 'off' || Object.prototype.hasOwnProperty.call(model.thinkingLevelMap, level))
-          : THINKING_LEVELS
-      return [`${model.provider}/${model.id}`, mapped]
-    }))
-    const stateModel = runtime.state.model && typeof runtime.state.model === 'object'
-      ? runtime.state.model as JsonRecord
-      : null
-    const selectedModel = stateModel?.provider && stateModel.id
-      ? `${stateModel.provider}/${stateModel.id}`
-      : runtime.record.modelKey
-    const selectedLevels: AgentThinkingLevel[] = selectedModel ? levelsByModel[selectedModel] ?? ['off'] : ['off']
-    const preferredModelByProvider: Record<string, string> = {}
-    const steeringMessages = Array.isArray(runtime.state.steering) ? runtime.state.steering.map(String) : []
-    const followUpMessages = Array.isArray(runtime.state.followUp) ? runtime.state.followUp.map(String) : []
-    for (const model of models) {
-      preferredModelByProvider[model.provider] ??= model.id
-    }
-
-    return {
-      agentId: 'pi',
-      auth: {},
-      availableModelInputs: Object.fromEntries(models.map((model) => [
-        `${model.provider}/${model.id}`,
-        model.input?.includes('image') ? ['text', 'image'] : ['text'],
-      ])),
-      availableModels,
-      availableThinkingLevels: selectedLevels,
-      availableThinkingLevelsByModel: levelsByModel,
-      compactionReason: runtime.state.compactionReason === 'manual'
-        || runtime.state.compactionReason === 'overflow'
-        || runtime.state.compactionReason === 'threshold'
-        ? runtime.state.compactionReason
-        : null,
-      defaultModel: selectedModel ?? availableModels[0] ?? null,
-      defaultThinkingLevel: normalizeThinkingLevel(runtime.state.thinkingLevel ?? runtime.record.thinkingLevel),
-      followUpMessageCount: followUpMessages.length,
-      followUpMessages,
-      followUpMode: runtime.state.followUpMode === 'all' ? 'all' : 'one-at-a-time',
-      hasConfiguredModels: availableModels.length > 0,
-      isCompacting: runtime.state.isCompacting === true,
-      isStreaming: runtime.isStreaming,
-      pendingMessageCount: typeof runtime.state.pendingMessageCount === 'number' ? runtime.state.pendingMessageCount : 0,
-      preferredModelByProvider,
-      retryAttempt: typeof runtime.state.retryAttempt === 'number' ? runtime.state.retryAttempt : 0,
-      retryMaxAttempts: typeof runtime.state.retryMaxAttempts === 'number' ? runtime.state.retryMaxAttempts : null,
-      selectedModel,
-      setupHint: availableModels.length > 0 ? null : 'PI CLI 当前没有可用模型，请先通过 PI 配置 Provider。',
-      supportedRunningPromptBehaviors: ['steer', 'followUp'],
-      supportsQueuedMessageEditing: false,
-      steeringMessageCount: steeringMessages.length,
-      steeringMessages,
-      steeringMode: runtime.state.steeringMode === 'all' ? 'all' : 'one-at-a-time',
-      supportsThinking: selectedLevels.some((level) => level !== 'off'),
-      thinkingLevel: normalizeThinkingLevel(runtime.state.thinkingLevel ?? runtime.record.thinkingLevel),
-      workspacePath: cwd,
-    }
-  }
-
   private async buildWorkspaceState(
     cwd: string,
     activeSessionID: string | null,
-    providedRuntime?: PiRuntime,
+    providedRuntime?: PiCliRuntime,
     isRequestCurrent?: () => boolean,
   ): Promise<AgentWorkspaceState> {
     const records = await this.sessionCatalog.list(cwd)
@@ -894,17 +558,9 @@ export class PiCliAgentManager {
     const draftRuntime = activeRuntime ?? await this.createEphemeralRuntime(cwd)
     try {
       return {
-        activeSession: activeRuntime ? await this.serializeSession(activeRuntime) : null,
-        runtime: this.serializeRuntime(cwd, draftRuntime),
-        sessions: records.map((record) => ({
-          createdAt: record.createdAt,
-          id: record.id,
-          messageCount: record.messageCount ?? 0,
-          modifiedAt: record.updatedAt,
-          name: record.name,
-          path: record.id,
-          preview: record.name ?? record.preview ?? 'PI CLI session',
-        })),
+        activeSession: activeRuntime ? await serializePiCliSession(activeRuntime) : null,
+        runtime: serializePiCliRuntime(cwd, draftRuntime),
+        sessions: records.map(createPiCliSessionListItem),
       }
     } finally {
       if (!activeRuntime) await this.runtimeCoordinator.retireLease(draftRuntime.lease)
@@ -991,7 +647,7 @@ export class PiCliAgentManager {
   private withRuntime<TResult>(
     cwd: string,
     sessionID: string,
-    operation: (runtime: PiRuntime) => Promise<TResult> | TResult,
+    operation: (runtime: PiCliRuntime) => Promise<TResult> | TResult,
     options: { allowCreate?: boolean } = {},
   ) {
     return this.runtimeCoordinator.use(
@@ -1009,14 +665,14 @@ export class PiCliAgentManager {
     )
   }
 
-  private requireRuntimeWorkspace(runtime: PiRuntime, cwd: string) {
+  private requireRuntimeWorkspace(runtime: PiCliRuntime, cwd: string) {
     if (workspaceIdentity(runtime.record.cwd) !== workspaceIdentity(cwd)) {
       throw new Error('PI CLI session not found for this workspace.')
     }
     return runtime
   }
 
-  private async setRuntimeModel(runtime: PiRuntime, modelKey: string) {
+  private async setRuntimeModel(runtime: PiCliRuntime, modelKey: string) {
     const separator = modelKey.indexOf('/')
     if (separator <= 0 || separator === modelKey.length - 1) throw new Error(`Invalid PI model key "${modelKey}".`)
     await runtime.process.request({
@@ -1031,7 +687,7 @@ export class PiCliAgentManager {
     await this.sessionCatalog.update(record)
   }
 
-  private async touchRecord(runtime: PiRuntime) {
+  private async touchRecord(runtime: PiCliRuntime) {
     if (runtime.lease.isCurrent()) await this.updateRecord(runtime.record)
   }
 }
