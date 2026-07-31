@@ -148,7 +148,7 @@ const CommandInput = React.forwardRef<
     <input
       ref={ref}
       className={cn(
-        "w-full border-b bg-transparent px-3 text-[var(--app-item-font-size)] outline-none placeholder:text-[var(--foreground-secondary)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]",
+        "w-full border-b bg-transparent px-3 text-[var(--app-item-font-size)] outline-none placeholder:text-[var(--foreground-secondary)]",
         className
       )}
       value={query}
@@ -353,7 +353,7 @@ const Input = React.forwardRef<
       ref={ref}
       type={type}
       className={cn(
-        "flex h-9 w-full min-w-0 rounded-md border bg-[var(--background-primary)] px-3 py-1 text-sm text-[var(--foreground-primary)] shadow-xs outline-none transition-colors placeholder:text-[var(--foreground-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--focus)] disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-9 w-full min-w-0 rounded-md border bg-[var(--background-primary)] px-3 py-1 text-sm text-[var(--foreground-primary)] shadow-xs outline-none transition-colors placeholder:text-[var(--foreground-secondary)] disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
       {...props}
@@ -3554,7 +3554,7 @@ function FileSystemSearchField({
   const input = (
     <div
       className={cn(
-        "relative flex h-8 min-w-0 flex-1 items-center rounded-[8px] border border-[var(--border-primary)] bg-[var(--overlay)] text-sm text-[var(--foreground-primary)] shadow-xs/5 transition-shadow outline-none not-dark:bg-clip-padding before:pointer-events-none before:absolute before:inset-0 before:rounded-[7px] not-focus-within:before:shadow-[0_1px_color-mix(in_oklab,var(--foreground-primary)_4%,transparent)] focus-within:ring-2 focus-within:ring-[var(--focus)] focus-within:ring-offset-1 focus-within:ring-offset-[var(--background-primary)] dark:bg-[color-mix(in_oklab,var(--border-primary)_32%,transparent)] dark:not-focus-within:before:shadow-[0_-1px_color-mix(in_oklab,var(--foreground-primary)_6%,transparent)]",
+        "relative flex h-8 min-w-0 flex-1 items-center rounded-[8px] border border-[var(--border-primary)] bg-[var(--overlay)] text-sm text-[var(--foreground-primary)] shadow-xs/5 transition-shadow outline-none not-dark:bg-clip-padding before:pointer-events-none before:absolute before:inset-0 before:rounded-[7px] before:shadow-[0_1px_color-mix(in_oklab,var(--foreground-primary)_4%,transparent)] dark:bg-[color-mix(in_oklab,var(--border-primary)_32%,transparent)] dark:before:shadow-[0_-1px_color-mix(in_oklab,var(--foreground-primary)_6%,transparent)]",
         isInline && "max-w-56"
       )}
     >

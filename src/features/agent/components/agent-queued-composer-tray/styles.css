@@ -111,11 +111,6 @@
   line-height: 1.2;
 }
 
-.agent-queued-edit-input:focus {
-  border-color: color-mix(in oklab, var(--accent) 52%, var(--border-primary));
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 18%, transparent);
-}
-
 @media (max-width: 640px) {
   .agent-queued-row {
     grid-template-columns: auto minmax(0, 1fr);

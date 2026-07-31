@@ -225,3 +225,35 @@
   --default-foreground: var(--foreground-on-default);
   --border: var(--border-primary);
 }
+
+/* Text-entry controls keep focus behavior without drawing focus rings. */
+:where(
+  input:not([type]),
+  input:is(
+    [type='text'],
+    [type='search'],
+    [type='email'],
+    [type='password'],
+    [type='url'],
+    [type='tel'],
+    [type='number'],
+    [type='date'],
+    [type='time'],
+    [type='datetime-local'],
+    [type='month'],
+    [type='week']
+  ),
+  textarea,
+  [contenteditable]:not([contenteditable='false']),
+  [role='textbox'],
+  [role='searchbox']
+):is(
+  :focus,
+  :focus-visible,
+  [data-focused='true'],
+  [data-focus-visible='true']
+):not([data-invalid], [aria-invalid='true']) {
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  outline: none !important;
+}

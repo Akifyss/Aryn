@@ -69,6 +69,46 @@ body > .aryn-opencode-portal-theme {
   --v2-state-fg-warning: var(--warning);
 }
 
+/* Text-entry controls keep focus functional without a ring. */
+:where(
+  input:not([type]),
+  input:is(
+    [type='text'],
+    [type='search'],
+    [type='email'],
+    [type='password'],
+    [type='url'],
+    [type='tel'],
+    [type='number'],
+    [type='date'],
+    [type='time'],
+    [type='datetime-local'],
+    [type='month'],
+    [type='week']
+  ),
+  textarea,
+  [contenteditable]:not([contenteditable='false']),
+  [role='textbox'],
+  [role='searchbox']
+):is(:focus, :focus-visible, [data-state='focus']):not(
+  [data-invalid],
+  [aria-invalid='true']
+) {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+:where(
+  [data-component='input'] [data-slot='input-wrapper']:not(:has([data-invalid])),
+  [data-component='inline-input']:not([data-invalid]),
+  [data-component='inline-input-v2']:not([data-invalid]),
+  [data-component='text-input-v2']:not([data-invalid]),
+  [data-component='textarea-v2']:not([data-invalid])
+):focus-within {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
 body > .aryn-opencode-portal-theme {
   color-scheme: inherit;
 }

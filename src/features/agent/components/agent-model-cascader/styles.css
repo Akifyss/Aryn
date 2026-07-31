@@ -71,11 +71,6 @@
   flex: 0 0 auto;
 }
 
-.agent-model-cascader-search:focus-within {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-
 .agent-model-cascader-search input {
   flex: 1 1 auto;
   width: 100%;

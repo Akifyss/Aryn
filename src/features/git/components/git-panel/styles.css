@@ -217,13 +217,6 @@
   color: var(--field-placeholder);
 }
 
-.git-commit-textarea:focus,
-.git-commit-textarea:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
-  border-color: var(--separator);
-}
-
 @media (max-width: 860px) {
   .git-panel-header {
     align-items: stretch;

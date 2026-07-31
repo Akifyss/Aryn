@@ -73,11 +73,6 @@
   background: var(--background-primary);
 }
 
-.project-menu-search:focus-within {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-
 .project-menu-search > svg {
   flex: 0 0 auto;
   width: var(--icon-size-md);

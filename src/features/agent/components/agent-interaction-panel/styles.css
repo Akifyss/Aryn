@@ -120,11 +120,6 @@
   font-size: 12px;
 }
 
-.agent-interaction-input:focus-visible {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
-}
-
 .agent-interaction-input.is-multiline {
   min-height: 5.5rem;
   resize: vertical;

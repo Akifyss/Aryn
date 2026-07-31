@@ -1528,8 +1528,8 @@
 }
 
 .meo-native-theme .find-input:focus {
-  outline: 1px solid var(--focusBorder);
-  outline-offset: 0;
+  outline: none;
+  box-shadow: none;
 }
 
 .meo-native-theme .find-status {
