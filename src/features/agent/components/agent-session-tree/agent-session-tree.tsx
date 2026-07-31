@@ -58,7 +58,7 @@ export function AgentProjectSwitchTrigger({
     >
       <ProjectIcon />
       <span className='agent-project-switch-trigger-label'>{label}</span>
-      <DownLine className='agent-project-switch-chevron' aria-hidden='true' size={14} />
+      <DownLine className='agent-project-switch-chevron' aria-hidden='true' size={16} />
     </Menu.TriggerSurface>
   )
 }

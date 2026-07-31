@@ -1,59 +1,34 @@
 import { readFile } from 'node:fs/promises'
-import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { AgentTypeSwitchOptionCopy } from '@/features/agent/components/agent-type-switch/agent-type-switch'
-import { getAgentDefinition, type AgentAvailability } from '@/features/agent/agent-definition'
 
-function availability(overrides: Partial<AgentAvailability> = {}): AgentAvailability {
-  return {
-    available: false,
-    command: 'codex',
-    definition: getAgentDefinition('codex'),
-    guidance: '完成登录后重新打开 Agent 菜单。',
-    reason: 'Codex 尚未登录',
-    version: 'codex-cli 0.144.5',
-    ...overrides,
-  }
-}
+const switchSourceUrl = new URL(
+  '../src/features/agent/components/agent-type-switch/agent-type-switch.tsx',
+  import.meta.url,
+)
 
 describe('AgentTypeSwitch', () => {
-  it('renders the unavailable reason and recovery guidance as visible content', () => {
-    const markup = renderToStaticMarkup(
-      <AgentTypeSwitchOptionCopy
-        availability={availability()}
-        guidanceId='codex-guidance'
-        reasonId='codex-reason'
-      />,
-    )
+  it('renders unavailable details through the shared description slot', async () => {
+    const source = await readFile(switchSourceUrl, 'utf8')
 
-    expect(markup).toContain('Codex 尚未登录')
-    expect(markup).toContain('完成登录后重新打开 Agent 菜单。')
-    expect(markup).toContain('id="codex-reason"')
-    expect(markup).toContain('id="codex-guidance"')
-    expect(markup).not.toContain('title=')
+    expect(source).toContain('description={isUnavailable ? (')
+    expect(source).toContain('<span id={reasonId}>')
+    expect(source).toContain('<span id={guidanceId}>')
+    expect(source).toContain('availability.reason')
+    expect(source).toContain('availability.guidance')
+    expect(source).not.toContain('AgentTypeSwitchOptionCopy')
   })
 
-  it('keeps available options compact', () => {
-    const markup = renderToStaticMarkup(
-      <AgentTypeSwitchOptionCopy
-        availability={availability({
-          available: true,
-          guidance: null,
-          reason: null,
-        })}
-      />,
-    )
+  it('keeps available options on the shared single-line item path', async () => {
+    const source = await readFile(switchSourceUrl, 'utf8')
 
-    expect(markup).toContain('Codex')
-    expect(markup).not.toContain('agent-type-switch-option-description')
-    expect(markup).not.toContain('agent-type-switch-option-guidance')
+    expect(source).toContain('text={availability.definition.label}')
+    expect(source).toContain('description={isUnavailable ? (')
+    expect(source).not.toContain('agent-type-switch-option-title')
+    expect(source).not.toContain('agent-type-switch-option-copy')
   })
 
   it('refreshes only when opening and keeps unavailable options focusable but inert', async () => {
-    const source = await readFile(
-      new URL('../src/features/agent/components/agent-type-switch/agent-type-switch.tsx', import.meta.url),
-      'utf8',
-    )
+    const source = await readFile(switchSourceUrl, 'utf8')
 
     expect(source).toContain('if (open) void onRefresh()')
     expect(source).toContain('<Menu.RadioGroup')
@@ -67,17 +42,12 @@ describe('AgentTypeSwitch', () => {
     expect(source).not.toContain('agent-type-switch-refresh')
     expect(source).not.toContain('Refresh2Line')
     expect(source).not.toContain('isRefreshing')
-    expect(source).not.toContain('重新检测')
-    expect(source).not.toContain('正在检测')
     expect(source).not.toContain('title={!availability.available')
   })
 
-  it('mounts the menu in the drawer-local overlay when the agent surface is a drawer', async () => {
+  it('mounts the menu in the drawer-local overlay while using the shared positioner', async () => {
     const [switchSource, promptSource, chatSurfaceSource, styleSource] = await Promise.all([
-      readFile(
-        new URL('../src/features/agent/components/agent-type-switch/agent-type-switch.tsx', import.meta.url),
-        'utf8',
-      ),
+      readFile(switchSourceUrl, 'utf8'),
       readFile(
         new URL(
           '../src/features/agent/components/agent-new-conversation-prompt/agent-new-conversation-prompt.tsx',
@@ -99,11 +69,13 @@ describe('AgentTypeSwitch', () => {
     ])
 
     expect(switchSource).toContain('<Menu.Portal container={menuPortalTarget ?? undefined}>')
-    expect(switchSource).toContain("className='agent-type-switch-menu-positioner'")
+    expect(switchSource).not.toContain('agent-type-switch-menu-positioner')
+    expect(switchSource).toContain('triggerIconSize = 16')
+    expect(promptSource).toContain('triggerIconSize={24}')
     expect(promptSource).toContain('<AgentTypeSwitchTrigger menuPortalTarget={menuPortalTarget} />')
     expect(chatSurfaceSource).toMatch(
       /<AgentNewConversationPrompt\s+menuPortalTarget=\{\s*surfaceMode === 'drawer' \? localOverlayRoot : undefined\s*\}/,
     )
-    expect(styleSource).toMatch(/\.agent-type-switch-menu-positioner\s*\{[^}]*pointer-events:\s*auto;/s)
+    expect(styleSource).not.toContain('.agent-type-switch-menu-positioner')
   })
 })

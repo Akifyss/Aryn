@@ -315,7 +315,7 @@ function CsvFileActionsMenu({
       >
         <More2Line aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40">
+      <DropdownMenuContent align="end">
         {showDownload ? (
           <DropdownMenuItem
             disabled={downloadDisabled}

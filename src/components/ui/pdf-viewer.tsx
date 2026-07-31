@@ -568,7 +568,7 @@ function PDFViewerFileActionsMenu({
         <DropdownMenuTrigger label={VIEWER_COPY.openPdfActions}>
           <More2Line aria-hidden="true" className="size-4" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuContent align="end">
           {showDownload && onDownload ? (
             <DropdownMenuItem
               disabled={downloadDisabled}

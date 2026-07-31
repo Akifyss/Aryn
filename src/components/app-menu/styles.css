@@ -58,6 +58,7 @@
 .app-menu-scroll-viewport.app-scroll-area-viewport {
   inline-size: calc(100% - var(--app-menu-content-padding) - var(--app-menu-content-padding));
   margin-inline: var(--app-menu-content-padding);
+  overscroll-behavior: contain;
 }
 
 .app-menu-item {

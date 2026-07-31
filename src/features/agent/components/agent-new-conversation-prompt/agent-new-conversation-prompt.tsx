@@ -29,6 +29,8 @@ function AgentTypeSwitchTrigger({
       menuPortalTarget={menuPortalTarget}
       refreshError={agentCatalogRefreshError}
       selectedAgentId={selectedAgentId}
+      // This trigger is inline with the 24px hero heading.
+      triggerIconSize={24}
       onRefresh={refreshAgentCatalog}
       onSelect={setSelectedAgentId}
     />

@@ -352,7 +352,7 @@ function DocxFileActionsMenu({
       <DropdownMenuTrigger label={VIEWER_COPY.openDocxActions}>
         <More2Line aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuContent align="end">
         {showNightRenderToggle ? (
           <>
             <DropdownMenuCheckboxItem

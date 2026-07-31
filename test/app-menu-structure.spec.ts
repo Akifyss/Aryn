@@ -129,12 +129,11 @@ describe('shared application menu', () => {
       expect(source).toContain('<Menu.Option')
       expect(source).not.toMatch(/className=\{?['"`]app-menu-item/)
     }
-    expect(agentModelSource).toMatch(
-      /text=\{<span className='agent-model-cascader-option-main'>\{provider\}<\/span>\}[\s\S]{0,160}info=\{<RightLine[\s\S]{0,100}size=\{16\}/,
-    )
-    expect(agentModelSource).toMatch(
-      /info=\{<span className='agent-model-cascader-option-sub'>\{option\.provider\}<\/span>\}[\s\S]{0,80}infoVariant='text'/,
-    )
+    expect(agentModelSource).toContain('text={provider}')
+    expect(agentModelSource).toContain("info={<RightLine aria-hidden='true' size={16} />}")
+    expect(agentModelSource).toContain('info={option.provider}')
+    expect(agentModelSource).not.toContain('agent-model-cascader-option-main')
+    expect(agentModelSource).not.toContain('agent-model-cascader-option-sub')
     expect(agentModelSource).not.toMatch(
       /text=\{\([\s\S]{0,180}<RightLine/,
     )
@@ -240,7 +239,7 @@ describe('shared application menu', () => {
     expect(appMenuSource).toContain('export const AppMenuSelectItem')
 
     expect(projectMenuCss).not.toContain('.project-menu-list-content')
-    expect(projectMenuCss).not.toContain('--app-item-font-size')
+    expect(projectMenuCss).not.toContain('--app-item-font-size:')
     expect(projectMenuSource).toContain("<Menu.ScrollContent className='project-menu-project-list'>")
     expect(projectMenuSource).toContain("<Menu.List className='project-menu-actions'>")
     expect(projectMenuSource).not.toContain('project-menu-projectless-actions')
@@ -319,6 +318,9 @@ describe('shared application menu', () => {
     expect(appMenuSource).toContain('if (render !== undefined)')
     expect(appMenuSource).toContain("const resolvedVariant = variant ?? 'outline'")
     expect(appMenuSource).toContain('function createAppMenuVisualTrigger')
+    expect(appMenuSource).toContain("return cx('app-menu-trigger', className)")
+    expect(appMenuSource).not.toContain('`app-menu-trigger-${variant}`')
+    expect(appMenuSource).not.toContain('`app-menu-trigger-${size}`')
     expect(appMenuSource).toContain('const resolvedRender = createAppMenuVisualTrigger')
     expect(appMenuSource).toContain('<AppIconButton')
     expect(appMenuSource).toContain('tooltip={iconTooltip}')
@@ -384,7 +386,7 @@ describe('shared application menu', () => {
       /\.app-menu-scroll-area\.app-scroll-area\s*\{[^}]*inline-size:\s*calc\(100% \+ var\(--app-menu-content-padding\) \+ var\(--app-menu-content-padding\)\);[^}]*margin-inline:\s*calc\(0px - var\(--app-menu-content-padding\)\);[^}]*--app-scroll-area-scrollbar-gap:\s*0px;/,
     )
     expect(appMenuCss).toMatch(
-      /\.app-menu-scroll-viewport\.app-scroll-area-viewport\s*\{[^}]*inline-size:\s*calc\(100% - var\(--app-menu-content-padding\) - var\(--app-menu-content-padding\)\);[^}]*margin-inline:\s*var\(--app-menu-content-padding\);/,
+      /\.app-menu-scroll-viewport\.app-scroll-area-viewport\s*\{[^}]*inline-size:\s*calc\(100% - var\(--app-menu-content-padding\) - var\(--app-menu-content-padding\)\);[^}]*margin-inline:\s*var\(--app-menu-content-padding\);[^}]*overscroll-behavior:\s*contain;/,
     )
     expect(indexCss).toContain('--app-menu-content-padding: 6px;')
     expect(indexCss).toContain('--app-item-list-gap: 2px;')
@@ -542,6 +544,7 @@ describe('shared application menu', () => {
     expect(settingsSelectSource).not.toContain('<BaseSelect.')
     expect(settingsSelectSource).not.toContain('@base-ui/react/scroll-area')
     expect(fileSystemSource).toContain('alignItemWithTrigger={alignItemWithTrigger}')
+    expect(fileSystemSource).not.toContain('alignItemWithTrigger={false}')
     expect(fileSystemSource).toContain('<MenuSelect.Trigger')
     expect(fileSystemSource).toMatch(
       /<MenuSelect\.Trigger[\s\S]{0,320}size=\{size\}[\s\S]{0,80}variant="outline"/,
@@ -553,6 +556,9 @@ describe('shared application menu', () => {
     expect(fileSystemSource).not.toContain('className="h-8 min-h-8 shrink-0 [&_svg]:size-4"')
     expect(fileSystemSource).toContain('<MenuSelect.Value')
     expect(fileSystemSource).toContain('<MenuSelect.Item')
+    expect(fileSystemSource).toMatch(
+      /<SelectItem[\s\S]{0,180}icon=\{<SystemIcon[\s\S]{0,120}>\s*\{option\.label\}/,
+    )
     expect(fileSystemSource).not.toContain('<BaseSelect.')
     expect(fileSystemSource).not.toContain('alignItemWithTrigger: _alignItemWithTrigger')
   })
@@ -566,8 +572,11 @@ describe('shared application menu', () => {
       agentQueuedCss,
       agentSessionCss,
       agentTypeCss,
+      agentTypeSource,
       fileSystemSource,
       gitCss,
+      mentionCss,
+      projectMenuSource,
       treeCss,
     ] = await Promise.all([
       readFile(new URL('../src/components/app-menu/app-menu.tsx', import.meta.url), 'utf8'),
@@ -577,14 +586,21 @@ describe('shared application menu', () => {
       readFile(new URL('../src/features/agent/components/agent-queued-composer-tray/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/agent/components/agent-session-tree/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/agent/components/agent-type-switch/styles.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/features/agent/components/agent-type-switch/agent-type-switch.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/ui/file-system/file-system.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/git/components/git-panel/styles.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/features/agent/components/agent-composer-mention-input/styles.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/features/workspace/components/project-menu/project-menu.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/tree/styles.css', import.meta.url), 'utf8'),
     ])
     const businessCssFiles = [
       ...await collectCssFiles(new URL('../src/features/', import.meta.url)),
       ...await collectCssFiles(new URL('../src/components/ui/', import.meta.url)),
     ]
+    const fileTypeCommandSource = fileSystemSource.slice(
+      fileSystemSource.indexOf('function FileSystemFileTypeCommand'),
+      fileSystemSource.indexOf('// Toolbar filter menu:'),
+    )
     const prohibitedOverrides: string[] = []
 
     await Promise.all(businessCssFiles.map(async (fileUrl) => {
@@ -604,6 +620,10 @@ describe('shared application menu', () => {
     }))
 
     expect(prohibitedOverrides).toEqual([])
+    for (const fileUrl of businessCssFiles) {
+      const source = await readFile(fileUrl, 'utf8')
+      expect(source, fileUrl.pathname).not.toMatch(/\.[a-z0-9-]*(?:menu|select)-positioner\b/i)
+    }
     expect(treeCss).not.toContain('--app-item-row-padding-x:')
     expect(treeCss).not.toContain('--app-item-row-description-min-height: 48px;')
     expect(gitCss).not.toContain('--app-item-row-description-min-height:')
@@ -615,23 +635,37 @@ describe('shared application menu', () => {
     expect(agentModelSource).toContain('is-highlighted')
     expect(agentModelSource).not.toContain('is-active')
     expect(agentModelCss).not.toContain('.agent-model-cascader-option.is-active')
+    expect(agentModelCss).not.toContain('.agent-model-cascader-option-main')
+    expect(agentModelCss).not.toContain('.agent-model-cascader-option-sub')
+    expect(agentModelCss).not.toContain('.agent-model-cascader-option-arrow')
     expect(agentModelCss).not.toContain('--app-menu-item-hover-background')
     expect(agentModelCss).toContain('--app-menu-popup-max-width: 680px;')
     expect(agentModelCss).not.toMatch(
       /\.agent-model-cascader-trigger-thinking\s*\{[^}]*(?:font-size|line-height):/,
     )
     expect(agentTypeCss).not.toContain('.agent-type-switch-menu-separator')
+    expect(agentTypeCss).not.toContain('.agent-type-switch-option-title')
+    expect(agentTypeCss).not.toContain('.agent-type-switch-option-copy')
+    expect(agentTypeCss).not.toContain('.agent-type-switch-option {')
+    expect(agentTypeCss).not.toContain('.agent-type-switch-option >')
     expect(agentTypeCss).not.toMatch(
       /\.agent-type-switch-trigger\s*\{[^}]*(?:font-size|line-height):/,
     )
+    expect(agentTypeSource).not.toContain('AgentTypeSwitchOptionCopy')
+    expect(agentTypeSource).toContain('text={availability.definition.label}')
+    expect(agentTypeSource).toContain('description={isUnavailable ? (')
     expect(agentSessionCss).not.toMatch(
       /\.agent-project-switch-trigger\s*\{[^}]*line-height:/,
     )
     expect(agentQueuedCss).not.toMatch(/\.agent-queued-action\s*\{/)
     expect(agentQueuedCss).not.toMatch(/\.agent-queued-action\[aria-expanded/)
     expect(agentNewPromptCss).toMatch(
-      /\.agent-new-conversation-prompt h2 \.agent-project-switch-trigger\s*\{[^}]*font-size:\s*inherit;/,
+      /\.agent-new-conversation-prompt h2 \.app-menu-trigger\s*\{[^}]*font-size:\s*inherit;/,
     )
+    expect(mentionCss).not.toMatch(
+      /\.agent-composer-mention-option-inline \.agent-composer-mention-option-label\s*\{[^}]*(?:font-size|font-weight|line-height):/,
+    )
+    expect(projectMenuSource).not.toContain('size={18}')
 
     expect(appMenuSource).toContain('export const AppMenuSelectGroup')
     expect(appMenuSource).toContain('Group: AppMenuSelectGroup')
@@ -640,5 +674,11 @@ describe('shared application menu', () => {
     expect(fileSystemSource).toMatch(
       /<DropdownMenuItem[\s\S]{0,100}text=\{dateFilterPresetLabel\(preset\)\}/,
     )
+    expect(fileTypeCommandSource).toContain('<CommandItem')
+    expect(fileTypeCommandSource).toContain('icon={(')
+    expect(fileTypeCommandSource).toContain('info={isChecked ?')
+    expect(fileTypeCommandSource).toContain('infoVariant="status"')
+    expect(fileTypeCommandSource).toContain('text={option.label}')
+    expect(fileTypeCommandSource).not.toMatch(/<CommandItem[\s\S]*?>[\s\S]*?<\/CommandItem>/)
   })
 })

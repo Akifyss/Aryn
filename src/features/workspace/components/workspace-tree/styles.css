@@ -19,17 +19,6 @@
   color: var(--accent);
 }
 
-.workspace-tree-menu-positioner {
-  z-index: 82;
-  pointer-events: auto;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.workspace-tree-menu-portal {
-  pointer-events: auto;
-}
-
 .workspace-tree-root.is-root-drop-target {
   outline: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   outline-offset: -1px;

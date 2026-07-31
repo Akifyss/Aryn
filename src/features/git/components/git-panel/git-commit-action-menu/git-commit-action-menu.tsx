@@ -2,7 +2,6 @@ import { type MouseEvent, useEffect, useState } from 'react'
 import { ArrowUpCircleLine, CheckLine, DownLine } from '@mingcute/react'
 import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
 import { AppSplitButton } from '@/components/app-split-button'
-import './styles.css'
 
 function runCommitMenuAction(event: MouseEvent<HTMLElement>, action: () => void) {
   event.stopPropagation()
@@ -70,23 +69,17 @@ export function GitCommitActionMenu({
         <DownLine size={16} aria-hidden='true' />
       </Menu.Trigger>
       <Menu.Portal
-        className='git-commit-menu-portal'
         container={menuPortalTarget ?? undefined}
       >
         <Menu.Positioner
           align='end'
-          className='git-commit-menu-positioner'
-          collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
-          collisionPadding={8}
           positionMethod='fixed'
           side='bottom'
-          sideOffset={4}
         >
           <Menu.Popup
             aria-label='提交选项'
-            className='git-commit-menu'
             finalFocus={false}
-            size='fit'
+            size='sm'
           >
             <Menu.Item
               disabled={commitDisabled}

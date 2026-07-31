@@ -54,21 +54,8 @@ function mergeStatefulClassName<State>(
   return cx(baseClassName, className)
 }
 
-function appMenuTriggerClassName({
-  className,
-  size,
-  variant,
-}: {
-  className?: string
-  size: AppMenuTriggerSize
-  variant: AppMenuTriggerVariant
-}) {
-  return cx(
-    'app-menu-trigger',
-    `app-menu-trigger-${variant}`,
-    `app-menu-trigger-${size}`,
-    className,
-  )
+function appMenuTriggerClassName(className?: string) {
+  return cx('app-menu-trigger', className)
 }
 
 export type AppMenuTriggerSurfaceProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'> & {
@@ -92,7 +79,7 @@ export const AppMenuTriggerSurface = forwardRef<HTMLButtonElement, AppMenuTrigge
     },
     ref,
   ) {
-    const triggerClassName = appMenuTriggerClassName({ className, size, variant })
+    const triggerClassName = appMenuTriggerClassName(className)
 
     return (
       <AppButton
@@ -282,10 +269,7 @@ function createAppMenuVisualTrigger({
     )
     : (
       <AppButton
-        className={appMenuTriggerClassName({
-          size,
-          variant,
-        })}
+        className={appMenuTriggerClassName()}
         size={size}
         variant={variant}
       />

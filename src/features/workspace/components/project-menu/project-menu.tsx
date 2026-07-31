@@ -93,17 +93,15 @@ export function ProjectMenu({
   const projectMenuActions = (
     <Menu.List className='project-menu-actions'>
       <Menu.Item
-        className='project-menu-action'
         disabled={isBusy}
-        icon={<NewFolderLine aria-hidden='true' size={18} />}
+        icon={<NewFolderLine aria-hidden='true' size={16} />}
         label='新建空白项目'
         text='新建空白项目'
         onClick={onCreateProject}
       />
       <Menu.Item
-        className='project-menu-action'
         disabled={isBusy}
-        icon={<FolderOpenLine aria-hidden='true' size={18} />}
+        icon={<FolderOpenLine aria-hidden='true' size={16} />}
         label='使用现有文件夹'
         text='使用现有文件夹'
         onClick={() => {
@@ -112,9 +110,8 @@ export function ProjectMenu({
       />
       {showProjectlessAction ? (
         <Menu.Item
-          className='project-menu-action'
           disabled={isBusy}
-          icon={<FolderForbidLine aria-hidden='true' size={18} />}
+          icon={<FolderForbidLine aria-hidden='true' size={16} />}
           label='不使用项目'
           text='不使用项目'
           onClick={() => {
@@ -153,8 +150,6 @@ export function ProjectMenu({
         <Menu.Positioner
           align={menuAlign}
           anchor={menuAnchor}
-          className={`project-menu-positioner${surface === 'global' ? '' : ' is-local'}`}
-          collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
           collisionBoundary={collisionBoundary}
           collisionPadding={PROJECT_MENU_MARGIN_PX}
           positionMethod='fixed'
@@ -162,7 +157,7 @@ export function ProjectMenu({
           sideOffset={PROJECT_MENU_GAP_PX}
         >
           <Menu.Popup
-            className={`project-menu project-menu-${renderedMode}`}
+            className='project-menu'
             data-surface={surface}
             aria-label={isSwitchMenu && hasProjects ? '切换项目' : '添加项目'}
             finalFocus={false}
@@ -197,7 +192,6 @@ export function ProjectMenu({
                           return (
                             <Menu.Item
                               key={project.id}
-                              className='project-menu-project'
                               disabled={isBusy}
                               info={isActive ? <CheckLine aria-hidden='true' size={16} /> : undefined}
                               infoVariant='status'

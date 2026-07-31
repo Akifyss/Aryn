@@ -169,7 +169,6 @@ describe('Git panel model ownership', () => {
       changeSectionSource,
       changeSectionCss,
       commitActionMenuSource,
-      commitActionMenuCss,
       historySource,
       historyCss,
     ] = await Promise.all([
@@ -210,13 +209,6 @@ describe('Git panel model ownership', () => {
       ),
       readFile(
         new URL(
-          '../src/features/git/components/git-panel/git-commit-action-menu/styles.css',
-          import.meta.url,
-        ),
-        'utf8',
-      ),
-      readFile(
-        new URL(
           '../src/features/git/components/git-panel/git-history/git-history.tsx',
           import.meta.url,
         ),
@@ -240,7 +232,6 @@ describe('Git panel model ownership', () => {
 
     for (const source of [
       changeSectionSource,
-      commitActionMenuSource,
       historySource,
     ]) {
       expect(source).toContain("import './styles.css'")
@@ -250,7 +241,9 @@ describe('Git panel model ownership', () => {
     expect(panelCss).not.toContain('.git-commit-menu {')
     expect(panelCss).not.toContain('.git-history-pane {')
     expect(changeSectionCss).toContain('.git-panel-section {')
-    expect(commitActionMenuCss).toContain('.git-commit-menu {')
+    expect(commitActionMenuSource).not.toContain("import './styles.css'")
+    expect(commitActionMenuSource).not.toContain("className='git-commit-menu'")
+    expect(commitActionMenuSource).toContain("size='sm'")
     expect(historyCss).toContain('.git-history-pane {')
   })
 })

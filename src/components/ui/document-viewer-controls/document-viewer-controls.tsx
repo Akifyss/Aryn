@@ -392,7 +392,7 @@ function ViewerZoomSelect({
         type="button"
         aria-label={ariaLabel}
         className={cn(
-          "viewer-toolbar-select shrink-0 justify-between gap-1 tabular-nums disabled:pointer-events-none disabled:cursor-default disabled:opacity-50",
+          "viewer-toolbar-select shrink-0 justify-between tabular-nums",
           className,
         )}
         size="md"
@@ -408,13 +408,12 @@ function ViewerZoomSelect({
       <Select.Portal>
         <Select.Positioner
           alignItemWithTrigger
-          collisionPadding={8}
           positionMethod="fixed"
         >
           <Select.Popup
-            className="w-32 overflow-hidden"
             size="sm"
             style={{
+              // Keep long zoom lists usable without turning the toolbar menu into a page-height panel.
               "--app-menu-popup-max-height": "384px",
             } as React.CSSProperties}
           >
@@ -556,7 +555,7 @@ export function ViewerMenuContent({
   children,
   className,
   side = "bottom",
-  sideOffset = 4,
+  sideOffset,
 }: {
   align?: "center" | "end" | "start";
   children: React.ReactNode;
@@ -568,7 +567,6 @@ export function ViewerMenuContent({
     <Menu.Portal>
       <Menu.Positioner
         align={align}
-        collisionPadding={8}
         side={side}
         sideOffset={sideOffset}
       >

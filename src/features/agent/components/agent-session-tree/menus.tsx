@@ -7,12 +7,8 @@ import { AppMenu as Menu } from '@/components/app-menu'
 import { getSystemFileManagerName } from '@/features/agent/lib/system-file-manager'
 
 const AGENT_TREE_MENU_POSITIONER_PROPS = {
-  className: 'agent-tree-menu-positioner',
-  collisionAvoidance: { side: 'flip', align: 'shift', fallbackAxisSide: 'none' },
-  collisionPadding: 8,
   positionMethod: 'fixed',
   side: 'bottom',
-  sideOffset: 2,
 } as const
 
 type AgentTreeMenuItemComponent = typeof Menu.Item
@@ -62,7 +58,6 @@ export function AgentTreeMenuPopup({
 }) {
   return (
     <Menu.Portal
-      className='agent-tree-menu-portal'
       container={menuPortalTarget ?? undefined}
     >
       <Menu.Positioner
@@ -70,9 +65,8 @@ export function AgentTreeMenuPopup({
         {...AGENT_TREE_MENU_POSITIONER_PROPS}
       >
         <Menu.Popup
-          className='agent-session-tree-menu agent-tree-context-menu'
           data-agent-tree-menu-root='true'
-          size='fit'
+          size='sm'
         >
           <AgentTreeActionMenuItems disabled={disabled} onDelete={onDelete} onRename={onRename} />
         </Menu.Popup>
@@ -94,7 +88,6 @@ export function AgentTreeContextMenuPopup({
 }) {
   return (
     <Menu.Context.Portal
-      className='agent-tree-menu-portal'
       container={menuPortalTarget ?? undefined}
     >
       <Menu.Context.Positioner
@@ -102,9 +95,8 @@ export function AgentTreeContextMenuPopup({
         {...AGENT_TREE_MENU_POSITIONER_PROPS}
       >
         <Menu.Context.Popup
-          className='agent-session-tree-menu agent-tree-context-menu'
           data-agent-tree-menu-root='true'
-          size='fit'
+          size='sm'
         >
           <AgentTreeActionMenuItems
             disabled={disabled}
@@ -159,7 +151,6 @@ export function AgentProjectMenuPopup({
 }) {
   return (
     <Menu.Portal
-      className='agent-tree-menu-portal'
       container={menuPortalTarget ?? undefined}
     >
       <Menu.Positioner
@@ -167,7 +158,6 @@ export function AgentProjectMenuPopup({
         {...AGENT_TREE_MENU_POSITIONER_PROPS}
       >
         <Menu.Popup
-          className='agent-project-menu agent-tree-context-menu'
           data-agent-tree-menu-root='true'
           size='md'
         >
@@ -189,7 +179,6 @@ export function AgentProjectContextMenuPopup({
 }) {
   return (
     <Menu.Context.Portal
-      className='agent-tree-menu-portal'
       container={menuPortalTarget ?? undefined}
     >
       <Menu.Context.Positioner
@@ -197,7 +186,6 @@ export function AgentProjectContextMenuPopup({
         {...AGENT_TREE_MENU_POSITIONER_PROPS}
       >
         <Menu.Context.Popup
-          className='agent-project-menu agent-tree-context-menu'
           data-agent-tree-menu-root='true'
           size='md'
         >

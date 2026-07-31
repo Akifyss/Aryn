@@ -1105,8 +1105,8 @@ export function AgentModelCascader({
                         aria-selected={option.key === selectedModelKey}
                         className={`agent-model-cascader-option${option.key === activeModelOption?.key ? ' is-highlighted' : ''}`}
                         selected={option.key === selectedModelKey}
-                        text={<span className='agent-model-cascader-option-main'>{option.modelId}</span>}
-                        info={<span className='agent-model-cascader-option-sub'>{option.provider}</span>}
+                        text={option.modelId}
+                        info={option.provider}
                         infoVariant='text'
                         onFocus={() => {
                           activateModelPreview(option.key)
@@ -1144,8 +1144,8 @@ export function AgentModelCascader({
                           aria-selected={provider === resolvedPreviewProvider}
                           className={`agent-model-cascader-option${provider === resolvedPreviewProvider ? ' is-highlighted' : ''}`}
                           selected={provider === currentProvider}
-                          text={<span className='agent-model-cascader-option-main'>{provider}</span>}
-                          info={<RightLine aria-hidden='true' className='agent-model-cascader-option-arrow' size={16} />}
+                          text={provider}
+                          info={<RightLine aria-hidden='true' size={16} />}
                           infoVariant='status'
                           onFocus={() => {
                             setKeyboardColumn('provider')
@@ -1184,7 +1184,7 @@ export function AgentModelCascader({
                           aria-selected={option.key === selectedModelKey}
                           className={`agent-model-cascader-option${option.key === activeModelOption?.key ? ' is-highlighted' : ''}`}
                           selected={option.key === selectedModelKey}
-                          text={<span className='agent-model-cascader-option-main'>{option.modelId}</span>}
+                          text={option.modelId}
                           onFocus={() => {
                             activateModelPreview(option.key)
                             setKeyboardColumn('model')
@@ -1228,7 +1228,7 @@ export function AgentModelCascader({
                         aria-selected={level === selectedActiveThinkingLevel}
                         className={`agent-model-cascader-option${level === previewThinkingLevel ? ' is-highlighted' : ''}`}
                         selected={level === selectedActiveThinkingLevel}
-                        text={<span className='agent-model-cascader-option-main'>{formatThinkingLevelLabel(level)}</span>}
+                        text={formatThinkingLevelLabel(level)}
                         onFocus={() => {
                           setActiveThinkingLevel(level)
                           setKeyboardColumn('thinking')

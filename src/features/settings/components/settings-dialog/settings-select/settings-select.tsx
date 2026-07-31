@@ -58,11 +58,8 @@ export function SettingsSelect({
       <Select.Positioner
         align='start'
         alignItemWithTrigger
-        className='settings-select-positioner'
-        collisionPadding={8}
         positionMethod='fixed'
         side='bottom'
-        sideOffset={6}
       >
         <Select.Popup
           className='settings-select-popup'

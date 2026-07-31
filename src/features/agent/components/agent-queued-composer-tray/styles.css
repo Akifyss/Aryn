@@ -88,17 +88,6 @@
   display: inline-flex;
 }
 
-.agent-queued-menu-positioner {
-  z-index: 80;
-  pointer-events: auto;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.agent-queued-menu {
-  width: 148px;
-}
-
 .agent-queued-edit-input {
   flex: 1 1 auto;
   width: 100%;

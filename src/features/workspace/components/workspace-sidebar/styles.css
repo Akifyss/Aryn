@@ -63,6 +63,7 @@
   padding-left: 6px;
 }
 
+/* The full-width switch aligns with the sidebar tab rail, so its inset is intentionally local. */
 .workspace-sidebar-surface .editor-workspace-switch-button {
   flex: 1 1 auto;
   width: 100%;

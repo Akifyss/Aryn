@@ -55,29 +55,24 @@
 }
 
 .agent-session-trigger {
-  display: flex;
-  align-items: center;
   width: 100%;
-  min-width: 0;
   flex: 0 1 auto;
   max-width: 100%;
   overflow: hidden;
   align-self: center;
   justify-content: flex-start;
-  margin-left: 0;
-  letter-spacing: -0.01em;
   text-align: left;
   text-overflow: ellipsis;
-  text-transform: none;
 }
 
 .agent-session-trigger-arrow {
-  width: 14px;
-  height: 14px;
   flex: 0 0 auto;
   color: var(--foreground-secondary);
   opacity: 0.75;
-  transition: color 120ms ease, opacity 120ms ease, transform 120ms ease;
+  transition:
+    color var(--app-button-base-transition-duration) ease,
+    opacity var(--app-button-base-transition-duration) ease,
+    transform var(--app-button-base-transition-duration) ease;
 }
 
 .agent-session-trigger:hover:not(:disabled) .agent-session-trigger-arrow,
@@ -106,9 +101,6 @@
   min-width: 0;
   overflow: hidden;
   color: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -155,13 +147,6 @@
   max-height: min(416px, calc(100vh - 16px));
 }
 
-.agent-session-menu-positioner {
-  z-index: 1200;
-  pointer-events: auto;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
 .agent-local-overlay-root {
   position: absolute;
   inset: 0;
@@ -193,6 +178,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .agent-threadbar {
+    transition: none;
+  }
+
+  .agent-session-trigger-arrow {
     transition: none;
   }
 }

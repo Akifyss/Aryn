@@ -46,7 +46,6 @@ describe('shared split button', () => {
       gitSource,
       gitCss,
       gitCommitActionMenuSource,
-      gitCommitActionMenuCss,
     ] = await Promise.all([
       readFile(new URL('../src/components/app-button/styles.css', import.meta.url), 'utf8'),
       readFile(
@@ -81,16 +80,9 @@ describe('shared split button', () => {
         ),
         'utf8',
       ),
-      readFile(
-        new URL(
-          '../src/features/git/components/git-panel/git-commit-action-menu/styles.css',
-          import.meta.url,
-        ),
-        'utf8',
-      ),
     ])
     const gitSplitButtonSource = `${gitSource}\n${gitCommitActionMenuSource}`
-    const gitSplitButtonCss = `${gitCss}\n${gitCommitActionMenuCss}`
+    const gitSplitButtonCss = gitCss
 
     expect(splitSource).toContain('type AppButtonSize')
     expect(splitSource).toContain('type AppButtonVariant')
@@ -110,6 +102,7 @@ describe('shared split button', () => {
     expect(gitSplitButtonSource).toContain('<AppSplitButton.Root')
     expect(gitSplitButtonSource).toContain('<AppSplitButton.Action')
     expect(gitSplitButtonSource).toContain('<AppSplitButton.Trigger')
+    expect(gitCommitActionMenuSource).not.toContain("import './styles.css'")
     expect(gitSplitButtonCss).not.toContain('.git-commit-submit-button')
     expect(gitSplitButtonCss).not.toContain('.git-commit-menu-trigger')
     expect(gitSplitButtonCss).not.toContain('box-shadow: 0 6px 16px')

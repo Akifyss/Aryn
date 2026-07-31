@@ -939,7 +939,6 @@ export function AgentComposerMentionInput({
         <Popover.Positioner
           anchor={mentionMenuAnchor}
           align='start'
-          className='agent-composer-mention-positioner'
           collisionAvoidance={{ align: 'shift', fallbackAxisSide: 'none', side: 'shift' }}
           collisionPadding={MENTION_MENU_MARGIN}
           positionMethod='fixed'
@@ -968,8 +967,24 @@ export function AgentComposerMentionInput({
                         role='option'
                         aria-selected={isActive}
                         data-active={isActive ? 'true' : 'false'}
-                        className='agent-composer-mention-option'
+                        icon={(
+                          <WorkspaceFileIcon
+                            fileName={item.name}
+                            iconTheme={iconTheme ?? null}
+                            isClosed={item.kind === 'directory'}
+                            isFolder={item.kind === 'directory'}
+                            nodeLabel={item.name}
+                          />
+                        )}
                         selected={isActive}
+                        text={(
+                          <span className='agent-composer-mention-option-inline'>
+                            <span className='agent-composer-mention-option-label'>{item.displayName}</span>
+                            {item.displayPath ? (
+                              <span className='agent-composer-mention-option-meta'>{item.displayPath}</span>
+                            ) : null}
+                          </span>
+                        )}
                         onMouseDown={(mouseEvent) => {
                           mouseEvent.preventDefault()
                           applyMentionSelection(index)
@@ -977,21 +992,7 @@ export function AgentComposerMentionInput({
                         onMouseEnter={() => {
                           setSelectedIndex(index)
                         }}
-                      >
-                        <WorkspaceFileIcon
-                          fileName={item.name}
-                          iconTheme={iconTheme ?? null}
-                          isClosed={item.kind === 'directory'}
-                          isFolder={item.kind === 'directory'}
-                          nodeLabel={item.name}
-                        />
-                        <span className='agent-composer-mention-option-inline'>
-                          <span className='agent-composer-mention-option-label'>{item.displayName}</span>
-                          {item.displayPath ? (
-                            <span className='agent-composer-mention-option-meta'>{item.displayPath}</span>
-                          ) : null}
-                        </span>
-                      </Menu.Option>
+                      />
                     )
                   }) : (
                     <div className='agent-composer-mention-empty'>No matching files or folders</div>

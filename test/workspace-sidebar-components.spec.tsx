@@ -27,7 +27,7 @@ describe('WorkspaceSidebar', () => {
     expect(markup).toContain('class="workspace-sidebar-surface"')
     expect(markup).toContain('data-platform="windows"')
     expect(markup).toContain(
-      'class="app-button app-menu-trigger app-menu-trigger-outline app-menu-trigger-md editor-workspace-switch-button"',
+      'class="app-button app-menu-trigger editor-workspace-switch-button"',
     )
     expect(markup).toContain('data-size="md"')
     expect(markup).toContain('data-variant="outline"')

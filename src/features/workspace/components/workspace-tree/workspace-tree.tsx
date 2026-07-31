@@ -196,17 +196,12 @@ function FileRowActionMenu({
             <More1Line size={16} />
           </Menu.Trigger>
           <Menu.Portal
-            className='workspace-tree-menu-portal'
             container={menuPortalTarget ?? undefined}
           >
             <Menu.Positioner
               align='end'
-              className='workspace-tree-menu-positioner'
-              collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
-              collisionPadding={8}
               positionMethod='fixed'
               side='bottom'
-              sideOffset={2}
             >
               <Menu.Popup
                 aria-label='File actions'

@@ -148,7 +148,7 @@ const CommandInput = React.forwardRef<
     <input
       ref={ref}
       className={cn(
-        "w-full border-b bg-transparent px-3 text-[13px] outline-none placeholder:text-[var(--foreground-secondary)]",
+        "w-full border-b bg-transparent px-3 text-[var(--app-item-font-size)] outline-none placeholder:text-[var(--foreground-secondary)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus)]",
         className
       )}
       value={query}
@@ -208,13 +208,12 @@ function CommandGroup({
 }
 
 function CommandItem({
-  children,
   className,
   keywords = [],
   onSelect,
   value = "",
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & {
+}: Omit<React.ComponentPropsWithoutRef<typeof Menu.Option>, "onClick" | "onKeyDown"> & {
   keywords?: string[]
   onSelect?: (value: string) => void
   value?: string
@@ -246,9 +245,7 @@ function CommandItem({
         }
       }}
       {...props}
-    >
-      {children}
-    </Menu.Option>
+    />
   )
 }
 
@@ -277,12 +274,12 @@ function DropdownMenuContent({
   align = "start",
   className,
   side = "bottom",
-  sideOffset = 4,
+  sideOffset,
   ...props
 }: DropdownMenuContentProps) {
   return (
     <Menu.Portal>
-      <Menu.Positioner align={align} collisionPadding={8} side={side} sideOffset={sideOffset}>
+      <Menu.Positioner align={align} side={side} sideOffset={sideOffset}>
         <Menu.Popup
           className={className}
           size="sm"
@@ -331,12 +328,12 @@ function DropdownMenuSubContent({
   align = "start",
   className,
   side = "right",
-  sideOffset = 6,
+  sideOffset,
   ...props
 }: DropdownMenuContentProps) {
   return (
     <Menu.Portal>
-      <Menu.Positioner align={align} collisionPadding={8} side={side} sideOffset={sideOffset}>
+      <Menu.Positioner align={align} side={side} sideOffset={sideOffset}>
         <Menu.Popup
           className={className}
           size="sm"
@@ -508,7 +505,7 @@ function SelectTrigger({
     >
       {children}
       <MenuSelect.Icon className="flex shrink-0 items-center text-[var(--foreground-secondary)]">
-        <DownLine aria-hidden="true" className="size-3.5" />
+        <DownLine aria-hidden="true" className="size-4" />
       </MenuSelect.Icon>
     </MenuSelect.Trigger>
   )
@@ -538,7 +535,7 @@ function SelectContent({
   alignItemWithTrigger = true,
   className,
   side = "bottom",
-  sideOffset = 4,
+  sideOffset,
   children,
   ...props
 }: SelectContentProps) {
@@ -547,7 +544,6 @@ function SelectContent({
       <MenuSelect.Positioner
         align={align}
         alignItemWithTrigger={alignItemWithTrigger}
-        collisionPadding={8}
         side={side}
         sideOffset={sideOffset}
       >
@@ -3188,7 +3184,6 @@ export function FileSystem({
             aria-label={FILE_SYSTEM_COPY.toolbar.view}
             // Compact select: sheds the base min-width while retaining the
             // shared medium outline-button geometry and select chevron.
-            className="[&_svg]:size-4"
           >
             <SelectValue>
               {activeViewOption ? (
@@ -3202,11 +3197,12 @@ export function FileSystem({
         </AppTooltip>
         <SelectContent>
           {VIEW_OPTIONS.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              <span className="flex items-center gap-2">
-                <SystemIcon icon={option.icon} className="size-4" />
-                {option.label}
-              </span>
+            <SelectItem
+              key={option.value}
+              icon={<SystemIcon icon={option.icon} className="size-4" />}
+              value={option.value}
+            >
+              {option.label}
             </SelectItem>
           ))}
         </SelectContent>
@@ -3666,7 +3662,7 @@ function FileSystemSortSelect({
         <SelectTrigger
           compact={layout !== "full" || !showLabel}
           aria-label={FILE_SYSTEM_COPY.sort.by}
-          className="shrink-0 [&_svg]:size-4"
+          className="shrink-0"
         >
           <SelectValue>
             <span className="flex items-center gap-1.5">
@@ -3676,7 +3672,7 @@ function FileSystemSortSelect({
           </SelectValue>
         </SelectTrigger>
       </AppTooltip>
-      <SelectContent align="end" alignItemWithTrigger={false}>
+      <SelectContent align="end">
         {SORT_OPTIONS.map((option) => (
           <SelectItem key={option.key} value={option.key}>
             {option.label}
@@ -3747,21 +3743,19 @@ function FileSystemFileTypeCommand({
                           key={option.mime}
                           value={option.label}
                           keywords={[option.mime]}
+                          icon={(
+                            <FileTypeIcon
+                              fileName={option.iconFileName}
+                              className="size-4"
+                            />
+                          )}
+                          info={isChecked ? <CheckLine aria-hidden="true" className="size-4" /> : undefined}
+                          infoVariant="status"
+                          aria-selected={isChecked}
+                          selected={isChecked}
+                          text={option.label}
                           onSelect={() => onToggle(option.mime, !isChecked)}
-                        >
-                          <CheckLine
-                            aria-hidden="true"
-                            className={cn(
-                              "size-4 text-[var(--foreground-primary)]",
-                              !isChecked && "opacity-0"
-                            )}
-                          />
-                          <FileTypeIcon
-                            fileName={option.iconFileName}
-                            className="size-4"
-                          />
-                          {option.label}
-                        </CommandItem>
+                        />
                       )
                     })}
                   </CommandGroup>
@@ -3774,6 +3768,9 @@ function FileSystemFileTypeCommand({
     </Command>
   )
 }
+
+// Search plus common file-type labels need more room than a short action menu.
+const FILE_SYSTEM_FILE_TYPE_MENU_CLASSNAME = "w-60"
 
 // Toolbar filter menu: file types as a searchable checklist, dates as
 // single-select presets plus a custom range, mirroring Extend's table
@@ -3815,18 +3812,18 @@ function FileSystemFilterMenu({
           ) : null}
         </DropdownMenuTrigger>
       </AppTooltip>
-      <DropdownMenuContent align="end" className="min-w-44">
+      <DropdownMenuContent align="end">
         <DropdownMenuSub>
           <DropdownMenuSubTrigger
             icon={(
               <Document2Line
                 aria-hidden="true"
-                className="size-4 text-[var(--foreground-secondary)]"
+                size={16}
               />
             )}
             text={FILE_SYSTEM_COPY.filter.type.fileType}
           />
-          <DropdownMenuSubContent className="w-60">
+          <DropdownMenuSubContent className={FILE_SYSTEM_FILE_TYPE_MENU_CLASSNAME}>
             <FileSystemFileTypeCommand
               checkedMimes={fileTypeFilter?.value ?? []}
               onToggle={onToggleFileType}
@@ -3840,7 +3837,7 @@ function FileSystemFilterMenu({
               icon={(
                 <Calendar2Line
                   aria-hidden="true"
-                  className="size-4 text-[var(--foreground-secondary)]"
+                  size={16}
                 />
               )}
               text={FILTER_TYPE_LABELS[type]}
@@ -3933,7 +3930,7 @@ function FileSystemFilterPill({
         >
           {FILTER_OPERATOR_LABELS[filter.operator]}
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-28">
+        <DropdownMenuContent align="start">
           {filterOperatorChoices(filter).map((operator) => (
             <DropdownMenuItem
               key={operator}
@@ -3958,7 +3955,7 @@ function FileSystemFilterPill({
               ? selectedTypeLabels[0]
               : FILE_SYSTEM_COPY.filter.selected(filter.value.length)}
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-60">
+          <DropdownMenuContent align="start" className={FILE_SYSTEM_FILE_TYPE_MENU_CLASSNAME}>
             <FileSystemFileTypeCommand
               checkedMimes={filter.value}
               onToggle={onToggleFileType}

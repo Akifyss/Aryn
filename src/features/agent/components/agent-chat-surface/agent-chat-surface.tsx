@@ -23,11 +23,9 @@ import { formatAgentSessionLabel } from '@/features/agent/lib/session-tree'
 import './styles.css'
 
 const AGENT_SESSION_MENU_POSITIONER_PROPS = {
-  className: 'agent-session-menu-positioner',
-  collisionAvoidance: { side: 'flip', align: 'shift', fallbackAxisSide: 'none' },
-  collisionPadding: 8,
   positionMethod: 'fixed',
   side: 'bottom',
+  // This is a full session browser rather than a short action list.
   sideOffset: 8,
 } as const
 
@@ -178,7 +176,7 @@ export function AgentChatSurface() {
                   <DownLine
                     aria-hidden='true'
                     className='agent-session-trigger-arrow'
-                    size={14}
+                    size={16}
                   />
                 </Menu.Trigger>
                 {sessionMenuPortalTarget ? (

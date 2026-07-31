@@ -63,7 +63,6 @@ if (!xlsxWasmState.__arynXlsxViewerWasmConfigured) {
 }
 
 const XLSX_LOADING_INDICATOR_DELAY_MS = 300;
-const XLSX_DROPDOWN_Z_INDEX_CLASS = "z-40";
 const XLSX_SEARCH_BATCH_ROW_COUNT = 500;
 const XLSX_SEARCH_DEBOUNCE_MS = 300;
 const XLSX_GRID_HEADER_HEIGHT = 24;
@@ -481,7 +480,6 @@ function WorkbookFileActionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className={cn("w-52", XLSX_DROPDOWN_Z_INDEX_CLASS)}
       >
         {showThemeControl ? (
           <>
@@ -551,7 +549,6 @@ export function WorkbookTableHeaderMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className={cn("w-40", XLSX_DROPDOWN_Z_INDEX_CLASS)}
       >
         <DropdownMenuRadioGroup
           value={direction ?? ""}

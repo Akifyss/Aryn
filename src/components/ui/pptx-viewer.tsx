@@ -162,7 +162,7 @@ function PptxFileActionsMenu({
       <DropdownMenuTrigger label="打开 PPTX 操作菜单">
         <More2Line aria-hidden="true" className="size-4" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align="end">
         {showDownloadButton ? (
           <DropdownMenuItem
             disabled={downloadDisabled}

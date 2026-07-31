@@ -5,12 +5,9 @@
   margin-right: auto;
 }
 
+/* Model and thinking level form one compact `model / level` label. */
 .agent-model-cascader-trigger {
-  display: inline-flex;
-  align-items: center;
   gap: 2px;
-  width: fit-content;
-  min-width: 0;
   max-width: 100%;
   justify-content: flex-start;
   text-align: left;
@@ -42,7 +39,7 @@
 .agent-model-cascader {
   --app-menu-popup-max-width: 680px;
   position: fixed;
-  z-index: 1200;
+  z-index: var(--app-z-menu);
   width: min(680px, calc(100vw - 24px));
   min-width: min(340px, calc(100vw - 24px));
   max-height: min(390px, calc(100vh - 24px));
@@ -56,11 +53,20 @@
 .agent-model-cascader-search {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--app-item-content-gap, 8px);
   height: 38px;
-  padding: 0 10px;
+  padding-inline:
+    calc(
+      var(--app-menu-content-padding)
+      + var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px))
+    );
   border-bottom: 1px solid var(--separator);
   color: var(--foreground-secondary);
+}
+
+.agent-model-cascader-search:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 
 .agent-model-cascader-search input {
@@ -72,7 +78,7 @@
   background: transparent;
   color: var(--foreground-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--app-item-font-size);
   line-height: 1.2;
 }
 
@@ -155,30 +161,10 @@
   height: 100%;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .agent-model-cascader-scroll .app-menu-list {
   padding: 0 var(--app-menu-content-padding) var(--app-menu-content-padding);
-}
-
-.agent-model-cascader-option-main,
-.agent-model-cascader-option-sub {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-model-cascader-option-sub {
-  flex: 0 1 auto;
-  color: var(--foreground-secondary);
-  font-size: 11px;
-}
-
-.agent-model-cascader-option-arrow {
-  flex: 0 0 auto;
-  color: var(--foreground-secondary);
 }
 
 .agent-model-cascader-empty {

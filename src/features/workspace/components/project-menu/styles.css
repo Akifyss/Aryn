@@ -1,7 +1,7 @@
 .project-menu-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: calc(var(--app-z-menu) - 2);
   background: transparent;
   app-region: no-drag;
   -webkit-app-region: no-drag;
@@ -13,26 +13,15 @@
   pointer-events: auto;
 }
 
-.project-menu-positioner {
-  z-index: 81;
-  pointer-events: auto;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
-.project-menu-positioner.is-local {
-  z-index: 2;
-}
-
+/*
+ * Compound menu exception: search, project list, and action list are separate
+ * sections. The surface stays edge-to-edge and each section owns one shared inset.
+ */
 .project-menu {
   width: min(360px, calc(100vw - 24px));
   max-height: min(520px, calc(100vh - 72px));
   padding: 0;
   --project-menu-list-max-height: 320px;
-}
-
-.project-menu-agent-add {
-  width: 288px;
 }
 
 .project-menu-project-section {
@@ -74,14 +63,19 @@
 .project-menu-search {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--app-item-content-gap, 8px);
   min-height: 32px;
   margin: 0;
   padding-inline: var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px));
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--app-item-row-radius);
   color: var(--foreground-secondary);
   background: var(--background-primary);
+}
+
+.project-menu-search:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 
 .project-menu-search > svg {
@@ -98,7 +92,7 @@
   background: transparent;
   color: var(--foreground-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--app-item-font-size);
 }
 
 .project-menu-list {

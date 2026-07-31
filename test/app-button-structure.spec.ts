@@ -208,11 +208,9 @@ describe('shared text button', () => {
     )
     expect(agentTypeSwitchSource).toBeDefined()
     expect(agentTypeSwitchSource ?? '').toMatch(
-      /<Menu\.Trigger[\s\S]{0,240}className='agent-type-switch-trigger'[\s\S]{0,120}size='md'[\s\S]{0,80}variant='ghost'/,
+      /<Menu\.Trigger[\s\S]{0,240}size='md'[\s\S]{0,80}variant='ghost'/,
     )
-    expect(agentTypeSwitchSource ?? '').not.toMatch(
-      /className='agent-type-switch-trigger'[\s\S]{0,240}render=\{<AppButton/,
-    )
+    expect(agentTypeSwitchSource ?? '').not.toContain("className='agent-type-switch-trigger'")
     expect(agentModelCascaderSource).toBeDefined()
     expect(agentModelCascaderSource ?? '').toMatch(
       /<Menu\.TriggerSurface[\s\S]{0,300}className='agent-model-cascader-trigger'[\s\S]{0,180}size='md'[\s\S]{0,80}variant='ghost'/,

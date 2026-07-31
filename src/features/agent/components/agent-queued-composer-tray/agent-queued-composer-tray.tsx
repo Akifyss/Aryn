@@ -297,14 +297,10 @@ export function AgentQueuedComposerTray({
                           <Menu.Portal container={menuPortalTarget ?? undefined}>
                             <Menu.Positioner
                               align='end'
-                              className='agent-queued-menu-positioner'
-                              collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
-                              collisionPadding={8}
                               positionMethod='fixed'
                               side='bottom'
-                              sideOffset={6}
                             >
-                              <Menu.Popup className='agent-queued-menu' finalFocus={false} size='fit'>
+                              <Menu.Popup finalFocus={false} size='sm'>
                                 <Menu.Item
                                   icon={<EditLine size={16} />}
                                   label='编辑消息'

@@ -126,13 +126,6 @@
   -webkit-box-decoration-break: clone;
 }
 
-.agent-composer-mention-positioner {
-  z-index: 1300;
-  pointer-events: auto;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
 .agent-composer-mention-menu {
   width: var(--agent-composer-mention-menu-width);
 }
@@ -146,9 +139,6 @@
 }
 
 .agent-composer-mention-option-inline .agent-composer-mention-option-label {
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.35;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

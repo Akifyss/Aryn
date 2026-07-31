@@ -18,36 +18,7 @@ type AgentTypeSwitchProps = {
   onSelect: (agentId: AgentId) => void
   refreshError: string | null
   selectedAgentId: AgentId
-}
-
-export function AgentTypeSwitchOptionCopy({
-  availability,
-  guidanceId,
-  reasonId,
-}: {
-  availability: AgentAvailability
-  guidanceId?: string
-  reasonId?: string
-}) {
-  return (
-    <span className='agent-type-switch-option-copy'>
-      <span className='agent-type-switch-option-title'>
-        {availability.definition.label}
-      </span>
-      {!availability.available ? (
-        <>
-          <span id={reasonId} className='agent-type-switch-option-description'>
-            {availability.reason ?? '当前不可用'}
-          </span>
-          {availability.guidance ? (
-            <span id={guidanceId} className='agent-type-switch-option-guidance'>
-              {availability.guidance}
-            </span>
-          ) : null}
-        </>
-      ) : null}
-    </span>
-  )
+  triggerIconSize?: number
 }
 
 export function AgentTypeSwitch({
@@ -58,6 +29,7 @@ export function AgentTypeSwitch({
   onSelect,
   refreshError,
   selectedAgentId,
+  triggerIconSize = 16,
 }: AgentTypeSwitchProps) {
   const descriptionIdPrefix = useId()
   const catalog = agentCatalog.length > 0
@@ -82,93 +54,92 @@ export function AgentTypeSwitch({
     >
       <Menu.Trigger
         aria-label={`选择 Agent，当前：${selectedDefinition.label}`}
-        className='agent-type-switch-trigger'
         disabled={isLocked}
         size='md'
         variant='ghost'
       >
-        <AgentBrandIcon agentId={selectedAgentId} className='agent-brand-icon' size={24} />
+        <AgentBrandIcon agentId={selectedAgentId} className='agent-brand-icon' size={triggerIconSize} />
         <span className='agent-type-switch-label'>{selectedDefinition.label}</span>
       </Menu.Trigger>
       <Menu.Portal container={menuPortalTarget ?? undefined}>
         <Menu.Positioner
           align='start'
-          className='agent-type-switch-menu-positioner'
-          collisionAvoidance={{ side: 'flip', align: 'shift', fallbackAxisSide: 'none' }}
-          collisionPadding={8}
           positionMethod='fixed'
           side='bottom'
-          sideOffset={6}
         >
           <Menu.Popup
-            className='agent-type-switch-menu'
             aria-label='选择用于新会话的 Agent'
             size='lg'
           >
             <Menu.ScrollArea className='agent-type-switch-options-scroll'>
-              <Menu.ScrollViewport className='agent-type-switch-options-viewport'>
+              <Menu.ScrollViewport>
                 <Menu.ScrollContent>
                   <Menu.RadioGroup
-                value={selectedAgentId}
-                onValueChange={(nextAgentId, eventDetails) => {
-                  const availability = catalog.find((item) => item.definition.id === nextAgentId)
-                  if (!availability?.available) {
-                    eventDetails.cancel()
-                    return
-                  }
-                  onSelect(availability.definition.id)
-                }}
-              >
-                {catalog.map((availability) => {
-                  const agentId = availability.definition.id
-                  const isSelected = agentId === selectedAgentId
-                  const isUnavailable = !availability.available
-                  const reasonId = `${descriptionIdPrefix}-${agentId}-reason`
-                  const guidanceId = availability.guidance
-                    ? `${descriptionIdPrefix}-${agentId}-guidance`
-                    : undefined
+                    value={selectedAgentId}
+                    onValueChange={(nextAgentId, eventDetails) => {
+                      const availability = catalog.find((item) => item.definition.id === nextAgentId)
+                      if (!availability?.available) {
+                        eventDetails.cancel()
+                        return
+                      }
+                      onSelect(availability.definition.id)
+                    }}
+                  >
+                    {catalog.map((availability) => {
+                      const agentId = availability.definition.id
+                      const isSelected = agentId === selectedAgentId
+                      const isUnavailable = !availability.available
+                      const reasonId = `${descriptionIdPrefix}-${agentId}-reason`
+                      const guidanceId = availability.guidance
+                        ? `${descriptionIdPrefix}-${agentId}-guidance`
+                        : undefined
 
-                  return (
-                    <Menu.RadioItem
-                      key={agentId}
-                      aria-describedby={isUnavailable
-                        ? [reasonId, guidanceId].filter(Boolean).join(' ')
-                        : undefined}
-                      aria-disabled={isUnavailable || undefined}
-                      className={`agent-type-switch-option${isUnavailable ? ' is-unavailable' : ''}`}
-                      closeOnClick={!isUnavailable}
-                      info={isUnavailable ? (
-                        <WarningLine aria-hidden='true' size={16} />
-                      ) : isSelected ? (
-                        <CheckLine aria-hidden='true' size={16} />
-                      ) : undefined}
-                      infoVariant='status'
-                      icon={(
-                        <AgentBrandIcon
-                          agentId={agentId}
-                          className='agent-brand-icon'
-                          size={16}
+                      return (
+                        <Menu.RadioItem
+                          key={agentId}
+                          aria-describedby={isUnavailable
+                            ? [reasonId, guidanceId].filter(Boolean).join(' ')
+                            : undefined}
+                          aria-disabled={isUnavailable || undefined}
+                          className={isUnavailable ? 'agent-type-switch-option-unavailable' : undefined}
+                          closeOnClick={!isUnavailable}
+                          description={isUnavailable ? (
+                            <>
+                              <span id={reasonId}>{availability.reason ?? '当前不可用'}</span>
+                              {availability.guidance ? (
+                                <>
+                                  <span aria-hidden='true'> · </span>
+                                  <span id={guidanceId}>{availability.guidance}</span>
+                                </>
+                              ) : null}
+                            </>
+                          ) : undefined}
+                          info={isUnavailable ? (
+                            <WarningLine aria-hidden='true' size={16} />
+                          ) : isSelected ? (
+                            <CheckLine aria-hidden='true' size={16} />
+                          ) : undefined}
+                          infoVariant='status'
+                          icon={(
+                            <AgentBrandIcon
+                              agentId={agentId}
+                              className='agent-brand-icon'
+                              size={16}
+                            />
+                          )}
+                          label={availability.definition.label}
+                          selected={isSelected}
+                          text={availability.definition.label}
+                          value={agentId}
+                          onClick={(event) => {
+                            if (isUnavailable) {
+                              event.preventDefault()
+                            }
+                          }}
                         />
-                      )}
-                      label={availability.definition.label}
-                      selected={isSelected}
-                      text={(
-                        <AgentTypeSwitchOptionCopy
-                          availability={availability}
-                          guidanceId={guidanceId}
-                          reasonId={reasonId}
-                        />
-                      )}
-                      value={agentId}
-                      onClick={(event) => {
-                        if (isUnavailable) {
-                          event.preventDefault()
-                        }
-                      }}
-                    />
-                  )
-                })}
-                </Menu.RadioGroup>
+                      )
+                    })}
+                  </Menu.RadioGroup>
                 </Menu.ScrollContent>
               </Menu.ScrollViewport>
             </Menu.ScrollArea>

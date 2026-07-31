@@ -2,15 +2,6 @@
   flex: 0 0 auto;
 }
 
-.agent-new-project-bar .agent-project-switch-trigger .project-icon {
-  --project-icon-size: 16px;
-}
-
-.agent-new-project-bar .agent-project-switch-trigger .agent-project-switch-chevron {
-  width: 14px;
-  height: 14px;
-}
-
 .agent-composer {
   display: flex;
   flex-direction: column;
