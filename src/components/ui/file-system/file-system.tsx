@@ -4009,10 +4009,7 @@ function FileSystemFilterPill({
         tooltip={FILE_SYSTEM_COPY.filter.remove(FILTER_TYPE_LABELS[filter.type])}
         size="sm"
         onClick={onRemove}
-        className={cn(
-          "file-system-filter-pill-remove-button",
-          "text-[var(--foreground-secondary)] hover:text-[var(--foreground-primary)]"
-        )}
+        className="file-system-filter-pill-remove-button"
       >
         <CloseLine aria-hidden="true" className="size-4" />
       </AppIconButton>

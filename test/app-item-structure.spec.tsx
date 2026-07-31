@@ -93,13 +93,14 @@ describe('shared application item', () => {
 
   it('builds item actions from AppIconButton instead of cloning an icon button', () => {
     const markup = renderToStaticMarkup(
-      <AppItemActionButton aria-label='More actions'>
+      <AppItemActionButton aria-label='More actions' isActive>
         <svg aria-hidden='true' />
       </AppItemActionButton>,
     )
 
     expect(markup).toContain('class="app-icon-button app-item-action"')
     expect(markup).toContain('aria-label="More actions"')
+    expect(markup).toContain('data-active="true"')
   })
 
   it('renders menu trailing indicators through the shared 32px info slot', () => {

@@ -168,8 +168,7 @@
 @media (prefers-reduced-motion: reduce) {
   .app-dialog-backdrop,
   .app-dialog-popup,
-  .app-alert-dialog-popup,
-  .app-dialog-close-button {
+  .app-alert-dialog-popup {
     transition: none;
   }
 }

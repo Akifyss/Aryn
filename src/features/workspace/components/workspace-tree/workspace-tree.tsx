@@ -453,7 +453,7 @@ function FileTreeItem({
             取消
           </AppAlertDialog.Close>
           <AppButton
-            variant='danger'
+            tone='danger'
             onClick={() => void handleDelete()}
             disabled={isSubmitting}
           >

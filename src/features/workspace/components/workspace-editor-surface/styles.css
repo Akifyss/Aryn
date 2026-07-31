@@ -57,21 +57,9 @@
   pointer-events: auto;
 }
 
-.editor-directory-toggle {
-  width: var(--editor-directory-toggle-size);
-  min-width: var(--editor-directory-toggle-size);
-  height: var(--editor-directory-toggle-size);
-  min-height: var(--editor-directory-toggle-size);
-}
-
-.app-icon-button.editor-directory-toggle[data-active='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
+/* The icon already conveys visibility; pressed state elevates color without looking like a selected mode. */
+.editor-directory-toggle[aria-pressed='true'] {
   color: var(--foreground-primary);
-  background: transparent;
-}
-
-.app-icon-button.editor-directory-toggle[data-active='true']:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
-.app-icon-button.editor-directory-toggle[data-active='true']:focus-visible:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
-  background: var(--hover);
 }
 
 .editor-directory-toggle-spacer {

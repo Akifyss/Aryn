@@ -5,14 +5,12 @@ import {
 import { forwardRef } from 'react'
 
 export type AppButtonSize = 'md' | 'sm'
-export type AppButtonVariant =
-  | 'danger'
-  | 'ghost'
-  | 'outline'
-  | 'primary'
+export type AppButtonTone = 'danger' | 'default'
+export type AppButtonVariant = 'ghost' | 'outline' | 'primary'
 
 export type AppButtonProps = BaseButtonProps & {
   size?: AppButtonSize
+  tone?: AppButtonTone
   variant?: AppButtonVariant
 }
 
@@ -25,6 +23,7 @@ export const AppButton = forwardRef<HTMLElement, AppButtonProps>(function AppBut
     children,
     className,
     size = 'md',
+    tone = 'default',
     type = 'button',
     variant = 'primary',
     ...props
@@ -42,6 +41,7 @@ export const AppButton = forwardRef<HTMLElement, AppButtonProps>(function AppBut
           : cx('app-button', className)
       }
       data-size={size}
+      data-tone={tone}
       data-variant={variant}
     >
       {children}

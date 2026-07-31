@@ -54,7 +54,6 @@ export function WorkspaceEditorDirectoryToggle({
       className='editor-directory-toggle'
       aria-label={isVisible ? '隐藏目录侧边栏' : '显示目录侧边栏'}
       aria-pressed={isVisible}
-      isActive={isVisible}
       onClick={onToggle}
       tooltip={isVisible ? '隐藏目录' : '显示目录'}
     >

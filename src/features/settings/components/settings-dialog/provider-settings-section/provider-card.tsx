@@ -193,8 +193,8 @@ export function ProviderCard({
               {showsOAuthActions || showsApiKeyActions ? (
                 <AppButton
                   disabled={isBusy || !canClearStoredCredential}
+                  tone='danger'
                   variant='outline'
-                  className='settings-danger-button'
                   onClick={() => {
                     if (showsOAuthActions) {
                       onLogout()

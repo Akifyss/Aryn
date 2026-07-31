@@ -34,7 +34,7 @@ describe('WorkspaceEditorSurface', () => {
     expect(markup).toContain('class="editor-directory-sidebar"')
     expect(markup).toContain('class="editor-directory-toggle-slot"')
     expect(markup).toContain('class="app-icon-button editor-directory-toggle"')
-    expect(markup).toContain('data-active="true"')
+    expect(markup).not.toContain('data-active="true"')
     expect(markup).toContain('aria-pressed="true"')
     expect(markup).toContain('class="editor-plain-toolbar"')
     expect(markup).toContain('data-slot="editor"')
@@ -60,7 +60,7 @@ describe('WorkspaceEditorSurface', () => {
     expect(missingWorkspaceMarkup).toContain('选择工作目录')
     expect(missingWorkspaceMarkup).toContain('连接一个文件夹后')
     expect(missingWorkspaceMarkup).toContain(
-      'data-size="md" data-variant="primary" class="app-button"',
+      'data-size="md" data-tone="default" data-variant="primary" class="app-button"',
     )
     expect(missingWorkspaceMarkup).toMatch(
       /<button[^>]*class="app-button"[^>]*><svg[^>]*aria-hidden="true"/,
@@ -85,11 +85,10 @@ describe('workspace editor component styles', () => {
     expect(globalCss).not.toMatch(/(^|\n)\.file-tabs-shell\s*\{/)
     expect(appIconButtonCss).toContain('.app-icon-button[data-size]:focus-visible')
     expect(appIconButtonCss).toContain('outline: 2px solid var(--focus);')
+    expect(editorSurfaceCss).not.toMatch(/(^|\n)\.editor-directory-toggle\s*\{/)
+    expect(editorSurfaceCss).not.toContain('.app-icon-button.editor-directory-toggle')
     expect(editorSurfaceCss).toMatch(
-      /\.app-icon-button\.editor-directory-toggle\[data-active='true'\][^{]*\{[^}]*background:\s*transparent;/s,
-    )
-    expect(editorSurfaceCss).toMatch(
-      /\.app-icon-button\.editor-directory-toggle\[data-active='true'\]:hover[^{]*\{[^}]*background:\s*var\(--hover\);/s,
+      /\.editor-directory-toggle\[aria-pressed='true'\]\s*\{[^}]*color:\s*var\(--foreground-primary\);/s,
     )
     expect(editorSurfaceCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(fileTabsCss).toContain('@media (prefers-reduced-motion: reduce)')

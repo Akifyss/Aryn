@@ -161,6 +161,10 @@ describe('settings dialog structure', () => {
     expect(providerCss).toContain(
       'padding-right: calc(var(--app-icon-button-size-md) + 20px) !important;',
     )
+    expect(providerCardSource).toContain("variant='outline'")
+    expect(providerCardSource).toContain("tone='danger'")
+    expect(providerCardSource).not.toContain('settings-danger-button')
+    expect(providerCss).not.toContain('settings-danger-button')
     expect(dialogCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(providerCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(selectCss).toContain('@media (prefers-reduced-motion: reduce)')

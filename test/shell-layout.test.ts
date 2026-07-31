@@ -776,4 +776,38 @@ describe('shell layout helpers', () => {
       rightControlsTopLayer: false,
     })
   })
+
+  it('uses an explicit behavior marker for DevTools focus settlement', async () => {
+    const [focusSource, chromeSource, shellSource, workspaceShellSource, shellCss] = await Promise.all([
+      readFile(new URL('../src/hooks/use-devtools-focus-settlement.ts', import.meta.url), 'utf8'),
+      readFile(
+        new URL(
+          '../src/features/layout/components/app-chrome-controls/app-chrome-controls.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/features/layout/components/app-shell/app-shell.tsx', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/layout/components/app-workspace-shell/app-workspace-shell.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readAppShellCss(),
+    ])
+
+    expect(focusSource).toContain("const WINDOW_CHROME_BUTTON_SELECTOR = '[data-window-chrome-button]'")
+    expect(chromeSource.match(/data-window-chrome-button='true'/g)).toHaveLength(2)
+    expect(shellSource).toContain("data-window-chrome-button='true'")
+    expect(workspaceShellSource.match(/data-window-chrome-button='true'/g)).toHaveLength(2)
+    expect(`${chromeSource}\n${shellSource}\n${workspaceShellSource}`).not.toContain(
+      'agent-collapsed-tab-button',
+    )
+    expect(shellCss).not.toMatch(/\.panel-toggle-button\s*\{/)
+  })
 })

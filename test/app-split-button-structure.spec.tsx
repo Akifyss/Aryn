@@ -9,6 +9,7 @@ describe('shared split button', () => {
       <AppSplitButton.Root
         aria-label='提交操作'
         size='sm'
+        tone='danger'
         variant='outline'
       >
         <AppSplitButton.Action type='submit'>
@@ -27,6 +28,7 @@ describe('shared split button', () => {
     expect(markup).toContain('aria-label="提交操作"')
     expect(markup).toContain('class="app-split-button"')
     expect(markup).toContain('data-size="sm"')
+    expect(markup).toContain('data-tone="danger"')
     expect(markup).toContain('data-variant="outline"')
     expect(markup).toContain(
       'class="app-button app-split-button-segment app-split-button-action"',
@@ -38,7 +40,7 @@ describe('shared split button', () => {
     expect(markup).toContain('aria-label="提交选项"')
   })
 
-  it('shares AppButton size and variant types without duplicating the visual skin', async () => {
+  it('shares AppButton size, tone, and variant types without duplicating the visual skin', async () => {
     const [
       buttonCss,
       splitSource,
@@ -85,6 +87,7 @@ describe('shared split button', () => {
     const gitSplitButtonCss = gitCss
 
     expect(splitSource).toContain('type AppButtonSize')
+    expect(splitSource).toContain('type AppButtonTone')
     expect(splitSource).toContain('type AppButtonVariant')
     expect(splitSource).toContain('AppSplitButtonContext')
     expect(buttonCss).toContain('.app-button,\n.app-split-button')

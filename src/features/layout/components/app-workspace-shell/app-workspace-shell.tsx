@@ -114,7 +114,7 @@ export function AppWorkspaceShell({
         <>
           <AppIconButton
             type='button'
-            className='agent-collapsed-tab-button'
+            data-window-chrome-button='true'
             aria-label='Expand right sidebar and open Git'
             tooltip='更改'
             preventFocusOnPress
@@ -124,7 +124,7 @@ export function AppWorkspaceShell({
           </AppIconButton>
           <AppIconButton
             type='button'
-            className='agent-collapsed-tab-button'
+            data-window-chrome-button='true'
             aria-label='Expand right sidebar and open files'
             tooltip='文件'
             preventFocusOnPress

@@ -8,6 +8,7 @@ import {
   AppButton,
   type AppButtonProps,
   type AppButtonSize,
+  type AppButtonTone,
   type AppButtonVariant,
 } from '@/components/app-button'
 import {
@@ -17,6 +18,7 @@ import {
 
 type AppSplitButtonContextValue = {
   size: AppButtonSize
+  tone: AppButtonTone
   variant: AppButtonVariant
 }
 
@@ -24,12 +26,13 @@ const AppSplitButtonContext = createContext<AppSplitButtonContextValue | null>(n
 
 export type AppSplitButtonRootProps = ComponentPropsWithoutRef<'div'> & {
   size?: AppButtonSize
+  tone?: AppButtonTone
   variant?: AppButtonVariant
 }
 
 export type AppSplitButtonActionProps = Omit<
   AppButtonProps,
-  'size' | 'variant'
+  'size' | 'tone' | 'variant'
 >
 
 export type AppSplitButtonTriggerProps = Omit<
@@ -60,19 +63,21 @@ const AppSplitButtonRoot = forwardRef<HTMLDivElement, AppSplitButtonRootProps>(
       className,
       role = 'group',
       size = 'md',
+      tone = 'default',
       variant = 'primary',
       ...props
     },
     ref,
   ) {
     return (
-      <AppSplitButtonContext.Provider value={{ size, variant }}>
+      <AppSplitButtonContext.Provider value={{ size, tone, variant }}>
         <div
           {...props}
           ref={ref}
           role={role}
           className={cx('app-split-button', className)}
           data-size={size}
+          data-tone={tone}
           data-variant={variant}
         >
           {children}
@@ -84,13 +89,14 @@ const AppSplitButtonRoot = forwardRef<HTMLDivElement, AppSplitButtonRootProps>(
 
 const AppSplitButtonAction = forwardRef<HTMLElement, AppSplitButtonActionProps>(
   function AppSplitButtonAction({ className, ...props }, ref) {
-    const { size, variant } = useAppSplitButtonContext('AppSplitButton.Action')
+    const { size, tone, variant } = useAppSplitButtonContext('AppSplitButton.Action')
 
     return (
       <AppButton
         {...props}
         ref={ref}
         size={size}
+        tone={tone}
         variant={variant}
         className={
           typeof className === 'function'

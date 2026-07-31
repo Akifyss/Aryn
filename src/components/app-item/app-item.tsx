@@ -8,7 +8,10 @@ import {
   useState,
 } from 'react'
 import { DownLine, RightLine } from '@mingcute/react'
-import { AppIconButton } from '@/components/app-icon-button'
+import {
+  AppIconButton,
+  type AppIconButtonProps,
+} from '@/components/app-icon-button'
 import { AppTooltip, AppTooltipButton } from '@/components/app-tooltip'
 
 export type AppItemState = {
@@ -44,8 +47,8 @@ export type AppItemMainState = {
 }
 
 export type AppItemMainButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & AppItemMainState
-export type AppItemActionButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  tooltip?: ReactNode
+export type AppItemActionButtonProps = Omit<AppIconButtonProps, 'className'> & {
+  className?: string
 }
 export type AppItemMainRenderProps = AppItemMainState & {
   className?: string

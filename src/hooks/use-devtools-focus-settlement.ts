@@ -9,7 +9,7 @@ type DevToolsFocusSnapshot = {
 const DEVTOOLS_FOCUS_SNAPSHOT_MAX_AGE_MS = 10_000
 const DEVTOOLS_FOCUS_SETTLEMENT_CANCEL_WINDOW_MS = 500
 const DEVTOOLS_FOCUS_SETTLEMENT_DELAYS_MS = [0, 50, 150, 400] as const
-const WINDOW_CHROME_BUTTON_SELECTOR = '.panel-toggle-button, .agent-collapsed-tab-button'
+const WINDOW_CHROME_BUTTON_SELECTOR = '[data-window-chrome-button]'
 const TEXT_ENTRY_FOCUS_TARGET_SELECTOR = [
   '[role="textbox"]',
   '.agent-composer-editor',

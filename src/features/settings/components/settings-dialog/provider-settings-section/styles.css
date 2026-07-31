@@ -249,16 +249,6 @@
   line-height: 1.5;
 }
 
-.app-button.settings-danger-button {
-  color: var(--danger);
-}
-
-.app-button.settings-danger-button[data-variant='outline']:hover:not(:disabled):not([data-disabled]),
-.app-button.settings-danger-button[data-variant='outline']:active:not(:disabled):not([data-disabled]) {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .provider-card-details-wrapper,
   .provider-card-header svg {

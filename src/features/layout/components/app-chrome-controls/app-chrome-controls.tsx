@@ -53,7 +53,7 @@ export function AppChromeSearchButton({ onClick }: AppChromeSearchButtonProps) {
   return (
     <AppIconButton
       type='button'
-      className='panel-toggle-button left-chrome-search-button'
+      data-window-chrome-button='true'
       aria-label='Open search'
       tooltip='搜索'
       preventFocusOnPress
@@ -87,7 +87,7 @@ export function AppChromeSidebarToggleButton({
   return (
     <AppIconButton
       type='button'
-      className='panel-toggle-button'
+      data-window-chrome-button='true'
       aria-label={ariaLabel}
       tooltip={tooltip}
       preventFocusOnPress

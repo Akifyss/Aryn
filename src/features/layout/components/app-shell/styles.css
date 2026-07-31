@@ -192,10 +192,6 @@
   --titlebar-left-control-reserved-width: calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size));
 }
 
-.panel-toggle-button {
-  position: relative;
-}
-
 .panel-toggle-button-overlay {
   position: absolute;
   top: calc((var(--chrome-height) - var(--panel-toggle-size)) / 2);
@@ -281,10 +277,6 @@ body:has([data-app-modal-layer]) .left-chrome-actions {
 body:has([data-app-modal-layer]) .agent-collapsed-tab-actions {
   z-index: var(--app-z-panel-toggle-underlay);
   pointer-events: none;
-}
-
-.agent-collapsed-tab-button {
-  position: relative;
 }
 
 .drawer-window-drag-region {

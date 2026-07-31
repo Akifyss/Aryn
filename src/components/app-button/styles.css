@@ -103,8 +103,8 @@
   --app-button-separator-color: transparent;
 }
 
-.app-button[data-variant='danger'],
-.app-split-button[data-variant='danger'] {
+.app-button[data-variant='primary'][data-tone='danger'],
+.app-split-button[data-variant='primary'][data-tone='danger'] {
   --app-button-background: var(--danger);
   --app-button-foreground: var(--foreground-on-danger);
   --app-button-hover-background: color-mix(in oklab, var(--danger) 90%, transparent);
@@ -112,6 +112,17 @@
   --app-button-active-background: color-mix(in oklab, var(--danger) 80%, transparent);
   --app-button-active-foreground: var(--foreground-on-danger);
   --app-button-separator-color: color-mix(in oklab, var(--foreground-on-danger) 24%, transparent);
+}
+
+.app-button[data-variant='outline'][data-tone='danger'],
+.app-button[data-variant='ghost'][data-tone='danger'],
+.app-split-button[data-variant='outline'][data-tone='danger'],
+.app-split-button[data-variant='ghost'][data-tone='danger'] {
+  --app-button-foreground: var(--danger);
+  --app-button-hover-background: var(--danger-soft);
+  --app-button-hover-foreground: var(--danger);
+  --app-button-active-background: var(--danger-soft);
+  --app-button-active-foreground: var(--danger);
 }
 
 .app-button:hover:not(:disabled):not([data-disabled]),

@@ -112,6 +112,48 @@ describe('shared icon tooltip button', () => {
     expect(appItemSource).toContain('<AppIconButton')
   })
 
+  it('uses shared variants for standard states and limits contextual overrides', async () => {
+    const [composerSource, composerCss, fileCardCss, modelCascaderCss] = await Promise.all([
+      readFile(
+        new URL(
+          '../src/features/agent/components/agent-composer-surface/agent-composer-surface.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/agent/components/agent-composer-surface/styles.css',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/agent/components/agent-file-card/styles.css',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../src/features/agent/components/agent-model-cascader/styles.css',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ])
+
+    expect(composerSource).toContain("composerAction === 'stop' ? 'outline' : 'solid'")
+    expect(composerSource).not.toContain('agent-send-button')
+    expect(composerCss).not.toContain('.agent-send-button')
+    expect(fileCardCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[^{]*\{[\s\S]*\.app-icon-button\.agent-file-card-remove\s*\{[^}]*transition:\s*none;/,
+    )
+    expect(modelCascaderCss).toContain('var(--app-icon-button-size-md)')
+    expect(modelCascaderCss).not.toContain('--agent-send-button-size')
+  })
+
   it('reuses the shared icon-button size for AppItem trailing controls without business overrides', async () => {
     const [
       segmentedIconTabsCss,
@@ -159,6 +201,9 @@ describe('shared icon tooltip button', () => {
 
     expect(segmentedIconTabsCss).not.toContain('--app-icon-button-')
     expect(appItemCss).toContain('min-width: var(--app-icon-button-size-md);')
+    expect(appItemCss).not.toMatch(/\.app-item-action\s*\{/)
+    expect(appItemCss).not.toContain('.app-item-action.is-menu-open')
+    expect(appItemCss).not.toContain('.app-item-action.is-danger')
     expect(appItemCss).not.toContain('--app-item-trailing-size')
     expect(appItemCss).toContain('var(--app-item-icon-size)')
     expect(treeCss).not.toContain('--app-item-trailing-size:')

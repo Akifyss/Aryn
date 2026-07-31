@@ -280,8 +280,7 @@ export function AgentComposerSurface({
             aria-label={composerAction === 'stop' ? '停止当前运行' : '发送消息'}
             disabled={!canPerformComposerAction}
             type='submit'
-            variant={composerAction === 'stop' ? 'ghost' : 'solid'}
-            className={`agent-send-button${composerAction === 'stop' ? ' is-stop' : ''}`}
+            variant={composerAction === 'stop' ? 'outline' : 'solid'}
             tooltip={composerActionTitle}
           >
             {composerAction === 'stop' ? (

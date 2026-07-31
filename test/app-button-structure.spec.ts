@@ -32,8 +32,22 @@ describe('shared text button', () => {
 
     expect(markup).toContain('type="button"')
     expect(markup).toContain('data-size="md"')
+    expect(markup).toContain('data-tone="default"')
     expect(markup).toContain('data-variant="primary"')
     expect(markup).toContain('class="app-button custom-button"')
+  })
+
+  it('composes semantic tone independently from visual variant', () => {
+    const markup = renderToStaticMarkup(
+      createElement(
+        AppButton,
+        { tone: 'danger', variant: 'outline' },
+        '清除凭据',
+      ),
+    )
+
+    expect(markup).toContain('data-tone="danger"')
+    expect(markup).toContain('data-variant="outline"')
   })
 
   it('uses Base UI and owns the shared visual contract', async () => {
@@ -51,14 +65,18 @@ describe('shared text button', () => {
 
     expect(buttonSource).toContain("from '@base-ui/react/button'")
     expect(buttonSource).toContain("export type AppButtonSize = 'md' | 'sm'")
+    expect(buttonSource).toContain("export type AppButtonTone = 'danger' | 'default'")
+    expect(buttonSource).toContain(
+      "export type AppButtonVariant = 'ghost' | 'outline' | 'primary'",
+    )
     expect(buttonSource).not.toContain("| 'xs'")
-    expect(buttonSource).toContain("| 'ghost'")
     expect(buttonSource).not.toContain("| 'link'")
     expect(buttonSource).not.toContain("| 'tertiary'")
     expect(buttonSource).toContain('<BaseButton')
     expect(buttonSource).toContain("type = 'button'")
     expect(buttonSource).toContain("typeof className === 'function'")
     expect(buttonSource).toContain('data-size={size}')
+    expect(buttonSource).toContain('data-tone={tone}')
     expect(buttonSource).toContain('data-variant={variant}')
     expect(indexCss).toContain('--app-button-height-md: 32px;')
     expect(indexCss).toContain('--app-button-height-sm: 28px;')
@@ -96,6 +114,9 @@ describe('shared text button', () => {
     expect(buttonCss).toContain('box-shadow: var(--app-button-shadow);')
     expect(buttonCss).not.toContain("[data-size='xs']")
     expect(buttonCss).toContain("[data-variant='ghost']")
+    expect(buttonCss).toContain("[data-variant='primary'][data-tone='danger']")
+    expect(buttonCss).toContain("[data-variant='outline'][data-tone='danger']")
+    expect(buttonCss).toContain("[data-variant='ghost'][data-tone='danger']")
     expect(buttonCss).toContain('--app-button-hover-background: var(--hover);')
     expect(buttonCss).toContain('[data-popup-open]')
     expect(buttonCss).toContain("[aria-expanded='true']")

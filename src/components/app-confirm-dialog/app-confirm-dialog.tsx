@@ -59,7 +59,7 @@ export function AppConfirmDialog({
             {visibleConfirmation?.cancelLabel ?? '取消'}
           </AppAlertDialog.Close>
           <AppButton
-            variant={visibleConfirmation?.isDanger ? 'danger' : 'primary'}
+            tone={visibleConfirmation?.isDanger ? 'danger' : 'default'}
             onClick={onConfirm}
           >
             {visibleConfirmation?.confirmLabel ?? '确认'}

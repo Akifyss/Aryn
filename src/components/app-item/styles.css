@@ -1,29 +1,6 @@
-.app-item-action {
-  width: var(--app-icon-button-size-md);
-  min-width: var(--app-icon-button-size-md);
-  height: var(--app-icon-button-size-md);
-  min-height: var(--app-icon-button-size-md);
-}
-
 .app-item-action-tooltip-trigger {
   display: inline-flex;
   flex-shrink: 0;
-}
-
-.app-item-action.is-menu-open:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
-  background: var(--hover);
-  color: var(--foreground-primary);
-}
-
-.app-item-action:disabled,
-.app-item-action[aria-disabled='true'],
-.app-item-action[data-disabled] {
-  cursor: not-allowed;
-}
-
-.app-icon-button.app-item-action.is-danger:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
-  background: var(--danger);
-  color: var(--foreground-on-danger);
 }
 
 .app-item-row {

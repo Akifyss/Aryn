@@ -66,7 +66,6 @@
 .app-icon-button.file-system-thumbnail-pager-button[aria-disabled='true'],
 .app-icon-button.file-system-thumbnail-pager-button[data-disabled] {
   pointer-events: none;
-  opacity: 0.4;
 }
 
 .app-icon-button.file-system-search-clear-button {
@@ -87,11 +86,6 @@
     var(--app-button-base-radius-sm)
     0;
   background: var(--background-primary);
-}
-
-.app-icon-button.file-system-filter-pill-remove-button:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
-  background: var(--hover);
-  color: var(--foreground-primary);
 }
 
 .file-system-filter-bar {

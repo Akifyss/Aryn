@@ -157,3 +157,9 @@
   background: color-mix(in oklab, var(--foreground-primary) 62%, var(--background-primary));
   color: var(--background-primary);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-icon-button.agent-file-card-remove {
+    transition: none;
+  }
+}

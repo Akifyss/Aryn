@@ -201,7 +201,8 @@ export function AppShell({
       {shouldExposeRightPanelTools ? (
         <AppIconButton
           type='button'
-          className='panel-toggle-button panel-toggle-button-overlay panel-toggle-button-overlay-right'
+          className='panel-toggle-button-overlay panel-toggle-button-overlay-right'
+          data-window-chrome-button='true'
           data-overlay-elevated={shellChromeOverlayState.rightControlsElevated ? 'true' : 'false'}
           data-react-aria-top-layer={shellChromeOverlayState.rightControlsTopLayer ? 'true' : undefined}
           aria-label={rightSidebarToggleAriaLabel}

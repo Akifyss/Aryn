@@ -179,7 +179,7 @@
 
 @media (max-width: 640px) {
   .agent-model-field {
-    max-width: calc(100% - var(--agent-send-button-size) - var(--agent-composer-action-gap));
+    max-width: calc(100% - var(--app-icon-button-size-md) - var(--agent-composer-action-gap));
   }
 
   .agent-model-cascader {

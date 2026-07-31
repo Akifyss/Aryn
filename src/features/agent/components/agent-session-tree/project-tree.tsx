@@ -287,7 +287,7 @@ export function AgentProjectTree({
                 isMenuOpen={isProjectAddMenuOpen}
                 actions={(
                   <AppItemActionButton
-                    className={isProjectAddMenuOpen ? 'is-menu-open' : undefined}
+                    isActive={isProjectAddMenuOpen}
                     aria-label='添加项目'
                     title='添加项目'
                     onClick={(event) => {
