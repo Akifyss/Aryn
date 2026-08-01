@@ -6,6 +6,7 @@ import { SessionManager } from '@earendil-works/pi-coding-agent'
 import type { AgentClientEventPayload } from '../src/features/agent/types'
 
 type FakeProcessInstance = {
+  args: string[]
   emit: (message: Record<string, unknown>) => void
   exit: (error: Error) => void
   notifications: Array<Record<string, unknown>>
@@ -24,6 +25,7 @@ const rpcState = vi.hoisted(() => ({
 
 vi.mock('../electron/main/json-line-process', () => {
   class FakePiRpcProcess implements FakeProcessInstance {
+    readonly args: string[]
     notifications: Array<Record<string, unknown>> = []
     stopCount = 0
 
@@ -32,6 +34,7 @@ vi.mock('../electron/main/json-line-process', () => {
       onEvent: (message: Record<string, unknown>) => void
       onExit?: (error: Error) => void
     }) {
+      this.args = options.args
       rpcState.instances.push(this)
     }
 
@@ -167,6 +170,7 @@ describe('PI CLI runtime coordination', () => {
       expect(processInstances(sessionA)).toHaveLength(1)
 
       const processA = processInstances(sessionA)[0]!
+      expect(processA.args.some((argument) => argument.includes('pi-permission-gate'))).toBe(false)
       await manager.openSession(workspace, sessionB)
       expect(processA.stopCount).toBe(0)
 

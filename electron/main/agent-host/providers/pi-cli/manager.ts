@@ -31,9 +31,6 @@ import {
   type PiCliSessionRecord,
   type PiRpcModel,
 } from './session-model'
-import {
-  resolvePiPermissionExtensionPath as permissionExtensionPath,
-} from './session-paths'
 import { PiCliSessionCatalog } from './session-catalog'
 import { handlePiCliEvent } from './event-handler'
 import { PiCliInteractionRegistry } from './interaction-registry'
@@ -439,7 +436,6 @@ export class PiCliAgentManager {
         : allowCreate
           ? ['--session-id', record.id]
           : ['--session', record.id]),
-      '--extension', permissionExtensionPath(),
     ]
     let runtime: PiCliRuntime
     const processHandle = new JsonLineProcess({

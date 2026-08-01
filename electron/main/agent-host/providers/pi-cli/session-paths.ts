@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto'
-import { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
@@ -28,13 +27,4 @@ export function resolvePiSessionDirectory(cwd: string) {
   // getDefaultSessionDir implementation (not part of its public exports).
   const safePath = `--${cwd.replace(/^[/\\]/, '').replace(/[/\\:]/g, '-')}--`
   return path.join(getPiAgentDir(), 'sessions', safePath)
-}
-
-export function resolvePiPermissionExtensionPath() {
-  const resourcesPath = typeof process.resourcesPath === 'string' ? process.resourcesPath : ''
-  if (resourcesPath) {
-    const packagedPath = path.join(resourcesPath, 'agent-extensions', 'pi-permission-gate.mjs')
-    if (existsSync(packagedPath)) return packagedPath
-  }
-  return path.resolve(process.cwd(), 'resources', 'agent-extensions', 'pi-permission-gate.mjs')
 }
