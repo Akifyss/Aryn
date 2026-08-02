@@ -35,6 +35,7 @@ import {
 } from './interaction-codec'
 import {
   getCodexNotificationThreadId as notificationThreadId,
+  isCodexThreadDeleteSchemaCompatibilityError,
   isMissingNativeCodexThreadError as isMissingNativeThreadError,
   isTransientCodexThreadReadError as isTransientThreadReadError,
 } from './protocol-compatibility'
@@ -1347,9 +1348,25 @@ export class CodexAgentManager {
     if (binding?.activeTurnId) {
       await client.request('turn/interrupt', { threadId, turnId: binding.activeTurnId })
     }
-    await client.request('thread/delete', { threadId }).catch((error) => {
-      if (!isMissingNativeThreadError(error)) throw error
-    })
+    try {
+      await client.request('thread/delete', { threadId })
+    } catch (error) {
+      if (isMissingNativeThreadError(error)) return
+      // Codex 0.144.x can create and resume threads in a fresh CODEX_HOME
+      // before its optional jobs schema exists. thread/delete then fails while
+      // thread/archive remains available, so keep Aryn deletion functional by
+      // using the official archive operation for this narrowly scoped server
+      // compatibility failure.
+      if (!isCodexThreadDeleteSchemaCompatibilityError(error)) throw error
+      try {
+        await this.archiveThread(client, threadId)
+      } catch (archiveError) {
+        throw new AggregateError(
+          [error, archiveError],
+          `Codex thread ${threadId} could not be deleted or archived.`,
+        )
+      }
+    }
   }
 
   private async setThreadName(client: CodexRpcClient, record: CodexThreadRecord) {

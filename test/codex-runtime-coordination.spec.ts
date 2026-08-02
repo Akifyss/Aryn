@@ -15,6 +15,7 @@ type FakeClientInstance = {
 }
 
 const rpcState = vi.hoisted(() => ({
+  archiveErrors: [] as Error[],
   deleteErrors: [] as Error[],
   initializeHook: null as ((clientIndex: number) => Promise<void>) | null,
   instances: [] as FakeClientInstance[],
@@ -142,6 +143,8 @@ vi.mock('../electron/main/agent-host/providers/codex/rpc-client', () => ({
         return {}
       }
       if (method === 'thread/archive') {
+        const failure = rpcState.archiveErrors.shift()
+        if (failure) throw failure
         rpcState.threads.delete(String(params.threadId))
         return {}
       }
@@ -214,6 +217,7 @@ function resumeCount(threadId: string) {
 
 describe('Codex thread binding coordination', () => {
   beforeEach(() => {
+    rpcState.archiveErrors = []
     rpcState.deleteErrors = []
     rpcState.initializeHook = null
     rpcState.instances = []
@@ -495,6 +499,88 @@ describe('Codex thread binding coordination', () => {
       await expect(manager.deleteSession(workspace, 'thread-a')).resolves.toMatchObject({ sessions: [] })
       await expect(manager.sessionExists(workspace, 'thread-a')).resolves.toBe(false)
       expect(resumeCount('thread-a')).toBe(1)
+    } finally {
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('falls back to the official archive operation when Codex delete hits the fresh-state jobs schema bug', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-delete-schema-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    rpcState.threads.set('thread-a', thread(workspace, 'thread-a'))
+    rpcState.deleteErrors.push(new Error(
+      'error returned from database: (code: 1) no such table: agent_jobs',
+    ))
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+
+    try {
+      await manager.openSession(workspace, 'thread-a')
+      await expect(manager.deleteSession(workspace, 'thread-a')).resolves.toMatchObject({ sessions: [] })
+      await expect(manager.sessionExists(workspace, 'thread-a')).resolves.toBe(false)
+      expect(rpcState.instances.flatMap((instance) => instance.requests)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ method: 'thread/delete', params: { threadId: 'thread-a' } }),
+        expect.objectContaining({ method: 'thread/archive', params: { threadId: 'thread-a' } }),
+      ]))
+    } finally {
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('does not archive a session for an unrelated provider database failure', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-delete-other-schema-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    rpcState.threads.set('thread-a', thread(workspace, 'thread-a'))
+    rpcState.deleteErrors.push(new Error(
+      'error returned from database: (code: 1) no such table: agent_jobs_backup',
+    ))
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+
+    try {
+      await manager.openSession(workspace, 'thread-a')
+      await expect(manager.deleteSession(workspace, 'thread-a')).rejects.toThrow('agent_jobs_backup')
+      expect(rpcState.instances.flatMap((instance) => instance.requests)).not.toContainEqual(
+        expect.objectContaining({ method: 'thread/archive' }),
+      )
+      await expect(manager.sessionExists(workspace, 'thread-a')).resolves.toBe(true)
+    } finally {
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('preserves the session and both provider errors when delete and its compatibility archive fail', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-runtime-delete-schema-retry-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    rpcState.threads.set('thread-a', thread(workspace, 'thread-a'))
+    rpcState.deleteErrors.push(new Error(
+      'error returned from database:\nno such table: "main.agent_jobs"',
+    ))
+    rpcState.archiveErrors.push(new Error('provider archive failed'))
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+
+    try {
+      await manager.openSession(workspace, 'thread-a')
+      const deletion = manager.deleteSession(workspace, 'thread-a')
+      await expect(deletion).rejects.toMatchObject({
+        errors: [
+          expect.objectContaining({ message: expect.stringContaining('main.agent_jobs') }),
+          expect.objectContaining({ message: 'provider archive failed' }),
+        ],
+        message: expect.stringContaining('could not be deleted or archived'),
+      })
+      await expect(manager.sessionExists(workspace, 'thread-a')).resolves.toBe(true)
+      await expect(manager.deleteSession(workspace, 'thread-a')).resolves.toMatchObject({ sessions: [] })
     } finally {
       manager.dispose()
       await rm(tempRoot, { force: true, recursive: true })

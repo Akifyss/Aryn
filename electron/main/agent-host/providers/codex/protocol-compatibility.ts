@@ -29,6 +29,11 @@ export function isMissingNativeCodexThreadError(error: unknown) {
   return message.includes('no rollout found') || message.includes('not found')
 }
 
+export function isCodexThreadDeleteSchemaCompatibilityError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /error returned from database:[\s\S]*no such table:\s*["'`]?(?:main\.)?agent_jobs["'`]?(?![\w])/i.test(message)
+}
+
 export function isCodexServiceTierCompatibilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   return message.includes('service_tier') || (
