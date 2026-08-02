@@ -376,6 +376,65 @@ async function applyDebugScenario(page) {
       document.querySelector('.bb-session-surface-host')?.getAttribute('aria-busy') !== 'true'
     ), null, { timeout: timeoutMs })
 
+    const productionAgentIcons = await page.evaluate(async () => {
+      const loadImage = (src) => new Promise((resolve) => {
+        const image = new Image()
+        image.addEventListener('load', () => resolve({
+          height: image.naturalHeight,
+          loaded: image.naturalHeight > 0 && image.naturalWidth > 0,
+          src,
+          width: image.naturalWidth,
+        }), { once: true })
+        image.addEventListener('error', () => resolve({
+          height: 0,
+          loaded: false,
+          src,
+          width: 0,
+        }), { once: true })
+        image.src = src
+      })
+      const readCssUrl = (value) => {
+        if (typeof value !== 'string') return null
+        const match = /^url\(["']?(.*?)["']?\)$/.exec(value.trim())
+        return match?.[1] ?? null
+      }
+      const masks = Array.from(document.querySelectorAll('.agent-brand-icon-mask'))
+      const maskSources = masks.map((element) => (
+        readCssUrl(getComputedStyle(element).maskImage)
+        ?? readCssUrl(getComputedStyle(element).webkitMaskImage)
+      ))
+      const maskResources = await Promise.all(maskSources.map(async (src) => (
+        src ? loadImage(src) : { height: 0, loaded: false, src, width: 0 }
+      )))
+      const bundledResources = await Promise.all([
+        'aryn.svg',
+        'codex.svg',
+        'opencode.svg',
+        'pi.svg',
+      ].map((fileName) => loadImage(new URL(`./agent-icons/${fileName}`, document.baseURI).href)))
+      const images = Array.from(document.querySelectorAll('.agent-brand-icon-image'))
+      await Promise.all(images.map(async (image) => {
+        if (!image.complete) {
+          await new Promise((resolve) => {
+            image.addEventListener('load', resolve, { once: true })
+            image.addEventListener('error', resolve, { once: true })
+          })
+        }
+      }))
+
+      return {
+        brokenImageCount: images.filter((image) => image.naturalWidth <= 0 || image.naturalHeight <= 0).length,
+        bundledResources,
+        imageCount: images.length,
+        maskCount: masks.length,
+        maskResources,
+        visibleMaskCount: masks.filter((element) => {
+          const rect = element.getBoundingClientRect()
+          return rect.width > 0 && rect.height > 0
+        }).length,
+      }
+    })
+
     const productionSurfaceStayedMounted = await page.evaluate(async () => {
       const mounted = document.querySelector('.bb-session-surface-host .aryn-bb-session-surface')
       const editor = document.querySelector('.agent-composer-editor')
@@ -1411,6 +1470,7 @@ async function applyDebugScenario(page) {
     }
 
     return {
+      productionAgentIcons,
       productionSurfaceCount: await page.locator('.bb-session-surface-host .aryn-bb-session-surface').count(),
       productionSurfaceStayedMounted,
       reducedMotion,
@@ -2071,7 +2131,14 @@ function assertDebugScenarioResult(result) {
 
   if (debugScenario === 'bb-unified-surface') {
     if (
-      !result.productionSurfaceStayedMounted
+      !result.productionAgentIcons
+      || result.productionAgentIcons.maskCount < 1
+      || result.productionAgentIcons.visibleMaskCount < 1
+      || result.productionAgentIcons.maskResources.some((resource) => !resource.loaded)
+      || result.productionAgentIcons.bundledResources.length !== 4
+      || result.productionAgentIcons.bundledResources.some((resource) => !resource.loaded)
+      || result.productionAgentIcons.brokenImageCount !== 0
+      || !result.productionSurfaceStayedMounted
       || result.productionSurfaceCount !== 1
       || !result.syntheticTimeline?.rendered
       || result.syntheticTimeline.rootCount !== 1

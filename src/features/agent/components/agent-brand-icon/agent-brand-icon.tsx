@@ -20,7 +20,10 @@ const AGENT_ICON_FILES: Record<AgentId, string> = {
 }
 
 function getAgentIconSrc(agentId: AgentId) {
-  return `./agent-icons/${AGENT_ICON_FILES[agentId]}`
+  const relativePath = `./agent-icons/${AGENT_ICON_FILES[agentId]}`
+  return typeof document === 'undefined'
+    ? relativePath
+    : new URL(relativePath, document.baseURI).href
 }
 
 function getMaskStyle(src: string): CSSProperties {

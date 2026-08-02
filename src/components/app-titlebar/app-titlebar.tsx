@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
-import { Icon } from '@iconify/react'
+import { CloseLine, RestoreLine, SquareLine, SubtractLine } from '@mingcute/react'
 
 export function AppTitlebar({
   isDrawerOpen = false,
@@ -57,7 +57,7 @@ export function AppTitlebar({
                 void window.appApi.minimizeWindow()
               }}
             >
-              <Icon icon='material-symbols:chrome-minimize-rounded' />
+              <SubtractLine aria-hidden='true' />
             </button>
             <button
               aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
@@ -69,11 +69,9 @@ export function AppTitlebar({
                 })
               }}
             >
-              <Icon
-                icon={isMaximized
-                  ? 'material-symbols:chrome-restore-outline-rounded'
-                  : 'material-symbols:chrome-maximize-outline'}
-              />
+              {isMaximized
+                ? <RestoreLine aria-hidden='true' />
+                : <SquareLine aria-hidden='true' />}
             </button>
             <button
               aria-label='Close window'
@@ -88,7 +86,7 @@ export function AppTitlebar({
                 void window.appApi.closeWindow()
               }}
             >
-              <Icon icon='material-symbols:close-rounded' />
+              <CloseLine aria-hidden='true' />
             </button>
           </div>
         ) : null}

@@ -1,5 +1,4 @@
-import { Icon } from '@iconify/react'
-import { Chat3Line, FolderLine, LayoutLeftLine } from '@mingcute/react'
+import { Chat3Line, FolderLine, LayoutLeftLine, SearchLine } from '@mingcute/react'
 import { AppIconButton } from '@/components/app-icon-button'
 import { SegmentedIconTabs } from '@/components/ui/segmented-icon-tabs/segmented-icon-tabs'
 import type { AppLayoutPreference } from '@/hooks/use-settings-store'
@@ -59,7 +58,7 @@ export function AppChromeSearchButton({ onClick }: AppChromeSearchButtonProps) {
       preventFocusOnPress
       onClick={onClick}
     >
-      <Icon icon='lucide:search' aria-hidden='true' />
+      <SearchLine aria-hidden='true' />
     </AppIconButton>
   )
 }

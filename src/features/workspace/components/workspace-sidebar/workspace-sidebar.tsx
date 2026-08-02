@@ -1,6 +1,5 @@
 import type { CSSProperties, ReactNode, Ref } from 'react'
-import { Icon } from '@iconify/react'
-import { DownLine } from '@mingcute/react'
+import { DownLine, Settings3Line } from '@mingcute/react'
 import { AppMenu as Menu } from '@/components/app-menu'
 import { ProjectIcon } from '@/components/project-icon'
 import type { ShellPlatform } from '@/features/layout/shell-layout'
@@ -79,7 +78,7 @@ export function WorkspaceSidebar({
 
       <div className='sidebar-footer'>
         <button type='button' className='sidebar-footer-item' onClick={onOpenSettings}>
-          <Icon aria-hidden='true' icon='lucide:settings' />
+          <Settings3Line aria-hidden='true' />
           <span>设置</span>
         </button>
       </div>

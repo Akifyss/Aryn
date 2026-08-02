@@ -4,7 +4,7 @@ import {
   ListBox,
   ListBoxItem
 } from '@heroui/react'
-import { Icon } from '@iconify/react'
+import { SearchLine } from '@mingcute/react'
 import { AppDialog } from '@/components/app-dialog'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
@@ -180,7 +180,7 @@ export function CommandPalette({
         <AppDialog.Body>
           {/* Header */}
           <div className='command-palette-header'>
-            <Icon icon='lucide:search' className='command-palette-icon' />
+            <SearchLine aria-hidden='true' className='command-palette-icon' />
             <input
               ref={inputRef}
               aria-label='搜索命令'
@@ -268,7 +268,7 @@ export function CommandPalette({
               </div>
             ) : (
               <div className='command-palette-empty'>
-                <Icon icon='lucide:search' className='command-palette-empty-icon' />
+                <SearchLine aria-hidden='true' className='command-palette-empty-icon' />
                 <p className='command-palette-empty-text'>未找到结果</p>
               </div>
             )}

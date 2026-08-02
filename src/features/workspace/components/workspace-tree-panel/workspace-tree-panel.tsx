@@ -1,6 +1,11 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
-import { Icon } from '@iconify/react'
-import { FolderForbidLine } from '@mingcute/react'
+import {
+  FileNewLine,
+  FolderForbidLine,
+  FoldVerticalLine,
+  NewFolderLine,
+  UnfoldVerticalLine,
+} from '@mingcute/react'
 import { AppItem, AppItemActionButton } from '@/components/app-item'
 import { TreeScrollArea } from '@/components/tree'
 import { WorkspaceTree, type WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree/workspace-tree'
@@ -85,7 +90,7 @@ export function WorkspaceTreePanel({
               aria-label='Create File'
               title='新建文件'
             >
-              <Icon icon='lucide:file-plus' />
+              <FileNewLine aria-hidden='true' />
             </AppItemActionButton>
             <AppItemActionButton
               onClick={onCreateDirectory}
@@ -93,7 +98,7 @@ export function WorkspaceTreePanel({
               aria-label='Create Folder'
               title='新建文件夹'
             >
-              <Icon icon='lucide:folder-plus' />
+              <NewFolderLine aria-hidden='true' />
             </AppItemActionButton>
             <AppItemActionButton
               onClick={onToggleFileTreeExpansion}
@@ -101,9 +106,9 @@ export function WorkspaceTreePanel({
               aria-label='Toggle Expansion'
               title={expandedPaths.size > 0 ? '全部折叠' : '全部展开'}
             >
-              <Icon
-                icon={expandedPaths.size > 0 ? 'lucide:fold-vertical' : 'lucide:unfold-vertical'}
-              />
+              {expandedPaths.size > 0
+                ? <FoldVerticalLine aria-hidden='true' />
+                : <UnfoldVerticalLine aria-hidden='true' />}
             </AppItemActionButton>
           </>
         )}
