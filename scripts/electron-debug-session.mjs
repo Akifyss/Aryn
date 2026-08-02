@@ -37,7 +37,7 @@ function readViewMode(value) {
 }
 
 function readDebugScenario(value) {
-  return ['agent-attachments', 'agent-mention-menu', 'opencode-surface'].includes(value ?? '') ? value : null
+  return ['agent-attachments', 'agent-mention-menu', 'bb-unified-surface', 'opencode-surface'].includes(value ?? '') ? value : null
 }
 
 function compactText(value, maxLength = 1200) {
@@ -279,26 +279,27 @@ async function restoreWorkspace(page, fixture) {
         paths: [filePath],
       }))
 
-      if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu' || debugScenario === 'opencode-surface') {
+      if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu' || debugScenario === 'bb-unified-surface' || debugScenario === 'opencode-surface') {
         // Keep the legacy Agent fixtures deterministic now that new
         // conversations remember the last successfully used adapter.
         window.localStorage.setItem(
           'aryn:last-new-conversation-agent',
-          debugScenario === 'opencode-surface' ? 'opencode' : 'builtin-pi',
+          debugScenario === 'opencode-surface' || debugScenario === 'bb-unified-surface' ? 'opencode' : 'builtin-pi',
         )
-        window.localStorage.setItem('aryn:settings', JSON.stringify({
-          state: {
-            layoutPreference: 'agent',
-            meo: {
-              focusedLineHighlight: false,
-              gitDiffLineHighlights: true,
-              imageFolder: 'assets',
-              outlinePosition: 'right',
-            },
-            theme: 'auto',
+        await window.appApi.updateSettingsState({
+          agent: {
+            runningPromptEnterBehavior: 'followUp',
+            sessionView: debugScenario === 'opencode-surface' ? 'native' : 'unified',
           },
-          version: 0,
-        }))
+          layoutPreference: 'agent',
+          meo: {
+            focusedLineHighlight: false,
+            gitDiffLineHighlights: true,
+            imageFolder: 'assets',
+            outlinePosition: 'right',
+          },
+          theme: 'auto',
+        })
         window.localStorage.setItem('aryn:left-sidebar-collapsed', 'true')
         window.localStorage.setItem('aryn:agent-right-sidebar-collapsed', 'true')
       } else {
@@ -310,7 +311,7 @@ async function restoreWorkspace(page, fixture) {
         lastFilePath: filePath,
         markAsLastOpened: true,
       })
-      if (debugScenario === 'opencode-surface') {
+      if (debugScenario === 'opencode-surface' || debugScenario === 'bb-unified-surface') {
         const projectState = await window.appApi.getProjectState()
         const project = projectState.projects.find((item) => item.path === workspacePath)
         if (!project) throw new Error('OpenCode surface debug project was not registered.')
@@ -318,7 +319,7 @@ async function restoreWorkspace(page, fixture) {
         await window.appApi.setActiveWorkspaceContext({ kind: 'project', projectId: project.id })
         const agentState = await window.appApi.createAgentSession(
           { agentId: 'opencode', workspacePath },
-          { name: 'OpenCode surface debug' },
+          { name: debugScenario === 'bb-unified-surface' ? 'bb unified surface debug' : 'OpenCode surface debug' },
         )
         const sessionPath = agentState.activeSession?.sessionPath
         if (!sessionPath) {
@@ -343,7 +344,7 @@ async function restoreWorkspace(page, fixture) {
 
   await page.reload({ waitUntil: 'domcontentloaded', timeout: timeoutMs })
   await waitForAppShell(page)
-  if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu' || debugScenario === 'opencode-surface') {
+  if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu' || debugScenario === 'bb-unified-surface' || debugScenario === 'opencode-surface') {
     await page.waitForSelector('.agent-composer-editor', { timeout: timeoutMs })
   } else {
     await page.waitForFunction(() => {
@@ -354,12 +355,1069 @@ async function restoreWorkspace(page, fixture) {
 }
 
 async function applyDebugScenario(page) {
-  if (debugScenario !== 'agent-attachments' && debugScenario !== 'agent-mention-menu' && debugScenario !== 'opencode-surface') {
+  if (debugScenario !== 'agent-attachments' && debugScenario !== 'agent-mention-menu' && debugScenario !== 'bb-unified-surface' && debugScenario !== 'opencode-surface') {
     return null
   }
 
   log('applying debug scenario', { debugScenario })
   await page.waitForSelector('.agent-composer-editor', { timeout: timeoutMs })
+
+  if (debugScenario === 'bb-unified-surface') {
+    if (!await page.$('.bb-session-surface-host .aryn-bb-session-surface')) {
+      const sessionRow = page.locator('.agent-project-list').getByText('bb unified surface debug', { exact: true }).first()
+      await sessionRow.waitFor({ state: 'visible', timeout: Math.min(timeoutMs, 10_000) })
+      await sessionRow.click()
+    }
+    await page.waitForSelector('.bb-session-surface-host .aryn-bb-session-surface', {
+      state: 'attached',
+      timeout: Math.min(timeoutMs, 10_000),
+    })
+    await page.waitForFunction(() => (
+      document.querySelector('.bb-session-surface-host')?.getAttribute('aria-busy') !== 'true'
+    ), null, { timeout: timeoutMs })
+
+    const productionSurfaceStayedMounted = await page.evaluate(async () => {
+      const mounted = document.querySelector('.bb-session-surface-host .aryn-bb-session-surface')
+      const editor = document.querySelector('.agent-composer-editor')
+      if (!mounted || !editor) return false
+      editor.focus()
+      document.execCommand('insertText', false, 'bb-remount-check')
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      const stayedMounted = mounted === document.querySelector('.bb-session-surface-host .aryn-bb-session-surface')
+      editor.textContent = ''
+      editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }))
+      return stayedMounted
+    })
+
+    const syntheticTimeline = await page.evaluate(async () => {
+      const created = Date.now()
+      const workspacePath = 'C:\\debug-workspace'
+      const moduleUrl = new URL('./bb-session-surface/index.js', document.baseURI).href
+      const previewImageUrl = new URL('./bb-session-surface/bb-mark.svg', document.baseURI).href
+      const surfaceModule = await import(moduleUrl)
+      const container = document.createElement('div')
+      container.dataset.debugBbTimeline = 'true'
+      Object.assign(container.style, {
+        background: 'var(--background-primary)',
+        bottom: '120px',
+        left: '280px',
+        overflow: 'auto',
+        position: 'fixed',
+        right: '24px',
+        top: '48px',
+        zIndex: '9999',
+      })
+      document.body.append(container)
+      let historyLoadCount = 0
+      const openedWorkspaceFiles = []
+      let mounted
+      mounted = surfaceModule.mountBbSessionSurface(container, {
+        bridge: {
+          loadOlderTimelineRows: async () => {
+            historyLoadCount += 1
+            mounted.setPaginationState({
+              hasOlderTimelineRows: false,
+              isLoadingOlderTimelineRows: false,
+            })
+          },
+          openWorkspaceFile: async (filePath) => {
+            openedWorkspaceFiles.push(filePath)
+          },
+        },
+        interactionRecords: [{
+          request: {
+            fields: [{
+              id: 'format',
+              label: 'Format',
+              message: 'Choose output format',
+              options: [
+                { id: 'html', label: 'HTML' },
+                { id: 'markdown', label: 'Markdown' },
+              ],
+            }],
+            id: 'question-request-1',
+            itemId: 'question-part-1',
+            kind: 'question',
+            message: 'Choose output format',
+            options: [],
+            sessionId: 'bb_debug_unified',
+            title: 'Output format',
+          },
+          requestedAt: created + 2,
+          resolvedAt: created + 3,
+          response: {
+            answers: { format: ['html'] },
+            optionId: 'answer',
+          },
+          status: 'resolved',
+        }],
+        paginationState: {
+          hasOlderTimelineRows: true,
+          isLoadingOlderTimelineRows: false,
+        },
+        sessionId: 'bb_debug_unified',
+        theme: 'light',
+        workspacePath,
+        optimisticUserMessages: [{
+          id: 'optimistic-1',
+          text: 'Unified optimistic follow-up',
+          timestamp: created + 8,
+        }],
+        snapshot: {
+          agentId: 'opencode',
+          status: { type: 'busy' },
+          diffs: [{
+            path: 'README.md',
+            status: 'modified',
+            diff: '@@ -1 +1 @@\\n-old\\n+new',
+          }],
+          messages: [{
+            info: { id: 'user-1', role: 'user', time: { created } },
+            parts: [{ id: 'user-text-1', type: 'text', text: 'Unified synthetic user message' }, {
+              id: 'synthetic-user-text-1',
+              type: 'text',
+              text: 'Internal synthetic text must stay hidden',
+              synthetic: true,
+            }, {
+              id: 'user-file-1',
+              type: 'file',
+              filename: 'input file.txt',
+              mime: 'text/plain',
+              url: 'file:///C:/debug-workspace/input%20file.txt',
+            }],
+          }, {
+            info: { id: 'assistant-1', role: 'assistant', time: { created: created + 1 } },
+            parts: [{
+              id: 'reasoning-1',
+              type: 'reasoning',
+              text: 'Inspecting the workspace carefully',
+              state: { status: 'running' },
+            }, {
+              id: 'command-1',
+              type: 'tool',
+              tool: 'bash',
+              state: {
+                status: 'completed',
+                input: { command: 'npm test', cwd: workspacePath },
+                output: '1058 tests passed',
+                metadata: { exitCode: 0 },
+                attachments: [{
+                  id: 'tool-attachment-1',
+                  type: 'file',
+                  filename: 'tool attachment.txt',
+                  mime: 'text/plain',
+                  url: 'file:///C:/debug-workspace/tool%20attachment.txt',
+                }],
+              },
+            }, {
+              id: 'fetch-1',
+              type: 'tool',
+              tool: 'webfetch',
+              state: {
+                status: 'completed',
+                input: { url: 'https://example.com/reference' },
+                output: 'Reference loaded',
+              },
+            }, {
+              id: 'question-part-1',
+              type: 'tool',
+              tool: 'question',
+              state: {
+                status: 'pending',
+                input: {
+                  questions: [{
+                    id: 'format',
+                    question: 'Choose output format',
+                    options: [
+                      { label: 'HTML', value: 'html' },
+                      { label: 'Markdown', value: 'markdown' },
+                    ],
+                  }],
+                },
+              },
+            }, {
+              id: 'future-1',
+              type: 'future-part',
+              payload: { preserved: true },
+            }, {
+              id: 'assistant-text-1',
+              type: 'text',
+              text: 'Unified synthetic assistant response',
+            }],
+          }],
+        },
+      })
+
+      const deadline = Date.now() + 10_000
+      let rendered = false
+      while (Date.now() < deadline) {
+        const text = container.textContent ?? ''
+        if (
+          text.includes('Unified synthetic user message')
+          && text.includes('Unified synthetic assistant response')
+          && text.includes('Unified optimistic follow-up')
+          && text.includes('npm test')
+          && text.includes('tool attachment.txt')
+          && text.includes('README.md')
+          && text.includes('Unhandled OpenCode event')
+        ) {
+          rendered = true
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+
+      const initialText = container.textContent ?? ''
+      const toolAttachmentControl = [...container.querySelectorAll('a, button')].find(
+        (element) => element.textContent?.trim() === 'tool attachment.txt',
+      )
+      toolAttachmentControl?.click()
+      await new Promise((resolve) => setTimeout(resolve, 25))
+      const toolAttachmentVisible = Boolean(toolAttachmentControl)
+      const toolAttachmentOpenedPath = openedWorkspaceFiles.at(-1) ?? null
+      const openCodeUserFileVisible = initialText.includes('input file.txt')
+      const syntheticUserTextHidden = !initialText.includes('Internal synthetic text must stay hidden')
+
+      const openCodeQuestionRowCount = container.querySelectorAll(
+        '[data-timeline-row-id*="question-request-1"]',
+      ).length
+      const historyScrollArea = container.querySelector('.thread-scrollbar')
+      if (historyScrollArea) {
+        historyScrollArea.scrollTop = 0
+        historyScrollArea.dispatchEvent(new Event('scroll', { bubbles: true }))
+      }
+      const historyDeadline = Date.now() + 5_000
+      while (Date.now() < historyDeadline && historyLoadCount < 1) {
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+
+      const streamingSnapshot = {
+        agentId: 'codex',
+        status: { type: 'busy' },
+        thread: {
+          id: 'codex-streaming-regression',
+          createdAt: created,
+          turns: [{
+            id: 'turn-streaming',
+            status: 'inProgress',
+            startedAt: created,
+            items: [{
+              id: 'user-streaming',
+              type: 'userMessage',
+              content: [{ type: 'text', text: 'Streaming update regression' }],
+            }, {
+              id: 'assistant-streaming',
+              type: 'agentMessage',
+              text: '我',
+            }, {
+              id: 'command-streaming',
+              type: 'commandExecution',
+              command: 'npm test',
+              aggregatedOutput: 'Tests still running',
+              status: 'inProgress',
+            }, {
+              id: 'search-streaming',
+              type: 'webSearch',
+              queries: ['AI news latest August 2026'],
+              status: 'inProgress',
+            }],
+          }],
+        },
+      }
+      mounted.setOptimisticUserMessages([])
+      mounted.setFileChanges([])
+      mounted.setSnapshot(streamingSnapshot)
+      const firstChunkDeadline = Date.now() + 5_000
+      while (Date.now() < firstChunkDeadline && !(container.textContent ?? '').includes('我')) {
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+      const completeStreamingText = '我会先检索近期 AI 新闻并交叉核对来源，再生成 HTML 总结。'
+      streamingSnapshot.thread.turns[0].items[1].text = completeStreamingText
+      mounted.setSnapshot(streamingSnapshot)
+      const streamingDeadline = Date.now() + 5_000
+      let streamingTextUpdated = false
+      while (Date.now() < streamingDeadline) {
+        if ((container.textContent ?? '').includes(completeStreamingText)) {
+          streamingTextUpdated = true
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+
+      mounted.setSnapshot({
+        agentId: 'pi',
+        entryIds: ['', ''],
+        isStreaming: false,
+        messages: [{
+          role: 'user',
+          content: [{ type: 'text', text: '你好' }],
+          timestamp: created + 10,
+        }, {
+          role: 'assistant',
+          content: [{ type: 'text', text: '你好！我是 PI。' }],
+          timestamp: created + 11,
+        }],
+        modelNames: {},
+        sessionId: 'pi-real-shape-regression',
+      })
+      const piDeadline = Date.now() + 5_000
+      let piRendered = false
+      while (Date.now() < piDeadline) {
+        const text = container.textContent ?? ''
+        if (
+          text.includes('你好')
+          && text.includes('你好！我是 PI。')
+        ) {
+          piRendered = true
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+
+      const piUserMessage = Array.from(container.querySelectorAll('[class*="group/message"]'))
+        .find((element) => (element.textContent ?? '').trim() === '你好')
+      const piUserMessageBody = piUserMessage?.querySelector('[data-markdown-preview]') ?? null
+      const piUserMessageStyle = piUserMessageBody ? getComputedStyle(piUserMessageBody) : null
+      const piUserMessageRect = piUserMessageBody?.getBoundingClientRect() ?? null
+      const piUserMessageTextFillColor = piUserMessageStyle?.webkitTextFillColor ?? null
+      const transparentColors = new Set(['transparent', 'rgba(0, 0, 0, 0)'])
+      const piUserMessageVisible = Boolean(
+        piUserMessageRect
+        && piUserMessageRect.width > 0
+        && piUserMessageRect.height > 0
+        && piUserMessageStyle
+        && !transparentColors.has(piUserMessageStyle.color)
+        && piUserMessageTextFillColor
+        && !transparentColors.has(piUserMessageTextFillColor),
+      )
+
+      mounted.setSnapshot({
+        agentId: 'builtin-pi',
+        entryIds: ['builtin-user', 'builtin-assistant'],
+        isStreaming: false,
+        messages: [{
+          role: 'user',
+          content: [{ type: 'text', text: 'Builtin PI user message rendered' }],
+          timestamp: created + 15,
+        }, {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Builtin PI assistant message rendered' }],
+          timestamp: created + 16,
+        }],
+        sessionId: 'builtin-pi-regression',
+      })
+      const builtinPiDeadline = Date.now() + 5_000
+      let builtinPiRendered = false
+      while (Date.now() < builtinPiDeadline) {
+        const text = container.textContent ?? ''
+        if (
+          text.includes('Builtin PI user message rendered')
+          && text.includes('Builtin PI assistant message rendered')
+        ) {
+          builtinPiRendered = true
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+
+      mounted.setSnapshot({
+        agentId: 'pi',
+        entryIds: ['pi-live-user'],
+        isStreaming: true,
+        messages: [{
+          role: 'user',
+          content: [{ type: 'text', text: 'PI live event bridge regression' }],
+          timestamp: created + 20,
+        }],
+        modelNames: {},
+        sessionId: 'pi-live-event-regression',
+      })
+      mounted.setRuntimeState({
+        isStreaming: true,
+        streaming: {
+          assistantText: 'PI stale assistant delta must not render',
+          startedAt: created + 21,
+        },
+      })
+      mounted.setRuntimeState({
+        isStreaming: true,
+        streaming: {
+          assistantText: 'PI live assistant delta rendered',
+          isThinkingStreaming: true,
+          startedAt: created + 21,
+          thinkingText: 'PI live thinking delta rendered',
+          tools: [{
+            id: 'pi-live-tool',
+            name: 'read',
+            startedAt: created + 22,
+            status: 'running',
+            summary: 'PI live tool progress rendered',
+          }],
+        },
+      })
+      const piLiveDeadline = Date.now() + 5_000
+      let piLiveRendered = false
+      let piStaleRuntimeHidden = false
+      while (Date.now() < piLiveDeadline) {
+        const text = container.textContent ?? ''
+        if (
+          text.includes('PI live assistant delta rendered')
+          && text.includes('Thinking')
+          && text.includes('Running tool: read')
+        ) {
+          piLiveRendered = true
+          piStaleRuntimeHidden = !text.includes('PI stale assistant delta must not render')
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+
+      const waitForLayout = () => new Promise((resolve) => requestAnimationFrame(() => (
+        requestAnimationFrame(resolve)
+      )))
+      const surfaceRootForChecks = container.querySelector('.aryn-bb-session-surface')
+      const liveUserMessage = Array.from(container.querySelectorAll('[class*="group/message"]'))
+        .find((element) => (element.textContent ?? '').trim() === 'PI live event bridge regression')
+      const liveUserMessageBody = liveUserMessage?.querySelector('[data-markdown-preview]') ?? null
+      const parseCssColor = (value) => {
+        const rgb = value.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i)
+        if (rgb) {
+          return rgb.slice(1, 4).map((component) => Number.parseFloat(component) / 255)
+        }
+        const oklch = value.match(/^oklch\(\s*([\d.]+)(%)?\s+([\d.]+)\s+([\d.-]+)/i)
+        if (!oklch) return null
+        const lightness = Number.parseFloat(oklch[1]) / (oklch[2] ? 100 : 1)
+        const chroma = Number.parseFloat(oklch[3])
+        const hue = Number.parseFloat(oklch[4]) * Math.PI / 180
+        const a = chroma * Math.cos(hue)
+        const b = chroma * Math.sin(hue)
+        const lRoot = lightness + 0.3963377774 * a + 0.2158037573 * b
+        const mRoot = lightness - 0.1055613458 * a - 0.0638541728 * b
+        const sRoot = lightness - 0.0894841775 * a - 1.291485548 * b
+        const l = lRoot ** 3
+        const m = mRoot ** 3
+        const s = sRoot ** 3
+        return [
+          4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+          -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+          -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+        ].map((component) => Math.max(0, Math.min(1, component)))
+      }
+      const contrastRatio = (foreground, background) => {
+        const foregroundRgb = parseCssColor(foreground)
+        const backgroundRgb = parseCssColor(background)
+        if (!foregroundRgb || !backgroundRgb) return null
+        const luminance = (rgb) => (
+          0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+        )
+        const foregroundLuminance = luminance(foregroundRgb)
+        const backgroundLuminance = luminance(backgroundRgb)
+        return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
+          / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+      }
+      const previousRootClass = document.documentElement.getAttribute('class')
+      const previousBodyClass = document.body.getAttribute('class')
+      const previousTheme = document.documentElement.getAttribute('data-theme')
+      const themeChecks = []
+      for (const theme of ['light', 'dark']) {
+        mounted.setTheme(theme)
+        document.documentElement.classList.remove('light', 'dark')
+        document.documentElement.classList.add(theme)
+        document.documentElement.setAttribute('data-theme', theme)
+        document.body.classList.remove('light', 'dark')
+        document.body.classList.add(theme)
+        await waitForLayout()
+        const containerStyle = getComputedStyle(container)
+        const surfaceStyle = surfaceRootForChecks ? getComputedStyle(surfaceRootForChecks) : null
+        const userStyle = liveUserMessageBody ? getComputedStyle(liveUserMessageBody) : null
+        const userRect = liveUserMessageBody?.getBoundingClientRect() ?? null
+        const userTextFillColor = userStyle?.webkitTextFillColor ?? ''
+        const userContrastRatio = contrastRatio(userTextFillColor, containerStyle.backgroundColor)
+        themeChecks.push({
+          backgroundColor: containerStyle.backgroundColor,
+          color: surfaceStyle?.color ?? null,
+          readable: Boolean(
+            userRect
+            && userRect.width > 0
+            && userRect.height > 0
+            && userStyle
+            && !transparentColors.has(userStyle.color)
+            && !transparentColors.has(userTextFillColor)
+            && userContrastRatio !== null
+            && userContrastRatio >= 4.5,
+          ),
+          surfaceTheme: surfaceRootForChecks?.getAttribute('data-bb-theme') ?? null,
+          theme,
+          userContrastRatio,
+          userTextFillColor,
+        })
+      }
+      if (previousRootClass === null) {
+        document.documentElement.removeAttribute('class')
+      } else {
+        document.documentElement.setAttribute('class', previousRootClass)
+      }
+      if (previousBodyClass === null) {
+        document.body.removeAttribute('class')
+      } else {
+        document.body.setAttribute('class', previousBodyClass)
+      }
+      if (previousTheme === null) {
+        document.documentElement.removeAttribute('data-theme')
+      } else {
+        document.documentElement.setAttribute('data-theme', previousTheme)
+      }
+      await waitForLayout()
+
+      const originalContainerPosition = {
+        left: container.style.left,
+        right: container.style.right,
+        width: container.style.width,
+      }
+      const responsiveChecks = []
+      for (const requestedWidth of [360, 960]) {
+        container.style.left = '16px'
+        container.style.right = 'auto'
+        container.style.width = `${Math.min(requestedWidth, window.innerWidth - 32)}px`
+        await waitForLayout()
+        const surfaceRect = surfaceRootForChecks?.getBoundingClientRect() ?? null
+        const userRect = liveUserMessageBody?.getBoundingClientRect() ?? null
+        responsiveChecks.push({
+          clientWidth: surfaceRootForChecks?.clientWidth ?? 0,
+          horizontalOverflow: surfaceRootForChecks
+            ? Math.max(0, surfaceRootForChecks.scrollWidth - surfaceRootForChecks.clientWidth)
+            : Number.POSITIVE_INFINITY,
+          requestedWidth,
+          userMessageInsideSurface: Boolean(
+            surfaceRect
+            && userRect
+            && userRect.left >= surfaceRect.left - 1
+            && userRect.right <= surfaceRect.right + 1,
+          ),
+        })
+      }
+      container.style.left = originalContainerPosition.left
+      container.style.right = originalContainerPosition.right
+      container.style.width = originalContainerPosition.width
+      await waitForLayout()
+
+      const providerVisualFixtures = [{
+        agentId: 'codex',
+        assistantText: 'Electron matrix assistant codex',
+        snapshot: {
+          agentId: 'codex',
+          thread: {
+            id: 'electron-matrix-codex',
+            turns: [{
+              id: 'electron-matrix-codex-turn',
+              status: 'completed',
+              items: [{
+                id: 'electron-matrix-codex-user',
+                type: 'userMessage',
+                content: [{ type: 'text', text: 'Electron matrix user codex' }],
+              }, {
+                id: 'electron-matrix-codex-assistant',
+                type: 'agentMessage',
+                text: 'Electron matrix assistant codex',
+              }],
+            }],
+          },
+        },
+        userText: 'Electron matrix user codex',
+      }, {
+        agentId: 'opencode',
+        assistantText: 'Electron matrix assistant opencode',
+        snapshot: {
+          agentId: 'opencode',
+          messages: [{
+            info: { id: 'electron-matrix-opencode-user', role: 'user', time: { created } },
+            parts: [{ type: 'text', text: 'Electron matrix user opencode' }],
+          }, {
+            info: { id: 'electron-matrix-opencode-assistant', role: 'assistant', time: { created: created + 1 } },
+            parts: [{ type: 'text', text: 'Electron matrix assistant opencode' }],
+          }],
+        },
+        userText: 'Electron matrix user opencode',
+      }, {
+        agentId: 'builtin-pi',
+        assistantText: 'Electron matrix assistant builtin-pi',
+        snapshot: {
+          agentId: 'builtin-pi',
+          entryIds: ['electron-matrix-builtin-user', 'electron-matrix-builtin-assistant'],
+          messages: [{
+            role: 'user',
+            content: [{ type: 'text', text: 'Electron matrix user builtin-pi' }],
+            timestamp: created,
+          }, {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'Electron matrix assistant builtin-pi' }],
+            timestamp: created + 1,
+          }],
+          sessionId: 'electron-matrix-builtin-pi',
+        },
+        userText: 'Electron matrix user builtin-pi',
+      }, {
+        agentId: 'pi',
+        assistantText: 'Electron matrix assistant pi',
+        snapshot: {
+          agentId: 'pi',
+          entryIds: ['electron-matrix-pi-user', 'electron-matrix-pi-assistant'],
+          messages: [{
+            role: 'user',
+            content: [{ type: 'text', text: 'Electron matrix user pi' }],
+            timestamp: created,
+          }, {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'Electron matrix assistant pi' }],
+            timestamp: created + 1,
+          }],
+          sessionId: 'electron-matrix-pi',
+        },
+        userText: 'Electron matrix user pi',
+      }]
+      const originalContainerBackground = container.style.background
+      const providerVisualChecks = []
+      mounted.setOptimisticUserMessages([])
+      mounted.setFileChanges([])
+      mounted.setRuntimeState({})
+      for (const fixture of providerVisualFixtures) {
+        mounted.setSnapshot(fixture.snapshot)
+        const providerDeadline = Date.now() + 5_000
+        while (Date.now() < providerDeadline) {
+          const text = container.textContent ?? ''
+          if (text.includes(fixture.userText) && text.includes(fixture.assistantText)) break
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        }
+        const root = container.querySelector('.aryn-bb-session-surface')
+        const userMessage = Array.from(container.querySelectorAll('[class*="group/message"]'))
+          .find((element) => (element.textContent ?? '').trim() === fixture.userText)
+        const userBody = userMessage?.querySelector('[data-markdown-preview]') ?? null
+        const providerThemeChecks = []
+        for (const theme of ['light', 'dark']) {
+          mounted.setTheme(theme)
+          await waitForLayout()
+          const rootStyle = root ? getComputedStyle(root) : null
+          const canvas = rootStyle?.getPropertyValue('--canvas').trim() ?? ''
+          if (canvas) container.style.background = canvas
+          await waitForLayout()
+          const userStyle = userBody ? getComputedStyle(userBody) : null
+          const userRect = userBody?.getBoundingClientRect() ?? null
+          const userTextFillColor = userStyle?.webkitTextFillColor ?? ''
+          const backgroundColor = getComputedStyle(container).backgroundColor
+          const ratio = contrastRatio(userTextFillColor, backgroundColor)
+          providerThemeChecks.push({
+            backgroundColor,
+            color: rootStyle?.color ?? null,
+            explicitTheme: root?.getAttribute('data-bb-theme') ?? null,
+            readable: Boolean(
+              userRect
+              && userRect.width > 0
+              && userRect.height > 0
+              && userStyle
+              && !transparentColors.has(userStyle.color)
+              && !transparentColors.has(userTextFillColor)
+              && ratio !== null
+              && ratio >= 4.5,
+            ),
+            theme,
+            userContrastRatio: ratio,
+            userTextFillColor,
+          })
+        }
+        const providerResponsiveChecks = []
+        for (const requestedWidth of [360, 960]) {
+          container.style.left = '16px'
+          container.style.right = 'auto'
+          container.style.width = `${Math.min(requestedWidth, window.innerWidth - 32)}px`
+          await waitForLayout()
+          const surfaceRect = root?.getBoundingClientRect() ?? null
+          const userRect = userBody?.getBoundingClientRect() ?? null
+          providerResponsiveChecks.push({
+            clientWidth: root?.clientWidth ?? 0,
+            horizontalOverflow: root
+              ? Math.max(0, root.scrollWidth - root.clientWidth)
+              : Number.POSITIVE_INFINITY,
+            requestedWidth,
+            userMessageInsideSurface: Boolean(
+              surfaceRect
+              && userRect
+              && userRect.left >= surfaceRect.left - 1
+              && userRect.right <= surfaceRect.right + 1,
+            ),
+          })
+        }
+        container.style.left = originalContainerPosition.left
+        container.style.right = originalContainerPosition.right
+        container.style.width = originalContainerPosition.width
+        await waitForLayout()
+        providerVisualChecks.push({
+          agentId: fixture.agentId,
+          assistantVisible: (container.textContent ?? '').includes(fixture.assistantText),
+          responsiveChecks: providerResponsiveChecks,
+          themeChecks: providerThemeChecks,
+          userVisible: Boolean(userBody && userBody.getBoundingClientRect().height > 0),
+        })
+      }
+      container.style.background = originalContainerBackground
+      await waitForLayout()
+
+      mounted.setSnapshot({
+        agentId: 'opencode',
+        messages: [{
+          info: { id: 'keyboard-user', role: 'user', time: { created: created + 300 } },
+          parts: [{ type: 'text', text: 'Keyboard interaction regression' }],
+        }, {
+          info: { id: 'keyboard-assistant', role: 'assistant', time: { created: created + 301 } },
+          parts: [{
+            id: 'keyboard-tool',
+            type: 'tool',
+            tool: 'bash',
+            state: {
+              status: 'completed',
+              input: { command: 'npm test', cwd: workspacePath },
+              output: 'Keyboard-expandable output',
+              metadata: { exitCode: 0 },
+            },
+          }, {
+            id: 'keyboard-assistant-text',
+            type: 'text',
+            text: `Keyboard interaction assistant response\n\n![Keyboard preview](${previewImageUrl})`,
+          }],
+        }],
+      })
+      const keyboardTargetDeadline = Date.now() + 5_000
+      let keyboardTarget = null
+      while (Date.now() < keyboardTargetDeadline) {
+        keyboardTarget = container.querySelector(
+          'button[aria-expanded], [role="button"][tabindex="0"][aria-expanded]',
+        )
+        if (keyboardTarget) break
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+      if (keyboardTarget) keyboardTarget.dataset.debugBbKeyboardTarget = 'true'
+
+      const keyboardImageDeadline = Date.now() + 5_000
+      let keyboardImage = null
+      while (Date.now() < keyboardImageDeadline) {
+        keyboardImage = container.querySelector('img[data-bb-keyboard-image="true"]')
+        if (keyboardImage) break
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+      if (keyboardImage) keyboardImage.dataset.debugBbKeyboardImage = 'true'
+
+      mounted.setRuntimeState({ isStreaming: true })
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      const runtimeStatus = container.querySelector('.aryn-bb-session-surface__runtime-status')
+      const activeRuntimeAnnouncement = runtimeStatus?.textContent?.trim() ?? ''
+      mounted.setRuntimeState({})
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      const idleRuntimeAnnouncement = runtimeStatus?.textContent?.trim() ?? ''
+
+      const visibleEmptyRows = Array.from(container.querySelectorAll('[data-timeline-row-id]')).filter((row) => {
+        const rect = row.getBoundingClientRect()
+        return rect.height > 1 && !(row.textContent ?? '').trim()
+      })
+      const topLevelRows = Array.from(container.querySelectorAll(
+        '[data-timeline-row-list="top-level"] > [data-timeline-row-id]',
+      ))
+      const topLevelGaps = topLevelRows.slice(1).map((row, index) => (
+        row.getBoundingClientRect().top - topLevelRows[index].getBoundingClientRect().bottom
+      ))
+      const timelineRowContentVisibility = topLevelRows[0]
+        ? getComputedStyle(topLevelRows[0]).contentVisibility
+        : null
+
+      const bottomAnchorContainer = document.createElement('div')
+      Object.assign(bottomAnchorContainer.style, {
+        display: 'flex',
+        height: '320px',
+        left: '-10000px',
+        position: 'fixed',
+        top: '0',
+        width: '720px',
+      })
+      document.body.append(bottomAnchorContainer)
+      const bottomAnchorMessages = Array.from({ length: 12 }, (_, turnIndex) => ([{
+        role: 'user',
+        content: [{ type: 'text', text: `Long conversation user turn ${turnIndex + 1}` }],
+        timestamp: created + 100 + turnIndex * 2,
+      }, {
+        role: 'assistant',
+        content: [{
+          type: 'text',
+          text: `Long conversation assistant turn ${turnIndex + 1}\n\n${'Detailed response line. '.repeat(12)}`,
+        }],
+        timestamp: created + 101 + turnIndex * 2,
+      }])).flat()
+      const bottomAnchorSurface = surfaceModule.mountBbSessionSurface(bottomAnchorContainer, {
+        sessionId: 'bb_debug_bottom_anchor',
+        theme: 'light',
+        workspacePath,
+        snapshot: {
+          agentId: 'pi',
+          entryIds: bottomAnchorMessages.map((_, index) => `long-entry-${index}`),
+          isStreaming: false,
+          messages: bottomAnchorMessages,
+          modelNames: {},
+          sessionId: 'bb-debug-bottom-anchor-native',
+        },
+      })
+      await new Promise((resolve) => requestAnimationFrame(() => (
+        requestAnimationFrame(() => requestAnimationFrame(resolve))
+      )))
+      const bottomAnchorScrollArea = bottomAnchorContainer.querySelector('.thread-scrollbar')
+      const bottomAnchorGeometry = bottomAnchorScrollArea
+        ? {
+            clientHeight: bottomAnchorScrollArea.clientHeight,
+            maxScrollTop: Math.max(0, bottomAnchorScrollArea.scrollHeight - bottomAnchorScrollArea.clientHeight),
+            scrollHeight: bottomAnchorScrollArea.scrollHeight,
+            scrollTop: bottomAnchorScrollArea.scrollTop,
+          }
+        : null
+      let detachedScrollPreserved = false
+      let scrollToLatestButtonFound = false
+      let scrollToLatestButtonStyle = null
+      let scrollToLatestButtonVisible = false
+      let scrollToLatestReturnedToBottom = false
+      if (bottomAnchorScrollArea && bottomAnchorGeometry) {
+        bottomAnchorScrollArea.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -120 }))
+        bottomAnchorScrollArea.scrollTop = Math.max(1, Math.floor(bottomAnchorGeometry.maxScrollTop / 2))
+        bottomAnchorScrollArea.dispatchEvent(new Event('scroll', { bubbles: true }))
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        const detachedScrollTop = bottomAnchorScrollArea.scrollTop
+        bottomAnchorSurface.setSnapshot({
+          agentId: 'pi',
+          entryIds: [...bottomAnchorMessages, {}, {}].map((_, index) => `long-entry-${index}`),
+          isStreaming: true,
+          messages: [...bottomAnchorMessages, {
+            role: 'user',
+            content: [{ type: 'text', text: 'A newly streamed user turn' }],
+            timestamp: created + 200,
+          }, {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'A newly streamed response that must not steal the reading position.' }],
+            timestamp: created + 201,
+          }],
+          modelNames: {},
+          sessionId: 'bb-debug-bottom-anchor-native',
+        })
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        detachedScrollPreserved = Math.abs(bottomAnchorScrollArea.scrollTop - detachedScrollTop) <= 4
+          && bottomAnchorScrollArea.scrollTop < bottomAnchorScrollArea.scrollHeight - bottomAnchorScrollArea.clientHeight - 4
+        const scrollToLatestButton = bottomAnchorContainer.querySelector('button[aria-label="Scroll to latest event"]')
+        scrollToLatestButtonFound = Boolean(scrollToLatestButton)
+        scrollToLatestButtonStyle = scrollToLatestButton
+          ? {
+              display: getComputedStyle(scrollToLatestButton).display,
+              opacity: getComputedStyle(scrollToLatestButton).opacity,
+              pointerEvents: getComputedStyle(scrollToLatestButton).pointerEvents,
+            }
+          : null
+        scrollToLatestButtonVisible = Boolean(
+          scrollToLatestButton
+          && scrollToLatestButtonStyle
+          && scrollToLatestButtonStyle.pointerEvents !== 'none'
+          && Number(scrollToLatestButtonStyle.opacity) > 0.9,
+        )
+        scrollToLatestButton?.click()
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        scrollToLatestReturnedToBottom = Math.abs(
+          bottomAnchorScrollArea.scrollTop
+          - (bottomAnchorScrollArea.scrollHeight - bottomAnchorScrollArea.clientHeight)
+        ) <= 4
+      }
+      bottomAnchorSurface.dispose()
+      bottomAnchorContainer.remove()
+
+      window.__arynDebugBbSyntheticDispose = () => {
+        mounted.dispose()
+        container.remove()
+        delete window.__arynDebugBbSyntheticDispose
+      }
+
+      const root = container.querySelector('.aryn-bb-session-surface')
+      const timelineRoot = container.querySelector('[data-agent-id]')
+      const timeline = container.querySelector('.aryn-bb-session-surface__timeline')
+      return {
+        agentId: timelineRoot?.getAttribute('data-agent-id') ?? null,
+        activeRuntimeAnnouncement,
+        bottomAnchorGeometry,
+        builtinPiRendered,
+        detachedScrollPreserved,
+        historyLoadCount,
+        idleRuntimeAnnouncement,
+        keyboardImageAriaLabel: keyboardImage?.getAttribute('aria-label') ?? null,
+        keyboardImageFound: Boolean(keyboardImage),
+        keyboardImageRole: keyboardImage?.getAttribute('role') ?? null,
+        keyboardImageTabIndex: keyboardImage?.getAttribute('tabindex') ?? null,
+        keyboardTargetFound: Boolean(keyboardTarget),
+        openCodeQuestionRowCount,
+        openCodeUserFileVisible,
+        piRendered,
+        piLiveRendered,
+        piStaleRuntimeHidden,
+        piUserMessageColor: piUserMessageStyle?.color ?? null,
+        piUserMessageText: piUserMessage?.textContent?.trim() ?? '',
+        piUserMessageTextFillColor,
+        piUserMessageVisible,
+        providerVisualChecks,
+        rendered,
+        responsiveChecks,
+        rootCount: container.querySelectorAll('.aryn-bb-session-surface').length,
+        streamingTextUpdated,
+        scrollToLatestButtonVisible,
+        scrollToLatestButtonFound,
+        scrollToLatestButtonStyle,
+        scrollToLatestReturnedToBottom,
+        text: container.textContent?.trim() ?? '',
+        themeChecks,
+        timelineRowContentVisibility,
+        timelineWidth: timeline ? Math.round(timeline.getBoundingClientRect().width) : 0,
+        toolAttachmentOpenedPath,
+        toolAttachmentVisible,
+        syntheticUserTextHidden,
+        visibleEmptyRowCount: visibleEmptyRows.length,
+        maxTopLevelGap: topLevelGaps.length ? Math.max(...topLevelGaps) : 0,
+        viewToggleCount: document.querySelectorAll('.agent-threadbar-view-actions button').length,
+      }
+    })
+
+    const keyboardTarget = page.locator(
+      '[data-debug-bb-timeline="true"] button[aria-expanded], '
+      + '[data-debug-bb-timeline="true"] [role="button"][tabindex="0"][aria-expanded]',
+    ).first()
+    const keyboardTargetFound = await keyboardTarget.count() === 1
+    let timelineKeyboard = {
+      afterEnter: null,
+      afterSpace: null,
+      before: null,
+      focused: false,
+      targetFound: keyboardTargetFound,
+    }
+    if (keyboardTargetFound) {
+      const before = await keyboardTarget.getAttribute('aria-expanded')
+      await page.keyboard.press('Tab')
+      await keyboardTarget.focus()
+      const focused = await keyboardTarget.evaluate((element) => document.activeElement === element)
+      const focusOutline = await keyboardTarget.evaluate((element) => {
+        const style = getComputedStyle(element)
+        return { style: style.outlineStyle, width: style.outlineWidth }
+      })
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(50)
+      const afterEnter = await keyboardTarget.getAttribute('aria-expanded')
+      await page.keyboard.press('Space')
+      await page.waitForTimeout(50)
+      const afterSpace = await keyboardTarget.getAttribute('aria-expanded')
+      timelineKeyboard = { afterEnter, afterSpace, before, focusOutline, focused, targetFound: true }
+    }
+    syntheticTimeline.timelineKeyboard = timelineKeyboard
+
+    const keyboardImage = page.locator('[data-debug-bb-keyboard-image="true"]').first()
+    const keyboardImageFound = await keyboardImage.count() === 1
+    let imageKeyboard = {
+      dialogOpened: false,
+      focusOutline: null,
+      focused: false,
+      targetFound: keyboardImageFound,
+    }
+    if (keyboardImageFound) {
+      await keyboardImage.focus()
+      const focused = await keyboardImage.evaluate((element) => document.activeElement === element)
+      const focusOutline = await keyboardImage.evaluate((element) => {
+        const style = getComputedStyle(element)
+        return { style: style.outlineStyle, width: style.outlineWidth }
+      })
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(100)
+      const dialogOpened = await page.locator('[role="dialog"] img').count() > 0
+      imageKeyboard = { dialogOpened, focusOutline, focused, targetFound: true }
+      if (dialogOpened) await page.keyboard.press('Escape')
+    }
+    syntheticTimeline.imageKeyboard = imageKeyboard
+
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    const reducedMotion = await page.evaluate(() => {
+      const elements = Array.from(document.querySelectorAll(
+        '[data-debug-bb-timeline] .aryn-bb-session-surface *',
+      ))
+      const toMilliseconds = (value) => {
+        const trimmed = value.trim()
+        if (trimmed.endsWith('ms')) return Number.parseFloat(trimmed)
+        if (trimmed.endsWith('s')) return Number.parseFloat(trimmed) * 1000
+        return Number.parseFloat(trimmed) || 0
+      }
+      const readDurations = (value) => value.split(',').map(toMilliseconds)
+      const violations = elements.flatMap((element) => {
+        const style = getComputedStyle(element)
+        const durations = [
+          ...readDurations(style.animationDuration),
+          ...readDurations(style.transitionDuration),
+        ]
+        const maxDurationMs = Math.max(0, ...durations)
+        return maxDurationMs > 0.011
+          ? [{ maxDurationMs, tagName: element.tagName }]
+          : []
+      })
+      return {
+        checkedElementCount: elements.length,
+        violationCount: violations.length,
+        violations: violations.slice(0, 10),
+      }
+    })
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+
+    const productionSessionIdBeforeSwitch = await page.locator('.bb-session-surface-host')
+      .getAttribute('data-bb-session-id')
+    const sessionLabelBeforeSwitch = (await page.locator('.agent-select-current').first().textContent())?.trim() ?? ''
+    const nativeViewToggle = page.getByRole('button', { name: '切换到原生对话视图' })
+    await nativeViewToggle.focus()
+    const nativeToggleFocused = await nativeViewToggle.evaluate((element) => document.activeElement === element)
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('.bb-session-surface-host', {
+      state: 'detached',
+      timeout: Math.min(timeoutMs, 10_000),
+    })
+    const nativeViewVisible = await page.locator('.agent-messages-scroll, .agent-codex-surface-stage').count() > 0
+    const nativeComposerVisible = await page.locator('.agent-composer-editor').isVisible()
+    const unifiedViewToggle = page.getByRole('button', { name: '切换到统一对话视图' })
+    await unifiedViewToggle.focus()
+    const unifiedToggleFocused = await unifiedViewToggle.evaluate((element) => document.activeElement === element)
+    await page.keyboard.press('Space')
+    await page.waitForSelector('.bb-session-surface-host .aryn-bb-session-surface', {
+      state: 'attached',
+      timeout: Math.min(timeoutMs, 10_000),
+    })
+    await page.waitForFunction(() => (
+      document.querySelector('.bb-session-surface-host')?.getAttribute('aria-busy') !== 'true'
+    ), null, { timeout: timeoutMs })
+    const productionSessionIdAfterSwitch = await page.locator('.bb-session-surface-host')
+      .getAttribute('data-bb-session-id')
+    const sessionLabelAfterSwitch = (await page.locator('.agent-select-current').first().textContent())?.trim() ?? ''
+    const viewSwitch = {
+      nativeComposerVisible,
+      nativeToggleFocused,
+      nativeViewVisible,
+      productionSessionIdAfterSwitch,
+      productionSessionIdBeforeSwitch,
+      sessionLabelAfterSwitch,
+      sessionLabelBeforeSwitch,
+      sessionPreserved: Boolean(
+        productionSessionIdBeforeSwitch
+        && productionSessionIdAfterSwitch === productionSessionIdBeforeSwitch
+        && sessionLabelAfterSwitch === sessionLabelBeforeSwitch,
+      ),
+      unifiedToggleFocused,
+    }
+
+    return {
+      productionSurfaceCount: await page.locator('.bb-session-surface-host .aryn-bb-session-surface').count(),
+      productionSurfaceStayedMounted,
+      reducedMotion,
+      syntheticTimeline,
+      viewSwitch,
+    }
+  }
 
   if (debugScenario === 'opencode-surface') {
     const diagnostics = await page.evaluate(async () => {
@@ -1011,6 +2069,102 @@ function assertDebugScenarioResult(result) {
     return
   }
 
+  if (debugScenario === 'bb-unified-surface') {
+    if (
+      !result.productionSurfaceStayedMounted
+      || result.productionSurfaceCount !== 1
+      || !result.syntheticTimeline?.rendered
+      || result.syntheticTimeline.rootCount !== 1
+      || result.syntheticTimeline.agentId !== 'opencode'
+      || !result.syntheticTimeline.bottomAnchorGeometry
+      || result.syntheticTimeline.bottomAnchorGeometry.maxScrollTop <= 0
+      || Math.abs(
+        result.syntheticTimeline.bottomAnchorGeometry.maxScrollTop
+        - result.syntheticTimeline.bottomAnchorGeometry.scrollTop
+      ) > 4
+      || !result.syntheticTimeline.detachedScrollPreserved
+      || !result.syntheticTimeline.piRendered
+      || !result.syntheticTimeline.builtinPiRendered
+      || !result.syntheticTimeline.piLiveRendered
+      || !result.syntheticTimeline.piStaleRuntimeHidden
+      || result.syntheticTimeline.activeRuntimeAnnouncement !== 'Agent is working.'
+      || result.syntheticTimeline.idleRuntimeAnnouncement !== 'Agent finished working.'
+      || result.syntheticTimeline.historyLoadCount < 1
+      || result.syntheticTimeline.openCodeQuestionRowCount !== 1
+      || !result.syntheticTimeline.openCodeUserFileVisible
+      || !result.syntheticTimeline.syntheticUserTextHidden
+      || !result.syntheticTimeline.toolAttachmentVisible
+      || result.syntheticTimeline.toolAttachmentOpenedPath !== 'C:/debug-workspace/tool attachment.txt'
+      || result.syntheticTimeline.piUserMessageText !== '你好'
+      || !result.syntheticTimeline.piUserMessageTextFillColor
+      || !result.syntheticTimeline.piUserMessageVisible
+      || !result.syntheticTimeline.keyboardTargetFound
+      || !result.syntheticTimeline.timelineKeyboard?.targetFound
+      || !result.syntheticTimeline.timelineKeyboard.focused
+      || result.syntheticTimeline.timelineKeyboard.focusOutline?.style === 'none'
+      || result.syntheticTimeline.timelineKeyboard.focusOutline?.width !== '2px'
+      || !['false', 'true'].includes(result.syntheticTimeline.timelineKeyboard.before)
+      || result.syntheticTimeline.timelineKeyboard.afterEnter === result.syntheticTimeline.timelineKeyboard.before
+      || result.syntheticTimeline.timelineKeyboard.afterSpace !== result.syntheticTimeline.timelineKeyboard.before
+      || !result.syntheticTimeline.keyboardImageFound
+      || result.syntheticTimeline.keyboardImageRole !== 'button'
+      || result.syntheticTimeline.keyboardImageTabIndex !== '0'
+      || !result.syntheticTimeline.keyboardImageAriaLabel?.includes('Keyboard preview')
+      || !result.syntheticTimeline.imageKeyboard?.targetFound
+      || !result.syntheticTimeline.imageKeyboard.focused
+      || !result.syntheticTimeline.imageKeyboard.dialogOpened
+      || result.syntheticTimeline.imageKeyboard.focusOutline?.style === 'none'
+      || result.syntheticTimeline.imageKeyboard.focusOutline?.width !== '2px'
+      || result.syntheticTimeline.providerVisualChecks?.length !== 4
+      || result.syntheticTimeline.providerVisualChecks.some((provider) => (
+        !provider.userVisible
+        || !provider.assistantVisible
+        || provider.themeChecks?.length !== 2
+        || provider.themeChecks.some((check) => (
+          !check.readable
+          || check.explicitTheme !== check.theme
+        ))
+        || provider.themeChecks[0].backgroundColor === provider.themeChecks[1].backgroundColor
+        || provider.themeChecks[0].color === provider.themeChecks[1].color
+        || provider.responsiveChecks?.length !== 2
+        || provider.responsiveChecks.some((check) => (
+          check.clientWidth <= 0
+          || check.horizontalOverflow > 1
+          || !check.userMessageInsideSurface
+        ))
+      ))
+      || !result.syntheticTimeline.streamingTextUpdated
+      || !result.syntheticTimeline.scrollToLatestButtonVisible
+      || !result.syntheticTimeline.scrollToLatestReturnedToBottom
+      || result.syntheticTimeline.visibleEmptyRowCount !== 0
+      || result.syntheticTimeline.maxTopLevelGap > 17
+      || result.syntheticTimeline.timelineRowContentVisibility !== 'auto'
+      || result.syntheticTimeline.timelineWidth <= 0
+      || result.syntheticTimeline.viewToggleCount !== 1
+      || result.syntheticTimeline.themeChecks?.length !== 2
+      || result.syntheticTimeline.themeChecks.some((check) => !check.readable)
+      || result.syntheticTimeline.themeChecks.some((check) => check.surfaceTheme !== check.theme)
+      || result.syntheticTimeline.themeChecks[0].backgroundColor === result.syntheticTimeline.themeChecks[1].backgroundColor
+      || result.syntheticTimeline.themeChecks[0].color === result.syntheticTimeline.themeChecks[1].color
+      || result.syntheticTimeline.responsiveChecks?.length !== 2
+      || result.syntheticTimeline.responsiveChecks.some((check) => (
+        check.clientWidth <= 0
+        || check.horizontalOverflow > 1
+        || !check.userMessageInsideSurface
+      ))
+      || result.reducedMotion?.checkedElementCount < 1
+      || result.reducedMotion.violationCount !== 0
+      || !result.viewSwitch?.nativeToggleFocused
+      || !result.viewSwitch.unifiedToggleFocused
+      || !result.viewSwitch.nativeViewVisible
+      || !result.viewSwitch.nativeComposerVisible
+      || !result.viewSwitch.sessionPreserved
+    ) {
+      throw new Error(`bb unified surface scenario failed: ${JSON.stringify(result)}`)
+    }
+    return
+  }
+
   if (
     !result.surfaceStayedMounted
     || result.officialSurfaceCount !== 1
@@ -1021,12 +2175,13 @@ function assertDebugScenarioResult(result) {
 }
 
 async function cleanupDebugScenario(page) {
-  if (debugScenario !== 'opencode-surface') return
+  if (debugScenario !== 'opencode-surface' && debugScenario !== 'bb-unified-surface') return
   try {
     await page.evaluate(() => {
       window.__arynDebugOpenCodeSyntheticDispose?.()
+      window.__arynDebugBbSyntheticDispose?.()
     })
-    log('cleaned up OpenCode synthetic surface')
+    log('cleaned up synthetic surface')
   } catch (error) {
     log('failed to clean up OpenCode synthetic surface', serializeError(error))
   }

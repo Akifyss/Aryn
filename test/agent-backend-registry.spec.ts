@@ -3,6 +3,7 @@ import { AGENT_IDS, type AgentId } from '../src/features/agent/agent-definition'
 import { AgentApplicationService } from '../electron/main/agent-host/application/agent-application-service'
 import { AgentBackendRegistry } from '../electron/main/agent-host/application/backend-registry'
 import type { AgentBackend } from '../electron/main/agent-host/application/agent-backend'
+import type { AgentInteractionHistoryStore } from '../electron/main/agent-host/sessions/interaction-history'
 
 function createBackend(agentId: AgentId) {
   return { agentId, capabilities: {} } as AgentBackend
@@ -88,5 +89,70 @@ describe('AgentBackendRegistry', () => {
     )
     expect(AGENT_IDS.map((agentId) => disposals[agentId].mock.calls.length))
       .toEqual(AGENT_IDS.map(() => 1))
+  })
+
+  it('clears builtin PI history by session path without changing backend deletion flow', async () => {
+    const sessionPath = 'C:/agent/sessions/session.jsonl'
+    const deletedState = { activeSession: null, sessions: [] }
+    const deleteSession = vi.fn(async () => deletedState)
+    const backends = AGENT_IDS.map((agentId) => agentId === 'builtin-pi'
+      ? {
+          ...createBackend(agentId),
+          deleteSession,
+        } as AgentBackend
+      : createBackend(agentId))
+    const clearSession = vi.fn(async () => {
+      throw new Error('history storage unavailable')
+    })
+    const history = { clearSession } as unknown as AgentInteractionHistoryStore
+    const service = new AgentApplicationService(new AgentBackendRegistry(backends), history)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    try {
+      await expect(service.deleteSession({
+        agentId: 'builtin-pi',
+        sessionPath,
+        workspacePath: 'C:/workspace',
+      }, sessionPath)).resolves.toBe(deletedState)
+      expect(clearSession).toHaveBeenCalledWith('builtin-pi', sessionPath)
+      expect(warn).toHaveBeenCalledOnce()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('waits for pending interaction-history writes during disposal', async () => {
+    let releaseBackend!: () => void
+    const backendDisposal = new Promise<void>((resolve) => {
+      releaseBackend = resolve
+    })
+    let releaseHistory!: () => void
+    const historyDrain = new Promise<void>((resolve) => {
+      releaseHistory = resolve
+    })
+    const history = {
+      drain: vi.fn(() => historyDrain),
+    } as unknown as AgentInteractionHistoryStore
+    const backends = AGENT_IDS.map((agentId) => ({
+      ...createBackend(agentId),
+      dispose: vi.fn(() => agentId === 'codex' ? backendDisposal : undefined),
+    }))
+    const service = new AgentApplicationService(new AgentBackendRegistry(backends), history)
+
+    const disposal = service.dispose()
+    let settled = false
+    void disposal.then(() => { settled = true })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    expect(history.drain).not.toHaveBeenCalled()
+
+    releaseBackend()
+    await vi.waitFor(() => {
+      expect(history.drain).toHaveBeenCalledOnce()
+    })
+    expect(settled).toBe(false)
+
+    releaseHistory()
+    await expect(disposal).resolves.toBeUndefined()
   })
 })

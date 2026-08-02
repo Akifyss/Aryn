@@ -582,6 +582,7 @@ export class CodexAgentManager {
     this.options.emitEvent({
       type: 'interaction_resolved',
       requestId: response.requestId,
+      response,
       resumeRun: true,
       sessionId: pending.sessionId,
     })

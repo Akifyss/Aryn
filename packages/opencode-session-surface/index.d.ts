@@ -28,6 +28,7 @@ export type OpenCodeSurfaceEvent =
     }
 
 export type OpenCodeOptimisticUserMessage = {
+  baselineUserMessageIds?: ReadonlyArray<string>
   attachments?: Array<{
     fileName: string
     mimeType?: string

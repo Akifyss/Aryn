@@ -733,7 +733,7 @@ export class OpenCodeAgentManager {
         }
       }
       if (!this.interactionRegistry.isCurrent(pending, this.clientGeneration)) return false
-      this.interactionRegistry.resolve(interactionKey, true)
+      this.interactionRegistry.resolve(interactionKey, true, response)
       return true
     })
   }
@@ -1541,10 +1541,13 @@ export class OpenCodeAgentManager {
     const hydration = this.messageReducer.beginHydration(sessionID)
     try {
       const [messagesResponse, diffResponse] = await Promise.all([
-        client.session.messages({ directory: cwd, sessionID }, { throwOnError: true }),
+        client.session.messages({ directory: cwd, sessionID, limit: 200 }, { throwOnError: true }),
         client.session.diff({ directory: cwd, sessionID }, { throwOnError: true }).catch(() => ({ data: [] as SnapshotFileDiff[] })),
       ])
       const records = unwrapSdkResult<Array<{ info: Message, parts: Part[] }>>(messagesResponse, 'read messages')
+      const nextCursor = messagesResponse && typeof messagesResponse === 'object' && 'response' in messagesResponse
+        ? messagesResponse.response.headers.get('x-next-cursor')
+        : null
       const diffs = unwrapSdkResult<SnapshotFileDiff[]>(diffResponse, 'read diff')
       if (
         !this.isClientCurrent(client, clientGeneration)
@@ -1562,6 +1565,7 @@ export class OpenCodeAgentManager {
       } else {
         this.messageReducer.hydrate(sessionID, records, hydration)
       }
+      binding.historyCursor = nextCursor
       if (!isStreaming) {
         this.sessionDiffs.set(sessionID, diffs)
       }

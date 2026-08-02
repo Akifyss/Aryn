@@ -8,6 +8,7 @@ import {
   type SetStateAction,
 } from 'react'
 import type { OpenCodeOptimisticUserMessage } from '@aryn/opencode-session-surface'
+import type { BbTheme } from '@aryn/bb-session-surface'
 import type {
   PiWebNativeSessionSnapshot,
   PiWebOptimisticUserMessage,
@@ -20,6 +21,7 @@ import type {
   AgentComposerAttachment,
   AgentComposerState,
 } from '@/features/agent/composer/use-agent-composer-draft'
+import type { AgentStoppingPromptState } from '@/features/agent/composer/use-agent-composer-actions'
 import type {
   AgentMenuAnchorRect,
   AgentProjectSwitchMenuOptions,
@@ -30,6 +32,7 @@ import type { AgentProjectSessionBucket } from '@/features/agent/lib/session-tre
 import type { AgentLiveToolState } from '@/features/agent/runtime/use-agent-runtime-events'
 import type {
   AgentInteractionRequest,
+  AgentInteractionTimelineRecord,
   AgentMessageFileChange,
   AgentQueuedMessageUpdate,
   AgentSidebarMessage,
@@ -83,6 +86,8 @@ export type AgentContextValue = {
   configuredProviders: string[]
   conversationState: ConversationState
   deletingSessionPath: string | null
+  draftAssistant: string
+  draftThinking: string
   handleComposerKeyDown: (event: KeyboardEvent<HTMLElement>) => void
   handleDeleteSession: (rootPath: string, agentId: AgentId, sessionPath: string) => Promise<void>
   handleOpenSession: (agentId: AgentId, sessionPath: string) => Promise<void>
@@ -97,8 +102,10 @@ export type AgentContextValue = {
   hasConfiguredProviders: boolean
   iconTheme?: WorkspaceIconTheme | null
   isAgentLayout: boolean
+  isViewingActiveRuntime: boolean
   isProjectAddMenuOpen: boolean
   isLoading: boolean
+  isThinkingStreaming: boolean
   isSwitchingModel: boolean
   isSwitchingThinkingLevel: boolean
   liveTools: AgentLiveToolState[]
@@ -148,6 +155,7 @@ export type AgentContextValue = {
   piWebStreamingStatus: AgentSessionStatus | null
   panelError: string | null
   pendingInteraction: AgentInteractionRequest | null
+  interactionTimelineRecords: AgentInteractionTimelineRecord[]
   loadProjectSessions: (project: ProjectRecord) => Promise<void>
   projectSessions: Record<string, AgentProjectSessionBucket>
   projectState: ProjectState
@@ -173,10 +181,13 @@ export type AgentContextValue = {
   selectedAgentId: AgentId
   setSelectedAgentId: (agentId: AgentId) => void
   statusMessage: string | null
+  stoppingPrompt: AgentStoppingPromptState | null
+  streamStartedAt: number | null
   surfaceMode: AgentSurfaceMode
   streamingShortcutModifierLabel: string
   thinkingLevel: AgentThinkingLevel
   thinkingLevelLabel: string
+  theme: BbTheme
   workspacePath: string | null
   workspaceTree: WorkspaceNode[]
 }

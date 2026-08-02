@@ -93,6 +93,7 @@ export class OpenCodeBindingRegistry {
     return {
       cwd,
       executionState: { type: 'idle' },
+      historyCursor: null,
       isStreaming: false,
       lastAssistantMessageId: null,
       lease,

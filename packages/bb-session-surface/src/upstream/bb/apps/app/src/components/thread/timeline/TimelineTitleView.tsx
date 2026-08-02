@@ -1,0 +1,385 @@
+import { Fragment, useEffect, useState } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import {
+  assertNever,
+  durationToCompactString,
+  formatDiffStatsText,
+  type TimelineTitle,
+  type TimelineTitleAction,
+  type TimelineTitleDecoration,
+  type TimelineTitleLink,
+  type TimelineTitleSegment,
+  type TimelineTitleSegmentAccent,
+  type TimelineTitleTone,
+} from "@bb/thread-view";
+import { cn } from "@bb/shared-ui/lib/utils";
+import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
+import { RouteAnchor } from "@/components/ui/app-route-anchor.js";
+
+/**
+ * Resolves a title's declared action to a click callback. Return `null` to
+ * leave the content as plain (non-interactive) text — the renderer will not
+ * surface the action in that case.
+ */
+export type TimelineTitleActionResolver = (
+  action: TimelineTitleAction,
+) => (() => void) | null;
+
+/**
+ * Resolves a segment-level link target (e.g. a parent thread) to an href the
+ * renderer uses for an `<a>` element. Return `null` to render the segment as
+ * plain (non-interactive) text — useful when the target is not navigable from
+ * the current surface (e.g. a story without routing context).
+ */
+export type TimelineTitleLinkResolver = (
+  link: TimelineTitleLink,
+) => string | null;
+
+export interface TimelineTitleViewProps {
+  title: TimelineTitle;
+  className?: string;
+  onTitleAction?: TimelineTitleActionResolver;
+  resolveSegmentLinkHref?: TimelineTitleLinkResolver;
+}
+
+function emToneClass(tone: TimelineTitleTone): string {
+  switch (tone) {
+    case "default":
+      // Emphasized work-row targets (command/query/URL/name) sit at medium and
+      // dimmed — the non-file machinery recedes. File paths take the `file`
+      // accent instead (see accentToneClass) and stay at full strength.
+      return "font-medium text-foreground opacity-70";
+    case "summary":
+      return "text-subtle-foreground";
+    default:
+      return assertNever(tone);
+  }
+}
+
+function accentToneClass(
+  accent: TimelineTitleSegmentAccent,
+  em: boolean,
+): string {
+  switch (accent) {
+    case "muted":
+      return "text-muted-foreground";
+    case "subtle":
+      return "text-subtle-foreground";
+    case "file":
+      // File-path segments are emphasized timeline targets; keep the medium
+      // weight so they read as the row's anchor.
+      return em ? "font-medium text-timeline-accent" : "text-timeline-accent";
+    default:
+      return assertNever(accent);
+  }
+}
+
+function plainToneClass(tone: TimelineTitleTone): string {
+  switch (tone) {
+    case "default":
+      return "text-muted-foreground";
+    case "summary":
+      return "text-subtle-foreground";
+    default:
+      return assertNever(tone);
+  }
+}
+
+function decorationToneClass(tone: TimelineTitleTone): string {
+  switch (tone) {
+    case "default":
+      return "text-muted-foreground";
+    case "summary":
+      return "text-subtle-foreground";
+    default:
+      return assertNever(tone);
+  }
+}
+
+const STATUS_DECORATION_TONE_CLASS = "text-subtle-foreground";
+const STATUS_DECORATION_TEXT_CLASS = cn(
+  "font-mono text-xs font-normal leading-none",
+  STATUS_DECORATION_TONE_CLASS,
+);
+
+function renderStatusDecorationText(
+  text: string,
+  className?: string,
+): ReactNode {
+  return (
+    <span
+      className={cn(
+        STATUS_DECORATION_TEXT_CLASS,
+        "ml-px opacity-75",
+        className,
+      )}
+    >
+      {text}
+    </span>
+  );
+}
+
+function renderSegment(
+  segment: TimelineTitleSegment,
+  index: number,
+  tone: TimelineTitleTone,
+  interactive: {
+    onClick: (() => void) | null;
+    linkHref: string | null;
+  },
+): ReactNode {
+  const widthClass = segment.truncate
+    ? "min-w-0 truncate whitespace-pre"
+    : "shrink-0 whitespace-pre";
+  const toneClass =
+    segment.accent !== undefined
+      ? accentToneClass(segment.accent, segment.em)
+      : segment.em
+        ? emToneClass(tone)
+        : plainToneClass(tone);
+  const baseClass = cn(
+    widthClass,
+    toneClass,
+    segment.shimmer ? "animate-shine" : null,
+  );
+
+  if (interactive.linkHref !== null) {
+    const href = interactive.linkHref;
+    return (
+      <RouteAnchor
+        // Title segments live inside a row-level CollapsibleHeader button; HTML
+        // forbids nested <button> elements, so we render a stopped-propagation
+        // anchor — the click/Enter on the link must not also toggle the row.
+        key={index}
+        href={href}
+        className={cn(
+          baseClass,
+          "cursor-pointer text-left underline underline-offset-2 focus-visible:outline-none",
+        )}
+        onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+          event.stopPropagation();
+        }}
+        onKeyDown={(event: KeyboardEvent<HTMLAnchorElement>) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.stopPropagation();
+          }
+        }}
+      >
+        {segment.text}
+      </RouteAnchor>
+    );
+  }
+
+  if (segment.em && interactive.onClick) {
+    const onClick = interactive.onClick;
+    return (
+      <span
+        // Title actions live inside a row-level CollapsibleHeader button; HTML
+        // forbids nested <button> elements, so the action renders as a span
+        // with role="link" and explicit keyboard handling. stopPropagation
+        // keeps a click/Enter on the segment from also toggling the row.
+        key={index}
+        role="link"
+        tabIndex={0}
+        className={cn(
+          baseClass,
+          "cursor-pointer text-left underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none",
+        )}
+        onClick={(event: MouseEvent<HTMLSpanElement>) => {
+          event.stopPropagation();
+          onClick();
+        }}
+        onKeyDown={(event: KeyboardEvent<HTMLSpanElement>) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            onClick();
+          }
+        }}
+      >
+        {segment.text}
+      </span>
+    );
+  }
+
+  return (
+    <span key={index} className={baseClass}>
+      {segment.text}
+    </span>
+  );
+}
+
+/**
+ * Ticks the displayed elapsed time locally while the row is still active.
+ * The truth is `startedAt` (the wall-clock when the work began); the App
+ * derives `now - startedAt` and ticks once per second until the row reaches
+ * a terminal status (at which point a static `completedAt - startedAt` is
+ * shown by the caller instead). Stays empty until the elapsed time crosses
+ * the visible threshold (>1s) to avoid sub-second flicker on row entry.
+ */
+function LiveDurationText({ startedAt }: { startedAt: number }) {
+  const [tick, setTick] = useState(() => Date.now() - startedAt);
+
+  useEffect(() => {
+    setTick(Date.now() - startedAt);
+    const interval = window.setInterval(() => {
+      setTick(Date.now() - startedAt);
+    }, 1_000);
+    return () => window.clearInterval(interval);
+  }, [startedAt]);
+
+  if (tick <= 1_000) return null;
+  return <>{durationToCompactString(tick)}</>;
+}
+
+function renderDecoration(
+  decoration: TimelineTitleDecoration,
+  index: number,
+  tone: TimelineTitleTone,
+): ReactNode {
+  const baseClass = cn("shrink-0 whitespace-pre", decorationToneClass(tone));
+
+  switch (decoration.kind) {
+    case "duration": {
+      const durationClass = decoration.em
+        ? cn("shrink-0 whitespace-pre", emToneClass(tone))
+        : baseClass;
+      return (
+        <span key={index} className={durationClass}>
+          {decoration.completedAt !== null ? (
+            durationToCompactString(
+              decoration.completedAt - decoration.startedAt,
+            )
+          ) : (
+            <LiveDurationText startedAt={decoration.startedAt} />
+          )}
+        </span>
+      );
+    }
+    case "status":
+    case "summary-status": {
+      // Status decorations render as compact mono annotations without
+      // parentheses. `title.plain` keeps the canonical parenthesized text for
+      // tooltips and plain renderers.
+      if (decoration.kind === "status") {
+        const durationText =
+          decoration.durationMs === null
+            ? null
+            : durationToCompactString(decoration.durationMs);
+        return (
+          <span
+            key={index}
+            className={cn(
+              "shrink-0 whitespace-pre",
+              STATUS_DECORATION_TONE_CLASS,
+              "inline-flex items-baseline gap-1",
+            )}
+          >
+            {durationText ? <span>{durationText}</span> : null}
+            {renderStatusDecorationText(
+              decoration.status,
+              // Only an emphasized error — one that is the row's primary signal,
+              // i.e. the error that actually fails the thread — carries a subtle
+              // semantic red. Transient work-row errors (a failed command, an
+              // errored fetch the agent recovers from) and denied/interrupted
+              // annotations stay muted. The container's opacity-75 + small mono
+              // keep even the red subtle rather than alarming.
+              decoration.status === "error" && decoration.emphasis
+                ? "text-destructive-text"
+                : undefined,
+            )}
+          </span>
+        );
+      }
+
+      const parts: string[] = [];
+      if (decoration.errorCount > 0) {
+        parts.push(
+          `${decoration.errorCount} ${
+            decoration.errorCount === 1 ? "error" : "errors"
+          }`,
+        );
+      }
+      if (decoration.interruptedCount > 0) {
+        parts.push(`${decoration.interruptedCount} interrupted`);
+      }
+      const text = parts.join(", ");
+      if (text.length === 0) return null;
+      return (
+        <span key={index} className="shrink-0 whitespace-pre">
+          {renderStatusDecorationText(text)}
+        </span>
+      );
+    }
+    case "diff-stats": {
+      if (tone === "summary") {
+        const text = formatDiffStatsText({
+          added: decoration.added,
+          removed: decoration.removed,
+          hideZero: true,
+        });
+        if (text.length === 0) return null;
+        return (
+          <span key={index} className={baseClass}>
+            {text}
+          </span>
+        );
+      }
+      return (
+        <DiffStatsTally
+          key={index}
+          insertions={decoration.added}
+          deletions={decoration.removed}
+          hideZero
+          className="shrink-0"
+        />
+      );
+    }
+    default:
+      return assertNever(decoration);
+  }
+}
+
+export function TimelineTitleView({
+  title,
+  className,
+  onTitleAction,
+  resolveSegmentLinkHref,
+}: TimelineTitleViewProps) {
+  const onClick =
+    title.action && onTitleAction ? onTitleAction(title.action) : null;
+
+  return (
+    <span
+      className={cn(
+        "inline-flex min-w-0 max-w-full items-baseline gap-1 overflow-hidden whitespace-nowrap text-sm leading-5",
+        className,
+      )}
+      title={title.plain}
+    >
+      {/* Literal whitespace text nodes between flex items keep the
+          accessible name well-formed: the browser concatenates text content
+          to compute the role's name, so without spaces siblings would join as
+          "Runningpnpm test". gap-1 handles visual spacing; the spaces handle
+          accessibility. */}
+      {title.segments.map((segment, index) => {
+        const linkHref =
+          segment.link && resolveSegmentLinkHref
+            ? resolveSegmentLinkHref(segment.link)
+            : null;
+        return (
+          <Fragment key={`segment-${index}`}>
+            {index > 0 ? " " : null}
+            {renderSegment(segment, index, title.tone, { onClick, linkHref })}
+          </Fragment>
+        );
+      })}
+      {title.decorations.map((decoration, index) => (
+        <Fragment key={`decoration-${index}`}>
+          {" "}
+          {renderDecoration(decoration, index, title.tone)}
+        </Fragment>
+      ))}
+    </span>
+  );
+}

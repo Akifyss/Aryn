@@ -1,0 +1,708 @@
+@import "@fontsource-variable/inter";
+@import "@/components/ui/theme.css";
+
+@layer base {
+  /*
+   * Keep the real app shell from becoming a second scroll container. These
+   * selectors are class-scoped because Ladle imports app.css but does not use
+   * the Vite index.html shell classes.
+   */
+  html.bb-app-shell-root,
+  body.bb-app-shell,
+  body.bb-app-shell #root {
+    height: 100%;
+  }
+
+  html.bb-app-shell-root,
+  body.bb-app-shell {
+    overflow: hidden;
+    /*
+     * Suppress vertical rubber-banding without blocking the native horizontal
+     * two-finger back/forward gesture.
+     */
+    overscroll-behavior-y: none;
+  }
+
+  .chat-prompt-box {
+    padding-bottom: 0.5rem;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 20%, transparent)
+      transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--foreground) 40%, transparent);
+  }
+
+  /*
+   * Default the keyboard focus ring to the app's achromatic `--ring` instead of
+   * the browser's native outline, which `color-scheme` renders in the OS accent
+   * (blue in dark, the system accent in light) and clashes with the chroma-0
+   * design. Components that supply their own `focus-visible:outline-none` + ring
+   * override this from the utilities layer, so this only catches elements that
+   * would otherwise fall through to the UA focus ring.
+   */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
+
+  /* Keep the drag cursor stable while crossing rows whose normal pointer
+   * cursor would otherwise override the cursor inherited from the body. */
+  body[data-sidebar-dragging="true"],
+  body[data-sidebar-dragging="true"] * {
+    cursor: grabbing !important;
+  }
+}
+
+@layer components {
+  /*
+   * Tint the prompt editor's text selection with the app's selected-surface
+   * color so it matches the background that mention pills paint on themselves
+   * when selected (mention icons are SVG and never take the native highlight,
+   * so pills can't rely on `::selection` — see PromptMentionPillNodeView).
+   */
+  .ProseMirror ::selection {
+    background-color: var(--surface-selected);
+  }
+
+  /*
+   * Mention-pill surface. PROMPT_MENTION_PILL_CLASS owns layout, radius, and
+   * border width; this paints the theme-specific face, border, and soft shadow.
+   * The --selected modifier tints the same chip for the editor's drag-select
+   * highlight (mention icons are SVG and never take the native ::selection
+   * paint, so the pill colors itself).
+   */
+  .prompt-mention-pill {
+    color: var(--pill-foreground);
+    background: var(--pill-surface);
+    border-color: var(--pill-surface-border);
+    box-shadow: var(--pill-shadow);
+  }
+
+  /* Leading mention identity: a plain near-black outline glyph or section
+   * marker (near-white in dark), with no fill. */
+  .prompt-mention-pill svg,
+  .prompt-mention-pill [data-section-mention-marker] {
+    color: var(--pill-icon);
+  }
+
+  .prompt-mention-pill--selected {
+    background: var(--pill-surface-selected);
+    border-color: var(--pill-surface-selected-border);
+  }
+
+  /*
+   * The compact mobile composer is a single-line preview of a rich editor,
+   * not a separate plain-text field. Flatten every Markdown block and hard
+   * break into one clipped line. The editor expands before it can be edited, so
+   * the compact state only needs to preserve the real document and present its
+   * leading text. Mention pills remain inline-flex so their own labels can
+   * truncate without breaking the line. `!important` beats ProseMirror's
+   * unlayered `white-space: break-spaces` rule.
+   */
+  [data-promptbox-compact-content] .ProseMirror[contenteditable] {
+    width: 100%;
+    min-height: 0 !important;
+    max-height: 1.7em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap !important;
+  }
+
+  [data-promptbox-compact-content] .ProseMirror[contenteditable] > *,
+  [data-promptbox-compact-content]
+    .ProseMirror[contenteditable]
+    :where(blockquote, h1, h2, h3, h4, h5, h6, li, ol, p, ul) {
+    display: inline;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    list-style: none;
+    white-space: inherit;
+  }
+
+  [data-promptbox-compact-content]
+    .ProseMirror[contenteditable]
+    > *
+    + *::before,
+  [data-promptbox-compact-content]
+    .ProseMirror[contenteditable]
+    :where(blockquote, li)
+    > *
+    + *::before,
+  [data-promptbox-compact-content]
+    .ProseMirror[contenteditable]
+    :where(ol, ul)
+    > li
+    + li::before {
+    content: " ";
+  }
+
+  [data-promptbox-compact-content] .ProseMirror[contenteditable] br {
+    display: inline;
+    content: " ";
+  }
+
+  [data-promptbox-compact-content] .ProseMirror[contenteditable] br::after {
+    content: " ";
+  }
+
+  [data-promptbox-compact-content] .prompt-mention-pill > span:last-child {
+    min-width: 0;
+  }
+
+  [data-promptbox-editor-content]
+    .ProseMirror
+    p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+  }
+
+  /*
+   * Light up the `ultracode` keyword in the prompt editor with animated purple
+   * sparkles (mirrors Claude Code). The wrapping span is added as a ProseMirror
+   * inline decoration (see prompt-ultracode-highlight-extension.ts); it stays
+   * editable text, so this is paint-only. `background-clip: text` shimmers a
+   * purple gradient through the glyphs, and two pseudo-element glints twinkle at
+   * opposite corners. `prefers-reduced-motion` keeps the purple, drops motion.
+   */
+  .prompt-ultracode-highlight {
+    position: relative;
+    font-weight: 600;
+    background: linear-gradient(
+      90deg,
+      oklch(0.62 0.21 300) 0%,
+      oklch(0.74 0.18 318) 30%,
+      oklch(0.82 0.15 286) 50%,
+      oklch(0.74 0.18 318) 70%,
+      oklch(0.62 0.21 300) 100%
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: ultracode-shimmer 3s linear infinite;
+  }
+
+  .prompt-ultracode-highlight::before,
+  .prompt-ultracode-highlight::after {
+    content: "✦";
+    position: absolute;
+    font-size: 0.62em;
+    line-height: 1;
+    color: oklch(0.84 0.16 308);
+    /* `-webkit-text-fill-color` is inherited, so the transparent fill above
+     * would hide these glyphs — repaint them solid. */
+    -webkit-text-fill-color: oklch(0.84 0.16 308);
+    pointer-events: none;
+    opacity: 0;
+    animation: ultracode-sparkle 1.8s ease-in-out infinite;
+  }
+
+  .prompt-ultracode-highlight::before {
+    top: -0.32em;
+    right: -0.42em;
+  }
+
+  .prompt-ultracode-highlight::after {
+    bottom: -0.22em;
+    left: -0.42em;
+    animation-delay: 0.9s;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .prompt-ultracode-highlight {
+      animation: none;
+      background-position: 50% 0%;
+    }
+
+    .prompt-ultracode-highlight::before,
+    .prompt-ultracode-highlight::after {
+      animation: none;
+      opacity: 0.9;
+    }
+  }
+
+  [data-promptbox] {
+    container: promptbox / inline-size;
+  }
+
+  [data-promptbox-shell] {
+    container: promptbox-shell / inline-size;
+  }
+
+  /*
+   * The thread pane (timeline + composer footer) is a size container so a
+   * short stacked split can compact the follow-up composer. Its dimensions
+   * are determined by the split track, making size containment safe here.
+   */
+  [data-thread-window] {
+    container: thread-pane / size;
+  }
+
+  [data-follow-up-composer] {
+    container-name: follow-up-composer;
+  }
+
+  [data-scroll-overlay] {
+    container: scroll-overlay / inline-size;
+  }
+
+  [data-thread-toc] {
+    display: none;
+  }
+
+  @container scroll-overlay (min-width: 56rem) {
+    [data-thread-toc] {
+      display: block;
+    }
+  }
+
+  [data-promptbox-compact-label] {
+    display: none;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @container promptbox (max-width: 30rem) {
+    [data-promptbox] [data-promptbox-full-label],
+    [data-promptbox] [data-promptbox-hide-compact] {
+      display: none !important;
+    }
+
+    [data-promptbox] [data-promptbox-compact-label] {
+      display: block;
+      flex: 1 1 auto;
+    }
+
+    [data-promptbox] [data-promptbox-icon-only-control] {
+      flex-shrink: 0;
+    }
+  }
+
+  @container promptbox-shell (max-width: 34rem) {
+    [data-promptbox-shell] [data-promptbox-full-label],
+    [data-promptbox-shell] [data-promptbox-hide-compact] {
+      display: none !important;
+    }
+
+    [data-promptbox-shell] [data-promptbox-compact-label] {
+      display: block;
+      flex: 1 1 auto;
+    }
+
+    [data-promptbox-shell] [data-promptbox-icon-only-control] {
+      flex-shrink: 0;
+    }
+
+    [data-promptbox-shell] [data-promptbox-project-control] {
+      flex-shrink: 0;
+      max-inline-size: 10rem;
+    }
+  }
+
+  @container promptbox-shell (max-width: 22rem) {
+    [data-promptbox-shell] [data-promptbox-hide-branch-compact],
+    [data-promptbox-shell] [data-promptbox-hide-tiny] {
+      display: none !important;
+    }
+  }
+}
+
+/*
+ * A narrow prompt shell or short thread pane sets the same custom-property
+ * flag on the follow-up composer. The style query below applies its one-line
+ * presentation once for either condition, then lets focus expand it. This is
+ * intentionally unlayered so it can override the prompt's utility classes.
+ * The mobile path still owns its React state so software-keyboard expansion
+ * remains synchronized with visualViewport changes.
+ */
+@container promptbox-shell (max-width: 30rem) {
+  [data-follow-up-composer] {
+    --follow-up-composer-container-compact: true;
+  }
+}
+
+@container thread-pane ((min-height: 1px) and (max-height: 26rem)) {
+  [data-follow-up-composer] {
+    --follow-up-composer-container-compact: true;
+  }
+}
+
+@container follow-up-composer style(--follow-up-composer-container-compact: true) {
+  [data-follow-up-composer] [data-promptbox-layout] {
+    height: 100%;
+  }
+
+  [data-follow-up-composer] [data-promptbox-main] {
+    position: static;
+  }
+
+  [data-follow-up-composer] [data-promptbox-action-row] {
+    /* The submit group owns the edge inset in this mode. Neutralize the
+     * compact React layout's matching right inset so the two do not stack. */
+    right: 0;
+    padding-right: 3rem;
+  }
+
+  [data-follow-up-composer] [data-promptbox-submit-group] {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    z-index: 1;
+  }
+
+  [data-follow-up-composer] [data-promptbox-submit-action] {
+    width: 2rem;
+    height: 2rem;
+    margin-left: 0;
+    padding: 0;
+  }
+
+  [data-follow-up-composer] [data-follow-up-composer-footer] {
+    min-height: 0;
+    max-height: 0;
+    margin-top: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    ) {
+    overflow: hidden;
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-main] {
+    height: 3rem;
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-expanded-only] {
+    display: none !important;
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-scroll] {
+    height: 3rem !important;
+    min-height: 3rem !important;
+    max-height: 3rem !important;
+    overflow: hidden;
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-right: 3.5rem;
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-content] {
+    display: flex;
+    align-items: center;
+    height: 100%;
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-content]
+    .ProseMirror[contenteditable] {
+    width: 100%;
+    min-height: 0 !important;
+    max-height: 1.7em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap !important;
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-content]
+    .ProseMirror[contenteditable]
+    > *,
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-content]
+    .ProseMirror[contenteditable]
+    :where(blockquote, h1, h2, h3, h4, h5, h6, li, ol, p, ul) {
+    display: inline;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    list-style: none;
+    white-space: inherit;
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-content]
+    .ProseMirror[contenteditable]
+    > *
+    + *::before,
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-content]
+    .ProseMirror[contenteditable]
+    :where(blockquote, li)
+    > *
+    + *::before,
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-content]
+    .ProseMirror[contenteditable]
+    :where(ol, ul)
+    > li
+    + li::before {
+    content: " ";
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-content]
+    .ProseMirror[contenteditable]
+    br {
+    display: inline;
+    content: " ";
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-content]
+    .ProseMirror[contenteditable]
+    br::after {
+    content: " ";
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-content]
+    .prompt-mention-pill
+    > span:last-child {
+    min-width: 0;
+  }
+
+  [data-follow-up-composer]:not([data-follow-up-composer-expanded])
+    [data-promptbox]:not([data-promptbox-zen]):not(
+      [data-promptbox-voice-active]
+    )
+    [data-promptbox-editor-content]
+    .ProseMirror
+    p.is-editor-empty:first-child::before {
+    content: var(--promptbox-container-compact-placeholder);
+  }
+}
+
+@layer base {
+  /*
+   * Sonner clips collapsed native toasts on the toast node. Our custom card
+   * lives inside that node, so clip it there too when it is behind the front
+   * toast in the stack.
+   */
+  :where(
+    [data-sonner-toast].bb-app-toast[data-expanded="false"][data-front="false"]
+  ) {
+    overflow: hidden;
+    border-radius: var(--radius-md);
+  }
+
+  /*
+   * Opt out of the global thin scrollbar for horizontally-scrolling strips
+   * (e.g. the secondary-panel tab strip) where the scrollbar would clutter a
+   * short row. The element still scrolls; only the scrollbar chrome is hidden.
+   */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /*
+   * Keep thread timelines visually quiet at rest while preserving the native
+   * scroll container, its hit area, and its layout geometry. The timeline
+   * scroll owner briefly sets `data-scrollbar-scrolling` for real scroll
+   * events, matching the transient scrollbar behavior users expect from the
+   * platform without making pane content reflow as the thumb appears.
+   */
+  .thread-scrollbar {
+    scrollbar-color: transparent transparent;
+  }
+
+  .thread-scrollbar::-webkit-scrollbar-thumb,
+  .thread-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: transparent;
+  }
+
+  .thread-scrollbar[data-scrollbar-scrolling="true"] {
+    scrollbar-color: color-mix(in oklab, var(--foreground) 20%, transparent)
+      transparent;
+  }
+
+  .thread-scrollbar[data-scrollbar-scrolling="true"]::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+  }
+
+  .thread-scrollbar[data-scrollbar-scrolling="true"]::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--foreground) 40%, transparent);
+  }
+
+  /*
+   * Opt out of the global thin scrollbar into always-visible classic
+   * scrollbars for two-axis data surfaces (e.g. the CSV table preview).
+   * Native thin scrollbars render as macOS overlay bars that fade out and
+   * give a wide table no persistent horizontal-scroll affordance. Chromium
+   * only honors `::-webkit-scrollbar` customization when `scrollbar-width`
+   * and `scrollbar-color` are both `auto`, so those resets are what
+   * re-enable the persistent chrome below.
+   */
+  .persistent-scrollbar {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+
+  .persistent-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .persistent-scrollbar::-webkit-scrollbar-track,
+  .persistent-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .persistent-scrollbar::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .persistent-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--foreground) 40%, transparent);
+  }
+
+  /*
+   * Soft right-edge fade for single-line text that is clipped horizontally
+   * (e.g. a queued-message preview). Fades the text out instead of a hard
+   * `…` ellipsis. Self-gating: short text doesn't reach the fade zone, so the
+   * fade only shows when content is actually truncated. Pair with
+   * `overflow-hidden whitespace-nowrap` (no scroll).
+   */
+  .fade-clip-right {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      #000 calc(100% - 1.5rem),
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      #000 calc(100% - 1.5rem),
+      transparent
+    );
+  }
+}
+
+/* Sweep the purple gradient across the `ultracode` glyphs. */
+@keyframes ultracode-shimmer {
+  0% {
+    background-position: 200% 0%;
+  }
+  100% {
+    background-position: -200% 0%;
+  }
+}
+
+/* Twinkle each corner sparkle: fade in, scale up, and spin a quarter turn. */
+@keyframes ultracode-sparkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(90deg);
+  }
+}
+
+/* Briefly highlight a conversation message that a sidebar search result
+ * deep-links to, then fade back to transparent. */
+@keyframes bb-search-flash {
+  from {
+    background-color: color-mix(in oklch, var(--ring) 22%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.bb-search-flash {
+  border-radius: var(--radius-lg, 0.5rem);
+  animation: bb-search-flash 1.6s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bb-search-flash {
+    animation: none;
+  }
+}

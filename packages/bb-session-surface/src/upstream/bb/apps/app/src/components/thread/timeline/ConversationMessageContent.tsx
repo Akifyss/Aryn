@@ -1,0 +1,774 @@
+import { useMemo, useRef, useState, type CSSProperties } from "react";
+import type {
+  TimelineConversationAttachments,
+  TimelineRowBase,
+  TimelineUserConversationRow,
+} from "@bb/server-contract";
+import type { PromptTextMention, ThreadChildOrigin } from "@bb/domain";
+import { fileNameFromPath } from "@bb/thread-view";
+import { cn } from "@bb/shared-ui/lib/utils";
+import {
+  MarkdownPreview,
+  type MarkdownThreadMentions,
+} from "../../ui/markdown-preview.js";
+import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.js";
+import {
+  parseLocalFileHref,
+  resolveRelativeLocalFileHref,
+} from "@/components/ui/markdown-local-file-link.js";
+import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
+import { computeMutedPrefixLength } from "./compute-muted-prefix-length.js";
+import type {
+  TimelineTitleActionResolver,
+  TimelineTitleLinkResolver,
+} from "./TimelineTitleView.js";
+import type {
+  ThreadTimelineAddToChatHandler,
+  ThreadTimelineLinkHandler,
+  ThreadTimelineLocalFileLinkHandler,
+  UserAttachmentImageSrcResolver,
+} from "./types.js";
+import {
+  ConversationAttachments,
+  buildAttachmentItems,
+  type ConversationAttachmentItems,
+} from "./ConversationAttachments.js";
+import {
+  GeneratedConversationMessage,
+  generatedConversationBodySlice,
+} from "./GeneratedConversationMessage.js";
+import {
+  clipMentionTextToVisibleRange,
+  shiftMentionsToTextRange,
+} from "./ConversationMessageMentions.js";
+import type { MarkdownPromptMentions } from "@/components/ui/markdown-prompt-mentions.js";
+import {
+  useMessageDirectiveRegistry,
+  type MarkdownMessageDirectives,
+} from "@/components/ui/markdown-message-directives.js";
+import { USER_MESSAGE_CHAR_CAP } from "./conversation-message-limits.js";
+import { turnRequestLabel } from "./conversation-turn-request-label.js";
+import { TurnRequestLabel } from "./TurnRequestLabel.js";
+import { MessageActionBar } from "./MessageActionBar.js";
+import {
+  ConversationMessageOverflowToggle,
+  useIsOverflowing,
+} from "./conversation-message-overflow.js";
+import {
+  SelectableMessageProse,
+  type MessageProseSelection,
+} from "./SelectableMessageProse.js";
+import type { ThreadTimelinePluginMessageAction } from "./types.js";
+import type { PromptDraftAttachment } from "@/lib/prompt-draft";
+import { buildThreadHostFileContentUrl } from "@/lib/file-content-urls";
+
+interface ConversationMessageContentBaseProps {
+  attachments: TimelineConversationAttachments | null;
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
+  onOpenPluginPanel?: MarkdownMessageDirectives["openThreadPanel"];
+  /** Plugin-contributed per-message actions, resolved by the timeline root. */
+  pluginActions?: readonly ThreadTimelinePluginMessageAction[];
+  projectId?: string;
+  resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
+  text: string;
+}
+
+export interface ConversationMessageContentUserProps extends ConversationMessageContentBaseProps {
+  role: "user";
+  /** Mobile presentation for the regular user message's action footer. */
+  mobileActionDisplay?: "inline" | "overflow";
+  /**
+   * `childOrigin` of the thread this row belongs to. Selects the fork leading
+   * icon when an agent-initiated thread-start anchor (a fork's seed-without-run
+   * row) renders as "Message from {source}". Null for non-fork threads.
+   */
+  childOrigin: ThreadChildOrigin | null;
+  initiator: TimelineUserConversationRow["initiator"];
+  mentions: readonly PromptTextMention[];
+  onAddToChat?: ThreadTimelineAddToChatHandler;
+  resolveMentionLink?: PromptMentionLinkResolver;
+  resolveSegmentLinkHref?: TimelineTitleLinkResolver;
+  onOpenLink?: ThreadTimelineLinkHandler;
+  onTitleAction?: TimelineTitleActionResolver;
+  senderThreadId: TimelineUserConversationRow["senderThreadId"];
+  senderThreadTitle: string | null;
+  /** `childOrigin` of the SENDER thread (the cross-thread "Message from" source),
+   * so a message handed back from a side chat reads "Message from side chat". */
+  senderChildOrigin: ThreadChildOrigin | null;
+  /** The sender thread is a side-chat plugin hidden fork — the plugin-era
+   * side chat. Renders the same "Message from side chat" affordance, opening
+   * the plugin's panel instead of a legacy tab. */
+  senderIsPluginSideChat: boolean;
+  // Family-B taxonomy fields off the row, required and always supplied (legacy
+  // rows carry `unlabeled` + `null`). They drive the `system`-initiated message
+  // title, icon, and title-only collapse in `GeneratedConversationMessage`.
+  systemMessageKind: TimelineUserConversationRow["systemMessageKind"];
+  systemMessageSubject: TimelineUserConversationRow["systemMessageSubject"];
+  turnRequest: TimelineUserConversationRow["turnRequest"];
+}
+
+/**
+ * Identity of the source timeline row, forwarded onto the assistant message so
+ * the per-message fork / side-chat actions (wired in later sessions) can anchor
+ * on the exact agent message. Sourced from `TimelineRowBase` rather than inlined
+ * primitives so it stays in lockstep with the contract.
+ */
+type AssistantMessageRowIdentity = Pick<
+  TimelineRowBase,
+  "id" | "threadId" | "turnId" | "sourceSeqStart" | "sourceSeqEnd"
+>;
+
+const COLLAPSED_MESSAGE_FADE_STYLE: CSSProperties = {
+  maskImage:
+    "linear-gradient(to bottom, black calc(100% - 2.5rem), transparent)",
+  WebkitMaskImage:
+    "linear-gradient(to bottom, black calc(100% - 2.5rem), transparent)",
+};
+
+const ASSISTANT_THREAD_MENTIONS: MarkdownThreadMentions = {
+  mentions: [],
+  preserveSoftBreaks: false,
+};
+
+export interface ConversationMessageContentAssistantProps
+  extends ConversationMessageContentBaseProps, AssistantMessageRowIdentity {
+  role: "assistant";
+  // Assistant content and generated system rows render through MarkdownPreview,
+  // which is the only message body surface with clickable web links.
+  onOpenLink?: ThreadTimelineLinkHandler;
+  /** Add this complete agent response to the active composer draft. */
+  onAddToChat?: ThreadTimelineAddToChatHandler;
+  /**
+   * Fork the active thread from this agent message. Omitted when forking is
+   * unavailable (no host) — the action bar then renders without a Fork button.
+   */
+  onFork?: () => void;
+  /**
+   * Open a side chat anchored on this agent message. Omitted when side chats are
+   * unavailable (no host secondary panel) — the bar then renders without it.
+   */
+  onSideChat?: () => void;
+  /**
+   * Hand this agent message back to the main thread. Supplied only inside a side
+   * chat; omitted on the main timeline (a main message has no main thread).
+   */
+  onSendToMain?: () => void;
+  /**
+   * Greys the Fork + Side-chat buttons when the thread is at the spawn-depth cap
+   * — both spawn a child thread off the active thread, so they share one guard.
+   */
+  forkDisabled?: boolean;
+  /**
+   * Reports this message's in-bounds text selection (or `null` when cleared) up
+   * to the timeline-level selection controller that drives the single floating
+   * menu. Omitted when no controller is wired in (e.g. delegation output).
+   */
+  onSelectProse?: (selection: MessageProseSelection | null) => void;
+  /** Shows the hover-revealed message action footer. */
+  showActions: boolean;
+  /** Mobile presentation for this message's action footer. */
+  mobileActionDisplay: "inline" | "overflow";
+  turnRequest: null;
+  workspaceRootPath?: string;
+}
+
+/**
+ * Discriminated on `role` so the user variant carries `initiator` +
+ * non-null `turnRequest` while the assistant variant requires neither.
+ * Avoids optional-with-default props (AGENTS.md: "do not use optional
+ * fields to hide defaults") and lets the renderer drop optional-chain
+ * defenses on contract-required fields.
+ */
+export type ConversationMessageContentProps =
+  | ConversationMessageContentUserProps
+  | ConversationMessageContentAssistantProps;
+
+interface UserConversationMessageProps {
+  addToChatAttachments: readonly PromptDraftAttachment[];
+  attachmentItems: ConversationAttachmentItems;
+  childOrigin: ThreadChildOrigin | null;
+  pluginActions?: readonly ThreadTimelinePluginMessageAction[];
+  initiator: TimelineUserConversationRow["initiator"];
+  mentions: readonly PromptTextMention[];
+  mobileActionDisplay: "inline" | "overflow";
+  onAddToChat?: ThreadTimelineAddToChatHandler;
+  onOpenLink?: ThreadTimelineLinkHandler;
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
+  projectId?: string;
+  resolveMentionLink?: PromptMentionLinkResolver;
+  resolveSegmentLinkHref?: TimelineTitleLinkResolver;
+  onTitleAction?: TimelineTitleActionResolver;
+  senderThreadId: TimelineUserConversationRow["senderThreadId"];
+  senderThreadTitle: string | null;
+  senderChildOrigin: ThreadChildOrigin | null;
+  senderIsPluginSideChat: boolean;
+  systemMessageKind: TimelineUserConversationRow["systemMessageKind"];
+  systemMessageSubject: TimelineUserConversationRow["systemMessageSubject"];
+  text: string;
+  turnRequest: TimelineUserConversationRow["turnRequest"];
+}
+
+interface AssistantConversationMessageProps extends AssistantMessageRowIdentity {
+  addToChatAttachments: readonly PromptDraftAttachment[];
+  attachmentItems: ConversationAttachmentItems;
+  pluginActions?: readonly ThreadTimelinePluginMessageAction[];
+  onAddToChat?: ThreadTimelineAddToChatHandler;
+  onFork?: () => void;
+  onSideChat?: () => void;
+  onSendToMain?: () => void;
+  forkDisabled?: boolean;
+  onSelectProse?: (selection: MessageProseSelection | null) => void;
+  onOpenLink?: ThreadTimelineLinkHandler;
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
+  onOpenPluginPanel?: MarkdownMessageDirectives["openThreadPanel"];
+  projectId?: string;
+  showActions: boolean;
+  mobileActionDisplay: "inline" | "overflow";
+  text: string;
+  workspaceRootPath?: string;
+}
+
+interface CollapsibleMessageTextProps {
+  mentions: readonly PromptTextMention[];
+  resolveMentionLink?: PromptMentionLinkResolver;
+  resolveSegmentLinkHref?: TimelineTitleLinkResolver;
+  onOpenLink?: ThreadTimelineLinkHandler;
+  text: string;
+  /**
+   * When set, the first `mutePrefixLength` characters of `text` are rendered
+   * inside a muted, max-width-truncated pill — used for `[bb …]` prefixes on
+   * system-initiated messages and non-user messages without sender metadata.
+   */
+  mutePrefixLength?: number;
+}
+
+function CollapsibleMessageText({
+  mentions,
+  resolveMentionLink,
+  resolveSegmentLinkHref,
+  onOpenLink,
+  text,
+  mutePrefixLength,
+}: CollapsibleMessageTextProps) {
+  // The prefix is computed off the full source text; if it would consume
+  // everything we'd show (or extend past the text — e.g. char-cap truncates
+  // before the closing `]`), fall back to plain rendering.
+  const showMutedPrefix =
+    typeof mutePrefixLength === "number" &&
+    mutePrefixLength > 0 &&
+    mutePrefixLength < text.length;
+  const prefixText = showMutedPrefix ? text.slice(0, mutePrefixLength) : null;
+  const bodyText = showMutedPrefix ? text.slice(mutePrefixLength) : text;
+  const bodyOffset = showMutedPrefix ? mutePrefixLength : 0;
+
+  const [isExpanded, setIsExpanded] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // Cap before rendering so a megabyte paste can't dominate window-resize
+  // reflow. Unlike the prior plain-text path we hand the whole capped body to
+  // the markdown renderer and clamp it visually (markdown block content doesn't
+  // line-clamp cleanly), rather than slicing it by line per collapse state.
+  const isTruncated = bodyText.length > USER_MESSAGE_CHAR_CAP;
+  const cappedBody = isTruncated
+    ? bodyText.slice(0, USER_MESSAGE_CHAR_CAP)
+    : bodyText;
+  // Rebase mentions onto the prefix-stripped, char-capped body so their offsets
+  // index into the exact string handed to the markdown renderer (a mention
+  // straddling the cap is dropped, clipping the body to just before it).
+  const body = useMemo(
+    () =>
+      clipMentionTextToVisibleRange({
+        mentions,
+        rangeStart: bodyOffset,
+        text: cappedBody,
+      }),
+    [mentions, bodyOffset, cappedBody],
+  );
+  const promptMentions = useMemo<MarkdownPromptMentions>(
+    () => ({
+      mentions: body.mentions,
+      resolveLinkHref: resolveSegmentLinkHref,
+      resolveMentionLink,
+    }),
+    [body.mentions, resolveSegmentLinkHref, resolveMentionLink],
+  );
+  const rawThreadMentions = useMemo<MarkdownThreadMentions>(
+    () => ({
+      mentions: body.mentions,
+      preserveSoftBreaks: true,
+    }),
+    [body.mentions],
+  );
+  const linkRouting = useMemo<MarkdownLinkRouting | undefined>(
+    () => (onOpenLink ? { onOpenLink } : undefined),
+    [onOpenLink],
+  );
+
+  // Collapsed: clamp the rendered markdown to ~15 lines and reveal the toggle
+  // when it overflows the clamp, measured off the container height (the source
+  // line count no longer maps to rendered height once blocks have margins).
+  const isOverflowing = useIsOverflowing({
+    elementRef: bodyRef,
+    enabled: !isExpanded,
+    measurementKey: body.text,
+  });
+  const showToggle = isExpanded || isOverflowing;
+
+  return (
+    <>
+      {prefixText !== null ? (
+        <span
+          className="line-clamp-1 text-muted-foreground"
+          title={prefixText.trimEnd()}
+        >
+          {prefixText}
+        </span>
+      ) : null}
+      <div
+        ref={bodyRef}
+        className={cn(
+          "break-words",
+          !isExpanded && "max-h-[15lh] overflow-hidden",
+        )}
+        style={
+          !isExpanded && showToggle ? COLLAPSED_MESSAGE_FADE_STYLE : undefined
+        }
+      >
+        <MarkdownPreview
+          content={body.text}
+          promptMentions={promptMentions}
+          threadMentions={rawThreadMentions}
+          linkRouting={linkRouting}
+        />
+        {isExpanded && isTruncated ? (
+          <span className="text-muted-foreground">[truncated]</span>
+        ) : null}
+      </div>
+      {showToggle ? (
+        <ConversationMessageOverflowToggle
+          expanded={isExpanded}
+          labels={{ collapsed: "Show more", expanded: "Show less" }}
+          onToggle={() => setIsExpanded((prev) => !prev)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function buildAddToChatAttachments(
+  attachments: TimelineConversationAttachments | null,
+): PromptDraftAttachment[] {
+  if (!attachments) {
+    return [];
+  }
+
+  return [
+    ...attachments.localImagePaths.map((path) => ({
+      type: "localImage" as const,
+      path,
+      name: fileNameFromPath(path),
+      sizeBytes: 0,
+    })),
+    ...attachments.localFilePaths.map((path) => ({
+      type: "localFile" as const,
+      path,
+      name: fileNameFromPath(path),
+      sizeBytes: 0,
+    })),
+  ];
+}
+
+function UserConversationMessage({
+  addToChatAttachments,
+  attachmentItems,
+  childOrigin,
+  initiator,
+  mentions,
+  mobileActionDisplay,
+  onAddToChat,
+  onOpenLink,
+  onOpenLocalFileLink,
+  pluginActions = [],
+  projectId,
+  resolveMentionLink,
+  resolveSegmentLinkHref,
+  onTitleAction,
+  senderThreadId,
+  senderThreadTitle,
+  senderChildOrigin,
+  senderIsPluginSideChat,
+  systemMessageKind,
+  systemMessageSubject,
+  text,
+  turnRequest,
+}: UserConversationMessageProps) {
+  if (initiator === "agent" && senderThreadId !== null) {
+    const body = generatedConversationBodySlice({ initiator, text });
+    const bodyMentions = shiftMentionsToTextRange({
+      mentions,
+      rangeStart: body.startOffset,
+      rangeEnd: body.startOffset + body.text.length,
+    });
+    return (
+      <GeneratedConversationMessage
+        attachmentItems={attachmentItems}
+        childOrigin={childOrigin}
+        mentions={bodyMentions}
+        onOpenLink={onOpenLink}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId={projectId}
+        resolveMentionLink={resolveMentionLink}
+        resolveSegmentLinkHref={resolveSegmentLinkHref}
+        onTitleAction={onTitleAction}
+        sourceKind="agent"
+        sourceName={
+          senderChildOrigin === "side-chat" || senderIsPluginSideChat
+            ? "side chat"
+            : (senderThreadTitle ?? "Agent")
+        }
+        sourceThreadId={senderThreadId}
+        sourceIsSideChat={senderChildOrigin === "side-chat"}
+        sourceIsPluginSideChat={senderIsPluginSideChat}
+        systemMessageKind={systemMessageKind}
+        systemMessageSubject={systemMessageSubject}
+        text={body.text}
+        turnRequest={turnRequest}
+      />
+    );
+  }
+
+  if (initiator === "system") {
+    const body = generatedConversationBodySlice({ initiator, text });
+    const bodyMentions = shiftMentionsToTextRange({
+      mentions,
+      rangeStart: body.startOffset,
+      rangeEnd: body.startOffset + body.text.length,
+    });
+    return (
+      <GeneratedConversationMessage
+        attachmentItems={attachmentItems}
+        childOrigin={null}
+        mentions={bodyMentions}
+        onOpenLink={onOpenLink}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId={projectId}
+        resolveMentionLink={resolveMentionLink}
+        resolveSegmentLinkHref={resolveSegmentLinkHref}
+        onTitleAction={onTitleAction}
+        sourceKind="system"
+        sourceName="BB"
+        sourceThreadId={null}
+        sourceIsSideChat={false}
+        sourceIsPluginSideChat={false}
+        systemMessageKind={systemMessageKind}
+        systemMessageSubject={systemMessageSubject}
+        text={body.text}
+        turnRequest={turnRequest}
+      />
+    );
+  }
+
+  const mutePrefixLength = computeMutedPrefixLength(initiator, text);
+  const messageText = text.trim();
+  const requestLabel = turnRequestLabel(turnRequest);
+
+  return (
+    <div className="w-full">
+      <div className="group/message ml-auto w-fit max-w-[70%]">
+        {requestLabel ? (
+          <div className="mb-1 flex justify-end">
+            <TurnRequestLabel
+              turnRequest={turnRequest}
+              icon="ArrowTurnForward"
+            />
+          </div>
+        ) : null}
+        <div className="rounded-xl border border-border-seam bg-surface-recessed px-4 py-2.5 text-sm leading-relaxed text-foreground">
+          {messageText ? (
+            <CollapsibleMessageText
+              mentions={mentions}
+              resolveMentionLink={resolveMentionLink}
+              resolveSegmentLinkHref={resolveSegmentLinkHref}
+              onOpenLink={onOpenLink}
+              text={text}
+              mutePrefixLength={mutePrefixLength || undefined}
+            />
+          ) : (
+            <p className="text-muted-foreground">Sent attachments</p>
+          )}
+          <ConversationAttachments
+            align="end"
+            filePaths={attachmentItems.filePaths}
+            imageItems={attachmentItems.imageItems}
+            onOpenLocalFileLink={onOpenLocalFileLink}
+            projectId={projectId}
+          />
+        </div>
+        {messageText ||
+        addToChatAttachments.length > 0 ||
+        pluginActions.length > 0 ? (
+          <div className="mt-1 flex justify-end">
+            <MessageActionBar
+              messageText={messageText}
+              alignment="end"
+              mobileActionDisplay={mobileActionDisplay}
+              addToChatAttachments={addToChatAttachments}
+              onAddToChat={onAddToChat}
+              pluginActions={pluginActions}
+            />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function AssistantConversationMessage({
+  addToChatAttachments,
+  attachmentItems,
+  id,
+  onAddToChat,
+  onFork,
+  onSideChat,
+  onSendToMain,
+  forkDisabled,
+  onSelectProse,
+  onOpenLink,
+  onOpenLocalFileLink,
+  onOpenPluginPanel,
+  pluginActions,
+  projectId,
+  showActions,
+  mobileActionDisplay,
+  text,
+  threadId,
+  turnId,
+  workspaceRootPath,
+}: AssistantConversationMessageProps) {
+  const linkRouting = useMemo<MarkdownLinkRouting>(() => {
+    const localImage: NonNullable<MarkdownLinkRouting["localImage"]> = {
+      absolutePaths: {
+        kind: "trusted-host",
+      },
+      resolveSrc: ({ path }) => buildThreadHostFileContentUrl(threadId, path),
+    };
+    const routing: MarkdownLinkRouting = {
+      localImage,
+    };
+    if (workspaceRootPath !== undefined) {
+      localImage.relativePaths = {
+        baseDir: workspaceRootPath,
+        rootPath: workspaceRootPath,
+      };
+    }
+    if (onOpenLink) {
+      routing.onOpenLink = onOpenLink;
+    }
+    if (onOpenLocalFileLink) {
+      routing.localFile = {
+        absoluteLinks: {
+          kind: "trusted-host",
+        },
+        onOpenLink: onOpenLocalFileLink,
+      };
+      if (workspaceRootPath !== undefined) {
+        routing.localFile.relativeLinks = {
+          baseDir: workspaceRootPath,
+          rootPath: workspaceRootPath,
+        };
+      }
+    }
+    return routing;
+  }, [onOpenLink, onOpenLocalFileLink, threadId, workspaceRootPath]);
+
+  // Registry is subscribed once at the timeline root and provided via context;
+  // only assistant (and nested delegation) bodies activate plugin directives.
+  const messageDirectiveRegistry = useMessageDirectiveRegistry();
+  const openDirectiveWorkspaceFile = useMemo<
+    MarkdownMessageDirectives["openWorkspaceFile"]
+  >(() => {
+    if (onOpenLocalFileLink === undefined || workspaceRootPath === undefined) {
+      return null;
+    }
+
+    return (path) => {
+      const href = resolveRelativeLocalFileHref({
+        baseDir: workspaceRootPath,
+        href: path,
+        rootPath: workspaceRootPath,
+      });
+      if (href === null) {
+        return false;
+      }
+      const link = parseLocalFileHref({
+        absoluteLinks: { kind: "contained", rootPath: workspaceRootPath },
+        href,
+      });
+      return link === null ? false : onOpenLocalFileLink(link);
+    };
+  }, [onOpenLocalFileLink, workspaceRootPath]);
+  const messageDirectives = useMemo<
+    MarkdownMessageDirectives | undefined
+  >(() => {
+    if (
+      messageDirectiveRegistry === null ||
+      messageDirectiveRegistry.size === 0
+    ) {
+      return undefined;
+    }
+    return {
+      registry: messageDirectiveRegistry,
+      message: {
+        id,
+        threadId,
+        turnId,
+        projectId: projectId ?? null,
+      },
+      openWorkspaceFile: openDirectiveWorkspaceFile,
+      openThreadPanel: onOpenPluginPanel ?? null,
+    };
+  }, [
+    messageDirectiveRegistry,
+    id,
+    threadId,
+    turnId,
+    projectId,
+    openDirectiveWorkspaceFile,
+    onOpenPluginPanel,
+  ]);
+
+  return (
+    <div className="group/message w-full px-2 text-sm font-normal leading-relaxed">
+      {/*
+        Reports in-bounds text selections up to the timeline-level controller
+        that drives the single floating selection menu (Add to chat / Reply in
+        side chat).
+      */}
+      <SelectableMessageProse onSelect={onSelectProse}>
+        <MarkdownPreview
+          content={text}
+          linkRouting={linkRouting}
+          messageDirectives={messageDirectives}
+          threadMentions={ASSISTANT_THREAD_MENTIONS}
+        />
+      </SelectableMessageProse>
+      <ConversationAttachments
+        filePaths={attachmentItems.filePaths}
+        imageItems={attachmentItems.imageItems}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId={projectId}
+      />
+      {showActions ? (
+        /*
+          Message actions. Each button is dropped entirely (not rendered
+          disabled) when its handler is absent — e.g. fork is omitted for a
+          personal-only source with no host to base a worktree fork on.
+          `disabled` greys both fork and side chat together when the thread is at
+          the spawn-depth cap (both spawn a child thread, one guard).
+        */
+        <div className="relative h-5 max-md:pointer-coarse:h-7">
+          <div
+            className={cn(
+              "absolute left-0 top-1",
+              "max-md:pointer-coarse:top-0",
+            )}
+          >
+            <MessageActionBar
+              messageText={text}
+              alignment="start"
+              mobileActionDisplay={mobileActionDisplay}
+              addToChatAttachments={addToChatAttachments}
+              onAddToChat={onAddToChat}
+              onFork={onFork}
+              onSideChat={onSideChat}
+              onSendToMain={onSendToMain}
+              disabled={forkDisabled}
+              pluginActions={pluginActions}
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function ConversationMessageContent(
+  props: ConversationMessageContentProps,
+) {
+  const {
+    attachments,
+    onOpenLocalFileLink,
+    onOpenPluginPanel,
+    projectId,
+    resolveUserAttachmentImageSrc,
+    text,
+  } = props;
+  const attachmentItems = useMemo(
+    () =>
+      buildAttachmentItems({
+        attachments,
+        projectId,
+        resolveUserAttachmentImageSrc,
+      }),
+    [attachments, projectId, resolveUserAttachmentImageSrc],
+  );
+  const addToChatAttachments = useMemo(
+    () => buildAddToChatAttachments(attachments),
+    [attachments],
+  );
+
+  if (props.role === "user") {
+    return (
+      <UserConversationMessage
+        addToChatAttachments={addToChatAttachments}
+        attachmentItems={attachmentItems}
+        childOrigin={props.childOrigin}
+        pluginActions={props.pluginActions}
+        initiator={props.initiator}
+        mentions={props.mentions}
+        mobileActionDisplay={props.mobileActionDisplay ?? "overflow"}
+        onAddToChat={props.onAddToChat}
+        onOpenLink={props.onOpenLink}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId={projectId}
+        resolveMentionLink={props.resolveMentionLink}
+        resolveSegmentLinkHref={props.resolveSegmentLinkHref}
+        onTitleAction={props.onTitleAction}
+        senderThreadId={props.senderThreadId}
+        senderThreadTitle={props.senderThreadTitle}
+        senderChildOrigin={props.senderChildOrigin}
+        senderIsPluginSideChat={props.senderIsPluginSideChat}
+        systemMessageKind={props.systemMessageKind}
+        systemMessageSubject={props.systemMessageSubject}
+        text={text}
+        turnRequest={props.turnRequest}
+      />
+    );
+  }
+
+  return (
+    <AssistantConversationMessage
+      addToChatAttachments={addToChatAttachments}
+      attachmentItems={attachmentItems}
+      id={props.id}
+      pluginActions={props.pluginActions}
+      onAddToChat={props.onAddToChat}
+      onFork={props.onFork}
+      onSideChat={props.onSideChat}
+      onSendToMain={props.onSendToMain}
+      forkDisabled={props.forkDisabled}
+      onSelectProse={props.onSelectProse}
+      onOpenLink={props.onOpenLink}
+      onOpenLocalFileLink={onOpenLocalFileLink}
+      onOpenPluginPanel={onOpenPluginPanel}
+      projectId={projectId}
+      showActions={props.showActions}
+      mobileActionDisplay={props.mobileActionDisplay}
+      sourceSeqEnd={props.sourceSeqEnd}
+      sourceSeqStart={props.sourceSeqStart}
+      text={text}
+      threadId={props.threadId}
+      turnId={props.turnId}
+      workspaceRootPath={props.workspaceRootPath}
+    />
+  );
+}

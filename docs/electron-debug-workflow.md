@@ -118,7 +118,7 @@ npm.cmd run debug:electron
 
 Run the OpenCode official session-surface scenario. This creates an empty,
 isolated Aryn-owned OpenCode session without sending a provider prompt, verifies
-that the prebuilt official surface loads through the Electron IPC bridge, and
+that the preserved native view's prebuilt official surface loads through the Electron IPC bridge, and
 mounts a synthetic user/assistant turn through the same production bundle. The
 scenario only passes when the text parts and compact official web-fetch tool are
 rendered, the tool's raw output remains hidden, optimistic messages reconcile
@@ -127,6 +127,24 @@ CLI must be installed, but this scenario does not require a configured model.
 
 ```powershell
 $env:ARYN_ELECTRON_DEBUG_SCENARIO="opencode-surface"
+npm.cmd run debug:electron
+```
+
+Run the default unified bb timeline scenario. This verifies the production
+Agent wrapper, its non-remounting behavior, the header view toggle, and a
+synthetic OpenCode timeline containing conversation, reasoning, command,
+web-fetch, diff, optimistic, and explicitly preserved unknown-provider rows.
+It also covers all four agent entries, user-message visibility, live PI state,
+OpenCode question deduplication and older-history loading, detached-scroll
+preservation, and scroll-to-latest behavior. The scenario additionally switches
+between light and dark themes with an AA text-contrast check, exercises 360 px
+and 960 px surface widths, verifies reduced-motion timing, and uses the keyboard
+to enter native view and return to unified view without changing the session or
+composer state. Renderer errors, failed requests, and shutdown-time Agent IPC
+errors are treated as failures rather than expected noise.
+
+```powershell
+$env:ARYN_ELECTRON_DEBUG_SCENARIO="bb-unified-surface"
 npm.cmd run debug:electron
 ```
 

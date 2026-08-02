@@ -4,6 +4,7 @@ import {
   type KeyboardEvent,
   type RefObject,
   type SetStateAction,
+  useState,
 } from 'react'
 import {
   hasAgentComposerPayload,
@@ -13,6 +14,7 @@ import {
 import type { AgentId } from '@/features/agent/agent-definition'
 import type {
   AgentInteractionRequest,
+  AgentInteractionResponse,
   AgentQueuedMessageUpdate,
   AgentRunningPromptBehavior,
   AgentWorkspaceState,
@@ -35,6 +37,10 @@ type UseAgentComposerActionsOptions = {
   ) => boolean
   isViewingActiveRuntime: boolean
   pendingInteractions: AgentInteractionRequest[]
+  recordInteractionResponse: (
+    request: AgentInteractionRequest,
+    response: AgentInteractionResponse,
+  ) => void
   resetRunDrafts: () => void
   selectedAgentId: AgentId
   setAgentState: Dispatch<SetStateAction<AgentWorkspaceState>>
@@ -42,6 +48,12 @@ type UseAgentComposerActionsOptions = {
   setPendingInteractions: Dispatch<SetStateAction<AgentInteractionRequest[]>>
   submitComposerPrompt: (streamingBehavior?: AgentRunningPromptEnterBehavior) => Promise<void>
   workspacePath: string | null
+}
+
+export type AgentStoppingPromptState = {
+  agentId: AgentId
+  anchorAt: number
+  sessionPath: string
 }
 
 function getStreamingPromptBehaviorForShortcut(
@@ -76,6 +88,7 @@ export function useAgentComposerActions({
   isAgentSessionOperationCurrent,
   isViewingActiveRuntime,
   pendingInteractions,
+  recordInteractionResponse,
   resetRunDrafts,
   selectedAgentId,
   setAgentState,
@@ -84,6 +97,8 @@ export function useAgentComposerActions({
   submitComposerPrompt,
   workspacePath,
 }: UseAgentComposerActionsOptions) {
+  const [stoppingPrompt, setStoppingPrompt] = useState<AgentStoppingPromptState | null>(null)
+
   async function handleQueuedMessageUpdate(update: AgentQueuedMessageUpdate) {
     const sessionPath = agentState.activeSession?.sessionPath
     const requestAgentId = selectedAgentId
@@ -126,6 +141,12 @@ export function useAgentComposerActions({
     try {
       closeComposerMenu()
       setPanelError(null)
+      const stopState: AgentStoppingPromptState = {
+        agentId: requestAgentId,
+        anchorAt: Date.now(),
+        sessionPath,
+      }
+      setStoppingPrompt(stopState)
       const nextState = await window.appApi.abortAgentPrompt({
         agentId: requestAgentId,
         sessionPath,
@@ -143,6 +164,12 @@ export function useAgentComposerActions({
       if (isAgentSessionOperationCurrent(requestAgentId, sessionPath, requestWorkspacePath)) {
         setPanelError(error instanceof Error ? error.message : 'Unable to stop the current run.')
       }
+    } finally {
+      setStoppingPrompt((current) => (
+        current?.agentId === requestAgentId && current.sessionPath === sessionPath
+          ? null
+          : current
+      ))
     }
   }
 
@@ -162,17 +189,19 @@ export function useAgentComposerActions({
       if (!request) {
         throw new Error('这个请求已经失效，请等待 Agent 更新状态。')
       }
-      const result = await window.appApi.respondAgentInteraction({
+      const response: AgentInteractionResponse = {
         agentId: request.agentId,
         answers,
         optionId,
         requestId,
         sessionId: request.sessionId,
         values,
-      })
+      }
+      const result = await window.appApi.respondAgentInteraction(response)
       if (!result.ok) {
         throw new Error('这个请求已经失效，请等待 Agent 更新状态。')
       }
+      recordInteractionResponse(request, response)
       setPendingInteractions((currentRequests) => currentRequests.filter((candidate) => !(
         candidate.agentId === request.agentId
         && candidate.id === requestId
@@ -232,5 +261,6 @@ export function useAgentComposerActions({
     handleQueuedMessageUpdate,
     handleSubmit,
     respondToInteraction,
+    stoppingPrompt,
   }
 }

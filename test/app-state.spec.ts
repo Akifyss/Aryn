@@ -94,6 +94,7 @@ describe('app state persistence', () => {
     expect(state.settings).toEqual({
       agent: {
         runningPromptEnterBehavior: 'followUp',
+        sessionView: 'unified',
       },
       layoutPreference: 'agent',
       meo: {
@@ -477,6 +478,7 @@ describe('app state persistence', () => {
     expect(state.settings).toEqual({
       agent: {
         runningPromptEnterBehavior: 'steer',
+        sessionView: 'unified',
       },
       layoutPreference: 'editor',
       meo: {

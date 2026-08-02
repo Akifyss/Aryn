@@ -140,6 +140,7 @@ export function handleCodexServerRequest(options: HandleCodexServerRequestOption
       request: {
         agentId: 'codex',
         id: requestId,
+        ...(String(params.itemId ?? '').trim() ? { itemId: String(params.itemId).trim() } : {}),
         kind: 'permission',
         message: requestedPermissions
           ? describeRequestedPermissions(requestedPermissions, detail)
@@ -155,6 +156,7 @@ export function handleCodexServerRequest(options: HandleCodexServerRequestOption
           : request.method.includes('fileChange') || request.method === 'applyPatchApproval'
             ? 'Codex 请求修改文件'
             : 'Codex 请求执行命令',
+        ...(String(params.turnId ?? '').trim() ? { turnId: String(params.turnId).trim() } : {}),
         workspacePath: findWorkspace(threadId) || String(params.cwd ?? ''),
       },
     })
@@ -199,6 +201,9 @@ export function handleCodexServerRequest(options: HandleCodexServerRequestOption
           })) ?? [],
         })),
         id: requestId,
+        ...(String((request.params as unknown as JsonRecord).itemId ?? '').trim()
+          ? { itemId: String((request.params as unknown as JsonRecord).itemId).trim() }
+          : {}),
         kind: 'question',
         message: questions.length === 1
           ? questions[0].question
@@ -206,6 +211,9 @@ export function handleCodexServerRequest(options: HandleCodexServerRequestOption
         options: [{ id: 'deny', label: '取消' }],
         sessionId: threadId,
         title: questions.length === 1 ? questions[0].header : 'Codex 提问',
+        ...(String((request.params as unknown as JsonRecord).turnId ?? '').trim()
+          ? { turnId: String((request.params as unknown as JsonRecord).turnId).trim() }
+          : {}),
         workspacePath: findWorkspace(threadId),
       },
     })

@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import type { BbTheme } from '@aryn/bb-session-surface'
 import {
   type AgentId,
 } from '@/features/agent/agent-definition'
@@ -44,10 +45,8 @@ import {
   type AgentSessionSelection,
 } from '@/features/agent/lib/project-session-request'
 import type { OptimisticAgentUserMessage } from '@/features/agent/lib/optimistic-user-messages'
-import {
-  normalizeAgentProjectPath,
-  SESSION_TREE_AGENT_IDS,
-} from '@/features/agent/lib/session-tree'
+import { findVisiblePendingInteraction } from '@/features/agent/lib/interaction-visibility'
+import { SESSION_TREE_AGENT_IDS } from '@/features/agent/lib/session-tree'
 import type {
   ActiveWorkspaceContext,
   ConversationRecord,
@@ -71,6 +70,7 @@ import {
   useAgentModelSelectionSync,
 } from '@/features/agent/model/use-agent-model-state'
 import {
+  mergeInteractionTimelineRecords,
   useAgentRuntimeEvents,
 } from '@/features/agent/runtime/use-agent-runtime-events'
 import { useAgentWorkspaceLifecycle } from '@/features/agent/runtime/use-agent-workspace-lifecycle'
@@ -109,6 +109,7 @@ type AgentSidebarProps = {
   isProjectAddMenuOpen?: boolean
   isAgentLayout?: boolean
   surfaceMode?: AgentSurfaceMode
+  theme?: BbTheme
   workspaceState?: AgentWorkspaceState | null
   workspacePath: string | null
 }
@@ -139,6 +140,7 @@ type AgentSurfaceProps = {
   isProjectAddMenuOpen?: boolean
   isAgentLayout?: boolean
   surfaceMode?: AgentSurfaceMode
+  theme?: BbTheme
   workspaceState?: AgentWorkspaceState | null
   workspacePath: string | null
 }
@@ -226,6 +228,7 @@ function AgentProvider({
   isProjectAddMenuOpen = false,
   isAgentLayout = false,
   surfaceMode = 'docked',
+  theme = 'light',
   workspaceState,
   workspacePath,
 }: AgentProviderProps) {
@@ -356,11 +359,14 @@ function AgentProvider({
     draftAssistant,
     draftThinking,
     isThinkingStreaming,
+    interactionTimelineRecords,
     liveTools,
     pendingInteractions,
+    recordInteractionResponse,
     resetRunDrafts,
     sessionActivityById,
     setPendingInteractions,
+    streamStartedAt,
   } = useAgentRuntimeEvents({
     activeRuntimeSessionRef,
     activeSessionSelectionRef,
@@ -378,12 +384,6 @@ function AgentProvider({
     workspacePath,
     workspacePathRef,
   })
-  const pendingInteraction = pendingInteractions.find((request) => (
-    request.agentId === selectedAgentId
-    && request.sessionId === agentState.activeSession?.sessionId
-    && (!workspacePath || normalizeAgentProjectPath(request.workspacePath) === normalizeAgentProjectPath(workspacePath))
-  )) ?? null
-
   useAgentWorkspaceLifecycle({
     catalog: {
       markAgentUnavailable,
@@ -495,6 +495,17 @@ function AgentProvider({
     viewedSessionSnapshot,
     workspacePath,
   })
+  const pendingInteraction = findVisiblePendingInteraction({
+    activeRuntimeSessionId: agentState.activeSession?.sessionId ?? null,
+    isViewingActiveRuntime,
+    pendingInteractions,
+    selectedAgentId,
+    workspacePath,
+  })
+  const visibleInteractionTimelineRecords = useMemo(() => mergeInteractionTimelineRecords(
+    interactionTimelineRecords,
+    visibleSessionSnapshot?.interactionHistory ?? [],
+  ), [interactionTimelineRecords, visibleSessionSnapshot?.interactionHistory])
 
   useEffect(() => {
     if (activeWorkspaceContext.kind !== 'conversation' || !onConversationTitleSuggested) {
@@ -697,6 +708,7 @@ function AgentProvider({
     handleQueuedMessageUpdate,
     handleSubmit,
     respondToInteraction,
+    stoppingPrompt,
   } = useAgentComposerActions({
     agentState,
     closeComposerMenu,
@@ -706,6 +718,7 @@ function AgentProvider({
     isAgentSessionOperationCurrent,
     isViewingActiveRuntime,
     pendingInteractions,
+    recordInteractionResponse,
     resetRunDrafts,
     selectedAgentId,
     setAgentState,
@@ -859,6 +872,8 @@ function AgentProvider({
     configuredProviders,
     conversationState,
     deletingSessionPath,
+    draftAssistant,
+    draftThinking,
     handleComposerKeyDown,
     handleDeleteSession,
     handleOpenSession,
@@ -873,10 +888,13 @@ function AgentProvider({
     hasConfiguredProviders,
     iconTheme,
     isAgentLayout,
+    isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,
+    isThinkingStreaming,
     isSwitchingModel,
     isSwitchingThinkingLevel,
+    interactionTimelineRecords: visibleInteractionTimelineRecords,
     liveTools,
     loadProjectSessions,
     messagesScrollElement,
@@ -928,10 +946,13 @@ function AgentProvider({
     selectedAgentId,
     setSelectedAgentId,
     statusMessage,
+    stoppingPrompt,
+    streamStartedAt,
     surfaceMode,
     streamingShortcutModifierLabel,
     thinkingLevel,
     thinkingLevelLabel,
+    theme,
     workspacePath,
     workspaceTree,
   }), [
@@ -955,6 +976,8 @@ function AgentProvider({
     configuredProviders,
     conversationState,
     deletingSessionPath,
+    draftAssistant,
+    draftThinking,
     handleComposerKeyDown,
     handleDeleteSession,
     handleOpenSession,
@@ -969,10 +992,13 @@ function AgentProvider({
     hasConfiguredProviders,
     iconTheme,
     isAgentLayout,
+    isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,
+    isThinkingStreaming,
     isSwitchingModel,
     isSwitchingThinkingLevel,
+    visibleInteractionTimelineRecords,
     liveTools,
     loadProjectSessions,
     messagesScrollElement,
@@ -1019,10 +1045,13 @@ function AgentProvider({
     selectedAgentId,
     setSelectedAgentId,
     statusMessage,
+    stoppingPrompt,
+    streamStartedAt,
     surfaceMode,
     streamingShortcutModifierLabel,
     thinkingLevel,
     thinkingLevelLabel,
+    theme,
     workspacePath,
     workspaceTree,
   ])

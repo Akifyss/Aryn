@@ -6,11 +6,14 @@ import type {
   AgentRequestScope,
   AgentRunningPromptBehavior,
   AgentSessionCreateOptions,
+  AgentSessionSnapshot,
+  AgentWorkspaceState,
   OpenCodeSurfaceRequest,
 } from '../../../shared/agent-contracts/types'
 import { isAgentId, type AgentId } from '../../../shared/agent-contracts/definition'
 import type { AgentBackendRegistry } from './backend-registry'
 import type { AgentProviderAuthLoginCallbacks } from './agent-backend'
+import type { AgentInteractionHistoryStore } from '../sessions/interaction-history'
 
 function requireWorkspacePath(scope: AgentRequestScope) {
   const workspacePath = typeof scope.workspacePath === 'string' ? scope.workspacePath.trim() : ''
@@ -99,7 +102,10 @@ export class AgentApplicationService {
   private disposed = false
   private disposePromise: Promise<void> | null = null
 
-  constructor(private readonly backends: AgentBackendRegistry) {}
+  constructor(
+    private readonly backends: AgentBackendRegistry,
+    private readonly interactionHistory?: AgentInteractionHistoryStore,
+  ) {}
 
   async loadWorkspaceState(
     rawScope: AgentRequestScope,
@@ -110,7 +116,10 @@ export class AgentApplicationService {
     const targetPreferredSessionPath = preferredSessionPath === null
       ? null
       : requireExplicitSessionPath(scope, preferredSessionPath)
-    return backend.loadWorkspaceState(cwd, targetPreferredSessionPath, options)
+    return this.withInteractionHistory(
+      scope.agentId,
+      await backend.loadWorkspaceState(cwd, targetPreferredSessionPath, options),
+    )
   }
 
   async loadDraftState(agentId: AgentId = 'builtin-pi') {
@@ -125,7 +134,10 @@ export class AgentApplicationService {
 
   async readSession(rawScope: AgentRequestScope, sessionPath: string) {
     const { backend, cwd, scope } = this.resolveWorkspaceBackend(rawScope)
-    return backend.readSession(cwd, requireExplicitSessionPath(scope, sessionPath))
+    return this.withSnapshotInteractionHistory(
+      scope.agentId,
+      await backend.readSession(cwd, requireExplicitSessionPath(scope, sessionPath)),
+    )
   }
 
   async requestOpenCodeSurface(rawScope: AgentRequestScope, rawRequest: OpenCodeSurfaceRequest) {
@@ -149,22 +161,31 @@ export class AgentApplicationService {
     if (typeof options !== 'string' && options?.agentId && options.agentId !== scope.agentId) {
       throw new Error('Agent session scope does not match the requested Agent.')
     }
-    return backend.createSession(cwd, options)
+    return this.withInteractionHistory(scope.agentId, await backend.createSession(cwd, options))
   }
 
   async openSession(rawScope: AgentRequestScope, sessionPath: string) {
     const { backend, cwd, scope } = this.resolveWorkspaceBackend(rawScope)
-    return backend.openSession(cwd, requireExplicitSessionPath(scope, sessionPath))
+    return this.withInteractionHistory(
+      scope.agentId,
+      await backend.openSession(cwd, requireExplicitSessionPath(scope, sessionPath)),
+    )
   }
 
   async deleteSession(rawScope: AgentRequestScope, sessionPath: string) {
     const { backend, cwd, scope } = this.resolveWorkspaceBackend(rawScope)
-    return backend.deleteSession(cwd, requireExplicitSessionPath(scope, sessionPath))
+    const targetSessionPath = requireExplicitSessionPath(scope, sessionPath)
+    const state = await backend.deleteSession(cwd, targetSessionPath)
+    await this.clearInteractionHistorySession(scope.agentId, targetSessionPath)
+    return this.withInteractionHistory(scope.agentId, state)
   }
 
   async renameSession(rawScope: AgentRequestScope, sessionPath: string, name: string) {
     const { backend, cwd, scope } = this.resolveWorkspaceBackend(rawScope)
-    return backend.renameSession(cwd, requireExplicitSessionPath(scope, sessionPath), name)
+    return this.withInteractionHistory(
+      scope.agentId,
+      await backend.renameSession(cwd, requireExplicitSessionPath(scope, sessionPath), name),
+    )
   }
 
   async sendPrompt(
@@ -182,22 +203,31 @@ export class AgentApplicationService {
     const { backend, cwd, scope, sessionPath } = this.resolveSessionBackend(rawScope)
     const capability = backend.capabilities.queuedMessageEditing
     if (!capability) throw unsupportedQueuedMessageEditingError(scope.agentId)
-    return capability.update(cwd, sessionPath, update)
+    return this.withInteractionHistory(scope.agentId, await capability.update(cwd, sessionPath, update))
   }
 
   async selectModel(rawScope: AgentRequestScope, modelKey: string) {
-    const { backend, cwd, sessionPath } = this.resolveSessionBackend(rawScope)
-    return backend.selectModel(cwd, sessionPath, modelKey)
+    const { backend, cwd, scope, sessionPath } = this.resolveSessionBackend(rawScope)
+    return this.withInteractionHistory(
+      scope.agentId,
+      await backend.selectModel(cwd, sessionPath, modelKey),
+    )
   }
 
   async selectThinkingLevel(rawScope: AgentRequestScope, level: string, modelKey?: string) {
-    const { backend, cwd, sessionPath } = this.resolveSessionBackend(rawScope)
-    return backend.selectThinkingLevel(cwd, sessionPath, level, modelKey)
+    const { backend, cwd, scope, sessionPath } = this.resolveSessionBackend(rawScope)
+    return this.withInteractionHistory(
+      scope.agentId,
+      await backend.selectThinkingLevel(cwd, sessionPath, level, modelKey),
+    )
   }
 
   async abortActivePrompt(rawScope: AgentRequestScope) {
-    const { backend, cwd, sessionPath } = this.resolveSessionBackend(rawScope)
-    return backend.abortActivePrompt(cwd, sessionPath)
+    const { backend, cwd, scope, sessionPath } = this.resolveSessionBackend(rawScope)
+    return this.withInteractionHistory(
+      scope.agentId,
+      await backend.abortActivePrompt(cwd, sessionPath),
+    )
   }
 
   updateProviderAuth(cwd: string | null, provider: string, apiKey: string | null) {
@@ -236,6 +266,11 @@ export class AgentApplicationService {
       [...this.backends.values()].map((backend) => backend.discardWorkspaceSessions(cwd)),
     )
     this.throwFanOutFailures(results, 'One or more Agent session stores could not be cleaned up.')
+    try {
+      await this.interactionHistory?.clearWorkspace(cwd)
+    } catch (error) {
+      console.warn('[Agent Host] Unable to clear interaction history for the workspace.', error)
+    }
   }
 
   dispose() {
@@ -248,7 +283,12 @@ export class AgentApplicationService {
         return Promise.reject(error)
       }
     })
-    this.disposePromise = Promise.allSettled(disposals).then((results) => {
+    this.disposePromise = Promise.allSettled(disposals).then(async (results) => {
+      try {
+        await this.interactionHistory?.drain()
+      } catch (error) {
+        console.warn('[Agent Host] Unable to finish persisting interaction history.', error)
+      }
       this.throwFanOutFailures(results, 'One or more Agent backends could not be disposed.')
     })
     return this.disposePromise
@@ -272,6 +312,47 @@ export class AgentApplicationService {
     const capability = this.requireBackend('builtin-pi').capabilities.providerAuth
     if (!capability) throw new Error('Embedded PI provider authentication is unavailable.')
     return capability
+  }
+
+  private async withSnapshotInteractionHistory(
+    agentId: AgentId,
+    snapshot: AgentSessionSnapshot,
+  ): Promise<AgentSessionSnapshot> {
+    if (!this.interactionHistory) return snapshot
+    try {
+      if (agentId === 'builtin-pi' && snapshot.sessionPath) {
+        await this.interactionHistory.associateSession(
+          agentId,
+          snapshot.sessionId,
+          snapshot.sessionPath,
+          snapshot.workspacePath,
+        )
+      }
+      const interactionHistory = await this.interactionHistory.read(agentId, snapshot.sessionId)
+      return { ...snapshot, interactionHistory }
+    } catch (error) {
+      console.warn('[Agent Host] Unable to load interaction history for the session.', error)
+      return snapshot
+    }
+  }
+
+  private async withInteractionHistory(
+    agentId: AgentId,
+    state: AgentWorkspaceState,
+  ): Promise<AgentWorkspaceState> {
+    if (!state.activeSession) return state
+    return {
+      ...state,
+      activeSession: await this.withSnapshotInteractionHistory(agentId, state.activeSession),
+    }
+  }
+
+  private async clearInteractionHistorySession(agentId: AgentId, sessionIdOrPath: string) {
+    try {
+      await this.interactionHistory?.clearSession(agentId, sessionIdOrPath)
+    } catch (error) {
+      console.warn('[Agent Host] Unable to clear interaction history for the session.', error)
+    }
   }
 
   private requireBackend(agentId: AgentId) {

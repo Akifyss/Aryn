@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type {
   AgentRunningPromptEnterBehavior,
+  AgentSessionView,
   AppLayoutPreference,
   AppTheme,
   PersistedAgentSettings,
@@ -11,6 +12,7 @@ import type {
 
 export type {
   AgentRunningPromptEnterBehavior,
+  AgentSessionView,
   AppLayoutPreference,
   AppTheme,
   MeoOutlinePosition,
@@ -42,6 +44,7 @@ const DEFAULT_MEO_SETTINGS: MeoSettings = {
 
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   runningPromptEnterBehavior: 'followUp',
+  sessionView: 'unified',
 }
 
 const DEFAULT_APP_SETTINGS: PersistedAppSettings = {
@@ -67,9 +70,18 @@ function sanitizeRunningPromptEnterBehavior(value: unknown): AgentRunningPromptE
     : DEFAULT_AGENT_SETTINGS.runningPromptEnterBehavior
 }
 
+export function isAgentSessionView(value: unknown): value is AgentSessionView {
+  return value === 'unified' || value === 'native'
+}
+
+function sanitizeAgentSessionView(value: unknown): AgentSessionView {
+  return isAgentSessionView(value) ? value : DEFAULT_AGENT_SETTINGS.sessionView
+}
+
 function sanitizeAgentSettings(value: Partial<AgentSettings> | undefined): AgentSettings {
   return {
     runningPromptEnterBehavior: sanitizeRunningPromptEnterBehavior(value?.runningPromptEnterBehavior),
+    sessionView: sanitizeAgentSessionView(value?.sessionView),
   }
 }
 

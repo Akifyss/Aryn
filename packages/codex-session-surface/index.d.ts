@@ -4,6 +4,7 @@ export type CodexSessionExecutionState =
   | { type: 'retry'; message: string; attempt: number; next: number }
 
 export type CodexOptimisticUserMessage = {
+  baselineUserMessageIds?: ReadonlyArray<string>
   id: string
   text: string
   timestamp: number

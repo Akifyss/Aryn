@@ -12,7 +12,10 @@ export type PiWebNativeSessionSnapshot = {
 }
 
 export type PiWebOptimisticUserMessage = {
+  attachments?: ReadonlyArray<Record<string, unknown>>
+  baselineUserMessageIds?: ReadonlyArray<string>
   content: unknown
+  id?: string
   timestamp: number
 }
 

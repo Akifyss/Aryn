@@ -63,16 +63,32 @@ function normalizeAgentIpcScope(scopeOrWorkspacePath: AgentRequestScope | string
 
 export function registerAgentIpc(options: RegisterAgentIpcOptions) {
   const activeProviderAuthFlows = new Map<string, ActiveProviderAuthFlow>()
+  const handlerDrainWaiters = new Set<() => void>()
   const pendingProviderAuthPrompts = new Map<string, PendingProviderAuthPrompt>()
   const registeredChannels = new Set<string>()
+  let activeHandlerCount = 0
   let disposed = false
   let legacyBuiltinAgentScope: AgentRequestScope | null = null
+
+  function settleHandlerDrain() {
+    if (activeHandlerCount !== 0) return
+    for (const resolve of handlerDrainWaiters) resolve()
+    handlerDrainWaiters.clear()
+  }
 
   function handle(
     channel: string,
     listener: Parameters<typeof ipcMain.handle>[1],
   ) {
-    ipcMain.handle(channel, listener)
+    ipcMain.handle(channel, async (...args) => {
+      activeHandlerCount += 1
+      try {
+        return await listener(...args)
+      } finally {
+        activeHandlerCount -= 1
+        settleHandlerDrain()
+      }
+    })
     registeredChannels.add(channel)
   }
 
@@ -469,6 +485,12 @@ export function registerAgentIpc(options: RegisterAgentIpcOptions) {
 
   return {
     cancelProviderAuthFlows,
+    drain() {
+      if (activeHandlerCount === 0) return Promise.resolve()
+      return new Promise<void>((resolve) => {
+        handlerDrainWaiters.add(resolve)
+      })
+    },
     dispose() {
       if (disposed) return
       disposed = true

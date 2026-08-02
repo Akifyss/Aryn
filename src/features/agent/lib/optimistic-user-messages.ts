@@ -10,6 +10,7 @@ import type {
 
 export type OptimisticAgentUserMessage = {
   agentId: AgentId
+  baselineUserMessageIds?: string[]
   message: AgentSidebarMessage
   nativePartIds?: string[]
   sessionPath: string
@@ -62,7 +63,9 @@ export function getPersistedAgentUserMessages(snapshot: AgentSessionSnapshot) {
     return native.messages.flatMap((message, index): AgentSidebarMessage[] => (
       message.role === 'user'
         ? [{
-            id: typeof message.id === 'string' ? message.id : `pi-user-${index}`,
+            id: native.entryIds[index]
+              || (typeof message.id === 'string' ? message.id : '')
+              || `message-${index}`,
             kind: 'user',
             text: getPiWebUserMessageText(message),
             timestamp: typeof message.timestamp === 'number' ? message.timestamp : 0,
@@ -102,8 +105,10 @@ export function reconcileOptimisticAgentUserMessages(
       return true
     }
 
+    const baselineIds = new Set(entry.baselineUserMessageIds ?? [])
     const match = persistedUsers.find((message) => (
-      !usedPersistedIds.has(message.id)
+      !baselineIds.has(message.id)
+      && !usedPersistedIds.has(message.id)
       && (
         message.id === entry.message.id
         || (contentFallbackUserIds.has(message.id) && (
@@ -123,7 +128,14 @@ export function reconcileOptimisticAgentUserMessages(
 }
 
 export function buildNativeOptimisticUserMessages(entries: OptimisticAgentUserMessage[]) {
-  const messages = entries.map((entry) => entry.message)
+  const messages = entries.map((entry) => ({
+    ...entry.message,
+    ...(entry.baselineUserMessageIds
+      ? {
+          optimisticBaselineUserMessageIds: entry.baselineUserMessageIds,
+        }
+      : {}),
+  }))
   const openCodeMessages = entries.map((entry): OpenCodeOptimisticUserMessage => {
     const message = entry.message
 
@@ -143,12 +155,15 @@ export function buildNativeOptimisticUserMessages(entries: OptimisticAgentUserMe
           : []
       }),
       id: message.id,
+      ...(entry.baselineUserMessageIds
+        ? { baselineUserMessageIds: entry.baselineUserMessageIds }
+        : {}),
       text: message.text,
       textPartId: entry.nativePartIds?.[0] ?? `${message.id}-text`,
       timestamp: message.timestamp,
     }
   })
-  const piWebMessages = entries.map((entry): PiWebOptimisticUserMessage => {
+  const piWebMessages = entries.map((entry) => {
     const imageBlocks = entry.message.attachments?.flatMap((attachment) => {
       if (attachment.kind !== 'image' || !attachment.data) return []
       const match = attachment.data.match(/^data:([^;]+);base64,(.+)$/)
@@ -165,12 +180,17 @@ export function buildNativeOptimisticUserMessages(entries: OptimisticAgentUserMe
     }) ?? []
 
     return {
+      attachments: entry.message.attachments,
+      ...(entry.baselineUserMessageIds
+        ? { baselineUserMessageIds: entry.baselineUserMessageIds }
+        : {}),
       content: imageBlocks.length > 0
         ? [
             ...(entry.message.text ? [{ type: 'text' as const, text: entry.message.text }] : []),
             ...imageBlocks,
           ]
         : entry.message.text,
+      id: entry.message.id,
       timestamp: entry.message.timestamp,
     }
   })
@@ -178,6 +198,10 @@ export function buildNativeOptimisticUserMessages(entries: OptimisticAgentUserMe
   return {
     codex: messages,
     openCode: openCodeMessages,
-    piWeb: piWebMessages,
+    piWeb: piWebMessages satisfies Array<PiWebOptimisticUserMessage & {
+      attachments?: AgentSidebarMessage['attachments']
+      baselineUserMessageIds?: string[]
+      id: string
+    }>,
   }
 }

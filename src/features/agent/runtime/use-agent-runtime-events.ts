@@ -23,22 +23,90 @@ import {
   normalizeAgentProjectPath,
 } from '@/features/agent/lib/session-tree'
 import {
+  EMPTY_AGENT_LIVE_STREAM_STATE,
+  reduceAgentLiveStreamState,
+  type AgentLiveStreamState,
+} from '@/features/agent/runtime/agent-live-stream-state'
+import {
   getAgentInteractionKey,
+  getAgentInteractionResolution,
   type AgentClientEvent,
   type AgentInteractionRequest,
+  type AgentInteractionResponse,
+  type AgentInteractionTimelineRecord,
   type AgentSessionAnnotations,
   type AgentSessionListItem,
   type AgentSessionSnapshot,
-  type AgentSidebarMessageStatus,
   type AgentWorkspaceState,
 } from '@/features/agent/types'
 
-export type AgentLiveToolState = {
-  id: string
-  name: string
-  status: AgentSidebarMessageStatus
-  summary: string
-  isError?: boolean
+export type { AgentLiveToolState } from '@/features/agent/runtime/agent-live-stream-state'
+
+const MAX_INTERACTION_TIMELINE_RECORDS = 200
+
+function getInteractionRecordKey(record: AgentInteractionTimelineRecord) {
+  return `${record.request.agentId}\n${getAgentInteractionKey(record.request.sessionId, record.request.id)}`
+}
+
+function keepRecentInteractionRecords(records: AgentInteractionTimelineRecord[]) {
+  return records.length <= MAX_INTERACTION_TIMELINE_RECORDS
+    ? records
+    : records.slice(records.length - MAX_INTERACTION_TIMELINE_RECORDS)
+}
+
+export function mergeInteractionTimelineRecords(
+  currentRecords: AgentInteractionTimelineRecord[],
+  incomingRecords: AgentInteractionTimelineRecord[],
+) {
+  const recordsByKey = new Map<string, AgentInteractionTimelineRecord>()
+  for (const record of [...currentRecords, ...incomingRecords]) {
+    const key = getInteractionRecordKey(record)
+    const existing = recordsByKey.get(key)
+    if (!existing) {
+      recordsByKey.set(key, record)
+      continue
+    }
+    const existingTerminal = existing.status !== 'pending'
+    const recordTerminal = record.status !== 'pending'
+    if (existingTerminal && !recordTerminal) continue
+    if (!existingTerminal && recordTerminal) {
+      recordsByKey.set(key, record)
+      continue
+    }
+    if ((record.resolvedAt ?? record.requestedAt) >= (existing.resolvedAt ?? existing.requestedAt)) {
+      recordsByKey.set(key, record)
+    }
+  }
+  return keepRecentInteractionRecords(
+    [...recordsByKey.values()].sort((left, right) => left.requestedAt - right.requestedAt),
+  )
+}
+
+type AgentInteractionResolutionEvent = Extract<
+  AgentClientEvent,
+  { type: 'interaction_resolved' }
+>
+
+export function resolveInteractionTimelineRecords(
+  currentRecords: AgentInteractionTimelineRecord[],
+  event: AgentInteractionResolutionEvent,
+  resolvedAt = event.resolvedAt ?? Date.now(),
+) {
+  return currentRecords.map((record) => {
+    const matches = record.request.agentId === event.agentId
+      && getAgentInteractionKey(record.request.sessionId, record.request.id)
+        === getAgentInteractionKey(event.sessionId, event.requestId)
+    if (!matches) return record
+
+    const response = event.response ?? record.response
+    const resolution = getAgentInteractionResolution(record.request, response, event.resumeRun)
+    return {
+      ...record,
+      ...(response ? { response } : {}),
+      resolvedAt: record.resolvedAt ?? resolvedAt,
+      ...resolution,
+    }
+  })
 }
 
 type UseAgentRuntimeEventsOptions = {
@@ -103,13 +171,17 @@ export function useAgentRuntimeEvents({
   workspacePath,
   workspacePathRef,
 }: UseAgentRuntimeEventsOptions) {
-  const [draftAssistant, setDraftAssistant] = useState('')
-  const [draftThinking, setDraftThinking] = useState('')
-  const [isThinkingStreaming, setIsThinkingStreaming] = useState(false)
-  const [liveTools, setLiveTools] = useState<AgentLiveToolState[]>([])
+  const [liveStream, setLiveStream] = useState<AgentLiveStreamState>(EMPTY_AGENT_LIVE_STREAM_STATE)
   const [pendingInteractions, setPendingInteractions] = useState<AgentInteractionRequest[]>([])
+  const [interactionTimelineRecords, setInteractionTimelineRecords] = useState<AgentInteractionTimelineRecord[]>([])
   const [sessionActivityById, setSessionActivityById] = useState<Record<string, 'running' | 'waiting'>>({})
   const sessionPathByIdRef = useRef<Map<string, string>>(new Map())
+
+  useEffect(() => {
+    const persisted = agentState.activeSession?.interactionHistory
+    if (!persisted?.length) return
+    setInteractionTimelineRecords((current) => mergeInteractionTimelineRecords(current, persisted))
+  }, [agentState.activeSession?.interactionHistory])
 
   const updateSessionActivity = useCallback((
     agentId: AgentId,
@@ -134,18 +206,15 @@ export function useAgentRuntimeEvents({
   }, [])
 
   const clearAssistantDraft = useCallback(() => {
-    setDraftAssistant('')
+    setLiveStream((current) => ({ ...current, assistantText: '' }))
   }, [])
 
   const clearLiveTools = useCallback(() => {
-    setLiveTools([])
+    setLiveStream((current) => ({ ...current, tools: [] }))
   }, [])
 
   const resetRunDrafts = useCallback(() => {
-    setDraftAssistant('')
-    setDraftThinking('')
-    setIsThinkingStreaming(false)
-    setLiveTools([])
+    setLiveStream(EMPTY_AGENT_LIVE_STREAM_STATE)
   }, [])
 
   useEffect(() => {
@@ -179,6 +248,21 @@ export function useAgentRuntimeEvents({
           )),
           event.request,
         ])
+        setInteractionTimelineRecords((currentRecords) => {
+          const nextRecord: AgentInteractionTimelineRecord = {
+            request: event.request,
+            requestedAt: event.requestedAt ?? Date.now(),
+            status: 'pending',
+          }
+          const nextKey = getInteractionRecordKey(nextRecord)
+          const existing = currentRecords.find((record) => getInteractionRecordKey(record) === nextKey)
+          return keepRecentInteractionRecords([
+            ...currentRecords.filter((record) => getInteractionRecordKey(record) !== nextKey),
+            existing
+              ? { ...existing, request: event.request, status: 'pending', resolvedAt: undefined, response: undefined }
+              : nextRecord,
+          ])
+        })
         updateSessionActivity(event.agentId, [event.request.sessionId], 'waiting')
         return
       }
@@ -188,6 +272,9 @@ export function useAgentRuntimeEvents({
           request.agentId === event.agentId
           && getAgentInteractionKey(request.sessionId, request.id) === getAgentInteractionKey(event.sessionId, event.requestId)
         )))
+        setInteractionTimelineRecords((currentRecords) => (
+          resolveInteractionTimelineRecords(currentRecords, event, event.resolvedAt)
+        ))
         updateSessionActivity(event.agentId, [event.sessionId], event.resumeRun ? 'running' : null, !event.resumeRun)
         return
       }
@@ -299,17 +386,19 @@ export function useAgentRuntimeEvents({
           syncNewSessionModelDraft(nextDraft)
           syncModelDraft(nextDraft)
         }
-        setDraftAssistant('')
-        setDraftThinking('')
-        setIsThinkingStreaming(false)
-        setLiveTools((currentTools) => {
+        setLiveStream((current) => {
           const persistedToolIds = new Set(
             (event.state.activeSession?.messages ?? [])
               .filter((message) => message.kind === 'tool')
               .map((message) => message.id),
           )
-
-          return currentTools.filter((tool) => tool.status === 'running' || !persistedToolIds.has(tool.id))
+          return {
+            assistantText: '',
+            thinkingText: '',
+            isThinkingStreaming: false,
+            startedAt: null,
+            tools: current.tools.filter((tool) => tool.status === 'running' || !persistedToolIds.has(tool.id)),
+          }
         })
         closeComposerMenu()
         return
@@ -327,9 +416,7 @@ export function useAgentRuntimeEvents({
         && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
         updateSessionActivity(event.agentId, [event.sessionId, activeRuntimeSessionRef.current?.sessionPath], 'running')
-        setDraftAssistant('')
-        setDraftThinking('')
-        setIsThinkingStreaming(false)
+        setLiveStream((current) => reduceAgentLiveStreamState(current, event))
         return
       }
 
@@ -337,8 +424,7 @@ export function useAgentRuntimeEvents({
         event.type === 'assistant_thinking_delta'
         && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
-        setIsThinkingStreaming(true)
-        setDraftThinking((currentValue) => currentValue + event.delta)
+        setLiveStream((current) => reduceAgentLiveStreamState(current, event))
         return
       }
 
@@ -347,7 +433,7 @@ export function useAgentRuntimeEvents({
         && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
         updateSessionActivity(event.agentId, [event.sessionId, activeRuntimeSessionRef.current?.sessionPath], null)
-        setIsThinkingStreaming(false)
+        setLiveStream((current) => reduceAgentLiveStreamState(current, event))
         return
       }
 
@@ -355,7 +441,7 @@ export function useAgentRuntimeEvents({
         event.type === 'assistant_message_delta'
         && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
-        setDraftAssistant((currentValue) => currentValue + event.delta)
+        setLiveStream((current) => reduceAgentLiveStreamState(current, event))
         return
       }
 
@@ -363,15 +449,7 @@ export function useAgentRuntimeEvents({
         event.type === 'tool_execution_started'
         && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
-        setLiveTools((currentTools) => [
-          ...currentTools.filter((tool) => tool.id !== event.toolCallId),
-          {
-            id: event.toolCallId,
-            name: event.toolName,
-            status: 'running',
-            summary: event.summary,
-          },
-        ])
+        setLiveStream((current) => reduceAgentLiveStreamState(current, event))
         return
       }
 
@@ -379,33 +457,7 @@ export function useAgentRuntimeEvents({
         event.type === 'tool_execution_updated'
         && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
-        setLiveTools((currentTools) => {
-          const existingTool = currentTools.find((tool) => tool.id === event.toolCallId)
-
-          if (!existingTool) {
-            return [
-              ...currentTools,
-              {
-                id: event.toolCallId,
-                name: event.toolName,
-                status: 'running',
-                summary: event.summary,
-              },
-            ]
-          }
-
-          return currentTools.map((tool) => {
-            if (tool.id !== event.toolCallId) {
-              return tool
-            }
-
-            return {
-              ...tool,
-              status: 'running',
-              summary: event.summary,
-            }
-          })
-        })
+        setLiveStream((current) => reduceAgentLiveStreamState(current, event))
         return
       }
 
@@ -413,35 +465,7 @@ export function useAgentRuntimeEvents({
         event.type === 'tool_execution_finished'
         && event.sessionId === activeRuntimeSessionRef.current?.sessionId
       ) {
-        setLiveTools((currentTools) => {
-          const existingTool = currentTools.find((tool) => tool.id === event.toolCallId)
-
-          if (!existingTool) {
-            return [
-              ...currentTools,
-              {
-                id: event.toolCallId,
-                isError: event.isError,
-                name: event.toolName,
-                status: event.isError ? 'error' : 'done',
-                summary: event.summary,
-              },
-            ]
-          }
-
-          return currentTools.map((tool) => {
-            if (tool.id !== event.toolCallId) {
-              return tool
-            }
-
-            return {
-              ...tool,
-              isError: event.isError,
-              status: event.isError ? 'error' : 'done',
-              summary: event.summary,
-            }
-          })
-        })
+        setLiveStream((current) => reduceAgentLiveStreamState(current, event))
         return
       }
 
@@ -459,16 +483,40 @@ export function useAgentRuntimeEvents({
     return unsubscribe
   }, [agentState.activeSession?.sessionId, agentState.activeSession?.sessionPath, selectedAgentId, storeProjectAgentSessions, updateSessionActivity, workspacePath])
 
+  const recordInteractionResponse = useCallback((
+    request: AgentInteractionRequest,
+    response: AgentInteractionResponse,
+  ) => {
+    const requestKey = `${request.agentId}\n${getAgentInteractionKey(request.sessionId, request.id)}`
+    setInteractionTimelineRecords((currentRecords) => {
+      const existing = currentRecords.find((record) => getInteractionRecordKey(record) === requestKey)
+      const nextRecord: AgentInteractionTimelineRecord = {
+        request,
+        requestedAt: existing?.requestedAt ?? Date.now(),
+        resolvedAt: Date.now(),
+        response,
+        ...getAgentInteractionResolution(request, response, true),
+      }
+      return keepRecentInteractionRecords([
+        ...currentRecords.filter((record) => getInteractionRecordKey(record) !== requestKey),
+        nextRecord,
+      ])
+    })
+  }, [])
+
   return {
     clearAssistantDraft,
     clearLiveTools,
-    draftAssistant,
-    draftThinking,
-    isThinkingStreaming,
-    liveTools,
+    draftAssistant: liveStream.assistantText,
+    draftThinking: liveStream.thinkingText,
+    isThinkingStreaming: liveStream.isThinkingStreaming,
+    interactionTimelineRecords,
+    liveTools: liveStream.tools,
     pendingInteractions,
+    recordInteractionResponse,
     resetRunDrafts,
     sessionActivityById,
+    streamStartedAt: liveStream.startedAt,
     setPendingInteractions,
   }
 }

@@ -1,15 +1,19 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from 'react'
 import {
   DownLine,
   EditLine,
+  GridLine,
+  ListCheckLine,
 } from '@mingcute/react'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
 import { AgentComposerSurface } from '@/features/agent/components/agent-composer-surface/agent-composer-surface'
+import { BbSessionTimeline } from '@/features/agent/components/bb-session-timeline/bb-session-timeline'
 import { AgentMessageViewport } from '@/features/agent/components/agent-message-viewport/agent-message-viewport'
 import { AgentNewConversationPrompt } from '@/features/agent/components/agent-new-conversation-prompt/agent-new-conversation-prompt'
 import {
@@ -17,9 +21,14 @@ import {
   type AgentSessionTreeProps,
 } from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import { useAgentContext } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
-import { CodexSessionTimeline } from '@/features/agent/components/codex-session-timeline/codex-session-timeline'
+import {
+  CodexSessionTimeline,
+  toCodexSurfaceOptimisticMessages,
+} from '@/features/agent/components/codex-session-timeline/codex-session-timeline'
 import { shouldShowAgentNewConversationPrompt } from '@/features/agent/lib/agent-surface-state'
+import { buildBbSessionRuntimeState } from '@/features/agent/lib/bb-session-runtime-state'
 import { formatAgentSessionLabel } from '@/features/agent/lib/session-tree'
+import { useSettingsStore } from '@/hooks/use-settings-store'
 import './styles.css'
 
 const AGENT_SESSION_MENU_POSITIONER_PROPS = {
@@ -40,19 +49,28 @@ export function AgentSessionTree(props: AgentSessionTreeProps) {
 }
 
 export function AgentChatSurface() {
+  const sessionView = useSettingsStore((state) => state.agent.sessionView)
+  const updateAgentSettings = useSettingsStore((state) => state.updateAgentSettings)
   const {
     activeOverlayPanel,
     activeSession,
     activeSessionPath,
     activeSessionSelection,
     activeWorkspaceContext,
+    agentState,
     codexNativeSession,
     codexOptimisticUserMessages,
     conversationState,
+    draftAssistant,
+    draftThinking,
     handleOpenSession,
     handleStartNewSession,
     iconTheme,
     isAgentLayout,
+    isViewingActiveRuntime,
+    interactionTimelineRecords,
+    isThinkingStreaming,
+    liveTools,
     messagesScrollElement,
     messagesScrollViewportRef,
     onOpenMessageFile,
@@ -63,13 +81,17 @@ export function AgentChatSurface() {
     piWebNativeSession,
     piWebOptimisticUserMessages,
     piWebStreamingStatus,
+    panelError,
     projectState,
     renderedMessages,
     roundFileChangesByMessageId,
     sessionStatus,
     setActiveOverlayPanel,
     statusMessage,
+    stoppingPrompt,
+    streamStartedAt,
     surfaceMode,
+    theme,
     workspacePath,
   } = useAgentContext()
   const isNewConversation = shouldShowAgentNewConversationPrompt(
@@ -96,6 +118,72 @@ export function AgentChatSurface() {
   const handleOpenWorkspaceFileFromMessage = useCallback((filePath: string) => {
     void onOpenMessageFile?.(filePath, 'updated')
   }, [onOpenMessageFile])
+  const nativeSession = codexNativeSession ?? openCodeNativeSession ?? piWebNativeSession
+  const unifiedSessionId = codexNativeSession?.thread.id
+    ?? piWebNativeSession?.sessionId
+    ?? activeSessionPath
+    ?? activeSession?.path
+    ?? 'agent-session'
+  const unifiedOptimisticUserMessages = useMemo(() => {
+    const messages = codexNativeSession
+      ? toCodexSurfaceOptimisticMessages(codexOptimisticUserMessages)
+      : openCodeNativeSession
+        ? openCodeOptimisticUserMessages
+        : piWebOptimisticUserMessages
+    return messages.map((message) => ({ ...message }))
+  }, [
+    codexNativeSession,
+    codexOptimisticUserMessages,
+    openCodeNativeSession,
+    openCodeOptimisticUserMessages,
+    piWebOptimisticUserMessages,
+  ])
+  const unifiedFileChanges = useMemo(() => (
+    piWebNativeSession
+      ? piWebFileChanges.map((change) => ({
+          kind: change.kind,
+          path: change.filePath,
+        }))
+      : []
+  ), [piWebFileChanges, piWebNativeSession])
+  const unifiedInteractionRecords = useMemo(() => (
+    nativeSession
+      ? interactionTimelineRecords.filter((record) => (
+          record.request.agentId === nativeSession.agentId
+          && record.request.sessionId === unifiedSessionId
+        ))
+      : []
+  ), [interactionTimelineRecords, nativeSession, unifiedSessionId])
+  const unifiedRuntimeState = useMemo(() => {
+    return buildBbSessionRuntimeState({
+      activeSessionPath,
+      agentId: nativeSession?.agentId ?? null,
+      assistantText: draftAssistant,
+      isThinkingStreaming,
+      isViewingActiveRuntime,
+      liveTools,
+      panelError,
+      runtime: agentState.runtime,
+      startedAt: streamStartedAt,
+      stoppingPrompt,
+      thinkingText: draftThinking,
+    })
+  }, [
+    activeSessionPath,
+    agentState.runtime,
+    draftAssistant,
+    draftThinking,
+    isThinkingStreaming,
+    isViewingActiveRuntime,
+    liveTools,
+    nativeSession,
+    panelError,
+    stoppingPrompt,
+    streamStartedAt,
+  ])
+  const handleRequestNativeView = useCallback(() => {
+    updateAgentSettings({ sessionView: 'native' })
+  }, [updateAgentSettings])
   const [localOverlayRoot, setLocalOverlayRoot] = useState<HTMLDivElement | null>(null)
   const handleLocalOverlayRootRef = useCallback((node: HTMLDivElement | null) => {
     setLocalOverlayRoot(node)
@@ -221,6 +309,22 @@ export function AgentChatSurface() {
         </div>
 
         <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
+        {nativeSession ? (
+          <div className='agent-threadbar-view-actions'>
+            <AppIconButton
+              type='button'
+              aria-label={sessionView === 'unified' ? '切换到原生对话视图' : '切换到统一对话视图'}
+              tooltip={sessionView === 'unified' ? '当前：统一视图' : '当前：原生视图'}
+              onClick={() => {
+                updateAgentSettings({
+                  sessionView: sessionView === 'unified' ? 'native' : 'unified',
+                })
+              }}
+            >
+              {sessionView === 'unified' ? <GridLine /> : <ListCheckLine />}
+            </AppIconButton>
+          </div>
+        ) : null}
       </div>
       <div ref={handleLocalOverlayRootRef} className='agent-local-overlay-root' />
 
@@ -254,7 +358,20 @@ export function AgentChatSurface() {
             </div>
           ) : null}
 
-          {workspacePath && codexNativeSession ? (
+          {workspacePath && nativeSession && sessionView === 'unified' ? (
+            <BbSessionTimeline
+              fileChanges={unifiedFileChanges}
+              interactionRecords={unifiedInteractionRecords}
+              snapshot={nativeSession}
+              optimisticUserMessages={unifiedOptimisticUserMessages}
+              runtimeState={unifiedRuntimeState}
+              onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
+              onRequestNativeView={handleRequestNativeView}
+              sessionId={unifiedSessionId}
+              theme={theme}
+              workspacePath={workspacePath}
+            />
+          ) : workspacePath && codexNativeSession ? (
             <div className='agent-codex-surface-stage'>
               <CodexSessionTimeline
                 snapshot={codexNativeSession}

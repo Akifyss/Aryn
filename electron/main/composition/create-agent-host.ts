@@ -7,6 +7,7 @@ import { CodexAgentManager } from '../agent-host/providers/codex/manager'
 import { OpenCodeAgentManager } from '../agent-host/providers/opencode/manager'
 import { PiCliAgentManager } from '../agent-host/providers/pi-cli/manager'
 import { ExternalAgentBackend } from '../agent-host/providers/shared/external-agent-backend'
+import { AgentInteractionHistoryStore } from '../agent-host/sessions/interaction-history'
 
 type CreateAgentHostOptions = {
   agentDir: string
@@ -16,29 +17,36 @@ type CreateAgentHostOptions = {
 function bindAgentId(
   agentId: AgentId,
   emitEvent: (event: AgentClientEvent) => void,
+  interactionHistory: AgentInteractionHistoryStore,
 ) {
   return (event: AgentClientEventPayload) => {
-    emitEvent({ ...event, agentId } as AgentClientEvent)
+    const enrichedEvent = interactionHistory.enrichEvent({ ...event, agentId } as AgentClientEvent)
+    emitEvent(enrichedEvent)
+    void interactionHistory.observeEvent(enrichedEvent).catch((error) => {
+      console.error('[Agent Host] Unable to persist interaction history.', error)
+    })
   }
 }
 
 /** Single production composition root for the complete Agent Host. */
 export function createAgentHost(options: CreateAgentHostOptions) {
+  const interactionHistory = new AgentInteractionHistoryStore(options.agentDir)
+  const bindEvent = (agentId: AgentId) => bindAgentId(agentId, options.emitEvent, interactionHistory)
   const codexManager = new CodexAgentManager({
     agentDir: options.agentDir,
-    emitEvent: bindAgentId('codex', options.emitEvent),
+    emitEvent: bindEvent('codex'),
   })
   const openCodeManager = new OpenCodeAgentManager({
     agentDir: options.agentDir,
-    emitEvent: bindAgentId('opencode', options.emitEvent),
+    emitEvent: bindEvent('opencode'),
   })
   const piCliManager = new PiCliAgentManager({
     agentDir: options.agentDir,
-    emitEvent: bindAgentId('pi', options.emitEvent),
+    emitEvent: bindEvent('pi'),
   })
 
   const backends = new AgentBackendRegistry([
-    new BuiltinPiBackend(bindAgentId('builtin-pi', options.emitEvent), { agentDir: options.agentDir }),
+    new BuiltinPiBackend(bindEvent('builtin-pi'), { agentDir: options.agentDir }),
     new ExternalAgentBackend('pi', piCliManager),
     new ExternalAgentBackend('opencode', openCodeManager, {
       forwardPromptOptions: true,
@@ -48,5 +56,5 @@ export function createAgentHost(options: CreateAgentHostOptions) {
     }),
     new ExternalAgentBackend('codex', codexManager, { forwardPromptOptions: true }),
   ])
-  return new AgentApplicationService(backends)
+  return new AgentApplicationService(backends, interactionHistory)
 }

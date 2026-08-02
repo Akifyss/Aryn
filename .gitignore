@@ -9,6 +9,7 @@ release/
 /public/opencode-session-surface/
 /public/pi-web-session-surface/
 /public/codex-session-surface/
+/public/bb-session-surface/
 !vendor/meo-runtime/
 !vendor/meo-runtime/**
 !vendor/meo-runtime/webview/

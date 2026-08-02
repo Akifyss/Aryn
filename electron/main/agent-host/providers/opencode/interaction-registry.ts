@@ -71,13 +71,18 @@ export class OpenCodeInteractionRegistry {
       && pending.lease.isCurrent()
   }
 
-  resolve(interactionKey: string, resumeRun: boolean) {
+  resolve(
+    interactionKey: string,
+    resumeRun: boolean,
+    response?: AgentInteractionResponse,
+  ) {
     const pending = this.pending.get(interactionKey)
     if (!pending) return false
     this.pending.delete(interactionKey)
     this.emitEvent({
       type: 'interaction_resolved',
       requestId: pending.requestId,
+      ...(response ? { response } : {}),
       resumeRun,
       sessionId: pending.ownerSessionId,
     })
@@ -151,6 +156,9 @@ export class OpenCodeInteractionRegistry {
         request: {
           agentId: 'opencode',
           id: requestId,
+          ...(String(properties.partID ?? properties.partId ?? '').trim()
+            ? { itemId: String(properties.partID ?? properties.partId).trim() }
+            : {}),
           kind: 'permission',
           message: resources.length > 0
             ? resources.map(String).join('\n')
@@ -185,6 +193,7 @@ export class OpenCodeInteractionRegistry {
         id: questionIds[index],
         label: String(question.header ?? `问题 ${index + 1}`),
         message: String(question.question ?? question.message ?? ''),
+        multiSelect: question.multiple === true || question.multiSelect === true,
         options: Array.isArray(question.options)
           ? (question.options as JsonRecord[]).map((option) => ({
               description: normalizeNullableText(option.description),
@@ -210,6 +219,9 @@ export class OpenCodeInteractionRegistry {
           agentId: 'opencode',
           fields,
           id: requestId,
+          ...(String(properties.partID ?? properties.partId ?? '').trim()
+            ? { itemId: String(properties.partID ?? properties.partId).trim() }
+            : {}),
           kind: 'question',
           message: questions.length === 1
             ? String(questions[0].question ?? questions[0].message ?? 'OpenCode 需要你的回答。')

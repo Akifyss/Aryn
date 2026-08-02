@@ -189,6 +189,37 @@ describe('registerAgentIpc', () => {
     await expect(login).rejects.toThrow('Application closed.')
   })
 
+  it('drains in-flight handlers before the Agent Host is disposed', async () => {
+    let releaseList: (() => void) | null = null
+    const listSessionItems = vi.fn(() => new Promise<Array<{ id: string }>>((resolve) => {
+      releaseList = () => resolve([{ id: 'session-1' }])
+    }))
+    const registration = registerAgentIpc({
+      agentHost: createHost({ listSessionItems }),
+      getWindow: () => null,
+    })
+
+    const listRequest = Promise.resolve(invoke('agent:list-sessions', {
+      agentId: 'codex',
+      sessionPath: null,
+      workspacePath: 'C:/workspace',
+    }))
+    await vi.waitFor(() => expect(listSessionItems).toHaveBeenCalledOnce())
+
+    registration.dispose()
+    let drained = false
+    const drain = registration.drain().then(() => {
+      drained = true
+    })
+    await Promise.resolve()
+    expect(drained).toBe(false)
+
+    releaseList?.()
+    await expect(listRequest).resolves.toEqual([{ id: 'session-1' }])
+    await drain
+    expect(drained).toBe(true)
+  })
+
   it('does not open the attachment picker for a destroyed window', async () => {
     const win = createWindow()
     win.isDestroyed = () => true

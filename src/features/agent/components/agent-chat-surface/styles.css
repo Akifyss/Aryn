@@ -54,6 +54,14 @@
   -webkit-app-region: drag;
 }
 
+.agent-threadbar-view-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
 .agent-session-trigger {
   width: 100%;
   flex: 0 1 auto;

@@ -20,7 +20,10 @@ import {
   type AgentModelDraft,
 } from '@/features/agent/lib/model-selection'
 import { serializeComposerText } from '@/features/agent/lib/composer-mentions'
-import type { OptimisticAgentUserMessage } from '@/features/agent/lib/optimistic-user-messages'
+import {
+  getPersistedAgentUserMessages,
+  type OptimisticAgentUserMessage,
+} from '@/features/agent/lib/optimistic-user-messages'
 import type { AgentSessionSelection } from '@/features/agent/lib/project-session-request'
 import { normalizeAgentProjectPath } from '@/features/agent/lib/session-tree'
 import type { AgentId } from '@/features/agent/agent-definition'
@@ -373,14 +376,19 @@ export function useAgentPromptSubmission({
         ...attachment,
         status: attachment.kind === 'image' ? 'sent' : 'referenced',
       }))
+      const baselineUserMessageIds = agentState.activeSession?.sessionPath === promptSessionPath
+        ? getPersistedAgentUserMessages(agentState.activeSession).map((message) => message.id)
+        : []
       setOptimisticUserMessages((current) => [...current, {
         agentId: requestAgentId,
+        baselineUserMessageIds,
         message: {
           ...(optimisticAttachments.length > 0 ? { attachments: optimisticAttachments } : {}),
           id: nextOptimisticUserMessageId,
           kind: 'user',
           text: trimmedPrompt,
           timestamp: Date.now(),
+          optimisticBaselineUserMessageIds: baselineUserMessageIds,
         },
         ...(nativePartIds ? { nativePartIds } : {}),
         sessionPath: promptSessionPath,

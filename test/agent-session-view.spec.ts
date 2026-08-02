@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { buildRenderedAgentMessages } from '../src/features/agent/components/agent-message-viewport/use-agent-message-presentation'
 import {
   buildNativeOptimisticUserMessages,
+  getPersistedAgentUserMessages,
   reconcileOptimisticAgentUserMessages,
   type OptimisticAgentUserMessage,
 } from '../src/features/agent/lib/optimistic-user-messages'
@@ -104,6 +105,38 @@ describe('agent optimistic user messages', () => {
     ], 'opencode', snapshot)).toEqual([sameContent])
   })
 
+  it('does not let a baseline PI prompt with identical text consume a new optimistic prompt', () => {
+    const snapshot = {
+      annotations: { fileChangesByEntryId: {} },
+      messages: [],
+      name: null,
+      native: {
+        agentId: 'pi',
+        entryIds: [''],
+        isStreaming: true,
+        messages: [{ role: 'user', content: 'continue', timestamp: 10_000 }],
+        modelNames: {},
+        sessionId: 'session-id',
+      },
+      sessionId: 'session-id',
+      sessionPath: 'session-a',
+      workspacePath: 'C:/workspace',
+    } as AgentSessionSnapshot
+    const baselineUserMessageIds = getPersistedAgentUserMessages(snapshot).map((message) => message.id)
+    const optimistic = createOptimisticMessage('optimistic-new', 'continue', 20_000, {
+      agentId: 'pi',
+      baselineUserMessageIds,
+    })
+
+    expect(baselineUserMessageIds).toEqual(['message-0'])
+
+    expect(reconcileOptimisticAgentUserMessages([optimistic], 'pi', snapshot)).toEqual([optimistic])
+
+    snapshot.native!.entryIds.push('')
+    snapshot.native!.messages.push({ role: 'user', content: 'continue', timestamp: 20_001 })
+    expect(reconcileOptimisticAgentUserMessages([optimistic], 'pi', snapshot)).toEqual([])
+  })
+
   it('adapts optimistic image attachments for native OpenCode and Pi surfaces', () => {
     const entry = createOptimisticMessage('optimistic-user', 'Describe this', 10_000, {
       message: {
@@ -129,6 +162,7 @@ describe('agent optimistic user messages', () => {
       textPartId: 'text-part',
     })])
     expect(adapted.piWeb).toEqual([{
+      attachments: entry.message.attachments,
       content: [
         { text: 'Describe this', type: 'text' },
         {
@@ -140,8 +174,34 @@ describe('agent optimistic user messages', () => {
           type: 'image',
         },
       ],
+      id: 'optimistic-user',
       timestamp: 10_000,
     }])
+  })
+
+  it('keeps optimistic PI file attachments for the unified bb projection', () => {
+    const entry = createOptimisticMessage('optimistic-file', 'Review this file', 10_000, {
+      agentId: 'pi',
+      message: {
+        ...createUserMessage('optimistic-file', 'Review this file', 10_000),
+        attachments: [{
+          fileName: 'notes.txt',
+          kind: 'file',
+          path: 'C:/workspace/notes.txt',
+          status: 'referenced',
+        }],
+      },
+    })
+
+    expect(buildNativeOptimisticUserMessages([entry]).piWeb).toEqual([
+      expect.objectContaining({
+        attachments: [expect.objectContaining({
+          kind: 'file',
+          path: 'C:/workspace/notes.txt',
+        })],
+        id: 'optimistic-file',
+      }),
+    ])
   })
 })
 

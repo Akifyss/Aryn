@@ -89,6 +89,11 @@ export type AgentSidebarMessage = {
   timestamp: number
   title?: string
   isError?: boolean
+  /**
+   * Runtime-only optimistic reconciliation metadata. Persisted provider
+   * messages do not set this field.
+   */
+  optimisticBaselineUserMessageIds?: string[]
 }
 
 export type AgentSessionListItem = {
@@ -142,6 +147,9 @@ export type OpenCodeNativeMessageRecord = {
 export type OpenCodeNativeSessionSnapshot = {
   agentId: 'opencode'
   diffs: unknown[]
+  history?: {
+    nextCursor: string | null
+  }
   messages: OpenCodeNativeMessageRecord[]
   parentSessionId: string | null
   status: AgentSessionExecutionState
@@ -310,6 +318,7 @@ export type AgentInteractionField = {
   isSecret?: boolean
   label: string
   message?: string
+  multiSelect?: boolean
   multiline?: boolean
   options?: AgentInteractionOption[]
 }
@@ -318,11 +327,13 @@ export type AgentInteractionRequest = {
   agentId: AgentId
   fields?: AgentInteractionField[]
   id: string
+  itemId?: string
   kind: AgentInteractionKind
   message: string
   options: AgentInteractionOption[]
   sessionId: string
   title: string
+  turnId?: string
   workspacePath: string
 }
 
@@ -335,12 +346,45 @@ export type AgentInteractionResponse = {
   values?: string[]
 }
 
+/**
+ * Host-persisted lifecycle history for interaction requests. Native provider
+ * requests remain authoritative; this record preserves their conversation
+ * placement and terminal state across navigation and application restarts.
+ */
+export type AgentInteractionTimelineRecord = {
+  request: AgentInteractionRequest
+  requestedAt: number
+  resolvedAt?: number
+  response?: AgentInteractionResponse
+  status: 'pending' | 'resolved' | 'interrupted'
+  statusReason?: string
+}
+
+export function getAgentInteractionResolution(
+  request: AgentInteractionRequest,
+  response: AgentInteractionResponse | undefined,
+  resumeRun: boolean,
+): Pick<AgentInteractionTimelineRecord, 'status' | 'statusReason'> {
+  if (!resumeRun || !response) {
+    return {
+      status: 'interrupted',
+      statusReason: 'Request ended before Aryn received an answer.',
+    }
+  }
+  const cancelledQuestion = request.kind === 'question'
+    && /^(?:cancel|deny|reject)$/.test(response.optionId.toLowerCase())
+  return cancelledQuestion
+    ? { status: 'interrupted', statusReason: 'User cancelled the request.' }
+    : { status: 'resolved', statusReason: undefined }
+}
+
 export function getAgentInteractionKey(sessionId: string, requestId: string) {
   return `${sessionId}\n${requestId}`
 }
 
 export type AgentSessionSnapshot = {
   annotations: AgentSessionAnnotations
+  interactionHistory?: AgentInteractionTimelineRecord[]
   native?: AgentNativeSessionSnapshot
   sessionId: string
   sessionPath: string | null
@@ -377,10 +421,13 @@ export type AgentClientEventPayload =
   | {
       type: 'interaction_requested'
       request: AgentInteractionRequest
+      requestedAt?: number
     }
   | {
       type: 'interaction_resolved'
       requestId: string
+      response?: AgentInteractionResponse
+      resolvedAt?: number
       resumeRun: boolean
       sessionId: string
     }

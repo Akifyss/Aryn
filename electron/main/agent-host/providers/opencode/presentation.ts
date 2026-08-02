@@ -32,6 +32,7 @@ export function createOpenCodeSessionSnapshot(
     native: {
       agentId: 'opencode',
       diffs: projection.diffs.get(sessionId) ?? [],
+      history: { nextCursor: binding.historyCursor ?? null },
       messages: records,
       parentSessionId: binding.parentSessionId,
       status: binding.executionState,

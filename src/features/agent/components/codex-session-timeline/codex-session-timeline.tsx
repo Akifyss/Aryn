@@ -78,6 +78,9 @@ function ensureSurfaceStyles() {
 
 export function toCodexSurfaceOptimisticMessages(messages: AgentSidebarMessage[]): CodexOptimisticUserMessage[] {
   return messages.map((message) => ({
+    ...(message.optimisticBaselineUserMessageIds
+      ? { baselineUserMessageIds: message.optimisticBaselineUserMessageIds }
+      : {}),
     id: message.id,
     text: message.text,
     timestamp: message.timestamp,

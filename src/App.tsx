@@ -617,6 +617,7 @@ function App() {
       onWorkspaceStateChange={setAgentWorkspaceState}
       isAgentLayout={isAgentLayout}
       surfaceMode={agentSurfaceMode}
+      theme={resolvedTheme}
       onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect, {
         surface: agentProjectMenuSurface,
       })}

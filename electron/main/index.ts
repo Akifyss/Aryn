@@ -1152,7 +1152,8 @@ app.on('before-quit', (event) => {
   if (agentHostDisposed) return
   event.preventDefault()
   if (agentHostDisposal) return
-  agentHostDisposal = agentManager.dispose()
+  agentHostDisposal = agentIpc.drain()
+    .then(() => agentManager.dispose())
     .catch((error) => {
       console.warn('Failed to dispose one or more Agent backends.', error)
     })

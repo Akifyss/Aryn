@@ -9,6 +9,7 @@ import type { SessionRuntimeLease } from '../../runtime/session-runtime-coordina
 export type OpenCodeSessionBinding = {
   cwd: string
   executionState: AgentSessionExecutionState
+  historyCursor?: string | null
   isStreaming: boolean
   lastAssistantMessageId: string | null
   lease: SessionRuntimeLease
