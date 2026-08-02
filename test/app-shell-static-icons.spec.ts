@@ -38,6 +38,15 @@ describe('app shell icons', () => {
     }
   })
 
+  it('uses the window-minimize glyph for the minimize control', async () => {
+    const source = await readFile(path.resolve(
+      'src/components/app-titlebar/app-titlebar.tsx',
+    ), 'utf8')
+
+    expect(source).toContain('MinimizeLine')
+    expect(source).not.toContain('SubtractLine')
+  })
+
   it('resolves every agent icon from the document base and ships each referenced SVG', async () => {
     const source = await readFile(path.resolve(
       'src/features/agent/components/agent-brand-icon/agent-brand-icon.tsx',

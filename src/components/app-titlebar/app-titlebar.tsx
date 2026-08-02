@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
-import { CloseLine, RestoreLine, SquareLine, SubtractLine } from '@mingcute/react'
+import { CloseLine, MinimizeLine, RestoreLine, SquareLine } from '@mingcute/react'
 
 export function AppTitlebar({
   isDrawerOpen = false,
@@ -57,7 +57,7 @@ export function AppTitlebar({
                 void window.appApi.minimizeWindow()
               }}
             >
-              <SubtractLine aria-hidden='true' />
+              <MinimizeLine aria-hidden='true' />
             </button>
             <button
               aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
