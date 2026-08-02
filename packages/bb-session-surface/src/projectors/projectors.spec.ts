@@ -3,6 +3,8 @@ import type { BbAgentId, BbNativeSessionSnapshot } from '../contracts'
 import type { TimelineRow } from '../compat/server-contract'
 import { projectCodexSnapshot } from './codex'
 import { projectNativeSession } from './index'
+import { projectOpenCodeSnapshot } from './opencode'
+import { projectPiSnapshot } from './pi'
 
 function project(snapshot: BbNativeSessionSnapshot) {
   return projectNativeSession({
@@ -266,6 +268,101 @@ describe('vendored bb native session flow', () => {
     expect(serialized).toContain('codex/webSearch/nativeDetail')
   })
 
+  it.each([{
+    completedAt: 1_700_000_002,
+    durationMs: 2_000,
+    expectedCompletedAt: 1_700_000_002_000,
+    expectedStartedAt: 1_700_000_000_000,
+    label: 'derives a missing start from completion and duration',
+    startedAt: null,
+  }, {
+    completedAt: null,
+    durationMs: 2_500,
+    expectedCompletedAt: 1_700_000_002_500,
+    expectedStartedAt: 1_700_000_000_000,
+    label: 'derives a missing completion from start and duration',
+    startedAt: 1_700_000_000,
+  }])('uses coupled Codex turn timing when it $label', ({
+    completedAt,
+    durationMs,
+    expectedCompletedAt,
+    expectedStartedAt,
+    startedAt,
+  }) => {
+    const projection = projectCodexSnapshot({
+      agentId: 'codex',
+      thread: {
+        id: 'codex-partial-timing',
+        turns: [{
+          completedAt,
+          durationMs,
+          id: 'turn-1',
+          items: [{ id: 'assistant-1', text: 'Answer', type: 'agentMessage' }],
+          startedAt,
+          status: 'completed',
+        }],
+      },
+    }, [], 0)
+    const turnStarted = projection.events.find(({ event }) => event.type === 'turn/started')
+    const turnCompleted = projection.events.find(({ event }) => event.type === 'turn/completed')
+
+    expect(turnStarted?.meta.createdAt).toBe(expectedStartedAt)
+    expect(turnCompleted?.meta.createdAt).toBe(expectedCompletedAt)
+    expect(turnCompleted!.meta.createdAt).toBeGreaterThanOrEqual(turnStarted!.meta.createdAt)
+  })
+
+  it('falls back to Codex updatedAt when a native completion predates the turn start', () => {
+    const startedAt = 1_700_000_010
+    const updatedAt = 1_700_000_018
+    const projection = projectCodexSnapshot({
+      agentId: 'codex',
+      thread: {
+        id: 'codex-invalid-completion',
+        turns: [{
+          completedAt: 1_700_000_005,
+          durationMs: null,
+          id: 'turn-1',
+          items: [{ id: 'assistant-1', text: 'Answer', type: 'agentMessage' }],
+          startedAt,
+          status: 'completed',
+          updatedAt,
+        }],
+      },
+    }, [], 0)
+    const turnCompleted = projection.events.find(({ event }) => event.type === 'turn/completed')
+
+    expect(turnCompleted?.meta.createdAt).toBe(updatedAt * 1_000)
+  })
+
+  it('does not expose a negative Codex tool duration to the bb timeline', () => {
+    const projection = projectCodexSnapshot({
+      agentId: 'codex',
+      thread: {
+        id: 'codex-invalid-tool-duration',
+        turns: [{
+          completedAt: 1_700_000_002,
+          id: 'turn-1',
+          items: [{
+            command: 'npm test',
+            durationMs: -5_000,
+            id: 'command-1',
+            status: 'completed',
+            type: 'commandExecution',
+          }],
+          startedAt: 1_700_000_000,
+          status: 'completed',
+        }],
+      },
+    }, [], 0)
+    const itemCompleted = projection.events.find(({ event }) => (
+      event.type === 'item/completed' && event.item.id === 'command-1'
+    ))
+
+    expect(itemCompleted?.event).toMatchObject({ item: { id: 'command-1' } })
+    expect(itemCompleted?.event.type === 'item/completed' ? itemCompleted.event.item : {})
+      .not.toHaveProperty('durationMs')
+  })
+
   it('maps OpenCode user and command activity without mutating its native snapshot', () => {
     const snapshot = {
       agentId: 'opencode' as const,
@@ -290,6 +387,278 @@ describe('vendored bb native session flow', () => {
       expect.objectContaining({ kind: 'work', workKind: 'command', command: 'npm test', output: 'ok' }),
     ]))
     expect(JSON.stringify(snapshot)).toBe(before)
+  })
+
+  it('freezes OpenCode turn durations at native assistant completion across long idle gaps', () => {
+    const firstTurnStartedAt = 1_700_000_000_000
+    const firstTurnCompletedAt = firstTurnStartedAt + 24_000
+    const secondTurnStartedAt = firstTurnStartedAt + 21 * 60_000
+    const secondTurnCompletedAt = secondTurnStartedAt + 7_000
+    const firstTurnMessages = [{
+      info: { id: 'user-1', role: 'user', time: { created: firstTurnStartedAt } },
+      parts: [{ type: 'text', text: 'First prompt' }],
+    }, {
+      info: {
+        id: 'assistant-1',
+        role: 'assistant',
+        time: { completed: firstTurnCompletedAt, created: firstTurnStartedAt + 1_000 },
+      },
+      parts: [{ id: 'answer-1', type: 'text', text: 'First answer' }],
+    }]
+    const firstProjection = projectOpenCodeSnapshot({
+      agentId: 'opencode',
+      messages: firstTurnMessages,
+      status: { type: 'idle' },
+    }, [], 'opencode-duration', 0)
+    const laterProjection = projectOpenCodeSnapshot({
+      agentId: 'opencode',
+      messages: [...firstTurnMessages, {
+        info: { id: 'user-2', role: 'user', time: { created: secondTurnStartedAt } },
+        parts: [{ type: 'text', text: 'Second prompt' }],
+      }, {
+        info: {
+          id: 'assistant-2',
+          role: 'assistant',
+          time: { completed: secondTurnCompletedAt, created: secondTurnStartedAt + 1_000 },
+        },
+        parts: [{ id: 'answer-2', type: 'text', text: 'Second answer' }],
+      }],
+      status: { type: 'idle' },
+    }, [], 'opencode-duration', 0)
+    const completedAt = (projection: typeof firstProjection, turnId: string) => projection.events.find(({ event }) => (
+      event.type === 'turn/completed'
+      && event.scope.kind === 'turn'
+      && event.scope.turnId === turnId
+    ))?.meta.createdAt
+
+    expect(completedAt(firstProjection, 'user-1')).toBe(firstTurnCompletedAt)
+    expect(completedAt(laterProjection, 'user-1')).toBe(firstTurnCompletedAt)
+    expect(completedAt(laterProjection, 'user-2')).toBe(secondTurnCompletedAt)
+  })
+
+  it('uses OpenCode assistant activity when an error has no completion timestamp', () => {
+    const startedAt = 1_700_000_000_000
+    const failedAt = startedAt + 6_000
+    const projection = projectOpenCodeSnapshot({
+      agentId: 'opencode',
+      messages: [{
+        info: { id: 'user-1', role: 'user', time: { created: startedAt } },
+        parts: [{ type: 'text', text: 'Prompt' }],
+      }, {
+        info: {
+          error: { data: { message: 'Request failed' }, name: 'APIError' },
+          id: 'assistant-1',
+          role: 'assistant',
+          time: { created: failedAt },
+        },
+        parts: [],
+      }],
+      status: { type: 'idle' },
+    }, [], 'opencode-error-without-completion', 0)
+    const turnCompleted = projection.events.find(({ event }) => event.type === 'turn/completed')
+
+    expect(turnCompleted).toMatchObject({
+      event: { status: 'failed' },
+      meta: { createdAt: failedAt },
+    })
+  })
+
+  it('rejects an OpenCode message completion timestamp that predates message creation', () => {
+    const startedAt = 1_700_000_000_000
+    const assistantStartedAt = startedAt + 5_000
+    const projection = projectOpenCodeSnapshot({
+      agentId: 'opencode',
+      messages: [{
+        info: { id: 'user-1', role: 'user', time: { created: startedAt } },
+        parts: [{ type: 'text', text: 'Prompt' }],
+      }, {
+        info: {
+          id: 'assistant-1',
+          role: 'assistant',
+          time: { completed: startedAt + 1_000, created: assistantStartedAt },
+        },
+        parts: [],
+      }],
+      status: { type: 'idle' },
+    }, [], 'opencode-invalid-message-completion', 0)
+    const turnCompleted = projection.events.find(({ event }) => event.type === 'turn/completed')
+
+    expect(turnCompleted?.meta.createdAt).toBe(assistantStartedAt)
+  })
+
+  it('applies a legacy OpenCode runtime error only to the active terminal turn', () => {
+    const firstTurnStartedAt = 1_700_000_000_000
+    const secondTurnStartedAt = firstTurnStartedAt + 10_000
+    const projection = projectOpenCodeSnapshot({
+      agentId: 'opencode',
+      messages: [{
+        info: { id: 'user-1', role: 'user', time: { created: firstTurnStartedAt } },
+        parts: [{ type: 'text', text: 'First prompt' }],
+      }, {
+        info: {
+          id: 'assistant-1',
+          role: 'assistant',
+          time: { completed: firstTurnStartedAt + 2_000, created: firstTurnStartedAt + 1_000 },
+        },
+        parts: [{ id: 'answer-1', type: 'text', text: 'First answer' }],
+      }, {
+        info: { id: 'user-2', role: 'user', time: { created: secondTurnStartedAt } },
+        parts: [{ type: 'text', text: 'Second prompt' }],
+      }],
+      status: { type: 'error' },
+    }, [], 'opencode-runtime-error', 0)
+    const completedTurns = projection.events.filter(({ event }) => event.type === 'turn/completed')
+
+    expect(completedTurns).toMatchObject([{
+      event: { scope: { turnId: 'user-1' }, status: 'completed' },
+    }, {
+      event: { scope: { turnId: 'user-2' }, status: 'failed' },
+    }])
+  })
+
+  it('preserves OpenCode native tool timing on item lifecycle events', () => {
+    const turnStartedAt = 1_700_000_000_000
+    const toolStartedAt = turnStartedAt + 2_000
+    const toolCompletedAt = turnStartedAt + 12_000
+    const projection = projectOpenCodeSnapshot({
+      agentId: 'opencode',
+      messages: [{
+        info: { id: 'user-1', role: 'user', time: { created: turnStartedAt } },
+        parts: [{ type: 'text', text: 'Run it' }],
+      }, {
+        info: {
+          id: 'assistant-1',
+          role: 'assistant',
+          time: { completed: toolCompletedAt + 1_000, created: turnStartedAt + 1_000 },
+        },
+        parts: [{
+          id: 'tool-1',
+          state: {
+            input: { command: 'npm test' },
+            output: 'ok',
+            status: 'completed',
+            time: { end: toolCompletedAt, start: toolStartedAt },
+          },
+          tool: 'bash',
+          type: 'tool',
+        }],
+      }],
+      status: { type: 'idle' },
+    }, [], 'opencode-tool-duration', 0)
+    const itemStarted = projection.events.find(({ event }) => (
+      event.type === 'item/started' && event.item.id === 'tool-1'
+    ))
+    const itemCompleted = projection.events.find(({ event }) => (
+      event.type === 'item/completed' && event.item.id === 'tool-1'
+    ))
+
+    expect(itemStarted?.meta.createdAt).toBe(toolStartedAt)
+    expect(itemCompleted).toMatchObject({
+      event: { item: { durationMs: 10_000, id: 'tool-1' } },
+      meta: { createdAt: toolCompletedAt },
+    })
+  })
+
+  it('clamps malformed OpenCode tool completion time instead of emitting a negative duration', () => {
+    const startedAt = 1_700_000_010_000
+    const projection = projectOpenCodeSnapshot({
+      agentId: 'opencode',
+      messages: [{
+        info: { id: 'user-1', role: 'user', time: { created: startedAt - 1_000 } },
+        parts: [{ type: 'text', text: 'Run it' }],
+      }, {
+        info: {
+          id: 'assistant-1',
+          role: 'assistant',
+          time: { completed: startedAt + 1_000, created: startedAt - 500 },
+        },
+        parts: [{
+          id: 'tool-1',
+          state: {
+            input: { command: 'npm test' },
+            output: 'ok',
+            status: 'completed',
+            time: { end: startedAt - 5_000, start: startedAt },
+          },
+          tool: 'bash',
+          type: 'tool',
+        }],
+      }],
+      status: { type: 'idle' },
+    }, [], 'opencode-invalid-tool-duration', 0)
+    const itemCompleted = projection.events.find(({ event }) => (
+      event.type === 'item/completed' && event.item.id === 'tool-1'
+    ))
+
+    expect(itemCompleted?.meta.createdAt).toBe(startedAt)
+    expect(itemCompleted?.event.type === 'item/completed' ? itemCompleted.event.item : {})
+      .not.toHaveProperty('durationMs')
+  })
+
+  it('extracts the official nested OpenCode retry message', () => {
+    const projection = projectOpenCodeSnapshot({
+      agentId: 'opencode',
+      messages: [{
+        info: { id: 'user-1', role: 'user', time: { created: 1_700_000_000_000 } },
+        parts: [{ type: 'text', text: 'Prompt' }],
+      }, {
+        info: { id: 'assistant-1', role: 'assistant', time: { created: 1_700_000_001_000 } },
+        parts: [{
+          attempt: 2,
+          error: { data: { message: 'Rate limited' }, name: 'APIError' },
+          id: 'retry-1',
+          type: 'retry',
+        }],
+      }],
+      status: { type: 'retry' },
+    }, [], 'opencode-retry-message', 0)
+
+    expect(projection.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        event: expect.objectContaining({ message: 'Rate limited', type: 'provider/error' }),
+      }),
+    ]))
+  })
+
+  it.each([
+    ['ContextOverflowError', 'failed'],
+    ['MessageAbortedError', 'interrupted'],
+  ] as const)('keeps official OpenCode %s details and turn status', (name, status) => {
+    const startedAt = 1_700_000_000_000
+    const completedAt = startedAt + 5_000
+    const projection = projectOpenCodeSnapshot({
+      agentId: 'opencode',
+      messages: [{
+        info: { id: 'user-1', role: 'user', time: { created: startedAt } },
+        parts: [{ type: 'text', text: 'Prompt' }],
+      }, {
+        info: {
+          error: { data: { message: 'Native OpenCode failure' }, name },
+          id: 'assistant-1',
+          role: 'assistant',
+          time: { completed: completedAt, created: startedAt + 1_000 },
+        },
+        parts: [],
+      }],
+      status: { type: 'idle' },
+    }, [], `opencode-${name}`, 0)
+
+    expect(projection.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        event: expect.objectContaining({
+          message: 'Native OpenCode failure',
+          type: 'provider/error',
+        }),
+      }),
+      expect.objectContaining({
+        event: expect.objectContaining({
+          error: { message: 'Native OpenCode failure' },
+          status,
+          type: 'turn/completed',
+        }),
+        meta: expect.objectContaining({ createdAt: completedAt }),
+      }),
+    ]))
   })
 
   it('normalizes OpenCode file URLs and excludes synthetic user text', () => {
@@ -466,6 +835,240 @@ describe('vendored bb native session flow', () => {
       },
       { kind: 'conversation', role: 'assistant', text: '你好！我是 PI。' },
     ])
+  })
+
+  it.each(['builtin-pi', 'pi'] as const)(
+    'freezes completed %s turn durations at the last native activity instead of the next user prompt',
+    (agentId) => {
+      const firstTurnStartedAt = 1_700_000_000_000
+      const firstTurnCompletedAt = firstTurnStartedAt + 24_000
+      const secondTurnStartedAt = firstTurnStartedAt + 21 * 60_000
+      const secondTurnCompletedAt = secondTurnStartedAt + 7_000
+      const projection = projectPiSnapshot({
+        agentId,
+        entryIds: ['user-1', 'assistant-1', 'user-2', 'assistant-2'],
+        isStreaming: false,
+        messages: [{
+          role: 'user',
+          content: [{ type: 'text', text: 'First prompt' }],
+          timestamp: firstTurnStartedAt,
+        }, {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'First answer' }],
+          timestamp: firstTurnCompletedAt,
+        }, {
+          role: 'user',
+          content: [{ type: 'text', text: 'Second prompt' }],
+          timestamp: secondTurnStartedAt,
+        }, {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Second answer' }],
+          timestamp: secondTurnCompletedAt,
+        }],
+        sessionId: `${agentId}-duration`,
+      }, [], [], 0)
+      const completedTurns = projection.events.filter(({ event }) => event.type === 'turn/completed')
+
+      expect(completedTurns).toMatchObject([{
+        event: { scope: { turnId: 'user-1' } },
+        meta: { createdAt: firstTurnCompletedAt },
+      }, {
+        event: { scope: { turnId: 'user-2' } },
+        meta: { createdAt: secondTurnCompletedAt },
+      }])
+    },
+  )
+
+  it('uses an authoritative PI message completion timestamp when the host provides one', () => {
+    const startedAt = 1_700_000_000_000
+    const completedAt = startedAt + 8_000
+    const projection = projectPiSnapshot({
+      agentId: 'pi',
+      entryIds: ['user-1', 'assistant-1'],
+      isStreaming: false,
+      messages: [{
+        role: 'user',
+        content: [{ type: 'text', text: 'Prompt' }],
+        timestamp: startedAt,
+      }, {
+        role: 'assistant',
+        completedAt,
+        content: [{ type: 'text', text: 'Answer' }],
+        timestamp: startedAt + 1_000,
+      }],
+      sessionId: 'pi-authoritative-duration',
+    }, [], [], 0)
+    const turnCompleted = projection.events.find(({ event }) => event.type === 'turn/completed')
+
+    expect(turnCompleted).toMatchObject({
+      event: { scope: { turnId: 'user-1' } },
+      meta: { createdAt: completedAt },
+    })
+  })
+
+  it('preserves PI tool-result completion time on the item lifecycle', () => {
+    const startedAt = 1_700_000_000_000
+    const toolStartedAt = startedAt + 2_000
+    const toolCompletedAt = startedAt + 11_000
+    const snapshot = {
+      agentId: 'pi' as const,
+      entryIds: ['user-1', 'assistant-1', 'tool-result-1', 'assistant-2'],
+      isStreaming: false,
+      messages: [{
+        role: 'user',
+        content: [{ type: 'text', text: 'Run it' }],
+        timestamp: startedAt,
+      }, {
+        role: 'assistant',
+        content: [{
+          arguments: { command: 'npm test' },
+          id: 'tool-1',
+          name: 'bash',
+          type: 'toolCall',
+        }],
+        timestamp: toolStartedAt,
+      }, {
+        role: 'toolResult',
+        completedAt: toolCompletedAt,
+        content: [{ type: 'text', text: 'ok' }],
+        isError: false,
+        timestamp: toolCompletedAt - 1_000,
+        toolCallId: 'tool-1',
+        toolName: 'bash',
+      }, {
+        role: 'assistant',
+        completedAt: toolCompletedAt + 1_000,
+        content: [{ type: 'text', text: 'Done' }],
+        stopReason: 'stop',
+        timestamp: toolCompletedAt,
+      }],
+      sessionId: 'pi-tool-duration',
+    }
+    const projection = projectPiSnapshot(snapshot, [], [], 0)
+    const itemStarted = projection.events.find(({ event }) => (
+      event.type === 'item/started' && event.item.id === 'tool-1'
+    ))
+    const itemCompleted = projection.events.find(({ event }) => (
+      event.type === 'item/completed' && event.item.id === 'tool-1'
+    ))
+
+    expect(itemStarted?.meta.createdAt).toBe(toolStartedAt)
+    expect(itemCompleted).toMatchObject({
+      event: { item: { durationMs: 9_000, id: 'tool-1' } },
+      meta: { createdAt: toolCompletedAt },
+    })
+
+    const rows = flattenRows(project(snapshot).rows)
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        completedAt: toolCompletedAt,
+        kind: 'work',
+        startedAt: toolStartedAt,
+        workKind: 'command',
+      }),
+      expect.objectContaining({
+        completedAt: toolCompletedAt + 1_000,
+        kind: 'turn',
+        startedAt,
+        turnId: 'user-1',
+      }),
+    ]))
+  })
+
+  it.each([
+    ['error', 'failed'],
+    ['aborted', 'interrupted'],
+  ] as const)('maps PI assistant stopReason %s to the bb turn terminal state', (stopReason, status) => {
+    const startedAt = 1_700_000_000_000
+    const completedAt = startedAt + 4_000
+    const projection = projectPiSnapshot({
+      agentId: 'pi',
+      entryIds: ['user-1', 'assistant-1'],
+      isStreaming: false,
+      messages: [{
+        role: 'user',
+        content: [{ type: 'text', text: 'Prompt' }],
+        timestamp: startedAt,
+      }, {
+        role: 'assistant',
+        completedAt,
+        content: [],
+        errorMessage: 'Native PI failure',
+        stopReason,
+        timestamp: startedAt + 1_000,
+      }],
+      sessionId: `pi-${stopReason}`,
+    }, [], [], 0)
+
+    expect(projection.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        event: expect.objectContaining({
+          error: { message: 'Native PI failure' },
+          status,
+          type: 'turn/completed',
+        }),
+        meta: expect.objectContaining({ createdAt: completedAt }),
+      }),
+    ]))
+  })
+
+  it('lets a legacy successful PI retry without stopReason settle an earlier failure', () => {
+    const startedAt = 1_700_000_000_000
+    const completedAt = startedAt + 8_000
+    const projection = projectPiSnapshot({
+      agentId: 'pi',
+      entryIds: ['user-1', 'assistant-error', 'assistant-success'],
+      isStreaming: false,
+      messages: [{
+        role: 'user',
+        content: [{ type: 'text', text: 'Prompt' }],
+        timestamp: startedAt,
+      }, {
+        role: 'assistant',
+        completedAt: startedAt + 3_000,
+        content: [],
+        errorMessage: 'Temporary failure',
+        stopReason: 'error',
+        timestamp: startedAt + 1_000,
+      }, {
+        role: 'assistant',
+        completedAt,
+        content: [{ type: 'text', text: 'Recovered' }],
+        timestamp: startedAt + 4_000,
+      }],
+      sessionId: 'pi-retry-success',
+    }, [], [], 0)
+    const turnCompleted = projection.events.find(({ event }) => event.type === 'turn/completed')
+
+    expect(turnCompleted).toMatchObject({
+      event: { status: 'completed' },
+      meta: { createdAt: completedAt },
+    })
+  })
+
+  it('clamps a PI completion timestamp that predates its message start', () => {
+    const startedAt = 1_700_000_000_000
+    const assistantStartedAt = startedAt + 2_000
+    const projection = projectPiSnapshot({
+      agentId: 'pi',
+      entryIds: ['user-1', 'assistant-1'],
+      isStreaming: false,
+      messages: [{
+        role: 'user',
+        content: [{ type: 'text', text: 'Prompt' }],
+        timestamp: startedAt,
+      }, {
+        role: 'assistant',
+        completedAt: startedAt - 5_000,
+        content: [{ type: 'text', text: 'Answer' }],
+        stopReason: 'stop',
+        timestamp: assistantStartedAt,
+      }],
+      sessionId: 'pi-invalid-completion',
+    }, [], [], 0)
+    const turnCompleted = projection.events.find(({ event }) => event.type === 'turn/completed')
+
+    expect(turnCompleted?.meta.createdAt).toBe(assistantStartedAt)
   })
 
   it('renders PI base64 image blocks as user attachments', () => {

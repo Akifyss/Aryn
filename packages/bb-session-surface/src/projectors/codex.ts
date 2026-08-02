@@ -13,6 +13,7 @@ import {
   fileChangeKind,
   itemStatus,
   normalizeEpoch,
+  normalizedEpochOrNull,
   numberValue,
   recordValue,
   safeJson,
@@ -34,6 +35,38 @@ function codexRuntimeStatus(snapshot: BbNativeSessionSnapshot, turns: unknown[])
 
 function codexThreadStatus(runtimeStatus: ThreadRuntimeDisplayStatus): ThreadStatus {
   return runtimeStatus === 'active' ? 'active' : 'idle'
+}
+
+function nonNegativeDurationMs(value: unknown) {
+  const durationMs = numberValue(value)
+  return durationMs !== null && durationMs >= 0 ? durationMs : null
+}
+
+function codexTurnTiming(
+  turn: Record<string, unknown>,
+  fallback: number,
+  terminal: boolean,
+) {
+  const nativeStartedAt = normalizedEpochOrNull(turn.startedAt)
+  const nativeCompletedAt = normalizedEpochOrNull(turn.completedAt)
+  const updatedAt = normalizedEpochOrNull(turn.updatedAt)
+  const durationMs = nonNegativeDurationMs(turn.durationMs)
+  const startedAt = nativeStartedAt
+    ?? (nativeCompletedAt !== null && durationMs !== null ? nativeCompletedAt - durationMs : null)
+    ?? (updatedAt !== null && durationMs !== null ? updatedAt - durationMs : null)
+    ?? nativeCompletedAt
+    ?? updatedAt
+    ?? fallback
+
+  if (!terminal) return { completedAt: null, startedAt }
+
+  const completedAt = (nativeCompletedAt !== null && nativeCompletedAt >= startedAt
+    ? nativeCompletedAt
+    : null)
+    ?? (durationMs === null ? null : startedAt + durationMs)
+    ?? (updatedAt !== null && updatedAt >= startedAt ? updatedAt : null)
+    ?? startedAt
+  return { completedAt, startedAt }
 }
 
 function tokenUsageBreakdown(value: unknown): ThreadEventTokenUsageBreakdown {
@@ -125,6 +158,7 @@ function codexItem(
   runtimeOutput: string,
 ): ThreadEventItem | null {
   const status = itemStatus(item.status, 'completed')
+  const durationMs = nonNegativeDurationMs(item.durationMs)
   switch (stringValue(item.type)) {
     case 'userMessage':
       return {
@@ -153,7 +187,7 @@ function codexItem(
         approvalStatus: null,
         ...(output ? { aggregatedOutput: output } : {}),
         ...(exitCode === null ? {} : { exitCode }),
-        ...(numberValue(item.durationMs) === null ? {} : { durationMs: numberValue(item.durationMs)! }),
+        ...(durationMs === null ? {} : { durationMs }),
       }
     }
     case 'fileChange': {
@@ -185,7 +219,7 @@ function codexItem(
         status: error ? 'failed' : status,
         ...(result === undefined || result === '' ? {} : { result }),
         ...(error ? { error: safeJson(error) } : {}),
-        ...(numberValue(item.durationMs) === null ? {} : { durationMs: numberValue(item.durationMs)! }),
+        ...(durationMs === null ? {} : { durationMs }),
       }
     }
     case 'dynamicToolCall':
@@ -200,7 +234,7 @@ function codexItem(
           ? { result: runtimeOutput || item.contentItems }
           : {}),
         ...(item.success === false ? { error: 'Tool call failed' } : {}),
-        ...(numberValue(item.durationMs) === null ? {} : { durationMs: numberValue(item.durationMs)! }),
+        ...(durationMs === null ? {} : { durationMs }),
       }
     case 'collabAgentToolCall': {
       const nativeTool = stringValue(item.tool) || 'Agent'
@@ -286,8 +320,13 @@ export function projectCodexSnapshot(
       continue
     }
     const turnId = stringValue(turn.id) || `turn-${turnIndex}`
-    const startedAt = normalizeEpoch(turn.startedAt, fallbackTime + turnIndex * 10_000)
     const completedStatus = turnStatus(turn.status)
+    const timing = codexTurnTiming(
+      turn,
+      fallbackTime + turnIndex * 10_000,
+      completedStatus !== null,
+    )
+    const { completedAt, startedAt } = timing
     const items = arrayValue(turn.items)
     const userItems = items.flatMap((value, itemIndex) => {
       const nativeItem = recordValue(value)
@@ -417,14 +456,14 @@ export function projectCodexSnapshot(
     if (diff) builder.diff(turnId, diff)
 
     if (tokenUsage && turnIndex === turns.length - 1) {
-      builder.tokenUsage(turnId, tokenUsage, turn.updatedAt ?? turn.completedAt ?? startedAt)
+      builder.tokenUsage(turnId, tokenUsage, completedAt ?? turn.updatedAt ?? startedAt)
     }
 
     if (completedStatus) {
       builder.turnCompleted(
         turnId,
         completedStatus,
-        turn.completedAt,
+        completedAt,
         stringValue(recordValue(turn.error)?.message) || undefined,
       )
     }

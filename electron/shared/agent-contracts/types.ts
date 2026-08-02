@@ -9,6 +9,8 @@ export type PiWebAgentMessage = {
   role: string
   content?: unknown
   timestamp?: number
+  /** Aryn enrichment from PI's official SessionEntry append timestamp. */
+  completedAt?: number
   [key: string]: unknown
 }
 

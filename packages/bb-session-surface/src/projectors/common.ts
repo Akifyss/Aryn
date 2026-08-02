@@ -35,14 +35,18 @@ export function numberValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-export function normalizeEpoch(value: unknown, fallback: number): number {
+export function normalizedEpochOrNull(value: unknown): number | null {
   if (typeof value === 'string') {
     const parsed = Date.parse(value)
     if (Number.isFinite(parsed)) return parsed
   }
   const numeric = numberValue(value)
-  if (numeric === null) return fallback
+  if (numeric === null) return null
   return numeric < 1_000_000_000_000 ? numeric * 1_000 : numeric
+}
+
+export function normalizeEpoch(value: unknown, fallback: number): number {
+  return normalizedEpochOrNull(value) ?? fallback
 }
 
 export function stableFallbackEpoch(seed: string): number {
@@ -426,7 +430,13 @@ export class CanonicalEventBuilder {
     }, `${turnId}:turn-completed`, timestamp)
   }
 
-  item(turnId: string, item: ThreadEventItem, terminal: boolean, timestamp?: unknown) {
+  item(
+    turnId: string,
+    item: ThreadEventItem,
+    terminal: boolean,
+    timestamp?: unknown,
+    completedTimestamp?: unknown,
+  ) {
     this.emit({
       type: 'item/started',
       threadId: this.threadId,
@@ -508,7 +518,7 @@ export class CanonicalEventBuilder {
       providerThreadId: this.providerThreadId,
       scope: { kind: 'turn', turnId },
       item,
-    }, `${item.id}:item-completed`, timestamp)
+    }, `${item.id}:item-completed`, completedTimestamp ?? timestamp)
   }
 
   fileOutput(turnId: string, itemId: string, output: string, timestamp?: unknown) {

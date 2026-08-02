@@ -89,15 +89,49 @@ describe('agent session serialization', () => {
     expect(serializePiWebSessionEntries(entries)).toEqual({
       entryIds: ['user-entry', 'compaction-entry'],
       messages: [
-        entries[0].message,
+        expect.objectContaining({
+          ...entries[0].message,
+          completedAt: 1775667900000,
+        }),
         expect.objectContaining({
           role: 'custom',
           customType: 'compaction',
           content: 'Earlier context.',
+          completedAt: 1775667960000,
           display: true,
         }),
       ],
     })
+  })
+
+  it('does not turn invalid PI native entry timestamps into current-time activity', () => {
+    const entries = [{
+      id: 'assistant-entry',
+      message: {
+        content: [{ text: 'Historical answer', type: 'text' }],
+        role: 'assistant',
+        timestamp: 1_700_000_000_000,
+      },
+      parentId: null,
+      timestamp: 'invalid-entry-time',
+      type: 'message',
+    }, {
+      firstKeptEntryId: 'assistant-entry',
+      id: 'compaction-entry',
+      parentId: 'assistant-entry',
+      summary: 'Historical summary',
+      timestamp: 'invalid-compaction-time',
+      tokensBefore: 1_000,
+      type: 'compaction',
+    }] as SessionEntry[]
+
+    const serialized = serializePiWebSessionEntries(entries)
+
+    expect(serialized.entryIds).toEqual(['assistant-entry', 'compaction-entry'])
+    expect(serialized.messages).toHaveLength(2)
+    expect(serialized.messages[0]).not.toHaveProperty('completedAt')
+    expect(serialized.messages[1]).not.toHaveProperty('completedAt')
+    expect(serialized.messages[1]).not.toHaveProperty('timestamp')
   })
 
   it('updates application-level provider auth without creating a workspace', async () => {

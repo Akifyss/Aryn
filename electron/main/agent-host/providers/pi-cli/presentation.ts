@@ -1,3 +1,8 @@
+import path from 'node:path'
+import {
+  SessionManager,
+  type SessionEntry,
+} from '@earendil-works/pi-coding-agent'
 import type {
   AgentSessionSnapshot,
   AgentThinkingLevel,
@@ -14,16 +19,63 @@ import {
 } from './session-model'
 import type { PiCliRuntime } from './runtime'
 
+function piMessageIdentity(message: PiWebAgentMessage) {
+  const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : ''
+  return `${message.role}\u0000${String(message.timestamp ?? '')}\u0000${toolCallId}`
+}
+
+function attachPiMessageCompletionTimestamps(
+  messages: PiWebAgentMessage[],
+  entries: SessionEntry[],
+) {
+  const completionQueues = new Map<string, number[]>()
+  for (const entry of entries) {
+    if (entry.type !== 'message') continue
+    const message = entry.message as unknown as PiWebAgentMessage
+    const completedAt = Date.parse(entry.timestamp)
+    if (!Number.isFinite(completedAt)) continue
+    const key = piMessageIdentity(message)
+    const queue = completionQueues.get(key)
+    if (queue) queue.push(completedAt)
+    else completionQueues.set(key, [completedAt])
+  }
+
+  return messages.map((message) => {
+    const completions = completionQueues.get(piMessageIdentity(message))
+    const completedAt = completions?.shift()
+    return completedAt === undefined ? message : { ...message, completedAt }
+  })
+}
+
+function readOfficialPiBranch(runtime: PiCliRuntime) {
+  const sessionPath = runtime.record.sessionPath
+  if (!sessionPath) return []
+  try {
+    return SessionManager.open(
+      sessionPath,
+      path.dirname(sessionPath),
+      runtime.record.cwd,
+    ).getBranch()
+  } catch {
+    // The RPC snapshot remains usable if PI is still flushing its session file.
+    return []
+  }
+}
+
 export async function serializePiCliSession(runtime: PiCliRuntime): Promise<AgentSessionSnapshot> {
   const response = await runtime.process.request({ type: 'get_messages' })
   const data = readResponseData(response)
-  const nativeMessages = Array.isArray(data.messages)
+  const rpcMessages = Array.isArray(data.messages)
     ? data.messages.filter((message): message is PiWebAgentMessage => (
         Boolean(message)
         && typeof message === 'object'
         && typeof (message as { role?: unknown }).role === 'string'
       ))
     : []
+  const nativeMessages = attachPiMessageCompletionTimestamps(
+    rpcMessages,
+    readOfficialPiBranch(runtime),
+  )
   return {
     annotations: projectPiFileAnnotations(data.messages),
     messages: [],

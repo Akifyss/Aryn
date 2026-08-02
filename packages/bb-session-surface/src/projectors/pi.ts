@@ -1,5 +1,6 @@
 import type {
   ThreadEventItem,
+  ThreadEventTurnStatus,
   ThreadEventUserContent,
   ThreadRuntimeDisplayStatus,
   ThreadStatus,
@@ -17,6 +18,7 @@ import {
   markdownForAttachments,
   normalizeEpoch,
   normalizeLocalAttachmentPath,
+  normalizedEpochOrNull,
   numberValue,
   recordValue,
   safeJson,
@@ -52,6 +54,23 @@ function isDelegationTool(name: string) {
 
 function toolResultText(message: Record<string, unknown>) {
   return textFromBlocks(message.content) || safeJson(message.details ?? '')
+}
+
+function piCompletedAt(message: Record<string, unknown>, startedAt: number) {
+  const nativeCompletedAt = normalizedEpochOrNull(message.completedAt)
+  return nativeCompletedAt !== null && nativeCompletedAt >= startedAt
+    ? nativeCompletedAt
+    : startedAt
+}
+
+function piToolTiming(
+  result: Record<string, unknown> | undefined,
+  startedAt: number,
+) {
+  if (!result) return { completedAt: startedAt, durationMs: null }
+  const resultTimestamp = normalizeEpoch(result.timestamp, startedAt)
+  const completedAt = Math.max(startedAt, piCompletedAt(result, resultTimestamp))
+  return { completedAt, durationMs: completedAt - startedAt }
 }
 
 const PI_ATTACHMENT_MARKER = 'Attachments:'
@@ -181,6 +200,7 @@ function piToolItem(
   blockId: string,
   result: Record<string, unknown> | undefined,
   streaming: boolean,
+  durationMs: number | null,
 ): ThreadEventItem {
   const callId = piToolCallId(block, blockId)
   const name = piToolName(block)
@@ -199,6 +219,7 @@ function piToolItem(
       approvalStatus: null,
       ...(output ? { aggregatedOutput: output } : {}),
       ...(exitCode === null ? {} : { exitCode }),
+      ...(durationMs === null ? {} : { durationMs }),
     }
   }
   return {
@@ -211,6 +232,7 @@ function piToolItem(
     status,
     ...(output ? { result: output } : {}),
     ...(isError ? { error: output || 'Tool call failed' } : {}),
+    ...(durationMs === null ? {} : { durationMs }),
   }
 }
 
@@ -235,11 +257,19 @@ export function projectPiSnapshot(
   const runtimeStatus: ThreadRuntimeDisplayStatus = snapshot.isStreaming === true ? 'active' : 'idle'
   let currentTurnId: string | null = null
   let currentTurnStartedAt = firstTimestamp
+  let currentTurnCompletedAt = firstTimestamp
+  let currentTurnStatus: ThreadEventTurnStatus = 'completed'
+  let currentTurnError: string | undefined
   builder.threadStarted(firstTimestamp)
 
-  const finishCurrentTurn = (timestamp: number) => {
+  const finishCurrentTurn = () => {
     if (!currentTurnId) return
-    builder.turnCompleted(currentTurnId, 'completed', timestamp)
+    builder.turnCompleted(
+      currentTurnId,
+      currentTurnStatus,
+      Math.max(currentTurnStartedAt, currentTurnCompletedAt),
+      currentTurnError,
+    )
     currentTurnId = null
   }
 
@@ -247,16 +277,21 @@ export function projectPiSnapshot(
     const message = recordValue(messages[messageIndex])
     const entryId = stringValue(entryIds[messageIndex]) || `message-${messageIndex}`
     const timestamp = normalizeEpoch(message?.timestamp, firstTimestamp + messageIndex * 100)
+    const completedAt = message ? piCompletedAt(message, timestamp) : timestamp
     const role = stringValue(message?.role)
     if (!message) {
+      if (currentTurnId) currentTurnCompletedAt = Math.max(currentTurnCompletedAt, timestamp)
       builder.unhandled(entryId, 'pi/message', messages[messageIndex], currentTurnId, timestamp)
       continue
     }
 
     if (role === 'user') {
-      finishCurrentTurn(timestamp - 1)
+      finishCurrentTurn()
       currentTurnId = entryId
       currentTurnStartedAt = timestamp
+      currentTurnCompletedAt = timestamp
+      currentTurnStatus = 'completed'
+      currentTurnError = undefined
       const content = projectPiUserContent(message.content)
       const text = content.filter((entry) => entry.type === 'text').map((entry) => entry.text).join('\n\n')
       persistedMessages.push({
@@ -276,6 +311,10 @@ export function projectPiSnapshot(
         )
       }
       continue
+    }
+
+    if (currentTurnId) {
+      currentTurnCompletedAt = Math.max(currentTurnCompletedAt, completedAt)
     }
 
     if (role === 'toolResult') {
@@ -302,10 +341,28 @@ export function projectPiSnapshot(
     if (!currentTurnId) {
       currentTurnId = `pi:turn:${entryId}`
       currentTurnStartedAt = timestamp
+      currentTurnCompletedAt = completedAt
+      currentTurnStatus = 'completed'
+      currentTurnError = undefined
       builder.turnStarted(currentTurnId, timestamp)
     }
 
     if (role === 'assistant') {
+      const stopReason = stringValue(message.stopReason).toLowerCase()
+      const error = stringValue(message.errorMessage)
+      if (stopReason === 'aborted') {
+        currentTurnStatus = 'interrupted'
+        currentTurnError = error || undefined
+      } else if (stopReason === 'error' || error) {
+        currentTurnStatus = 'failed'
+        currentTurnError = error || 'PI request failed'
+      } else {
+        // A later successful assistant message settles an earlier retry in the
+        // same user turn. Older PI session formats do not always persist a
+        // success stop reason, so absence alone cannot keep a prior failure.
+        currentTurnStatus = 'completed'
+        currentTurnError = undefined
+      }
       const blocks = arrayValue(message.content)
       for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
         const block = recordValue(blocks[blockIndex])
@@ -321,6 +378,7 @@ export function projectPiSnapshot(
         let item: ThreadEventItem | null = null
         let projectedAttachments: MarkdownAttachment[] = []
         let terminal = !isLastStreamingBlock
+        let itemCompletedAt = blockTimestamp
         switch (stringValue(block.type)) {
           case 'text':
             item = { type: 'agentMessage', id: blockId, text: stringValue(block.text) }
@@ -339,7 +397,9 @@ export function projectPiSnapshot(
             const callId = piToolCallId(block, blockId)
             const result = toolResults.get(callId)
             if (result) pairedToolResults.add(callId)
-            item = piToolItem(block, blockId, result, runtimeStatus === 'active')
+            const timing = piToolTiming(result, blockTimestamp)
+            item = piToolItem(block, blockId, result, runtimeStatus === 'active', timing.durationMs)
+            itemCompletedAt = timing.completedAt
             projectedAttachments = markdownAttachmentsFromBlocks(result?.content)
             terminal = Boolean(result) || runtimeStatus !== 'active'
             break
@@ -358,7 +418,7 @@ export function projectPiSnapshot(
           const projectedItem = parentToolCallId
             ? { ...item, parentToolCallId } as ThreadEventItem
             : item
-          builder.item(currentTurnId, projectedItem, terminal, blockTimestamp)
+          builder.item(currentTurnId, projectedItem, terminal, blockTimestamp, itemCompletedAt)
           if (projectedItem.type === 'commandExecution') {
             const input = piToolInput(block)
             const terminalInput = stringValue(input?.terminalInput) || stringValue(input?.stdin)
@@ -382,8 +442,7 @@ export function projectPiSnapshot(
           }
         }
       }
-      const error = stringValue(message.errorMessage)
-      if (error) builder.providerError(`${entryId}:error`, error, currentTurnId, timestamp)
+      if (error) builder.providerError(`${entryId}:error`, error, currentTurnId, completedAt)
       continue
     }
 
@@ -454,6 +513,9 @@ export function projectPiSnapshot(
     if (!currentTurnId) {
       currentTurnId = 'pi:file-changes'
       currentTurnStartedAt = firstTimestamp + messages.length * 100
+      currentTurnCompletedAt = currentTurnStartedAt
+      currentTurnStatus = 'completed'
+      currentTurnError = undefined
       builder.turnStarted(currentTurnId, currentTurnStartedAt)
     }
     for (let index = 0; index < nativeFileChanges.length; index += 1) {
@@ -470,11 +532,12 @@ export function projectPiSnapshot(
         status: 'completed',
         approvalStatus: null,
       }, true, currentTurnStartedAt + index)
+      currentTurnCompletedAt = Math.max(currentTurnCompletedAt, currentTurnStartedAt + index)
     }
   }
 
   if (currentTurnId && runtimeStatus !== 'active') {
-    finishCurrentTurn(firstTimestamp + messages.length * 100 + nativeFileChanges.length)
+    finishCurrentTurn()
   }
   appendOptimisticEvents({ builder, optimisticMessages, persistedMessages })
 

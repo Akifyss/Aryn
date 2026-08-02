@@ -252,8 +252,12 @@ export function serializeMessage(message: AgentMessage, index: number): AgentSid
 }
 
 export function parseEntryTimestamp(value: string) {
+  return parseValidEntryTimestamp(value) ?? Date.now()
+}
+
+function parseValidEntryTimestamp(value: string) {
   const parsed = Date.parse(value)
-  return Number.isNaN(parsed) ? Date.now() : parsed
+  return Number.isFinite(parsed) ? parsed : null
 }
 
 /** Preserve PI's full native branch for the vendored pi-web renderer. */
@@ -263,30 +267,37 @@ export function serializePiWebSessionEntries(entries: SessionEntry[]) {
   for (const entry of entries) {
     let message: PiWebAgentMessage | null = null
     if (entry.type === 'message') {
-      message = entry.message as unknown as PiWebAgentMessage
+      const completedAt = parseValidEntryTimestamp(entry.timestamp)
+      message = {
+        ...(entry.message as unknown as PiWebAgentMessage),
+        ...(completedAt === null ? {} : { completedAt }),
+      }
     } else if (entry.type === 'compaction') {
+      const timestamp = parseValidEntryTimestamp(entry.timestamp)
       message = {
         role: 'custom',
         customType: 'compaction',
         content: entry.summary,
         display: true,
         details: { tokensBefore: entry.tokensBefore, firstKeptEntryId: entry.firstKeptEntryId },
-        timestamp: parseEntryTimestamp(entry.timestamp),
+        ...(timestamp === null ? {} : { completedAt: timestamp, timestamp }),
       }
     } else if (entry.type === 'branch_summary' && entry.summary) {
+      const timestamp = parseValidEntryTimestamp(entry.timestamp)
       message = {
         role: 'user',
         content: `*The conversation briefly explored another branch and returned with this summary:*\n\n${entry.summary}`,
-        timestamp: parseEntryTimestamp(entry.timestamp),
+        ...(timestamp === null ? {} : { completedAt: timestamp, timestamp }),
       }
     } else if (entry.type === 'custom_message') {
+      const timestamp = parseValidEntryTimestamp(entry.timestamp)
       message = {
         role: 'custom',
         customType: entry.customType,
         content: entry.content,
         display: entry.display,
         details: entry.details,
-        timestamp: parseEntryTimestamp(entry.timestamp),
+        ...(timestamp === null ? {} : { completedAt: timestamp, timestamp }),
       }
     }
     if (message) {

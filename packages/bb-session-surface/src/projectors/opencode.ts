@@ -1,6 +1,7 @@
 import type {
   ThreadEventItem,
   ThreadEventTokenUsage,
+  ThreadEventTurnStatus,
   ThreadRuntimeDisplayStatus,
   ThreadStatus,
 } from '@bb/domain'
@@ -13,6 +14,7 @@ import {
   itemStatus,
   markdownForAttachments,
   normalizeEpoch,
+  normalizedEpochOrNull,
   numberValue,
   recordValue,
   safeJson,
@@ -36,6 +38,58 @@ function partOutput(part: Record<string, unknown>) {
     || stringValue(part.output)
     || stringValue(part.error)
     || safeJson(state?.result ?? part.result ?? '')
+}
+
+type OpenCodeNativeTiming = {
+  completedAt: number | null
+  durationMs: number | null
+  startedAt: number
+}
+
+function openCodePartTiming(part: Record<string, unknown>, fallback: number): OpenCodeNativeTiming {
+  const partTime = recordValue(part.time)
+  const stateTime = recordValue(recordValue(part.state)?.time)
+  const startedAt = normalizedEpochOrNull(
+    stateTime?.start
+      ?? partTime?.start
+      ?? stateTime?.created
+      ?? partTime?.created,
+  ) ?? fallback
+  const nativeCompletedAt = normalizedEpochOrNull(
+    stateTime?.end
+      ?? stateTime?.completed
+      ?? partTime?.end
+      ?? partTime?.completed,
+  )
+  const completedAt = nativeCompletedAt !== null && nativeCompletedAt >= startedAt
+    ? nativeCompletedAt
+    : null
+  return {
+    completedAt,
+    durationMs: completedAt === null ? null : completedAt - startedAt,
+    startedAt,
+  }
+}
+
+function openCodeMessageError(value: unknown): {
+  message: string
+  status: Extract<ThreadEventTurnStatus, 'failed' | 'interrupted'>
+} | null {
+  if (typeof value === 'string' && value.trim()) {
+    return { message: value.trim(), status: 'failed' }
+  }
+  const error = recordValue(value)
+  if (!error) return null
+  const name = stringValue(error.name)
+  const message = stringValue(recordValue(error.data)?.message)
+    || stringValue(error.message)
+    || name
+    || safeJson(value)
+    || 'OpenCode request failed'
+  return {
+    message,
+    status: name === 'MessageAbortedError' ? 'interrupted' : 'failed',
+  }
 }
 
 function visibleOpenCodeUserParts(parts: unknown[]) {
@@ -181,7 +235,7 @@ function projectOpenCodeTool(
   part: Record<string, unknown>,
   partId: string,
   turnId: string,
-  timestamp: number,
+  timing: OpenCodeNativeTiming,
 ): ThreadEventItem | null {
   const name = normalizedToolName(part)
   const displayName = toolName(part)
@@ -189,6 +243,9 @@ function projectOpenCodeTool(
   const status = partStatus(part)
   const input = partInput(part)
   const output = partOutput(part)
+  const lifecycleTimestamp = status === 'pending'
+    ? timing.startedAt
+    : timing.completedAt ?? timing.startedAt
 
   if (isQuestionTool(name)) {
     const lifecycle = status === 'pending' ? 'pending' : status === 'completed' ? 'resolved' : 'interrupted'
@@ -198,7 +255,7 @@ function projectOpenCodeTool(
       turnId,
       questions,
       lifecycle,
-      timestamp,
+      lifecycleTimestamp,
       stringValue(state?.error),
       lifecycle === 'resolved' ? normalizeQuestionAnswers(questions, state) : undefined,
     )
@@ -206,7 +263,15 @@ function projectOpenCodeTool(
   }
   if (isApprovalTool(name)) {
     const lifecycle = status === 'pending' ? 'pending' : status === 'completed' || status === 'failed' ? 'resolved' : 'interrupted'
-    builder.permission(partId, turnId, displayName, lifecycle, timestamp, status === 'failed', stringValue(state?.error))
+    builder.permission(
+      partId,
+      turnId,
+      displayName,
+      lifecycle,
+      lifecycleTimestamp,
+      status === 'failed',
+      stringValue(state?.error),
+    )
     return null
   }
   if (isCommandTool(name)) {
@@ -221,7 +286,7 @@ function projectOpenCodeTool(
         'opencode/command/terminalInput',
         { input: terminalInput },
         turnId,
-        timestamp + 0.001,
+        timing.startedAt + 0.001,
       )
     }
     return {
@@ -233,6 +298,7 @@ function projectOpenCodeTool(
       approvalStatus: null,
       ...(output ? { aggregatedOutput: output } : {}),
       ...(exitCode === null ? {} : { exitCode }),
+      ...(timing.durationMs === null ? {} : { durationMs: timing.durationMs }),
     }
   }
   if (isFileTool(name)) {
@@ -283,6 +349,7 @@ function projectOpenCodeTool(
     status,
     ...(output ? { result: output } : {}),
     ...(status === 'failed' ? { error: stringValue(state?.error) || output || 'Tool call failed' } : {}),
+    ...(timing.durationMs === null ? {} : { durationMs: timing.durationMs }),
     ...(name.includes('todo') ? { statusLabels: { pending: 'Updating plan', completed: 'Updated plan' } } : {}),
   }
 }
@@ -333,11 +400,23 @@ export function projectOpenCodeSnapshot(
   const runtimeStatus = openCodeRuntimeStatus(snapshot)
   let currentTurnId: string | null = null
   let currentTurnStartedAt = fallbackTime
+  let currentTurnCompletedAt = fallbackTime
+  let currentTurnStatus: ThreadEventTurnStatus = 'completed'
+  let currentTurnError: string | undefined
+  let lastNativeActivityAt = fallbackTime
   builder.threadStarted(fallbackTime)
 
-  const finishCurrentTurn = (timestamp: number, status: 'completed' | 'failed' = 'completed') => {
+  const finishCurrentTurn = (runtimeFailed = false) => {
     if (!currentTurnId) return
-    builder.turnCompleted(currentTurnId, status, timestamp)
+    const status = runtimeFailed && currentTurnStatus === 'completed'
+      ? 'failed'
+      : currentTurnStatus
+    builder.turnCompleted(
+      currentTurnId,
+      status,
+      Math.max(currentTurnStartedAt, currentTurnCompletedAt),
+      currentTurnError,
+    )
     currentTurnId = null
   }
 
@@ -352,12 +431,20 @@ export function projectOpenCodeSnapshot(
     const role = stringValue(info.role)
     const time = recordValue(info.time)
     const timestamp = normalizeEpoch(time?.created, fallbackTime + messageIndex * 100)
+    const nativeMessageCompletedAt = normalizedEpochOrNull(time?.completed)
+    const messageCompletedAt = nativeMessageCompletedAt !== null && nativeMessageCompletedAt >= timestamp
+      ? nativeMessageCompletedAt
+      : null
     const parts = arrayValue(message.parts)
+    lastNativeActivityAt = Math.max(lastNativeActivityAt, timestamp, messageCompletedAt ?? timestamp)
 
     if (role === 'user') {
-      finishCurrentTurn(timestamp - 1)
+      finishCurrentTurn()
       currentTurnId = messageId
       currentTurnStartedAt = timestamp
+      currentTurnCompletedAt = timestamp
+      currentTurnStatus = 'completed'
+      currentTurnError = undefined
       const visibleParts = visibleOpenCodeUserParts(parts)
       const content = userContentFromBlocks(visibleParts)
       const text = content.filter((entry) => entry.type === 'text').map((entry) => entry.text).join('\n\n')
@@ -379,9 +466,14 @@ export function projectOpenCodeSnapshot(
     if (!currentTurnId) {
       currentTurnId = `opencode:turn:${messageId}`
       currentTurnStartedAt = timestamp
+      currentTurnCompletedAt = messageCompletedAt ?? timestamp
+      currentTurnStatus = 'completed'
+      currentTurnError = undefined
       builder.turnStarted(currentTurnId, timestamp)
     }
+    currentTurnCompletedAt = Math.max(currentTurnCompletedAt, timestamp)
     if (role !== 'assistant') {
+      currentTurnCompletedAt = Math.max(currentTurnCompletedAt, messageCompletedAt ?? timestamp)
       builder.unhandled(messageId, `opencode/${role || 'message'}`, message, currentTurnId, timestamp)
       continue
     }
@@ -389,11 +481,18 @@ export function projectOpenCodeSnapshot(
     for (let partIndex = 0; partIndex < parts.length; partIndex += 1) {
       const part = recordValue(parts[partIndex])
       const partId = stringValue(part?.id) || `${messageId}:part-${partIndex}`
-      const partTimestamp = timestamp + partIndex / 100
+      const fallbackPartTimestamp = timestamp + partIndex / 100
       if (!part) {
-        builder.unhandled(partId, 'opencode/part', parts[partIndex], currentTurnId, partTimestamp)
+        currentTurnCompletedAt = Math.max(currentTurnCompletedAt, fallbackPartTimestamp)
+        lastNativeActivityAt = Math.max(lastNativeActivityAt, fallbackPartTimestamp)
+        builder.unhandled(partId, 'opencode/part', parts[partIndex], currentTurnId, fallbackPartTimestamp)
         continue
       }
+      const partTiming = openCodePartTiming(part, fallbackPartTimestamp)
+      const partTimestamp = partTiming.startedAt
+      const partCompletedAt = partTiming.completedAt ?? partTimestamp
+      currentTurnCompletedAt = Math.max(currentTurnCompletedAt, partCompletedAt)
+      lastNativeActivityAt = Math.max(lastNativeActivityAt, partCompletedAt)
       const explicitStatus = partStatus(part)
       const terminal = explicitStatus !== 'pending'
         || runtimeStatus !== 'active'
@@ -413,7 +512,7 @@ export function projectOpenCodeSnapshot(
           }
           break
         case 'tool':
-          item = projectOpenCodeTool(builder, part, partId, currentTurnId, partTimestamp)
+          item = projectOpenCodeTool(builder, part, partId, currentTurnId, partTiming)
           if (!item && !isQuestionTool(normalizedToolName(part)) && !isApprovalTool(normalizedToolName(part))) {
             builder.unhandled(partId, `opencode/tool/${toolName(part)}`, part, currentTurnId, partTimestamp)
           }
@@ -431,10 +530,10 @@ export function projectOpenCodeSnapshot(
           }
           break
         case 'retry': {
-          const error = recordValue(part.error)
+          const error = openCodeMessageError(part.error)
           builder.providerError(
             `${partId}:retry`,
-            stringValue(error?.message) || safeJson(part.error) || `Retry attempt ${numberValue(part.attempt) ?? ''}`,
+            error?.message || safeJson(part.error) || `Retry attempt ${numberValue(part.attempt) ?? ''}`,
             currentTurnId,
             partTimestamp,
             true,
@@ -505,7 +604,13 @@ export function projectOpenCodeSnapshot(
             if (change.diff) representedDiffPaths.add(change.path)
           })
         }
-        builder.item(currentTurnId, projectedItem, terminal, partTimestamp)
+        builder.item(
+          currentTurnId,
+          projectedItem,
+          terminal,
+          partTimestamp,
+          partTiming.completedAt ?? partTimestamp,
+        )
       }
       if (stringValue(part.type) === 'tool') {
         const nativeAttachments = arrayValue(recordValue(part.state)?.attachments)
@@ -530,15 +635,34 @@ export function projectOpenCodeSnapshot(
       }
     }
 
-    const error = stringValue(info.error) || stringValue(recordValue(info.error)?.message)
-    if (error) builder.providerError(`${messageId}:error`, error, currentTurnId, timestamp)
+    if (messageCompletedAt !== null) {
+      currentTurnCompletedAt = Math.max(currentTurnCompletedAt, messageCompletedAt)
+    }
+    const error = openCodeMessageError(info.error)
+    if (error) {
+      currentTurnStatus = error.status
+      currentTurnError = error.message
+      builder.providerError(`${messageId}:error`, error.message, currentTurnId, messageCompletedAt ?? timestamp)
+    } else if (
+      messageCompletedAt !== null
+      || runtimeStatus !== 'active'
+      || messageIndex < messages.length - 1
+    ) {
+      // A later successful assistant message can settle a provider retry that
+      // emitted an earlier failed assistant message in the same user turn.
+      currentTurnStatus = 'completed'
+      currentTurnError = undefined
+    }
   }
 
   const diffs = arrayValue(snapshot.diffs)
   if (diffs.length) {
     if (!currentTurnId) {
       currentTurnId = 'opencode:session-diff'
-      currentTurnStartedAt = fallbackTime + messages.length * 100
+      currentTurnStartedAt = lastNativeActivityAt + 1
+      currentTurnCompletedAt = currentTurnStartedAt
+      currentTurnStatus = 'completed'
+      currentTurnError = undefined
       builder.turnStarted(currentTurnId, currentTurnStartedAt)
     }
     for (let index = 0; index < diffs.length; index += 1) {
@@ -571,6 +695,7 @@ export function projectOpenCodeSnapshot(
         status: 'completed',
         approvalStatus: null,
       }, true, currentTurnStartedAt + index)
+      currentTurnCompletedAt = Math.max(currentTurnCompletedAt, currentTurnStartedAt + index)
     }
   }
 
@@ -602,7 +727,10 @@ export function projectOpenCodeSnapshot(
   if (nativeTodos.length) {
     if (!currentTurnId) {
       currentTurnId = 'opencode:todos'
-      currentTurnStartedAt = fallbackTime + messages.length * 100 + diffs.length
+      currentTurnStartedAt = lastNativeActivityAt + diffs.length + 1
+      currentTurnCompletedAt = currentTurnStartedAt
+      currentTurnStatus = 'completed'
+      currentTurnError = undefined
       builder.turnStarted(currentTurnId, currentTurnStartedAt)
     }
     if (todos.length) {
@@ -612,6 +740,7 @@ export function projectOpenCodeSnapshot(
         id: `${currentTurnId}:todo-plan`,
         text: todos.map((todo) => `${todo.status === 'completed' ? '- [x]' : '- [ ]'} ${todo.step}`).join('\n'),
       }, true, currentTurnStartedAt + todos.length)
+      currentTurnCompletedAt = Math.max(currentTurnCompletedAt, currentTurnStartedAt + todos.length)
     }
     for (const { detail, index, value } of todoNativeDetails) {
       builder.unhandled(
@@ -625,7 +754,7 @@ export function projectOpenCodeSnapshot(
   }
 
   if (currentTurnId && runtimeStatus !== 'active') {
-    finishCurrentTurn(fallbackTime + messages.length * 100 + diffs.length + nativeTodos.length, runtimeStatus === 'error' ? 'failed' : 'completed')
+    finishCurrentTurn(runtimeStatus === 'error')
   }
   appendOptimisticEvents({ builder, optimisticMessages, persistedMessages })
 

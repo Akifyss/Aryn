@@ -151,6 +151,8 @@ describe('PI CLI official session lifecycle', () => {
     appendConversation(officialSession)
     const sessionID = officialSession.getSessionId()
     const sessionFile = officialSession.getSessionFile() ?? ''
+    const messageEntries = officialSession.getBranch().filter((entry) => entry.type === 'message')
+    const expectedCompletionTimes = messageEntries.map((entry) => Date.parse(entry.timestamp))
     const firstManager = new PiCliAgentManager({ agentDir, emitEvent: () => undefined })
     let restartedManager: PiCliAgentManager | null = null
 
@@ -161,8 +163,8 @@ describe('PI CLI official session lifecycle', () => {
         native: {
           agentId: 'pi',
           messages: [
-            expect.objectContaining({ role: 'user' }),
-            expect.objectContaining({ role: 'assistant' }),
+            expect.objectContaining({ role: 'user', completedAt: expectedCompletionTimes[0] }),
+            expect.objectContaining({ role: 'assistant', completedAt: expectedCompletionTimes[1] }),
           ],
           sessionId: sessionID,
         },
