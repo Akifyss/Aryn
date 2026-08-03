@@ -11,6 +11,7 @@ import type {
   BbTheme,
 } from '@aryn/bb-session-surface'
 import type { AgentNativeSessionSnapshot } from '@/features/agent/types'
+import { BB_SESSION_SURFACE_REVISION } from './bb-session-surface-revision'
 import './styles.css'
 
 type BbSurfaceModule = typeof import('@aryn/bb-session-surface')
@@ -87,7 +88,7 @@ export function decorateOpenCodeSnapshot(
 
 function loadSurfaceModule() {
   if (!surfaceModulePromise) {
-    const moduleUrl = new URL('./bb-session-surface/index.js', document.baseURI).href
+    const moduleUrl = surfaceAssetUrl('index.js')
     surfaceModulePromise = (import(/* @vite-ignore */ moduleUrl) as Promise<BbSurfaceModule>)
       .catch((error) => {
         surfaceModulePromise = null
@@ -97,9 +98,15 @@ function loadSurfaceModule() {
   return surfaceModulePromise
 }
 
+function surfaceAssetUrl(assetName: 'index.js' | 'style.css') {
+  const url = new URL(`./bb-session-surface/${assetName}`, document.baseURI)
+  url.searchParams.set('v', BB_SESSION_SURFACE_REVISION)
+  return url.href
+}
+
 function ensureSurfaceStyles() {
   const id = 'aryn-bb-session-surface-styles'
-  const href = new URL('./bb-session-surface/style.css', document.baseURI).href
+  const href = surfaceAssetUrl('style.css')
   const current = document.getElementById(id)
 
   if (
@@ -403,7 +410,7 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
       surface?.dispose()
       container.replaceChildren()
     }
-  }, [loadRevision, sessionId, snapshot.agentId, workspacePath])
+  }, [loadRevision, sessionId, snapshot.agentId, workspacePath, BB_SESSION_SURFACE_REVISION])
 
   return (
     <div
@@ -411,6 +418,7 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
       aria-busy={isLoading ? 'true' : undefined}
       data-bb-agent-id={snapshot.agentId}
       data-bb-session-id={sessionId}
+      data-bb-surface-revision={BB_SESSION_SURFACE_REVISION}
     >
         {isLoading ? (
           <div className='agent-status-inline bb-session-surface-status' role='status'>

@@ -12,6 +12,7 @@ if (!fs.existsSync(cssPath)) {
 }
 
 const css = fs.readFileSync(cssPath, 'utf8')
+const stylesheet = postcss.parse(css)
 const allowedStarts = [
   '.aryn-bb-session-surface',
   '.dark .aryn-bb-session-surface',
@@ -29,7 +30,7 @@ function isInsideKeyframes(rule) {
 }
 
 const unscoped = []
-postcss.parse(css).walkRules((rule) => {
+stylesheet.walkRules((rule) => {
   if (isInsideKeyframes(rule)) return
   for (const selector of rule.selectors) {
     const value = selector.trim()
@@ -43,6 +44,33 @@ if (unscoped.length > 0) {
 
 if (!css.includes('.aryn-bb-session-surface')) {
   throw new Error('Built bb stylesheet does not contain the surface scope')
+}
+
+const firaCodeWeights = new Set()
+stylesheet.walkAtRules('font-face', (fontFace) => {
+  let family = ''
+  let weight = ''
+  fontFace.walkDecls('font-family', (declaration) => {
+    family = declaration.value.replace(/["']/g, '').trim()
+  })
+  fontFace.walkDecls('font-weight', (declaration) => {
+    weight = declaration.value.trim()
+  })
+  if (family === 'Fira Code' && weight) firaCodeWeights.add(weight)
+})
+
+for (const weight of ['400', '500']) {
+  if (!firaCodeWeights.has(weight)) {
+    throw new Error(`Built bb stylesheet does not contain Fira Code weight ${weight}`)
+  }
+}
+
+let hasFiraCodeMonoToken = false
+stylesheet.walkDecls('--font-mono', (declaration) => {
+  if (declaration.value.includes('Fira Code')) hasFiraCodeMonoToken = true
+})
+if (!hasFiraCodeMonoToken) {
+  throw new Error('Built bb stylesheet does not map the monospace token to Fira Code')
 }
 
 console.log('Verified bb session surface CSS isolation.')

@@ -1,3 +1,5 @@
+@import "@fontsource/fira-code/latin-400.css";
+@import "@fontsource/fira-code/latin-500.css";
 @import "./upstream/bb/apps/app/src/app.css";
 
 .aryn-bb-session-surface {

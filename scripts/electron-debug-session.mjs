@@ -447,12 +447,26 @@ async function applyDebugScenario(page) {
       return stayedMounted
     })
 
+    const productionSurfaceAssets = await page.evaluate(() => {
+      const styleHref = document.querySelector('#aryn-bb-session-surface-styles')?.href ?? null
+      const readRevision = (href) => href ? new URL(href).searchParams.get('v') : null
+      return {
+        hostRevision: document.querySelector('.bb-session-surface-host')
+          ?.getAttribute('data-bb-surface-revision') ?? null,
+        styleHref,
+        styleRevision: readRevision(styleHref),
+      }
+    })
+
     const syntheticTimeline = await page.evaluate(async () => {
       const created = Date.now()
       const workspacePath = 'C:\\debug-workspace'
-      const moduleUrl = new URL('./bb-session-surface/index.js', document.baseURI).href
+      const moduleUrl = new URL('./bb-session-surface/index.js', document.baseURI)
+      const moduleRevision = document.querySelector('.bb-session-surface-host')
+        ?.getAttribute('data-bb-surface-revision') ?? null
+      if (moduleRevision) moduleUrl.searchParams.set('v', moduleRevision)
       const previewImageUrl = new URL('./bb-session-surface/bb-mark.svg', document.baseURI).href
-      const surfaceModule = await import(moduleUrl)
+      const surfaceModule = await import(moduleUrl.href)
       const container = document.createElement('div')
       container.dataset.debugBbTimeline = 'true'
       Object.assign(container.style, {
@@ -600,7 +614,7 @@ async function applyDebugScenario(page) {
             }, {
               id: 'assistant-text-1',
               type: 'text',
-              text: 'Unified synthetic assistant response',
+              text: 'Unified synthetic assistant response with `context-mode`',
             }],
           }],
         },
@@ -626,6 +640,20 @@ async function applyDebugScenario(page) {
       }
 
       const initialText = container.textContent ?? ''
+      await document.fonts.ready
+      const inlineCodeMono = Array.from(container.querySelectorAll('code.font-mono')).find(
+        (element) => element.textContent?.trim() === 'context-mode',
+      )
+      const readFontProbe = (element) => {
+        if (!element) return null
+        const style = getComputedStyle(element)
+        return {
+          family: style.fontFamily,
+          size: style.fontSize,
+          weight: style.fontWeight,
+        }
+      }
+      const inlineCodeFont = readFontProbe(inlineCodeMono)
       const toolAttachmentControl = [...container.querySelectorAll('a, button')].find(
         (element) => element.textContent?.trim() === 'tool attachment.txt',
       )
@@ -647,6 +675,82 @@ async function applyDebugScenario(page) {
       const historyDeadline = Date.now() + 5_000
       while (Date.now() < historyDeadline && historyLoadCount < 1) {
         await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+
+      mounted.setOptimisticUserMessages([])
+      mounted.setSnapshot({
+        agentId: 'pi',
+        entryIds: ['pi-terminal-user', 'pi-terminal-call', 'pi-terminal-result'],
+        isStreaming: false,
+        messages: [{
+          role: 'user',
+          content: [{ type: 'text', text: 'PI terminal font regression' }],
+          timestamp: created + 4,
+        }, {
+          role: 'assistant',
+          content: [{
+            type: 'toolCall',
+            toolCallId: 'pi-terminal-call',
+            toolName: 'bash',
+            input: { command: 'npm test' },
+          }],
+          timestamp: created + 5,
+        }, {
+          role: 'toolResult',
+          toolCallId: 'pi-terminal-call',
+          content: [{ type: 'text', text: '1058 tests passed' }],
+          details: { exitCode: 0 },
+          timestamp: created + 6,
+        }],
+        modelNames: {},
+        sessionId: 'pi-terminal-font-regression',
+      })
+      const terminalSummaryDeadline = Date.now() + 5_000
+      while (
+        Date.now() < terminalSummaryDeadline
+        && !(container.textContent ?? '').includes('PI terminal font regression')
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+      const clickMatchingControl = async (text) => {
+        const control = Array.from(container.querySelectorAll('button, [role="button"]')).find(
+          (element) => element.textContent?.includes(text),
+        )
+        control?.click()
+        if (control) {
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+        }
+        return Boolean(control)
+      }
+      await clickMatchingControl('Worked for')
+      const commandSummaryDeadline = Date.now() + 5_000
+      while (
+        Date.now() < commandSummaryDeadline
+        && !(container.textContent ?? '').includes('npm test')
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+      await clickMatchingControl('npm test')
+      const terminalOutputDeadline = Date.now() + 5_000
+      while (
+        Date.now() < terminalOutputDeadline
+        && !(container.textContent ?? '').includes('1058 tests passed')
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+      await document.fonts.ready
+      const terminalMono = Array.from(container.querySelectorAll('.font-mono')).find(
+        (element) => element.textContent?.includes('$ npm test'),
+      )
+      const firaCodeFaces = Array.from(document.fonts)
+        .filter((face) => face.family.replace(/["']/g, '').trim() === 'Fira Code')
+        .map((face) => ({ status: face.status, weight: face.weight }))
+      const fontChecks = {
+        firaCodeFaces,
+        firaCodeReady: document.fonts.check('400 12px "Fira Code"', '1058 tests passed'),
+        inlineCode: inlineCodeFont,
+        terminal: readFontProbe(terminalMono),
+        terminalText: terminalMono?.textContent?.trim() ?? '',
       }
 
       const streamingSnapshot = {
@@ -1302,6 +1406,7 @@ async function applyDebugScenario(page) {
         bottomAnchorGeometry,
         builtinPiRendered,
         detachedScrollPreserved,
+        fontChecks,
         historyLoadCount,
         idleRuntimeAnnouncement,
         keyboardImageAriaLabel: keyboardImage?.getAttribute('aria-label') ?? null,
@@ -1322,6 +1427,7 @@ async function applyDebugScenario(page) {
         rendered,
         responsiveChecks,
         rootCount: container.querySelectorAll('.aryn-bb-session-surface').length,
+        moduleRevision,
         streamingTextUpdated,
         scrollToLatestButtonVisible,
         scrollToLatestButtonFound,
@@ -1427,6 +1533,7 @@ async function applyDebugScenario(page) {
 
     return {
       productionAgentIcons,
+      productionSurfaceAssets,
       productionSurfaceCount: await page.locator('.bb-session-surface-host .aryn-bb-session-surface').count(),
       productionSurfaceStayedMounted,
       reducedMotion,
@@ -1678,9 +1785,12 @@ function assertDebugScenarioResult(result) {
       || result.productionAgentIcons.bundledResources.length !== 4
       || result.productionAgentIcons.bundledResources.some((resource) => !resource.loaded)
       || result.productionAgentIcons.brokenImageCount !== 0
+      || !/^[a-f0-9]{16}$/.test(result.productionSurfaceAssets?.styleRevision ?? '')
+      || result.productionSurfaceAssets.hostRevision !== result.productionSurfaceAssets.styleRevision
       || !result.productionSurfaceStayedMounted
       || result.productionSurfaceCount !== 1
       || !result.syntheticTimeline?.rendered
+      || result.syntheticTimeline.moduleRevision !== result.productionSurfaceAssets.hostRevision
       || result.syntheticTimeline.rootCount !== 1
       || result.syntheticTimeline.agentId !== 'opencode'
       || !result.syntheticTimeline.bottomAnchorGeometry
@@ -1690,6 +1800,11 @@ function assertDebugScenarioResult(result) {
         - result.syntheticTimeline.bottomAnchorGeometry.scrollTop
       ) > 4
       || !result.syntheticTimeline.detachedScrollPreserved
+      || !result.syntheticTimeline.fontChecks?.firaCodeReady
+      || !result.syntheticTimeline.fontChecks.firaCodeFaces.some((face) => face.status === 'loaded')
+      || !result.syntheticTimeline.fontChecks.terminal?.family.includes('Fira Code')
+      || !result.syntheticTimeline.fontChecks.terminalText.includes('1058 tests passed')
+      || !result.syntheticTimeline.fontChecks.inlineCode?.family.includes('Fira Code')
       || !result.syntheticTimeline.piRendered
       || !result.syntheticTimeline.builtinPiRendered
       || !result.syntheticTimeline.piLiveRendered
