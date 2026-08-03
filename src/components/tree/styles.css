@@ -27,8 +27,7 @@
 .tree-list {
   --tree-icon-center-offset: 8px;
   --tree-indent-guide-offset: calc(
-    var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px))
-      + var(--tree-icon-center-offset)
+    var(--app-item-content-inset) + var(--tree-icon-center-offset)
   );
   --tree-list-padding-bottom: 0;
   --tree-list-padding-left: 0;

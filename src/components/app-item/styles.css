@@ -13,19 +13,14 @@
   height: 32px;
   min-height: 32px;
   margin: 0;
-  padding:
-    0
-    var(--app-item-row-padding-right, 0)
-    0
-    var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px));
+  padding: 0 0 0 var(--app-item-content-inset);
   border-radius: var(--app-item-row-radius);
   cursor: pointer;
   transition: background-color 120ms ease;
 }
 
-.app-item-row:not(.has-end),
-.app-item-row.has-actions:not(.has-info):not(.has-visible-actions):not(:hover):not(:focus-within):not(.is-menu-open):not(.is-editing) {
-  padding-right: 8px;
+.app-item-row:not(.has-end) {
+  padding-right: var(--app-item-content-inset);
 }
 
 .app-item-row:hover,
@@ -44,10 +39,10 @@
   width: auto;
   height: 100%;
   min-width: 0;
-  gap: var(--app-item-content-gap, 8px);
+  gap: var(--app-item-content-gap);
   color: var(--foreground-primary);
   font-size: var(--app-item-font-size);
-  line-height: var(--app-item-line-height, 1.5);
+  line-height: 1.5;
 }
 
 .app-item-main:is(button) {
@@ -82,7 +77,7 @@
 .app-item-main.has-description {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  column-gap: var(--app-item-content-gap, 8px);
+  column-gap: var(--app-item-content-gap);
   row-gap: 2px;
   align-items: center;
   width: 100%;
@@ -123,7 +118,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--foreground-secondary);
-  font-size: var(--app-item-description-font-size, 11px);
+  font-size: 11px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -276,19 +271,23 @@
   --app-item-status-dot-color: var(--foreground-secondary);
 }
 
+/* Keep the widest trailing state measured so hover/focus never resizes an auto-width menu. */
 .app-item-end {
-  display: flex;
+  display: grid;
   align-items: center;
-  gap: 0;
+  justify-items: end;
+}
+
+.app-item-end > .app-item-actions,
+.app-item-end > .app-item-info {
+  grid-area: 1 / 1;
 }
 
 .app-item-actions {
   display: flex;
   align-items: center;
-  max-width: 0;
   flex-shrink: 0;
-  gap: var(--app-item-action-gap, 2px);
-  overflow: hidden;
+  gap: 2px;
   opacity: 0;
   pointer-events: none;
   transform: translateX(4px);
@@ -300,12 +299,14 @@
     visibility 0s linear 160ms;
 }
 
-.app-item-row:focus-within .app-item-actions,
+/* Pointer-opened row focus stays quiet; keyboard focus and a focused action stay visible. */
+.app-item-row:focus-visible .app-item-actions,
+.app-item-row:has(:focus-visible) .app-item-actions,
+.app-item-row:has(.app-item-actions:focus-within) .app-item-actions,
 .app-item-row:hover .app-item-actions,
 .app-item-row.is-menu-open .app-item-actions,
 .app-item-row.is-editing .app-item-actions,
 .app-item-row.has-visible-actions .app-item-actions {
-  max-width: var(--app-item-actions-max-width, 136px);
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0);
@@ -313,16 +314,13 @@
   transition-delay: 0s;
 }
 
-.app-item-row.has-actions:focus-within .app-item-info,
+.app-item-row.has-actions:focus-visible .app-item-info,
+.app-item-row.has-actions:has(:focus-visible) .app-item-info,
+.app-item-row.has-actions:has(.app-item-actions:focus-within) .app-item-info,
 .app-item-row.has-actions:hover .app-item-info,
 .app-item-row.has-actions.is-menu-open .app-item-info,
 .app-item-row.has-actions.is-editing .app-item-info,
 .app-item-row.has-actions.has-visible-actions .app-item-info {
-  width: 0;
-  min-width: 0;
-  max-width: 0;
-  padding-inline: 0;
-  flex: 0 0 0;
   opacity: 0;
   pointer-events: none;
   transform: translateX(4px);
@@ -392,7 +390,6 @@
 
 .app-item-header > .app-item-row > .app-item-main:is(button):hover {
   color: var(--foreground-primary);
-  outline: none;
 }
 
 .app-item-header > .app-item-row .app-item-label {

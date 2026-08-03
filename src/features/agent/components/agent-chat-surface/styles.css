@@ -141,10 +141,9 @@
 }
 
 .agent-floating-panel {
+  /* This is a navigational tree panel, so it keeps a stable viewport instead of sizing to one row. */
   pointer-events: auto;
-  width: min(320px, calc(100vw - 16px));
   height: min(320px, calc(100vh - 16px));
-  max-height: min(416px, calc(100vh - 16px));
 }
 
 .agent-local-overlay-root {

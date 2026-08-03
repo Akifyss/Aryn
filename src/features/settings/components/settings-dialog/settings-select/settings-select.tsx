@@ -62,8 +62,7 @@ export function SettingsSelect({
         side='bottom'
       >
         <Select.Popup
-          className='settings-select-popup'
-          size='fit'
+          size='anchor'
         >
           <Select.ScrollList scrollAreaClassName='settings-select-scroll'>
             {options.map((option) => (

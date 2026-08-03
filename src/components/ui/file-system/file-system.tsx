@@ -3769,9 +3769,6 @@ function FileSystemFileTypeCommand({
   )
 }
 
-// Search plus common file-type labels need more room than a short action menu.
-const FILE_SYSTEM_FILE_TYPE_MENU_CLASSNAME = "w-60"
-
 // Toolbar filter menu: file types as a searchable checklist, dates as
 // single-select presets plus a custom range, mirroring Extend's table
 // filters.
@@ -3822,7 +3819,7 @@ function FileSystemFilterMenu({
             )}
             text={FILE_SYSTEM_COPY.filter.type.fileType}
           />
-          <DropdownMenuSubContent className={FILE_SYSTEM_FILE_TYPE_MENU_CLASSNAME}>
+          <DropdownMenuSubContent size="md">
             <FileSystemFileTypeCommand
               checkedMimes={fileTypeFilter?.value ?? []}
               onToggle={onToggleFileType}
@@ -3953,7 +3950,7 @@ function FileSystemFilterPill({
               ? selectedTypeLabels[0]
               : FILE_SYSTEM_COPY.filter.selected(filter.value.length)}
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className={FILE_SYSTEM_FILE_TYPE_MENU_CLASSNAME}>
+          <DropdownMenuContent align="start" size="md">
             <FileSystemFileTypeCommand
               checkedMimes={filter.value}
               onToggle={onToggleFileType}

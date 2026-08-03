@@ -18,9 +18,8 @@
  * sections. The surface stays edge-to-edge and each section owns one shared inset.
  */
 .project-menu {
-  width: min(360px, calc(100vw - 24px));
-  max-height: min(520px, calc(100vh - 72px));
   padding: 0;
+  /* Keep search and actions visible while a long project list scrolls. */
   --project-menu-list-max-height: 320px;
 }
 
@@ -63,10 +62,10 @@
 .project-menu-search {
   display: flex;
   align-items: center;
-  gap: var(--app-item-content-gap, 8px);
+  gap: var(--app-item-content-gap);
   min-height: 32px;
   margin: 0;
-  padding-inline: var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px));
+  padding-inline: var(--app-item-content-inset);
   border: 0;
   border-radius: var(--app-item-row-radius);
   color: var(--foreground-secondary);
@@ -109,7 +108,7 @@
 
 .project-menu-list .app-menu-scroll-viewport.app-scroll-area-viewport {
   inline-size: 100%;
-  height: auto;
+  height: 100%;
   max-height: var(--project-menu-list-max-height);
   margin-inline: 0;
 }
@@ -120,9 +119,7 @@
 }
 
 .project-menu-empty {
-  padding:
-    10px
-    var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px));
+  padding: 10px var(--app-item-content-inset);
   color: var(--foreground-secondary);
   font-size: 12px;
 }

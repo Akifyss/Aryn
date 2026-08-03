@@ -397,9 +397,10 @@ try {
 
   await page.locator('.workspace-sidebar-surface.is-drawer .agent-project-tree-header').first().hover({ timeout: 5_000 })
   await page.locator('.workspace-sidebar-surface.is-drawer .agent-project-tree-header-action').first().click({ timeout: 5_000 })
-  await page.waitForSelector('.drawer-local-overlay-root .project-menu-agent-add', { timeout: 5_000 })
+  const projectAddMenuSelector = '.drawer-local-overlay-root [data-project-menu-root="true"][data-project-menu-mode="agent-add"]'
+  await page.waitForSelector(projectAddMenuSelector, { timeout: 5_000 })
   const drawerProjectMenu = await page.evaluate(() => {
-    const menu = document.querySelector('.project-menu-agent-add')
+    const menu = document.querySelector('[data-project-menu-root="true"][data-project-menu-mode="agent-add"]')
     const rect = menu?.getBoundingClientRect()
     const hit = rect
       ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
@@ -419,14 +420,14 @@ try {
   await page.mouse.move(800, 500)
   await page.waitForTimeout(250)
   assert(
-    await page.locator('.drawer-local-overlay-root .project-menu-agent-add').count() === 1,
+    await page.locator(projectAddMenuSelector).count() === 1,
     'project add menu should stay open when the pointer leaves the menu',
     await page.evaluate(() => ({
-      menuCount: document.querySelectorAll('.project-menu-agent-add').length,
-      surface: document.querySelector('.project-menu-agent-add')?.getAttribute('data-surface') ?? null,
+      menuCount: document.querySelectorAll('[data-project-menu-root="true"][data-project-menu-mode="agent-add"]').length,
+      surface: document.querySelector('[data-project-menu-root="true"][data-project-menu-mode="agent-add"]')?.getAttribute('data-surface') ?? null,
     })),
   )
-  await page.locator('.drawer-local-overlay-root .project-menu-agent-add .project-menu-action').first().click({ timeout: 5_000 })
+  await page.locator(`${projectAddMenuSelector} .app-menu-item`).first().click({ timeout: 5_000 })
   await page.waitForSelector('.project-create-dialog', { timeout: 5_000 })
   await page.locator('.project-create-dialog .app-dialog-close-button').click({ timeout: 5_000 })
   await page.waitForSelector('.project-create-dialog', { state: 'detached', timeout: 5_000 })

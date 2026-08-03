@@ -14,7 +14,6 @@ import {
   PROJECT_MENU_GAP_PX,
   PROJECT_MENU_MARGIN_PX,
   resolveProjectMenuCollisionBoundary,
-  resolveProjectMenuStyle,
   type ProjectMenuAnchorRect,
   type ProjectMenuFrameRect,
   type ProjectMenuMode,
@@ -67,6 +66,7 @@ export function ProjectMenu({
   const [search, setSearch] = useState('')
   const isSwitchMenu = mode === 'editor-switch' || mode === 'agent-new-switch'
   const hasProjects = projects.length > 0
+  const isCompoundMenu = isSwitchMenu && hasProjects
   const renderedMode = isSwitchMenu && !hasProjects ? 'agent-add' : mode
   const showProjectlessAction = canUseNoProject && renderedMode === 'agent-new-switch'
   const filteredProjects = useMemo(() => {
@@ -81,17 +81,11 @@ export function ProjectMenu({
       || project.path.toLowerCase().includes(query)
     ))
   }, [projects, search])
-  const viewport = frameRect ?? (typeof window === 'undefined'
-    ? null
-    : { height: window.innerHeight, width: window.innerWidth })
-  const menuStyle = viewport
-    ? resolveProjectMenuStyle(renderedMode, showProjectlessAction, viewport)
-    : undefined
   const menuAnchor = createProjectMenuVirtualAnchor(anchorRect, frameRect)
   const collisionBoundary = resolveProjectMenuCollisionBoundary(frameRect)
   const menuAlign = renderedMode === 'editor-switch' ? 'center' : 'start'
-  const projectMenuActions = (
-    <Menu.List className='project-menu-actions'>
+  const projectMenuActionItems = (
+    <>
       <Menu.Item
         disabled={isBusy}
         icon={<NewFolderLine aria-hidden='true' />}
@@ -119,7 +113,7 @@ export function ProjectMenu({
           }}
         />
       ) : null}
-    </Menu.List>
+    </>
   )
 
   return (
@@ -157,15 +151,16 @@ export function ProjectMenu({
           sideOffset={PROJECT_MENU_GAP_PX}
         >
           <Menu.Popup
-            className='project-menu'
+            className={isCompoundMenu ? 'project-menu' : undefined}
+            data-project-menu-mode={renderedMode}
+            data-project-menu-root='true'
             data-surface={surface}
-            aria-label={isSwitchMenu && hasProjects ? '切换项目' : '添加项目'}
+            aria-label={isCompoundMenu ? '切换项目' : '添加项目'}
             finalFocus={false}
-            layout='compound'
-            size='fit'
-            style={menuStyle}
+            layout={isCompoundMenu ? 'compound' : 'list'}
+            size={isCompoundMenu ? 'lg' : 'sm'}
           >
-            {isSwitchMenu && hasProjects ? (
+            {isCompoundMenu ? (
               <>
                 <div className='project-menu-project-section'>
                   <div className='project-menu-search-section'>
@@ -214,9 +209,11 @@ export function ProjectMenu({
                   </Menu.ScrollArea>
                 </div>
                 <Menu.Separator className='project-menu-section-separator' />
-                {projectMenuActions}
+                <Menu.List className='project-menu-actions'>
+                  {projectMenuActionItems}
+                </Menu.List>
               </>
-            ) : projectMenuActions}
+            ) : projectMenuActionItems}
           </Menu.Popup>
         </Menu.Positioner>
       </Menu.Portal>

@@ -70,7 +70,6 @@ export function AgentTypeSwitch({
         >
           <Menu.Popup
             aria-label='选择用于新会话的 Agent'
-            size='lg'
           >
             <Menu.ScrollArea className='agent-type-switch-options-scroll'>
               <Menu.ScrollViewport>

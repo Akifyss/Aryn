@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   createProjectMenuVirtualAnchor,
   resolveProjectMenuCollisionBoundary,
-  resolveProjectMenuStyle,
   serializeProjectMenuAnchorRect,
 } from '../src/features/workspace/components/project-menu/project-menu-positioning'
 
@@ -27,31 +26,6 @@ describe('project menu positioning', () => {
       right: 140,
       top: 40,
       width: 120,
-    })
-  })
-
-  it('sizes global switch menus against the viewport', () => {
-    const viewport = { height: 768, width: 1280 }
-
-    expect(resolveProjectMenuStyle('editor-switch', false, viewport)).toEqual({
-      '--project-menu-list-max-height': '320px',
-      width: '320px',
-    })
-    expect(resolveProjectMenuStyle('agent-add', false, viewport)).toEqual({
-      width: '288px',
-    })
-  })
-
-  it('reserves room for fixed actions inside a short drawer frame', () => {
-    const frameRect = { height: 240, left: 12, top: 20, width: 300 }
-
-    expect(resolveProjectMenuStyle('agent-new-switch', false, frameRect)).toEqual({
-      '--project-menu-list-max-height': '105px',
-      width: '284px',
-    })
-    expect(resolveProjectMenuStyle('agent-new-switch', true, frameRect)).toEqual({
-      '--project-menu-list-max-height': '71px',
-      width: '284px',
     })
   })
 

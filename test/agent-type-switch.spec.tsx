@@ -23,6 +23,7 @@ describe('AgentTypeSwitch', () => {
 
     expect(source).toContain('text={availability.definition.label}')
     expect(source).toContain('description={isUnavailable ? (')
+    expect(source).not.toContain("size='lg'")
     expect(source).not.toContain('agent-type-switch-option-title')
     expect(source).not.toContain('agent-type-switch-option-copy')
   })

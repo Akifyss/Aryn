@@ -33,6 +33,8 @@
   --app-button-padding-inline-sm: 6px;
   --app-icon-button-size-md: 32px;
   --app-icon-button-size-sm: 24px;
+  --app-item-content-gap: 8px;
+  --app-item-content-inset: 8px;
   --app-item-row-radius: 8px;
   --app-item-font-size: 13px;
   --app-item-list-gap: 2px;

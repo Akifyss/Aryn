@@ -34,12 +34,8 @@
   transform: rotate(180deg);
 }
 
-.settings-select-popup {
-  width: var(--anchor-width);
-  max-width: var(--available-width);
-}
-
 .settings-select-scroll {
+  /* Long theme lists fill the popup's shared height cap so AppScrollArea owns overflow. */
   height: 100%;
 }
 

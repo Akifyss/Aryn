@@ -21,10 +21,7 @@
 }
 
 .agent-type-switch-error {
-  margin:
-    1px
-    var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px))
-    3px;
+  margin: 1px var(--app-item-content-inset) 3px;
   overflow-wrap: anywhere;
   color: var(--danger);
   font-size: 11px;

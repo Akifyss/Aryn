@@ -139,13 +139,46 @@ describe('shared application item', () => {
     expect(withOverriddenActions).not.toContain('has-actions')
     expect(withOverriddenActions).not.toContain('Unused action')
     expect(styles).toContain([
-      '.app-item-row:not(.has-end),',
-      '.app-item-row.has-actions:not(.has-info):not(.has-visible-actions):not(:hover):not(:focus-within):not(.is-menu-open):not(.is-editing) {',
-      '  padding-right: 8px;',
+      '.app-item-row:not(.has-end) {',
+      '  padding-right: var(--app-item-content-inset);',
       '}',
     ].join('\n'))
-    expect(styles).toContain('.app-item-row:focus-within .app-item-actions,')
-    expect(styles).toContain('.app-item-row.has-actions:focus-within .app-item-info,')
+    expect(styles).not.toContain('.app-item-row.has-actions:not(.has-info)')
+    expect(styles).not.toContain('.app-item-row:focus-within .app-item-actions,')
+    expect(styles).not.toContain('.app-item-row.has-actions:focus-within .app-item-info,')
+    expect(styles).toContain('.app-item-row:focus-visible .app-item-actions,')
+    expect(styles).toContain('.app-item-row:has(:focus-visible) .app-item-actions,')
+    expect(styles).toContain('.app-item-row:has(.app-item-actions:focus-within) .app-item-actions,')
+    expect(styles).toContain('.app-item-row.has-actions:focus-visible .app-item-info,')
+    expect(styles).toContain('.app-item-row.has-actions:has(:focus-visible) .app-item-info,')
+    expect(styles).toContain('.app-item-row.has-actions:has(.app-item-actions:focus-within) .app-item-info,')
+    expect(styles).not.toMatch(
+      /\.app-item-header > \.app-item-row > \.app-item-main:is\(button\):hover\s*\{[^}]*outline:\s*none;/,
+    )
+  })
+
+  it('reserves the end slot so revealing actions does not change item or popup width', async () => {
+    const styles = await readFile(new URL('../src/components/app-item/styles.css', import.meta.url), 'utf8')
+    const actionsRule = styles.match(/\.app-item-actions\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? ''
+    const visibleActionsRule = styles.match(
+      /\.app-item-row:focus-visible \.app-item-actions,[\s\S]*?\.app-item-row\.has-visible-actions \.app-item-actions\s*\{(?<body>[^}]*)\}/,
+    )?.groups?.body ?? ''
+    const hiddenInfoRule = styles.match(
+      /\.app-item-row\.has-actions:focus-visible \.app-item-info,[\s\S]*?\.app-item-row\.has-actions\.has-visible-actions \.app-item-info\s*\{(?<body>[^}]*)\}/,
+    )?.groups?.body ?? ''
+
+    expect(styles).toMatch(
+      /\.app-item-end\s*\{[^}]*display:\s*grid;[^}]*justify-items:\s*end;/,
+    )
+    expect(styles).toMatch(
+      /\.app-item-end > \.app-item-actions,\s*\.app-item-end > \.app-item-info\s*\{[^}]*grid-area:\s*1 \/ 1;/,
+    )
+    expect(actionsRule).not.toContain('max-width:')
+    expect(actionsRule).not.toContain('overflow: hidden;')
+    expect(actionsRule).toContain('visibility: hidden;')
+    expect(visibleActionsRule).not.toContain('max-width:')
+    expect(hiddenInfoRule).not.toMatch(/(?:min-|max-)?width\s*:/)
+    expect(hiddenInfoRule).not.toContain('padding-inline:')
   })
 
   it('builds item actions from AppIconButton instead of cloning an icon button', () => {

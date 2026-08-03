@@ -156,9 +156,7 @@
 }
 
 .agent-composer-mention-empty {
-  padding:
-    10px
-    var(--app-item-row-padding-left, var(--app-item-row-padding-x, 8px));
+  padding: 10px var(--app-item-content-inset);
   color: var(--foreground-secondary);
   font-size: 12px;
   line-height: 1.5;

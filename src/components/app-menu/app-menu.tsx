@@ -34,7 +34,7 @@ type StatefulClassName<State> = string | ((state: State) => string | undefined)
 
 export type AppMenuItemTone = 'danger' | 'default'
 export type AppMenuLayout = 'compound' | 'list'
-export type AppMenuPopupSize = 'fit' | 'lg' | 'md' | 'sm'
+export type AppMenuPopupSize = 'anchor' | 'fit' | 'lg' | 'md' | 'sm'
 export type AppMenuTriggerSize = AppButtonSize
 export type AppMenuTriggerVariant = 'ghost' | 'icon' | 'outline'
 export type AppMenuTriggerSurfaceVariant = Exclude<AppMenuTriggerVariant, 'icon'>
