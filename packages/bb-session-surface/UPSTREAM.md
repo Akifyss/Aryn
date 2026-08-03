@@ -40,8 +40,9 @@ event ordering, turn grouping, streaming buffers, lifecycle aggregation, and
 - `codex`
 
 Anything that cannot be represented safely is emitted as an explicit native
-event row. It is never silently discarded. The existing native surfaces remain
-available through Aryn's view selector and are not modified by this package.
+event row. It is never silently discarded. The bb surface is Aryn's only
+provider-session rendering path; the former provider-specific surfaces and
+view selector were removed after the unified projection reached parity.
 
 ## Exact code and compatibility code
 
@@ -65,7 +66,8 @@ is scoped to `.aryn-bb-session-surface` or the package's portal root.
 3. Run `node scripts/vendor-bb-session-surface.mjs <path-to-bb-clone>`.
 4. Run `node scripts/verify-bb-session-surface-upstream.mjs`.
 5. Run the package typecheck, tests, build, and CSS-scope verification.
-6. Review the Aryn provider projection fixtures and the native fallback path.
+6. Review the Aryn provider projection fixtures and the shared host fallback
+   used when a provider snapshot is unavailable.
 
 Upstream refreshes are intentionally explicit. Aryn does not track bb's main
 branch automatically.

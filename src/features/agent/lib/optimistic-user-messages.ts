@@ -1,11 +1,11 @@
-import type { OpenCodeOptimisticUserMessage } from '@aryn/opencode-session-surface'
-import type { PiWebOptimisticUserMessage } from '@aryn/pi-web-session-surface'
 import type { AgentId } from '@/features/agent/agent-definition'
 import { getOpenCodeUserMessageText } from '@/features/agent/lib/opencode-timeline'
 import type {
   AgentSessionSnapshot,
   AgentSidebarMessage,
+  OpenCodeOptimisticUserMessage,
   PiWebAgentMessage,
+  PiWebOptimisticUserMessage,
 } from '@/features/agent/types'
 
 export type OptimisticAgentUserMessage = {
@@ -204,4 +204,22 @@ export function buildNativeOptimisticUserMessages(entries: OptimisticAgentUserMe
       id: string
     }>,
   }
+}
+
+export function toBbCodexOptimisticMessages(messages: AgentSidebarMessage[]) {
+  return messages.map((message) => ({
+    ...(message.optimisticBaselineUserMessageIds
+      ? { baselineUserMessageIds: message.optimisticBaselineUserMessageIds }
+      : {}),
+    id: message.id,
+    text: message.text,
+    timestamp: message.timestamp,
+    attachments: message.attachments?.map((attachment, index) => ({
+      id: `${message.id}:attachment:${index}`,
+      name: attachment.fileName,
+      path: attachment.path,
+      url: attachment.data,
+      mimeType: attachment.mimeType,
+    })),
+  }))
 }

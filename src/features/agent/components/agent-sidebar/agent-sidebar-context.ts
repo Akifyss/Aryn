@@ -7,12 +7,7 @@ import {
   type RefObject,
   type SetStateAction,
 } from 'react'
-import type { OpenCodeOptimisticUserMessage } from '@aryn/opencode-session-surface'
 import type { BbTheme } from '@aryn/bb-session-surface'
-import type {
-  PiWebNativeSessionSnapshot,
-  PiWebOptimisticUserMessage,
-} from '@aryn/pi-web-session-surface'
 import type {
   AgentAvailability,
   AgentId,
@@ -34,12 +29,15 @@ import type {
   AgentInteractionRequest,
   AgentInteractionTimelineRecord,
   AgentMessageFileChange,
+  OpenCodeOptimisticUserMessage,
   AgentQueuedMessageUpdate,
   AgentSidebarMessage,
   AgentThinkingLevel,
   AgentWorkspaceState,
   CodexNativeSessionSnapshot,
   OpenCodeNativeSessionSnapshot,
+  PiWebNativeSessionSnapshot,
+  PiWebOptimisticUserMessage,
 } from '@/features/agent/types'
 import type {
   ActiveWorkspaceContext,
@@ -152,7 +150,6 @@ export type AgentContextValue = {
   piWebFileChanges: AgentMessageFileChange[]
   piWebNativeSession: PiWebNativeSessionSnapshot | null
   piWebOptimisticUserMessages: PiWebOptimisticUserMessage[]
-  piWebStreamingStatus: AgentSessionStatus | null
   panelError: string | null
   pendingInteraction: AgentInteractionRequest | null
   interactionTimelineRecords: AgentInteractionTimelineRecord[]

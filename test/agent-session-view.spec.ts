@@ -5,6 +5,7 @@ import {
   buildNativeOptimisticUserMessages,
   getPersistedAgentUserMessages,
   reconcileOptimisticAgentUserMessages,
+  toBbCodexOptimisticMessages,
   type OptimisticAgentUserMessage,
 } from '../src/features/agent/lib/optimistic-user-messages'
 import type { AgentSessionSnapshot, AgentSidebarMessage } from '../src/features/agent/types'
@@ -202,6 +203,32 @@ describe('agent optimistic user messages', () => {
         id: 'optimistic-file',
       }),
     ])
+  })
+
+  it('preserves optimistic Codex image data for the unified bb projection', () => {
+    expect(toBbCodexOptimisticMessages([{
+      attachments: [{
+        data: 'data:image/png;base64,cHJldmlldw==',
+        fileName: 'preview.png',
+        kind: 'image',
+        mimeType: 'image/png',
+      }],
+      id: 'client-user-1',
+      kind: 'user',
+      text: 'Inspect this image',
+      timestamp: 1,
+    }])).toEqual([{
+      attachments: [{
+        id: 'client-user-1:attachment:0',
+        mimeType: 'image/png',
+        name: 'preview.png',
+        path: undefined,
+        url: 'data:image/png;base64,cHJldmlldw==',
+      }],
+      id: 'client-user-1',
+      text: 'Inspect this image',
+      timestamp: 1,
+    }])
   })
 })
 

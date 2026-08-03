@@ -4,7 +4,6 @@ import {
   AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS,
   getAlternateRunningPromptBehavior,
   isAgentRunningPromptEnterBehavior,
-  isAgentSessionView,
   useSettingsStore,
 } from '@/hooks/use-settings-store'
 import './styles.css'
@@ -31,48 +30,6 @@ export function ConversationSettingsSection({
       className='settings-panel-content'
       contentClassName='settings-panel-content-inner'
     >
-      <div className='settings-card'>
-        <div className='settings-field'>
-          <div className='settings-copy-block'>
-            <h4>对话视图</h4>
-            <p>
-              Aryn、PI、OpenCode 和 Codex 共用同一套消息时间线。Threadbar、输入框和 Agent 运行逻辑仍由 Aryn 管理。
-            </p>
-          </div>
-
-          <div className='settings-tabs-wrapper heroui-tabs-fix settings-session-view-tabs'>
-            <Tabs
-              selectedKey={agent.sessionView}
-              onSelectionChange={(key) => {
-                const nextView = String(key)
-                if (isAgentSessionView(nextView)) {
-                  updateAgentSettings({ sessionView: nextView })
-                }
-              }}
-              variant='primary'
-              className='w-full'
-            >
-              <Tabs.ListContainer className='w-full'>
-                <Tabs.List aria-label='Agent 对话视图' className='w-full'>
-                  <Tabs.Tab id='unified' className='flex-1'>
-                    统一视图
-                    <Tabs.Indicator />
-                  </Tabs.Tab>
-                  <Tabs.Tab id='native' className='flex-1'>
-                    原生视图
-                    <Tabs.Indicator />
-                  </Tabs.Tab>
-                </Tabs.List>
-              </Tabs.ListContainer>
-            </Tabs>
-          </div>
-
-          <p className='settings-inline-hint'>
-            默认启用统一视图；原生视图完整保留，可随时切回用于兼容或排查问题。
-          </p>
-        </div>
-      </div>
-
       <div className='settings-card'>
         <div className='settings-field'>
           <div className='settings-copy-block'>

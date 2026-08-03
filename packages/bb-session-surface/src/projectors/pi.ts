@@ -389,7 +389,7 @@ export function projectPiSnapshot(
               id: blockId,
               summary: [stringValue(block.thinking)].filter(Boolean),
               content: block.deferred === true && !stringValue(block.thinking)
-                ? ['Historical reasoning is available in the native view.']
+                ? ['Historical reasoning was not recorded in this session.']
                 : [],
             }
             break

@@ -102,7 +102,7 @@
   padding: 0.75rem;
 }
 
-.aryn-bb-session-surface__error button {
+.aryn-bb-session-surface__retry {
   background: transparent;
   border: 1px solid currentColor;
   border-radius: 0.375rem;
@@ -112,7 +112,7 @@
   padding: 0.25rem 0.5rem;
 }
 
-.aryn-bb-session-surface__error button:focus-visible {
+.aryn-bb-session-surface__retry:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }

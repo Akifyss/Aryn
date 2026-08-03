@@ -15,7 +15,6 @@ describe('useSettingsStore', () => {
 
     expect(DEFAULT_APP_LAYOUT_PREFERENCE).toBe('agent')
     expect(DEFAULT_AGENT_SETTINGS.runningPromptEnterBehavior).toBe('followUp')
-    expect(DEFAULT_AGENT_SETTINGS.sessionView).toBe('unified')
     expect(useSettingsStore.getState().layoutPreference).toBe('agent')
     expect(useSettingsStore.getState().agent.runningPromptEnterBehavior).toBe('followUp')
   })
@@ -26,7 +25,6 @@ describe('useSettingsStore', () => {
     initializeSettingsStore({
       agent: {
         runningPromptEnterBehavior: 'steer',
-        sessionView: 'native',
       },
       layoutPreference: 'editor',
       meo: {
@@ -41,7 +39,6 @@ describe('useSettingsStore', () => {
     expect(useSettingsStore.getState().layoutPreference).toBe('editor')
     expect(useSettingsStore.getState().theme).toBe('dark')
     expect(useSettingsStore.getState().agent.runningPromptEnterBehavior).toBe('steer')
-    expect(useSettingsStore.getState().agent.sessionView).toBe('native')
     expect(useSettingsStore.getState().meo.outlinePosition).toBe('left')
   })
 
@@ -63,7 +60,6 @@ describe('useSettingsStore', () => {
     expect(updateSettingsState).toHaveBeenCalledWith({
       agent: {
         runningPromptEnterBehavior: 'steer',
-        sessionView: 'unified',
       },
     })
   })

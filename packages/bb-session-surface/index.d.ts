@@ -112,7 +112,6 @@ export type BbSessionSurfaceOptions = {
     loadOlderTimelineRows?: () => Promise<void> | void
     openExternal?: (href: string) => Promise<unknown> | unknown
     openWorkspaceFile?: (filePath: string) => Promise<unknown> | unknown
-    requestNativeView?: () => void
   }
   fileChanges?: BbNativeFileChange[]
   interactionRecords?: BbInteractionTimelineRecord[]

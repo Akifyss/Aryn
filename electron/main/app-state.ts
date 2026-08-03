@@ -90,7 +90,6 @@ export type PersistedAppState = {
 
 const DEFAULT_AGENT_SETTINGS: PersistedAgentSettings = {
   runningPromptEnterBehavior: 'followUp',
-  sessionView: 'unified',
 }
 
 const DEFAULT_MEO_SETTINGS: PersistedMeoSettings = {
@@ -193,12 +192,6 @@ function readRunningPromptEnterBehavior(value: unknown) {
     : DEFAULT_AGENT_SETTINGS.runningPromptEnterBehavior
 }
 
-function readAgentSessionView(value: unknown) {
-  return value === 'native' || value === 'unified'
-    ? value
-    : DEFAULT_AGENT_SETTINGS.sessionView
-}
-
 function sanitizeMeoImageFolder(imageFolder: unknown) {
   if (typeof imageFolder !== 'string') {
     return DEFAULT_MEO_SETTINGS.imageFolder
@@ -264,7 +257,6 @@ export function normalizeAppSettings(value: unknown): PersistedAppSettings {
   return {
     agent: {
       runningPromptEnterBehavior: readRunningPromptEnterBehavior(agentCandidate.runningPromptEnterBehavior),
-      sessionView: readAgentSessionView(agentCandidate.sessionView),
     },
     layoutPreference: readLayoutPreference(stateCandidate.layoutPreference),
     meo: {

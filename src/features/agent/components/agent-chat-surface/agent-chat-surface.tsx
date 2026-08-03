@@ -7,8 +7,6 @@ import {
 import {
   DownLine,
   EditLine,
-  GridLine,
-  ListCheckLine,
 } from '@mingcute/react'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
@@ -21,14 +19,10 @@ import {
   type AgentSessionTreeProps,
 } from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import { useAgentContext } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
-import {
-  CodexSessionTimeline,
-  toCodexSurfaceOptimisticMessages,
-} from '@/features/agent/components/codex-session-timeline/codex-session-timeline'
 import { shouldShowAgentNewConversationPrompt } from '@/features/agent/lib/agent-surface-state'
 import { buildBbSessionRuntimeState } from '@/features/agent/lib/bb-session-runtime-state'
+import { toBbCodexOptimisticMessages } from '@/features/agent/lib/optimistic-user-messages'
 import { formatAgentSessionLabel } from '@/features/agent/lib/session-tree'
-import { useSettingsStore } from '@/hooks/use-settings-store'
 import './styles.css'
 
 const AGENT_SESSION_MENU_POSITIONER_PROPS = {
@@ -49,8 +43,6 @@ export function AgentSessionTree(props: AgentSessionTreeProps) {
 }
 
 export function AgentChatSurface() {
-  const sessionView = useSettingsStore((state) => state.agent.sessionView)
-  const updateAgentSettings = useSettingsStore((state) => state.updateAgentSettings)
   const {
     activeOverlayPanel,
     activeSession,
@@ -63,7 +55,6 @@ export function AgentChatSurface() {
     conversationState,
     draftAssistant,
     draftThinking,
-    handleOpenSession,
     handleStartNewSession,
     iconTheme,
     isAgentLayout,
@@ -80,7 +71,6 @@ export function AgentChatSurface() {
     piWebFileChanges,
     piWebNativeSession,
     piWebOptimisticUserMessages,
-    piWebStreamingStatus,
     panelError,
     projectState,
     renderedMessages,
@@ -126,7 +116,7 @@ export function AgentChatSurface() {
     ?? 'agent-session'
   const unifiedOptimisticUserMessages = useMemo(() => {
     const messages = codexNativeSession
-      ? toCodexSurfaceOptimisticMessages(codexOptimisticUserMessages)
+      ? toBbCodexOptimisticMessages(codexOptimisticUserMessages)
       : openCodeNativeSession
         ? openCodeOptimisticUserMessages
         : piWebOptimisticUserMessages
@@ -181,9 +171,6 @@ export function AgentChatSurface() {
     stoppingPrompt,
     streamStartedAt,
   ])
-  const handleRequestNativeView = useCallback(() => {
-    updateAgentSettings({ sessionView: 'native' })
-  }, [updateAgentSettings])
   const [localOverlayRoot, setLocalOverlayRoot] = useState<HTMLDivElement | null>(null)
   const handleLocalOverlayRootRef = useCallback((node: HTMLDivElement | null) => {
     setLocalOverlayRoot(node)
@@ -309,22 +296,6 @@ export function AgentChatSurface() {
         </div>
 
         <div className='agent-threadbar-drag-spacer' aria-hidden='true' />
-        {nativeSession ? (
-          <div className='agent-threadbar-view-actions'>
-            <AppIconButton
-              type='button'
-              aria-label={sessionView === 'unified' ? '切换到原生对话视图' : '切换到统一对话视图'}
-              tooltip={sessionView === 'unified' ? '当前：统一视图' : '当前：原生视图'}
-              onClick={() => {
-                updateAgentSettings({
-                  sessionView: sessionView === 'unified' ? 'native' : 'unified',
-                })
-              }}
-            >
-              {sessionView === 'unified' ? <GridLine /> : <ListCheckLine />}
-            </AppIconButton>
-          </div>
-        ) : null}
       </div>
       <div ref={handleLocalOverlayRootRef} className='agent-local-overlay-root' />
 
@@ -358,7 +329,7 @@ export function AgentChatSurface() {
             </div>
           ) : null}
 
-          {workspacePath && nativeSession && sessionView === 'unified' ? (
+          {workspacePath && nativeSession ? (
             <BbSessionTimeline
               fileChanges={unifiedFileChanges}
               interactionRecords={unifiedInteractionRecords}
@@ -366,20 +337,10 @@ export function AgentChatSurface() {
               optimisticUserMessages={unifiedOptimisticUserMessages}
               runtimeState={unifiedRuntimeState}
               onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
-              onRequestNativeView={handleRequestNativeView}
               sessionId={unifiedSessionId}
               theme={theme}
               workspacePath={workspacePath}
             />
-          ) : workspacePath && codexNativeSession ? (
-            <div className='agent-codex-surface-stage'>
-              <CodexSessionTimeline
-                snapshot={codexNativeSession}
-                optimisticUserMessages={codexOptimisticUserMessages}
-                onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
-                workspacePath={workspacePath}
-              />
-            </div>
           ) : (
             <AgentMessageViewport
               activeSessionPath={activeSessionPath}
@@ -387,17 +348,8 @@ export function AgentChatSurface() {
               messages={renderedMessages}
               messagesScrollElement={messagesScrollElement}
               messagesScrollViewportRef={messagesScrollViewportRef}
-              onNavigateToOpenCodeSession={(sessionId) => {
-                void handleOpenSession('opencode', sessionId)
-              }}
               onOpenMessageFile={onOpenMessageFile}
               onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
-              openCodeNativeSession={openCodeNativeSession}
-              openCodeOptimisticUserMessages={openCodeOptimisticUserMessages}
-              piWebFileChanges={piWebFileChanges}
-              piWebNativeSession={piWebNativeSession}
-              piWebOptimisticUserMessages={piWebOptimisticUserMessages}
-              piWebStreamingStatus={piWebStreamingStatus}
               roundFileChangesByMessageId={roundFileChangesByMessageId}
               sessionStatus={sessionStatus}
               workspacePath={workspacePath}

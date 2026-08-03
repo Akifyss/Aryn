@@ -41,37 +41,3 @@
 .agent-message-virtual-spacer {
   flex: 0 0 auto;
 }
-
-.opencode-session-surface-host,
-.pi-web-session-surface-host {
-  width: 100%;
-  min-width: 0;
-}
-
-.agent-pi-web-session-stack {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.agent-pi-web-session-stack.has-streaming-status .aryn-pi-web-session-surface__timeline {
-  padding-bottom: 0;
-}
-
-.agent-pi-web-session-status {
-  width: min(820px, 100%);
-  margin: 0 auto;
-  padding: 0 16px;
-  box-sizing: border-box;
-}
-
-.agent-pi-web-session-status .agent-session-status {
-  margin-top: 0;
-  padding: 0;
-}
-
-.agent-native-surface-addon {
-  width: min(820px, calc(100% - 32px));
-  margin: 0 auto 16px;
-}

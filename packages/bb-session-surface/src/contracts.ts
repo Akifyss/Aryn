@@ -111,7 +111,6 @@ export type BbSessionSurfaceBridge = {
   loadOlderTimelineRows?: () => Promise<void> | void
   openExternal?: (href: string) => Promise<unknown> | unknown
   openWorkspaceFile?: (filePath: string) => Promise<unknown> | unknown
-  requestNativeView?: () => void
 }
 
 export type BbSessionSurfaceOptions = {

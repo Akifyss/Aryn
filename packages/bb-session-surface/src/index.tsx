@@ -34,7 +34,6 @@ import './index.css'
 
 type SurfaceErrorBoundaryProps = {
   children: ReactNode
-  onRequestNativeView?: () => void
   resetKey: number
 }
 
@@ -62,17 +61,23 @@ class SurfaceErrorBoundary extends Component<
     }
   }
 
+  private handleRetry = () => {
+    this.setState({ error: null })
+  }
+
   render() {
     if (!this.state.error) return this.props.children
     return (
       <div className='aryn-bb-session-surface__error' role='alert'>
         <strong>Unified view could not render this conversation.</strong>
         <span>{this.state.error.message}</span>
-        {this.props.onRequestNativeView ? (
-          <button type='button' onClick={this.props.onRequestNativeView}>
-            Switch to native view
-          </button>
-        ) : null}
+        <button
+          className='aryn-bb-session-surface__retry'
+          type='button'
+          onClick={this.handleRetry}
+        >
+          Retry unified view
+        </button>
       </div>
     )
   }
@@ -254,7 +259,6 @@ function renderSurface(
   root.render(
     <SurfaceErrorBoundary
       key={`${options.snapshot.agentId}:${options.sessionId}`}
-      onRequestNativeView={options.bridge?.requestNativeView}
       resetKey={projectionRevision}
     >
       <BbThemeProvider theme={options.theme}>

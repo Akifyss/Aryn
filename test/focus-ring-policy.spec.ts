@@ -21,7 +21,6 @@ describe('input focus ring policy', () => {
       queuedComposerCss,
       viewerControlsCss,
       fileSystemSource,
-      opencodeSurfaceCss,
       meoWebviewCss,
     ] = await Promise.all([
       readSource('src/index.css'),
@@ -33,7 +32,6 @@ describe('input focus ring policy', () => {
       readSource('src/features/agent/components/agent-queued-composer-tray/styles.css'),
       readSource('src/components/ui/document-viewer-controls/styles.css'),
       readSource('src/components/ui/file-system/file-system.tsx'),
-      readSource('packages/opencode-session-surface/src/surface.css'),
       readSource('src/vendor/meo/webview/styles.css'),
     ])
 
@@ -79,18 +77,6 @@ describe('input focus ring policy', () => {
     expect(commandInputSource).not.toContain('focus-visible:ring')
     expect(inputSource).not.toContain('focus-visible:ring')
     expect(searchFieldSource).not.toContain('focus-within:ring')
-
-    expect(opencodeSurfaceCss).toContain('Text-entry controls keep focus functional')
-    expect(opencodeSurfaceCss).toContain('input:not([type])')
-    expect(opencodeSurfaceCss).toContain(
-      "[data-component='input'] [data-slot='input-wrapper']",
-    )
-    expect(opencodeSurfaceCss).toContain(':not(:has([data-invalid]))')
-    expect(opencodeSurfaceCss).not.toContain("[data-component='text-field']")
-    expect(opencodeSurfaceCss).not.toContain(
-      ':is(.aryn-opencode-session-surface, body > .aryn-opencode-portal-theme)',
-    )
-    expect(opencodeSurfaceCss).toContain('.aryn-opencode-surface-retry:focus-visible')
 
     expect(meoWebviewCss).toMatch(
       /\.meo-native-theme \.find-input:focus\s*\{[^}]*outline:\s*none;[^}]*box-shadow:\s*none;/s,

@@ -6,12 +6,10 @@ import type { LegacyWorkspaceFileViewMode } from './workspace-files'
 export type AppTheme = 'light' | 'dark' | 'auto'
 export type AppLayoutPreference = 'agent' | 'editor'
 export type AgentRunningPromptEnterBehavior = AgentRunningPromptBehavior
-export type AgentSessionView = 'unified' | 'native'
 export type MeoOutlinePosition = 'left' | 'right'
 
 export type PersistedAgentSettings = {
   runningPromptEnterBehavior: AgentRunningPromptEnterBehavior
-  sessionView: AgentSessionView
 }
 
 export type PersistedMeoSettings = {

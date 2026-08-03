@@ -3,19 +3,14 @@ import { findLatestOpenableAgentFileChange } from '@/features/agent/auto-open-fi
 import {
   deriveAgentSessionPhase,
   formatAgentSessionStatus,
-  type AgentSessionPhase,
 } from '@/features/agent/components/agent-session-status/agent-session-status'
 import { mergeFileChangesByPath } from '@/features/agent/file-change-utils'
-import { getOpenCodeNativeRenderKey } from '@/features/agent/lib/opencode-timeline'
 import { buildRoundFileChangesByMessageId } from '@/features/agent/round-file-changes'
 import type { AgentLiveToolState } from '@/features/agent/runtime/use-agent-runtime-events'
 import type {
   AgentRuntimeState,
   AgentSessionSnapshot,
   AgentSidebarMessage,
-  CodexNativeSessionSnapshot,
-  OpenCodeNativeSessionSnapshot,
-  PiWebNativeSessionSnapshot,
 } from '@/features/agent/types'
 import type { AgentMessageViewportContentRevisions } from './use-agent-message-viewport-scroll'
 
@@ -104,11 +99,8 @@ type UseAgentMessagePresentationOptions = {
     visible: AgentRuntimeState
   }
   session: {
-    codexNative: CodexNativeSessionSnapshot | null
-    openCodeNative: OpenCodeNativeSessionSnapshot | null
     optimisticUserMessages: AgentSidebarMessage[]
     persistedMessages: AgentSidebarMessage[]
-    piWebNative: PiWebNativeSessionSnapshot | null
     snapshot: AgentSessionSnapshot | null
   }
   workspacePath: string | null
@@ -147,20 +139,18 @@ export function useAgentMessagePresentation({
       || Boolean(message.thinkingText?.trim())
     )
   ))
-  const sessionPhase = useMemo(() => runtime.visible.agentId === 'opencode'
-    ? null
-    : deriveAgentSessionPhase({
-        draftAssistant: drafts.assistant,
-        hasRunningTools: runtime.isViewingActive && runningTools.length > 0,
-        hasVisibleRunningContent,
-        isStreaming: runtime.visible.isStreaming,
-        isThinkingStreaming: drafts.isThinkingStreaming,
-        panelError,
-        pendingMessageCount: runtime.visible.pendingMessageCount,
-        retryAttempt: runtime.visible.retryAttempt,
-        runtime: runtime.visible,
-        workspacePath,
-      }), [
+  const sessionPhase = useMemo(() => deriveAgentSessionPhase({
+    draftAssistant: drafts.assistant,
+    hasRunningTools: runtime.isViewingActive && runningTools.length > 0,
+    hasVisibleRunningContent,
+    isStreaming: runtime.visible.isStreaming,
+    isThinkingStreaming: drafts.isThinkingStreaming,
+    panelError,
+    pendingMessageCount: runtime.visible.pendingMessageCount,
+    retryAttempt: runtime.visible.retryAttempt,
+    runtime: runtime.visible,
+    workspacePath,
+  }), [
     drafts.assistant,
     drafts.isThinkingStreaming,
     drafts.thinking,
@@ -190,38 +180,6 @@ export function useAgentMessagePresentation({
       sessionPhase,
     ],
   )
-  const piWebStreamingStatus = useMemo(() => {
-    if (
-      !session.piWebNative
-      || !runtime.isViewingActive
-      || !runtime.visible.isStreaming
-      || runningTools.length > 0
-    ) {
-      return null
-    }
-
-    const phase: AgentSessionPhase | null = drafts.isThinkingStreaming && !drafts.assistant.trim()
-      ? { type: 'thinking' }
-      : drafts.assistant.trim()
-        ? { type: 'streaming' }
-        : null
-
-    return phase ? formatAgentSessionStatus(phase, {
-      followUpMessageCount: runtime.visible.followUpMessageCount,
-      pendingMessageCount: runtime.visible.pendingMessageCount,
-      steeringMessageCount: runtime.visible.steeringMessageCount,
-    }) : null
-  }, [
-    drafts.assistant,
-    drafts.isThinkingStreaming,
-    runningTools.length,
-    runtime.isViewingActive,
-    runtime.visible.followUpMessageCount,
-    runtime.visible.isStreaming,
-    runtime.visible.pendingMessageCount,
-    runtime.visible.steeringMessageCount,
-    session.piWebNative,
-  ])
   const roundFileChangesByMessageId = useMemo(() => {
     const hasInFlightRound = runtime.isViewingActive && (
       runtime.liveTools.length > 0
@@ -250,15 +208,10 @@ export function useAgentMessagePresentation({
   ), [session.snapshot?.annotations.fileChangesByEntryId])
   const contentRevisions: AgentMessageViewportContentRevisions = {
     assistantDraft: drafts.assistant,
-    codexNative: session.codexNative ? String(session.codexNative.sequence) : 'none',
     fileChanges: [...roundFileChangesByMessageId.entries()]
       .flatMap(([messageId, changes]) => changes.map((change) => `${messageId}:${change.kind}:${change.filePath}`))
       .join('|'),
     liveTools: runtime.liveTools,
-    openCodeNative: getOpenCodeNativeRenderKey(session.openCodeNative),
-    piWebNative: session.piWebNative
-      ? `${session.piWebNative.messages.length}:${session.piWebNative.entryIds.at(-1) ?? ''}`
-      : 'none',
     renderedMessageCount: renderedMessages.length,
     sessionStatus: sessionStatus
       ? `${sessionStatus.label}:${sessionStatus.badges?.map((badge) => `${badge.kind}:${badge.label}`).join('|') ?? ''}`
@@ -273,7 +226,6 @@ export function useAgentMessagePresentation({
     contentRevisions,
     latestAutoOpenFileChange,
     piWebFileChanges,
-    piWebStreamingStatus,
     renderedMessages,
     roundFileChangesByMessageId,
     sessionStatus,

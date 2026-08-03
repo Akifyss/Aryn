@@ -16,11 +16,8 @@ const AGENT_MESSAGES_TRANSIENT_SCROLL_INTENT_MS = 600
 
 export type AgentMessageViewportContentRevisions = {
   assistantDraft: string
-  codexNative: string
   fileChanges: string
   liveTools: readonly unknown[]
-  openCodeNative: string
-  piWebNative: string
   renderedMessageCount: number
   sessionStatus: string
   thinkingDraft: string
@@ -43,11 +40,8 @@ export function useAgentMessageViewportScroll({
   const messagesBottomRestoreRef = useRef<AgentMessagesBottomRestoreController | null>(null)
   const {
     assistantDraft,
-    codexNative,
     fileChanges,
     liveTools,
-    openCodeNative,
-    piWebNative,
     renderedMessageCount,
     sessionStatus,
     thinkingDraft,
@@ -318,12 +312,9 @@ export function useAgentMessageViewportScroll({
   }, [
     activeSessionPath,
     assistantDraft,
-    codexNative,
     fileChanges,
     liveTools,
     messagesScrollElement,
-    openCodeNative,
-    piWebNative,
     renderedMessageCount,
     sessionStatus,
     thinkingDraft,

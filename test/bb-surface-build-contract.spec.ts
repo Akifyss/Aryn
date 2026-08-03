@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { access, readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import rootPackage from '../package.json'
 import surfacePackage from '../packages/bb-session-surface/package.json'
@@ -33,6 +33,19 @@ describe('bb unified session surface build contract', () => {
     expect(rootPackage.dependencies['@aryn/bb-session-surface']).toBe('file:packages/bb-session-surface')
     expect(config.resolve?.dedupe).toEqual(expect.arrayContaining(['react', 'react-dom']))
     expect(config.resolve?.alias?.find(({ find }) => find === '@/components/ui/bottom-anchored-scroll-body.js')).toBeUndefined()
+  })
+
+  it('does not retain provider-specific surface packages or build entry points', async () => {
+    expect(rootPackage.dependencies).not.toHaveProperty('@aryn/codex-session-surface')
+    expect(rootPackage.dependencies).not.toHaveProperty('@aryn/opencode-session-surface')
+    expect(rootPackage.dependencies).not.toHaveProperty('@aryn/pi-web-session-surface')
+    expect(rootPackage.scripts).not.toHaveProperty('build:codex-surface')
+    expect(rootPackage.scripts).not.toHaveProperty('build:opencode-surface')
+    expect(rootPackage.scripts).not.toHaveProperty('build:pi-web-surface')
+
+    await expect(access(new URL('../packages/codex-session-surface', import.meta.url))).rejects.toThrow()
+    await expect(access(new URL('../packages/opencode-session-surface', import.meta.url))).rejects.toThrow()
+    await expect(access(new URL('../packages/pi-web-session-surface', import.meta.url))).rejects.toThrow()
   })
 
   it('mounts bb timeline rows inside the exact upstream bottom-anchor owner', async () => {
@@ -119,32 +132,43 @@ describe('bb unified session surface build contract', () => {
     expect(hostSource).toContain('surfaceRef.current?.setTheme(theme)')
   })
 
-  it('defaults all native providers to the unified branch and retains native branches', async () => {
+  it('uses the bb surface as the only native-session rendering branch', async () => {
     const source = await readFile(
       new URL('../src/features/agent/components/agent-chat-surface/agent-chat-surface.tsx', import.meta.url),
       'utf8',
     )
 
-    expect(source).toContain("sessionView === 'unified'")
+    expect(source).toContain('workspacePath && nativeSession ?')
     expect(source).toContain('<BbSessionTimeline')
-    expect(source).toContain('<CodexSessionTimeline')
-    expect(source).toContain('openCodeNativeSession={openCodeNativeSession}')
-    expect(source).toContain('piWebNativeSession={piWebNativeSession}')
+    expect(source).not.toContain('sessionView')
+    expect(source).not.toContain('<CodexSessionTimeline')
+    expect(source).not.toContain('<OpenCodeSessionTimeline')
+    expect(source).not.toContain('<PiWebSessionTimeline')
   })
 
-  it('keeps shared loading, retry, error, and native fallback controls around every unified provider', async () => {
-    const source = await readFile(
-      new URL('../src/features/agent/components/bb-session-timeline/bb-session-timeline.tsx', import.meta.url),
-      'utf8',
-    )
+  it('keeps shared loading, retry, and error controls around every unified provider', async () => {
+    const [hostSource, surfaceSource] = await Promise.all([
+      readFile(
+        new URL('../src/features/agent/components/bb-session-timeline/bb-session-timeline.tsx', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../packages/bb-session-surface/src/index.tsx', import.meta.url),
+        'utf8',
+      ),
+    ])
 
-    expect(source).toContain('data-bb-agent-id={snapshot.agentId}')
-    expect(source).toContain("aria-busy={isLoading ? 'true' : undefined}")
-    expect(source).toContain("role='status'")
-    expect(source).toContain("role='alert'")
-    expect(source).toContain('setLoadRevision((value) => value + 1)')
-    expect(source).toContain('onClick={onRequestNativeView}')
-    expect(source).toContain('surface?.dispose()')
-    expect(source).toContain('container.replaceChildren()')
+    expect(hostSource).toContain('data-bb-agent-id={snapshot.agentId}')
+    expect(hostSource).toContain("aria-busy={isLoading ? 'true' : undefined}")
+    expect(hostSource).toContain("role='status'")
+    expect(hostSource).toContain("role='alert'")
+    expect(hostSource).toContain('setLoadRevision((value) => value + 1)')
+    expect(hostSource).not.toContain('requestNativeView')
+    expect(hostSource).not.toContain('onRequestNativeView')
+    expect(hostSource).toContain('surface?.dispose()')
+    expect(hostSource).toContain('container.replaceChildren()')
+    expect(surfaceSource).toContain('Retry unified view')
+    expect(surfaceSource).toContain('onClick={this.handleRetry}')
+    expect(surfaceSource).not.toContain('Switch to native view')
   })
 })

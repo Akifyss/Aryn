@@ -54,14 +54,6 @@
   -webkit-app-region: drag;
 }
 
-.agent-threadbar-view-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
-}
-
 .agent-session-trigger {
   width: 100%;
   flex: 0 1 auto;
@@ -192,13 +184,4 @@
   .agent-session-trigger-arrow {
     transition: none;
   }
-}
-
-.agent-codex-surface-stage {
-  display: flex;
-  flex: 1;
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
 }

@@ -152,7 +152,6 @@ type BbSessionTimelineProps = {
   fileChanges?: BbNativeFileChange[]
   interactionRecords?: BbInteractionTimelineRecord[]
   onOpenWorkspaceFile?: (filePath: string) => void
-  onRequestNativeView: () => void
   optimisticUserMessages?: BbOptimisticUserMessage[]
   runtimeState?: BbSessionRuntimeState
   sessionId: string
@@ -165,7 +164,6 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
   fileChanges = [],
   interactionRecords = [],
   onOpenWorkspaceFile,
-  onRequestNativeView,
   optimisticUserMessages = [],
   runtimeState = {},
   sessionId,
@@ -177,7 +175,6 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
   const fileChangesRef = useRef(fileChanges)
   const interactionRecordsRef = useRef(interactionRecords)
   const onOpenWorkspaceFileRef = useRef(onOpenWorkspaceFile)
-  const onRequestNativeViewRef = useRef(onRequestNativeView)
   const optimisticMessagesRef = useRef(optimisticUserMessages)
   const runtimeStateRef = useRef(runtimeState)
   const themeRef = useRef(theme)
@@ -211,8 +208,7 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
 
   useEffect(() => {
     onOpenWorkspaceFileRef.current = onOpenWorkspaceFile
-    onRequestNativeViewRef.current = onRequestNativeView
-  }, [onOpenWorkspaceFile, onRequestNativeView])
+  }, [onOpenWorkspaceFile])
 
   useEffect(() => {
     fileChangesRef.current = fileChanges
@@ -374,7 +370,6 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
         return window.appApi.openExternalLink(href)
       },
       openWorkspaceFile: (filePath) => onOpenWorkspaceFileRef.current?.(filePath),
-      requestNativeView: () => onRequestNativeViewRef.current(),
     }
 
     void Promise.all([ensureSurfaceStyles(), loadSurfaceModule()]).then(([, module]) => {
@@ -432,13 +427,6 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
                 onClick={() => setLoadRevision((value) => value + 1)}
               >
                 重新加载
-              </button>
-              <button
-                className='agent-status-action'
-                type='button'
-                onClick={onRequestNativeView}
-              >
-                切换到原生视图
               </button>
             </div>
           </div>

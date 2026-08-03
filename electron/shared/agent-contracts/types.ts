@@ -23,6 +23,28 @@ export type PiWebNativeSessionSnapshot = {
   sessionId: string
 }
 
+export type PiWebOptimisticUserMessage = {
+  attachments?: ReadonlyArray<Record<string, unknown>>
+  baselineUserMessageIds?: ReadonlyArray<string>
+  content: unknown
+  id?: string
+  timestamp: number
+}
+
+export type OpenCodeOptimisticUserMessage = {
+  attachments?: Array<{
+    fileName: string
+    mimeType?: string
+    partId: string
+    url: string
+  }>
+  baselineUserMessageIds?: ReadonlyArray<string>
+  id: string
+  text: string
+  textPartId: string
+  timestamp: number
+}
+
 export type OpenCodeSurfaceRequest =
   | { method: 'app.agents' }
   | { method: 'provider.list' }

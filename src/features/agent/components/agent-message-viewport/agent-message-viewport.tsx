@@ -1,9 +1,4 @@
 import { useMemo } from 'react'
-import type { OpenCodeOptimisticUserMessage } from '@aryn/opencode-session-surface'
-import type {
-  PiWebNativeSessionSnapshot,
-  PiWebOptimisticUserMessage,
-} from '@aryn/pi-web-session-surface'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import {
   AgentMessageBubble,
@@ -17,12 +12,9 @@ import {
   AgentVirtualMessageList,
   type AgentVirtualMessageListItem,
 } from './agent-virtual-message-list'
-import { OpenCodeSessionTimeline } from '@/features/agent/components/opencode-session-timeline'
-import { PiWebSessionTimeline } from '@/features/agent/components/pi-web-session-timeline'
 import type {
   AgentMessageFileChange,
   AgentSidebarMessage,
-  OpenCodeNativeSessionSnapshot,
 } from '@/features/agent/types'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
 import './styles.css'
@@ -35,15 +27,8 @@ type AgentMessageViewportProps = {
   messages: AgentSidebarMessage[]
   messagesScrollElement: HTMLDivElement | null
   messagesScrollViewportRef: (element: HTMLDivElement | null) => void
-  onNavigateToOpenCodeSession: (sessionId: string) => void
   onOpenMessageFile?: (filePath: string, changeKind: AgentMessageFileChange['kind']) => void
   onOpenWorkspaceFile?: (filePath: string) => void
-  openCodeNativeSession: OpenCodeNativeSessionSnapshot | null
-  openCodeOptimisticUserMessages: OpenCodeOptimisticUserMessage[]
-  piWebFileChanges: AgentMessageFileChange[]
-  piWebNativeSession: PiWebNativeSessionSnapshot | null
-  piWebOptimisticUserMessages: PiWebOptimisticUserMessage[]
-  piWebStreamingStatus: AgentSessionStatus | null
   roundFileChangesByMessageId: ReadonlyMap<string, AgentMessageFileChange[]>
   sessionStatus: AgentSessionStatus | null
   workspacePath: string | null
@@ -90,15 +75,8 @@ export function AgentMessageViewport({
   messages,
   messagesScrollElement,
   messagesScrollViewportRef,
-  onNavigateToOpenCodeSession,
   onOpenMessageFile,
   onOpenWorkspaceFile,
-  openCodeNativeSession,
-  openCodeOptimisticUserMessages,
-  piWebFileChanges,
-  piWebNativeSession,
-  piWebOptimisticUserMessages,
-  piWebStreamingStatus,
   roundFileChangesByMessageId,
   sessionStatus,
   workspacePath,
@@ -149,50 +127,10 @@ export function AgentMessageViewport({
     >
       <div
         className={`agent-messages${shouldVirtualizeMessages ? ' agent-messages-virtual' : ''}`}
-        data-agent-virtual-enabled={openCodeNativeSession || piWebNativeSession
-          ? undefined
-          : (shouldVirtualizeMessages ? 'true' : 'false')}
-        data-agent-virtual-total-items={openCodeNativeSession || piWebNativeSession
-          ? undefined
-          : virtualMessageItems.length}
+        data-agent-virtual-enabled={shouldVirtualizeMessages ? 'true' : 'false'}
+        data-agent-virtual-total-items={virtualMessageItems.length}
       >
-        {openCodeNativeSession ? (
-          <OpenCodeSessionTimeline
-            sessionID={activeSessionPath!}
-            workspacePath={workspacePath!}
-            optimisticUserMessages={openCodeOptimisticUserMessages}
-            onNavigateToSession={onNavigateToOpenCodeSession}
-            onOpenWorkspaceFile={onOpenWorkspaceFile}
-          />
-        ) : piWebNativeSession ? (
-          <>
-            <div
-              className={`agent-pi-web-session-stack${piWebStreamingStatus ? ' has-streaming-status' : ''}`}
-            >
-              <PiWebSessionTimeline
-                snapshot={piWebNativeSession}
-                workspacePath={workspacePath!}
-                optimisticUserMessages={piWebOptimisticUserMessages}
-                onOpenWorkspaceFile={onOpenWorkspaceFile}
-              />
-              {piWebStreamingStatus ? (
-                <div className='agent-pi-web-session-status'>
-                  <AgentSessionStatusBubble status={piWebStreamingStatus} />
-                </div>
-              ) : null}
-            </div>
-            {piWebFileChanges.length > 0 ? (
-              <div className='agent-message-stack agent-native-surface-addon'>
-                <AgentMessageFileCards
-                  fileChanges={piWebFileChanges}
-                  iconTheme={iconTheme}
-                  onOpenFile={onOpenMessageFile}
-                  workspacePath={workspacePath}
-                />
-              </div>
-            ) : null}
-          </>
-        ) : shouldVirtualizeMessages ? (
+        {shouldVirtualizeMessages ? (
           <AgentVirtualMessageList
             activeSessionPath={activeSessionPath}
             items={virtualMessageItems}

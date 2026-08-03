@@ -9,7 +9,7 @@ import type {
  *
  * OpenCode message grouping, tool presentation, diffs, errors, and status are
  * deliberately not projected here. Those behaviors live in the vendored
- * official OpenCode session surface under packages/opencode-session-surface.
+ * OpenCode snapshot adapter consumed by the unified bb session surface.
  */
 export function getOpenCodeUserTextPart(record: OpenCodeNativeMessageRecord) {
   if (record.info.role !== 'user') return null
