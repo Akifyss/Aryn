@@ -40,6 +40,7 @@
 
 ## Codex Computer Use 调试
 
+- 未经用户明确允许，不得使用 Computer Use；如认为需要使用，必须先向用户报告用途和范围，并取得明确许可。
 - 用于观察和操作当前真实桌面窗口，适合快速确认 UI 状态或复查交互结果。
 - 基本流程：先用 `mcp__computer_use__list_apps` 找到当前运行的开发窗口，通常是 `Electron`（打包版本可能是 `Aryn`）；再用 `mcp__computer_use__get_app_state` 读取截图和 accessibility tree；需要交互时优先用 element index 点击，操作后再次读取状态确认。
 - 注意确认当前窗口对应的是最新代码/HMR 状态；不要只凭截图判断，尽量同时核对 accessibility tree。
