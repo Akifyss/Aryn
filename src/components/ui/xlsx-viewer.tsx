@@ -1158,7 +1158,7 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
                   <span className="truncate">{sheet.name}</span>
                 </BaseTabs.Tab>
               ))}
-              <BaseTabs.Indicator className="absolute bottom-0 left-0 -z-1 h-(--active-tab-height) w-(--active-tab-width) translate-x-(--active-tab-left) -translate-y-(--active-tab-bottom) rounded-md bg-[var(--background-primary)] shadow-sm/5 transition-[width,translate] duration-200 ease-in-out" />
+              <BaseTabs.Indicator className="absolute bottom-0 left-0 -z-1 h-(--active-tab-height) w-(--active-tab-width) translate-x-(--active-tab-left) -translate-y-(--active-tab-bottom) rounded-md bg-[var(--background-primary)] shadow-sm transition-[width,translate] duration-200 ease-in-out" />
             </BaseTabs.List>
           </div>
         </AppScrollArea>
@@ -1169,7 +1169,7 @@ const WorkbookSheetTabsInner = React.memo(function WorkbookSheetTabsInner({
       previewThumbnail
         ? createPortal(
             <div
-              className="pointer-events-none fixed z-40 translate-y-0 overflow-hidden rounded-lg border bg-[color-mix(in_oklab,var(--background-primary)_95%,transparent)] opacity-100 shadow-xl backdrop-blur-md transition-[opacity,transform] duration-100"
+              className="smooth-shadow-ring-md pointer-events-none fixed z-40 translate-y-0 overflow-hidden rounded-lg bg-[color-mix(in_oklab,var(--background-primary)_95%,transparent)] opacity-100 backdrop-blur-md transition-[opacity,transform] duration-100"
               style={{
                 left: previewPosition.left,
                 top: previewPosition.top,

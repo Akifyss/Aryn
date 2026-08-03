@@ -1,4 +1,7 @@
 .app-tooltip {
+  --shadow-overlay:
+    var(--shadow-xs),
+    0 0 0 1px var(--smooth-ring-color);
   z-index: var(--app-z-tooltip);
   pointer-events: none;
 }

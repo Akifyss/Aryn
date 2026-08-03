@@ -1,0 +1,5 @@
+.app-toast-region {
+  --shadow-overlay:
+    var(--shadow-sm),
+    0 0 0 1px var(--smooth-ring-color);
+}

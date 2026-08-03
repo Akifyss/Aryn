@@ -95,7 +95,7 @@ function DocxAnnotationCard({
   return (
     <div
       style={cardStyle}
-      className="pointer-events-auto box-border flex flex-col gap-2 rounded-lg border border-[var(--border-secondary)] p-2 shadow-sm"
+      className="smooth-shadow-ring-sm pointer-events-auto box-border flex flex-col gap-2 rounded-lg p-2"
     >
       <div className="flex min-w-0 items-start justify-between gap-2">
         <div className="min-w-0 text-[11px] leading-tight font-medium text-[var(--foreground-secondary)]">

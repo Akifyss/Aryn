@@ -66,7 +66,7 @@ function cn(...values: Array<string | false | null | undefined>) {
 }
 
 const FILE_SYSTEM_POPOVER_SURFACE_CLASSNAME =
-  "z-[82] min-w-32 rounded-[14px] border border-[var(--border-primary)] bg-[var(--overlay)] p-[7px] text-[var(--overlay-foreground)] shadow-[0_24px_64px_rgba(15,23,42,0.18)] backdrop-blur-[22px] outline-none"
+  "smooth-shadow-ring-sm z-[82] min-w-32 rounded-[14px] bg-[var(--overlay)] p-[7px] text-[var(--overlay-foreground)] backdrop-blur-[22px] outline-none"
 
 type SystemIconComponent = React.ElementType<{
   className?: string
@@ -3554,7 +3554,7 @@ function FileSystemSearchField({
   const input = (
     <div
       className={cn(
-        "relative flex h-8 min-w-0 flex-1 items-center rounded-[8px] border border-[var(--border-primary)] bg-[var(--overlay)] text-sm text-[var(--foreground-primary)] shadow-xs/5 transition-shadow outline-none not-dark:bg-clip-padding before:pointer-events-none before:absolute before:inset-0 before:rounded-[7px] before:shadow-[0_1px_color-mix(in_oklab,var(--foreground-primary)_4%,transparent)] dark:bg-[color-mix(in_oklab,var(--border-primary)_32%,transparent)] dark:before:shadow-[0_-1px_color-mix(in_oklab,var(--foreground-primary)_6%,transparent)]",
+        "relative flex h-8 min-w-0 flex-1 items-center rounded-[8px] border border-[var(--border-primary)] bg-[var(--overlay)] text-sm text-[var(--foreground-primary)] shadow-xs transition-shadow outline-none not-dark:bg-clip-padding before:pointer-events-none before:absolute before:inset-0 before:rounded-[7px] before:shadow-[0_1px_color-mix(in_oklab,var(--foreground-primary)_4%,transparent)] dark:bg-[color-mix(in_oklab,var(--border-primary)_32%,transparent)] dark:before:shadow-[0_-1px_color-mix(in_oklab,var(--foreground-primary)_6%,transparent)]",
         isInline && "max-w-56"
       )}
     >

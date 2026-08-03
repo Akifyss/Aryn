@@ -13,7 +13,7 @@
   max-width: min(var(--app-menu-popup-max-width), calc(100vw - 16px));
   max-height: min(var(--app-menu-popup-max-height), calc(100vh - 16px));
   padding: var(--app-menu-content-padding);
-  border: 1px solid var(--border-primary);
+  border: 0;
   border-radius: var(--app-menu-popup-radius);
   outline: none;
   background: var(--overlay);

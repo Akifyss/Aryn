@@ -1,5 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap");
 @import "tailwindcss" source("./");
+@import "shadow-plugin";
 @import "@heroui/styles";
 
 @theme {
@@ -7,14 +8,12 @@
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-heading: "Cormorant Garamond", serif;
 
-  --shadow-2xs: 0 1px rgb(0 0 0 / 0.05);
-  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-  --shadow-3xl: 0 35px 35px rgb(0 0 0 / 0.25);
+  --shadow-xs: var(--smooth-shadow-xs);
+  --shadow-sm: var(--smooth-shadow-sm);
+  --shadow-md: var(--smooth-shadow-md);
+  --shadow-lg: var(--smooth-shadow-lg);
+  --shadow-xl: var(--smooth-shadow-xl);
+  --shadow-2xl: var(--smooth-shadow-2xl);
   --shadow-none: 0 0 #0000;
 }
 
@@ -41,7 +40,9 @@
   --app-menu-popup-max-width: 360px;
   --app-menu-popup-max-height: 520px;
   --app-menu-popup-radius: calc(var(--app-item-row-radius) + var(--app-menu-content-padding));
-  --app-menu-popup-shadow: var(--shadow-md);
+  --app-menu-popup-shadow:
+    var(--shadow-sm),
+    0 0 0 1px var(--smooth-ring-color);
   --app-z-panel-resize: 15;
   --app-z-panel-toggle-underlay: 20;
   --app-z-drawer-layer: 28;
@@ -56,7 +57,9 @@
   --dialog-popup-transition-duration: 100ms;
   --dialog-popup-transition-easing: ease-out;
   --dialog-radius: var(--radius-2xl);
-  --dialog-shadow: var(--shadow-2xl);
+  --dialog-shadow:
+    var(--shadow-md),
+    0 0 0 1px var(--smooth-ring-color);
 }
 
 :root,

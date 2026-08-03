@@ -135,13 +135,23 @@ describe('shared application dialogs', () => {
     expect(dialogCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(indexCss.match(/--app-z-modal-layer: 50;/g)).toHaveLength(1)
     expect(indexCss.match(/--dialog-radius: var\(--radius-2xl\);/g)).toHaveLength(1)
-    expect(indexCss.match(/--dialog-shadow: var\(--shadow-2xl\);/g)).toHaveLength(1)
+    expect(
+      indexCss.match(
+        /--dialog-shadow:\s*\n\s*var\(--shadow-md\),\s*\n\s*0 0 0 1px var\(--smooth-ring-color\);/g,
+      ),
+    ).toHaveLength(1)
     expect(indexCss.match(/--backdrop: rgb\(0 0 0 \/ 0\.25\);/g)).toHaveLength(1)
     expect(indexCss.match(/--backdrop: rgb\(0 0 0 \/ 0\.5\);/g)).toHaveLength(1)
     expect(dialogCss.match(/z-index: var\(--app-z-modal-layer\);/g)).toHaveLength(2)
     expect(dialogCss).toContain('background: var(--backdrop);')
     expect(dialogCss).toContain('border-radius: var(--dialog-radius);')
     expect(dialogCss).toContain('box-shadow: var(--dialog-shadow);')
+    expect(dialogCss).toMatch(
+      /\.app-dialog-popup,\s*\n\.app-alert-dialog-popup\s*\{[^}]*border:\s*0;/s,
+    )
+    expect(dialogCss).not.toMatch(
+      /\.app-dialog-popup,\s*\n\.app-alert-dialog-popup\s*\{[^}]*border:\s*1px/s,
+    )
     expect(dialogCss).toContain('background: var(--danger-soft);')
     expect(dialogCss).toContain('background: var(--warning-soft);')
     expect(dialogCss).toMatch(

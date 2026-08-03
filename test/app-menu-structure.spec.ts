@@ -396,11 +396,18 @@ describe('shared application menu', () => {
     )
     expect(indexCss).toContain('--app-menu-popup-max-width: 360px;')
     expect(indexCss).toContain('--app-menu-popup-max-height: 520px;')
-    expect(indexCss).toContain('--app-menu-popup-shadow: var(--shadow-md);')
+    expect(indexCss).toContain(
+      [
+        '--app-menu-popup-shadow:',
+        '    var(--shadow-sm),',
+        '    0 0 0 1px var(--smooth-ring-color);',
+      ].join('\n'),
+    )
     expect(indexCss).toContain('--app-z-menu: 82;')
     expect(appMenuCss).toMatch(
-      /\.app-menu-surface\s*\{[^}]*padding:\s*var\(--app-menu-content-padding\);[^}]*border-radius:\s*var\(--app-menu-popup-radius\);[^}]*box-shadow:\s*var\(--app-menu-popup-shadow\);/,
+      /\.app-menu-surface\s*\{[^}]*padding:\s*var\(--app-menu-content-padding\);[^}]*border:\s*0;[^}]*border-radius:\s*var\(--app-menu-popup-radius\);[^}]*box-shadow:\s*var\(--app-menu-popup-shadow\);/,
     )
+    expect(appMenuCss).not.toMatch(/\.app-menu-surface\s*\{[^}]*border:\s*1px/)
     expect(appMenuCss).toContain('z-index: var(--app-menu-z-index, var(--app-z-menu));')
     expect(appMenuCss).toContain('max-width: min(var(--app-menu-popup-max-width), calc(100vw - 16px));')
     expect(appMenuCss).toContain('max-height: min(var(--app-menu-popup-max-height), calc(100vh - 16px));')

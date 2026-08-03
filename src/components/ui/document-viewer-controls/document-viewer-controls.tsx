@@ -27,7 +27,7 @@ import {
 import { cn } from "@/components/ui/viewer-utils";
 
 const VIEWER_POPOVER_SURFACE =
-  "z-50 rounded-lg border border-[var(--border-primary)] bg-[var(--overlay)] p-4 text-[var(--overlay-foreground)] shadow-lg outline-none data-ending-style:scale-98 data-ending-style:opacity-0 data-starting-style:scale-98 data-starting-style:opacity-0";
+  "smooth-shadow-ring-sm z-50 rounded-lg bg-[var(--overlay)] p-4 text-[var(--overlay-foreground)] outline-none data-ending-style:scale-98 data-ending-style:opacity-0 data-starting-style:scale-98 data-starting-style:opacity-0";
 const ZOOM_VALUE_EPSILON = 0.000001;
 
 export function ViewerToolbarButton({

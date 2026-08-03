@@ -29,7 +29,7 @@
   max-height: calc(var(--visual-viewport-height, 100dvh) - 32px);
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border-primary);
+  border: 0;
   border-radius: var(--dialog-radius);
   outline: none;
   background: var(--overlay);

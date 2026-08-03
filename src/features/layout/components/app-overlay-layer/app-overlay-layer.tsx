@@ -8,6 +8,7 @@ import {
   ProjectMenuLayer,
   type ProjectMenuLayerConfiguration,
 } from '@/features/workspace/components/project-menu/project-menu-layer'
+import './styles.css'
 
 type AppOverlayLayerProps = {
   commandPalette: ComponentProps<typeof CommandPalette>
@@ -26,7 +27,7 @@ export function AppOverlayLayer({
 }: AppOverlayLayerProps) {
   return (
     <>
-      <Toast.Provider placement='bottom end' />
+      <Toast.Provider className='app-toast-region' placement='bottom end' />
       <ProjectMenuLayer
         configuration={projectMenu}
         surface='global'
