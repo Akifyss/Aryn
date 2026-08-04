@@ -74,6 +74,44 @@
   font-size: 13px;
 }
 
+.agent-session-tree-load-indicator {
+  display: inline-flex;
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--foreground-secondary);
+  line-height: 0;
+}
+
+.agent-session-tree-load-indicator.is-loading {
+  opacity: 0;
+  animation: agent-session-tree-loading-reveal 0s linear 120ms forwards;
+}
+
+.agent-session-tree-load-indicator.has-error {
+  color: var(--warning);
+}
+
+.agent-session-tree-load-indicator > svg,
+.agent-session-tree-load-indicator > .iconify {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
+.agent-flat-session-loading-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@keyframes agent-session-tree-loading-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
 .agent-session-rename-trigger {
   flex: 1;
   min-width: 0;

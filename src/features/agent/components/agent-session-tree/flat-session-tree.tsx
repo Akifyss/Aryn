@@ -14,6 +14,7 @@ import {
   summarizeAgentProjectSessionBucket,
   type AgentSessionTreeItem,
 } from '@/features/agent/lib/session-tree'
+import { AgentSessionTreeLoadIndicator } from './load-indicator'
 import { AgentSessionTreeRow } from './session-row'
 import type { AgentSessionTreeViewProps } from './types'
 
@@ -53,7 +54,8 @@ export function FlatAgentSessionTree({
     ? flattenAgentProjectSessions(currentProjectBucket)
     : agentState.sessions.map((session): AgentSessionTreeItem => ({ ...session, agentId: selectedAgentId }))
   const loadSummary = summarizeAgentProjectSessionBucket(currentProjectBucket, sessionTreeAgentIds)
-  const isSessionListLoading = Boolean(currentProject && (!loadSummary.hasLoaded || loadSummary.isLoading))
+  const isSessionListLoading = Boolean(currentProject && loadSummary.isLoading)
+  const isWaitingForProjectSessions = Boolean(currentProject && !loadSummary.hasLoaded)
 
   useEffect(() => {
     if (currentProject) void loadProjectSessions(currentProject)
@@ -82,10 +84,22 @@ export function FlatAgentSessionTree({
         contentClassName='agent-session-tree-scroll-content'
         viewportClassName='agent-session-tree-scroll-viewport'
       >
-        <TreeList id={id} className='agent-project-list agent-flat-session-list' aria-label='Agent sessions'>
-          {isSessionListLoading ? <TreeStatusItem>加载中</TreeStatusItem> : null}
-          {loadSummary.errors.length > 0 ? <TreeStatusItem tone='danger'>部分 Agent 无法加载</TreeStatusItem> : null}
-          {!isSessionListLoading && sessions.length === 0 ? (
+        <TreeList
+          id={id}
+          className='agent-project-list agent-flat-session-list'
+          aria-busy={isSessionListLoading || undefined}
+          aria-label='Agent sessions'
+        >
+          {isSessionListLoading && sessions.length === 0 ? (
+            <TreeStatusItem className='agent-flat-session-loading-status' role='status'>
+              <AgentSessionTreeLoadIndicator errorCount={0} isDecorative isLoading />
+              <span>正在加载会话…</span>
+            </TreeStatusItem>
+          ) : null}
+          {loadSummary.errors.length > 0 ? (
+            <TreeStatusItem role='status' tone='danger'>部分 Agent 会话加载失败</TreeStatusItem>
+          ) : null}
+          {!isSessionListLoading && !isWaitingForProjectSessions && loadSummary.errors.length === 0 && sessions.length === 0 ? (
             <TreeStatusItem>暂无对话</TreeStatusItem>
           ) : sessions.map((session) => {
             const label = formatAgentSessionLabel(session)

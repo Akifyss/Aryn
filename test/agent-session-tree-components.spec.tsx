@@ -5,6 +5,7 @@ import {
   AgentSessionTreeView,
   type AgentSessionTreeController,
 } from '@/features/agent/components/agent-session-tree/agent-session-tree'
+import { AgentSessionTreeLoadIndicator } from '@/features/agent/components/agent-session-tree/load-indicator'
 import { AgentSessionTreeRow } from '@/features/agent/components/agent-session-tree/session-row'
 import type { AgentWorkspaceState } from '@/features/agent/types'
 
@@ -181,5 +182,24 @@ describe('AgentSessionTree presentation components', () => {
     expect(markup).toContain('agent-project-switch-trigger')
     expect(markup).toContain('切换项目，当前项目：Aryn')
     expect(markup).not.toContain('disabled=""')
+  })
+
+  it('reserves a stable status slot and exposes loading and failure states accessibly', () => {
+    const idleMarkup = renderToStaticMarkup(
+      <AgentSessionTreeLoadIndicator errorCount={0} isLoading={false} />,
+    )
+    const loadingMarkup = renderToStaticMarkup(
+      <AgentSessionTreeLoadIndicator errorCount={0} isLoading />,
+    )
+    const errorMarkup = renderToStaticMarkup(
+      <AgentSessionTreeLoadIndicator errorCount={2} isLoading={false} />,
+    )
+
+    expect(idleMarkup).toContain('agent-session-tree-load-indicator')
+    expect(idleMarkup).toContain('aria-hidden="true"')
+    expect(loadingMarkup).toContain('aria-label="正在加载会话…"')
+    expect(loadingMarkup).toContain('is-loading')
+    expect(errorMarkup).toContain('aria-label="2 个 Agent 的会话加载失败；收起并重新展开项目可重试"')
+    expect(errorMarkup).toContain('has-error')
   })
 })
