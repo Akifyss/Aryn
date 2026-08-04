@@ -1,11 +1,14 @@
-@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap");
 @import "tailwindcss" source("./");
 @import "shadow-plugin";
 @import "@heroui/styles";
 
 @theme {
   --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Generic monospace can resolve CJK glyphs to a serif font on Windows. */
+  --font-mono:
+    "IBM Plex Mono", "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "SF Mono", SFMono-Regular, Menlo,
+    Monaco, Consolas, "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Noto Sans SC",
+    "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
   --font-heading: "Cormorant Garamond", serif;
 
   --shadow-xs: var(--smooth-shadow-xs);

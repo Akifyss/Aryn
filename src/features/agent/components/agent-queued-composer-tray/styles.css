@@ -41,7 +41,7 @@
   width: 8px;
   overflow: hidden;
   color: color-mix(in oklab, var(--foreground-secondary) 58%, transparent);
-  font-family: 'SF Mono', 'SFMono-Regular', ui-monospace, monospace;
+  font-family: "SF Mono", SFMono-Regular, var(--font-mono);
   font-size: 11px;
   letter-spacing: -2px;
   line-height: 1;

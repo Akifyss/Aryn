@@ -1,6 +1,12 @@
-@import "@fontsource/fira-code/latin-400.css";
-@import "@fontsource/fira-code/latin-500.css";
 @import "./upstream/bb/apps/app/src/app.css";
+
+/* The host delivers Fira Code and Noto Sans SC; the remaining families keep the surface usable offline. */
+:root {
+  --font-mono:
+    "Fira Code", "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "SF Mono", SFMono-Regular, Menlo, Monaco,
+    Consolas, "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Noto Sans SC", "Microsoft YaHei UI",
+    "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+}
 
 .aryn-bb-session-surface {
   box-sizing: border-box;

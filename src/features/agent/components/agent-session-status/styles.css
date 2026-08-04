@@ -15,7 +15,8 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  font-family: 'SF Mono', 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'Fira Code', 'Menlo', ui-monospace, monospace;
+  font-family: "SF Mono", SFMono-Regular, "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "Fira Code", Menlo,
+    var(--font-mono);
   font-size: 14px;
   font-weight: 400;
   line-height: 1;
@@ -61,7 +62,8 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  font-family: 'SF Mono', 'SFMono-Regular', 'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'Fira Code', 'Menlo', ui-monospace, monospace;
+  font-family: "SF Mono", SFMono-Regular, "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "Fira Code", Menlo,
+    var(--font-mono);
   font-size: 12px;
   font-weight: 400;
   line-height: 1;
