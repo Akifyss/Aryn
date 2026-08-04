@@ -33,6 +33,11 @@ import {
 type StatefulClassName<State> = string | ((state: State) => string | undefined)
 
 export type AppMenuItemTone = 'danger' | 'default'
+/**
+ * `list` owns the shared popup inset and item-list geometry.
+ * `compound` is an edge-to-edge shell whose independent sections each apply
+ * `--app-menu-content-padding` exactly once.
+ */
 export type AppMenuLayout = 'compound' | 'list'
 export type AppMenuPopupSize = 'anchor' | 'fit' | 'lg' | 'md' | 'sm'
 export type AppMenuTriggerSize = AppButtonSize
@@ -102,7 +107,7 @@ export type AppMenuSurfaceProps = HTMLAttributes<HTMLDivElement> & {
 export const AppMenuSurface = forwardRef<HTMLDivElement, AppMenuSurfaceProps>(function AppMenuSurface(
   {
     className,
-    layout = 'compound',
+    layout = 'list',
     size = 'md',
     ...props
   },
@@ -673,7 +678,7 @@ export const AppMenuPopoverPopup = forwardRef<HTMLDivElement, AppMenuPopoverPopu
   function AppMenuPopoverPopup(
     {
       className,
-      layout = 'compound',
+      layout = 'list',
       render,
       size = 'fit',
       ...props

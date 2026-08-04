@@ -199,6 +199,7 @@ describe('shared application menu', () => {
       agentModelCss,
       agentModelSource,
       agentTypeCss,
+      appScrollAreaCss,
       appMenuCss,
       appMenuSource,
       projectMenuCss,
@@ -209,6 +210,7 @@ describe('shared application menu', () => {
       readFile(new URL('../src/features/agent/components/agent-model-cascader/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/agent/components/agent-model-cascader/agent-model-cascader.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/agent/components/agent-type-switch/styles.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/components/app-scroll-area/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/app-menu/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/app-menu/app-menu.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/components/project-menu/styles.css', import.meta.url), 'utf8'),
@@ -241,6 +243,7 @@ describe('shared application menu', () => {
     expect(projectMenuCss).not.toContain('.project-menu-list-content')
     expect(projectMenuCss).not.toContain('--app-item-font-size:')
     expect(projectMenuSource).toContain("<Menu.ScrollContent className='project-menu-project-list'>")
+    expect(projectMenuSource).toContain("className='app-menu-search-field project-menu-search'")
     expect(projectMenuSource).toContain("<Menu.List className='project-menu-actions'>")
     expect(projectMenuSource).toContain("layout={isCompoundMenu ? 'compound' : 'list'}")
     expect(projectMenuSource).toContain("size={isCompoundMenu ? 'lg' : 'sm'}")
@@ -248,7 +251,7 @@ describe('shared application menu', () => {
     expect(projectMenuSource).not.toContain('project-menu-projectless-actions')
     expect(projectMenuSource.match(/className='project-menu-section-separator'/g)).toHaveLength(1)
     expect(projectMenuSource).not.toContain('project-menu-action-section')
-    expect(projectMenuCss).toMatch(/\.project-menu\s*\{[^}]*padding:\s*0;/)
+    expect(projectMenuCss).not.toMatch(/\.project-menu\s*\{[^}]*\bpadding\s*:/)
     expect(projectMenuCss).not.toMatch(/\.project-menu\s*\{[^}]*\bwidth\s*:/)
     expect(projectMenuCss).not.toMatch(/\.project-menu\s*\{[^}]*\n\s*max-height\s*:/)
     expect(projectMenuCss).toMatch(
@@ -263,11 +266,11 @@ describe('shared application menu', () => {
     expect(projectMenuCss).toMatch(
       /\.project-menu-section-separator\s*\{[^}]*height:\s*1px;[^}]*margin:\s*0;[^}]*border:\s*0;/,
     )
-    expect(projectMenuCss).toMatch(
-      /\.project-menu-list\.app-menu-scroll-area\.app-scroll-area\s*\{[^}]*inline-size:\s*100%;[^}]*margin-inline:\s*0;/,
+    expect(projectMenuCss).not.toMatch(
+      /\.project-menu-list\.app-menu-scroll-area\.app-scroll-area\s*\{/,
     )
-    expect(projectMenuCss).toMatch(
-      /\.project-menu-list \.app-menu-scroll-viewport\.app-scroll-area-viewport\s*\{[^}]*inline-size:\s*100%;[^}]*margin-inline:\s*0;/,
+    expect(projectMenuCss).not.toMatch(
+      /\.project-menu-list \.app-menu-scroll-viewport\.app-scroll-area-viewport\s*\{[^}]*(?:inline-size|margin-inline):/,
     )
     expect(projectMenuCss).not.toContain('calc(0px - var(--app-menu-content-padding))')
     expect(agentTypeCss).not.toContain('.agent-type-switch-options-content')
@@ -276,11 +279,16 @@ describe('shared application menu', () => {
     expect(agentModelCss).not.toContain('.agent-model-cascader-list')
     expect(agentModelCss).not.toContain('--app-scroll-area-scrollbar-gap')
     expect(agentModelCss).not.toContain('--app-scroll-area-scrollbar-thickness')
-    expect(agentModelCss).toMatch(
-      /\.agent-model-cascader\s*\{[^}]*padding:\s*0;/,
-    )
+    expect(agentModelSource).toContain("className='app-menu-search-field agent-model-cascader-search'")
+    expect(agentModelCss).not.toMatch(/\.agent-model-cascader\s*\{[^}]*\bpadding\s*:/)
     expect(agentModelCss).toMatch(
       /\.agent-model-cascader-scroll \.app-menu-list\s*\{[^}]*padding:\s*0 var\(--app-menu-content-padding\) var\(--app-menu-content-padding\);/,
+    )
+    expect(appMenuCss).toMatch(
+      /\.app-menu-search-field:focus-within\s*\{[^}]*outline:\s*2px solid var\(--focus\);[^}]*outline-offset:\s*-2px;/,
+    )
+    expect(appScrollAreaCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.app-scroll-area-scrollbar,[\s\S]*\.app-scroll-area-thumb\s*\{[^}]*transition:\s*none;/,
     )
 
     for (const source of [agentMentionSource, agentModelSource]) {
@@ -360,10 +368,14 @@ describe('shared application menu', () => {
       /className=\{`agent-session-trigger[\s\S]{0,160}size='md'[\s\S]{0,80}variant='ghost'/,
     )
     expect(agentChatSource).toMatch(
-      /className='agent-floating-panel'[\s\S]{0,180}layout='compound'[\s\S]{0,80}size='lg'/,
+      /className='agent-floating-panel'[\s\S]{0,180}size='lg'/,
+    )
+    expect(agentChatSource).not.toMatch(
+      /className='agent-floating-panel'[\s\S]{0,180}layout='compound'/,
     )
     expect(agentChatCss).not.toMatch(/\.agent-floating-panel\s*\{[^}]*\bwidth\s*:/)
     expect(agentChatCss).not.toMatch(/\.agent-floating-panel\s*\{[^}]*max-height\s*:/)
+    expect(agentChatCss).not.toMatch(/\.agent-floating-panel\s*\{[^}]*\bpadding\s*:/)
     expect(agentModelSource).toMatch(
       /className='agent-model-cascader-trigger'[\s\S]{0,160}size='md'[\s\S]{0,80}variant='ghost'/,
     )
@@ -441,6 +453,21 @@ describe('shared application menu', () => {
     expect(appMenuCss).not.toMatch(/\.app-menu-surface\s*\{[^}]*\n\s*gap:/)
     expect(appMenuCss).not.toContain('--app-menu-popup-padding')
     expect(appMenuCss).toMatch(
+      /\.app-menu-surface\[data-layout='compound'\]\s*\{[^}]*padding:\s*0;/,
+    )
+    expect(appMenuCss).toMatch(
+      /\.app-menu-surface\[data-layout='compound'\] \.app-menu-scroll-area\.app-scroll-area,\s*\.app-menu-surface\[data-layout='compound'\] \.app-menu-scroll-viewport\.app-scroll-area-viewport\s*\{[^}]*inline-size:\s*100%;[^}]*margin-inline:\s*0;/,
+    )
+    expect(appMenuSource).toMatch(
+      /AppMenuSurface[\s\S]*?layout = 'list',[\s\S]*?AppMenuPopup/,
+    )
+    expect(appMenuSource).toMatch(
+      /AppMenuPopoverPopup[\s\S]*?layout = 'list',[\s\S]*?<BasePopover\.Popup/,
+    )
+    expect(appMenuCss).toMatch(
+      /\.app-menu-surface\s*\{[^}]*--tree-scroll-content-inline-padding:\s*0px;/,
+    )
+    expect(appMenuCss).toMatch(
       /\.app-menu-surface-anchor\s*\{[^}]*width:\s*var\(--anchor-width\);[^}]*max-width:\s*var\(--available-width, calc\(100vw - 16px\)\);/,
     )
     expect(appMenuCss).not.toMatch(/\.app-menu-scrollbar[^}]*\{[^}]*(?:right|inset-inline-end):/)
@@ -477,7 +504,7 @@ describe('shared application menu', () => {
     expect(documentViewerCss).not.toContain('.viewer-zoom-select-popup')
     expect(documentViewerSource).not.toContain('className="w-32 overflow-hidden p-0"')
     expect(documentViewerSource).not.toContain('className="p-1"')
-    expect(documentViewerSource).toContain('"--app-menu-popup-max-height": "384px"')
+    expect(documentViewerSource).not.toContain('--app-menu-popup-max-height')
     expect(documentViewerSource).not.toContain('"--app-menu-content-padding": "16px"')
     expect(documentViewerSource).toContain('VIEWER_POPOVER_SURFACE')
     expect(documentViewerCss).toMatch(
@@ -631,11 +658,18 @@ describe('shared application menu', () => {
       ...await collectCssFiles(new URL('../src/features/', import.meta.url)),
       ...await collectCssFiles(new URL('../src/components/ui/', import.meta.url)),
     ]
+    const businessSourceFiles = [
+      ...await collectTypeScriptFiles(new URL('../src/features/', import.meta.url)),
+      ...await collectTypeScriptFiles(new URL('../src/components/ui/', import.meta.url)),
+    ]
     const fileTypeCommandSource = fileSystemSource.slice(
       fileSystemSource.indexOf('function FileSystemFileTypeCommand'),
       fileSystemSource.indexOf('// Toolbar filter menu:'),
     )
     const prohibitedOverrides: string[] = []
+    const popupMaxWidthOverrideFiles: string[] = []
+    const inlineMenuTokenOverrideFiles: string[] = []
+    const compoundLayoutFiles: string[] = []
 
     await Promise.all(businessCssFiles.map(async (fileUrl) => {
       const source = await readFile(fileUrl, 'utf8')
@@ -643,7 +677,7 @@ describe('shared application menu', () => {
       if (
         /--app-menu-item-(?:hover|active)-background\s*:/.test(source)
         || /--app-item-(?:content-gap|content-inset|list-gap)\s*:/.test(source)
-        || /--app-menu-(?:content-padding|popup-min-width|popup-radius|popup-shadow)\s*:/.test(source)
+        || /--app-menu-(?:content-padding|popup-max-height|popup-min-width|popup-radius|popup-shadow)\s*:/.test(source)
         || /\.app-menu-list[^{]*\{[^}]*\bgap\s*:/s.test(source)
         || /\.app-menu-item[^{]*\{[^}]*\bmargin(?:-[a-z]+)?\s*:/s.test(source)
         || /--app-item-row-(?:description-min-height|height|padding-left|padding-right|radius)\s*:/.test(source)
@@ -651,9 +685,39 @@ describe('shared application menu', () => {
       ) {
         prohibitedOverrides.push(fileUrl.pathname.replace(/\\/g, '/'))
       }
+
+      if (/--app-menu-popup-max-width\s*:/.test(source)) {
+        popupMaxWidthOverrideFiles.push(fileUrl.pathname.replace(/\\/g, '/'))
+      }
+    }))
+
+    await Promise.all(businessSourceFiles.map(async (fileUrl) => {
+      const source = await readFile(fileUrl, 'utf8')
+      const sourcePath = fileUrl.pathname.replace(/\\/g, '/')
+
+      if (source.includes('--app-menu-')) {
+        inlineMenuTokenOverrideFiles.push(sourcePath)
+      }
+
+      if (
+        source.includes("layout='compound'")
+        || source.includes("layout={isCompoundMenu ? 'compound' : 'list'}")
+      ) {
+        compoundLayoutFiles.push(sourcePath)
+      }
     }))
 
     expect(prohibitedOverrides).toEqual([])
+    expect(inlineMenuTokenOverrideFiles).toEqual([])
+    expect(popupMaxWidthOverrideFiles).toHaveLength(1)
+    expect(popupMaxWidthOverrideFiles[0]).toMatch(
+      /\/src\/features\/agent\/components\/agent-model-cascader\/styles\.css$/,
+    )
+    expect(compoundLayoutFiles).toHaveLength(2)
+    expect(compoundLayoutFiles).toEqual(expect.arrayContaining([
+      expect.stringMatching(/\/src\/features\/agent\/components\/agent-model-cascader\/agent-model-cascader\.tsx$/),
+      expect.stringMatching(/\/src\/features\/workspace\/components\/project-menu\/project-menu\.tsx$/),
+    ]))
     for (const fileUrl of businessCssFiles) {
       const source = await readFile(fileUrl, 'utf8')
       expect(source, fileUrl.pathname).not.toMatch(/\.[a-z0-9-]*(?:menu|select)-positioner\b/i)
@@ -692,6 +756,7 @@ describe('shared application menu', () => {
     expect(agentSessionCss).not.toMatch(
       /\.agent-project-switch-trigger\s*\{[^}]*line-height:/,
     )
+    expect(agentSessionCss).not.toContain('--tree-scroll-content-inline-padding')
     expect(agentQueuedCss).not.toMatch(/\.agent-queued-action\s*\{/)
     expect(agentQueuedCss).not.toMatch(/\.agent-queued-action\[aria-expanded/)
     expect(agentNewPromptCss).toMatch(

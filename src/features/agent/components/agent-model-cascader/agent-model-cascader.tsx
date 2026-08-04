@@ -1055,7 +1055,7 @@ export function AgentModelCascader({
           onPointerMove={handlePointerMove}
           onPointerLeave={clearPointerIntent}
         >
-          <div className='agent-model-cascader-search'>
+          <div className='app-menu-search-field agent-model-cascader-search'>
             <SearchLine aria-hidden='true' />
             <input
               ref={searchRef}

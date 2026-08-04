@@ -233,6 +233,7 @@
 }
 
 .viewer-toolbar-select {
+  /* Stable numeric width prevents zoom-label changes from shifting neighboring controls. */
   width: 84px;
   min-width: 84px;
 }

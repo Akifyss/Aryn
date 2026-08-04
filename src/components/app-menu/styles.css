@@ -7,6 +7,8 @@
 
 .app-menu-surface {
   --app-menu-popup-min-width: 220px;
+  /* The menu surface owns the single outer inset for an embedded TreeScrollArea. */
+  --tree-scroll-content-inline-padding: 0px;
   /* Positioner variables respect viewport or custom collision boundaries; fallbacks support standalone Surface. */
   display: flex;
   box-sizing: border-box;
@@ -35,11 +37,21 @@
   -webkit-app-region: no-drag;
 }
 
+/* Compound surfaces are structural shells; their child sections own the single shared inset. */
+.app-menu-surface[data-layout='compound'] {
+  padding: 0;
+}
+
 .app-menu-list {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--app-item-list-gap);
+}
+
+.app-menu-search-field:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 
 .app-menu-surface-sm {
@@ -75,6 +87,13 @@
   inline-size: calc(100% - var(--app-menu-content-padding) - var(--app-menu-content-padding));
   margin-inline: var(--app-menu-content-padding);
   overscroll-behavior: contain;
+}
+
+/* A compound surface has no outer inset, so its section scroll areas stay edge-to-edge. */
+.app-menu-surface[data-layout='compound'] .app-menu-scroll-area.app-scroll-area,
+.app-menu-surface[data-layout='compound'] .app-menu-scroll-viewport.app-scroll-area-viewport {
+  inline-size: 100%;
+  margin-inline: 0;
 }
 
 .app-menu-item {

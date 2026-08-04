@@ -264,7 +264,6 @@ export function AgentChatSurface() {
                         className='agent-floating-panel'
                         aria-label='Select conversation'
                         finalFocus={false}
-                        layout='compound'
                         size='lg'
                       >
                         <AgentSessionTree

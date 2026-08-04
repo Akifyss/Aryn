@@ -18,7 +18,6 @@
  * sections. The surface stays edge-to-edge and each section owns one shared inset.
  */
 .project-menu {
-  padding: 0;
   /* Keep search and actions visible while a long project list scrolls. */
   --project-menu-list-max-height: 320px;
 }
@@ -101,16 +100,9 @@
   max-height: var(--project-menu-list-max-height);
 }
 
-.project-menu-list.app-menu-scroll-area.app-scroll-area {
-  inline-size: 100%;
-  margin-inline: 0;
-}
-
 .project-menu-list .app-menu-scroll-viewport.app-scroll-area-viewport {
-  inline-size: 100%;
   height: 100%;
   max-height: var(--project-menu-list-max-height);
-  margin-inline: 0;
 }
 
 .project-menu-project-list {

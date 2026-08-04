@@ -97,3 +97,10 @@
 .app-scroll-area-corner {
   background: transparent;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-scroll-area-scrollbar,
+  .app-scroll-area-thumb {
+    transition: none;
+  }
+}

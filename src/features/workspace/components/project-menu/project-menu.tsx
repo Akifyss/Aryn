@@ -164,7 +164,7 @@ export function ProjectMenu({
               <>
                 <div className='project-menu-project-section'>
                   <div className='project-menu-search-section'>
-                    <label className='project-menu-search'>
+                    <label className='app-menu-search-field project-menu-search'>
                       <SearchLine aria-hidden='true' />
                       <input
                         autoFocus

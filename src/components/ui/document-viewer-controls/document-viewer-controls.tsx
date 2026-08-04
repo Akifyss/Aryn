@@ -410,13 +410,7 @@ function ViewerZoomSelect({
           alignItemWithTrigger
           positionMethod="fixed"
         >
-          <Select.Popup
-            size="sm"
-            style={{
-              // Keep long zoom lists usable without turning the toolbar menu into a page-height panel.
-              "--app-menu-popup-max-height": "384px",
-            } as React.CSSProperties}
-          >
+          <Select.Popup size="sm">
             <Select.ScrollList>
               {items.map((item) => (
                 <Select.Item
