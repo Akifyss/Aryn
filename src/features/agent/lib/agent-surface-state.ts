@@ -7,3 +7,11 @@ export function shouldShowAgentNewConversationPrompt(
 ) {
   return selection.kind === 'new' && activeWorkspaceContext.kind !== 'conversation'
 }
+
+export function shouldShowAgentThreadbarSessionControl(
+  activeWorkspaceContext: ActiveWorkspaceContext,
+  selection: AgentSessionSelection,
+) {
+  return activeWorkspaceContext.kind !== 'conversationDraft'
+    || !shouldShowAgentNewConversationPrompt(activeWorkspaceContext, selection)
+}

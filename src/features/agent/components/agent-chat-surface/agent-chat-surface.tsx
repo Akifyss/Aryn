@@ -19,7 +19,10 @@ import {
   type AgentSessionTreeProps,
 } from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import { useAgentContext } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
-import { shouldShowAgentNewConversationPrompt } from '@/features/agent/lib/agent-surface-state'
+import {
+  shouldShowAgentNewConversationPrompt,
+  shouldShowAgentThreadbarSessionControl,
+} from '@/features/agent/lib/agent-surface-state'
 import { buildBbSessionRuntimeState } from '@/features/agent/lib/bb-session-runtime-state'
 import { toBbCodexOptimisticMessages } from '@/features/agent/lib/optimistic-user-messages'
 import { formatAgentSessionLabel } from '@/features/agent/lib/session-tree'
@@ -85,6 +88,10 @@ export function AgentChatSurface() {
     workspacePath,
   } = useAgentContext()
   const isNewConversation = shouldShowAgentNewConversationPrompt(
+    activeWorkspaceContext,
+    activeSessionSelection,
+  )
+  const showThreadbarSessionControl = shouldShowAgentThreadbarSessionControl(
     activeWorkspaceContext,
     activeSessionSelection,
   )
@@ -213,83 +220,85 @@ export function AgentChatSurface() {
         <div className='agent-threadbar-leading'>
           {isAgentLayout ? threadbarNewButton : null}
 
-          <div className='agent-session-select'>
-            {canOpenSessionMenu ? (
-              <Menu.Root
-                modal={false}
-                open={activeOverlayPanel === 'sessions'}
-                onOpenChange={(open, details) => {
-                  if (open) {
-                    setActiveOverlayPanel('sessions')
-                    return
-                  }
+          {showThreadbarSessionControl ? (
+            <div className='agent-session-select'>
+              {canOpenSessionMenu ? (
+                <Menu.Root
+                  modal={false}
+                  open={activeOverlayPanel === 'sessions'}
+                  onOpenChange={(open, details) => {
+                    if (open) {
+                      setActiveOverlayPanel('sessions')
+                      return
+                    }
 
-                  if (
-                    details.reason === 'outside-press'
-                    && isAgentTreeMenuEventTarget(details.event.target)
-                  ) {
-                    details.cancel()
-                    return
-                  }
+                    if (
+                      details.reason === 'outside-press'
+                      && isAgentTreeMenuEventTarget(details.event.target)
+                    ) {
+                      details.cancel()
+                      return
+                    }
 
-                  if (shouldCloseClickOpenedMenu(details)) {
-                    setActiveOverlayPanel(null)
-                  } else {
-                    details.cancel()
-                  }
-                }}
-              >
-                <Menu.Trigger
-                  aria-controls='agent-session-tree-floating-panel'
-                  className={`agent-session-trigger ${activeOverlayPanel === 'sessions' ? 'is-open' : ''}`}
-                  size='md'
-                  variant='ghost'
+                    if (shouldCloseClickOpenedMenu(details)) {
+                      setActiveOverlayPanel(null)
+                    } else {
+                      details.cancel()
+                    }
+                  }}
                 >
+                  <Menu.Trigger
+                    aria-controls='agent-session-tree-floating-panel'
+                    className={`agent-session-trigger ${activeOverlayPanel === 'sessions' ? 'is-open' : ''}`}
+                    size='md'
+                    variant='ghost'
+                  >
+                    <span className='agent-select-current'>
+                      {activeSessionSelectLabel}
+                    </span>
+                    <DownLine
+                      aria-hidden='true'
+                      className='agent-session-trigger-arrow'
+                    />
+                  </Menu.Trigger>
+                  {sessionMenuPortalTarget ? (
+                    <Menu.Portal container={sessionMenuPortalTarget}>
+                      <Menu.Positioner
+                        align='start'
+                        {...AGENT_SESSION_MENU_POSITIONER_PROPS}
+                      >
+                        <Menu.Popup
+                          id='agent-session-tree-floating-panel'
+                          className='agent-floating-panel'
+                          aria-label='Select conversation'
+                          finalFocus={false}
+                          size='lg'
+                        >
+                          <AgentSessionTree
+                            className='agent-session-tree-floating'
+                            id='agent-session-tree-floating'
+                            isFloating
+                            menuPortalTarget={
+                              surfaceMode === 'drawer' ? localOverlayRoot : null
+                            }
+                            onRequestClose={() => {
+                              setActiveOverlayPanel(null)
+                            }}
+                          />
+                        </Menu.Popup>
+                      </Menu.Positioner>
+                    </Menu.Portal>
+                  ) : null}
+                </Menu.Root>
+              ) : (
+                <span className='agent-session-static-label'>
                   <span className='agent-select-current'>
                     {activeSessionSelectLabel}
                   </span>
-                  <DownLine
-                    aria-hidden='true'
-                    className='agent-session-trigger-arrow'
-                  />
-                </Menu.Trigger>
-                {sessionMenuPortalTarget ? (
-                  <Menu.Portal container={sessionMenuPortalTarget}>
-                    <Menu.Positioner
-                      align='start'
-                      {...AGENT_SESSION_MENU_POSITIONER_PROPS}
-                    >
-                      <Menu.Popup
-                        id='agent-session-tree-floating-panel'
-                        className='agent-floating-panel'
-                        aria-label='Select conversation'
-                        finalFocus={false}
-                        size='lg'
-                      >
-                        <AgentSessionTree
-                          className='agent-session-tree-floating'
-                          id='agent-session-tree-floating'
-                          isFloating
-                          menuPortalTarget={
-                            surfaceMode === 'drawer' ? localOverlayRoot : null
-                          }
-                          onRequestClose={() => {
-                            setActiveOverlayPanel(null)
-                          }}
-                        />
-                      </Menu.Popup>
-                    </Menu.Positioner>
-                  </Menu.Portal>
-                ) : null}
-              </Menu.Root>
-            ) : (
-              <span className='agent-session-static-label'>
-                <span className='agent-select-current'>
-                  {activeSessionSelectLabel}
                 </span>
-              </span>
-            )}
-          </div>
+              )}
+            </div>
+          ) : null}
 
           {isAgentLayout ? null : threadbarNewButton}
         </div>

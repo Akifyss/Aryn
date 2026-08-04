@@ -195,6 +195,16 @@ describe('agent sidebar structure', () => {
     })
   })
 
+  it('keeps conversation and project session threadbar titles typographically aligned', async () => {
+    const chatSurfaceCss = await readSource(
+      '../src/features/agent/components/agent-chat-surface/styles.css',
+    )
+
+    expect(chatSurfaceCss).toMatch(
+      /\.agent-session-static-label\s*\{[^}]*font-size:\s*var\(--app-button-font-size-md\);[^}]*font-weight:\s*500;[^}]*line-height:\s*1;/s,
+    )
+  })
+
   it('keeps Agent session status behavior and styles in its component module', async () => {
     const [
       globalCss,

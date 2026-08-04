@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { shouldShowAgentNewConversationPrompt } from '../src/features/agent/lib/agent-surface-state'
+import {
+  shouldShowAgentNewConversationPrompt,
+  shouldShowAgentThreadbarSessionControl,
+} from '../src/features/agent/lib/agent-surface-state'
 
 describe('shouldShowAgentNewConversationPrompt', () => {
   it('shows the prompt for true new-session entry points', () => {
@@ -17,5 +20,20 @@ describe('shouldShowAgentNewConversationPrompt', () => {
       kind: 'session',
       sessionPath: 'session-a',
     })).toBe(false)
+  })
+
+  it('hides the threadbar session control only for standalone conversation drafts', () => {
+    expect(shouldShowAgentThreadbarSessionControl(
+      { kind: 'conversationDraft' },
+      { kind: 'new' },
+    )).toBe(false)
+    expect(shouldShowAgentThreadbarSessionControl(
+      { kind: 'project', projectId: 'project-1' },
+      { kind: 'new' },
+    )).toBe(true)
+    expect(shouldShowAgentThreadbarSessionControl(
+      { kind: 'conversation', conversationId: 'conversation-1' },
+      { kind: 'new' },
+    )).toBe(true)
   })
 })

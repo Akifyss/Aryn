@@ -92,6 +92,9 @@
   overflow: hidden;
   padding: 4px 10px;
   color: var(--foreground-primary);
+  font-size: var(--app-button-font-size-md);
+  font-weight: 500;
+  line-height: 1;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
