@@ -103,6 +103,7 @@ export type AgentContextValue = {
   isViewingActiveRuntime: boolean
   isProjectAddMenuOpen: boolean
   isLoading: boolean
+  isSessionLoading: boolean
   isThinkingStreaming: boolean
   isSwitchingModel: boolean
   isSwitchingThinkingLevel: boolean

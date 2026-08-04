@@ -160,6 +160,11 @@
   --agent-content-max-width: 800px;
 }
 
+.agent-session-loading-state {
+  flex: 1;
+  min-height: 0;
+}
+
 .agent-new-conversation-stage {
   display: flex;
   flex: 1;

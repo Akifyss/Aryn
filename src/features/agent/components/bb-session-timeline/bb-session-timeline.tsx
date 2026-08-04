@@ -10,6 +10,7 @@ import type {
   BbSessionSurfaceOptions,
   BbTheme,
 } from '@aryn/bb-session-surface'
+import { AppLoadingState } from '@/components/app-loading-state'
 import type { AgentNativeSessionSnapshot } from '@/features/agent/types'
 import { BB_SESSION_SURFACE_REVISION } from './bb-session-surface-revision'
 import './styles.css'
@@ -420,25 +421,26 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
       data-bb-session-id={sessionId}
       data-bb-surface-revision={BB_SESSION_SURFACE_REVISION}
     >
-        {isLoading ? (
-          <div className='agent-status-inline bb-session-surface-status' role='status'>
-            <p>正在加载统一消息视图…</p>
+      {isLoading ? (
+        <AppLoadingState
+          fill
+          label='正在加载会话'
+        />
+      ) : null}
+      {loadError ? (
+        <div className='agent-status-inline bb-session-surface-status is-error' role='alert'>
+          <p>{loadError}</p>
+          <div className='bb-session-surface-status-actions'>
+            <button
+              className='agent-status-action'
+              type='button'
+              onClick={() => setLoadRevision((value) => value + 1)}
+            >
+              重新加载
+            </button>
           </div>
-        ) : null}
-        {loadError ? (
-          <div className='agent-status-inline bb-session-surface-status is-error' role='alert'>
-            <p>{loadError}</p>
-            <div className='bb-session-surface-status-actions'>
-              <button
-                className='agent-status-action'
-                type='button'
-                onClick={() => setLoadRevision((value) => value + 1)}
-              >
-                重新加载
-              </button>
-            </div>
-          </div>
-        ) : null}
+        </div>
+      ) : null}
       <div ref={containerRef} className='bb-session-surface-mount' />
     </div>
   )

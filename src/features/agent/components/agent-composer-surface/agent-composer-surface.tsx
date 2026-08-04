@@ -94,6 +94,7 @@ export function AgentComposerSurface({
     hasComposerPayload,
     iconTheme,
     isLoading,
+    isSessionLoading,
     isSwitchingModel,
     isSwitchingThinkingLevel,
     modelFieldRef,
@@ -244,6 +245,7 @@ export function AgentComposerSurface({
             isOpenCodeChildSession
             || (!workspacePath && !canUseDraftRuntimeWithoutWorkspace)
             || !agentState.runtime.hasConfiguredModels
+            || isSessionLoading
             || isSwitchingModel
             || isSwitchingThinkingLevel
           }
@@ -267,6 +269,7 @@ export function AgentComposerSurface({
               isOpenCodeChildSession
               || (!workspacePath && !canUseComposerWithoutWorkspace)
               || isLoading
+              || isSessionLoading
             }
             tooltip='附加文件'
             onClick={() => {
@@ -311,6 +314,7 @@ export function AgentComposerSurface({
             isOpenCodeChildSession
             || (!workspacePath && !canUseComposerWithoutWorkspace)
             || isLoading
+            || isSessionLoading
           }
           iconTheme={iconTheme}
           mentions={composerState.mentions}

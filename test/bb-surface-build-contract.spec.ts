@@ -160,7 +160,7 @@ describe('bb unified session surface build contract', () => {
 
     expect(hostSource).toContain('data-bb-agent-id={snapshot.agentId}')
     expect(hostSource).toContain("aria-busy={isLoading ? 'true' : undefined}")
-    expect(hostSource).toContain("role='status'")
+    expect(hostSource).toContain('<AppLoadingState')
     expect(hostSource).toContain("role='alert'")
     expect(hostSource).toContain('setLoadRevision((value) => value + 1)')
     expect(hostSource).not.toContain('requestNativeView')

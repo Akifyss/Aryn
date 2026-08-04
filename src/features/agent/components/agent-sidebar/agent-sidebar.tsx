@@ -595,6 +595,7 @@ function AgentProvider({
     handleOpenSession,
     handleStartNewSession,
     isAgentSessionOperationCurrent,
+    isSessionSnapshotLoading,
     openSessionRequestIdRef,
   } = useAgentSessionNavigation({
     externalRequest: {
@@ -631,6 +632,18 @@ function AgentProvider({
       setViewedSessionSnapshot,
     },
   })
+  const isSessionLoading = isSessionSnapshotLoading || Boolean(
+    isLoading && (
+      (
+        activeWorkspaceContext.kind === 'project'
+        && !(
+          externalSessionRequest?.kind === 'new'
+          && externalSessionRequest.projectId === activeWorkspaceContext.projectId
+        )
+      )
+      || activeConversation?.agentSessionPath
+    ),
+  )
   const {
     deletingSessionPath,
     handleDeleteSession,
@@ -774,6 +787,7 @@ function AgentProvider({
     hasComposerPayload
     && !isOpenCodeChildSession
     && !isSubmittingComposerPrompt
+    && !isSessionLoading
     && (
       (workspacePath && agentState.runtime.hasConfiguredModels)
       || (canUseComposerWithoutWorkspace && agentState.runtime.hasConfiguredModels)
@@ -887,6 +901,7 @@ function AgentProvider({
     isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,
+    isSessionLoading,
     isThinkingStreaming,
     isSwitchingModel,
     isSwitchingThinkingLevel,
@@ -990,6 +1005,7 @@ function AgentProvider({
     isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,
+    isSessionLoading,
     isThinkingStreaming,
     isSwitchingModel,
     isSwitchingThinkingLevel,

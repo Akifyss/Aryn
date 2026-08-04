@@ -4,6 +4,7 @@ import {
   type SetStateAction,
   useEffect,
   useRef,
+  useState,
 } from 'react'
 import type { AgentId } from '@/features/agent/agent-definition'
 import {
@@ -91,6 +92,12 @@ export function useAgentSessionNavigation({
 }: UseAgentSessionNavigationOptions) {
   const openSessionRequestIdRef = useRef(0)
   const handledExternalSessionRequestRef = useRef<number | null>(null)
+  const [isSessionSnapshotLoading, setIsSessionSnapshotLoading] = useState(false)
+
+  useEffect(() => {
+    openSessionRequestIdRef.current += 1
+    setIsSessionSnapshotLoading(false)
+  }, [workspacePath])
 
   function syncActiveRuntimeSessionSnapshot(agentId: AgentId, snapshot: AgentSessionSnapshot) {
     const currentSelection = activeSessionSelectionRef.current
@@ -173,6 +180,7 @@ export function useAgentSessionNavigation({
 
   function handleStartNewSession() {
     openSessionRequestIdRef.current += 1
+    setIsSessionSnapshotLoading(false)
     const nextDraft = normalizeAgentModelDraft(
       newSessionModelDraftRef.current,
       agentState.runtime,
@@ -195,18 +203,29 @@ export function useAgentSessionNavigation({
     setSelectedAgentIdValue(agentId)
     syncActiveSessionSelection({ agentId, kind: 'session', sessionPath })
     setViewedSessionSnapshot(null)
+    closeSessionOverlay()
     const requestId = openSessionRequestIdRef.current + 1
     openSessionRequestIdRef.current = requestId
 
     const isActiveRuntimeSession = agentState.runtime.agentId === agentId
       && agentState.activeSession?.sessionPath === sessionPath
     if (isActiveRuntimeSession && agentId !== 'codex') {
+      setIsSessionSnapshotLoading(false)
       setViewedSessionSnapshot(null)
       syncModelDraft(getRuntimeSelectedModelDraft(agentState.runtime))
       setPanelError(null)
-      closeSessionOverlay()
       return
     }
+    setIsSessionSnapshotLoading(!isActiveRuntimeSession)
+
+    const isCurrentRequest = () => (
+      requestId === openSessionRequestIdRef.current
+      && shouldApplyAgentSessionOperationResult(
+        activeSessionSelectionRef.current,
+        workspacePathRef.current,
+        { agentId, sessionPath, workspacePath },
+      )
+    )
 
     try {
       setPanelError(null)
@@ -214,12 +233,7 @@ export function useAgentSessionNavigation({
         agentId,
         workspacePath,
       }, sessionPath)
-      if (
-        requestId !== openSessionRequestIdRef.current
-        || activeSessionSelectionRef.current.kind !== 'session'
-        || activeSessionSelectionRef.current.agentId !== agentId
-        || activeSessionSelectionRef.current.sessionPath !== sessionPath
-      ) {
+      if (!isCurrentRequest()) {
         return
       }
 
@@ -233,18 +247,16 @@ export function useAgentSessionNavigation({
       } else {
         setViewedSessionSnapshot(nextSnapshot)
       }
-      closeSessionOverlay()
     } catch (error) {
-      if (
-        requestId !== openSessionRequestIdRef.current
-        || activeSessionSelectionRef.current.kind !== 'session'
-        || activeSessionSelectionRef.current.agentId !== agentId
-        || activeSessionSelectionRef.current.sessionPath !== sessionPath
-      ) {
+      if (!isCurrentRequest()) {
         return
       }
 
       setPanelError(error instanceof Error ? error.message : 'Unable to open that session.')
+    } finally {
+      if (isCurrentRequest()) {
+        setIsSessionSnapshotLoading(false)
+      }
     }
   }
 
@@ -291,6 +303,7 @@ export function useAgentSessionNavigation({
     handleOpenSession,
     handleStartNewSession,
     isAgentSessionOperationCurrent,
+    isSessionSnapshotLoading,
     openSessionRequestIdRef,
   }
 }

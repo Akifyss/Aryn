@@ -8,6 +8,7 @@ import {
   DownLine,
   EditLine,
 } from '@mingcute/react'
+import { AppLoadingState } from '@/components/app-loading-state'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
 import { AgentComposerSurface } from '@/features/agent/components/agent-composer-surface/agent-composer-surface'
@@ -61,6 +62,7 @@ export function AgentChatSurface() {
     handleStartNewSession,
     iconTheme,
     isAgentLayout,
+    isSessionLoading,
     isViewingActiveRuntime,
     interactionTimelineRecords,
     isThinkingStreaming,
@@ -307,28 +309,26 @@ export function AgentChatSurface() {
       </div>
       <div ref={handleLocalOverlayRootRef} className='agent-local-overlay-root' />
 
-      {isNewConversation ? (
-        <>
-          <div className='agent-new-conversation-stage'>
-            {statusMessage ? (
-              <div className='agent-status-inline'>
-                <p>{statusMessage}</p>
-              </div>
-            ) : null}
-            <div className='agent-new-conversation-content'>
-              <AgentNewConversationPrompt
-                menuPortalTarget={
-                  surfaceMode === 'drawer' ? localOverlayRoot : undefined
-                }
-              />
+      {isSessionLoading ? (
+        <AppLoadingState
+          className='agent-session-loading-state'
+          label='正在加载会话'
+        />
+      ) : isNewConversation ? (
+        <div className='agent-new-conversation-stage'>
+          {statusMessage ? (
+            <div className='agent-status-inline'>
+              <p>{statusMessage}</p>
             </div>
+          ) : null}
+          <div className='agent-new-conversation-content'>
+            <AgentNewConversationPrompt
+              menuPortalTarget={
+                surfaceMode === 'drawer' ? localOverlayRoot : undefined
+              }
+            />
           </div>
-          <AgentComposerSurface
-            activeProject={activeProject}
-            isNewConversation={isNewConversation}
-            localOverlayRoot={localOverlayRoot}
-          />
-        </>
+        </div>
       ) : (
         <>
           {statusMessage ? (
@@ -363,14 +363,13 @@ export function AgentChatSurface() {
               workspacePath={workspacePath}
             />
           )}
-
-          <AgentComposerSurface
-            activeProject={activeProject}
-            isNewConversation={isNewConversation}
-            localOverlayRoot={localOverlayRoot}
-          />
         </>
       )}
+      <AgentComposerSurface
+        activeProject={activeProject}
+        isNewConversation={isNewConversation}
+        localOverlayRoot={localOverlayRoot}
+      />
     </div>
   )
 }
