@@ -5,9 +5,10 @@ import {
   AgentSessionTreeView,
   type AgentSessionTreeController,
 } from '@/features/agent/components/agent-session-tree/agent-session-tree'
-import { AgentSessionTreeLoadIndicator } from '@/features/agent/components/agent-session-tree/load-indicator'
 import { AgentSessionTreeRow } from '@/features/agent/components/agent-session-tree/session-row'
+import { AgentSessionTreeStatusItem } from '@/features/agent/components/agent-session-tree/status-item'
 import type { AgentWorkspaceState } from '@/features/agent/types'
+import { ProjectIcon } from '@/components/project-icon'
 
 const emptyAgentState: AgentWorkspaceState = {
   activeSession: null,
@@ -184,22 +185,35 @@ describe('AgentSessionTree presentation components', () => {
     expect(markup).not.toContain('disabled=""')
   })
 
-  it('reserves a stable status slot and exposes loading and failure states accessibly', () => {
-    const idleMarkup = renderToStaticMarkup(
-      <AgentSessionTreeLoadIndicator errorCount={0} isLoading={false} />,
-    )
+  it('renders loading and empty states as static AppItems', () => {
     const loadingMarkup = renderToStaticMarkup(
-      <AgentSessionTreeLoadIndicator errorCount={0} isLoading />,
+      <AgentSessionTreeStatusItem label='正在加载会话…' status='loading' />,
+    )
+    const emptyMarkup = renderToStaticMarkup(
+      <AgentSessionTreeStatusItem label='暂无对话' status='empty' />,
     )
     const errorMarkup = renderToStaticMarkup(
-      <AgentSessionTreeLoadIndicator errorCount={2} isLoading={false} />,
+      <AgentSessionTreeStatusItem label='部分 Agent 会话加载失败' status='error' />,
     )
 
-    expect(idleMarkup).toContain('agent-session-tree-load-indicator')
-    expect(idleMarkup).toContain('aria-hidden="true"')
-    expect(loadingMarkup).toContain('aria-label="正在加载会话…"')
-    expect(loadingMarkup).toContain('is-loading')
-    expect(errorMarkup).toContain('aria-label="2 个 Agent 的会话加载失败；收起并重新展开项目可重试"')
-    expect(errorMarkup).toContain('has-error')
+    expect(loadingMarkup).toContain('agent-session-tree-status-item is-loading')
+    expect(loadingMarkup).toContain('app-item-icon')
+    expect(loadingMarkup).toContain('spinner')
+    expect(loadingMarkup).toContain('正在加载会话…')
+    expect(loadingMarkup).not.toContain('<button')
+    expect(emptyMarkup).toContain('agent-session-tree-status-item is-empty')
+    expect(emptyMarkup).toContain('app-item-row')
+    expect(emptyMarkup).toContain('暂无对话')
+    expect(errorMarkup).toContain('agent-session-tree-status-item is-error')
+    expect(errorMarkup).toContain('部分 Agent 会话加载失败')
+  })
+
+  it('uses the Mingcute open-folder icon for expanded projects', () => {
+    const closedMarkup = renderToStaticMarkup(<ProjectIcon />)
+    const openMarkup = renderToStaticMarkup(<ProjectIcon isOpen />)
+
+    expect(closedMarkup).not.toContain('is-open')
+    expect(openMarkup).toContain('project-icon is-open')
+    expect(openMarkup).not.toBe(closedMarkup)
   })
 })

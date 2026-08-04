@@ -74,36 +74,31 @@
   font-size: 13px;
 }
 
-.agent-session-tree-load-indicator {
-  display: inline-flex;
-  width: var(--icon-size-md);
-  height: var(--icon-size-md);
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  color: var(--foreground-secondary);
-  line-height: 0;
+.agent-session-tree-status-item .app-item-row {
+  cursor: default;
 }
 
-.agent-session-tree-load-indicator.is-loading {
+.agent-session-tree-status-item .app-item-row:hover {
+  background: transparent;
+}
+
+.agent-session-tree-status-item .app-item-main,
+.agent-session-tree-status-item .app-item-label {
+  color: var(--foreground-secondary);
+}
+
+.agent-session-tree-status-label {
+  font-size: 12px;
+}
+
+.agent-session-tree-status-item.is-loading .app-item-icon {
   opacity: 0;
   animation: agent-session-tree-loading-reveal 0s linear 120ms forwards;
 }
 
-.agent-session-tree-load-indicator.has-error {
-  color: var(--warning);
-}
-
-.agent-session-tree-load-indicator > svg,
-.agent-session-tree-load-indicator > .iconify {
-  width: var(--icon-size-md);
-  height: var(--icon-size-md);
-}
-
-.agent-flat-session-loading-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.agent-session-tree-status-item.is-error .app-item-icon,
+.agent-session-tree-status-item.is-error .app-item-label {
+  color: var(--danger);
 }
 
 @keyframes agent-session-tree-loading-reveal {
