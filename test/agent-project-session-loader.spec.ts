@@ -6,6 +6,9 @@ import {
   markAgentProjectSessionSourcesLoading,
 } from '../src/features/agent/lib/project-session-loader'
 import {
+  flattenAgentProjectSessions,
+  selectVisibleAgentProjectSessions,
+  storeAgentProjectSessionSource,
   summarizeAgentProjectSessionBucket,
   type AgentProjectSessionBucket,
 } from '../src/features/agent/lib/session-tree'
@@ -38,51 +41,58 @@ describe('Agent project session loading transaction', () => {
   it('marks every requested source loading in one immutable bucket update', () => {
     const cachedSession = session('cached-codex')
     const bucket: AgentProjectSessionBucket = {
-      codex: {
-        error: 'stale error',
-        hasLoaded: false,
-        isLoading: false,
-        sessions: [cachedSession],
+      hasCompleteSnapshot: false,
+      sources: {
+        codex: {
+          error: 'stale error',
+          hasLoaded: false,
+          isLoading: false,
+          sessions: [cachedSession],
+        },
       },
     }
 
     const loadingBucket = markAgentProjectSessionSourcesLoading(bucket, ['codex', 'opencode'])
 
     expect(loadingBucket).not.toBe(bucket)
-    expect(loadingBucket.codex).toEqual({
+    expect(loadingBucket.hasCompleteSnapshot).toBe(false)
+    expect(loadingBucket.sources.codex).toEqual({
       error: null,
       hasLoaded: false,
       isLoading: true,
       sessions: [cachedSession],
     })
-    expect(loadingBucket.opencode).toEqual({
+    expect(loadingBucket.sources.opencode).toEqual({
       error: null,
       hasLoaded: false,
       isLoading: true,
       sessions: [],
     })
-    expect(bucket.codex?.isLoading).toBe(false)
+    expect(bucket.sources.codex?.isLoading).toBe(false)
   })
 
   it('preserves settled state during retry and selects only missing or failed sources', () => {
     const bucket: AgentProjectSessionBucket = {
-      codex: {
-        error: null,
-        hasLoaded: true,
-        isLoading: false,
-        sessions: [session('cached-codex')],
-      },
-      opencode: {
-        error: 'OpenCode unavailable',
-        hasLoaded: true,
-        isLoading: false,
-        sessions: [],
-      },
-      pi: {
-        error: null,
-        hasLoaded: false,
-        isLoading: true,
-        sessions: [],
+      hasCompleteSnapshot: true,
+      sources: {
+        codex: {
+          error: null,
+          hasLoaded: true,
+          isLoading: false,
+          sessions: [session('cached-codex')],
+        },
+        opencode: {
+          error: 'OpenCode unavailable',
+          hasLoaded: true,
+          isLoading: false,
+          sessions: [],
+        },
+        pi: {
+          error: null,
+          hasLoaded: false,
+          isLoading: true,
+          sessions: [],
+        },
       },
     }
 
@@ -92,7 +102,7 @@ describe('Agent project session loading transaction', () => {
     )).toEqual(['builtin-pi', 'opencode'])
 
     const retryBucket = markAgentProjectSessionSourcesLoading(bucket, ['opencode'])
-    expect(retryBucket.opencode).toEqual({
+    expect(retryBucket.sources.opencode).toEqual({
       error: null,
       hasLoaded: true,
       isLoading: true,
@@ -100,6 +110,7 @@ describe('Agent project session loading transaction', () => {
     })
     expect(summarizeAgentProjectSessionBucket(retryBucket, ['opencode'])).toEqual({
       errors: [],
+      hasCompleteSnapshot: true,
       hasLoaded: true,
       isLoading: true,
     })
@@ -139,31 +150,63 @@ describe('Agent project session loading transaction', () => {
   it('commits successes and failures together while preserving cached data on failure', () => {
     const cachedPiSession = session('cached-pi')
     const loadingBucket = markAgentProjectSessionSourcesLoading({
-      pi: {
-        error: null,
-        hasLoaded: false,
-        isLoading: false,
-        sessions: [cachedPiSession],
+      hasCompleteSnapshot: false,
+      sources: {
+        pi: {
+          error: null,
+          hasLoaded: false,
+          isLoading: false,
+          sessions: [cachedPiSession],
+        },
       },
     }, ['pi', 'codex'])
 
     const committedBucket = commitAgentProjectSessionLoad(loadingBucket, [
       { agentId: 'pi', error: 'PI unavailable', sessions: null },
       { agentId: 'codex', error: null, sessions: [session('fresh-codex')] },
-    ])
+    ], ['pi', 'codex'])
 
-    expect(committedBucket.pi).toEqual({
+    expect(committedBucket.hasCompleteSnapshot).toBe(true)
+    expect(committedBucket.sources.pi).toEqual({
       error: 'PI unavailable',
       hasLoaded: true,
       isLoading: false,
       sessions: [cachedPiSession],
     })
-    expect(committedBucket.codex).toEqual({
+    expect(committedBucket.sources.codex).toEqual({
       error: null,
       hasLoaded: true,
       isLoading: false,
       sessions: [session('fresh-codex')],
     })
+  })
+
+  it('keeps a runtime source partial until the initial aggregate snapshot commits', () => {
+    const snapshotAgentIds = ['pi', 'codex'] as const
+    const loadingBucket = markAgentProjectSessionSourcesLoading(undefined, snapshotAgentIds)
+    const runtimeBucket = storeAgentProjectSessionSource(
+      loadingBucket,
+      'pi',
+      [session('runtime-pi')],
+      snapshotAgentIds,
+    )
+
+    expect(runtimeBucket.hasCompleteSnapshot).toBe(false)
+    expect(flattenAgentProjectSessions(runtimeBucket)).toEqual([
+      expect.objectContaining({ agentId: 'pi', id: 'runtime-pi' }),
+    ])
+    expect(selectVisibleAgentProjectSessions(runtimeBucket)).toEqual([])
+
+    const committedBucket = commitAgentProjectSessionLoad(runtimeBucket, [
+      { agentId: 'pi', error: null, sessions: [session('stale-pi')] },
+      { agentId: 'codex', error: null, sessions: [session('loaded-codex')] },
+    ], snapshotAgentIds)
+
+    expect(committedBucket.hasCompleteSnapshot).toBe(true)
+    expect(selectVisibleAgentProjectSessions(committedBucket).map((item) => item.id)).toEqual([
+      'runtime-pi',
+      'loaded-codex',
+    ])
   })
 
   it('normalizes synchronous provider failures into the aggregate outcome', async () => {
@@ -185,11 +228,14 @@ describe('Agent project session loading transaction', () => {
   it('does not let a late aggregate response overwrite a newer runtime update', () => {
     const newerSession = session('newer-runtime-session')
     const bucket: AgentProjectSessionBucket = {
-      codex: {
-        error: null,
-        hasLoaded: true,
-        isLoading: false,
-        sessions: [newerSession],
+      hasCompleteSnapshot: true,
+      sources: {
+        codex: {
+          error: null,
+          hasLoaded: true,
+          isLoading: false,
+          sessions: [newerSession],
+        },
       },
     }
 
@@ -197,9 +243,9 @@ describe('Agent project session loading transaction', () => {
       agentId: 'codex',
       error: null,
       sessions: [session('stale-request-session')],
-    }])
+    }], ['codex'])
 
     expect(committedBucket).toBe(bucket)
-    expect(committedBucket.codex?.sessions).toEqual([newerSession])
+    expect(committedBucket.sources.codex?.sessions).toEqual([newerSession])
   })
 })

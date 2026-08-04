@@ -9,6 +9,7 @@ import {
 import {
   invalidateAgentProjectSessionBuckets,
   normalizeAgentProjectPath,
+  storeAgentProjectSessionSource,
   type AgentProjectSessionBucket,
 } from '@/features/agent/lib/session-tree'
 import type { AgentSessionListItem } from '@/features/agent/types'
@@ -80,19 +81,16 @@ export function useAgentProjectSessions({
     updateProjectSessions((currentValue) => {
       const nextValue = { ...currentValue }
       for (const projectId of matchingProjectIds) {
-        nextValue[projectId] = {
-          ...nextValue[projectId],
-          [agentId]: {
-            error: null,
-            hasLoaded: true,
-            isLoading: false,
-            sessions,
-          },
-        }
+        nextValue[projectId] = storeAgentProjectSessionSource(
+          nextValue[projectId],
+          agentId,
+          sessions,
+          sessionTreeAgentIds,
+        )
       }
       return nextValue
     })
-  }, [updateProjectSessions])
+  }, [sessionTreeAgentIds, updateProjectSessions])
 
   const loadProjectSessions = useCallback(async (project: ProjectRecord) => {
     const requestGeneration = projectSessionRequestGenerationRef.current
@@ -130,7 +128,11 @@ export function useAgentProjectSessions({
 
       updateProjectSessions((currentValue) => {
         const currentBucket = currentValue[project.id]
-        const nextBucket = commitAgentProjectSessionLoad(currentBucket, outcomes)
+        const nextBucket = commitAgentProjectSessionLoad(
+          currentBucket,
+          outcomes,
+          sessionTreeAgentIds,
+        )
         if (nextBucket === currentBucket) return currentValue
 
         return {

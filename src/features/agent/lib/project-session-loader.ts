@@ -1,10 +1,16 @@
 import type { AgentId } from '@/features/agent/agent-definition'
-import type {
-  AgentProjectSessionBucket,
-  AgentSessionSourceState,
+import {
+  areAgentProjectSessionSourcesLoaded,
+  type AgentProjectSessionBucket,
+  type AgentSessionSourceState,
 } from '@/features/agent/lib/session-tree'
 import type { AgentSessionListItem } from '@/features/agent/types'
 
+/*
+ * Keep load orchestration separate from the project-level snapshot boundary:
+ * source freshness may reset, while a previously complete snapshot remains
+ * safe to render during a background refresh.
+ */
 export type AgentProjectSessionLoadOutcome = {
   agentId: AgentId
   error: string | null
@@ -24,21 +30,26 @@ export function markAgentProjectSessionSourcesLoading(
   bucket: AgentProjectSessionBucket | undefined,
   agentIds: readonly AgentId[],
 ): AgentProjectSessionBucket {
-  if (agentIds.length === 0) return bucket ?? {}
+  if (agentIds.length === 0) {
+    return bucket ?? { hasCompleteSnapshot: false, sources: {} }
+  }
 
-  const nextBucket = { ...bucket }
+  const currentSources = bucket?.sources ?? {}
+  const nextSources = { ...currentSources }
   for (const agentId of agentIds) {
-    nextBucket[agentId] = {
+    nextSources[agentId] = {
       error: null,
-      // `hasLoaded` means that this source has settled at least once. Keep it
-      // during a retry so the tree can replace its error row with a same-height
-      // loading row instead of collapsing the subtree again.
-      hasLoaded: bucket?.[agentId]?.hasLoaded ?? false,
+      // `hasLoaded` tracks this cache generation. Preserve it during a retry;
+      // invalidation may reset it without clearing `hasCompleteSnapshot`.
+      hasLoaded: currentSources[agentId]?.hasLoaded ?? false,
       isLoading: true,
-      sessions: bucket?.[agentId]?.sessions ?? [],
+      sessions: currentSources[agentId]?.sessions ?? [],
     }
   }
-  return nextBucket
+  return {
+    hasCompleteSnapshot: bucket?.hasCompleteSnapshot ?? false,
+    sources: nextSources,
+  }
 }
 
 export function getAgentProjectSessionSourceIdsToLoad(
@@ -46,7 +57,7 @@ export function getAgentProjectSessionSourceIdsToLoad(
   agentIds: readonly AgentId[],
 ) {
   return agentIds.filter((agentId) => {
-    const source = bucket?.[agentId]
+    const source = bucket?.sources[agentId]
     return !source?.isLoading && (!source?.hasLoaded || source.error !== null)
   })
 }
@@ -75,12 +86,13 @@ export async function loadAgentProjectSessionSources(
 export function commitAgentProjectSessionLoad(
   bucket: AgentProjectSessionBucket | undefined,
   outcomes: readonly AgentProjectSessionLoadOutcome[],
+  snapshotAgentIds: readonly AgentId[],
 ): AgentProjectSessionBucket {
-  let nextBucket = bucket ?? {}
+  let nextSources = bucket?.sources ?? {}
   let hasChanges = false
 
   for (const outcome of outcomes) {
-    const currentSource = bucket?.[outcome.agentId]
+    const currentSource = bucket?.sources[outcome.agentId]
 
     // A runtime event or a local mutation may have replaced this source while
     // the aggregate request was in flight. Only a source still owned by this
@@ -88,7 +100,7 @@ export function commitAgentProjectSessionLoad(
     if (!currentSource?.isLoading) continue
 
     if (!hasChanges) {
-      nextBucket = { ...nextBucket }
+      nextSources = { ...nextSources }
       hasChanges = true
     }
 
@@ -98,8 +110,15 @@ export function commitAgentProjectSessionLoad(
       isLoading: false,
       sessions: outcome.sessions ?? currentSource.sessions,
     }
-    nextBucket[outcome.agentId] = nextSource
+    nextSources[outcome.agentId] = nextSource
   }
 
-  return nextBucket
+  const hasCompleteSnapshot = (bucket?.hasCompleteSnapshot ?? false)
+    || areAgentProjectSessionSourcesLoaded(nextSources, snapshotAgentIds)
+
+  if (!hasChanges && hasCompleteSnapshot === bucket?.hasCompleteSnapshot) {
+    return bucket ?? { hasCompleteSnapshot: false, sources: {} }
+  }
+
+  return { hasCompleteSnapshot, sources: nextSources }
 }

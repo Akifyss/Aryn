@@ -6,7 +6,10 @@ import {
   type AgentSessionTreeController,
 } from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import { AgentSessionTreeRow } from '@/features/agent/components/agent-session-tree/session-row'
-import { AgentSessionTreeStatusItem } from '@/features/agent/components/agent-session-tree/status-item'
+import {
+  AgentSessionTreeStatusItem,
+  resolveAgentSessionTreeStatus,
+} from '@/features/agent/components/agent-session-tree/status-item'
 import type { AgentWorkspaceState } from '@/features/agent/types'
 import { ProjectIcon } from '@/components/project-icon'
 
@@ -99,6 +102,140 @@ describe('AgentSessionTree presentation components', () => {
     expect(markup).not.toContain('agent-session-section-stack')
   })
 
+  it('keeps the standalone floating empty state when no project is selected', () => {
+    const markup = renderToStaticMarkup(
+      <AgentSessionTreeView controller={createController()} isFloating />,
+    )
+
+    expect(markup).toContain('agent-session-tree-status-item is-empty')
+    expect(markup).toContain('暂无对话')
+  })
+
+  it('keeps complete cached content visible without a parallel loading item', () => {
+    const project = {
+      addedAt: '2026-07-28T09:00:00.000Z',
+      id: 'project-1',
+      lastFilePath: null,
+      lastOpenedAt: '2026-07-28T10:00:00.000Z',
+      name: 'Aryn',
+      path: 'C:\\workspace\\Aryn',
+    }
+    const controller = createController({
+      projectSessions: {
+        [project.id]: {
+          hasCompleteSnapshot: true,
+          sources: {
+            'builtin-pi': {
+              error: null,
+              hasLoaded: false,
+              isLoading: true,
+              sessions: [{
+                createdAt: '2026-07-28T10:00:00.000Z',
+                id: 'session-1',
+                messageCount: 1,
+                modifiedAt: '2026-07-28T10:05:00.000Z',
+                name: 'Cached session',
+                path: 'session-1',
+                preview: 'Preview',
+              }],
+            },
+          },
+        },
+      },
+      projectState: {
+        lastProjectId: project.id,
+        projects: [project],
+      },
+      workspacePath: project.path,
+    })
+
+    const markup = renderToStaticMarkup(
+      <AgentSessionTreeView controller={controller} isFloating />,
+    )
+
+    expect(markup).toContain('Cached session')
+    expect(markup).toContain('aria-busy="true"')
+    expect(markup).not.toContain('agent-session-tree-status-item is-loading')
+
+    const emptyMarkup = renderToStaticMarkup(
+      <AgentSessionTreeView
+        controller={{
+          ...controller,
+          projectSessions: {
+            [project.id]: {
+              hasCompleteSnapshot: true,
+              sources: {
+                'builtin-pi': {
+                  error: null,
+                  hasLoaded: false,
+                  isLoading: true,
+                  sessions: [],
+                },
+              },
+            },
+          },
+        }}
+        isFloating
+      />,
+    )
+
+    expect(emptyMarkup).toContain('agent-session-tree-status-item is-empty')
+    expect(emptyMarkup).not.toContain('agent-session-tree-status-item is-loading')
+  })
+
+  it('hides runtime partial sessions until the initial project snapshot is complete', () => {
+    const project = {
+      addedAt: '2026-07-28T09:00:00.000Z',
+      id: 'project-1',
+      lastFilePath: null,
+      lastOpenedAt: '2026-07-28T10:00:00.000Z',
+      name: 'Aryn',
+      path: 'C:\\workspace\\Aryn',
+    }
+    const controller = createController({
+      projectSessions: {
+        [project.id]: {
+          hasCompleteSnapshot: false,
+          sources: {
+            'builtin-pi': {
+              error: null,
+              hasLoaded: true,
+              isLoading: false,
+              sessions: [{
+                createdAt: '2026-07-28T10:00:00.000Z',
+                id: 'partial-session',
+                messageCount: 1,
+                modifiedAt: '2026-07-28T10:05:00.000Z',
+                name: 'Runtime partial session',
+                path: 'partial-session',
+                preview: 'Preview',
+              }],
+            },
+            codex: {
+              error: null,
+              hasLoaded: false,
+              isLoading: true,
+              sessions: [],
+            },
+          },
+        },
+      },
+      projectState: {
+        lastProjectId: project.id,
+        projects: [project],
+      },
+      sessionTreeAgentIds: ['builtin-pi', 'codex'],
+      workspacePath: project.path,
+    })
+
+    const markup = renderToStaticMarkup(
+      <AgentSessionTreeView controller={controller} isFloating />,
+    )
+
+    expect(markup).toContain('agent-session-tree-status-item is-loading')
+    expect(markup).not.toContain('Runtime partial session')
+  })
+
   it('renders project and conversation sections for docked surfaces', () => {
     const project = {
       addedAt: '2026-07-28T09:00:00.000Z',
@@ -140,6 +277,7 @@ describe('AgentSessionTree presentation components', () => {
     expect(markup).toContain('Architecture review')
     expect(markup).toContain('项目')
     expect(markup).toContain('对话')
+    expect(markup).not.toContain('aria-busy="true"')
   })
 
   it('keeps rename controls inside the reusable session row', () => {
@@ -206,6 +344,33 @@ describe('AgentSessionTree presentation components', () => {
     expect(emptyMarkup).toContain('暂无对话')
     expect(errorMarkup).toContain('agent-session-tree-status-item is-error')
     expect(errorMarkup).toContain('部分 Agent 会话加载失败')
+  })
+
+  it('resolves initial loading, cached refresh, empty, and error states consistently', () => {
+    expect(resolveAgentSessionTreeStatus({
+      errorCount: 0,
+      hasCompleteSnapshot: false,
+      isPending: true,
+      sessionCount: 1,
+    })).toBe('loading')
+    expect(resolveAgentSessionTreeStatus({
+      errorCount: 0,
+      hasCompleteSnapshot: true,
+      isPending: true,
+      sessionCount: 1,
+    })).toBeNull()
+    expect(resolveAgentSessionTreeStatus({
+      errorCount: 0,
+      hasCompleteSnapshot: true,
+      isPending: true,
+      sessionCount: 0,
+    })).toBe('empty')
+    expect(resolveAgentSessionTreeStatus({
+      errorCount: 1,
+      hasCompleteSnapshot: true,
+      isPending: false,
+      sessionCount: 0,
+    })).toBe('error')
   })
 
   it('uses the Mingcute open-folder icon for expanded projects', () => {

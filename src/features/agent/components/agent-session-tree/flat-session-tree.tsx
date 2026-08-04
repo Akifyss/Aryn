@@ -5,16 +5,19 @@ import {
   TreeScrollArea,
 } from '@/components/tree'
 import {
-  flattenAgentProjectSessions,
   formatAgentSessionLabel,
   getAgentSessionActivityKey,
   getAgentSessionTreeKey,
   normalizeAgentProjectPath,
+  selectVisibleAgentProjectSessions,
   summarizeAgentProjectSessionBucket,
   type AgentSessionTreeItem,
 } from '@/features/agent/lib/session-tree'
 import { AgentSessionTreeRow } from './session-row'
-import { AgentSessionTreeStatusItem } from './status-item'
+import {
+  AgentSessionTreeStatusItem,
+  resolveAgentSessionTreeStatus,
+} from './status-item'
 import type { AgentSessionTreeViewProps } from './types'
 
 export function FlatAgentSessionTree({
@@ -49,11 +52,18 @@ export function FlatAgentSessionTree({
       )) ?? null
     : null
   const currentProjectBucket = currentProject ? projectSessions[currentProject.id] : undefined
-  const sessions = currentProject
-    ? flattenAgentProjectSessions(currentProjectBucket)
-    : agentState.sessions.map((session): AgentSessionTreeItem => ({ ...session, agentId: selectedAgentId }))
   const loadSummary = summarizeAgentProjectSessionBucket(currentProjectBucket, sessionTreeAgentIds)
+  const hasCompleteSessionSnapshot = currentProject ? loadSummary.hasCompleteSnapshot : true
+  const sessions = currentProject
+    ? selectVisibleAgentProjectSessions(currentProjectBucket)
+    : agentState.sessions.map((session): AgentSessionTreeItem => ({ ...session, agentId: selectedAgentId }))
   const isSessionListPending = Boolean(currentProject && (!loadSummary.hasLoaded || loadSummary.isLoading))
+  const sessionTreeStatus = resolveAgentSessionTreeStatus({
+    errorCount: loadSummary.errors.length,
+    hasCompleteSnapshot: hasCompleteSessionSnapshot,
+    isPending: isSessionListPending,
+    sessionCount: sessions.length,
+  })
 
   useEffect(() => {
     if (currentProject) void loadProjectSessions(currentProject)
@@ -88,16 +98,16 @@ export function FlatAgentSessionTree({
           aria-busy={isSessionListPending || undefined}
           aria-label='Agent sessions'
         >
-          {isSessionListPending ? (
+          {sessionTreeStatus === 'loading' ? (
             <AgentSessionTreeStatusItem
-              label={loadSummary.hasLoaded ? '正在重新加载会话…' : '正在加载会话…'}
+              label='正在加载会话…'
               status='loading'
             />
           ) : null}
-          {!isSessionListPending && loadSummary.errors.length > 0 ? (
-            <AgentSessionTreeStatusItem label='部分 Agent 会话加载失败' status='error' />
+          {sessionTreeStatus === 'error' ? (
+            <AgentSessionTreeStatusItem label='部分 Agent 会话加载失败，重新打开可重试' status='error' />
           ) : null}
-          {!isSessionListPending && loadSummary.errors.length === 0 && sessions.length === 0 ? (
+          {sessionTreeStatus === 'empty' ? (
             <AgentSessionTreeStatusItem label='暂无对话' status='empty' />
           ) : sessions.map((session) => {
             const label = formatAgentSessionLabel(session)

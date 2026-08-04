@@ -27,6 +27,7 @@ import {
   getAgentSessionActivityKey,
   getAgentSessionTreeKey,
   normalizeAgentProjectPath,
+  selectVisibleAgentProjectSessions,
   summarizeAgentProjectSessionBucket,
 } from '@/features/agent/lib/session-tree'
 import type { ConversationRecord } from '@/features/conversations/types'
@@ -36,7 +37,10 @@ import {
   AgentProjectMenuPopup,
 } from './menus'
 import { AgentSessionTreeRow } from './session-row'
-import { AgentSessionTreeStatusItem } from './status-item'
+import {
+  AgentSessionTreeStatusItem,
+  resolveAgentSessionTreeStatus,
+} from './status-item'
 import type { AgentSessionTreeViewProps } from './types'
 
 function AgentConversationRow({
@@ -304,9 +308,17 @@ export function AgentProjectTree({
                 ) : projectState.projects.map((project) => {
                   const bucket = projectSessions[project.id]
                   const isExpanded = expandedProjectIds.has(project.id)
-                  const sessions = flattenAgentProjectSessions(bucket)
                   const loadSummary = summarizeAgentProjectSessionBucket(bucket, sessionTreeAgentIds)
                   const isSessionListPending = !loadSummary.hasLoaded || loadSummary.isLoading
+                  const isSessionLoadActive = loadSummary.isLoading
+                    || (isExpanded && !loadSummary.hasLoaded)
+                  const sessions = selectVisibleAgentProjectSessions(bucket)
+                  const sessionTreeStatus = resolveAgentSessionTreeStatus({
+                    errorCount: loadSummary.errors.length,
+                    hasCompleteSnapshot: loadSummary.hasCompleteSnapshot,
+                    isPending: isSessionListPending,
+                    sessionCount: sessions.length,
+                  })
 
                   const projectIcon = <ProjectIcon isOpen={isExpanded} />
                   const renderProjectMain: AppItemMainRenderer = (content, mainProps) => {
@@ -316,7 +328,7 @@ export function AgentProjectTree({
                       <Menu.Context.Root onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
                         <Menu.Context.Trigger
                           aria-expanded={isExpanded}
-                          aria-busy={isSessionListPending || undefined}
+                          aria-busy={isSessionLoadActive || undefined}
                           render={<AppItemMainButton className={className} hasDescription={hasDescription} role='button' />}
                           title={project.path}
                           onClick={() => toggleProject(project.id)}
@@ -381,17 +393,17 @@ export function AgentProjectTree({
                             className='agent-project-session-list'
                             aria-busy={isSessionListPending || undefined}
                           >
-                            {isSessionListPending ? (
+                            {sessionTreeStatus === 'loading' ? (
                               <AgentSessionTreeStatusItem
-                                label={loadSummary.hasLoaded ? '正在重新加载会话…' : '正在加载会话…'}
+                                label='正在加载会话…'
                                 status='loading'
                               />
-                            ) : loadSummary.errors.length > 0 ? (
+                            ) : sessionTreeStatus === 'error' ? (
                               <AgentSessionTreeStatusItem
                                 label='部分 Agent 会话加载失败，重新展开可重试'
                                 status='error'
                               />
-                            ) : sessions.length === 0 ? (
+                            ) : sessionTreeStatus === 'empty' ? (
                               <AgentSessionTreeStatusItem label='暂无对话' status='empty' />
                             ) : null}
                             {sessions.map((session) => {

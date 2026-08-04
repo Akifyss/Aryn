@@ -3,12 +3,22 @@ import type { AgentSessionListItem } from '@/features/agent/types'
 
 export type AgentSessionSourceState = {
   error: string | null
+  /** Whether this Agent source has settled in the current cache generation. */
   hasLoaded: boolean
   isLoading: boolean
   sessions: AgentSessionListItem[]
 }
 
-export type AgentProjectSessionBucket = Partial<Record<AgentId, AgentSessionSourceState>>
+export type AgentProjectSessionSources = Partial<Record<AgentId, AgentSessionSourceState>>
+
+export type AgentProjectSessionBucket = {
+  /**
+   * Once established, the tree may keep rendering this complete project-level
+   * snapshot while individual Agent sources refresh in the background.
+   */
+  hasCompleteSnapshot: boolean
+  sources: AgentProjectSessionSources
+}
 
 export type AgentSessionTreeItem = AgentSessionListItem & {
   agentId: AgentId
@@ -86,7 +96,7 @@ export function getAgentSessionTreeKey(agentId: AgentId, sessionPath: string) {
 export function flattenAgentProjectSessions(bucket: AgentProjectSessionBucket | undefined) {
   if (!bucket) return []
 
-  return Object.entries(bucket)
+  return Object.entries(bucket.sources)
     .flatMap(([agentId, source]) => (
       source?.sessions.map((session): AgentSessionTreeItem => ({
         ...session,
@@ -101,15 +111,50 @@ export function flattenAgentProjectSessions(bucket: AgentProjectSessionBucket | 
     })
 }
 
+export function selectVisibleAgentProjectSessions(bucket: AgentProjectSessionBucket | undefined) {
+  return bucket?.hasCompleteSnapshot ? flattenAgentProjectSessions(bucket) : []
+}
+
 export function summarizeAgentProjectSessionBucket(
   bucket: AgentProjectSessionBucket | undefined,
   agentIds: readonly AgentId[],
 ) {
-  const sources = agentIds.map((agentId) => bucket?.[agentId]).filter(Boolean)
+  const sources = agentIds.map((agentId) => bucket?.sources[agentId]).filter(Boolean)
   return {
     errors: sources.flatMap((source) => source?.error ? [source.error] : []),
-    hasLoaded: agentIds.length > 0 && agentIds.every((agentId) => bucket?.[agentId]?.hasLoaded),
-    isLoading: agentIds.some((agentId) => bucket?.[agentId]?.isLoading),
+    hasCompleteSnapshot: bucket?.hasCompleteSnapshot ?? false,
+    hasLoaded: areAgentProjectSessionSourcesLoaded(bucket?.sources, agentIds),
+    isLoading: agentIds.some((agentId) => bucket?.sources[agentId]?.isLoading),
+  }
+}
+
+export function areAgentProjectSessionSourcesLoaded(
+  sources: AgentProjectSessionSources | undefined,
+  agentIds: readonly AgentId[],
+) {
+  return agentIds.length > 0 && agentIds.every((agentId) => sources?.[agentId]?.hasLoaded)
+}
+
+export function storeAgentProjectSessionSource(
+  bucket: AgentProjectSessionBucket | undefined,
+  agentId: AgentId,
+  sessions: AgentSessionListItem[],
+  snapshotAgentIds: readonly AgentId[],
+): AgentProjectSessionBucket {
+  const sources: AgentProjectSessionSources = {
+    ...bucket?.sources,
+    [agentId]: {
+      error: null,
+      hasLoaded: true,
+      isLoading: false,
+      sessions,
+    },
+  }
+
+  return {
+    hasCompleteSnapshot: (bucket?.hasCompleteSnapshot ?? false)
+      || areAgentProjectSessionSourcesLoaded(sources, snapshotAgentIds),
+    sources,
   }
 }
 
@@ -118,16 +163,19 @@ export function invalidateAgentProjectSessionBuckets(
 ) {
   return Object.fromEntries(Object.entries(buckets).map(([projectId, bucket]) => [
     projectId,
-    Object.fromEntries(Object.entries(bucket).map(([agentId, source]) => [
-      agentId,
-      source
-        ? {
-            error: null,
-            hasLoaded: false,
-            isLoading: false,
-            sessions: source.sessions,
-          }
-        : source,
-    ])) as AgentProjectSessionBucket,
+    {
+      hasCompleteSnapshot: bucket.hasCompleteSnapshot,
+      sources: Object.fromEntries(Object.entries(bucket.sources).map(([agentId, source]) => [
+        agentId,
+        source
+          ? {
+              error: null,
+              hasLoaded: false,
+              isLoading: false,
+              sessions: source.sessions,
+            }
+          : source,
+      ])) as AgentProjectSessionSources,
+    },
   ])) as Record<string, AgentProjectSessionBucket>
 }
