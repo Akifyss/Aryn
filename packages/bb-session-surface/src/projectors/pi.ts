@@ -13,6 +13,7 @@ import type {
 import {
   appendOptimisticEvents,
   arrayValue,
+  buildEditDiff,
   CanonicalEventBuilder,
   fileChangeKind,
   markdownForAttachments,
@@ -52,8 +53,56 @@ function isDelegationTool(name: string) {
   return ['task', 'subagent', 'delegate', 'delegation', 'spawn_agent'].includes(name.toLowerCase())
 }
 
+function isFileTool(name: string) {
+  return ['edit', 'write'].includes(name.toLowerCase())
+}
+
 function toolResultText(message: Record<string, unknown>) {
-  return textFromBlocks(message.content) || safeJson(message.details ?? '')
+  return textFromBlocks(message.content)
+}
+
+const PI_EMPTY_COMMAND_OUTPUTS = new Set(['(no output)'])
+
+function commandResultText(message: Record<string, unknown>) {
+  const output = toolResultText(message)
+  return PI_EMPTY_COMMAND_OUTPUTS.has(output.trim()) ? '' : output
+}
+
+function optionalStringProperty(
+  value: Record<string, unknown> | null | undefined,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    if (typeof value?.[key] === 'string') return value[key]
+  }
+  return undefined
+}
+
+function normalizedFileChangePath(path: string) {
+  return path.replace(/\\/g, '/')
+}
+
+function piFileChangeItem(
+  callId: string,
+  input: Record<string, unknown> | null | undefined,
+  status: 'pending' | 'completed' | 'failed' | 'interrupted',
+): Extract<ThreadEventItem, { type: 'fileChange' }> | null {
+  const path = optionalStringProperty(input, ['path', 'filePath'])
+  if (!path) return null
+  const oldText = optionalStringProperty(input, ['oldText', 'oldString', 'old_string'])
+  const newText = optionalStringProperty(input, ['newText', 'newString', 'new_string', 'content'])
+  const diff = buildEditDiff(path, oldText, newText)
+  return {
+    type: 'fileChange',
+    id: callId,
+    changes: [{
+      path,
+      kind: oldText === undefined ? 'add' : 'update',
+      ...(diff ? { diff } : {}),
+    }],
+    status,
+    approvalStatus: null,
+  }
 }
 
 function piCompletedAt(message: Record<string, unknown>, startedAt: number) {
@@ -205,7 +254,9 @@ function piToolItem(
   const callId = piToolCallId(block, blockId)
   const name = piToolName(block)
   const input = piToolInput(block)
-  const output = result ? toolResultText(result) : ''
+  const output = result
+    ? isCommandTool(name) ? commandResultText(result) : toolResultText(result)
+    : ''
   const isError = result?.isError === true
   const status = result ? isError ? 'failed' : 'completed' : streaming ? 'pending' : 'interrupted'
   if (isCommandTool(name)) {
@@ -222,6 +273,10 @@ function piToolItem(
       ...(durationMs === null ? {} : { durationMs }),
     }
   }
+  if (isFileTool(name)) {
+    const item = piFileChangeItem(callId, input, status)
+    if (item) return item
+  }
   return {
     type: 'toolCall',
     id: callId,
@@ -231,8 +286,47 @@ function piToolItem(
       : input ?? undefined,
     status,
     ...(output ? { result: output } : {}),
-    ...(isError ? { error: output || 'Tool call failed' } : {}),
     ...(durationMs === null ? {} : { durationMs }),
+  }
+}
+
+function piStandaloneToolResultItem(
+  message: Record<string, unknown>,
+  fallbackId: string,
+): ThreadEventItem {
+  const callId = stringValue(message.toolCallId) || fallbackId
+  const name = stringValue(message.toolName) || 'unknown'
+  const isError = message.isError === true
+  const status = isError ? 'failed' as const : 'completed' as const
+  if (isCommandTool(name)) {
+    const output = commandResultText(message)
+    return {
+      type: 'commandExecution',
+      id: callId,
+      command: '',
+      cwd: '',
+      status,
+      approvalStatus: null,
+      ...(output ? { aggregatedOutput: output } : {}),
+      exitCode: isError ? 1 : 0,
+    }
+  }
+  if (isFileTool(name)) {
+    return {
+      type: 'fileChange',
+      id: callId,
+      changes: [],
+      status,
+      approvalStatus: null,
+    }
+  }
+  const output = toolResultText(message)
+  return {
+    type: 'toolCall',
+    id: callId,
+    tool: name,
+    status,
+    ...(output ? { result: output } : {}),
   }
 }
 
@@ -253,6 +347,7 @@ export function projectPiSnapshot(
   const builder = new CanonicalEventBuilder(sessionId, providerId, sessionId, firstTimestamp, projectionRevision)
   const persistedMessages: PersistedUserMessageIdentity[] = []
   const pairedToolResults = new Set<string>()
+  const projectedFileChangePaths = new Set<string>()
   const toolResults = resultByToolCall(messages)
   const runtimeStatus: ThreadRuntimeDisplayStatus = snapshot.isStreaming === true ? 'active' : 'idle'
   let currentTurnId: string | null = null
@@ -320,7 +415,25 @@ export function projectPiSnapshot(
     if (role === 'toolResult') {
       const callId = stringValue(message.toolCallId)
       if (!pairedToolResults.has(callId)) {
-        builder.unhandled(entryId, `pi/tool-result/${stringValue(message.toolName) || callId}`, message, currentTurnId, timestamp)
+        if (!currentTurnId) {
+          currentTurnId = `pi:turn:${entryId}`
+          currentTurnStartedAt = timestamp
+          currentTurnCompletedAt = completedAt
+          currentTurnStatus = message.isError === true ? 'failed' : 'completed'
+          currentTurnError = undefined
+          builder.turnStarted(currentTurnId, timestamp)
+        }
+        if (message.isError === true) {
+          currentTurnStatus = 'failed'
+          currentTurnError = toolResultText(message) || undefined
+        }
+        builder.item(
+          currentTurnId,
+          piStandaloneToolResultItem(message, entryId),
+          true,
+          timestamp,
+          completedAt,
+        )
       } else {
         for (let blockIndex = 0; blockIndex < arrayValue(message.content).length; blockIndex += 1) {
           const block = recordValue(arrayValue(message.content)[blockIndex])
@@ -418,6 +531,11 @@ export function projectPiSnapshot(
           const projectedItem = parentToolCallId
             ? { ...item, parentToolCallId } as ThreadEventItem
             : item
+          if (projectedItem.type === 'fileChange') {
+            projectedItem.changes.forEach((change) => {
+              projectedFileChangePaths.add(normalizedFileChangePath(change.path))
+            })
+          }
           builder.item(currentTurnId, projectedItem, terminal, blockTimestamp, itemCompletedAt)
           if (projectedItem.type === 'commandExecution') {
             const input = piToolInput(block)
@@ -520,6 +638,7 @@ export function projectPiSnapshot(
     }
     for (let index = 0; index < nativeFileChanges.length; index += 1) {
       const change = nativeFileChanges[index]!
+      if (projectedFileChangePaths.has(normalizedFileChangePath(change.path))) continue
       builder.item(currentTurnId, {
         type: 'fileChange',
         id: `pi:file-change-${index}:${change.path}`,

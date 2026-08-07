@@ -39,10 +39,12 @@ event ordering, turn grouping, streaming buffers, lifecycle aggregation, and
 - `opencode`
 - `codex`
 
-Anything that cannot be represented safely is emitted as an explicit native
-event row. It is never silently discarded. The bb surface is Aryn's only
-provider-session rendering path; the former provider-specific surfaces and
-view selector were removed after the unified projection reached parity.
+Anything that cannot be represented safely remains a canonical
+`provider/unhandled` event for diagnostics. Matching bb's default application
+behavior, those raw provider payloads are not rendered in the user-facing
+timeline. The bb surface is Aryn's only provider-session rendering path; the
+former provider-specific surfaces and view selector were removed after the
+unified projection reached parity.
 
 ## Exact code and compatibility code
 

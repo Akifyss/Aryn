@@ -254,6 +254,165 @@ export function fileChangeKind(value: unknown): 'add' | 'delete' | 'update' {
   }
 }
 
+type LineDiffOperation =
+  | { type: 'add'; line: string }
+  | { type: 'remove'; line: string }
+
+const MAX_EXACT_LINE_DIFF_CELLS = 1_000_000
+
+function splitComparableLines(text: string): string[] {
+  const normalized = text.replace(/\r\n?/gu, '\n')
+  if (!normalized) return []
+  const lines = normalized.split('\n')
+  if (lines.at(-1) === '') lines.pop()
+  return lines
+}
+
+function commonPrefixLength(oldLines: readonly string[], newLines: readonly string[]) {
+  const limit = Math.min(oldLines.length, newLines.length)
+  let index = 0
+  while (index < limit && oldLines[index] === newLines[index]) index += 1
+  return index
+}
+
+function commonSuffixLength({
+  newLines,
+  oldLines,
+  prefixLength,
+}: {
+  newLines: readonly string[]
+  oldLines: readonly string[]
+  prefixLength: number
+}) {
+  let oldIndex = oldLines.length - 1
+  let newIndex = newLines.length - 1
+  let length = 0
+  while (
+    oldIndex >= prefixLength
+    && newIndex >= prefixLength
+    && oldLines[oldIndex] === newLines[newIndex]
+  ) {
+    length += 1
+    oldIndex -= 1
+    newIndex -= 1
+  }
+  return length
+}
+
+function buildReplacementLineDiff(
+  oldLines: readonly string[],
+  newLines: readonly string[],
+): LineDiffOperation[] {
+  return [
+    ...oldLines.map((line) => ({ type: 'remove' as const, line })),
+    ...newLines.map((line) => ({ type: 'add' as const, line })),
+  ]
+}
+
+function buildExactLineDiff(
+  oldLines: readonly string[],
+  newLines: readonly string[],
+): LineDiffOperation[] {
+  if (!oldLines.length) return newLines.map((line) => ({ type: 'add', line }))
+  if (!newLines.length) return oldLines.map((line) => ({ type: 'remove', line }))
+
+  const columnCount = newLines.length + 1
+  const cellCount = (oldLines.length + 1) * columnCount
+  if (cellCount > MAX_EXACT_LINE_DIFF_CELLS) {
+    return buildReplacementLineDiff(oldLines, newLines)
+  }
+
+  const lcs = new Uint32Array(cellCount)
+  for (let oldIndex = oldLines.length - 1; oldIndex >= 0; oldIndex -= 1) {
+    const rowOffset = oldIndex * columnCount
+    const nextRowOffset = (oldIndex + 1) * columnCount
+    for (let newIndex = newLines.length - 1; newIndex >= 0; newIndex -= 1) {
+      lcs[rowOffset + newIndex] = oldLines[oldIndex] === newLines[newIndex]
+        ? lcs[nextRowOffset + newIndex + 1]! + 1
+        : Math.max(lcs[nextRowOffset + newIndex]!, lcs[rowOffset + newIndex + 1]!)
+    }
+  }
+
+  const operations: LineDiffOperation[] = []
+  let oldIndex = 0
+  let newIndex = 0
+  while (oldIndex < oldLines.length && newIndex < newLines.length) {
+    if (oldLines[oldIndex] === newLines[newIndex]) {
+      oldIndex += 1
+      newIndex += 1
+      continue
+    }
+    const removeScore = lcs[(oldIndex + 1) * columnCount + newIndex]!
+    const addScore = lcs[oldIndex * columnCount + newIndex + 1]!
+    if (removeScore >= addScore) {
+      operations.push({ type: 'remove', line: oldLines[oldIndex] ?? '' })
+      oldIndex += 1
+    } else {
+      operations.push({ type: 'add', line: newLines[newIndex] ?? '' })
+      newIndex += 1
+    }
+  }
+  while (oldIndex < oldLines.length) {
+    operations.push({ type: 'remove', line: oldLines[oldIndex] ?? '' })
+    oldIndex += 1
+  }
+  while (newIndex < newLines.length) {
+    operations.push({ type: 'add', line: newLines[newIndex] ?? '' })
+    newIndex += 1
+  }
+  return operations
+}
+
+function buildChangedLineDiff(
+  oldLines: readonly string[],
+  newLines: readonly string[],
+): LineDiffOperation[] {
+  const prefixLength = commonPrefixLength(oldLines, newLines)
+  const suffixLength = commonSuffixLength({ oldLines, newLines, prefixLength })
+  return buildExactLineDiff(
+    oldLines.slice(prefixLength, oldLines.length - suffixLength),
+    newLines.slice(prefixLength, newLines.length - suffixLength),
+  )
+}
+
+function formatLineDiff(headers: readonly string[], operations: readonly LineDiffOperation[]) {
+  const body = operations.map((operation) => (
+    operation.type === 'add' ? `+${operation.line}` : `-${operation.line}`
+  ))
+  return [...headers, ...body].join('\n') + '\n'
+}
+
+// Kept byte-for-byte compatible in behavior with bb's shared adapter helper.
+export function buildEditDiff(
+  filePath: string,
+  oldString: string | undefined,
+  newString: string | undefined,
+): string | undefined {
+  const normalizedPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '')
+  if (oldString === undefined && newString !== undefined) {
+    return formatLineDiff(
+      ['--- /dev/null', `+++ b/${normalizedPath}`],
+      splitComparableLines(newString).map((line) => ({ type: 'add', line })),
+    )
+  }
+  if (oldString !== undefined && newString === undefined) {
+    return formatLineDiff(
+      [`--- a/${normalizedPath}`, '+++ /dev/null'],
+      splitComparableLines(oldString).map((line) => ({ type: 'remove', line })),
+    )
+  }
+  if (oldString !== undefined && newString !== undefined) {
+    const operations = buildChangedLineDiff(
+      splitComparableLines(oldString),
+      splitComparableLines(newString),
+    )
+    return operations.length
+      ? formatLineDiff([`--- a/${normalizedPath}`, `+++ b/${normalizedPath}`], operations)
+      : undefined
+  }
+  return undefined
+}
+
 function jsonValue(value: unknown): unknown {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
   if (typeof value === 'number') return Number.isFinite(value) ? value : String(value)
@@ -274,8 +433,15 @@ function startedItem(item: ThreadEventItem): ThreadEventItem {
     case 'plan':
       return { ...item, text: '' }
     case 'commandExecution':
-      return { ...item, status: 'pending', aggregatedOutput: undefined, exitCode: undefined }
+      return {
+        ...item,
+        status: 'pending',
+        approvalStatus: null,
+        aggregatedOutput: undefined,
+        exitCode: undefined,
+      }
     case 'fileChange':
+      return { ...item, status: 'pending', approvalStatus: null }
     case 'toolCall':
       return { ...item, status: 'pending' }
     case 'backgroundTask':
@@ -366,12 +532,13 @@ export class CanonicalEventBuilder {
     }, `${this.threadId}:thread-identity`, timestamp)
   }
 
-  turnStarted(turnId: string, timestamp?: unknown) {
+  turnStarted(turnId: string, timestamp?: unknown, parentToolCallId?: string) {
     this.emit({
       type: 'turn/started',
       threadId: this.threadId,
       providerThreadId: this.providerThreadId,
       scope: { kind: 'turn', turnId },
+      ...(parentToolCallId ? { parentToolCallId } : {}),
     }, `${turnId}:turn-started`, timestamp)
   }
 
@@ -519,6 +686,16 @@ export class CanonicalEventBuilder {
       scope: { kind: 'turn', turnId },
       item,
     }, `${item.id}:item-completed`, completedTimestamp ?? timestamp)
+  }
+
+  completeItem(turnId: string, item: ThreadEventItem, timestamp?: unknown) {
+    this.emit({
+      type: 'item/completed',
+      threadId: this.threadId,
+      providerThreadId: this.providerThreadId,
+      scope: { kind: 'turn', turnId },
+      item,
+    }, `${item.id}:item-completed`, timestamp)
   }
 
   fileOutput(turnId: string, itemId: string, output: string, timestamp?: unknown) {

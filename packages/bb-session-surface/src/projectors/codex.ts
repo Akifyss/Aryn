@@ -10,13 +10,11 @@ import {
   appendOptimisticEvents,
   arrayValue,
   CanonicalEventBuilder,
-  fileChangeKind,
   itemStatus,
   normalizeEpoch,
   normalizedEpochOrNull,
   numberValue,
   recordValue,
-  safeJson,
   stableFallbackEpoch,
   stringValue,
   textFromBlocks,
@@ -101,55 +99,166 @@ function itemIsTerminal(
   return itemIndex < itemCount - 1
 }
 
-function meaningfulNativeDetail(value: unknown): boolean {
-  if (value === null || value === undefined || value === '') return false
-  if (Array.isArray(value)) return value.length > 0
-  const record = recordValue(value)
-  return record ? Object.keys(record).length > 0 : true
+function nonEmptyStrings(values: unknown[]): string[] {
+  return values.map(stringValue).filter(Boolean)
 }
 
-function codexNativeDetail(item: Record<string, unknown>) {
-  let detail: Record<string, unknown> = {}
-  switch (stringValue(item.type)) {
-    case 'agentMessage':
-      detail = {
-        phase: item.phase,
-        memoryCitation: item.memoryCitation,
-      }
-      break
-    case 'commandExecution':
-      detail = {
-        processId: item.processId,
-        source: item.source,
-        commandActions: item.commandActions,
-      }
-      break
-    case 'mcpToolCall':
-      detail = {
-        appContext: item.appContext,
-        mcpAppResourceUri: item.mcpAppResourceUri,
-        pluginId: item.pluginId,
-        ...(!recordValue(item.arguments) && meaningfulNativeDetail(item.arguments)
-          ? { nativeArguments: item.arguments }
-          : {}),
-      }
-      break
-    case 'dynamicToolCall':
-      detail = !recordValue(item.arguments) && meaningfulNativeDetail(item.arguments)
-        ? { nativeArguments: item.arguments }
-        : {}
-      break
-    case 'subAgentActivity':
-      detail = { agentThreadId: item.agentThreadId }
-      break
-    case 'webSearch':
-      detail = { action: item.action }
-      break
+function dedupeStrings(values: string[]): string[] {
+  return [...new Set(values)]
+}
+
+function codexItemStatus(value: unknown) {
+  switch (stringValue(value).toLowerCase()) {
+    case 'inprogress':
+    case 'in_progress':
+      return 'pending' as const
+    case 'completed':
+      return 'completed' as const
+    case 'failed':
+      return 'failed' as const
+    case 'declined':
+      return 'interrupted' as const
+    default:
+      return null
   }
-  const meaningful = Object.fromEntries(
-    Object.entries(detail).filter(([, value]) => meaningfulNativeDetail(value)),
-  )
-  return Object.keys(meaningful).length > 0 ? meaningful : null
+}
+
+function codexApprovalStatus(value: unknown) {
+  return stringValue(value).toLowerCase() === 'declined'
+    ? 'denied' as const
+    : null
+}
+
+function dynamicToolCallResult(value: unknown): {
+  result: string | undefined
+  valid: boolean
+} {
+  if (value === null || value === undefined) return { result: undefined, valid: true }
+  if (!Array.isArray(value)) return { result: undefined, valid: false }
+  let valid = true
+  const parts = value.flatMap((entry) => {
+    const contentItem = recordValue(entry)
+    switch (stringValue(contentItem?.type)) {
+      case 'inputText': {
+        const text = stringValue(contentItem?.text)
+        return text.trim() ? [text] : []
+      }
+      case 'inputImage': {
+        const imageUrl = stringValue(contentItem?.imageUrl)
+        return imageUrl ? [`[image: ${imageUrl}]`] : []
+      }
+      default:
+        valid = false
+        return []
+    }
+  })
+  return { result: parts.length ? parts.join('\n') : undefined, valid }
+}
+
+function dynamicToolCallError(success: unknown, result: string | undefined) {
+  if (success !== false) return undefined
+  return result?.trim() || 'Dynamic tool call failed'
+}
+
+function codexFileChangeKind(value: unknown): 'add' | 'delete' | 'update' | null {
+  switch (stringValue(recordValue(value)?.type ?? value).toLowerCase()) {
+    case 'add':
+    case 'added':
+    case 'create':
+    case 'created':
+      return 'add'
+    case 'delete':
+    case 'deleted':
+    case 'remove':
+    case 'removed':
+      return 'delete'
+    case 'update':
+    case 'updated':
+    case 'rename':
+    case 'renamed':
+      return 'update'
+    default:
+      return null
+  }
+}
+
+type CodexTrackedSubAgent = {
+  agentPath: string
+  agentThreadId: string
+  callId: string
+  parentToolCallId?: string
+  parentTurnId: string
+  providerThreadId: string
+  terminal: boolean
+}
+
+function codexSubAgentToolCall(
+  tracked: CodexTrackedSubAgent,
+  status: 'pending' | 'completed' | 'failed' | 'interrupted',
+): Extract<ThreadEventItem, { type: 'toolCall' }> {
+  return {
+    type: 'toolCall',
+    id: tracked.callId,
+    tool: 'spawnAgent',
+    arguments: {
+      senderThreadId: tracked.providerThreadId,
+      receiverThreadIds: [tracked.agentThreadId],
+      description: tracked.agentPath,
+    },
+    status,
+    ...(tracked.parentToolCallId ? { parentToolCallId: tracked.parentToolCallId } : {}),
+    ...(status === 'pending'
+      ? {}
+      : { result: { agentPath: tracked.agentPath, agentThreadId: tracked.agentThreadId } }),
+  }
+}
+
+function shouldIgnoreCodexItem(item: Record<string, unknown>): boolean {
+  if (stringValue(item.type) !== 'webSearch') return false
+  const action = recordValue(item.action)
+  return !action || stringValue(action.type) === 'other'
+}
+
+function codexWebItem(
+  item: Record<string, unknown>,
+  itemId: string,
+  runtimeOutput: string,
+): ThreadEventItem | null {
+  const action = recordValue(item.action)
+  const resultText = runtimeOutput || stringValue(item.result) || null
+  switch (stringValue(action?.type)) {
+    case 'search': {
+      const queries = dedupeStrings(nonEmptyStrings([
+        ...arrayValue(action?.queries),
+        action?.query,
+        item.query,
+      ]))
+      return queries.length > 0
+        ? { type: 'webSearch', id: itemId, queries, resultText }
+        : null
+    }
+    case 'openPage': {
+      const url = stringValue(action?.url)
+      return url
+        ? { type: 'webFetch', id: itemId, url, prompt: null, pattern: null, resultText }
+        : null
+    }
+    case 'findInPage': {
+      const url = stringValue(action?.url)
+      return url
+        ? {
+            type: 'webFetch',
+            id: itemId,
+            url,
+            prompt: null,
+            pattern: stringValue(action?.pattern) || null,
+            resultText,
+          }
+        : null
+    }
+    default:
+      return null
+  }
 }
 
 function codexItem(
@@ -157,7 +266,6 @@ function codexItem(
   itemId: string,
   runtimeOutput: string,
 ): ThreadEventItem | null {
-  const status = itemStatus(item.status, 'completed')
   const durationMs = nonNegativeDurationMs(item.durationMs)
   switch (stringValue(item.type)) {
     case 'userMessage':
@@ -176,6 +284,8 @@ function codexItem(
         content: arrayValue(item.content).map(stringValue).filter(Boolean),
       }
     case 'commandExecution': {
+      const status = codexItemStatus(item.status)
+      if (!status) return null
       const output = stringValue(item.aggregatedOutput) || runtimeOutput
       const exitCode = numberValue(item.exitCode)
       return {
@@ -183,33 +293,52 @@ function codexItem(
         id: itemId,
         command: stringValue(item.command) || 'Command',
         cwd: stringValue(item.cwd),
-        status: exitCode !== null && exitCode !== 0 ? 'failed' : status,
-        approvalStatus: null,
+        status: status === 'interrupted'
+          ? status
+          : exitCode !== null && exitCode !== 0 ? 'failed' : status,
+        approvalStatus: codexApprovalStatus(item.status),
         ...(output ? { aggregatedOutput: output } : {}),
         ...(exitCode === null ? {} : { exitCode }),
         ...(durationMs === null ? {} : { durationMs }),
       }
     }
     case 'fileChange': {
-      const changes = arrayValue(item.changes).flatMap((value) => {
+      const status = codexItemStatus(item.status)
+      if (!status) return null
+      const nativeChanges = arrayValue(item.changes)
+      const changes = nativeChanges.flatMap((value) => {
         const change = recordValue(value)
         const path = stringValue(change?.path)
         if (!path) return []
         const diff = stringValue(change?.diff)
-        const movePath = stringValue(change?.movePath)
+        const nativeKind = recordValue(change?.kind)
+        const kind = codexFileChangeKind(change?.kind)
+        if (!kind) return []
+        const movePath = kind === 'update'
+          ? stringValue(nativeKind?.move_path) || stringValue(change?.movePath)
+          : ''
         return [{
           path,
-          kind: fileChangeKind(change?.kind),
+          kind,
           ...(diff ? { diff } : {}),
           ...(movePath ? { movePath } : {}),
         }]
       })
-      if (changes.length === 0) return null
-      return { type: 'fileChange', id: itemId, changes, status, approvalStatus: null }
+      if (changes.length === 0 || changes.length !== nativeChanges.length) return null
+      return {
+        type: 'fileChange',
+        id: itemId,
+        changes,
+        status,
+        approvalStatus: codexApprovalStatus(item.status),
+      }
     }
     case 'mcpToolCall': {
+      const status = codexItemStatus(item.status)
+      if (!status) return null
       const error = recordValue(item.error)
-      const result = error ? safeJson(error) : runtimeOutput || item.result
+      const errorMessage = stringValue(error?.message)
+      if (error && !errorMessage) return null
       return {
         type: 'toolCall',
         id: itemId,
@@ -217,12 +346,17 @@ function codexItem(
         tool: stringValue(item.tool) || 'MCP tool',
         arguments: recordValue(item.arguments) ?? undefined,
         status: error ? 'failed' : status,
-        ...(result === undefined || result === '' ? {} : { result }),
-        ...(error ? { error: safeJson(error) } : {}),
+        ...(errorMessage ? { error: errorMessage } : {}),
         ...(durationMs === null ? {} : { durationMs }),
       }
     }
-    case 'dynamicToolCall':
+    case 'dynamicToolCall': {
+      const status = codexItemStatus(item.status)
+      if (!status) return null
+      const normalizedResult = dynamicToolCallResult(item.contentItems)
+      if (!normalizedResult.valid) return null
+      const result = runtimeOutput || normalizedResult.result
+      const error = dynamicToolCallError(item.success, result)
       return {
         type: 'toolCall',
         id: itemId,
@@ -230,52 +364,37 @@ function codexItem(
         tool: stringValue(item.tool) || 'Dynamic tool',
         arguments: recordValue(item.arguments) ?? undefined,
         status: item.success === false ? 'failed' : status,
-        ...(runtimeOutput || item.contentItems !== undefined
-          ? { result: runtimeOutput || item.contentItems }
-          : {}),
-        ...(item.success === false ? { error: 'Tool call failed' } : {}),
+        ...(result ? { result } : {}),
+        ...(error ? { error } : {}),
         ...(durationMs === null ? {} : { durationMs }),
       }
+    }
     case 'collabAgentToolCall': {
+      const status = codexItemStatus(item.status)
+      if (!status) return null
       const nativeTool = stringValue(item.tool) || 'Agent'
+      const prompt = stringValue(item.prompt)
+      const model = stringValue(item.model)
+      const reasoningEffort = stringValue(item.reasoningEffort)
       return {
         type: 'toolCall',
         id: itemId,
-        tool: 'Task',
+        tool: nativeTool,
         arguments: {
-          nativeTool,
           senderThreadId: stringValue(item.senderThreadId),
-          prompt: stringValue(item.prompt),
           receiverThreadIds: arrayValue(item.receiverThreadIds).map(stringValue).filter(Boolean),
-          model: stringValue(item.model),
-          reasoningEffort: stringValue(item.reasoningEffort),
-          agentsStates: recordValue(item.agentsStates) ?? {},
+          ...(prompt ? { prompt } : {}),
+          ...(model ? { model } : {}),
+          ...(reasoningEffort ? { reasoningEffort } : {}),
         },
         status,
-        ...(runtimeOutput ? { result: runtimeOutput } : {}),
+        result: recordValue(item.agentsStates) ?? {},
       }
     }
     case 'subAgentActivity':
-      return {
-        type: 'backgroundTask',
-        id: itemId,
-        taskType: 'local_subagent',
-        description: stringValue(item.agentPath) || stringValue(item.kind) || 'Sub-agent activity',
-        status,
-        taskStatus: status === 'pending' ? 'running' : status === 'completed' ? 'completed' : 'failed',
-        skipTranscript: false,
-        ...(runtimeOutput ? { summary: runtimeOutput } : {}),
-      }
-    case 'webSearch': {
-      const queries = arrayValue(item.queries).map(stringValue).filter(Boolean)
-      const fallbackQuery = stringValue(item.query) || stringValue(item.url) || 'Search'
-      return {
-        type: 'webSearch',
-        id: itemId,
-        queries: queries.length ? queries : [fallbackQuery],
-        resultText: runtimeOutput || stringValue(item.result) || null,
-      }
-    }
+      return null
+    case 'webSearch':
+      return codexWebItem(item, itemId, runtimeOutput)
     case 'imageView':
       return { type: 'imageView', id: itemId, path: stringValue(item.path) }
     case 'plan':
@@ -284,14 +403,7 @@ function codexItem(
       return { type: 'contextCompaction', id: itemId }
     case 'imageGeneration':
     case 'sleep':
-      return {
-        type: 'toolCall',
-        id: itemId,
-        tool: stringValue(item.type),
-        arguments: recordValue(item.arguments) ?? undefined,
-        status,
-        result: runtimeOutput || item.result || item,
-      }
+      return null
     default:
       return null
   }
@@ -311,6 +423,9 @@ export function projectCodexSnapshot(
   const itemRuntime = recordValue(snapshot.itemRuntime) ?? {}
   const turnRuntime = recordValue(snapshot.turnRuntime) ?? {}
   const tokenUsage = codexTokenUsage(snapshot.tokenUsage)
+  const pendingSubAgents: CodexTrackedSubAgent[] = []
+  const subAgentsByCallId = new Map<string, CodexTrackedSubAgent>()
+  const subAgentsByAgentThreadId = new Map<string, CodexTrackedSubAgent>()
   builder.threadStarted(thread.createdAt)
 
   for (let turnIndex = 0; turnIndex < turns.length; turnIndex += 1) {
@@ -321,13 +436,19 @@ export function projectCodexSnapshot(
     }
     const turnId = stringValue(turn.id) || `turn-${turnIndex}`
     const completedStatus = turnStatus(turn.status)
+    const items = arrayValue(turn.items)
+    let delegatedSubAgent: CodexTrackedSubAgent | undefined
+    while (pendingSubAgents.length && !delegatedSubAgent) {
+      const candidate = pendingSubAgents.shift()
+      if (candidate && !candidate.terminal) delegatedSubAgent = candidate
+    }
+    const delegatedParentToolCallId = delegatedSubAgent?.callId
     const timing = codexTurnTiming(
       turn,
       fallbackTime + turnIndex * 10_000,
       completedStatus !== null,
     )
     const { completedAt, startedAt } = timing
-    const items = arrayValue(turn.items)
     const userItems = items.flatMap((value, itemIndex) => {
       const nativeItem = recordValue(value)
       if (stringValue(nativeItem?.type) !== 'userMessage') return []
@@ -335,12 +456,14 @@ export function projectCodexSnapshot(
       const content = userContentFromBlocks(nativeItem?.content)
       const text = content.filter((entry) => entry.type === 'text').map((entry) => entry.text).join('\n\n')
       const clientId = stringValue(nativeItem?.clientId)
-      persistedMessages.push({
-        allowContentTimestampMatch: !clientId,
-        ids: [itemId, clientId].filter(Boolean),
-        text,
-        timestamp: startedAt + itemIndex,
-      })
+      if (!delegatedSubAgent) {
+        persistedMessages.push({
+          allowContentTimestampMatch: !clientId,
+          ids: [itemId, clientId].filter(Boolean),
+          text,
+          timestamp: startedAt + itemIndex,
+        })
+      }
       for (const { index, value: unsupported } of unsupportedUserContentBlocks(nativeItem?.content)) {
         builder.unhandled(
           `${itemId}:user-block-${index}`,
@@ -352,7 +475,7 @@ export function projectCodexSnapshot(
       }
       return [{ content, itemId }]
     })
-    if (userItems.length) {
+    if (userItems.length && !delegatedSubAgent) {
       builder.userRequest(
         turnId,
         userItems[0]!.itemId,
@@ -360,7 +483,7 @@ export function projectCodexSnapshot(
         startedAt,
       )
     } else {
-      builder.turnStarted(turnId, startedAt)
+      builder.turnStarted(turnId, startedAt, delegatedParentToolCallId)
     }
 
     for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
@@ -373,6 +496,52 @@ export function projectCodexSnapshot(
       }
       const runtime = recordValue(itemRuntime[itemId])
       const runtimeOutput = stringValue(runtime?.output)
+      if (stringValue(nativeItem.type) === 'subAgentActivity') {
+        const kind = stringValue(nativeItem.kind)
+        const agentThreadId = stringValue(nativeItem.agentThreadId)
+        const agentPath = stringValue(nativeItem.agentPath)
+        if (kind === 'started' && agentThreadId && agentPath) {
+          if (!subAgentsByCallId.has(itemId)) {
+            const tracked: CodexTrackedSubAgent = {
+              agentPath,
+              agentThreadId,
+              callId: itemId,
+              ...(delegatedParentToolCallId
+                ? { parentToolCallId: delegatedParentToolCallId }
+                : {}),
+              parentTurnId: turnId,
+              providerThreadId: threadId,
+              terminal: false,
+            }
+            subAgentsByCallId.set(itemId, tracked)
+            subAgentsByAgentThreadId.set(agentThreadId, tracked)
+            pendingSubAgents.push(tracked)
+            builder.item(
+              turnId,
+              codexSubAgentToolCall(tracked, 'pending'),
+              false,
+              timestamp,
+            )
+          }
+        } else if (kind === 'interrupted' && agentThreadId) {
+          const tracked = subAgentsByAgentThreadId.get(agentThreadId)
+          if (tracked && !tracked.terminal) {
+            tracked.terminal = true
+            if (subAgentsByAgentThreadId.get(agentThreadId) === tracked) {
+              subAgentsByAgentThreadId.delete(agentThreadId)
+            }
+            builder.completeItem(
+              tracked.parentTurnId,
+              codexSubAgentToolCall(tracked, 'interrupted'),
+              timestamp,
+            )
+          }
+        } else if (kind !== 'interacted') {
+          builder.unhandled(itemId, 'codex/subAgentActivity', nativeItem, turnId, timestamp)
+        }
+        continue
+      }
+      if (shouldIgnoreCodexItem(nativeItem)) continue
       const item = codexItem(nativeItem, itemId, runtimeOutput)
       if (!item) {
         builder.unhandled(itemId, `codex/${stringValue(nativeItem.type) || 'item'}`, nativeItem, turnId, timestamp)
@@ -382,6 +551,7 @@ export function projectCodexSnapshot(
         continue
       }
       const parentToolCallId = stringValue(nativeItem.parentToolCallId)
+        || delegatedParentToolCallId
       const projectedItem = parentToolCallId
         ? { ...item, parentToolCallId } as ThreadEventItem
         : item
@@ -399,16 +569,6 @@ export function projectCodexSnapshot(
           arrayValue(runtime?.progress).map(stringValue).filter(Boolean),
           stringValue(nativeItem.type) === 'mcpToolCall',
           timestamp,
-        )
-      }
-      const nativeDetail = codexNativeDetail(nativeItem)
-      if (nativeDetail) {
-        builder.unhandled(
-          `${itemId}:native-detail`,
-          `codex/${stringValue(nativeItem.type)}/nativeDetail`,
-          nativeDetail,
-          turnId,
-          timestamp + 0.5,
         )
       }
       const terminalInput = stringValue(runtime?.terminalInput)
@@ -466,6 +626,17 @@ export function projectCodexSnapshot(
         completedAt,
         stringValue(recordValue(turn.error)?.message) || undefined,
       )
+      if (delegatedSubAgent && !delegatedSubAgent.terminal) {
+        delegatedSubAgent.terminal = true
+        if (subAgentsByAgentThreadId.get(delegatedSubAgent.agentThreadId) === delegatedSubAgent) {
+          subAgentsByAgentThreadId.delete(delegatedSubAgent.agentThreadId)
+        }
+        builder.completeItem(
+          delegatedSubAgent.parentTurnId,
+          codexSubAgentToolCall(delegatedSubAgent, completedStatus),
+          completedAt,
+        )
+      }
     }
   }
 

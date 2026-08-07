@@ -127,7 +127,6 @@ function codexSnapshot(): BbNativeSessionSnapshot {
         output: 'matrix-command-success-codex',
         terminalInput: 'matrix-terminal-input-codex',
       },
-      'parent-tool': { output: 'matrix-tool-success-codex' },
       'child-tool': { output: 'matrix-nested-child-codex' },
     },
     status: { type: 'busy' },
@@ -166,13 +165,14 @@ function codexSnapshot(): BbNativeSessionSnapshot {
           type: 'commandExecution',
         }, {
           arguments: { marker: 'matrix-tool-input-codex' },
+          contentItems: [{ type: 'inputText', text: 'matrix-tool-success-codex' }],
           id: 'parent-tool',
           status: 'completed',
           tool: 'matrix_tool',
-          type: 'mcpToolCall',
+          type: 'dynamicToolCall',
         }, {
           arguments: { marker: 'matrix-tool-failure-codex' },
-          contentItems: [{ text: 'matrix-tool-failure-result-codex' }],
+          contentItems: [{ type: 'inputText', text: 'matrix-tool-failure-result-codex' }],
           id: 'failed-tool',
           status: 'failed',
           success: false,
@@ -184,10 +184,11 @@ function codexSnapshot(): BbNativeSessionSnapshot {
           prompt: 'matrix-delegation-codex',
           receiverThreadIds: ['child-thread'],
           status: 'completed',
-          tool: 'spawn_agent',
+          tool: 'spawnAgent',
           type: 'collabAgentToolCall',
         }, {
           arguments: { marker: 'matrix-unknown-tool-codex' },
+          contentItems: null,
           id: 'child-tool',
           parentToolCallId: 'delegation-codex',
           status: 'completed',
@@ -195,8 +196,9 @@ function codexSnapshot(): BbNativeSessionSnapshot {
           type: 'dynamicToolCall',
         }, {
           agentPath: 'matrix-nested-work-codex',
+          agentThreadId: 'matrix-subagent-thread-codex',
           id: 'subagent-codex',
-          kind: 'review',
+          kind: 'started',
           parentToolCallId: 'delegation-codex',
           status: 'completed',
           type: 'subAgentActivity',
@@ -508,7 +510,7 @@ function project(agentId: BbAgentId, runtimeState?: BbSessionRuntimeState) {
 }
 
 describe('bb unified provider acceptance matrix', () => {
-  it.each(AGENT_IDS)('preserves the complete conversation vocabulary for %s', (agentId) => {
+  it.each(AGENT_IDS)('preserves the user-facing conversation vocabulary for %s', (agentId) => {
     const result = project(agentId)
     const rows = flattenRows(result.rows)
     const serialized = JSON.stringify(rows)
@@ -524,7 +526,6 @@ describe('bb unified provider acceptance matrix', () => {
     expect(serialized).toContain(`https://example.com/matrix-${agentId}.png`)
     expect(serialized).toContain(`C:/workspace/matrix-${agentId}.txt`)
     expect(serialized).toContain(`matrix-command-success-${agentId}`)
-    expect(serialized).toContain(`matrix-terminal-input-${agentId}`)
     expect(serialized).toContain(`matrix-tool-success-${agentId}`)
     expect(serialized).toContain(`matrix-tool-failure-${agentId}`)
     expect(serialized).toContain(`matrix-unknown-tool-${agentId}`)
@@ -544,17 +545,17 @@ describe('bb unified provider acceptance matrix', () => {
     expect(serialized).toContain(`matrix-question-${agentId}`)
     expect(serialized).toContain(`matrix-answer-${agentId}`)
     expect(serialized).toContain(`matrix-permission-title-${agentId}`)
-    expect(serialized).toContain(`matrix-unknown-native-${agentId}`)
+    expect(serialized).not.toContain(`matrix-unknown-native-${agentId}`)
     if (agentId === 'opencode') {
       expect(serialized).toContain('matrix-tool-attachment-opencode.txt')
       expect(serialized).not.toContain('matrix-synthetic-opencode')
     }
     expect(serialized).toContain(`matrix-optimistic-${agentId}`)
     expect(rows).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'system', operationKind: 'provider-unhandled' }),
       expect.objectContaining({ kind: 'work', workKind: 'question' }),
       expect.objectContaining({ kind: 'work', workKind: 'approval' }),
     ]))
+    expect(serialized).not.toContain('"operationKind":"provider-unhandled"')
     expect(count(serialized, `matrix-optimistic-${agentId}`)).toBeGreaterThan(0)
   })
 

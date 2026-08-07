@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { ThreadItem as CodexThreadItem } from '../../../../electron/shared/agent-contracts/providers/codex/protocol/generated/v2/ThreadItem'
 import type { BbAgentId, BbNativeSessionSnapshot } from '../contracts'
 import type { TimelineRow } from '../compat/server-contract'
 import { projectCodexSnapshot } from './codex'
@@ -119,8 +120,8 @@ describe('vendored bb native session flow', () => {
             { id: 'user-1', type: 'userMessage', content: [{ type: 'text', text: 'hello' }] },
             { id: 'assistant-1', type: 'agentMessage', text: 'hi' },
             { id: 'thought-1', type: 'reasoning', summary: ['checking'] },
-            { id: 'command-1', type: 'commandExecution', command: 'pwd', aggregatedOutput: 'C:/workspace', exitCode: 0 },
-            { id: 'file-1', type: 'fileChange', changes: [{ path: 'README.md', kind: 'update', diff: '+hello' }] },
+            { id: 'command-1', type: 'commandExecution', command: 'pwd', aggregatedOutput: 'C:/workspace', exitCode: 0, status: 'completed' },
+            { id: 'file-1', type: 'fileChange', changes: [{ path: 'README.md', kind: 'update', diff: '+hello' }], status: 'completed' },
           ],
         }],
       },
@@ -193,8 +194,8 @@ describe('vendored bb native session flow', () => {
     expect(updatedAssistant!.sourceSeqEnd).toBeGreaterThan(initialAssistant!.sourceSeqEnd)
   })
 
-  it('keeps Codex native metadata that bb has no first-class row for', () => {
-    const canonical = projectCodexSnapshot({
+  it('matches bb Codex translation for known metadata and web activity', () => {
+    const snapshot: BbNativeSessionSnapshot = {
       agentId: 'codex',
       thread: {
         id: 'codex-native-details',
@@ -242,30 +243,308 @@ describe('vendored bb native session flow', () => {
           }, {
             id: 'subagent-1',
             type: 'subAgentActivity',
-            status: 'completed',
+            kind: 'started',
             agentPath: '/root/research',
             agentThreadId: 'agent-thread-1',
           }, {
             id: 'search-1',
             type: 'webSearch',
-            query: 'query',
-            action: { type: 'search', query: 'query' },
+            query: 'fallback query',
+            action: { type: 'search', query: 'primary query', queries: ['primary query', 'secondary query'] },
+          }, {
+            id: 'open-page-1',
+            type: 'webSearch',
+            query: 'ignored fallback',
+            action: { type: 'openPage', url: 'https://example.com/docs' },
+          }, {
+            id: 'find-in-page-1',
+            type: 'webSearch',
+            query: 'ignored fallback',
+            action: { type: 'findInPage', url: 'https://example.com/docs', pattern: 'API' },
+          }, {
+            id: 'placeholder-search-1',
+            type: 'webSearch',
+            query: '',
+            action: { type: 'other' },
           }],
         }],
       },
-    }, [], 0)
+    }
+    const canonical = projectCodexSnapshot(snapshot, [], 0)
     const serialized = JSON.stringify(canonical.events)
+    const projectedItems = canonical.events.flatMap(({ event }) => (
+      event.type === 'item/started' || event.type === 'item/completed' ? [event.item] : []
+    ))
 
-    expect(serialized).toContain('codex/agentMessage/nativeDetail')
-    expect(serialized).toContain('commentary')
-    expect(serialized).toContain('thread-memory')
-    expect(serialized).toContain('pty-1')
-    expect(serialized).toContain('connector-1')
-    expect(serialized).toContain('native-array-argument')
+    expect(projectedItems).toEqual(expect.arrayContaining([{
+      type: 'webSearch',
+      id: 'search-1',
+      queries: ['primary query', 'secondary query', 'fallback query'],
+      resultText: null,
+    }, {
+      type: 'webFetch',
+      id: 'open-page-1',
+      url: 'https://example.com/docs',
+      prompt: null,
+      pattern: null,
+      resultText: null,
+    }, {
+      type: 'webFetch',
+      id: 'find-in-page-1',
+      url: 'https://example.com/docs',
+      prompt: null,
+      pattern: 'API',
+      resultText: null,
+    }]))
+    expect(projectedItems.some(({ id }) => id === 'placeholder-search-1')).toBe(false)
+    expect(serialized).not.toContain('/nativeDetail')
+    expect(serialized).not.toContain('thread-memory')
+    expect(serialized).not.toContain('pty-1')
+    expect(serialized).not.toContain('connector-1')
+    expect(serialized).not.toContain('native-array-argument')
     expect(serialized).toContain('"durationMs":42')
     expect(serialized).toContain('sender-1')
-    expect(serialized).toContain('agent-thread-1')
-    expect(serialized).toContain('codex/webSearch/nativeDetail')
+    expect(canonical.events.some(({ event }) => event.type === 'provider/unhandled')).toBe(false)
+  })
+
+  it('projects the real Codex file-change and declined-approval protocol shapes', () => {
+    const items = [{
+      type: 'commandExecution',
+      id: 'declined-command',
+      command: 'npm publish',
+      cwd: 'C:/workspace',
+      processId: null,
+      source: 'agent',
+      status: 'declined',
+      commandActions: [],
+      aggregatedOutput: null,
+      exitCode: 126,
+      durationMs: null,
+    }, {
+      type: 'fileChange',
+      id: 'declined-files',
+      status: 'declined',
+      changes: [{ path: 'src/new.ts', kind: { type: 'add' }, diff: '+new' }, {
+        path: 'src/old.ts', kind: { type: 'delete' }, diff: '-old',
+      }, {
+        path: 'src/before.ts',
+        kind: { type: 'update', move_path: 'src/after.ts' },
+        diff: '',
+      }],
+    }] satisfies CodexThreadItem[]
+    const snapshot: BbNativeSessionSnapshot = {
+      agentId: 'codex',
+      thread: {
+        id: 'codex-real-file-shapes',
+        turns: [{ id: 'turn-1', status: 'completed', items }],
+      },
+    }
+    const canonical = projectCodexSnapshot(snapshot, [], 0)
+    const startedItems = canonical.events.flatMap(({ event }) => (
+      event.type === 'item/started' ? [event.item] : []
+    ))
+    const completedItems = canonical.events.flatMap(({ event }) => (
+      event.type === 'item/completed' ? [event.item] : []
+    ))
+
+    expect(startedItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'declined-command', status: 'pending', approvalStatus: null }),
+      expect.objectContaining({ id: 'declined-files', status: 'pending', approvalStatus: null }),
+    ]))
+    expect(completedItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'declined-command',
+        status: 'interrupted',
+        approvalStatus: 'denied',
+      }),
+      expect.objectContaining({
+        id: 'declined-files',
+        status: 'interrupted',
+        approvalStatus: 'denied',
+        changes: [{ path: 'src/new.ts', kind: 'add', diff: '+new' }, {
+          path: 'src/old.ts', kind: 'delete', diff: '-old',
+        }, {
+          path: 'src/before.ts', kind: 'update', movePath: 'src/after.ts',
+        }],
+      }),
+    ]))
+  })
+
+  it('normalizes Codex structured tool output and hides unsupported payloads', () => {
+    const items = [{
+      type: 'mcpToolCall',
+      id: 'mcp-error',
+      server: 'server',
+      tool: 'lookup',
+      status: 'failed',
+      arguments: {},
+      appContext: null,
+      pluginId: null,
+      result: null,
+      error: { message: 'Lookup failed' },
+      durationMs: null,
+    }, {
+      type: 'dynamicToolCall',
+      id: 'dynamic-output',
+      namespace: null,
+      tool: 'browser',
+      arguments: {},
+      status: 'failed',
+      contentItems: [{ type: 'inputText', text: 'Page unavailable' }, {
+        type: 'inputImage', imageUrl: 'https://example.com/screenshot.png',
+      }],
+      success: false,
+      durationMs: null,
+    }, {
+      type: 'imageGeneration',
+      id: 'generated-image',
+      status: 'completed',
+      revisedPrompt: null,
+      result: 'INTERNAL_IMAGE_PAYLOAD',
+    }, {
+      type: 'sleep',
+      id: 'sleep-1',
+      durationMs: 1000,
+    }] satisfies CodexThreadItem[]
+    const snapshot: BbNativeSessionSnapshot = {
+      agentId: 'codex',
+      thread: {
+        id: 'codex-structured-tools',
+        turns: [{ id: 'turn-1', status: 'completed', items }],
+      },
+    }
+    const canonical = projectCodexSnapshot(snapshot, [], 0)
+    const completedItems = canonical.events.flatMap(({ event }) => (
+      event.type === 'item/completed' ? [event.item] : []
+    ))
+    const rows = flattenRows(project(snapshot).rows)
+
+    expect(completedItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'mcp-error', error: 'Lookup failed' }),
+      expect.objectContaining({
+        id: 'dynamic-output',
+        result: 'Page unavailable\n[image: https://example.com/screenshot.png]',
+        error: 'Page unavailable\n[image: https://example.com/screenshot.png]',
+      }),
+    ]))
+    expect(JSON.stringify(completedItems)).not.toContain('"message":"Lookup failed"')
+    expect(canonical.events.filter(({ event }) => event.type === 'provider/unhandled')).toHaveLength(2)
+    expect(JSON.stringify(rows)).not.toContain('INTERNAL_IMAGE_PAYLOAD')
+    expect(JSON.stringify(rows)).not.toContain('provider-unhandled')
+  })
+
+  it('materializes the Codex subagent lifecycle and links its child turn', () => {
+    const startedActivity = {
+      type: 'subAgentActivity',
+      id: 'subagent-call-1',
+      kind: 'started',
+      agentThreadId: 'agent-thread-1',
+      agentPath: '/root/audit',
+    } satisfies CodexThreadItem
+    const childMessage = {
+      type: 'agentMessage',
+      id: 'child-message-1',
+      text: 'Audit complete.',
+      phase: null,
+      memoryCitation: null,
+    } satisfies CodexThreadItem
+    const childRequest = {
+      type: 'userMessage',
+      id: 'child-request-1',
+      clientId: null,
+      content: [{ type: 'text', text: 'Inspect this path.', text_elements: [] }],
+    } satisfies CodexThreadItem
+    const snapshot: BbNativeSessionSnapshot = {
+      agentId: 'codex',
+      thread: {
+        id: 'root-provider-thread',
+        turns: [{
+          id: 'parent-turn',
+          status: 'completed',
+          items: [startedActivity],
+        }, {
+          id: 'child-turn',
+          status: 'completed',
+          items: [childRequest, childMessage],
+        }],
+      },
+    }
+    const canonical = projectCodexSnapshot(snapshot, [], 0)
+    const rows = flattenRows(project(snapshot).rows)
+
+    expect(canonical.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        event: expect.objectContaining({
+          type: 'turn/started',
+          scope: { kind: 'turn', turnId: 'child-turn' },
+          parentToolCallId: 'subagent-call-1',
+        }),
+      }),
+      expect.objectContaining({
+        event: expect.objectContaining({
+          type: 'item/completed',
+          scope: { kind: 'turn', turnId: 'child-turn' },
+          item: expect.objectContaining({
+            id: 'child-message-1',
+            parentToolCallId: 'subagent-call-1',
+          }),
+        }),
+      }),
+      expect.objectContaining({
+        event: expect.objectContaining({
+          type: 'item/completed',
+          scope: { kind: 'turn', turnId: 'parent-turn' },
+          item: expect.objectContaining({
+            id: 'subagent-call-1',
+            tool: 'spawnAgent',
+            status: 'completed',
+          }),
+        }),
+      }),
+    ]))
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'work',
+        workKind: 'delegation',
+        callId: 'subagent-call-1',
+        status: 'completed',
+        childRows: expect.arrayContaining([
+          expect.objectContaining({ kind: 'conversation', role: 'assistant', text: 'Audit complete.' }),
+        ]),
+      }),
+    ]))
+    expect(JSON.stringify(rows)).not.toContain('Inspect this path.')
+  })
+
+  it('terminalizes the original Codex subagent call when activity is interrupted', () => {
+    const activities = [{
+      type: 'subAgentActivity',
+      id: 'subagent-call-1',
+      kind: 'started',
+      agentThreadId: 'agent-thread-1',
+      agentPath: '/root/audit',
+    }, {
+      type: 'subAgentActivity',
+      id: 'interrupt-activity-1',
+      kind: 'interrupted',
+      agentThreadId: 'agent-thread-1',
+      agentPath: '/root/audit',
+    }] satisfies CodexThreadItem[]
+    const canonical = projectCodexSnapshot({
+      agentId: 'codex',
+      thread: {
+        id: 'root-provider-thread',
+        turns: [{ id: 'parent-turn', status: 'completed', items: activities }],
+      },
+    }, [], 0)
+    const completedItems = canonical.events.flatMap(({ event }) => (
+      event.type === 'item/completed' ? [event.item] : []
+    ))
+
+    expect(completedItems).toEqual([
+      expect.objectContaining({ id: 'subagent-call-1', status: 'interrupted' }),
+    ])
+    expect(JSON.stringify(completedItems)).not.toContain('interrupt-activity-1')
   })
 
   it.each([{
@@ -387,6 +666,34 @@ describe('vendored bb native session flow', () => {
       expect.objectContaining({ kind: 'work', workKind: 'command', command: 'npm test', output: 'ok' }),
     ]))
     expect(JSON.stringify(snapshot)).toBe(before)
+  })
+
+  it('does not invent OpenCode search or fetch rows when required input is missing', () => {
+    const snapshot: BbNativeSessionSnapshot = {
+      agentId: 'opencode',
+      messages: [{
+        info: { id: 'assistant-1', role: 'assistant', time: { created: 1 } },
+        parts: [{
+          id: 'search-without-query',
+          type: 'tool',
+          tool: 'websearch',
+          state: { status: 'completed', input: {}, output: '' },
+        }, {
+          id: 'fetch-without-url',
+          type: 'tool',
+          tool: 'webfetch',
+          state: { status: 'completed', input: {}, output: '' },
+        }],
+      }],
+    }
+    const canonical = projectOpenCodeSnapshot(snapshot, [], 'opencode-missing-web-input', 0)
+    const rows = flattenRows(project(snapshot).rows)
+
+    expect(canonical.events.filter(({ event }) => event.type === 'provider/unhandled')).toHaveLength(2)
+    expect(rows.some((row) => row.kind === 'work' && (
+      row.workKind === 'web-search' || row.workKind === 'web-fetch'
+    ))).toBe(false)
+    expect(JSON.stringify(rows)).not.toContain('provider-unhandled')
   })
 
   it('freezes OpenCode turn durations at native assistant completion across long idle gaps', () => {
@@ -766,7 +1073,7 @@ describe('vendored bb native session flow', () => {
     'projects the real modern %s tool-call shape with arguments and result',
     (agentId) => {
       const rows = flattenRows(projectNativeSession({
-        fileChanges: [],
+        fileChanges: [{ path: 'agent-tool-smoke.txt', kind: 'updated' }],
         optimisticMessages: [],
         sessionId: `${agentId}-modern-tool`,
         snapshot: {
@@ -798,13 +1105,66 @@ describe('vendored bb native session flow', () => {
       expect(rows).toEqual(expect.arrayContaining([
         expect.objectContaining({
           kind: 'work',
-          workKind: 'tool',
+          workKind: 'file-change',
           status: 'completed',
-          toolName: 'write',
-          toolArgs: expect.objectContaining({ path: 'agent-tool-smoke.txt' }),
-          output: 'Wrote agent-tool-smoke.txt',
+          callId: 'write-modern-1',
+          change: expect.objectContaining({
+            path: 'agent-tool-smoke.txt',
+            kind: 'add',
+            diff: expect.stringContaining('+ARYN_TOOL_SMOKE'),
+          }),
         }),
       ]))
+      expect(rows.filter((row) => (
+        row.kind === 'work'
+        && row.workKind === 'file-change'
+        && row.change.path === 'agent-tool-smoke.txt'
+      ))).toHaveLength(1)
+    },
+  )
+
+  it.each(['pi', 'builtin-pi'] as const)(
+    'recovers standalone %s tool results and filters command placeholders',
+    (agentId) => {
+      const snapshot: BbNativeSessionSnapshot = {
+        agentId,
+        entryIds: ['bash-result', 'tool-result'],
+        isStreaming: false,
+        messages: [{
+          role: 'toolResult',
+          toolCallId: 'bash-call',
+          toolName: 'bash',
+          content: [{ type: 'text', text: '(no output)' }],
+          isError: false,
+        }, {
+          role: 'toolResult',
+          toolCallId: 'lookup-call',
+          toolName: 'lookup',
+          content: [{ type: 'text', text: 'Recovered result' }],
+          isError: false,
+        }],
+        sessionId: `${agentId}-standalone-results`,
+      }
+      const canonical = projectPiSnapshot(snapshot, [], [], 0)
+      const rows = flattenRows(project(snapshot).rows)
+      const serialized = JSON.stringify(rows)
+
+      expect(rows).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'work',
+          workKind: 'command',
+          callId: 'bash-call',
+          output: '',
+        }),
+        expect.objectContaining({
+          kind: 'work',
+          workKind: 'tool',
+          callId: 'lookup-call',
+          output: 'Recovered result',
+        }),
+      ]))
+      expect(serialized).not.toContain('(no output)')
+      expect(canonical.events.some(({ event }) => event.type === 'provider/unhandled')).toBe(false)
     },
   )
 
@@ -1178,17 +1538,18 @@ describe('vendored bb native session flow', () => {
     expect(serialized).not.toContain('pi/tool-result/image')
   })
 
-  it('keeps unsupported provider data visible through bb provider-unhandled rows', () => {
-    const rows = flattenRows(project({
+  it('retains unsupported provider data without exposing bb diagnostic rows by default', () => {
+    const snapshot: BbNativeSessionSnapshot = {
       agentId: 'builtin-pi',
       sessionId: 'builtin-1',
       entryIds: ['unknown-1'],
       messages: [{ role: 'future-provider-role', payload: { value: 1 } }],
-    }).rows)
+    }
+    const canonical = projectPiSnapshot(snapshot, [], [], 0)
+    const rows = flattenRows(project(snapshot).rows)
 
-    expect(rows).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'system', operationKind: 'provider-unhandled' }),
-    ]))
+    expect(canonical.events.some(({ event }) => event.type === 'provider/unhandled')).toBe(true)
+    expect(JSON.stringify(rows)).not.toContain('"operationKind":"provider-unhandled"')
   })
 
   it('renders unaccepted optimistic input as bb pending client requests', () => {
@@ -1384,24 +1745,26 @@ describe('vendored bb native session flow', () => {
     expect(JSON.stringify(rows)).toContain('Inspect renderer')
     expect(JSON.stringify(rows)).toContain('Audit mapping')
     expect(JSON.stringify(rows)).toContain('Temporary failure')
-    expect(JSON.stringify(rows)).toContain('opencode/todo/nativeDetail')
-    expect(JSON.stringify(rows)).toContain('high')
+    expect(JSON.stringify(rows)).not.toContain('opencode/todo/nativeDetail')
+    expect(JSON.stringify(rows)).not.toContain('provider-unhandled')
   })
 
-  it('keeps malformed native plan, todo, diff, and notice entries visible', () => {
-    const openCodeRows = flattenRows(project({
+  it('retains malformed native data diagnostically without rendering raw payload rows', () => {
+    const openCodeSnapshot: BbNativeSessionSnapshot = {
       agentId: 'opencode',
       messages: [],
       diffs: ['future-diff-shape'],
       todos: [{ status: 'pending', priority: 'urgent' }, 'future-todo-shape'],
-    }).rows)
+    }
+    const openCodeCanonical = projectOpenCodeSnapshot(openCodeSnapshot, [], 'opencode-malformed', 0)
+    const openCodeRows = flattenRows(project(openCodeSnapshot).rows)
+    const openCodeDiagnostics = JSON.stringify(openCodeCanonical.events)
     const openCodeSerialized = JSON.stringify(openCodeRows)
-    expect(openCodeSerialized).toContain('opencode/diff')
-    expect(openCodeSerialized).toContain('future-diff-shape')
-    expect(openCodeSerialized).toContain('opencode/todo')
-    expect(openCodeSerialized).toContain('future-todo-shape')
+    expect(openCodeDiagnostics).toContain('future-diff-shape')
+    expect(openCodeDiagnostics).toContain('future-todo-shape')
+    expect(openCodeSerialized).not.toContain('provider-unhandled')
 
-    const codexRows = flattenRows(project({
+    const codexSnapshot: BbNativeSessionSnapshot = {
       agentId: 'codex',
       notices: ['future-notice-shape'],
       thread: {
@@ -1411,16 +1774,18 @@ describe('vendored bb native session flow', () => {
       turnRuntime: {
         'turn-1': { plan: { steps: ['future-plan-step-shape'] } },
       },
-    }).rows)
+    }
+    const codexCanonical = projectCodexSnapshot(codexSnapshot, [], 0)
+    const codexRows = flattenRows(project(codexSnapshot).rows)
+    const codexDiagnostics = JSON.stringify(codexCanonical.events)
     const codexSerialized = JSON.stringify(codexRows)
-    expect(codexSerialized).toContain('codex/notice')
-    expect(codexSerialized).toContain('future-notice-shape')
-    expect(codexSerialized).toContain('codex/plan/step')
-    expect(codexSerialized).toContain('future-plan-step-shape')
+    expect(codexDiagnostics).toContain('future-notice-shape')
+    expect(codexDiagnostics).toContain('future-plan-step-shape')
+    expect(codexSerialized).not.toContain('provider-unhandled')
   })
 
-  it('never drops Codex terminal input or PI compaction/bash records', () => {
-    const codexRows = flattenRows(project({
+  it('retains Codex terminal input diagnostically and renders PI first-class records', () => {
+    const codexSnapshot: BbNativeSessionSnapshot = {
       agentId: 'codex',
       itemRuntime: {
         command: { output: '', progress: [], terminalInput: 'yes\n' },
@@ -1433,8 +1798,11 @@ describe('vendored bb native session flow', () => {
           items: [{ id: 'command', type: 'commandExecution', command: 'deploy', status: 'completed' }],
         }],
       },
-    }).rows)
-    expect(JSON.stringify(codexRows)).toContain('codex/commandExecution/terminalInput')
+    }
+    const codexCanonical = projectCodexSnapshot(codexSnapshot, [], 0)
+    const codexRows = flattenRows(project(codexSnapshot).rows)
+    expect(JSON.stringify(codexCanonical.events)).toContain('codex/commandExecution/terminalInput')
+    expect(JSON.stringify(codexRows)).not.toContain('provider-unhandled')
 
     const piRows = flattenRows(project({
       agentId: 'builtin-pi',

@@ -322,18 +322,22 @@ function projectOpenCodeTool(
     }
   }
   if (isSearchTool(name)) {
+    const query = stringValue(input?.query) || stringValue(input?.q)
+    if (!query) return null
     return {
       type: 'webSearch',
       id: partId,
-      queries: [stringValue(input?.query) || stringValue(input?.q) || displayName],
+      queries: [query],
       resultText: output || null,
     }
   }
   if (isFetchTool(name)) {
+    const url = stringValue(input?.url)
+    if (!url) return null
     return {
       type: 'webFetch',
       id: partId,
-      url: stringValue(input?.url),
+      url,
       prompt: stringValue(input?.prompt) || null,
       pattern: stringValue(input?.pattern) || null,
       resultText: output || null,

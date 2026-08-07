@@ -366,7 +366,9 @@ export function projectNativeSession({
     options: {
       includeDebugRawEvents: false,
       includeNestedRows: true,
-      includeProviderUnhandledOperations: true,
+      // Match bb's default user-facing timeline: retain unknown provider
+      // events canonically for diagnostics, but do not render raw payload rows.
+      includeProviderUnhandledOperations: false,
       isLatestPage: true,
       providerDisplayName: canonical.providerDisplayName,
       providerId: canonical.providerId,
