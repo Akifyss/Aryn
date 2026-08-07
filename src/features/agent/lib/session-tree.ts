@@ -93,6 +93,20 @@ export function getAgentSessionTreeKey(agentId: AgentId, sessionPath: string) {
   return `${agentId}\n${sessionPath}`
 }
 
+export function findAgentProjectSessionProjectId(
+  buckets: Readonly<Record<string, AgentProjectSessionBucket>>,
+  agentId: AgentId,
+  sessionPath: string,
+) {
+  for (const [projectId, bucket] of Object.entries(buckets)) {
+    if (bucket.sources[agentId]?.sessions.some((session) => session.path === sessionPath)) {
+      return projectId
+    }
+  }
+
+  return null
+}
+
 export function flattenAgentProjectSessions(bucket: AgentProjectSessionBucket | undefined) {
   if (!bucket) return []
 

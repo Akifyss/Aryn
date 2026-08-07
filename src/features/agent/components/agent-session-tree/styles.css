@@ -145,10 +145,41 @@
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--warning) 16%, transparent);
 }
 
-.agent-session-section-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.agent-session-virtual-list {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.agent-session-virtual-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 100%;
+  padding-bottom: var(--app-item-list-gap);
+  list-style: none;
+  contain: layout;
+}
+
+.agent-session-virtual-item.is-section-start {
+  padding-top: 6px;
+}
+
+.agent-session-virtual-item.is-project-child {
+  padding-left: calc(
+    var(--tree-indent-guide-offset) + var(--tree-nested-list-padding-left)
+  );
+}
+
+.agent-session-virtual-item.is-project-child::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--tree-indent-guide-offset);
+  border-left: 1px solid var(--separator);
+  content: '';
+  pointer-events: none;
 }
 
 .agent-session-rename-error {

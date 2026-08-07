@@ -27,6 +27,7 @@ type AgentSessionTreeRowProps = {
   isActive: boolean
   isDeleting: boolean
   isRenaming: boolean
+  itemAs?: 'div' | 'li' | null
   label: string
   menuPortalTarget?: HTMLElement | null
   menuTitle?: string
@@ -36,6 +37,7 @@ type AgentSessionTreeRowProps = {
   onOpen: () => void
   onCancelRename: () => void
   onDelete: () => void
+  onMenuOpenChange?: (open: boolean) => void
   onRename: (name: string) => Promise<void>
   onRequestRename: () => void
 }
@@ -46,6 +48,7 @@ export function AgentSessionTreeRow({
   isActive,
   isDeleting,
   isRenaming,
+  itemAs,
   label,
   menuPortalTarget,
   menuTitle = '更多',
@@ -55,6 +58,7 @@ export function AgentSessionTreeRow({
   onOpen,
   onCancelRename,
   onDelete,
+  onMenuOpenChange,
   onRename,
   onRequestRename,
 }: AgentSessionTreeRowProps) {
@@ -65,6 +69,9 @@ export function AgentSessionTreeRow({
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false)
   const rowRef = useRef<HTMLDivElement | null>(null)
   const renameInputRef = useRef<HTMLInputElement | null>(null)
+  const onMenuOpenChangeRef = useRef(onMenuOpenChange)
+  const reportedMenuOpenRef = useRef(false)
+  onMenuOpenChangeRef.current = onMenuOpenChange
   const isMenuOpen = isActionMenuOpen || isContextMenuOpen
   const accessibleLabel = agentId ? `${label}，${getAgentDefinition(agentId).label}` : label
   const activityLabel = activity === 'waiting' ? '等待操作' : '运行中'
@@ -78,6 +85,20 @@ export function AgentSessionTreeRow({
       />
       : relativeTime
     : undefined
+
+  useEffect(() => {
+    if (reportedMenuOpenRef.current === isMenuOpen) return
+
+    reportedMenuOpenRef.current = isMenuOpen
+    onMenuOpenChangeRef.current?.(isMenuOpen)
+  }, [isMenuOpen])
+
+  useEffect(() => () => {
+    if (!reportedMenuOpenRef.current) return
+
+    reportedMenuOpenRef.current = false
+    onMenuOpenChangeRef.current?.(false)
+  }, [])
 
   useEffect(() => {
     if (!isRenaming) {
@@ -224,6 +245,7 @@ export function AgentSessionTreeRow({
 
   return (
     <AppItem
+      itemAs={itemAs}
       itemClassName={`agent-project-session-node${itemClassName ? ` ${itemClassName}` : ''}`}
       ref={rowRef}
       rowClassName={`agent-project-session-row${rowClassName ? ` ${rowClassName}` : ''}`}

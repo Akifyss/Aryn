@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getSystemFileManagerName } from '../src/features/agent/lib/system-file-manager'
 import {
   flattenAgentProjectSessions,
+  findAgentProjectSessionProjectId,
   formatAgentSessionLabel,
   formatAgentSessionRelativeTime,
   getAgentSessionActivityKey,
@@ -57,6 +58,8 @@ describe('Agent session tree aggregation', () => {
       expect.objectContaining({ agentId: 'pi', name: 'PI session', path: 'shared' }),
     ])
     expect(getAgentSessionTreeKey('codex', 'shared')).not.toBe(getAgentSessionTreeKey('pi', 'shared'))
+    expect(findAgentProjectSessionProjectId({ project: bucket }, 'codex', 'shared')).toBe('project')
+    expect(findAgentProjectSessionProjectId({ project: bucket }, 'opencode', 'shared')).toBeNull()
   })
 
   it('normalizes native paths for stable labels, comparisons, and activity keys', () => {

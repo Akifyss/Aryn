@@ -102,6 +102,37 @@ describe('AgentSessionTree presentation components', () => {
     expect(markup).not.toContain('agent-session-section-stack')
   })
 
+  it('virtualizes large floating session collections', () => {
+    const sessions = Array.from({ length: 1_000 }, (_, index) => ({
+      createdAt: '2026-07-28T10:00:00.000Z',
+      id: `session-${index}`,
+      messageCount: 1,
+      modifiedAt: '2026-07-28T10:05:00.000Z',
+      name: `Floating session ${index}`,
+      path: `session-${index}`,
+      preview: 'Preview',
+    }))
+    const markup = renderToStaticMarkup(
+      <AgentSessionTreeView
+        controller={createController({
+          agentState: {
+            ...emptyAgentState,
+            sessions,
+          },
+          selectedAgentId: 'codex',
+        })}
+        isFloating
+      />,
+    )
+    const renderedSessionRows = markup.match(/agent-project-session-node/g) ?? []
+
+    expect(markup).toContain('Floating session 0')
+    expect(markup).not.toContain('Floating session 999')
+    expect(markup).toContain('aria-setsize="1000"')
+    expect(renderedSessionRows.length).toBeGreaterThan(0)
+    expect(renderedSessionRows.length).toBeLessThan(40)
+  })
+
   it('keeps the standalone floating empty state when no project is selected', () => {
     const markup = renderToStaticMarkup(
       <AgentSessionTreeView controller={createController()} isFloating />,
@@ -277,7 +308,38 @@ describe('AgentSessionTree presentation components', () => {
     expect(markup).toContain('Architecture review')
     expect(markup).toContain('项目')
     expect(markup).toContain('对话')
+    expect(markup).toContain('aria-level="1"')
+    expect(markup).toContain('aria-level="2"')
+    expect(markup).toContain('aria-posinset="2"')
+    expect(markup).toContain('aria-setsize="2"')
     expect(markup).not.toContain('aria-busy="true"')
+  })
+
+  it('bounds docked tree markup to the virtual render window for large collections', () => {
+    const projects = Array.from({ length: 1_000 }, (_, index) => ({
+      addedAt: '2026-07-28T09:00:00.000Z',
+      id: `project-${index}`,
+      lastFilePath: null,
+      lastOpenedAt: '2026-07-28T10:00:00.000Z',
+      name: `Project ${index}`,
+      path: `C:\\workspace\\project-${index}`,
+    }))
+    const markup = renderToStaticMarkup(
+      <AgentSessionTreeView
+        controller={createController({
+          projectState: {
+            lastProjectId: null,
+            projects,
+          },
+        })}
+      />,
+    )
+    const renderedProjectRows = markup.match(/agent-project-node/g) ?? []
+
+    expect(markup).toContain('Project 0')
+    expect(markup).not.toContain('Project 999')
+    expect(renderedProjectRows.length).toBeGreaterThan(0)
+    expect(renderedProjectRows.length).toBeLessThan(40)
   })
 
   it('keeps rename controls inside the reusable session row', () => {

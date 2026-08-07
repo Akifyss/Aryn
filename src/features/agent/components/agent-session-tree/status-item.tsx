@@ -1,30 +1,19 @@
 import { Spinner } from '@heroui/react'
 import { WarningLine } from '@mingcute/react'
 import { AppItem, AppItemIcon } from '@/components/app-item'
+import type { AgentSessionTreeStatus } from './status-model'
 
-type AgentSessionTreeStatus = 'empty' | 'error' | 'loading'
-
-export function resolveAgentSessionTreeStatus({
-  errorCount,
-  hasCompleteSnapshot,
-  isPending,
-  sessionCount,
-}: {
-  errorCount: number
-  hasCompleteSnapshot: boolean
-  isPending: boolean
-  sessionCount: number
-}): AgentSessionTreeStatus | null {
-  if (isPending && !hasCompleteSnapshot) return 'loading'
-  if (!isPending && errorCount > 0) return 'error'
-  if (hasCompleteSnapshot && sessionCount === 0) return 'empty'
-  return null
-}
+export {
+  resolveAgentSessionTreeStatus,
+  type AgentSessionTreeStatus,
+} from './status-model'
 
 export function AgentSessionTreeStatusItem({
+  itemAs,
   label,
   status,
 }: {
+  itemAs?: 'div' | 'li' | null
   label: string
   status: AgentSessionTreeStatus
 }) {
@@ -48,6 +37,7 @@ export function AgentSessionTreeStatusItem({
     <AppItem
       aria-atomic='true'
       aria-live='polite'
+      itemAs={itemAs}
       itemClassName={`agent-session-tree-status-item is-${status}`}
       icon={icon}
       label={label}

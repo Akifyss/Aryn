@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import {
   AddLine,
   EditLine,
@@ -14,34 +19,58 @@ import { AppMenu as Menu } from '@/components/app-menu'
 import { AppTooltipButton } from '@/components/app-tooltip'
 import { ProjectIcon } from '@/components/project-icon'
 import {
-  TreeChildren,
-  TreeList,
-  TreeScrollArea,
-  TreeSection,
-  TreeStatusItem,
-} from '@/components/tree'
-import {
-  flattenAgentProjectSessions,
+  findAgentProjectSessionProjectId,
   formatAgentSessionLabel,
   formatAgentSessionRelativeTime,
   getAgentSessionActivityKey,
   getAgentSessionTreeKey,
   normalizeAgentProjectPath,
-  selectVisibleAgentProjectSessions,
-  summarizeAgentProjectSessionBucket,
 } from '@/features/agent/lib/session-tree'
 import type { ConversationRecord } from '@/features/conversations/types'
-import type { ProjectRecord } from '@/features/workspace/types'
 import {
   AgentProjectContextMenuPopup,
   AgentProjectMenuPopup,
 } from './menus'
-import { AgentSessionTreeRow } from './session-row'
 import {
-  AgentSessionTreeStatusItem,
-  resolveAgentSessionTreeStatus,
-} from './status-item'
+  createAgentProjectTreeRows,
+  getAgentConversationRowKey,
+  getAgentProjectRowKey,
+  type AgentProjectTreeRow,
+} from './project-tree-model'
+import { AgentSessionTreeRow } from './session-row'
+import { AgentSessionTreeStatusItem } from './status-item'
 import type { AgentSessionTreeViewProps } from './types'
+import {
+  DEFAULT_AGENT_TREE_ROW_SIZE,
+  VirtualizedAgentTreeList,
+} from './virtualized-tree-list'
+
+const AGENT_TREE_SECTION_START_SIZE = 40
+
+function estimateAgentProjectTreeRowSize(row: AgentProjectTreeRow) {
+  if (row.kind === 'conversation-section-header') return AGENT_TREE_SECTION_START_SIZE
+  return DEFAULT_AGENT_TREE_ROW_SIZE
+}
+
+function getAgentProjectTreeRowClassName(row: AgentProjectTreeRow) {
+  return [
+    `is-${row.kind}`,
+    (row.kind === 'project-session' || row.kind === 'project-session-status') && 'is-project-child',
+    row.kind === 'conversation-section-header' && 'is-section-start',
+  ].filter(Boolean).join(' ')
+}
+
+function getAgentProjectTreeRowAriaMetadata(row: AgentProjectTreeRow) {
+  return row.aria
+}
+
+function isAgentProjectTreeRowFocusable(row: AgentProjectTreeRow) {
+  return row.kind === 'project-section-header'
+    || row.kind === 'project'
+    || row.kind === 'project-session'
+    || row.kind === 'conversation-section-header'
+    || row.kind === 'conversation'
+}
 
 function AgentConversationRow({
   activity,
@@ -53,6 +82,7 @@ function AgentConversationRow({
   onOpen,
   onCancelRename,
   onDelete,
+  onMenuOpenChange,
   onRename,
   onRequestRename,
 }: {
@@ -65,6 +95,7 @@ function AgentConversationRow({
   onOpen: () => void
   onCancelRename: () => void
   onDelete: () => void
+  onMenuOpenChange: (open: boolean) => void
   onRename: (name: string) => Promise<void>
   onRequestRename: () => void
 }) {
@@ -77,6 +108,7 @@ function AgentConversationRow({
       isActive={isActive}
       isDeleting={isDeleting}
       isRenaming={isRenaming}
+      itemAs='div'
       label={conversation.title}
       menuPortalTarget={menuPortalTarget}
       menuTitle='更多'
@@ -85,6 +117,7 @@ function AgentConversationRow({
       rowClassName='agent-conversation-row'
       onCancelRename={onCancelRename}
       onDelete={onDelete}
+      onMenuOpenChange={onMenuOpenChange}
       onOpen={onOpen}
       onRename={onRename}
       onRequestRename={onRequestRename}
@@ -97,7 +130,7 @@ export function AgentProjectTree({
   controller,
   onRequestClose,
   onOpenProjectAddMenu: onOpenProjectAddMenuOverride,
-  isFloating,
+  isFloating = false,
   isProjectAddMenuOpen: isProjectAddMenuOpenOverride,
   menuPortalTarget,
 }: AgentSessionTreeViewProps) {
@@ -134,40 +167,23 @@ export function AgentProjectTree({
   const [renamingSessionPath, setRenamingSessionPath] = useState<string | null>(null)
   const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null)
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
-  const projectRecordsRef = useRef(projectState.projects)
-  projectRecordsRef.current = projectState.projects
+  const [menuPinnedRowKeys, setMenuPinnedRowKeys] = useState<Set<string>>(() => new Set())
   const isProjectAddMenuOpen = isProjectAddMenuOpenOverride ?? contextIsProjectAddMenuOpen
+  const projectById = useMemo(() => new Map(
+    projectState.projects.map((project) => [project.id, project]),
+  ), [projectState.projects])
   const activeSessionProjectId = useMemo(() => {
-    if (activeSessionSelection.kind !== 'session' || !activeSessionPath) {
-      return null
-    }
+    if (activeSessionSelection.kind !== 'session' || !activeSessionPath) return null
 
-    for (const [projectId, bucket] of Object.entries(projectSessions)) {
-      if (flattenAgentProjectSessions(bucket).some((session) => (
-        session.agentId === activeSessionSelection.agentId
-        && session.path === activeSessionPath
-      ))) {
-        return projectId
-      }
-    }
-
-    return null
+    return findAgentProjectSessionProjectId(
+      projectSessions,
+      activeSessionSelection.agentId,
+      activeSessionPath,
+    )
   }, [activeSessionPath, activeSessionSelection, projectSessions])
-  const visibleConversations = useMemo(() => (
-    conversationState.conversations
-      .filter((conversation) => conversation.status === 'active')
-      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
-  ), [conversationState.conversations])
-
-  useEffect(() => {
-    for (const projectId of expandedProjectIds) {
-      const project = projectRecordsRef.current.find((candidate) => candidate.id === projectId)
-      if (project) void loadProjectSessions(project)
-    }
-  }, [expandedProjectIds, loadProjectSessions])
   const activeProject = useMemo(() => {
     if (activeWorkspaceContext.kind === 'project') {
-      return projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
+      return projectById.get(activeWorkspaceContext.projectId) ?? null
     }
 
     return workspacePath
@@ -175,14 +191,119 @@ export function AgentProjectTree({
           normalizeAgentProjectPath(project.path) === normalizeAgentProjectPath(workspacePath)
         )) ?? null
       : null
-  }, [activeWorkspaceContext, projectState.projects, workspacePath])
+  }, [activeWorkspaceContext, projectById, projectState.projects, workspacePath])
+  const treeRows = useMemo(() => createAgentProjectTreeRows({
+    conversations: conversationState.conversations,
+    expandedProjectIds,
+    isConversationSectionExpanded,
+    isFloating,
+    isProjectSectionExpanded,
+    projectSessions,
+    projects: projectState.projects,
+    sessionTreeAgentIds,
+  }), [
+    conversationState.conversations,
+    expandedProjectIds,
+    isConversationSectionExpanded,
+    isFloating,
+    isProjectSectionExpanded,
+    projectSessions,
+    projectState.projects,
+    sessionTreeAgentIds,
+  ])
+  const activeRowKey = useMemo(() => {
+    if (activeSessionSelection.kind === 'session' && activeSessionPath) {
+      return treeRows.find((row) => (
+        row.kind === 'project-session'
+        && row.session.agentId === activeSessionSelection.agentId
+        && row.session.path === activeSessionPath
+      ))?.key ?? null
+    }
+
+    return activeWorkspaceContext.kind === 'conversation'
+      ? getAgentConversationRowKey(activeWorkspaceContext.conversationId)
+      : null
+  }, [activeSessionPath, activeSessionSelection, activeWorkspaceContext, treeRows])
+  const pinnedRowKeys = useMemo(() => {
+    const nextPinnedRowKeys = new Set(menuPinnedRowKeys)
+
+    if (isProjectAddMenuOpen) {
+      nextPinnedRowKeys.add('section:projects')
+    }
+
+    if (openProjectMenuId) {
+      nextPinnedRowKeys.add(getAgentProjectRowKey(openProjectMenuId))
+    }
+
+    for (const row of treeRows) {
+      if (row.kind === 'project-session') {
+        const sessionKey = getAgentSessionTreeKey(row.session.agentId, row.session.path)
+        if (sessionKey === renamingSessionPath || sessionKey === deletingSessionPath) {
+          nextPinnedRowKeys.add(row.key)
+        }
+      } else if (
+        row.kind === 'conversation'
+        && (row.conversation.id === renamingConversationId || row.conversation.id === deletingConversationId)
+      ) {
+        nextPinnedRowKeys.add(row.key)
+      }
+    }
+
+    return nextPinnedRowKeys
+  }, [
+    deletingConversationId,
+    deletingSessionPath,
+    menuPinnedRowKeys,
+    isProjectAddMenuOpen,
+    openProjectMenuId,
+    renamingConversationId,
+    renamingSessionPath,
+    treeRows,
+  ])
+
+  useEffect(() => {
+    for (const projectId of expandedProjectIds) {
+      const project = projectById.get(projectId)
+      if (project) void loadProjectSessions(project)
+    }
+  }, [expandedProjectIds, loadProjectSessions, projectById])
+
+  useEffect(() => {
+    if (!activeSessionProjectId) return
+
+    setIsProjectSectionExpanded(true)
+    setExpandedProjectIds((currentExpandedProjectIds) => {
+      if (currentExpandedProjectIds.has(activeSessionProjectId)) return currentExpandedProjectIds
+
+      const nextExpandedProjectIds = new Set(currentExpandedProjectIds)
+      nextExpandedProjectIds.add(activeSessionProjectId)
+      return nextExpandedProjectIds
+    })
+  }, [activeSessionProjectId])
+
+  useEffect(() => {
+    if (activeWorkspaceContext.kind === 'conversation') {
+      setIsConversationSectionExpanded(true)
+    }
+  }, [activeWorkspaceContext])
+
+  const handleRowMenuOpenChange = useCallback((rowKey: string, open: boolean) => {
+    setMenuPinnedRowKeys((currentPinnedRowKeys) => {
+      if (currentPinnedRowKeys.has(rowKey) === open) return currentPinnedRowKeys
+
+      const nextPinnedRowKeys = new Set(currentPinnedRowKeys)
+      if (open) {
+        nextPinnedRowKeys.add(rowKey)
+      } else {
+        nextPinnedRowKeys.delete(rowKey)
+      }
+      return nextPinnedRowKeys
+    })
+  }, [])
 
   function handleProjectMenuOpenChange(projectId: string, open: boolean) {
     setOpenProjectMenuId((currentProjectId) => {
-      if (open) {
-        return projectId
-      }
-
+      if (open) return projectId
       return currentProjectId === projectId ? null : currentProjectId
     })
   }
@@ -199,29 +320,6 @@ export function AgentProjectTree({
 
     onRequestClose?.()
   }
-
-  useEffect(() => {
-    if (!activeSessionProjectId) {
-      return
-    }
-
-    setIsProjectSectionExpanded(true)
-    setExpandedProjectIds((currentExpandedProjectIds) => {
-      if (currentExpandedProjectIds.has(activeSessionProjectId)) {
-        return currentExpandedProjectIds
-      }
-
-      const nextExpandedProjectIds = new Set(currentExpandedProjectIds)
-      nextExpandedProjectIds.add(activeSessionProjectId)
-      return nextExpandedProjectIds
-    })
-  }, [activeSessionProjectId])
-
-  useEffect(() => {
-    if (activeWorkspaceContext.kind === 'conversation') {
-      setIsConversationSectionExpanded(true)
-    }
-  }, [activeWorkspaceContext])
 
   function toggleProjectSection() {
     setOpenProjectMenuId(null)
@@ -249,9 +347,236 @@ export function AgentProjectTree({
       } else {
         nextExpandedProjectIds.add(projectId)
       }
-
       return nextExpandedProjectIds
     })
+  }
+
+  function renderTreeRow(row: AgentProjectTreeRow) {
+    if (row.kind === 'project-section-header') {
+      return (
+        <AppItem
+          itemAs='div'
+          variant='header'
+          itemClassName='agent-project-tree-header'
+          label='项目'
+          isExpanded={isProjectSectionExpanded}
+          isMenuOpen={isProjectAddMenuOpen}
+          actions={(
+            <AppItemActionButton
+              isActive={isProjectAddMenuOpen}
+              aria-label='添加项目'
+              title='添加项目'
+              onClick={(event) => {
+                const openProjectAddMenu = onOpenProjectAddMenuOverride ?? onOpenProjectAddMenu
+                openProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
+              }}
+            >
+              <AddLine />
+            </AppItemActionButton>
+          )}
+          onToggle={toggleProjectSection}
+        />
+      )
+    }
+
+    if (row.kind === 'project-empty') {
+      return <div className='tree-status-item'>暂无项目</div>
+    }
+
+    if (row.kind === 'project') {
+      const { project } = row
+      const renderProjectMain: AppItemMainRenderer = (content, mainProps) => {
+        const { className: mainClassName, hasDescription } = mainProps
+
+        return (
+          <Menu.Context.Root onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
+            <Menu.Context.Trigger
+              aria-expanded={row.isExpanded}
+              aria-busy={row.isSessionLoadActive || undefined}
+              render={<AppItemMainButton className={mainClassName} hasDescription={hasDescription} role='button' />}
+              title={project.path}
+              onClick={() => toggleProject(project.id)}
+            >
+              {content}
+            </Menu.Context.Trigger>
+            <AgentProjectContextMenuPopup
+              menuPortalTarget={menuPortalTarget}
+              onOpenFolder={() => {
+                void onOpenProjectFolder?.(project)
+              }}
+              onRemoveProject={() => {
+                void onRemoveProject?.(project)
+              }}
+            />
+          </Menu.Context.Root>
+        )
+      }
+
+      return (
+        <AppItem
+          itemAs='div'
+          itemClassName='agent-project-node'
+          rowClassName='agent-project-row'
+          isMenuOpen={openProjectMenuId === project.id}
+          icon={<ProjectIcon isOpen={row.isExpanded} />}
+          label={project.name}
+          labelClassName='agent-project-row-label'
+          renderMain={renderProjectMain}
+          actions={(
+            <>
+              <AppItemActionButton
+                aria-label={`Start new conversation in ${project.name}`}
+                title='新建对话'
+                onClick={() => {
+                  setRenamingConversationId(null)
+                  void onStartProjectSession?.(project)
+                  onRequestClose?.()
+                }}
+              >
+                <EditLine />
+              </AppItemActionButton>
+              <Menu.Root modal={false} onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
+                <Menu.Trigger
+                  aria-label={`Open ${project.name} menu`}
+                  render={<AppItemActionButton />}
+                  title='更多'
+                >
+                  <More1Line />
+                </Menu.Trigger>
+                <AgentProjectMenuPopup
+                  menuPortalTarget={menuPortalTarget}
+                  onOpenFolder={() => {
+                    void onOpenProjectFolder?.(project)
+                  }}
+                  onRemoveProject={() => {
+                    void onRemoveProject?.(project)
+                  }}
+                />
+              </Menu.Root>
+            </>
+          )}
+        />
+      )
+    }
+
+    if (row.kind === 'project-session-status') {
+      const label = row.status === 'loading'
+        ? '正在加载会话…'
+        : row.status === 'error'
+          ? '部分 Agent 会话加载失败，重新展开可重试'
+          : '暂无对话'
+
+      return <AgentSessionTreeStatusItem itemAs='div' label={label} status={row.status} />
+    }
+
+    if (row.kind === 'project-session') {
+      const { project, session } = row
+      const sessionKey = getAgentSessionTreeKey(session.agentId, session.path)
+      const isActiveSession = activeSessionSelection.kind === 'session'
+        && activeSessionSelection.agentId === session.agentId
+        && activeSessionPath === session.path
+      const isCurrentActiveProject = Boolean(
+        activeWorkspaceContext.kind === 'project'
+        && activeWorkspaceContext.projectId === project.id
+        && workspacePath
+        && normalizeAgentProjectPath(workspacePath) === normalizeAgentProjectPath(project.path),
+      )
+
+      return (
+        <AgentSessionTreeRow
+          activity={sessionActivityById[getAgentSessionActivityKey(session.agentId, session.path)]}
+          agentId={session.agentId}
+          isActive={isActiveSession}
+          isDeleting={deletingSessionPath === sessionKey}
+          isRenaming={renamingSessionPath === sessionKey}
+          itemAs='div'
+          label={formatAgentSessionLabel(session)}
+          menuPortalTarget={menuPortalTarget}
+          onCancelRename={() => setRenamingSessionPath(null)}
+          relativeTime={formatAgentSessionRelativeTime(session.modifiedAt)}
+          onDelete={() => {
+            void handleDeleteSession(project.path, session.agentId, session.path)
+          }}
+          onMenuOpenChange={(open) => handleRowMenuOpenChange(row.key, open)}
+          onOpen={() => {
+            setRenamingSessionPath(null)
+            setRenamingConversationId(null)
+            const openSession = isCurrentActiveProject
+              ? handleOpenSession(session.agentId, session.path)
+              : onOpenProjectSession?.(project, session.agentId, session.path)
+            void Promise.resolve(openSession).then(() => {
+              onRequestClose?.()
+            })
+          }}
+          onRename={(name) => handleRenameSession(project.path, session.agentId, session.path, name)}
+          onRequestRename={() => setRenamingSessionPath(sessionKey)}
+        />
+      )
+    }
+
+    if (row.kind === 'conversation-section-header') {
+      return (
+        <AppItem
+          itemAs='div'
+          variant='header'
+          itemClassName='agent-project-tree-header agent-conversation-tree-header'
+          label='对话'
+          isExpanded={isConversationSectionExpanded}
+          actions={(
+            <AppItemActionButton
+              aria-label='新对话'
+              aria-keyshortcuts='Control+Alt+N'
+              title='新对话 Ctrl+Alt+N'
+              onClick={() => {
+                setRenamingConversationId(null)
+                void onStartStandaloneConversation?.()
+                onRequestClose?.()
+              }}
+            >
+              <EditLine />
+            </AppItemActionButton>
+          )}
+          onToggle={toggleConversationSection}
+        />
+      )
+    }
+
+    if (row.kind === 'conversation-empty') {
+      return <AgentSessionTreeStatusItem itemAs='div' label='暂无对话' status='empty' />
+    }
+
+    const { conversation } = row
+    return (
+      <AgentConversationRow
+        activity={conversation.agentSessionPath
+          ? sessionActivityById[getAgentSessionActivityKey(conversation.agentId, conversation.agentSessionPath)]
+          : undefined}
+        conversation={conversation}
+        isDeleting={deletingConversationId === conversation.id}
+        isRenaming={renamingConversationId === conversation.id}
+        isActive={activeWorkspaceContext.kind === 'conversation' && activeWorkspaceContext.conversationId === conversation.id}
+        menuPortalTarget={menuPortalTarget}
+        onCancelRename={() => setRenamingConversationId(null)}
+        onDelete={() => {
+          setDeletingConversationId(conversation.id)
+          void Promise.resolve(onRemoveConversation?.(conversation)).finally(() => {
+            setDeletingConversationId((currentId) => (
+              currentId === conversation.id ? null : currentId
+            ))
+          })
+        }}
+        onMenuOpenChange={(open) => handleRowMenuOpenChange(row.key, open)}
+        onOpen={() => {
+          setRenamingSessionPath(null)
+          setRenamingConversationId(null)
+          void Promise.resolve(onOpenConversation?.(conversation)).then(() => {
+            onRequestClose?.()
+          })
+        }}
+        onRename={(title) => Promise.resolve(onRenameConversation?.(conversation, title))}
+        onRequestRename={() => setRenamingConversationId(conversation.id)}
+      />
+    )
   }
 
   return (
@@ -262,270 +587,27 @@ export function AgentProjectTree({
           className='agent-session-new-button'
           aria-label='Start new conversation'
           aria-keyshortcuts='Control+Alt+N'
-          onClick={() => {
-            startPrimaryNewConversation()
-          }}
+          onClick={startPrimaryNewConversation}
         >
           <EditLine />
           <span>新对话</span>
         </AppTooltipButton>
       ) : null}
 
-      <TreeScrollArea
-        className='agent-session-tree-scroll'
+      <VirtualizedAgentTreeList
+        activeRowKey={activeRowKey}
+        ariaLabel='项目与对话'
         contentClassName='agent-session-tree-scroll-content'
+        estimateRowSize={estimateAgentProjectTreeRowSize}
+        getRowAriaMetadata={getAgentProjectTreeRowAriaMetadata}
+        getRowClassName={getAgentProjectTreeRowClassName}
+        isRowFocusable={isAgentProjectTreeRowFocusable}
+        pinnedRowKeys={pinnedRowKeys}
+        renderRow={renderTreeRow}
+        rows={treeRows}
+        scrollClassName='agent-session-tree-scroll'
         viewportClassName='agent-session-tree-scroll-viewport'
-      >
-        <TreeList className='agent-session-section-stack' aria-label='项目与对话'>
-          <TreeSection className={`agent-project-tree-section agent-project-section${isProjectSectionExpanded ? '' : ' is-collapsed'}${isFloating ? ' is-floating' : ''}`}>
-            {!isFloating ? (
-              <AppItem
-                variant='header'
-                itemClassName='agent-project-tree-header'
-                label='项目'
-                isExpanded={isProjectSectionExpanded}
-                isMenuOpen={isProjectAddMenuOpen}
-                actions={(
-                  <AppItemActionButton
-                    isActive={isProjectAddMenuOpen}
-                    aria-label='添加项目'
-                    title='添加项目'
-                    onClick={(event) => {
-                      const openProjectAddMenu = onOpenProjectAddMenuOverride ?? onOpenProjectAddMenu
-                      openProjectAddMenu?.(event.currentTarget.getBoundingClientRect())
-                    }}
-                  >
-                    <AddLine />
-                  </AppItemActionButton>
-                )}
-                onToggle={toggleProjectSection}
-              />
-            ) : null}
-            {isProjectSectionExpanded ? (
-              <TreeList className='agent-project-list'>
-                {projectState.projects.length === 0 ? (
-                  <TreeStatusItem>暂无项目</TreeStatusItem>
-                ) : projectState.projects.map((project) => {
-                  const bucket = projectSessions[project.id]
-                  const isExpanded = expandedProjectIds.has(project.id)
-                  const loadSummary = summarizeAgentProjectSessionBucket(bucket, sessionTreeAgentIds)
-                  const isSessionListPending = !loadSummary.hasLoaded || loadSummary.isLoading
-                  const isSessionLoadActive = loadSummary.isLoading
-                    || (isExpanded && !loadSummary.hasLoaded)
-                  const sessions = selectVisibleAgentProjectSessions(bucket)
-                  const sessionTreeStatus = resolveAgentSessionTreeStatus({
-                    errorCount: loadSummary.errors.length,
-                    hasCompleteSnapshot: loadSummary.hasCompleteSnapshot,
-                    isPending: isSessionListPending,
-                    sessionCount: sessions.length,
-                  })
-
-                  const projectIcon = <ProjectIcon isOpen={isExpanded} />
-                  const renderProjectMain: AppItemMainRenderer = (content, mainProps) => {
-                    const { className, hasDescription } = mainProps
-
-                    return (
-                      <Menu.Context.Root onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
-                        <Menu.Context.Trigger
-                          aria-expanded={isExpanded}
-                          aria-busy={isSessionLoadActive || undefined}
-                          render={<AppItemMainButton className={className} hasDescription={hasDescription} role='button' />}
-                          title={project.path}
-                          onClick={() => toggleProject(project.id)}
-                        >
-                          {content}
-                        </Menu.Context.Trigger>
-                        <AgentProjectContextMenuPopup
-                          menuPortalTarget={menuPortalTarget}
-                          onOpenFolder={() => {
-                            void onOpenProjectFolder?.(project)
-                          }}
-                          onRemoveProject={() => {
-                            void onRemoveProject?.(project)
-                          }}
-                        />
-                      </Menu.Context.Root>
-                    )
-                  }
-                  const projectRowActions = (
-                    <>
-                      <AppItemActionButton
-                        aria-label={`Start new conversation in ${project.name}`}
-                        title='新建对话'
-                        onClick={() => {
-                          setRenamingConversationId(null)
-                          void onStartProjectSession?.(project)
-                          onRequestClose?.()
-                        }}
-                      >
-                        <EditLine />
-                      </AppItemActionButton>
-                      <Menu.Root modal={false} onOpenChange={(open) => handleProjectMenuOpenChange(project.id, open)}>
-                        <Menu.Trigger
-                          aria-label={`Open ${project.name} menu`}
-                          render={<AppItemActionButton />}
-                          title='更多'
-                        >
-                          <More1Line />
-                        </Menu.Trigger>
-                        <AgentProjectMenuPopup
-                          menuPortalTarget={menuPortalTarget}
-                          onOpenFolder={() => {
-                            void onOpenProjectFolder?.(project)
-                          }}
-                          onRemoveProject={() => {
-                            void onRemoveProject?.(project)
-                          }}
-                        />
-                      </Menu.Root>
-                    </>
-                  )
-
-                  return (
-                    <AppItem
-                      key={project.id}
-                      itemClassName='agent-project-node'
-                      rowClassName='agent-project-row'
-                      isMenuOpen={openProjectMenuId === project.id}
-                      after={isExpanded ? (
-                        <TreeChildren className='agent-project-session-children'>
-                          <TreeList
-                            className='agent-project-session-list'
-                            aria-busy={isSessionListPending || undefined}
-                          >
-                            {sessionTreeStatus === 'loading' ? (
-                              <AgentSessionTreeStatusItem
-                                label='正在加载会话…'
-                                status='loading'
-                              />
-                            ) : sessionTreeStatus === 'error' ? (
-                              <AgentSessionTreeStatusItem
-                                label='部分 Agent 会话加载失败，重新展开可重试'
-                                status='error'
-                              />
-                            ) : sessionTreeStatus === 'empty' ? (
-                              <AgentSessionTreeStatusItem label='暂无对话' status='empty' />
-                            ) : null}
-                            {sessions.map((session) => {
-                              const sessionKey = getAgentSessionTreeKey(session.agentId, session.path)
-                              const isActiveSession = activeSessionSelection.kind === 'session'
-                                && activeSessionSelection.agentId === session.agentId
-                                && activeSessionPath === session.path
-                              const isCurrentActiveProject = Boolean(
-                                activeWorkspaceContext.kind === 'project'
-                                && activeWorkspaceContext.projectId === project.id
-                                && workspacePath
-                                && normalizeAgentProjectPath(workspacePath) === normalizeAgentProjectPath(project.path),
-                              )
-                              const label = formatAgentSessionLabel(session)
-                              const relativeTime = formatAgentSessionRelativeTime(session.modifiedAt)
-
-                              return (
-                                <AgentSessionTreeRow
-                                  activity={sessionActivityById[getAgentSessionActivityKey(session.agentId, session.path)]}
-                                  agentId={session.agentId}
-                                  key={sessionKey}
-                                  isActive={isActiveSession}
-                                  isDeleting={deletingSessionPath === sessionKey}
-                                  isRenaming={renamingSessionPath === sessionKey}
-                                  label={label}
-                                  menuPortalTarget={menuPortalTarget}
-                                  onCancelRename={() => setRenamingSessionPath(null)}
-                                  relativeTime={relativeTime}
-                                  onDelete={() => {
-                                    void handleDeleteSession(project.path, session.agentId, session.path)
-                                  }}
-                                  onOpen={() => {
-                                    setRenamingSessionPath(null)
-                                    setRenamingConversationId(null)
-                                    const openSession = isCurrentActiveProject
-                                      ? handleOpenSession(session.agentId, session.path)
-                                      : onOpenProjectSession?.(project, session.agentId, session.path)
-                                    void Promise.resolve(openSession).then(() => {
-                                      onRequestClose?.()
-                                    })
-                                  }}
-                                  onRename={(name) => handleRenameSession(project.path, session.agentId, session.path, name)}
-                                  onRequestRename={() => setRenamingSessionPath(sessionKey)}
-                                />
-                              )
-                            })}
-                          </TreeList>
-                        </TreeChildren>
-                      ) : null}
-                      icon={projectIcon}
-                      label={project.name}
-                      labelClassName='agent-project-row-label'
-                      renderMain={renderProjectMain}
-                      actions={projectRowActions}
-                    />
-                  )
-                })}
-              </TreeList>
-            ) : null}
-          </TreeSection>
-          <TreeSection className={`agent-project-tree-section agent-conversation-section${isConversationSectionExpanded ? '' : ' is-collapsed'}`}>
-            <AppItem
-              variant='header'
-              itemClassName='agent-project-tree-header agent-conversation-tree-header'
-              label='对话'
-              isExpanded={isConversationSectionExpanded}
-              actions={(
-                <AppItemActionButton
-                  aria-label='新对话'
-                  aria-keyshortcuts='Control+Alt+N'
-                  title='新对话 Ctrl+Alt+N'
-                  onClick={() => {
-                    setRenamingConversationId(null)
-                    void onStartStandaloneConversation?.()
-                    onRequestClose?.()
-                  }}
-                >
-                  <EditLine />
-                </AppItemActionButton>
-              )}
-              onToggle={toggleConversationSection}
-            />
-            {isConversationSectionExpanded ? (
-              <TreeList className='agent-project-session-list agent-conversation-list'>
-                {visibleConversations.length === 0 ? (
-                  <AgentSessionTreeStatusItem label='暂无对话' status='empty' />
-                ) : visibleConversations.map((conversation) => (
-                  <AgentConversationRow
-                    activity={conversation.agentSessionPath
-                      ? sessionActivityById[getAgentSessionActivityKey(conversation.agentId, conversation.agentSessionPath)]
-                      : undefined}
-                    key={conversation.id}
-                    conversation={conversation}
-                    isDeleting={deletingConversationId === conversation.id}
-                    isRenaming={renamingConversationId === conversation.id}
-                    isActive={activeWorkspaceContext.kind === 'conversation' && activeWorkspaceContext.conversationId === conversation.id}
-                    menuPortalTarget={menuPortalTarget}
-                    onCancelRename={() => setRenamingConversationId(null)}
-                    onDelete={() => {
-                      setDeletingConversationId(conversation.id)
-                      void Promise.resolve(onRemoveConversation?.(conversation)).finally(() => {
-                        setDeletingConversationId((currentId) => (
-                          currentId === conversation.id ? null : currentId
-                        ))
-                      })
-                    }}
-                    onOpen={() => {
-                      setRenamingSessionPath(null)
-                      setRenamingConversationId(null)
-                      void Promise.resolve(onOpenConversation?.(conversation)).then(() => {
-                        onRequestClose?.()
-                      })
-                    }}
-                    onRename={(title) => Promise.resolve(onRenameConversation?.(conversation, title))}
-                    onRequestRename={() => setRenamingConversationId(conversation.id)}
-                  />
-                ))}
-              </TreeList>
-            ) : null}
-          </TreeSection>
-        </TreeList>
-      </TreeScrollArea>
+      />
     </div>
   )
 }
