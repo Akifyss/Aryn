@@ -6,6 +6,7 @@ import { defineConfig } from 'vite'
 import type { Plugin } from 'vite'
 
 const source = path.resolve(__dirname, 'src')
+const arynSource = path.resolve(__dirname, '..', '..', 'src')
 const upstream = path.join(source, 'upstream', 'bb')
 const appSource = path.join(upstream, 'apps', 'app', 'src')
 const sharedUiSource = path.join(upstream, 'packages', 'shared-ui', 'src')
@@ -144,6 +145,7 @@ const scopeBbCssOutput: Plugin = {
 }
 
 const alias = [
+  { find: '@aryn/app-scroll-area', replacement: path.join(arynSource, 'components', 'app-scroll-area', 'index.ts') },
   { find: '@bb/domain', replacement: path.join(upstream, 'packages/domain/src/index.ts') },
   { find: '@bb/core-ui', replacement: path.join(upstream, 'packages/core-ui/src/index.ts') },
   { find: '@bb/server-contract', replacement: path.join(source, 'compat/server-contract.ts') },

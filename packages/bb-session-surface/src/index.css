@@ -35,7 +35,46 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
+  position: relative;
   width: 100%;
+}
+
+/*
+ * BB owns the timeline structure, while Aryn owns the surrounding composer.
+ * Share the host column width and inset so prose, code blocks, and the
+ * composer field keep identical edges at both constrained and fluid widths.
+ */
+.aryn-bb-session-surface__content-width {
+  max-width: var(--agent-content-max-width, 800px);
+}
+
+.aryn-bb-session-surface__content-inset {
+  padding-inline: var(--agent-messages-inline-padding, 8px);
+}
+
+/*
+ * The shared page inset already matches the composer's outer shell. BB adds a
+ * second px-2 inset only to assistant message rows; remove that duplicate
+ * layer so Markdown and code-block edges align with the visible composer
+ * field. User bubbles do not carry w-full and keep their upstream spacing.
+ */
+.aryn-bb-session-surface [class~="group/message"][class~="w-full"] {
+  padding-inline: 0;
+}
+
+/*
+ * Keep BB's exact scroll owner for anchoring, streaming follow, history
+ * prepends, and saved positions, but remove its platform scrollbar gutter.
+ * Aryn scrollbars are overlay-positioned; zero-width native chrome gives this
+ * vendored viewport the same non-consuming layout geometry.
+ */
+.aryn-bb-session-surface__scroll-viewport {
+  scrollbar-width: none;
+}
+
+.aryn-bb-session-surface__scroll-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .aryn-bb-session-surface__runtime-status {

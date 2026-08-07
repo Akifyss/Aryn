@@ -32,6 +32,7 @@ describe('bb unified session surface build contract', () => {
 
     expect(rootPackage.dependencies['@aryn/bb-session-surface']).toBe('file:packages/bb-session-surface')
     expect(config.resolve?.dedupe).toEqual(expect.arrayContaining(['react', 'react-dom']))
+    expect(config.resolve?.alias?.some(({ find }) => find === '@aryn/app-scroll-area')).toBe(true)
     expect(config.resolve?.alias?.find(({ find }) => find === '@/components/ui/bottom-anchored-scroll-body.js')).toBeUndefined()
   })
 
@@ -65,6 +66,69 @@ describe('bb unified session surface build contract', () => {
     expect(source).toContain('onLoadOlderRows={options.bridge?.loadOlderTimelineRows}')
     expect(source).toContain('hasOlderTimelineRows={options.paginationState?.hasOlderTimelineRows ?? false}')
     expect(hostSource).not.toContain('AppScrollArea')
+  })
+
+  it('aligns the bb message column with the Aryn composer column', async () => {
+    const [
+      source,
+      styles,
+      composerStyles,
+      messageSource,
+      appScrollAreaSource,
+      appScrollAreaStyles,
+    ] = await Promise.all([
+      readFile(
+        new URL('../packages/bb-session-surface/src/index.tsx', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../packages/bb-session-surface/src/index.css', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/features/agent/components/agent-composer-surface/styles.css', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          '../packages/bb-session-surface/src/upstream/bb/apps/app/src/components/thread/timeline/ConversationMessageContent.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/components/app-scroll-area/app-scroll-area.tsx', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/components/app-scroll-area/styles.css', import.meta.url),
+        'utf8',
+      ),
+    ])
+
+    expect(source).toContain("maxWidthClassName='aryn-bb-session-surface__content-width'")
+    expect(source).toContain("contentClassName='aryn-bb-session-surface__content-inset'")
+    expect(source).toContain("scrollAreaClassName='aryn-bb-session-surface__scroll-viewport'")
+    expect(styles).toContain('max-width: var(--agent-content-max-width, 800px)')
+    expect(styles).toContain('padding-inline: var(--agent-messages-inline-padding, 8px)')
+    expect(styles).toContain('[class~="group/message"][class~="w-full"]')
+    expect(messageSource).toContain(
+      'className="group/message w-full px-2 text-sm font-normal leading-relaxed"',
+    )
+    expect(styles).toContain('.aryn-bb-session-surface__scroll-viewport::-webkit-scrollbar')
+    expect(styles).toContain('scrollbar-width: none')
+    expect(source).toContain("import { AppScrollArea } from '@aryn/app-scroll-area'")
+    expect(source).toContain('<AppScrollArea')
+    expect(source).toContain('getExternalViewport={getScrollViewport}')
+    expect(source).toContain('getExternalInteractionRoot={getScrollInteractionRoot}')
+    expect(appScrollAreaSource).toContain('function ExternalAppScrollArea')
+    expect(appScrollAreaSource).toContain("'app-scroll-area-external-overlay'")
+    expect(appScrollAreaSource).toContain(
+      "viewport.dispatchEvent(new PointerEvent('pointerdown'",
+    )
+    expect(appScrollAreaStyles).toContain('.app-scroll-area-external-overlay')
+    expect(composerStyles).toContain('max-width: var(--agent-content-max-width)')
+    expect(composerStyles).toContain('--agent-composer-padding-inline: 8px')
   })
 
   it('adds accessibility and long-timeline safeguards outside the exact upstream mirror', async () => {

@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
+import { AppScrollArea } from '@aryn/app-scroll-area'
 import { ThreadTimelineSurface } from './upstream/bb/apps/app/src/components/thread/timeline/ThreadTimelineSurface'
 import { BottomAnchoredScrollBody } from './upstream/bb/apps/app/src/components/ui/bottom-anchored-scroll-body'
 import { ThreadTimelineScrollToBottomButton } from './upstream/bb/apps/app/src/views/thread-detail/ThreadTimelineScrollToBottomButton'
@@ -206,6 +207,17 @@ function BbTimeline({
     return true
   }, [options.bridge])
 
+  const getScrollViewport = useCallback(
+    () => timelineRootRef.current?.querySelector<HTMLElement>(
+      '.aryn-bb-session-surface__scroll-viewport',
+    ) ?? null,
+    [],
+  )
+  const getScrollInteractionRoot = useCallback(
+    () => timelineRootRef.current,
+    [],
+  )
+
   return (
     <div
       ref={timelineRootRef}
@@ -219,12 +231,14 @@ function BbTimeline({
         status={projection.runtimeStatus}
       />
       <BottomAnchoredScrollBody
+        contentClassName='aryn-bb-session-surface__content-inset'
         footer={(
           <ThreadTimelineScrollToBottomButton
             active={projection.runtimeStatus === 'active'}
           />
         )}
-        maxWidthClassName='max-w-[760px]'
+        maxWidthClassName='aryn-bb-session-surface__content-width'
+        scrollAreaClassName='aryn-bb-session-surface__scroll-viewport'
         scrollAnchorThreadId={options.sessionId}
       >
         <ThreadTimelineSurface
@@ -247,6 +261,11 @@ function BbTimeline({
           workspaceRootPath={options.workspacePath}
         />
       </BottomAnchoredScrollBody>
+      <AppScrollArea
+        className='aryn-bb-session-surface__app-scroll-area'
+        getExternalInteractionRoot={getScrollInteractionRoot}
+        getExternalViewport={getScrollViewport}
+      />
     </div>
   )
 }

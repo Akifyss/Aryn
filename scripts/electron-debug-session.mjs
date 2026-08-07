@@ -458,6 +458,52 @@ async function applyDebugScenario(page) {
       }
     })
 
+    const productionAlignment = await page.evaluate(() => {
+      const scrollArea = document.querySelector(
+        '.bb-session-surface-host .aryn-bb-session-surface__scroll-viewport',
+      )
+      const content = document.querySelector(
+        '.bb-session-surface-host .aryn-bb-session-surface__content-width',
+      )
+      const composer = document.querySelector('.agent-composer-field')
+      if (!scrollArea || !content || !composer) return null
+
+      const contentRect = content.getBoundingClientRect()
+      const contentStyle = getComputedStyle(content)
+      const composerRect = composer.getBoundingClientRect()
+      const paddingLeft = Number.parseFloat(contentStyle.paddingLeft) || 0
+      const paddingRight = Number.parseFloat(contentStyle.paddingRight) || 0
+      const messageLeft = contentRect.left + paddingLeft
+      const messageRight = contentRect.right - paddingRight
+      return {
+        composer: {
+          left: composerRect.left,
+          right: composerRect.right,
+          width: composerRect.width,
+        },
+        content: {
+          left: contentRect.left,
+          paddingLeft,
+          paddingRight,
+          right: contentRect.right,
+          width: contentRect.width,
+        },
+        delta: {
+          left: messageLeft - composerRect.left,
+          right: messageRight - composerRect.right,
+        },
+        message: {
+          left: messageLeft,
+          right: messageRight,
+          width: messageRight - messageLeft,
+        },
+        scrollArea: {
+          clientWidth: scrollArea.clientWidth,
+          offsetWidth: scrollArea.offsetWidth,
+        },
+      }
+    })
+
     const syntheticTimeline = await page.evaluate(async () => {
       const created = Date.now()
       const workspacePath = 'C:\\debug-workspace'
@@ -631,7 +677,6 @@ async function applyDebugScenario(page) {
           && text.includes('npm test')
           && text.includes('tool attachment.txt')
           && text.includes('README.md')
-          && text.includes('Unhandled OpenCode event')
         ) {
           rendered = true
           break
@@ -640,6 +685,7 @@ async function applyDebugScenario(page) {
       }
 
       const initialText = container.textContent ?? ''
+      const unknownProviderPayloadHidden = !initialText.includes('Unhandled OpenCode event')
       await document.fonts.ready
       const inlineCodeMono = Array.from(container.querySelectorAll('code.font-mono')).find(
         (element) => element.textContent?.trim() === 'context-mode',
@@ -1296,7 +1342,7 @@ async function applyDebugScenario(page) {
         left: '-10000px',
         position: 'fixed',
         top: '0',
-        width: '720px',
+        width: '1000px',
       })
       document.body.append(bottomAnchorContainer)
       const bottomAnchorMessages = Array.from({ length: 12 }, (_, turnIndex) => ([{
@@ -1328,20 +1374,134 @@ async function applyDebugScenario(page) {
         requestAnimationFrame(() => requestAnimationFrame(resolve))
       )))
       const bottomAnchorScrollArea = bottomAnchorContainer.querySelector('.thread-scrollbar')
+      const bottomAnchorContent = bottomAnchorContainer.querySelector(
+        '.aryn-bb-session-surface__content-width',
+      )
       const bottomAnchorGeometry = bottomAnchorScrollArea
         ? {
             clientHeight: bottomAnchorScrollArea.clientHeight,
             maxScrollTop: Math.max(0, bottomAnchorScrollArea.scrollHeight - bottomAnchorScrollArea.clientHeight),
             scrollHeight: bottomAnchorScrollArea.scrollHeight,
             scrollTop: bottomAnchorScrollArea.scrollTop,
+        }
+        : null
+      const bottomAnchorHorizontalGeometry = (() => {
+        if (!bottomAnchorScrollArea || !bottomAnchorContent) return null
+        const scrollRect = bottomAnchorScrollArea.getBoundingClientRect()
+        const contentRect = bottomAnchorContent.getBoundingClientRect()
+        const contentStyle = getComputedStyle(bottomAnchorContent)
+        const paddingLeft = Number.parseFloat(contentStyle.paddingLeft) || 0
+        const paddingRight = Number.parseFloat(contentStyle.paddingRight) || 0
+        return {
+          content: {
+            left: contentRect.left,
+            right: contentRect.right,
+            width: contentRect.width,
+          },
+          contentCenterDelta: (
+            (contentRect.left + contentRect.right)
+            - (scrollRect.left + scrollRect.right)
+          ) / 2,
+          messageInset: {
+            left: contentRect.left + paddingLeft - scrollRect.left,
+            right: scrollRect.right - (contentRect.right - paddingRight),
+          },
+          scrollArea: {
+            clientWidth: bottomAnchorScrollArea.clientWidth,
+            left: scrollRect.left,
+            offsetWidth: bottomAnchorScrollArea.offsetWidth,
+            right: scrollRect.right,
+            width: scrollRect.width,
+          },
+        }
+      })()
+      if (bottomAnchorScrollArea) {
+        bottomAnchorScrollArea.dispatchEvent(new Event('scroll', { bubbles: true }))
+        await new Promise((resolve) => setTimeout(resolve, 160))
+      }
+      const bottomAnchorOverlay = bottomAnchorContainer.querySelector(
+        '.aryn-bb-session-surface__app-scroll-area',
+      )
+      const bottomAnchorOverlayTrack = bottomAnchorOverlay?.querySelector(
+        '.app-scroll-area-scrollbar',
+      )
+      const bottomAnchorOverlayThumb = bottomAnchorOverlay?.querySelector(
+        '.app-scroll-area-thumb',
+      )
+      const bottomAnchorOverlayScrollbar = bottomAnchorOverlay
+        && bottomAnchorOverlayTrack
+        && bottomAnchorOverlayThumb
+        ? {
+            externalViewportAdapter: bottomAnchorOverlay.classList.contains(
+              'app-scroll-area-external-overlay',
+            ),
+            hasOverflow: bottomAnchorOverlay.hasAttribute('data-has-overflow-y'),
+            opacity: getComputedStyle(bottomAnchorOverlayTrack).opacity,
+            pointerEvents: getComputedStyle(bottomAnchorOverlayTrack).pointerEvents,
+            thumbHeight: bottomAnchorOverlayThumb.getBoundingClientRect().height,
+            trackWidth: bottomAnchorOverlayTrack.getBoundingClientRect().width,
           }
         : null
       let detachedScrollPreserved = false
+      let overlayPointerDetachPreserved = false
       let scrollToLatestButtonFound = false
       let scrollToLatestButtonStyle = null
       let scrollToLatestButtonVisible = false
       let scrollToLatestReturnedToBottom = false
       if (bottomAnchorScrollArea && bottomAnchorGeometry) {
+        if (bottomAnchorOverlayTrack && bottomAnchorOverlayThumb) {
+          const originalSetPointerCapture = bottomAnchorOverlayTrack.setPointerCapture
+          const originalHasPointerCapture = bottomAnchorOverlayTrack.hasPointerCapture
+          const originalReleasePointerCapture = bottomAnchorOverlayTrack.releasePointerCapture
+          bottomAnchorOverlayTrack.setPointerCapture = () => {}
+          bottomAnchorOverlayTrack.hasPointerCapture = () => false
+          bottomAnchorOverlayTrack.releasePointerCapture = () => {}
+          const trackRect = bottomAnchorOverlayTrack.getBoundingClientRect()
+          const pointerId = 71
+          bottomAnchorOverlayTrack.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true,
+            button: 0,
+            buttons: 1,
+            clientX: trackRect.left + trackRect.width / 2,
+            clientY: trackRect.top + trackRect.height / 3,
+            pointerId,
+            pointerType: 'mouse',
+          }))
+          await new Promise((resolve) => requestAnimationFrame(resolve))
+          bottomAnchorOverlayTrack.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true,
+            button: 0,
+            buttons: 0,
+            clientX: trackRect.left + trackRect.width / 2,
+            clientY: trackRect.top + trackRect.height / 3,
+            pointerId,
+            pointerType: 'mouse',
+          }))
+          bottomAnchorOverlayTrack.setPointerCapture = originalSetPointerCapture
+          bottomAnchorOverlayTrack.hasPointerCapture = originalHasPointerCapture
+          bottomAnchorOverlayTrack.releasePointerCapture = originalReleasePointerCapture
+          await new Promise((resolve) => requestAnimationFrame(resolve))
+          const overlayDetachedScrollTop = bottomAnchorScrollArea.scrollTop
+          bottomAnchorSurface.setSnapshot({
+            agentId: 'pi',
+            entryIds: [...bottomAnchorMessages, {}].map((_, index) => `long-entry-${index}`),
+            isStreaming: true,
+            messages: [...bottomAnchorMessages, {
+              role: 'assistant',
+              content: [{ type: 'text', text: 'Overlay pointer scrolling must preserve this reading position.' }],
+              timestamp: created + 199,
+            }],
+            modelNames: {},
+            sessionId: 'bb-debug-bottom-anchor-native',
+          })
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+          overlayPointerDetachPreserved = Math.abs(
+            bottomAnchorScrollArea.scrollTop - overlayDetachedScrollTop,
+          ) <= 4 && bottomAnchorScrollArea.scrollTop < (
+            bottomAnchorScrollArea.scrollHeight - bottomAnchorScrollArea.clientHeight - 4
+          )
+        }
+
         bottomAnchorScrollArea.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -120 }))
         bottomAnchorScrollArea.scrollTop = Math.max(1, Math.floor(bottomAnchorGeometry.maxScrollTop / 2))
         bottomAnchorScrollArea.dispatchEvent(new Event('scroll', { bubbles: true }))
@@ -1404,6 +1564,8 @@ async function applyDebugScenario(page) {
         agentId: timelineRoot?.getAttribute('data-agent-id') ?? null,
         activeRuntimeAnnouncement,
         bottomAnchorGeometry,
+        bottomAnchorHorizontalGeometry,
+        bottomAnchorOverlayScrollbar,
         builtinPiRendered,
         detachedScrollPreserved,
         fontChecks,
@@ -1416,6 +1578,7 @@ async function applyDebugScenario(page) {
         keyboardTargetFound: Boolean(keyboardTarget),
         openCodeQuestionRowCount,
         openCodeUserFileVisible,
+        overlayPointerDetachPreserved,
         piRendered,
         piLiveRendered,
         piStaleRuntimeHidden,
@@ -1440,6 +1603,7 @@ async function applyDebugScenario(page) {
         toolAttachmentOpenedPath,
         toolAttachmentVisible,
         syntheticUserTextHidden,
+        unknownProviderPayloadHidden,
         visibleEmptyRowCount: visibleEmptyRows.length,
         maxTopLevelGap: topLevelGaps.length ? Math.max(...topLevelGaps) : 0,
         legacyViewToggleCount: document.querySelectorAll('.agent-threadbar-view-actions button').length,
@@ -1533,6 +1697,7 @@ async function applyDebugScenario(page) {
 
     return {
       productionAgentIcons,
+      productionAlignment,
       productionSurfaceAssets,
       productionSurfaceCount: await page.locator('.bb-session-surface-host .aryn-bb-session-surface').count(),
       productionSurfaceStayedMounted,
@@ -1777,6 +1942,14 @@ function assertDebugScenarioResult(result) {
   }
 
   if (debugScenario === 'bb-unified-surface') {
+    const horizontalGeometry = result.syntheticTimeline?.bottomAnchorHorizontalGeometry
+    const measuredScrollbarGutter = horizontalGeometry
+      ? horizontalGeometry.scrollArea.offsetWidth - horizontalGeometry.scrollArea.clientWidth
+      : Number.NaN
+    const productionScrollbarGutter = result.productionAlignment
+      ? result.productionAlignment.scrollArea.offsetWidth
+        - result.productionAlignment.scrollArea.clientWidth
+      : Number.NaN
     if (
       !result.productionAgentIcons
       || result.productionAgentIcons.maskCount < 1
@@ -1785,6 +1958,10 @@ function assertDebugScenarioResult(result) {
       || result.productionAgentIcons.bundledResources.length !== 4
       || result.productionAgentIcons.bundledResources.some((resource) => !resource.loaded)
       || result.productionAgentIcons.brokenImageCount !== 0
+      || !result.productionAlignment
+      || Math.abs(result.productionAlignment?.delta.left ?? Number.NaN) > 1
+      || Math.abs(result.productionAlignment?.delta.right ?? Number.NaN) > 1
+      || productionScrollbarGutter > 1
       || !/^[a-f0-9]{16}$/.test(result.productionSurfaceAssets?.styleRevision ?? '')
       || result.productionSurfaceAssets.hostRevision !== result.productionSurfaceAssets.styleRevision
       || !result.productionSurfaceStayedMounted
@@ -1794,7 +1971,18 @@ function assertDebugScenarioResult(result) {
       || result.syntheticTimeline.rootCount !== 1
       || result.syntheticTimeline.agentId !== 'opencode'
       || !result.syntheticTimeline.bottomAnchorGeometry
+      || !horizontalGeometry
+      || Math.abs(horizontalGeometry.contentCenterDelta) > 1
+      || Math.abs(horizontalGeometry.messageInset.left - horizontalGeometry.messageInset.right) > 1
+      || measuredScrollbarGutter > 1
       || result.syntheticTimeline.bottomAnchorGeometry.maxScrollTop <= 0
+      || !result.syntheticTimeline.bottomAnchorOverlayScrollbar?.hasOverflow
+      || !result.syntheticTimeline.bottomAnchorOverlayScrollbar.externalViewportAdapter
+      || Number(result.syntheticTimeline.bottomAnchorOverlayScrollbar.opacity) < 0.9
+      || result.syntheticTimeline.bottomAnchorOverlayScrollbar.pointerEvents !== 'auto'
+      || result.syntheticTimeline.bottomAnchorOverlayScrollbar.thumbHeight < 18
+      || result.syntheticTimeline.bottomAnchorOverlayScrollbar.trackWidth < 5
+      || !result.syntheticTimeline.overlayPointerDetachPreserved
       || Math.abs(
         result.syntheticTimeline.bottomAnchorGeometry.maxScrollTop
         - result.syntheticTimeline.bottomAnchorGeometry.scrollTop
@@ -1817,6 +2005,7 @@ function assertDebugScenarioResult(result) {
       || !result.syntheticTimeline.syntheticUserTextHidden
       || !result.syntheticTimeline.toolAttachmentVisible
       || result.syntheticTimeline.toolAttachmentOpenedPath !== 'C:/debug-workspace/tool attachment.txt'
+      || !result.syntheticTimeline.unknownProviderPayloadHidden
       || result.syntheticTimeline.piUserMessageText !== '你好'
       || !result.syntheticTimeline.piUserMessageTextFillColor
       || !result.syntheticTimeline.piUserMessageVisible

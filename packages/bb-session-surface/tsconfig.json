@@ -16,6 +16,7 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
+      "@aryn/app-scroll-area": ["../../src/components/app-scroll-area/index.ts"],
       "@bb/domain": ["src/upstream/bb/packages/domain/src/index.ts"],
       "@bb/core-ui": ["src/upstream/bb/packages/core-ui/src/index.ts"],
       "@bb/server-contract": ["src/compat/server-contract.ts"],

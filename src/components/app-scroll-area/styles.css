@@ -21,6 +21,13 @@
   box-sizing: border-box;
 }
 
+.app-scroll-area-external-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
 .app-scroll-area-scrollbar {
   position: absolute;
   display: block;
@@ -39,6 +46,8 @@
 .app-scroll-area[data-has-overflow-y]:hover .app-scroll-area-scrollbar[data-orientation='vertical'],
 .app-scroll-area[data-has-overflow-y]:focus-within .app-scroll-area-scrollbar[data-orientation='vertical'],
 .app-scroll-area[data-has-overflow-y][data-scrolling] .app-scroll-area-scrollbar[data-orientation='vertical'],
+.app-scroll-area-external-overlay[data-has-overflow-y][data-owner-hovering] .app-scroll-area-scrollbar[data-orientation='vertical'],
+.app-scroll-area-external-overlay[data-has-overflow-y][data-owner-focus] .app-scroll-area-scrollbar[data-orientation='vertical'],
 .app-scroll-area-scrollbar[data-orientation='vertical'][data-hovering],
 .app-scroll-area-scrollbar[data-orientation='vertical'][data-scrolling],
 .app-scroll-area[data-has-overflow-x]:hover .app-scroll-area-scrollbar[data-orientation='horizontal'],
