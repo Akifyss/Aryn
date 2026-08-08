@@ -487,6 +487,34 @@ describe('shell layout helpers', () => {
     expect(appShellCss).toContain('--agent-collapsed-tab-actions-width: calc((var(--panel-toggle-size) * 2) + var(--panel-toggle-gap));')
   })
 
+  it('hides collapsed fixed-tab actions without reserving their titlebar space', async () => {
+    const [appShellCss, appShellSource, appWorkspaceShellSource] = await Promise.all([
+      readAppShellCss(),
+      readAppShellSource(),
+      readFile(
+        new URL(
+          '../src/features/layout/components/app-workspace-shell/app-workspace-shell.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ])
+
+    expect(appWorkspaceShellSource).toContain('const SHOW_COLLAPSED_FIXED_TAB_ACTIONS = false')
+    expect(appWorkspaceShellSource).toContain('rightCollapsedActions={SHOW_COLLAPSED_FIXED_TAB_ACTIONS ? (')
+    expect(appWorkspaceShellSource).toContain("handleCollapsedFixedTabClick('git')")
+    expect(appWorkspaceShellSource).toContain("handleCollapsedFixedTabClick('file')")
+    expect(appShellSource).toContain('const shouldRenderRightCollapsedActions = isAgentLayout')
+    expect(appShellSource).toContain('&& Boolean(rightCollapsedActions)')
+    expect(appShellSource).toContain("data-right-collapsed-actions={shouldRenderRightCollapsedActions ? 'true' : 'false'}")
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='agent'][data-right-collapsed='true'] .panel-editor .agent-threadbar {
+  padding-right: var(--right-panel-content-inset);
+}`)
+    expect(appShellCss).toContain(`[data-right-collapsed-actions='true'] .panel-editor .agent-threadbar {
+  padding-right: calc(var(--right-panel-content-inset) + var(--agent-collapsed-tab-actions-width) + var(--panel-toggle-gap));
+}`)
+  })
+
   it('keeps docked sidebar expansion motion scoped and disableable', async () => {
     const [
       globalCss,

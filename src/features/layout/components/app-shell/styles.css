@@ -152,6 +152,10 @@
 }
 
 .app-shell[data-app-layout='agent'][data-right-collapsed='true'] .panel-editor .agent-threadbar {
+  padding-right: var(--right-panel-content-inset);
+}
+
+.app-shell[data-app-layout='agent'][data-right-collapsed='true'][data-right-collapsed-actions='true'] .panel-editor .agent-threadbar {
   padding-right: calc(var(--right-panel-content-inset) + var(--agent-collapsed-tab-actions-width) + var(--panel-toggle-gap));
 }
 

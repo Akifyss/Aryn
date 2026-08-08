@@ -25,6 +25,9 @@ import {
   type AppWorkspacePanelConfiguration,
 } from './app-workspace-panels'
 
+// Keep the shortcuts available for a future opt-in without exposing them in the titlebar.
+const SHOW_COLLAPSED_FIXED_TAB_ACTIONS = false
+
 type AppWorkspaceShellProps = {
   appLayout: AppLayoutPreference
   children?: ReactNode
@@ -110,7 +113,7 @@ export function AppWorkspaceShell({
           surfaceMode={surfaceMode}
         />
       )}
-      rightCollapsedActions={(
+      rightCollapsedActions={SHOW_COLLAPSED_FIXED_TAB_ACTIONS ? (
         <>
           <AppIconButton
             type='button'
@@ -120,7 +123,7 @@ export function AppWorkspaceShell({
             preventFocusOnPress
             onClick={() => handleCollapsedFixedTabClick('git')}
           >
-            <GitBranchLine />
+            <GitBranchLine aria-hidden='true' />
           </AppIconButton>
           <AppIconButton
             type='button'
@@ -130,10 +133,10 @@ export function AppWorkspaceShell({
             preventFocusOnPress
             onClick={() => handleCollapsedFixedTabClick('file')}
           >
-            <FolderLine />
+            <FolderLine aria-hidden='true' />
           </AppIconButton>
         </>
-      )}
+      ) : null}
       shouldExposeRightPanelTools={shouldExposeRightPanelTools}
     >
       {children}

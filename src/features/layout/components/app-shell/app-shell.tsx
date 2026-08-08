@@ -115,6 +115,10 @@ export function AppShell({
     toggleAssistantSurface,
   } = layout
   const isAgentLayout = appLayout === 'agent'
+  const shouldRenderRightCollapsedActions = isAgentLayout
+    && shouldExposeRightPanelTools
+    && !isRightSidebarVisible
+    && Boolean(rightCollapsedActions)
   const leftChromeSurface = isLeftDrawerOpen
     ? 'drawer'
     : isLeftSidebarVisible
@@ -183,12 +187,13 @@ export function AppShell({
       data-modal-layer-open={isModalLayerOpen ? 'true' : 'false'}
       data-resizing={activeResizePanel ? 'true' : 'false'}
       data-right-collapsed={isRightSidebarDrawer || !isRightSidebarVisible ? 'true' : 'false'}
+      data-right-collapsed-actions={shouldRenderRightCollapsedActions ? 'true' : 'false'}
       data-right-drawer-open={isRightDrawerOpen ? 'true' : 'false'}
       data-window-fullscreen={isWindowFullScreen ? 'true' : 'false'}
       onTransitionEnd={handleSidebarLayoutTransitionEnd}
       style={shellStyle}
     >
-      {isAgentLayout && shouldExposeRightPanelTools && !isRightSidebarVisible && rightCollapsedActions ? (
+      {shouldRenderRightCollapsedActions ? (
         <div
           className='agent-collapsed-tab-actions'
           data-overlay-elevated={shellChromeOverlayState.rightControlsElevated ? 'true' : 'false'}
