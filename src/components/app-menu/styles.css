@@ -49,11 +49,6 @@
   gap: var(--app-item-list-gap);
 }
 
-.app-menu-search-field:focus-within {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-
 .app-menu-surface-sm {
   --app-menu-popup-min-width: 180px;
 }

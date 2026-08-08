@@ -13,6 +13,7 @@ describe('input focus ring policy', () => {
   it('removes rings from text-entry controls without suppressing button focus', async () => {
     const [
       indexCss,
+      appMenuCss,
       projectMenuCss,
       modelCascaderCss,
       newProjectCss,
@@ -24,6 +25,7 @@ describe('input focus ring policy', () => {
       meoWebviewCss,
     ] = await Promise.all([
       readSource('src/index.css'),
+      readSource('src/components/app-menu/styles.css'),
       readSource('src/features/workspace/components/project-menu/styles.css'),
       readSource('src/features/agent/components/agent-model-cascader/styles.css'),
       readSource('src/features/workspace/components/new-project-dialog/styles.css'),
@@ -51,6 +53,9 @@ describe('input focus ring policy', () => {
     expect(inputPolicy).not.toContain("[type='range']")
     expect(inputPolicy).not.toContain("[type='file']")
 
+    expect(appMenuCss).not.toMatch(
+      /\.app-menu-search-field:focus-within\s*\{[^}]*(?:outline|box-shadow|--tw-ring-(?:shadow|offset-shadow))\s*:/s,
+    )
     expect(projectMenuCss).not.toContain('.project-menu-search:focus-within')
     expect(modelCascaderCss).not.toContain('.agent-model-cascader-search:focus-within')
     expect(newProjectCss).not.toContain('.project-create-field input:focus')

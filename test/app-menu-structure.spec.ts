@@ -284,9 +284,6 @@ describe('shared application menu', () => {
     expect(agentModelCss).toMatch(
       /\.agent-model-cascader-scroll \.app-menu-list\s*\{[^}]*padding:\s*0 var\(--app-menu-content-padding\) var\(--app-menu-content-padding\);/,
     )
-    expect(appMenuCss).toMatch(
-      /\.app-menu-search-field:focus-within\s*\{[^}]*outline:\s*2px solid var\(--focus\);[^}]*outline-offset:\s*-2px;/,
-    )
     expect(appScrollAreaCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.app-scroll-area-scrollbar,[\s\S]*\.app-scroll-area-thumb\s*\{[^}]*transition:\s*none;/,
     )
