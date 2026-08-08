@@ -4,6 +4,11 @@
 }
 
 .app-item-row {
+  --app-item-current-foreground: var(--foreground-primary);
+  --app-item-current-icon-foreground: var(--foreground-secondary);
+  --app-item-hover-background: var(--hover);
+  --app-item-hover-foreground: var(--app-item-current-foreground);
+
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -15,6 +20,7 @@
   margin: 0;
   padding: 0 0 0 var(--app-item-content-inset);
   border-radius: var(--app-item-row-radius);
+  color: var(--app-item-current-foreground);
   cursor: pointer;
   transition: background-color 120ms ease;
 }
@@ -25,7 +31,7 @@
 
 .app-item-row:hover,
 .app-item-row.is-menu-open {
-  background: var(--hover);
+  background: var(--app-item-hover-background);
 }
 
 .app-item-row.is-active {
@@ -40,7 +46,7 @@
   height: 100%;
   min-width: 0;
   gap: var(--app-item-content-gap);
-  color: var(--foreground-primary);
+  color: var(--app-item-current-foreground, var(--foreground-primary));
   font-size: var(--app-item-font-size);
   line-height: 1.5;
 }
@@ -106,7 +112,7 @@
 }
 
 .app-item-row .app-item-label {
-  color: var(--foreground-primary);
+  color: var(--app-item-current-foreground, var(--foreground-primary));
   font-size: inherit;
   line-height: inherit;
 }
@@ -199,7 +205,7 @@
   width: var(--icon-size-md);
   height: var(--icon-size-md);
   flex-shrink: 0;
-  color: var(--foreground-secondary);
+  color: var(--app-item-current-icon-foreground, var(--foreground-secondary));
 }
 
 .app-item-icon[data-size='lg'] {
@@ -368,28 +374,32 @@
 }
 
 .app-item-header > .app-item-row {
+  --app-item-current-foreground: var(--foreground-secondary);
+  --app-item-hover-background: transparent;
+  --app-item-hover-foreground: var(--foreground-primary);
+
   height: 32px;
   min-height: 32px;
   border-radius: 0;
-  color: inherit;
+  color: var(--app-item-current-foreground);
   font-size: inherit;
   cursor: default;
 }
 
 .app-item-header > .app-item-row:hover,
 .app-item-header > .app-item-row.is-menu-open {
-  background: transparent;
+  background: var(--app-item-hover-background);
 }
 
 .app-item-header > .app-item-row > .app-item-main {
   gap: 0;
-  color: inherit;
+  color: var(--app-item-current-foreground);
   letter-spacing: 0;
   text-transform: none;
 }
 
 .app-item-header > .app-item-row > .app-item-main:is(button):hover {
-  color: var(--foreground-primary);
+  color: var(--app-item-hover-foreground);
 }
 
 .app-item-header > .app-item-row .app-item-label {
@@ -414,6 +424,13 @@
   transition:
     opacity 140ms ease,
     visibility 0s linear 140ms;
+}
+
+.app-item-row[data-tone='danger'] {
+  --app-item-current-foreground: var(--danger);
+  --app-item-current-icon-foreground: var(--danger);
+  --app-item-hover-background: var(--danger-soft);
+  --app-item-hover-foreground: var(--danger);
 }
 
 .app-item-header > .app-item-row:hover .app-item-chevron-box,

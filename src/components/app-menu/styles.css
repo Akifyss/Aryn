@@ -97,7 +97,7 @@
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--foreground-primary);
+  color: var(--app-item-current-foreground, var(--foreground-primary));
   user-select: none;
 }
 
@@ -115,7 +115,7 @@
 .app-menu-item:focus-visible,
 .app-menu-item[data-highlighted],
 .app-menu-item.is-highlighted {
-  background: var(--hover);
+  background: var(--app-item-hover-background, var(--hover));
 }
 
 .app-menu-item.is-selected,
@@ -131,29 +131,11 @@
   pointer-events: none;
 }
 
-.app-menu-item-danger {
-  color: var(--danger);
-}
-
-.app-menu-item-danger .app-item-label,
-.app-menu-item-danger .app-item-icon {
-  color: inherit;
-}
-
-.app-menu-item-danger:hover,
-.app-menu-item-danger:focus-visible,
-.app-menu-item-danger[data-highlighted],
-.app-menu-item-danger.is-highlighted {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-
-.app-menu-item .app-item-main {
-  color: inherit;
-}
-
-.app-menu-item .app-item-icon {
-  color: var(--foreground-secondary);
+.app-menu-item[data-tone='danger'] {
+  --app-item-current-foreground: var(--danger);
+  --app-item-current-icon-foreground: var(--danger);
+  --app-item-hover-background: var(--danger-soft);
+  --app-item-hover-foreground: var(--danger);
 }
 
 .app-menu-item-indicator {

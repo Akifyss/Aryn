@@ -17,7 +17,7 @@ describe('shared application item', () => {
     )
 
     expect(markup).toContain('<li class="app-item-container">')
-    expect(markup).toContain('<div class="app-item-row has-end has-info is-active">')
+    expect(markup).toContain('<div class="app-item-row has-end has-info is-active"')
     expect(markup).toMatch(/<button[^>]*class="app-item-main"[^>]*type="button"/)
     expect(markup).toContain('<span class="app-item-label">README.md</span>')
     expect(markup).toContain('<span class="app-item-info app-item-info-text">M</span>')
@@ -52,6 +52,32 @@ describe('shared application item', () => {
     expect(markup).toMatch(/^<div class="app-item-row"/)
     expect(markup).not.toContain('app-item-container')
     expect(markup).not.toContain('<li')
+  })
+
+  it('owns semantic row tones for every AppItem consumer', async () => {
+    const defaultMarkup = renderToStaticMarkup(
+      <AppItem itemAs={null} label='Open' mainKind='static' />,
+    )
+    const dangerMarkup = renderToStaticMarkup(
+      <AppItem itemAs={null} label='Delete' mainKind='static' tone='danger' />,
+    )
+    const menuDangerMarkup = renderToStaticMarkup(
+      <AppMenu.Option text='Delete' tone='danger' />,
+    )
+    const styles = await readFile(
+      new URL('../src/components/app-item/styles.css', import.meta.url),
+      'utf8',
+    )
+
+    expect(defaultMarkup).toContain('data-tone="default"')
+    expect(dangerMarkup).toContain('data-tone="danger"')
+    expect(menuDangerMarkup).toContain('data-tone="danger"')
+    expect(styles).toMatch(
+      /\.app-item-row\[data-tone='danger'\]\s*\{[^}]*--app-item-current-foreground:\s*var\(--danger\);[^}]*--app-item-current-icon-foreground:\s*var\(--danger\);[^}]*--app-item-hover-background:\s*var\(--danger-soft\);[^}]*--app-item-hover-foreground:\s*var\(--danger\);/,
+    )
+    expect(styles).toContain('background: var(--app-item-hover-background);')
+    expect(styles).toContain('color: var(--app-item-current-foreground, var(--foreground-primary));')
+    expect(styles).toContain('color: var(--app-item-current-icon-foreground, var(--foreground-secondary));')
   })
 
   it('adds right padding whenever no trailing end content is visible', async () => {

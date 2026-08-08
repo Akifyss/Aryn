@@ -28,11 +28,12 @@ import {
   AppItem,
   AppItemIcon,
   type AppItemInfoVariant,
+  type AppItemTone,
 } from '@/components/app-item'
 
 type StatefulClassName<State> = string | ((state: State) => string | undefined)
 
-export type AppMenuItemTone = 'danger' | 'default'
+export type AppMenuItemTone = AppItemTone
 /**
  * `list` owns the shared popup inset and item-list geometry.
  * `compound` is an edge-to-edge shell whose independent sections each apply
@@ -825,7 +826,7 @@ function createAppMenuItemRender({
       itemAs={null}
       label={text}
       mainKind='static'
-      data-tone={tone}
+      tone={tone}
     >
       {text === undefined ? children : undefined}
     </AppItem>
@@ -833,14 +834,12 @@ function createAppMenuItemRender({
 }
 
 function appMenuItemClassName<State>(
-  tone: AppMenuItemTone,
   selected: boolean | undefined,
   className?: StatefulClassName<State>,
 ) {
   return mergeStatefulClassName(
     cx(
       'app-menu-item',
-      `app-menu-item-${tone}`,
       selected && 'is-selected',
     ),
     className,
@@ -883,8 +882,9 @@ export const AppMenuItem = forwardRef<HTMLElement, AppMenuItemProps>(function Ap
     <BaseMenu.Item
       ref={ref}
       render={resolvedRender}
-      className={appMenuItemClassName(tone, selected, className)}
+      className={appMenuItemClassName(selected, className)}
       {...props}
+      data-tone={tone}
     >
       {render ? children : undefined}
     </BaseMenu.Item>
@@ -916,8 +916,9 @@ export const AppMenuLinkItem = forwardRef<Element, AppMenuLinkItemProps>(functio
       <BaseMenu.LinkItem
         ref={ref}
         render={render}
-        className={appMenuItemClassName(tone, selected, className)}
+        className={appMenuItemClassName(selected, className)}
         {...props}
+        data-tone={tone}
       >
         {children}
       </BaseMenu.LinkItem>
@@ -942,12 +943,12 @@ export const AppMenuLinkItem = forwardRef<Element, AppMenuLinkItemProps>(functio
         cx(
           'app-menu-item',
           'app-menu-link-item',
-          `app-menu-item-${tone}`,
           selected && 'is-selected',
         ),
         className,
       )}
       {...props}
+      data-tone={tone}
     >
       {itemVisual}
     </BaseMenu.LinkItem>
@@ -997,8 +998,9 @@ export const AppMenuRadioItem = forwardRef<HTMLElement, AppMenuRadioItemProps>(f
     <BaseMenu.RadioItem
       ref={ref}
       render={resolvedRender}
-      className={appMenuItemClassName(tone, selected, className)}
+      className={appMenuItemClassName(selected, className)}
       {...props}
+      data-tone={tone}
     >
       {render ? children : undefined}
     </BaseMenu.RadioItem>
@@ -1048,8 +1050,9 @@ export const AppMenuCheckboxItem = forwardRef<HTMLElement, AppMenuCheckboxItemPr
     <BaseMenu.CheckboxItem
       ref={ref}
       render={resolvedRender}
-      className={appMenuItemClassName(tone, selected, className)}
+      className={appMenuItemClassName(selected, className)}
       {...props}
+      data-tone={tone}
     >
       {render ? children : undefined}
     </BaseMenu.CheckboxItem>
@@ -1090,14 +1093,13 @@ export const AppMenuOption = forwardRef<HTMLDivElement, AppMenuOptionProps>(func
       label={text}
       mainKind='static'
       tabIndex={tabIndex}
+      tone={tone}
       className={cx(
         'app-menu-option',
         'app-menu-item',
-        `app-menu-item-${tone}`,
         selected && 'is-selected',
         className,
       )}
-      data-tone={tone}
     >
       {text === undefined ? children : undefined}
     </AppItem>
@@ -1153,7 +1155,7 @@ export const AppMenuSelectItem = forwardRef<HTMLElement, AppMenuSelectItemProps>
           </BaseSelect.ItemText>
         )}
         mainKind='static'
-        data-tone={tone}
+        tone={tone}
       />
     )
 
@@ -1163,7 +1165,8 @@ export const AppMenuSelectItem = forwardRef<HTMLElement, AppMenuSelectItemProps>
         ref={ref}
         label={label}
         render={resolvedRender}
-        className={appMenuItemClassName(tone, undefined, className)}
+        className={appMenuItemClassName(undefined, className)}
+        data-tone={tone}
       />
     )
   },
@@ -1206,8 +1209,9 @@ export const AppMenuSubmenuTrigger = forwardRef<HTMLElement, AppMenuSubmenuTrigg
     <BaseMenu.SubmenuTrigger
       ref={ref}
       render={resolvedRender}
-      className={appMenuItemClassName(tone, undefined, className)}
+      className={appMenuItemClassName(undefined, className)}
       {...props}
+      data-tone={tone}
     >
       {render ? children : undefined}
     </BaseMenu.SubmenuTrigger>

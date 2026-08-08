@@ -176,6 +176,11 @@ describe('shared application menu', () => {
     expect(appMenuSource).toContain('export const AppMenuSelect =')
     expect(appMenuSource).toContain('export const AppMenuPopover =')
     expect(appMenuSource).toContain('infoVariant?: AppItemInfoVariant')
+    expect(appMenuSource).toContain('export type AppMenuItemTone = AppItemTone')
+    expect(appMenuSource).toMatch(
+      /function createAppMenuItemRender[\s\S]{0,900}<AppItem[\s\S]{0,400}tone=\{tone\}/,
+    )
+    expect(appMenuSource).not.toContain('`app-menu-item-${tone}`')
     expect(appMenuSource).toMatch(
       /function AppMenuRadioItem[\s\S]{0,900}<AppMenuRadioItemIndicator>[\s\S]{0,300}infoVariant/,
     )
@@ -226,6 +231,13 @@ describe('shared application menu', () => {
     )
     expect(appMenuCss).not.toContain('--app-item-row-gap: 0;')
     expect(appMenuCss).not.toContain('.app-menu-item-end')
+    expect(appMenuCss).not.toContain('.app-menu-item-danger')
+    expect(appMenuCss).toContain(
+      'background: var(--app-item-hover-background, var(--hover));',
+    )
+    expect(appMenuCss).toMatch(
+      /\.app-menu-item\[data-tone='danger'\]\s*\{[^}]*--app-item-current-foreground:\s*var\(--danger\);[^}]*--app-item-current-icon-foreground:\s*var\(--danger\);[^}]*--app-item-hover-background:\s*var\(--danger-soft\);[^}]*--app-item-hover-foreground:\s*var\(--danger\);/,
+    )
     expect(appMenuCss).toMatch(
       /\.app-menu-radio-indicator-dot\s*\{[^}]*width:\s*8px;[^}]*height:\s*8px;/,
     )

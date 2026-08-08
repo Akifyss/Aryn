@@ -33,6 +33,7 @@ type AppItemRowState = AppItemState & {
 
 export type AppItemInfoVariant = 'count' | 'status' | 'summary' | 'text'
 export type AppItemStatusTone = 'danger' | 'neutral' | 'success' | 'warning'
+export type AppItemTone = 'danger' | 'default'
 export type AppItemVariant = 'default' | 'header'
 
 export type AppItemTextSlotProps = Omit<HTMLAttributes<HTMLSpanElement>, 'children' | 'className'> & {
@@ -87,6 +88,7 @@ export type AppItemProps = Omit<HTMLAttributes<HTMLDivElement>, 'children' | 'cl
   renderMain?: AppItemMainRenderer
   rowClassName?: string
   toggleAriaLabel?: string
+  tone?: AppItemTone
   variant?: AppItemVariant
   onToggle?: () => void
 }
@@ -177,6 +179,7 @@ export const AppItem = forwardRef<HTMLDivElement, AppItemProps>(function AppItem
     renderMain,
     rowClassName,
     toggleAriaLabel,
+    tone = 'default',
     variant = 'default',
     onToggle,
     isActive,
@@ -300,6 +303,7 @@ export const AppItem = forwardRef<HTMLDivElement, AppItemProps>(function AppItem
         className,
       ))}
       {...props}
+      data-tone={tone}
     >
       {defaultMain}
       {renderedEnd}
