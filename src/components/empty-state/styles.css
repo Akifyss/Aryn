@@ -36,7 +36,7 @@
 .app-empty-state-title {
   margin: 0;
   color: var(--foreground-primary);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.45;
   letter-spacing: 0;

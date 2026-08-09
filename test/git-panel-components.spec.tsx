@@ -99,7 +99,7 @@ describe('Git panel presentation components', () => {
 
     expect(markup).toContain('class="app-empty-state git-panel-init-state"')
     expect(markup).toContain('class="app-empty-state-actions"')
-    expect(markup).toContain('这个工作区还不是 Git 仓库。')
+    expect(markup).toContain('当前工作区尚未初始化 Git')
     expect(markup).toContain('初始化 Git')
   })
 

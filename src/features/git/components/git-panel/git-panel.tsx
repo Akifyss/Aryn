@@ -359,7 +359,7 @@ export function GitPanel({
       <EmptyState
         className='git-panel-init-state'
         icon='streamline-flex-color:search-history-browser-flat'
-        title='这个工作区还不是 Git 仓库。'
+        title='当前工作区尚未初始化 Git'
         actions={(
           <AppButton variant='primary' onClick={onInitialize}>
             初始化 Git
