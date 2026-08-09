@@ -65,7 +65,6 @@ export type MountNativeMeoEditorOptions = {
   onOpenGitDiff?: MeoOpenGitDiffHandler
   onApplyGitDiffSelection?: (change: GitChangeItem, selection: GitDiffSelection, action: GitDiffBlockAction) => Promise<void>
   onSave?: (nextValue: string) => void
-  root: HTMLElement
   savedValue: string
   workspacePath?: string | null
 }

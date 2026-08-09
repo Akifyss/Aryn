@@ -12,7 +12,6 @@ import { createFindPanelController } from '@/vendor/meo/webview/helpers/findPane
 import { setGitDiffLineHighlightsEnabled } from '@/vendor/meo/webview/helpers/gitDiffLineHighlights'
 import { handleSavedImagePath, handleImagePaste, initializeImageHandling, resolveImageSrc, setImageSrcResolver, settleImageSrcRequest } from '@/vendor/meo/webview/helpers/images'
 import { cancelPendingLocalLinkStatusRefresh, handleResolvedLocalLinks, initializeLocalLinkHandling, requestLocalLinkStatuses, scheduleLocalLinkStatusRefresh, setLocalLinkRefreshContext } from '@/vendor/meo/webview/helpers/localLinks'
-import { createOutlineController } from '@/vendor/meo/webview/helpers/outline'
 import { createSelectionMenuController } from '@/vendor/meo/webview/helpers/selectionMenu'
 import { handleEditorShortcut, isPrimaryModifier, isShortcutKey, normalizeEol } from '@/vendor/meo/webview/helpers/shortcuts'
 import { setMermaidRuntimeSource } from '@/vendor/meo/webview/helpers/mermaidDiagram'
@@ -29,7 +28,7 @@ import {
 } from '@/features/editor/lib/meo-native-live-inline-diff'
 import { mountMeoBaseScrollArea } from '@/features/editor/lib/meo-base-scroll-area'
 import { createMeoViewPositionPersistenceController } from '@/features/editor/lib/meo-native-editor-persistence'
-import { createNativeMeoEditorShell } from '@/features/editor/lib/meo-native-editor-shell'
+import type { NativeMeoEditorShell } from '@/features/editor/lib/meo-native-editor-shell'
 import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
 import type {
   MeoEditorCreateOptions,
@@ -43,6 +42,10 @@ import type {
 
 const SPLIT_PARENT_CHANGE_FLUSH_DELAY_MS = 50
 const DOCUMENT_FIND_REFRESH_DELAY_MS = 120
+
+type NativeMeoEditorMountOptions = MountNativeMeoEditorOptions & {
+  shell: NativeMeoEditorShell
+}
 
 function isDiffMode(mode: MeoEditorMode): mode is 'diff-split' | 'diff-unified' {
   return mode === 'diff-split' || mode === 'diff-unified'
@@ -70,10 +73,11 @@ export function mountNativeMeoEditor({
   onOpenGitDiff,
   onApplyGitDiffSelection,
   onSave,
-  root,
   savedValue,
+  shell,
   workspacePath,
-}: MountNativeMeoEditorOptions): NativeMeoController {
+}: NativeMeoEditorMountOptions): NativeMeoController {
+  const root = shell.root
   const mountStartedAt = performance.now()
   recordOpenFileProfile('native-meo:mount:start', {
     filePath,
@@ -116,6 +120,14 @@ export function mountNativeMeoEditor({
   let pendingSplitParentChangeFrame = 0
   let pendingSplitParentChangeText: string | null = null
   let pendingSplitParentChangeTimer = 0
+  let editor: MeoEditorInstance | null = null
+  let editorScrollArea: ReturnType<typeof mountMeoBaseScrollArea> | null = null
+  let diffSplitController: MeoDiffSplitController | null = null
+  let liveInlineDiffController: MeoLiveInlineDiffController | null = null
+
+  const getActiveEditor = () => (
+    isDiffMode(currentMode) ? diffSplitController : editor
+  )
 
   const vscode = {
     getState: () => persistedWebviewState,
@@ -133,16 +145,7 @@ export function mountNativeMeoEditor({
   initializeLocalLinkHandling(vscode)
   setImageSrcResolver(resolveImageSrc)
 
-  root.replaceChildren()
-  root.classList.add('meo-native-root')
-  root.classList.add('editor-root')
-  const shellStartedAt = performance.now()
-  const shell = createNativeMeoEditorShell()
-  recordOpenFileProfile('native-meo:create-shell:end', {
-    durationMs: getOpenFileProfileDuration(shellStartedAt),
-    elapsedMs: getOpenFileProfileDuration(mountStartedAt),
-    filePath,
-  })
+  shell.setEditorGetter(getActiveEditor)
   const {
     buttons: {
       bulletListBtn,
@@ -153,7 +156,6 @@ export function mountNativeMeoEditor({
       diffUnifiedButton,
       findToggleBtn,
       gitChangesGutterBtn,
-      headingDropdown,
       hrBtn,
       imageBtn,
       lineNumbersBtn,
@@ -168,28 +170,13 @@ export function mountNativeMeoEditor({
       wikiLinkBtn,
     },
     editorHost,
-    editorWrapper,
     findPanelElements,
     modeGroup,
+    outlineController,
     selectionMenuElements,
     toolbar,
   } = shell
-
-  let editor: MeoEditorInstance | null = null
-  let editorScrollArea: ReturnType<typeof mountMeoBaseScrollArea> | null = null
-  let diffSplitController: MeoDiffSplitController | null = null
-  let liveInlineDiffController: MeoLiveInlineDiffController | null = null
-
-  const getActiveEditor = () => (
-    isDiffMode(currentMode) ? diffSplitController : editor
-  )
-
-  const outlineController = createOutlineController({
-    editorWrapper,
-    getEditor: getActiveEditor,
-    outlineButton: outlineBtn,
-    root,
-  })
+  editorHost.replaceChildren()
 
   const cancelScheduledOutlineRefresh = () => {
     if (pendingOutlineRefreshFrame) {
@@ -218,9 +205,6 @@ export function mountNativeMeoEditor({
     }
   }
 
-  editorWrapper.replaceChildren(editorHost, outlineController.sidebar, selectionMenuElements.menu)
-  root.replaceChildren(toolbar, editorWrapper)
-
   const findPanelController = createFindPanelController(
     findPanelElements,
     getActiveEditor,
@@ -228,6 +212,42 @@ export function mountNativeMeoEditor({
     modeGroup,
   )
   const selectionMenuController = createSelectionMenuController(selectionMenuElements, getActiveEditor)
+  const updateSelectionMenu = (selectionState: Parameters<typeof selectionMenuController.update>[0]) => {
+    if (
+      selectionState?.visible !== true
+      && document.activeElement instanceof HTMLElement
+      && selectionMenuElements.menu.contains(document.activeElement)
+    ) {
+      document.activeElement.blur()
+    }
+    selectionMenuController.update(selectionState)
+    selectionMenuElements.menu.setAttribute(
+      'aria-hidden',
+      selectionState?.visible === true ? 'false' : 'true',
+    )
+  }
+
+  const syncFindPanelToggleUi = () => {
+    const visible = findPanelController.isVisible()
+    findToggleBtn.setAttribute('aria-pressed', visible ? 'true' : 'false')
+    if (visible) {
+      findToggleBtn.setAttribute('data-active', 'true')
+    } else {
+      findToggleBtn.removeAttribute('data-active')
+    }
+  }
+
+  const openFindPanel = (target: 'find' | 'replace' = 'find') => {
+    findPanelController.open(target)
+    findPanelElements.panel.setAttribute('aria-hidden', 'false')
+    syncFindPanelToggleUi()
+  }
+
+  const closeFindPanel = () => {
+    findPanelController.close()
+    findPanelElements.panel.setAttribute('aria-hidden', 'true')
+    syncFindPanelToggleUi()
+  }
 
   const cancelScheduledFindStatusRefresh = () => {
     if (pendingFindStatusRefreshTimer) {
@@ -342,14 +362,24 @@ export function mountNativeMeoEditor({
   }
 
   const updateModeUi = () => {
-    liveButton.classList.toggle('is-active', currentMode === 'live')
-    sourceButton.classList.toggle('is-active', currentMode === 'source')
-    diffSplitButton.classList.toggle('is-active', currentMode === 'diff-split')
-    diffUnifiedButton.classList.toggle('is-active', currentMode === 'diff-unified')
-    liveButton.setAttribute('aria-selected', currentMode === 'live' ? 'true' : 'false')
-    sourceButton.setAttribute('aria-selected', currentMode === 'source' ? 'true' : 'false')
-    diffSplitButton.setAttribute('aria-selected', currentMode === 'diff-split' ? 'true' : 'false')
-    diffUnifiedButton.setAttribute('aria-selected', currentMode === 'diff-unified' ? 'true' : 'false')
+    const modeButtons = [
+      [liveButton, 'live'],
+      [sourceButton, 'source'],
+      [diffSplitButton, 'diff-split'],
+      [diffUnifiedButton, 'diff-unified'],
+    ] as const
+
+    for (const [button, mode] of modeButtons) {
+      const active = currentMode === mode
+      button.classList.toggle('is-active', active)
+      button.setAttribute('aria-selected', active ? 'true' : 'false')
+      button.tabIndex = active ? 0 : -1
+      if (active) {
+        button.setAttribute('data-active', 'true')
+      } else {
+        button.removeAttribute('data-active')
+      }
+    }
     editorHost.classList.toggle('meo-diff-split-active', isDiffMode(currentMode))
     root.classList.toggle('is-diff-mode', isDiffMode(currentMode))
     root.classList.toggle('is-diff-split-mode', currentMode === 'diff-split')
@@ -359,13 +389,21 @@ export function mountNativeMeoEditor({
   const updateLineNumbersUi = () => {
     lineNumbersBtn.classList.toggle('is-active', lineNumbersVisible)
     lineNumbersBtn.setAttribute('aria-pressed', lineNumbersVisible ? 'true' : 'false')
-    lineNumbersBtn.title = lineNumbersVisible ? 'Hide Line Numbers' : 'Show Line Numbers'
+    if (lineNumbersVisible) {
+      lineNumbersBtn.setAttribute('data-active', 'true')
+    } else {
+      lineNumbersBtn.removeAttribute('data-active')
+    }
   }
 
   const updateGitChangesGutterUi = () => {
     gitChangesGutterBtn.classList.toggle('is-active', gitChangesGutterVisible)
     gitChangesGutterBtn.setAttribute('aria-pressed', gitChangesGutterVisible ? 'true' : 'false')
-    gitChangesGutterBtn.title = gitChangesGutterVisible ? 'Hide Git Changes' : 'Show Git Changes'
+    if (gitChangesGutterVisible) {
+      gitChangesGutterBtn.setAttribute('data-active', 'true')
+    } else {
+      gitChangesGutterBtn.removeAttribute('data-active')
+    }
   }
 
   const syncGitDiffLineHighlights = () => {
@@ -408,9 +446,6 @@ export function mountNativeMeoEditor({
 
   const setOutlineVisible = (visible: boolean, options?: { persist?: boolean }) => {
     outlineController.setVisible(visible === true)
-    if (outlineController.isVisible()) {
-      outlineController.refresh()
-    }
     if (options?.persist !== false) {
       persistenceController.persistOutlineVisible(visible === true)
     }
@@ -474,7 +509,7 @@ export function mountNativeMeoEditor({
         onSave?.(nextValue)
       },
       onSelectionChange: (selectionState) => {
-        selectionMenuController.update(selectionState)
+        updateSelectionMenu(selectionState)
       },
       onViewportChange: () => {
         persistenceController.scheduleViewPositionCapture()
@@ -775,7 +810,7 @@ export function mountNativeMeoEditor({
         )
       },
       onSelectionChange: (selectionState: { visible?: boolean, anchorX?: number, anchorY?: number } | null) => {
-        selectionMenuController.update(selectionState)
+        updateSelectionMenu(selectionState)
       },
       onViewportChange: () => {
         persistenceController.scheduleViewPositionCapture()
@@ -841,7 +876,7 @@ export function mountNativeMeoEditor({
         onSave?.(nextValue)
       },
       onSelectionChange: (selectionState) => {
-        selectionMenuController.update(selectionState)
+        updateSelectionMenu(selectionState)
       },
       onViewportChange: () => {
         persistenceController.scheduleViewPositionCapture()
@@ -914,11 +949,11 @@ export function mountNativeMeoEditor({
 
   const toggleFindPanel = () => {
     if (findPanelController.isVisible()) {
-      findPanelController.close()
+      closeFindPanel()
       return
     }
 
-    findPanelController.open('find')
+    openFindPanel('find')
   }
 
   const handleFormatAction = (action: MeoEditorInsertFormat, options?: unknown) => {
@@ -930,6 +965,11 @@ export function mountNativeMeoEditor({
     activeEditor.insertFormat(action, options)
     activeEditor.focus()
   }
+
+  shell.setHeadingLevelHandler((level) => {
+    handleFormatAction('heading', level)
+    focusEditor()
+  })
 
   const isEventInsideMeoSurface = (eventTarget: EventTarget | null) => (
     eventTarget instanceof Node && root.contains(eventTarget)
@@ -945,6 +985,13 @@ export function mountNativeMeoEditor({
       : ensurePrimaryEditor('shortcut').hasFocus()
 
     if (!hasEditorFocus && !isEventInsideMeoSurface(event.target)) {
+      return
+    }
+
+    if (event.key === 'Escape' && findPanelController.isVisible()) {
+      event.preventDefault()
+      event.stopPropagation()
+      closeFindPanel()
       return
     }
 
@@ -969,7 +1016,7 @@ export function mountNativeMeoEditor({
       if (hasPrimaryModifier && isShortcutKey(event, 'f', 'KeyF') && !event.altKey && !event.shiftKey) {
         event.preventDefault()
         event.stopPropagation()
-        findPanelController.open('find')
+        openFindPanel('find')
         return
       }
 
@@ -983,7 +1030,7 @@ export function mountNativeMeoEditor({
       ) {
         event.preventDefault()
         event.stopPropagation()
-        findPanelController.open('replace')
+        openFindPanel('replace')
         return
       }
 
@@ -1020,7 +1067,7 @@ export function mountNativeMeoEditor({
       currentMode,
       editor: primaryEditor,
       flushPendingChangesNow: () => undefined,
-      openFindPanel: (target) => findPanelController.open(target),
+      openFindPanel,
       pendingText: null,
       requestSave: () => {
         onSave?.(primaryEditor.getText())
@@ -1103,114 +1150,139 @@ export function mountNativeMeoEditor({
     updateCompositionState(false)
   }
 
-  window.addEventListener('keydown', shortcutHandler, true)
-  window.addEventListener('paste', pasteHandler)
-  window.addEventListener('resize', resizeHandler)
-  window.addEventListener('blur', blurHandler)
-  document.addEventListener('visibilitychange', visibilityHandler)
-  root.addEventListener('compositionstart', compositionStartHandler, true)
-  root.addEventListener('compositionend', compositionEndHandler, true)
-
-  headingDropdown.addEventListener('click', (event) => {
-    const option = (event.target as Element).closest('.heading-dropdown-option') as HTMLElement | null
-    if (!option) {
+  const modeGroupKeydownHandler = (event: KeyboardEvent) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
       return
     }
-    handleFormatAction('heading', Number.parseInt(option.dataset.level ?? '1', 10))
-    focusEditor()
-  })
 
-  bulletListBtn.addEventListener('click', () => handleFormatAction('bulletList'))
-  numberedListBtn.addEventListener('click', () => handleFormatAction('numberedList'))
-  taskBtn.addEventListener('click', () => handleFormatAction('task'))
+    const modeButtons = [liveButton, sourceButton, diffSplitButton, diffUnifiedButton]
+      .filter((button) => !button.disabled && button.offsetParent !== null)
+    if (modeButtons.length === 0) {
+      return
+    }
+
+    const focusedButton = event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>('[role="tab"]')
+      : null
+    const currentIndex = Math.max(0, modeButtons.indexOf(focusedButton ?? liveButton))
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? modeButtons.length - 1
+        : event.key === 'ArrowLeft'
+          ? (currentIndex - 1 + modeButtons.length) % modeButtons.length
+          : (currentIndex + 1) % modeButtons.length
+    const nextButton = modeButtons[nextIndex]
+
+    event.preventDefault()
+    nextButton.focus()
+    nextButton.click()
+  }
+
+  const eventAbortController = new AbortController()
+  const eventOptions = { signal: eventAbortController.signal }
+  const captureEventOptions = { capture: true, signal: eventAbortController.signal }
+
+  window.addEventListener('keydown', shortcutHandler, captureEventOptions)
+  window.addEventListener('paste', pasteHandler, eventOptions)
+  window.addEventListener('resize', resizeHandler, eventOptions)
+  window.addEventListener('blur', blurHandler, eventOptions)
+  document.addEventListener('visibilitychange', visibilityHandler, eventOptions)
+  root.addEventListener('compositionstart', compositionStartHandler, captureEventOptions)
+  root.addEventListener('compositionend', compositionEndHandler, captureEventOptions)
+  modeGroup.addEventListener('keydown', modeGroupKeydownHandler, eventOptions)
+
+  bulletListBtn.addEventListener('click', () => handleFormatAction('bulletList'), eventOptions)
+  numberedListBtn.addEventListener('click', () => handleFormatAction('numberedList'), eventOptions)
+  taskBtn.addEventListener('click', () => handleFormatAction('task'), eventOptions)
   tableBtn.addEventListener('click', () => {
     handleFormatAction('table', { cols: 3, rows: 3 })
-  })
-  codeBlockBtn.addEventListener('click', () => handleFormatAction('codeBlock'))
-  linkBtn.addEventListener('click', () => handleFormatAction('link'))
-  wikiLinkBtn.addEventListener('click', () => handleFormatAction('wikiLink'))
-  imageBtn.addEventListener('click', () => handleFormatAction('image'))
-  quoteBtn.addEventListener('click', () => handleFormatAction('quote'))
-  hrBtn.addEventListener('click', () => handleFormatAction('hr'))
+  }, eventOptions)
+  codeBlockBtn.addEventListener('click', () => handleFormatAction('codeBlock'), eventOptions)
+  linkBtn.addEventListener('click', () => handleFormatAction('link'), eventOptions)
+  wikiLinkBtn.addEventListener('click', () => handleFormatAction('wikiLink'), eventOptions)
+  imageBtn.addEventListener('click', () => handleFormatAction('image'), eventOptions)
+  quoteBtn.addEventListener('click', () => handleFormatAction('quote'), eventOptions)
+  hrBtn.addEventListener('click', () => handleFormatAction('hr'), eventOptions)
   outlineBtn.addEventListener('click', () => {
     setOutlineVisible(!outlineController.isVisible())
-  })
-  findToggleBtn.addEventListener('click', toggleFindPanel)
+  }, eventOptions)
+  findToggleBtn.addEventListener('click', toggleFindPanel, eventOptions)
   lineNumbersBtn.addEventListener('click', () => {
     setLineNumbersVisible(!lineNumbersVisible)
-  })
+  }, eventOptions)
   gitChangesGutterBtn.addEventListener('click', () => {
     setGitChangesGutterVisible(!gitChangesGutterVisible)
-  })
+  }, eventOptions)
   diffPreviousChangeBtn.addEventListener('click', () => {
     diffSplitController?.previousChange()
     diffSplitController?.focus()
-  })
+  }, eventOptions)
   diffNextChangeBtn.addEventListener('click', () => {
     diffSplitController?.nextChange()
     diffSplitController?.focus()
-  })
+  }, eventOptions)
   liveButton.addEventListener('click', () => {
     applyMode('live')
-  })
+  }, eventOptions)
   sourceButton.addEventListener('click', () => {
     applyMode('source')
-  })
+  }, eventOptions)
   diffSplitButton.addEventListener('click', () => {
     applyMode('diff-split')
-  })
+  }, eventOptions)
   diffUnifiedButton.addEventListener('click', () => {
     applyMode('diff-unified')
-  })
+  }, eventOptions)
 
   findPanelElements.findInput.addEventListener('input', () => {
     findPanelController.updateFindStatusSummary()
-  })
+  }, eventOptions)
   findPanelElements.wholeWordBtn.addEventListener('click', () => {
     findPanelController.toggleWholeWord()
     persistenceController.persistFindOptions(findPanelController.getSearchOptions())
-  })
+  }, eventOptions)
   findPanelElements.caseSensitiveBtn.addEventListener('click', () => {
     findPanelController.toggleCaseSensitive()
     persistenceController.persistFindOptions(findPanelController.getSearchOptions())
-  })
+  }, eventOptions)
   findPanelElements.findPrevBtn.addEventListener('click', () => {
     findPanelController.runFind(true)
-  })
+  }, eventOptions)
   findPanelElements.findNextBtn.addEventListener('click', () => {
     findPanelController.runFind(false)
-  })
+  }, eventOptions)
   findPanelElements.replaceBtn.addEventListener('click', () => {
     findPanelController.runReplace()
-  })
+  }, eventOptions)
   findPanelElements.replaceAllBtn.addEventListener('click', () => {
     findPanelController.runReplaceAll()
-  })
+  }, eventOptions)
   findPanelElements.findInput.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') {
       return
     }
     event.preventDefault()
     findPanelController.runFind(event.shiftKey, { focusEditor: false })
-  })
+  }, eventOptions)
   findPanelElements.replaceInput.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') {
       return
     }
     event.preventDefault()
     findPanelController.runReplace()
-  })
+  }, eventOptions)
 
   selectionMenuElements.menu.addEventListener('pointerdown', (event) => {
     event.preventDefault()
-  })
+  }, eventOptions)
   selectionMenuElements.menu.addEventListener('click', (event) => {
     const button = (event.target as Element).closest('.selection-inline-button') as HTMLElement | null
     if (!button?.dataset.action) {
       return
     }
     selectionMenuController.handleAction(button.dataset.action)
-  })
+  }, eventOptions)
 
   return {
     captureViewPosition() {
@@ -1237,13 +1309,7 @@ export function mountNativeMeoEditor({
         refreshDecorations: () => undefined,
       })
       setMermaidRuntimeSource(previousMermaidRuntimeSource)
-      window.removeEventListener('keydown', shortcutHandler, true)
-      window.removeEventListener('paste', pasteHandler)
-      window.removeEventListener('resize', resizeHandler)
-      window.removeEventListener('blur', blurHandler)
-      document.removeEventListener('visibilitychange', visibilityHandler)
-      root.removeEventListener('compositionstart', compositionStartHandler, true)
-      root.removeEventListener('compositionend', compositionEndHandler, true)
+      eventAbortController.abort()
       persistenceController.captureViewPosition()
       destroyDiffSplit()
       liveInlineDiffController?.destroy()
@@ -1252,7 +1318,7 @@ export function mountNativeMeoEditor({
       editorScrollArea = null
       editor?.destroy()
       editor = null
-      root.replaceChildren()
+      shell.disconnectController()
     },
     focus() {
       focusEditor()

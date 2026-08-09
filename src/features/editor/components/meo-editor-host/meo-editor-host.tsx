@@ -5,6 +5,10 @@ import type { MeoSettings } from '@/hooks/use-settings-store'
 import { createDefaultMeoHostEnvironment } from '@/features/editor/lib/meo-host-environment'
 import { getGitStateRefreshKey, getUnavailableGitBaseline } from '@/features/editor/lib/meo-git-state'
 import { mountNativeMeoEditor } from '@/features/editor/lib/meo-native-editor'
+import {
+  MeoNativeEditorChrome,
+  type NativeMeoEditorShell,
+} from '@/features/editor/lib/meo-native-editor-shell'
 import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
 import '@/vendor/meo/webview/styles.css'
 import 'katex/dist/katex.min.css'
@@ -84,7 +88,7 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
   workspacePath,
 }, forwardedRef) {
   const shellRef = useRef<HTMLDivElement | null>(null)
-  const rootRef = useRef<HTMLDivElement | null>(null)
+  const editorChromeRef = useRef<NativeMeoEditorShell | null>(null)
   const controllerRef = useRef<MountedNativeMeo | null>(null)
   const contentRef = useRef(value)
   const isGitBaselineReadyRef = useRef(false)
@@ -128,8 +132,8 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
   }, [onChange, onCompositionChange, onOpenFile, onOpenGitDiff, onApplyGitDiffSelection, onSave])
 
   useLayoutEffect(() => {
-    const rootElement = rootRef.current
-    if (!rootElement) {
+    const editorShell = editorChromeRef.current
+    if (!editorShell) {
       return
     }
 
@@ -138,6 +142,10 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
       filePath,
       valueChars: value.length,
       workspacePath: workspacePath ?? null,
+    })
+    recordOpenFileProfile('meo-host:react-chrome-ready', {
+      elapsedMs: getOpenFileProfileDuration(mountStartedAt),
+      filePath,
     })
     const controller = mountNativeMeoEditor({
       environment,
@@ -172,8 +180,8 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
       onSave: (nextValue) => {
         onSaveRef.current?.(nextValue)
       },
-      root: rootElement,
       savedValue,
+      shell: editorShell,
       workspacePath,
     })
     recordOpenFileProfile('meo-host:mount-native:end', {
@@ -447,7 +455,7 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
       data-leading-toolbar-inset={hasLeadingToolbarInset ? 'true' : undefined}
       data-theme={resolvedTheme}
     >
-      <div ref={rootRef} className='meo-editor-root-host' />
+      <MeoNativeEditorChrome ref={editorChromeRef} />
     </div>
   )
 })

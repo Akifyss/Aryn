@@ -1,0 +1,77 @@
+.meo-native-theme .format-button.app-icon-button,
+.meo-native-theme .selection-inline-button.app-icon-button {
+  color: var(--foreground-secondary);
+}
+
+.meo-native-theme .format-button.app-icon-button:hover,
+.meo-native-theme .format-button.app-icon-button.is-active,
+.meo-native-theme .selection-inline-button.app-icon-button:hover {
+  color: var(--foreground-primary);
+  background: var(--toolbar-hoverBackground);
+}
+
+.meo-native-theme .selection-inline-menu {
+  visibility: hidden;
+}
+
+.meo-native-theme .selection-inline-menu.is-visible {
+  visibility: visible;
+}
+
+.meo-native-theme .mode-button.app-button {
+  height: 24px;
+  min-height: 24px;
+}
+
+.meo-heading-menu-popup {
+  min-width: 144px;
+}
+
+.meo-heading-menu-level {
+  display: inline-flex;
+  width: 22px;
+  justify-content: center;
+  color: var(--foreground-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.meo-native-theme .find-input.input {
+  min-width: 0;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.meo-native-theme .outline-sidebar {
+  position: relative;
+}
+
+.meo-native-theme .meo-outline-scroll-area {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.meo-native-theme .meo-outline-scroll-area .outline-content {
+  padding-bottom: 0;
+}
+
+.meo-native-theme .outline-list {
+  min-width: 100%;
+  padding-bottom: 30px;
+}
+
+.meo-native-theme .outline-item.app-button {
+  min-height: 28px;
+  height: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meo-native-theme .format-button.app-icon-button,
+  .meo-native-theme .selection-inline-button.app-icon-button,
+  .meo-native-theme .mode-button.app-button {
+    transition: none;
+  }
+}
