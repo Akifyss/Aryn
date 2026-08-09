@@ -59,6 +59,8 @@
 
 .app-menu-surface-lg {
   --app-menu-popup-min-width: 320px;
+  /* Virtualized or absolutely positioned content has no reliable intrinsic width during Base UI measurement. */
+  width: var(--app-menu-popup-min-width);
 }
 
 .app-menu-surface-anchor {
@@ -72,13 +74,15 @@
   width: max-content;
 }
 
-.app-menu-scroll-area.app-scroll-area {
+.app-menu-scroll-area.app-scroll-area,
+.app-menu-surface .tree-scroll-area.app-scroll-area {
   inline-size: calc(100% + var(--app-menu-content-padding) + var(--app-menu-content-padding));
   margin-inline: calc(0px - var(--app-menu-content-padding));
   --app-scroll-area-scrollbar-gap: 0px;
 }
 
-.app-menu-scroll-viewport.app-scroll-area-viewport {
+.app-menu-scroll-viewport.app-scroll-area-viewport,
+.app-menu-surface .tree-scroll-area.app-scroll-area > .app-scroll-area-viewport {
   inline-size: calc(100% - var(--app-menu-content-padding) - var(--app-menu-content-padding));
   margin-inline: var(--app-menu-content-padding);
   overscroll-behavior: contain;
@@ -86,7 +90,9 @@
 
 /* A compound surface has no outer inset, so its section scroll areas stay edge-to-edge. */
 .app-menu-surface[data-layout='compound'] .app-menu-scroll-area.app-scroll-area,
-.app-menu-surface[data-layout='compound'] .app-menu-scroll-viewport.app-scroll-area-viewport {
+.app-menu-surface[data-layout='compound'] .app-menu-scroll-viewport.app-scroll-area-viewport,
+.app-menu-surface[data-layout='compound'] .tree-scroll-area.app-scroll-area,
+.app-menu-surface[data-layout='compound'] .tree-scroll-area.app-scroll-area > .app-scroll-area-viewport {
   inline-size: 100%;
   margin-inline: 0;
 }

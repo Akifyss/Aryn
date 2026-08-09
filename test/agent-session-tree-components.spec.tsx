@@ -10,6 +10,7 @@ import {
   AgentSessionTreeStatusItem,
   resolveAgentSessionTreeStatus,
 } from '@/features/agent/components/agent-session-tree/status-item'
+import { VirtualizedAgentTreeList } from '@/features/agent/components/agent-session-tree/virtualized-tree-list'
 import type { AgentWorkspaceState } from '@/features/agent/types'
 import { ProjectIcon } from '@/components/project-icon'
 
@@ -76,6 +77,27 @@ function createController(
 }
 
 describe('AgentSessionTree presentation components', () => {
+  it('uses a smaller initial render window for floating virtualized trees', () => {
+    const rows = Array.from({ length: 1_000 }, (_, index) => ({
+      key: `row-${index}`,
+      label: `Row ${index}`,
+    }))
+    const renderTree = (isFloating: boolean) => renderToStaticMarkup(
+      <VirtualizedAgentTreeList
+        ariaLabel='Sessions'
+        estimateRowSize={() => 34}
+        isFloating={isFloating}
+        renderRow={(row) => <span>{row.label}</span>}
+        rows={rows}
+      />,
+    )
+    const floatingRows = renderTree(true).match(/agent-session-virtual-item/g) ?? []
+    const dockedRows = renderTree(false).match(/agent-session-virtual-item/g) ?? []
+
+    expect(floatingRows.length).toBeGreaterThan(0)
+    expect(floatingRows.length).toBeLessThan(dockedRows.length)
+  })
+
   it('selects the flat session view for floating surfaces', () => {
     const controller = createController({
       agentState: {

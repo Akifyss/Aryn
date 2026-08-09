@@ -417,10 +417,10 @@ describe('shared application menu', () => {
       /\.viewer-toolbar-select\s*\{[^}]*(?:height|padding|border|border-radius|font-size):/,
     )
     expect(appMenuCss).toMatch(
-      /\.app-menu-scroll-area\.app-scroll-area\s*\{[^}]*inline-size:\s*calc\(100% \+ var\(--app-menu-content-padding\) \+ var\(--app-menu-content-padding\)\);[^}]*margin-inline:\s*calc\(0px - var\(--app-menu-content-padding\)\);[^}]*--app-scroll-area-scrollbar-gap:\s*0px;/,
+      /\.app-menu-scroll-area\.app-scroll-area,\s*\.app-menu-surface \.tree-scroll-area\.app-scroll-area\s*\{[^}]*inline-size:\s*calc\(100% \+ var\(--app-menu-content-padding\) \+ var\(--app-menu-content-padding\)\);[^}]*margin-inline:\s*calc\(0px - var\(--app-menu-content-padding\)\);[^}]*--app-scroll-area-scrollbar-gap:\s*0px;/,
     )
     expect(appMenuCss).toMatch(
-      /\.app-menu-scroll-viewport\.app-scroll-area-viewport\s*\{[^}]*inline-size:\s*calc\(100% - var\(--app-menu-content-padding\) - var\(--app-menu-content-padding\)\);[^}]*margin-inline:\s*var\(--app-menu-content-padding\);[^}]*overscroll-behavior:\s*contain;/,
+      /\.app-menu-scroll-viewport\.app-scroll-area-viewport,\s*\.app-menu-surface \.tree-scroll-area\.app-scroll-area > \.app-scroll-area-viewport\s*\{[^}]*inline-size:\s*calc\(100% - var\(--app-menu-content-padding\) - var\(--app-menu-content-padding\)\);[^}]*margin-inline:\s*var\(--app-menu-content-padding\);[^}]*overscroll-behavior:\s*contain;/,
     )
     expect(indexCss).toContain('--app-menu-content-padding: 6px;')
     expect(indexCss).toContain('--app-item-list-gap: 2px;')
@@ -449,6 +449,9 @@ describe('shared application menu', () => {
     expect(appMenuCss).toMatch(
       /max-height:\s*min\(\s*var\(--app-menu-popup-max-height\),\s*var\(--available-height, calc\(100vh - 16px\)\)\s*\);/,
     )
+    expect(appMenuCss).toMatch(
+      /\.app-menu-surface-lg\s*\{[^}]*--app-menu-popup-min-width:\s*320px;[^}]*width:\s*var\(--app-menu-popup-min-width\);/,
+    )
     expect(appMenuCss).not.toContain('var(--app-menu-popup-max-width, 360px)')
     expect(appMenuCss).not.toContain('var(--app-menu-popup-max-height, 520px)')
     expect(appMenuCss).not.toContain('--app-menu-content-padding: 6px;')
@@ -465,7 +468,7 @@ describe('shared application menu', () => {
       /\.app-menu-surface\[data-layout='compound'\]\s*\{[^}]*padding:\s*0;/,
     )
     expect(appMenuCss).toMatch(
-      /\.app-menu-surface\[data-layout='compound'\] \.app-menu-scroll-area\.app-scroll-area,\s*\.app-menu-surface\[data-layout='compound'\] \.app-menu-scroll-viewport\.app-scroll-area-viewport\s*\{[^}]*inline-size:\s*100%;[^}]*margin-inline:\s*0;/,
+      /\.app-menu-surface\[data-layout='compound'\] \.app-menu-scroll-area\.app-scroll-area,\s*\.app-menu-surface\[data-layout='compound'\] \.app-menu-scroll-viewport\.app-scroll-area-viewport,\s*\.app-menu-surface\[data-layout='compound'\] \.tree-scroll-area\.app-scroll-area,\s*\.app-menu-surface\[data-layout='compound'\] \.tree-scroll-area\.app-scroll-area > \.app-scroll-area-viewport\s*\{[^}]*inline-size:\s*100%;[^}]*margin-inline:\s*0;/,
     )
     expect(appMenuSource).toMatch(
       /AppMenuSurface[\s\S]*?layout = 'list',[\s\S]*?AppMenuPopup/,
@@ -569,6 +572,9 @@ describe('shared application menu', () => {
     )
     expect(treeCss).toMatch(
       /\.tree-list > \.app-item-container,\s*\.tree-section > \.app-item-container,\s*\.tree-section\s*\{[^}]*gap:\s*var\(--app-item-list-gap\);/,
+    )
+    expect(treeCss).toMatch(
+      /\.tree-scroll-area > \.app-scroll-area-viewport\s*\{[^}]*overscroll-behavior:\s*contain;/,
     )
     expect(treeCss).toMatch(/\.tree-error\s*\{[^}]*margin:\s*0;/)
     expect(treeCss).toContain('var(--app-item-content-inset)')

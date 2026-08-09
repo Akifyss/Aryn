@@ -601,6 +601,7 @@ export function AgentProjectTree({
         estimateRowSize={estimateAgentProjectTreeRowSize}
         getRowAriaMetadata={getAgentProjectTreeRowAriaMetadata}
         getRowClassName={getAgentProjectTreeRowClassName}
+        isFloating={isFloating}
         isRowFocusable={isAgentProjectTreeRowFocusable}
         pinnedRowKeys={pinnedRowKeys}
         renderRow={renderTreeRow}

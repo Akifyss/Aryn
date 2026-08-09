@@ -15,7 +15,9 @@ import {
   TreeScrollArea,
 } from '@/components/tree'
 
-const AGENT_TREE_INITIAL_VIEWPORT_HEIGHT = 640
+// Pre-observation estimates only; the real ScrollArea viewport replaces them after mount.
+const AGENT_TREE_DOCKED_INITIAL_VIEWPORT_HEIGHT = 640
+const AGENT_TREE_FLOATING_INITIAL_VIEWPORT_HEIGHT = 320
 const AGENT_TREE_INITIAL_VIEWPORT_WIDTH = 320
 const AGENT_TREE_OVERSCAN = 8
 const DEFAULT_IS_ROW_FOCUSABLE = () => true
@@ -43,6 +45,7 @@ type VirtualizedAgentTreeListProps<Row extends KeyedTreeRow> = {
   estimateRowSize: (row: Row) => number
   getRowClassName?: (row: Row) => string | undefined
   getRowAriaMetadata?: (row: Row) => VirtualizedTreeRowAriaMetadata | undefined
+  isFloating: boolean
   isRowFocusable?: (row: Row) => boolean
   listClassName?: string
   listId?: string
@@ -61,6 +64,7 @@ export function VirtualizedAgentTreeList<Row extends KeyedTreeRow>({
   estimateRowSize,
   getRowClassName,
   getRowAriaMetadata,
+  isFloating,
   isRowFocusable = DEFAULT_IS_ROW_FOCUSABLE,
   listClassName,
   listId,
@@ -101,7 +105,9 @@ export function VirtualizedAgentTreeList<Row extends KeyedTreeRow>({
     getItemKey: (index) => rows[index]?.key ?? index,
     getScrollElement: () => viewportRef.current,
     initialRect: {
-      height: AGENT_TREE_INITIAL_VIEWPORT_HEIGHT,
+      height: isFloating
+        ? AGENT_TREE_FLOATING_INITIAL_VIEWPORT_HEIGHT
+        : AGENT_TREE_DOCKED_INITIAL_VIEWPORT_HEIGHT,
       width: AGENT_TREE_INITIAL_VIEWPORT_WIDTH,
     },
     overscan: AGENT_TREE_OVERSCAN,

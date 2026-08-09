@@ -63,7 +63,7 @@ export function FlatAgentSessionTree({
   controller,
   onRequestClose,
   id = 'agent-session-tree',
-  isFloating,
+  isFloating = false,
   menuPortalTarget,
 }: AgentSessionTreeViewProps) {
   const {
@@ -228,6 +228,7 @@ export function FlatAgentSessionTree({
         ariaLabel='Agent sessions'
         contentClassName='agent-session-tree-scroll-content'
         estimateRowSize={estimateFlatAgentSessionTreeRowSize}
+        isFloating={isFloating}
         isRowFocusable={isFlatAgentSessionTreeRowFocusable}
         listClassName='agent-project-list agent-flat-session-list'
         listId={id}
