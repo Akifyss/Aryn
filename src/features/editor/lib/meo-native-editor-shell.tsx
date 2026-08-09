@@ -1,7 +1,6 @@
 import {
   BlockquoteLine,
   BoldLine,
-  BorderHorizontalLine,
   BracketsLine,
   CodeLine,
   Columns2Line,
@@ -9,25 +8,27 @@ import {
   FontSizeLine,
   GitCompareLine,
   HashtagLine,
-  Heading1Line,
   ItalicLine,
   Keyboard2Line,
-  LetterSpacingLine,
   LinkLine,
+  ListCheck3Line,
   ListCheckLine,
   ListOrderedLine,
-  ListSearchLine,
   PicLine,
-  Refresh2Line,
-  RepeatLine,
   Rows2Line,
   SearchLine,
   StrikethroughLine,
   Table2Line,
-  TaskLine,
   UpLine,
 } from '@mingcute/react'
 import { Input } from '@heroui/react'
+import headingIcon from '@iconify-icons/lucide/heading'
+import listTreeIcon from '@iconify-icons/lucide/list-tree'
+import minusIcon from '@iconify-icons/lucide/minus'
+import replaceIcon from '@iconify-icons/lucide/replace'
+import replaceAllIcon from '@iconify-icons/lucide/replace-all'
+import wholeWordIcon from '@iconify-icons/lucide/whole-word'
+import { Icon as OfflineIcon } from '@iconify/react/offline'
 import {
   forwardRef,
   memo,
@@ -273,7 +274,7 @@ const MeoHeadingMenu = forwardRef(function MeoHeadingMenu({
         className='format-button meo-heading-menu-trigger'
         aria-label='Heading'
       >
-        <Heading1Line aria-hidden='true' />
+        <OfflineIcon aria-hidden='true' icon={headingIcon} />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner align='start' side='bottom' sideOffset={4}>
@@ -336,7 +337,7 @@ function MeoFindPanel({
           label='Whole word'
           pressed={false}
         >
-          <LetterSpacingLine aria-hidden='true' />
+          <OfflineIcon aria-hidden='true' icon={wholeWordIcon} />
         </MeoToolbarIconButton>
         <MeoToolbarIconButton
           action='findCaseSensitive'
@@ -378,14 +379,14 @@ function MeoFindPanel({
           buttonRef={refs.replaceBtn}
           label='Replace current match'
         >
-          <Refresh2Line aria-hidden='true' />
+          <OfflineIcon aria-hidden='true' icon={replaceIcon} />
         </MeoToolbarIconButton>
         <MeoToolbarIconButton
           action='replaceAll'
           buttonRef={refs.replaceAllBtn}
           label='Replace all matches'
         >
-          <RepeatLine aria-hidden='true' />
+          <OfflineIcon aria-hidden='true' icon={replaceAllIcon} />
         </MeoToolbarIconButton>
       </div>
     </div>
@@ -488,7 +489,7 @@ function MeoEditorToolbar({
           <ListOrderedLine aria-hidden='true' />
         </MeoToolbarIconButton>
         <MeoToolbarIconButton action='task' buttonRef={buttons.taskBtn} label='Task list'>
-          <TaskLine aria-hidden='true' />
+          <ListCheck3Line aria-hidden='true' />
         </MeoToolbarIconButton>
         <div className='format-separator' role='separator' aria-orientation='vertical' />
         <MeoToolbarIconButton action='table' buttonRef={buttons.tableBtn} label='Table'>
@@ -510,7 +511,7 @@ function MeoEditorToolbar({
           <BlockquoteLine aria-hidden='true' />
         </MeoToolbarIconButton>
         <MeoToolbarIconButton action='hr' buttonRef={buttons.hrBtn} label='Horizontal rule'>
-          <BorderHorizontalLine aria-hidden='true' />
+          <OfflineIcon aria-hidden='true' icon={minusIcon} />
         </MeoToolbarIconButton>
       </div>
 
@@ -522,7 +523,7 @@ function MeoEditorToolbar({
           label='Toggle document outline'
           pressed={false}
         >
-          <ListSearchLine aria-hidden='true' />
+          <OfflineIcon aria-hidden='true' icon={listTreeIcon} />
         </MeoToolbarIconButton>
         <MeoToolbarIconButton
           action='find'

@@ -85,6 +85,7 @@
     "@heroui/react": "^3.0.2",
     "@heroui/styles": "^3.0.2",
     "@heroui/system": "^2.4.28",
+    "@iconify-icons/lucide": "^1.2.135",
     "@iconify/react": "^6.0.2",
     "@lobehub/icons": "^5.10.0",
     "@mingcute/react": "^1.4.1",

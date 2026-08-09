@@ -6,12 +6,14 @@ function readSource(path: string) {
 }
 
 describe('MEO React chrome boundary', () => {
-  it('renders application chrome with shared React components and Mingcute icons', async () => {
+  it('renders application chrome with shared React components and locally bundled icons', async () => {
     const shellSource = await readSource(
       'src/features/editor/lib/meo-native-editor-shell.tsx',
     )
 
     expect(shellSource).toContain("from '@mingcute/react'")
+    expect(shellSource).toContain("from '@iconify/react/offline'")
+    expect(shellSource).toContain("from '@iconify-icons/lucide/whole-word'")
     expect(shellSource).toContain("import { Input } from '@heroui/react'")
     expect(shellSource).toContain("import { AppButton } from '@/components/app-button'")
     expect(shellSource).toContain("import { AppIconButton } from '@/components/app-icon-button'")
@@ -28,6 +30,36 @@ describe('MEO React chrome boundary', () => {
     expect(shellSource).not.toContain("document.createElement('button')")
     expect(shellSource).not.toContain('createFindPanel(')
     expect(shellSource).not.toContain('createSelectionMenu(')
+  })
+
+  it('uses action-specific icons for editor-only concepts', async () => {
+    const shellSource = await readSource(
+      'src/features/editor/lib/meo-native-editor-shell.tsx',
+    )
+
+    for (const icon of [
+      'headingIcon',
+      'listTreeIcon',
+      'minusIcon',
+      'replaceIcon',
+      'replaceAllIcon',
+      'wholeWordIcon',
+      'ListCheck3Line',
+    ]) {
+      expect(shellSource).toContain(icon)
+    }
+
+    for (const misleadingIcon of [
+      'BorderHorizontalLine',
+      'Heading1Line',
+      'LetterSpacingLine',
+      'ListSearchLine',
+      'Refresh2Line',
+      'RepeatLine',
+      'TaskLine',
+    ]) {
+      expect(shellSource).not.toContain(misleadingIcon)
+    }
   })
 
   it('keeps the CodeMirror engine outside React while the shell owns the outline', async () => {
