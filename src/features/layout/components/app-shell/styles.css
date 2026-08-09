@@ -6,7 +6,7 @@
   --resize-handle-hit-area: 100%;
   --resize-handle-line-width: 2px;
   --chrome-height: 44px;
-  --tabs-chrome-height: calc(var(--chrome-height) - 1px);
+  --tabs-chrome-height: var(--chrome-height);
   --panel-toggle-size: var(--app-icon-button-size-md);
   --panel-toggle-gap: 2px;
   --left-chrome-action-gap: 2px;
@@ -114,6 +114,15 @@
 
 .app-shell[data-app-layout='agent'] .panel-agent {
   background: var(--background-primary);
+  border-left: 0;
+}
+
+.app-shell[data-app-layout='editor'][data-left-collapsed='false'] .panel-sidebar {
+  border-right: 0;
+}
+
+.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .panel-agent {
+  border-left: 0;
 }
 
 .app-shell[data-app-layout='agent'] .panel-agent .editor-frame {
@@ -122,16 +131,6 @@
 
 .app-shell[data-app-layout='agent'] .panel-agent .file-tabs-shell {
   padding-right: var(--file-tabs-right-panel-inset);
-}
-
-.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-shell::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: var(--file-tabs-right-panel-inset);
-  border-bottom: 1px solid var(--separator);
-  z-index: 1;
 }
 
 .app-shell[data-app-layout='agent'] .panel-agent .file-tabs-drag-spacer {
@@ -516,6 +515,10 @@ body:has([data-app-modal-layer]) .agent-collapsed-tab-actions {
 }
 
 .panel-resize-handle {
+  --panel-resize-guide-color: var(--separator);
+  --panel-resize-guide-opacity: 0;
+  --panel-resize-guide-shadow: none;
+
   position: relative;
   display: block;
   width: 100%;
@@ -540,24 +543,60 @@ body:has([data-app-modal-layer]) .agent-collapsed-tab-actions {
   width: var(--resize-handle-line-width);
   transform: translateX(-50%);
   border-radius: 999px;
-  background: var(--separator);
-  opacity: 0;
+  background: var(--panel-resize-guide-color);
+  box-shadow: var(--panel-resize-guide-shadow);
+  opacity: var(--panel-resize-guide-opacity);
   transition:
     opacity 140ms ease,
     background-color 140ms ease,
     box-shadow 140ms ease;
 }
 
-.panel-resize-handle:hover::before,
-.panel-resize-handle:focus-visible::before,
-.panel-resize-handle.is-active::before {
-  opacity: 1;
+/* Tabbed panel dividers never draw through tab-owned corners. With an interior
+   tab active, the guide starts at the leading content corner's tangent. When
+   the first tab is active, it moves up to that tab's own tangent instead. */
+.app-shell[data-app-layout='agent'] .panel-resize-slot-right .panel-resize-handle::before,
+.app-shell[data-app-layout='editor'] .panel-resize-slot-left .panel-resize-handle::before,
+.app-shell[data-app-layout='editor'] .panel-resize-slot-right .panel-resize-handle::before {
+  top: calc(var(--tabs-chrome-height) + var(--file-tab-radius) - 1px);
+  left: 50%;
+  border-radius: 0;
 }
 
-.panel-resize-handle.is-active::before,
-.panel-resize-handle:focus-visible::before {
-  background: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
+/* Keep the resize guide on the editor-frame side of each slot so it lands on
+   the same physical pixel as the SVG boundary instead of drawing a second line. */
+.app-shell[data-app-layout='agent'] .panel-resize-slot-right .panel-resize-handle::before,
+.app-shell[data-app-layout='editor'] .panel-resize-slot-left .panel-resize-handle::before {
+  transform: none;
+}
+
+.app-shell[data-app-layout='editor'] .panel-resize-slot-right .panel-resize-handle::before {
+  transform: translateX(-100%);
+}
+
+.app-shell[data-app-layout='agent']:has(.panel-agent > .editor-frame > .file-tabs-shell[data-first-tab-active='true'])
+  .panel-resize-slot-right .panel-resize-handle::before,
+.app-shell[data-app-layout='editor']:has(.panel-editor > .editor-frame > .file-tabs-shell[data-first-tab-active='true'])
+  .panel-resize-slot-left .panel-resize-handle::before {
+  top: calc(var(--file-tabs-top-gap) + var(--file-tab-radius));
+}
+
+.panel-resize-handle:is(:hover, :focus-visible, .is-active) {
+  --panel-resize-guide-opacity: 1;
+}
+
+.panel-resize-handle:is(:focus-visible, .is-active) {
+  --panel-resize-guide-color: var(--accent);
+  --panel-resize-guide-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.app-shell[data-app-layout='agent']
+  .panel-resize-slot-right .panel-resize-handle:is(:focus-visible, .is-active),
+.app-shell[data-app-layout='editor']
+  .panel-resize-slot-left .panel-resize-handle:is(:focus-visible, .is-active),
+.app-shell[data-app-layout='editor']
+  .panel-resize-slot-right .panel-resize-handle:is(:focus-visible, .is-active) {
+  --panel-resize-guide-shadow: none;
 }
 
 .drawer-local-overlay-root {
@@ -584,6 +623,10 @@ body:has([data-app-modal-layer]) .agent-collapsed-tab-actions {
   .titlebar-spacer,
   .left-chrome-actions,
   .panel-resize-slot {
+    transition: none;
+  }
+
+  .panel-resize-handle::before {
     transition: none;
   }
 }

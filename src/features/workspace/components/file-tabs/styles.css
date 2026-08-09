@@ -1,5 +1,12 @@
 .file-tabs-shell {
   --file-tabs-right-panel-inset: var(--right-panel-control-inset);
+  --file-tab-activation-duration: 180ms;
+  --file-tab-shoulder-size: var(--file-tab-radius);
+  --file-tab-height: calc(var(--tabs-chrome-height) - var(--file-tabs-top-gap));
+  /* Equal top and bottom insets center tab content in the shared chrome row.
+     The SVG outline owns the final visual pixel; it does not reduce layout height. */
+  --file-tab-content-bottom-inset: var(--file-tabs-top-gap);
+  --file-tabs-rail-surface: var(--background-primary);
 
   position: relative;
   display: flex;
@@ -7,7 +14,19 @@
   flex-shrink: 0;
   min-width: 0;
   min-height: var(--tabs-chrome-height);
-  background-color: var(--background-primary);
+  background: linear-gradient(
+    to bottom,
+    var(--file-tabs-rail-surface) 0 calc(100% - 1px),
+    transparent calc(100% - 1px)
+  );
+  z-index: 2;
+}
+
+.app-shell[data-app-layout='editor']
+  .panel-editor
+  > .editor-frame
+  > .file-tabs-shell {
+  --file-tabs-rail-surface: var(--sidebar);
 }
 
 .file-tabs-shell[data-has-actions='false'] {
@@ -20,47 +39,12 @@
     padding-right var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
 }
 
-.file-tabs-shell[data-empty='true'] .file-tabs-drag-spacer,
-.file-tabs-shell[data-empty='true'] .file-tabs-actions,
-.file-tabs-shell[data-empty='true']::before,
-.file-tabs-shell[data-empty='true']::after,
-.app-shell[data-left-collapsed='true'] .file-tabs-shell[data-empty='true']::before,
-.app-shell[data-right-collapsed='true'] .file-tabs-shell[data-empty='true']::after {
-  border-bottom-color: transparent !important;
-}
-
-/* When collapsed, fill the left padding area with a segment of the bottom line */
-.app-shell[data-left-collapsed='true'] .file-tabs-shell::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: calc(var(--left-panel-content-inset) + var(--file-tabs-collapsed-left-extra-gap));
-  border-bottom: 1px solid var(--separator);
-  z-index: 1;
-}
-
-/* When side-collapsed, fill the right padding area with a segment of the bottom line */
-.app-shell[data-right-collapsed='true'] .file-tabs-shell::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: var(--file-tabs-right-panel-inset);
-  border-bottom: 1px solid var(--separator);
-  z-index: 1;
-}
-
 .app-shell[data-left-collapsed='true'] .file-tabs-shell {
   padding-left: calc(var(--left-panel-content-inset) + var(--file-tabs-collapsed-left-extra-gap));
 }
 
 .app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-agent .file-tabs-shell {
   padding-left: 0;
-}
-
-.app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-agent .file-tabs-shell::before {
-  display: none;
 }
 
 .app-shell[data-right-collapsed='true'] .file-tabs-shell {
@@ -70,31 +54,60 @@
 .file-tabs-scroll-frame {
   position: relative;
   z-index: 2;
-  display: flex;
-  align-items: stretch;
   flex: 0 1 auto;
+  width: max-content;
+  height: var(--tabs-chrome-height);
   max-width: 100%;
   min-width: 0;
+  overflow: hidden;
 }
 
 .file-tabs-scroller {
   position: relative;
   z-index: 2;
-  display: flex;
-  align-items: stretch;
-  flex: 0 1 auto;
-  max-width: 100%;
-  min-width: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: hidden;
   scrollbar-width: none;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
 
+.file-tabs-scroll-content {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  height: 100%;
+}
+
+.file-tabs-list {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: max-content;
+  min-width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: var(--file-tabs-top-gap) var(--file-tab-shoulder-size) 0 0;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+/* Base UI owns active-tab measurement; the SVG chrome consumes its CSS
+   geometry so the moving outline and the selected tab cannot drift apart. */
+.file-tabs-geometry-indicator {
+  position: absolute;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .file-tabs-scroll-edge {
   position: absolute;
-  top: 0;
+  top: var(--file-tabs-top-gap);
   bottom: 0;
   width: 1px;
   background: color-mix(in oklch, var(--foreground-primary) 9%, transparent);
@@ -118,37 +131,23 @@
   display: none;
 }
 
-.file-tabs-scroll-frame[data-can-scroll-left='true'] .file-tabs-scroll-edge-left,
-.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroll-edge-right {
+.file-tabs-scroll-frame[data-overflow-x-start] .file-tabs-scroll-edge-left,
+.file-tabs-scroll-frame[data-overflow-x-end] .file-tabs-scroll-edge-right {
   opacity: 1;
 }
 
-.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroller {
+.file-tabs-scroll-frame[data-has-overflow-x] .file-tabs-scroller {
   clip-path: inset(0 1px 0 0);
-}
-
-.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tab:last-child {
-  border-right-color: transparent;
 }
 
 .file-tabs-scroller[data-dragging='true'] {
   cursor: grabbing;
 }
 
-/* Offset the 1px negative margin ONLY when the first tab is allowed to overlap (collapsed state) */
-.app-shell[data-left-collapsed='true'] .file-tabs-scroller {
-  padding-left: 1px;
-}
-
-.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroller {
-  padding-left: 0;
-}
-
 .file-tabs-drag-spacer {
   flex: 1 1 auto;
   min-width: 0;
   align-self: stretch;
-  border-bottom: 1px solid var(--separator);
   app-region: drag;
   -webkit-app-region: drag;
 }
@@ -168,7 +167,6 @@
   align-items: center;
   gap: 2px;
   padding: 0 0 0 6px;
-  border-bottom: 1px solid var(--separator);
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
@@ -182,21 +180,20 @@
 }
 
 .file-tab {
+  --file-tab-actions-surface: var(--file-tabs-rail-surface);
+
   position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: stretch;
+  height: var(--file-tab-height);
   min-width: 0;
   max-width: min(288px, 42vw);
-  border-right: 1px solid var(--separator);
-  border-left: 1px solid transparent;
-  border-top: 1px solid transparent;
-  border-bottom: 1px solid var(--separator);
-  margin-left: -1px;
-  background: transparent;
-  transition: background-color 140ms ease, color 140ms ease;
+  box-sizing: border-box;
+  border-radius: var(--file-tab-radius) var(--file-tab-radius) 0 0;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+  z-index: 1;
 }
 
 .file-tab.is-pinned {
@@ -240,7 +237,7 @@
 
 .file-tabs-drop-indicator {
   position: absolute;
-  top: 6px;
+  top: calc(var(--file-tabs-top-gap) + 3px);
   bottom: 6px;
   width: 3px;
   border-radius: 999px;
@@ -251,32 +248,74 @@
   z-index: 7;
 }
 
-/* When sidebar is visible, the very first tab shouldn't have a left border or negative margin (to avoid redundant line with sidebar) */
-.app-shell[data-left-collapsed='false'] .file-tab:first-child {
-  border-left-width: 0;
-  margin-left: 0;
-}
-
-.app-shell[data-app-layout='agent'] .panel-agent .file-tab:first-child {
-  border-left-width: 0;
-  margin-left: 0;
-}
-
 .file-tab.is-active {
-  background-color: var(--background-primary);
-  border-top-color: var(--separator);
-  border-left-color: var(--separator);
-  border-bottom: 1px solid transparent;
+  --file-tab-actions-surface: var(--background-primary);
+
   z-index: 5;
 }
 
+.file-tabs-boundary-chrome {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  max-width: none;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.file-tabs-boundary-shadow-layer {
+  position: fixed;
+  display: block;
+  max-width: none;
+  overflow: visible;
+  pointer-events: none;
+  z-index: calc(var(--app-z-panel-resize) - 1);
+}
+
+.file-tabs-boundary-shadow-source {
+  fill: #000;
+}
+
+.file-tabs-boundary-shadow-token-probe {
+  position: absolute;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  box-shadow: var(--shadow-xs);
+  pointer-events: none;
+}
+
+.file-tabs-boundary-fill-layer {
+  z-index: 1;
+}
+
+.file-tabs-boundary-outline-layer {
+  z-index: 3;
+}
+
+.file-tabs-boundary-active-fill {
+  fill: var(--background-primary);
+}
+
+.file-tabs-boundary-outline {
+  fill: none;
+  stroke: var(--separator);
+  stroke-linecap: butt;
+  stroke-linejoin: round;
+  stroke-width: 1;
+}
+
 .file-tab-trigger {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
-  min-height: var(--tabs-chrome-height);
-  padding: 0 24px 0 8px;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 0 24px var(--file-tab-content-bottom-inset) 8px;
   border: 0;
   background: transparent;
   color: var(--foreground-secondary);
@@ -287,6 +326,32 @@
   transition: color 140ms ease;
   app-region: no-drag;
   -webkit-app-region: no-drag;
+  z-index: 1;
+}
+
+/* Separators and active-tab shoulders must not share a pseudo-element: hover
+   can hide this line without ever changing either shoulder's geometry. */
+.file-tab-trigger::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -1px;
+  width: 1px;
+  height: 18px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--foreground-primary) 12%, transparent);
+  opacity: 1;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+}
+
+.file-tab:first-child .file-tab-trigger::before,
+.file-tab.is-active .file-tab-trigger::before,
+.file-tab.is-active + .file-tab .file-tab-trigger::before,
+.file-tab:hover .file-tab-trigger::before,
+.file-tab:hover + .file-tab .file-tab-trigger::before {
+  opacity: 0;
 }
 
 .file-tab.is-active .file-tab-trigger,
@@ -301,15 +366,21 @@
   bottom: 0;
   display: flex;
   align-items: center;
-  padding-left: 12px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 0 0 var(--file-tab-content-bottom-inset) 12px;
   opacity: 0;
   pointer-events: none;
-  background: var(--background-primary);
-  transition: opacity 140ms ease, background-color 140ms ease;
+  background: linear-gradient(
+    to bottom,
+    var(--file-tab-actions-surface) 0 calc(100% - 1px),
+    transparent calc(100% - 1px)
+  );
+  transition: opacity 140ms ease;
   z-index: 10;
 }
 
-.file-tab.is-dirty:not(:hover) .file-tab-actions {
+.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-actions {
   background: transparent;
 }
 
@@ -319,23 +390,14 @@
   position: absolute;
   left: -16px;
   top: 0;
-  bottom: 0;
+  bottom: 1px;
   width: 16px;
-  background: linear-gradient(to right, transparent, var(--background-primary));
+  background: linear-gradient(to right, transparent, var(--file-tab-actions-surface));
   pointer-events: none;
 }
 
-.file-tab.is-dirty:not(:hover) .file-tab-actions::before {
+.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-actions::before {
   display: none;
-}
-
-.file-tab.is-active .file-tab-actions {
-  /* Match active background color */
-  background: var(--background-primary);
-}
-
-.file-tab.is-active .file-tab-actions::before {
-  background: linear-gradient(to right, transparent, var(--background-primary));
 }
 
 .file-tab:hover .file-tab-actions,
@@ -353,14 +415,8 @@
 
 .file-tab-trigger:focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-
-.file-tab-actions {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  padding-right: 4px;
+  outline-offset: -3px;
+  border-radius: calc(var(--file-tab-radius) - 2px) calc(var(--file-tab-radius) - 2px) 0 0;
 }
 
 .file-tab-label {
@@ -407,7 +463,7 @@
 }
 
 .file-tab.is-dirty:hover .file-tab-dirty-indicator,
-.file-tab.is-dirty.is-active:hover .file-tab-dirty-indicator,
+.file-tab.is-dirty:focus-within .file-tab-dirty-indicator,
 .file-tab.is-dirty .file-tab-close:hover .file-tab-dirty-indicator,
 .file-tab.is-dirty .file-tab-close:focus-visible .file-tab-dirty-indicator {
   opacity: 0;
@@ -424,10 +480,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .file-tabs-shell {
+    --file-tab-activation-duration: 0ms;
+  }
+
   .file-tabs-shell,
   .file-tabs-scroll-edge,
   .file-tab,
   .file-tab-trigger,
+  .file-tab-trigger::before,
   .file-tab-actions,
   .file-tab-dirty-indicator {
     transition: none;

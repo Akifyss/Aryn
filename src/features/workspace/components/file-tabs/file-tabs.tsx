@@ -1,8 +1,17 @@
-import { type DragEvent as ReactDragEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, type DragEvent as ReactDragEvent, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { ScrollArea } from '@base-ui/react/scroll-area'
+import { Tabs } from '@base-ui/react/tabs'
 import { CloseLine, FolderLine, GitBranchLine, GitCompareLine } from '@mingcute/react'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppTooltip } from '@/components/app-tooltip'
+import {
+  interpolateFileTabActiveGeometry,
+  parseCssTimeInMilliseconds,
+} from './file-tabs-boundary-motion'
+import { createFileTabsBoundaryPaths, type FileTabsBoundaryPaths } from './file-tabs-boundary-path'
+import { getFileTabsShadowFilterPadding, parseComputedBoxShadow, type FileTabsShadowLayer } from './file-tabs-shadow'
 import {
   reorderWorkspaceTabs,
   type TabDropPosition,
@@ -36,18 +45,33 @@ type FileTabLabelTooltip = {
   text: string
 }
 
-type FileTabsScrollEdgeState = {
-  canScrollLeft: boolean
-  hasScrollOverflow: boolean
+type FileTabsBoundaryGeometryBase = {
+  frameHeight: number
+  frameLeft: number
+  frameTop: number
+  frameWidth: number
+  hasLeftBoundary: boolean
+  hasRightBoundary: boolean
+  isTabActivating: boolean
+  isLayoutChanging: boolean
+  radius: number
 }
+
+type FileTabsBoundaryGeometry = FileTabsBoundaryGeometryBase & ({
+  kind: 'active'
+  activeHeight: number
+  activeLeft: number
+  activeTop: number
+  activeWidth: number
+  tabId: string
+} | {
+  kind: 'empty'
+  railHeight: number
+})
 
 const FILE_TAB_LABEL_TOOLTIP_DELAY = 500
 const FILE_TAB_TEXT_OVERFLOW_EPSILON = 1
-const FILE_TAB_SCROLL_EDGE_EPSILON = 1
-const EMPTY_FILE_TAB_SCROLL_EDGE_STATE: FileTabsScrollEdgeState = {
-  canScrollLeft: false,
-  hasScrollOverflow: false,
-}
+const FILE_TAB_BOUNDARY_GEOMETRY_EPSILON = 0.01
 
 function getTabLabel(tab: WorkspaceDisplayTab) {
   if (tab.kind === 'fixed-panel') {
@@ -118,14 +142,618 @@ function isTabVisibleInScroller(tabElement: HTMLElement, scrollerElement: HTMLEl
   return tabRect.left >= scrollerRect.left && tabRect.right <= scrollerRect.right
 }
 
-function getFileTabsScrollEdgeState(scrollerElement: HTMLElement): FileTabsScrollEdgeState {
-  const maxScrollLeft = Math.max(0, scrollerElement.scrollWidth - scrollerElement.clientWidth)
-  const hasScrollOverflow = maxScrollLeft > FILE_TAB_SCROLL_EDGE_EPSILON
-
-  return {
-    canScrollLeft: scrollerElement.scrollLeft > FILE_TAB_SCROLL_EDGE_EPSILON,
-    hasScrollOverflow,
+function readBaseTabsIndicatorGeometry(
+  indicatorElement: HTMLSpanElement | null,
+  frameRect: DOMRect,
+) {
+  const listElement = indicatorElement?.parentElement
+  if (!indicatorElement || !listElement) {
+    return null
   }
+
+  const indicatorStyle = window.getComputedStyle(indicatorElement)
+  const readNumber = (property: string) => Number.parseFloat(
+    indicatorStyle.getPropertyValue(property),
+  )
+  const activeLeft = readNumber('--active-tab-left')
+  const activeTop = readNumber('--active-tab-top')
+  const activeWidth = readNumber('--active-tab-width')
+  const activeHeight = readNumber('--active-tab-height')
+
+  if (
+    !Number.isFinite(activeLeft)
+    || !Number.isFinite(activeTop)
+    || !Number.isFinite(activeWidth)
+    || !Number.isFinite(activeHeight)
+    || activeWidth <= 0
+    || activeHeight <= 0
+  ) {
+    return null
+  }
+
+  const listRect = listElement.getBoundingClientRect()
+  return {
+    activeHeight,
+    activeLeft: listRect.left - frameRect.left + activeLeft,
+    activeTop: listRect.top - frameRect.top + activeTop,
+    activeWidth,
+  }
+}
+
+function FileTabsBoundaryChrome({
+  chromeHost,
+  geometry,
+}: {
+  chromeHost: HTMLElement
+  geometry: FileTabsBoundaryGeometry
+}) {
+  const shadowFilterId = `file-tabs-boundary-shadow-${useId().replace(/:/g, '')}`
+  const shadowTokenProbeRef = useRef<HTMLSpanElement | null>(null)
+  const stableShadowPathsRef = useRef<FileTabsBoundaryPaths | null>(null)
+  const [shadowLayers, setShadowLayers] = useState<FileTabsShadowLayer[]>([])
+  useLayoutEffect(() => {
+    const shadowTokenProbe = shadowTokenProbeRef.current
+    if (!shadowTokenProbe) {
+      return
+    }
+
+    const syncShadowLayers = () => {
+      const nextShadowLayers = parseComputedBoxShadow(window.getComputedStyle(shadowTokenProbe).boxShadow)
+      setShadowLayers((currentShadowLayers) => (
+        JSON.stringify(currentShadowLayers) === JSON.stringify(nextShadowLayers)
+          ? currentShadowLayers
+          : nextShadowLayers
+      ))
+    }
+
+    syncShadowLayers()
+
+    if (typeof MutationObserver === 'undefined') {
+      return
+    }
+
+    const themeObserver = new MutationObserver(syncShadowLayers)
+    themeObserver.observe(document.documentElement, {
+      attributeFilter: ['class', 'data-theme'],
+      attributes: true,
+    })
+
+    return () => themeObserver.disconnect()
+  }, [])
+
+  const paths = createFileTabsBoundaryPaths({
+    frameHeight: geometry.frameHeight,
+    frameWidth: geometry.frameWidth,
+    radius: geometry.radius,
+    shape: geometry.kind === 'active'
+      ? {
+          kind: 'active',
+          activeHeight: geometry.activeHeight,
+          activeLeft: geometry.activeLeft,
+          activeTop: geometry.activeTop,
+          activeWidth: geometry.activeWidth,
+        }
+      : {
+          kind: 'empty',
+          railHeight: geometry.railHeight,
+        },
+  })
+
+  useLayoutEffect(() => {
+    if (paths && (!stableShadowPathsRef.current || !geometry.isTabActivating)) {
+      stableShadowPathsRef.current = paths
+    }
+  }, [geometry.isTabActivating, paths])
+
+  if (!paths) {
+    return null
+  }
+
+  const shadowPaths = geometry.isTabActivating
+    ? stableShadowPathsRef.current ?? paths
+    : paths
+
+  const variant = geometry.hasLeftBoundary
+    ? paths.withLeftBoundary
+    : paths.withoutLeftBoundary
+  const outlinePath = geometry.hasRightBoundary
+    ? variant.outlinePathWithRightBoundary
+    : variant.outlinePath
+  const shadowVariant = geometry.hasLeftBoundary
+    ? shadowPaths.withLeftBoundary
+    : shadowPaths.withoutLeftBoundary
+  const shadowSurfacePath = geometry.hasRightBoundary
+    ? shadowVariant.surfacePathWithRightBoundary
+    : shadowVariant.surfacePath
+
+  const svgProps = {
+    'aria-hidden': true,
+    focusable: 'false',
+    height: paths.frameHeight,
+    viewBox: `0 0 ${paths.frameWidth} ${paths.frameHeight}`,
+    width: paths.frameWidth,
+  } as const
+  const shadowFilterPadding = getFileTabsShadowFilterPadding(shadowLayers)
+  const shadowLayer = geometry.isLayoutChanging || shadowLayers.length === 0 || typeof document === 'undefined'
+    ? null
+    : createPortal(
+        <svg
+          {...svgProps}
+          className='file-tabs-boundary-shadow-layer'
+          style={{
+            left: geometry.frameLeft,
+            top: geometry.frameTop,
+          }}
+        >
+          <defs>
+            <filter
+              id={shadowFilterId}
+              x={-shadowFilterPadding.x}
+              y={-shadowFilterPadding.y}
+              width={paths.frameWidth + shadowFilterPadding.x * 2}
+              height={paths.frameHeight + shadowFilterPadding.y * 2}
+              colorInterpolationFilters='sRGB'
+              filterUnits='userSpaceOnUse'
+            >
+              {shadowLayers.map((layer, index) => {
+                const resultPrefix = `shadow-${index}`
+                const spreadResult = `${resultPrefix}-spread`
+                const shadowSource = layer.spreadRadius === 0 ? 'SourceAlpha' : spreadResult
+
+                return (
+                  <Fragment key={`${layer.offsetX}-${layer.offsetY}-${layer.blurRadius}-${layer.spreadRadius}-${layer.color}`}>
+                    {layer.spreadRadius !== 0 ? (
+                      <feMorphology
+                        in='SourceAlpha'
+                        operator={layer.spreadRadius > 0 ? 'dilate' : 'erode'}
+                        radius={Math.abs(layer.spreadRadius)}
+                        result={spreadResult}
+                      />
+                    ) : null}
+                    <feGaussianBlur
+                      in={shadowSource}
+                      stdDeviation={layer.blurRadius / 2}
+                      result={`${resultPrefix}-blur`}
+                    />
+                    <feOffset
+                      in={`${resultPrefix}-blur`}
+                      dx={layer.offsetX}
+                      dy={layer.offsetY}
+                      result={`${resultPrefix}-offset`}
+                    />
+                    <feFlood floodColor={layer.color} result={`${resultPrefix}-color`} />
+                    <feComposite
+                      in={`${resultPrefix}-color`}
+                      in2={`${resultPrefix}-offset`}
+                      operator='in'
+                      result={`${resultPrefix}-shadow`}
+                    />
+                    <feComposite
+                      in={`${resultPrefix}-shadow`}
+                      in2='SourceAlpha'
+                      operator='out'
+                      result={`${resultPrefix}-outer`}
+                    />
+                  </Fragment>
+                )
+              })}
+
+              <feMerge>
+                {shadowLayers.map((_, index) => (
+                  <feMergeNode key={index} in={`shadow-${index}-outer`} />
+                ))}
+              </feMerge>
+            </filter>
+          </defs>
+          <path
+            className='file-tabs-boundary-shadow-source'
+            d={shadowSurfacePath}
+            filter={`url(#${shadowFilterId})`}
+          />
+        </svg>,
+        document.body,
+      )
+
+  const chromeLayers = createPortal(
+    <>
+      <span
+        ref={shadowTokenProbeRef}
+        aria-hidden='true'
+        className='file-tabs-boundary-shadow-token-probe'
+      />
+
+      {geometry.kind === 'active' ? (
+        <svg
+          {...svgProps}
+          className='file-tabs-boundary-chrome file-tabs-boundary-fill-layer'
+        >
+          <path
+            className='file-tabs-boundary-active-fill'
+            d={variant.activeFillPath ?? undefined}
+          />
+        </svg>
+      ) : null}
+
+      <svg
+        {...svgProps}
+        className='file-tabs-boundary-chrome file-tabs-boundary-outline-layer'
+      >
+        <path
+          className='file-tabs-boundary-outline'
+          d={outlinePath}
+          vectorEffect='non-scaling-stroke'
+        />
+      </svg>
+    </>,
+    chromeHost,
+  )
+
+  return (
+    <>
+      {shadowLayer}
+      {chromeLayers}
+    </>
+  )
+}
+
+function areBoundaryGeometriesEqual(
+  currentGeometry: FileTabsBoundaryGeometry | null,
+  nextGeometry: FileTabsBoundaryGeometry,
+) {
+  const hasSameFrame = currentGeometry?.kind === nextGeometry.kind
+    && Math.abs(currentGeometry.frameHeight - nextGeometry.frameHeight) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    && Math.abs(currentGeometry.frameLeft - nextGeometry.frameLeft) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    && Math.abs(currentGeometry.frameTop - nextGeometry.frameTop) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    && Math.abs(currentGeometry.frameWidth - nextGeometry.frameWidth) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    && currentGeometry.hasLeftBoundary === nextGeometry.hasLeftBoundary
+    && currentGeometry.hasRightBoundary === nextGeometry.hasRightBoundary
+    && currentGeometry.isTabActivating === nextGeometry.isTabActivating
+    && currentGeometry.isLayoutChanging === nextGeometry.isLayoutChanging
+    && Math.abs(currentGeometry.radius - nextGeometry.radius) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+
+  if (!hasSameFrame || !currentGeometry) {
+    return false
+  }
+
+  return nextGeometry.kind === 'empty'
+    ? currentGeometry.kind === 'empty'
+      && Math.abs(currentGeometry.railHeight - nextGeometry.railHeight) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    : currentGeometry.kind === 'active'
+      && currentGeometry.tabId === nextGeometry.tabId
+      && Math.abs(currentGeometry.activeHeight - nextGeometry.activeHeight) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+      && Math.abs(currentGeometry.activeLeft - nextGeometry.activeLeft) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+      && Math.abs(currentGeometry.activeTop - nextGeometry.activeTop) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+      && Math.abs(currentGeometry.activeWidth - nextGeometry.activeWidth) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+}
+
+function canAnimateActiveBoundaryTransition(
+  currentGeometry: FileTabsBoundaryGeometry | null,
+  nextGeometry: FileTabsBoundaryGeometry,
+) {
+  if (
+    currentGeometry?.kind !== 'active'
+    || nextGeometry.kind !== 'active'
+    || currentGeometry.tabId === nextGeometry.tabId
+    || currentGeometry.isLayoutChanging
+    || nextGeometry.isLayoutChanging
+  ) {
+    return false
+  }
+
+  return (
+    Math.abs(currentGeometry.frameHeight - nextGeometry.frameHeight) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    && Math.abs(currentGeometry.frameLeft - nextGeometry.frameLeft) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    && Math.abs(currentGeometry.frameTop - nextGeometry.frameTop) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    && Math.abs(currentGeometry.frameWidth - nextGeometry.frameWidth) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    && currentGeometry.hasLeftBoundary === nextGeometry.hasLeftBoundary
+    && currentGeometry.hasRightBoundary === nextGeometry.hasRightBoundary
+    && Math.abs(currentGeometry.radius - nextGeometry.radius) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+  )
+}
+
+function FileTabsBoundaryChromeController({
+  activeTabId,
+  indicatorRef,
+  scrollerRef,
+  shellRef,
+  tabContainerRefs,
+  tabCount,
+  tabGeometryKey,
+}: {
+  activeTabId: string | null
+  indicatorRef: RefObject<HTMLSpanElement | null>
+  scrollerRef: RefObject<HTMLDivElement | null>
+  shellRef: RefObject<HTMLDivElement | null>
+  tabContainerRefs: RefObject<Record<string, HTMLDivElement | null>>
+  tabCount: number
+  tabGeometryKey: string
+}) {
+  const [boundaryGeometry, setBoundaryGeometry] = useState<FileTabsBoundaryGeometry | null>(null)
+  const boundaryGeometryRef = useRef<FileTabsBoundaryGeometry | null>(null)
+  const boundaryMotionFrameRef = useRef<number | null>(null)
+  const boundaryMotionTargetRef = useRef<FileTabsBoundaryGeometry | null>(null)
+
+  const cancelBoundaryMotion = useCallback(() => {
+    if (boundaryMotionFrameRef.current !== null) {
+      window.cancelAnimationFrame(boundaryMotionFrameRef.current)
+      boundaryMotionFrameRef.current = null
+    }
+    boundaryMotionTargetRef.current = null
+  }, [])
+
+  const commitBoundaryGeometry = useCallback((nextGeometry: FileTabsBoundaryGeometry | null) => {
+    boundaryGeometryRef.current = nextGeometry
+    setBoundaryGeometry((currentGeometry) => (
+      nextGeometry && areBoundaryGeometriesEqual(currentGeometry, nextGeometry)
+        ? currentGeometry
+        : nextGeometry
+    ))
+  }, [])
+
+  const transitionBoundaryGeometry = useCallback((nextGeometry: FileTabsBoundaryGeometry) => {
+    if (
+      boundaryMotionFrameRef.current !== null
+      && boundaryMotionTargetRef.current
+      && areBoundaryGeometriesEqual(boundaryMotionTargetRef.current, nextGeometry)
+    ) {
+      return
+    }
+
+    const currentGeometry = boundaryGeometryRef.current
+    cancelBoundaryMotion()
+
+    const shellElement = shellRef.current
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const activationDuration = shellElement
+      ? parseCssTimeInMilliseconds(
+          window.getComputedStyle(shellElement).getPropertyValue('--file-tab-activation-duration'),
+        )
+      : 0
+
+    if (
+      prefersReducedMotion
+      || activationDuration <= 0
+      || !canAnimateActiveBoundaryTransition(currentGeometry, nextGeometry)
+      || currentGeometry?.kind !== 'active'
+      || nextGeometry.kind !== 'active'
+    ) {
+      commitBoundaryGeometry(nextGeometry)
+      return
+    }
+
+    const fromGeometry = currentGeometry
+    const startedAt = window.performance.now()
+    boundaryMotionTargetRef.current = nextGeometry
+    commitBoundaryGeometry({
+      ...nextGeometry,
+      activeHeight: fromGeometry.activeHeight,
+      activeLeft: fromGeometry.activeLeft,
+      activeTop: fromGeometry.activeTop,
+      activeWidth: fromGeometry.activeWidth,
+      isTabActivating: true,
+    })
+
+    const animateBoundary = (timestamp: number) => {
+      const progress = Math.min(1, (timestamp - startedAt) / activationDuration)
+      const activeGeometry = interpolateFileTabActiveGeometry(
+        fromGeometry,
+        nextGeometry,
+        progress,
+      )
+
+      commitBoundaryGeometry({
+        ...nextGeometry,
+        ...activeGeometry,
+        isTabActivating: progress < 1,
+      })
+
+      if (progress < 1) {
+        boundaryMotionFrameRef.current = window.requestAnimationFrame(animateBoundary)
+        return
+      }
+
+      boundaryMotionFrameRef.current = null
+      boundaryMotionTargetRef.current = null
+    }
+
+    boundaryMotionFrameRef.current = window.requestAnimationFrame(animateBoundary)
+  }, [cancelBoundaryMotion, commitBoundaryGeometry, shellRef])
+
+  useLayoutEffect(() => {
+    const shellElement = shellRef.current
+    const scrollerElement = scrollerRef.current
+    const activeTabElement = activeTabId ? tabContainerRefs.current[activeTabId] : null
+    const frameElement = shellElement?.closest<HTMLElement>('.editor-frame') ?? null
+    const appShellElement = shellElement?.closest<HTMLElement>('.app-shell') ?? null
+    const isEmpty = tabCount === 0
+
+    if (
+      !shellElement
+      || !frameElement
+      || !scrollerElement
+      || (!isEmpty && (!activeTabId || !activeTabElement))
+    ) {
+      cancelBoundaryMotion()
+      commitBoundaryGeometry(null)
+      return
+    }
+
+    const isLayoutChanging = () => Boolean(
+      appShellElement?.hasAttribute('data-sidebar-transition')
+      || appShellElement?.dataset.resizing === 'true',
+    )
+    const syncBoundaryGeometry = () => {
+      const frameRect = frameElement.getBoundingClientRect()
+      const computedStyle = window.getComputedStyle(shellElement)
+      const radius = Number.parseFloat(computedStyle.getPropertyValue('--file-tab-radius')) || 0
+      const panelElement = frameElement.parentElement
+      const appLayout = appShellElement?.dataset.appLayout
+      const isEditorPanel = panelElement?.classList.contains('panel-editor') ?? false
+      const isAgentPanel = panelElement?.classList.contains('panel-agent') ?? false
+      const hasLeftBoundary = (
+        (appLayout === 'agent' && isAgentPanel)
+        || (
+          appLayout === 'editor'
+          && isEditorPanel
+          && appShellElement?.dataset.leftCollapsed === 'false'
+        )
+      )
+      const hasRightBoundary = (
+        appLayout === 'editor'
+        && isEditorPanel
+        && appShellElement?.dataset.rightCollapsed === 'false'
+      )
+      const frameIsChanging = isLayoutChanging()
+      let nextGeometry: FileTabsBoundaryGeometry
+
+      if (isEmpty) {
+        const shellRect = shellElement.getBoundingClientRect()
+        nextGeometry = {
+          frameHeight: frameRect.height,
+          frameLeft: frameRect.left,
+          frameTop: frameRect.top,
+          frameWidth: frameRect.width,
+          hasLeftBoundary,
+          hasRightBoundary,
+          isTabActivating: false,
+          isLayoutChanging: frameIsChanging,
+          kind: 'empty',
+          radius,
+          railHeight: shellRect.bottom - frameRect.top,
+        }
+      } else {
+        if (!activeTabId || !activeTabElement) {
+          cancelBoundaryMotion()
+          commitBoundaryGeometry(null)
+          return
+        }
+
+        const activeRect = activeTabElement.getBoundingClientRect()
+        const indicatorGeometry = readBaseTabsIndicatorGeometry(
+          indicatorRef.current,
+          frameRect,
+        )
+        nextGeometry = {
+          activeHeight: indicatorGeometry?.activeHeight ?? activeRect.height,
+          activeLeft: indicatorGeometry?.activeLeft ?? activeRect.left - frameRect.left,
+          activeTop: indicatorGeometry?.activeTop ?? activeRect.top - frameRect.top,
+          activeWidth: indicatorGeometry?.activeWidth ?? activeRect.width,
+          frameHeight: frameRect.height,
+          frameLeft: frameRect.left,
+          frameTop: frameRect.top,
+          frameWidth: frameRect.width,
+          hasLeftBoundary,
+          hasRightBoundary,
+          isTabActivating: false,
+          isLayoutChanging: frameIsChanging,
+          kind: 'active',
+          radius,
+          tabId: activeTabId,
+        }
+      }
+
+      transitionBoundaryGeometry(nextGeometry)
+    }
+
+    let syncFrameId: number | null = null
+    const scheduleBoundaryGeometrySync = () => {
+      if (syncFrameId !== null) {
+        return
+      }
+
+      syncFrameId = window.requestAnimationFrame(() => {
+        syncFrameId = null
+        syncBoundaryGeometry()
+      })
+    }
+
+    syncBoundaryGeometry()
+
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(scheduleBoundaryGeometrySync)
+
+    for (const tabElement of Object.values(tabContainerRefs.current)) {
+      if (tabElement) {
+        resizeObserver?.observe(tabElement)
+      }
+    }
+
+    resizeObserver?.observe(shellElement)
+    resizeObserver?.observe(frameElement)
+
+    const mutationObserver = appShellElement && typeof MutationObserver !== 'undefined'
+      ? new MutationObserver((records) => {
+          const layoutActivityChanged = records.some(({ attributeName }) => (
+            attributeName === 'data-resizing'
+            || attributeName === 'data-sidebar-transition'
+          ))
+
+          if (layoutActivityChanged && isLayoutChanging()) {
+            const currentGeometry = boundaryGeometryRef.current
+            if (currentGeometry && !currentGeometry.isLayoutChanging) {
+              cancelBoundaryMotion()
+              commitBoundaryGeometry({
+                ...currentGeometry,
+                isTabActivating: false,
+                isLayoutChanging: true,
+              })
+            }
+            return
+          }
+
+          scheduleBoundaryGeometrySync()
+        })
+      : null
+    if (mutationObserver && appShellElement) {
+      mutationObserver.observe(appShellElement, {
+        attributeFilter: [
+          'data-app-layout',
+          'data-layout',
+          'data-left-collapsed',
+          'data-resizing',
+          'data-right-collapsed',
+          'data-sidebar-transition',
+        ],
+        attributes: true,
+      })
+    }
+
+    scrollerElement.addEventListener('scroll', scheduleBoundaryGeometrySync, { passive: true })
+    window.addEventListener('resize', scheduleBoundaryGeometrySync)
+
+    return () => {
+      resizeObserver?.disconnect()
+      mutationObserver?.disconnect()
+      scrollerElement.removeEventListener('scroll', scheduleBoundaryGeometrySync)
+      window.removeEventListener('resize', scheduleBoundaryGeometrySync)
+      if (syncFrameId !== null) {
+        window.cancelAnimationFrame(syncFrameId)
+      }
+      cancelBoundaryMotion()
+    }
+  }, [
+    activeTabId,
+    cancelBoundaryMotion,
+    commitBoundaryGeometry,
+    indicatorRef,
+    scrollerRef,
+    shellRef,
+    tabContainerRefs,
+    tabCount,
+    tabGeometryKey,
+    transitionBoundaryGeometry,
+  ])
+
+  const chromeHost = shellRef.current
+  if (!chromeHost || !boundaryGeometry || (
+    (boundaryGeometry.kind === 'empty' && tabCount !== 0)
+    || (boundaryGeometry.kind === 'active' && boundaryGeometry.tabId !== activeTabId)
+  )) {
+    return null
+  }
+
+  return <FileTabsBoundaryChrome chromeHost={chromeHost} geometry={boundaryGeometry} />
 }
 
 export function FileTabs({
@@ -142,14 +770,14 @@ export function FileTabs({
 }: FileTabsProps) {
   const shellRef = useRef<HTMLDivElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const indicatorRef = useRef<HTMLSpanElement | null>(null)
+  const tabRefs = useRef<Record<string, HTMLElement | null>>({})
   const tabContainerRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
   const labelTooltipTimerRef = useRef<number | null>(null)
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null)
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null)
   const [labelTooltip, setLabelTooltip] = useState<FileTabLabelTooltip | null>(null)
-  const [scrollEdgeState, setScrollEdgeState] = useState<FileTabsScrollEdgeState>(EMPTY_FILE_TAB_SCROLL_EDGE_STATE)
   const reorderableTabs = useMemo(
     () => tabs.filter(isReorderableTab),
     [tabs],
@@ -163,6 +791,8 @@ export function FileTabs({
     && onOpenDiff
     && getHasDiff?.(activeFileTab.filePath),
   )
+  const isFirstTabActive = tabs[0]?.id === activeTabId
+  const tabGeometryKey = useMemo(() => tabs.map((tab) => tab.id).join('\u0000'), [tabs])
   const hasFileTabActions = canOpenActiveDiff || Boolean(actions)
   const duplicateNameSet = useMemo(() => {
     const counts = new Map<string, number>()
@@ -179,20 +809,6 @@ export function FileTabs({
     )
   }, [tabs])
 
-  const syncScrollEdgeState = useCallback(() => {
-    const scrollerElement = scrollerRef.current
-    const nextState = scrollerElement
-      ? getFileTabsScrollEdgeState(scrollerElement)
-      : EMPTY_FILE_TAB_SCROLL_EDGE_STATE
-
-    setScrollEdgeState((currentState) => (
-      currentState.canScrollLeft === nextState.canScrollLeft
-      && currentState.hasScrollOverflow === nextState.hasScrollOverflow
-        ? currentState
-        : nextState
-    ))
-  }, [])
-
   useLayoutEffect(() => {
     if (!activeTabId) {
       return
@@ -202,7 +818,6 @@ export function FileTabs({
     const scrollerElement = scrollerRef.current
 
     if (!activeTabElement || !scrollerElement) {
-      syncScrollEdgeState()
       return
     }
 
@@ -214,22 +829,7 @@ export function FileTabs({
       })
     }
 
-    syncScrollEdgeState()
-  }, [activeTabId, syncScrollEdgeState])
-
-  useEffect(() => {
-    const scrollerElement = scrollerRef.current
-    if (!scrollerElement || typeof ResizeObserver === 'undefined') {
-      return
-    }
-
-    const resizeObserver = new ResizeObserver(syncScrollEdgeState)
-    resizeObserver.observe(scrollerElement)
-
-    return () => {
-      resizeObserver.disconnect()
-    }
-  }, [syncScrollEdgeState])
+  }, [activeTabId])
 
   useLayoutEffect(() => {
     const currentTabIds = new Set(tabs.map((tab) => tab.id))
@@ -246,8 +846,7 @@ export function FileTabs({
       }
     }
 
-    syncScrollEdgeState()
-  }, [syncScrollEdgeState, tabs])
+  }, [tabs])
 
   useEffect(() => {
     if (draggingTabId && !reorderableTabs.some((tab) => tab.id === draggingTabId)) {
@@ -272,17 +871,6 @@ export function FileTabs({
       setLabelTooltip(null)
     }
   }, [labelTooltip, tabs])
-
-  function focusTabAtIndex(index: number) {
-    const nextTab = tabs[index]
-
-    if (!nextTab) {
-      return
-    }
-
-    onActivate(nextTab.id)
-    tabRefs.current[nextTab.id]?.focus()
-  }
 
   function wouldMoveChangeOrder(targetId: string, position: TabDropPosition) {
     if (!draggingTabId) {
@@ -368,13 +956,11 @@ export function FileTabs({
 
     if (clientX <= rect.left + edgeThreshold) {
       scroller.scrollLeft -= scrollStep
-      requestAnimationFrame(syncScrollEdgeState)
       return
     }
 
     if (clientX >= rect.right - edgeThreshold) {
       scroller.scrollLeft += scrollStep
-      requestAnimationFrame(syncScrollEdgeState)
     }
   }
 
@@ -437,25 +1023,30 @@ export function FileTabs({
   const dropIndicatorOffset = getDropIndicatorOffset(dragTarget)
 
   return (
-    <div
-      ref={shellRef}
-      className='file-tabs-shell'
-      data-empty={tabs.length === 0}
-      data-dragging={draggingTabId ? 'true' : 'false'}
-      data-has-actions={hasFileTabActions ? 'true' : 'false'}
-    >
-      <div
-        className='file-tabs-scroll-frame'
-        data-can-scroll-left={scrollEdgeState.canScrollLeft ? 'true' : 'false'}
-        data-has-scroll-overflow={scrollEdgeState.hasScrollOverflow ? 'true' : 'false'}
+    <>
+      <Tabs.Root
+        ref={shellRef}
+        className='file-tabs-shell'
+        data-empty={tabs.length === 0}
+        data-dragging={draggingTabId ? 'true' : 'false'}
+        data-first-tab-active={isFirstTabActive ? 'true' : 'false'}
+        data-has-actions={hasFileTabActions ? 'true' : 'false'}
+        orientation='horizontal'
+        value={activeTabId}
+        onValueChange={(value) => {
+          if (typeof value === 'string' && tabs.some((tab) => tab.id === value)) {
+            onActivate(value)
+          }
+        }}
       >
-        <div
+      <ScrollArea.Root
+        className='file-tabs-scroll-frame'
+        overflowEdgeThreshold={1}
+      >
+        <ScrollArea.Viewport
           ref={scrollerRef}
           className='file-tabs-scroller'
           data-dragging={draggingTabId ? 'true' : 'false'}
-          role='tablist'
-          aria-label='Open files'
-          onScroll={syncScrollEdgeState}
           onDragOver={(event) => {
             if (!draggingTabId) {
               return
@@ -530,151 +1121,136 @@ export function FileTabs({
             }
 
             scrollerRef.current.scrollLeft += event.deltaY
-            requestAnimationFrame(syncScrollEdgeState)
             event.preventDefault()
           }}
         >
-        {tabs.length > 0 && tabs.map((tab, index) => {
-          const baseName = getTabLabel(tab)
-          const fileIconName = getFileIconName(tab)
-          const metaLabel = getTabMetaLabel(workspacePath, tab, duplicateNameSet.has(baseName))
-          const isActive = activeTabId === tab.id
-          const isPinned = tab.kind === 'fixed-panel'
-
-          return (
-            <div
-              key={tab.id}
-              ref={(element) => {
-                tabContainerRefs.current[tab.id] = element
-              }}
-              className={`file-tab${isActive ? ' is-active' : ''}${tab.isDirty ? ' is-dirty' : ''}${tab.exists ? '' : ' is-missing'}${draggingTabId === tab.id ? ' is-drag-source' : ''}${isPinned ? ' is-pinned' : ''}`}
-              data-active={isActive ? 'true' : 'false'}
-              data-reorderable={isReorderableTab(tab) ? 'true' : 'false'}
-              data-tab-id={tab.id}
+          <ScrollArea.Content className='file-tabs-scroll-content'>
+            <Tabs.List
+              activateOnFocus
+              aria-label='Open files'
+              className='file-tabs-list'
+              loopFocus
             >
-              <AppTooltip
-                isOpen={labelTooltip?.tabId === tab.id}
-                tooltip={labelTooltip?.tabId === tab.id ? labelTooltip.text : baseName}
-                triggerMode='focusable'
-              >
-                <button
-                  ref={(element) => {
-                    tabRefs.current[tab.id] = element
-                  }}
-                  type='button'
-                  draggable={isReorderableTab(tab)}
-                  role='tab'
-                  aria-selected={isActive}
-                  aria-controls='editor-content-panel'
-                  aria-grabbed={draggingTabId === tab.id}
-                  className='file-tab-trigger'
-                  onClick={() => {
-                    onActivate(tab.id)
-                  }}
-                  onPointerEnter={(event) => {
-                    scheduleLabelTooltip(tab.id, event.currentTarget)
-                  }}
-                  onPointerLeave={closeLabelTooltip}
-                  onFocus={(event) => {
-                    scheduleLabelTooltip(tab.id, event.currentTarget)
-                  }}
-                  onBlur={closeLabelTooltip}
-                  onDragStart={(event) => {
-                    if (!isReorderableTab(tab)) {
-                      event.preventDefault()
-                      return
-                    }
+              {tabs.length > 0 && tabs.map((tab) => {
+                const baseName = getTabLabel(tab)
+                const fileIconName = getFileIconName(tab)
+                const metaLabel = getTabMetaLabel(workspacePath, tab, duplicateNameSet.has(baseName))
+                const isActive = activeTabId === tab.id
+                const isPinned = tab.kind === 'fixed-panel'
 
-                    closeLabelTooltip()
-                    setDraggingTabId(tab.id)
-                    setDragTarget(null)
-                    event.dataTransfer.effectAllowed = 'move'
-                    event.dataTransfer.setData('text/plain', tab.id)
-                    const preview = createDragPreview(tab.id)
-                    if (preview) {
-                      event.dataTransfer.setDragImage(preview, 24, Math.max(12, preview.clientHeight / 2))
-                    }
-                  }}
-                  onDragEnd={() => {
-                    setDraggingTabId(null)
-                    setDragTarget(null)
-                    cleanupDragPreview()
-                  }}
-                  onAuxClick={(event) => {
-                    if (isPinned) {
-                      return
-                    }
-
-                    if (event.button !== 1) {
-                      return
-                    }
-
-                    event.preventDefault()
-                    onClose(tab.id)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowRight') {
-                      event.preventDefault()
-                      focusTabAtIndex((index + 1) % tabs.length)
-                      return
-                    }
-
-                    if (event.key === 'ArrowLeft') {
-                      event.preventDefault()
-                      focusTabAtIndex((index - 1 + tabs.length) % tabs.length)
-                      return
-                    }
-
-                    if (event.key === 'Home') {
-                      event.preventDefault()
-                      focusTabAtIndex(0)
-                      return
-                    }
-
-                    if (event.key === 'End') {
-                      event.preventDefault()
-                      focusTabAtIndex(tabs.length - 1)
-                    }
-                  }}
-                >
-                  {tab.kind === 'fixed-panel' ? (
-                    tab.fixedTabKind === 'file-panel'
-                      ? <FolderLine className='file-tab-leading-icon' />
-                      : <GitBranchLine className='file-tab-leading-icon' />
-                  ) : fileIconName ? (
-                    <WorkspaceFileIcon fileName={fileIconName} iconTheme={iconTheme} />
-                  ) : null}
-                  <span className='file-tab-label'>{baseName}</span>
-                  {metaLabel ? <span className='file-tab-meta'>{metaLabel}</span> : null}
-                </button>
-              </AppTooltip>
-
-              {!isPinned ? (
-                <div className='file-tab-actions'>
-                  <AppIconButton
-                    type='button'
-                    className='file-tab-close'
-                    aria-label={`Close ${baseName}`}
-                    size='sm'
-                    tooltip='关闭'
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onClose(tab.id)
+                return (
+                  <div
+                    key={tab.id}
+                    ref={(element) => {
+                      tabContainerRefs.current[tab.id] = element
                     }}
+                    className={`file-tab${isActive ? ' is-active' : ''}${tab.isDirty ? ' is-dirty' : ''}${tab.exists ? '' : ' is-missing'}${draggingTabId === tab.id ? ' is-drag-source' : ''}${isPinned ? ' is-pinned' : ''}`}
+                    data-active={isActive ? 'true' : 'false'}
+                    data-reorderable={isReorderableTab(tab) ? 'true' : 'false'}
+                    data-tab-id={tab.id}
                   >
-                    <span className='file-tab-dirty-indicator' aria-hidden='true' />
-                    <CloseLine />
-                  </AppIconButton>
-                </div>
-              ) : null}
-            </div>
-          )
-        })}
+                    <AppTooltip
+                      isOpen={labelTooltip?.tabId === tab.id}
+                      tooltip={labelTooltip?.tabId === tab.id ? labelTooltip.text : baseName}
+                      triggerMode='focusable'
+                    >
+                      <Tabs.Tab
+                        ref={(element) => {
+                          tabRefs.current[tab.id] = element
+                        }}
+                        type='button'
+                        value={tab.id}
+                        draggable={isReorderableTab(tab)}
+                        aria-controls='editor-content-panel'
+                        aria-grabbed={draggingTabId === tab.id}
+                        className='file-tab-trigger'
+                        onPointerEnter={(event) => {
+                          scheduleLabelTooltip(tab.id, event.currentTarget)
+                        }}
+                        onPointerLeave={closeLabelTooltip}
+                        onFocus={(event) => {
+                          scheduleLabelTooltip(tab.id, event.currentTarget)
+                        }}
+                        onBlur={closeLabelTooltip}
+                        onDragStart={(event) => {
+                          if (!isReorderableTab(tab)) {
+                            event.preventDefault()
+                            return
+                          }
 
-        </div>
+                          closeLabelTooltip()
+                          setDraggingTabId(tab.id)
+                          setDragTarget(null)
+                          event.dataTransfer.effectAllowed = 'move'
+                          event.dataTransfer.setData('text/plain', tab.id)
+                          const preview = createDragPreview(tab.id)
+                          if (preview) {
+                            event.dataTransfer.setDragImage(preview, 24, Math.max(12, preview.clientHeight / 2))
+                          }
+                        }}
+                        onDragEnd={() => {
+                          setDraggingTabId(null)
+                          setDragTarget(null)
+                          cleanupDragPreview()
+                        }}
+                        onAuxClick={(event) => {
+                          if (isPinned) {
+                            return
+                          }
+
+                          if (event.button !== 1) {
+                            return
+                          }
+
+                          event.preventDefault()
+                          onClose(tab.id)
+                        }}
+                      >
+                        {tab.kind === 'fixed-panel' ? (
+                          tab.fixedTabKind === 'file-panel'
+                            ? <FolderLine aria-hidden='true' className='file-tab-leading-icon' />
+                            : <GitBranchLine aria-hidden='true' className='file-tab-leading-icon' />
+                        ) : fileIconName ? (
+                          <WorkspaceFileIcon fileName={fileIconName} iconTheme={iconTheme} />
+                        ) : null}
+                        <span className='file-tab-label'>{baseName}</span>
+                        {metaLabel ? <span className='file-tab-meta'>{metaLabel}</span> : null}
+                      </Tabs.Tab>
+                    </AppTooltip>
+
+                    {!isPinned ? (
+                      <div className='file-tab-actions'>
+                        <AppIconButton
+                          type='button'
+                          className='file-tab-close'
+                          aria-label={`Close ${baseName}`}
+                          size='sm'
+                          tooltip='关闭'
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onClose(tab.id)
+                          }}
+                        >
+                          <span className='file-tab-dirty-indicator' aria-hidden='true' />
+                          <CloseLine aria-hidden='true' />
+                        </AppIconButton>
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
+
+              <Tabs.Indicator
+                ref={indicatorRef}
+                aria-hidden='true'
+                className='file-tabs-geometry-indicator'
+              />
+            </Tabs.List>
+          </ScrollArea.Content>
+        </ScrollArea.Viewport>
         <div className='file-tabs-scroll-edge file-tabs-scroll-edge-left' aria-hidden='true' />
         <div className='file-tabs-scroll-edge file-tabs-scroll-edge-right' aria-hidden='true' />
-      </div>
+      </ScrollArea.Root>
 
       <div
         className='file-tabs-drag-spacer'
@@ -741,12 +1317,23 @@ export function FileTabs({
                 onOpenDiff?.(activeFileTab.filePath)
               }}
             >
-              <GitCompareLine />
+              <GitCompareLine aria-hidden='true' />
             </AppIconButton>
           ) : null}
           {actions}
         </div>
       ) : null}
-    </div>
+      </Tabs.Root>
+
+      <FileTabsBoundaryChromeController
+        activeTabId={activeTabId}
+        indicatorRef={indicatorRef}
+        scrollerRef={scrollerRef}
+        shellRef={shellRef}
+        tabContainerRefs={tabContainerRefs}
+        tabCount={tabs.length}
+        tabGeometryKey={tabGeometryKey}
+      />
+    </>
   )
 }

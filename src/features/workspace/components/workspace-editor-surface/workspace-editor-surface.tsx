@@ -36,7 +36,12 @@ export function WorkspaceEditorSurface({ children, tabs }: WorkspaceEditorSurfac
   return (
     <div className='editor-frame'>
       {tabs}
-      <div className='editor-content-shell' id='editor-content-panel'>
+      <div
+        aria-label='Editor content'
+        className='editor-content-shell'
+        id='editor-content-panel'
+        role='tabpanel'
+      >
         {children}
       </div>
     </div>

@@ -319,33 +319,28 @@ describe('shell layout helpers', () => {
   display: none;
 }`)
     expect(fileTabsCss).not.toContain(".app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroll-edge-right")
-    expect(fileTabsCss).toContain(`.file-tabs-scroll-frame[data-can-scroll-left='true'] .file-tabs-scroll-edge-left,
-.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroll-edge-right {
+    expect(fileTabsCss).toContain(`.file-tabs-scroll-frame[data-overflow-x-start] .file-tabs-scroll-edge-left,
+.file-tabs-scroll-frame[data-overflow-x-end] .file-tabs-scroll-edge-right {
   opacity: 1;
 }`)
-    expect(fileTabsCss).toContain(`.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tabs-scroller {
+    expect(fileTabsCss).toContain(`.file-tabs-scroll-frame[data-has-overflow-x] .file-tabs-scroller {
   clip-path: inset(0 1px 0 0);
-}`)
-    expect(fileTabsCss).toContain(`.file-tabs-scroll-frame[data-has-scroll-overflow='true'] .file-tab:last-child {
-  border-right-color: transparent;
 }`)
     expect(fileTabsCss).toContain(`.file-tabs-shell {
   --file-tabs-right-panel-inset: var(--right-panel-control-inset);`)
+    expect(fileTabsCss).toContain(`.app-shell[data-app-layout='editor']
+  .panel-editor
+  > .editor-frame
+  > .file-tabs-shell {
+  --file-tabs-rail-surface: var(--sidebar);
+}`)
     expect(fileTabsCss).toContain(`.file-tabs-shell[data-has-actions='false'] {
   --file-tabs-right-panel-inset: var(--right-panel-content-inset);
 }`)
     expect(fileTabsCss).toContain(`.app-shell[data-right-collapsed='true'] .file-tabs-shell {
   padding-right: var(--file-tabs-right-panel-inset);
 }`)
-    expect(fileTabsCss).toContain(`.app-shell[data-right-collapsed='true'] .file-tabs-shell::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: var(--file-tabs-right-panel-inset);
-  border-bottom: 1px solid var(--separator);
-  z-index: 1;
-}`)
+    expect(fileTabsCss).not.toContain(".app-shell[data-right-collapsed='true'] .file-tabs-shell::after")
     expect(fileTabsCss).not.toContain(".app-shell[data-right-collapsed='true'] .file-tabs-shell[data-has-actions='false']")
     expect(fileTabsCss).not.toContain('.file-tabs-scroll-edge::before')
     expect(fileTabsCss).not.toContain('.file-tabs-scroll-edge::after')
@@ -357,17 +352,17 @@ describe('shell layout helpers', () => {
     expect(titlebarCss).toContain('width: var(--window-control-button-width);')
   })
 
-  it('keeps file tab edge separators independent from scroll-end state', async () => {
+  it('delegates file tab overflow edges to Base UI Scroll Area state', async () => {
     const fileTabsSource = await readFileTabsSource()
 
-    expect(fileTabsSource).toContain('const hasScrollOverflow = maxScrollLeft > FILE_TAB_SCROLL_EDGE_EPSILON')
-    expect(fileTabsSource).toContain('hasScrollOverflow,')
+    expect(fileTabsSource).toContain("import { ScrollArea } from '@base-ui/react/scroll-area'")
+    expect(fileTabsSource).toContain('<ScrollArea.Root')
+    expect(fileTabsSource).toContain('overflowEdgeThreshold={1}')
+    expect(fileTabsSource).toContain('<ScrollArea.Viewport')
+    expect(fileTabsSource).toContain("<ScrollArea.Content className='file-tabs-scroll-content'>")
     expect(fileTabsSource).toContain("data-has-actions={hasFileTabActions ? 'true' : 'false'}")
-    expect(fileTabsSource).toContain("data-has-scroll-overflow={scrollEdgeState.hasScrollOverflow ? 'true' : 'false'}")
-    expect(fileTabsSource).not.toContain('canScrollRight')
-    expect(fileTabsSource).not.toContain('rightEdgeTabId')
-    expect(fileTabsSource).not.toContain('data-scroll-edge-right')
-    expect(fileTabsSource).not.toContain('const settleTimeoutId = window.setTimeout')
+    expect(fileTabsSource).not.toContain('scrollEdgeResizeObserver')
+    expect(fileTabsSource).not.toContain('scrollEdgeState')
   })
 
   it('keeps file tab actions visible for keyboard focus', async () => {
@@ -428,16 +423,175 @@ describe('shell layout helpers', () => {
 }`)
   })
 
-  it('keeps file tab drag events on the native tab trigger', async () => {
+  it('uses Base UI tabs while keeping drag events on the native tab trigger', async () => {
     const fileTabsSource = await readFileTabsSource()
     const tabTooltipBlock = fileTabsSource.match(/<AppTooltip\s+isOpen=\{labelTooltip\?\.tabId === tab\.id\}[\s\S]*?<\/AppTooltip>/)?.[0]
 
+    expect(fileTabsSource).toContain("import { Tabs } from '@base-ui/react/tabs'")
+    expect(fileTabsSource).toContain('<Tabs.Root')
+    expect(fileTabsSource).toContain('<Tabs.List')
+    expect(fileTabsSource).toContain('<Tabs.Indicator')
+    expect(fileTabsSource).toContain("className='file-tabs-geometry-indicator'")
+    expect(fileTabsSource).toContain('activateOnFocus')
     expect(tabTooltipBlock).toBeDefined()
     expect(tabTooltipBlock).toContain("triggerMode='focusable'")
-    expect(tabTooltipBlock).toContain('<button')
+    expect(tabTooltipBlock).toContain('<Tabs.Tab')
+    expect(tabTooltipBlock).toContain('value={tab.id}')
     expect(tabTooltipBlock).toContain('draggable={isReorderableTab(tab)}')
     expect(tabTooltipBlock).toContain('onDragStart={(event) => {')
     expect(tabTooltipBlock).not.toContain('<AppTooltipButton')
+    expect(fileTabsSource).not.toContain("event.key === 'ArrowRight'")
+  })
+
+  it('keeps the panel boundary and resize guide continuous with the active tab chrome', async () => {
+    const [appShellCss, editorSurfaceCss, fileTabsCss, globalCss] = await Promise.all([
+      readAppShellCss(),
+      readWorkspaceEditorSurfaceCss(),
+      readFileTabsCss(),
+      readGlobalCss(),
+    ])
+
+    expect(globalCss).toContain('--file-tabs-top-gap: 6px;')
+    expect(globalCss).toContain('--file-tab-radius: 8px;')
+    expect(appShellCss).toContain('--tabs-chrome-height: var(--chrome-height);')
+    expect(appShellCss).not.toContain('--tabs-chrome-height: calc(var(--chrome-height) - 1px);')
+    expect(fileTabsCss).toContain('--file-tabs-rail-surface: var(--background-primary);')
+    expect(fileTabsCss).toContain('--file-tab-activation-duration: 180ms;')
+    expect(fileTabsCss).not.toContain(
+      '--file-tabs-rail-surface: color-mix(in oklch, var(--background-secondary) 42%, var(--background-primary));',
+    )
+    expect(fileTabsCss).toContain('--file-tab-shoulder-size: var(--file-tab-radius);')
+    expect(fileTabsCss).toContain('--file-tab-content-bottom-inset: var(--file-tabs-top-gap);')
+    expect(fileTabsCss).not.toContain('var(--chrome-height) - var(--tabs-chrome-height)')
+    expect(fileTabsCss).toContain('padding: var(--file-tabs-top-gap) var(--file-tab-shoulder-size) 0 0;')
+    expect(fileTabsCss).toContain('padding: 0 24px var(--file-tab-content-bottom-inset) 8px;')
+    expect(fileTabsCss).toContain('padding: 0 0 var(--file-tab-content-bottom-inset) 12px;')
+    expect(fileTabsCss).toContain('border-radius: var(--file-tab-radius) var(--file-tab-radius) 0 0;')
+    expect(fileTabsCss).not.toContain('box-shadow: inset 0 -1px 0 var(--separator);')
+    expect(fileTabsCss).toContain(`.file-tab.is-active {
+  --file-tab-actions-surface: var(--background-primary);`)
+    expect(fileTabsCss).not.toContain('.file-tab:hover:not(.is-active)')
+    expect(fileTabsCss).not.toContain('--file-tab-surface')
+    expect(fileTabsCss).not.toContain('border-left-width: 0;')
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='agent'] .panel-agent {
+  background: var(--background-primary);
+  border-left: 0;
+}`)
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='editor'][data-left-collapsed='false'] .panel-sidebar {
+  border-right: 0;
+}`)
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .panel-agent {
+  border-left: 0;
+}`)
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='agent'] .panel-resize-slot-right .panel-resize-handle::before,
+.app-shell[data-app-layout='editor'] .panel-resize-slot-left .panel-resize-handle::before,
+.app-shell[data-app-layout='editor'] .panel-resize-slot-right .panel-resize-handle::before {
+  top: calc(var(--tabs-chrome-height) + var(--file-tab-radius) - 1px);
+  left: 50%;
+  border-radius: 0;
+}`)
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='agent'] .panel-resize-slot-right .panel-resize-handle::before,
+.app-shell[data-app-layout='editor'] .panel-resize-slot-left .panel-resize-handle::before {
+  transform: none;
+}`)
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='editor'] .panel-resize-slot-right .panel-resize-handle::before {
+  transform: translateX(-100%);
+}`)
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='agent']:has(.panel-agent > .editor-frame > .file-tabs-shell[data-first-tab-active='true'])
+  .panel-resize-slot-right .panel-resize-handle::before,
+.app-shell[data-app-layout='editor']:has(.panel-editor > .editor-frame > .file-tabs-shell[data-first-tab-active='true'])
+  .panel-resize-slot-left .panel-resize-handle::before {
+  top: calc(var(--file-tabs-top-gap) + var(--file-tab-radius));
+}`)
+    expect(appShellCss).toContain('--panel-resize-guide-opacity: 0;')
+    expect(appShellCss).toContain(`.panel-resize-handle:is(:hover, :focus-visible, .is-active) {
+  --panel-resize-guide-opacity: 1;
+}`)
+    expect(appShellCss).not.toContain('.panel-resize-handle::after')
+    expect(editorSurfaceCss).not.toContain(".editor-frame:has(> .file-tabs-shell[data-empty='true'])::after")
+    expect(editorSurfaceCss).not.toContain('margin-top: -1px;')
+    expect(editorSurfaceCss).toContain('padding-left: 1px;')
+    expect(editorSurfaceCss).toContain('padding-right: 1px;')
+    const editorFrameRule = editorSurfaceCss.match(/\.editor-frame\s*\{[^}]*\}/)?.[0]
+    const editorContentShellRule = editorSurfaceCss.match(/\.editor-content-shell\s*\{[^}]*\}/)?.[0]
+    expect(editorFrameRule).toBeDefined()
+    expect(editorFrameRule).not.toContain('border')
+    expect(editorContentShellRule).toBeDefined()
+    expect(editorContentShellRule).not.toContain('border')
+    expect(fileTabsCss).toContain('.file-tabs-boundary-chrome {')
+    expect(fileTabsCss).toContain('.file-tabs-geometry-indicator {')
+    expect(fileTabsCss).toContain(`.file-tabs-boundary-fill-layer {
+  z-index: 1;
+}`)
+    expect(fileTabsCss).toContain(`.file-tabs-boundary-outline-layer {
+  z-index: 3;
+}`)
+    expect(fileTabsCss).toContain('.file-tabs-boundary-shadow-layer {')
+    expect(fileTabsCss).toContain('box-shadow: var(--shadow-xs);')
+    expect(fileTabsCss).not.toContain('--editor-frame-shadow-')
+    expect(fileTabsCss).toContain('.file-tabs-boundary-active-fill {')
+    expect(fileTabsCss).toContain('.file-tabs-boundary-outline {')
+    expect(fileTabsCss).not.toContain('.file-tabs-boundary-variant-with-left')
+    expect(fileTabsCss).not.toContain('.file-tabs-boundary-right-variant-with')
+    expect(fileTabsCss).not.toContain('.file-tab.is-active::before')
+    expect(fileTabsCss).not.toContain('.file-tab.is-active::after')
+    expect(fileTabsCss).not.toContain('radial-gradient')
+    expect(fileTabsCss).not.toContain('box-shadow: 0 1px 0 var(--file-tab-actions-surface);')
+    expect(fileTabsCss).toContain('.file-tab-trigger::before {')
+    expect(fileTabsCss).toContain('.file-tab:hover + .file-tab .file-tab-trigger::before {')
+    expect(fileTabsCss).not.toContain('.file-tab:hover + .file-tab::before')
+    expect(fileTabsCss).toContain('.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-actions {')
+    expect(fileTabsCss).toContain('.file-tab.is-dirty:focus-within .file-tab-dirty-indicator,')
+    expect(fileTabsCss).toMatch(
+      /\.file-tab-actions\s*\{[^}]*transparent calc\(100% - 1px\)/s,
+    )
+    expect(fileTabsCss).not.toContain('.file-tabs-leading-corner')
+    expect(fileTabsCss).not.toContain('.panel-resize-handle')
+    expect(fileTabsCss).not.toContain(".app-shell[data-left-collapsed='true'] .file-tabs-scroller")
+
+    const fileTabsSource = await readFileTabsSource()
+    expect(fileTabsSource).toContain("from './file-tabs-boundary-path'")
+    expect(fileTabsSource).toContain('<FileTabsBoundaryChrome')
+    expect(fileTabsSource).toContain("kind: 'empty'")
+    expect(fileTabsSource).toContain("kind: 'active'")
+    expect(fileTabsSource).toContain("className='file-tabs-boundary-chrome file-tabs-boundary-fill-layer'")
+    expect(fileTabsSource).toContain("className='file-tabs-boundary-chrome file-tabs-boundary-outline-layer'")
+    expect(fileTabsSource).toContain("className='file-tabs-boundary-shadow-layer'")
+    expect(fileTabsSource).toContain('parseComputedBoxShadow(window.getComputedStyle(shadowTokenProbe).boxShadow)')
+    expect(fileTabsSource).toContain("attributeFilter: ['class', 'data-theme']")
+    expect(fileTabsSource).toContain('createPortal(')
+    expect(fileTabsSource).toContain('shadowVariant.surfacePathWithRightBoundary')
+    expect(fileTabsSource).toContain("operator='out'")
+    expect(fileTabsSource).toContain('function FileTabsBoundaryChromeController({')
+    expect(fileTabsSource).toContain('geometry.isLayoutChanging ||')
+    expect(fileTabsSource).toContain("appShellElement?.hasAttribute('data-sidebar-transition')")
+    expect(fileTabsSource).toContain("appShellElement?.dataset.resizing === 'true'")
+    expect(fileTabsSource).toContain("attributeName === 'data-sidebar-transition'")
+    expect(fileTabsSource).toContain("attributeName === 'data-resizing'")
+    expect(fileTabsSource).toContain('<FileTabsBoundaryChromeController')
+    expect(fileTabsSource).toContain('chromeHost={chromeHost}')
+    expect(fileTabsSource.lastIndexOf('<FileTabsBoundaryChromeController')).toBeGreaterThan(
+      fileTabsSource.lastIndexOf('</Tabs.Root>'),
+    )
+    expect(fileTabsSource.indexOf('const [boundaryGeometry, setBoundaryGeometry]')).toBeLessThan(
+      fileTabsSource.indexOf('export function FileTabs({'),
+    )
+    expect(fileTabsSource).toContain('new ResizeObserver(scheduleBoundaryGeometrySync)')
+    expect(fileTabsSource).toContain('for (const tabElement of Object.values(tabContainerRefs.current))')
+    expect(fileTabsSource).toContain('resizeObserver?.observe(tabElement)')
+    expect(fileTabsSource).toContain('resizeObserver?.observe(shellElement)')
+    expect(fileTabsSource).toContain("scrollerElement.addEventListener('scroll', scheduleBoundaryGeometrySync")
+    expect(fileTabsSource).toContain("indicatorStyle.getPropertyValue(property)")
+    expect(fileTabsSource).toContain("readNumber('--active-tab-left')")
+    expect(fileTabsSource).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches")
+    expect(fileTabsSource).toContain('interpolateFileTabActiveGeometry(')
+    expect(fileTabsSource).toContain('boundaryMotionTargetRef.current = nextGeometry')
+    expect(fileTabsSource).toContain('isTabActivating: progress < 1')
+    expect(fileTabsSource).toContain('const stableShadowPathsRef = useRef<FileTabsBoundaryPaths | null>(null)')
+    expect(fileTabsSource).toContain(
+      'if (paths && (!stableShadowPathsRef.current || !geometry.isTabActivating))',
+    )
+    expect(fileTabsSource).toContain('const shadowPaths = geometry.isTabActivating')
   })
 
   it('uses the workspace FileSystem for the Agent fixed file tab', async () => {
@@ -703,6 +857,10 @@ describe('shell layout helpers', () => {
     expect(layoutSource).toContain("event.key !== 'ArrowLeft'")
     expect(layoutSource).toContain('notifySidebarResizeEnd()')
     expect(appShellCss).toContain(`.panel-resize-handle {
+  --panel-resize-guide-color: var(--separator);
+  --panel-resize-guide-opacity: 0;
+  --panel-resize-guide-shadow: none;
+
   position: relative;
   display: block;
   width: 100%;
@@ -730,6 +888,10 @@ describe('shell layout helpers', () => {
     transition: none;
   }`)
     expect(fileTabsCss).toContain(`@media (prefers-reduced-motion: reduce) {
+  .file-tabs-shell {
+    --file-tab-activation-duration: 0ms;
+  }
+
   .file-tabs-shell,
   .file-tabs-scroll-edge,`)
   })

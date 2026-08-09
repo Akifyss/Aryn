@@ -28,6 +28,17 @@
   background: var(--background-primary);
 }
 
+/* Reserve the frame outline's one-pixel footprint without changing the
+   existing content alignment. The tab rail owns that outline in every state. */
+.app-shell[data-app-layout='agent'] .panel-agent > .editor-frame > .editor-content-shell,
+.app-shell[data-app-layout='editor'][data-left-collapsed='false'] .panel-editor > .editor-frame > .editor-content-shell {
+  padding-left: 1px;
+}
+
+.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .panel-editor > .editor-frame > .editor-content-shell {
+  padding-right: 1px;
+}
+
 .app-shell[data-app-layout='agent'] .editor-content-shell > .sidebar-git-pane .git-panel-detail-pane > .git-panel > .git-panel-header,
 .app-shell[data-app-layout='agent'] .editor-content-shell > .sidebar-git-pane .git-panel-detail-pane > .git-commit-detail > .git-commit-detail-header {
   margin-block-start: var(--editor-fixed-panel-block-start-gap);
