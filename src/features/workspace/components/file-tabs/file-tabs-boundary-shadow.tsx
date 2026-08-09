@@ -1,4 +1,10 @@
-import { Fragment, memo, type AnimationEvent as ReactAnimationEvent } from 'react'
+import {
+  forwardRef,
+  Fragment,
+  memo,
+  type AnimationEvent as ReactAnimationEvent,
+  type Ref,
+} from 'react'
 import {
   resolveFileTabShadowSnapshotTransform,
   type FileTabFrameGeometry,
@@ -59,15 +65,15 @@ export function getFileTabsShadowSnapshotCssTransform(
   return `translate3d(${transform.translateX}px, ${transform.translateY}px, 0) scale(${transform.scaleX}, ${transform.scaleY})`
 }
 
-const FileTabsBoundaryShadowSurface = memo(function FileTabsBoundaryShadowSurface({
-  filterId,
-  shadowLayers,
-  snapshot,
-}: {
+const FileTabsBoundaryShadowSurface = memo(forwardRef<SVGPathElement, {
   filterId: string
   shadowLayers: FileTabsShadowLayer[]
   snapshot: FileTabsShadowSnapshot
-}) {
+}>(function FileTabsBoundaryShadowSurface({
+  filterId,
+  shadowLayers,
+  snapshot,
+}, forwardedRef) {
   const variant = snapshot.hasLeftBoundary
     ? snapshot.paths.withLeftBoundary
     : snapshot.paths.withoutLeftBoundary
@@ -139,18 +145,20 @@ const FileTabsBoundaryShadowSurface = memo(function FileTabsBoundaryShadowSurfac
         </filter>
       </defs>
       <path
+        ref={forwardedRef}
         className='file-tabs-boundary-shadow-source'
         d={surfacePath}
         filter={`url(#${filterId})`}
       />
     </>
   )
-})
+}))
 
 export function FileTabsBoundaryShadowLayer({
   className,
   filterId,
   onAnimationEnd,
+  sourceRef,
   shadowLayers,
   snapshot,
   transform,
@@ -158,6 +166,7 @@ export function FileTabsBoundaryShadowLayer({
   className: string
   filterId: string
   onAnimationEnd?: (event: ReactAnimationEvent<SVGSVGElement>) => void
+  sourceRef?: Ref<SVGPathElement>
   shadowLayers: FileTabsShadowLayer[]
   snapshot: FileTabsShadowSnapshot
   transform?: string
@@ -179,6 +188,7 @@ export function FileTabsBoundaryShadowLayer({
       }}
     >
       <FileTabsBoundaryShadowSurface
+        ref={sourceRef}
         filterId={filterId}
         shadowLayers={shadowLayers}
         snapshot={snapshot}

@@ -7,6 +7,28 @@ export type FileTabActiveMotionGeometry = {
   activeWidth: number
 }
 
+export type FileTabActiveMotionTarget = FileTabActiveMotionGeometry & {
+  isLayoutChanging: boolean
+  tabId: string
+}
+
+export type FileTabAnimationFrame = {
+  progress: number
+  startedAt: number
+}
+
+export type FileTabBoundaryMotionPaths = {
+  activeFillPath: string | null
+  outlinePath: string
+  surfacePath: string
+}
+
+export type FileTabBoundaryMotionPathTargets = {
+  activeFill: Pick<SVGPathElement, 'setAttribute'> | null
+  outline: Pick<SVGPathElement, 'setAttribute'> | null
+  shadow: Pick<SVGPathElement, 'setAttribute'> | null
+}
+
 export type FileTabFrameGeometry = {
   frameHeight: number
   frameLeft: number
@@ -23,6 +45,25 @@ export type FileTabShadowSnapshotTransform = {
 
 function clampUnitInterval(value: number) {
   return Math.min(1, Math.max(0, value))
+}
+
+/**
+ * Starts the animation clock on the first frame the browser can actually
+ * render. File activation can keep the renderer busy before that frame; using
+ * the state-change time would silently consume most of a short transition.
+ */
+export function resolveFileTabAnimationFrame(
+  timestamp: number,
+  startedAt: number | null,
+  duration: number,
+): FileTabAnimationFrame {
+  const resolvedStartedAt = startedAt ?? timestamp
+  const elapsed = Math.max(0, timestamp - resolvedStartedAt)
+
+  return {
+    progress: duration <= 0 ? 1 : clampUnitInterval(elapsed / duration),
+    startedAt: resolvedStartedAt,
+  }
 }
 
 /** A compact, non-bouncy deceleration curve for routine tab activation. */
@@ -45,6 +86,47 @@ export function interpolateFileTabActiveGeometry(
     activeTop: interpolate(from.activeTop, to.activeTop),
     activeWidth: interpolate(from.activeWidth, to.activeWidth),
   }
+}
+
+/**
+ * Keeps viewport scrolling attached to the activation already in flight.
+ * The target tab remains the same while its frame-relative position changes,
+ * so restarting or snapping would break the shared-element movement.
+ */
+export function canRetargetFileTabActiveMotion(
+  currentTarget: FileTabActiveMotionTarget | null,
+  nextTarget: FileTabActiveMotionTarget,
+) {
+  return currentTarget?.tabId === nextTarget.tabId
+    && !currentTarget.isLayoutChanging
+    && !nextTarget.isLayoutChanging
+}
+
+export function resolveFileTabAutoScrollBehavior(prefersReducedMotion: boolean) {
+  return prefersReducedMotion ? 'auto' : 'smooth'
+}
+
+/**
+ * Applies one in-flight boundary frame outside React's state queue. React owns
+ * the start and end states; this narrow writer keeps each requestAnimationFrame
+ * visible even when editor rendering is concurrently busy.
+ */
+export function renderFileTabBoundaryMotionFrame(
+  targets: FileTabBoundaryMotionPathTargets,
+  paths: FileTabBoundaryMotionPaths,
+) {
+  if (!targets.outline || (paths.activeFillPath && !targets.activeFill)) {
+    return false
+  }
+
+  targets.outline.setAttribute('d', paths.outlinePath)
+
+  if (targets.activeFill && paths.activeFillPath) {
+    targets.activeFill.setAttribute('d', paths.activeFillPath)
+  }
+
+  targets.shadow?.setAttribute('d', paths.surfacePath)
+  return true
 }
 
 /**

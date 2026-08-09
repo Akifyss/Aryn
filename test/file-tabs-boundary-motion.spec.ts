@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
+  canRetargetFileTabActiveMotion,
   easeFileTabActivation,
   interpolateFileTabActiveGeometry,
   parseCssTimeInMilliseconds,
+  renderFileTabBoundaryMotionFrame,
+  resolveFileTabAnimationFrame,
+  resolveFileTabAutoScrollBehavior,
   resolveFileTabShadowSnapshotTransform,
 } from '../src/features/workspace/components/file-tabs/file-tabs-boundary-motion'
 
@@ -37,6 +41,85 @@ describe('file tab boundary motion', () => {
       activeWidth: 135,
     })
     expect(interpolateFileTabActiveGeometry(from, to, 1)).toEqual(to)
+  })
+
+  it('starts timing on the first renderable frame instead of consuming delayed setup time', () => {
+    const firstFrame = resolveFileTabAnimationFrame(5_000, null, 180)
+
+    expect(firstFrame).toEqual({
+      progress: 0,
+      startedAt: 5_000,
+    })
+    expect(resolveFileTabAnimationFrame(5_090, firstFrame.startedAt, 180)).toEqual({
+      progress: 0.5,
+      startedAt: 5_000,
+    })
+    expect(resolveFileTabAnimationFrame(5_180, firstFrame.startedAt, 180)).toEqual({
+      progress: 1,
+      startedAt: 5_000,
+    })
+  })
+
+  it('retargets an in-flight activation when scrolling moves the same tab', () => {
+    const currentTarget = {
+      activeHeight: 38,
+      activeLeft: 420,
+      activeTop: 6,
+      activeWidth: 160,
+      isLayoutChanging: false,
+      tabId: 'file://later.md',
+    }
+
+    expect(canRetargetFileTabActiveMotion(currentTarget, {
+      ...currentTarget,
+      activeLeft: 300,
+    })).toBe(true)
+    expect(canRetargetFileTabActiveMotion(currentTarget, {
+      ...currentTarget,
+      tabId: 'file://another.md',
+    })).toBe(false)
+    expect(canRetargetFileTabActiveMotion(currentTarget, {
+      ...currentTarget,
+      activeLeft: 300,
+      isLayoutChanging: true,
+    })).toBe(false)
+  })
+
+  it('does not smooth-scroll hidden tabs when reduced motion is requested', () => {
+    expect(resolveFileTabAutoScrollBehavior(false)).toBe('smooth')
+    expect(resolveFileTabAutoScrollBehavior(true)).toBe('auto')
+  })
+
+  it('renders each in-flight boundary path in the same animation frame', () => {
+    const activeFill = { setAttribute: vi.fn() }
+    const outline = { setAttribute: vi.fn() }
+    const shadow = { setAttribute: vi.fn() }
+    const paths = {
+      activeFillPath: 'M active',
+      outlinePath: 'M outline',
+      surfacePath: 'M surface',
+    }
+
+    expect(renderFileTabBoundaryMotionFrame({ activeFill, outline, shadow }, paths)).toBe(true)
+    expect(activeFill.setAttribute).toHaveBeenCalledWith('d', paths.activeFillPath)
+    expect(outline.setAttribute).toHaveBeenCalledWith('d', paths.outlinePath)
+    expect(shadow.setAttribute).toHaveBeenCalledWith('d', paths.surfacePath)
+  })
+
+  it('falls back to React when the required boundary paths are not mounted', () => {
+    const outline = { setAttribute: vi.fn() }
+    const paths = {
+      activeFillPath: 'M active',
+      outlinePath: 'M outline',
+      surfacePath: 'M surface',
+    }
+
+    expect(renderFileTabBoundaryMotionFrame({
+      activeFill: null,
+      outline,
+      shadow: null,
+    }, paths)).toBe(false)
+    expect(outline.setAttribute).not.toHaveBeenCalled()
   })
 
   it('parses CSS duration tokens without accepting ambiguous unitless values', () => {

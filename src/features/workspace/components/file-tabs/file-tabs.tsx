@@ -1,4 +1,4 @@
-import { type AnimationEvent as ReactAnimationEvent, type DragEvent as ReactDragEvent, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, type AnimationEvent as ReactAnimationEvent, type DragEvent as ReactDragEvent, type ReactNode, type RefObject, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ScrollArea } from '@base-ui/react/scroll-area'
 import { Tabs } from '@base-ui/react/tabs'
@@ -7,10 +7,14 @@ import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppTooltip } from '@/components/app-tooltip'
 import {
+  canRetargetFileTabActiveMotion,
   interpolateFileTabActiveGeometry,
   parseCssTimeInMilliseconds,
+  renderFileTabBoundaryMotionFrame,
+  resolveFileTabAnimationFrame,
+  resolveFileTabAutoScrollBehavior,
 } from './file-tabs-boundary-motion'
-import { createFileTabsBoundaryPaths } from './file-tabs-boundary-path'
+import { createFileTabsBoundaryPaths, type FileTabsBoundaryPaths } from './file-tabs-boundary-path'
 import {
   createFileTabsShadowSnapshot,
   FileTabsBoundaryShadowLayer,
@@ -80,6 +84,17 @@ type FileTabsShadowSlot = 'a' | 'b'
 type FileTabsShadowHandoff = {
   outgoingSlot: FileTabsShadowSlot
   snapshot: FileTabsShadowSnapshot
+}
+
+type FileTabsBoundaryChromeHandle = {
+  renderMotionGeometry: (geometry: FileTabsBoundaryGeometry) => boolean
+}
+
+type FileTabsBoundaryRenderablePaths = {
+  activeFillPath: string | null
+  outlinePath: string
+  paths: FileTabsBoundaryPaths
+  surfacePath: string
 }
 
 const FILE_TAB_LABEL_TOOLTIP_DELAY = 500
@@ -198,14 +213,58 @@ function getAlternateShadowSlot(slot: FileTabsShadowSlot): FileTabsShadowSlot {
   return slot === 'a' ? 'b' : 'a'
 }
 
-function FileTabsBoundaryChrome({
-  chromeHost,
-  geometry,
-}: {
+function createFileTabsBoundaryRenderablePaths(
+  geometry: FileTabsBoundaryGeometry,
+): FileTabsBoundaryRenderablePaths | null {
+  const paths = createFileTabsBoundaryPaths({
+    frameHeight: geometry.frameHeight,
+    frameWidth: geometry.frameWidth,
+    radius: geometry.radius,
+    shape: geometry.kind === 'active'
+      ? {
+          kind: 'active',
+          activeHeight: geometry.activeHeight,
+          activeLeft: geometry.activeLeft,
+          activeTop: geometry.activeTop,
+          activeWidth: geometry.activeWidth,
+        }
+      : {
+          kind: 'empty',
+          railHeight: geometry.railHeight,
+        },
+  })
+
+  if (!paths) {
+    return null
+  }
+
+  const variant = geometry.hasLeftBoundary
+    ? paths.withLeftBoundary
+    : paths.withoutLeftBoundary
+
+  return {
+    activeFillPath: variant.activeFillPath,
+    outlinePath: geometry.hasRightBoundary
+      ? variant.outlinePathWithRightBoundary
+      : variant.outlinePath,
+    paths,
+    surfacePath: geometry.hasRightBoundary
+      ? variant.surfacePathWithRightBoundary
+      : variant.surfacePath,
+  }
+}
+
+const FileTabsBoundaryChrome = forwardRef<FileTabsBoundaryChromeHandle, {
   chromeHost: HTMLElement
   geometry: FileTabsBoundaryGeometry
-}) {
+}>(function FileTabsBoundaryChrome({
+  chromeHost,
+  geometry,
+}, forwardedRef) {
   const shadowFilterPrefix = `file-tabs-boundary-shadow-${useId().replace(/:/g, '')}`
+  const activeFillPathRef = useRef<SVGPathElement | null>(null)
+  const activationShadowPathRef = useRef<SVGPathElement | null>(null)
+  const outlinePathRef = useRef<SVGPathElement | null>(null)
   const shadowTokenProbeRef = useRef<HTMLSpanElement | null>(null)
   const stableShadowSnapshotRef = useRef<FileTabsShadowSnapshot | null>(null)
   const layoutShadowSnapshotRef = useRef<FileTabsShadowSnapshot | null>(null)
@@ -256,27 +315,30 @@ function FileTabsBoundaryChrome({
     return () => themeObserver.disconnect()
   }, [])
 
-  const paths = useMemo(() => createFileTabsBoundaryPaths({
-    frameHeight: geometry.frameHeight,
-    frameWidth: geometry.frameWidth,
-    radius: geometry.radius,
-    shape: geometry.kind === 'active'
-      ? {
-          kind: 'active',
-          activeHeight: geometry.activeHeight,
-          activeLeft: geometry.activeLeft,
-          activeTop: geometry.activeTop,
-          activeWidth: geometry.activeWidth,
-        }
-      : {
-          kind: 'empty',
-          railHeight: geometry.railHeight,
-        },
-  }), [geometry])
+  const renderablePaths = useMemo(
+    () => createFileTabsBoundaryRenderablePaths(geometry),
+    [geometry],
+  )
+  const paths = renderablePaths?.paths ?? null
   const currentShadowSnapshot = useMemo(
     () => paths ? createFileTabsShadowSnapshot(geometry, paths) : null,
     [geometry, paths],
   )
+  useImperativeHandle(forwardedRef, () => ({
+    renderMotionGeometry(nextGeometry) {
+      const nextRenderablePaths = createFileTabsBoundaryRenderablePaths(nextGeometry)
+
+      if (!nextRenderablePaths) {
+        return false
+      }
+
+      return renderFileTabBoundaryMotionFrame({
+        activeFill: activeFillPathRef.current,
+        outline: outlinePathRef.current,
+        shadow: activationShadowPathRef.current,
+      }, nextRenderablePaths)
+    },
+  }), [])
 
   // Keep one complete, exact shadow render as the source for the next layout
   // transition. No filter input changes while that snapshot is in motion.
@@ -343,23 +405,16 @@ function FileTabsBoundaryChrome({
     return () => window.clearTimeout(timerId)
   }, [chromeHost, completeShadowHandoff, shadowHandoff])
 
-  if (!paths || !currentShadowSnapshot) {
+  if (!renderablePaths || !currentShadowSnapshot) {
     return null
   }
-
-  const variant = geometry.hasLeftBoundary
-    ? paths.withLeftBoundary
-    : paths.withoutLeftBoundary
-  const outlinePath = geometry.hasRightBoundary
-    ? variant.outlinePathWithRightBoundary
-    : variant.outlinePath
 
   const svgProps = {
     'aria-hidden': true,
     focusable: 'false',
-    height: paths.frameHeight,
-    viewBox: `0 0 ${paths.frameWidth} ${paths.frameHeight}`,
-    width: paths.frameWidth,
+    height: renderablePaths.paths.frameHeight,
+    viewBox: `0 0 ${renderablePaths.paths.frameWidth} ${renderablePaths.paths.frameHeight}`,
+    width: renderablePaths.paths.frameWidth,
   } as const
   const prefersReducedMotion = typeof window !== 'undefined'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -430,6 +485,7 @@ function FileTabsBoundaryChrome({
           key={activeShadowSlot}
           className='file-tabs-boundary-shadow-layer'
           filterId={`${shadowFilterPrefix}-${activeShadowSlot}`}
+          sourceRef={geometry.isTabActivating ? activationShadowPathRef : undefined}
           shadowLayers={shadowLayers}
           snapshot={activationSnapshot}
           transform={getFileTabsShadowSnapshotCssTransform(activationSnapshot, geometry)}
@@ -456,8 +512,9 @@ function FileTabsBoundaryChrome({
           className='file-tabs-boundary-chrome file-tabs-boundary-fill-layer'
         >
           <path
+            ref={activeFillPathRef}
             className='file-tabs-boundary-active-fill'
-            d={variant.activeFillPath ?? undefined}
+            d={renderablePaths.activeFillPath ?? undefined}
           />
         </svg>
       ) : null}
@@ -467,8 +524,9 @@ function FileTabsBoundaryChrome({
         className='file-tabs-boundary-chrome file-tabs-boundary-outline-layer'
       >
         <path
+          ref={outlinePathRef}
           className='file-tabs-boundary-outline'
-          d={outlinePath}
+          d={renderablePaths.outlinePath}
           vectorEffect='non-scaling-stroke'
         />
       </svg>
@@ -482,7 +540,7 @@ function FileTabsBoundaryChrome({
       {chromeLayers}
     </>
   )
-}
+})
 
 function areBoundaryGeometriesEqual(
   currentGeometry: FileTabsBoundaryGeometry | null,
@@ -560,6 +618,9 @@ function FileTabsBoundaryChromeController({
   const boundaryGeometryRef = useRef<FileTabsBoundaryGeometry | null>(null)
   const boundaryMotionFrameRef = useRef<number | null>(null)
   const boundaryMotionTargetRef = useRef<FileTabsBoundaryGeometry | null>(null)
+  // React owns stable start/end geometry. The chrome handle renders only the
+  // transient frames so concurrent editor work cannot collapse the motion.
+  const boundaryChromeRef = useRef<FileTabsBoundaryChromeHandle | null>(null)
 
   const cancelBoundaryMotion = useCallback(() => {
     if (boundaryMotionFrameRef.current !== null) {
@@ -579,12 +640,19 @@ function FileTabsBoundaryChromeController({
   }, [])
 
   const transitionBoundaryGeometry = useCallback((nextGeometry: FileTabsBoundaryGeometry) => {
-    if (
-      boundaryMotionFrameRef.current !== null
-      && boundaryMotionTargetRef.current
-      && areBoundaryGeometriesEqual(boundaryMotionTargetRef.current, nextGeometry)
-    ) {
-      return
+    if (boundaryMotionFrameRef.current !== null && boundaryMotionTargetRef.current) {
+      if (areBoundaryGeometriesEqual(boundaryMotionTargetRef.current, nextGeometry)) {
+        return
+      }
+
+      if (
+        boundaryMotionTargetRef.current.kind === 'active'
+        && nextGeometry.kind === 'active'
+        && canRetargetFileTabActiveMotion(boundaryMotionTargetRef.current, nextGeometry)
+      ) {
+        boundaryMotionTargetRef.current = nextGeometry
+        return
+      }
     }
 
     const currentGeometry = boundaryGeometryRef.current
@@ -610,7 +678,8 @@ function FileTabsBoundaryChromeController({
     }
 
     const fromGeometry = currentGeometry
-    const startedAt = window.performance.now()
+    let startedAt: number | null = null
+    let hasPresentedStartGeometry = false
     boundaryMotionTargetRef.current = nextGeometry
     commitBoundaryGeometry({
       ...nextGeometry,
@@ -622,18 +691,44 @@ function FileTabsBoundaryChromeController({
     })
 
     const animateBoundary = (timestamp: number) => {
-      const progress = Math.min(1, (timestamp - startedAt) / activationDuration)
+      const motionTarget = boundaryMotionTargetRef.current
+      if (!motionTarget || motionTarget.kind !== 'active') {
+        boundaryMotionFrameRef.current = null
+        return
+      }
+
+      // Present the source shape for one frame before starting the clock. This
+      // is the read/write boundary of the shared-element transition and keeps
+      // the first visible frame at progress zero.
+      if (!hasPresentedStartGeometry) {
+        hasPresentedStartGeometry = true
+        boundaryMotionFrameRef.current = window.requestAnimationFrame(animateBoundary)
+        return
+      }
+
+      const animationFrame = resolveFileTabAnimationFrame(
+        timestamp,
+        startedAt,
+        activationDuration,
+      )
+      startedAt = animationFrame.startedAt
+      const { progress } = animationFrame
       const activeGeometry = interpolateFileTabActiveGeometry(
         fromGeometry,
-        nextGeometry,
+        motionTarget,
         progress,
       )
 
-      commitBoundaryGeometry({
-        ...nextGeometry,
+      const animatedGeometry: FileTabsBoundaryGeometry = {
+        ...motionTarget,
         ...activeGeometry,
         isTabActivating: progress < 1,
-      })
+      }
+      boundaryGeometryRef.current = animatedGeometry
+
+      if (!boundaryChromeRef.current?.renderMotionGeometry(animatedGeometry)) {
+        commitBoundaryGeometry(animatedGeometry)
+      }
 
       if (progress < 1) {
         boundaryMotionFrameRef.current = window.requestAnimationFrame(animateBoundary)
@@ -642,6 +737,7 @@ function FileTabsBoundaryChromeController({
 
       boundaryMotionFrameRef.current = null
       boundaryMotionTargetRef.current = null
+      commitBoundaryGeometry(animatedGeometry)
     }
 
     boundaryMotionFrameRef.current = window.requestAnimationFrame(animateBoundary)
@@ -841,7 +937,13 @@ function FileTabsBoundaryChromeController({
     return null
   }
 
-  return <FileTabsBoundaryChrome chromeHost={chromeHost} geometry={boundaryGeometry} />
+  return (
+    <FileTabsBoundaryChrome
+      ref={boundaryChromeRef}
+      chromeHost={chromeHost}
+      geometry={boundaryGeometry}
+    />
+  )
 }
 
 export function FileTabs({
@@ -910,8 +1012,9 @@ export function FileTabs({
     }
 
     if (!isTabVisibleInScroller(activeTabElement, scrollerElement)) {
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       activeTabElement.scrollIntoView({
-        behavior: 'smooth',
+        behavior: resolveFileTabAutoScrollBehavior(prefersReducedMotion),
         block: 'nearest',
         inline: 'nearest',
       })
