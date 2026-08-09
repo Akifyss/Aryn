@@ -1,4 +1,9 @@
-import type { ReactNode } from 'react'
+import {
+  type ReactNode,
+  type RefObject,
+  useMemo,
+  useRef,
+} from 'react'
 import { Icon } from '@iconify/react'
 import { Back2Line, GitCommitFill, GitCommitLine } from '@mingcute/react'
 import {
@@ -7,10 +12,11 @@ import {
   AppItemIcon,
 } from '@/components/app-item'
 import {
-  TreeChildren,
-  TreeList,
+  DEFAULT_TREE_ROW_SIZE,
+  DESCRIBED_TREE_ROW_SIZE,
   TreeScrollArea,
-  TreeStatusItem,
+  VirtualizedTreeList,
+  type VirtualizedTreeRowAriaMetadata,
 } from '@/components/tree'
 import type {
   GitChangeItem,
@@ -27,9 +33,16 @@ import {
   type GitHistorySelection,
 } from '../git-panel-model'
 import {
-  GitChangeRows,
+  GitChangeRow,
   GitChangeSection,
 } from '../git-change-section/git-change-section'
+import {
+  createGitHistoryPaneRows,
+  createGitHistorySectionRows,
+  type GitHistoryCommitRow,
+  type GitHistoryRow,
+  type GitHistoryStatusRow,
+} from './git-history-model'
 import './styles.css'
 
 type GitHistoryLoadState = {
@@ -42,26 +55,6 @@ type GitRevertActionProps = {
   busyLabel: string | null
   onRevertCommit: (commit: GitCommitItem) => void
   revertDisabledReason: string | null
-}
-
-function GitHistoryStatus({
-  commits,
-  error,
-  isLoading,
-}: GitHistoryLoadState) {
-  return (
-    <>
-      {isLoading && commits.length === 0 ? (
-        <TreeStatusItem>正在加载提交历史...</TreeStatusItem>
-      ) : null}
-      {error ? (
-        <TreeStatusItem tone='danger'>{error}</TreeStatusItem>
-      ) : null}
-      {!isLoading && !error && commits.length === 0 ? (
-        <TreeStatusItem>暂无历史提交</TreeStatusItem>
-      ) : null}
-    </>
-  )
 }
 
 function GitRevertCommitAction({
@@ -87,6 +80,75 @@ function GitRevertCommitAction({
   )
 }
 
+function getHistoryRowAriaMetadata(row: GitHistoryRow): VirtualizedTreeRowAriaMetadata {
+  return row.aria
+}
+
+function getHistoryRowDepth(row: GitHistoryRow) {
+  return row.depth
+}
+
+function isHistoryRowFocusable(row: GitHistoryRow) {
+  return row.kind !== 'status'
+}
+
+function estimateHistoryRowSize(row: GitHistoryRow) {
+  return row.kind === 'status' ? DEFAULT_TREE_ROW_SIZE : DESCRIBED_TREE_ROW_SIZE
+}
+
+function GitHistoryStatusRowView({ row }: { row: GitHistoryStatusRow }) {
+  return (
+    <div className={`tree-status-item tree-status-item-${row.tone}`}>
+      {row.message}
+    </div>
+  )
+}
+
+function GitHistoryCommitRowView({
+  busyLabel,
+  commitRow,
+  isSelected,
+  onActivate,
+  onRevertCommit,
+  revertDisabledReason,
+}: GitRevertActionProps & {
+  commitRow: GitHistoryCommitRow
+  isSelected?: boolean
+  onActivate: () => void
+}) {
+  const commitMeta = getCommitMeta(commitRow.commit)
+  const useFilledIcon = commitRow.isExpanded || isSelected
+
+  return (
+    <AppItem
+      itemAs='div'
+      icon={(
+        <AppItemIcon>
+          {useFilledIcon
+            ? <GitCommitFill aria-hidden='true' />
+            : <GitCommitLine aria-hidden='true' />}
+        </AppItemIcon>
+      )}
+      isActive={isSelected}
+      label={commitRow.commit.subject}
+      description={commitMeta}
+      actions={(
+        <GitRevertCommitAction
+          busyLabel={busyLabel}
+          commit={commitRow.commit}
+          onRevertCommit={onRevertCommit}
+          revertDisabledReason={revertDisabledReason}
+        />
+      )}
+      mainButtonProps={{
+        'aria-expanded': commitRow.canExpand ? commitRow.isExpanded : undefined,
+        title: `${commitRow.commit.subject}\n${commitMeta}\n${commitRow.commit.hash}`,
+        onClick: onActivate,
+      }}
+    />
+  )
+}
+
 export function GitHistoryPane({
   commits,
   error,
@@ -104,74 +166,75 @@ export function GitHistoryPane({
   onSelectCommit: (commitHash: string) => void
   onSelectWorkingTree: () => void
 }) {
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+  const rows = useMemo(
+    () => createGitHistoryPaneRows({ commits, error, isLoading }),
+    [commits, error, isLoading],
+  )
   const selectedCommitHash = historySelection.kind === 'commit'
     ? historySelection.commitHash
     : null
+  const activeRowKey = selectedCommitHash
+    ? `commit:${selectedCommitHash}`
+    : 'working-tree'
 
   return (
     <aside className='git-history-pane' aria-label='Git 历史'>
       <TreeScrollArea
         className='git-history-scroll'
         contentClassName='git-history-scroll-content'
+        viewportRef={viewportRef}
       >
-        <TreeList className='git-history-list'>
-          <AppItem
-            icon={(
-              <AppItemIcon>
-                <Icon
-                  icon={historySelection.kind === 'working-tree' ? 'octicon:dot-fill-16' : 'octicon:dot-16'}
-                  aria-hidden='true'
+        <VirtualizedTreeList
+          activeRowKey={activeRowKey}
+          ariaBusy={isLoading}
+          ariaLabel='Git 历史'
+          estimateRowSize={estimateHistoryRowSize}
+          getRowAriaMetadata={getHistoryRowAriaMetadata}
+          getRowDepth={getHistoryRowDepth}
+          isRowFocusable={isHistoryRowFocusable}
+          itemClassName='git-history-virtual-item'
+          listClassName='git-history-list'
+          renderRow={(row) => {
+            if (row.kind === 'status') return <GitHistoryStatusRowView row={row} />
+            if (row.kind === 'working-tree') {
+              return (
+                <AppItem
+                  itemAs='div'
+                  icon={(
+                    <AppItemIcon>
+                      <Icon
+                        icon={historySelection.kind === 'working-tree' ? 'octicon:dot-fill-16' : 'octicon:dot-16'}
+                        aria-hidden='true'
+                      />
+                    </AppItemIcon>
+                  )}
+                  isActive={historySelection.kind === 'working-tree'}
+                  label='工作树'
+                  description={repositoryMeta}
+                  mainButtonProps={{
+                    title: '工作树',
+                    onClick: onSelectWorkingTree,
+                  }}
                 />
-              </AppItemIcon>
-            )}
-            isActive={historySelection.kind === 'working-tree'}
-            label='工作树'
-            description={repositoryMeta}
-            mainButtonProps={{
-              title: '工作树',
-              onClick: onSelectWorkingTree,
-            }}
-          />
-
-          <GitHistoryStatus
-            commits={commits}
-            error={error}
-            isLoading={isLoading}
-          />
-
-          {commits.map((commit) => {
-            const isCommitSelected = selectedCommitHash === commit.hash
-            const commitMeta = getCommitMeta(commit)
+              )
+            }
+            if (row.kind !== 'commit') return null
 
             return (
-              <AppItem
-                key={commit.hash}
-                icon={(
-                  <AppItemIcon>
-                    {isCommitSelected
-                      ? <GitCommitFill aria-hidden='true' />
-                      : <GitCommitLine aria-hidden='true' />}
-                  </AppItemIcon>
-                )}
-                isActive={isCommitSelected}
-                label={commit.subject}
-                description={commitMeta}
-                actions={(
-                  <GitRevertCommitAction
-                    busyLabel={busyLabel}
-                    commit={commit}
-                    onRevertCommit={onRevertCommit}
-                    revertDisabledReason={revertDisabledReason}
-                  />
-                )}
-                mainButtonProps={{
-                  title: `${commit.subject}\n${commitMeta}\n${commit.hash}`,
-                  onClick: () => onSelectCommit(commit.hash),
-                }}
+              <GitHistoryCommitRowView
+                busyLabel={busyLabel}
+                commitRow={row}
+                isSelected={selectedCommitHash === row.commit.hash}
+                onActivate={() => onSelectCommit(row.commit.hash)}
+                onRevertCommit={onRevertCommit}
+                revertDisabledReason={revertDisabledReason}
               />
             )
-          })}
-        </TreeList>
+          }}
+          rows={rows}
+          scrollElementRef={viewportRef}
+        />
       </TreeScrollArea>
     </aside>
   )
@@ -181,58 +244,6 @@ const ignoreChanges = (_changes: GitChangeItem[]) => {}
 const ignoreChange = (_change: GitChangeItem) => {}
 const ignoreFilePath = (_filePath: string) => {}
 const ignoreFilePaths = (_filePaths: string[]) => {}
-
-function GitHistoryCommitChildren({
-  commit,
-  detailsByHash,
-  detailsErrorsByHash,
-  iconTheme,
-  loadingCommitHashes,
-  onOpenCommitFileDiff,
-}: {
-  commit: GitCommitItem
-  detailsByHash: Record<string, GitCommitDetails>
-  detailsErrorsByHash: Record<string, string>
-  iconTheme: WorkspaceIconTheme | null
-  loadingCommitHashes: Record<string, boolean>
-  onOpenCommitFileDiff: (commitHash: string, change: GitCommitFileChange) => void
-}) {
-  const details = detailsByHash[commit.hash]
-  const isCommitLoading = Boolean(loadingCommitHashes[commit.hash])
-  const commitError = detailsErrorsByHash[commit.hash]
-
-  if (isCommitLoading && !details) {
-    return <TreeStatusItem>正在加载提交文件...</TreeStatusItem>
-  }
-
-  if (commitError && !details) {
-    return <TreeStatusItem tone='danger'>{commitError}</TreeStatusItem>
-  }
-
-  if (!details) {
-    return <TreeStatusItem>展开后加载文件变更。</TreeStatusItem>
-  }
-
-  if (details.changes.length === 0) {
-    return <TreeStatusItem>这个提交没有文件变更。</TreeStatusItem>
-  }
-
-  return (
-    <GitChangeRows
-      changes={details.changes}
-      kind='commit'
-      layout='list'
-      iconTheme={iconTheme}
-      onDiscardMany={ignoreChanges}
-      onOpenCommitFileDiff={(change) => onOpenCommitFileDiff(details.hash, change)}
-      onOpenDiff={ignoreChange}
-      onOpenMeoDiff={ignoreChange}
-      onOpenFile={ignoreFilePath}
-      onStage={ignoreFilePaths}
-      onUnstage={ignoreFilePaths}
-    />
-  )
-}
 
 export function GitHistorySection({
   commits,
@@ -246,6 +257,7 @@ export function GitHistorySection({
   isExpanded,
   loadingCommitHashes,
   revertDisabledReason,
+  scrollElementRef,
   onExpandedChange,
   onOpenCommitFileDiff,
   onRevertCommit,
@@ -257,10 +269,29 @@ export function GitHistorySection({
   iconTheme: WorkspaceIconTheme | null
   isExpanded: boolean
   loadingCommitHashes: Record<string, boolean>
+  scrollElementRef: RefObject<HTMLDivElement | null>
   onExpandedChange: (isExpanded: boolean) => void
   onOpenCommitFileDiff: (commitHash: string, change: GitCommitFileChange) => void
   onToggleCommit: (commitHash: string) => void
 }) {
+  const rows = useMemo(() => createGitHistorySectionRows({
+    commits,
+    detailsByHash,
+    detailsErrorsByHash,
+    error,
+    expandedCommitHashes,
+    isLoading,
+    loadingCommitHashes,
+  }), [
+    commits,
+    detailsByHash,
+    detailsErrorsByHash,
+    error,
+    expandedCommitHashes,
+    isLoading,
+    loadingCommitHashes,
+  ])
+
   return (
     <div className='git-panel-section git-history-section'>
       <AppItem
@@ -274,60 +305,50 @@ export function GitHistorySection({
 
       {isExpanded ? (
         <div className='git-history-tree-shell'>
-          <TreeList className='git-history-tree-list'>
-            <GitHistoryStatus
-              commits={commits}
-              error={error}
-              isLoading={isLoading}
-            />
-
-            {commits.map((commit) => {
-              const isCommitExpanded = Boolean(expandedCommitHashes[commit.hash])
-              const commitMeta = getCommitMeta(commit)
+          <VirtualizedTreeList
+            ariaBusy={isLoading}
+            ariaLabel='提交历史'
+            estimateRowSize={estimateHistoryRowSize}
+            getRowAriaMetadata={getHistoryRowAriaMetadata}
+            getRowDepth={getHistoryRowDepth}
+            indentSize={24}
+            isRowFocusable={isHistoryRowFocusable}
+            itemClassName='git-history-virtual-item'
+            listClassName='git-history-tree-list'
+            renderRow={(row) => {
+              if (row.kind === 'status') return <GitHistoryStatusRowView row={row} />
+              if (row.kind === 'commit-change') {
+                return (
+                  <GitChangeRow
+                    change={row.change}
+                    iconTheme={iconTheme}
+                    kind='commit'
+                    layout='list'
+                    onDiscardMany={ignoreChanges}
+                    onOpenCommitFileDiff={(change) => onOpenCommitFileDiff(row.commitHash, change)}
+                    onOpenDiff={ignoreChange}
+                    onOpenFile={ignoreFilePath}
+                    onOpenMeoDiff={ignoreChange}
+                    onStage={ignoreFilePaths}
+                    onUnstage={ignoreFilePaths}
+                  />
+                )
+              }
+              if (row.kind !== 'commit') return null
 
               return (
-                <AppItem
-                  key={commit.hash}
-                  after={isCommitExpanded ? (
-                    <TreeChildren className='git-history-commit-children'>
-                      <TreeList className='git-history-file-list'>
-                        <GitHistoryCommitChildren
-                          commit={commit}
-                          detailsByHash={detailsByHash}
-                          detailsErrorsByHash={detailsErrorsByHash}
-                          iconTheme={iconTheme}
-                          loadingCommitHashes={loadingCommitHashes}
-                          onOpenCommitFileDiff={onOpenCommitFileDiff}
-                        />
-                      </TreeList>
-                    </TreeChildren>
-                  ) : null}
-                  icon={(
-                    <AppItemIcon>
-                      {isCommitExpanded
-                        ? <GitCommitFill aria-hidden='true' />
-                        : <GitCommitLine aria-hidden='true' />}
-                    </AppItemIcon>
-                  )}
-                  label={commit.subject}
-                  description={commitMeta}
-                  actions={(
-                    <GitRevertCommitAction
-                      busyLabel={busyLabel}
-                      commit={commit}
-                      onRevertCommit={onRevertCommit}
-                      revertDisabledReason={revertDisabledReason}
-                    />
-                  )}
-                  mainButtonProps={{
-                    'aria-expanded': isCommitExpanded,
-                    title: `${commit.subject}\n${commitMeta}\n${commit.hash}`,
-                    onClick: () => onToggleCommit(commit.hash),
-                  }}
+                <GitHistoryCommitRowView
+                  busyLabel={busyLabel}
+                  commitRow={row}
+                  onActivate={() => onToggleCommit(row.commit.hash)}
+                  onRevertCommit={onRevertCommit}
+                  revertDisabledReason={revertDisabledReason}
                 />
               )
-            })}
-          </TreeList>
+            }}
+            rows={rows}
+            scrollElementRef={scrollElementRef}
+          />
         </div>
       ) : null}
     </div>
@@ -394,9 +415,9 @@ export function GitCommitDetail({
   selectedCommitHash: string | null
   summary: GitCommitItem | null
 }) {
-  if (!selectedCommitHash) {
-    return null
-  }
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+
+  if (!selectedCommitHash) return null
 
   const renderHeader = (commit: GitCommitItem, changeCount?: number) => (
     <GitCommitDetailHeader
@@ -449,6 +470,7 @@ export function GitCommitDetail({
       <TreeScrollArea
         className='git-panel-sections git-commit-detail-sections'
         contentClassName='git-panel-sections-content'
+        viewportRef={viewportRef}
       >
         {details.changes.length === 0 ? (
           <div className='git-panel-empty-state git-commit-detail-state'>
@@ -461,6 +483,7 @@ export function GitCommitDetail({
             kind='commit'
             layout={layout}
             iconTheme={iconTheme}
+            scrollElementRef={viewportRef}
             onDiscardMany={ignoreChanges}
             onOpenCommitFileDiff={(change) => onOpenCommitFileDiff(details.hash, change)}
             onOpenDiff={ignoreChange}

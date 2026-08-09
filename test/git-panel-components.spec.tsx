@@ -1,8 +1,10 @@
+import { createRef } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type {
   GitChangeItem,
   GitCommitDetails,
+  GitCommitFileChange,
   GitCommitItem,
   GitRepositoryState,
 } from '@/features/git/types'
@@ -63,6 +65,18 @@ const commitDetails: GitCommitDetails = {
 const ignoreChange = () => undefined
 const ignoreChanges = () => undefined
 const ignorePath = () => undefined
+const scrollElementRef = createRef<HTMLDivElement>()
+
+function createCommit(index: number): GitCommitItem {
+  return {
+    authorEmail: null,
+    authorName: 'Aryn',
+    authorTimeUnix: 1_700_000_000 + index,
+    hash: `commit-${index}`,
+    shortHash: `c${index}`,
+    subject: `Commit ${index}`,
+  }
+}
 
 describe('Git panel presentation components', () => {
   it('uses the shared empty state for a workspace without a Git repository', () => {
@@ -108,6 +122,7 @@ describe('Git panel presentation components', () => {
       changes: [markdownChange],
       iconTheme: null,
       kind: 'unstaged' as const,
+      scrollElementRef,
       onDiscardMany: ignoreChanges,
       onOpenDiff: ignoreChange,
       onOpenFile: ignorePath,
@@ -161,6 +176,7 @@ describe('Git panel presentation components', () => {
         isLoading={false}
         loadingCommitHashes={{}}
         revertDisabledReason={null}
+        scrollElementRef={scrollElementRef}
         onExpandedChange={ignorePath}
         onOpenCommitFileDiff={ignoreChange}
         onRevertCommit={ignoreChange}
@@ -193,5 +209,110 @@ describe('Git panel presentation components', () => {
     expect(commitDetailMarkup).toContain('1 个变更文件')
     expect(commitDetailMarkup).toContain('切换布局')
     expect(commitDetailMarkup).toContain('guide.md')
+  })
+
+  it('bounds every large Git collection to its virtual render window', () => {
+    const changes = Array.from({ length: 1_000 }, (_, index): GitChangeItem => ({
+      ...markdownChange,
+      path: `C:\\workspace\\src\\file-${index}.md`,
+      relativePath: `src/file-${index}.md`,
+    }))
+    const commits = Array.from({ length: 1_000 }, (_, index) => createCommit(index))
+    const changeMarkup = renderToStaticMarkup(
+      <GitChangeSection
+        changes={changes}
+        iconTheme={null}
+        kind='unstaged'
+        layout='list'
+        scrollElementRef={scrollElementRef}
+        title='Changes'
+        onDiscardMany={ignoreChanges}
+        onOpenDiff={ignoreChange}
+        onOpenFile={ignorePath}
+        onOpenMeoDiff={ignoreChange}
+        onStage={ignorePath}
+        onUnstage={ignorePath}
+      />,
+    )
+    const historyMarkup = renderToStaticMarkup(
+      <GitHistoryPane
+        busyLabel={null}
+        commits={commits}
+        error={null}
+        historySelection={{ kind: 'working-tree' }}
+        isLoading={false}
+        repositoryMeta='main'
+        revertDisabledReason={null}
+        onRevertCommit={ignoreChange}
+        onSelectCommit={ignorePath}
+        onSelectWorkingTree={ignorePath}
+      />,
+    )
+    const compactHistoryMarkup = renderToStaticMarkup(
+      <GitHistorySection
+        busyLabel={null}
+        commits={commits}
+        detailsByHash={{}}
+        detailsErrorsByHash={{}}
+        error={null}
+        expandedCommitHashes={{}}
+        iconTheme={null}
+        isExpanded
+        isLoading={false}
+        loadingCommitHashes={{}}
+        revertDisabledReason={null}
+        scrollElementRef={scrollElementRef}
+        onExpandedChange={ignorePath}
+        onOpenCommitFileDiff={ignoreChange}
+        onRevertCommit={ignoreChange}
+        onToggleCommit={ignorePath}
+      />,
+    )
+    const largeCommitDetails: GitCommitDetails = {
+      ...commit,
+      changes: changes.map((change): GitCommitFileChange => ({
+        kind: 'modified',
+        originalPath: change.originalPath,
+        path: change.path,
+        relativePath: change.relativePath,
+        statusCode: 'M',
+      })),
+    }
+    const detailMarkup = renderToStaticMarkup(
+      <GitCommitDetail
+        busyLabel={null}
+        details={largeCommitDetails}
+        error={null}
+        iconTheme={null}
+        isLoading={false}
+        layout='list'
+        layoutAction={null}
+        revertDisabledReason={null}
+        selectedCommitHash={commit.hash}
+        summary={commit}
+        onOpenCommitFileDiff={ignoreChange}
+        onRevertCommit={ignoreChange}
+      />,
+    )
+
+    for (const [markup, rowClassName] of [
+      [changeMarkup, 'git-change-virtual-item'],
+      [historyMarkup, 'git-history-virtual-item'],
+      [compactHistoryMarkup, 'git-history-virtual-item'],
+      [detailMarkup, 'git-change-virtual-item'],
+    ] as const) {
+      const renderedRows = markup.match(new RegExp(rowClassName, 'g')) ?? []
+      expect(renderedRows.length).toBeGreaterThan(0)
+      expect(renderedRows.length).toBeLessThan(40)
+    }
+
+    expect(changeMarkup).toContain('file-0.md')
+    expect(changeMarkup).not.toContain('file-999.md')
+    expect(historyMarkup).toContain('Commit 0')
+    expect(historyMarkup).not.toContain('Commit 999')
+    expect(compactHistoryMarkup).toContain('Commit 0')
+    expect(compactHistoryMarkup).not.toContain('Commit 999')
+    expect(detailMarkup).toContain('file-0.md')
+    expect(detailMarkup).not.toContain('file-999.md')
   })
 })

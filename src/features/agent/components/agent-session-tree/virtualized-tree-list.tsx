@@ -1,40 +1,19 @@
+import { type ReactNode, useRef } from 'react'
 import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from 'react'
-import {
-  defaultRangeExtractor,
-  useVirtualizer,
-} from '@tanstack/react-virtual'
-import {
-  TreeList,
+  DEFAULT_TREE_ROW_SIZE,
   TreeScrollArea,
+  VirtualizedTreeList,
+  type VirtualizedTreeRowAriaMetadata,
 } from '@/components/tree'
 
-// Pre-observation estimates only; the real ScrollArea viewport replaces them after mount.
 const AGENT_TREE_DOCKED_INITIAL_VIEWPORT_HEIGHT = 640
 const AGENT_TREE_FLOATING_INITIAL_VIEWPORT_HEIGHT = 320
-const AGENT_TREE_INITIAL_VIEWPORT_WIDTH = 320
-const AGENT_TREE_OVERSCAN = 8
-const DEFAULT_IS_ROW_FOCUSABLE = () => true
-const TREE_ROW_FOCUS_TARGET_SELECTOR = '.app-item-main:is(button, [role="button"]), .raw-rename-input'
 
-// AppItem's 32px row plus the shared 2px tree-list gap. Runtime measurement
-// corrects this estimate whenever a rendered row has a different height.
-export const DEFAULT_AGENT_TREE_ROW_SIZE = 34
+export const DEFAULT_AGENT_TREE_ROW_SIZE = DEFAULT_TREE_ROW_SIZE
+export type { VirtualizedTreeRowAriaMetadata }
 
 type KeyedTreeRow = {
   key: string
-}
-
-export type VirtualizedTreeRowAriaMetadata = {
-  level: number
-  positionInSet: number
-  setSize: number
 }
 
 type VirtualizedAgentTreeListProps<Row extends KeyedTreeRow> = {
@@ -65,7 +44,7 @@ export function VirtualizedAgentTreeList<Row extends KeyedTreeRow>({
   getRowClassName,
   getRowAriaMetadata,
   isFloating,
-  isRowFocusable = DEFAULT_IS_ROW_FOCUSABLE,
+  isRowFocusable,
   listClassName,
   listId,
   pinnedRowKeys,
@@ -75,146 +54,6 @@ export function VirtualizedAgentTreeList<Row extends KeyedTreeRow>({
   viewportClassName,
 }: VirtualizedAgentTreeListProps<Row>) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
-  const listRef = useRef<HTMLUListElement | null>(null)
-  const pendingFocusIndexRef = useRef<number | null>(null)
-  const revealedActiveRowKeyRef = useRef<string | null>(null)
-  const pinnedRowIndexes = useMemo(() => {
-    if (!pinnedRowKeys?.size) return []
-
-    const rowIndexByKey = new Map(rows.map((row, index) => [row.key, index]))
-    return Array.from(pinnedRowKeys)
-      .flatMap((rowKey) => {
-        const rowIndex = rowIndexByKey.get(rowKey)
-        return rowIndex === undefined ? [] : [rowIndex]
-      })
-      .sort((left, right) => left - right)
-  }, [pinnedRowKeys, rows])
-  const rangeExtractor = useCallback((range: Parameters<typeof defaultRangeExtractor>[0]) => {
-    if (pinnedRowIndexes.length === 0) return defaultRangeExtractor(range)
-
-    return Array.from(new Set([
-      ...defaultRangeExtractor(range),
-      ...pinnedRowIndexes,
-    ])).sort((left, right) => left - right)
-  }, [pinnedRowIndexes])
-  const getItemKey = useCallback(
-    (index: number) => rows[index]?.key ?? index,
-    [rows],
-  )
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    estimateSize: (index) => {
-      const row = rows[index]
-      return row ? estimateRowSize(row) : 0
-    },
-    getItemKey,
-    getScrollElement: () => viewportRef.current,
-    initialRect: {
-      height: isFloating
-        ? AGENT_TREE_FLOATING_INITIAL_VIEWPORT_HEIGHT
-        : AGENT_TREE_DOCKED_INITIAL_VIEWPORT_HEIGHT,
-      width: AGENT_TREE_INITIAL_VIEWPORT_WIDTH,
-    },
-    overscan: AGENT_TREE_OVERSCAN,
-    rangeExtractor,
-  })
-  const activeRowIndex = useMemo(() => (
-    activeRowKey ? rows.findIndex((row) => row.key === activeRowKey) : -1
-  ), [activeRowKey, rows])
-  const virtualRows = virtualizer.getVirtualItems()
-
-  useEffect(() => {
-    if (!activeRowKey) {
-      revealedActiveRowKeyRef.current = null
-      return
-    }
-    if (
-      revealedActiveRowKeyRef.current === activeRowKey
-      || activeRowIndex < 0
-      || !viewportRef.current
-    ) {
-      return
-    }
-
-    // Reveal a new selection once. Session metadata can reorder the same key
-    // while this list is open; following its changing index would fight the
-    // user's own scrolling.
-    virtualizer.scrollToIndex(activeRowIndex, { align: 'auto' })
-    revealedActiveRowKeyRef.current = activeRowKey
-  }, [activeRowIndex, activeRowKey, virtualizer])
-
-  const focusRow = useCallback((rowIndex: number) => {
-    virtualizer.scrollToIndex(rowIndex, { align: 'auto' })
-    const focusTarget = listRef.current
-      ?.querySelector<HTMLElement>(`[data-index="${rowIndex}"]`)
-      ?.querySelector<HTMLElement>(TREE_ROW_FOCUS_TARGET_SELECTOR)
-
-    if (focusTarget) {
-      pendingFocusIndexRef.current = null
-      focusTarget.focus({ preventScroll: true })
-    } else {
-      pendingFocusIndexRef.current = rowIndex
-    }
-  }, [virtualizer])
-
-  useEffect(() => {
-    const pendingFocusIndex = pendingFocusIndexRef.current
-    if (
-      pendingFocusIndex === null
-      || !virtualRows.some((virtualRow) => virtualRow.index === pendingFocusIndex)
-    ) {
-      return
-    }
-
-    pendingFocusIndexRef.current = null
-    listRef.current
-      ?.querySelector<HTMLElement>(`[data-index="${pendingFocusIndex}"]`)
-      ?.querySelector<HTMLElement>(TREE_ROW_FOCUS_TARGET_SELECTOR)
-      ?.focus({ preventScroll: true })
-  }, [virtualRows])
-
-  const handleListKeyDown = useCallback((event: ReactKeyboardEvent<HTMLUListElement>) => {
-    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
-    if (!(event.target instanceof HTMLElement)) return
-    if (event.target.matches('input, textarea, select, [contenteditable="true"]')) return
-
-    const currentRow = event.target.closest<HTMLElement>('.agent-session-virtual-item')
-    const primaryAction = currentRow?.querySelector<HTMLElement>(
-      '.app-item-main:is(button, [role="button"])',
-    )
-    if (!currentRow || !primaryAction?.contains(event.target)) return
-
-    const currentIndex = Number(currentRow.dataset.index)
-    if (!Number.isInteger(currentIndex)) return
-
-    const findFocusableRow = (startIndex: number, step: 1 | -1) => {
-      for (
-        let rowIndex = startIndex;
-        rowIndex >= 0 && rowIndex < rows.length;
-        rowIndex += step
-      ) {
-        const row = rows[rowIndex]
-        if (row && isRowFocusable(row)) return rowIndex
-      }
-
-      return null
-    }
-    let nextIndex: number | null = null
-    if (event.key === 'ArrowDown') {
-      nextIndex = findFocusableRow(currentIndex + 1, 1)
-    } else if (event.key === 'ArrowUp') {
-      nextIndex = findFocusableRow(currentIndex - 1, -1)
-    } else if (event.key === 'Home') {
-      nextIndex = findFocusableRow(0, 1)
-    } else if (event.key === 'End') {
-      nextIndex = findFocusableRow(rows.length - 1, -1)
-    }
-
-    if (nextIndex === null || nextIndex === currentIndex) return
-
-    event.preventDefault()
-    focusRow(nextIndex)
-  }, [focusRow, isRowFocusable, rows])
 
   return (
     <TreeScrollArea
@@ -223,39 +62,25 @@ export function VirtualizedAgentTreeList<Row extends KeyedTreeRow>({
       viewportClassName={viewportClassName}
       viewportRef={viewportRef}
     >
-      <TreeList
-        ref={listRef}
-        id={listId}
-        className={`agent-session-virtual-list${listClassName ? ` ${listClassName}` : ''}`}
-        aria-busy={ariaBusy || undefined}
-        aria-label={ariaLabel}
-        onKeyDown={handleListKeyDown}
-        style={{ height: virtualizer.getTotalSize() }}
-      >
-        {virtualRows.map((virtualRow) => {
-          const row = rows[virtualRow.index]
-          if (!row) return null
-
-          const rowClassName = getRowClassName?.(row)
-          const ariaMetadata = getRowAriaMetadata?.(row)
-
-          return (
-            <li
-              key={virtualRow.key}
-              ref={virtualizer.measureElement}
-              aria-level={ariaMetadata?.level}
-              aria-posinset={ariaMetadata?.positionInSet ?? virtualRow.index + 1}
-              aria-setsize={ariaMetadata?.setSize ?? rows.length}
-              className={`agent-session-virtual-item${rowClassName ? ` ${rowClassName}` : ''}`}
-              data-index={virtualRow.index}
-              data-row-key={row.key}
-              style={{ transform: `translateY(${virtualRow.start}px)` }}
-            >
-              {renderRow(row)}
-            </li>
-          )
-        })}
-      </TreeList>
+      <VirtualizedTreeList
+        activeRowKey={activeRowKey}
+        ariaBusy={ariaBusy}
+        ariaLabel={ariaLabel}
+        estimateRowSize={estimateRowSize}
+        getRowAriaMetadata={getRowAriaMetadata}
+        getRowClassName={getRowClassName}
+        initialViewportHeight={isFloating
+          ? AGENT_TREE_FLOATING_INITIAL_VIEWPORT_HEIGHT
+          : AGENT_TREE_DOCKED_INITIAL_VIEWPORT_HEIGHT}
+        isRowFocusable={isRowFocusable}
+        itemClassName='agent-session-virtual-item'
+        listClassName={`agent-session-virtual-list${listClassName ? ` ${listClassName}` : ''}`}
+        listId={listId}
+        pinnedRowKeys={pinnedRowKeys}
+        renderRow={renderRow}
+        rows={rows}
+        scrollElementRef={viewportRef}
+      />
     </TreeScrollArea>
   )
 }

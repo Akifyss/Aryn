@@ -52,6 +52,39 @@
   list-style: none;
 }
 
+.tree-virtual-list {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.tree-virtual-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 100%;
+  padding-bottom: var(--app-item-list-gap);
+  list-style: none;
+  contain: layout;
+}
+
+.tree-virtual-indent-guides,
+.tree-virtual-indent-guides > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.tree-virtual-indent-guides {
+  left: 0;
+}
+
+.tree-virtual-indent-guides > span {
+  border-left: 1px solid var(--separator);
+}
+
 .tree-list > .app-item-container,
 .tree-section > .app-item-container,
 .tree-section {

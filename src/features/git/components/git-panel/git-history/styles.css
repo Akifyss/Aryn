@@ -22,14 +22,6 @@
   padding-top: 2px;
 }
 
-.git-history-tree-list {
-  --tree-nested-list-padding-left: 8px;
-}
-
-.git-history-commit-children {
-  margin-bottom: 4px;
-}
-
 .git-commit-detail {
   display: flex;
   flex: 1;

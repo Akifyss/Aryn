@@ -1,4 +1,4 @@
-import type { Dispatch, ReactNode, SetStateAction } from 'react'
+import { useRef, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import {
   FileNewLine,
   FolderForbidLine,
@@ -65,6 +65,8 @@ export function WorkspaceTreePanel({
   onSelectFile,
   onToggleFileTreeExpansion,
 }: WorkspaceTreePanelProps) {
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+
   return (
     <div className={`sidebar-stack-pane workspace-tree-pane${showDirectoryHeader ? ' has-directory-header' : ''}`}>
       {showDirectoryHeader ? (
@@ -117,6 +119,7 @@ export function WorkspaceTreePanel({
       <TreeScrollArea
         className='workspace-tree-scroll'
         contentClassName='workspace-tree-scroll-content'
+        viewportRef={viewportRef}
       >
         {workspaceUnavailableMessage ? (
           <WorkspaceTreeEmptyState
@@ -133,6 +136,7 @@ export function WorkspaceTreePanel({
             workspacePath={workspacePath}
             gitRepositoryState={gitRepositoryState}
             menuPortalTarget={menuPortalTarget}
+            scrollElementRef={viewportRef}
             onDeleteNode={onDeleteNode}
             onMoveNode={onMoveNode}
             onOpenDiff={onOpenDiff}

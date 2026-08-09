@@ -145,23 +145,6 @@
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--warning) 16%, transparent);
 }
 
-.agent-session-virtual-list {
-  position: relative;
-  display: block;
-  flex: 0 0 auto;
-}
-
-.agent-session-virtual-item {
-  position: absolute;
-  top: 0;
-  left: 0;
-  box-sizing: border-box;
-  width: 100%;
-  padding-bottom: var(--app-item-list-gap);
-  list-style: none;
-  contain: layout;
-}
-
 .agent-session-virtual-item.is-section-start {
   padding-top: 6px;
 }

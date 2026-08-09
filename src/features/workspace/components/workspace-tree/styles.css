@@ -31,11 +31,10 @@
 }
 
 .workspace-tree-root {
-  display: flex;
+  display: block;
   flex: 1 0 auto;
   min-height: 100%;
   box-sizing: border-box;
-  flex-direction: column;
 }
 
 .workspace-tree-root.is-dragging .app-item-row.is-drag-source .app-item-main,

@@ -144,6 +144,7 @@ export function GitPanel({
   const [isHistoryCompact, setIsHistoryCompact] = useState(false)
   const latestHistoryRequestIdRef = useRef(0)
   const commitDetailsWorkspaceRef = useRef<string | null>(workspacePath)
+  const sectionsViewportRef = useRef<HTMLDivElement | null>(null)
   const stagedPaths = useMemo(
     () => repositoryState?.stagedChanges.map((change) => change.path) ?? [],
     [repositoryState?.stagedChanges],
@@ -432,6 +433,7 @@ export function GitPanel({
       isLoading={isHistoryLoading}
       loadingCommitHashes={loadingCommitHashes}
       revertDisabledReason={revertDisabledReason}
+      scrollElementRef={sectionsViewportRef}
       onExpandedChange={setIsHistoryExpanded}
       onOpenCommitFileDiff={onOpenCommitFileDiff}
       onRevertCommit={onRevertCommit}
@@ -547,6 +549,7 @@ export function GitPanel({
       <TreeScrollArea
         className='git-panel-sections'
         contentClassName='git-panel-sections-content'
+        viewportRef={sectionsViewportRef}
       >
         {!currentRepositoryState.hasChanges ? (
           <div className='git-panel-empty-state git-panel-clean-state'>
@@ -597,6 +600,7 @@ export function GitPanel({
               kind='staged'
               layout={layout}
               iconTheme={iconTheme}
+              scrollElementRef={sectionsViewportRef}
               onDiscardMany={onDiscardMany}
               onOpenDiff={onOpenDiff}
               onOpenMeoDiff={onOpenMeoDiff}
@@ -621,6 +625,7 @@ export function GitPanel({
               kind='unstaged'
               layout={layout}
               iconTheme={iconTheme}
+              scrollElementRef={sectionsViewportRef}
               onDiscardMany={onDiscardMany}
               onOpenDiff={onOpenDiff}
               onOpenMeoDiff={onOpenMeoDiff}

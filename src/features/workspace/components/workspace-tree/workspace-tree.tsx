@@ -1,4 +1,17 @@
-import { type Dispatch, type DragEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type SetStateAction, useEffect, useRef, useState } from 'react'
+import {
+  type Dispatch,
+  type DragEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+  type RefObject,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   CheckLine,
   CloseLine,
@@ -23,8 +36,8 @@ import {
   WorkspaceFileIcon,
 } from '@/components/file-change-visuals'
 import {
-  TreeChildren,
-  TreeList,
+  DEFAULT_TREE_ROW_SIZE,
+  VirtualizedTreeList,
 } from '@/components/tree'
 import { pickDominantGitDisplayChange } from '@/features/git/lib/display-change'
 import {
@@ -41,6 +54,11 @@ import { recordOpenFileProfile } from '@/lib/open-file-profile'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 import type { GitChangeItem, GitDisplayChange, GitRepositoryState } from '@/features/git/types'
 import { WorkspaceTreeEmptyState } from './workspace-tree-empty-state'
+import {
+  createVisibleWorkspaceTreeRows,
+  getWorkspaceTreeRowKey,
+  type WorkspaceTreeRow,
+} from './workspace-tree-model'
 import './styles.css'
 
 export type WorkspaceTreeActivationEvent = Pick<MouseEvent<HTMLElement>, 'button' | 'ctrlKey' | 'metaKey'>
@@ -60,6 +78,19 @@ type WorkspaceTreeProps = {
   onMoveNode: (node: WorkspaceNode, targetDirectoryPath: string) => Promise<void>
   gitRepositoryState?: GitRepositoryState | null
   menuPortalTarget?: HTMLElement | null
+  scrollElementRef: RefObject<HTMLDivElement | null>
+}
+
+function estimateWorkspaceTreeRowSize() {
+  return DEFAULT_TREE_ROW_SIZE
+}
+
+function getWorkspaceTreeRowAriaMetadata(row: WorkspaceTreeRow) {
+  return row.aria
+}
+
+function getWorkspaceTreeRowDepth(row: WorkspaceTreeRow) {
+  return row.depth
 }
 
 function findGitChangeByFilePath(repositoryState: GitRepositoryState | null | undefined, node: WorkspaceNode): GitDisplayChange | null {
@@ -275,6 +306,8 @@ function FileTreeItem({
   onRenameNode,
   onSelectFile,
   onToggleDirectory,
+  onPinnedChange,
+  rowKey,
   gitRepositoryState,
   menuPortalTarget,
 }: {
@@ -296,16 +329,22 @@ function FileTreeItem({
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onSelectFile: (path: string, event: WorkspaceTreeActivationEvent) => void
   onToggleDirectory: (path: string) => void
+  onPinnedChange: (rowKey: string, pinned: boolean) => void
+  rowKey: string
   gitRepositoryState?: GitRepositoryState | null
   menuPortalTarget?: HTMLElement | null
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [isRowMenuOpen, setIsRowMenuOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [draftName, setDraftName] = useState(node.name)
   const [error, setError] = useState<string | null>(null)
   const rowRef = useRef<HTMLDivElement | null>(null)
   const renameInputRef = useRef<HTMLInputElement | null>(null)
+  const onPinnedChangeRef = useRef(onPinnedChange)
+  const reportedPinnedRef = useRef(false)
+  onPinnedChangeRef.current = onPinnedChange
 
   const isFolder = node.kind === 'directory'
   const editorKind = node.kind === 'file' ? getSupportedWorkspaceEditorKind(node.path) : null
@@ -322,6 +361,21 @@ function FileTreeItem({
     && dropTargetDirectoryPath
     && areSameWorkspacePaths(dropTargetDirectoryPath, resolvedDropTargetDirectoryPath),
   )
+  const isPinned = isEditing || isRowMenuOpen || isDeleteDialogOpen || isSubmitting
+
+  useEffect(() => {
+    if (reportedPinnedRef.current === isPinned) return
+
+    reportedPinnedRef.current = isPinned
+    onPinnedChangeRef.current(rowKey, isPinned)
+  }, [isPinned, rowKey])
+
+  useEffect(() => () => {
+    if (!reportedPinnedRef.current) return
+
+    reportedPinnedRef.current = false
+    onPinnedChangeRef.current(rowKey, false)
+  }, [rowKey])
 
   useEffect(() => {
     setDraftName(node.name)
@@ -365,8 +419,6 @@ function FileTreeItem({
       setIsSubmitting(false)
     }
   }
-
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   const handleActivateNode = (event: WorkspaceTreeActivationEvent) => {
     recordOpenFileProfile('workspace-tree:row-click', {
@@ -469,38 +521,6 @@ function FileTreeItem({
       {deleteDialog}
 
       {error && <p className='tree-error'>{error}</p>}
-
-      {isFolder && isExpanded && node.children && (
-        <TreeChildren>
-          <TreeList>
-            {node.children.map(child => (
-              <FileTreeItem
-                key={child.path}
-                activeFilePath={activeFilePath}
-                draggedNode={draggedNode}
-                dropTargetDirectoryPath={dropTargetDirectoryPath}
-                expandedPaths={expandedPaths}
-                iconTheme={iconTheme}
-                node={child}
-                workspacePath={workspacePath}
-                onDeleteNode={onDeleteNode}
-                onDragEndNode={onDragEndNode}
-                onDragLeaveNode={onDragLeaveNode}
-                onDragOverNode={onDragOverNode}
-                onDragStartNode={onDragStartNode}
-                onDropOnNode={onDropOnNode}
-                onOpenInCodeEditor={onOpenInCodeEditor}
-                onOpenDiff={onOpenDiff}
-                onRenameNode={onRenameNode}
-                onSelectFile={onSelectFile}
-                onToggleDirectory={onToggleDirectory}
-                gitRepositoryState={gitRepositoryState}
-                menuPortalTarget={menuPortalTarget}
-              />
-            ))}
-          </TreeList>
-        </TreeChildren>
-      )}
     </>
   )
 
@@ -591,6 +611,7 @@ function FileTreeItem({
 
   return (
     <AppItem
+      itemAs='div'
       ref={rowRef}
       isActive={isActive}
       isDragSource={isDragSource}
@@ -654,10 +675,12 @@ export function WorkspaceTree({
   onMoveNode,
   gitRepositoryState,
   menuPortalTarget,
+  scrollElementRef,
 }: WorkspaceTreeProps) {
   const [draggedNode, setDraggedNode] = useState<WorkspaceNode | null>(null)
   const [dropTargetDirectoryPath, setDropTargetDirectoryPath] = useState<string | null>(null)
   const [isMovingNode, setIsMovingNode] = useState(false)
+  const [pinnedRowKeys, setPinnedRowKeys] = useState<Set<string>>(() => new Set())
   const expandTimerRef = useRef<number | null>(null)
   const expandTimerPathRef = useRef<string | null>(null)
   const isRootDropTarget = Boolean(
@@ -665,6 +688,29 @@ export function WorkspaceTree({
     && dropTargetDirectoryPath
     && areSameWorkspacePaths(dropTargetDirectoryPath, workspacePath),
   )
+  const rows = useMemo(
+    () => createVisibleWorkspaceTreeRows(nodes, expandedPaths),
+    [expandedPaths, nodes],
+  )
+  const activeRowKey = activeFilePath ? getWorkspaceTreeRowKey(activeFilePath) : null
+  const resolvedPinnedRowKeys = useMemo(() => {
+    if (!draggedNode) return pinnedRowKeys
+
+    const nextPinnedRowKeys = new Set(pinnedRowKeys)
+    nextPinnedRowKeys.add(getWorkspaceTreeRowKey(draggedNode.path))
+    return nextPinnedRowKeys
+  }, [draggedNode, pinnedRowKeys])
+
+  const handlePinnedChange = useCallback((rowKey: string, pinned: boolean) => {
+    setPinnedRowKeys((currentPinnedRowKeys) => {
+      if (currentPinnedRowKeys.has(rowKey) === pinned) return currentPinnedRowKeys
+
+      const nextPinnedRowKeys = new Set(currentPinnedRowKeys)
+      if (pinned) nextPinnedRowKeys.add(rowKey)
+      else nextPinnedRowKeys.delete(rowKey)
+      return nextPinnedRowKeys
+    })
+  }, [])
 
   const clearExpandTimer = () => {
     if (expandTimerRef.current !== null) {
@@ -873,21 +919,29 @@ export function WorkspaceTree({
   }
 
   return (
-    <TreeList
-      className={`workspace-tree-root${draggedNode ? ' is-dragging' : ''}${isRootDropTarget ? ' is-root-drop-target' : ''}`}
-      onDragLeave={handleRootDragLeave}
-      onDragOver={handleRootDragOver}
-      onDrop={(event) => void handleRootDrop(event)}
-    >
-      {nodes.map((node) => (
+    <VirtualizedTreeList
+      activeRowKey={activeRowKey}
+      ariaLabel='文件树'
+      estimateRowSize={estimateWorkspaceTreeRowSize}
+      getRowAriaMetadata={getWorkspaceTreeRowAriaMetadata}
+      getRowDepth={getWorkspaceTreeRowDepth}
+      itemClassName='workspace-tree-virtual-item'
+      listClassName={`workspace-tree-root${draggedNode ? ' is-dragging' : ''}${isRootDropTarget ? ' is-root-drop-target' : ''}`}
+      listProps={{
+        onDragLeave: handleRootDragLeave,
+        onDragOver: handleRootDragOver,
+        onDrop: (event) => void handleRootDrop(event),
+      }}
+      pinnedRowKeys={resolvedPinnedRowKeys}
+      renderRow={(row) => (
         <FileTreeItem
-          key={node.path}
           activeFilePath={activeFilePath}
           draggedNode={draggedNode}
           dropTargetDirectoryPath={dropTargetDirectoryPath}
           expandedPaths={expandedPaths}
           iconTheme={iconTheme}
-          node={node}
+          node={row.node}
+          rowKey={row.key}
           workspacePath={workspacePath}
           onDeleteNode={onDeleteNode}
           onDragEndNode={handleDragEndNode}
@@ -900,10 +954,13 @@ export function WorkspaceTree({
           onRenameNode={onRenameNode}
           onSelectFile={onSelectFile}
           onToggleDirectory={handleToggle}
+          onPinnedChange={handlePinnedChange}
           gitRepositoryState={gitRepositoryState}
           menuPortalTarget={menuPortalTarget}
         />
-      ))}
-    </TreeList>
+      )}
+      rows={rows}
+      scrollElementRef={scrollElementRef}
+    />
   )
 }

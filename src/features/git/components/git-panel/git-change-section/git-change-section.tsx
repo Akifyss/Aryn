@@ -1,4 +1,10 @@
-import { type ReactNode, useMemo, useState } from 'react'
+import {
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useMemo,
+  useState,
+} from 'react'
 import { AddLine, Back2Line, MarkdownLine } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import {
@@ -10,8 +16,10 @@ import {
   AppItemActionButton,
 } from '@/components/app-item'
 import {
-  TreeChildren,
-  TreeList,
+  DEFAULT_TREE_ROW_SIZE,
+  DESCRIBED_TREE_ROW_SIZE,
+  VirtualizedTreeList,
+  type VirtualizedTreeRowAriaMetadata,
 } from '@/components/tree'
 import type {
   GitChangeItem,
@@ -29,22 +37,26 @@ import {
   supportsMeoDiff,
   type GitTreeNode,
 } from '../git-panel-model'
+import {
+  createGitChangeTreeRows,
+  type GitChangeTreeRow,
+} from './git-change-tree-model'
 import './styles.css'
 
 type GitChangeSectionKind = 'staged' | 'unstaged' | 'pulled' | 'commit'
 
-type GitChangeRowsProps = {
-  changes: GitDisplayChange[]
-  onDiscardMany: (changes: GitChangeItem[]) => void
-  onOpenDiff: (change: GitChangeItem) => void
-  onOpenCommitFileDiff?: (change: GitCommitFileChange) => void
-  onOpenMeoDiff: (change: GitChangeItem) => void
-  onOpenFile: (filePath: string) => void
-  onStage: (filePaths: string[]) => void
-  onUnstage: (filePaths: string[]) => void
+export type GitChangeRowProps = {
+  change: GitDisplayChange
   iconTheme: WorkspaceIconTheme | null
   kind: GitChangeSectionKind
   layout: GitPanelLayout
+  onDiscardMany: (changes: GitChangeItem[]) => void
+  onOpenCommitFileDiff?: (change: GitCommitFileChange) => void
+  onOpenDiff: (change: GitChangeItem) => void
+  onOpenFile: (filePath: string) => void
+  onOpenMeoDiff: (change: GitChangeItem) => void
+  onStage: (filePaths: string[]) => void
+  onUnstage: (filePaths: string[]) => void
 }
 
 function GitRowActions({
@@ -80,7 +92,7 @@ function GitRowActions({
 
   return (
     <>
-      {showOpenFile && (
+      {showOpenFile ? (
         <AppItemActionButton
           aria-label='打开文件'
           title='打开文件'
@@ -91,8 +103,8 @@ function GitRowActions({
         >
           <Icon icon='material-symbols:file-export-outline-rounded' aria-hidden='true' />
         </AppItemActionButton>
-      )}
-      {showMeoDiff && (
+      ) : null}
+      {showMeoDiff ? (
         <AppItemActionButton
           aria-label='打开 MEO 分屏差异'
           title='打开 MEO 分屏差异'
@@ -103,9 +115,8 @@ function GitRowActions({
         >
           <MarkdownLine aria-hidden='true' />
         </AppItemActionButton>
-      )}
-
-      {showUnstage && (
+      ) : null}
+      {showUnstage ? (
         <AppItemActionButton
           aria-label='取消暂存'
           title='取消暂存'
@@ -116,9 +127,8 @@ function GitRowActions({
         >
           <Icon icon='mdi:minus' aria-hidden='true' />
         </AppItemActionButton>
-      )}
-
-      {showStageControls && (
+      ) : null}
+      {showStageControls ? (
         <>
           <AppItemActionButton
             aria-label='放弃更改'
@@ -141,93 +151,49 @@ function GitRowActions({
             <AddLine aria-hidden='true' />
           </AppItemActionButton>
         </>
-      )}
+      ) : null}
     </>
   )
 }
 
-function GitTreeFolder({
+function GitTreeFolderRow({
+  closedMap,
+  iconTheme,
   kind,
   node,
   onDiscardMany,
-  onOpenDiff,
-  onOpenCommitFileDiff,
-  onOpenMeoDiff,
-  onOpenFile,
   onStage,
+  onToggle,
   onUnstage,
-  iconTheme,
-  closedMap,
-  toggleNode,
-  layout,
 }: {
+  closedMap: Readonly<Record<string, boolean>>
+  iconTheme: WorkspaceIconTheme | null
   kind: GitChangeSectionKind
   node: GitTreeNode
   onDiscardMany: (changes: GitChangeItem[]) => void
-  onOpenDiff: (change: GitChangeItem) => void
-  onOpenCommitFileDiff?: (change: GitCommitFileChange) => void
-  onOpenMeoDiff: (change: GitChangeItem) => void
-  onOpenFile: (filePath: string) => void
   onStage: (filePaths: string[]) => void
+  onToggle: (id: string) => void
   onUnstage: (filePaths: string[]) => void
-  iconTheme: WorkspaceIconTheme | null
-  closedMap: Record<string, boolean>
-  toggleNode: (id: string) => void
-  layout: GitPanelLayout
 }) {
   const isClosed = closedMap[node.id] ?? false
   const activeItems = node.items.filter(isScopedGitChange)
   const paths = activeItems.map((item) => item.path)
 
-  const localItems = node.items.filter((item) => {
-    const parentPath = item.relativePath.substring(0, item.relativePath.lastIndexOf('/'))
-    return parentPath === node.path
-  })
-
   return (
     <AppItem
-      after={!isClosed ? (
-        <TreeChildren>
-          <TreeList>
-            {node.children.map((child) => (
-              <GitTreeFolder
-                key={child.id}
-                kind={kind}
-                node={child}
-                onDiscardMany={onDiscardMany}
-                onOpenDiff={onOpenDiff}
-                onOpenCommitFileDiff={onOpenCommitFileDiff}
-                onOpenMeoDiff={onOpenMeoDiff}
-                onOpenFile={onOpenFile}
-                onStage={onStage}
-                onUnstage={onUnstage}
-                iconTheme={iconTheme}
-                closedMap={closedMap}
-                toggleNode={toggleNode}
-                layout={layout}
-              />
-            ))}
-            <GitChangeRows
-              changes={localItems}
-              kind={kind}
-              onDiscardMany={onDiscardMany}
-              onOpenDiff={onOpenDiff}
-              onOpenCommitFileDiff={onOpenCommitFileDiff}
-              onOpenMeoDiff={onOpenMeoDiff}
-              onOpenFile={onOpenFile}
-              onStage={onStage}
-              onUnstage={onUnstage}
-              iconTheme={iconTheme}
-              layout={layout}
-            />
-          </TreeList>
-        </TreeChildren>
-      ) : null}
-      icon={<WorkspaceFileIcon isFolder nodeLabel={node.label} isClosed={isClosed} iconTheme={iconTheme} />}
+      itemAs='div'
+      icon={(
+        <WorkspaceFileIcon
+          isFolder
+          nodeLabel={node.label}
+          isClosed={isClosed}
+          iconTheme={iconTheme}
+        />
+      )}
       label={node.label}
       mainButtonProps={{
         'aria-expanded': !isClosed,
-        onClick: () => toggleNode(node.id),
+        onClick: () => onToggle(node.id),
       }}
       actions={() => (
         <GitRowActions
@@ -244,77 +210,67 @@ function GitTreeFolder({
   )
 }
 
-export function GitChangeRows({
-  changes,
-  onDiscardMany,
-  onOpenDiff,
-  onOpenCommitFileDiff,
-  onOpenMeoDiff,
-  onOpenFile,
-  onStage,
-  onUnstage,
+export function GitChangeRow({
+  change,
   iconTheme,
   kind,
   layout,
-}: GitChangeRowsProps) {
-  return (
-    <>
-      {changes.map((change) => {
-        const fileName = getBaseName(change.relativePath)
-        const dirLabel = getDirectoryLabel(change.relativePath)
-        const isChange = isScopedGitChange(change)
-        const pathMeta = layout === 'list' ? dirLabel : ''
-        const changeKindLabel = getGitChangeKindLabel(change.kind)
+  onDiscardMany,
+  onOpenCommitFileDiff,
+  onOpenDiff,
+  onOpenFile,
+  onOpenMeoDiff,
+  onStage,
+  onUnstage,
+}: GitChangeRowProps) {
+  const fileName = getBaseName(change.relativePath)
+  const dirLabel = getDirectoryLabel(change.relativePath)
+  const isChange = isScopedGitChange(change)
+  const pathMeta = layout === 'list' ? dirLabel : ''
+  const changeKindLabel = getGitChangeKindLabel(change.kind)
 
-        return (
-          <AppItem
-            key={change.path}
-            icon={<WorkspaceFileIcon fileName={fileName} iconTheme={iconTheme} />}
-            label={fileName}
-            description={pathMeta || undefined}
-            mainButtonProps={{
-              title: change.relativePath,
-              onClick: () => {
-                if (isChange) onOpenDiff(change)
-                else if (kind === 'commit') onOpenCommitFileDiff?.(change)
-                else onOpenFile(change.path)
-              },
-            }}
-            actions={() => (
-              <GitRowActions
-                kind={kind}
-                change={change}
-                onStage={() => onStage([change.path])}
-                onUnstage={() => onUnstage([change.path])}
-                onDiscard={() => onDiscardMany([change as GitChangeItem])}
-                onOpenFile={() => onOpenFile(change.path)}
-                onOpenMeoDiff={() => isChange && onOpenMeoDiff(change)}
-              />
-            )}
-            info={(
-              <FileChangeStatusBadge
-                kind={change.kind}
-                title={changeKindLabel}
-              />
-            )}
-            infoVariant='status'
-          />
-        )
-      })}
-    </>
+  return (
+    <AppItem
+      itemAs='div'
+      icon={<WorkspaceFileIcon fileName={fileName} iconTheme={iconTheme} />}
+      label={fileName}
+      description={pathMeta || undefined}
+      mainButtonProps={{
+        title: change.relativePath,
+        onClick: () => {
+          if (isChange) onOpenDiff(change)
+          else if (kind === 'commit') onOpenCommitFileDiff?.(change)
+          else onOpenFile(change.path)
+        },
+      }}
+      actions={() => (
+        <GitRowActions
+          kind={kind}
+          change={change}
+          onStage={() => onStage([change.path])}
+          onUnstage={() => onUnstage([change.path])}
+          onDiscard={() => isChange && onDiscardMany([change])}
+          onOpenFile={() => onOpenFile(change.path)}
+          onOpenMeoDiff={() => isChange && onOpenMeoDiff(change)}
+        />
+      )}
+      info={(
+        <FileChangeStatusBadge
+          kind={change.kind}
+          title={changeKindLabel}
+        />
+      )}
+      infoVariant='status'
+    />
   )
 }
 
-function GitChangeList(props: GitChangeRowsProps) {
-  if (props.changes.length === 0) {
-    return null
-  }
+function getRowAriaMetadata(row: GitChangeTreeRow): VirtualizedTreeRowAriaMetadata {
+  return row.aria
+}
 
-  return (
-    <TreeList className='git-change-list git-change-list-flat'>
-      <GitChangeRows {...props} />
-    </TreeList>
-  )
+function getRowDepth(row: GitChangeTreeRow) {
+  return row.depth
 }
 
 export function GitChangeSection({
@@ -331,6 +287,7 @@ export function GitChangeSection({
   onOpenMeoDiff,
   onOpenFile,
   iconTheme,
+  scrollElementRef,
 }: {
   title: string
   changes: GitDisplayChange[]
@@ -345,25 +302,33 @@ export function GitChangeSection({
   onOpenMeoDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   iconTheme: WorkspaceIconTheme | null
+  scrollElementRef: RefObject<HTMLDivElement | null>
 }) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [closedMap, setClosedMap] = useState<Record<string, boolean>>({})
-  const treeNodes = useMemo(() => buildGitTree(changes), [changes])
-  const rootFiles = useMemo(
-    () => changes.filter((change) => !change.relativePath.includes('/')),
-    [changes],
+  const treeNodes = useMemo(
+    () => layout === 'tree' ? buildGitTree(changes) : [],
+    [changes, layout],
   )
+  const rows = useMemo(
+    () => createGitChangeTreeRows(changes, layout, closedMap, treeNodes),
+    [changes, closedMap, layout, treeNodes],
+  )
+  const estimateRowSize = useCallback((row: GitChangeTreeRow) => {
+    if (row.kind === 'folder' || layout === 'tree') return DEFAULT_TREE_ROW_SIZE
 
-  const toggleNode = (id: string) => {
+    return getDirectoryLabel(row.change.relativePath)
+      ? DESCRIBED_TREE_ROW_SIZE
+      : DEFAULT_TREE_ROW_SIZE
+  }, [layout])
+  const toggleNode = useCallback((id: string) => {
     setClosedMap((previousMap) => ({
       ...previousMap,
       [id]: !previousMap[id],
     }))
-  }
+  }, [])
 
-  if (changes.length === 0) {
-    return null
-  }
+  if (changes.length === 0) return null
 
   return (
     <div className='git-panel-section'>
@@ -379,57 +344,43 @@ export function GitChangeSection({
 
       {isExpanded ? (
         <div className={layout === 'tree' ? 'git-panel-tree-shell' : ''}>
-          {layout === 'tree' && treeNodes.length > 0 ? (
-            <TreeList className='git-change-list'>
-              {treeNodes.map((node) => (
-                <GitTreeFolder
-                  key={node.id}
-                  kind={kind}
-                  node={node}
-                  closedMap={closedMap}
-                  toggleNode={toggleNode}
-                  onDiscardMany={onDiscardMany}
-                  onOpenDiff={onOpenDiff}
-                  onOpenCommitFileDiff={onOpenCommitFileDiff}
-                  onOpenMeoDiff={onOpenMeoDiff}
-                  onOpenFile={onOpenFile}
-                  onStage={onStage}
-                  onUnstage={onUnstage}
-                  iconTheme={iconTheme}
-                  layout={layout}
-                />
-              ))}
-              {rootFiles.length > 0 ? (
-                <GitChangeRows
-                  changes={rootFiles}
-                  kind={kind}
-                  onDiscardMany={onDiscardMany}
-                  onOpenDiff={onOpenDiff}
-                  onOpenCommitFileDiff={onOpenCommitFileDiff}
-                  onOpenMeoDiff={onOpenMeoDiff}
-                  onOpenFile={onOpenFile}
-                  onStage={onStage}
-                  onUnstage={onUnstage}
-                  iconTheme={iconTheme}
-                  layout={layout}
-                />
-              ) : null}
-            </TreeList>
-          ) : (
-            <GitChangeList
-              changes={changes}
-              kind={kind}
-              onDiscardMany={onDiscardMany}
-              onOpenDiff={onOpenDiff}
-              onOpenCommitFileDiff={onOpenCommitFileDiff}
-              onOpenMeoDiff={onOpenMeoDiff}
-              onOpenFile={onOpenFile}
-              onStage={onStage}
-              onUnstage={onUnstage}
-              iconTheme={iconTheme}
-              layout={layout}
-            />
-          )}
+          <VirtualizedTreeList
+            ariaLabel={title}
+            estimateRowSize={estimateRowSize}
+            getRowAriaMetadata={getRowAriaMetadata}
+            getRowDepth={getRowDepth}
+            indentSize={22}
+            itemClassName='git-change-virtual-item'
+            listClassName='git-change-list'
+            renderRow={(row) => row.kind === 'folder' ? (
+              <GitTreeFolderRow
+                closedMap={closedMap}
+                iconTheme={iconTheme}
+                kind={kind}
+                node={row.node}
+                onDiscardMany={onDiscardMany}
+                onStage={onStage}
+                onToggle={toggleNode}
+                onUnstage={onUnstage}
+              />
+            ) : (
+              <GitChangeRow
+                change={row.change}
+                iconTheme={iconTheme}
+                kind={kind}
+                layout={layout}
+                onDiscardMany={onDiscardMany}
+                onOpenCommitFileDiff={onOpenCommitFileDiff}
+                onOpenDiff={onOpenDiff}
+                onOpenFile={onOpenFile}
+                onOpenMeoDiff={onOpenMeoDiff}
+                onStage={onStage}
+                onUnstage={onUnstage}
+              />
+            )}
+            rows={rows}
+            scrollElementRef={scrollElementRef}
+          />
         </div>
       ) : null}
     </div>
