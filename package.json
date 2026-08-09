@@ -93,7 +93,7 @@
     "@pierre/diffs": "^1.1.10",
     "@pierre/trees": "^1.0.0-beta.4",
     "@replit/codemirror-vim": "^6.3.0",
-    "@tanstack/react-virtual": "^3.13.12",
+    "@tanstack/react-virtual": "^3.14.9",
     "chokidar": "^5.0.0",
     "cross-spawn": "^7.0.6",
     "diff": "^8.0.4",

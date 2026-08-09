@@ -97,13 +97,17 @@ export function VirtualizedAgentTreeList<Row extends KeyedTreeRow>({
       ...pinnedRowIndexes,
     ])).sort((left, right) => left - right)
   }, [pinnedRowIndexes])
+  const getItemKey = useCallback(
+    (index: number) => rows[index]?.key ?? index,
+    [rows],
+  )
   const virtualizer = useVirtualizer({
     count: rows.length,
     estimateSize: (index) => {
       const row = rows[index]
       return row ? estimateRowSize(row) : 0
     },
-    getItemKey: (index) => rows[index]?.key ?? index,
+    getItemKey,
     getScrollElement: () => viewportRef.current,
     initialRect: {
       height: isFloating
