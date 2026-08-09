@@ -19,7 +19,9 @@
     var(--file-tabs-rail-surface) 0 calc(100% - 1px),
     transparent calc(100% - 1px)
   );
-  z-index: 2;
+  /* The SVG boundary extends below this rail. Keep the rail's stacking context
+     above content overlays so they cannot cover the curved part of the line. */
+  z-index: 3;
 }
 
 .app-shell[data-app-layout='editor']

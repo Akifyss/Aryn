@@ -528,6 +528,7 @@ describe('shell layout helpers', () => {
     expect(editorFrameRule).not.toContain('border')
     expect(editorContentShellRule).toBeDefined()
     expect(editorContentShellRule).not.toContain('border')
+    expect(fileTabsCss).toMatch(/\.file-tabs-shell\s*\{[^}]*z-index: 3;/s)
     expect(fileTabsCss).toContain('.file-tabs-boundary-chrome {')
     expect(fileTabsCss).toContain('.file-tabs-geometry-indicator {')
     expect(fileTabsCss).toContain(`.file-tabs-boundary-fill-layer {
