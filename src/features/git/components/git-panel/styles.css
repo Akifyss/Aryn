@@ -122,8 +122,7 @@
 }
 
 .git-panel-init-state {
-  flex-direction: column;
-  gap: 13px;
+  flex: 1;
 }
 
 .git-panel-clean-state {

@@ -4,7 +4,9 @@ import type {
   GitChangeItem,
   GitCommitDetails,
   GitCommitItem,
+  GitRepositoryState,
 } from '@/features/git/types'
+import { GitPanel } from '@/features/git/components/git-panel/git-panel'
 import { GitChangeSection } from '@/features/git/components/git-panel/git-change-section/git-change-section'
 import {
   GitCommitDetail,
@@ -19,6 +21,23 @@ const markdownChange: GitChangeItem = {
   relativePath: 'src/guide.md',
   scope: 'unstaged',
   statusCode: ' M',
+}
+
+const nonRepositoryState: GitRepositoryState = {
+  ahead: 0,
+  behind: 0,
+  branch: null,
+  hasCommits: false,
+  hasChanges: false,
+  hasRemote: false,
+  isRepository: false,
+  recentlyPulledChanges: [],
+  remoteCount: 0,
+  repositoryRootPath: null,
+  stagedChanges: [],
+  unpushedCommits: 0,
+  unstagedChanges: [],
+  workspacePath: 'C:\\workspace',
 }
 
 const commit: GitCommitItem = {
@@ -46,6 +65,44 @@ const ignoreChanges = () => undefined
 const ignorePath = () => undefined
 
 describe('Git panel presentation components', () => {
+  it('uses the shared empty state for a workspace without a Git repository', () => {
+    const markup = renderToStaticMarkup(
+      <GitPanel
+        busyLabel={null}
+        commitMessage=''
+        historyRefreshVersion={0}
+        iconTheme={null}
+        isLoading={false}
+        layout='list'
+        menuPortalTarget={null}
+        repositoryState={nonRepositoryState}
+        workspacePath='C:\\workspace'
+        onCommit={ignoreChange}
+        onCommitAndSync={ignoreChange}
+        onCommitMessageChange={ignorePath}
+        onDiscardAll={ignoreChange}
+        onDiscardMany={ignoreChanges}
+        onInitialize={ignoreChange}
+        onLayoutChange={ignorePath}
+        onOpenCommitFileDiff={ignoreChange}
+        onOpenDiff={ignoreChange}
+        onOpenFile={ignorePath}
+        onOpenMeoDiff={ignoreChange}
+        onPull={ignoreChange}
+        onPush={ignoreChange}
+        onRefresh={ignoreChange}
+        onRevertCommit={ignoreChange}
+        onStage={ignorePath}
+        onUnstage={ignorePath}
+      />,
+    )
+
+    expect(markup).toContain('class="app-empty-state git-panel-init-state"')
+    expect(markup).toContain('class="app-empty-state-actions"')
+    expect(markup).toContain('这个工作区还不是 Git 仓库。')
+    expect(markup).toContain('初始化 Git')
+  })
+
   it('preserves editable file actions in list and tree layouts', () => {
     const sharedProps = {
       changes: [markdownChange],

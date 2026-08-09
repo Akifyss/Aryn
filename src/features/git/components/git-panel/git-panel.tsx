@@ -12,6 +12,7 @@ import {
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import { AppButton } from '@/components/app-button'
+import { EmptyState } from '@/components/empty-state'
 import {
   AppItem,
   AppItemActionButton,
@@ -355,12 +356,16 @@ export function GitPanel({
 
   if (!repositoryState?.isRepository) {
     return (
-      <div className='git-panel-empty-state git-panel-init-state'>
-        <p>这个工作区还不是 Git 仓库。</p>
-        <AppButton variant='primary' onClick={onInitialize}>
-          初始化 Git
-        </AppButton>
-      </div>
+      <EmptyState
+        className='git-panel-init-state'
+        icon='streamline-flex-color:search-history-browser-flat'
+        title='这个工作区还不是 Git 仓库。'
+        actions={(
+          <AppButton variant='primary' onClick={onInitialize}>
+            初始化 Git
+          </AppButton>
+        )}
+      />
     )
   }
 
