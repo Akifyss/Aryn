@@ -23,6 +23,12 @@ import {
 } from '@mingcute/react'
 import { Input } from '@heroui/react'
 import headingIcon from '@iconify-icons/lucide/heading'
+import heading1Icon from '@iconify-icons/lucide/heading-1'
+import heading2Icon from '@iconify-icons/lucide/heading-2'
+import heading3Icon from '@iconify-icons/lucide/heading-3'
+import heading4Icon from '@iconify-icons/lucide/heading-4'
+import heading5Icon from '@iconify-icons/lucide/heading-5'
+import heading6Icon from '@iconify-icons/lucide/heading-6'
 import listTreeIcon from '@iconify-icons/lucide/list-tree'
 import minusIcon from '@iconify-icons/lucide/minus'
 import replaceIcon from '@iconify-icons/lucide/replace'
@@ -50,6 +56,15 @@ import type { MeoEditorInstance } from '@/features/editor/lib/meo-native-editor-
 import type { FindPanelElements } from '@/vendor/meo/webview/helpers/findPanel'
 import type { SelectionMenuElements } from '@/vendor/meo/webview/helpers/selectionMenu'
 import './meo-native-editor-shell.css'
+
+const HEADING_LEVELS = [
+  { icon: heading1Icon, level: 1 },
+  { icon: heading2Icon, level: 2 },
+  { icon: heading3Icon, level: 3 },
+  { icon: heading4Icon, level: 4 },
+  { icon: heading5Icon, level: 5 },
+  { icon: heading6Icon, level: 6 },
+] as const
 
 type NativeMeoButtonMap = {
   bulletListBtn: HTMLButtonElement
@@ -280,11 +295,11 @@ const MeoHeadingMenu = forwardRef(function MeoHeadingMenu({
         <Menu.Positioner align='start' side='bottom' sideOffset={4}>
           <Menu.Popup className='meo-heading-menu-popup' size='sm'>
             <Menu.List aria-label='Heading level'>
-              {[1, 2, 3, 4, 5, 6].map((level) => (
+              {HEADING_LEVELS.map(({ icon, level }) => (
                 <Menu.Item
                   key={level}
                   className='meo-heading-menu-item'
-                  icon={<span className='meo-heading-menu-level'>H{level}</span>}
+                  icon={<OfflineIcon aria-hidden='true' icon={icon} />}
                   text={`Heading ${level}`}
                   onClick={() => actions.onHeadingLevel?.(level)}
                 />

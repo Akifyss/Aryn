@@ -27,16 +27,6 @@
   min-width: 144px;
 }
 
-.meo-heading-menu-level {
-  display: inline-flex;
-  width: 22px;
-  justify-content: center;
-  color: var(--foreground-secondary);
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1;
-}
-
 .meo-native-theme .find-input.input {
   min-width: 0;
   border-radius: 6px;

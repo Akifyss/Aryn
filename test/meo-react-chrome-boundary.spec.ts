@@ -39,6 +39,12 @@ describe('MEO React chrome boundary', () => {
 
     for (const icon of [
       'headingIcon',
+      'heading1Icon',
+      'heading2Icon',
+      'heading3Icon',
+      'heading4Icon',
+      'heading5Icon',
+      'heading6Icon',
       'listTreeIcon',
       'minusIcon',
       'replaceIcon',
@@ -60,6 +66,8 @@ describe('MEO React chrome boundary', () => {
     ]) {
       expect(shellSource).not.toContain(misleadingIcon)
     }
+
+    expect(shellSource).not.toContain('meo-heading-menu-level')
   })
 
   it('keeps the CodeMirror engine outside React while the shell owns the outline', async () => {
