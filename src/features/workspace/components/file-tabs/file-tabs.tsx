@@ -14,7 +14,11 @@ import {
   resolveFileTabAnimationFrame,
   resolveFileTabAutoScrollBehavior,
 } from './file-tabs-boundary-motion'
-import { createFileTabsBoundaryPaths, type FileTabsBoundaryPaths } from './file-tabs-boundary-path'
+import {
+  createFileTabsBoundaryPaths,
+  createFileTabsBoundaryRenderablePaths,
+  type FileTabsBoundaryPaths,
+} from './file-tabs-boundary-path'
 import {
   createFileTabsShadowSnapshot,
   FileTabsBoundaryShadowLayer,
@@ -90,7 +94,7 @@ type FileTabsBoundaryChromeHandle = {
   renderMotionGeometry: (geometry: FileTabsBoundaryGeometry) => boolean
 }
 
-type FileTabsBoundaryRenderablePaths = {
+type FileTabsBoundaryChromeRenderData = {
   activeFillPath: string | null
   outlinePath: string
   paths: FileTabsBoundaryPaths
@@ -213,9 +217,9 @@ function getAlternateShadowSlot(slot: FileTabsShadowSlot): FileTabsShadowSlot {
   return slot === 'a' ? 'b' : 'a'
 }
 
-function createFileTabsBoundaryRenderablePaths(
+function createFileTabsBoundaryChromeRenderData(
   geometry: FileTabsBoundaryGeometry,
-): FileTabsBoundaryRenderablePaths | null {
+): FileTabsBoundaryChromeRenderData | null {
   const paths = createFileTabsBoundaryPaths({
     frameHeight: geometry.frameHeight,
     frameWidth: geometry.frameWidth,
@@ -316,7 +320,7 @@ const FileTabsBoundaryChrome = forwardRef<FileTabsBoundaryChromeHandle, {
   }, [])
 
   const renderablePaths = useMemo(
-    () => createFileTabsBoundaryRenderablePaths(geometry),
+    () => createFileTabsBoundaryChromeRenderData(geometry),
     [geometry],
   )
   const paths = renderablePaths?.paths ?? null
@@ -326,7 +330,24 @@ const FileTabsBoundaryChrome = forwardRef<FileTabsBoundaryChromeHandle, {
   )
   useImperativeHandle(forwardedRef, () => ({
     renderMotionGeometry(nextGeometry) {
-      const nextRenderablePaths = createFileTabsBoundaryRenderablePaths(nextGeometry)
+      if (nextGeometry.kind !== 'active') {
+        return false
+      }
+
+      const nextRenderablePaths = createFileTabsBoundaryRenderablePaths({
+        frameHeight: nextGeometry.frameHeight,
+        frameWidth: nextGeometry.frameWidth,
+        hasLeftBoundary: nextGeometry.hasLeftBoundary,
+        hasRightBoundary: nextGeometry.hasRightBoundary,
+        radius: nextGeometry.radius,
+        shape: {
+          kind: 'active',
+          activeHeight: nextGeometry.activeHeight,
+          activeLeft: nextGeometry.activeLeft,
+          activeTop: nextGeometry.activeTop,
+          activeWidth: nextGeometry.activeWidth,
+        },
+      })
 
       if (!nextRenderablePaths) {
         return false

@@ -34,6 +34,19 @@ export type FileTabsBoundaryPaths = {
   withoutLeftBoundary: FileTabsBoundaryVariantPaths
 }
 
+export type FileTabsBoundaryRenderablePathOptions = FileTabsBoundaryPathOptions & {
+  hasLeftBoundary: boolean
+  hasRightBoundary: boolean
+}
+
+export type FileTabsBoundaryRenderablePaths = {
+  activeFillPath: string | null
+  frameHeight: number
+  frameWidth: number
+  outlinePath: string
+  surfacePath: string
+}
+
 const STROKE_CENTER_INSET = 0.5
 const QUARTER_CIRCLE_CONTROL_POINT = 0.5522847498
 const MIN_CHROME_SIZE = 1
@@ -50,6 +63,19 @@ type ActiveProfile = {
   commands: string[]
   endX: number
   startX: number
+}
+
+type BoundaryVariantBase = {
+  activeFillPath: string | null
+  boundaryY: number
+  currentBoundaryX: number
+  outlineCommands: string[]
+  surfaceLeftX: number
+}
+
+type SelectedBoundaryPaths = {
+  outlinePath: string
+  surfacePath: string
 }
 
 function createActiveProfile({
@@ -96,13 +122,12 @@ function createActiveProfile({
   return { commands, endX, startX }
 }
 
-function createBoundaryVariant({
+function createBoundaryVariantBase({
   frameHeight,
-  frameWidth,
   hasLeftBoundary,
   radius,
   shape,
-}: FileTabsBoundaryPathOptions & { hasLeftBoundary: boolean }): FileTabsBoundaryVariantPaths {
+}: FileTabsBoundaryPathOptions & { hasLeftBoundary: boolean }): BoundaryVariantBase {
   const boundaryY = shape.kind === 'active'
     ? shape.activeTop + shape.activeHeight - STROKE_CENTER_INSET
     : shape.railHeight - STROKE_CENTER_INSET
@@ -158,37 +183,6 @@ function createBoundaryVariant({
     currentBoundaryX = profile.endX
   }
 
-  const outlinePath = [
-    ...outlineCommands,
-    `L ${formatPathValue(frameWidth)} ${formatPathValue(boundaryY)}`,
-  ].join(' ')
-  const rightBoundaryX = frameWidth - STROKE_CENTER_INSET
-  const rightCornerRadius = Math.min(
-    radius,
-    Math.max(0, (rightBoundaryX - currentBoundaryX) / 2),
-  )
-  const rightCornerStartX = rightBoundaryX - rightCornerRadius
-  const rightControlOffset = curveControlOffset(rightCornerRadius)
-  const rightBoundaryCommands = [...outlineCommands]
-
-  if (Math.abs(rightCornerStartX - currentBoundaryX) > 0.001) {
-    rightBoundaryCommands.push(
-      `L ${formatPathValue(rightCornerStartX)} ${formatPathValue(boundaryY)}`,
-    )
-  }
-
-  if (rightCornerRadius > 0) {
-    rightBoundaryCommands.push(
-      `C ${formatPathValue(rightCornerStartX + rightControlOffset)} ${formatPathValue(boundaryY)}`,
-      `${formatPathValue(rightBoundaryX)} ${formatPathValue(boundaryY + rightCornerRadius - rightControlOffset)}`,
-      `${formatPathValue(rightBoundaryX)} ${formatPathValue(boundaryY + rightCornerRadius)}`,
-    )
-  }
-
-  rightBoundaryCommands.push(
-    `L ${formatPathValue(rightBoundaryX)} ${formatPathValue(frameHeight)}`,
-  )
-
   const activeFillPath = profile && shape.kind === 'active'
     ? [
         `M ${formatPathValue(profile.startX)} ${formatPathValue(boundaryY)}`,
@@ -198,39 +192,113 @@ function createBoundaryVariant({
         'Z',
       ].join(' ')
     : null
-  const surfaceLeftX = hasLeftBoundary ? STROKE_CENTER_INSET : 0
-  const surfacePath = [
-    outlinePath,
-    `L ${formatPathValue(frameWidth)} ${formatPathValue(frameHeight)}`,
-    `L ${formatPathValue(surfaceLeftX)} ${formatPathValue(frameHeight)}`,
-    'Z',
-  ].join(' ')
-  const surfacePathWithRightBoundary = [
-    rightBoundaryCommands.join(' '),
-    `L ${formatPathValue(surfaceLeftX)} ${formatPathValue(frameHeight)}`,
-    'Z',
-  ].join(' ')
 
   return {
     activeFillPath,
-    outlinePath,
-    outlinePathWithRightBoundary: rightBoundaryCommands.join(' '),
-    surfacePath,
-    surfacePathWithRightBoundary,
+    boundaryY,
+    currentBoundaryX,
+    outlineCommands,
+    surfaceLeftX: hasLeftBoundary ? STROKE_CENTER_INSET : 0,
   }
 }
 
-/**
- * Creates the complete editor frame outline for every tab state. Empty and
- * active rails share the same side dividers, outer corners, and top edge;
- * only the active shape inserts the selected tab silhouette into that path.
- */
-export function createFileTabsBoundaryPaths({
+function createOpenBoundaryPaths(
+  base: BoundaryVariantBase,
+  frameHeight: number,
+  frameWidth: number,
+): SelectedBoundaryPaths {
+  const outlinePath = [
+    ...base.outlineCommands,
+    `L ${formatPathValue(frameWidth)} ${formatPathValue(base.boundaryY)}`,
+  ].join(' ')
+
+  return {
+    outlinePath,
+    surfacePath: [
+      outlinePath,
+      `L ${formatPathValue(frameWidth)} ${formatPathValue(frameHeight)}`,
+      `L ${formatPathValue(base.surfaceLeftX)} ${formatPathValue(frameHeight)}`,
+      'Z',
+    ].join(' '),
+  }
+}
+
+function createRightBoundaryPaths(
+  base: BoundaryVariantBase,
+  frameHeight: number,
+  frameWidth: number,
+  radius: number,
+): SelectedBoundaryPaths {
+  const rightBoundaryX = frameWidth - STROKE_CENTER_INSET
+  const rightCornerRadius = Math.min(
+    radius,
+    Math.max(0, (rightBoundaryX - base.currentBoundaryX) / 2),
+  )
+  const rightCornerStartX = rightBoundaryX - rightCornerRadius
+  const rightControlOffset = curveControlOffset(rightCornerRadius)
+  const rightBoundaryCommands = [...base.outlineCommands]
+
+  if (Math.abs(rightCornerStartX - base.currentBoundaryX) > 0.001) {
+    rightBoundaryCommands.push(
+      `L ${formatPathValue(rightCornerStartX)} ${formatPathValue(base.boundaryY)}`,
+    )
+  }
+
+  if (rightCornerRadius > 0) {
+    rightBoundaryCommands.push(
+      `C ${formatPathValue(rightCornerStartX + rightControlOffset)} ${formatPathValue(base.boundaryY)}`,
+      `${formatPathValue(rightBoundaryX)} ${formatPathValue(base.boundaryY + rightCornerRadius - rightControlOffset)}`,
+      `${formatPathValue(rightBoundaryX)} ${formatPathValue(base.boundaryY + rightCornerRadius)}`,
+    )
+  }
+
+  rightBoundaryCommands.push(
+    `L ${formatPathValue(rightBoundaryX)} ${formatPathValue(frameHeight)}`,
+  )
+
+  const outlinePath = rightBoundaryCommands.join(' ')
+
+  return {
+    outlinePath,
+    surfacePath: [
+      outlinePath,
+      `L ${formatPathValue(base.surfaceLeftX)} ${formatPathValue(frameHeight)}`,
+      'Z',
+    ].join(' '),
+  }
+}
+
+function createBoundaryVariant(options: FileTabsBoundaryPathOptions & {
+  hasLeftBoundary: boolean
+}): FileTabsBoundaryVariantPaths {
+  const base = createBoundaryVariantBase(options)
+  const openBoundary = createOpenBoundaryPaths(
+    base,
+    options.frameHeight,
+    options.frameWidth,
+  )
+  const rightBoundary = createRightBoundaryPaths(
+    base,
+    options.frameHeight,
+    options.frameWidth,
+    options.radius,
+  )
+
+  return {
+    activeFillPath: base.activeFillPath,
+    outlinePath: openBoundary.outlinePath,
+    outlinePathWithRightBoundary: rightBoundary.outlinePath,
+    surfacePath: openBoundary.surfacePath,
+    surfacePathWithRightBoundary: rightBoundary.surfacePath,
+  }
+}
+
+function normalizeFileTabsBoundaryPathOptions({
   frameHeight,
   frameWidth,
   radius,
   shape,
-}: FileTabsBoundaryPathOptions): FileTabsBoundaryPaths | null {
+}: FileTabsBoundaryPathOptions): FileTabsBoundaryPathOptions | null {
   if (
     frameHeight < MIN_CHROME_SIZE
     || frameWidth < MIN_CHROME_SIZE
@@ -258,19 +326,84 @@ export function createFileTabsBoundaryPaths({
         ...shape,
         railHeight: Math.min(frameHeight, shape.railHeight),
       }
-  const normalizedOptions: FileTabsBoundaryPathOptions = {
+
+  return {
     frameHeight,
     frameWidth,
     radius: resolvedRadius,
     shape: normalizedShape,
   }
+}
+
+/**
+ * Creates only the boundary variant visible in the current layout. Animation
+ * frames use this path to avoid building the unused opposite-side variant.
+ */
+export function createFileTabsBoundaryRenderablePaths({
+  hasLeftBoundary,
+  hasRightBoundary,
+  ...options
+}: FileTabsBoundaryRenderablePathOptions): FileTabsBoundaryRenderablePaths | null {
+  const normalizedOptions = normalizeFileTabsBoundaryPathOptions(options)
+  if (!normalizedOptions) {
+    return null
+  }
+
+  const base = createBoundaryVariantBase({
+    ...normalizedOptions,
+    hasLeftBoundary,
+  })
+  const selectedPaths = hasRightBoundary
+    ? createRightBoundaryPaths(
+        base,
+        normalizedOptions.frameHeight,
+        normalizedOptions.frameWidth,
+        normalizedOptions.radius,
+      )
+    : createOpenBoundaryPaths(
+        base,
+        normalizedOptions.frameHeight,
+        normalizedOptions.frameWidth,
+      )
+
+  return {
+    activeFillPath: base.activeFillPath,
+    frameHeight: normalizedOptions.frameHeight,
+    frameWidth: normalizedOptions.frameWidth,
+    outlinePath: selectedPaths.outlinePath,
+    surfacePath: selectedPaths.surfacePath,
+  }
+}
+
+/**
+ * Creates the complete editor frame outline for every tab state. Empty and
+ * active rails share the same side dividers, outer corners, and top edge;
+ * only the active shape inserts the selected tab silhouette into that path.
+ */
+export function createFileTabsBoundaryPaths({
+  frameHeight,
+  frameWidth,
+  radius,
+  shape,
+}: FileTabsBoundaryPathOptions): FileTabsBoundaryPaths | null {
+  const normalizedOptions = normalizeFileTabsBoundaryPathOptions({
+    frameHeight,
+    frameWidth,
+    radius,
+    shape,
+  })
+  if (!normalizedOptions) {
+    return null
+  }
+
+  const normalizedShape = normalizedOptions.shape
 
   return {
     boundaryY: normalizedShape.kind === 'active'
       ? normalizedShape.activeTop + normalizedShape.activeHeight - STROKE_CENTER_INSET
       : normalizedShape.railHeight - STROKE_CENTER_INSET,
-    frameHeight,
-    frameWidth,
+    frameHeight: normalizedOptions.frameHeight,
+    frameWidth: normalizedOptions.frameWidth,
     withLeftBoundary: createBoundaryVariant({
       ...normalizedOptions,
       hasLeftBoundary: true,

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createFileTabsBoundaryPaths } from '../src/features/workspace/components/file-tabs/file-tabs-boundary-path'
+import {
+  createFileTabsBoundaryPaths,
+  createFileTabsBoundaryRenderablePaths,
+} from '../src/features/workspace/components/file-tabs/file-tabs-boundary-path'
 
 const interiorTabGeometry = {
   frameHeight: 500,
@@ -15,6 +18,38 @@ const interiorTabGeometry = {
 }
 
 describe('file tabs boundary path', () => {
+  it.each([
+    { hasLeftBoundary: false, hasRightBoundary: false },
+    { hasLeftBoundary: false, hasRightBoundary: true },
+    { hasLeftBoundary: true, hasRightBoundary: false },
+    { hasLeftBoundary: true, hasRightBoundary: true },
+  ])('creates the same visible paths without building unused boundary variants (%o)', ({
+    hasLeftBoundary,
+    hasRightBoundary,
+  }) => {
+    const completePaths = createFileTabsBoundaryPaths(interiorTabGeometry)
+    const renderablePaths = createFileTabsBoundaryRenderablePaths({
+      ...interiorTabGeometry,
+      hasLeftBoundary,
+      hasRightBoundary,
+    })
+    const variant = hasLeftBoundary
+      ? completePaths?.withLeftBoundary
+      : completePaths?.withoutLeftBoundary
+
+    expect(renderablePaths).toEqual({
+      activeFillPath: variant?.activeFillPath,
+      frameHeight: completePaths?.frameHeight,
+      frameWidth: completePaths?.frameWidth,
+      outlinePath: hasRightBoundary
+        ? variant?.outlinePathWithRightBoundary
+        : variant?.outlinePath,
+      surfacePath: hasRightBoundary
+        ? variant?.surfacePathWithRightBoundary
+        : variant?.surfacePath,
+    })
+  })
+
   it('draws the left divider, content corner, active tab, and top edge as one outline', () => {
     const paths = createFileTabsBoundaryPaths(interiorTabGeometry)
 
