@@ -77,6 +77,7 @@ export function VirtualizedAgentTreeList<Row extends KeyedTreeRow>({
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLUListElement | null>(null)
   const pendingFocusIndexRef = useRef<number | null>(null)
+  const revealedActiveRowKeyRef = useRef<string | null>(null)
   const pinnedRowIndexes = useMemo(() => {
     if (!pinnedRowKeys?.size) return []
 
@@ -119,9 +120,24 @@ export function VirtualizedAgentTreeList<Row extends KeyedTreeRow>({
   const virtualRows = virtualizer.getVirtualItems()
 
   useEffect(() => {
-    if (activeRowIndex < 0 || !viewportRef.current) return
+    if (!activeRowKey) {
+      revealedActiveRowKeyRef.current = null
+      return
+    }
+    if (
+      revealedActiveRowKeyRef.current === activeRowKey
+      || activeRowIndex < 0
+      || !viewportRef.current
+    ) {
+      return
+    }
+
+    // Reveal a new selection once. Session metadata can reorder the same key
+    // while this list is open; following its changing index would fight the
+    // user's own scrolling.
     virtualizer.scrollToIndex(activeRowIndex, { align: 'auto' })
-  }, [activeRowIndex, virtualizer])
+    revealedActiveRowKeyRef.current = activeRowKey
+  }, [activeRowIndex, activeRowKey, virtualizer])
 
   const focusRow = useCallback((rowIndex: number) => {
     virtualizer.scrollToIndex(rowIndex, { align: 'auto' })
