@@ -315,4 +315,42 @@ describe('Git panel presentation components', () => {
     expect(detailMarkup).toContain('file-0.md')
     expect(detailMarkup).not.toContain('file-999.md')
   })
+
+  it('announces asynchronous Git history states without claiming tree-widget semantics', () => {
+    const loadingMarkup = renderToStaticMarkup(
+      <GitHistoryPane
+        busyLabel={null}
+        commits={[]}
+        error={null}
+        historySelection={{ kind: 'working-tree' }}
+        isLoading
+        repositoryMeta='main'
+        revertDisabledReason={null}
+        onRevertCommit={ignoreChange}
+        onSelectCommit={ignorePath}
+        onSelectWorkingTree={ignorePath}
+      />,
+    )
+    const errorMarkup = renderToStaticMarkup(
+      <GitHistoryPane
+        busyLabel={null}
+        commits={[]}
+        error='History unavailable'
+        historySelection={{ kind: 'working-tree' }}
+        isLoading={false}
+        repositoryMeta='main'
+        revertDisabledReason={null}
+        onRevertCommit={ignoreChange}
+        onSelectCommit={ignorePath}
+        onSelectWorkingTree={ignorePath}
+      />,
+    )
+
+    expect(loadingMarkup).toContain('role="status"')
+    expect(loadingMarkup).toContain('aria-live="polite"')
+    expect(errorMarkup).toContain('role="alert"')
+    expect(errorMarkup).toContain('aria-live="assertive"')
+    expect(loadingMarkup).not.toContain('role="tree"')
+    expect(errorMarkup).not.toContain('role="treeitem"')
+  })
 })

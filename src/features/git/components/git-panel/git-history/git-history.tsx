@@ -97,8 +97,15 @@ function estimateHistoryRowSize(row: GitHistoryRow) {
 }
 
 function GitHistoryStatusRowView({ row }: { row: GitHistoryStatusRow }) {
+  const isError = row.tone === 'danger'
+
   return (
-    <div className={`tree-status-item tree-status-item-${row.tone}`}>
+    <div
+      aria-atomic='true'
+      aria-live={isError ? 'assertive' : 'polite'}
+      className={`tree-status-item tree-status-item-${row.tone}`}
+      role={isError ? 'alert' : 'status'}
+    >
       {row.message}
     </div>
   )

@@ -520,7 +520,7 @@ function FileTreeItem({
     <>
       {deleteDialog}
 
-      {error && <p className='tree-error'>{error}</p>}
+      {error && <p className='tree-error' role='alert'>{error}</p>}
     </>
   )
 

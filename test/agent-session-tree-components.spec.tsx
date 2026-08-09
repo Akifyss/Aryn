@@ -334,6 +334,8 @@ describe('AgentSessionTree presentation components', () => {
     expect(markup).toContain('aria-level="2"')
     expect(markup).toContain('aria-posinset="2"')
     expect(markup).toContain('aria-setsize="2"')
+    expect(markup).not.toContain('role="tree"')
+    expect(markup).not.toContain('role="treeitem"')
     expect(markup).not.toContain('aria-busy="true"')
   })
 

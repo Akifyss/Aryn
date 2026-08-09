@@ -290,7 +290,6 @@ export function VirtualizedTreeList<Row extends KeyedTreeRow>({
       className={`tree-virtual-list${listClassName ? ` ${listClassName}` : ''}`}
       aria-busy={ariaBusy || undefined}
       aria-label={ariaLabel}
-      role={listProps?.role ?? 'tree'}
       onKeyDown={handleListKeyDown}
     >
       {virtualRows.map((virtualRow) => {
@@ -309,7 +308,6 @@ export function VirtualizedTreeList<Row extends KeyedTreeRow>({
             aria-level={ariaMetadata?.level}
             aria-posinset={ariaMetadata?.positionInSet ?? virtualRow.index + 1}
             aria-setsize={ariaMetadata?.setSize ?? rows.length}
-            role='treeitem'
             className={[
               'tree-virtual-item',
               itemClassName,
