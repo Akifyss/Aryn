@@ -111,43 +111,31 @@
   display: flex;
   flex-direction: column;
   padding: 8px var(--sidebar-content-inline-padding);
-  gap: 2px;
+  gap: var(--app-item-list-gap);
   background: transparent;
 }
 
-.workspace-sidebar-surface .sidebar-footer-item {
-  display: flex;
-  align-items: center;
-  gap: var(--app-item-content-gap);
-  width: 100%;
-  padding: 8px var(--app-item-content-inset);
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--foreground-secondary);
-  cursor: pointer;
-  font-size: 13px;
+.workspace-sidebar-surface .sidebar-footer-settings-item {
+  --app-item-current-foreground: var(--foreground-secondary);
+}
+
+.workspace-sidebar-surface .sidebar-footer-settings-item .app-item-label {
   font-weight: 500;
-  text-align: left;
-  transition: background-color 140ms ease, color 140ms ease;
 }
 
-.workspace-sidebar-surface .sidebar-footer-item > svg,
-.workspace-sidebar-surface .sidebar-footer-item > .iconify {
-  width: var(--icon-size-md);
-  height: var(--icon-size-md);
-  flex: 0 0 auto;
+.workspace-sidebar-surface .sidebar-footer-settings-item .app-item-label,
+.workspace-sidebar-surface .sidebar-footer-settings-item .app-item-icon {
+  transition: color var(--app-button-base-transition-duration) ease;
 }
 
-.workspace-sidebar-surface .sidebar-footer-item:hover,
-.workspace-sidebar-surface .sidebar-footer-item:focus-visible {
+.workspace-sidebar-surface .sidebar-footer-settings-item:hover,
+.workspace-sidebar-surface .sidebar-footer-settings-item:has(:focus-visible) {
+  --app-item-current-foreground: var(--foreground-primary);
+  --app-item-current-icon-foreground: var(--foreground-primary);
+}
+
+.workspace-sidebar-surface .sidebar-footer-settings-item:has(:focus-visible) {
   background: var(--hover);
-  color: var(--foreground-primary);
-}
-
-.workspace-sidebar-surface .sidebar-footer-item:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
 }
 
 .workspace-sidebar-surface .agent-session-tree-shell {
@@ -156,7 +144,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .workspace-sidebar-surface .editor-workspace-switch-chevron,
-  .workspace-sidebar-surface .sidebar-footer-item {
+  .workspace-sidebar-surface .sidebar-footer-settings-item .app-item-label,
+  .workspace-sidebar-surface .sidebar-footer-settings-item .app-item-icon {
     transition: none;
   }
 }

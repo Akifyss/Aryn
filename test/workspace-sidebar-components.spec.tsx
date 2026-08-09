@@ -33,7 +33,12 @@ describe('WorkspaceSidebar', () => {
     expect(markup).toContain('data-variant="outline"')
     expect(markup).toContain('>Aryn</span>')
     expect(markup).toContain('data-slot="workspace-content"')
-    expect(markup).toContain('class="sidebar-footer-item"')
+    expect(markup).toContain('class="sidebar-footer"')
+    expect(markup).toContain('class="app-item-row sidebar-footer-settings-item"')
+    expect(markup).toContain('class="app-item-icon"')
+    expect(markup).toContain('class="app-item-label"')
+    expect(markup).toContain('>设置</span>')
+    expect(markup).not.toContain('app-item-container')
     expect(markup).not.toContain('style="width:320px"')
     expect(markup).not.toContain('drawer-local-overlay-root')
   })
@@ -111,6 +116,7 @@ describe('workspace sidebar styles', () => {
 
     expect(globalCss).not.toContain('.sidebar-workspace-tabs')
     expect(globalCss).not.toContain('.sidebar-footer-item')
+    expect(sidebarCss).not.toContain('.sidebar-footer-item')
     expect(sidebarCss).not.toMatch(/(^|\n)\.section-title/)
     const workspaceSwitchRule = sidebarCss.match(
       /\.editor-workspace-switch-button\s*\{[^}]*\}/,
@@ -118,11 +124,14 @@ describe('workspace sidebar styles', () => {
     const sidebarFooterRule = sidebarCss.match(
       /\.workspace-sidebar-surface \.sidebar-footer\s*\{[^}]*\}/,
     )?.[0]
-    const sidebarFooterItemRule = sidebarCss.match(
-      /\.workspace-sidebar-surface \.sidebar-footer-item\s*\{[^}]*\}/,
+    const sidebarFooterSettingsRule = sidebarCss.match(
+      /\.workspace-sidebar-surface \.sidebar-footer-settings-item\s*\{[^}]*\}/,
     )?.[0]
-    const sidebarFooterIconRule = sidebarCss.match(
-      /\.workspace-sidebar-surface \.sidebar-footer-item > svg,[\s\S]*?\{[^}]*\}/,
+    const sidebarFooterLabelRule = sidebarCss.match(
+      /\.workspace-sidebar-surface \.sidebar-footer-settings-item \.app-item-label\s*\{[^}]*\}/,
+    )?.[0]
+    const sidebarFooterInteractiveRule = sidebarCss.match(
+      /\.workspace-sidebar-surface \.sidebar-footer-settings-item:hover,[\s\S]*?\{[^}]*\}/,
     )?.[0]
     expect(workspaceSwitchRule).toContain('gap: 8px;')
     expect(workspaceSwitchRule).toContain('padding: 0 8px;')
@@ -139,12 +148,17 @@ describe('workspace sidebar styles', () => {
     expect(sidebarFooterRule).toContain(
       'padding: 8px var(--sidebar-content-inline-padding);',
     )
-    expect(sidebarFooterItemRule).toContain('gap: var(--app-item-content-gap);')
-    expect(sidebarFooterItemRule).toContain(
-      'padding: 8px var(--app-item-content-inset);',
+    expect(sidebarFooterRule).toContain('gap: var(--app-item-list-gap);')
+    expect(sidebarFooterSettingsRule).toContain(
+      '--app-item-current-foreground: var(--foreground-secondary);',
     )
-    expect(sidebarFooterIconRule).toContain('flex: 0 0 auto;')
-    expect(sidebarCss).toContain('.sidebar-footer-item:focus-visible')
+    expect(sidebarFooterLabelRule).toContain('font-weight: 500;')
+    expect(sidebarFooterInteractiveRule).toContain(
+      '--app-item-current-foreground: var(--foreground-primary);',
+    )
+    expect(sidebarFooterInteractiveRule).toContain(
+      '--app-item-current-icon-foreground: var(--foreground-primary);',
+    )
     expect(tabsCss).toContain('.sidebar-workspace-tab:focus-visible')
     expect(sidebarCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(tabsCss).toContain('@media (prefers-reduced-motion: reduce)')

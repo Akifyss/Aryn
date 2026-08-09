@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode, Ref } from 'react'
 import { DownLine, Settings3Line } from '@mingcute/react'
+import { AppItem, AppItemIcon } from '@/components/app-item'
 import { AppMenu as Menu } from '@/components/app-menu'
 import { ProjectIcon } from '@/components/project-icon'
 import type { ShellPlatform } from '@/features/layout/shell-layout'
@@ -77,10 +78,13 @@ export function WorkspaceSidebar({
       </div>
 
       <div className='sidebar-footer'>
-        <button type='button' className='sidebar-footer-item' onClick={onOpenSettings}>
-          <Settings3Line aria-hidden='true' />
-          <span>设置</span>
-        </button>
+        <AppItem
+          itemAs={null}
+          icon={<AppItemIcon><Settings3Line /></AppItemIcon>}
+          label='设置'
+          mainButtonProps={{ onClick: onOpenSettings }}
+          rowClassName='sidebar-footer-settings-item'
+        />
       </div>
 
       {isDrawer ? (

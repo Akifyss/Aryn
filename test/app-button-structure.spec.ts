@@ -193,7 +193,6 @@ describe('shared text button', () => {
       'agent-model-cascader-trigger',
       'agent-project-switch-trigger',
       'agent-session-new-button',
-      'sidebar-footer-item',
       'editor-workspace-switch-button',
     ]
     const nonActionAppButtonUsages = sources.flatMap(({ path, source }) =>
@@ -247,8 +246,13 @@ describe('shared text button', () => {
       /<AppButton[\s\S]{0,320}editor-workspace-switch-button/,
     )
     expect(workspaceSidebarSource ?? '').toMatch(
-      /<button type='button' className='sidebar-footer-item'/,
+      /<AppItem[\s\S]{0,320}itemAs=\{null\}[\s\S]{0,320}mainButtonProps=\{\{ onClick: onOpenSettings \}\}/,
     )
+    expect(workspaceSidebarSource ?? '').toContain('<AppItemIcon>')
+    expect(workspaceSidebarSource ?? '').toContain(
+      "rowClassName='sidebar-footer-settings-item'",
+    )
+    expect(workspaceSidebarSource ?? '').not.toContain('sidebar-footer-item')
     expect(nonActionAppButtonUsages).toEqual([])
   })
 })
