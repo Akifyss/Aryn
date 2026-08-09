@@ -110,7 +110,7 @@
 .workspace-sidebar-surface .sidebar-footer {
   display: flex;
   flex-direction: column;
-  padding: 8px;
+  padding: 8px var(--sidebar-content-inline-padding);
   gap: 2px;
   background: transparent;
 }
@@ -118,9 +118,9 @@
 .workspace-sidebar-surface .sidebar-footer-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--app-item-content-gap);
   width: 100%;
-  padding: 8px 12px;
+  padding: 8px var(--app-item-content-inset);
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -136,6 +136,7 @@
 .workspace-sidebar-surface .sidebar-footer-item > .iconify {
   width: var(--icon-size-md);
   height: var(--icon-size-md);
+  flex: 0 0 auto;
 }
 
 .workspace-sidebar-surface .sidebar-footer-item:hover,

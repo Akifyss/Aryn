@@ -115,6 +115,15 @@ describe('workspace sidebar styles', () => {
     const workspaceSwitchRule = sidebarCss.match(
       /\.editor-workspace-switch-button\s*\{[^}]*\}/,
     )?.[0]
+    const sidebarFooterRule = sidebarCss.match(
+      /\.workspace-sidebar-surface \.sidebar-footer\s*\{[^}]*\}/,
+    )?.[0]
+    const sidebarFooterItemRule = sidebarCss.match(
+      /\.workspace-sidebar-surface \.sidebar-footer-item\s*\{[^}]*\}/,
+    )?.[0]
+    const sidebarFooterIconRule = sidebarCss.match(
+      /\.workspace-sidebar-surface \.sidebar-footer-item > svg,[\s\S]*?\{[^}]*\}/,
+    )?.[0]
     expect(workspaceSwitchRule).toContain('gap: 8px;')
     expect(workspaceSwitchRule).toContain('padding: 0 8px;')
     expect(workspaceSwitchRule).toContain('text-align: left;')
@@ -127,6 +136,14 @@ describe('workspace sidebar styles', () => {
     expect(sidebarCss).toContain(
       'transition: color var(--app-button-base-transition-duration) ease;',
     )
+    expect(sidebarFooterRule).toContain(
+      'padding: 8px var(--sidebar-content-inline-padding);',
+    )
+    expect(sidebarFooterItemRule).toContain('gap: var(--app-item-content-gap);')
+    expect(sidebarFooterItemRule).toContain(
+      'padding: 8px var(--app-item-content-inset);',
+    )
+    expect(sidebarFooterIconRule).toContain('flex: 0 0 auto;')
     expect(sidebarCss).toContain('.sidebar-footer-item:focus-visible')
     expect(tabsCss).toContain('.sidebar-workspace-tab:focus-visible')
     expect(sidebarCss).toContain('@media (prefers-reduced-motion: reduce)')
