@@ -5,8 +5,7 @@ import {
   CodeLine,
   Columns2Line,
   DownLine,
-  Eye2Line,
-  FileCodeLine,
+  EditLine,
   FontSizeLine,
   GitCompareLine,
   HashtagLine,
@@ -77,13 +76,13 @@ const HEADING_LEVELS = [
 const MODE_OPTIONS = [
   {
     ariaLabel: 'Live preview mode',
-    icon: <Eye2Line aria-hidden='true' />,
+    icon: <EditLine aria-hidden='true' />,
     tooltip: 'Live preview',
     value: 'live',
   },
   {
     ariaLabel: 'Markdown source mode',
-    icon: <FileCodeLine aria-hidden='true' />,
+    icon: <CodeLine aria-hidden='true' />,
     tooltip: 'Markdown source',
     value: 'source',
   },

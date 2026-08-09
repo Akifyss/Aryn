@@ -51,8 +51,8 @@ describe('MEO React chrome boundary', () => {
       'replaceAllIcon',
       'wholeWordIcon',
       'ListCheck3Line',
-      'Eye2Line',
-      'FileCodeLine',
+      'EditLine',
+      'CodeLine',
     ]) {
       expect(shellSource).toContain(icon)
     }
@@ -72,6 +72,8 @@ describe('MEO React chrome boundary', () => {
     expect(shellSource).not.toContain('meo-heading-menu-level')
     expect(shellSource).not.toContain('MeoModeTextButton')
     expect(shellSource).not.toContain('MeoModeIconButton')
+    expect(shellSource).toMatch(/ariaLabel: 'Live preview mode',[\s\S]*?icon: <EditLine/)
+    expect(shellSource).toMatch(/ariaLabel: 'Markdown source mode',[\s\S]*?icon: <CodeLine/)
   })
 
   it('keeps the CodeMirror engine outside React while the shell owns the outline', async () => {
